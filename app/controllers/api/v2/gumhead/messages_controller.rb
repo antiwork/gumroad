@@ -113,14 +113,18 @@ class Api::V2::Gumhead::MessagesController < Api::V2::BaseController
   # so status alone cannot separate it from a real rate limit. Only the
   # documented wordings are matched: a broad "quota" would also swallow
   # the per-minute limits, which recover on their own.
-  UPSTREAM_OUT_OF_BUDGET_PATTERN = /api usage limits|credit balance|insufficient.{0,12}(credit|balance|fund)|out of credit/i
+  # "budget ... exceeded" is OpenRouter's workspace cap, which answers 403
+  # with no structured code, so the wording is the only signal there.
+  UPSTREAM_OUT_OF_BUDGET_PATTERN = /api usage limits|credit balance|insufficient.{0,12}(credit|balance|fund)|out of credit|budget.{0,40}exceeded/i
   # The structured marker for a tier spend cap, authoritative where the
   # wording is not.
   UPSTREAM_SPEND_LIMIT_CODE = "enforced_spend_limit_reached"
   # 401 is unambiguous, but a 403 is not proof of a credential problem:
-  # model allowlists, policy, and guardrails answer 403 too, and naming
-  # those a rejected key sends ops looking in the wrong place.
-  UPSTREAM_CREDENTIALS_PATTERN = /unauthorized|authenticat|credential|api.?key|permission denied|not permitted/i
+  # model allowlists, guardrails, and budget caps answer 403 too, and
+  # naming those a rejected key sends ops looking in the wrong place. Only
+  # authentication wording counts — "not permitted" and "permission
+  # denied" are what a policy block says about a perfectly good key.
+  UPSTREAM_CREDENTIALS_PATTERN = /unauthorized|authenticat|credential|api.?key|invalid.{0,10}key|no auth/i
 
   # Client feature flags forward as sent: the spend boundary is the body
   # validators above, not this header, and dropping a flag the body relies

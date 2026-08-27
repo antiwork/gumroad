@@ -1033,15 +1033,26 @@ describe Api::V2::Gumhead::MessagesController do
       expect(JSON.parse(response.body)["error"]["message"]).to eq(minted(:credentials))
     end
 
-    # A guardrail or model allowlist also answers 403; calling that a
-    # rejected key would send ops looking at the wrong thing.
-    it "does not blame credentials for a 403 that is not about them" do
-      stub_upstream_error(status: 403, message: "Blocked by a guardrail policy")
+    # Guardrails, model allowlists, and budget caps all answer 403; calling
+    # those a rejected key would send ops looking at the wrong thing.
+    ["Blocked by a guardrail policy", "This model is not permitted", "Permission denied for this route"].each do |message|
+      it "does not blame credentials for a 403 saying #{message.inspect}" do
+        stub_upstream_error(status: 403, message:)
+
+        post_messages
+
+        expect(response.status).to eq(403)
+        expect(JSON.parse(response.body)["error"]["message"]).to eq(minted(:other))
+      end
+    end
+
+    it "reads OpenRouter's 403 workspace budget cap as out of budget" do
+      stub_upstream_error(status: 403, message: "Workspace monthly budget of $500.00 exceeded. Contact your org admin.")
 
       post_messages
 
       expect(response.status).to eq(403)
-      expect(JSON.parse(response.body)["error"]["message"]).to eq(minted(:other))
+      expect(JSON.parse(response.body)["error"]["message"]).to eq(minted(:out_of_budget))
     end
 
     it "tells the runtime not to retry a spend limit it would otherwise retry" do
