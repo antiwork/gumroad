@@ -21,6 +21,7 @@ class EmailEngagementDynamoStore
   DUAL_WRITE_FEATURE = :email_engagement_dynamodb_dual_write
   READ_FEATURE = :email_engagement_dynamodb_reads
   BATCH_GET_LIMIT = 100
+  BATCH_GET_MAX_ATTEMPTS = 5
 
   class << self
     attr_writer :client
@@ -90,10 +91,16 @@ class EmailEngagementDynamoStore
 
       counts = {}
       ids.each_slice(BATCH_GET_LIMIT) do |slice|
-        keys = slice.map { item_key(_1, SUMMARY_SORT_KEY) }
-        response = client.batch_get_item(request_items: { table_name => { keys: } })
-        (response.responses[table_name] || []).each do |item|
-          counts[item["pk"].to_i] = summary_from_item(item)
+        request_items = { table_name => { keys: slice.map { |id| item_key(id, SUMMARY_SORT_KEY) } } }
+        BATCH_GET_MAX_ATTEMPTS.times do |attempt|
+          response = client.batch_get_item(request_items:)
+          (response.responses[table_name] || []).each do |item|
+            counts[item["pk"].to_i] = summary_from_item(item)
+          end
+          request_items = response.unprocessed_keys
+          break if request_items.blank?
+          raise "Unprocessed keys remain after #{BATCH_GET_MAX_ATTEMPTS} BatchGetItem attempts" if attempt == BATCH_GET_MAX_ATTEMPTS - 1
+          sleep(2**attempt * 0.1)
         end
       end
       ids.index_with { |id| counts[id] || summary_from_item(nil) }
