@@ -8,7 +8,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { PICKED_FILE_SNAPSHOT_LIMIT_BYTES } from "$app/utils/snapshotPickedFile";
 
 import { ImageUploadSettings, ImageUploadSettingsContext } from "$app/components/RichTextEditor";
-import { Image } from "$app/components/TiptapExtensions/Image";
+import { Image, uploadImages } from "$app/components/TiptapExtensions/Image";
 
 vi.mock("$app/components/server-components/Alert", () => ({ showAlert: () => {} }));
 
@@ -178,6 +178,60 @@ describe("Insert image picker", () => {
         if (node.type.name === "image") images.push(node);
       });
       expect(images).toHaveLength(1);
+    });
+  });
+
+  it("maps overlapping image preparations without restoring a stale dispatch", async () => {
+    const element = document.createElement("div");
+    document.body.append(element);
+    editor = new Editor({ element, extensions: [StarterKit, Image], content: "<p>hello</p>" });
+
+    isLikelyImageFile.mockReturnValue(true);
+    const release: Array<(file: File) => void> = [];
+    prepareImageForUpload.mockImplementation(
+      (file: File) =>
+        new Promise((resolve) => {
+          release.push(() => resolve(file));
+        }),
+    );
+
+    const imageSettings: ImageUploadSettings = {
+      allowedExtensions: ["png", "jpg"],
+      onUpload: (file) => Promise.resolve(`https://example.com/${file.name}`),
+    };
+    const first = new File(["a"], "a.png", { type: "image/png" });
+    const second = new File(["b"], "b.png", { type: "image/png" });
+
+    const firstUpload = uploadImages({ view: editor.view, files: [first], imageSettings, insertAt: 1 });
+    const secondUpload = uploadImages({ view: editor.view, files: [second], imageSettings, insertAt: 1 });
+    await waitFor(() => expect(release).toHaveLength(2));
+
+    await act(async () => {
+      release[0]?.(first);
+      await firstUpload;
+    });
+
+    act(() => {
+      if (!editor) throw new Error("editor missing");
+      editor.chain().setTextSelection({ from: 1, to: editor.state.doc.content.size }).deleteSelection().run();
+    });
+
+    await act(async () => {
+      release[1]?.(second);
+      await secondUpload;
+    });
+
+    const images: string[] = [];
+    editor.state.doc.descendants((node) => {
+      if (node.type.name === "image") images.push(String(node.attrs.src));
+    });
+    // The delete after the first upload removes A; B must still insert at the
+    // mapped pos instead of throwing RangeError on the captured start.
+    expect(images).toEqual(["https://example.com/b.png"]);
+
+    act(() => {
+      if (!editor) throw new Error("editor missing");
+      editor.chain().insertContent("x").run();
     });
   });
 

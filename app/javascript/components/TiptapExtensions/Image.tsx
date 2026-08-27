@@ -48,17 +48,43 @@ const deleteImageInView = (view: EditorView, src: string) =>
 
 // Keep insertAt valid while decode/resize runs. Callers may already map through
 // file snapshotting; this covers the slower prepareImageForUpload window.
+// One shared dispatch hook per view: overlapping uploadImages must not restore
+// a captured handler and rip out a still-running tracker.
+type PosMapper = (tr: Transaction) => void;
+type DispatchHook = { original: EditorView["dispatch"]; mappers: Set<PosMapper> };
+const dispatchHooks = new WeakMap<EditorView, DispatchHook>();
+
 const trackMappedPos = (view: EditorView, start: number) => {
   let pos = start;
-  const originalDispatch = view.dispatch.bind(view);
-  view.dispatch = (tr: Transaction) => {
-    if (tr.docChanged) pos = tr.mapping.map(pos);
-    originalDispatch(tr);
+  const mapper: PosMapper = (tr) => {
+    pos = tr.mapping.map(pos);
   };
+
+  let hook = dispatchHooks.get(view);
+  if (!hook) {
+    const original = view.dispatch.bind(view);
+    const mappers = new Set<PosMapper>();
+    view.dispatch = (tr: Transaction) => {
+      if (tr.docChanged) {
+        for (const map of mappers) map(tr);
+      }
+      original(tr);
+    };
+    hook = { original, mappers };
+    dispatchHooks.set(view, hook);
+  }
+  hook.mappers.add(mapper);
+
   return {
     get: () => pos,
     stop: () => {
-      view.dispatch = originalDispatch;
+      const current = dispatchHooks.get(view);
+      if (!current) return;
+      current.mappers.delete(mapper);
+      if (current.mappers.size === 0) {
+        view.dispatch = current.original;
+        dispatchHooks.delete(view);
+      }
     },
   };
 };
