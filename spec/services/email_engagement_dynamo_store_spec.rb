@@ -33,7 +33,8 @@ describe EmailEngagementDynamoStore do
   end
 
   describe ".record_open" do
-    it "does nothing when the feature flag is inactive" do
+    it "does nothing in production when the feature flag is inactive" do
+      allow(Rails).to receive(:env).and_return(ActiveSupport::StringInquirer.new("production"))
       Feature.deactivate(:email_engagement_dynamodb_dual_write)
 
       described_class.record_open(installment_id: 123, mailer_method:, mailer_args:)
@@ -49,7 +50,7 @@ describe EmailEngagementDynamoStore do
       expect(requests.map { _1[:operation_name] }).to eq([:update_item, :update_item])
 
       open_upsert = requests.first[:params]
-      expect(open_upsert[:table_name]).to eq("email_engagement")
+      expect(open_upsert[:table_name]).to eq(described_class.table_name)
       expect(plain_hash(open_upsert[:key])).to eq("pk" => "123", "sk" => "OPEN##{recipient_digest}")
       expect(open_upsert[:update_expression]).to include("ADD open_count :one")
       expect(open_upsert[:update_expression]).to include("first_open_at = if_not_exists(first_open_at, :now)")
@@ -82,7 +83,8 @@ describe EmailEngagementDynamoStore do
   end
 
   describe ".record_click" do
-    it "does nothing when the feature flag is inactive" do
+    it "does nothing in production when the feature flag is inactive" do
+      allow(Rails).to receive(:env).and_return(ActiveSupport::StringInquirer.new("production"))
       Feature.deactivate(:email_engagement_dynamodb_dual_write)
 
       described_class.record_click(installment_id: 123, mailer_method:, mailer_args:, click_url:)
@@ -167,34 +169,44 @@ describe EmailEngagementDynamoStore do
   describe ".client" do
     it "defaults to the regional DynamoDB endpoint when DYNAMODB_ENDPOINT is unset" do
       described_class.client = nil
+      endpoint_was = ENV.delete("DYNAMODB_ENDPOINT")
       expect(described_class.client.config.endpoint.to_s).to eq("https://dynamodb.#{AWS_DEFAULT_REGION}.amazonaws.com")
+    ensure
+      ENV["DYNAMODB_ENDPOINT"] = endpoint_was if endpoint_was
     end
 
     it "honors DYNAMODB_ENDPOINT when set" do
       described_class.client = nil
+      endpoint_was = ENV["DYNAMODB_ENDPOINT"]
       ENV["DYNAMODB_ENDPOINT"] = "http://localhost:8123"
       expect(described_class.client.config.endpoint.to_s).to eq("http://localhost:8123")
     ensure
-      ENV.delete("DYNAMODB_ENDPOINT")
+      endpoint_was.nil? ? ENV.delete("DYNAMODB_ENDPOINT") : ENV["DYNAMODB_ENDPOINT"] = endpoint_was
     end
   end
 
   describe ".table_name" do
     it "prepends DYNAMODB_TABLE_PREFIX when set" do
+      original = ENV["DYNAMODB_TABLE_PREFIX"]
+      ENV.delete("DYNAMODB_TABLE_PREFIX")
       expect(described_class.table_name).to eq("email_engagement")
 
       ENV["DYNAMODB_TABLE_PREFIX"] = "lane1_"
       expect(described_class.table_name).to eq("lane1_email_engagement")
     ensure
-      ENV.delete("DYNAMODB_TABLE_PREFIX")
+      original.nil? ? ENV.delete("DYNAMODB_TABLE_PREFIX") : ENV["DYNAMODB_TABLE_PREFIX"] = original
     end
 
     it "defaults to the Terraform-owned per-environment table in production and staging" do
+      original = ENV["DYNAMODB_TABLE_PREFIX"]
+      ENV.delete("DYNAMODB_TABLE_PREFIX")
       allow(Rails).to receive(:env).and_return(ActiveSupport::StringInquirer.new("production"))
       expect(described_class.table_name).to eq("production-email_engagement")
 
       allow(Rails).to receive(:env).and_return(ActiveSupport::StringInquirer.new("staging"))
       expect(described_class.table_name).to eq("staging-email_engagement")
+    ensure
+      original.nil? ? ENV.delete("DYNAMODB_TABLE_PREFIX") : ENV["DYNAMODB_TABLE_PREFIX"] = original
     end
 
     it "lets DYNAMODB_TABLE_PREFIX override the environment default for branch apps" do
@@ -219,7 +231,7 @@ describe EmailEngagementDynamoStore do
 
       request = requests.sole
       expect(request[:operation_name]).to eq(:create_table)
-      expect(request[:params][:table_name]).to eq("email_engagement")
+      expect(request[:params][:table_name]).to eq(described_class.table_name)
       expect(request[:params][:billing_mode]).to eq("PAY_PER_REQUEST")
       expect(request[:params][:attribute_definitions]).to eq(
         [
@@ -232,6 +244,95 @@ describe EmailEngagementDynamoStore do
           { attribute_name: "pk", key_type: "HASH" },
           { attribute_name: "sk", key_type: "RANGE" },
         ]
+      )
+    end
+  end
+
+  describe ".summary" do
+    it "returns zeroed counters when the item is missing" do
+      client.stub_responses(:get_item, { item: nil })
+
+      expect(described_class.summary(123)).to eq(open_count: 0, click_count: 0, click_pair_count: 0)
+    end
+
+    it "reads open and click-pair counters from SUMMARY" do
+      client.stub_responses(:get_item, { item: { "open_count" => 10, "click_count" => 7, "click_pair_count" => 9 } })
+
+      expect(described_class.summary(123)).to eq(open_count: 10, click_count: 7, click_pair_count: 9)
+    end
+  end
+
+  describe ".summaries" do
+    it "batch-gets SUMMARY items and fills zeros for missing partitions" do
+      client.stub_responses(
+        :batch_get_item,
+        {
+          responses: {
+            described_class.table_name => [{ "pk" => "123", "open_count" => 10, "click_pair_count" => 4 }],
+          },
+        }
+      )
+
+      result = described_class.summaries([123, 456])
+      expect(result[123]).to eq(open_count: 10, click_count: 0, click_pair_count: 4)
+      expect(result[456]).to eq(open_count: 0, click_count: 0, click_pair_count: 0)
+    end
+
+    it "retries unprocessed keys instead of zero-filling them" do
+      allow(described_class).to receive(:sleep)
+      client.stub_responses(
+        :batch_get_item,
+        [
+          {
+            responses: { described_class.table_name => [] },
+            unprocessed_keys: {
+              described_class.table_name => { keys: [{ "pk" => "123", "sk" => "SUMMARY" }] },
+            },
+          },
+          {
+            responses: {
+              described_class.table_name => [{ "pk" => "123", "open_count" => 10, "click_pair_count" => 4 }],
+            },
+          },
+        ]
+      )
+
+      result = described_class.summaries([123])
+      expect(result[123]).to eq(open_count: 10, click_count: 0, click_pair_count: 4)
+      expect(requests.map { _1[:operation_name] }).to eq([:batch_get_item, :batch_get_item])
+    end
+
+    it "raises when unprocessed keys remain after retries" do
+      allow(described_class).to receive(:sleep)
+      client.stub_responses(
+        :batch_get_item,
+        {
+          responses: { described_class.table_name => [] },
+          unprocessed_keys: {
+            described_class.table_name => { keys: [{ "pk" => "123", "sk" => "SUMMARY" }] },
+          },
+        }
+      )
+
+      expect { described_class.summaries([123]) }.to raise_error(/Unprocessed keys remain/)
+    end
+  end
+
+  describe ".url_click_counts" do
+    it "strips protocol and www from URL# click_url values" do
+      client.stub_responses(
+        :query,
+        {
+          items: [
+            { "click_url" => "https://www.gumroad.com/l/a", "click_count" => 5 },
+            { "click_url" => "https://example.com", "click_count" => 2 },
+          ],
+        }
+      )
+
+      expect(described_class.url_click_counts(123)).to eq(
+        "gumroad.com/l/a" => 5,
+        "example.com" => 2,
       )
     end
   end

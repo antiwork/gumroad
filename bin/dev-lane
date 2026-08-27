@@ -41,6 +41,7 @@ ANYCABLE_RPC_PORT=$((50051 + LANE))
 if [[ "$LANE" -eq 0 ]]; then
   DATABASE_NAME="gumroad_development"
   MONGO_DATABASE_NAME="gumroad_log_development"
+  DYNAMODB_TABLE_PREFIX=""
   ES_INDEX_SUFFIX=""
   REDIS_HOST="localhost:6379/0"
   SIDEKIQ_REDIS_HOST="localhost:6379/1"
@@ -50,6 +51,7 @@ if [[ "$LANE" -eq 0 ]]; then
 else
   DATABASE_NAME="gumroad_development_lane${LANE}"
   MONGO_DATABASE_NAME="gumroad_log_development_lane${LANE}"
+  DYNAMODB_TABLE_PREFIX="lane${LANE}_"
   ES_INDEX_SUFFIX="_lane${LANE}"
   # Two Redis databases per extra lane, not four: databases 10-13 are the test
   # suite's fallback block and its leases start at 14 (config/test_redis_isolation.rb),
@@ -83,7 +85,7 @@ PIDFILE="tmp/pids/server-lane${LANE}.pid"
 # database. Bypass spring for everything run with lane env.
 DISABLE_SPRING=1
 
-export PORT DEV_LANE_PORT VITE_RUBY_PORT DATABASE_NAME MONGO_DATABASE_NAME
+export PORT DEV_LANE_PORT VITE_RUBY_PORT DATABASE_NAME MONGO_DATABASE_NAME DYNAMODB_TABLE_PREFIX
 export REDIS_HOST SIDEKIQ_REDIS_HOST RPUSH_REDIS_HOST RACK_ATTACK_REDIS_HOST
 export ES_INDEX_SUFFIX ANYCABLE_PORT ANYCABLE_RPC_PORT ANYCABLE_REDIS_URL ANYCABLE_WEBSOCKET_URL ANYCABLE_REDIS_CHANNEL
 export PIDFILE DISABLE_SPRING
@@ -95,6 +97,7 @@ if [[ "$print_env" == true ]]; then
     "VITE_RUBY_PORT=${VITE_RUBY_PORT}" \
     "DATABASE_NAME=${DATABASE_NAME}" \
     "MONGO_DATABASE_NAME=${MONGO_DATABASE_NAME}" \
+    "DYNAMODB_TABLE_PREFIX=${DYNAMODB_TABLE_PREFIX}" \
     "REDIS_HOST=${REDIS_HOST}" \
     "SIDEKIQ_REDIS_HOST=${SIDEKIQ_REDIS_HOST}" \
     "RPUSH_REDIS_HOST=${RPUSH_REDIS_HOST}" \

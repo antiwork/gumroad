@@ -33,6 +33,20 @@ services:
       - mongo_data:/data/db
     command: "mongod"
 
+  dynamodb:
+    image: amazon/dynamodb-local:3.3.1
+    # Root because the named volume mounts in root-owned and the sqlite data
+    # file has to live on it.
+    user: root
+    working_dir: /home/dynamodblocal
+    command: "-jar DynamoDBLocal.jar -sharedDb -dbPath ./data"
+    ports:
+      # Host 8002, not the conventional 8000: the prod-logs SSH tunnel binds
+      # 127.0.0.1:8000 and would shadow this mapping for localhost clients.
+      - "8002:8000"
+    volumes:
+      - dynamodb_data:/home/dynamodblocal/data
+
   elasticsearch:
     image: elasticsearch:7.9.3
     ports:
@@ -118,4 +132,5 @@ volumes:
   mysql_data:
   redis_data:
   mongo_data:
+  dynamodb_data:
   minio_data:

@@ -50,9 +50,9 @@ describe HandleEmailEventInfo::ForAbandonedCartEmail do
       it "sets cache for open event" do
         handler_class_for(email_provider).new.perform(params)
 
-        expect(Rails.cache.read("unique_open_count_for_installment_#{abandoned_cart_workflow_installment1.id}")).to eq(1)
-        expect(Rails.cache.read("unique_open_count_for_installment_#{abandoned_cart_workflow_installment2.id}")).to be_nil
-        expect(Rails.cache.read("unique_open_count_for_installment_#{abandoned_cart_workflow_installment3.id}")).to eq(1)
+        expect(Rails.cache.read("unique_open_count_for_installment_#{abandoned_cart_workflow_installment1.id}_ddb")).to eq(1)
+        expect(Rails.cache.read("unique_open_count_for_installment_#{abandoned_cart_workflow_installment2.id}_ddb")).to be_nil
+        expect(Rails.cache.read("unique_open_count_for_installment_#{abandoned_cart_workflow_installment3.id}_ddb")).to eq(1)
       end
 
       it "tracks an open event and update it if there are 2 identical open events" do
@@ -108,14 +108,14 @@ describe HandleEmailEventInfo::ForAbandonedCartEmail do
         handler_class_for(email_provider).new.perform(params1)
 
         [abandoned_cart_workflow_installment1.id, abandoned_cart_workflow_installment3.id].each do |installment_id|
-          expect(Rails.cache.read("unique_click_count_for_installment_#{installment_id}")).to eq(1)
+          expect(Rails.cache.read("unique_click_count_for_installment_#{installment_id}_ddb")).to eq(1)
 
           # It should also cache unique_open_count
-          expect(Rails.cache.read("unique_open_count_for_installment_#{installment_id}")).to eq(1)
+          expect(Rails.cache.read("unique_open_count_for_installment_#{installment_id}_ddb")).to eq(1)
         end
 
-        expect(Rails.cache.read("unique_click_count_for_installment_#{abandoned_cart_workflow_installment2.id}")).to be_nil
-        expect(Rails.cache.read("unique_open_count_for_installment_#{abandoned_cart_workflow_installment2.id}")).to be_nil
+        expect(Rails.cache.read("unique_click_count_for_installment_#{abandoned_cart_workflow_installment2.id}_ddb")).to be_nil
+        expect(Rails.cache.read("unique_open_count_for_installment_#{abandoned_cart_workflow_installment2.id}_ddb")).to be_nil
       end
 
       it "tracks multiple click events and only one email click summary record for different URLs for an installment" do
