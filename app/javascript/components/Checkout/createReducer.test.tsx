@@ -373,7 +373,7 @@ describe("createReducer surcharge refetches", () => {
     });
   });
 
-  it("restores the displayed exact-tip currency when a refreshed payment configuration refuses USD", async () => {
+  it("keeps an explicit USD pick through the tipped direct-listed payment-configuration refresh", async () => {
     const requests = stubSurchargeRequests();
     const { result } = renderCheckout({ checkoutPayment: directListedCheckoutPayment });
 
@@ -414,6 +414,7 @@ describe("createReducer surcharge refetches", () => {
     });
 
     act(() => result.current[1]({ type: "set-value", buyerCurrency: "usd" }));
+    expect(document.cookie).toContain("gumroad_buyer_currency=usd");
     act(() =>
       result.current[1]({
         type: "update-checkout-payment",
@@ -430,19 +431,26 @@ describe("createReducer surcharge refetches", () => {
     );
     await act(() => vi.advanceTimersByTimeAsync(300));
     expect(requests.at(-1)?.payload).toMatchObject({ buyer_currency: "usd" });
+    expect(requests.at(-1)?.payload).not.toMatchObject({
+      products: [expect.objectContaining({ presentment_tip_cents: expect.anything() })],
+    });
     await act(async () => {
       requests.at(-1)?.resolve(
         surchargesResponse({
           detected_buyer_currency: "cad",
-          available_buyer_currencies: [{ code: "cad", label: "CA$ (Canadian Dollars)" }],
+          available_buyer_currencies: [
+            { code: "usd", label: "$ (US Dollars)" },
+            { code: "cad", label: "CA$ (Canadian Dollars)" },
+          ],
         }),
       );
       await vi.advanceTimersByTimeAsync(0);
     });
 
-    expect(result.current[0].unavailableBuyerCurrency).toBe("usd");
-    expect(result.current[0].buyerCurrency).toBe("cad");
-    expect(result.current[0].surcharges.type).toBe("pending");
+    expect(result.current[0].unavailableBuyerCurrency).toBeNull();
+    expect(result.current[0].buyerCurrency).toBe("usd");
+    expect(result.current[0].surcharges.type).toBe("loaded");
+    expect(document.cookie).toContain("gumroad_buyer_currency=usd");
   });
 
   it("marks saved-card surcharge requests so direct-listed currencies are not advertised", async () => {

@@ -898,6 +898,25 @@ describe("direct-listed card element", () => {
     expect(getStripePaymentElementMountCurrency(s)).toBeNull();
   });
 
+  it("stays canonical USD after the refreshed config drops the direct-listed card marker", () => {
+    const s = state({
+      checkoutPayment: {
+        ...directListedCardConfig,
+        elements_options: {
+          ...directListedCardConfig.elements_options,
+          currency: "eur",
+          listed_currency_display: { currency: "eur", subunit_to_unit: 100 },
+          direct_listed_card: false,
+        },
+      },
+      buyerCurrency: "usd",
+    });
+
+    expect(getConfiguredDirectListedCurrency(s)).toBeNull();
+    expect(getStripePaymentElementAmount(s)).toBe(1_000);
+    expect(getStripePaymentElementMountCurrency(s)).toBe("usd");
+  });
+
   it("remounts in canonical USD when a tip makes the direct-listed charge ineligible", () => {
     const s = state({
       checkoutPayment: directListedCardConfig,

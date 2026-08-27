@@ -592,7 +592,7 @@ export function getStripePaymentElementAmount(state: State) {
   if (
     state.checkoutPayment.integration === "payment_element_client_confirm" &&
     state.checkoutPayment.elements_options.presentment_amount_cents !== null &&
-    (!state.checkoutPayment.elements_options.direct_listed_card ||
+    ((!state.checkoutPayment.elements_options.direct_listed_card && state.buyerCurrency?.toLowerCase() !== "usd") ||
       (getSelectableDirectListedCurrency(state) !== null && state.buyerCurrency?.toLowerCase() !== "usd"))
   )
     return state.checkoutPayment.elements_options.presentment_amount_cents;
@@ -709,6 +709,7 @@ function getDesiredStripePaymentElementMountCurrency(state: State): string | nul
 
   const configuredDirectListedCurrency = getConfiguredDirectListedCurrency(state);
   if (!configuredDirectListedCurrency) {
+    if (state.buyerCurrency?.toLowerCase() === "usd") return "usd";
     return state.checkoutPayment.elements_options.direct_listed_card
       ? "usd"
       : state.checkoutPayment.elements_options.currency;
@@ -1450,7 +1451,6 @@ export const reduceCheckoutState = produce((state: State, action: Action) => {
         ) {
           state.unavailableBuyerCurrency = state.buyerCurrency;
           state.buyerCurrency = remint.previousCurrency;
-          writeBuyerCurrencyPreference(state.buyerCurrency);
           // The response in hand is the canonical-USD fallback the refused currency produced, so
           // the restored selection needs quoting again — but only when this same response says it
           // is still on offer. Asking again for a currency the server has just withdrawn would
@@ -1506,7 +1506,6 @@ export const reduceCheckoutState = produce((state: State, action: Action) => {
       // the server saying it cannot charge that currency, and the notice must not claim it did.
       if (state.buyerCurrencyRemint && !state.buyerCurrencyRemint.surfaceSwitch) {
         state.buyerCurrency = state.buyerCurrencyRemint.previousCurrency;
-        writeBuyerCurrencyPreference(state.buyerCurrency);
       }
       state.surcharges = { type: "error" };
       break;

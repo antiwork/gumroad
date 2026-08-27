@@ -416,8 +416,9 @@ export const Checkout = ({
     ? state.buyerCurrencyRemint.previousCurrency
     : state.buyerCurrency;
   const directListedCurrencySelected =
-    configuredDirectListedCurrency === null ||
-    (selectableDirectListedCurrency !== null && displayedBuyerCurrency?.toLowerCase() !== "usd");
+    configuredDirectListedCurrency === null
+      ? !(state.paymentMethod === "card" && displayedBuyerCurrency?.toLowerCase() === "usd")
+      : selectableDirectListedCurrency !== null && displayedBuyerCurrency?.toLowerCase() !== "usd";
   const listedCurrency =
     buyerCurrencyDisplay || !canUseStripePaymentElementClientConfirm(state) || !directListedCurrencySelected
       ? null

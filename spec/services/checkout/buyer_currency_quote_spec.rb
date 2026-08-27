@@ -184,6 +184,45 @@ describe Checkout::BuyerCurrencyQuote do
       expect(locked.presentment_component_overrides).to eq([[nil, 4_37, nil, nil, nil]])
     end
 
+    it "keeps paid-line override slots before a later paid exact tip" do
+      untipped_product = create(:product, user: seller, price_cents: 10_00, price_currency_type: Currency::USD)
+      untipped_line = described_class::LineItem.new(
+        permalink: untipped_product.unique_permalink,
+        product: untipped_product,
+        price_cents: 10_00,
+        tip_cents: 0,
+        presentment_tip_cents: 0,
+        seller_tax_cents: 0,
+        gumroad_tax_cents: 0,
+        shipping_cents: 0
+      )
+      tipped_line = described_class::LineItem.new(
+        permalink: product.unique_permalink,
+        product:,
+        price_cents: 10_00,
+        tip_cents: 3_50,
+        presentment_tip_cents: 4_37,
+        seller_tax_cents: 0,
+        gumroad_tax_cents: 0,
+        shipping_cents: 0
+      )
+
+      result = described_class.create(line_items: [untipped_line, tipped_line], canonical_total_cents: 23_50, ip: "24.48.0.1")
+      locked = described_class.verify!(
+        token: result.token,
+        seller:,
+        merchant_account:,
+        currency: Currency::CAD,
+        canonical_total_cents: 23_50,
+        canonical_line_items: [
+          { permalink: untipped_product.unique_permalink, total_cents: 10_00 },
+          { permalink: product.unique_permalink, total_cents: 13_50 }
+        ]
+      )
+
+      expect(locked.presentment_component_overrides).to eq([nil, [nil, 4_37, nil, nil, nil]])
+    end
+
     it "ignores an exact presentment tip that is not the converted canonical tip" do
       line_item = described_class::LineItem.new(
         permalink: product.unique_permalink,

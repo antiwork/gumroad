@@ -907,9 +907,10 @@ class Checkout::BuyerCurrencyQuote
     end
 
     def presentment_component_overrides_for(charge_line_items, fx_rate:, buyer_currency:, include_zero_charge_slots: false)
-      overrides = charge_line_items.map do |line_item|
-        next if line_item.charge_canonical_total_cents.zero?
-        next if line_item.presentment_tip_cents.blank?
+      lines = include_zero_charge_slots ? charge_line_items : charge_line_items.reject { _1.charge_canonical_total_cents.zero? }
+      overrides = lines.map do |line_item|
+        next if include_zero_charge_slots && line_item.charge_canonical_total_cents.zero?
+        next if line_item.presentment_tip_cents.to_i.zero?
 
         charge_tip_cents = line_item.charge_tip_cents.nil? ? line_item.tip_cents : line_item.charge_tip_cents
         expected_tip_cents = presentment_cents_for(charge_tip_cents, fx_rate, buyer_currency)
@@ -917,7 +918,6 @@ class Checkout::BuyerCurrencyQuote
 
         [nil, line_item.presentment_tip_cents, nil, nil, nil]
       end
-      overrides = overrides.compact unless include_zero_charge_slots
       overrides.any? ? overrides : nil
     end
 
