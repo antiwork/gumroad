@@ -616,6 +616,11 @@ class Order::PreparePaymentIntentService
       direct_listed_decision = client_confirm_direct_listed_decision
       if direct_listed_decision.eligible? && direct_listed_decision.direct_listed_amount? &&
          direct_listed_decision.currency == forced_currency
+        if params[:buyer_currency_quote].present?
+          Rails.logger.info("Client-confirm direct-listed presentment rejected a stale quote for order #{order.id}")
+          return reject_client_confirm_buyer_currency_quote!
+        end
+
         return direct_listed_presentment_for(charge, direct_listed_decision)
       end
 
@@ -633,12 +638,17 @@ class Order::PreparePaymentIntentService
       )
       presentment = service.perform
       if presentment.nil? && service.failure_reason == Charge::MethodForcedPresentment::BUYER_CURRENCY_QUOTE_INVALID
-        purchases_to_charge.each do |purchase|
-          purchase.error_code = PurchaseErrorCode::BUYER_CURRENCY_QUOTE_INVALID if purchase.error_code.blank?
-        end
-        @client_confirm_presentment_failure_message = Charge::CreateService::BUYER_CURRENCY_QUOTE_INVALID_MESSAGE
+        reject_client_confirm_buyer_currency_quote!
       end
       presentment
+    end
+
+    def reject_client_confirm_buyer_currency_quote!
+      purchases_to_charge.each do |purchase|
+        purchase.error_code = PurchaseErrorCode::BUYER_CURRENCY_QUOTE_INVALID
+      end
+      @client_confirm_presentment_failure_message = Charge::CreateService::BUYER_CURRENCY_QUOTE_INVALID_MESSAGE
+      nil
     end
 
     def client_confirm_direct_listed_decision

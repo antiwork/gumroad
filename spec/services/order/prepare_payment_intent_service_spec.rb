@@ -2165,6 +2165,26 @@ describe Order::PreparePaymentIntentService, :vcr do
           .to have_attributes(presentment_currency: Currency::CAD, presentment_total_cents: 15_00, stripe_fx_quote_id: nil)
       end
 
+      it "rejects a stale quote token instead of charging a changed direct-listed amount" do
+        order, params = build_order
+        purchase = order.purchases.first
+        purchase.update!(displayed_price_cents: 15_00,
+                         displayed_price_currency_type: Currency::CAD,
+                         rate_converted_to_usd: BigDecimal("0.8"))
+        params[:buyer_currency_quote] = "stale-quoted-cart-token"
+        expect(Charge::DirectListedPresentment).not_to receive(:new)
+
+        create_args, responses = perform_with_direct_listed_card(order, params)
+
+        expect(create_args).to be_nil
+        expect(responses["unique-id-0"]).to include(
+          success: false,
+          error_code: PurchaseErrorCode::BUYER_CURRENCY_QUOTE_INVALID,
+          error_message: Charge::CreateService::BUYER_CURRENCY_QUOTE_INVALID_MESSAGE
+        )
+        expect(purchase.reload.purchase_presentment).to be_nil
+      end
+
       it "keeps the canonical USD intent when the Element reports that it displayed USD" do
         order, params = build_order
         expect(Charge::DirectListedPresentment).not_to receive(:new)
