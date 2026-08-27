@@ -32,6 +32,7 @@ import * as React from "react";
 
 import { assertDefined } from "$app/utils/assert";
 import { classNames } from "$app/utils/classNames";
+import { isLikelyImageFile } from "$app/utils/prepareImageForUpload";
 
 import { InputtedDiscount } from "$app/components/CheckoutDashboard/DiscountInput";
 import { Modal } from "$app/components/Modal";
@@ -357,7 +358,7 @@ export const useRichTextEditor = ({
   }, [initialValue]);
   const imageSettings = useImageUploadSettings();
   const uploadFiles = ({ view, files }: { view: EditorView; files: File[] }) => {
-    const [images, nonImages] = partition(files, (file) => file.type.startsWith("image"));
+    const [images, nonImages] = partition(files, (file) => isLikelyImageFile(file));
     onInputNonImageFiles?.(nonImages);
     uploadImages({ view, files: images, imageSettings });
   };

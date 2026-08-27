@@ -1,6 +1,7 @@
 import { Image as ImageIcon } from "@boxicons/react";
 import { Node as TiptapNode } from "@tiptap/core";
 import { Node as ProseMirrorNode } from "@tiptap/pm/model";
+import { Transaction } from "@tiptap/pm/state";
 import { EditorView } from "@tiptap/pm/view";
 import { NodeViewContent, NodeViewProps, NodeViewWrapper, ReactNodeViewRenderer } from "@tiptap/react";
 import * as React from "react";
@@ -9,6 +10,7 @@ import typia from "typia";
 import { assertDefined } from "$app/utils/assert";
 import { classNames } from "$app/utils/classNames";
 import FileUtils from "$app/utils/file";
+import { isLikelyImageFile, prepareImageForUpload, heicDecodingLikely } from "$app/utils/prepareImageForUpload";
 import {
   canResetFileInputAfterSnapshot,
   fileListMatchesPickedFiles,
@@ -44,6 +46,49 @@ const deleteImageInView = (view: EditorView, src: string) =>
     view.dispatch(view.state.tr.deleteRange(nodePos, nodePos + descendant.nodeSize));
   });
 
+// Keep insertAt valid while decode/resize runs. Callers may already map through
+// file snapshotting; this covers the slower prepareImageForUpload window.
+// One shared dispatch hook per view: overlapping uploadImages must not restore
+// a captured handler and rip out a still-running tracker.
+type PosMapper = (tr: Transaction) => void;
+type DispatchHook = { original: EditorView["dispatch"]; mappers: Set<PosMapper> };
+const dispatchHooks = new WeakMap<EditorView, DispatchHook>();
+
+const trackMappedPos = (view: EditorView, start: number) => {
+  let pos = start;
+  const mapper: PosMapper = (tr) => {
+    pos = tr.mapping.map(pos);
+  };
+
+  let hook = dispatchHooks.get(view);
+  if (!hook) {
+    const original = view.dispatch.bind(view);
+    const mappers = new Set<PosMapper>();
+    view.dispatch = (tr: Transaction) => {
+      if (tr.docChanged) {
+        for (const map of mappers) map(tr);
+      }
+      original(tr);
+    };
+    hook = { original, mappers };
+    dispatchHooks.set(view, hook);
+  }
+  hook.mappers.add(mapper);
+
+  return {
+    get: () => pos,
+    stop: () => {
+      const current = dispatchHooks.get(view);
+      if (!current) return;
+      current.mappers.delete(mapper);
+      if (current.mappers.size === 0) {
+        view.dispatch = current.original;
+        dispatchHooks.delete(view);
+      }
+    },
+  };
+};
+
 export const uploadImages = ({
   view,
   files,
@@ -58,37 +103,57 @@ export const uploadImages = ({
   if (!imageSettings || !files.length) return Promise.resolve();
 
   const { maxFileSize } = imageSettings;
-  const validFiles = maxFileSize
-    ? files.filter((file) => {
-        if (file.size > maxFileSize) {
-          showAlert(`File is too large (max allowed size is ${FileUtils.getReadableFileSize(maxFileSize)})`, "error");
-          return false;
+
+  return (async () => {
+    const mapped = trackMappedPos(view, insertAt);
+    const prepared: File[] = [];
+    try {
+      for (const file of files) {
+        try {
+          const next = isLikelyImageFile(file)
+            ? await prepareImageForUpload(file, maxFileSize ? { maxBytes: maxFileSize } : undefined)
+            : file;
+          // Check the post-prep name so HEIC/AVIF that re-encoded to JPEG pass, while
+          // SVG/ICO that skipped prep still fail the editor's extension allow-list.
+          if (!FileUtils.isFileNameExtensionAllowed(next.name, imageSettings.allowedExtensions)) {
+            showAlert("Invalid file type.", "error");
+            continue;
+          }
+          if (maxFileSize && next.size > maxFileSize) {
+            showAlert(`File is too large (max allowed size is ${FileUtils.getReadableFileSize(maxFileSize)})`, "error");
+            continue;
+          }
+          prepared.push(next);
+        } catch {
+          showAlert("Could not process that image.", "error");
         }
-        return true;
-      })
-    : files;
+      }
+      if (!prepared.length) return;
 
-  if (!validFiles.length) return Promise.resolve();
+      const imageSchema = assertDefined(view.state.schema.nodes.image, "Image node type missing");
+      const pos = mapped.get();
 
-  const imageSchema = assertDefined(view.state.schema.nodes.image, "Image node type missing");
+      // We reverse the files so their order in the editor is the same as the order they were selected
+      const filesWithUrls = [...prepared].reverse().map((file) => {
+        const src = URL.createObjectURL(file);
+        const node = imageSchema.create({ src, uploading: true });
+        view.dispatch(view.state.tr.insert(pos, node));
+        return { file, src };
+      });
 
-  // We reverse the files so their order in the editor is the same as the order they were selected
-  const filesWithUrls = [...validFiles].reverse().map((file) => {
-    const src = URL.createObjectURL(file);
-    const node = imageSchema.create({ src, uploading: true });
-    view.dispatch(view.state.tr.insert(insertAt, node));
-    return { file, src };
-  });
-
-  return Promise.all(
-    filesWithUrls.map(
-      ({ file, src }) =>
-        imageSettings.onUpload(file, src)?.then(
-          (newSrc) => setImageSrcInView(view, src, newSrc),
-          () => deleteImageInView(view, src),
-        ) ?? Promise.resolve(),
-    ),
-  );
+      await Promise.all(
+        filesWithUrls.map(
+          ({ file, src }) =>
+            imageSettings.onUpload(file, src)?.then(
+              (newSrc) => setImageSrcInView(view, src, newSrc),
+              () => deleteImageInView(view, src),
+            ) ?? Promise.resolve(),
+        ),
+      );
+    } finally {
+      mapped.stop();
+    }
+  })();
 };
 
 const ImageNodeView = ({ node, editor, getPos }: NodeViewProps) => {
@@ -247,7 +312,11 @@ export const Image = TiptapNode.create({
           ref={inputRef}
           multiple
           type="file"
-          accept={imageSettings.allowedExtensions.map((ext) => `.${ext}`).join(",")}
+          accept={[
+            ...imageSettings.allowedExtensions.map((ext) => `.${ext}`),
+            "image/avif",
+            ...(heicDecodingLikely() ? [".heic", ".heif"] : []),
+          ].join(",")}
           onChange={(e) => {
             const input = e.target;
             if (snapshotInFlight.current || !input.files) return;
@@ -263,7 +332,6 @@ export const Image = TiptapNode.create({
             input.disabled = true;
             void snapshotPickedFiles(picked)
               .then(async (files) => {
-                editor.off("transaction", mapInsertAt);
                 const uploads = uploadImages({ view: editor.view, files, imageSettings, insertAt });
                 const snapshotted =
                   fileListMatchesPickedFiles(input.files, picked) && canResetFileInputAfterSnapshot(picked, files);

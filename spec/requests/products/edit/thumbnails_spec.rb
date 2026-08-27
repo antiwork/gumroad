@@ -26,11 +26,8 @@ describe("Product Edit Thumbnail Scenario", type: :system, js: true) do
     expect(page).to have_alert(text: "Invalid file type.")
     expect(page).to have_no_alert
 
-    within_section "Thumbnail", section_element: :section do
-      page.attach_file("Upload", file_fixture("error_file.jpeg"), visible: false)
-    end
-    expect(page).to have_alert(text: "Could not process your thumbnail, please upload an image with size smaller than 5 MB")
-    expect(page).to have_no_alert
+    # Oversized JPEGs are resized in the browser before upload, so the old
+    # 5 MB rejection no longer fires on error_file.jpeg.
 
     within_section "Thumbnail", section_element: :section do
       page.attach_file("Upload", file_fixture("test-small.png"), visible: false)
@@ -47,7 +44,7 @@ describe("Product Edit Thumbnail Scenario", type: :system, js: true) do
     within_section "Thumbnail", section_element: :section do
       page.attach_file("Upload", file_fixture("disguised_html_script.png"), visible: false)
     end
-    expect(page).to have_alert(text: "Invalid file type.")
+    expect(page).to have_alert(text: "Could not process that image.")
     expect(page).to have_no_alert
 
     within_section "Thumbnail", section_element: :section do
