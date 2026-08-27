@@ -12,9 +12,9 @@
 # error: {type:, message:}}) so the client runtime surfaces the message
 # instead of choking on an unfamiliar shape. An upstream failure keeps its
 # original status, so the runtime's own retry logic (429/529) keeps
-# working, but its message is replaced by one of this gateway's own — the
-# pet must not have to recognise each vendor's phrasing. The upstream
-# text goes to the log.
+# working, but its message is replaced by one of this gateway's own, so
+# Gumhead need not recognise each vendor's phrasing. The upstream text
+# goes to the log.
 #
 # ActionController::Live turns every render in this controller into a
 # streamed body; that is fine — the buffered paths (count_tokens, validation
@@ -97,24 +97,20 @@ class Api::V2::Gumhead::MessagesController < Api::V2::BaseController
   # must stream, and streams meter incrementally.
   MAX_BUFFERED_OUTPUT_TOKENS = BUFFERED_TIMEOUT * TIMEOUT_OUTPUT_TOKENS_PER_SECOND
   # Operational failures only: a request the client got wrong keeps the
-  # provider's message, which names the field this gateway cannot. These
-  # strings are a contract with the pet, which matches them to choose what
-  # it says (core/src/errors.ts in antiwork/gumhead), so changing one needs
-  # a client release in the same window.
+  # provider's message, which names the field this gateway cannot. Gumhead
+  # matches these strings to choose what it says (core/src/errors.ts), so
+  # changing one needs a client release in the same window.
   UPSTREAM_ERRORS = {
     out_of_budget: ["api_error", "The Gumhead model service is out of budget."],
     credentials: ["api_error", "The Gumhead model service rejected the gateway credentials."],
     rate_limited: ["rate_limit_error", "The Gumhead model service is rate limited. Please retry shortly."],
     busy: ["api_error", "The Gumhead model service is busy. Please retry shortly."],
   }.freeze
-  # A spend cap or exhausted credit lasts hours or days, so it must not
-  # reach the pet as a transient. Providers report it on several statuses
-  # (400 for a self-set limit, 429 for a tier cap, 402 for empty credit),
-  # so status alone cannot separate it from a real rate limit. Only the
-  # documented wordings are matched: a broad "quota" would also swallow
-  # the per-minute limits, which recover on their own.
-  # "budget ... exceeded" is OpenRouter's workspace cap, which answers 403
-  # with no structured code, so the wording is the only signal there.
+  # A spend cap lasts hours or days, and providers report it on 400, 402,
+  # and 429, so status alone cannot separate it from a real rate limit.
+  # Only documented wordings match: a broad "quota" would swallow the
+  # per-minute limits, which recover on their own. "budget ... exceeded"
+  # is OpenRouter's workspace cap, which carries no structured code.
   UPSTREAM_OUT_OF_BUDGET_PATTERN = /api usage limits|credit balance|insufficient.{0,12}(credit|balance|fund)|out of credit|budget.{0,40}exceeded/i
   # The structured marker for a tier spend cap, authoritative where the
   # wording is not.
@@ -830,11 +826,10 @@ class Api::V2::Gumhead::MessagesController < Api::V2::BaseController
     # text reaches the log.
     def minted_upstream_error(status, parsed, body)
       detail = upstream_error_detail(parsed, body)
-      # The provider's request id is the only handle for finding this
-      # failure in their logs, and it used to reach the client inside the
-      # body this replaces.
-      request_id = parsed.is_a?(Hash) ? parsed["request_id"].to_s.presence : nil
-      Rails.logger.warn("Gumhead gateway upstream error: status=#{status} request_id=#{request_id || "none"} #{detail}")
+      # The request id is the handle for finding this failure in the
+      # provider's logs; it used to reach the client inside the body this
+      # replaces.
+      Rails.logger.warn("Gumhead gateway upstream error: status=#{status} request_id=#{upstream_request_id(parsed)} #{detail}")
       key = upstream_error_key(status, parsed, detail)
       return nil if key.nil?
 
@@ -867,15 +862,26 @@ class Api::V2::Gumhead::MessagesController < Api::V2::BaseController
 
     # Providers put the message in {error:{message}}, but `error` is also
     # a bare string in the wild, where a nested dig would raise. Anything
-    # else — an HTML error page from a proxy, a truncated body — is logged
-    # as it arrived, bounded so one bad response cannot flood the log.
+    # else — an HTML error page from a proxy — is logged as it arrived.
+    #
+    # Both this and the request id are upstream-controlled and go into one
+    # log line, so control characters are flattened: a newline in either
+    # would forge a second record. Bounded so one bad response cannot
+    # flood the log.
     def upstream_error_detail(parsed, body)
       error = parsed.is_a?(Hash) ? parsed["error"] : nil
       message = case error
                 when Hash then error["message"].to_s
                 when String then error
       end
-      (message.presence || body.to_s).slice(0, 500)
+      (message.presence || body.to_s).gsub(/[[:cntrl:]]/, " ").squeeze(" ").strip.slice(0, 500)
+    end
+
+    # A known shape, so it is validated rather than sanitised: anything
+    # else is not a request id and should not reach the log as one.
+    def upstream_request_id(parsed)
+      id = parsed.is_a?(Hash) ? parsed["request_id"].to_s : ""
+      id[/\A[\w.-]{1,64}\z/] || "none"
     end
 
     def openrouter_error_envelope?(parsed)

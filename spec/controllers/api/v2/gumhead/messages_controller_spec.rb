@@ -1003,8 +1003,7 @@ describe Api::V2::Gumhead::MessagesController do
       )
     end
 
-    # The spend limit that took Gumhead chat down, in all three shapes the
-    # provider reports it. None may reach the pet as a transient retry.
+    # No spend-limit shape may be reported as a transient retry.
     [
       ["a self-set organization limit", 400, "You have reached your specified API usage limits. You will regain access on 2026-09-01 at 00:00 UTC."],
       ["a workspace limit", 400, "You have reached your specified workspace API usage limits."],
