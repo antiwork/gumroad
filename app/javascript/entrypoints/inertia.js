@@ -5,6 +5,7 @@ import { createRoot } from "react-dom/client";
 import AppWrapper from "../inertia/app_wrapper.tsx";
 import Layout, { PublicLayout, LoggedInUserLayout } from "../inertia/layout.tsx";
 import { isUnredirectedDownloadPagePollResponse, warnAboutDroppedPollResponse } from "../utils/inertia_partial_reload";
+import { installFileDropNavigationGuard } from "../utils/preventFileDropNavigation";
 import { defaults as requestDefaults } from "../utils/request";
 
 // Keep the `request()` util's CSRF token current for Inertia pages. `base_page.ts` only
@@ -183,5 +184,6 @@ createInertiaApp({
 
     const root = createRoot(el);
     root.render(createElement(AppWrapper, { global }, createElement(App, props)));
+    installFileDropNavigationGuard();
   },
 });

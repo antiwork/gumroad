@@ -1,6 +1,7 @@
 import typia from "typia";
 
 import { startTrackingForGumroad } from "$app/data/google_analytics";
+import { installFileDropNavigationGuard } from "$app/utils/preventFileDropNavigation";
 import { defaults as requestDefaults } from "$app/utils/request";
 
 const BasePage = {
@@ -9,6 +10,7 @@ const BasePage = {
     requestDefaults.headers = { "X-CSRF-Token": csrfToken };
 
     startTrackingForGumroad();
+    installFileDropNavigationGuard();
   },
 };
 

@@ -8,6 +8,7 @@ import { CoverPayload, createCover, deleteCover } from "$app/data/covers";
 import { AssetPreview } from "$app/parsers/product";
 import FileUtils from "$app/utils/file";
 import { between } from "$app/utils/math";
+import { isLikelyImageFile, prepareImageForUpload, heicDecodingLikely } from "$app/utils/prepareImageForUpload";
 import { asyncVoid } from "$app/utils/promise";
 import { assertResponseError } from "$app/utils/request";
 
@@ -26,10 +27,9 @@ import { WithTooltip } from "$app/components/WithTooltip";
 const MAX_PREVIEW_COUNT = 8;
 
 const ALLOWED_EXTENSIONS = ["jpeg", "jpg", "png", "gif", "mov", "m4v", "mpeg", "mpg", "mp4", "wmv"];
-const IMAGE_EXTENSIONS = ["jpeg", "jpg", "png", "gif"];
 // Matches AssetPreview::MAX_IMAGE_FILE_SIZE on the server. Oversized images
 // make cover variant processing slow enough to time out product page loads,
-// so reject them here before wasting the seller's time on an upload.
+// so convert/resize in the browser before upload.
 const MEGABYTE = 1024 * 1024;
 const MAX_IMAGE_FILE_SIZE = 50 * MEGABYTE;
 
@@ -190,29 +190,46 @@ const CoverUploader = ({
                 type="file"
                 className="sr-only"
                 multiple
-                accept={ALLOWED_EXTENSIONS.map((ext) => `.${ext}`).join(",")}
+                accept={[
+                  ...ALLOWED_EXTENSIONS.map((ext) => `.${ext}`),
+                  "image/avif",
+                  ...(heicDecodingLikely() ? [".heic", ".heif"] : []),
+                ].join(",")}
                 disabled={isUploading}
                 onChange={asyncVoid(async (event) => {
-                  if (!event.target.files?.length) return;
+                  const input = event.currentTarget;
+                  const files = input.files;
+                  if (!files?.length) return;
 
-                  const validFiles = Array.from(event.target.files).filter((file) => {
+                  const validFiles: File[] = [];
+                  for (const file of Array.from(files)) {
+                    if (isLikelyImageFile(file)) {
+                      try {
+                        const prepared = await prepareImageForUpload(file, { maxBytes: MAX_IMAGE_FILE_SIZE });
+                        if (prepared.size > MAX_IMAGE_FILE_SIZE) {
+                          showAlert(
+                            `Cover images must be smaller than ${MAX_IMAGE_FILE_SIZE / MEGABYTE} MB. Please try another image.`,
+                            "error",
+                          );
+                          continue;
+                        }
+                        validFiles.push(prepared);
+                      } catch {
+                        showAlert("Could not process that image.", "error");
+                      }
+                      continue;
+                    }
                     if (!FileUtils.isFileNameExtensionAllowed(file.name, ALLOWED_EXTENSIONS)) {
                       showAlert("Invalid file type.", "error");
-                      return false;
+                      continue;
                     }
-                    if (
-                      FileUtils.isFileNameExtensionAllowed(file.name, IMAGE_EXTENSIONS) &&
-                      file.size > MAX_IMAGE_FILE_SIZE
-                    ) {
-                      showAlert(
-                        `Cover images must be smaller than ${MAX_IMAGE_FILE_SIZE / MEGABYTE} MB. Please resize or compress the image and try again.`,
-                        "error",
-                      );
-                      return false;
-                    }
-                    return true;
-                  });
-                  if (validFiles.length === 0) return;
+                    validFiles.push(file);
+                  }
+                  input.value = "";
+                  if (validFiles.length === 0) {
+                    setIsSelecting(false);
+                    return;
+                  }
 
                   setIsUploading(true);
                   for (const file of validFiles) {

@@ -32,7 +32,7 @@ const validateFile = async (file: File) => {
   if (!FileUtils.isFileNameExtensionAllowed(file.name, ALLOWED_EXTENSIONS)) throw new ValidationError();
 
   if (file.size > MAX_FILE_SIZE)
-    throw new ValidationError("Could not process your thumbnail, please upload an image with size smaller than 5 MB.");
+    throw new ValidationError("Could not process your thumbnail. Please try another image.");
 
   const dimensions = await getImageDimensionsFromFile(file).catch(() => null);
   if (!dimensions) throw new ValidationError();
@@ -90,7 +90,7 @@ export const ThumbnailEditor = ({
         imageAlt="Thumbnail image"
         imageUrl={thumbnail?.url ?? null}
         allowedExtensions={ALLOWED_EXTENSIONS}
-        helpText="This image appears in the Gumroad Library, Discover and Profile pages. Your image should be square, at least 600x600px, and JPG, PNG or GIF format."
+        helpText="This image appears in the Gumroad Library, Discover and Profile pages. Your image should be square and at least 600x600px."
         onRemove={() => void removeThumbnail(thumbnail?.guid ?? "")}
         defaultImageUrl={coverUrlForThumbnail(covers) ?? nativeTypeThumbnails[`./${nativeType}.svg`]}
         onSelectFile={(file) =>

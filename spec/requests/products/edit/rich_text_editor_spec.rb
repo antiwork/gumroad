@@ -91,7 +91,9 @@ describe("Product Edit Rich Text Editor", type: :system, js: true) do
       attach_file large_image.path do
         click_on "Insert image"
       end
-      expect(page).to have_alert(text: "File is too large (max allowed size is 10.0 MB)")
+      # Header-only PNG cannot be decoded; genuine oversized images are resized
+      # in the browser instead of rejected for size.
+      expect(page).to have_alert(text: "Could not process that image.")
       expect(find("[aria-label='Description']")).to_not have_selector("img")
     ensure
       large_image.close
