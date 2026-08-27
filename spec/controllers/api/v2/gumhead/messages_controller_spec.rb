@@ -900,9 +900,7 @@ describe Api::V2::Gumhead::MessagesController do
 
     it "still rewrites Claude names when the configured map is empty" do
       use_openrouter_base
-      allow(GlobalConfig).to receive(:get)
-        .with("GUMHEAD_MODEL_MAP", described_class::DEFAULT_MODEL_MAP)
-        .and_return({})
+      allow(GlobalConfig).to receive(:get).with("GUMHEAD_MODEL_MAP").and_return("{}")
       stub_request(:post, openrouter_messages_url)
         .to_return(status: 200, body: anthropic_response.to_json, headers: { "Content-Type" => "application/json" })
 
@@ -989,6 +987,148 @@ describe Api::V2::Gumhead::MessagesController do
 
       expect(response.status).to eq(502)
       expect(GumheadUsageEvent.sole.input_tokens).to eq(rewritten_payload_bytesize)
+    end
+  end
+
+  describe "live model map in Redis" do
+    let(:openrouter_messages_url) { "https://openrouter.ai/api/v1/messages" }
+
+    after { $redis.del(RedisKey.gumhead_model_map) }
+
+    def use_openrouter_base
+      allow(GlobalConfig).to receive(:get)
+        .with("GUMHEAD_UPSTREAM_API_BASE", described_class::DEFAULT_UPSTREAM_API_BASE)
+        .and_return("https://openrouter.ai/api/v1")
+      allow(GlobalConfig).to receive(:get).with("GUMHEAD_UPSTREAM_API_KEY").and_return("sk-or-test")
+    end
+
+    # Response without a model, so the ledger has to take the name from
+    # the rewritten body. A stub naming the mapped model would pass with
+    # the rewrite reverted.
+    def stub_openrouter
+      stub_request(:post, openrouter_messages_url)
+        .to_return(status: 200, body: anthropic_response.except(:model).to_json, headers: { "Content-Type" => "application/json" })
+    end
+
+    def expect_forwarded_model(url, model)
+      expect(WebMock).to have_requested(:post, url).with { |req|
+        JSON.parse(req.body)["model"] == model
+      }
+    end
+
+    it "serves the model a Redis write names, without a deploy" do
+      use_openrouter_base
+      $redis.set(RedisKey.gumhead_model_map, { "claude-sonnet-" => "openai/gpt-5.6-luna" }.to_json)
+      stub_openrouter
+
+      post_messages
+
+      expect(response.status).to eq(200)
+      expect_forwarded_model(openrouter_messages_url, "openai/gpt-5.6-luna")
+      expect(GumheadUsageEvent.sole.model).to eq("openai/gpt-5.6-luna")
+    end
+
+    it "moves one role and leaves the rest on the built-in map" do
+      use_openrouter_base
+      $redis.set(RedisKey.gumhead_model_map, { "gumhead-status" => "openai/gpt-5.6-luna" }.to_json)
+      stub_openrouter
+
+      post_messages(request_payload.merge(model: "gumhead-status"))
+      post_messages(request_payload.merge(model: "gumhead-chat"))
+
+      expect_forwarded_model(openrouter_messages_url, "openai/gpt-5.6-luna")
+      expect_forwarded_model(openrouter_messages_url, "x-ai/grok-4.6")
+    end
+
+    it "outranks the deployed GUMHEAD_MODEL_MAP" do
+      use_openrouter_base
+      allow(GlobalConfig).to receive(:get).with("GUMHEAD_MODEL_MAP")
+        .and_return({ "claude-sonnet-" => "x-ai/grok-4.5" }.to_json)
+      $redis.set(RedisKey.gumhead_model_map, { "claude-sonnet-" => "openai/gpt-5.6-luna" }.to_json)
+      stub_openrouter
+
+      post_messages
+
+      expect_forwarded_model(openrouter_messages_url, "openai/gpt-5.6-luna")
+    end
+
+    it "falls back to the deployed map once the Redis key is deleted" do
+      use_openrouter_base
+      allow(GlobalConfig).to receive(:get).with("GUMHEAD_MODEL_MAP")
+        .and_return({ "claude-sonnet-" => "x-ai/grok-4.5" }.to_json)
+      $redis.del(RedisKey.gumhead_model_map)
+      stub_openrouter
+
+      post_messages
+
+      expect_forwarded_model(openrouter_messages_url, "x-ai/grok-4.5")
+    end
+
+    it "serves the deployed map and warns when the Redis value is not a JSON object" do
+      use_openrouter_base
+      $redis.set(RedisKey.gumhead_model_map, "x-ai/grok-4.5")
+      stub_openrouter
+      allow(Rails.logger).to receive(:warn)
+
+      post_messages
+
+      expect(response.status).to eq(200)
+      expect(Rails.logger).to have_received(:warn).with(/not a JSON object/).at_least(:once)
+      expect_forwarded_model(openrouter_messages_url, "x-ai/grok-4.6")
+    end
+
+    it "warns on a stored empty value instead of treating it as unset" do
+      use_openrouter_base
+      $redis.set(RedisKey.gumhead_model_map, "")
+      stub_openrouter
+      allow(Rails.logger).to receive(:warn)
+
+      post_messages
+
+      expect(response.status).to eq(200)
+      expect(Rails.logger).to have_received(:warn).with(/not a JSON object/).at_least(:once)
+      expect_forwarded_model(openrouter_messages_url, "x-ai/grok-4.6")
+    end
+
+    it "serves the deployed map when Redis is unreachable" do
+      use_openrouter_base
+      # Other services read $redis on this path; only the map read fails.
+      allow($redis).to receive(:get).and_call_original
+      allow($redis).to receive(:get).with(RedisKey.gumhead_model_map).and_raise(Redis::CannotConnectError)
+      stub_openrouter
+
+      post_messages
+
+      expect(response.status).to eq(200)
+      expect_forwarded_model(openrouter_messages_url, "x-ai/grok-4.6")
+    end
+
+    it "rewrites on an Anthropic upstream when only Redis names a map" do
+      $redis.set(RedisKey.gumhead_model_map, { "claude-sonnet-" => "claude-sonnet-4.5" }.to_json)
+      stub_request(:post, messages_url)
+        .to_return(status: 200, body: anthropic_response.to_json, headers: { "Content-Type" => "application/json" })
+
+      post_messages
+
+      expect_forwarded_model(messages_url, "claude-sonnet-4.5")
+    end
+
+    it "records which source chose the model" do
+      use_openrouter_base
+      $redis.set(RedisKey.gumhead_model_map, { "claude-sonnet-" => "openai/gpt-5.6-luna" }.to_json)
+      stub_openrouter
+      sources = []
+      subscriber = ActiveSupport::Notifications.subscribe("process_action.action_controller") do |*, payload|
+        sources << payload[:gumhead_model_map_source]
+      end
+
+      begin
+        post_messages
+      ensure
+        ActiveSupport::Notifications.unsubscribe(subscriber)
+      end
+
+      expect(sources).to include("redis")
     end
   end
 end

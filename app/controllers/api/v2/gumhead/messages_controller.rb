@@ -63,6 +63,11 @@ class Api::V2::Gumhead::MessagesController < Api::V2::BaseController
   # Family prefixes rewrite every allowed Claude name, including
   # OpenRouter :online variants.
   DEFAULT_ALLOWED_MODEL_PREFIXES = "claude-sonnet-,claude-haiku-,claude-opus-,gumhead-chat,gumhead-status,gumhead-cover"
+  # The fallback map. The live one is a JSON object in Redis under
+  # RedisKey.gumhead_model_map, merged over this one, so a partial write
+  # moves one role with no deploy. Point a role at an upstream id, never
+  # at the incoming name: a value equal to what the app sent is not a
+  # mapping, and validate_model rejects the request.
   DEFAULT_MODEL_MAP = {
     "claude-sonnet-" => "x-ai/grok-4.6",
     "claude-haiku-" => "x-ai/grok-4.6",
@@ -292,9 +297,16 @@ class Api::V2::Gumhead::MessagesController < Api::V2::BaseController
     end
 
     def rewrite_upstream_model?
-      return true if GlobalConfig.get("GUMHEAD_MODEL_MAP").present?
+      return true if configured_model_map?
 
       !anthropic_upstream?
+    end
+
+    # An operator-set map — in Redis or in the deployed config — always
+    # rewrites. Only the built-in map waits for the upstream to move off
+    # Anthropic.
+    def configured_model_map?
+      model_map_source != "default"
     end
 
     def mapped_upstream_model(model)
@@ -307,18 +319,55 @@ class Api::V2::Gumhead::MessagesController < Api::V2::BaseController
       match ? match[1] : model
     end
 
-    def model_map
-      raw = GlobalConfig.get("GUMHEAD_MODEL_MAP", DEFAULT_MODEL_MAP)
-      parsed = raw.is_a?(String) ? safe_parse_json(raw) : raw
-      overrides = {}
-      if parsed.is_a?(Hash)
-        parsed.each do |key, value|
-          next if key.blank? || value.blank?
+    # Precedence: Redis, then GUMHEAD_MODEL_MAP, then the built-in map.
+    # The live value lives in Redis because a secret/web write restarts a
+    # whole Puma colour (gp#2273); deleting the key reverts to what is
+    # deployed. Memoised: one request consults the map several times.
+    def model_map = resolved_model_map.first
 
-          overrides[key.to_s] = value.to_s
-        end
+    def model_map_source = resolved_model_map.last
+
+    def resolved_model_map
+      @resolved_model_map ||= begin
+        raw, source = raw_model_map
+        [DEFAULT_MODEL_MAP.merge(normalized_model_map(raw)), source]
       end
-      DEFAULT_MODEL_MAP.merge(overrides)
+    end
+
+    def raw_model_map
+      live = live_model_map
+      # Any stored value, empty string included: an operator who wrote one
+      # needs to hear that it is not serving. Only an absent key is silent.
+      unless live.nil?
+        parsed = safe_parse_json(live)
+        return [parsed, "redis"] if parsed.is_a?(Hash)
+
+        Rails.logger.warn("Gumhead model map in Redis is not a JSON object; serving the deployed map.")
+      end
+
+      configured = GlobalConfig.get("GUMHEAD_MODEL_MAP")
+      return [configured, "config"] if configured.present?
+
+      [DEFAULT_MODEL_MAP, "default"]
+    end
+
+    def live_model_map
+      $redis.get(RedisKey.gumhead_model_map)
+    rescue Redis::BaseError => e
+      # Reading ops policy must not fail the turn; the deployed map serves.
+      Rails.logger.warn("Gumhead model map Redis read failed: #{e.class} #{e.message}")
+      nil
+    end
+
+    def normalized_model_map(raw)
+      parsed = raw.is_a?(String) ? safe_parse_json(raw) : raw
+      return {} unless parsed.is_a?(Hash)
+
+      parsed.each_with_object({}) do |(key, value), map|
+        next if key.blank? || value.blank?
+
+        map[key.to_s] = value.to_s
+      end
     end
 
     def allowed_model_prefixes
@@ -356,6 +405,10 @@ class Api::V2::Gumhead::MessagesController < Api::V2::BaseController
     # request was already answered with the error envelope, and logging must
     # not turn that answer into a 500.
     def append_info_to_payload(payload)
+      # A lost Redis key is a model change; log the source so it is not a
+      # silent one. Read the memo rather than model_map_source, so logging
+      # never triggers the Redis read for a request that skipped the map.
+      payload[:gumhead_model_map_source] = @resolved_model_map.last if @resolved_model_map
       super
     rescue ActionDispatch::Http::Parameters::ParseError
       nil
