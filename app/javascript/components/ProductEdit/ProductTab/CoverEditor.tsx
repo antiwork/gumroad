@@ -208,7 +208,7 @@ const CoverUploader = ({
                         const prepared = await prepareImageForUpload(file, { maxBytes: MAX_IMAGE_FILE_SIZE });
                         if (prepared.size > MAX_IMAGE_FILE_SIZE) {
                           showAlert(
-                            `Cover images must be smaller than ${MAX_IMAGE_FILE_SIZE / MEGABYTE} MB. Please resize or compress the image and try again.`,
+                            `Cover images must be smaller than ${MAX_IMAGE_FILE_SIZE / MEGABYTE} MB. Please try another image.`,
                             "error",
                           );
                           continue;
