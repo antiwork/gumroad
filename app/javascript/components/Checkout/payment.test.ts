@@ -104,12 +104,23 @@ const paymentElementClientConfirmConfig: CheckoutPaymentConfig = {
   elements_options: {
     stripe_elements_mode: STRIPE_ELEMENTS_MODE_FOR_PAYMENT_INTENT,
     currency: "usd",
+    buyer_currency_presentment: false,
     presentment_amount_cents: null,
     listed_currency_display: null,
     payment_method_types: ["card"],
     payment_method_list_token: null,
     stripe_link_enabled: false,
     stripe_connect_account_id: null,
+  },
+};
+
+const buyerCurrencyClientConfirmConfig: CheckoutPaymentConfig = {
+  ...paymentElementClientConfirmConfig,
+  disable_wallets: true,
+  flat_payment_methods: true,
+  elements_options: {
+    ...paymentElementClientConfirmConfig.elements_options,
+    buyer_currency_presentment: true,
   },
 };
 
@@ -1050,13 +1061,20 @@ describe("buyer-currency presentment lane", () => {
     expect(getStripePaymentElementAmount(s)).toBe(1_300);
   });
 
-  it("remounts a client-confirm element in the quoted currency so any checkout can leave USD", () => {
+  it("remounts a client-confirm element in the quoted currency only when the server marked it quote-presentable", () => {
     const s = state({
-      checkoutPayment: paymentElementClientConfirmConfig,
+      checkoutPayment: buyerCurrencyClientConfirmConfig,
       surcharges: loadedSurchargesWithQuote,
     });
     expect(getStripePaymentElementPresentment(s)).toEqual({ currency: "cad", amountCents: 625 });
     expect(getStripePaymentElementMountCurrency(s)).toBe("cad");
+
+    const unmarked = state({
+      checkoutPayment: paymentElementClientConfirmConfig,
+      surcharges: loadedSurchargesWithQuote,
+    });
+    expect(getStripePaymentElementPresentment(unmarked)).toBeNull();
+    expect(getStripePaymentElementMountCurrency(unmarked)).toBe("usd");
   });
 
   it("returns null until surcharges load", () => {
@@ -1087,6 +1105,12 @@ describe("buyer-currency presentment lane", () => {
         const s = state({ checkoutPayment: buyerCurrencyPresentmentPaymentElementConfig, surcharges });
         expect(getStripePaymentElementMountCurrency(s)).toBeNull();
       }
+    });
+
+    it("keeps a client-confirm quote-presentment mount while a surcharge refresh is in flight", () => {
+      const s = state({ checkoutPayment: buyerCurrencyClientConfirmConfig, surcharges: { type: "pending" } });
+
+      expect(getStripePaymentElementMountCurrency(s)).toBeNull();
     });
 
     it("mounts canonical USD when a loaded surcharge response has no quote", () => {

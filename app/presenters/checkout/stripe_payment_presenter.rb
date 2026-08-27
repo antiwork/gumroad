@@ -70,6 +70,11 @@ class Checkout::StripePaymentPresenter
     # Unquoted USD-GeoIP candidates take this branch too (no local-method tabs).
     # Quote candidate + method-forced (EUR listing, CAD buyer) wins here; own-currency
     # method-forced carts are not candidates and fall through.
+    # Prefer client-confirm for carts it can safely charge: it is the only Payment Element path
+    # that can remount a USD-priced Indian buyer into INR and add UPI. Carts outside prepare's
+    # client-confirm contract fall through to the server-confirm buyer-currency element below.
+    return client_confirm_props if client_confirm_eligible?
+
     if buyer_currency_presentment_element_shape?(checkout_items)
       return payment_element_props(
         STRIPE_ELEMENTS_MODE_FOR_PAYMENT_INTENT,
@@ -82,8 +87,6 @@ class Checkout::StripePaymentPresenter
     # one-time carts are one-time, and the UPI Autopay membership shape is paid upfront (it
     # excludes preorders and free trials), registering reuse on a PaymentIntent rather than a
     # SetupIntent.
-    return client_confirm_props if client_confirm_eligible?
-
     payment_element_props(STRIPE_ELEMENTS_MODE_FOR_PAYMENT_INTENT)
   end
 
@@ -266,6 +269,8 @@ class Checkout::StripePaymentPresenter
       else
         CLIENT_CONFIRM_CURRENCY
       end
+      quote_remount = client_confirm_quote_remount?
+      inr_local_method_types = (quote_remount || listed_currency) ? inr_local_methods : []
       # Never list a forced-currency method on an element that is not mounted in that
       # currency — Stripe rejects the whole session, card included. UPI for a USD-priced
       # cart is added only after the browser remounts in INR (inr_local_methods).
@@ -275,7 +280,7 @@ class Checkout::StripePaymentPresenter
       end
       # Listed-currency Elements stay wallet-free until their sheet can be guaranteed to carry
       # the same final tax/tip/shipping total as the deferred intent.
-      disable_wallets = listed_currency || items.any? { buyer_currency_presentment_candidate?(_1) } || inr_local_methods.any? || client_confirm_quote_remount?
+      disable_wallets = listed_currency || items.any? { buyer_currency_presentment_candidate?(_1) } || inr_local_method_types.any? || quote_remount
       if listed_currency
         # The ConfirmationToken inherits this currency and method set. Keep only methods the
         # matching non-USD intent can accept; prepare applies the same restrictions.
@@ -286,14 +291,15 @@ class Checkout::StripePaymentPresenter
       elements_options = {
         stripe_elements_mode: STRIPE_ELEMENTS_MODE_FOR_PAYMENT_INTENT,
         currency: element_currency,
+        buyer_currency_presentment: quote_remount,
         presentment_amount_cents: listed_currency ? listed_element_amount_cents : nil,
         listed_currency_display: listed_currency ? {
           currency: element_currency,
           subunit_to_unit: subunit_to_unit(element_currency),
         } : nil,
         payment_method_types:,
-        inr_local_methods:,
-        payment_method_list_token: issued_payment_method_list_token(payment_method_types),
+        inr_local_methods: inr_local_method_types,
+        payment_method_list_token: issued_payment_method_list_token(payment_method_types, inr_local_method_types:),
         stripe_link_enabled: payment_method_types.include?(Checkout::PaymentMethodResolver::LINK_PAYMENT_METHOD_TYPE),
         stripe_connect_account_id: resolution.stripe_connect_account_id,
       }
@@ -401,14 +407,14 @@ class Checkout::StripePaymentPresenter
          Checkout::PaymentMethodResolver::ALIPAY_PAYMENT_METHOD_TYPE]
     end
 
-    def issued_payment_method_list_token(payment_method_types)
+    def issued_payment_method_list_token(payment_method_types, inr_local_method_types: inr_local_methods)
       quoted_types = quoted_remount_payment_method_types(payment_method_types)
-      inr_types = (quoted_types + inr_local_methods).uniq
+      inr_types = (quoted_types + inr_local_method_types).uniq
       Checkout::PaymentMethodListToken.issue(
         payment_method_types:,
         sellers:,
         quoted_payment_method_types: quoted_types == payment_method_types ? nil : quoted_types,
-        inr_payment_method_types: inr_local_methods.present? ? inr_types : nil,
+        inr_payment_method_types: inr_local_method_types.present? ? inr_types : nil,
       )
     end
 
@@ -425,16 +431,36 @@ class Checkout::StripePaymentPresenter
       return [] unless Checkout::BuyerCurrencyEligibility.stripe_test_mode? ||
                        Checkout::BuyerCurrencyEligibility.local_method_launched?("upi", seller)
 
-      %w[upi]
+      inr_method_resolution.payment_method_types & Checkout::PaymentMethodResolver::IN_LOCKED_PAYMENT_METHOD_TYPES
+    end
+
+    def inr_method_resolution
+      Checkout::PaymentMethodResolver.new(
+        sellers: [sellers.first],
+        recurring: false,
+        commission: false,
+        setup_for_future: false,
+        buyer_country:,
+        ppp_discounted: ppp_verification_applies?,
+        cart_product_currency: Currency::INR,
+        cart_total_usd_cents: nil,
+        recurring_upi_registration: false
+      ).resolve
     end
 
     # Client-confirm remounts the element in the quoted buyer currency. Wallets stay off
     # because their sheet cannot carry that locked total.
     def client_confirm_quote_remount?
-      return false unless sellers.all? { Checkout::BuyerCurrencyEligibility.seller_enabled?(_1) }
+      return false unless sellers.one? && sellers.all? { Checkout::BuyerCurrencyEligibility.seller_enabled?(_1) }
 
       currency = buyer_currency_for_ip(ip).to_s.downcase.presence
-      currency.present? && currency != Currency::USD
+      return false if currency.blank? || currency == Currency::USD
+      return false unless StripeChargeProcessor.charge_minor_units_compatible?(currency)
+
+      # Prepare can honor the displayed quote today only for a single USD-priced line. Multi-line
+      # USD carts and non-USD listing quotes still need the per-line quote basis work before a
+      # single client-confirm intent can safely leave USD.
+      items.one? && items.first[:product_currency] == Currency::USD
     end
 
     def recurring_upi_registration_shape?(items)

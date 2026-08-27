@@ -738,6 +738,8 @@ const CreditCardContent = ({
   // USD otherwise, or null while an in-flight surcharge refresh makes it unknowable so the
   // input keeps its current mount instead of remounting and wiping entered card details.
   const stripePaymentElementMountCurrency = getStripePaymentElementMountCurrency(state);
+  const stripePaymentElementWalletsEnabled =
+    state.checkoutPayment.payment_element_wallets && (stripePaymentElementMountCurrency ?? "usd") === "usd";
   const handlePaymentElementReady = React.useCallback((controller: PaymentElementController | null) => {
     paymentElementRef.current = controller;
     // A fresh (re)mounted element always starts on the card form, but the ref outlives element
@@ -1132,7 +1134,7 @@ const CreditCardContent = ({
                 ? "off_session"
                 : undefined
             }
-            walletsEnabled={state.checkoutPayment.payment_element_wallets}
+            walletsEnabled={stripePaymentElementWalletsEnabled}
             flatLayout={state.checkoutPayment.flat_payment_methods}
             applePayOption={memoizedPaymentElementApplePayOption}
             disabled={isProcessing(state)}

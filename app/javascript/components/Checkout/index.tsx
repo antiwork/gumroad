@@ -77,6 +77,7 @@ import {
   findCartItem,
 } from "./cartState";
 import {
+  canDisplayBuyerCurrencyQuote,
   canUseStripePaymentElementClientConfirm,
   computeTip,
   computeTipForListedLines,
@@ -368,14 +369,15 @@ export const Checkout = ({
   const selectableDirectListedCurrency = getSelectableDirectListedCurrency(state, {
     usingSavedCard: displayedUsingSavedCard,
   });
-  const buyerCurrencyDisplay = configuredDirectListedCurrency
-    ? null
-    : getCheckoutBuyerCurrencyDisplay(summarySurcharges, {
-        cartPermalinks: cart.items.map((item) => item.product.permalink),
-        willSaveCard: state.willSaveCard,
-        paymentMethod: state.paymentMethod,
-        paymentElementType: state.paymentElementType,
-      });
+  const buyerCurrencyDisplay =
+    configuredDirectListedCurrency || !canDisplayBuyerCurrencyQuote(state)
+      ? null
+      : getCheckoutBuyerCurrencyDisplay(summarySurcharges, {
+          cartPermalinks: cart.items.map((item) => item.product.permalink),
+          willSaveCard: state.willSaveCard,
+          paymentMethod: state.paymentMethod,
+          paymentElementType: state.paymentElementType,
+        });
   // The buyer-currency amounts every row of the table renders from, so the visible numbers
   // sum exactly to the locked total the buyer is charged. An unusable allocation makes
   // buyerCurrencyDisplay null above, keeping every row and the submitted token canonical.

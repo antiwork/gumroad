@@ -55,6 +55,7 @@ import {
 import { CrossSellModal } from "$app/components/Checkout/CrossSellModal";
 import { computeInitialCheckout, type InitialCheckout } from "$app/components/Checkout/initialCheckout";
 import {
+  canDisplayBuyerCurrencyQuote,
   canUseStripePaymentElement,
   canUseStripePaymentElementClientConfirm,
   computeTip,
@@ -252,14 +253,15 @@ const CheckoutIndexPage = () => {
   const [state, dispatch] = reducer;
   const configuredDirectListedCurrency = getConfiguredDirectListedCurrency(state);
   const selectableDirectListedCurrency = getSelectableDirectListedCurrency(state);
-  const buyerCurrencyDisplay = configuredDirectListedCurrency
-    ? null
-    : getCheckoutBuyerCurrencyDisplay(state.surcharges.type === "loaded" ? state.surcharges.result : null, {
-        cartPermalinks: cartForm.data.cart.items.map((item) => item.product.permalink),
-        willSaveCard: state.willSaveCard,
-        paymentMethod: state.paymentMethod,
-        paymentElementType: state.paymentElementType,
-      });
+  const buyerCurrencyDisplay =
+    configuredDirectListedCurrency || !canDisplayBuyerCurrencyQuote(state)
+      ? null
+      : getCheckoutBuyerCurrencyDisplay(state.surcharges.type === "loaded" ? state.surcharges.result : null, {
+          cartPermalinks: cartForm.data.cart.items.map((item) => item.product.permalink),
+          willSaveCard: state.willSaveCard,
+          paymentMethod: state.paymentMethod,
+          paymentElementType: state.paymentElementType,
+        });
   // The direct-listed currency lane, for the large-tip confirmation below and for the tip
   // basis the order submits. Suppressed whenever the FX-quoted buyer-currency lane is displaying,
   // exactly as the checkout summary's precedence does (`buyerCurrencyDisplay ?? listedCurrency`):
@@ -557,14 +559,15 @@ const CheckoutIndexPage = () => {
         },
         recaptchaResponse: state.status.recaptchaResponse ?? null,
         recaptchaChallengeFallback: state.status.challengeFallback ?? false,
-        buyerCurrencyQuote: configuredDirectListedCurrency
-          ? null
-          : getCheckoutBuyerCurrencyQuoteToken(state.surcharges.type === "loaded" ? state.surcharges.result : null, {
-              cartPermalinks: cartForm.data.cart.items.map((item) => item.product.permalink),
-              willSaveCard: state.willSaveCard,
-              paymentMethod: state.paymentMethod,
-              paymentElementType: state.paymentElementType,
-            }),
+        buyerCurrencyQuote:
+          configuredDirectListedCurrency || !canDisplayBuyerCurrencyQuote(state)
+            ? null
+            : getCheckoutBuyerCurrencyQuoteToken(state.surcharges.type === "loaded" ? state.surcharges.result : null, {
+                cartPermalinks: cartForm.data.cart.items.map((item) => item.product.permalink),
+                willSaveCard: state.willSaveCard,
+                paymentMethod: state.paymentMethod,
+                paymentElementType: state.paymentElementType,
+              }),
         lineItems: (() => {
           // Precompute each line's discounted price bases once so the tip can be allocated
           // across the whole cart in a single pass. The per-line tips must sum exactly to

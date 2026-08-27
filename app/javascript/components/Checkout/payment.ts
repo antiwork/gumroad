@@ -72,6 +72,8 @@ export type ListedCurrencyDisplayConfig = {
 export type PaymentElementClientConfirmConfig = {
   stripe_elements_mode: typeof STRIPE_ELEMENTS_MODE_FOR_PAYMENT_INTENT;
   currency: string;
+  // True only when the server proved this client-confirm cart can honor a displayed FX quote at /orders/prepare.
+  buyer_currency_presentment: boolean;
   presentment_amount_cents: number | null;
   listed_currency_display: ListedCurrencyDisplayConfig | null;
   // Marks the GeoIP/listed-price card lane. Unlike the method-forced lane, tip or shipping
@@ -630,8 +632,19 @@ export function getStripePaymentElementAmount(state: State) {
 // from that one quote. When the quote is missing or suppressed (expired/errored quote, or
 // the buyer chose to save the card, which PR 1 forces onto the canonical USD charge path),
 // this returns null and the element mounts canonical USD.
+
+export function canDisplayBuyerCurrencyQuote(state: Pick<State, "checkoutPayment">): boolean {
+  if (state.checkoutPayment.integration === "payment_element")
+    return state.checkoutPayment.elements_options.buyer_currency_presentment;
+  if (state.checkoutPayment.integration === "payment_element_client_confirm")
+    return state.checkoutPayment.elements_options.buyer_currency_presentment;
+  return false;
+}
+
 export function getStripePaymentElementPresentment(state: State): { currency: string; amountCents: number } | null {
   if (state.surcharges.type !== "loaded") return null;
+
+  if (!canDisplayBuyerCurrencyQuote(state)) return null;
 
   const display = getCheckoutBuyerCurrencyDisplay(state.surcharges.result, {
     cartPermalinks: state.products.map((product) => product.permalink),
@@ -647,6 +660,8 @@ export function getStripePaymentElementPresentment(state: State): { currency: st
   }
 
   if (state.checkoutPayment.integration === "payment_element_client_confirm") {
+    if (!state.checkoutPayment.elements_options.buyer_currency_presentment) return null;
+    if (!canUseStripePaymentElementClientConfirm(state)) return null;
     return { currency: display.currencyCode, amountCents: display.chargePresentmentTotalCents };
   }
 
@@ -659,7 +674,12 @@ export function getStripePaymentElementPresentment(state: State): { currency: st
 // preserves the current Element instead of remounting and wiping entered card details.
 export function getStripePaymentElementMountCurrency(state: State): string | null {
   if (state.checkoutPayment.integration === "payment_element_client_confirm") {
-    if (getConfiguredDirectListedCurrency(state) !== null && state.surcharges.type !== "loaded") return null;
+    if (
+      state.surcharges.type !== "loaded" &&
+      (getConfiguredDirectListedCurrency(state) !== null ||
+        state.checkoutPayment.elements_options.buyer_currency_presentment)
+    )
+      return null;
     return getDesiredStripePaymentElementMountCurrency(state);
   }
   if (state.checkoutPayment.integration !== "payment_element") return null;

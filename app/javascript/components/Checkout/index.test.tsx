@@ -411,6 +411,7 @@ describe("Checkout method-forced listed-currency amounts", () => {
     elements_options: {
       stripe_elements_mode: "payment",
       currency: "brl",
+      buyer_currency_presentment: false,
       presentment_amount_cents: 4_990,
       listed_currency_display: { currency: "brl", subunit_to_unit: 100 },
       payment_method_types: ["card", "pix"],
@@ -662,12 +663,10 @@ describe("Checkout method-forced listed-currency amounts", () => {
     expect(getAllByLabelText("Price").map((node) => node.textContent)).toEqual(["US$9.15"]);
   });
 
-  it("defers to the FX-quoted lane when a quote is also usable, so only one lane is ever in effect", () => {
-    // The two lanes are near-mutually-exclusive but not provably so: a non-USD buyer of a
-    // non-USD-priced product can satisfy both. The quote's allocation is the one locked into the
-    // token and verified at charge time, so it must win. Pinned here because the tip basis in
-    // Show.tsx follows the same precedence — if display and submission ever disagreed about which
-    // lane is in effect, the tip would be computed in one currency and rendered in the other.
+  it("ignores an FX quote when the client-confirm config is not marked quote-presentable", () => {
+    // A non-USD buyer of a non-USD-priced product can receive an FX quote, but prepare cannot
+    // honor that quote through one client-confirm intent yet. Unless the server marks the
+    // configuration as quote-presentable, checkout must keep the already-safe listed lane.
     const { getAllByLabelText, queryByText } = renderCheckout(
       brlState({
         surcharges: {
@@ -704,8 +703,8 @@ describe("Checkout method-forced listed-currency amounts", () => {
       brlCart(),
     );
 
-    expect(getAllByLabelText("Price").map((node) => node.textContent)).toEqual(["CA$11.44"]);
-    expect(queryByText("R$49.90")).toBeNull();
+    expect(getAllByLabelText("Price").map((node) => node.textContent)).toEqual(["R$49.90"]);
+    expect(queryByText("CA$11.44")).toBeNull();
   });
 });
 
@@ -721,6 +720,7 @@ describe("Checkout direct-listed currency picker", () => {
     elements_options: {
       stripe_elements_mode: "payment",
       currency: "cad",
+      buyer_currency_presentment: false,
       presentment_amount_cents: 1_500,
       listed_currency_display: { currency: "cad", subunit_to_unit: 100 },
       direct_listed_card: true,
