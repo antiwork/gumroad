@@ -1,6 +1,7 @@
 import { Image as ImageIcon } from "@boxicons/react";
 import { Node as TiptapNode } from "@tiptap/core";
 import { Node as ProseMirrorNode } from "@tiptap/pm/model";
+import { Transaction } from "@tiptap/pm/state";
 import { EditorView } from "@tiptap/pm/view";
 import { NodeViewContent, NodeViewProps, NodeViewWrapper, ReactNodeViewRenderer } from "@tiptap/react";
 import * as React from "react";
@@ -45,6 +46,23 @@ const deleteImageInView = (view: EditorView, src: string) =>
     view.dispatch(view.state.tr.deleteRange(nodePos, nodePos + descendant.nodeSize));
   });
 
+// Keep insertAt valid while decode/resize runs. Callers may already map through
+// file snapshotting; this covers the slower prepareImageForUpload window.
+const trackMappedPos = (view: EditorView, start: number) => {
+  let pos = start;
+  const originalDispatch = view.dispatch.bind(view);
+  view.dispatch = (tr: Transaction) => {
+    if (tr.docChanged) pos = tr.mapping.map(pos);
+    originalDispatch(tr);
+  };
+  return {
+    get: () => pos,
+    stop: () => {
+      view.dispatch = originalDispatch;
+    },
+  };
+};
+
 export const uploadImages = ({
   view,
   files,
@@ -61,48 +79,54 @@ export const uploadImages = ({
   const { maxFileSize } = imageSettings;
 
   return (async () => {
+    const mapped = trackMappedPos(view, insertAt);
     const prepared: File[] = [];
-    for (const file of files) {
-      try {
-        const next = isLikelyImageFile(file)
-          ? await prepareImageForUpload(file, maxFileSize ? { maxBytes: maxFileSize } : undefined)
-          : file;
-        // Check the post-prep name so HEIC/AVIF that re-encoded to JPEG pass, while
-        // SVG/ICO that skipped prep still fail the editor's extension allow-list.
-        if (!FileUtils.isFileNameExtensionAllowed(next.name, imageSettings.allowedExtensions)) {
-          showAlert("Invalid file type.", "error");
-          continue;
+    try {
+      for (const file of files) {
+        try {
+          const next = isLikelyImageFile(file)
+            ? await prepareImageForUpload(file, maxFileSize ? { maxBytes: maxFileSize } : undefined)
+            : file;
+          // Check the post-prep name so HEIC/AVIF that re-encoded to JPEG pass, while
+          // SVG/ICO that skipped prep still fail the editor's extension allow-list.
+          if (!FileUtils.isFileNameExtensionAllowed(next.name, imageSettings.allowedExtensions)) {
+            showAlert("Invalid file type.", "error");
+            continue;
+          }
+          if (maxFileSize && next.size > maxFileSize) {
+            showAlert(`File is too large (max allowed size is ${FileUtils.getReadableFileSize(maxFileSize)})`, "error");
+            continue;
+          }
+          prepared.push(next);
+        } catch {
+          showAlert("Could not process that image.", "error");
         }
-        if (maxFileSize && next.size > maxFileSize) {
-          showAlert(`File is too large (max allowed size is ${FileUtils.getReadableFileSize(maxFileSize)})`, "error");
-          continue;
-        }
-        prepared.push(next);
-      } catch {
-        showAlert("Could not process that image.", "error");
       }
+      if (!prepared.length) return;
+
+      const imageSchema = assertDefined(view.state.schema.nodes.image, "Image node type missing");
+      const pos = mapped.get();
+
+      // We reverse the files so their order in the editor is the same as the order they were selected
+      const filesWithUrls = [...prepared].reverse().map((file) => {
+        const src = URL.createObjectURL(file);
+        const node = imageSchema.create({ src, uploading: true });
+        view.dispatch(view.state.tr.insert(pos, node));
+        return { file, src };
+      });
+
+      await Promise.all(
+        filesWithUrls.map(
+          ({ file, src }) =>
+            imageSettings.onUpload(file, src)?.then(
+              (newSrc) => setImageSrcInView(view, src, newSrc),
+              () => deleteImageInView(view, src),
+            ) ?? Promise.resolve(),
+        ),
+      );
+    } finally {
+      mapped.stop();
     }
-    if (!prepared.length) return;
-
-    const imageSchema = assertDefined(view.state.schema.nodes.image, "Image node type missing");
-
-    // We reverse the files so their order in the editor is the same as the order they were selected
-    const filesWithUrls = [...prepared].reverse().map((file) => {
-      const src = URL.createObjectURL(file);
-      const node = imageSchema.create({ src, uploading: true });
-      view.dispatch(view.state.tr.insert(insertAt, node));
-      return { file, src };
-    });
-
-    await Promise.all(
-      filesWithUrls.map(
-        ({ file, src }) =>
-          imageSettings.onUpload(file, src)?.then(
-            (newSrc) => setImageSrcInView(view, src, newSrc),
-            () => deleteImageInView(view, src),
-          ) ?? Promise.resolve(),
-      ),
-    );
   })();
 };
 
@@ -282,7 +306,6 @@ export const Image = TiptapNode.create({
             input.disabled = true;
             void snapshotPickedFiles(picked)
               .then(async (files) => {
-                editor.off("transaction", mapInsertAt);
                 const uploads = uploadImages({ view: editor.view, files, imageSettings, insertAt });
                 const snapshotted =
                   fileListMatchesPickedFiles(input.files, picked) && canResetFileInputAfterSnapshot(picked, files);

@@ -11,10 +11,17 @@ import { ImageUploadSettings, ImageUploadSettingsContext } from "$app/components
 import { Image } from "$app/components/TiptapExtensions/Image";
 
 vi.mock("$app/components/server-components/Alert", () => ({ showAlert: () => {} }));
+
+const { isLikelyImageFile, prepareImageForUpload, heicDecodingLikely } = vi.hoisted(() => ({
+  isLikelyImageFile: vi.fn(() => false),
+  prepareImageForUpload: vi.fn(async (file: File) => file),
+  heicDecodingLikely: vi.fn(() => false),
+}));
+
 vi.mock("$app/utils/prepareImageForUpload", () => ({
-  isLikelyImageFile: () => false,
-  prepareImageForUpload: async (file: File) => file,
-  heicDecodingLikely: () => false,
+  isLikelyImageFile,
+  prepareImageForUpload,
+  heicDecodingLikely,
 }));
 
 // happy-dom has no object URL support, and uploadImages mints one per inserted image.
@@ -27,6 +34,12 @@ afterEach(() => {
   cleanup();
   editor?.destroy();
   editor = null;
+  isLikelyImageFile.mockReset();
+  isLikelyImageFile.mockReturnValue(false);
+  prepareImageForUpload.mockReset();
+  prepareImageForUpload.mockImplementation(async (file: File) => file);
+  heicDecodingLikely.mockReset();
+  heicDecodingLikely.mockReturnValue(false);
 });
 
 const attachPickedFile = (input: HTMLInputElement, picked: File) => {
@@ -158,6 +171,41 @@ describe("Insert image picker", () => {
     await act(async () => {
       release();
       await ready;
+    });
+    await waitFor(() => {
+      const images: unknown[] = [];
+      editor?.state.doc.descendants((node) => {
+        if (node.type.name === "image") images.push(node);
+      });
+      expect(images).toHaveLength(1);
+    });
+  });
+
+  it("maps the insert position across edits while image preparation is in flight", async () => {
+    const { input } = renderInsertImagePicker();
+    isLikelyImageFile.mockReturnValue(true);
+    let release!: (file: File) => void;
+    prepareImageForUpload.mockImplementation(
+      (file: File) =>
+        new Promise((resolve) => {
+          release = () => resolve(file);
+        }),
+    );
+    const picked = new File(["png"], "pic.png", { type: "image/png" });
+    attachPickedFile(input, picked);
+
+    act(() => {
+      fireEvent.change(input);
+    });
+    await waitFor(() => expect(prepareImageForUpload).toHaveBeenCalled());
+
+    act(() => {
+      if (!editor) throw new Error("editor missing");
+      editor.chain().setTextSelection({ from: 1, to: 6 }).deleteSelection().run();
+    });
+
+    await act(async () => {
+      release(picked);
     });
     await waitFor(() => {
       const images: unknown[] = [];
