@@ -759,11 +759,16 @@ class Installment < ApplicationRecord
   def unique_open_count
     Rails.cache.fetch(key_for_cache(:unique_open_count)) do
       if EmailEngagementDynamoStore.reads_enabled?
-        EmailEngagementDynamoStore.summary(id)[:open_count]
+        dynamo_engagement_summary[:open_count]
       else
         CreatorEmailOpenEvent.where(installment_id: id).count
       end
     end
+  end
+
+  # One SUMMARY read serves both counters when a render misses both caches.
+  private def dynamo_engagement_summary
+    @dynamo_engagement_summary ||= EmailEngagementDynamoStore.summary(id)
   end
 
   # How many email_infos rows to read at a time when working out who a post was emailed
@@ -854,7 +859,7 @@ class Installment < ApplicationRecord
   def unique_click_count
     Rails.cache.fetch(key_for_cache(:unique_click_count)) do
       if EmailEngagementDynamoStore.reads_enabled?
-        EmailEngagementDynamoStore.summary(id)[:click_pair_count]
+        dynamo_engagement_summary[:click_pair_count]
       else
         summary = CreatorEmailClickSummary.where(installment_id: id).last
         summary.present? ? summary[:total_unique_clicks] : 0
