@@ -835,6 +835,40 @@ describe("Checkout direct-listed currency picker", () => {
     expect(getByLabelText("Tip").getAttribute("value")).toBe("3.50");
   });
 
+  it("restores a stale non-USD selection to the only available USD option after a tip", () => {
+    const dispatch = vi.fn();
+    const { getAllByLabelText, getByLabelText } = renderCheckout(
+      directListedState({
+        buyerCurrency: "cad",
+        products: [stateProduct({ price: 1_000, hasTippingEnabled: true })],
+        tip: { type: "fixed", amount: 350, presentmentAmount: 437, presentmentCurrency: "cad" },
+        surcharges: {
+          type: "loaded",
+          result: {
+            ...directListedSurcharges,
+            detected_buyer_currency: "usd",
+            available_buyer_currencies: [{ code: "usd", label: "$ (US Dollars)" }],
+          },
+        },
+      }),
+      {
+        ...directListedCart,
+        items: [
+          cartItem({
+            product: cartProduct({ currency_code: "cad", exchange_rate: 1.5, has_tipping_enabled: true }),
+            price: 1_500,
+          }),
+        ],
+      },
+      dispatch,
+    );
+    const picker = getByLabelText("Currency");
+
+    expect(picker).toHaveProperty("value", "usd");
+    expect(getAllByLabelText("Price").map((node) => node.textContent)).toEqual(["US$10"]);
+    expect(dispatch).toHaveBeenCalledWith({ type: "set-value", buyerCurrency: "usd" });
+  });
+
   it("keeps the listed total while a switch to the saved card is being re-quoted", () => {
     // The held quote was minted for a new card, which charges the listed currency. Reading the
     // display off the surface being switched TO flips the same held amounts to USD for the length

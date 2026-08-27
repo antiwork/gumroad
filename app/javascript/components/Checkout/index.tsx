@@ -145,10 +145,10 @@ const CurrencyPicker = ({
   const availableOptions = surcharges?.available_buyer_currencies ?? [];
   const directListedCurrencyOptionAvailable =
     configuredDirectListedCurrency !== null && selectableDirectListedCurrency === configuredDirectListedCurrency;
-  const directListedUsdSelected =
-    configuredDirectListedCurrency !== null && state.buyerCurrency?.toLowerCase() === "usd";
   const directListedUsdOptionAvailable =
     configuredDirectListedCurrency !== null && availableOptions.some((option) => option.code === "usd");
+  const directListedUsdFallbackAvailable =
+    directListedUsdOptionAvailable && !directListedCurrencyOptionAvailable && state.buyerCurrency !== null;
   const options = configuredDirectListedCurrency
     ? availableOptions.filter(
         (option) =>
@@ -167,11 +167,11 @@ const CurrencyPicker = ({
       ? detected
       : (options[0]?.code ?? "usd");
   const canChooseCurrency =
-    (options.length >= 2 || (directListedUsdSelected && directListedUsdOptionAvailable)) &&
+    (options.length >= 2 || directListedUsdFallbackAvailable) &&
     state.paymentMethod === "card" &&
     !isWalletPaymentElementType(state.paymentElementType) &&
     (configuredDirectListedCurrency
-      ? directListedCurrencyOptionAvailable || (directListedUsdSelected && directListedUsdOptionAvailable)
+      ? directListedCurrencyOptionAvailable || directListedUsdFallbackAvailable
       : !state.willSaveCard && !isListedCurrency);
 
   React.useEffect(() => {
