@@ -379,15 +379,16 @@ describe Api::V2::Gumhead::MessagesController do
       expect(event.cache_read_input_tokens).to eq(11)
     end
 
-    it "passes an upstream error through with its status, body, and retry timing" do
+    it "keeps an upstream error's status and retry timing but mints its message" do
       stub_request(:post, messages_url)
         .to_return(status: 429, body: { type: "error", error: { type: "rate_limit_error", message: "Slow down" } }.to_json, headers: { "Retry-After" => "13" })
 
       post_messages
 
       expect(response.status).to eq(429)
-      expect(response.body).to include("Slow down")
       expect(response.headers["Retry-After"]).to eq("13")
+      expect(JSON.parse(response.body)["error"]["message"]).to eq(described_class::UPSTREAM_ERRORS.fetch(:rate_limited).last)
+      expect(response.body).not_to include("Slow down")
       expect(GumheadUsageEvent.count).to eq(0)
     end
 
@@ -642,7 +643,8 @@ describe Api::V2::Gumhead::MessagesController do
       post_messages(request_payload.merge(stream: true))
 
       expect(response.status).to eq(401)
-      expect(response.body).to include("bad key")
+      expect(JSON.parse(response.body)["error"]["message"]).to eq(described_class::UPSTREAM_ERRORS.fetch(:credentials).last)
+      expect(response.body).not_to include("bad key")
       expect(GumheadUsageEvent.count).to eq(0)
     end
   end
@@ -704,14 +706,14 @@ describe Api::V2::Gumhead::MessagesController do
       expect(GumheadUsageEvent.count).to eq(0)
     end
 
-    it "passes through a 404 from Anthropic count_tokens" do
+    it "keeps the status of a 404 from Anthropic count_tokens but mints its message" do
       stub_request(:post, count_tokens_url)
         .to_return(status: 404, body: { type: "error", error: { type: "not_found_error", message: "Not Found" } }.to_json)
 
       post :count_tokens, body: request_payload.to_json, as: :json
 
       expect(response.status).to eq(404)
-      expect(JSON.parse(response.body)["error"]["type"]).to eq("not_found_error")
+      expect(JSON.parse(response.body)["error"]["message"]).to eq(described_class::UPSTREAM_ERRORS.fetch(:other).last)
     end
 
     it "shares the concurrent in-flight limit" do
@@ -863,7 +865,7 @@ describe Api::V2::Gumhead::MessagesController do
       expect(response.headers["Retry-After"]).to eq("7")
       expect(JSON.parse(response.body)).to eq(
         "type" => "error",
-        "error" => { "type" => "api_error", "message" => "Rate limited" },
+        "error" => { "type" => "rate_limit_error", "message" => described_class::UPSTREAM_ERRORS.fetch(:rate_limited).last },
       )
       expect(GumheadUsageEvent.count).to eq(0)
     end
@@ -882,8 +884,9 @@ describe Api::V2::Gumhead::MessagesController do
       expect(response.status).to eq(502)
       expect(JSON.parse(response.body)).to eq(
         "type" => "error",
-        "error" => { "type" => "api_error", "message" => "Provider returned error" },
+        "error" => { "type" => "api_error", "message" => described_class::UPSTREAM_ERRORS.fetch(:other).last },
       )
+      expect(response.body).not_to include("Provider returned error")
       expect(GumheadUsageEvent.count).to eq(0)
     end
 
@@ -987,6 +990,127 @@ describe Api::V2::Gumhead::MessagesController do
 
       expect(response.status).to eq(502)
       expect(GumheadUsageEvent.sole.input_tokens).to eq(rewritten_payload_bytesize)
+    end
+  end
+
+  describe "minted upstream errors" do
+    def minted(key) = described_class::UPSTREAM_ERRORS.fetch(key).last
+
+    def stub_upstream_error(status:, message:, headers: {})
+      stub_request(:post, messages_url).to_return(
+        status:,
+        body: { type: "error", error: { type: "invalid_request_error", message: } }.to_json,
+        headers: { "Content-Type" => "application/json" }.merge(headers),
+      )
+    end
+
+    # The spend limit that took Gumhead chat down, in all three shapes the
+    # provider reports it. None may reach the pet as a transient retry.
+    [
+      ["a self-set organization limit", 400, "You have reached your specified API usage limits. You will regain access on 2026-09-01 at 00:00 UTC."],
+      ["a workspace limit", 400, "You have reached your specified workspace API usage limits."],
+      ["a tier spend cap", 429, "You have reached your API usage limits: your organization has crossed its monthly API usage threshold."],
+      ["exhausted credit", 402, "Insufficient credits."],
+    ].each do |label, status, message|
+      it "mints an out-of-budget error for #{label}" do
+        stub_upstream_error(status:, message:)
+
+        post_messages
+
+        expect(response.status).to eq(status)
+        expect(JSON.parse(response.body)["error"]["message"]).to eq(minted(:out_of_budget))
+        expect(response.body).not_to include("usage limits")
+        expect(response.body).not_to include("Insufficient credits")
+      end
+    end
+
+    it "mints a credentials error for an upstream 403" do
+      stub_upstream_error(status: 403, message: "Your key is not permitted")
+
+      post_messages
+
+      expect(response.status).to eq(403)
+      expect(JSON.parse(response.body)["error"]["message"]).to eq(minted(:credentials))
+    end
+
+    it "mints a busy error for an upstream overload" do
+      stub_upstream_error(status: 529, message: "Overloaded")
+
+      post_messages
+
+      expect(response.status).to eq(529)
+      expect(JSON.parse(response.body)["error"]["message"]).to eq(minted(:busy))
+    end
+
+    it "separates a real rate limit from a spend limit on the same status" do
+      stub_upstream_error(status: 429, message: "Number of request tokens has exceeded your per-minute rate limit")
+
+      post_messages
+
+      expect(JSON.parse(response.body)["error"]["message"]).to eq(minted(:rate_limited))
+    end
+
+    it "keeps a per-minute quota transient rather than reading it as a budget" do
+      stub_upstream_error(status: 429, message: "You have exceeded your per-minute request quota")
+
+      post_messages
+
+      expect(JSON.parse(response.body)["error"]["message"]).to eq(minted(:rate_limited))
+    end
+
+    it "trusts the structured spend-limit code over the wording" do
+      stub_request(:post, messages_url).to_return(
+        status: 429,
+        body: {
+          type: "error",
+          error: { type: "rate_limit_error", message: "Access paused.", details: { error_code: "enforced_spend_limit_reached" } },
+        }.to_json,
+        headers: { "Content-Type" => "application/json" },
+      )
+
+      post_messages
+
+      expect(JSON.parse(response.body)["error"]["message"]).to eq(minted(:out_of_budget))
+    end
+
+    it "mints instead of raising when the upstream puts a bare string in error" do
+      stub_request(:post, messages_url)
+        .to_return(status: 401, body: { error: "Unauthorized" }.to_json, headers: { "Content-Type" => "application/json" })
+
+      post_messages
+
+      expect(response.status).to eq(401)
+      expect(JSON.parse(response.body)["error"]["message"]).to eq(minted(:credentials))
+    end
+
+    it "logs the upstream text it withheld from the seller" do
+      stub_upstream_error(status: 403, message: "Your key is not permitted")
+      allow(Rails.logger).to receive(:warn)
+
+      post_messages
+
+      expect(Rails.logger).to have_received(:warn).with(/status=403 Your key is not permitted/)
+    end
+
+    it "mints for an upstream body that is not JSON at all" do
+      stub_request(:post, messages_url).to_return(status: 502, body: "<html>Bad Gateway</html>")
+
+      post_messages
+
+      expect(response.status).to eq(502)
+      expect(JSON.parse(response.body)["error"]["message"]).to eq(minted(:busy))
+      expect(response.body).not_to include("html")
+    end
+
+    it "leaves a successful reply untouched" do
+      stub_request(:post, messages_url)
+        .to_return(status: 200, body: anthropic_response.to_json, headers: { "Content-Type" => "application/json" })
+
+      post_messages
+
+      expect(response.status).to eq(200)
+      expect(JSON.parse(response.body)["content"].first["text"]).to eq("Hello!")
+      expect(GumheadUsageEvent.count).to eq(1)
     end
   end
 
