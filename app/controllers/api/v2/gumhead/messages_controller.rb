@@ -117,6 +117,10 @@ class Api::V2::Gumhead::MessagesController < Api::V2::BaseController
   # The structured marker for a tier spend cap, authoritative where the
   # wording is not.
   UPSTREAM_SPEND_LIMIT_CODE = "enforced_spend_limit_reached"
+  # 401 is unambiguous, but a 403 is not proof of a credential problem:
+  # model allowlists, policy, and guardrails answer 403 too, and naming
+  # those a rejected key sends ops looking in the wrong place.
+  UPSTREAM_CREDENTIALS_PATTERN = /unauthorized|authenticat|credential|api.?key|permission denied|not permitted/i
 
   # Client feature flags forward as sent: the spend boundary is the body
   # validators above, not this header, and dropping a flag the body relies
@@ -802,13 +806,18 @@ class Api::V2::Gumhead::MessagesController < Api::V2::BaseController
     def minted_upstream_error(status, parsed, body)
       detail = upstream_error_detail(parsed, body)
       Rails.logger.warn("Gumhead gateway upstream error: status=#{status} #{detail}")
-      type, message = UPSTREAM_ERRORS.fetch(upstream_error_key(status, parsed, detail))
+      key = upstream_error_key(status, parsed, detail)
+      # A spend limit answers 429, which the runtime's SDK retries on
+      # status alone; every attempt fails until the cap resets. The SDK
+      # reads this header before it reaches that rule.
+      response.set_header("x-should-retry", "false") if key == :out_of_budget
+      type, message = UPSTREAM_ERRORS.fetch(key)
       anthropic_error(type, message)
     end
 
     def upstream_error_key(status, parsed, detail)
       return :out_of_budget if status == 402 || spend_limit_code?(parsed) || detail.match?(UPSTREAM_OUT_OF_BUDGET_PATTERN)
-      return :credentials if [401, 403].include?(status)
+      return :credentials if status == 401 || (status == 403 && detail.match?(UPSTREAM_CREDENTIALS_PATTERN))
       return :rate_limited if status == 429
       return :busy if status >= 500
 

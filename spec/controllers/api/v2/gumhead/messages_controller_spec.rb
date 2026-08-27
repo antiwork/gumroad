@@ -1024,13 +1024,42 @@ describe Api::V2::Gumhead::MessagesController do
       end
     end
 
-    it "mints a credentials error for an upstream 403" do
-      stub_upstream_error(status: 403, message: "Your key is not permitted")
+    it "mints a credentials error for an upstream 403 that names the key" do
+      stub_upstream_error(status: 403, message: "Your API key is not permitted")
 
       post_messages
 
       expect(response.status).to eq(403)
       expect(JSON.parse(response.body)["error"]["message"]).to eq(minted(:credentials))
+    end
+
+    # A guardrail or model allowlist also answers 403; calling that a
+    # rejected key would send ops looking at the wrong thing.
+    it "does not blame credentials for a 403 that is not about them" do
+      stub_upstream_error(status: 403, message: "Blocked by a guardrail policy")
+
+      post_messages
+
+      expect(response.status).to eq(403)
+      expect(JSON.parse(response.body)["error"]["message"]).to eq(minted(:other))
+    end
+
+    it "tells the runtime not to retry a spend limit it would otherwise retry" do
+      stub_upstream_error(status: 429, message: "You have reached your specified API usage limits.")
+
+      post_messages
+
+      expect(response.status).to eq(429)
+      expect(response.headers["x-should-retry"]).to eq("false")
+    end
+
+    it "leaves a real rate limit retryable" do
+      stub_upstream_error(status: 429, message: "Per-minute rate limit exceeded", headers: { "Retry-After" => "9" })
+
+      post_messages
+
+      expect(response.headers["x-should-retry"]).to be_nil
+      expect(response.headers["Retry-After"]).to eq("9")
     end
 
     it "mints a busy error for an upstream overload" do
