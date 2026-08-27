@@ -486,6 +486,16 @@ jobs:
           password: ${{ secrets.DOCKERHUB_PASSWORD }}
         ports:
           - 27017:27017
+      # DynamoDB Local for the email engagement store: the test env reads and
+      # dual-writes it unconditionally. Default image command works; port
+      # matches .env.test's localhost:8002.
+      dynamodb:
+        image: amazon/dynamodb-local:3.3.1
+        credentials:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_PASSWORD }}
+        ports:
+          - 8002:8000
       # Elasticsearch for the handful of ported tests that index records and query
       # them back (product search, page-view analytics). Matches the version and
       # heap the RSpec docker-compose stack uses. Most Minitest tests never touch

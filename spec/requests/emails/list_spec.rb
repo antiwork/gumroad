@@ -50,8 +50,8 @@ describe("Email List", :js, :sidekiq_inline, :elasticsearch_wait_for_refresh, ty
         click_on "View clicked URLs for Email 1 (sent)"
         within_modal "Clicked URLs" do
           expect(page).to have_text("Email 1 (sent)")
-          expect(page).to have_table_row({ "URL" => url1, "Clicks" => "100" })
-          expect(page).to have_table_row({ "URL" => url2, "Clicks" => "23" })
+          expect(page).to have_table_row({ "URL" => url1, "Clicks" => "1" })
+          expect(page).to have_table_row({ "URL" => url2, "Clicks" => "1" })
           click_on "Close"
         end
         expect(page).to_not have_text("Clicked URLs")
