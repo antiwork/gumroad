@@ -244,10 +244,13 @@ class Api::V2::Gumhead::MessagesController < Api::V2::BaseController
     # never used as prefixes, so gumhead-chat-extra stays out.
     def allowed_incoming_model?(model)
       prefixes = allowed_model_prefixes
-      return true if prefixes.any? { |prefix| prefix.start_with?("claude-") && model.start_with?(prefix) }
+      if prefixes.any? { |prefix| prefix.start_with?("claude-") && model.start_with?(prefix) }
+        return incoming_model_maps_if_needed?(model)
+      end
       if incoming_role_id?(model)
         return false unless prefixes.include?(model)
         return false unless rewrite_upstream_model?
+
         outgoing = mapped_upstream_model(model)
         return outgoing.present? && outgoing != model
       end
@@ -256,6 +259,16 @@ class Api::V2::Gumhead::MessagesController < Api::V2::BaseController
         next false if incoming_role_id?(prefix)
         model.start_with?(prefix)
       end
+    end
+
+    # On a non-Anthropic hop, a Claude family name only passes if the
+    # active map actually rewrites it. An empty override must not forward
+    # the client-controlled name unchanged.
+    def incoming_model_maps_if_needed?(model)
+      return true unless rewrite_upstream_model?
+
+      outgoing = mapped_upstream_model(model)
+      outgoing.present? && outgoing != model
     end
 
     def incoming_role_id?(model)
@@ -297,7 +310,15 @@ class Api::V2::Gumhead::MessagesController < Api::V2::BaseController
     def model_map
       raw = GlobalConfig.get("GUMHEAD_MODEL_MAP", DEFAULT_MODEL_MAP)
       parsed = raw.is_a?(String) ? safe_parse_json(raw) : raw
-      parsed.is_a?(Hash) ? parsed : {}
+      overrides = {}
+      if parsed.is_a?(Hash)
+        parsed.each do |key, value|
+          next if key.blank? || value.blank?
+
+          overrides[key.to_s] = value.to_s
+        end
+      end
+      DEFAULT_MODEL_MAP.merge(overrides)
     end
 
     def allowed_model_prefixes
@@ -690,9 +711,14 @@ class Api::V2::Gumhead::MessagesController < Api::V2::BaseController
     end
 
     def upstream_api_key
-      # One-deploy fallback: ops can store the OpenRouter key in the
-      # existing GUMHEAD_ANTHROPIC_API_KEY name while flipping the base.
-      GlobalConfig.get("GUMHEAD_UPSTREAM_API_KEY").presence || GlobalConfig.get("GUMHEAD_ANTHROPIC_API_KEY")
+      # Never send the Anthropic secret to another host. OpenRouter (and
+      # any other hop) needs GUMHEAD_UPSTREAM_API_KEY. The Anthropic key
+      # stays on api.anthropic.com only.
+      if anthropic_upstream?
+        GlobalConfig.get("GUMHEAD_UPSTREAM_API_KEY").presence || GlobalConfig.get("GUMHEAD_ANTHROPIC_API_KEY")
+      else
+        GlobalConfig.get("GUMHEAD_UPSTREAM_API_KEY").presence
+      end
     end
 
     def openrouter_error_envelope?(parsed)

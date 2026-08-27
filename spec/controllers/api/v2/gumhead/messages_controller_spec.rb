@@ -898,7 +898,7 @@ describe Api::V2::Gumhead::MessagesController do
       expect(GumheadUsageEvent.sole.model).to eq("x-ai/grok-4.6")
     end
 
-    it "leaves the model untouched when the map has no matching entry" do
+    it "still rewrites Claude names when the configured map is empty" do
       use_openrouter_base
       allow(GlobalConfig).to receive(:get)
         .with("GUMHEAD_MODEL_MAP", described_class::DEFAULT_MODEL_MAP)
@@ -909,7 +909,7 @@ describe Api::V2::Gumhead::MessagesController do
       post_messages
 
       expect(WebMock).to have_requested(:post, openrouter_messages_url).with { |req|
-        JSON.parse(req.body)["model"] == "claude-sonnet-5"
+        JSON.parse(req.body)["model"] == "x-ai/grok-4.6"
       }
     end
 
@@ -932,17 +932,14 @@ describe Api::V2::Gumhead::MessagesController do
       }
     end
 
-    it "falls back to GUMHEAD_ANTHROPIC_API_KEY on OpenRouter when the upstream key is unset" do
+    it "does not send the Anthropic key to OpenRouter when the upstream key is unset" do
       use_openrouter_base
       allow(GlobalConfig).to receive(:get).with("GUMHEAD_UPSTREAM_API_KEY").and_return(nil)
-      stub_request(:post, openrouter_messages_url)
-        .to_return(status: 200, body: anthropic_response.merge(model: "x-ai/grok-4.6").to_json, headers: { "Content-Type" => "application/json" })
 
       post_messages
 
-      expect(WebMock).to have_requested(:post, openrouter_messages_url).with { |req|
-        req.headers["Authorization"] == "Bearer sk-ant-gateway-test" && req.headers["X-Api-Key"].nil?
-      }
+      expect(response.status).to eq(503)
+      expect(WebMock).not_to have_requested(:post, openrouter_messages_url)
     end
 
     it "sends a bearer token to OpenRouter and omits x-api-key" do
