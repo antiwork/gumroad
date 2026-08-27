@@ -64,13 +64,10 @@ class Api::V2::Gumhead::MessagesController < Api::V2::BaseController
   # OpenRouter :online variants.
   DEFAULT_ALLOWED_MODEL_PREFIXES = "claude-sonnet-,claude-haiku-,claude-opus-,gumhead-chat,gumhead-status,gumhead-cover"
   # The fallback map. The live one is a JSON object in Redis under
-  # RedisKey.gumhead_model_map, so moving a role to another model is one
-  # write with no deploy and no restart:
-  #   $redis.set(RedisKey.gumhead_model_map, { "gumhead-status" => "..." }.to_json)
-  # Entries merge over this one, so a partial map moves a single role.
-  # Point a role at an upstream id, never at the incoming name: a value
-  # equal to what the app sent is not a mapping, and validate_model
-  # rejects the request rather than forward a client-chosen name.
+  # RedisKey.gumhead_model_map, merged over this one, so a partial write
+  # moves one role with no deploy. Point a role at an upstream id, never
+  # at the incoming name: a value equal to what the app sent is not a
+  # mapping, and validate_model rejects the request.
   DEFAULT_MODEL_MAP = {
     "claude-sonnet-" => "x-ai/grok-4.6",
     "claude-haiku-" => "x-ai/grok-4.6",
@@ -322,14 +319,10 @@ class Api::V2::Gumhead::MessagesController < Api::V2::BaseController
       match ? match[1] : model
     end
 
-    # Which model serves each role is ops policy that has to change
-    # without a deploy: every `secret/web/` write re-renders one
-    # secrets.env and restarts a whole Puma colour at once, which took
-    # checkout down for four minutes on Aug 27 (gp#2273). So the live
-    # value is a Redis string and the deployed value is the fallback.
-    # Precedence: Redis, then GUMHEAD_MODEL_MAP, then the built-in map;
-    # deleting the Redis key reverts to what is deployed. Memoised
-    # because one request consults the map several times.
+    # Precedence: Redis, then GUMHEAD_MODEL_MAP, then the built-in map.
+    # The live value lives in Redis because a secret/web write restarts a
+    # whole Puma colour (gp#2273); deleting the key reverts to what is
+    # deployed. Memoised: one request consults the map several times.
     def model_map = resolved_model_map.first
 
     def model_map_source = resolved_model_map.last
@@ -343,12 +336,12 @@ class Api::V2::Gumhead::MessagesController < Api::V2::BaseController
 
     def raw_model_map
       live = live_model_map
-      if live.present?
+      # Any stored value, empty string included: an operator who wrote one
+      # needs to hear that it is not serving. Only an absent key is silent.
+      unless live.nil?
         parsed = safe_parse_json(live)
         return [parsed, "redis"] if parsed.is_a?(Hash)
 
-        # Serving the deployed map while an operator believes their write
-        # is live is the one failure they cannot see from the outside.
         Rails.logger.warn("Gumhead model map in Redis is not a JSON object; serving the deployed map.")
       end
 
@@ -412,11 +405,9 @@ class Api::V2::Gumhead::MessagesController < Api::V2::BaseController
     # request was already answered with the error envelope, and logging must
     # not turn that answer into a 500.
     def append_info_to_payload(payload)
-      # Which source chose this request's model, so a lost Redis key
-      # reads as a model change in the logs rather than as silence. Read
-      # from the memo, not through model_map_source: a request rejected
-      # before validate_model never consults the map, and logging must
-      # not be what sends it to Redis.
+      # A lost Redis key is a model change; log the source so it is not a
+      # silent one. Read the memo rather than model_map_source, so logging
+      # never triggers the Redis read for a request that skipped the map.
       payload[:gumhead_model_map_source] = @resolved_model_map.last if @resolved_model_map
       super
     rescue ActionDispatch::Http::Parameters::ParseError

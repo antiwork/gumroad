@@ -1077,6 +1077,19 @@ describe Api::V2::Gumhead::MessagesController do
       expect_forwarded_model(openrouter_messages_url, "x-ai/grok-4.6")
     end
 
+    it "warns on a stored empty value instead of treating it as unset" do
+      use_openrouter_base
+      $redis.set(RedisKey.gumhead_model_map, "")
+      stub_openrouter
+      allow(Rails.logger).to receive(:warn)
+
+      post_messages
+
+      expect(response.status).to eq(200)
+      expect(Rails.logger).to have_received(:warn).with(/not a JSON object/).at_least(:once)
+      expect_forwarded_model(openrouter_messages_url, "x-ai/grok-4.6")
+    end
+
     it "serves the deployed map when Redis is unreachable" do
       use_openrouter_base
       # Other services read $redis on this path; only the map read fails.
