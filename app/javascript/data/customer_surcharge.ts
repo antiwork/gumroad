@@ -12,6 +12,9 @@ export type GetSurchargesRequest = {
     // The share of the buyer's tip included in `price`, so the server can carve it back out
     // when allocating the buyer-currency quote across the cart's lines and components.
     tip_cents: number;
+    // Exact buyer-currency tip the buyer typed, when the checkout is already displaying an
+    // FX quote. Optional for rolling deploy compatibility.
+    presentment_tip_cents?: number | undefined;
     pay_in_installments?: boolean | undefined;
     subscription_id?: string | undefined;
   }[];

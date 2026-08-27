@@ -43,7 +43,7 @@ class Charge::PresentmentAllocator
   # (see Checkout::PresentmentRounding); it is added on top of the exact components,
   # touching only the non-tax ones. The returned line totals therefore sum to
   # presentment_total_cents + rounding_delta_cents, which is what the buyer is charged.
-  def self.allocate_lines(presentment_total_cents:, lines:, rounding_delta_cents: 0)
+  def self.allocate_lines(presentment_total_cents:, lines:, rounding_delta_cents: 0, presentment_component_overrides: nil)
     line_total_shares = Charge.allocate_by_largest_remainder(
       presentment_total_cents,
       lines.map(&:canonical_total_cents),
@@ -58,6 +58,7 @@ class Charge::PresentmentAllocator
       )
     end
     component_shares = apply_rounding_delta(component_shares, rounding_delta_cents.to_i) unless rounding_delta_cents.to_i.zero?
+    component_shares = apply_presentment_component_overrides(component_shares, presentment_component_overrides) if presentment_component_overrides.present?
 
     component_shares.map do |shares|
       LineAllocation.new(presentment_total_cents: shares.sum, presentment_component_cents: shares)
@@ -101,23 +102,49 @@ class Charge::PresentmentAllocator
   end
   private_class_method :apply_rounding_delta
 
-  attr_reader :purchases, :presentment_total_cents, :presentment_gumroad_amount_cents, :rounding_delta_cents
+  def self.apply_presentment_component_overrides(component_shares, overrides)
+    shares = component_shares.map(&:dup)
+    overrides.to_a.each_with_index do |line_overrides, line_index|
+      next if line_overrides.blank?
+
+      line_overrides.each_with_index do |desired_cents, component_index|
+        next if desired_cents.nil?
+
+        diff = desired_cents.to_i - shares.fetch(line_index).fetch(component_index).to_i
+        next if diff.zero?
+
+        compensation_index = (ROUNDING_ABSORBING_COMPONENT_INDEXES - [component_index]).find do |index|
+          diff.negative? || shares[line_index][index] >= diff
+        end
+        raise ArgumentError, "presentment component override has no component to carry #{diff} cents" if compensation_index.nil?
+
+        shares[line_index][component_index] += diff
+        shares[line_index][compensation_index] -= diff
+      end
+    end
+    shares
+  end
+  private_class_method :apply_presentment_component_overrides
+
+  attr_reader :purchases, :presentment_total_cents, :presentment_gumroad_amount_cents, :rounding_delta_cents, :presentment_component_overrides
 
   # presentment_total_cents is the EXACT converted total; rounding_delta_cents is how far
   # the price-ending rounding moved the charged total away from it (see #allocate_lines).
   # presentment_gumroad_amount_cents already includes the difference, because Gumroad's
   # share of the charge is what absorbs it.
-  def initialize(purchases:, presentment_total_cents:, presentment_gumroad_amount_cents:, rounding_delta_cents: 0)
+  def initialize(purchases:, presentment_total_cents:, presentment_gumroad_amount_cents:, rounding_delta_cents: 0, presentment_component_overrides: nil)
     @purchases = purchases
     @presentment_total_cents = presentment_total_cents
     @presentment_gumroad_amount_cents = presentment_gumroad_amount_cents
     @rounding_delta_cents = rounding_delta_cents.to_i
+    @presentment_component_overrides = presentment_component_overrides
   end
 
   def allocations
     line_allocations = self.class.allocate_lines(
       presentment_total_cents:,
       rounding_delta_cents:,
+      presentment_component_overrides:,
       lines: purchases.map do |purchase|
         Line.new(
           canonical_total_cents: purchase.total_transaction_cents,

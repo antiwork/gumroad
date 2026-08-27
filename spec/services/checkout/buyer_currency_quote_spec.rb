@@ -111,6 +111,35 @@ describe Checkout::BuyerCurrencyQuote do
       expect(result.token).to be_present
     end
 
+    it "carries an exact buyer-typed presentment tip through the signed quote" do
+      line_item = described_class::LineItem.new(
+        permalink: product.unique_permalink,
+        product:,
+        price_cents: 10_00,
+        tip_cents: 3_50,
+        presentment_tip_cents: 4_37,
+        seller_tax_cents: 0,
+        gumroad_tax_cents: 0,
+        shipping_cents: 0
+      )
+
+      result = described_class.create(line_items: [line_item], canonical_total_cents: 13_50, ip: "24.48.0.1")
+
+      expect(result.line_allocations.sole).to have_attributes(
+        presentment_total_cents: 16_88,
+        presentment_tip_cents: 4_37,
+      )
+      locked = described_class.verify!(
+        token: result.token,
+        seller:,
+        merchant_account:,
+        currency: Currency::CAD,
+        canonical_total_cents: 13_50,
+        canonical_line_items: [{ permalink: product.unique_permalink, total_cents: 13_50 }]
+      )
+      expect(locked.presentment_component_overrides).to eq([[nil, 4_37, nil, nil, nil]])
+    end
+
     it "reports the exact rate from the locked quote when the cart is one charge" do
       # A cart of one charge has one Stripe rate, so the browser gets that rate rather than a
       # ratio of totals that were each already rounded to the cent. At $3.34 the ratio would be

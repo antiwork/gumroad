@@ -6,8 +6,9 @@ class Checkout::BuyerCurrencyQuote
   InvalidToken = Class.new(StandardError)
 
   # line_allocations is only present on freshly created quotes (it drives the checkout
-  # display); verified tokens don't carry it because the charge re-derives the allocation
-  # from its purchases with the same shared code (Charge::PresentmentAllocator).
+  # display); verified tokens normally re-derive the allocation from purchases with the same
+  # shared code. The optional presentment_component_overrides carry exact buyer-typed tips
+  # through that second allocation when no canonical USD cent round-trips to the typed amount.
   #
   # A created quote covers the whole cart, which can be several prospective charges (one per
   # seller), so its totals are cart-wide sums and `charges` holds the per-charge detail.
@@ -26,6 +27,7 @@ class Checkout::BuyerCurrencyQuote
                       :stripe_fx_quote_expires_at,
                       :charges,
                       :line_allocations,
+                      :presentment_component_overrides,
                       :later_charge_presentments,
                       :listed_currency_rates,
                       :listed_currency_codes,
@@ -58,6 +60,7 @@ class Checkout::BuyerCurrencyQuote
   # (price, tip, seller tax, Gumroad tax, shipping), so the quote-time allocation and the
   # persisted purchase rows are computed from identical inputs.
   LineItem = Struct.new(:permalink, :uid, :line_index, :product, :price_cents, :tip_cents,
+                        :presentment_tip_cents,
                         :seller_tax_cents, :gumroad_tax_cents, :shipping_cents,
                         :charge_price_cents, :charge_tip_cents,
                         :charge_seller_tax_cents, :charge_gumroad_tax_cents,
@@ -86,7 +89,7 @@ class Checkout::BuyerCurrencyQuote
     # taken at the same moment it converted this line to canonical USD cents
     # (gumroad-private#1958). Binding it here lets the charge path re-derive
     # `rate_converted_to_usd` from the token instead of a second, possibly-drifted read.
-    def self.from_surcharge(permalink:, product:, tax_result:, tip_cents:, shipping_usd_cents:,
+    def self.from_surcharge(permalink:, product:, tax_result:, tip_cents:, shipping_usd_cents:, presentment_tip_cents: nil,
                             charge_tax_result: nil, charge_tip_cents: nil, charge_shipping_usd_cents: nil,
                             later_charge_kind: nil, later_charge_price_cents: nil, charge_now: true,
                             listed_currency_rate: nil, uid: nil, line_index: nil)
@@ -97,6 +100,8 @@ class Checkout::BuyerCurrencyQuote
       # back to canonical USD (no quote) instead of erroring the surcharge endpoint.
       tip_cents = tip_cents.is_a?(String) || tip_cents.is_a?(Numeric) ? tip_cents.to_i : 0
       tip_cents = tip_cents.clamp(0, [price_cents, 0].max)
+      presentment_tip_cents = presentment_tip_cents.is_a?(String) || presentment_tip_cents.is_a?(Numeric) ? presentment_tip_cents.to_i : nil
+      presentment_tip_cents = [presentment_tip_cents, 0].max if presentment_tip_cents
       tax_cents = tax_result.tax_cents > 0 ? tax_result.tax_cents.round.to_i : 0
       seller_responsible = seller_responsible_for?(tax_result)
 
@@ -121,6 +126,7 @@ class Checkout::BuyerCurrencyQuote
         product:,
         price_cents: price_cents - tip_cents,
         tip_cents:,
+        presentment_tip_cents:,
         seller_tax_cents: seller_responsible ? tax_cents : 0,
         gumroad_tax_cents: seller_responsible ? 0 : tax_cents,
         shipping_cents: shipping_usd_cents.round.to_i,
@@ -199,6 +205,7 @@ class Checkout::BuyerCurrencyQuote
                            :charge_canonical_line_items,
                            :canonical_line_components,
                            :line_allocations,
+                           :presentment_component_overrides,
                            :future_installments_presentment_total_cents,
                            :later_charge_presentments,
                            :listed_currency_rates,
@@ -309,6 +316,7 @@ class Checkout::BuyerCurrencyQuote
       fx_rate: BigDecimal(charge_payload.fetch("fx_rate")),
       stripe_fx_quote_id: charge_payload.fetch("stripe_fx_quote_id"),
       stripe_fx_quote_expires_at: Time.zone.parse(charge_payload.fetch("stripe_fx_quote_expires_at")),
+      presentment_component_overrides: charge_payload["presentment_component_overrides"],
       later_charge_presentments: charge_payload["later_charge_presentments"] || [],
       listed_currency_rates: charge_payload["listed_currency_rates"] || {},
       listed_currency_codes: charge_payload["listed_currency_codes"] || {}
@@ -830,6 +838,7 @@ class Checkout::BuyerCurrencyQuote
         # checkout displays is the true converted tax and the cosmetic difference shows up on
         # the price/tip/shipping lines instead (see Charge::PresentmentAllocator).
         line_allocations:,
+        presentment_component_overrides: presentment_component_overrides_for(charge_line_items),
         future_installments_presentment_total_cents:,
         later_charge_presentments:,
         # Keep the existing scalar rate shape so older app instances can read tokens minted
@@ -863,6 +872,7 @@ class Checkout::BuyerCurrencyQuote
       Charge::PresentmentAllocator.allocate_lines(
         presentment_total_cents: converted_total_cents,
         rounding_delta_cents:,
+        presentment_component_overrides: presentment_component_overrides_for(charge_line_items),
         lines: charge_line_items.map do |line_item|
           Charge::PresentmentAllocator::Line.new(
             canonical_total_cents: line_item.canonical_total_cents,
@@ -882,6 +892,13 @@ class Checkout::BuyerCurrencyQuote
           presentment_total_cents: line_allocation.presentment_total_cents
         )
       end
+    end
+
+    def presentment_component_overrides_for(charge_line_items)
+      overrides = charge_line_items.map do |line_item|
+        line_item.presentment_tip_cents ? [nil, line_item.presentment_tip_cents, nil, nil, nil] : nil
+      end
+      overrides.any? ? overrides : nil
     end
 
     # The cart's line allocations back in the order the request listed them. The charges are
@@ -976,6 +993,7 @@ class Checkout::BuyerCurrencyQuote
           charge_canonical_total_cents: charge_quote.charge_canonical_total_cents,
           charge_canonical_line_items: charge_quote.charge_canonical_line_items,
           canonical_line_components: charge_quote.canonical_line_components,
+          presentment_component_overrides: charge_quote.presentment_component_overrides,
           charge_presentment_total_cents: charge_quote.charge_presentment_total_cents,
           later_charge_presentments: charge_quote.later_charge_presentments,
           # How far the rounding moved the amount, signed into the token so the charge

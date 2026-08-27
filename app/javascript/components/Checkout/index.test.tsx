@@ -985,6 +985,44 @@ describe("Checkout currency picker", () => {
     expect(document.activeElement).toBe(select);
   });
 
+  it("keeps a custom buyer-currency tip as typed while the quote remints around canonical rounding", () => {
+    const state = buildState({
+      products: [stateProduct({ hasTippingEnabled: true })],
+      tip: { type: "fixed", amount: 350, presentmentAmount: 437 },
+      surcharges: {
+        type: "loaded",
+        result: {
+          ...quotedSurcharges,
+          subtotal: 1_350,
+          buyer_currency_quote: quotedSurcharges.buyer_currency_quote
+            ? {
+                ...quotedSurcharges.buyer_currency_quote,
+                canonical_total_cents: 1_350,
+                presentment_total_cents: 1_688,
+                charge_presentment_total_cents: 1_688,
+                line_allocations: [
+                  {
+                    permalink: "prod",
+                    price_cents: 1_250,
+                    tip_cents: 438,
+                    tax_cents: 0,
+                    shipping_cents: 0,
+                    total_cents: 1_688,
+                  },
+                ],
+              }
+            : null,
+        },
+      },
+    });
+    const { getByLabelText } = renderCheckout(state, {
+      items: [cartItem({ product: cartProduct({ has_tipping_enabled: true }) })],
+      discountCodes: [],
+    });
+
+    expect(getByLabelText("Tip").getAttribute("value")).toBe("4.37");
+  });
+
   it("names the currency the server refused instead of switching the total quietly", () => {
     const { getByText } = renderCheckout(
       buildState({

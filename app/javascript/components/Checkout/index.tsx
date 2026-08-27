@@ -751,11 +751,13 @@ const TipSelector = ({
   const fixedTipCents =
     state.tip.type !== "fixed" || state.tip.amount == null
       ? null
-      : buyerCurrencyDisplay && presentmentTipCents != null
-        ? presentmentTipCents
-        : buyerCurrencyDisplay
-          ? toBuyerCurrencyCents(state.tip.amount, buyerCurrencyDisplay)
-          : state.tip.amount;
+      : buyerCurrencyDisplay && state.tip.presentmentAmount != null
+        ? state.tip.presentmentAmount
+        : buyerCurrencyDisplay && presentmentTipCents != null
+          ? presentmentTipCents
+          : buyerCurrencyDisplay
+            ? toBuyerCurrencyCents(state.tip.amount, buyerCurrencyDisplay)
+            : state.tip.amount;
 
   return (
     <div className="@container flex flex-col gap-2 sm:gap-3">
@@ -822,6 +824,7 @@ const TipSelector = ({
                   // it. `amount` above stays the canonical USD source of truth every other
                   // consumer reads; this is only consulted on that one lane.
                   listedAmount: isListedCurrency ? newAmount : null,
+                  presentmentAmount: buyerCurrencyDisplay ? newAmount : null,
                 },
               });
             }}

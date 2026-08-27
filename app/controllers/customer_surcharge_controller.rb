@@ -67,6 +67,7 @@ class CustomerSurchargeController < ApplicationController
         product:,
         tax_result:,
         tip_cents: item[:tip_cents],
+        presentment_tip_cents: item[:presentment_tip_cents],
         shipping_usd_cents:,
         charge_tax_result: charge_details[:surcharges]&.fetch(:sales_tax_result),
         charge_tip_cents: charge_details[:tip_cents],

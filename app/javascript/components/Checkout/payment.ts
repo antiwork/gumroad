@@ -190,6 +190,10 @@ export type Tip =
       // Null on every other checkout and whenever the buyer picked a percentage instead, in
       // which case the listed lane takes its percentage of the listed price — already exact.
       listedAmount?: number | null;
+      // The exact amount the buyer typed in the currently displayed FX presentment currency.
+      // Some amounts (CA$4.37 at a 1.25 quote) cannot round-trip through canonical USD cents,
+      // so the input must keep the buyer's figure while the quote remints around it.
+      presentmentAmount?: number | null;
     };
 
 // Whether a response's currency menu offers `code`. Undefined when the response carries no menu
@@ -938,6 +942,14 @@ export const loadSurcharges = (state: State, abortSignal?: AbortSignal) => {
     state,
     state.products.map((item) => ({ price: item.price, permalink: item.permalink })),
   );
+  const presentmentLineTips =
+    state.tip.type === "fixed" && state.tip.presentmentAmount != null
+      ? allocateFixedTipCents(
+          state.tip.presentmentAmount,
+          state.products.map((item) => ({ price: item.price })),
+          getTotalPriceFromProducts(state),
+        )
+      : [];
 
   return getSurcharges(
     {
@@ -949,6 +961,7 @@ export const loadSurcharges = (state: State, abortSignal?: AbortSignal) => {
           quantity: item.quantity,
           price: item.hasFreeTrial && !isGift ? 0 : Math.round(item.price + tipCents),
           tip_cents: tipCents,
+          ...(presentmentLineTips[index] != null ? { presentment_tip_cents: presentmentLineTips[index] } : {}),
           pay_in_installments: item.payInInstallments,
           subscription_id: item.subscription_id,
           recommended_by: item.recommended_by,
