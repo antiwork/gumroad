@@ -187,7 +187,7 @@ describe Order::CreateService, :vcr do
         order_params = params.deep_dup.merge(
           payment_params,
           buyer_currency_quote: quote,
-          email: "native-payment-#{payment_index}@gumroad.com",
+          email: "native-payment-#{payment_index}@example.com",
           browser_guid: SecureRandom.uuid
         )
         order_params[:purchase][:email] = order_params[:email]
