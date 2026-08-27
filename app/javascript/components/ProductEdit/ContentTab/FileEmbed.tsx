@@ -63,7 +63,13 @@ export const getDraggedFileEmbed = (editor: Editor) => {
 
 const DEFAULT_FILE_ROW_HEIGHT = 82;
 
-const FileEmbedNodeView = ({ node, editor, getPos, updateAttributes }: NodeViewProps) => {
+const FileEmbedNodeView = ({
+  node,
+  editor,
+  getPos,
+  updateAttributes,
+  config,
+}: NodeViewProps & { config: FileEmbedConfig | undefined }) => {
   if (!node.attrs.id) return;
 
   const { ref, visible, lastHeight } = useNodeVisibility(DEFAULT_FILE_ROW_HEIGHT);
@@ -81,6 +87,7 @@ const FileEmbedNodeView = ({ node, editor, getPos, updateAttributes }: NodeViewP
   const downloadUrl = file && getDownloadUrl(id, file);
 
   const playerRef = React.useRef<jwplayer.JWPlayer | null>(null);
+  const subtitleUploadSettled = React.useRef(new Map<string, () => void>());
   const uploadedSubtitleFiles =
     file?.subtitle_files.filter(
       (subtitle) => subtitle.status.type !== "unsaved" || subtitle.status.uploadStatus.type === "uploaded",
@@ -162,7 +169,8 @@ const FileEmbedNodeView = ({ node, editor, getPos, updateAttributes }: NodeViewP
   };
   const fileExists = file && file.status.type !== "removed";
   React.useEffect(() => {
-    if (file?.status.type === "unsaved" && file.status.uploadStatus.type === "uploading") generateThumbnail();
+    if (file?.is_streamable && file.status.type === "unsaved" && file.status.uploadStatus.type === "uploading")
+      generateThumbnail();
   }, [file?.status.type]);
 
   const pos = getPos();
@@ -233,6 +241,7 @@ const FileEmbedNodeView = ({ node, editor, getPos, updateAttributes }: NodeViewP
   const onCancel = () => {
     deleteNode();
     uploader.cancelUpload(`file_${file.id}`);
+    config?.onUploadCancelled?.(file.id);
     if (file.status.type === "dropbox") void cancelDropboxFileUpload(file.id);
     updateProduct((product) => {
       product.files = product.files.filter((f) => f.id !== file.id);
@@ -266,9 +275,28 @@ const FileEmbedNodeView = ({ node, editor, getPos, updateAttributes }: NodeViewP
     />
   );
 
-  const removeSubtitle = (url: string) =>
+  const settleSubtitleUpload = (url: string) => {
+    subtitleUploadSettled.current.get(url)?.();
+    subtitleUploadSettled.current.delete(url);
+  };
+  const dropFailedSubtitle = (url: string) => {
+    updateProduct((product) => {
+      product.files = product.files.map((existing) =>
+        existing.id === file.id
+          ? { ...existing, subtitle_files: existing.subtitle_files.filter((subtitle) => subtitle.url !== url) }
+          : existing,
+      );
+    });
+  };
+  const removeSubtitle = (url: string) => {
+    if (subtitleUploadSettled.current.has(url)) {
+      uploader.cancelUpload(`subtitles_for_${file.id}__${url}`);
+      settleSubtitleUpload(url);
+    }
     updateFile({ subtitle_files: file.subtitle_files.filter((subtitle) => subtitle.url !== url) });
+  };
   const uploadSubtitles = (files: File[]) => {
+    const pending: Promise<void>[] = [];
     for (const subtitleFile of files) {
       const mimeType = getMimeType(subtitleFile.name);
       const extension = FileUtils.getFileExtension(subtitleFile.name).toUpperCase();
@@ -287,28 +315,49 @@ const FileEmbedNodeView = ({ node, editor, getPos, updateAttributes }: NodeViewP
         status: { type: "unsaved", uploadStatus: { type: "uploading", progress: { percent: 0, bitrate: 0 } } },
       };
 
-      updateFile({ subtitle_files: [...file.subtitle_files, subtitleEntry] });
-
-      const status = uploader.scheduleUpload({
-        cancellationKey: `subtitles_for_${file.id}__${subtitleEntry.url}`,
-        name: s3key,
-        file: subtitleFile,
-        mimeType,
-        onComplete: () => {
-          subtitleEntry.status = { type: "unsaved", uploadStatus: { type: "uploaded" } };
-          updateFile({});
-        },
-        onProgress: (progress) => {
-          subtitleEntry.status = { type: "unsaved", uploadStatus: { type: "uploading", progress } };
-          updateFile({});
-        },
+      updateProduct((product) => {
+        product.files = product.files.map((existing) =>
+          existing.id === file.id
+            ? { ...existing, subtitle_files: [...existing.subtitle_files, subtitleEntry] }
+            : existing,
+        );
       });
 
-      if (typeof status === "string") {
-        // status contains error string if any, otherwise index of file in array
-        showAlert(status, "error");
-      }
+      pending.push(
+        new Promise<void>((resolve) => {
+          subtitleUploadSettled.current.set(subtitleEntry.url, resolve);
+          const status = uploader.scheduleUpload({
+            cancellationKey: `subtitles_for_${file.id}__${subtitleEntry.url}`,
+            name: s3key,
+            file: subtitleFile,
+            mimeType,
+            onComplete: () => {
+              subtitleEntry.status = { type: "unsaved", uploadStatus: { type: "uploaded" } };
+              updateFile({});
+              settleSubtitleUpload(subtitleEntry.url);
+            },
+            onError: () => {
+              showAlert("Subtitle upload failed.", "error");
+              uploader.cancelUpload(`subtitles_for_${file.id}__${subtitleEntry.url}`);
+              dropFailedSubtitle(subtitleEntry.url);
+              settleSubtitleUpload(subtitleEntry.url);
+            },
+            onProgress: (progress) => {
+              subtitleEntry.status = { type: "unsaved", uploadStatus: { type: "uploading", progress } };
+              updateFile({});
+            },
+          });
+
+          if (typeof status === "string") {
+            // status contains error string if any, otherwise index of file in array
+            showAlert(status, "error");
+            dropFailedSubtitle(subtitleEntry.url);
+            settleSubtitleUpload(subtitleEntry.url);
+          }
+        }),
+      );
     }
+    return Promise.all(pending);
   };
 
   const folderAction = {
@@ -751,7 +800,12 @@ const FileEmbedNodeView = ({ node, editor, getPos, updateAttributes }: NodeViewP
   );
 };
 
-export type FileEmbedConfig = { filesById: Map<string, FileEntry> };
+export type FileEmbedConfig = {
+  filesById: Map<string, FileEntry>;
+  // Cancelling releases Evaporate's hold on the picked File; the content tab uses this
+  // to know when the toolbar file input can be reset.
+  onUploadCancelled?: (fileId: string) => void;
+};
 
 export const FileEmbed = TiptapNode.create<{ getConfig?: () => FileEmbedConfig }>({
   name: "fileEmbed",
@@ -766,7 +820,9 @@ export const FileEmbed = TiptapNode.create<{ getConfig?: () => FileEmbedConfig }
   renderHTML: ({ HTMLAttributes }) => ["file-embed", HTMLAttributes],
 
   addNodeView() {
-    return ReactNodeViewRenderer(FileEmbedNodeView);
+    return ReactNodeViewRenderer((props: NodeViewProps) =>
+      FileEmbedNodeView({ ...props, config: this.options.getConfig?.() }),
+    );
   },
 
   addProseMirrorPlugins() {

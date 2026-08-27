@@ -8,6 +8,7 @@ export type EvaporateUploader = {
     mimeType: string;
     onComplete: () => void;
     onProgress: (progress: { percent: number; bitrate: number }) => void;
+    onError?: () => void;
   }) => string | number;
   cancelUpload: (cancellationKey: string) => void;
 };

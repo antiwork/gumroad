@@ -67,6 +67,19 @@ describe PostToPingEndpointsWorker, :vcr do
     expect(PostToIndividualPingEndpointWorker).to have_enqueued_sidekiq_job(@user.notification_endpoint, params, @user.notification_content_type, @user.id)
   end
 
+  it "falls back to persisted purchase url parameters when the enqueued value is blank" do
+    purchase = create(:purchase, link: @product, price_cents: 500)
+    purchase.url_parameters = { "order_ref" => "test-order-ref" }
+    purchase.save!
+
+    PostToPingEndpointsWorker.new.perform(purchase.id, nil)
+
+    params = @default_params.call(purchase).merge(
+      url_params: { "order_ref" => "test-order-ref" }
+    )
+    expect(PostToIndividualPingEndpointWorker).to have_enqueued_sidekiq_job(@user.notification_endpoint, params, @user.notification_content_type, @user.id)
+  end
+
   it "includes a license key if the purchase has one" do
     link = create(:product, user: @user, unique_permalink: "lic", is_licensed: true)
     purchase = create(:purchase, link:, price_cents: 500)

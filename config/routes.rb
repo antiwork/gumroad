@@ -163,6 +163,8 @@ Rails.application.routes.draw do
           put :mark_as_shipped
           put :refund
           post :resend_receipt
+          put :revoke_access
+          put :undo_revoke_access
         end
       end
       resources :payouts, only: [:index, :show] do

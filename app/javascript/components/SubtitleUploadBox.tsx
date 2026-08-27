@@ -1,26 +1,54 @@
 import * as React from "react";
 
 import FileUtils from "$app/utils/file";
+import {
+  canResetFileInputAfterSnapshot,
+  fileListMatchesPickedFiles,
+  snapshotPickedFiles,
+} from "$app/utils/snapshotPickedFile";
 
 import { buttonVariants } from "$app/components/Button";
 import { showAlert } from "$app/components/server-components/Alert";
 
-type UploadBoxProps = { onUploadFiles: (domFiles: File[]) => void };
+type UploadBoxProps = { onUploadFiles: (domFiles: File[]) => unknown };
 
 const acceptedSubtitleExtensions = FileUtils.getAllowedSubtitleExtensions()
   .map((ext) => `.${ext}`)
   .join(",");
 
 export const SubtitleUploadBox = ({ onUploadFiles }: UploadBoxProps) => {
+  const snapshotInFlight = React.useRef(false);
+
   const filePickerOnChange = (fileInput: HTMLInputElement) => {
-    if (!fileInput.files) return;
-    const files = [...fileInput.files];
-    if (files.some((file) => !FileUtils.isFileNameASubtitle(file.name))) {
+    if (snapshotInFlight.current || !fileInput.files) return;
+    const picked = [...fileInput.files];
+    if (picked.some((file) => !FileUtils.isFileNameASubtitle(file.name))) {
       showAlert("Invalid file type.", "error");
       return;
     }
-    fileInput.value = "";
-    onUploadFiles(files);
+    snapshotInFlight.current = true;
+    fileInput.disabled = true;
+    void snapshotPickedFiles(picked)
+      .then(async (files) => {
+        const uploaded = onUploadFiles(files);
+        const snapshotted =
+          fileListMatchesPickedFiles(fileInput.files, picked) && canResetFileInputAfterSnapshot(picked, files);
+        if (snapshotted) fileInput.value = "";
+        // Over-budget picks keep the original File. Wait for the caller to finish
+        // with that handle (upload complete/cancel) before re-enabling or resetting.
+        if (!snapshotted && uploaded && typeof uploaded === "object" && "then" in uploaded) {
+          await uploaded;
+          if (fileListMatchesPickedFiles(fileInput.files, picked)) fileInput.value = "";
+        }
+      })
+      .catch((error: unknown) => {
+        showAlert(error instanceof Error ? error.message : "Could not read the selected file.", "error");
+        if (fileListMatchesPickedFiles(fileInput.files, picked)) fileInput.value = "";
+      })
+      .finally(() => {
+        snapshotInFlight.current = false;
+        fileInput.disabled = false;
+      });
   };
 
   return (

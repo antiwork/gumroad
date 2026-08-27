@@ -30,11 +30,27 @@ describe Exports::AffiliateExportService do
       expect(field_value(data_row, "Email")).to eq("affiliate@gumroad.com")
       expect(field_value(data_row, "Fee")).to eq("10 %")
       expect(field_value(data_row, "Sales ($)")).to eq("10.00")
-      expect(field_value(totals_row, "Sales ($)")).to eq("10.0")
+      expect(field_value(totals_row, "Sales ($)")).to eq("10.00")
       expect(field_value(data_row, "Products")).to eq('["Product 1"]')
       expect(field_value(data_row, "Referral URL")).to eq(@direct_affiliate.referral_url)
       expect(field_value(data_row, "Destination URL")).to eq(@direct_affiliate.destination_url)
       expect(field_value(data_row, "Created At")).to eq(@direct_affiliate.created_at.in_time_zone(@direct_affiliate.affiliate_user.timezone).to_date.to_s)
+    end
+
+    it "totals affiliates whose sales cross the thousands delimiter" do
+      # MoneyFormatter delimits thousands, and "1,234.56".to_f is 1.0, so summing the
+      # rendered cell counted every affiliate past $999.99 as one dollar.
+      big_product = create(:product, user: @seller, price_cents: 1_234_56, name: "Product 2")
+      big_affiliate = create(:direct_affiliate, seller: @seller, affiliate_basis_points: 1000, products: [big_product])
+      big_purchase = create(:purchase_in_progress, seller: @seller, link: big_product, affiliate: big_affiliate)
+      big_purchase.process!
+      big_purchase.update_balance_and_mark_successful!
+
+      rows = CSV.parse(described_class.new(@seller).perform.tempfile.read)
+      cells = rows[1..-2].map { field_value(_1, "Sales ($)") }
+
+      expect(cells).to match_array(["10.00", "1,234.56"])
+      expect(field_value(rows.last, "Sales ($)")).to eq("1,244.56")
     end
 
     it "sets a filename" do

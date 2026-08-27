@@ -5,7 +5,10 @@ class Api::V2::SalesController < Api::V2::BaseController
   before_action(only: [:index, :show, :export, :summary]) { doorkeeper_authorize! :view_sales }
   before_action(only: [:mark_as_shipped]) { doorkeeper_authorize! :mark_sales_as_shipped }
   before_action(only: [:refund]) { doorkeeper_authorize! :refund_sales, :edit_sales }
-  before_action(only: [:resend_receipt]) { doorkeeper_authorize! :edit_sales }
+  before_action(only: [:resend_receipt, :revoke_access, :undo_revoke_access]) { doorkeeper_authorize! :edit_sales }
+  # BaseController appends the legacy `account` scope to doorkeeper_authorize!.
+  # Revoking buyer access must require the seller's explicit edit_sales grant.
+  before_action(only: [:revoke_access, :undo_revoke_access]) { require_oauth_scope! :edit_sales }
   before_action :set_page, only: :index
 
   RESULTS_PER_PAGE = 10
@@ -194,9 +197,42 @@ class Api::V2::SalesController < Api::V2::BaseController
     render_response(true)
   end
 
+  def revoke_access
+    purchase = current_resource_owner.sales.find_by_external_id(params[:id])
+    return error_with_sale if purchase.nil?
+
+    unless sale_purchase_policy(purchase).revoke_access?
+      purchase.errors.add(:base, "Access cannot be revoked for this sale.")
+      return error_with_sale(purchase)
+    end
+
+    purchase.update!(is_access_revoked: true)
+    success_with_sale(purchase.as_json(version: 2, include_buyer_presentment: true))
+  end
+
+  def undo_revoke_access
+    purchase = current_resource_owner.sales.find_by_external_id(params[:id])
+    return error_with_sale if purchase.nil?
+
+    unless sale_purchase_policy(purchase).undo_revoke_access?
+      purchase.errors.add(:base, "Access is not revoked for this sale.")
+      return error_with_sale(purchase)
+    end
+
+    purchase.update!(is_access_revoked: false)
+    success_with_sale(purchase.as_json(version: 2, include_buyer_presentment: true))
+  end
+
   private
     def success_with_sale(sale = nil)
       success_with_object(:sale, sale)
+    end
+
+    def sale_purchase_policy(purchase)
+      Audience::PurchasePolicy.new(
+        SellerContext.new(user: current_resource_owner, seller: current_resource_owner),
+        purchase
+      )
     end
 
     def error_with_sale(sale = nil)

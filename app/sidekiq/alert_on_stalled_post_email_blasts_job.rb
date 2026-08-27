@@ -52,6 +52,8 @@ class AlertOnStalledPostEmailBlastsJob
     live = Feature.active?(:auto_resume_stalled_post_blasts)
     scan[:stalled].each { |entry| entry[:action] = resolve_action(entry, live:) }
 
+    return unless notify?(scan, live:)
+
     InternalNotificationWorker.perform_async("payments", "Stalled post email blasts", message_for(scan, live:))
   end
 
@@ -89,6 +91,16 @@ class AlertOnStalledPostEmailBlastsJob
       end
 
       { stalled:, truncated: }
+    end
+
+    # Live auto-resume already handles DEAD/UNACCOUNTED rows. Email only when a
+    # human (now: Gumclaw, via finance@ + ALWAYS_CC) still has to look — HELD
+    # rows or a truncated scan. Silent ticks are the path to deleting this mail.
+    def notify?(scan, live:)
+      return true if scan[:truncated]
+      return true unless live
+
+      scan[:stalled].any? { |entry| entry[:action].to_s.start_with?("held_") }
     end
 
     def resolve_action(entry, live:)

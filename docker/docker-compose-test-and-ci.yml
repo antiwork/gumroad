@@ -36,6 +36,12 @@ services:
       - "27017"
     command: "mongod"
 
+  dynamodb:
+    image: amazon/dynamodb-local:3.3.1
+    command: "-jar DynamoDBLocal.jar -inMemory -sharedDb"
+    ports:
+      - "8000"
+
   elasticsearch:
     image: elasticsearch:7.9.3
     ports:

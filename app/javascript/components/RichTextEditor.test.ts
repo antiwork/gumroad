@@ -12,12 +12,50 @@ import {
   useRichTextEditor,
   validateUrl,
 } from "$app/components/RichTextEditor";
+import { emailPrimaryButtonStyle, tiptapButtonClassName } from "$app/components/TiptapExtensions/Link";
 
 // vite.config.ts's `define` replaces the bare `SSR` identifier at build time; vitest doesn't run
 // through that build step, so stub the global here for the hook test below.
 Object.assign(globalThis, { SSR: false });
 
 afterEach(cleanup);
+
+describe("Tiptap button styling", () => {
+  it("renders inserted buttons as always-visible accent CTAs", () => {
+    expect(tiptapButtonClassName).toContain("bg-accent-with-text");
+    expect(tiptapButtonClassName).toContain("text-accent-foreground");
+    expect(tiptapButtonClassName).toContain("-translate-1");
+    expect(tiptapButtonClassName).toContain("shadow-[0.25rem_0.25rem_0_var(--color-black)]");
+    expect(tiptapButtonClassName).not.toContain("bg-primary text-primary-foreground");
+  });
+
+  it("serializes buttons with email-safe pink fill and persistent depth", async () => {
+    const initialValue = {
+      type: "doc",
+      content: [
+        { type: "button", attrs: { href: "https://example.com/" }, content: [{ type: "text", text: "Read more" }] },
+      ],
+    };
+    let editor: Editor | null = null;
+    const Harness = () => {
+      // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- exercising the hook's public Content type
+      editor = useRichTextEditor({ initialValue: initialValue as never });
+      return null;
+    };
+    const getEditor = (): Editor => {
+      if (!editor) throw new Error("editor did not mount");
+      return editor;
+    };
+
+    render(React.createElement(Harness));
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(getEditor().getHTML()).toContain('class="tiptap__button button primary"');
+    expect(getEditor().getHTML()).toContain(`style="${emailPrimaryButtonStyle}"`);
+  });
+});
 
 describe("validateUrl", () => {
   it("rejects empty input", () => {

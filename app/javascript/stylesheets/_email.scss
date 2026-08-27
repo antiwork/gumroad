@@ -406,9 +406,10 @@ $accent-color: map-get($colors, "pink"); // [1]
 
         &.primary {
           /* Some email clients don't support CSS variables: https://www.caniemail.com/search/?s=var */
-          background-color: #000000;
-          color: #ffffff;
+          background-color: #ff90e8;
+          color: #000000;
           border-color: #000000;
+          box-shadow: spacer(1) spacer(1) 0 #000000;
         }
       }
 
