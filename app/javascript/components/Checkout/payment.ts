@@ -205,6 +205,14 @@ export type Tip =
 const offersBuyerCurrency = (surcharges: SurchargesResponse, code: string) =>
   surcharges.available_buyer_currencies?.some((option) => option.code === code);
 
+const loadedBuyerCurrency = (state: Pick<State, "buyerCurrency" | "surcharges" | "tip">) => {
+  if (state.buyerCurrency != null) return state.buyerCurrency;
+  if (state.surcharges.type === "loaded" && state.surcharges.result.buyer_currency_quote?.currency)
+    return state.surcharges.result.buyer_currency_quote.currency;
+  if (state.tip.type === "fixed" && state.tip.presentmentAmount != null) return state.tip.presentmentCurrency ?? null;
+  return null;
+};
+
 type CheckoutTaxLocation = { country: string; state: string; zipCode: string };
 type PayPalBillingAddressTaxLocation = {
   country: string;
@@ -1093,7 +1101,10 @@ export const reduceCheckoutState = produce((state: State, action: Action) => {
         // invalidation edits the cart itself, which makes the old amounts wrong rather than stale.
         if ("buyerCurrency" in action) {
           if (state.surcharges.type === "loaded")
-            state.buyerCurrencyRemint = { surcharges: state.surcharges.result, previousCurrency: state.buyerCurrency };
+            state.buyerCurrencyRemint = {
+              surcharges: state.surcharges.result,
+              previousCurrency: loadedBuyerCurrency(state),
+            };
           else if (state.buyerCurrencyRemint?.surfaceSwitch)
             // An explicit pick landing on top of a surface switch's in-flight remint: there is no
             // loaded quote to snapshot, but the held amounts still describe what the buyer saw.
@@ -1466,7 +1477,12 @@ export const reduceCheckoutState = produce((state: State, action: Action) => {
               : (action.result.available_buyer_currencies?.[0]?.code ?? null);
           if (replacement != null) {
             state.buyerCurrency = replacement;
-            writeBuyerCurrencyPreference(replacement);
+            if (
+              replacement !== (action.result.buyer_currency_quote?.currency ?? "usd") &&
+              offersBuyerCurrency(action.result, replacement)
+            ) {
+              state.surcharges = { type: "pending" };
+            }
           }
         }
       }

@@ -2250,7 +2250,7 @@ describe("reduceCheckoutState", () => {
 
       expect(next.surcharges).toEqual({ type: "pending" });
       expect(next.buyerCurrencyRemint?.surcharges).toEqual(quoted("cad", ["usd", "cad", "gbp"]));
-      expect(next.buyerCurrencyRemint?.previousCurrency).toBeNull();
+      expect(next.buyerCurrencyRemint?.previousCurrency).toBe("cad");
     });
 
     it("keeps the first held quote when a second change lands before the first one returns", () => {
@@ -2262,7 +2262,7 @@ describe("reduceCheckoutState", () => {
       const pickedAgain = reduceCheckoutState(picked, { type: "set-value", buyerCurrency: "usd" });
 
       expect(pickedAgain.buyerCurrencyRemint?.surcharges).toEqual(quoted("cad", ["usd", "cad", "gbp"]));
-      expect(pickedAgain.buyerCurrencyRemint?.previousCurrency).toBeNull();
+      expect(pickedAgain.buyerCurrencyRemint?.previousCurrency).toBe("cad");
     });
 
     it("drops the held quote when the cart itself changes", () => {

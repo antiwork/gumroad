@@ -140,7 +140,7 @@ describe Checkout::BuyerCurrencyQuote do
       expect(locked.presentment_component_overrides).to eq([[nil, 4_37, nil, nil, nil]])
     end
 
-    it "omits zero-charge lines from exact presentment tip overrides" do
+    it "keeps zero-charge line slots while displaying exact presentment tip overrides" do
       deferred_product = create(:product, user: seller, price_cents: 5_00, price_currency_type: Currency::USD)
       deferred_line = described_class::LineItem.new(
         permalink: deferred_product.unique_permalink,
@@ -172,6 +172,7 @@ describe Checkout::BuyerCurrencyQuote do
 
       expect(result.line_allocations.map(&:permalink)).to eq([deferred_product.unique_permalink, product.unique_permalink])
       expect(result.line_allocations.sum(&:presentment_total_cents)).to eq(result.presentment_total_cents)
+      expect(result.line_allocations.map(&:presentment_tip_cents)).to eq([0, 4_37])
       locked = described_class.verify!(
         token: result.token,
         seller:,
@@ -181,6 +182,32 @@ describe Checkout::BuyerCurrencyQuote do
         canonical_line_items: [{ permalink: product.unique_permalink, total_cents: 13_50 }]
       )
       expect(locked.presentment_component_overrides).to eq([[nil, 4_37, nil, nil, nil]])
+    end
+
+    it "ignores an exact presentment tip that is not the converted canonical tip" do
+      line_item = described_class::LineItem.new(
+        permalink: product.unique_permalink,
+        product:,
+        price_cents: 10_00,
+        tip_cents: 3_50,
+        presentment_tip_cents: 9_00,
+        seller_tax_cents: 0,
+        gumroad_tax_cents: 0,
+        shipping_cents: 0
+      )
+
+      result = described_class.create(line_items: [line_item], canonical_total_cents: 13_50, ip: "24.48.0.1")
+
+      expect(result.line_allocations.sole.presentment_tip_cents).to eq(4_38)
+      locked = described_class.verify!(
+        token: result.token,
+        seller:,
+        merchant_account:,
+        currency: Currency::CAD,
+        canonical_total_cents: 13_50,
+        canonical_line_items: [{ permalink: product.unique_permalink, total_cents: 13_50 }]
+      )
+      expect(locked.presentment_component_overrides).to be_nil
     end
 
     it "reports the exact rate from the locked quote when the cart is one charge" do

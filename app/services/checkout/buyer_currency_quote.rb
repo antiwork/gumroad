@@ -769,7 +769,19 @@ class Checkout::BuyerCurrencyQuote
       else
         presentment_cents_for(current_canonical_total_cents, quote.fx_rate, buyer_currency)
       end
-      line_allocations = line_allocations_for(charge_line_items, converted_total_cents, rounding.delta_cents)
+      presentment_component_overrides = presentment_component_overrides_for(charge_line_items, fx_rate: quote.fx_rate, buyer_currency:)
+      display_presentment_component_overrides = presentment_component_overrides_for(
+        charge_line_items,
+        fx_rate: quote.fx_rate,
+        buyer_currency:,
+        include_zero_charge_slots: true
+      )
+      line_allocations = line_allocations_for(
+        charge_line_items,
+        converted_total_cents,
+        rounding.delta_cents,
+        presentment_component_overrides: display_presentment_component_overrides
+      )
       future_installments_presentment_total_cents = 0
       later_charge_presentments = charge_line_items.each_with_index.filter_map do |line_item, index|
         next if line_item.later_charge_kind.blank?
@@ -838,7 +850,7 @@ class Checkout::BuyerCurrencyQuote
         # checkout displays is the true converted tax and the cosmetic difference shows up on
         # the price/tip/shipping lines instead (see Charge::PresentmentAllocator).
         line_allocations:,
-        presentment_component_overrides: presentment_component_overrides_for(charge_line_items),
+        presentment_component_overrides:,
         future_installments_presentment_total_cents:,
         later_charge_presentments:,
         # Keep the existing scalar rate shape so older app instances can read tokens minted
@@ -868,11 +880,11 @@ class Checkout::BuyerCurrencyQuote
     # A raise from the allocator (a difference with no non-tax component to carry it) is
     # caught by #create's rescue, which drops the whole cart back to canonical USD — a
     # cosmetic price ending must never break a checkout.
-    def line_allocations_for(charge_line_items, converted_total_cents, rounding_delta_cents)
+    def line_allocations_for(charge_line_items, converted_total_cents, rounding_delta_cents, presentment_component_overrides:)
       Charge::PresentmentAllocator.allocate_lines(
         presentment_total_cents: converted_total_cents,
         rounding_delta_cents:,
-        presentment_component_overrides: presentment_component_overrides_for(charge_line_items),
+        presentment_component_overrides:,
         lines: charge_line_items.map do |line_item|
           Charge::PresentmentAllocator::Line.new(
             canonical_total_cents: line_item.canonical_total_cents,
@@ -894,12 +906,18 @@ class Checkout::BuyerCurrencyQuote
       end
     end
 
-    def presentment_component_overrides_for(charge_line_items)
-      overrides = charge_line_items.filter_map do |line_item|
+    def presentment_component_overrides_for(charge_line_items, fx_rate:, buyer_currency:, include_zero_charge_slots: false)
+      overrides = charge_line_items.map do |line_item|
         next if line_item.charge_canonical_total_cents.zero?
+        next if line_item.presentment_tip_cents.blank?
 
-        line_item.presentment_tip_cents ? [nil, line_item.presentment_tip_cents, nil, nil, nil] : nil
+        charge_tip_cents = line_item.charge_tip_cents.nil? ? line_item.tip_cents : line_item.charge_tip_cents
+        expected_tip_cents = presentment_cents_for(charge_tip_cents, fx_rate, buyer_currency)
+        next if (line_item.presentment_tip_cents - expected_tip_cents).abs > 1
+
+        [nil, line_item.presentment_tip_cents, nil, nil, nil]
       end
+      overrides = overrides.compact unless include_zero_charge_slots
       overrides.any? ? overrides : nil
     end
 
