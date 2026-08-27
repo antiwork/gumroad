@@ -2360,14 +2360,23 @@ describe Order::PreparePaymentIntentService, :vcr do
         [create_args, responses]
       end
 
-      def locked_cad_quote
-        instance_double(
-          Checkout::BuyerCurrencyQuote::Result,
+      def locked_cad_quote(presentment_total_cents: 13_51)
+        Checkout::BuyerCurrencyQuote::Result.new(
+          currency: "cad",
+          presentment_total_cents:,
+          charge_presentment_total_cents: presentment_total_cents,
+          rounding_delta_cents: 0,
           stripe_fx_quote_id: "fxq_displayed_cad",
           fx_rate: BigDecimal("0.74"),
           stripe_fx_quote_expires_at: 30.minutes.from_now,
-          charge_presentment_total_cents: 13_51
         )
+      end
+
+      before do
+        allow(Checkout::BuyerCurrencyQuote).to receive(:quoted_currency_hint).and_call_original
+        allow(Checkout::BuyerCurrencyQuote).to receive(:quoted_currency_hint)
+          .with("displayed-cad-quote")
+          .and_return("cad")
       end
 
       it "reuses the displayed CAD quote instead of failing the remount closed" do
@@ -2384,6 +2393,44 @@ describe Order::PreparePaymentIntentService, :vcr do
         expect(create_args[:stripe_fx_quote_id]).to eq("fxq_displayed_cad")
         expect(create_args[:amount_cents]).to eq(13_51)
         expect(Checkout::BuyerCurrencyQuote).to have_received(:verify!).with(hash_including(token: "displayed-cad-quote", currency: "cad"))
+      end
+
+      it "reuses a displayed CAD quote for a same-seller multi-line cart" do
+        other_product = create(:product, user: seller, price_cents: 5_00)
+        second_line = {
+          uid: "unique-id-1",
+          permalink: other_product.unique_permalink,
+          perceived_price_cents: other_product.price_cents,
+          quantity: 1,
+        }
+        params = { line_items: [line_item, second_line] }.merge(common_params)
+        order, = Order::CreateService.new(params:).perform
+        params = params.merge(payment_element_mount_currency: "cad", buyer_currency_quote: "displayed-cad-quote")
+        allow(Checkout::BuyerCurrencyQuote).to receive(:verify!).and_return(locked_cad_quote(presentment_total_cents: 20_27))
+        allow(Checkout::BuyerCurrencyEligibility).to receive(:stripe_test_mode?).and_return(false)
+
+        create_args, responses = perform_with_cad_card_preview(order, params)
+
+        expect(responses.values).to all(include(success: true))
+        expect(create_args).to include(currency: "cad", amount_cents: 20_27, stripe_fx_quote_id: "fxq_displayed_cad")
+        expect(order.purchases.map { _1.reload.purchase_presentment }).to all(be_present)
+      end
+
+      it "returns the quote-invalid error when the displayed quote is rejected" do
+        order, params = build_order
+        params = params.merge(payment_element_mount_currency: "cad", buyer_currency_quote: "displayed-cad-quote")
+        allow(Checkout::BuyerCurrencyQuote).to receive(:verify!)
+          .and_raise(Checkout::BuyerCurrencyQuote::InvalidToken, "expired buyer currency quote")
+        allow(Checkout::BuyerCurrencyEligibility).to receive(:stripe_test_mode?).and_return(false)
+
+        create_args, responses = perform_with_cad_card_preview(order, params)
+
+        expect(create_args).to be_nil
+        expect(responses["unique-id-0"]).to include(
+          success: false,
+          error_code: PurchaseErrorCode::BUYER_CURRENCY_QUOTE_INVALID,
+          error_message: Charge::CreateService::BUYER_CURRENCY_QUOTE_INVALID_MESSAGE
+        )
       end
 
       it "fails closed when the CAD remount has no displayed quote" do
@@ -2455,12 +2502,14 @@ describe Order::PreparePaymentIntentService, :vcr do
       end
 
       def locked_inr_quote
-        instance_double(
-          Checkout::BuyerCurrencyQuote::Result,
+        Checkout::BuyerCurrencyQuote::Result.new(
+          currency: Currency::INR,
+          presentment_total_cents: 83_000,
+          charge_presentment_total_cents: 83_000,
+          rounding_delta_cents: 0,
           stripe_fx_quote_id: "fxq_displayed_inr",
           fx_rate: BigDecimal("83.0"),
           stripe_fx_quote_expires_at: 30.minutes.from_now,
-          charge_presentment_total_cents: 83_000,
         )
       end
 
@@ -2476,6 +2525,9 @@ describe Order::PreparePaymentIntentService, :vcr do
           ),
         )
         order.purchases.each { _1.update!(ip_country: "India") }
+        allow(Checkout::BuyerCurrencyQuote).to receive(:quoted_currency_hint)
+          .with("displayed-inr-quote")
+          .and_return(Currency::INR)
         allow(Checkout::BuyerCurrencyQuote).to receive(:verify!).and_return(locked_inr_quote)
         allow(Checkout::BuyerCurrencyEligibility).to receive(:stripe_test_mode?).and_return(false)
         expect(StripeFxQuote).not_to receive(:create)

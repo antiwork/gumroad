@@ -516,7 +516,9 @@ class Order::PreparePaymentIntentService
 
       charge = build_charge
       presentment = client_confirm_presentment_for(charge)
-      return fail_purchases_with(GENERIC_CHARGE_ERROR) if presentment.nil? && client_confirm_presentment_required?
+      if presentment.nil? && client_confirm_presentment_required?
+        return fail_purchases_with(@client_confirm_presentment_failure_message || GENERIC_CHARGE_ERROR)
+      end
 
       @charge_with_prepare_time_presentment = charge if presentment.present?
       # Runs after the presentment because Pix's floor is denominated in BRL, which only the
@@ -617,7 +619,7 @@ class Order::PreparePaymentIntentService
         return direct_listed_presentment_for(charge, direct_listed_decision)
       end
 
-      Charge::MethodForcedPresentment.new(
+      service = Charge::MethodForcedPresentment.new(
         charge:,
         order:,
         seller:,
@@ -628,7 +630,15 @@ class Order::PreparePaymentIntentService
         payment_method_type: method_type,
         forced_currency:,
         params:
-      ).perform
+      )
+      presentment = service.perform
+      if presentment.nil? && service.failure_reason == Charge::MethodForcedPresentment::BUYER_CURRENCY_QUOTE_INVALID
+        purchases_to_charge.each do |purchase|
+          purchase.error_code = PurchaseErrorCode::BUYER_CURRENCY_QUOTE_INVALID if purchase.error_code.blank?
+        end
+        @client_confirm_presentment_failure_message = Charge::CreateService::BUYER_CURRENCY_QUOTE_INVALID_MESSAGE
+      end
+      presentment
     end
 
     def client_confirm_direct_listed_decision
