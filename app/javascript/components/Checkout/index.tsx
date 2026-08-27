@@ -156,12 +156,14 @@ const CurrencyPicker = ({
     : detected && options.some((option) => option.code === detected)
       ? detected
       : (options[0]?.code ?? "usd");
+  const directListedUsdSelected =
+    configuredDirectListedCurrency !== null && state.buyerCurrency?.toLowerCase() === "usd";
   const canChooseCurrency =
     options.length >= 2 &&
     state.paymentMethod === "card" &&
     !isWalletPaymentElementType(state.paymentElementType) &&
     (configuredDirectListedCurrency
-      ? selectableDirectListedCurrency === configuredDirectListedCurrency
+      ? selectableDirectListedCurrency === configuredDirectListedCurrency || directListedUsdSelected
       : !state.willSaveCard && !isListedCurrency);
 
   React.useEffect(() => {
