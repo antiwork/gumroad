@@ -96,13 +96,11 @@ class Api::V2::Gumhead::MessagesController < Api::V2::BaseController
   # timeout charge a true upper bound on upstream spend; anything larger
   # must stream, and streams meter incrementally.
   MAX_BUFFERED_OUTPUT_TOKENS = BUFFERED_TIMEOUT * TIMEOUT_OUTPUT_TOKENS_PER_SECOND
-  # The seller's pet reads these strings, so they must not change when the
-  # upstream vendor does. Forwarding the vendor's own text made the client
-  # match Anthropic's exact wording, which meant every later vendor fell
-  # back to a generic "busy" line for failures the pet should name.
-  # Operational failures only. A request the client got wrong — a missing
-  # max_tokens, a bad tool history — keeps the provider's own message,
-  # because that names the field and this gateway cannot.
+  # Operational failures only: a request the client got wrong keeps the
+  # provider's message, which names the field this gateway cannot. These
+  # strings are a contract with the pet, which matches them to choose what
+  # it says (core/src/errors.ts in antiwork/gumhead), so changing one needs
+  # a client release in the same window.
   UPSTREAM_ERRORS = {
     out_of_budget: ["api_error", "The Gumhead model service is out of budget."],
     credentials: ["api_error", "The Gumhead model service rejected the gateway credentials."],
