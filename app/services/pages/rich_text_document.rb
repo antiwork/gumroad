@@ -34,8 +34,8 @@ class Pages::RichTextDocument
             article blockquote { margin: 1rem 0; padding-left: 1rem; border-left: 3px solid currentColor; opacity: 0.8; }
             article table { border-collapse: collapse; }
             article th, article td { border: 1px solid rgba(127, 127, 127, 0.4); padding: 0.4rem 0.6rem; }
-            article a.tiptap__button { display: inline-block; margin: 0.25rem 0; padding: 0.6rem 1rem; background: #000; color: #fff; text-decoration: none; border-radius: 4px; }
-            @media (prefers-color-scheme: dark) { body { background: #000; color: #fff; } article a.tiptap__button { background: #fff; color: #000; } }
+            article a.tiptap__button { display: inline-block; margin: 0.25rem 0; padding: 0.6rem 1rem; background: #ff90e8; color: #000; text-decoration: none; border: 1px solid #000; border-radius: 4px; box-shadow: 0.25rem 0.25rem 0 #000; }
+            @media (prefers-color-scheme: dark) { body { background: #000; color: #fff; } }
           </style>
         </head>
         <body>

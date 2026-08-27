@@ -18,6 +18,14 @@ import { Fieldset } from "$app/components/ui/Fieldset";
 import { Input } from "$app/components/ui/Input";
 import { MenuItem as MenuListItem } from "$app/components/ui/Menu";
 
+export const tiptapButtonClassName = classNames(
+  buttonVariants({ size: "default", color: "accent" }),
+  "-translate-1 shadow-[0.25rem_0.25rem_0_var(--color-black)]",
+);
+
+export const emailPrimaryButtonStyle =
+  "background-color: #ff90e8; color: #000000; border-color: #000000; box-shadow: 0.25rem 0.25rem 0 #000000;";
+
 export const LinkDialog = ({
   editor,
   type,
@@ -211,7 +219,7 @@ const LinkNodeView = ({ node, editor, getPos, deleteNode }: NodeViewProps) => {
             <NodeViewContent
               as="a"
               href={typia.assert<string>(node.attrs.href)}
-              className={cx({ [buttonVariants({ size: "default", color: "primary" })]: isButton })}
+              className={cx({ [tiptapButtonClassName]: isButton })}
               target="_blank"
               rel="noopener noreferrer nofollow"
             />
@@ -257,7 +265,7 @@ const LinkNodeView = ({ node, editor, getPos, deleteNode }: NodeViewProps) => {
           as="a"
           href={typia.assert<string>(node.attrs.href)}
           contentEditable={editor.isEditable}
-          className={cx({ [buttonVariants({ size: "default", color: "primary" })]: isButton })}
+          className={cx({ [tiptapButtonClassName]: isButton })}
           target="_blank"
           rel="noopener noreferrer nofollow"
           onClick={(event: React.MouseEvent) => {
@@ -287,6 +295,7 @@ const TiptapButton = Node.create({
       {
         ...HTMLAttributes,
         class: "tiptap__button button primary",
+        style: emailPrimaryButtonStyle,
         target: "_blank",
         rel: "noopener noreferrer nofollow",
       },
