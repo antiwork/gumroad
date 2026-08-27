@@ -37,14 +37,24 @@ describe GumheadUsageEvent do
       expect(described_class.input_equivalent_tokens_today(@user)).to eq(65)
     end
 
-    it "rejects a negative cache multiplier so cached traffic cannot shrink the cap" do
+    it "falls back to the default multiplier when the configured value is negative" do
       described_class.create!(user: @user, model: "claude-sonnet-5", cache_read_input_tokens: 100)
       allow(GlobalConfig).to receive(:get).and_call_original
       allow(GlobalConfig).to receive(:get)
         .with("GUMHEAD_CACHE_READ_COST_MULTIPLIER", described_class::CACHE_READ_COST_MULTIPLIER)
         .and_return(-1)
 
-      expect { described_class.input_equivalent_tokens_today(@user) }.to raise_error(ArgumentError)
+      expect(described_class.input_equivalent_tokens_today(@user)).to eq(10)
+    end
+
+    it "falls back to the default multiplier when the configured value is not numeric" do
+      described_class.create!(user: @user, model: "claude-sonnet-5", cache_read_input_tokens: 100)
+      allow(GlobalConfig).to receive(:get).and_call_original
+      allow(GlobalConfig).to receive(:get)
+        .with("GUMHEAD_CACHE_READ_COST_MULTIPLIER", described_class::CACHE_READ_COST_MULTIPLIER)
+        .and_return("not-a-number")
+
+      expect(described_class.input_equivalent_tokens_today(@user)).to eq(10)
     end
   end
 end
