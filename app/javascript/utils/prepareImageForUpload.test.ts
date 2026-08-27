@@ -17,7 +17,8 @@ describe("isLikelyImageFile", () => {
     expect(heicDecodingLikely()).toBe(true);
     expect(isLikelyImageFile(new File([""], "photo.HEIC"))).toBe(true);
     vi.stubGlobal("navigator", {
-      userAgent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+      userAgent:
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
     });
     expect(heicDecodingLikely()).toBe(false);
     expect(isLikelyImageFile(new File([""], "photo.HEIC"))).toBe(false);

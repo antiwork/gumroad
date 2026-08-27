@@ -35,7 +35,7 @@ export const heicDecodingLikely = (): boolean => {
   if (typeof navigator === "undefined") return true;
   const ua = navigator.userAgent || "";
   if (!ua) return true;
-  return /safari/i.test(ua) && !/chrome|crios|chromium|android|edg/i.test(ua);
+  return /safari/iu.test(ua) && !/chrome|crios|chromium|android|edg/iu.test(ua);
 };
 
 export const isLikelyImageFile = (file: File): boolean => {
