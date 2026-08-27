@@ -10,9 +10,11 @@
 #
 # Gateway-minted errors use Anthropic's error envelope ({type: "error",
 # error: {type:, message:}}) so the client runtime surfaces the message
-# instead of choking on an unfamiliar shape. Upstream errors pass through
-# with their original status so the runtime's own retry logic (429/529)
-# keeps working.
+# instead of choking on an unfamiliar shape. An upstream failure keeps its
+# original status, so the runtime's own retry logic (429/529) keeps
+# working, but its message is replaced by one of this gateway's own, so
+# Gumhead need not recognise each vendor's phrasing. The upstream text
+# goes to the log.
 #
 # ActionController::Live turns every render in this controller into a
 # streamed body; that is fine — the buffered paths (count_tokens, validation
@@ -94,6 +96,32 @@ class Api::V2::Gumhead::MessagesController < Api::V2::BaseController
   # timeout charge a true upper bound on upstream spend; anything larger
   # must stream, and streams meter incrementally.
   MAX_BUFFERED_OUTPUT_TOKENS = BUFFERED_TIMEOUT * TIMEOUT_OUTPUT_TOKENS_PER_SECOND
+  # Operational failures only: a request the client got wrong keeps the
+  # provider's message, which names the field this gateway cannot. Gumhead
+  # matches these strings to choose what it says (core/src/errors.ts), so
+  # changing one needs a client release in the same window.
+  UPSTREAM_ERRORS = {
+    out_of_budget: ["api_error", "The Gumhead model service is out of budget."],
+    credentials: ["api_error", "The Gumhead model service rejected the gateway credentials."],
+    rate_limited: ["rate_limit_error", "The Gumhead model service is rate limited. Please retry shortly."],
+    busy: ["api_error", "The Gumhead model service is busy. Please retry shortly."],
+  }.freeze
+  # A spend cap lasts hours or days, and providers report it on 400, 402,
+  # and 429, so status alone cannot separate it from a real rate limit.
+  # Only documented wordings match: a broad "quota" would swallow the
+  # per-minute limits, which recover on their own. "budget ... exceeded"
+  # is OpenRouter's workspace cap, which carries no structured code.
+  UPSTREAM_OUT_OF_BUDGET_PATTERN = /api usage limits|credit balance|insufficient.{0,12}(credit|balance|fund)|out of credit|budget.{0,40}exceeded/i
+  # The structured marker for a tier spend cap, authoritative where the
+  # wording is not.
+  UPSTREAM_SPEND_LIMIT_CODE = "enforced_spend_limit_reached"
+  # 401 is unambiguous, but a 403 is not proof of a credential problem:
+  # model allowlists, guardrails, and budget caps answer 403 too, and
+  # naming those a rejected key sends ops looking in the wrong place. Only
+  # authentication wording counts — "not permitted" and "permission
+  # denied" are what a policy block says about a perfectly good key.
+  UPSTREAM_CREDENTIALS_PATTERN = /unauthorized|authenticat|credential|api.?key|invalid.{0,10}key|no auth/i
+
   # Client feature flags forward as sent: the spend boundary is the body
   # validators above, not this header, and dropping a flag the body relies
   # on fails the request. `fallback` is denied because it runs extra models
@@ -456,16 +484,24 @@ class Api::V2::Gumhead::MessagesController < Api::V2::BaseController
         return render json: { "input_tokens" => @raw_body.bytesize }, status: :ok
       end
       parsed = safe_parse_json(body)
-      # OpenRouter uses {error:{message}} without Anthropic's top-level type.
-      # Keep Anthropic envelopes as pass-through.
-      if openrouter_error_envelope?(parsed)
+      # A 200 carrying an error envelope (OpenRouter's shape omits
+      # Anthropic's top-level type) was still generated and billed.
+      if !upstream.status.success? || openrouter_error_envelope?(parsed)
         meter_buffered_usage(body) if meter && upstream.status.success?
-        message = parsed.dig("error", "message").to_s.presence || "The model service returned an error."
         copy_retry_after(upstream)
         status = upstream.status.success? ? :bad_gateway : upstream.status.code
-        return render json: anthropic_error("api_error", message), status:
+        minted = minted_upstream_error(upstream.status.code, parsed, body)
+        return render(json: minted, status:) if minted
+        # Unclassified: the provider's own message names what to fix, so it
+        # goes through. Only OpenRouter's shape is rewrapped, since the
+        # runtime reads the Anthropic envelope.
+        if openrouter_error_envelope?(parsed)
+          return render(json: anthropic_error("api_error", upstream_error_detail(parsed, body)), status:)
+        end
+
+        return render body:, content_type: "application/json", status: upstream.status.code
       end
-      meter_buffered_usage(body) if meter && upstream.status.success?
+      meter_buffered_usage(body) if meter
       copy_retry_after(upstream)
       render body:, content_type: "application/json", status: upstream.status.code
     rescue HTTP::ConnectTimeoutError => e
@@ -586,10 +622,12 @@ class Api::V2::Gumhead::MessagesController < Api::V2::BaseController
         copy_retry_after(upstream)
         body = upstream.body.to_s
         parsed = safe_parse_json(body)
+        minted = minted_upstream_error(upstream.status.code, parsed, body)
+        return render(json: minted, status: upstream.status.code) if minted
         if openrouter_error_envelope?(parsed)
-          message = parsed.dig("error", "message").to_s.presence || "The model service returned an error."
-          return render json: anthropic_error("api_error", message), status: upstream.status.code
+          return render(json: anthropic_error("api_error", upstream_error_detail(parsed, body)), status: upstream.status.code)
         end
+
         return render body:, content_type: "application/json", status: upstream.status.code
       end
       if upstream.headers["Content-Type"].to_s.include?("application/json") &&
@@ -598,8 +636,8 @@ class Api::V2::Gumhead::MessagesController < Api::V2::BaseController
         parsed = safe_parse_json(body)
         if parsed.is_a?(Hash) && parsed["error"].is_a?(Hash)
           meter_buffered_usage(body) if parsed["usage"].is_a?(Hash)
-          message = parsed.dig("error", "message").to_s.presence || "The model service returned an error."
-          return render json: anthropic_error("api_error", message), status: :bad_gateway
+          minted = minted_upstream_error(upstream.status.code, parsed, body)
+          return render json: minted || anthropic_error("api_error", upstream_error_detail(parsed, body)), status: :bad_gateway
         end
       end
 
@@ -612,6 +650,12 @@ class Api::V2::Gumhead::MessagesController < Api::V2::BaseController
       scanner = GumheadStreamUsageScanner.new
       begin
         last_renewal = Time.current
+        # Committed bytes pass through untouched, so an error event the
+        # provider sends after this point still carries its own wording —
+        # the one failure this gateway does not mint. Rewriting it means
+        # re-framing SSE across chunk boundaries and teaching the scanner
+        # to separate an error ending from message_stop; that belongs in
+        # its own change, not in the middle of this loop.
         while (chunk = upstream.body.readpartial)
           scanner << chunk
           response.stream.write(chunk)
@@ -772,6 +816,72 @@ class Api::V2::Gumhead::MessagesController < Api::V2::BaseController
       else
         GlobalConfig.get("GUMHEAD_UPSTREAM_API_KEY").presence
       end
+    end
+
+    # One of this gateway's own messages for an upstream failure, and the
+    # upstream's text in the log where an engineer can read it.
+    # This gateway's own message for an operational failure, or nil when
+    # the failure is the request's own fault and the provider's message
+    # says more than any fixed string could. Either way the provider's
+    # text reaches the log.
+    def minted_upstream_error(status, parsed, body)
+      detail = upstream_error_detail(parsed, body)
+      # The request id is the handle for finding this failure in the
+      # provider's logs; it used to reach the client inside the body this
+      # replaces.
+      Rails.logger.warn("Gumhead gateway upstream error: status=#{status} request_id=#{upstream_request_id(parsed)} #{detail}")
+      key = upstream_error_key(status, parsed, detail)
+      return nil if key.nil?
+
+      # A spend limit answers 429, which the runtime's SDK retries on
+      # status alone; every attempt fails until the cap resets. The SDK
+      # reads this header before it reaches that rule.
+      response.set_header("x-should-retry", "false") if key == :out_of_budget
+      type, message = UPSTREAM_ERRORS.fetch(key)
+      anthropic_error(type, message)
+    end
+
+    def upstream_error_key(status, parsed, detail)
+      return :out_of_budget if status == 402 || spend_limit_code?(parsed) || detail.match?(UPSTREAM_OUT_OF_BUDGET_PATTERN)
+      return :credentials if status == 401 || (status == 403 && detail.match?(UPSTREAM_CREDENTIALS_PATTERN))
+      return :rate_limited if status == 429
+      return :busy if status >= 500
+
+      nil
+    end
+
+    def spend_limit_code?(parsed)
+      return false unless parsed.is_a?(Hash)
+
+      error = parsed["error"]
+      return false unless error.is_a?(Hash)
+
+      details = error["details"]
+      details.is_a?(Hash) && details["error_code"].to_s == UPSTREAM_SPEND_LIMIT_CODE
+    end
+
+    # Providers put the message in {error:{message}}, but `error` is also
+    # a bare string in the wild, where a nested dig would raise. Anything
+    # else — an HTML error page from a proxy — is logged as it arrived.
+    #
+    # Both this and the request id are upstream-controlled and go into one
+    # log line, so control characters are flattened: a newline in either
+    # would forge a second record. Bounded so one bad response cannot
+    # flood the log.
+    def upstream_error_detail(parsed, body)
+      error = parsed.is_a?(Hash) ? parsed["error"] : nil
+      message = case error
+                when Hash then error["message"].to_s
+                when String then error
+      end
+      (message.presence || body.to_s).gsub(/[[:cntrl:]]/, " ").squeeze(" ").strip.slice(0, 500)
+    end
+
+    # A known shape, so it is validated rather than sanitised: anything
+    # else is not a request id and should not reach the log as one.
+    def upstream_request_id(parsed)
+      id = parsed.is_a?(Hash) ? parsed["request_id"].to_s : ""
+      id[/\A[\w.-]{1,64}\z/] || "none"
     end
 
     def openrouter_error_envelope?(parsed)

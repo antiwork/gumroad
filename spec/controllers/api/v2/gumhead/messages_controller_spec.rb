@@ -379,15 +379,16 @@ describe Api::V2::Gumhead::MessagesController do
       expect(event.cache_read_input_tokens).to eq(11)
     end
 
-    it "passes an upstream error through with its status, body, and retry timing" do
+    it "keeps an upstream error's status and retry timing but mints its message" do
       stub_request(:post, messages_url)
         .to_return(status: 429, body: { type: "error", error: { type: "rate_limit_error", message: "Slow down" } }.to_json, headers: { "Retry-After" => "13" })
 
       post_messages
 
       expect(response.status).to eq(429)
-      expect(response.body).to include("Slow down")
       expect(response.headers["Retry-After"]).to eq("13")
+      expect(JSON.parse(response.body)["error"]["message"]).to eq(described_class::UPSTREAM_ERRORS.fetch(:rate_limited).last)
+      expect(response.body).not_to include("Slow down")
       expect(GumheadUsageEvent.count).to eq(0)
     end
 
@@ -642,7 +643,8 @@ describe Api::V2::Gumhead::MessagesController do
       post_messages(request_payload.merge(stream: true))
 
       expect(response.status).to eq(401)
-      expect(response.body).to include("bad key")
+      expect(JSON.parse(response.body)["error"]["message"]).to eq(described_class::UPSTREAM_ERRORS.fetch(:credentials).last)
+      expect(response.body).not_to include("bad key")
       expect(GumheadUsageEvent.count).to eq(0)
     end
   end
@@ -863,7 +865,7 @@ describe Api::V2::Gumhead::MessagesController do
       expect(response.headers["Retry-After"]).to eq("7")
       expect(JSON.parse(response.body)).to eq(
         "type" => "error",
-        "error" => { "type" => "api_error", "message" => "Rate limited" },
+        "error" => { "type" => "rate_limit_error", "message" => described_class::UPSTREAM_ERRORS.fetch(:rate_limited).last },
       )
       expect(GumheadUsageEvent.count).to eq(0)
     end
@@ -987,6 +989,191 @@ describe Api::V2::Gumhead::MessagesController do
 
       expect(response.status).to eq(502)
       expect(GumheadUsageEvent.sole.input_tokens).to eq(rewritten_payload_bytesize)
+    end
+  end
+
+  describe "minted upstream errors" do
+    def minted(key) = described_class::UPSTREAM_ERRORS.fetch(key).last
+
+    def stub_upstream_error(status:, message:, headers: {})
+      stub_request(:post, messages_url).to_return(
+        status:,
+        body: { type: "error", error: { type: "invalid_request_error", message: } }.to_json,
+        headers: { "Content-Type" => "application/json" }.merge(headers),
+      )
+    end
+
+    # No spend-limit shape may be reported as a transient retry.
+    [
+      ["a self-set organization limit", 400, "You have reached your specified API usage limits. You will regain access on 2026-09-01 at 00:00 UTC."],
+      ["a workspace limit", 400, "You have reached your specified workspace API usage limits."],
+      ["a tier spend cap", 429, "You have reached your API usage limits: your organization has crossed its monthly API usage threshold."],
+      ["exhausted credit", 402, "Insufficient credits."],
+    ].each do |label, status, message|
+      it "mints an out-of-budget error for #{label}" do
+        stub_upstream_error(status:, message:)
+
+        post_messages
+
+        expect(response.status).to eq(status)
+        expect(JSON.parse(response.body)["error"]["message"]).to eq(minted(:out_of_budget))
+        expect(response.body).not_to include("usage limits")
+        expect(response.body).not_to include("Insufficient credits")
+      end
+    end
+
+    it "mints a credentials error for an upstream 403 that names the key" do
+      stub_upstream_error(status: 403, message: "Your API key is not permitted")
+
+      post_messages
+
+      expect(response.status).to eq(403)
+      expect(JSON.parse(response.body)["error"]["message"]).to eq(minted(:credentials))
+    end
+
+    # Guardrails, model allowlists, and budget caps all answer 403; calling
+    # those a rejected key would send ops looking at the wrong thing, and a
+    # fixed string would say less than the provider already did.
+    ["Blocked by a guardrail policy", "This model is not permitted", "Permission denied for this route"].each do |message|
+      it "does not blame credentials for a 403 saying #{message.inspect}" do
+        stub_upstream_error(status: 403, message:)
+
+        post_messages
+
+        expect(response.status).to eq(403)
+        expect(JSON.parse(response.body)["error"]["message"]).to eq(message)
+      end
+    end
+
+    it "keeps a client-correctable 400 as the provider wrote it" do
+      stub_upstream_error(status: 400, message: "max_tokens: Field required")
+
+      post_messages
+
+      expect(response.status).to eq(400)
+      expect(response.body).to include("max_tokens: Field required")
+    end
+
+    it "reads OpenRouter's 403 workspace budget cap as out of budget" do
+      stub_upstream_error(status: 403, message: "Workspace monthly budget of $500.00 exceeded. Contact your org admin.")
+
+      post_messages
+
+      expect(response.status).to eq(403)
+      expect(JSON.parse(response.body)["error"]["message"]).to eq(minted(:out_of_budget))
+    end
+
+    it "tells the runtime not to retry a spend limit it would otherwise retry" do
+      stub_upstream_error(status: 429, message: "You have reached your specified API usage limits.")
+
+      post_messages
+
+      expect(response.status).to eq(429)
+      expect(response.headers["x-should-retry"]).to eq("false")
+    end
+
+    it "leaves a real rate limit retryable" do
+      stub_upstream_error(status: 429, message: "Per-minute rate limit exceeded", headers: { "Retry-After" => "9" })
+
+      post_messages
+
+      expect(response.headers["x-should-retry"]).to be_nil
+      expect(response.headers["Retry-After"]).to eq("9")
+    end
+
+    it "mints a busy error for an upstream overload" do
+      stub_upstream_error(status: 529, message: "Overloaded")
+
+      post_messages
+
+      expect(response.status).to eq(529)
+      expect(JSON.parse(response.body)["error"]["message"]).to eq(minted(:busy))
+    end
+
+    it "separates a real rate limit from a spend limit on the same status" do
+      stub_upstream_error(status: 429, message: "Number of request tokens has exceeded your per-minute rate limit")
+
+      post_messages
+
+      expect(JSON.parse(response.body)["error"]["message"]).to eq(minted(:rate_limited))
+    end
+
+    it "keeps a per-minute quota transient rather than reading it as a budget" do
+      stub_upstream_error(status: 429, message: "You have exceeded your per-minute request quota")
+
+      post_messages
+
+      expect(JSON.parse(response.body)["error"]["message"]).to eq(minted(:rate_limited))
+    end
+
+    it "trusts the structured spend-limit code over the wording" do
+      stub_request(:post, messages_url).to_return(
+        status: 429,
+        body: {
+          type: "error",
+          error: { type: "rate_limit_error", message: "Access paused.", details: { error_code: "enforced_spend_limit_reached" } },
+        }.to_json,
+        headers: { "Content-Type" => "application/json" },
+      )
+
+      post_messages
+
+      expect(JSON.parse(response.body)["error"]["message"]).to eq(minted(:out_of_budget))
+    end
+
+    it "mints instead of raising when the upstream puts a bare string in error" do
+      stub_request(:post, messages_url)
+        .to_return(status: 401, body: { error: "Unauthorized" }.to_json, headers: { "Content-Type" => "application/json" })
+
+      post_messages
+
+      expect(response.status).to eq(401)
+      expect(JSON.parse(response.body)["error"]["message"]).to eq(minted(:credentials))
+    end
+
+    it "logs the upstream text it withheld from the seller" do
+      stub_upstream_error(status: 403, message: "Your key is not permitted")
+      allow(Rails.logger).to receive(:warn)
+
+      post_messages
+
+      expect(Rails.logger).to have_received(:warn).with(/status=403 .*Your key is not permitted/)
+    end
+
+    # The minted envelope replaces the body that carried this, and it is
+    # the only handle for finding the failure in the provider's logs.
+    it "logs the provider's request id alongside the withheld text" do
+      stub_request(:post, messages_url).to_return(
+        status: 429,
+        body: { type: "error", error: { type: "rate_limit_error", message: "Slow down" }, request_id: "req_018EeWyXxfu5" }.to_json,
+        headers: { "Content-Type" => "application/json" },
+      )
+      allow(Rails.logger).to receive(:warn)
+
+      post_messages
+
+      expect(Rails.logger).to have_received(:warn).with(/request_id=req_018EeWyXxfu5/)
+    end
+
+    it "mints for an upstream body that is not JSON at all" do
+      stub_request(:post, messages_url).to_return(status: 502, body: "<html>Bad Gateway</html>")
+
+      post_messages
+
+      expect(response.status).to eq(502)
+      expect(JSON.parse(response.body)["error"]["message"]).to eq(minted(:busy))
+      expect(response.body).not_to include("html")
+    end
+
+    it "leaves a successful reply untouched" do
+      stub_request(:post, messages_url)
+        .to_return(status: 200, body: anthropic_response.to_json, headers: { "Content-Type" => "application/json" })
+
+      post_messages
+
+      expect(response.status).to eq(200)
+      expect(JSON.parse(response.body)["content"].first["text"]).to eq("Hello!")
+      expect(GumheadUsageEvent.count).to eq(1)
     end
   end
 
