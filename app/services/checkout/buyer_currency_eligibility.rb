@@ -112,7 +112,7 @@ class Checkout::BuyerCurrencyEligibility
     # out-of-ramp later-charge products are facts about the product, and are checked as such.
     return false if line_items.any? { unquotable_product?(_1.product) }
     return false if line_items.any? { _1.later_charge_kind.present? }
-    return false if line_items.any? { _1.tip_cents.to_i.positive? || _1.shipping_cents.to_i.positive? }
+    return false if line_items.any? { _1.shipping_cents.to_i.positive? }
 
     rates = line_items.map { _1.listed_currency_rate.presence }
     rates.all? && rates.map(&:to_s).uniq.one? && rates.first.to_d.positive?
@@ -368,7 +368,7 @@ class Checkout::BuyerCurrencyEligibility
         self.class.listed_currency_direct_charge_enabled?(seller) &&
         listed_currency_displayed?(buyer_currency) &&
         purchases.none? { Purchase::FixLaterChargePresentmentService.kind_for(_1).present? } &&
-        purchases.none? { _1.tip&.value_cents.to_i.positive? || _1.shipping_cents.to_i.positive? } &&
+        purchases.none? { _1.shipping_cents.to_i.positive? } &&
         listed_lane_rates_uniform?(purchases)
 
       if listed_lane

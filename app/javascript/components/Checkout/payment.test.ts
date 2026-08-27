@@ -514,6 +514,18 @@ describe("canUseStripePaymentElementClientConfirm", () => {
     ).toBe(true);
   });
 
+  it("keeps recurring UPI on the server-rendered INR amount when a stale USD preference is stored", () => {
+    const s = clientConfirmState({
+      checkoutPayment: recurringUpiPaymentElementClientConfirmConfig,
+      products: [product({ recurrence: "monthly", price: 1_000, listedPriceCents: 73_000 })],
+      buyerCurrency: "usd",
+    });
+
+    expect(canUseStripePaymentElementClientConfirm(s)).toBe(true);
+    expect(getStripePaymentElementAmount(s)).toBe(73_000);
+    expect(getStripePaymentElementMountCurrency(s)).toBe("inr");
+  });
+
   it("falls back when the server selected the server-confirm Payment Element integration", () => {
     expect(canUseStripePaymentElementClientConfirm(state())).toBe(false);
   });
@@ -917,11 +929,11 @@ describe("direct-listed card element", () => {
     expect(getStripePaymentElementMountCurrency(s)).toBe("usd");
   });
 
-  it("remounts in canonical USD when a tip makes the direct-listed charge ineligible", () => {
+  it("keeps the direct-listed lane and amount when a percentage tip is added", () => {
     const s = state({
       checkoutPayment: directListedCardConfig,
-      products: [product({ hasTippingEnabled: true })],
-      tip: { type: "percentage", percentage: 10 },
+      products: [product({ hasTippingEnabled: true, listedPriceCents: 1_500 })],
+      tip: { type: "percentage", percentage: 15 },
       surcharges: {
         type: "loaded",
         result: {
@@ -930,15 +942,39 @@ describe("direct-listed card element", () => {
           shipping_rate_cents: 0,
           tax_cents: 0,
           tax_included_cents: 0,
-          subtotal: 1_100,
+          subtotal: 1_150,
           buyer_currency_quote: null,
         },
       },
     });
 
-    expect(getSelectableDirectListedCurrency(s)).toBeNull();
-    expect(getStripePaymentElementAmount(s)).toBe(1_100);
-    expect(getStripePaymentElementMountCurrency(s)).toBe("usd");
+    expect(getSelectableDirectListedCurrency(s)).toBe("cad");
+    expect(getStripePaymentElementAmount(s)).toBe(1_725);
+    expect(getStripePaymentElementMountCurrency(s)).toBe("cad");
+  });
+
+  it("keeps the direct-listed lane and exact listed amount when a fixed tip is added", () => {
+    const s = state({
+      checkoutPayment: directListedCardConfig,
+      products: [product({ hasTippingEnabled: true, listedPriceCents: 1_500 })],
+      tip: { type: "fixed", amount: 291, listedAmount: 437 },
+      surcharges: {
+        type: "loaded",
+        result: {
+          vat_id_valid: false,
+          has_vat_id_input: false,
+          shipping_rate_cents: 0,
+          tax_cents: 0,
+          tax_included_cents: 0,
+          subtotal: 1_291,
+          buyer_currency_quote: null,
+        },
+      },
+    });
+
+    expect(getSelectableDirectListedCurrency(s)).toBe("cad");
+    expect(getStripePaymentElementAmount(s)).toBe(1_937);
+    expect(getStripePaymentElementMountCurrency(s)).toBe("cad");
   });
 
   it("remounts in canonical USD for a shipping cart", () => {

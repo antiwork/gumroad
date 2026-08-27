@@ -592,7 +592,7 @@ describe Checkout::BuyerCurrencyEligibility do
     Feature.deactivate_user(described_class::SUBSCRIPTION_FEATURE_NAME, seller)
   end
 
-  it "falls back when a buyer-currency purchase carries a tip" do
+  it "allows direct listed charging when a buyer-currency purchase carries a tip" do
     Feature.activate_user(described_class::LISTED_CURRENCY_DIRECT_CHARGE_FEATURE_NAME, seller)
     report_listed_currency_element(params)
     purchase.update!(link: create(:product, user: seller, price_currency_type: Currency::CAD),
@@ -600,14 +600,14 @@ describe Checkout::BuyerCurrencyEligibility do
                      rate_converted_to_usd: "0.8")
     create(:tip, purchase:, value_cents: 200)
 
-    expect(decision).not_to be_eligible
-    expect(decision.fallback_reason).to eq(:listed_currency_is_buyer_currency)
+    expect(decision).to be_eligible
+    expect(decision.currency).to eq(Currency::CAD)
+    expect(decision.direct_listed_amount?).to eq(true)
   end
 
   it "falls back when a buyer-currency purchase carries shipping" do
     # Shipping conversion now matches surcharge vs charge, but the direct-listed Element still
-    # mounts product price only and payment.ts keeps shipping out of directListedCardActive.
-    # Eligibility must stay aligned with that mount path.
+    # has no listed-currency shipping basis. Eligibility must stay aligned with that mount path.
     Feature.activate_user(described_class::LISTED_CURRENCY_DIRECT_CHARGE_FEATURE_NAME, seller)
     report_listed_currency_element(params)
     purchase.update!(link: create(:product, user: seller, price_currency_type: Currency::CAD),
@@ -1256,10 +1256,10 @@ describe Checkout::BuyerCurrencyEligibility do
       Feature.activate_user(described_class::LISTED_CURRENCY_DIRECT_CHARGE_FEATURE_NAME, seller)
     end
 
-    it "advertises the listed currency for a cart the listed lane can charge" do
+    it "advertises the listed currency for a tipped cart the listed lane can charge" do
       merchant_account
 
-      expect(eligible_for?(cad_product)).to be(true)
+      expect(eligible_for?(cad_product, tip_cents: 200)).to be(true)
     end
 
     it "refuses a seller whose charging account cannot create the intent" do

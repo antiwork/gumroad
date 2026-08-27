@@ -810,7 +810,7 @@ describe("Checkout direct-listed currency picker", () => {
     expect(getAllByLabelText("Price").map((node) => node.textContent)).toEqual(["US$10"]);
   });
 
-  it("keeps explicit USD selected after a tip makes the listed currency unavailable", () => {
+  it("keeps explicit USD selected after a tip while preserving the listed option", () => {
     const { getAllByLabelText, getByLabelText } = renderCheckout(
       directListedState({
         buyerCurrency: "usd",
@@ -830,7 +830,10 @@ describe("Checkout direct-listed currency picker", () => {
     const picker = getByLabelText("Currency");
 
     expect(picker).toHaveProperty("value", "usd");
-    expect(Array.from(picker.querySelectorAll<HTMLOptionElement>("option"), (option) => option.value)).toEqual(["usd"]);
+    expect(Array.from(picker.querySelectorAll<HTMLOptionElement>("option"), (option) => option.value)).toEqual([
+      "usd",
+      "cad",
+    ]);
     expect(getAllByLabelText("Price").map((node) => node.textContent)).toEqual(["US$10"]);
     expect(getByLabelText("Tip").getAttribute("value")).toBe("3.50");
   });
@@ -858,8 +861,8 @@ describe("Checkout direct-listed currency picker", () => {
     expect(getAllByLabelText("Price").map((node) => node.textContent)).toEqual(["CA$15"]);
   });
 
-  it("does not expose quote-backed currencies after a tip moves the cart to canonical USD", () => {
-    const { getAllByLabelText, queryByLabelText } = renderCheckout(
+  it("keeps the listed option after a percentage tip without exposing quote-backed currencies", () => {
+    const { getAllByLabelText, getByLabelText } = renderCheckout(
       directListedState({
         products: [stateProduct({ price: 1_000, hasTippingEnabled: true })],
         tip: { type: "percentage", percentage: 10 },
@@ -874,9 +877,14 @@ describe("Checkout direct-listed currency picker", () => {
         ],
       },
     );
+    const picker = getByLabelText("Currency");
 
-    expect(queryByLabelText("Currency")).toBeNull();
-    expect(getAllByLabelText("Price").map((node) => node.textContent)).toEqual(["US$10"]);
+    expect(Array.from(picker.querySelectorAll<HTMLOptionElement>("option"), (option) => option.value)).toEqual([
+      "usd",
+      "cad",
+    ]);
+    expect(picker).toHaveProperty("value", "cad");
+    expect(getAllByLabelText("Price").map((node) => node.textContent)).toEqual(["CA$15"]);
   });
 });
 

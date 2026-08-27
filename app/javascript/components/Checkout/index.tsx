@@ -737,8 +737,8 @@ const TipSelector = ({
 }: {
   buyerCurrencyDisplay?: CheckoutLocalCurrencyFormat | null;
   presentmentTipCents?: number | null;
-  // True while checkout displays the listed-currency lane. A positive tip moves the direct-card
-  // ramp back to USD; the method-forced lane preserves the listed tip exactly as typed.
+  // True while checkout displays the listed-currency lane. The listed lane preserves fixed tips
+  // exactly as typed instead of round-tripping them through canonical USD cents.
   isListedCurrency?: boolean;
 }) => {
   const [state, dispatch] = useState();

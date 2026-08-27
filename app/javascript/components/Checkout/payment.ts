@@ -73,8 +73,8 @@ export type PaymentElementClientConfirmConfig = {
   currency: string;
   presentment_amount_cents: number | null;
   listed_currency_display: ListedCurrencyDisplayConfig | null;
-  // Marks the GeoIP/listed-price card lane. Unlike the method-forced lane, tip or shipping
-  // moves this Element back to canonical USD because charge-time eligibility excludes both.
+  // Marks the GeoIP/listed-price card lane. Unlike the method-forced lane, shipping moves
+  // this Element back to canonical USD because charge-time eligibility excludes it.
   direct_listed_card?: boolean;
   payment_method_types: string[];
   // Signed server copy of payment_method_types above, echoed back at /orders/prepare so the
@@ -587,15 +587,23 @@ export function getStripePaymentElementAmount(state: State) {
   // loaded quote before the server-rendered listed amount from the stale initial configuration.
   const presentment = getStripePaymentElementPresentment(state);
   if (presentment) return presentment.amountCents;
+  // Recurring UPI is a server-selected INR registration lane. A stale stored USD picker
+  // preference must not reinterpret either the Element amount or its currency.
+  if (
+    state.checkoutPayment.integration === "payment_element_client_confirm" &&
+    isRecurringUpiPaymentConfig(state.checkoutPayment)
+  )
+    return state.checkoutPayment.elements_options.presentment_amount_cents;
   // Direct-listed surfaces mount in the listed currency, so the USD total below would be the
-  // wrong unit. The server supplies the listed amount instead.
+  // wrong unit. Add any listed-currency tip the buyer selected to the server-rendered base amount
+  // so Elements and the deferred intent stay aligned after surcharge-only tip edits.
   if (
     state.checkoutPayment.integration === "payment_element_client_confirm" &&
     state.checkoutPayment.elements_options.presentment_amount_cents !== null &&
     ((!state.checkoutPayment.elements_options.direct_listed_card && state.buyerCurrency?.toLowerCase() !== "usd") ||
       (getSelectableDirectListedCurrency(state) !== null && state.buyerCurrency?.toLowerCase() !== "usd"))
   )
-    return state.checkoutPayment.elements_options.presentment_amount_cents;
+    return getDirectListedPaymentElementAmount(state);
   // Partial-payment carts mount with the amount the server will charge now, not the agreement total.
   return getChargeTodayPrice(state);
 }
@@ -706,6 +714,7 @@ export function getDisplayedUsingSavedCard(state: Pick<State, "usingSavedCard" |
 
 function getDesiredStripePaymentElementMountCurrency(state: State): string | null {
   if (state.checkoutPayment.integration !== "payment_element_client_confirm") return null;
+  if (isRecurringUpiPaymentConfig(state.checkoutPayment)) return state.checkoutPayment.elements_options.currency;
 
   const configuredDirectListedCurrency = getConfiguredDirectListedCurrency(state);
   if (!configuredDirectListedCurrency) {
@@ -721,7 +730,24 @@ function getDesiredStripePaymentElementMountCurrency(state: State): string | nul
 }
 
 function directListedCardActive(state: State, usingSavedCard = state.usingSavedCard) {
-  return state.paymentMethod === "card" && !usingSavedCard && computeTip(state) === 0 && !hasShipping(state);
+  return state.paymentMethod === "card" && !usingSavedCard && !hasShipping(state);
+}
+
+function getDirectListedPaymentElementAmount(state: State) {
+  if (state.checkoutPayment.integration !== "payment_element_client_confirm") return getChargeTodayPrice(state);
+
+  const baseAmount = state.checkoutPayment.elements_options.presentment_amount_cents ?? 0;
+  const linePrices = state.products.map((product) => ({
+    price: product.listedPriceCents ?? (state.products.length === 1 ? baseAmount : product.price),
+    permalink: product.permalink,
+  }));
+  const lineTotal = linePrices.reduce<number>((sum, line) => sum + line.price, 0);
+  const tipTotal = computeTipsForLines(state, linePrices, { basis: "listed" }).reduce<number>(
+    (sum, tip) => sum + (tip ?? 0),
+    0,
+  );
+
+  return lineTotal + tipTotal;
 }
 
 export function isProcessing(state: State) {

@@ -320,7 +320,7 @@ describe CustomerSurchargeController, :vcr do
       expect(codes).not_to include(Currency::CAD)
     end
 
-    it "does not advertise the listed currency when the direct-listed lane rejects the cart shape" do
+    it "keeps the listed currency when the direct-listed lane carries a tip" do
       Feature.activate_user(Checkout::BuyerCurrencyEligibility::LISTED_CURRENCY_DIRECT_CHARGE_FEATURE_NAME, @user)
       cad_product = create(:product, user: @user, price_currency_type: Currency::CAD, price_cents: 10_00)
       allow_any_instance_of(CurrencyHelper).to receive(:get_rate).with(Currency::CAD).and_return("0.8")
@@ -333,8 +333,9 @@ describe CustomerSurchargeController, :vcr do
         payment_element_direct_listed_currency: Currency::CAD,
       }, as: :json
 
+      expect(response.parsed_body.fetch("buyer_currency_quote")).to be_nil
       codes = response.parsed_body.fetch("available_buyer_currencies").map { |currency| currency["code"] }
-      expect(codes).not_to include(Currency::CAD)
+      expect(codes).to contain_exactly(Currency::USD, Currency::CAD)
     end
 
     it "does not advertise the listed currency when the seller's account cannot create the intent" do
