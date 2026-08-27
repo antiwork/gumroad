@@ -205,7 +205,15 @@ const CoverUploader = ({
                   for (const file of Array.from(files)) {
                     if (isLikelyImageFile(file)) {
                       try {
-                        validFiles.push(await prepareImageForUpload(file, { maxBytes: MAX_IMAGE_FILE_SIZE }));
+                        const prepared = await prepareImageForUpload(file, { maxBytes: MAX_IMAGE_FILE_SIZE });
+                        if (prepared.size > MAX_IMAGE_FILE_SIZE) {
+                          showAlert(
+                            `Cover images must be smaller than ${MAX_IMAGE_FILE_SIZE / MEGABYTE} MB. Please resize or compress the image and try again.`,
+                            "error",
+                          );
+                          continue;
+                        }
+                        validFiles.push(prepared);
                       } catch {
                         showAlert("Could not process that image.", "error");
                       }

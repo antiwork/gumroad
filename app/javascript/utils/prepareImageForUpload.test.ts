@@ -108,6 +108,25 @@ describe("prepareImageForUpload", () => {
     const result = await prepareImageForUpload(file, { maxBytes: 1 });
     expect(result).toBe(file);
   });
+
+  it("throws when re-encoding cannot get under maxBytes", async () => {
+    const file = new File([new Uint8Array(500)], "huge.jpg", { type: "image/jpeg" });
+    const close = vi.fn();
+    vi.stubGlobal(
+      "createImageBitmap",
+      vi.fn(() => Promise.resolve({ width: 800, height: 600, close })),
+    );
+    vi.spyOn(HTMLCanvasElement.prototype, "toBlob").mockImplementation((cb: BlobCallback) => {
+      cb(new Blob([new Uint8Array(5000)], { type: "image/jpeg" }));
+    });
+    vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue(
+      // eslint-disable-next-line @typescript-eslint/consistent-type-assertions
+      { drawImage: vi.fn() } as unknown as CanvasRenderingContext2D,
+    );
+
+    await expect(prepareImageForUpload(file, { maxBytes: 100 })).rejects.toThrow("Could not encode image.");
+    expect(close).toHaveBeenCalled();
+  });
 });
 
 describe("installFileDropNavigationGuard", () => {

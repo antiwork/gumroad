@@ -148,6 +148,7 @@ export const prepareImageForUpload = async (file: File, options: PrepareImageOpt
       }
     }
     if (!blob) throw new Error("Could not encode image.");
+    if (blob.size > maxBytes) throw new Error("Could not encode image.");
 
     return new File([blob], outputName(file.name, keepAlpha ? "png" : "jpg"), {
       type: mime,
