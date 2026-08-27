@@ -282,10 +282,10 @@ class EmailEngagementDynamoStore
       end
 
       def conditional_check_failed?(error)
-        reasons = Array(error.cancellation_reasons)
-        return true if reasons.empty?
-
-        reasons.any? { |reason| reason.code == "ConditionalCheckFailed" }
+        # aws-sdk-ruby's TransactionCanceledException has no cancellation_reasons
+        # member — reading it raises. The service still names ConditionalCheckFailed
+        # in the message; any other cancellation must retry.
+        error.message.to_s.include?("ConditionalCheckFailed")
       end
 
       def item_key(installment_id, sort_key)

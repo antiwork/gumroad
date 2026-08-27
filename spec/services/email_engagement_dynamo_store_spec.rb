@@ -31,6 +31,30 @@ describe EmailEngagementDynamoStore do
     hash.transform_values { plain(_1) }
   end
 
+  def stub_transact(*steps)
+    i = 0
+    client.stub_responses(:transact_write_items, lambda do |_context|
+      step = steps[i] || steps.last
+      i += 1
+      case step
+      when :ok
+        {}
+      when :conditional
+        raise Aws::DynamoDB::Errors::TransactionCanceledException.new(
+          nil,
+          "Transaction cancelled, please refer cancellation reasons for specific reasons [ConditionalCheckFailed, None, None]"
+        )
+      when :conflict
+        raise Aws::DynamoDB::Errors::TransactionCanceledException.new(
+          nil,
+          "Transaction cancelled, please refer cancellation reasons for specific reasons [TransactionConflict, None, None]"
+        )
+      else
+        step
+      end
+    end)
+  end
+
   describe ".record_open" do
     it "writes in production without a feature flag" do
       allow(Rails).to receive(:env).and_return(ActiveSupport::StringInquirer.new("production"))
@@ -61,7 +85,7 @@ describe EmailEngagementDynamoStore do
     end
 
     it "does not touch the summary when the recipient has opened before" do
-      client.stub_responses(:transact_write_items, "TransactionCanceledException")
+      stub_transact(:conditional)
 
       described_class.record_open(installment_id: 123, mailer_method:, mailer_args:)
 
@@ -135,7 +159,7 @@ describe EmailEngagementDynamoStore do
     end
 
     it "counts the pair but not the summary click count when the recipient has clicked another url before" do
-      client.stub_responses(:transact_write_items, [{}, "TransactionCanceledException", "TransactionCanceledException"])
+      stub_transact(:ok, :conditional, :conditional)
 
       described_class.record_click(installment_id: 123, mailer_method:, mailer_args:, click_url:)
 
@@ -147,7 +171,7 @@ describe EmailEngagementDynamoStore do
     end
 
     it "counts nothing on a repeat click of the same url by the same recipient" do
-      client.stub_responses(:transact_write_items, "TransactionCanceledException")
+      stub_transact(:conditional)
 
       described_class.record_click(installment_id: 123, mailer_method:, mailer_args:, click_url:)
 
@@ -156,7 +180,7 @@ describe EmailEngagementDynamoStore do
     end
 
     it "still writes clicker and open counters when a retry finds the click item already committed" do
-      client.stub_responses(:transact_write_items, ["TransactionCanceledException", {}, {}])
+      stub_transact(:conditional, :ok, :ok)
 
       described_class.record_click(installment_id: 123, mailer_method:, mailer_args:, click_url:)
 
@@ -172,6 +196,14 @@ describe EmailEngagementDynamoStore do
       expect do
         described_class.record_click(installment_id: 123, mailer_method:, mailer_args:, click_url:)
       end.to raise_error(Aws::Errors::ServiceError)
+    end
+
+    it "raises retryable transaction cancellations that are not conditional duplicates" do
+      stub_transact(:conflict)
+
+      expect do
+        described_class.record_click(installment_id: 123, mailer_method:, mailer_args:, click_url:)
+      end.to raise_error(Aws::DynamoDB::Errors::TransactionCanceledException)
     end
   end
 
