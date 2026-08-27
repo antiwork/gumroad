@@ -5,6 +5,8 @@
 # OAuth bearer authenticates the request, the body is forwarded to Anthropic
 # with the server-side key, and token usage is metered per user
 # (GumheadUsageEvent). The seller never holds a model credential.
+# The upstream host is GUMHEAD_UPSTREAM_API_BASE — Anthropic today,
+# OpenRouter (or another Anthropic-protocol host) when that is set.
 #
 # Gateway-minted errors use Anthropic's error envelope ({type: "error",
 # error: {type:, message:}}) so the client runtime surfaces the message
@@ -43,6 +45,7 @@ class Api::V2::Gumhead::MessagesController < Api::V2::BaseController
   before_action :throttle_gateway_requests
   before_action :load_body
   before_action :validate_model
+  before_action :rewrite_upstream_model
   before_action :validate_tools
   before_action :validate_pricing_modifiers
   before_action :validate_max_tokens, only: [:create]
@@ -54,11 +57,20 @@ class Api::V2::Gumhead::MessagesController < Api::V2::BaseController
   # a deploy — any upstream must speak the Anthropic Messages protocol.
   DEFAULT_UPSTREAM_API_BASE = "https://api.anthropic.com/v1"
   DEFAULT_ANTHROPIC_VERSION = "2023-06-01"
-  # The model families Gumhead actually uses (main loop, narrator, artist).
-  # The caps are token-denominated, so an unlisted pricier SKU cannot be
-  # smuggled in to spend faster per token; ops can extend the list without
-  # a deploy via GUMHEAD_ALLOWED_MODEL_PREFIXES.
-  DEFAULT_ALLOWED_MODEL_PREFIXES = "claude-sonnet-,claude-haiku-,claude-opus-"
+  # Claude families plus exact role ids newer builds send. Role ids
+  # are listed here so validate_model can admit them, but they are
+  # not prefixes: only an exact allowlist hit plus a rewrite passes.
+  # Family prefixes rewrite every allowed Claude name, including
+  # OpenRouter :online variants.
+  DEFAULT_ALLOWED_MODEL_PREFIXES = "claude-sonnet-,claude-haiku-,claude-opus-,gumhead-chat,gumhead-status,gumhead-cover"
+  DEFAULT_MODEL_MAP = {
+    "claude-sonnet-" => "x-ai/grok-4.6",
+    "claude-haiku-" => "x-ai/grok-4.6",
+    "claude-opus-" => "x-ai/grok-4.6",
+    "gumhead-chat" => "x-ai/grok-4.6",
+    "gumhead-status" => "x-ai/grok-4.6",
+    "gumhead-cover" => "x-ai/grok-4.6",
+  }.freeze
   # Matches nginx's client_max_body_size; a larger constant here would
   # document a limit requests can never reach.
   MAX_BODY_BYTES = 10.megabytes
@@ -123,7 +135,7 @@ class Api::V2::Gumhead::MessagesController < Api::V2::BaseController
   # the in-flight limit.
   def count_tokens
     with_in_flight_slot do
-      forward_buffered("#{upstream_api_base}/messages/count_tokens", meter: false)
+      forward_buffered("#{upstream_api_base}/messages/count_tokens", meter: false, missing_ok: !anthropic_upstream?)
     end
   end
 
@@ -143,7 +155,7 @@ class Api::V2::Gumhead::MessagesController < Api::V2::BaseController
     end
 
     def ensure_gateway_configured
-      return if anthropic_api_key.present? && gumhead_oauth_application_uids.any?
+      return if upstream_api_key.present? && gumhead_oauth_application_uids.any?
 
       render json: anthropic_error("api_error", "The Gumhead gateway is not configured."), status: :service_unavailable
     end
@@ -220,9 +232,93 @@ class Api::V2::Gumhead::MessagesController < Api::V2::BaseController
 
     def validate_model
       model = @body["model"].to_s
-      return if allowed_model_prefixes.any? { |prefix| model.start_with?(prefix) }
+      return if allowed_incoming_model?(model)
 
       render json: anthropic_error("invalid_request_error", "That model is not available through the Gumhead gateway."), status: :bad_request
+    end
+
+    # Role ids have no Anthropic SKU. They pass only as an exact
+    # allowlist hit, and only when this request will rewrite that id.
+    # Claude family prefixes stay valid on both hosts. Other ops
+    # prefixes keep the old always-on allowlist. Role id strings are
+    # never used as prefixes, so gumhead-chat-extra stays out.
+    def allowed_incoming_model?(model)
+      prefixes = allowed_model_prefixes
+      if prefixes.any? { |prefix| prefix.start_with?("claude-") && model.start_with?(prefix) }
+        return incoming_model_maps_if_needed?(model)
+      end
+      if incoming_role_id?(model)
+        return false unless prefixes.include?(model)
+        return false unless rewrite_upstream_model?
+
+        outgoing = mapped_upstream_model(model)
+        return outgoing.present? && outgoing != model
+      end
+
+      prefixes.any? do |prefix|
+        next false if incoming_role_id?(prefix)
+        model.start_with?(prefix)
+      end
+    end
+
+    # On a non-Anthropic hop, a Claude family name only passes if the
+    # active map actually rewrites it. An empty override must not forward
+    # the client-controlled name unchanged.
+    def incoming_model_maps_if_needed?(model)
+      return true unless rewrite_upstream_model?
+
+      outgoing = mapped_upstream_model(model)
+      outgoing.present? && outgoing != model
+    end
+
+    def incoming_role_id?(model)
+      %w[gumhead-chat gumhead-status gumhead-cover].include?(model)
+    end
+
+    # Incoming names stay on the Claude allowlist so the shipped app
+    # passes validate_model. The built-in Grok map applies only when the
+    # upstream is no longer Anthropic, so a deploy that has not flipped
+    # the base still sends Claude ids. An explicit GUMHEAD_MODEL_MAP
+    # always applies. The ledger records the billed outgoing name.
+    def rewrite_upstream_model
+      return unless rewrite_upstream_model?
+
+      incoming = @body["model"].to_s
+      outgoing = mapped_upstream_model(incoming)
+      return if outgoing.blank? || outgoing == incoming
+
+      @body["model"] = outgoing
+      @raw_body = @body.to_json
+    end
+
+    def rewrite_upstream_model?
+      return true if GlobalConfig.get("GUMHEAD_MODEL_MAP").present?
+
+      !anthropic_upstream?
+    end
+
+    def mapped_upstream_model(model)
+      map = model_map
+      exact = map[model].presence
+      return exact if exact
+
+      match = map.select { |key, value| value.present? && model.start_with?(key.to_s) }
+                 .max_by { |key, _| key.to_s.length }
+      match ? match[1] : model
+    end
+
+    def model_map
+      raw = GlobalConfig.get("GUMHEAD_MODEL_MAP", DEFAULT_MODEL_MAP)
+      parsed = raw.is_a?(String) ? safe_parse_json(raw) : raw
+      overrides = {}
+      if parsed.is_a?(Hash)
+        parsed.each do |key, value|
+          next if key.blank? || value.blank?
+
+          overrides[key.to_s] = value.to_s
+        end
+      end
+      DEFAULT_MODEL_MAP.merge(overrides)
     end
 
     def allowed_model_prefixes
@@ -266,14 +362,14 @@ class Api::V2::Gumhead::MessagesController < Api::V2::BaseController
     end
 
     # `speed: "fast"` and `inference_geo` carry pricing multipliers the
-    # ledger does not weight, and `fallbacks` runs extra attempts whose
-    # nested options bypass every top-level validator here. All three would
-    # spend the shared key invisibly.
+    # ledger does not weight. `fallbacks`, `models`, `provider`, `route`,
+    # and `plugins` run extra paid work outside this ledger.
     def validate_pricing_modifiers
       speed_ok = @body["speed"].nil? || @body["speed"] == "standard"
-      return if speed_ok && @body["inference_geo"].nil? && !@body.key?("fallbacks")
+      extra = %w[inference_geo fallbacks plugins models provider route service_tier]
+      return if speed_ok && extra.none? { |key| @body.key?(key) }
 
-      render json: anthropic_error("invalid_request_error", "speed, inference_geo, and fallbacks options are not available through the Gumhead gateway."), status: :bad_request
+      render json: anthropic_error("invalid_request_error", "speed, inference_geo, fallbacks, plugins, models, provider, route, and service_tier options are not available through the Gumhead gateway."), status: :bad_request
     end
 
     # A missing max_tokens passes through: Anthropic's own error for it is
@@ -295,11 +391,27 @@ class Api::V2::Gumhead::MessagesController < Api::V2::BaseController
       render json: anthropic_error("rate_limit_error", "Daily Gumhead usage limit reached. Please try again tomorrow."), status: :too_many_requests
     end
 
-    def forward_buffered(url, meter:)
+    def forward_buffered(url, meter:, missing_ok: false)
       upstream = nil
       dispatched_at = Process.clock_gettime(Process::CLOCK_MONOTONIC)
       upstream = HTTP.timeout(BUFFERED_TIMEOUT).headers(upstream_headers).post(url, body: buffered_upstream_body(meter:))
       body = upstream.body.to_s
+      # OpenRouter has no count_tokens; a 404 pass-through must not
+      # fail the app probe (it only blocks on 401/403). Same byte
+      # estimate charge_input_tokens already uses when counting fails.
+      if missing_ok && upstream.status.code == 404
+        return render json: { "input_tokens" => @raw_body.bytesize }, status: :ok
+      end
+      parsed = safe_parse_json(body)
+      # OpenRouter uses {error:{message}} without Anthropic's top-level type.
+      # Keep Anthropic envelopes as pass-through.
+      if openrouter_error_envelope?(parsed)
+        meter_buffered_usage(body) if meter && upstream.status.success?
+        message = parsed.dig("error", "message").to_s.presence || "The model service returned an error."
+        copy_retry_after(upstream)
+        status = upstream.status.success? ? :bad_gateway : upstream.status.code
+        return render json: anthropic_error("api_error", message), status:
+      end
       meter_buffered_usage(body) if meter && upstream.status.success?
       copy_retry_after(upstream)
       render body:, content_type: "application/json", status: upstream.status.code
@@ -419,7 +531,23 @@ class Api::V2::Gumhead::MessagesController < Api::V2::BaseController
 
       unless upstream.status.success?
         copy_retry_after(upstream)
-        return render body: upstream.body.to_s, content_type: "application/json", status: upstream.status.code
+        body = upstream.body.to_s
+        parsed = safe_parse_json(body)
+        if openrouter_error_envelope?(parsed)
+          message = parsed.dig("error", "message").to_s.presence || "The model service returned an error."
+          return render json: anthropic_error("api_error", message), status: upstream.status.code
+        end
+        return render body:, content_type: "application/json", status: upstream.status.code
+      end
+      if upstream.headers["Content-Type"].to_s.include?("application/json") &&
+         !upstream.headers["Content-Type"].to_s.include?("event-stream")
+        body = upstream.body.to_s
+        parsed = safe_parse_json(body)
+        if parsed.is_a?(Hash) && parsed["error"].is_a?(Hash)
+          meter_buffered_usage(body) if parsed["usage"].is_a?(Hash)
+          message = parsed.dig("error", "message").to_s.presence || "The model service returned an error."
+          return render json: anthropic_error("api_error", message), status: :bad_gateway
+        end
       end
 
       response.headers["Content-Type"] = "text/event-stream"
@@ -555,11 +683,18 @@ class Api::V2::Gumhead::MessagesController < Api::V2::BaseController
     end
 
     def upstream_headers
+      key = upstream_api_key
       headers = {
-        "x-api-key" => anthropic_api_key,
         "anthropic-version" => request.headers["anthropic-version"].presence || DEFAULT_ANTHROPIC_VERSION,
         "content-type" => "application/json",
       }
+      # Anthropic rejects a bearer token when x-api-key is also set.
+      # OpenRouter authenticates only with Authorization: Bearer.
+      if anthropic_upstream?
+        headers["x-api-key"] = key
+      else
+        headers["authorization"] = "Bearer #{key}"
+      end
       beta = filtered_beta_features
       headers["anthropic-beta"] = beta if beta.present?
       headers
@@ -575,8 +710,25 @@ class Api::V2::Gumhead::MessagesController < Api::V2::BaseController
       requested.reject { |feature| denied.any? { |pattern| feature.include?(pattern) } }.join(",")
     end
 
-    def anthropic_api_key
-      GlobalConfig.get("GUMHEAD_ANTHROPIC_API_KEY")
+    def upstream_api_key
+      # Never send the Anthropic secret to another host. OpenRouter (and
+      # any other hop) needs GUMHEAD_UPSTREAM_API_KEY. The Anthropic key
+      # stays on api.anthropic.com only.
+      if anthropic_upstream?
+        GlobalConfig.get("GUMHEAD_UPSTREAM_API_KEY").presence || GlobalConfig.get("GUMHEAD_ANTHROPIC_API_KEY")
+      else
+        GlobalConfig.get("GUMHEAD_UPSTREAM_API_KEY").presence
+      end
+    end
+
+    def openrouter_error_envelope?(parsed)
+      parsed.is_a?(Hash) && parsed["error"].is_a?(Hash) && parsed["type"] != "error"
+    end
+
+    def anthropic_upstream?
+      URI.parse(upstream_api_base.to_s).host == "api.anthropic.com"
+    rescue URI::InvalidURIError
+      false
     end
 
     def upstream_api_base
