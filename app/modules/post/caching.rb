@@ -9,6 +9,7 @@ module Post::Caching
   end
 
   def invalidate_cache(key)
+    @dynamo_engagement_summary = nil
     Rails.cache.delete(key_for_cache(key))
   end
 end

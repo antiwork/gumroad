@@ -3,9 +3,19 @@
 require "spec_helper"
 
 describe "InstallmentTracking"  do
+  def mailer_method
+    "CreatorContactingCustomersMailer.purchase_installment"
+  end
+
   before do
     @creator = create(:named_user, :with_avatar)
     @installment = create(:installment, call_to_action_text: "CTA", call_to_action_url: "https://www.example.com", seller: @creator)
+  end
+
+  def record_click(installment, recipient:, url:)
+    EmailEngagementDynamoStore.record_click(
+      installment_id: installment.id, mailer_method:, mailer_args: recipient, click_url: url
+    )
   end
 
   describe "click_summary" do
@@ -14,10 +24,10 @@ describe "InstallmentTracking"  do
     end
 
     it "converts encoded urls back into human-readable format" do
-      CreatorEmailClickSummary.create!(installment_id: @installment.id,
-                                       total_unique_clicks: 2,
-                                       urls: { "https://www&#46;gumroad&#46;com" => 1,
-                                               "https://www&#46;google&#46;com" => 2 })
+      record_click(@installment, recipient: "[1, 1]", url: "https://www&#46;google&#46;com")
+      record_click(@installment, recipient: "[2, 2]", url: "https://www&#46;google&#46;com")
+      record_click(@installment, recipient: "[1, 1]", url: "https://www&#46;gumroad&#46;com")
+
       decoded_hash = { "google.com" => 2,
                        "gumroad.com" => 1 }
       urls = @installment.clicked_urls
@@ -31,10 +41,9 @@ describe "InstallmentTracking"  do
     end
 
     it "computes the click rate correctly" do
-      CreatorEmailClickSummary.create!(installment_id: @installment.id,
-                                       total_unique_clicks: 2,
-                                       urls: { "https://www&#46;gumroad&#46;com" => 2,
-                                               "https://www&#46;google&#46;com" => 1 })
+      record_click(@installment, recipient: "[1, 1]", url: "https://www&#46;gumroad&#46;com")
+      record_click(@installment, recipient: "[2, 2]", url: "https://www&#46;google&#46;com")
+
       expect(@installment.click_rate_percent).to eq 50.0
     end
   end
@@ -48,24 +57,26 @@ describe "InstallmentTracking"  do
       expect(@installment.unique_click_count).to eq 0
     end
 
-    it "returns the correct number of clicks" do
-      CreatorEmailClickSummary.create!(installment_id: @installment.id,
-                                       total_unique_clicks: 2,
-                                       urls: { "https://www&#46;gumroad&#46;com" => 2,
-                                               "https://www&#46;google&#46;com" => 1 })
+    it "returns the number of unique recipient and url clicks" do
+      record_click(@installment, recipient: "[1, 1]", url: "https://www&#46;gumroad&#46;com")
+      record_click(@installment, recipient: "[2, 2]", url: "https://www&#46;google&#46;com")
+      # A repeat of an already-counted pair changes nothing.
+      record_click(@installment, recipient: "[1, 1]", url: "https://www&#46;gumroad&#46;com")
+
       expect(@installment.unique_click_count).to eq 2
     end
 
-    it "does not hit CreatorEmailClickSummary model once the cache is set" do
-      CreatorEmailClickSummary.create!(installment_id: @installment.id,
-                                       total_unique_clicks: 4,
-                                       urls: { "https://www&#46;gumroad&#46;com" => 2,
-                                               "https://www&#46;google&#46;com" => 1 })
+    it "does not hit DynamoDB once the cache is set" do
+      record_click(@installment, recipient: "[1, 1]", url: "https://www&#46;gumroad&#46;com")
+      record_click(@installment, recipient: "[1, 1]", url: "https://www&#46;google&#46;com")
+      record_click(@installment, recipient: "[2, 2]", url: "https://www&#46;gumroad&#46;com")
+      record_click(@installment, recipient: "[3, 3]", url: "https://www&#46;google&#46;com")
+
       # Read once and set the cache
       @installment.unique_click_count
 
-      expect(CreatorEmailClickSummary).not_to receive(:where).with(installment_id: @installment.id)
-      unique_click_count = @installment.unique_click_count
+      expect(EmailEngagementDynamoStore).not_to receive(:summary)
+      unique_click_count = Installment.find(@installment.id).unique_click_count
 
       expect(unique_click_count).to eq 4
     end
@@ -76,14 +87,18 @@ describe "InstallmentTracking"  do
       @installment = create(:installment, customer_count: 4)
     end
 
-    it "does not hit CreatorEmailOpenEvent model once the cache is set" do
-      3.times { CreatorEmailOpenEvent.create!(installment_id: @installment.id) }
+    it "does not hit DynamoDB once the cache is set" do
+      3.times do |i|
+        EmailEngagementDynamoStore.record_open(
+          installment_id: @installment.id, mailer_method:, mailer_args: "[#{i}, #{i}]"
+        )
+      end
 
       # Read once and set the cache
       @installment.unique_open_count
 
-      expect(CreatorEmailOpenEvent).not_to receive(:where).with(installment_id: @installment.id)
-      unique_open_count = @installment.unique_open_count
+      expect(EmailEngagementDynamoStore).not_to receive(:summary)
+      unique_open_count = Installment.find(@installment.id).unique_open_count
 
       expect(unique_open_count).to eq 3
     end

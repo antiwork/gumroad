@@ -61,8 +61,7 @@ describe Api::V2::Workflows::EmailsController do
       token = create_access_token("edit_emails")
       existing_email = create(:workflow_installment, workflow: @workflow, seller: @user, link: nil)
       published_at = @workflow.published_at
-      allow(CreatorEmailOpenEvent).to receive(:collection).and_raise("analytics unavailable")
-      allow(CreatorEmailClickSummary).to receive(:in).and_raise("analytics unavailable")
+      allow(EmailEngagementDynamoStore).to receive(:summaries).and_raise("analytics unavailable")
 
       post @action, params: @params.merge(access_token: token.token)
 
@@ -251,8 +250,7 @@ describe Api::V2::Workflows::EmailsController do
       token = create_access_token("edit_emails")
       sibling = create(:workflow_installment, workflow: @workflow, seller: @user, link: nil)
       file = create(:product_file, installment: @email, link: nil)
-      allow(CreatorEmailOpenEvent).to receive(:collection).and_raise("analytics unavailable")
-      allow(CreatorEmailClickSummary).to receive(:in).and_raise("analytics unavailable")
+      allow(EmailEngagementDynamoStore).to receive(:summaries).and_raise("analytics unavailable")
 
       put @action, params: @params.merge(access_token: token.token)
 

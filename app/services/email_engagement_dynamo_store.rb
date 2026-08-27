@@ -76,8 +76,15 @@ class EmailEngagementDynamoStore
 
     # Staging and production tables are Terraform-owned (antiwork/infrastructure#998)
     # and deletion-protected; this bootstrap is for dev, test, and branch apps.
+    # DynamoDB is the primary store outside production: dual writes always
+    # on, reads always served from DynamoDB. Production stays flag-controlled
+    # until the Mongo decommission completes.
     def reads_enabled?
-      Feature.active?(READ_FEATURE)
+      !Rails.env.production? || Feature.active?(READ_FEATURE)
+    end
+
+    def dual_writes_enabled?
+      !Rails.env.production? || Feature.active?(DUAL_WRITE_FEATURE)
     end
 
     def summary(installment_id)
@@ -179,7 +186,7 @@ class EmailEngagementDynamoStore
 
     private
       def with_dual_write_guard
-        return unless Feature.active?(DUAL_WRITE_FEATURE)
+        return unless dual_writes_enabled?
         yield
       rescue => e
         # Mongo remains the source of truth during dual writes; a DynamoDB

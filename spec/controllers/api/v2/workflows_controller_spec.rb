@@ -104,30 +104,32 @@ describe Api::V2::WorkflowsController do
       create(:workflow_installment, workflow: @workflow, seller: @user, link: nil, deleted_at: Time.current)
 
       4.times do |index|
-        CreatorEmailOpenEvent.create!(
+        EmailEngagementDynamoStore.record_open(
           installment_id: first_email.id,
           mailer_method: "WorkflowMailer.first_#{index}",
           mailer_args: index.to_s,
-          open_timestamps: [Time.current],
-          open_count: 1,
         )
       end
-      CreatorEmailOpenEvent.create!(
+      EmailEngagementDynamoStore.record_open(
         installment_id: later_email.id,
         mailer_method: "WorkflowMailer.later",
         mailer_args: "later",
-        open_timestamps: [Time.current],
-        open_count: 1,
       )
-      CreatorEmailClickSummary.create!(installment_id: first_email.id, total_unique_clicks: 2, urls: {})
-      CreatorEmailClickSummary.create!(installment_id: later_email.id, total_unique_clicks: 1, urls: {})
+      2.times do |index|
+        EmailEngagementDynamoStore.record_click(
+          installment_id: first_email.id, mailer_method: "WorkflowMailer.first_#{index}",
+          mailer_args: index.to_s, click_url: "https://example&#46;com"
+        )
+      end
+      EmailEngagementDynamoStore.record_click(
+        installment_id: later_email.id, mailer_method: "WorkflowMailer.later",
+        mailer_args: "later", click_url: "https://example&#46;com"
+      )
       [first_email, later_email].each do |email|
         Rails.cache.delete(email.key_for_cache(:unique_open_count))
         Rails.cache.delete(email.key_for_cache(:unique_click_count))
       end
-      open_events_collection = CreatorEmailOpenEvent.collection
-      expect(CreatorEmailOpenEvent).to receive(:collection).once.and_return(open_events_collection)
-      expect(CreatorEmailClickSummary).to receive(:in).once.and_call_original
+      expect(EmailEngagementDynamoStore).to receive(:summaries).twice.and_call_original
 
       get @action, params: @params.merge(access_token: token.token)
       expect(Rails.cache.read(first_email.key_for_cache(:unique_open_count))).to be_nil
