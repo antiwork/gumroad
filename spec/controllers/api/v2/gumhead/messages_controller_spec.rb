@@ -1177,6 +1177,185 @@ describe Api::V2::Gumhead::MessagesController do
     end
   end
 
+  describe "empty upstream replies" do
+    let(:blank_sse) do
+      [
+        %(event: message_start\ndata: {"type":"message_start","message":{"model":"x-ai/grok-4.6","usage":{"input_tokens":40,"output_tokens":0}}}\n\n),
+        %(event: message_delta\ndata: {"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":{"output_tokens":0,"input_tokens":40}}\n\n),
+        %(event: message_stop\ndata: {"type":"message_stop"}\n\n),
+      ].join
+    end
+
+    it "answers a completed blank stream as retryable instead of committing it" do
+      stub_request(:post, messages_url)
+        .to_return(status: 200, body: blank_sse, headers: { "Content-Type" => "text/event-stream" })
+
+      post_messages(request_payload.merge(stream: true))
+
+      expect(response.status).to eq(502)
+      expect(response.headers["Content-Type"]).not_to include("event-stream")
+      expect(JSON.parse(response.body)["error"]["message"]).to eq(described_class::UPSTREAM_ERRORS.fetch(:busy).last)
+    end
+
+    it "answers a thinking-only completed stream as retryable" do
+      thinking_sse = [
+        %(event: message_start\ndata: {"type":"message_start","message":{"model":"x-ai/grok-4.6","usage":{"input_tokens":40,"output_tokens":0}}}\n\n),
+        %(event: content_block_delta\ndata: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"hm"}}\n\n),
+        %(event: message_delta\ndata: {"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":{"output_tokens":9,"input_tokens":40}}\n\n),
+        %(event: message_stop\ndata: {"type":"message_stop"}\n\n),
+      ].join
+      stub_request(:post, messages_url)
+        .to_return(status: 200, body: thinking_sse, headers: { "Content-Type" => "text/event-stream" })
+
+      post_messages(request_payload.merge(stream: true))
+
+      expect(response.status).to eq(502)
+    end
+
+    it "meters what a rejected blank stream reported" do
+      stub_request(:post, messages_url)
+        .to_return(status: 200, body: blank_sse, headers: { "Content-Type" => "text/event-stream" })
+
+      post_messages(request_payload.merge(stream: true))
+
+      expect(GumheadUsageEvent.sole.input_tokens).to eq(40)
+    end
+
+    it "passes a refusal stream through as it arrived" do
+      refusal_sse = [
+        %(event: message_start\ndata: {"type":"message_start","message":{"model":"x-ai/grok-4.6","usage":{"input_tokens":40,"output_tokens":0}}}\n\n),
+        %(event: message_delta\ndata: {"type":"message_delta","delta":{"stop_reason":"refusal"},"usage":{"output_tokens":0,"input_tokens":40}}\n\n),
+        %(event: message_stop\ndata: {"type":"message_stop"}\n\n),
+      ].join
+      stub_request(:post, messages_url)
+        .to_return(status: 200, body: refusal_sse, headers: { "Content-Type" => "text/event-stream" })
+
+      post_messages(request_payload.merge(stream: true))
+
+      expect(response.headers["Content-Type"]).to include("event-stream")
+      expect(response.body).to eq(refusal_sse)
+    end
+
+    it "streams a tool_use-only stream through byte for byte" do
+      tool_sse = [
+        %(event: message_start\ndata: {"type":"message_start","message":{"model":"x-ai/grok-4.6","usage":{"input_tokens":40,"output_tokens":0}}}\n\n),
+        %(event: content_block_start\ndata: {"type":"content_block_start","content_block":{"type":"tool_use","id":"t1","name":"read_folder"}}\n\n),
+        %(event: content_block_delta\ndata: {"type":"content_block_delta","delta":{"type":"input_json_delta","partial_json":"{}"}}\n\n),
+        %(event: message_delta\ndata: {"type":"message_delta","delta":{"stop_reason":"tool_use"},"usage":{"output_tokens":12,"input_tokens":40}}\n\n),
+        %(event: message_stop\ndata: {"type":"message_stop"}\n\n),
+      ].join
+      stub_request(:post, messages_url)
+        .to_return(status: 200, body: tool_sse, headers: { "Content-Type" => "text/event-stream" })
+
+      post_messages(request_payload.merge(stream: true))
+
+      expect(response.headers["Content-Type"]).to include("event-stream")
+      expect(response.body).to eq(tool_sse)
+    end
+
+    def empty_reply(content:, output_tokens: 0)
+      {
+        id: "msg_e", type: "message", role: "assistant", model: "x-ai/grok-4.6",
+        content:, stop_reason: "end_turn",
+        usage: { input_tokens: 40, output_tokens: },
+      }
+    end
+
+    it "answers a 200 with no output as retryable instead of passing a blank turn through" do
+      stub_request(:post, messages_url)
+        .to_return(status: 200, body: empty_reply(content: []).to_json, headers: { "Content-Type" => "application/json" })
+
+      post_messages
+
+      expect(response.status).to eq(502)
+      expect(JSON.parse(response.body)["error"]["message"]).to eq(described_class::UPSTREAM_ERRORS.fetch(:busy).last)
+    end
+
+    it "still meters the input the empty reply reported" do
+      stub_request(:post, messages_url)
+        .to_return(status: 200, body: empty_reply(content: []).to_json, headers: { "Content-Type" => "application/json" })
+
+      post_messages
+
+      expect(GumheadUsageEvent.sole.input_tokens).to eq(40)
+    end
+
+    it "treats blank text blocks as no output" do
+      stub_request(:post, messages_url)
+        .to_return(status: 200, body: empty_reply(content: [{ type: "text", text: "  " }]).to_json, headers: { "Content-Type" => "application/json" })
+
+      post_messages
+
+      expect(response.status).to eq(502)
+    end
+
+    # Billing and substance are different facts: a blank reply can carry a
+    # nonzero output count, and it is still a blank turn.
+    it "catches a blank reply that billed output tokens" do
+      stub_request(:post, messages_url)
+        .to_return(status: 200, body: empty_reply(content: [], output_tokens: 1).to_json, headers: { "Content-Type" => "application/json" })
+
+      post_messages
+
+      expect(response.status).to eq(502)
+    end
+
+    # A refusal legitimately ships empty content; the client handles it,
+    # and retrying a refused prompt cannot succeed.
+    it "passes a refusal through untouched" do
+      body = empty_reply(content: []).merge(stop_reason: "refusal")
+      stub_request(:post, messages_url)
+        .to_return(status: 200, body: body.to_json, headers: { "Content-Type" => "application/json" })
+
+      post_messages
+
+      expect(response.status).to eq(200)
+      expect(JSON.parse(response.body)["stop_reason"]).to eq("refusal")
+    end
+
+    # A tool call is a normal loop step; converting it to an error would
+    # break every agentic turn.
+    it "passes a tool_use-only reply through untouched" do
+      stub_request(:post, messages_url)
+        .to_return(status: 200, body: empty_reply(content: [{ type: "tool_use", id: "t1", name: "read_folder", input: {} }], output_tokens: 0).to_json, headers: { "Content-Type" => "application/json" })
+
+      post_messages
+
+      expect(response.status).to eq(200)
+      expect(JSON.parse(response.body)["content"].first["type"]).to eq("tool_use")
+    end
+
+    # The client renders neither the thinking nor the silence after it, so
+    # a completed turn of pure deliberation is a blank turn.
+    it "retries a thinking-only completed turn" do
+      stub_request(:post, messages_url)
+        .to_return(status: 200, body: empty_reply(content: [{ type: "thinking", thinking: "hm" }], output_tokens: 31).to_json, headers: { "Content-Type" => "application/json" })
+
+      post_messages
+
+      expect(response.status).to eq(502)
+    end
+
+    it "passes thinking through when text accompanies it" do
+      stub_request(:post, messages_url)
+        .to_return(status: 200, body: empty_reply(content: [{ type: "thinking", thinking: "hm" }, { type: "text", text: "Done." }], output_tokens: 40).to_json, headers: { "Content-Type" => "application/json" })
+
+      post_messages
+
+      expect(response.status).to eq(200)
+    end
+
+    it "leaves an unfinished stop reason alone even with no visible output" do
+      body = empty_reply(content: [{ type: "thinking", thinking: "hm" }]).merge(stop_reason: "max_tokens")
+      stub_request(:post, messages_url)
+        .to_return(status: 200, body: body.to_json, headers: { "Content-Type" => "application/json" })
+
+      post_messages
+
+      expect(response.status).to eq(200)
+    end
+  end
+
   describe "live model map in Redis" do
     let(:openrouter_messages_url) { "https://openrouter.ai/api/v1/messages" }
 

@@ -21,6 +21,7 @@ class GumheadStreamUsageScanner
     @stop_reason = nil
     @saw_usage = false
     @terminal = false
+    @substantive = false
   end
 
   # True once the stream carried a proper ending — message_stop or a
@@ -32,6 +33,13 @@ class GumheadStreamUsageScanner
   def unbilled_refusal?
     @stop_reason == "refusal" && @content_delta_count.zero?
   end
+
+  attr_reader :stop_reason
+
+  # True once the stream carried something the client can consume: a tool
+  # call, or text with a non-space character. Thinking is not substance —
+  # the client renders neither it nor the silence after it.
+  def substantive? = @substantive
 
   def <<(chunk)
     @buffer << chunk
@@ -71,6 +79,9 @@ class GumheadStreamUsageScanner
         @terminal = true
       when "message_start"
         started(event)
+      when "content_block_start"
+        block = event["content_block"]
+        @substantive = true if block.is_a?(Hash) && block["type"] == "tool_use"
       when "content_block_delta"
         @content_delta_count += 1
         delta = event["delta"]
@@ -82,6 +93,8 @@ class GumheadStreamUsageScanner
           # every stream that completes.
           content = delta["text"] || delta["partial_json"] || delta["thinking"] || delta["data"]
           @streamed_output_bytes += content.bytesize if content.is_a?(String)
+          @substantive = true if delta["text"].is_a?(String) && delta["text"].match?(/\S/)
+          @substantive = true if delta["partial_json"].is_a?(String)
         end
       when "message_delta"
         delta = event["delta"]

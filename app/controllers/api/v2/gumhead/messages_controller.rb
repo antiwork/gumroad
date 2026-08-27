@@ -90,6 +90,17 @@ class Api::V2::Gumhead::MessagesController < Api::V2::BaseController
   # equal to them would let the outer layers cut the client before the
   # rescue can render its error envelope.
   BUFFERED_TIMEOUT = 90
+  # How much of a stream may be held back, and for how long, while it has
+  # shown nothing the client can consume. Held bytes are thinking and
+  # framing; past either bound the stream commits anyway. The byte bound
+  # trades blank-turn detection for bounded memory. The time bound exists
+  # because an uncommitted response writes nothing to the client, and
+  # nginx and the Rack timeout cut a silent connection at 120s — a long
+  # thinking run used to stay alive on its own forwarded deltas. Every
+  # observed blank reply completed within seconds, so a short window
+  # catches them all.
+  MAX_HELD_STREAM_BYTES = 512.kilobytes
+  MAX_HELD_STREAM_SECONDS = 20
   # A buffered call is abandoned at BUFFERED_TIMEOUT, but Anthropic keeps
   # generating — and billing — until max_tokens. Clamping the forwarded
   # ceiling to what fits inside the timeout window keeps the elapsed-time
@@ -501,6 +512,15 @@ class Api::V2::Gumhead::MessagesController < Api::V2::BaseController
 
         return render body:, content_type: "application/json", status: upstream.status.code
       end
+      # A 200 whose message carries no output at all: the loop upstream of
+      # the runtime would swallow it as a blank turn. Measured at 7 of 32
+      # calls across three models. A 502 makes the runtime retry instead;
+      # the reported input usage is still billed, so it is still metered.
+      if empty_reply?(parsed)
+        meter_buffered_usage(body) if meter
+        Rails.logger.warn("Gumhead gateway empty reply: model=#{loggable_upstream_field(parsed["model"])} provider=#{loggable_upstream_field(parsed["provider"])} request_id=#{upstream_request_id(parsed)}")
+        return render json: anthropic_error(*UPSTREAM_ERRORS.fetch(:busy)), status: :bad_gateway
+      end
       meter_buffered_usage(body) if meter
       copy_retry_after(upstream)
       render body:, content_type: "application/json", status: upstream.status.code
@@ -641,25 +661,45 @@ class Api::V2::Gumhead::MessagesController < Api::V2::BaseController
         end
       end
 
-      response.headers["Content-Type"] = "text/event-stream"
-      response.headers["Cache-Control"] = "no-cache"
-      # Disable buffering at the proxy (nginx) layer so events flush to
-      # Gumhead as they are written.
-      response.headers["X-Accel-Buffering"] = "no"
-
       scanner = GumheadStreamUsageScanner.new
+      # Nothing is written until the stream shows something the client can
+      # consume, so a blank stream can still be answered as a retryable
+      # error instead of committed and passed through. The held bytes are
+      # thinking and framing; the cap bounds memory and fails open, since a
+      # stream that long is being generated, not stalling.
+      held = +""
+      committed = false
+      hold_started_at = Process.clock_gettime(Process::CLOCK_MONOTONIC)
       begin
         last_renewal = Time.current
-        # Committed bytes pass through untouched, so an error event the
-        # provider sends after this point still carries its own wording —
+        # Once committed, bytes pass through untouched, so an error event
+        # the provider sends after that still carries its own wording —
         # the one failure this gateway does not mint. Rewriting it means
-        # re-framing SSE across chunk boundaries and teaching the scanner
-        # to separate an error ending from message_stop; that belongs in
-        # its own change, not in the middle of this loop.
+        # re-framing SSE across chunk boundaries; that belongs in its own
+        # change, not in the middle of this loop.
         while (chunk = upstream.body.readpartial)
           scanner << chunk
-          response.stream.write(chunk)
+          if committed
+            response.stream.write(chunk)
+          else
+            held << chunk
+            held_too_long = Process.clock_gettime(Process::CLOCK_MONOTONIC) - hold_started_at > MAX_HELD_STREAM_SECONDS
+            if scanner.substantive? || held.bytesize > MAX_HELD_STREAM_BYTES || held_too_long
+              committed = commit_stream!(held)
+            end
+          end
           last_renewal = renew_in_flight_lease(last_renewal)
+        end
+        unless committed
+          # A completed blank stream is answered as retryable; anything
+          # else — a refusal the client handles, an unfinished ending —
+          # passes through as it arrived.
+          if scanner.terminal? && scanner.stop_reason == "end_turn"
+            Rails.logger.warn("Gumhead gateway empty reply: model=#{loggable_upstream_field(scanner.model)} stream=true")
+            render json: anthropic_error(*UPSTREAM_ERRORS.fetch(:busy)), status: :bad_gateway
+            return
+          end
+          committed = commit_stream!(held)
         end
         # A clean EOF without message_stop (or an upstream error event) is
         # an interruption the client would otherwise see as a silent close.
@@ -677,6 +717,7 @@ class Api::V2::Gumhead::MessagesController < Api::V2::BaseController
         # an empty 200) would leave the client guessing. Anthropic delivers
         # mid-stream failures the same way: an error event on the open stream.
         Rails.logger.warn("Gumhead gateway upstream error: #{e.class} #{e.message}")
+        committed = commit_stream!(held) unless committed
         write_stream_error_frame
       ensure
         if scanner.usage?
@@ -687,7 +728,7 @@ class Api::V2::Gumhead::MessagesController < Api::V2::BaseController
           # the exact prompt; no deltas arrived, so output stays zero.
           record_usage!(model: @body["model"], usage: synthetic_input_usage.merge("output_tokens" => 0))
         end
-        response.stream.close
+        response.stream.close if committed
       end
     rescue HTTP::ConnectTimeoutError => e
       # TCP connect failed; the request never reached Anthropic.
@@ -707,6 +748,20 @@ class Api::V2::Gumhead::MessagesController < Api::V2::BaseController
       # unwrapped, hence the explicit rescue.
       Rails.logger.warn("Gumhead gateway upstream error: #{e.class} #{e.message}")
       render json: anthropic_error("api_error", "Could not reach the model service."), status: :bad_gateway
+    end
+
+    # Commits the SSE response and flushes what was held back. From here
+    # on, bytes pass through as they arrive.
+    def commit_stream!(held)
+      response.headers["Content-Type"] = "text/event-stream"
+      response.headers["Cache-Control"] = "no-cache"
+      # Disable buffering at the proxy (nginx) layer so events flush to
+      # Gumhead as they are written.
+      response.headers["X-Accel-Buffering"] = "no"
+      # The stream buffer keeps a reference to what it is handed, so the
+      # held bytes must not be mutated after the write.
+      response.stream.write(held.dup) unless held.empty?
+      true
     end
 
     def write_stream_error_frame
@@ -837,8 +892,7 @@ class Api::V2::Gumhead::MessagesController < Api::V2::BaseController
       # status alone; every attempt fails until the cap resets. The SDK
       # reads this header before it reaches that rule.
       response.set_header("x-should-retry", "false") if key == :out_of_budget
-      type, message = UPSTREAM_ERRORS.fetch(key)
-      anthropic_error(type, message)
+      anthropic_error(*UPSTREAM_ERRORS.fetch(key))
     end
 
     def upstream_error_key(status, parsed, detail)
@@ -882,6 +936,36 @@ class Api::V2::Gumhead::MessagesController < Api::V2::BaseController
     def upstream_request_id(parsed)
       id = parsed.is_a?(Hash) ? parsed["request_id"].to_s : ""
       id[/\A[\w.-]{1,64}\z/] || "none"
+    end
+
+    # Deliberately narrow: a completed message that gives the client
+    # nothing to consume. Judged by the content, not the token count — a
+    # blank reply can bill a nonzero count. Substance is a tool_use block
+    # (a normal loop step) or non-blank text; a thinking block alone is
+    # not, because the client renders neither it nor the silence after it.
+    # Only end_turn counts: a refusal ships empty content the client
+    # handles and must never be retried, and other stop reasons mean the
+    # turn is not finished being answered.
+    def empty_reply?(parsed)
+      return false unless parsed.is_a?(Hash) && parsed["type"] == "message"
+      return false unless parsed["stop_reason"] == "end_turn"
+
+      blocks = parsed["content"]
+      return true if blocks.nil? || blocks == []
+      return false unless blocks.is_a?(Array)
+
+      blocks.none? do |b|
+        next false unless b.is_a?(Hash)
+
+        b["type"] == "tool_use" || (b["type"] == "text" && b["text"].to_s.strip.present?)
+      end
+    end
+
+    # Upstream-controlled and headed for one log line, so control
+    # characters are flattened and the length bounded — a newline would
+    # forge a second record.
+    def loggable_upstream_field(value)
+      value.to_s.gsub(/[[:cntrl:]]/, " ").strip.slice(0, 64).presence || "none"
     end
 
     def openrouter_error_envelope?(parsed)
