@@ -80,15 +80,35 @@ describe("prepareImageForUpload", () => {
 });
 
 describe("installFileDropNavigationGuard", () => {
+  const fileDrop = () => {
+    const event = new DragEvent("drop", { bubbles: true, cancelable: true });
+    Object.defineProperty(event, "dataTransfer", { value: { types: ["Files"], files: [] } });
+    return event;
+  };
+
   it("prevents the browser from navigating when a file is dropped on the page", () => {
     const doc = document;
     const uninstall = installFileDropNavigationGuard(doc);
-    const event = new DragEvent("drop", { bubbles: true, cancelable: true });
-    Object.defineProperty(event, "dataTransfer", { value: { types: ["Files"], files: [] } });
+    const event = fileDrop();
 
     doc.dispatchEvent(event);
 
     expect(event.defaultPrevented).toBe(true);
     uninstall();
+  });
+
+  it("does not cancel a drop on a native file input", () => {
+    const doc = document;
+    const input = doc.createElement("input");
+    input.type = "file";
+    doc.body.append(input);
+    const uninstall = installFileDropNavigationGuard(doc);
+    const event = fileDrop();
+
+    input.dispatchEvent(event);
+
+    expect(event.defaultPrevented).toBe(false);
+    uninstall();
+    input.remove();
   });
 });
