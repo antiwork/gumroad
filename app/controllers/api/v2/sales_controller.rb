@@ -6,6 +6,9 @@ class Api::V2::SalesController < Api::V2::BaseController
   before_action(only: [:mark_as_shipped]) { doorkeeper_authorize! :mark_sales_as_shipped }
   before_action(only: [:refund]) { doorkeeper_authorize! :refund_sales, :edit_sales }
   before_action(only: [:resend_receipt, :revoke_access, :undo_revoke_access]) { doorkeeper_authorize! :edit_sales }
+  # BaseController appends the legacy `account` scope to doorkeeper_authorize!.
+  # Revoking buyer access must require the seller's explicit edit_sales grant.
+  before_action(only: [:revoke_access, :undo_revoke_access]) { require_oauth_scope! :edit_sales }
   before_action :set_page, only: :index
 
   RESULTS_PER_PAGE = 10

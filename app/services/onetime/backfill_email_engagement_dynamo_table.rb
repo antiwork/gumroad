@@ -1,11 +1,15 @@
 # frozen_string_literal: true
 
+require "tmpdir"
+require "fileutils"
+
 # Loads the Mongo engagement collections into the DynamoDB email_engagement
 # table (gumroad-private#2158). Run phases in order, each from a console:
 #
 #   Onetime::BackfillEmailEngagementDynamoTable.backfill_opens!
 #   Onetime::BackfillEmailEngagementDynamoTable.backfill_clicks!
-#   Onetime::BackfillEmailEngagementDynamoTable.recompute_counters!  # rerun until it reports 0 adjustments
+#   Onetime::BackfillEmailEngagementDynamoTable.recompute_counters!  # forked scan + deltas, prints progress
+#   Onetime::BackfillEmailEngagementDynamoTable.recompute_installments_active_since!(scan_started_at)
 #   Onetime::BackfillEmailEngagementDynamoTable.verify!
 #
 # Or pilot a single seller (or a single installment) first:
@@ -23,8 +27,11 @@ class Onetime::BackfillEmailEngagementDynamoTable
   MONGO_BATCH_SIZE = 1_000
   DYNAMO_BATCH_SIZE = 25 # BatchWriteItem hard limit
   PROGRESS_INTERVAL = 100_000 # docs between progress lines
-  SCAN_PAGE_SIZE = 1_000
   MAX_WRITE_ATTEMPTS = 8
+  RECOMPUTE_PROCESSES = 8
+  DRIFT_WINDOW_MARGIN = 15.minutes
+  # Everything classify_item reads; OPEN#/CLICKER# items shrink to keys only.
+  SCAN_PROJECTION = "pk, sk, click_url, open_count, click_count, click_pair_count"
   OPENS_CURSOR_KEY = "onetime_backfill_email_engagement_opens_last_id"
   CLICKS_CURSOR_KEY = "onetime_backfill_email_engagement_clicks_last_id"
 
@@ -41,17 +48,40 @@ class Onetime::BackfillEmailEngagementDynamoTable
       end
     end
 
-    # Tallies OPEN#/CLICKER#/CLICK# items per installment in one full scan and
-    # corrects SUMMARY and URL# counters by the difference. Deltas (not
-    # absolute writes) because live events keep incrementing concurrently.
-    def recompute_counters!
-      tallies = Hash.new { |h, k| h[k] = new_tally }
-      current = Hash.new { |h, k| h[k] = new_tally }
-      scan_all_items { |item| classify_item(item, tallies[item["pk"]], current[item["pk"]]) }
-
-      adjustments = (tallies.keys | current.keys).sum { |pk| apply_deltas(pk, tallies[pk], current[pk]) }
-      puts "#{adjustments} counter adjustments applied; rerun until this reports 0."
+    # Tallies OPEN#/CLICKER#/CLICK# items per installment across the whole
+    # table and corrects SUMMARY and URL# counters by the difference. Deltas
+    # (not absolute writes) because live events keep incrementing concurrently.
+    # The scan forks worker processes: item deserialization is CPU-bound Ruby,
+    # so the GIL rules out threads. processes: 1 scans inline. Catch drift
+    # from events arriving mid-run with recompute_installments_active_since!.
+    def recompute_counters!(processes: RECOMPUTE_PROCESSES)
+      started_at = Time.current
+      adjustments =
+        if processes >= 2
+          estimated_items = store.client.describe_table(table_name: store.table_name).table.item_count.to_i
+          puts "Scanning ~#{estimated_items} items with #{processes} forked workers..."
+          scan_segments_forked(processes, estimated_items)
+        else
+          stream_segment_deltas(segment: nil, total_segments: nil, per_segment_estimate: nil)
+        end
+      puts "Done in #{((Time.current - started_at) / 60).round} minutes: #{adjustments} counter adjustments applied. " \
+           "Catch mid-run drift with recompute_installments_active_since!(Time.iso8601(\"#{started_at.utc.iso8601}\"))."
       adjustments
+    end
+
+    # Cheap drift pass: only installments with Mongo events since `time` can
+    # have drifted during a full recompute; re-derive just those partitions.
+    # The margin covers events whose Mongo doc landed just before the scan
+    # started but whose DynamoDB writes straddled it (same handler, but the
+    # scan can catch a torn view of item vs counter).
+    def recompute_installments_active_since!(time)
+      min_id = BSON::ObjectId.from_time(time - DRIFT_WINDOW_MARGIN)
+      installment_ids = CreatorEmailOpenEvent.where(_id: { "$gte" => min_id }).distinct(:installment_id)
+      installment_ids |= CreatorEmailClickEvent.where(_id: { "$gte" => min_id }).distinct(:installment_id)
+      installment_ids = installment_ids.compact
+      puts "#{installment_ids.size} installments with activity since #{time}."
+      installment_ids.each { |installment_id| recompute_installment!(installment_id) }
+      installment_ids.size
     end
 
     # Pilot: backfill a single seller's installments end-to-end (items plus a
@@ -337,18 +367,92 @@ class Onetime::BackfillEmailEngagementDynamoTable
         end
       end
 
-      def scan_all_items(&block)
+      # Forked, not threaded: the work is GIL-bound Ruby deserialization.
+      # Failed segments retry one at a time — and with consistent reads, so a
+      # crashed attempt's already-applied deltas are seen and not re-added
+      # (the default eventually consistent scan doesn't read our own writes).
+      def scan_segments_forked(processes, estimated_items)
+        dir = Dir.mktmpdir("email_engagement_recompute")
+        per_segment_estimate = [estimated_items / processes, 1].max
+        GC.start # shrink copy-on-write breakage in the children
+        waits = processes.times.map do |segment|
+          [segment, fork_segment_worker(segment, processes, dir, per_segment_estimate)]
+        end
+        failed = waits.map { |segment, pid| [segment, Process.wait2(pid).last] }.reject { |_, status| status.success? }
+        failed.each do |segment, status|
+          puts "segment #{segment} failed (#{status}); retrying serially..."
+          retry_status = Process.wait2(
+            fork_segment_worker(segment, processes, dir, per_segment_estimate, attempt: 2, consistent_read: true)
+          ).last
+          raise "segment #{segment} failed twice: #{status}, then #{retry_status}" unless retry_status.success?
+        end
+
+        # Checkpointed running totals per attempt; a crashed attempt's applied
+        # deltas still count (retries add only what the crash left undone).
+        Dir.glob(File.join(dir, "segment-*.adjustments")).sum { |path| File.read(path).to_i }
+      ensure
+        FileUtils.remove_entry(dir) if dir
+      end
+
+      def fork_segment_worker(segment, total_segments, dir, per_segment_estimate, attempt: 1, consistent_read: false)
+        Process.fork do
+          store.client = nil # fresh connections post-fork
+          path = File.join(dir, "segment-#{segment}.attempt#{attempt}.adjustments")
+          checkpoint = ->(adjustments) { File.write(path, adjustments.to_s) }
+          checkpoint.call(stream_segment_deltas(segment:, total_segments:, per_segment_estimate:, consistent_read:, checkpoint:))
+          exit!(0)
+        rescue => e
+          warn "segment #{segment} crashed: #{e.class}: #{e.message}"
+          exit!(1)
+        end
+      end
+
+      # A scan returns each pk's items contiguously (LastEvaluatedKey is
+      # (pk, sk), and a pk hashes into exactly one segment), so one
+      # installment's tally completes before the next begins: flush deltas at
+      # each pk boundary and memory stays flat at any table size. verify!
+      # backstops the whole run regardless.
+      def stream_segment_deltas(segment:, total_segments:, per_segment_estimate:, consistent_read: false, checkpoint: nil)
+        adjustments = 0
+        scanned = 0
+        run_pk = nil
+        tally = new_tally
+        seen = new_tally
+        flush = lambda do
+          adjustments += apply_deltas(run_pk, tally, seen) if run_pk
+          tally = new_tally
+          seen = new_tally
+        end
+
         last_evaluated_key = nil
         loop do
-          response = store.client.scan(
+          params = {
             table_name: store.table_name,
-            limit: SCAN_PAGE_SIZE,
-            exclusive_start_key: last_evaluated_key
-          )
-          response.items.each(&block)
+            projection_expression: SCAN_PROJECTION,
+            consistent_read:,
+            exclusive_start_key: last_evaluated_key,
+          }
+          params.update(segment:, total_segments:) if segment
+          response = store.client.scan(**params)
+          response.items.each do |item|
+            if item["pk"] != run_pk
+              flush.call
+              run_pk = item["pk"]
+            end
+            classify_item(item, tally, seen)
+          end
+          scanned_before = scanned
+          scanned += response.items.size
+          if per_segment_estimate && scanned / 1_000_000 > scanned_before / 1_000_000
+            percent = [scanned * 100.0 / per_segment_estimate, 100.0].min
+            puts format("segment %d: %d/~%d items (%.1f%%), %d adjustments", segment, scanned, per_segment_estimate, percent, adjustments)
+            checkpoint&.call(adjustments)
+          end
           last_evaluated_key = response.last_evaluated_key
           break if last_evaluated_key.blank?
         end
+        flush.call
+        adjustments
       end
 
       def apply_delta(pk, sort_key, attribute, delta, click_url: nil)
