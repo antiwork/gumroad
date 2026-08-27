@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { act, cleanup, fireEvent, render } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, waitFor } from "@testing-library/react";
 import { Editor } from "@tiptap/core";
 import StarterKit from "@tiptap/starter-kit";
 import * as React from "react";
@@ -11,6 +11,10 @@ import { ImageUploadSettings, ImageUploadSettingsContext } from "$app/components
 import { Image } from "$app/components/TiptapExtensions/Image";
 
 vi.mock("$app/components/server-components/Alert", () => ({ showAlert: () => {} }));
+vi.mock("$app/utils/prepareImageForUpload", () => ({
+  isLikelyImageFile: () => false,
+  prepareImageForUpload: async (file: File) => file,
+}));
 
 // happy-dom has no object URL support, and uploadImages mints one per inserted image.
 let blobSeq = 0;
@@ -85,8 +89,9 @@ describe("Insert image picker", () => {
 
     await act(async () => {
       fireEvent.change(input);
-      // snapshotPickedFiles settles on a microtask after the change handler returns
-      await Promise.resolve();
+    });
+    await waitFor(() => {
+      if (!uploaded[0]) throw new Error("onUpload was not called");
     });
 
     const [file] = uploaded;
@@ -108,12 +113,8 @@ describe("Insert image picker", () => {
 
     await act(async () => {
       fireEvent.change(input);
-      // snapshot then onUpload (already resolved) each take a microtask
-      await Promise.resolve();
-      await Promise.resolve();
     });
-
-    expect(uploaded).toEqual([picked]);
+    await waitFor(() => expect(uploaded).toEqual([picked]));
     expect(valueWrites).toEqual([""]);
   });
 
@@ -156,15 +157,14 @@ describe("Insert image picker", () => {
     await act(async () => {
       release();
       await ready;
-      await Promise.resolve();
-      await Promise.resolve();
     });
-
-    const images: unknown[] = [];
-    editor?.state.doc.descendants((node) => {
-      if (node.type.name === "image") images.push(node);
+    await waitFor(() => {
+      const images: unknown[] = [];
+      editor?.state.doc.descendants((node) => {
+        if (node.type.name === "image") images.push(node);
+      });
+      expect(images).toHaveLength(1);
     });
-    expect(images).toHaveLength(1);
   });
 
   it("inserts multiple images in selection order", async () => {
@@ -184,14 +184,25 @@ describe("Insert image picker", () => {
 
     await act(async () => {
       fireEvent.change(input);
-      await Promise.resolve();
-      await Promise.resolve();
     });
+    await waitFor(() => {
+      const names: string[] = [];
+      editor?.state.doc.descendants((node) => {
+        if (node.type.name === "image") names.push(String(node.attrs.src));
+      });
+      expect(names).toEqual(["https://example.com/a.png", "https://example.com/b.png"]);
+    });
+  });
 
-    const names: string[] = [];
-    editor?.state.doc.descendants((node) => {
-      if (node.type.name === "image") names.push(String(node.attrs.src));
+  it("rejects a file the editor does not allow", async () => {
+    const { input, uploaded } = renderInsertImagePicker();
+    const picked = new File(["<svg></svg>"], "logo.svg", { type: "image/svg+xml" });
+    const valueWrites = attachPickedFile(input, picked);
+
+    await act(async () => {
+      fireEvent.change(input);
     });
-    expect(names).toEqual(["https://example.com/a.png", "https://example.com/b.png"]);
+    await waitFor(() => expect(valueWrites).toEqual([""]));
+    expect(uploaded).toEqual([]);
   });
 });

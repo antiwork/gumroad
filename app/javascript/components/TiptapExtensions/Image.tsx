@@ -67,6 +67,12 @@ export const uploadImages = ({
         const next = isLikelyImageFile(file)
           ? await prepareImageForUpload(file, maxFileSize ? { maxBytes: maxFileSize } : undefined)
           : file;
+        // Check the post-prep name so HEIC/AVIF that re-encoded to JPEG pass, while
+        // SVG/ICO that skipped prep still fail the editor's extension allow-list.
+        if (!FileUtils.isFileNameExtensionAllowed(next.name, imageSettings.allowedExtensions)) {
+          showAlert("Invalid file type.", "error");
+          continue;
+        }
         if (maxFileSize && next.size > maxFileSize) {
           showAlert(`File is too large (max allowed size is ${FileUtils.getReadableFileSize(maxFileSize)})`, "error");
           continue;
