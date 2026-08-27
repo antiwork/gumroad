@@ -1,11 +1,11 @@
 # frozen_string_literal: true
 
-# Creates the email engagement table on the DynamoDB Local container so specs
-# can run against a real endpoint. An unreachable DynamoDB only warns for now:
-# no spec depends on a live table yet (EmailEngagementDynamoStore's specs stub
-# the client). When reads flip and integration specs land, make this raise and
-# give the suite its own table: dev and test currently share the container's
-# unprefixed one, so per-example cleanup here would wipe lane 0's dev data.
+# Creates the email engagement table on the DynamoDB Local container. The
+# test suite reads and writes DynamoDB for real (reads_enabled? is true
+# outside production), so an unreachable endpoint is fatal. The test_ prefix
+# keeps the suite off lane 0's dev table; examples stay isolated from each
+# other because engagement partitions are keyed by installment id and every
+# example creates fresh installments.
 class DynamodbSetup
   def self.prepare_test_environment
     attempts = 0
@@ -19,9 +19,9 @@ class DynamodbSetup
         sleep 1
         retry
       end
-      warn "[DynamoDB] Could not reach #{EmailEngagementDynamoStore.client.config.endpoint}; " \
-           "the #{EmailEngagementDynamoStore.table_name} table was not created. " \
-           "Start the dynamodb docker compose service (`make local`)."
+      raise "Could not reach DynamoDB at #{EmailEngagementDynamoStore.client.config.endpoint} " \
+            "to create #{EmailEngagementDynamoStore.table_name}. " \
+            "Start the dynamodb docker compose service (`make local`)."
     end
   end
 end

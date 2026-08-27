@@ -32,7 +32,7 @@ describe HandleEmailEventInfo::ForInstallmentEmail do
 
       HandleSendgridEventJob.new.perform(params)
 
-      unique_open_count = Rails.cache.read("unique_open_count_for_installment_#{@installment.id}")
+      unique_open_count = Rails.cache.read("unique_open_count_for_installment_#{@installment.id}_ddb")
       expect(unique_open_count).to eq 1
     end
 
@@ -90,11 +90,11 @@ describe HandleEmailEventInfo::ForInstallmentEmail do
 
       HandleSendgridEventJob.new.perform(params)
 
-      unique_click_count = Rails.cache.read("unique_click_count_for_installment_#{@installment.id}")
+      unique_click_count = Rails.cache.read("unique_click_count_for_installment_#{@installment.id}_ddb")
       expect(unique_click_count).to eq 1
 
       # It should also cache unique_open_count
-      unique_open_count = Rails.cache.read("unique_open_count_for_installment_#{@installment.id}")
+      unique_open_count = Rails.cache.read("unique_open_count_for_installment_#{@installment.id}_ddb")
       expect(unique_open_count).to eq 1
     end
 

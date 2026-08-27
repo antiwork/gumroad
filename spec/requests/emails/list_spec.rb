@@ -27,17 +27,18 @@ describe("Email List", :js, :sidekiq_inline, :elasticsearch_wait_for_refresh, ty
       it "shows published emails" do
         expect_any_instance_of(Installment).to receive(:send_preview_email).with(user_with_role_for_seller)
 
-        CreatorEmailOpenEvent.create!(installment_id: installment1.id)
+        EmailEngagementDynamoStore.record_open(installment_id: installment1.id, mailer_method: "M.a", mailer_args: "[1]")
 
         url1 = "example.com"
         url2 = "example.com/this-is-a-very-very-long-url-12345-the-quick-brown-fox-jumps-over-the-lazy-dog"
-        CreatorEmailClickSummary.create!(installment_id: installment1.id, total_unique_clicks: 123, urls: { url1 => 100, url2 => 23 })
+        EmailEngagementDynamoStore.record_click(installment_id: installment1.id, mailer_method: "M.a", mailer_args: "[1]", click_url: url1)
+        EmailEngagementDynamoStore.record_click(installment_id: installment1.id, mailer_method: "M.a", mailer_args: "[1]", click_url: url2)
         installment1.increment_total_delivered
 
         visit "#{emails_path}/published"
 
         within_table "Published" do
-          expect(page).to have_table_row({ "Subject" => "Email 1 (sent)", "Emailed" => "1", "Opened" => "100%", "Clicks" => "123", "Views" => "n/a" })
+          expect(page).to have_table_row({ "Subject" => "Email 1 (sent)", "Emailed" => "1", "Opened" => "100%", "Clicks" => "2", "Views" => "n/a" })
           expect(page).to have_table_row({ "Subject" => "Email 3 (sent)", "Emailed" => "--", "Opened" => "--", "Clicks" => "0", "Views" => "0" })
           expect(page).to_not have_table_row({ "Subject" => "Email 2 (draft)" })
           expect(page).to_not have_table_row({ "Subject" => "Email 4 (draft)" })

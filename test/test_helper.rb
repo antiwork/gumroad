@@ -14,7 +14,12 @@ require "sidekiq/testing"
 Sidekiq::Testing.fake!
 
 # Disable network access in tests (matches RSpec's webmock config).
-WebMock.disable_net_connect!(allow_localhost: true)
+# "dynamodb" is the CI compose hostname for DynamoDB Local.
+WebMock.disable_net_connect!(allow_localhost: true, allow: ["dynamodb"])
+
+# Engagement reads and dual writes hit DynamoDB Local for real in test.
+require_relative "../spec/support/dynamodb"
+DynamodbSetup.prepare_test_environment
 
 # Stub Elasticsearch globally so any model save/callback that calls EsClient
 # (search reindex, ProductPageView.count, etc.) doesn't make a real HTTP

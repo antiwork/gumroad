@@ -782,11 +782,20 @@ const b = 2;</code></pre>
 
   test "invalidate_cache clears the cached value so the next read is fresh" do
     installment = create_installment(customer_count: 4)
-    3.times { CreatorEmailOpenEvent.create!(installment_id: installment.id) }
+    record_open = lambda do |n|
+      n.times do
+        EmailEngagementDynamoStore.record_open(
+          installment_id: installment.id,
+          mailer_method: "CreatorContactingCustomersMailer.purchase_installment",
+          mailer_args: "[#{SecureRandom.hex(4)}]"
+        )
+      end
+    end
+    record_open.call(3)
 
     assert_equal 3, installment.unique_open_count # reads and caches
 
-    4.times { CreatorEmailOpenEvent.create!(installment_id: installment.id) }
+    record_open.call(4)
     assert_equal 3, installment.unique_open_count # still cached
 
     installment.invalidate_cache(:unique_open_count)

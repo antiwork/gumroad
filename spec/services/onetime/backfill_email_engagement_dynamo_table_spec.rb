@@ -29,7 +29,7 @@ describe Onetime::BackfillEmailEngagementDynamoTable do
   end
 
   def written_items(request)
-    request[:params][:request_items]["email_engagement"].map do |r|
+    request[:params][:request_items][EmailEngagementDynamoStore.table_name].map do |r|
       r[:put_request][:item].transform_values do |attribute_value|
         type, value = attribute_value.first
         type == :n ? Integer(value) : value
@@ -93,7 +93,7 @@ describe Onetime::BackfillEmailEngagementDynamoTable do
       allow(described_class).to receive(:sleep)
       client.stub_responses(:batch_write_item, lambda { |context|
         if requests.count { _1[:operation_name] == :batch_write_item } == 1
-          { unprocessed_items: { "email_engagement" => context.params[:request_items]["email_engagement"] } }
+          { unprocessed_items: { EmailEngagementDynamoStore.table_name => context.params[:request_items][EmailEngagementDynamoStore.table_name] } }
         else
           { unprocessed_items: {} }
         end

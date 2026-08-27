@@ -217,13 +217,16 @@ describe InstallmentPresenter do
     context "when the installment has clicked URLs" do
       it "returns each full URL without truncation so the UI can show it verbatim" do
         long_url = "example.com/blog/#{"a" * 90}?utm_source=newsletter&utm_campaign=july"
-        CreatorEmailClickSummary.create!(installment_id: installment.id, total_unique_clicks: 12, urls: { "example.com" => 10, long_url => 2 })
+        [["M.a", "[1]"], ["M.b", "[2]"]].each do |mailer_method, mailer_args|
+          EmailEngagementDynamoStore.record_click(installment_id: installment.id, mailer_method:, mailer_args:, click_url: "example.com")
+        end
+        EmailEngagementDynamoStore.record_click(installment_id: installment.id, mailer_method: "M.a", mailer_args: "[1]", click_url: long_url)
 
         props = described_class.new(seller:, installment:).props
 
         expect(props[:clicked_urls]).to eq([
-                                             { url: "example.com", count: 10 },
-                                             { url: long_url, count: 2 }
+                                             { url: "example.com", count: 2 },
+                                             { url: long_url, count: 1 }
                                            ])
       end
     end
