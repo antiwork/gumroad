@@ -64,16 +64,15 @@ class Checkout::StripePaymentPresenter
       return payment_element_props(STRIPE_ELEMENTS_MODE_FOR_SETUP_INTENT)
     end
 
-    # Server-confirm: deferred-intent does not consume the quote token.
-    # Before client-confirm — Prepare#block_unexpected_buyer_currency_quote fails closed
-    # on a token rather than charge USD behind a local total.
-    # Unquoted USD-GeoIP candidates take this branch too (no local-method tabs).
-    # Quote candidate + method-forced (EUR listing, CAD buyer) wins here; own-currency
-    # method-forced carts are not candidates and fall through.
-    # Prefer client-confirm for carts it can safely charge: it is the only Payment Element path
-    # that can remount a USD-priced Indian buyer into INR and add UPI. Carts outside prepare's
-    # client-confirm contract fall through to the server-confirm buyer-currency element below.
-    return client_confirm_props if client_confirm_eligible?
+    # Client-confirm can remount a single USD-priced quote (INR UPI, CAD card, etc.).
+    # Quoted carts it cannot remount — non-USD listings, multi-line USD — stay on the
+    # server-confirm presentment element: prepare honors that quote, and stealing them
+    # onto unmarked client-confirm hid the quote while the currency picker stayed on.
+    # Own-currency method-forced / unquoted carts still take client-confirm.
+    if client_confirm_eligible?
+      quoted = buyer_currency_presentment_element_shape?(checkout_items)
+      return client_confirm_props unless quoted && !client_confirm_quote_remount?
+    end
 
     if buyer_currency_presentment_element_shape?(checkout_items)
       return payment_element_props(

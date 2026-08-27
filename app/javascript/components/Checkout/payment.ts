@@ -625,20 +625,18 @@ export function getStripePaymentElementAmount(state: State) {
   return getChargeTodayPrice(state);
 }
 
-// The mount currency + amount for the buyer-currency presentment lane, or null everywhere else.
-// Server-confirm requires buyer_currency_presentment. Client-confirm remounts whenever the
-// surcharge response carries a usable FX quote, so any checkout can leave USD and the buyer
-// can pick the listed currency to come back. Both the element mount and the charge derive
-// from that one quote. When the quote is missing or suppressed (expired/errored quote, or
-// the buyer chose to save the card, which PR 1 forces onto the canonical USD charge path),
-// this returns null and the element mounts canonical USD.
+// Whether the summary (and submitted token) may show the surcharge FX quote.
+// Client-confirm: only when prepare can honor that quote (server-set flag).
+// Server-confirm PE: only the presentment-shaped element charges it.
+// CardElement: the surcharge quote is still the display the picker specs pin;
+// willSaveCard already suppresses it on the save-card USD path.
 
 export function canDisplayBuyerCurrencyQuote(state: Pick<State, "checkoutPayment">): boolean {
   if (state.checkoutPayment.integration === "payment_element")
     return state.checkoutPayment.elements_options.buyer_currency_presentment;
   if (state.checkoutPayment.integration === "payment_element_client_confirm")
     return state.checkoutPayment.elements_options.buyer_currency_presentment;
-  return false;
+  return true;
 }
 
 export function getStripePaymentElementPresentment(state: State): { currency: string; amountCents: number } | null {

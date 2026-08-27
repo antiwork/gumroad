@@ -1743,7 +1743,7 @@ describe Checkout::StripePaymentPresenter do
       second = checkout_product_for(second_product)
       second[:product][:exchange_rate] = 0.9
       expect(stripe_payment_props(add_products: [first, second], ip: "24.48.0.1"))
-        .to eq(payment_element_client_confirm_props(disable_wallets: true))
+        .to eq(payment_element_client_confirm_props)
     ensure
       if seller
         Feature.deactivate_user(Checkout::BuyerCurrencyEligibility::LISTED_CURRENCY_DIRECT_CHARGE_FEATURE_NAME, seller)
@@ -1777,7 +1777,7 @@ describe Checkout::StripePaymentPresenter do
       stub_geoip_country("24.48.0.1", "Canada")
 
       expect(stripe_payment_props(add_products: [checkout_product_for(product)], ip: "24.48.0.1"))
-        .to eq(payment_element_client_confirm_props(disable_wallets: true))
+        .to eq(payment_element_client_confirm_props)
     ensure
       deactivate_buyer_currency_flags(seller) if seller
     end
@@ -2191,7 +2191,7 @@ describe Checkout::StripePaymentPresenter do
       end
     end
 
-    it "keeps multi-item USD carts on canonical client-confirm because prepare cannot honor one INR intent yet" do
+    it "keeps multi-item USD carts on the server-confirm presentment element because client-confirm cannot honor one quoted intent yet" do
       seller, product = buyer_currency_seller_with_product(price_currency_type: "usd", price_cents: 1500)
       other_product = create(:product, user: seller, price_currency_type: Currency::USD, price_cents: 2500)
       activate_buyer_currency_flags(seller)
@@ -2200,12 +2200,20 @@ describe Checkout::StripePaymentPresenter do
       stub_geoip_country("203.0.113.26", "India")
 
       props = stripe_payment_props(
-        add_products: [checkout_product_for(product), checkout_product_for(other_product)],
+        add_products: [
+          checkout_product_for(
+            product,
+            buyer_currency_display: { display_mode: "buyer_local", buyer_currency_shown: Currency::INR }
+          ),
+          checkout_product_for(
+            other_product,
+            buyer_currency_display: { display_mode: "buyer_local", buyer_currency_shown: Currency::INR }
+          ),
+        ],
         ip: "203.0.113.26"
       )
 
-      expect(props).to eq(payment_element_client_confirm_props)
-      expect(props.dig(:elements_options, :buyer_currency_presentment)).to eq(false)
+      expect(props).to eq(payment_element_props(buyer_currency_presentment: true, disable_wallets: true))
       expect(props.dig(:elements_options, :inr_local_methods)).to eq([])
     ensure
       if seller

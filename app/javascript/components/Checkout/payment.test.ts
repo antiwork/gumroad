@@ -4,6 +4,7 @@ import type { SurchargesResponse } from "$app/data/customer_surcharge";
 import type { CurrencyCode } from "$app/utils/currency";
 
 import {
+  canDisplayBuyerCurrencyQuote,
   canUseStripePaymentElement,
   canUseStripePaymentElementClientConfirm,
   computeTip,
@@ -1075,6 +1076,14 @@ describe("buyer-currency presentment lane", () => {
     });
     expect(getStripePaymentElementPresentment(unmarked)).toBeNull();
     expect(getStripePaymentElementMountCurrency(unmarked)).toBe("usd");
+  });
+
+  it("still displays a CardElement surcharge quote; willSaveCard is what suppresses save-card USD", () => {
+    const s = state({
+      checkoutPayment: cardElementConfig,
+      surcharges: loadedSurchargesWithQuote,
+    });
+    expect(canDisplayBuyerCurrencyQuote(s)).toBe(true);
   });
 
   it("returns null until surcharges load", () => {
