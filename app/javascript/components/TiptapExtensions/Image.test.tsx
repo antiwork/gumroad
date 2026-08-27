@@ -187,7 +187,7 @@ describe("Insert image picker", () => {
     editor = new Editor({ element, extensions: [StarterKit, Image], content: "<p>hello</p>" });
 
     isLikelyImageFile.mockReturnValue(true);
-    const release: Array<(file: File) => void> = [];
+    const release: ((file: File) => void)[] = [];
     prepareImageForUpload.mockImplementation(
       (file: File) =>
         new Promise((resolve) => {
