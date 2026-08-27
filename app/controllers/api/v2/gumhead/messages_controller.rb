@@ -832,7 +832,11 @@ class Api::V2::Gumhead::MessagesController < Api::V2::BaseController
     # text reaches the log.
     def minted_upstream_error(status, parsed, body)
       detail = upstream_error_detail(parsed, body)
-      Rails.logger.warn("Gumhead gateway upstream error: status=#{status} #{detail}")
+      # The provider's request id is the only handle for finding this
+      # failure in their logs, and it used to reach the client inside the
+      # body this replaces.
+      request_id = parsed.is_a?(Hash) ? parsed["request_id"].to_s.presence : nil
+      Rails.logger.warn("Gumhead gateway upstream error: status=#{status} request_id=#{request_id || "none"} #{detail}")
       key = upstream_error_key(status, parsed, detail)
       return nil if key.nil?
 

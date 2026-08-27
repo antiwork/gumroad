@@ -1138,7 +1138,22 @@ describe Api::V2::Gumhead::MessagesController do
 
       post_messages
 
-      expect(Rails.logger).to have_received(:warn).with(/status=403 Your key is not permitted/)
+      expect(Rails.logger).to have_received(:warn).with(/status=403 .*Your key is not permitted/)
+    end
+
+    # The minted envelope replaces the body that carried this, and it is
+    # the only handle for finding the failure in the provider's logs.
+    it "logs the provider's request id alongside the withheld text" do
+      stub_request(:post, messages_url).to_return(
+        status: 429,
+        body: { type: "error", error: { type: "rate_limit_error", message: "Slow down" }, request_id: "req_018EeWyXxfu5" }.to_json,
+        headers: { "Content-Type" => "application/json" },
+      )
+      allow(Rails.logger).to receive(:warn)
+
+      post_messages
+
+      expect(Rails.logger).to have_received(:warn).with(/request_id=req_018EeWyXxfu5/)
     end
 
     it "mints for an upstream body that is not JSON at all" do
