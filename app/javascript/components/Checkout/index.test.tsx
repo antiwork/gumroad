@@ -830,10 +830,7 @@ describe("Checkout direct-listed currency picker", () => {
     const picker = getByLabelText("Currency");
 
     expect(picker).toHaveProperty("value", "usd");
-    expect(Array.from(picker.querySelectorAll<HTMLOptionElement>("option"), (option) => option.value)).toEqual([
-      "usd",
-      "cad",
-    ]);
+    expect(Array.from(picker.querySelectorAll<HTMLOptionElement>("option"), (option) => option.value)).toEqual(["usd"]);
     expect(getAllByLabelText("Price").map((node) => node.textContent)).toEqual(["US$10"]);
     expect(getByLabelText("Tip").getAttribute("value")).toBe("3.50");
   });

@@ -143,8 +143,18 @@ const CurrencyPicker = ({
   const [state, dispatch] = useState();
   const uid = React.useId();
   const availableOptions = surcharges?.available_buyer_currencies ?? [];
+  const directListedCurrencyOptionAvailable =
+    configuredDirectListedCurrency !== null && selectableDirectListedCurrency === configuredDirectListedCurrency;
+  const directListedUsdSelected =
+    configuredDirectListedCurrency !== null && state.buyerCurrency?.toLowerCase() === "usd";
+  const directListedUsdOptionAvailable =
+    configuredDirectListedCurrency !== null && availableOptions.some((option) => option.code === "usd");
   const options = configuredDirectListedCurrency
-    ? availableOptions.filter((option) => option.code === "usd" || option.code === configuredDirectListedCurrency)
+    ? availableOptions.filter(
+        (option) =>
+          option.code === "usd" ||
+          (directListedCurrencyOptionAvailable && option.code === configuredDirectListedCurrency),
+      )
     : availableOptions;
   const detected = surcharges?.detected_buyer_currency ?? null;
   // Unset buyerCurrency is the listed-currency default on this lane (mount treats
@@ -156,14 +166,12 @@ const CurrencyPicker = ({
     : detected && options.some((option) => option.code === detected)
       ? detected
       : (options[0]?.code ?? "usd");
-  const directListedUsdSelected =
-    configuredDirectListedCurrency !== null && state.buyerCurrency?.toLowerCase() === "usd";
   const canChooseCurrency =
-    options.length >= 2 &&
+    (options.length >= 2 || (directListedUsdSelected && directListedUsdOptionAvailable)) &&
     state.paymentMethod === "card" &&
     !isWalletPaymentElementType(state.paymentElementType) &&
     (configuredDirectListedCurrency
-      ? selectableDirectListedCurrency === configuredDirectListedCurrency || directListedUsdSelected
+      ? directListedCurrencyOptionAvailable || (directListedUsdSelected && directListedUsdOptionAvailable)
       : !state.willSaveCard && !isListedCurrency);
 
   React.useEffect(() => {
