@@ -100,12 +100,14 @@ class Api::V2::Gumhead::MessagesController < Api::V2::BaseController
   # upstream vendor does. Forwarding the vendor's own text made the client
   # match Anthropic's exact wording, which meant every later vendor fell
   # back to a generic "busy" line for failures the pet should name.
+  # Operational failures only. A request the client got wrong — a missing
+  # max_tokens, a bad tool history — keeps the provider's own message,
+  # because that names the field and this gateway cannot.
   UPSTREAM_ERRORS = {
     out_of_budget: ["api_error", "The Gumhead model service is out of budget."],
     credentials: ["api_error", "The Gumhead model service rejected the gateway credentials."],
     rate_limited: ["rate_limit_error", "The Gumhead model service is rate limited. Please retry shortly."],
     busy: ["api_error", "The Gumhead model service is busy. Please retry shortly."],
-    other: ["api_error", "The model service returned an error."],
   }.freeze
   # A spend cap or exhausted credit lasts hours or days, so it must not
   # reach the pet as a transient. Providers report it on several statuses
@@ -494,7 +496,16 @@ class Api::V2::Gumhead::MessagesController < Api::V2::BaseController
         meter_buffered_usage(body) if meter && upstream.status.success?
         copy_retry_after(upstream)
         status = upstream.status.success? ? :bad_gateway : upstream.status.code
-        return render json: minted_upstream_error(upstream.status.code, parsed, body), status:
+        minted = minted_upstream_error(upstream.status.code, parsed, body)
+        return render(json: minted, status:) if minted
+        # Unclassified: the provider's own message names what to fix, so it
+        # goes through. Only OpenRouter's shape is rewrapped, since the
+        # runtime reads the Anthropic envelope.
+        if openrouter_error_envelope?(parsed)
+          return render(json: anthropic_error("api_error", upstream_error_detail(parsed, body)), status:)
+        end
+
+        return render body:, content_type: "application/json", status: upstream.status.code
       end
       meter_buffered_usage(body) if meter
       copy_retry_after(upstream)
@@ -616,7 +627,14 @@ class Api::V2::Gumhead::MessagesController < Api::V2::BaseController
       unless upstream.status.success?
         copy_retry_after(upstream)
         body = upstream.body.to_s
-        return render json: minted_upstream_error(upstream.status.code, safe_parse_json(body), body), status: upstream.status.code
+        parsed = safe_parse_json(body)
+        minted = minted_upstream_error(upstream.status.code, parsed, body)
+        return render(json: minted, status: upstream.status.code) if minted
+        if openrouter_error_envelope?(parsed)
+          return render(json: anthropic_error("api_error", upstream_error_detail(parsed, body)), status: upstream.status.code)
+        end
+
+        return render body:, content_type: "application/json", status: upstream.status.code
       end
       if upstream.headers["Content-Type"].to_s.include?("application/json") &&
          !upstream.headers["Content-Type"].to_s.include?("event-stream")
@@ -624,7 +642,8 @@ class Api::V2::Gumhead::MessagesController < Api::V2::BaseController
         parsed = safe_parse_json(body)
         if parsed.is_a?(Hash) && parsed["error"].is_a?(Hash)
           meter_buffered_usage(body) if parsed["usage"].is_a?(Hash)
-          return render json: minted_upstream_error(upstream.status.code, parsed, body), status: :bad_gateway
+          minted = minted_upstream_error(upstream.status.code, parsed, body)
+          return render json: minted || anthropic_error("api_error", upstream_error_detail(parsed, body)), status: :bad_gateway
         end
       end
 
@@ -807,10 +826,16 @@ class Api::V2::Gumhead::MessagesController < Api::V2::BaseController
 
     # One of this gateway's own messages for an upstream failure, and the
     # upstream's text in the log where an engineer can read it.
+    # This gateway's own message for an operational failure, or nil when
+    # the failure is the request's own fault and the provider's message
+    # says more than any fixed string could. Either way the provider's
+    # text reaches the log.
     def minted_upstream_error(status, parsed, body)
       detail = upstream_error_detail(parsed, body)
       Rails.logger.warn("Gumhead gateway upstream error: status=#{status} #{detail}")
       key = upstream_error_key(status, parsed, detail)
+      return nil if key.nil?
+
       # A spend limit answers 429, which the runtime's SDK retries on
       # status alone; every attempt fails until the cap resets. The SDK
       # reads this header before it reaches that rule.
@@ -825,7 +850,7 @@ class Api::V2::Gumhead::MessagesController < Api::V2::BaseController
       return :rate_limited if status == 429
       return :busy if status >= 500
 
-      :other
+      nil
     end
 
     def spend_limit_code?(parsed)

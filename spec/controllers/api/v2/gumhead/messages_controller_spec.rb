@@ -706,14 +706,14 @@ describe Api::V2::Gumhead::MessagesController do
       expect(GumheadUsageEvent.count).to eq(0)
     end
 
-    it "keeps the status of a 404 from Anthropic count_tokens but mints its message" do
+    it "passes through a 404 from Anthropic count_tokens" do
       stub_request(:post, count_tokens_url)
         .to_return(status: 404, body: { type: "error", error: { type: "not_found_error", message: "Not Found" } }.to_json)
 
       post :count_tokens, body: request_payload.to_json, as: :json
 
       expect(response.status).to eq(404)
-      expect(JSON.parse(response.body)["error"]["message"]).to eq(described_class::UPSTREAM_ERRORS.fetch(:other).last)
+      expect(JSON.parse(response.body)["error"]["type"]).to eq("not_found_error")
     end
 
     it "shares the concurrent in-flight limit" do
@@ -884,9 +884,8 @@ describe Api::V2::Gumhead::MessagesController do
       expect(response.status).to eq(502)
       expect(JSON.parse(response.body)).to eq(
         "type" => "error",
-        "error" => { "type" => "api_error", "message" => described_class::UPSTREAM_ERRORS.fetch(:other).last },
+        "error" => { "type" => "api_error", "message" => "Provider returned error" },
       )
-      expect(response.body).not_to include("Provider returned error")
       expect(GumheadUsageEvent.count).to eq(0)
     end
 
@@ -1034,7 +1033,8 @@ describe Api::V2::Gumhead::MessagesController do
     end
 
     # Guardrails, model allowlists, and budget caps all answer 403; calling
-    # those a rejected key would send ops looking at the wrong thing.
+    # those a rejected key would send ops looking at the wrong thing, and a
+    # fixed string would say less than the provider already did.
     ["Blocked by a guardrail policy", "This model is not permitted", "Permission denied for this route"].each do |message|
       it "does not blame credentials for a 403 saying #{message.inspect}" do
         stub_upstream_error(status: 403, message:)
@@ -1042,8 +1042,17 @@ describe Api::V2::Gumhead::MessagesController do
         post_messages
 
         expect(response.status).to eq(403)
-        expect(JSON.parse(response.body)["error"]["message"]).to eq(minted(:other))
+        expect(JSON.parse(response.body)["error"]["message"]).to eq(message)
       end
+    end
+
+    it "keeps a client-correctable 400 as the provider wrote it" do
+      stub_upstream_error(status: 400, message: "max_tokens: Field required")
+
+      post_messages
+
+      expect(response.status).to eq(400)
+      expect(response.body).to include("max_tokens: Field required")
     end
 
     it "reads OpenRouter's 403 workspace budget cap as out of budget" do
