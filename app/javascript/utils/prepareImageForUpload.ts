@@ -15,6 +15,8 @@ const DECODE_TYPES = new Set([
   "image/tif",
 ]);
 const PASSTHROUGH_TYPES = new Set(["image/jpeg", "image/png", "image/webp", "image/gif"]);
+const ALPHA_TYPES = new Set(["image/png", "image/webp", "image/avif", "image/gif"]);
+const ALPHA_EXTENSIONS = new Set(["png", "webp", "avif", "gif"]);
 const DEFAULT_MAX_DIMENSION = 4096;
 const DEFAULT_MAX_BYTES = 5 * 1024 * 1024;
 
@@ -93,7 +95,10 @@ const drawToCanvas = (source: ImageBitmap | HTMLImageElement, width: number, hei
   return canvas;
 };
 
-const outputName = (name: string): string => `${FileUtils.getFileNameWithoutExtension(name)}.jpg`;
+const outputName = (name: string, ext: string): string => `${FileUtils.getFileNameWithoutExtension(name)}.${ext}`;
+
+const preservesAlpha = (file: File, ext: string): boolean =>
+  ALPHA_TYPES.has(file.type.toLowerCase()) || ALPHA_EXTENSIONS.has(ext);
 
 export const prepareImageForUpload = async (file: File, options: PrepareImageOptions = {}): Promise<File> => {
   if (!isLikelyImageFile(file)) return file;
@@ -102,7 +107,8 @@ export const prepareImageForUpload = async (file: File, options: PrepareImageOpt
   const maxDimension = options.maxDimension ?? DEFAULT_MAX_DIMENSION;
   const ext = FileUtils.getFileExtension(file.name).toLowerCase();
   const keepAnimatedGif = ext === "gif" || file.type === "image/gif";
-  if (keepAnimatedGif && file.size <= maxBytes) return file;
+  // Re-encoding a GIF collapses animation; leave it for the server allow-list.
+  if (keepAnimatedGif) return file;
 
   const alreadyFine =
     PASSTHROUGH_TYPES.has(file.type) && file.size <= maxBytes && ext !== "heic" && ext !== "heif" && ext !== "avif";
@@ -125,13 +131,15 @@ export const prepareImageForUpload = async (file: File, options: PrepareImageOpt
       height = Math.max(1, Math.round(srcHeight * scale));
     }
 
+    const keepAlpha = preservesAlpha(file, ext);
+    const mime = keepAlpha ? "image/png" : "image/jpeg";
     let quality = 0.88;
     let blob: Blob | null = null;
     for (let attempt = 0; attempt < 8; attempt++) {
       const canvas = drawToCanvas(source, width, height);
-      blob = await canvasToBlob(canvas, "image/jpeg", quality);
+      blob = await canvasToBlob(canvas, mime, keepAlpha ? 1 : quality);
       if (blob.size <= maxBytes) break;
-      if (quality > 0.5) {
+      if (!keepAlpha && quality > 0.5) {
         quality -= 0.12;
       } else {
         width = Math.max(1, Math.round(width * 0.75));
@@ -141,7 +149,10 @@ export const prepareImageForUpload = async (file: File, options: PrepareImageOpt
     }
     if (!blob) throw new Error("Could not encode image.");
 
-    return new File([blob], outputName(file.name), { type: "image/jpeg", lastModified: Date.now() });
+    return new File([blob], outputName(file.name, keepAlpha ? "png" : "jpg"), {
+      type: mime,
+      lastModified: Date.now(),
+    });
   } finally {
     if ("close" in source) source.close();
   }

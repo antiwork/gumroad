@@ -77,6 +77,37 @@ describe("prepareImageForUpload", () => {
     expect(toBlob).toHaveBeenCalled();
     expect(close).toHaveBeenCalled();
   });
+
+  it("re-encodes an oversized PNG as PNG so transparency is kept", async () => {
+    const file = new File(["png-bytes"], "logo.png", { type: "image/png" });
+    const close = vi.fn();
+    vi.stubGlobal(
+      "createImageBitmap",
+      vi.fn(() => Promise.resolve({ width: 8000, height: 6000, close })),
+    );
+    const toBlob = vi.fn((cb: BlobCallback, type?: string) => {
+      cb(new Blob([new Uint8Array(1200)], { type: type ?? "image/png" }));
+    });
+    vi.spyOn(HTMLCanvasElement.prototype, "toBlob").mockImplementation(toBlob);
+    vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue(
+      // eslint-disable-next-line @typescript-eslint/consistent-type-assertions
+      { drawImage: vi.fn() } as unknown as CanvasRenderingContext2D,
+    );
+
+    const result = await prepareImageForUpload(file, { maxBytes: 5 * 1024 * 1024, maxDimension: 4096 });
+
+    expect(result).not.toBe(file);
+    expect(result.name).toBe("logo.png");
+    expect(result.type).toBe("image/png");
+    expect(toBlob).toHaveBeenCalledWith(expect.any(Function), "image/png", 1);
+    expect(close).toHaveBeenCalled();
+  });
+
+  it("leaves a GIF alone so animation is not collapsed", async () => {
+    const file = new File(["gif-bytes"], "loop.gif", { type: "image/gif" });
+    const result = await prepareImageForUpload(file, { maxBytes: 1 });
+    expect(result).toBe(file);
+  });
 });
 
 describe("installFileDropNavigationGuard", () => {
