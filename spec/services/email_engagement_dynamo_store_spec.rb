@@ -9,7 +9,6 @@ describe EmailEngagementDynamoStore do
   let(:url_digest) { Digest::SHA256.hexdigest(click_url) }
 
   before do
-    Feature.activate(:email_engagement_dynamodb_dual_write)
     described_class.client = client
   end
 
@@ -33,13 +32,13 @@ describe EmailEngagementDynamoStore do
   end
 
   describe ".record_open" do
-    it "does nothing in production when the feature flag is inactive" do
+    it "writes in production without a feature flag" do
       allow(Rails).to receive(:env).and_return(ActiveSupport::StringInquirer.new("production"))
-      Feature.deactivate(:email_engagement_dynamodb_dual_write)
+      client.stub_responses(:update_item, [{ attributes: {} }, {}])
 
       described_class.record_open(installment_id: 123, mailer_method:, mailer_args:)
 
-      expect(requests).to be_empty
+      expect(requests.map { _1[:operation_name] }).to eq([:update_item, :update_item])
     end
 
     it "upserts the open item and increments the summary open count on a recipient's first open" do
@@ -72,24 +71,22 @@ describe EmailEngagementDynamoStore do
       expect(requests.map { _1[:operation_name] }).to eq([:update_item])
     end
 
-    it "notifies instead of raising when DynamoDB fails" do
+    it "raises when DynamoDB fails so Sidekiq can retry" do
       client.stub_responses(:update_item, "InternalServerError")
-      expect(ErrorNotifier).to receive(:notify).with(kind_of(Aws::Errors::ServiceError))
 
       expect do
         described_class.record_open(installment_id: 123, mailer_method:, mailer_args:)
-      end.not_to raise_error
+      end.to raise_error(Aws::Errors::ServiceError)
     end
   end
 
   describe ".record_click" do
-    it "does nothing in production when the feature flag is inactive" do
+    it "writes in production without a feature flag" do
       allow(Rails).to receive(:env).and_return(ActiveSupport::StringInquirer.new("production"))
-      Feature.deactivate(:email_engagement_dynamodb_dual_write)
 
       described_class.record_click(installment_id: 123, mailer_method:, mailer_args:, click_url:)
 
-      expect(requests).to be_empty
+      expect(requests).not_to be_empty
     end
 
     it "records a first-ever click with the url total, the pair count, the clicker marker, the summary click count, and a compensating open" do
@@ -156,13 +153,12 @@ describe EmailEngagementDynamoStore do
       expect(requests.map { _1[:operation_name] }).to eq([:put_item])
     end
 
-    it "notifies instead of raising when DynamoDB fails" do
+    it "raises when DynamoDB fails so Sidekiq can retry" do
       client.stub_responses(:put_item, "ProvisionedThroughputExceededException")
-      expect(ErrorNotifier).to receive(:notify).with(kind_of(Aws::Errors::ServiceError))
 
       expect do
         described_class.record_click(installment_id: 123, mailer_method:, mailer_args:, click_url:)
-      end.not_to raise_error
+      end.to raise_error(Aws::Errors::ServiceError)
     end
   end
 
@@ -210,11 +206,12 @@ describe EmailEngagementDynamoStore do
     end
 
     it "lets DYNAMODB_TABLE_PREFIX override the environment default for branch apps" do
+      original = ENV["DYNAMODB_TABLE_PREFIX"]
       allow(Rails).to receive(:env).and_return(ActiveSupport::StringInquirer.new("staging"))
       ENV["DYNAMODB_TABLE_PREFIX"] = "branchapp-foo-"
       expect(described_class.table_name).to eq("branchapp-foo-email_engagement")
     ensure
-      ENV.delete("DYNAMODB_TABLE_PREFIX")
+      original.nil? ? ENV.delete("DYNAMODB_TABLE_PREFIX") : ENV["DYNAMODB_TABLE_PREFIX"] = original
     end
   end
 

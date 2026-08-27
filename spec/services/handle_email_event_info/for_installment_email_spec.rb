@@ -8,163 +8,59 @@ describe HandleEmailEventInfo::ForInstallmentEmail do
   end
 
   describe ".perform" do
-    it "creates a new CreatorEmailOpenEvent object" do
-      now = Time.current
-      params = { "_json" => [{ "event" => "open", "type" => "CreatorContactingCustomersMailer.purchase_installment",
-                               "identifier" => @identifier, "installment_id" => @installment.id }] }
-      travel_to(now) do
-        HandleSendgridEventJob.new.perform(params)
-      end
-
-      expect(CreatorEmailOpenEvent.count).to eq 1
-      open_event = CreatorEmailOpenEvent.last
-      expect(open_event.mailer_method).to eq "CreatorContactingCustomersMailer.purchase_installment"
-      expect(open_event.mailer_args).to eq @identifier
-      expect(open_event.installment_id).to eq @installment.id
-      expect(open_event.open_timestamps.count).to eq 1
-      expect(open_event.open_timestamps.last.to_i).to eq now.to_i
-      expect(open_event.open_count).to eq 1
+    def send_open
+      HandleSendgridEventJob.new.perform(
+        "_json" => [{ "event" => "open", "type" => "CreatorContactingCustomersMailer.purchase_installment",
+                      "identifier" => @identifier, "installment_id" => @installment.id }]
+      )
     end
 
-    it "sets cache for open event" do
-      params = { "_json" => [{ "event" => "open", "type" => "CreatorContactingCustomersMailer.purchase_installment",
-                               "identifier" => @identifier, "installment_id" => @installment.id }] }
-
-      HandleSendgridEventJob.new.perform(params)
-
-      unique_open_count = Rails.cache.read("unique_open_count_for_installment_#{@installment.id}_ddb")
-      expect(unique_open_count).to eq 1
+    def send_click(url: "https://www&#46;gumroad&#46;com", identifier: @identifier)
+      HandleSendgridEventJob.new.perform(
+        "_json" => [{ "event" => "click", "type" => "CreatorContactingCustomersMailer.purchase_installment",
+                      "identifier" => identifier, "installment_id" => @installment.id, "url" => url }]
+      )
     end
 
-    it "creates a new CreatorEmailOpenEvent object and then update it if there are 2 identical open events" do
-      now = Time.current
-      params = { "_json" => [{ "event" => "open", "type" => "CreatorContactingCustomersMailer.purchase_installment",
-                               "identifier" => @identifier, "installment_id" => @installment.id }] }
-      travel_to(now) do
-        HandleSendgridEventJob.new.perform(params)
-      end
-
-      travel_to(now + 1.minute) do
-        HandleSendgridEventJob.new.perform(params)
-      end
-
-      expect(CreatorEmailOpenEvent.count).to eq 1
-      open_event = CreatorEmailOpenEvent.last
-      expect(open_event.mailer_method).to eq "CreatorContactingCustomersMailer.purchase_installment"
-      expect(open_event.mailer_args).to eq @identifier
-      expect(open_event.installment_id).to eq @installment.id
-      expect(open_event.open_timestamps.count).to eq 2
-      expect(open_event.open_timestamps.first.to_i).to eq now.to_i
-      expect(open_event.open_timestamps.last.to_i).to eq((now + 1.minute).to_i)
-      expect(open_event.open_count).to eq 2
+    it "records a unique open in DynamoDB and caches it" do
+      send_open
+      expect(@installment.reload.unique_open_count).to eq 1
+      expect(Rails.cache.read("unique_open_count_for_installment_#{@installment.id}_ddb")).to eq 1
+      expect(CreatorEmailOpenEvent.count).to eq 0
     end
 
-    it "creates a new CreatorEmailClickSummary object and a new CreatorEmailClickEvent object" do
-      now = Time.current
-      params = { "_json" => [{ "event" => "click", "type" => "CreatorContactingCustomersMailer.purchase_installment",
-                               "identifier" => @identifier, "installment_id" => @installment.id, "url" => "https://www&#46;gumroad&#46;com" }] }
-      travel_to(now) do
-        HandleSendgridEventJob.new.perform(params)
-      end
-
-      expect(CreatorEmailClickSummary.count).to eq 1
-      summary = CreatorEmailClickSummary.last
-      expect(summary.total_unique_clicks).to eq 1
-      expect(summary.installment_id).to eq @installment.id
-      url_hash = { "https://www&#46;gumroad&#46;com" => 1 }
-      expect(summary.urls).to eq url_hash
-      expect(CreatorEmailClickEvent.count).to eq 1
-      click_event = CreatorEmailClickEvent.last
-      expect(click_event.mailer_method).to eq "CreatorContactingCustomersMailer.purchase_installment"
-      expect(click_event.mailer_args).to eq @identifier
-      expect(click_event.installment_id).to eq @installment.id
-      expect(click_event.click_url).to eq "https://www&#46;gumroad&#46;com"
-      expect(click_event.click_timestamps.count).to eq 1
-      expect(click_event.click_timestamps.last.to_i).to eq now.to_i
-      expect(click_event.click_count).to eq 1
+    it "does not increment unique opens for a repeat open from the same recipient" do
+      send_open
+      send_open
+      expect(@installment.reload.unique_open_count).to eq 1
     end
 
-    it "sets cache on click event" do
-      params = { "_json" => [{ "event" => "click", "type" => "CreatorContactingCustomersMailer.purchase_installment",
-                               "identifier" => @identifier, "installment_id" => @installment.id, "url" => "https://www&#46;gumroad&#46;com" }] }
-
-      HandleSendgridEventJob.new.perform(params)
-
-      unique_click_count = Rails.cache.read("unique_click_count_for_installment_#{@installment.id}_ddb")
-      expect(unique_click_count).to eq 1
-
-      # It should also cache unique_open_count
-      unique_open_count = Rails.cache.read("unique_open_count_for_installment_#{@installment.id}_ddb")
-      expect(unique_open_count).to eq 1
+    it "records a unique click, caches it, and counts a compensating open" do
+      send_click
+      expect(@installment.reload.unique_click_count).to eq 1
+      expect(@installment.unique_open_count).to eq 1
+      expect(Rails.cache.read("unique_click_count_for_installment_#{@installment.id}_ddb")).to eq 1
+      expect(Rails.cache.read("unique_open_count_for_installment_#{@installment.id}_ddb")).to eq 1
+      expect(CreatorEmailClickEvent.count).to eq 0
+      expect(CreatorEmailClickSummary.count).to eq 0
     end
 
-    it "creates 1 new CreatorEmailClickSummary and 2 CreatorEmailClickEvent objects for different URLs, \
-        but not update unique clicks if same identifier" do
-      now = Time.current
-      params = { "_json" => [{ "event" => "click", "type" => "CreatorContactingCustomersMailer.purchase_installment",
-                               "identifier" => @identifier, "installment_id" => @installment.id, "url" => "https://www&#46;gumroad&#46;com" }] }
-      travel_to(now) do
-        HandleSendgridEventJob.new.perform(params)
-      end
-
-      params2 = { "_json" => [{ "event" => "click", "type" => "CreatorContactingCustomersMailer.purchase_installment",
-                                "identifier" => @identifier, "installment_id" => @installment.id, "url" => "https://www&#46;google&#46;com" }] }
-      travel_to(now + 1.minute) do
-        HandleSendgridEventJob.new.perform(params2)
-      end
-
-      expect(CreatorEmailClickSummary.count).to eq 1
-      summary = CreatorEmailClickSummary.last
-      expect(summary.total_unique_clicks).to eq 1
-      expect(summary.installment_id).to eq @installment.id
-      url_hash = { "https://www&#46;gumroad&#46;com" => 1, "https://www&#46;google&#46;com" => 1 }
-      expect(summary.urls).to eq url_hash
-      expect(CreatorEmailClickEvent.count).to eq 2
-      click_event = CreatorEmailClickEvent.order_by(created_at: :asc).last
-      expect(click_event.mailer_method).to eq "CreatorContactingCustomersMailer.purchase_installment"
-      expect(click_event.mailer_args).to eq @identifier
-      expect(click_event.installment_id).to eq @installment.id
-      expect(click_event.click_url).to eq "https://www&#46;google&#46;com"
-      expect(click_event.click_timestamps.count).to eq 1
-      expect(click_event.click_timestamps.last.to_i).to eq((now + 1.minute).to_i)
-      expect(click_event.click_count).to eq 1
+    it "counts two urls from the same recipient as one unique clicker and two pairs" do
+      send_click(url: "https://www&#46;gumroad&#46;com")
+      send_click(url: "https://www&#46;google&#46;com")
+      expect(@installment.reload.unique_click_count).to eq 2
+      expect(@installment.clicked_urls.values.sum).to eq 2
     end
 
-    it "does not modify CreatorEmailClickSummary if it sees two duplicate events, \
-        but should update the timestamps for the CreatorEmailClickEvent object" do
-      now = Time.current
-      params = { "_json" => [{ "event" => "click", "type" => "CreatorContactingCustomersMailer.purchase_installment",
-                               "identifier" => @identifier, "installment_id" => @installment.id, "url" => "https://www&#46;gumroad&#46;com" }] }
-      travel_to(now) do
-        HandleSendgridEventJob.new.perform(params)
-      end
-
-      travel_to(now + 1.minute) do
-        HandleSendgridEventJob.new.perform(params)
-      end
-
-      expect(CreatorEmailClickSummary.count).to eq 1
-      summary = CreatorEmailClickSummary.last
-      expect(summary.total_unique_clicks).to eq 1
-      expect(summary.installment_id).to eq @installment.id
-      url_hash = { "https://www&#46;gumroad&#46;com" => 1 }
-      expect(summary.urls).to eq url_hash
-      expect(CreatorEmailClickEvent.count).to eq 1
-      click_event = CreatorEmailClickEvent.last
-      expect(click_event.mailer_method).to eq "CreatorContactingCustomersMailer.purchase_installment"
-      expect(click_event.mailer_args).to eq @identifier
-      expect(click_event.installment_id).to eq @installment.id
-      expect(click_event.click_url).to eq "https://www&#46;gumroad&#46;com"
-      expect(click_event.click_timestamps.first.to_i).to eq now.to_i
+    it "ignores a duplicate click of the same url by the same recipient" do
+      send_click
+      send_click
+      expect(@installment.reload.unique_click_count).to eq 1
     end
 
     it "marks the per-purchase email_info as opened when a click event arrives" do
       email_info = create(:creator_contacting_customers_email_info_sent, installment: @installment, purchase: @purchase)
-      params = { "_json" => [{ "event" => "click", "type" => "CreatorContactingCustomersMailer.purchase_installment",
-                               "identifier" => @identifier, "installment_id" => @installment.id, "url" => "https://www&#46;gumroad&#46;com" }] }
-
-      HandleSendgridEventJob.new.perform(params)
-
+      send_click
       expect(email_info.reload).to be_opened
       expect(email_info.opened_at).to be_present
     end
@@ -172,161 +68,57 @@ describe HandleEmailEventInfo::ForInstallmentEmail do
     it "leaves an already-opened email_info untouched on a click event" do
       email_info = create(:creator_contacting_customers_email_info_opened, installment: @installment, purchase: @purchase)
       original_opened_at = email_info.opened_at
-
-      params = { "_json" => [{ "event" => "click", "type" => "CreatorContactingCustomersMailer.purchase_installment",
-                               "identifier" => @identifier, "installment_id" => @installment.id, "url" => "https://www&#46;gumroad&#46;com" }] }
-      HandleSendgridEventJob.new.perform(params)
-
+      send_click
       expect(email_info.reload).to be_opened
       expect(email_info.opened_at.to_i).to eq(original_opened_at.to_i)
     end
 
-    it "registers two unique clicks for two different users clicking the same url for the same installment" do
-      now = Time.current
-      params = { "_json" => [{ "event" => "click", "type" => "CreatorContactingCustomersMailer.purchase_installment",
-                               "identifier" => @identifier, "installment_id" => @installment.id, "url" => "https://www&#46;gumroad&#46;com" }] }
-      travel_to(now) do
-        HandleSendgridEventJob.new.perform(params)
-      end
-
+    it "registers two unique clicks for two different users clicking the same url" do
+      send_click
       purchase2 = create(:purchase)
-      params2 = { "_json" => [{ "event" => "click", "type" => "CreatorContactingCustomersMailer.purchase_installment",
-                                "identifier" => "[#{purchase2.id}, #{@installment.id}]", "installment_id" => @installment.id,
-                                "url" => "https://www&#46;gumroad&#46;com" }] }
-      travel_to(now + 1.minute) do
-        HandleSendgridEventJob.new.perform(params2)
-      end
-
-      expect(CreatorEmailClickSummary.count).to eq 1
-      summary = CreatorEmailClickSummary.last
-      expect(summary.total_unique_clicks).to eq 2
-      expect(summary.installment_id).to eq @installment.id
-      url_hash = { "https://www&#46;gumroad&#46;com" => 2 }
-      expect(summary.urls).to eq url_hash
-      expect(CreatorEmailClickEvent.count).to eq 2
-      click_event = CreatorEmailClickEvent.order_by(created_at: :asc).last
-      expect(click_event.mailer_method).to eq "CreatorContactingCustomersMailer.purchase_installment"
-      expect(click_event.mailer_args).to eq "[#{purchase2.id}, #{@installment.id}]"
-      expect(click_event.installment_id).to eq @installment.id
-      expect(click_event.click_url).to eq "https://www&#46;gumroad&#46;com"
-      expect(click_event.click_timestamps.count).to eq 1
-      expect(click_event.click_timestamps.first.to_i).to eq((now + 1.minute).to_i)
-      expect(click_event.click_count).to eq 1
+      send_click(identifier: "[#{purchase2.id}, #{@installment.id}]")
+      expect(@installment.reload.unique_click_count).to eq 2
+      expect(@installment.clicked_urls.values.sum).to eq 2
     end
 
     it "handles the second event in the params array even if the first one is malformed" do
-      now = Time.current
-      params = { "_json" => [{ "event" => "click" },
-                             { "event" => "click", "type" => "CreatorContactingCustomersMailer.purchase_installment",
-                               "identifier" => @identifier, "installment_id" => @installment.id, "url" => "https://www&#46;gumroad&#46;com" }] }
-      travel_to(now) do
-        HandleSendgridEventJob.new.perform(params)
-      end
-
-      expect(CreatorEmailClickSummary.count).to eq 1
-      summary = CreatorEmailClickSummary.last
-      expect(summary.total_unique_clicks).to eq 1
-      expect(summary.installment_id).to eq @installment.id
-      url_hash = { "https://www&#46;gumroad&#46;com" => 1 }
-      expect(summary.urls).to eq url_hash
-      expect(CreatorEmailClickEvent.count).to eq 1
-      click_event = CreatorEmailClickEvent.last
-      expect(click_event.mailer_method).to eq "CreatorContactingCustomersMailer.purchase_installment"
-      expect(click_event.mailer_args).to eq @identifier
-      expect(click_event.installment_id).to eq @installment.id
-      expect(click_event.click_url).to eq "https://www&#46;gumroad&#46;com"
-      expect(click_event.click_timestamps.count).to eq 1
-      expect(click_event.click_timestamps.first.to_i).to eq now.to_i
-      expect(click_event.click_count).to eq 1
+      HandleSendgridEventJob.new.perform(
+        "_json" => [
+          { "event" => "click" },
+          { "event" => "click", "type" => "CreatorContactingCustomersMailer.purchase_installment",
+            "identifier" => @identifier, "installment_id" => @installment.id, "url" => "https://www&#46;gumroad&#46;com" }
+        ]
+      )
+      expect(@installment.reload.unique_click_count).to eq 1
     end
 
-    it "creates a corresponding open event if a click event is logged but \
-        an open event does not yet exist for a particular installment / recipient pair" do
-      now = Time.current
-      params = { "_json" => [{ "event" => "click", "type" => "CreatorContactingCustomersMailer.purchase_installment",
-                               "identifier" => @identifier, "installment_id" => @installment.id, "url" => "https://www&#46;gumroad&#46;com" }] }
-      travel_to(now) do
-        HandleSendgridEventJob.new.perform(params)
-      end
-
-      expect(CreatorEmailOpenEvent.count).to eq 1
-      open_event = CreatorEmailOpenEvent.last
-      expect(open_event.mailer_method).to eq "CreatorContactingCustomersMailer.purchase_installment"
-      expect(open_event.mailer_args).to eq @identifier
-      expect(open_event.installment_id).to eq @installment.id
-      expect(open_event.open_timestamps.count).to eq 1
-      expect(open_event.open_timestamps.last.to_i).to eq now.to_i
+    it "does not increment unique opens twice when a click follows an open for the same recipient" do
+      send_open
+      send_click
+      expect(@installment.reload.unique_open_count).to eq 1
+      expect(@installment.unique_click_count).to eq 1
     end
 
-    it "does not create a corresponding open event if a click event is logged if an open event already exists" do
-      now = Time.current
-      params = { "_json" => [{ "event" => "open", "type" => "CreatorContactingCustomersMailer.purchase_installment",
-                               "identifier" => @identifier, "installment_id" => @installment.id },
-                             { "event" => "click", "type" => "CreatorContactingCustomersMailer.purchase_installment",
-                               "identifier" => @identifier, "installment_id" => @installment.id, "url" => "https://www&#46;gumroad&#46;com" }] }
-      travel_to(now) do
-        HandleSendgridEventJob.new.perform(params)
-      end
-
-      expect(CreatorEmailOpenEvent.count).to eq 1
-      open_event = CreatorEmailOpenEvent.last
-      expect(open_event.mailer_method).to eq "CreatorContactingCustomersMailer.purchase_installment"
-      expect(open_event.mailer_args).to eq @identifier
-      expect(open_event.installment_id).to eq @installment.id
-      expect(open_event.open_timestamps.count).to eq 1
-      expect(open_event.open_timestamps.last.to_i).to eq now.to_i
-
-      expect(CreatorEmailClickSummary.count).to eq 1
-      summary = CreatorEmailClickSummary.last
-      expect(summary.total_unique_clicks).to eq 1
-      expect(summary.installment_id).to eq @installment.id
-      url_hash = { "https://www&#46;gumroad&#46;com" => 1 }
-      expect(summary.urls).to eq url_hash
-      expect(CreatorEmailClickEvent.count).to eq 1
-      click_event = CreatorEmailClickEvent.last
-      expect(click_event.mailer_method).to eq "CreatorContactingCustomersMailer.purchase_installment"
-      expect(click_event.mailer_args).to eq @identifier
-      expect(click_event.installment_id).to eq @installment.id
-      expect(click_event.click_url).to eq "https://www&#46;gumroad&#46;com"
-      expect(click_event.click_timestamps.count).to eq 1
-      expect(click_event.click_timestamps.first.to_i).to eq now.to_i
-      expect(click_event.click_count).to eq 1
+    it "stores attachment clicks as view_attachments_url" do
+      send_click(url: "#{DOMAIN}/d/fdd185111c9808abfb6029a3c2e4e96e")
+      expect(@installment.reload.clicked_urls.keys).to include("view_attachments_url")
     end
 
-    it "replaces the url for an attachment link with 'Attached Files'" do
-      now = Time.current
-      params = { "_json" => [{
-        "event" => "click",
-        "type" => "CreatorContactingCustomersMailer.purchase_installment",
-        "identifier" => @identifier,
-        "installment_id" => @installment.id,
-        "url" => "#{DOMAIN}/d/fdd185111c9808abfb6029a3c2e4e96e"
-      }] }
-      travel_to(now) do
-        HandleSendgridEventJob.new.perform(params)
-      end
-
-      click_event = CreatorEmailClickEvent.last
-      expect(click_event.click_url).to eq "view_attachments_url"
-    end
-
-    it "does not create an event for unsubscribes" do
-      now = Time.current
-      params = { "_json" => [{ "event" => "click", "type" => "CreatorContactingCustomersMailer.purchase_installment",
-                               "identifier" => @identifier, "installment_id" => @installment.id,
-                               "url" => "#{DOMAIN}#{Rails.application.routes.url_helpers.unsubscribe_purchase_path('CTE53CxbKFW_VLa0BZ9-iA==')}" },
-                             { "event" => "click", "type" => "CreatorContactingCustomersMailer.purchase_installment",
-                               "identifier" => @identifier, "installment_id" => @installment.id,
-                               "url" => "#{DOMAIN}#{Rails.application.routes.url_helpers.unsubscribe_imported_customer_path('_CTE53CxbKVLa0BZ9-iA==')}" },
-                             { "event" => "click", "type" => "CreatorContactingCustomersMailer.purchase_installment",
-                               "identifier" => @identifier, "installment_id" => @installment.id,
-                               "url" => "#{DOMAIN}#{Rails.application.routes.url_helpers.cancel_follow_path('-CTE53CxbKVLa0BZ9-iA==')}" }] }
-      travel_to(now) do
-        HandleSendgridEventJob.new.perform(params)
-      end
-
-      click_event = CreatorEmailClickEvent.last
-      expect(click_event).to eq nil
+    it "does not record clicks on unsubscribe urls" do
+      HandleSendgridEventJob.new.perform(
+        "_json" => [
+          { "event" => "click", "type" => "CreatorContactingCustomersMailer.purchase_installment",
+            "identifier" => @identifier, "installment_id" => @installment.id,
+            "url" => "#{DOMAIN}#{Rails.application.routes.url_helpers.unsubscribe_purchase_path('CTE53CxbKFW_VLa0BZ9-iA==')}" },
+          { "event" => "click", "type" => "CreatorContactingCustomersMailer.purchase_installment",
+            "identifier" => @identifier, "installment_id" => @installment.id,
+            "url" => "#{DOMAIN}#{Rails.application.routes.url_helpers.unsubscribe_imported_customer_path('_CTE53CxbKVLa0BZ9-iA==')}" },
+          { "event" => "click", "type" => "CreatorContactingCustomersMailer.purchase_installment",
+            "identifier" => @identifier, "installment_id" => @installment.id,
+            "url" => "#{DOMAIN}#{Rails.application.routes.url_helpers.cancel_follow_path('-CTE53CxbKVLa0BZ9-iA==')}" }
+        ]
+      )
+      expect(@installment.reload.unique_click_count).to eq 0
     end
 
     describe "cancel follower" do

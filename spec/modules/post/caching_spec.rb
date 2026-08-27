@@ -4,15 +4,8 @@ describe Post::Caching do
   let(:installment) { create(:installment) }
 
   describe "#key_for_cache" do
-    it "namespaces keys by the read source so legacy cached counters cannot survive the production flip" do
-      allow(Rails).to receive(:env).and_return(ActiveSupport::StringInquirer.new("production"))
-      Feature.deactivate(:email_engagement_dynamodb_reads)
-      expect(installment.key_for_cache(:unique_open_count)).to eq("unique_open_count_for_installment_#{installment.id}")
-
-      Feature.activate(:email_engagement_dynamodb_reads)
+    it "keeps engagement counters in the DynamoDB cache namespace" do
       expect(installment.key_for_cache(:unique_open_count)).to eq("unique_open_count_for_installment_#{installment.id}_ddb")
-    ensure
-      Feature.deactivate(:email_engagement_dynamodb_reads)
     end
   end
 

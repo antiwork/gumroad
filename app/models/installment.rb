@@ -758,11 +758,7 @@ class Installment < ApplicationRecord
 
   def unique_open_count
     Rails.cache.fetch(key_for_cache(:unique_open_count)) do
-      if EmailEngagementDynamoStore.reads_enabled?
-        dynamo_engagement_summary[:open_count]
-      else
-        CreatorEmailOpenEvent.where(installment_id: id).count
-      end
+      dynamo_engagement_summary[:open_count]
     end
   end
 
@@ -858,27 +854,14 @@ class Installment < ApplicationRecord
 
   def unique_click_count
     Rails.cache.fetch(key_for_cache(:unique_click_count)) do
-      if EmailEngagementDynamoStore.reads_enabled?
-        dynamo_engagement_summary[:click_pair_count]
-      else
-        summary = CreatorEmailClickSummary.where(installment_id: id).last
-        summary.present? ? summary[:total_unique_clicks] : 0
-      end
+      dynamo_engagement_summary[:click_pair_count]
     end
   end
 
   def clicked_urls
-    if EmailEngagementDynamoStore.reads_enabled?
-      counts = EmailEngagementDynamoStore.url_click_counts(id)
-      return {} if counts.blank?
-      counts.sort_by { |_, v| -v }.to_h
-    else
-      summary = CreatorEmailClickSummary.where(installment_id: id).last
-      return {} if summary.blank?
-
-      summary.urls.keys.each { |k| summary.urls[k.gsub(/&#46;/, ".").sub(%r{^https?://}, "").sub(/^www./, "")] = summary.urls.delete(k) }
-      Hash[summary.urls.sort_by { |_, v| v }.reverse]
-    end
+    counts = EmailEngagementDynamoStore.url_click_counts(id)
+    return {} if counts.blank?
+    counts.sort_by { |_, v| -v }.to_h
   end
 
   # Public: Returns the percentage of email opens for this installment, or nil if one cannot be calculated.

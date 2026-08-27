@@ -82,32 +82,13 @@ class Api::WorkflowPresenter
 
     def batched_open_counts(emails)
       batched_counts(emails, :unique_open_count) do |missing_ids|
-        if EmailEngagementDynamoStore.reads_enabled?
-          EmailEngagementDynamoStore.summaries(missing_ids).transform_values { _1[:open_count] }
-        else
-          pipeline = [
-            { "$match" => { "installment_id" => { "$in" => missing_ids } } },
-            { "$group" => { "_id" => "$installment_id", "count" => { "$sum" => 1 } } },
-          ]
-          CreatorEmailOpenEvent.collection.aggregate(pipeline).each_with_object({}) do |row, counts|
-            counts[row.fetch("_id").to_i] = row.fetch("count").to_i
-          end
-        end
+        EmailEngagementDynamoStore.summaries(missing_ids).transform_values { _1[:open_count] }
       end
     end
 
     def batched_click_counts(emails)
       batched_counts(emails, :unique_click_count) do |missing_ids|
-        if EmailEngagementDynamoStore.reads_enabled?
-          EmailEngagementDynamoStore.summaries(missing_ids).transform_values { _1[:click_pair_count] }
-        else
-          CreatorEmailClickSummary
-            .in(installment_id: missing_ids)
-            .only(:installment_id, :total_unique_clicks)
-            .each_with_object({}) do |summary, counts|
-              counts[summary.installment_id] = summary.total_unique_clicks.to_i
-            end
-        end
+        EmailEngagementDynamoStore.summaries(missing_ids).transform_values { _1[:click_pair_count] }
       end
     end
 

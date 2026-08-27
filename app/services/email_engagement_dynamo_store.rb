@@ -18,8 +18,6 @@
 class EmailEngagementDynamoStore
   TABLE_BASE_NAME = "email_engagement"
   SUMMARY_SORT_KEY = "SUMMARY"
-  DUAL_WRITE_FEATURE = :email_engagement_dynamodb_dual_write
-  READ_FEATURE = :email_engagement_dynamodb_reads
   BATCH_GET_LIMIT = 100
   BATCH_GET_MAX_ATTEMPTS = 5
 
@@ -76,17 +74,6 @@ class EmailEngagementDynamoStore
 
     # Staging and production tables are Terraform-owned (antiwork/infrastructure#998)
     # and deletion-protected; this bootstrap is for dev, test, and branch apps.
-    # DynamoDB is the primary store outside production: dual writes always
-    # on, reads always served from DynamoDB. Production stays flag-controlled
-    # until the Mongo decommission completes.
-    def reads_enabled?
-      !Rails.env.production? || Feature.active?(READ_FEATURE)
-    end
-
-    def dual_writes_enabled?
-      !Rails.env.production? || Feature.active?(DUAL_WRITE_FEATURE)
-    end
-
     def summary(installment_id)
       item = client.get_item(table_name:, key: item_key(installment_id, SUMMARY_SORT_KEY)).item
       summary_from_item(item)
@@ -186,12 +173,7 @@ class EmailEngagementDynamoStore
 
     private
       def with_dual_write_guard
-        return unless dual_writes_enabled?
         yield
-      rescue => e
-        # Mongo remains the source of truth during dual writes; a DynamoDB
-        # failure must not fail email event processing.
-        ErrorNotifier.notify(e)
       end
 
       def upsert_open_item(installment_id:, mailer_method:, mailer_args:)
