@@ -336,8 +336,12 @@ describe("getCheckoutListedCurrencyDisplay", () => {
     expect(listed).toEqual({ currencyCode: "brl", rate: 5.45, subunitToUnit: 100 });
   });
 
-  it("falls back to USD for tip or shipping shapes excluded from the direct-listed card lane", () => {
-    expect(getCheckoutListedCurrencyDisplay(directListedCardPayment(), brlCartItems(), { hasTip: true })).toBeNull();
+  it("keeps tips on the direct-listed card lane but falls back for shipping", () => {
+    expect(getCheckoutListedCurrencyDisplay(directListedCardPayment(), brlCartItems(), { hasTip: true })).toEqual({
+      currencyCode: "brl",
+      rate: 5.45,
+      subunitToUnit: 100,
+    });
     expect(
       getCheckoutListedCurrencyDisplay(directListedCardPayment(), brlCartItems(), { hasShipping: true }),
     ).toBeNull();
