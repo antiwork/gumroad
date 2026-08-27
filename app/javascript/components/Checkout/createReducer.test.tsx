@@ -282,6 +282,26 @@ describe("createReducer surcharge refetches", () => {
     });
   });
 
+  it("replaces a stale stored buyer currency before publishing a USD-only surcharge response", async () => {
+    document.cookie = "gumroad_buyer_currency=cad; path=/";
+    const requests = stubSurchargeRequests();
+    const { result } = renderCheckout({ checkoutPayment: directListedCheckoutPayment });
+
+    await act(() => vi.advanceTimersByTimeAsync(300));
+    await act(async () => {
+      requests[0]?.resolve(
+        surchargesResponse({
+          detected_buyer_currency: "usd",
+          available_buyer_currencies: [{ code: "usd", label: "$ (US Dollars)" }],
+        }),
+      );
+      await vi.advanceTimersByTimeAsync(0);
+    });
+
+    expect(result.current[0].buyerCurrency).toBe("usd");
+    expect(document.cookie).toContain("gumroad_buyer_currency=usd");
+  });
+
   it("does not reuse a CAD exact tip when a tipped direct-listed cart requests USD", async () => {
     const requests = stubSurchargeRequests();
     const { result } = renderCheckout({ checkoutPayment: directListedCheckoutPayment });

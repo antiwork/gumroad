@@ -1454,6 +1454,20 @@ export const reduceCheckoutState = produce((state: State, action: Action) => {
             state.buyerCurrencyRemint = remint;
             state.surcharges = { type: "pending" };
           }
+        } else if (
+          !remint &&
+          state.buyerCurrency != null &&
+          offersBuyerCurrency(action.result, state.buyerCurrency) === false
+        ) {
+          const detected = action.result.detected_buyer_currency ?? null;
+          const replacement =
+            detected != null && offersBuyerCurrency(action.result, detected)
+              ? detected
+              : (action.result.available_buyer_currencies?.[0]?.code ?? null);
+          if (replacement != null) {
+            state.buyerCurrency = replacement;
+            writeBuyerCurrencyPreference(replacement);
+          }
         }
       }
       // A quote arriving is the other half of what a refused submit is waiting for. Accepting an
