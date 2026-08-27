@@ -139,12 +139,24 @@ class Charge::MethodForcedPresentment
       # A displayed quote already binds the cart's canonical lines and presentment
       # currency, so use the quote lane's cart-shape gates. Without a quote, local
       # methods and direct-listed Elements keep the narrower method-forced contract.
+      # Registry methods still need their live launch flag — a tab opened while UPI
+      # was on can keep a signed inr_types list after rollback.
       decision = if displayed_quote?
         eligibility.decision
       else
         eligibility.method_forced_decision(payment_method: payment_method_type, forced_currency:)
       end
       return decision unless displayed_quote? && decision.eligible?
+
+      if Checkout::BuyerCurrencyEligibility.forced_currency_for(payment_method_type).present? &&
+         !Checkout::BuyerCurrencyEligibility.stripe_test_mode? &&
+         !Checkout::BuyerCurrencyEligibility.local_method_launched?(payment_method_type, seller)
+        return Checkout::BuyerCurrencyEligibility::Decision.new(
+          eligible: false,
+          currency: nil,
+          fallback_reason: :method_not_launched
+        )
+      end
 
       required_currency = forced_currency.presence ||
         Checkout::BuyerCurrencyEligibility.forced_currency_for(payment_method_type)

@@ -282,6 +282,91 @@ describe Charge::MethodForcedPresentment do
         expect(service.failure_reason).to eq(described_class::BUYER_CURRENCY_QUOTE_INVALID)
         expect(charge.reload.charge_presentment).to be_nil
       end
+
+      it "fails closed when UPI is selected after its launch flag is deactivated" do
+        allow(Stripe).to receive(:api_key).and_return("sk_live_currency")
+        token = displayed_quote_token(
+          stripe_fx_quote_id: "fxq_upi_stale_tab",
+          fx_rate: BigDecimal("1.25"),
+          presentment_total_cents: 8_00,
+          currency: Currency::INR
+        )
+        expect(StripeFxQuote).not_to receive(:create)
+
+        service = described_class.new(
+          charge:,
+          order:,
+          seller:,
+          merchant_account:,
+          purchases: [purchase],
+          amount_cents: 10_00,
+          gumroad_amount_cents: 3_00,
+          payment_method_type: "upi",
+          params: { buyer_currency_quote: token, payment_element_mount_currency: Currency::INR }
+        )
+
+        expect(service.perform).to be_nil
+        expect(service.failure_reason).to eq(described_class::BUYER_CURRENCY_QUOTE_INVALID)
+        expect(charge.reload.charge_presentment).to be_nil
+      end
+
+      it "reuses a displayed UPI quote while the launch flag is on" do
+        allow(Stripe).to receive(:api_key).and_return("sk_live_currency")
+        Feature.activate_user(:checkout_local_method_upi, seller)
+        token = displayed_quote_token(
+          stripe_fx_quote_id: "fxq_upi_live",
+          fx_rate: BigDecimal("1.25"),
+          presentment_total_cents: 8_00,
+          currency: Currency::INR
+        )
+        expect(StripeFxQuote).not_to receive(:create)
+
+        reused = described_class.new(
+          charge:,
+          order:,
+          seller:,
+          merchant_account:,
+          purchases: [purchase],
+          amount_cents: 10_00,
+          gumroad_amount_cents: 3_00,
+          payment_method_type: "upi",
+          params: { buyer_currency_quote: token, payment_element_mount_currency: Currency::INR }
+        ).perform
+
+        expect(reused).to have_attributes(presentment_total_cents: 8_00,
+                                          presentment_currency: Currency::INR,
+                                          stripe_fx_quote_id: "fxq_upi_live")
+      ensure
+        Feature.deactivate_user(:checkout_local_method_upi, seller)
+      end
+
+      it "still reuses a displayed quote for a card remount when UPI is not launched" do
+        allow(Stripe).to receive(:api_key).and_return("sk_live_currency")
+        token = displayed_quote_token(
+          stripe_fx_quote_id: "fxq_card_inr",
+          fx_rate: BigDecimal("1.25"),
+          presentment_total_cents: 8_00,
+          currency: Currency::INR
+        )
+        expect(StripeFxQuote).not_to receive(:create)
+
+        reused = described_class.new(
+          charge:,
+          order:,
+          seller:,
+          merchant_account:,
+          purchases: [purchase],
+          amount_cents: 10_00,
+          gumroad_amount_cents: 3_00,
+          payment_method_type: "card",
+          forced_currency: Currency::INR,
+          params: { buyer_currency_quote: token, payment_element_mount_currency: Currency::INR }
+        ).perform
+
+        expect(reused).to have_attributes(presentment_total_cents: 8_00,
+                                          presentment_currency: Currency::INR,
+                                          stripe_fx_quote_id: "fxq_card_inr")
+      end
     end
 
     context "when UPI is selected without a displayed quote token" do
