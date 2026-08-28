@@ -392,7 +392,7 @@ changed.each do |path|
     # Same: standalone ruby (ruby spec/bin/classify_hung_checkout_test.rb), not rspec.
     next
   elsif path == "bin/reuse-full-suite" || path == "script/test-reuse-full-suite"
-    # Standalone bash + its test; lint/self-test jobs cover them.
+    # Standalone bash; script/test-reuse-full-suite runs on every PR.
     next
   elsif path == ".github/workflows/rerun-hung-checkout.yml"
     # Only invokes the classifier; the job `if` is asserted in that standalone

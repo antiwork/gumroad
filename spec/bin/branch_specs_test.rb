@@ -615,6 +615,25 @@ check(
   expect_specs: %w[spec/models/widget_spec.rb],
 )
 
+check(
+  "reuse-full-suite-only change does not escalate",
+  base_files: {
+    "bin/reuse-full-suite" => "old",
+    "script/test-reuse-full-suite" => "old",
+  },
+  head_files: {
+    "bin/reuse-full-suite" => "new",
+    "script/test-reuse-full-suite" => "new",
+  },
+  expect_specs: [],
+)
+
+WORKFLOW = File.expand_path("../../.github/workflows/tests.yml", __dir__)
+$count += 1
+unless File.read(WORKFLOW).include?("bash script/test-reuse-full-suite")
+  $failures << "tests.yml does not run script/test-reuse-full-suite"
+end
+
 if $failures.empty?
 
   puts "#{$count} checks passed"
