@@ -29,6 +29,44 @@ Rails.application.config.after_initialize do
   rescue StandardError => e
     Rails.logger.warn("[preview-qa] FX rate seed skipped: #{e.class} #{e.message}")
   end
+
+  begin
+    seller = User.find_by!(email: "seller@gumroad.com")
+    %i[
+      buyer_currency_charging
+      buyer_local_currency
+      buyer_currency_subscriptions
+      stripe_payment_element_checkout
+      stripe_payment_element_client_confirm
+      checkout_local_method_upi
+      checkout_local_method_upi_recurring
+    ].each { Feature.activate_user(_1, seller) }
+
+    product = Link.find_by(unique_permalink: "qaupi") || Link.find(2).dup
+    if product.new_record?
+      product.assign_attributes(
+        unique_permalink: "qaupi",
+        custom_permalink: nil,
+        name: "QA7367 INR Autopay membership",
+        customizable_price: false,
+        free_trial_enabled: false,
+        is_physical: false,
+        is_in_preorder_state: false,
+      )
+      product.save!(validate: false)
+    end
+    product.update_columns(price_currency_type: "inr", price_cents: 49_900, subscription_duration: "monthly")
+    product.prices.alive.where(variant_id: nil).first_or_create!(price_cents: 49_900, currency: "inr", recurrence: "monthly")
+    product.prices.alive.where(variant_id: nil).update_all(price_cents: 49_900, currency: "inr", recurrence: "monthly")
+
+    category = product.variant_categories.alive.first || product.variant_categories.create!(title: "Tier")
+    tier = category.alive_variants.first || category.variants.create!(name: "Autopay tier")
+    tier.prices.alive.first_or_create!(link: product, price_cents: 49_900, currency: "inr", recurrence: "monthly")
+    tier.prices.alive.update_all(link_id: product.id, price_cents: 49_900, currency: "inr", recurrence: "monthly")
+    Rails.logger.info("[preview-qa] seeded INR Autopay membership #{product.id}")
+  rescue StandardError => e
+    Rails.logger.warn("[preview-qa] INR Autopay seed skipped: #{e.class} #{e.message}")
+  end
 end
 
 # TEMP QA debug endpoint (test-mode only): tells apart a GeoIP miss from a missing FX
@@ -100,6 +138,24 @@ class PreviewQaDebugMiddleware
       buyer_currency_for_ip: helper.buyer_currency_for_ip(ip),
       cached_cad_rate: helper.cached_usd_rate("cad")&.to_s,
       cached_eur_rate: helper.cached_usd_rate("eur")&.to_s,
+    }
+
+    purchase = Purchase.where(email: "pr7367-final-qa@example.com").order(id: :desc).first
+    body[:purchase] = if purchase
+      {
+        external_id: purchase.external_id,
+        successful: purchase.successful?,
+        currency: purchase.purchase_presentment&.presentment_currency,
+        tip_cents: purchase.purchase_presentment&.presentment_tip_cents,
+        total_cents: purchase.purchase_presentment&.presentment_total_cents,
+        receipt_path: "/purchases/#{purchase.external_id}/receipt?email=#{CGI.escape(purchase.email)}",
+      }
+    end
+    upi_product = Link.find_by(unique_permalink: "qaupi")
+    body[:upi_product] = upi_product && {
+      id: upi_product.id,
+      currency: upi_product.price_currency_type,
+      duration: upi_product.subscription_duration,
     }
     [200, { "Content-Type" => "application/json" }, [body.to_json]]
   end
