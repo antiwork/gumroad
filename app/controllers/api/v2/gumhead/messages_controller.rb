@@ -200,24 +200,18 @@ class Api::V2::Gumhead::MessagesController < Api::V2::BaseController
   end
 
   private
-    # A build below "min" cannot be served safely — that is the only
-    # reason to set "min". Exactly one released build predates the
-    # X-Gumhead-Version header, so a missing header means that build:
-    # counting it as its real version keeps "min" honest at the boundary
-    # (min 0.1.0 serves it, min 0.2.0 gates it). That build predates the
-    # update vocabulary, so when gated it shows its generic try-again line
-    # instead of the update instruction — accepted: it has no installed
-    # base, and exempting it forever would defeat the gate. "dev" passes:
-    # cooperative, not a security boundary (the token is), and a
-    # development build runs code at least as new as any release.
+    # A missing header is the one released pre-header build, 0.1.0: min
+    # 0.1.0 serves it, min 0.2.0 gates it — behind a stale generic error,
+    # accepted while it has no installed base. "dev" passes: the gate is
+    # cooperative, not a security boundary (the token is).
     PRE_HEADER_VERSION = "0.1.0"
 
     def enforce_minimum_client_version
-      min = safe_version(client_versions["min"].to_s)
+      versions = client_versions
+      min = safe_version(versions["min"].to_s)
       if min.nil?
-        # A typo in the policy must degrade to no gate, not fail every
-        # valid build's turns until an operator repairs the key.
-        Rails.logger.warn("Gumhead minimum client version is not a version; not gating.") if client_versions["min"].present?
+        # A policy typo degrades to no gate, not to failed turns.
+        Rails.logger.warn("Gumhead minimum client version is not a version; not gating.") if versions["min"].present?
         return
       end
 
