@@ -17,9 +17,21 @@ class EmbeddedJavascriptsController < ApplicationController
   end
 
   def analytics
-    @product = Link.fetch(params[:id]) if params[:id].present?
+    @product = analytics_widget_product
     @analytics_token = @product&.analytics_view_token(source_url: request.referrer) if request.referrer.present? && @product&.analytics_script_token?(params[:token])
     expires_now
     render :analytics, layout: false, content_type: "application/javascript"
+  end
+
+  private
+
+  # Widget `id` is the product URL's last segment (custom permalink when set).
+  # Link.fetch only matches unique_permalink; the signed token picks among collisions.
+  def analytics_widget_product
+    return if params[:id].blank?
+
+    unique = Link.fetch(params[:id])
+    candidates = [unique, *Link.visible.by_general_permalink(params[:id])].compact.uniq
+    candidates.find { |product| product.analytics_script_token?(params[:token]) } || unique
   end
 end

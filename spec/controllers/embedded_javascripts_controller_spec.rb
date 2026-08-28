@@ -56,5 +56,26 @@ describe EmbeddedJavascriptsController do
 
       expect(response.body).to include('var token = "";')
     end
+
+    it "mints a view token when the widget id is the custom permalink" do
+      product.update!(custom_permalink: "from-nothing-to-sold-bundle")
+      request.env["HTTP_REFERER"] = "https://landing.example/post"
+      get :analytics, params: { id: "from-nothing-to-sold-bundle", token: product.analytics_script_token }, format: :js
+
+      token = response.body.match(/var token = "([^"]+)";/)[1]
+      expect(token).not_to eq("")
+      expect(product.analytics_view_token?(token, source_url: "https://landing.example/post")).to eq(true)
+    end
+
+    it "mints the token-matching product when two custom permalinks collide" do
+      other = create(:product, custom_permalink: "shared-slug")
+      product.update!(custom_permalink: "shared-slug")
+      request.env["HTTP_REFERER"] = "https://landing.example/post"
+      get :analytics, params: { id: "shared-slug", token: product.analytics_script_token }, format: :js
+
+      token = response.body.match(/var token = "([^"]+)";/)[1]
+      expect(product.analytics_view_token?(token, source_url: "https://landing.example/post")).to eq(true)
+      expect(other.analytics_view_token?(token, source_url: "https://landing.example/post")).to eq(false)
+    end
   end
 end
