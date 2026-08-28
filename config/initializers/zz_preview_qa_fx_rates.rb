@@ -145,6 +145,7 @@ class PreviewQaDebugMiddleware
         checkout_local_method_upi
         checkout_local_method_upi_recurring
       ].each { Feature.activate_user(_1, seller) }
+      Feature.activate(Checkout::PaymentMethodResolver::UPI_RECURRING_SERVICING_FEATURE)
 
       product = Link.find_by(unique_permalink: "qaupi") || Link.find(2).dup
       if product.new_record?
