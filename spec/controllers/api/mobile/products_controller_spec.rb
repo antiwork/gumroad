@@ -37,6 +37,23 @@ describe Api::Mobile::ProductsController do
       expect(body["pagination"]).to eq("count" => 2, "page" => 1, "pages" => 1, "next" => nil)
     end
 
+    it "returns the thumbnail url when the product has a thumbnail" do
+      product = create(:product, user: @seller, name: "Brush pack")
+      thumbnail = create(:thumbnail, product:)
+
+      get :index, params: @params
+
+      expect(response.parsed_body["products"].first["thumbnail_url"]).to eq(thumbnail.url)
+    end
+
+    it "returns a nil thumbnail url when the product has no thumbnail" do
+      create(:product, user: @seller, name: "No cover")
+
+      get :index, params: @params
+
+      expect(response.parsed_body["products"].first["thumbnail_url"]).to be_nil
+    end
+
     it "filters products by name" do
       create(:product, user: @seller, name: "Photo pack")
       match = create(:product, user: @seller, name: "Writing guide")

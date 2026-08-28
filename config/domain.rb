@@ -83,7 +83,11 @@ custom_short_domain = ENV["CUSTOM_SHORT_DOMAIN"]
 environment         = ENV["RAILS_ENV"]&.to_sym || :development
 config              = configuration_by_env[environment]
 
-PROTOCOL            = config[:protocol]
+# CUSTOM_PROTOCOL pairs with CUSTOM_DOMAIN for local HTTPS work — running the mobile app against
+# a local backend, for example. Without it, CUSTOM_DOMAIN changes the host but development stays
+# on "http", so asset and redirect URLs point at http://app.localhost:3000 and every page the
+# mobile app embeds in an HTTPS WebView renders blank with no error on either side.
+PROTOCOL            = ENV["CUSTOM_PROTOCOL"] || config[:protocol]
 DOMAIN              = custom_domain || config[:domain]
 ASSET_DOMAIN        = ENV["ASSET_DOMAIN"] || config[:asset_domain]
 ROOT_DOMAIN         = custom_domain || config[:root_domain]
