@@ -161,7 +161,16 @@ class PreviewQaDebugMiddleware
         product.user_id = seller.id
         product.save!(validate: false)
       end
-      product.update_columns(user_id: seller.id, price_currency_type: "inr", price_cents: 49_900, subscription_duration: "monthly")
+      product.installment_plan&.destroy!
+      product.update_columns(
+        user_id: seller.id,
+        price_currency_type: "inr",
+        price_cents: 49_900,
+        subscription_duration: "monthly",
+        free_trial_enabled: false,
+        is_physical: false,
+        is_in_preorder_state: false,
+      )
       product.prices.alive.where(variant_id: nil).first_or_create!(price_cents: 49_900, currency: "inr", recurrence: "monthly")
       product.prices.alive.where(variant_id: nil).update_all(price_cents: 49_900, currency: "inr", recurrence: "monthly")
 
