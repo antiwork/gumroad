@@ -16,6 +16,7 @@
 require "tmpdir"
 require "fileutils"
 require "open3"
+require "yaml"
 
 SELECTOR = File.expand_path("../../bin/branch-specs", __dir__)
 
@@ -614,6 +615,30 @@ check(
   },
   expect_specs: %w[spec/models/widget_spec.rb],
 )
+
+check(
+  "reuse-full-suite-only change does not escalate",
+  base_files: {
+    "bin/reuse-full-suite" => "old",
+    "script/test-reuse-full-suite" => "old",
+  },
+  head_files: {
+    "bin/reuse-full-suite" => "new",
+    "script/test-reuse-full-suite" => "new",
+  },
+  expect_specs: [],
+)
+
+WORKFLOW = File.expand_path("../../.github/workflows/tests.yml", __dir__)
+workflow = YAML.load_file(WORKFLOW)
+migration_versions = workflow.fetch("jobs").fetch("migration_versions")
+reuse_self_test = migration_versions.fetch("steps").find do |step|
+  step["name"] == "Self-test reuse-full-suite"
+end
+$count += 1
+unless reuse_self_test && reuse_self_test["run"] == "bash script/test-reuse-full-suite" && !reuse_self_test.key?("if")
+  $failures << "tests.yml does not run script/test-reuse-full-suite as an ungated migration_versions step"
+end
 
 if $failures.empty?
 

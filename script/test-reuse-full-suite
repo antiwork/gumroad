@@ -100,7 +100,8 @@ write_jobs 18 50 "$FAKE/fix/jobs-full.json"
 printf '{"jobs":[{"name":"Test Fast 0 (internal PR noop)","conclusion":"success"},{"name":"Test Relevant 0","conclusion":"success"}]}\n' > "$FAKE/fix/jobs-noop.json"
 
 run() {
-  TESTS_WORKFLOW_PATH="$FAKE/tests.yml" REPO=antiwork/gumroad GH_FIXTURE_DIR="$FAKE/fix" GH="$FAKE/gh" "$SCRIPT" mainsha
+  env -u GITHUB_ACTIONS -u GITHUB_EVENT_NAME -u GITHUB_REF \
+    TESTS_WORKFLOW_PATH="$FAKE/tests.yml" REPO=antiwork/gumroad GH_FIXTURE_DIR="$FAKE/fix" GH="$FAKE/gh" "$SCRIPT" mainsha
 }
 
 out=$(run)
@@ -177,7 +178,8 @@ else echo "unexpected $path" >&2; exit 1
 fi
 EOF
 chmod +x "$FAKE/gh-fail-pull"
-out=$(TESTS_WORKFLOW_PATH="$FAKE/tests.yml" REPO=antiwork/gumroad GH="$FAKE/gh-fail-pull" "$SCRIPT" mainsha || true)
+out=$(env -u GITHUB_ACTIONS -u GITHUB_EVENT_NAME -u GITHUB_REF \
+  TESTS_WORKFLOW_PATH="$FAKE/tests.yml" REPO=antiwork/gumroad GH="$FAKE/gh-fail-pull" "$SCRIPT" mainsha || true)
 test "$out" = "reuse=false" || { echo "FAIL expected reuse=false on pulls 404 got [$out]"; exit 1; }
 echo "ok pulls 404 fail-closes"
 
