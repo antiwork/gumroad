@@ -30,43 +30,6 @@ Rails.application.config.after_initialize do
     Rails.logger.warn("[preview-qa] FX rate seed skipped: #{e.class} #{e.message}")
   end
 
-  begin
-    seller = User.find_by!(email: "seller@gumroad.com")
-    %i[
-      buyer_currency_charging
-      buyer_local_currency
-      buyer_currency_subscriptions
-      stripe_payment_element_checkout
-      stripe_payment_element_client_confirm
-      checkout_local_method_upi
-      checkout_local_method_upi_recurring
-    ].each { Feature.activate_user(_1, seller) }
-
-    product = Link.find_by(unique_permalink: "qaupi") || Link.find(2).dup
-    if product.new_record?
-      product.assign_attributes(
-        unique_permalink: "qaupi",
-        custom_permalink: nil,
-        name: "QA7367 INR Autopay membership",
-        customizable_price: false,
-        free_trial_enabled: false,
-        is_physical: false,
-        is_in_preorder_state: false,
-      )
-      product.save!(validate: false)
-    end
-    product.update_columns(price_currency_type: "inr", price_cents: 49_900, subscription_duration: "monthly")
-    product.prices.alive.where(variant_id: nil).first_or_create!(price_cents: 49_900, currency: "inr", recurrence: "monthly")
-    product.prices.alive.where(variant_id: nil).update_all(price_cents: 49_900, currency: "inr", recurrence: "monthly")
-
-    category = product.variant_categories.alive.first || product.variant_categories.create!(title: "Tier")
-    tier = category.alive_variants.first || category.variants.create!(name: "Autopay tier")
-    tier.prices.alive.first_or_create!(link: product, price_cents: 49_900, currency: "inr", recurrence: "monthly")
-    tier.prices.alive.update_all(link_id: product.id, price_cents: 49_900, currency: "inr", recurrence: "monthly")
-    Rails.logger.info("[preview-qa] seeded INR Autopay membership #{product.id}")
-  rescue StandardError => e
-    Rails.logger.warn("[preview-qa] INR Autopay seed skipped: #{e.class} #{e.message}")
-  end
 end
 
 # TEMP QA debug endpoint (test-mode only): tells apart a GeoIP miss from a missing FX
@@ -94,6 +57,10 @@ class PreviewQaDebugMiddleware
     return @app.call(env) unless preview_app_or_development?
 
     req = Rack::Request.new(env)
+
+    if req.path == "/qa/seed_upi"
+      return [200, { "Content-Type" => "application/json" }, [seed_upi_product.to_json]]
+    end
 
     # Cookie mode for human testers on phones/tablets, where sending a custom header is
     # impractical: GET /qa/spoof?ip=<addr> stores the spoof IP in a cookie and every
@@ -161,6 +128,44 @@ class PreviewQaDebugMiddleware
   end
 
   private
+    def seed_upi_product
+      seller = User.find_by!(email: "seller@gumroad.com")
+      %i[
+        buyer_currency_charging
+        buyer_local_currency
+        buyer_currency_subscriptions
+        stripe_payment_element_checkout
+        stripe_payment_element_client_confirm
+        checkout_local_method_upi
+        checkout_local_method_upi_recurring
+      ].each { Feature.activate_user(_1, seller) }
+
+      product = Link.find_by(unique_permalink: "qaupi") || Link.find(2).dup
+      if product.new_record?
+        product.assign_attributes(
+          unique_permalink: "qaupi",
+          custom_permalink: nil,
+          name: "QA7367 INR Autopay membership",
+          customizable_price: false,
+          free_trial_enabled: false,
+          is_physical: false,
+          is_in_preorder_state: false,
+        )
+        product.save!(validate: false)
+      end
+      product.update_columns(price_currency_type: "inr", price_cents: 49_900, subscription_duration: "monthly")
+      product.prices.alive.where(variant_id: nil).first_or_create!(price_cents: 49_900, currency: "inr", recurrence: "monthly")
+      product.prices.alive.where(variant_id: nil).update_all(price_cents: 49_900, currency: "inr", recurrence: "monthly")
+
+      category = product.variant_categories.alive.first || product.variant_categories.create!(title: "Tier")
+      tier = category.alive_variants.first || category.variants.create!(name: "Autopay tier")
+      tier.prices.alive.first_or_create!(link: product, price_cents: 49_900, currency: "inr", recurrence: "monthly")
+      tier.prices.alive.update_all(link_id: product.id, price_cents: 49_900, currency: "inr", recurrence: "monthly")
+      { id: product.id, slug: product.unique_permalink, currency: product.price_currency_type, duration: product.subscription_duration }
+    rescue StandardError => e
+      { error: "#{e.class}: #{e.message}" }
+    end
+
     def preview_app_or_development?
       Rails.env.development? || (Rails.env.staging? && ENV["BRANCH_DEPLOYMENT"] == "true")
     end
