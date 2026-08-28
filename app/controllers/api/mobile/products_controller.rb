@@ -53,7 +53,9 @@ class Api::Mobile::ProductsController < Api::Mobile::BaseController
         permalink: props["permalink"],
         price_formatted: props["price_formatted"],
         status: props["status"],
-        thumbnail_url: props.dig("thumbnail", "url"),
+        # `Thumbnail#as_json` returns symbol keys, unlike the string-keyed hash around it, so
+        # digging with "url" here silently returned nil for every product.
+        thumbnail_url: props["thumbnail"]&.dig(:url),
         can_edit: props["can_edit"],
         can_destroy: props["can_destroy"],
       }
