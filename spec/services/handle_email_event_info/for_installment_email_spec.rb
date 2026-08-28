@@ -35,6 +35,16 @@ describe HandleEmailEventInfo::ForInstallmentEmail do
       expect(Installment.find(@installment.id).unique_open_count).to eq 1
     end
 
+    it "does not GetItem installment summaries while recording an open" do
+      allow(EmailEngagementDynamoStore).to receive(:summary).and_call_original
+      params = { "_json" => [{ "event" => "open", "type" => "CreatorContactingCustomersMailer.purchase_installment",
+                               "identifier" => @identifier, "installment_id" => @installment.id }] }
+
+      HandleSendgridEventJob.new.perform(params)
+
+      expect(EmailEngagementDynamoStore).not_to have_received(:summary)
+    end
+
     it "creates a new CreatorEmailOpenEvent object and then update it if there are 2 identical open events" do
       now = Time.current
       params = { "_json" => [{ "event" => "open", "type" => "CreatorContactingCustomersMailer.purchase_installment",

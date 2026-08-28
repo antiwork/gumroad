@@ -173,6 +173,10 @@ class HandleEmailEventInfo::ForInstallmentEmail
     end
 
     def update_installment_cache(installment_id, key)
+      # DDB aggregates are a live GetItem; precomputing them here only burns a
+      # read on a discarded Installment and cannot warm the dashboard.
+      return if EmailEngagementDynamoStore.reads_enabled?
+
       installment = Installment.find(installment_id)
 
       # Clear cache and precompute the result
