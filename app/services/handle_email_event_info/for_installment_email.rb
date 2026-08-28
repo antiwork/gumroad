@@ -175,6 +175,14 @@ class HandleEmailEventInfo::ForInstallmentEmail
     def update_installment_cache(installment_id, key)
       installment = Installment.find(installment_id)
 
+      if EmailEngagementDynamoStore.reads_enabled?
+        # DDB aggregates are live GetItem reads. Clear stale cache entries for
+        # this event, but do not precompute counters from the discarded instance.
+        installment.invalidate_cache(key)
+        installment.invalidate_legacy_engagement_cache(key)
+        return
+      end
+
       # Clear cache and precompute the result
       installment.invalidate_cache(key)
       installment.send(key)

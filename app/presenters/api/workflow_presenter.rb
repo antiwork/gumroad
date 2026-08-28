@@ -121,7 +121,9 @@ class Api::WorkflowPresenter
       missing_ids = []
 
       keys_by_id.each do |id, keys|
-        if cached_counts.key?(keys.fetch(:event))
+        # The installment event key has no TTL. Under DynamoDB reads it can be a
+        # stale zero from the first dashboard hit; skip it and use the 5s API cache.
+        if !EmailEngagementDynamoStore.reads_enabled? && cached_counts.key?(keys.fetch(:event))
           counts[id] = cached_counts.fetch(keys.fetch(:event)).to_i
         elsif cached_counts.key?(keys.fetch(:api))
           counts[id] = cached_counts.fetch(keys.fetch(:api)).to_i

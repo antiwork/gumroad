@@ -100,6 +100,12 @@ class HandleEmailEventInfo::ForAbandonedCartEmail
     end
 
     def update_installment_cache(installment, key)
+      if EmailEngagementDynamoStore.reads_enabled?
+        installment.invalidate_cache(key)
+        installment.invalidate_legacy_engagement_cache(key)
+        return
+      end
+
       # Clear cache and precompute the result
       installment.invalidate_cache(key)
       installment.send(key)

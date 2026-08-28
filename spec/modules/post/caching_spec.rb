@@ -11,6 +11,7 @@ describe Post::Caching do
 
       Feature.activate(:email_engagement_dynamodb_reads)
       expect(installment.key_for_cache(:unique_open_count)).to eq("unique_open_count_for_installment_#{installment.id}_ddb")
+      expect(installment.key_for_cache(:unique_open_count, dynamodb_reads: false)).to eq("unique_open_count_for_installment_#{installment.id}")
     ensure
       Feature.deactivate(:email_engagement_dynamodb_reads)
     end
@@ -21,6 +22,14 @@ describe Post::Caching do
       expect(Rails.cache).to receive(:delete).with("unique_click_count_for_installment_#{installment.id}_ddb")
 
       installment.invalidate_cache(:unique_click_count)
+    end
+  end
+
+  describe "#invalidate_legacy_engagement_cache" do
+    it "deletes the unsuffixed key even while DynamoDB reads are enabled" do
+      expect(Rails.cache).to receive(:delete).with("unique_click_count_for_installment_#{installment.id}")
+
+      installment.invalidate_legacy_engagement_cache(:unique_click_count)
     end
   end
 end

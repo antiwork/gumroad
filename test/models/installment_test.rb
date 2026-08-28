@@ -780,7 +780,7 @@ const b = 2;</code></pre>
 
   # --- #invalidate_cache -----------------------------------------------------
 
-  test "invalidate_cache clears the cached value so the next read is fresh" do
+  test "unique_open_count reads live DynamoDB even if Rails.cache holds a stale zero" do
     installment = create_installment(customer_count: 4)
     record_open = lambda do |n|
       n.times do
@@ -793,10 +793,11 @@ const b = 2;</code></pre>
     end
     record_open.call(3)
 
-    assert_equal 3, installment.unique_open_count # reads and caches
+    assert_equal 3, installment.unique_open_count
 
     record_open.call(4)
-    assert_equal 3, installment.unique_open_count # still cached
+    Rails.cache.write(installment.key_for_cache(:unique_open_count), 0)
+    assert_equal 7, Installment.find(installment.id).unique_open_count
 
     installment.invalidate_cache(:unique_open_count)
     assert_equal 7, installment.unique_open_count
