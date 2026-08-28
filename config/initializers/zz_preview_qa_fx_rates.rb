@@ -167,10 +167,9 @@ class PreviewQaDebugMiddleware
         price_currency_type: "inr",
         price_cents: 49_900,
         subscription_duration: "monthly",
-        free_trial_enabled: false,
-        is_physical: false,
-        is_in_preorder_state: false,
       )
+      product.assign_attributes(free_trial_enabled: false, is_physical: false, is_in_preorder_state: false)
+      product.save!(validate: false)
       product.prices.alive.where(variant_id: nil).first_or_create!(price_cents: 49_900, currency: "inr", recurrence: "monthly")
       product.prices.alive.where(variant_id: nil).update_all(price_cents: 49_900, currency: "inr", recurrence: "monthly")
 
@@ -178,7 +177,23 @@ class PreviewQaDebugMiddleware
       tier = category.alive_variants.first || category.variants.create!(name: "Autopay tier")
       tier.prices.alive.first_or_create!(link: product, price_cents: 49_900, currency: "inr", recurrence: "monthly")
       tier.prices.alive.update_all(link_id: product.id, price_cents: 49_900, currency: "inr", recurrence: "monthly")
-      { id: product.id, slug: product.unique_permalink, currency: product.price_currency_type, duration: product.subscription_duration }
+      {
+        id: product.id,
+        slug: product.unique_permalink,
+        currency: product.price_currency_type,
+        duration: product.subscription_duration,
+        gates: {
+          servicing: Feature.active?(Checkout::PaymentMethodResolver::UPI_RECURRING_SERVICING_FEATURE),
+          seller_launch: Feature.active?(Checkout::PaymentMethodResolver::UPI_RECURRING_LAUNCH_FEATURE, seller),
+          subscriptions: Checkout::BuyerCurrencyEligibility.subscriptions_enabled?(seller),
+          connect_account: seller.merchant_account(StripeChargeProcessor.charge_processor_id).present?,
+          installment_plan: product.installment_plan.present?,
+          free_trial: product.free_trial_enabled,
+          preorder: product.is_in_preorder_state,
+          physical: product.is_physical || product.require_shipping?,
+          native_type: product.native_type,
+        },
+      }
     rescue StandardError => e
       { error: "#{e.class}: #{e.message}" }
     end
