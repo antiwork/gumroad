@@ -34,7 +34,9 @@ class Api::Mobile::ProductsController < Api::Mobile::BaseController
     return fetch_error("Product not found") if product.nil?
     return fetch_error("You cannot delete this product", status: :forbidden) unless Pundit.policy!(seller_context, product).destroy?
 
+    @product = product
     product.delete!
+    create_user_event("delete_product_mobile_app", user_id: current_resource_owner.id)
     render json: { success: true }
   end
 

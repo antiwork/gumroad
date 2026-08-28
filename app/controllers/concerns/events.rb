@@ -1,13 +1,13 @@
 # frozen_string_literal: true
 
 module Events
-  def create_user_event(name, seller_id: nil, on_custom_domain: false)
+  def create_user_event(name, seller_id: nil, on_custom_domain: false, user_id: nil)
     return if name.nil?
 
     create_event(
       event_name: name,
       on_custom_domain:,
-      user_id: logged_in_user&.id
+      user_id: user_id || logged_in_user&.id
     )
   end
 

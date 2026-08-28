@@ -69,17 +69,24 @@ describe Api::Mobile::ProductsController do
     it "deletes the seller's product" do
       product = create(:product, user: @seller, name: "To delete")
 
-      delete :destroy, params: @params.merge(id: product.unique_permalink)
+      expect do
+        delete :destroy, params: @params.merge(id: product.unique_permalink)
+      end.to change { Event.where(event_name: "delete_product_mobile_app").count }.by(1)
 
       expect(response).to be_successful
       expect(response.parsed_body["success"]).to eq(true)
       expect(product.reload.deleted?).to eq(true)
+      event = Event.where(event_name: "delete_product_mobile_app").last
+      expect(event.link_id).to eq(product.id)
+      expect(event.user_id).to eq(@seller.id)
     end
 
     it "does not delete another seller's product" do
       other = create(:product, name: "Not yours")
 
-      delete :destroy, params: @params.merge(id: other.unique_permalink)
+      expect do
+        delete :destroy, params: @params.merge(id: other.unique_permalink)
+      end.not_to change { Event.where(event_name: "delete_product_mobile_app").count }
 
       expect(response).to have_http_status(:not_found)
       expect(other.reload.deleted?).to eq(false)

@@ -21,10 +21,18 @@ module MobileAppWebView
   end
 
   private
+    def mobile_app_web_view?
+      params[:display] == "mobile_app" || session[:mobile_app_web_view] == true
+    end
+
     def persist_mobile_app_web_view
       return unless params[:display] == "mobile_app" && user_signed_in?
 
       session[:mobile_app_web_view] = true
+    end
+
+    def create_mobile_app_user_event(name)
+      create_user_event(name) if mobile_app_web_view?
     end
 
     def authenticate_mobile_app_web_view!
