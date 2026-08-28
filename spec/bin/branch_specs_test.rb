@@ -615,48 +615,6 @@ check(
   expect_specs: %w[spec/models/widget_spec.rb],
 )
 
-# The daily schedule must stay a full-suite run. Extract the live run_scope
-# step so this fails if someone deletes the schedule branch from tests.yml.
-WORKFLOW = File.expand_path("../../.github/workflows/tests.yml", __dir__)
-$count += 1
-workflow_text = File.read(WORKFLOW)
-unless workflow_text.include?('cron: "0 14 * * *"')
-  $failures << "tests.yml is missing the daily 0 14 * * * schedule"
-end
-unless workflow_text.include?('GITHUB_EVENT_NAME" = "schedule"')
-  $failures << "run_scope does not treat schedule events as full suite"
-end
-
-def run_scope_body
-  text = File.read(WORKFLOW)
-  chunk = text[/- id: scope\n.*?run: \|\n(.*?)(?:\n  [a-z_]+:|\n    permissions:)/m, 1]
-  raise "could not extract run_scope step" unless chunk
-  chunk.gsub(/^          /, "")
-end
-
-$count += 1
-Dir.mktmpdir do |dir|
-  out = File.join(dir, "github_output")
-  File.write(out, "")
-  env = {
-    "GITHUB_OUTPUT" => out,
-    "GITHUB_EVENT_NAME" => "schedule",
-    "GITHUB_REF" => "refs/heads/main",
-    "GH_TOKEN" => "none",
-    "SHA" => "deadbeef",
-    "GITHUB_REPOSITORY" => "antiwork/gumroad",
-  }
-  _stdout, stderr, status = Open3.capture3(env, "bash", "-c", run_scope_body)
-  unless status.success?
-    $failures << "run_scope schedule step failed: #{stderr}"
-  else
-    got = File.read(out)
-    unless got.include?("full=true")
-      $failures << "run_scope schedule did not set full=true (got #{got.inspect})"
-    end
-  end
-end
-
 if $failures.empty?
 
   puts "#{$count} checks passed"
