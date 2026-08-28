@@ -541,7 +541,124 @@ check(
   expect_escalate: true,
 )
 
+
+# Recurring run-all-specs gaps: ProductEdit JS has no per-file rspec.
+check(
+  "ProductEdit component fans out to product request specs",
+  base_files: {
+    "spec/requests/products/edit/covers_spec.rb" => SPEC_STUB,
+    "app/javascript/components/ProductEdit/state.ts" => "old",
+  },
+  head_files: { "app/javascript/components/ProductEdit/state.ts" => "new" },
+  expect_specs: %w[spec/requests/products/edit/covers_spec.rb],
+)
+
+check(
+  "Settings page fans out to settings request specs",
+  base_files: {
+    "spec/requests/settings/main_spec.rb" => SPEC_STUB,
+    "app/javascript/pages/Settings/Main.tsx" => "old",
+  },
+  head_files: { "app/javascript/pages/Settings/Main.tsx" => "new" },
+  expect_specs: %w[spec/requests/settings/main_spec.rb],
+)
+
+check(
+  "dynamodb support file maps instead of escalating",
+  base_files: {
+    "spec/services/email_engagement_dynamo_store_spec.rb" => SPEC_STUB,
+    "spec/support/dynamodb.rb" => "old",
+  },
+  head_files: { "spec/support/dynamodb.rb" => "new" },
+  expect_specs: %w[spec/services/email_engagement_dynamo_store_spec.rb],
+)
+
+check(
+  "public image with a mapped spec does not escalate",
+  base_files: {
+    "app/models/widget.rb" => "old",
+    "spec/models/widget_spec.rb" => SPEC_STUB,
+    "public/images/help_center/foo.png" => "old",
+  },
+  head_files: {
+    "app/models/widget.rb" => "new",
+    "public/images/help_center/foo.png" => "new",
+  },
+  expect_specs: %w[spec/models/widget_spec.rb],
+)
+
+check(
+  "non-tests workflow with a mapped spec does not escalate",
+  base_files: {
+    "app/models/widget.rb" => "old",
+    "spec/models/widget_spec.rb" => SPEC_STUB,
+    ".github/workflows/e2e.yml" => "old",
+  },
+  head_files: {
+    "app/models/widget.rb" => "new",
+    ".github/workflows/e2e.yml" => "new",
+  },
+  expect_specs: %w[spec/models/widget_spec.rb],
+)
+
+check(
+  "reuse-full-suite script with a mapped spec does not escalate",
+  base_files: {
+    "app/models/widget.rb" => "old",
+    "spec/models/widget_spec.rb" => SPEC_STUB,
+    "bin/reuse-full-suite" => "old",
+  },
+  head_files: {
+    "app/models/widget.rb" => "new",
+    "bin/reuse-full-suite" => "new",
+  },
+  expect_specs: %w[spec/models/widget_spec.rb],
+)
+
+# The daily schedule must stay a full-suite run. Extract the live run_scope
+# step so this fails if someone deletes the schedule branch from tests.yml.
+WORKFLOW = File.expand_path("../../.github/workflows/tests.yml", __dir__)
+$count += 1
+workflow_text = File.read(WORKFLOW)
+unless workflow_text.include?('cron: "0 14 * * *"')
+  $failures << "tests.yml is missing the daily 0 14 * * * schedule"
+end
+unless workflow_text.include?('GITHUB_EVENT_NAME" = "schedule"')
+  $failures << "run_scope does not treat schedule events as full suite"
+end
+
+def run_scope_body
+  text = File.read(WORKFLOW)
+  chunk = text[/- id: scope\n.*?run: \|\n(.*?)(?:\n  [a-z_]+:|\n    permissions:)/m, 1]
+  raise "could not extract run_scope step" unless chunk
+  chunk.gsub(/^          /, "")
+end
+
+$count += 1
+Dir.mktmpdir do |dir|
+  out = File.join(dir, "github_output")
+  File.write(out, "")
+  env = {
+    "GITHUB_OUTPUT" => out,
+    "GITHUB_EVENT_NAME" => "schedule",
+    "GITHUB_REF" => "refs/heads/main",
+    "GH_TOKEN" => "none",
+    "SHA" => "deadbeef",
+    "GITHUB_REPOSITORY" => "antiwork/gumroad",
+  }
+  _stdout, stderr, status = Open3.capture3(env, "bash", "-c", run_scope_body)
+  unless status.success?
+    $failures << "run_scope schedule step failed: #{stderr}"
+  else
+    got = File.read(out)
+    unless got.include?("full=true")
+      $failures << "run_scope schedule did not set full=true (got #{got.inspect})"
+    end
+  end
+end
+
 if $failures.empty?
+
   puts "#{$count} checks passed"
 else
   $failures.each { |f| puts "FAIL: #{f}\n\n" }

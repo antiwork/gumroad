@@ -1,6 +1,11 @@
 name: Tests
 
 on:
+  schedule:
+    # Daily full Fast/Slow on main (10:00 ET). Branch CI is trimmed, and
+    # squash-reuse can skip Fast/Slow on merge when a PR already ran them.
+    # This is the safety net so the full suite still runs every day.
+    - cron: "0 14 * * *"
   push:
     branches:
       - "**"
@@ -25,9 +30,9 @@ jobs:
 
   run_scope:
     # Decides whether this run gets the full Fast/Slow suite or the trimmed
-    # test_relevant job. Full suite: every push to main (deploy gate), or a
-    # PR carrying the run-all-specs label. Push events have no PR payload,
-    # so the label is looked up via the commit's PRs.
+    # test_relevant job. Full suite: the daily schedule, every push to main
+    # (deploy gate), or a PR carrying the run-all-specs label. Push events
+    # have no PR payload, so the label is looked up via the commit's PRs.
     #
     # Fork PRs hit this job via pull_request_target (token is the base repo).
     # No checkout here — only label lookup. Reuse of a prior Fast/Slow run
@@ -46,6 +51,10 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           SHA: ${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.sha || github.sha }}
         run: |
+          if [ "$GITHUB_EVENT_NAME" = "schedule" ]; then
+            echo "full=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
           if [ "$GITHUB_EVENT_NAME" = "push" ] && [ "$GITHUB_REF" = "refs/heads/main" ]; then
             echo "full=true" >> "$GITHUB_OUTPUT"
             exit 0
