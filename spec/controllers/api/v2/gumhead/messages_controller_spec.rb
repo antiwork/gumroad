@@ -10,8 +10,7 @@ describe Api::V2::Gumhead::MessagesController do
     Feature.activate_user(:gumhead, @user)
 
     allow(GlobalConfig).to receive(:get).and_call_original
-    allow(GlobalConfig).to receive(:get).with("GUMHEAD_ANTHROPIC_API_KEY").and_return("sk-ant-gateway-test")
-    allow(GlobalConfig).to receive(:get).with("GUMHEAD_UPSTREAM_API_KEY").and_return(nil)
+    allow(GlobalConfig).to receive(:get).with("GUMHEAD_UPSTREAM_API_KEY").and_return("sk-or-test")
     allow(GlobalConfig).to receive(:get).with("GUMHEAD_OAUTH_APPLICATION_UIDS", "").and_return(@app.uid)
 
     request.headers["Authorization"] = "Bearer #{@token.token}"
@@ -22,10 +21,10 @@ describe Api::V2::Gumhead::MessagesController do
     $redis.del(RedisKey.gumhead_gateway_in_flight(@user.id))
   end
 
-  let(:messages_url) { "https://api.anthropic.com/v1/messages" }
-  let(:count_tokens_url) { "https://api.anthropic.com/v1/messages/count_tokens" }
+  let(:messages_url) { "https://openrouter.ai/api/v1/messages" }
+  let(:count_tokens_url) { "https://openrouter.ai/api/v1/messages/count_tokens" }
   let(:request_payload) do
-    { model: "claude-sonnet-5", max_tokens: 64, messages: [{ role: "user", content: "Hi" }] }
+    { model: "gumhead-chat", max_tokens: 64, messages: [{ role: "user", content: "Hi" }] }
   end
   let(:anthropic_response) do
     {
@@ -357,21 +356,21 @@ describe Api::V2::Gumhead::MessagesController do
   end
 
   describe "buffered forwarding" do
-    it "proxies to Anthropic with the server key and records usage" do
+    it "proxies to the upstream with the gateway key and records usage" do
       stub_request(:post, messages_url)
-        .to_return(status: 200, body: anthropic_response.to_json, headers: { "Content-Type" => "application/json" })
+        .to_return(status: 200, body: anthropic_response.except(:model).to_json, headers: { "Content-Type" => "application/json" })
 
       post_messages
 
       expect(response.status).to eq(200)
       expect(JSON.parse(response.body)["content"].first["text"]).to eq("Hello!")
       expect(WebMock).to have_requested(:post, messages_url).with { |req|
-        req.headers["X-Api-Key"] == "sk-ant-gateway-test" && req.headers["Authorization"].nil?
+        req.headers["Authorization"] == "Bearer sk-or-test" && req.headers["X-Api-Key"].nil?
       }
 
       event = GumheadUsageEvent.sole
       expect(event.user).to eq(@user)
-      expect(event.model).to eq("claude-sonnet-5")
+      expect(event.model).to eq("x-ai/grok-4.6")
       expect(event.input_tokens).to eq(50)
       expect(event.output_tokens).to eq(7)
       expect(event.cache_creation_input_tokens).to eq(3)
@@ -489,7 +488,7 @@ describe Api::V2::Gumhead::MessagesController do
       post_messages
 
       expect(response.status).to eq(502)
-      expect(GumheadUsageEvent.sole.input_tokens).to eq(request_payload.to_json.bytesize)
+      expect(GumheadUsageEvent.sole.input_tokens).to eq(request_payload.merge(model: "x-ai/grok-4.6").to_json.bytesize)
     end
 
     it "charges nothing when the connection itself times out" do
@@ -706,14 +705,22 @@ describe Api::V2::Gumhead::MessagesController do
       expect(GumheadUsageEvent.count).to eq(0)
     end
 
+    # The Anthropic host has a real count_tokens, so a 404 there is an
+    # answer, not a missing path.
     it "passes through a 404 from Anthropic count_tokens" do
-      stub_request(:post, count_tokens_url)
+      allow(GlobalConfig).to receive(:get)
+        .with("GUMHEAD_UPSTREAM_API_BASE", described_class::DEFAULT_UPSTREAM_API_BASE)
+        .and_return("https://api.anthropic.com/v1")
+      $redis.set(RedisKey.gumhead_model_map, { "gumhead-chat" => "claude-sonnet-5" }.to_json)
+      stub_request(:post, "https://api.anthropic.com/v1/messages/count_tokens")
         .to_return(status: 404, body: { type: "error", error: { type: "not_found_error", message: "Not Found" } }.to_json)
 
       post :count_tokens, body: request_payload.to_json, as: :json
 
       expect(response.status).to eq(404)
       expect(JSON.parse(response.body)["error"]["type"]).to eq("not_found_error")
+    ensure
+      $redis.del(RedisKey.gumhead_model_map)
     end
 
     it "shares the concurrent in-flight limit" do
@@ -728,269 +735,125 @@ describe Api::V2::Gumhead::MessagesController do
   end
 
   describe "upstream hop" do
-    let(:openrouter_messages_url) { "https://openrouter.ai/api/v1/messages" }
-    let(:openrouter_count_tokens_url) { "https://openrouter.ai/api/v1/messages/count_tokens" }
-    let(:rewritten_payload_bytesize) { request_payload.merge(model: "x-ai/grok-4.6").to_json.bytesize }
+    let(:anthropic_messages_url) { "https://api.anthropic.com/v1/messages" }
 
-    def use_openrouter_base
+    def use_anthropic_base
       allow(GlobalConfig).to receive(:get)
         .with("GUMHEAD_UPSTREAM_API_BASE", described_class::DEFAULT_UPSTREAM_API_BASE)
-        .and_return("https://openrouter.ai/api/v1")
-      allow(GlobalConfig).to receive(:get).with("GUMHEAD_UPSTREAM_API_KEY").and_return("sk-or-test")
+        .and_return("https://api.anthropic.com/v1")
+      allow(GlobalConfig).to receive(:get).with("GUMHEAD_ANTHROPIC_API_KEY").and_return("sk-ant-gateway-test")
     end
 
-    it "does not rewrite Claude aliases while the upstream is still Anthropic" do
+    it "rewrites a role id to its mapped model before forwarding" do
       stub_request(:post, messages_url)
-        .to_return(status: 200, body: anthropic_response.to_json, headers: { "Content-Type" => "application/json" })
+        .to_return(status: 200, body: anthropic_response.except(:model).to_json, headers: { "Content-Type" => "application/json" })
 
       post_messages
 
       expect(WebMock).to have_requested(:post, messages_url).with { |req|
-        JSON.parse(req.body)["model"] == "claude-sonnet-5"
-      }
-    end
-
-    it "rewrites an allowed Claude alias to the mapped OpenRouter id before forwarding" do
-      use_openrouter_base
-      stub_request(:post, openrouter_messages_url)
-        .to_return(status: 200, body: anthropic_response.merge(model: "x-ai/grok-4.6").to_json, headers: { "Content-Type" => "application/json" })
-
-      post_messages
-
-      expect(response.status).to eq(200)
-      expect(WebMock).to have_requested(:post, openrouter_messages_url).with { |req|
         JSON.parse(req.body)["model"] == "x-ai/grok-4.6"
       }
-    end
-
-    it "maps a versioned Claude name by prefix" do
-      use_openrouter_base
-      stub_request(:post, openrouter_messages_url)
-        .to_return(status: 200, body: anthropic_response.to_json, headers: { "Content-Type" => "application/json" })
-
-      post_messages(request_payload.merge(model: "claude-sonnet-5-20250514"))
-
-      expect(WebMock).to have_requested(:post, openrouter_messages_url).with { |req|
-        JSON.parse(req.body)["model"] == "x-ai/grok-4.6"
-      }
-    end
-
-    it "rejects a role id while the upstream is still Anthropic" do
-      post_messages(request_payload.merge(model: "gumhead-chat"))
-
-      expect(response.status).to eq(400)
-      expect(WebMock).not_to have_requested(:post, messages_url)
-    end
-
-    # Forwarded body plus a response that omits model: the ledger then
-    # records @body["model"] after rewrite. A stub that already names
-    # grok would pass with the rewrite reverted.
-    %w[gumhead-chat gumhead-status gumhead-cover].each do |role_id|
-      it "allows #{role_id}, rewrites it on the upstream POST, and records the billed model" do
-        use_openrouter_base
-        stub_request(:post, openrouter_messages_url)
-          .to_return(status: 200, body: anthropic_response.except(:model).to_json, headers: { "Content-Type" => "application/json" })
-
-        post_messages(request_payload.merge(model: role_id))
-
-        expect(response.status).to eq(200)
-        expect(WebMock).to have_requested(:post, openrouter_messages_url).with { |req|
-          JSON.parse(req.body)["model"] == "x-ai/grok-4.6"
-        }
-        expect(GumheadUsageEvent.sole.model).to eq("x-ai/grok-4.6")
-      end
-    end
-
-    it "rejects a suffixed role id instead of treating it as a prefix" do
-      use_openrouter_base
-
-      post_messages(request_payload.merge(model: "gumhead-chat-extra"))
-
-      expect(response.status).to eq(400)
-      expect(WebMock).not_to have_requested(:post, openrouter_messages_url)
-    end
-
-    it "rejects a role id that is missing from the allowlist" do
-      use_openrouter_base
-      allow(GlobalConfig).to receive(:get)
-        .with("GUMHEAD_ALLOWED_MODEL_PREFIXES", described_class::DEFAULT_ALLOWED_MODEL_PREFIXES)
-        .and_return("claude-sonnet-,claude-haiku-,claude-opus-")
-
-      post_messages(request_payload.merge(model: "gumhead-chat"))
-
-      expect(response.status).to eq(400)
-      expect(WebMock).not_to have_requested(:post, openrouter_messages_url)
-    end
-
-    it "rewrites a Claude family name that carries an OpenRouter variant suffix" do
-      use_openrouter_base
-      stub_request(:post, openrouter_messages_url)
-        .to_return(status: 200, body: anthropic_response.merge(model: "x-ai/grok-4.6").to_json, headers: { "Content-Type" => "application/json" })
-
-      post_messages(request_payload.merge(model: "claude-opus-4-7:online"))
-
-      expect(WebMock).to have_requested(:post, openrouter_messages_url).with { |req|
-        JSON.parse(req.body)["model"] == "x-ai/grok-4.6"
-      }
-    end
-
-    it "does not rewrite when the configured base is still the Anthropic host" do
-      allow(GlobalConfig).to receive(:get)
-        .with("GUMHEAD_UPSTREAM_API_BASE", described_class::DEFAULT_UPSTREAM_API_BASE)
-        .and_return("https://api.anthropic.com/v1/")
-      stub_request(:post, %r{\Ahttps://api\.anthropic\.com/v1/+messages\z})
-        .to_return(status: 200, body: anthropic_response.to_json, headers: { "Content-Type" => "application/json" })
-
-      post_messages
-
-      expect(WebMock).to have_requested(:post, %r{\Ahttps://api\.anthropic\.com/v1/+messages\z}).with { |req|
-        JSON.parse(req.body)["model"] == "claude-sonnet-5" &&
-          req.headers["X-Api-Key"] == "sk-ant-gateway-test" &&
-          req.headers["Authorization"].nil?
-      }
-    end
-
-    it "translates a non-2xx OpenRouter error envelope into the Anthropic shape" do
-      use_openrouter_base
-      stub_request(:post, openrouter_messages_url)
-        .to_return(
-          status: 429,
-          body: { error: { message: "Rate limited" } }.to_json,
-          headers: { "Content-Type" => "application/json", "Retry-After" => "7" },
-        )
-
-      post_messages
-
-      expect(response.status).to eq(429)
-      expect(response.headers["Retry-After"]).to eq("7")
-      expect(JSON.parse(response.body)).to eq(
-        "type" => "error",
-        "error" => { "type" => "rate_limit_error", "message" => described_class::UPSTREAM_ERRORS.fetch(:rate_limited).last },
-      )
-      expect(GumheadUsageEvent.count).to eq(0)
-    end
-
-    it "turns an OpenRouter HTTP 200 error envelope into a gateway error" do
-      use_openrouter_base
-      stub_request(:post, openrouter_messages_url)
-        .to_return(
-          status: 200,
-          body: { error: { message: "Provider returned error" } }.to_json,
-          headers: { "Content-Type" => "application/json" },
-        )
-
-      post_messages
-
-      expect(response.status).to eq(502)
-      expect(JSON.parse(response.body)).to eq(
-        "type" => "error",
-        "error" => { "type" => "api_error", "message" => "Provider returned error" },
-      )
-      expect(GumheadUsageEvent.count).to eq(0)
-    end
-
-    it "records the outgoing model on a synthetic timeout charge" do
-      use_openrouter_base
-      stub_request(:post, openrouter_messages_url).to_raise(HTTP::TimeoutError)
-      stub_request(:post, openrouter_count_tokens_url)
-        .to_return(status: 200, body: { input_tokens: 37 }.to_json, headers: { "Content-Type" => "application/json" })
-
-      post_messages
-
       expect(GumheadUsageEvent.sole.model).to eq("x-ai/grok-4.6")
     end
 
-    it "still rewrites Claude names when the configured map is empty" do
-      use_openrouter_base
-      allow(GlobalConfig).to receive(:get).with("GUMHEAD_MODEL_MAP").and_return("{}")
-      stub_request(:post, openrouter_messages_url)
-        .to_return(status: 200, body: anthropic_response.to_json, headers: { "Content-Type" => "application/json" })
-
-      post_messages
-
-      expect(WebMock).to have_requested(:post, openrouter_messages_url).with { |req|
-        JSON.parse(req.body)["model"] == "x-ai/grok-4.6"
-      }
-    end
-
-    it "still rejects a model outside the Claude allowlist" do
-      post_messages(request_payload.merge(model: "x-ai/grok-4.6"))
+    it "rejects the Claude names older builds sent" do
+      post_messages(request_payload.merge(model: "claude-sonnet-5"))
 
       expect(response.status).to eq(400)
       expect(WebMock).not_to have_requested(:post, messages_url)
     end
 
-    it "prefers GUMHEAD_UPSTREAM_API_KEY over the Anthropic key" do
-      allow(GlobalConfig).to receive(:get).with("GUMHEAD_UPSTREAM_API_KEY").and_return("sk-or-test")
-      stub_request(:post, messages_url)
-        .to_return(status: 200, body: anthropic_response.to_json, headers: { "Content-Type" => "application/json" })
+    it "rejects a suffixed role id instead of treating it as a prefix" do
+      post_messages(request_payload.merge(model: "gumhead-chat-extra"))
+
+      expect(response.status).to eq(400)
+    end
+
+    it "rejects a role id that is missing from the allowlist" do
+      allow(GlobalConfig).to receive(:get)
+        .with("GUMHEAD_ALLOWED_MODEL_PREFIXES", described_class::DEFAULT_ALLOWED_MODEL_PREFIXES)
+        .and_return("gumhead-chat")
+
+      post_messages(request_payload.merge(model: "gumhead-status"))
+
+      expect(response.status).to eq(400)
+    end
+
+    # A role id is never a real model, so a map entry that stops changing
+    # it must fail closed rather than forward a client-controlled name.
+    it "rejects a role id whose map entry is an identity mapping" do
+      $redis.set(RedisKey.gumhead_model_map, { "gumhead-chat" => "gumhead-chat" }.to_json)
 
       post_messages
 
-      expect(WebMock).to have_requested(:post, messages_url).with { |req|
-        req.headers["X-Api-Key"] == "sk-or-test" && req.headers["Authorization"].nil?
-      }
+      expect(response.status).to eq(400)
+      expect(WebMock).not_to have_requested(:post, messages_url)
+    ensure
+      $redis.del(RedisKey.gumhead_model_map)
     end
 
-    it "does not send the Anthropic key to OpenRouter when the upstream key is unset" do
-      use_openrouter_base
+    it "refuses to proxy when no upstream key is set for the default host" do
       allow(GlobalConfig).to receive(:get).with("GUMHEAD_UPSTREAM_API_KEY").and_return(nil)
+      allow(GlobalConfig).to receive(:get).with("GUMHEAD_ANTHROPIC_API_KEY").and_return(nil)
 
       post_messages
 
       expect(response.status).to eq(503)
-      expect(WebMock).not_to have_requested(:post, openrouter_messages_url)
+      expect(WebMock).not_to have_requested(:post, messages_url)
     end
 
     it "sends a bearer token to OpenRouter and omits x-api-key" do
-      use_openrouter_base
-      allow(GlobalConfig).to receive(:get).with("GUMHEAD_UPSTREAM_API_KEY").and_return("sk-or-test")
-      stub_request(:post, openrouter_messages_url)
-        .to_return(status: 200, body: anthropic_response.merge(model: "x-ai/grok-4.6").to_json, headers: { "Content-Type" => "application/json" })
+      stub_request(:post, messages_url)
+        .to_return(status: 200, body: anthropic_response.to_json, headers: { "Content-Type" => "application/json" })
 
       post_messages
 
-      expect(WebMock).to have_requested(:post, openrouter_messages_url).with { |req|
+      expect(WebMock).to have_requested(:post, messages_url).with { |req|
         req.headers["Authorization"] == "Bearer sk-or-test" && req.headers["X-Api-Key"].nil?
       }
     end
 
-    it "forwards to GUMHEAD_UPSTREAM_API_BASE when it is set" do
-      use_openrouter_base
-      stub_request(:post, openrouter_messages_url)
-        .to_return(status: 200, body: anthropic_response.merge(model: "x-ai/grok-4.6").to_json, headers: { "Content-Type" => "application/json" })
+    # The Anthropic secret stays on api.anthropic.com, under the header
+    # that host requires; a mapped role still rewrites there.
+    it "uses x-api-key and the Anthropic fallback key on the Anthropic host" do
+      use_anthropic_base
+      allow(GlobalConfig).to receive(:get).with("GUMHEAD_UPSTREAM_API_KEY").and_return(nil)
+      $redis.set(RedisKey.gumhead_model_map, { "gumhead-chat" => "claude-sonnet-5" }.to_json)
+      stub_request(:post, anthropic_messages_url)
+        .to_return(status: 200, body: anthropic_response.to_json, headers: { "Content-Type" => "application/json" })
 
       post_messages
 
-      expect(response.status).to eq(200)
-      expect(WebMock).to have_requested(:post, openrouter_messages_url)
+      expect(WebMock).to have_requested(:post, anthropic_messages_url).with { |req|
+        req.headers["X-Api-Key"] == "sk-ant-gateway-test" && req.headers["Authorization"].nil? &&
+          JSON.parse(req.body)["model"] == "claude-sonnet-5"
+      }
+    ensure
+      $redis.del(RedisKey.gumhead_model_map)
+    end
+
+    it "does not send the Anthropic key to a non-Anthropic host" do
+      allow(GlobalConfig).to receive(:get).with("GUMHEAD_UPSTREAM_API_KEY").and_return(nil)
+      allow(GlobalConfig).to receive(:get).with("GUMHEAD_ANTHROPIC_API_KEY").and_return("sk-ant-gateway-test")
+
+      post_messages
+
+      expect(response.status).to eq(503)
       expect(WebMock).not_to have_requested(:post, messages_url)
-      expect(GumheadUsageEvent.sole.model).to eq("x-ai/grok-4.6")
     end
 
     it "returns a synthetic token count when upstream count_tokens is missing" do
-      use_openrouter_base
-      stub_request(:post, openrouter_count_tokens_url)
+      stub_request(:post, count_tokens_url)
         .to_return(status: 404, body: { type: "error", error: { type: "not_found_error", message: "Not Found" } }.to_json)
 
       post :count_tokens, body: request_payload.to_json, as: :json
 
       expect(response.status).to eq(200)
-      expect(JSON.parse(response.body)["input_tokens"]).to eq(rewritten_payload_bytesize)
+      expect(JSON.parse(response.body)["input_tokens"]).to eq(request_payload.merge(model: "x-ai/grok-4.6").to_json.bytesize)
       expect(GumheadUsageEvent.count).to eq(0)
     end
-
-    it "charges the byte fallback when count_tokens returns 404 during a timeout" do
-      use_openrouter_base
-      stub_request(:post, openrouter_messages_url).to_raise(HTTP::TimeoutError)
-      stub_request(:post, openrouter_count_tokens_url).to_return(status: 404, body: "Not Found")
-
-      post_messages
-
-      expect(response.status).to eq(502)
-      expect(GumheadUsageEvent.sole.input_tokens).to eq(rewritten_payload_bytesize)
-    end
   end
+
 
   describe "minted upstream errors" do
     def minted(key) = described_class::UPSTREAM_ERRORS.fetch(key).last
@@ -1384,7 +1247,7 @@ describe Api::V2::Gumhead::MessagesController do
 
     it "serves the model a Redis write names, without a deploy" do
       use_openrouter_base
-      $redis.set(RedisKey.gumhead_model_map, { "claude-sonnet-" => "openai/gpt-5.6-luna" }.to_json)
+      $redis.set(RedisKey.gumhead_model_map, { "gumhead-chat" => "openai/gpt-5.6-luna" }.to_json)
       stub_openrouter
 
       post_messages
@@ -1409,8 +1272,8 @@ describe Api::V2::Gumhead::MessagesController do
     it "outranks the deployed GUMHEAD_MODEL_MAP" do
       use_openrouter_base
       allow(GlobalConfig).to receive(:get).with("GUMHEAD_MODEL_MAP")
-        .and_return({ "claude-sonnet-" => "x-ai/grok-4.5" }.to_json)
-      $redis.set(RedisKey.gumhead_model_map, { "claude-sonnet-" => "openai/gpt-5.6-luna" }.to_json)
+        .and_return({ "gumhead-chat" => "x-ai/grok-4.5" }.to_json)
+      $redis.set(RedisKey.gumhead_model_map, { "gumhead-chat" => "openai/gpt-5.6-luna" }.to_json)
       stub_openrouter
 
       post_messages
@@ -1421,7 +1284,7 @@ describe Api::V2::Gumhead::MessagesController do
     it "falls back to the deployed map once the Redis key is deleted" do
       use_openrouter_base
       allow(GlobalConfig).to receive(:get).with("GUMHEAD_MODEL_MAP")
-        .and_return({ "claude-sonnet-" => "x-ai/grok-4.5" }.to_json)
+        .and_return({ "gumhead-chat" => "x-ai/grok-4.5" }.to_json)
       $redis.del(RedisKey.gumhead_model_map)
       stub_openrouter
 
@@ -1469,19 +1332,23 @@ describe Api::V2::Gumhead::MessagesController do
       expect_forwarded_model(openrouter_messages_url, "x-ai/grok-4.6")
     end
 
-    it "rewrites on an Anthropic upstream when only Redis names a map" do
-      $redis.set(RedisKey.gumhead_model_map, { "claude-sonnet-" => "claude-sonnet-4.5" }.to_json)
-      stub_request(:post, messages_url)
+    it "rewrites on an Anthropic upstream when Redis names a real model there" do
+      allow(GlobalConfig).to receive(:get)
+        .with("GUMHEAD_UPSTREAM_API_BASE", described_class::DEFAULT_UPSTREAM_API_BASE)
+        .and_return("https://api.anthropic.com/v1")
+      allow(GlobalConfig).to receive(:get).with("GUMHEAD_ANTHROPIC_API_KEY").and_return("sk-ant-gateway-test")
+      $redis.set(RedisKey.gumhead_model_map, { "gumhead-chat" => "claude-sonnet-4.5" }.to_json)
+      stub_request(:post, "https://api.anthropic.com/v1/messages")
         .to_return(status: 200, body: anthropic_response.to_json, headers: { "Content-Type" => "application/json" })
 
       post_messages
 
-      expect_forwarded_model(messages_url, "claude-sonnet-4.5")
+      expect_forwarded_model("https://api.anthropic.com/v1/messages", "claude-sonnet-4.5")
     end
 
     it "records which source chose the model" do
       use_openrouter_base
-      $redis.set(RedisKey.gumhead_model_map, { "claude-sonnet-" => "openai/gpt-5.6-luna" }.to_json)
+      $redis.set(RedisKey.gumhead_model_map, { "gumhead-chat" => "openai/gpt-5.6-luna" }.to_json)
       stub_openrouter
       sources = []
       subscriber = ActiveSupport::Notifications.subscribe("process_action.action_controller") do |*, payload|

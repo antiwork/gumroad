@@ -57,23 +57,22 @@ class Api::V2::Gumhead::MessagesController < Api::V2::BaseController
   # caps) stays here; where the tokens come from is a config value, so the
   # upstream can move (another provider, or a Gumroad-run endpoint) without
   # a deploy — any upstream must speak the Anthropic Messages protocol.
-  DEFAULT_UPSTREAM_API_BASE = "https://api.anthropic.com/v1"
+  # A role id is never a real model at any provider, so the gateway only
+  # works through a host the map's targets live on. With the base unset a
+  # non-Anthropic default fails as a clean 503 (no upstream key) instead
+  # of forwarding a mapped id to Anthropic for a confusing 400.
+  DEFAULT_UPSTREAM_API_BASE = "https://openrouter.ai/api/v1"
   DEFAULT_ANTHROPIC_VERSION = "2023-06-01"
-  # Claude families plus exact role ids newer builds send. Role ids
-  # are listed here so validate_model can admit them, but they are
-  # not prefixes: only an exact allowlist hit plus a rewrite passes.
-  # Family prefixes rewrite every allowed Claude name, including
-  # OpenRouter :online variants.
-  DEFAULT_ALLOWED_MODEL_PREFIXES = "claude-sonnet-,claude-haiku-,claude-opus-,gumhead-chat,gumhead-status,gumhead-cover"
+  # Exact role ids, the only names the app sends. Never prefixes: only an
+  # exact allowlist hit plus a mapping passes, so gumhead-chat-extra stays
+  # out. Ops can extend the list without a deploy.
+  DEFAULT_ALLOWED_MODEL_PREFIXES = "gumhead-chat,gumhead-status,gumhead-cover"
   # The fallback map. The live one is a JSON object in Redis under
   # RedisKey.gumhead_model_map, merged over this one, so a partial write
   # moves one role with no deploy. Point a role at an upstream id, never
   # at the incoming name: a value equal to what the app sent is not a
   # mapping, and validate_model rejects the request.
   DEFAULT_MODEL_MAP = {
-    "claude-sonnet-" => "x-ai/grok-4.6",
-    "claude-haiku-" => "x-ai/grok-4.6",
-    "claude-opus-" => "x-ai/grok-4.6",
     "gumhead-chat" => "x-ai/grok-4.6",
     "gumhead-status" => "x-ai/grok-4.6",
     "gumhead-cover" => "x-ai/grok-4.6",
@@ -281,71 +280,26 @@ class Api::V2::Gumhead::MessagesController < Api::V2::BaseController
       render json: anthropic_error("invalid_request_error", "That model is not available through the Gumhead gateway."), status: :bad_request
     end
 
-    # Role ids have no Anthropic SKU. They pass only as an exact
-    # allowlist hit, and only when this request will rewrite that id.
-    # Claude family prefixes stay valid on both hosts. Other ops
-    # prefixes keep the old always-on allowlist. Role id strings are
-    # never used as prefixes, so gumhead-chat-extra stays out.
+    # An id passes only when the allowlist names it exactly and the map
+    # turns it into something else — a role id is never a real model, so
+    # forwarding one unmapped could only be a client-controlled name.
     def allowed_incoming_model?(model)
-      prefixes = allowed_model_prefixes
-      if prefixes.any? { |prefix| prefix.start_with?("claude-") && model.start_with?(prefix) }
-        return incoming_model_maps_if_needed?(model)
-      end
-      if incoming_role_id?(model)
-        return false unless prefixes.include?(model)
-        return false unless rewrite_upstream_model?
-
-        outgoing = mapped_upstream_model(model)
-        return outgoing.present? && outgoing != model
-      end
-
-      prefixes.any? do |prefix|
-        next false if incoming_role_id?(prefix)
-        model.start_with?(prefix)
-      end
-    end
-
-    # On a non-Anthropic hop, a Claude family name only passes if the
-    # active map actually rewrites it. An empty override must not forward
-    # the client-controlled name unchanged.
-    def incoming_model_maps_if_needed?(model)
-      return true unless rewrite_upstream_model?
+      return false unless allowed_model_prefixes.include?(model)
 
       outgoing = mapped_upstream_model(model)
       outgoing.present? && outgoing != model
     end
 
-    def incoming_role_id?(model)
-      %w[gumhead-chat gumhead-status gumhead-cover].include?(model)
-    end
-
-    # Incoming names stay on the Claude allowlist so the shipped app
-    # passes validate_model. The built-in Grok map applies only when the
-    # upstream is no longer Anthropic, so a deploy that has not flipped
-    # the base still sends Claude ids. An explicit GUMHEAD_MODEL_MAP
-    # always applies. The ledger records the billed outgoing name.
+    # A role id is never a real model, so the rewrite always runs and the
+    # ledger records the billed outgoing name. validate_model has already
+    # guaranteed the map changes this name.
     def rewrite_upstream_model
-      return unless rewrite_upstream_model?
-
       incoming = @body["model"].to_s
       outgoing = mapped_upstream_model(incoming)
       return if outgoing.blank? || outgoing == incoming
 
       @body["model"] = outgoing
       @raw_body = @body.to_json
-    end
-
-    def rewrite_upstream_model?
-      return true if configured_model_map?
-
-      !anthropic_upstream?
-    end
-
-    # An operator-set map — in Redis or in the deployed config — always
-    # rewrites. Only the built-in map waits for the upstream to move off
-    # Anthropic.
-    def configured_model_map?
-      model_map_source != "default"
     end
 
     def mapped_upstream_model(model)
@@ -363,8 +317,6 @@ class Api::V2::Gumhead::MessagesController < Api::V2::BaseController
     # whole Puma colour (gp#2273); deleting the key reverts to what is
     # deployed. Memoised: one request consults the map several times.
     def model_map = resolved_model_map.first
-
-    def model_map_source = resolved_model_map.last
 
     def resolved_model_map
       @resolved_model_map ||= begin
