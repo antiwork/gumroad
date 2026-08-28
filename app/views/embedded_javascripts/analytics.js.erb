@@ -2,13 +2,13 @@
   var script = document.currentScript;
   if (!script || !script.src) return;
 
-  var id = script.getAttribute("data-gumroad-product");
+  var id = "<%= j @product&.unique_permalink.to_s %>";
   var token = "<%= j @analytics_token.to_s %>";
   var origin;
   try {
     var src = new URL(script.src);
     origin = src.origin;
-    if (!id) id = src.searchParams.get("id");
+    if (!id) id = script.getAttribute("data-gumroad-product") || src.searchParams.get("id");
   } catch (e) {
     return;
   }

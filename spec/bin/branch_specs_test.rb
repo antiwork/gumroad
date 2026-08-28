@@ -541,7 +541,82 @@ check(
   expect_escalate: true,
 )
 
+
+# Recurring run-all-specs gaps: ProductEdit JS has no per-file rspec.
+check(
+  "ProductEdit component fans out to product request specs",
+  base_files: {
+    "spec/requests/products/edit/covers_spec.rb" => SPEC_STUB,
+    "app/javascript/components/ProductEdit/state.ts" => "old",
+  },
+  head_files: { "app/javascript/components/ProductEdit/state.ts" => "new" },
+  expect_specs: %w[spec/requests/products/edit/covers_spec.rb],
+)
+
+check(
+  "Settings page fans out to settings request specs",
+  base_files: {
+    "spec/requests/settings/main_spec.rb" => SPEC_STUB,
+    "app/javascript/pages/Settings/Main.tsx" => "old",
+  },
+  head_files: { "app/javascript/pages/Settings/Main.tsx" => "new" },
+  expect_specs: %w[spec/requests/settings/main_spec.rb],
+)
+
+check(
+  "dynamodb support file maps instead of escalating",
+  base_files: {
+    "spec/services/email_engagement_dynamo_store_spec.rb" => SPEC_STUB,
+    "spec/support/dynamodb.rb" => "old",
+  },
+  head_files: { "spec/support/dynamodb.rb" => "new" },
+  expect_specs: %w[spec/services/email_engagement_dynamo_store_spec.rb],
+)
+
+check(
+  "public image with a mapped spec does not escalate",
+  base_files: {
+    "app/models/widget.rb" => "old",
+    "spec/models/widget_spec.rb" => SPEC_STUB,
+    "public/images/help_center/foo.png" => "old",
+  },
+  head_files: {
+    "app/models/widget.rb" => "new",
+    "public/images/help_center/foo.png" => "new",
+  },
+  expect_specs: %w[spec/models/widget_spec.rb],
+)
+
+check(
+  "non-tests workflow with a mapped spec does not escalate",
+  base_files: {
+    "app/models/widget.rb" => "old",
+    "spec/models/widget_spec.rb" => SPEC_STUB,
+    ".github/workflows/e2e.yml" => "old",
+  },
+  head_files: {
+    "app/models/widget.rb" => "new",
+    ".github/workflows/e2e.yml" => "new",
+  },
+  expect_specs: %w[spec/models/widget_spec.rb],
+)
+
+check(
+  "reuse-full-suite script with a mapped spec does not escalate",
+  base_files: {
+    "app/models/widget.rb" => "old",
+    "spec/models/widget_spec.rb" => SPEC_STUB,
+    "bin/reuse-full-suite" => "old",
+  },
+  head_files: {
+    "app/models/widget.rb" => "new",
+    "bin/reuse-full-suite" => "new",
+  },
+  expect_specs: %w[spec/models/widget_spec.rb],
+)
+
 if $failures.empty?
+
   puts "#{$count} checks passed"
 else
   $failures.each { |f| puts "FAIL: #{f}\n\n" }
