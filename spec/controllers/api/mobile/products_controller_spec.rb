@@ -81,6 +81,17 @@ describe Api::Mobile::ProductsController do
       expect(event.user_id).to eq(@seller.id)
     end
 
+    it "still reports success if recording the delete event raises" do
+      product = create(:product, user: @seller, name: "To delete")
+      allow(controller).to receive(:create_user_event).and_raise(StandardError, "analytics down")
+
+      delete :destroy, params: @params.merge(id: product.unique_permalink)
+
+      expect(response).to be_successful
+      expect(response.parsed_body["success"]).to eq(true)
+      expect(product.reload.deleted?).to eq(true)
+    end
+
     it "does not delete another seller's product" do
       other = create(:product, name: "Not yours")
 

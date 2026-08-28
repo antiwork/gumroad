@@ -11,6 +11,12 @@ module Events
     )
   end
 
+  def create_user_event_without_raising(name, **kwargs)
+    create_user_event(name, **kwargs)
+  rescue StandardError => e
+    Rails.logger.error("Failed to record #{name}: #{e.class}: #{e.message}")
+  end
+
   def create_post_event(installment)
     @product = installment.try(:link)
     event = create_event(

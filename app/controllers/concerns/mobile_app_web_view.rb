@@ -32,7 +32,7 @@ module MobileAppWebView
     end
 
     def create_mobile_app_user_event(name)
-      create_user_event(name) if mobile_app_web_view?
+      create_user_event_without_raising(name) if mobile_app_web_view?
     end
 
     def authenticate_mobile_app_web_view!

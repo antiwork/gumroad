@@ -36,7 +36,7 @@ class Api::Mobile::ProductsController < Api::Mobile::BaseController
 
     @product = product
     product.delete!
-    create_user_event("delete_product_mobile_app", user_id: current_resource_owner.id)
+    create_user_event_without_raising("delete_product_mobile_app", user_id: current_resource_owner.id)
     render json: { success: true }
   end
 
