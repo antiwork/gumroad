@@ -1219,6 +1219,134 @@ describe Api::V2::Gumhead::MessagesController do
     end
   end
 
+  describe "client version gate" do
+    after { $redis.del(RedisKey.gumhead_client_versions) }
+
+    def stub_upstream
+      stub_request(:post, messages_url)
+        .to_return(status: 200, body: anthropic_response.to_json, headers: { "Content-Type" => "application/json" })
+    end
+
+    it "does nothing while no minimum is set" do
+      stub_upstream
+
+      post_messages
+
+      expect(response.status).to eq(200)
+    end
+
+    it "refuses a build below the minimum with the update message" do
+      $redis.set(RedisKey.gumhead_client_versions, { "min" => "0.2.0" }.to_json)
+      request.headers["X-Gumhead-Version"] = "0.1.0"
+
+      post_messages
+
+      expect(response.status).to eq(426)
+      expect(JSON.parse(response.body)["error"]["message"]).to eq(described_class::UPDATE_REQUIRED_MESSAGE)
+      expect(WebMock).not_to have_requested(:post, messages_url)
+    end
+
+    # A missing header means the one released pre-header build, 0.1.0.
+    it "gates the pre-header build once the minimum passes its version" do
+      $redis.set(RedisKey.gumhead_client_versions, { "min" => "0.2.0" }.to_json)
+
+      post_messages
+
+      expect(response.status).to eq(426)
+    end
+
+    it "serves a build at the minimum" do
+      $redis.set(RedisKey.gumhead_client_versions, { "min" => "0.2.0" }.to_json)
+      request.headers["X-Gumhead-Version"] = "0.2.0"
+      stub_upstream
+
+      post_messages
+
+      expect(response.status).to eq(200)
+    end
+
+    it "refuses a garbled version header once a minimum is set" do
+      $redis.set(RedisKey.gumhead_client_versions, { "min" => "0.2.0" }.to_json)
+      request.headers["X-Gumhead-Version"] = "not-a-version"
+
+      post_messages
+
+      expect(response.status).to eq(426)
+    end
+
+    it "serves the pre-header build while the minimum is its version" do
+      $redis.set(RedisKey.gumhead_client_versions, { "min" => "0.1.0" }.to_json)
+      stub_upstream
+
+      post_messages
+
+      expect(response.status).to eq(200)
+    end
+
+    it "serves a dev build regardless of the minimum" do
+      $redis.set(RedisKey.gumhead_client_versions, { "min" => "0.2.0" }.to_json)
+      request.headers["X-Gumhead-Version"] = "dev"
+      stub_upstream
+
+      post_messages
+
+      expect(response.status).to eq(200)
+    end
+
+    it "serves everyone when the configured minimum is not a version" do
+      $redis.set(RedisKey.gumhead_client_versions, { "min" => "0.2.x" }.to_json)
+      request.headers["X-Gumhead-Version"] = "0.1.0"
+      stub_upstream
+
+      post_messages
+
+      expect(response.status).to eq(200)
+    end
+
+    it "serves turns when the Redis read fails" do
+      allow($redis).to receive(:get).and_call_original
+      allow($redis).to receive(:get).with(RedisKey.gumhead_client_versions).and_raise(Redis::CannotConnectError)
+      stub_upstream
+
+      post_messages
+
+      expect(response.status).to eq(200)
+    end
+
+    it "reports the configured versions to an authenticated client" do
+      $redis.set(RedisKey.gumhead_client_versions, { "min" => "0.1.0", "current" => "0.2.0" }.to_json)
+
+      get :client_version
+
+      expect(response.status).to eq(200)
+      expect(JSON.parse(response.body)).to eq("min" => "0.1.0", "current" => "0.2.0")
+    end
+
+    it "reports an empty object while nothing is configured" do
+      get :client_version
+
+      expect(response.status).to eq(200)
+      expect(JSON.parse(response.body)).to eq({})
+    end
+
+    it "requires a token for the version endpoint" do
+      request.headers["Authorization"] = "Bearer nope"
+
+      get :client_version
+
+      expect(response.status).to eq(401)
+    end
+
+    it "answers the version endpoint even when the gateway key is unset" do
+      allow(GlobalConfig).to receive(:get).with("GUMHEAD_UPSTREAM_API_KEY").and_return(nil)
+      allow(GlobalConfig).to receive(:get).with("GUMHEAD_ANTHROPIC_API_KEY").and_return(nil)
+
+      get :client_version
+
+      expect(response.status).to eq(200)
+    end
+  end
+
   describe "live model map in Redis" do
     let(:openrouter_messages_url) { "https://openrouter.ai/api/v1/messages" }
 

@@ -41,15 +41,16 @@ class Api::V2::Gumhead::MessagesController < Api::V2::BaseController
   prepend_before_action { Sentry.get_current_scope.clear if defined?(Sentry) && Sentry.initialized? }
 
   before_action { doorkeeper_authorize! }
-  before_action :ensure_gateway_configured
+  before_action :ensure_gateway_configured, except: [:client_version]
   before_action :ensure_first_party_client
   before_action :ensure_gumhead_enabled
-  before_action :throttle_gateway_requests
-  before_action :load_body
-  before_action :validate_model
-  before_action :rewrite_upstream_model
-  before_action :validate_tools
-  before_action :validate_pricing_modifiers
+  before_action :enforce_minimum_client_version, except: [:client_version]
+  before_action :throttle_gateway_requests, except: [:client_version]
+  before_action :load_body, except: [:client_version]
+  before_action :validate_model, except: [:client_version]
+  before_action :rewrite_upstream_model, except: [:client_version]
+  before_action :validate_tools, except: [:client_version]
+  before_action :validate_pricing_modifiers, except: [:client_version]
   before_action :validate_max_tokens, only: [:create]
   before_action :enforce_daily_token_caps, only: [:create]
 
@@ -138,6 +139,14 @@ class Api::V2::Gumhead::MessagesController < Api::V2::BaseController
   # server-side, outside the ledger. Tune with GUMHEAD_DENIED_ANTHROPIC_BETAS.
   DEFAULT_DENIED_ANTHROPIC_BETAS = "fallback"
 
+  # The app has no auto-updater, so the gateway is the update channel: it
+  # is the one thing every install talks to. Both values live in Redis —
+  # unset means no gate and no nudge. "min" refuses builds the gateway can
+  # no longer serve safely; "current" lets the app tell the seller a newer
+  # build exists. The message is part of the client's error vocabulary.
+  #   $redis.set(RedisKey.gumhead_client_versions, { "min" => "0.1.0", "current" => "0.2.0" }.to_json)
+  UPDATE_REQUIRED_MESSAGE = "This Gumhead build is too old for the gateway. Download the update from your Gumroad dashboard."
+
   # One Gumhead turn is a whole tool loop of model calls, so the request
   # throttle is deliberately loose; the real spend control is the daily
   # token caps.
@@ -161,6 +170,14 @@ class Api::V2::Gumhead::MessagesController < Api::V2::BaseController
   IN_FLIGHT_TTL = 10.minutes
   IN_FLIGHT_RENEWAL_INTERVAL = 1.minute
 
+  # GET /v2/gumhead/client_version
+  # The launch-time check: the app compares itself to "current" and tells
+  # the seller when a newer build exists. Authenticated like everything
+  # else here, so the endpoint says nothing to the world at large.
+  def client_version
+    render json: client_versions
+  end
+
   # POST /v2/gumhead/v1/messages
   def create
     with_in_flight_slot do
@@ -183,6 +200,50 @@ class Api::V2::Gumhead::MessagesController < Api::V2::BaseController
   end
 
   private
+    # A build below "min" cannot be served safely — that is the only
+    # reason to set "min". Exactly one released build predates the
+    # X-Gumhead-Version header, so a missing header means that build:
+    # counting it as its real version keeps "min" honest at the boundary
+    # (min 0.1.0 serves it, min 0.2.0 gates it). That build predates the
+    # update vocabulary, so when gated it shows its generic try-again line
+    # instead of the update instruction — accepted: it has no installed
+    # base, and exempting it forever would defeat the gate. "dev" passes:
+    # cooperative, not a security boundary (the token is), and a
+    # development build runs code at least as new as any release.
+    PRE_HEADER_VERSION = "0.1.0"
+
+    def enforce_minimum_client_version
+      min = safe_version(client_versions["min"].to_s)
+      if min.nil?
+        # A typo in the policy must degrade to no gate, not fail every
+        # valid build's turns until an operator repairs the key.
+        Rails.logger.warn("Gumhead minimum client version is not a version; not gating.") if client_versions["min"].present?
+        return
+      end
+
+      reported = request.headers["X-Gumhead-Version"].to_s
+      return if reported == "dev"
+      reported = PRE_HEADER_VERSION if reported.blank?
+      return if safe_version(reported)&.>= min
+
+      render json: anthropic_error("invalid_request_error", UPDATE_REQUIRED_MESSAGE), status: :upgrade_required
+    end
+
+    def client_versions
+      raw = $redis.get(RedisKey.gumhead_client_versions)
+      parsed = safe_parse_json(raw.to_s)
+      versions = parsed.is_a?(Hash) ? parsed : {}
+      { "min" => versions["min"].to_s.presence, "current" => versions["current"].to_s.presence }.compact
+    rescue Redis::BaseError => e
+      # The gate is an ops policy read; losing Redis must not stop turns.
+      Rails.logger.warn("Gumhead client versions Redis read failed: #{e.class} #{e.message}")
+      {}
+    end
+
+    def safe_version(value)
+      Gem::Version.new(value) if value.match?(/\A\d+(\.\d+)*\z/)
+    end
+
     # Doorkeeper's defaults also authenticate `access_token`/`bearer_token`
     # request parameters. A token in the URL leaks into access logs, and a
     # token in the body would forward upstream — only the Authorization
