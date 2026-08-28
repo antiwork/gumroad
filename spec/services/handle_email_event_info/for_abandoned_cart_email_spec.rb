@@ -48,11 +48,18 @@ describe HandleEmailEventInfo::ForAbandonedCartEmail do
       end
 
       it "reads live unique open counts after an open event" do
+        [abandoned_cart_workflow_installment1, abandoned_cart_workflow_installment3].each do |installment|
+          Rails.cache.write(installment.key_for_cache(:unique_open_count, dynamodb_reads: false), 0)
+        end
+
         handler_class_for(email_provider).new.perform(params)
 
         expect(Installment.find(abandoned_cart_workflow_installment1.id).unique_open_count).to eq(1)
         expect(Installment.find(abandoned_cart_workflow_installment2.id).unique_open_count).to eq(0)
         expect(Installment.find(abandoned_cart_workflow_installment3.id).unique_open_count).to eq(1)
+        [abandoned_cart_workflow_installment1, abandoned_cart_workflow_installment3].each do |installment|
+          expect(Rails.cache.read(installment.key_for_cache(:unique_open_count, dynamodb_reads: false))).to be_nil
+        end
       end
 
       it "tracks an open event and update it if there are 2 identical open events" do
@@ -105,12 +112,19 @@ describe HandleEmailEventInfo::ForAbandonedCartEmail do
       end
 
       it "reads live unique click and open counts after a click event" do
+        [abandoned_cart_workflow_installment1, abandoned_cart_workflow_installment3].each do |installment|
+          Rails.cache.write(installment.key_for_cache(:unique_click_count, dynamodb_reads: false), 0)
+          Rails.cache.write(installment.key_for_cache(:unique_open_count, dynamodb_reads: false), 0)
+        end
+
         handler_class_for(email_provider).new.perform(params1)
 
         [abandoned_cart_workflow_installment1.id, abandoned_cart_workflow_installment3.id].each do |installment_id|
           installment = Installment.find(installment_id)
           expect(installment.unique_click_count).to eq(1)
           expect(installment.unique_open_count).to eq(1)
+          expect(Rails.cache.read(installment.key_for_cache(:unique_click_count, dynamodb_reads: false))).to be_nil
+          expect(Rails.cache.read(installment.key_for_cache(:unique_open_count, dynamodb_reads: false))).to be_nil
         end
 
         skipped = Installment.find(abandoned_cart_workflow_installment2.id)
