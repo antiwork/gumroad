@@ -66,19 +66,15 @@ describe "InstallmentTracking"  do
       expect(@installment.unique_click_count).to eq 2
     end
 
-    it "does not hit DynamoDB once the cache is set" do
+    it "does not keep a stale cached zero after later DynamoDB writes" do
+      Rails.cache.write(@installment.key_for_cache(:unique_click_count), 0)
+
       record_click(@installment, recipient: "[1, 1]", url: "https://www&#46;gumroad&#46;com")
       record_click(@installment, recipient: "[1, 1]", url: "https://www&#46;google&#46;com")
       record_click(@installment, recipient: "[2, 2]", url: "https://www&#46;gumroad&#46;com")
       record_click(@installment, recipient: "[3, 3]", url: "https://www&#46;google&#46;com")
 
-      # Read once and set the cache
-      @installment.unique_click_count
-
-      expect(EmailEngagementDynamoStore).not_to receive(:summary)
-      unique_click_count = Installment.find(@installment.id).unique_click_count
-
-      expect(unique_click_count).to eq 4
+      expect(Installment.find(@installment.id).unique_click_count).to eq 4
     end
   end
 
@@ -87,20 +83,16 @@ describe "InstallmentTracking"  do
       @installment = create(:installment, customer_count: 4)
     end
 
-    it "does not hit DynamoDB once the cache is set" do
+    it "does not keep a stale cached zero after later DynamoDB writes" do
+      Rails.cache.write(@installment.key_for_cache(:unique_open_count), 0)
+
       3.times do |i|
         EmailEngagementDynamoStore.record_open(
           installment_id: @installment.id, mailer_method:, mailer_args: "[#{i}, #{i}]"
         )
       end
 
-      # Read once and set the cache
-      @installment.unique_open_count
-
-      expect(EmailEngagementDynamoStore).not_to receive(:summary)
-      unique_open_count = Installment.find(@installment.id).unique_open_count
-
-      expect(unique_open_count).to eq 3
+      expect(Installment.find(@installment.id).unique_open_count).to eq 3
     end
   end
 end

@@ -102,9 +102,9 @@ class Api::WorkflowPresenter
       missing_ids = []
 
       keys_by_id.each do |id, keys|
-        if cached_counts.key?(keys.fetch(:event))
-          counts[id] = cached_counts.fetch(keys.fetch(:event)).to_i
-        elsif cached_counts.key?(keys.fetch(:api))
+        # The installment event key has no TTL. DynamoDB reads are live GetItem;
+        # skip it (it can be a stale zero) and use the 5s API cache.
+        if cached_counts.key?(keys.fetch(:api))
           counts[id] = cached_counts.fetch(keys.fetch(:api)).to_i
         else
           missing_ids << id

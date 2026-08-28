@@ -757,9 +757,8 @@ class Installment < ApplicationRecord
   end
 
   def unique_open_count
-    Rails.cache.fetch(key_for_cache(:unique_open_count)) do
-      dynamo_engagement_summary[:open_count]
-    end
+    # DDB GetItem is cheap; caching it pins a first-read zero while opens still stream in.
+    dynamo_engagement_summary[:open_count]
   end
 
   # One SUMMARY read serves both counters when a render misses both caches.
@@ -853,9 +852,7 @@ class Installment < ApplicationRecord
   end
 
   def unique_click_count
-    Rails.cache.fetch(key_for_cache(:unique_click_count)) do
-      dynamo_engagement_summary[:click_pair_count]
-    end
+    dynamo_engagement_summary[:click_pair_count]
   end
 
   def clicked_urls

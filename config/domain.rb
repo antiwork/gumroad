@@ -78,12 +78,18 @@ configuration_by_env = {
   }
 }
 
+# bin/vite requires this file before Rails boots, so ActiveSupport is not loaded here. Keep every
+# check below to plain Ruby: `present?` and `presence` raise NoMethodError in that path.
 custom_domain       = ENV["CUSTOM_DOMAIN"]
 custom_short_domain = ENV["CUSTOM_SHORT_DOMAIN"]
+custom_protocol     = ENV["CUSTOM_PROTOCOL"].to_s.strip
 environment         = ENV["RAILS_ENV"]&.to_sym || :development
 config              = configuration_by_env[environment]
 
-PROTOCOL            = config[:protocol]
+# CUSTOM_PROTOCOL pairs with CUSTOM_DOMAIN for local HTTPS. Without it the scheme stays "http", so
+# pages the mobile app embeds in an HTTPS WebView fail silently on their assets. Blank or
+# whitespace-only falls back: an empty scheme yields URLs like "://gumroad.com".
+PROTOCOL            = custom_protocol.empty? ? config[:protocol] : custom_protocol
 DOMAIN              = custom_domain || config[:domain]
 ASSET_DOMAIN        = ENV["ASSET_DOMAIN"] || config[:asset_domain]
 ROOT_DOMAIN         = custom_domain || config[:root_domain]
@@ -100,7 +106,7 @@ ANYCABLE_HOST           = config[:anycable_host]
 if custom_domain
   VALID_REQUEST_HOSTS << custom_domain
   VALID_API_REQUEST_HOSTS << "api.#{custom_domain}"
-  VALID_API_REQUEST_HOSTS << custom_domain if ENV["BRANCH_DEPLOYMENT"].present? # Allow CORS to preview app's root domain
+  VALID_API_REQUEST_HOSTS << custom_domain unless ENV["BRANCH_DEPLOYMENT"].to_s.empty? # Allow CORS to preview app's root domain
   VALID_CORS_ORIGINS << custom_domain
   DISCOVER_DOMAIN = custom_domain
   VALID_DISCOVER_REQUEST_HOST = custom_domain

@@ -873,6 +873,27 @@ class LinksControllerSellerAreaTest < ActionController::TestCase
     assert_equal "UX design mastery using Figma", Link.last.name
   end
 
+  test "POST create records add_product_mobile_app when the request is from the mobile app" do
+    Rails.cache.clear
+    session[:mobile_app_web_view] = true
+
+    assert_difference -> { Event.where(event_name: "add_product_mobile_app").count }, 1 do
+      post :create, params: { link: { price_cents: 100, name: "from app" } }
+    end
+
+    event = Event.where(event_name: "add_product_mobile_app").last
+    assert_equal Link.last.id, event.link_id
+    assert_equal @logged_in_user.id, event.user_id
+  end
+
+  test "POST create does not record add_product_mobile_app for a web request" do
+    Rails.cache.clear
+
+    assert_no_difference -> { Event.where(event_name: "add_product_mobile_app").count } do
+      post :create, params: { link: { price_cents: 100, name: "from web" } }
+    end
+  end
+
   # --- POST release_preorder --------------------------------------------------
 
   def preorder_setup
@@ -1063,6 +1084,26 @@ class LinksControllerUpdateTest < ActionController::TestCase
 
   test "PUT update calls authorize" do
     assert_authorize_called(:put, :update, record: @product, params: @params)
+  end
+
+  test "PUT update records edit_product_mobile_app when the request is from the mobile app" do
+    session[:mobile_app_web_view] = true
+
+    assert_difference -> { Event.where(event_name: "edit_product_mobile_app").count }, 1 do
+      put :update, params: @params
+    end
+
+    assert_response :success
+    event = Event.where(event_name: "edit_product_mobile_app").last
+    assert_equal @product.id, event.link_id
+    assert_equal @logged_in_user.id, event.user_id
+  end
+
+  test "PUT update does not record edit_product_mobile_app for a web request" do
+    assert_no_difference -> { Event.where(event_name: "edit_product_mobile_app").count } do
+      put :update, params: @params
+    end
+    assert_response :success
   end
 
   test "PUT update allows a collaborator to access" do

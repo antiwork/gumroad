@@ -185,6 +185,10 @@ jobs:
       - name: Self-test the branch-specs selector
         run: ruby spec/bin/branch_specs_test.rb
 
+      # Hosted here so a reuse-only PR cannot ship on the user_spec.rb floor.
+      - name: Self-test reuse-full-suite
+        run: bash script/test-reuse-full-suite
+
   build:
     name: Build images${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.repo.full_name == github.repository && ' (internal PR noop)' || '' }}
     runs-on: blacksmith-8vcpu-ubuntu-2204

@@ -159,8 +159,8 @@ describe Api::V2::WorkflowsController do
         "send_emails" => true,
         "delay" => { "amount" => 2, "unit" => InstallmentRule::DAY },
         "sent_count" => 10,
-        "open_count" => 5,
-        "open_rate" => 50.0,
+        "open_count" => 4,
+        "open_rate" => 40.0,
         "click_count" => 2,
         "click_rate" => 20.0,
       )

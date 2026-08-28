@@ -210,6 +210,7 @@ Rails.application.routes.draw do
           post "messages", to: "messages#create"
           post "messages/count_tokens", to: "messages#count_tokens"
         end
+        get "client_version", to: "messages#client_version"
       end
     end
   end

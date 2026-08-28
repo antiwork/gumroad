@@ -22,11 +22,22 @@ describe HandleEmailEventInfo::ForInstallmentEmail do
       )
     end
 
-    it "records a unique open in DynamoDB and caches it" do
+    it "records a unique open in DynamoDB" do
       send_open
       expect(@installment.reload.unique_open_count).to eq 1
-      expect(Rails.cache.read("unique_open_count_for_installment_#{@installment.id}_ddb")).to eq 1
       expect(CreatorEmailOpenEvent.count).to eq 0
+    end
+
+    it "does not GetItem installment summaries while recording an open" do
+      allow(EmailEngagementDynamoStore).to receive(:summary).and_call_original
+      Rails.cache.write(@installment.key_for_cache(:unique_open_count, dynamodb_reads: false), 0)
+      Rails.cache.write(@installment.key_for_cache(:unique_open_count), 0)
+
+      send_open
+
+      expect(EmailEngagementDynamoStore).not_to have_received(:summary)
+      expect(Rails.cache.read(@installment.key_for_cache(:unique_open_count, dynamodb_reads: false))).to be_nil
+      expect(Rails.cache.read(@installment.key_for_cache(:unique_open_count))).to be_nil
     end
 
     it "does not increment unique opens for a repeat open from the same recipient" do
@@ -35,14 +46,25 @@ describe HandleEmailEventInfo::ForInstallmentEmail do
       expect(@installment.reload.unique_open_count).to eq 1
     end
 
-    it "records a unique click, caches it, and counts a compensating open" do
+    it "records a unique click and counts a compensating open" do
       send_click
       expect(@installment.reload.unique_click_count).to eq 1
       expect(@installment.unique_open_count).to eq 1
-      expect(Rails.cache.read("unique_click_count_for_installment_#{@installment.id}_ddb")).to eq 1
-      expect(Rails.cache.read("unique_open_count_for_installment_#{@installment.id}_ddb")).to eq 1
       expect(CreatorEmailClickEvent.count).to eq 0
       expect(CreatorEmailClickSummary.count).to eq 0
+    end
+
+    it "reads live unique click and open counts after a click event" do
+      Rails.cache.write(@installment.key_for_cache(:unique_click_count, dynamodb_reads: false), 0)
+      Rails.cache.write(@installment.key_for_cache(:unique_open_count, dynamodb_reads: false), 0)
+
+      send_click
+
+      installment = Installment.find(@installment.id)
+      expect(installment.unique_click_count).to eq 1
+      expect(installment.unique_open_count).to eq 1
+      expect(Rails.cache.read(@installment.key_for_cache(:unique_click_count, dynamodb_reads: false))).to be_nil
+      expect(Rails.cache.read(@installment.key_for_cache(:unique_open_count, dynamodb_reads: false))).to be_nil
     end
 
     it "counts two urls from the same recipient as one unique clicker and two pairs" do

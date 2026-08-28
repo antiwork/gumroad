@@ -10,9 +10,11 @@
 #
 # Gateway-minted errors use Anthropic's error envelope ({type: "error",
 # error: {type:, message:}}) so the client runtime surfaces the message
-# instead of choking on an unfamiliar shape. Upstream errors pass through
-# with their original status so the runtime's own retry logic (429/529)
-# keeps working.
+# instead of choking on an unfamiliar shape. An upstream failure keeps its
+# original status, so the runtime's own retry logic (429/529) keeps
+# working, but its message is replaced by one of this gateway's own, so
+# Gumhead need not recognise each vendor's phrasing. The upstream text
+# goes to the log.
 #
 # ActionController::Live turns every render in this controller into a
 # streamed body; that is fine — the buffered paths (count_tokens, validation
@@ -39,15 +41,16 @@ class Api::V2::Gumhead::MessagesController < Api::V2::BaseController
   prepend_before_action { Sentry.get_current_scope.clear if defined?(Sentry) && Sentry.initialized? }
 
   before_action { doorkeeper_authorize! }
-  before_action :ensure_gateway_configured
+  before_action :ensure_gateway_configured, except: [:client_version]
   before_action :ensure_first_party_client
   before_action :ensure_gumhead_enabled
-  before_action :throttle_gateway_requests
-  before_action :load_body
-  before_action :validate_model
-  before_action :rewrite_upstream_model
-  before_action :validate_tools
-  before_action :validate_pricing_modifiers
+  before_action :enforce_minimum_client_version, except: [:client_version]
+  before_action :throttle_gateway_requests, except: [:client_version]
+  before_action :load_body, except: [:client_version]
+  before_action :validate_model, except: [:client_version]
+  before_action :rewrite_upstream_model, except: [:client_version]
+  before_action :validate_tools, except: [:client_version]
+  before_action :validate_pricing_modifiers, except: [:client_version]
   before_action :validate_max_tokens, only: [:create]
   before_action :enforce_daily_token_caps, only: [:create]
 
@@ -55,18 +58,22 @@ class Api::V2::Gumhead::MessagesController < Api::V2::BaseController
   # caps) stays here; where the tokens come from is a config value, so the
   # upstream can move (another provider, or a Gumroad-run endpoint) without
   # a deploy — any upstream must speak the Anthropic Messages protocol.
-  DEFAULT_UPSTREAM_API_BASE = "https://api.anthropic.com/v1"
+  # A role id is never a real model at any provider, so the gateway only
+  # works through a host the map's targets live on. With the base unset a
+  # non-Anthropic default fails as a clean 503 (no upstream key) instead
+  # of forwarding a mapped id to Anthropic for a confusing 400.
+  DEFAULT_UPSTREAM_API_BASE = "https://openrouter.ai/api/v1"
   DEFAULT_ANTHROPIC_VERSION = "2023-06-01"
-  # Claude families plus exact role ids newer builds send. Role ids
-  # are listed here so validate_model can admit them, but they are
-  # not prefixes: only an exact allowlist hit plus a rewrite passes.
-  # Family prefixes rewrite every allowed Claude name, including
-  # OpenRouter :online variants.
-  DEFAULT_ALLOWED_MODEL_PREFIXES = "claude-sonnet-,claude-haiku-,claude-opus-,gumhead-chat,gumhead-status,gumhead-cover"
+  # Exact role ids, the only names the app sends. Never prefixes: only an
+  # exact allowlist hit plus a mapping passes, so gumhead-chat-extra stays
+  # out. Ops can extend the list without a deploy.
+  DEFAULT_ALLOWED_MODEL_PREFIXES = "gumhead-chat,gumhead-status,gumhead-cover"
+  # The fallback map. The live one is a JSON object in Redis under
+  # RedisKey.gumhead_model_map, merged over this one, so a partial write
+  # moves one role with no deploy. Point a role at an upstream id, never
+  # at the incoming name: a value equal to what the app sent is not a
+  # mapping, and validate_model rejects the request.
   DEFAULT_MODEL_MAP = {
-    "claude-sonnet-" => "x-ai/grok-4.6",
-    "claude-haiku-" => "x-ai/grok-4.6",
-    "claude-opus-" => "x-ai/grok-4.6",
     "gumhead-chat" => "x-ai/grok-4.6",
     "gumhead-status" => "x-ai/grok-4.6",
     "gumhead-cover" => "x-ai/grok-4.6",
@@ -83,17 +90,62 @@ class Api::V2::Gumhead::MessagesController < Api::V2::BaseController
   # equal to them would let the outer layers cut the client before the
   # rescue can render its error envelope.
   BUFFERED_TIMEOUT = 90
+  # How much of a stream may be held back, and for how long, while it has
+  # shown nothing the client can consume. Held bytes are thinking and
+  # framing; past either bound the stream commits anyway. The byte bound
+  # trades blank-turn detection for bounded memory. The time bound exists
+  # because an uncommitted response writes nothing to the client, and
+  # nginx and the Rack timeout cut a silent connection at 120s — a long
+  # thinking run used to stay alive on its own forwarded deltas. Every
+  # observed blank reply completed within seconds, so a short window
+  # catches them all.
+  MAX_HELD_STREAM_BYTES = 512.kilobytes
+  MAX_HELD_STREAM_SECONDS = 20
   # A buffered call is abandoned at BUFFERED_TIMEOUT, but Anthropic keeps
   # generating — and billing — until max_tokens. Clamping the forwarded
   # ceiling to what fits inside the timeout window keeps the elapsed-time
   # timeout charge a true upper bound on upstream spend; anything larger
   # must stream, and streams meter incrementally.
   MAX_BUFFERED_OUTPUT_TOKENS = BUFFERED_TIMEOUT * TIMEOUT_OUTPUT_TOKENS_PER_SECOND
+  # Operational failures only: a request the client got wrong keeps the
+  # provider's message, which names the field this gateway cannot. Gumhead
+  # matches these strings to choose what it says (core/src/errors.ts), so
+  # changing one needs a client release in the same window.
+  UPSTREAM_ERRORS = {
+    out_of_budget: ["api_error", "The Gumhead model service is out of budget."],
+    credentials: ["api_error", "The Gumhead model service rejected the gateway credentials."],
+    rate_limited: ["rate_limit_error", "The Gumhead model service is rate limited. Please retry shortly."],
+    busy: ["api_error", "The Gumhead model service is busy. Please retry shortly."],
+  }.freeze
+  # A spend cap lasts hours or days, and providers report it on 400, 402,
+  # and 429, so status alone cannot separate it from a real rate limit.
+  # Only documented wordings match: a broad "quota" would swallow the
+  # per-minute limits, which recover on their own. "budget ... exceeded"
+  # is OpenRouter's workspace cap, which carries no structured code.
+  UPSTREAM_OUT_OF_BUDGET_PATTERN = /api usage limits|credit balance|insufficient.{0,12}(credit|balance|fund)|out of credit|budget.{0,40}exceeded/i
+  # The structured marker for a tier spend cap, authoritative where the
+  # wording is not.
+  UPSTREAM_SPEND_LIMIT_CODE = "enforced_spend_limit_reached"
+  # 401 is unambiguous, but a 403 is not proof of a credential problem:
+  # model allowlists, guardrails, and budget caps answer 403 too, and
+  # naming those a rejected key sends ops looking in the wrong place. Only
+  # authentication wording counts — "not permitted" and "permission
+  # denied" are what a policy block says about a perfectly good key.
+  UPSTREAM_CREDENTIALS_PATTERN = /unauthorized|authenticat|credential|api.?key|invalid.{0,10}key|no auth/i
+
   # Client feature flags forward as sent: the spend boundary is the body
   # validators above, not this header, and dropping a flag the body relies
   # on fails the request. `fallback` is denied because it runs extra models
   # server-side, outside the ledger. Tune with GUMHEAD_DENIED_ANTHROPIC_BETAS.
   DEFAULT_DENIED_ANTHROPIC_BETAS = "fallback"
+
+  # The app has no auto-updater, so the gateway is the update channel: it
+  # is the one thing every install talks to. Both values live in Redis —
+  # unset means no gate and no nudge. "min" refuses builds the gateway can
+  # no longer serve safely; "current" lets the app tell the seller a newer
+  # build exists. The message is part of the client's error vocabulary.
+  #   $redis.set(RedisKey.gumhead_client_versions, { "min" => "0.1.0", "current" => "0.2.0" }.to_json)
+  UPDATE_REQUIRED_MESSAGE = "This Gumhead build is too old for the gateway. Download the update from your Gumroad dashboard."
 
   # One Gumhead turn is a whole tool loop of model calls, so the request
   # throttle is deliberately loose; the real spend control is the daily
@@ -118,6 +170,14 @@ class Api::V2::Gumhead::MessagesController < Api::V2::BaseController
   IN_FLIGHT_TTL = 10.minutes
   IN_FLIGHT_RENEWAL_INTERVAL = 1.minute
 
+  # GET /v2/gumhead/client_version
+  # The launch-time check: the app compares itself to "current" and tells
+  # the seller when a newer build exists. Authenticated like everything
+  # else here, so the endpoint says nothing to the world at large.
+  def client_version
+    render json: client_versions
+  end
+
   # POST /v2/gumhead/v1/messages
   def create
     with_in_flight_slot do
@@ -140,6 +200,44 @@ class Api::V2::Gumhead::MessagesController < Api::V2::BaseController
   end
 
   private
+    # A missing header is the one released pre-header build, 0.1.0: min
+    # 0.1.0 serves it, min 0.2.0 gates it — behind a stale generic error,
+    # accepted while it has no installed base. "dev" passes: the gate is
+    # cooperative, not a security boundary (the token is).
+    PRE_HEADER_VERSION = "0.1.0"
+
+    def enforce_minimum_client_version
+      versions = client_versions
+      min = safe_version(versions["min"].to_s)
+      if min.nil?
+        # A policy typo degrades to no gate, not to failed turns.
+        Rails.logger.warn("Gumhead minimum client version is not a version; not gating.") if versions["min"].present?
+        return
+      end
+
+      reported = request.headers["X-Gumhead-Version"].to_s
+      return if reported == "dev"
+      reported = PRE_HEADER_VERSION if reported.blank?
+      return if safe_version(reported)&.>= min
+
+      render json: anthropic_error("invalid_request_error", UPDATE_REQUIRED_MESSAGE), status: :upgrade_required
+    end
+
+    def client_versions
+      raw = $redis.get(RedisKey.gumhead_client_versions)
+      parsed = safe_parse_json(raw.to_s)
+      versions = parsed.is_a?(Hash) ? parsed : {}
+      { "min" => versions["min"].to_s.presence, "current" => versions["current"].to_s.presence }.compact
+    rescue Redis::BaseError => e
+      # The gate is an ops policy read; losing Redis must not stop turns.
+      Rails.logger.warn("Gumhead client versions Redis read failed: #{e.class} #{e.message}")
+      {}
+    end
+
+    def safe_version(value)
+      Gem::Version.new(value) if value.match?(/\A\d+(\.\d+)*\z/)
+    end
+
     # Doorkeeper's defaults also authenticate `access_token`/`bearer_token`
     # request parameters. A token in the URL leaks into access logs, and a
     # token in the body would forward upstream — only the Authorization
@@ -237,64 +335,26 @@ class Api::V2::Gumhead::MessagesController < Api::V2::BaseController
       render json: anthropic_error("invalid_request_error", "That model is not available through the Gumhead gateway."), status: :bad_request
     end
 
-    # Role ids have no Anthropic SKU. They pass only as an exact
-    # allowlist hit, and only when this request will rewrite that id.
-    # Claude family prefixes stay valid on both hosts. Other ops
-    # prefixes keep the old always-on allowlist. Role id strings are
-    # never used as prefixes, so gumhead-chat-extra stays out.
+    # An id passes only when the allowlist names it exactly and the map
+    # turns it into something else — a role id is never a real model, so
+    # forwarding one unmapped could only be a client-controlled name.
     def allowed_incoming_model?(model)
-      prefixes = allowed_model_prefixes
-      if prefixes.any? { |prefix| prefix.start_with?("claude-") && model.start_with?(prefix) }
-        return incoming_model_maps_if_needed?(model)
-      end
-      if incoming_role_id?(model)
-        return false unless prefixes.include?(model)
-        return false unless rewrite_upstream_model?
-
-        outgoing = mapped_upstream_model(model)
-        return outgoing.present? && outgoing != model
-      end
-
-      prefixes.any? do |prefix|
-        next false if incoming_role_id?(prefix)
-        model.start_with?(prefix)
-      end
-    end
-
-    # On a non-Anthropic hop, a Claude family name only passes if the
-    # active map actually rewrites it. An empty override must not forward
-    # the client-controlled name unchanged.
-    def incoming_model_maps_if_needed?(model)
-      return true unless rewrite_upstream_model?
+      return false unless allowed_model_prefixes.include?(model)
 
       outgoing = mapped_upstream_model(model)
       outgoing.present? && outgoing != model
     end
 
-    def incoming_role_id?(model)
-      %w[gumhead-chat gumhead-status gumhead-cover].include?(model)
-    end
-
-    # Incoming names stay on the Claude allowlist so the shipped app
-    # passes validate_model. The built-in Grok map applies only when the
-    # upstream is no longer Anthropic, so a deploy that has not flipped
-    # the base still sends Claude ids. An explicit GUMHEAD_MODEL_MAP
-    # always applies. The ledger records the billed outgoing name.
+    # A role id is never a real model, so the rewrite always runs and the
+    # ledger records the billed outgoing name. validate_model has already
+    # guaranteed the map changes this name.
     def rewrite_upstream_model
-      return unless rewrite_upstream_model?
-
       incoming = @body["model"].to_s
       outgoing = mapped_upstream_model(incoming)
       return if outgoing.blank? || outgoing == incoming
 
       @body["model"] = outgoing
       @raw_body = @body.to_json
-    end
-
-    def rewrite_upstream_model?
-      return true if GlobalConfig.get("GUMHEAD_MODEL_MAP").present?
-
-      !anthropic_upstream?
     end
 
     def mapped_upstream_model(model)
@@ -307,18 +367,53 @@ class Api::V2::Gumhead::MessagesController < Api::V2::BaseController
       match ? match[1] : model
     end
 
-    def model_map
-      raw = GlobalConfig.get("GUMHEAD_MODEL_MAP", DEFAULT_MODEL_MAP)
-      parsed = raw.is_a?(String) ? safe_parse_json(raw) : raw
-      overrides = {}
-      if parsed.is_a?(Hash)
-        parsed.each do |key, value|
-          next if key.blank? || value.blank?
+    # Precedence: Redis, then GUMHEAD_MODEL_MAP, then the built-in map.
+    # The live value lives in Redis because a secret/web write restarts a
+    # whole Puma colour (gp#2273); deleting the key reverts to what is
+    # deployed. Memoised: one request consults the map several times.
+    def model_map = resolved_model_map.first
 
-          overrides[key.to_s] = value.to_s
-        end
+    def resolved_model_map
+      @resolved_model_map ||= begin
+        raw, source = raw_model_map
+        [DEFAULT_MODEL_MAP.merge(normalized_model_map(raw)), source]
       end
-      DEFAULT_MODEL_MAP.merge(overrides)
+    end
+
+    def raw_model_map
+      live = live_model_map
+      # Any stored value, empty string included: an operator who wrote one
+      # needs to hear that it is not serving. Only an absent key is silent.
+      unless live.nil?
+        parsed = safe_parse_json(live)
+        return [parsed, "redis"] if parsed.is_a?(Hash)
+
+        Rails.logger.warn("Gumhead model map in Redis is not a JSON object; serving the deployed map.")
+      end
+
+      configured = GlobalConfig.get("GUMHEAD_MODEL_MAP")
+      return [configured, "config"] if configured.present?
+
+      [DEFAULT_MODEL_MAP, "default"]
+    end
+
+    def live_model_map
+      $redis.get(RedisKey.gumhead_model_map)
+    rescue Redis::BaseError => e
+      # Reading ops policy must not fail the turn; the deployed map serves.
+      Rails.logger.warn("Gumhead model map Redis read failed: #{e.class} #{e.message}")
+      nil
+    end
+
+    def normalized_model_map(raw)
+      parsed = raw.is_a?(String) ? safe_parse_json(raw) : raw
+      return {} unless parsed.is_a?(Hash)
+
+      parsed.each_with_object({}) do |(key, value), map|
+        next if key.blank? || value.blank?
+
+        map[key.to_s] = value.to_s
+      end
     end
 
     def allowed_model_prefixes
@@ -356,6 +451,10 @@ class Api::V2::Gumhead::MessagesController < Api::V2::BaseController
     # request was already answered with the error envelope, and logging must
     # not turn that answer into a 500.
     def append_info_to_payload(payload)
+      # A lost Redis key is a model change; log the source so it is not a
+      # silent one. Read the memo rather than model_map_source, so logging
+      # never triggers the Redis read for a request that skipped the map.
+      payload[:gumhead_model_map_source] = @resolved_model_map.last if @resolved_model_map
       super
     rescue ActionDispatch::Http::Parameters::ParseError
       nil
@@ -403,16 +502,33 @@ class Api::V2::Gumhead::MessagesController < Api::V2::BaseController
         return render json: { "input_tokens" => @raw_body.bytesize }, status: :ok
       end
       parsed = safe_parse_json(body)
-      # OpenRouter uses {error:{message}} without Anthropic's top-level type.
-      # Keep Anthropic envelopes as pass-through.
-      if openrouter_error_envelope?(parsed)
+      # A 200 carrying an error envelope (OpenRouter's shape omits
+      # Anthropic's top-level type) was still generated and billed.
+      if !upstream.status.success? || openrouter_error_envelope?(parsed)
         meter_buffered_usage(body) if meter && upstream.status.success?
-        message = parsed.dig("error", "message").to_s.presence || "The model service returned an error."
         copy_retry_after(upstream)
         status = upstream.status.success? ? :bad_gateway : upstream.status.code
-        return render json: anthropic_error("api_error", message), status:
+        minted = minted_upstream_error(upstream.status.code, parsed, body)
+        return render(json: minted, status:) if minted
+        # Unclassified: the provider's own message names what to fix, so it
+        # goes through. Only OpenRouter's shape is rewrapped, since the
+        # runtime reads the Anthropic envelope.
+        if openrouter_error_envelope?(parsed)
+          return render(json: anthropic_error("api_error", upstream_error_detail(parsed, body)), status:)
+        end
+
+        return render body:, content_type: "application/json", status: upstream.status.code
       end
-      meter_buffered_usage(body) if meter && upstream.status.success?
+      # A 200 whose message carries no output at all: the loop upstream of
+      # the runtime would swallow it as a blank turn. Measured at 7 of 32
+      # calls across three models. A 502 makes the runtime retry instead;
+      # the reported input usage is still billed, so it is still metered.
+      if empty_reply?(parsed)
+        meter_buffered_usage(body) if meter
+        Rails.logger.warn("Gumhead gateway empty reply: model=#{loggable_upstream_field(parsed["model"])} provider=#{loggable_upstream_field(parsed["provider"])} request_id=#{upstream_request_id(parsed)}")
+        return render json: anthropic_error(*UPSTREAM_ERRORS.fetch(:busy)), status: :bad_gateway
+      end
+      meter_buffered_usage(body) if meter
       copy_retry_after(upstream)
       render body:, content_type: "application/json", status: upstream.status.code
     rescue HTTP::ConnectTimeoutError => e
@@ -533,10 +649,12 @@ class Api::V2::Gumhead::MessagesController < Api::V2::BaseController
         copy_retry_after(upstream)
         body = upstream.body.to_s
         parsed = safe_parse_json(body)
+        minted = minted_upstream_error(upstream.status.code, parsed, body)
+        return render(json: minted, status: upstream.status.code) if minted
         if openrouter_error_envelope?(parsed)
-          message = parsed.dig("error", "message").to_s.presence || "The model service returned an error."
-          return render json: anthropic_error("api_error", message), status: upstream.status.code
+          return render(json: anthropic_error("api_error", upstream_error_detail(parsed, body)), status: upstream.status.code)
         end
+
         return render body:, content_type: "application/json", status: upstream.status.code
       end
       if upstream.headers["Content-Type"].to_s.include?("application/json") &&
@@ -545,24 +663,50 @@ class Api::V2::Gumhead::MessagesController < Api::V2::BaseController
         parsed = safe_parse_json(body)
         if parsed.is_a?(Hash) && parsed["error"].is_a?(Hash)
           meter_buffered_usage(body) if parsed["usage"].is_a?(Hash)
-          message = parsed.dig("error", "message").to_s.presence || "The model service returned an error."
-          return render json: anthropic_error("api_error", message), status: :bad_gateway
+          minted = minted_upstream_error(upstream.status.code, parsed, body)
+          return render json: minted || anthropic_error("api_error", upstream_error_detail(parsed, body)), status: :bad_gateway
         end
       end
 
-      response.headers["Content-Type"] = "text/event-stream"
-      response.headers["Cache-Control"] = "no-cache"
-      # Disable buffering at the proxy (nginx) layer so events flush to
-      # Gumhead as they are written.
-      response.headers["X-Accel-Buffering"] = "no"
-
       scanner = GumheadStreamUsageScanner.new
+      # Nothing is written until the stream shows something the client can
+      # consume, so a blank stream can still be answered as a retryable
+      # error instead of committed and passed through. The held bytes are
+      # thinking and framing; the cap bounds memory and fails open, since a
+      # stream that long is being generated, not stalling.
+      held = +""
+      committed = false
+      hold_started_at = Process.clock_gettime(Process::CLOCK_MONOTONIC)
       begin
         last_renewal = Time.current
+        # Once committed, bytes pass through untouched, so an error event
+        # the provider sends after that still carries its own wording —
+        # the one failure this gateway does not mint. Rewriting it means
+        # re-framing SSE across chunk boundaries; that belongs in its own
+        # change, not in the middle of this loop.
         while (chunk = upstream.body.readpartial)
           scanner << chunk
-          response.stream.write(chunk)
+          if committed
+            response.stream.write(chunk)
+          else
+            held << chunk
+            held_too_long = Process.clock_gettime(Process::CLOCK_MONOTONIC) - hold_started_at > MAX_HELD_STREAM_SECONDS
+            if scanner.substantive? || held.bytesize > MAX_HELD_STREAM_BYTES || held_too_long
+              committed = commit_stream!(held)
+            end
+          end
           last_renewal = renew_in_flight_lease(last_renewal)
+        end
+        unless committed
+          # A completed blank stream is answered as retryable; anything
+          # else — a refusal the client handles, an unfinished ending —
+          # passes through as it arrived.
+          if scanner.terminal? && scanner.stop_reason == "end_turn"
+            Rails.logger.warn("Gumhead gateway empty reply: model=#{loggable_upstream_field(scanner.model)} stream=true")
+            render json: anthropic_error(*UPSTREAM_ERRORS.fetch(:busy)), status: :bad_gateway
+            return
+          end
+          committed = commit_stream!(held)
         end
         # A clean EOF without message_stop (or an upstream error event) is
         # an interruption the client would otherwise see as a silent close.
@@ -580,6 +724,7 @@ class Api::V2::Gumhead::MessagesController < Api::V2::BaseController
         # an empty 200) would leave the client guessing. Anthropic delivers
         # mid-stream failures the same way: an error event on the open stream.
         Rails.logger.warn("Gumhead gateway upstream error: #{e.class} #{e.message}")
+        committed = commit_stream!(held) unless committed
         write_stream_error_frame
       ensure
         if scanner.usage?
@@ -590,7 +735,7 @@ class Api::V2::Gumhead::MessagesController < Api::V2::BaseController
           # the exact prompt; no deltas arrived, so output stays zero.
           record_usage!(model: @body["model"], usage: synthetic_input_usage.merge("output_tokens" => 0))
         end
-        response.stream.close
+        response.stream.close if committed
       end
     rescue HTTP::ConnectTimeoutError => e
       # TCP connect failed; the request never reached Anthropic.
@@ -610,6 +755,20 @@ class Api::V2::Gumhead::MessagesController < Api::V2::BaseController
       # unwrapped, hence the explicit rescue.
       Rails.logger.warn("Gumhead gateway upstream error: #{e.class} #{e.message}")
       render json: anthropic_error("api_error", "Could not reach the model service."), status: :bad_gateway
+    end
+
+    # Commits the SSE response and flushes what was held back. From here
+    # on, bytes pass through as they arrive.
+    def commit_stream!(held)
+      response.headers["Content-Type"] = "text/event-stream"
+      response.headers["Cache-Control"] = "no-cache"
+      # Disable buffering at the proxy (nginx) layer so events flush to
+      # Gumhead as they are written.
+      response.headers["X-Accel-Buffering"] = "no"
+      # The stream buffer keeps a reference to what it is handed, so the
+      # held bytes must not be mutated after the write.
+      response.stream.write(held.dup) unless held.empty?
+      true
     end
 
     def write_stream_error_frame
@@ -719,6 +878,101 @@ class Api::V2::Gumhead::MessagesController < Api::V2::BaseController
       else
         GlobalConfig.get("GUMHEAD_UPSTREAM_API_KEY").presence
       end
+    end
+
+    # One of this gateway's own messages for an upstream failure, and the
+    # upstream's text in the log where an engineer can read it.
+    # This gateway's own message for an operational failure, or nil when
+    # the failure is the request's own fault and the provider's message
+    # says more than any fixed string could. Either way the provider's
+    # text reaches the log.
+    def minted_upstream_error(status, parsed, body)
+      detail = upstream_error_detail(parsed, body)
+      # The request id is the handle for finding this failure in the
+      # provider's logs; it used to reach the client inside the body this
+      # replaces.
+      Rails.logger.warn("Gumhead gateway upstream error: status=#{status} request_id=#{upstream_request_id(parsed)} #{detail}")
+      key = upstream_error_key(status, parsed, detail)
+      return nil if key.nil?
+
+      # A spend limit answers 429, which the runtime's SDK retries on
+      # status alone; every attempt fails until the cap resets. The SDK
+      # reads this header before it reaches that rule.
+      response.set_header("x-should-retry", "false") if key == :out_of_budget
+      anthropic_error(*UPSTREAM_ERRORS.fetch(key))
+    end
+
+    def upstream_error_key(status, parsed, detail)
+      return :out_of_budget if status == 402 || spend_limit_code?(parsed) || detail.match?(UPSTREAM_OUT_OF_BUDGET_PATTERN)
+      return :credentials if status == 401 || (status == 403 && detail.match?(UPSTREAM_CREDENTIALS_PATTERN))
+      return :rate_limited if status == 429
+      return :busy if status >= 500
+
+      nil
+    end
+
+    def spend_limit_code?(parsed)
+      return false unless parsed.is_a?(Hash)
+
+      error = parsed["error"]
+      return false unless error.is_a?(Hash)
+
+      details = error["details"]
+      details.is_a?(Hash) && details["error_code"].to_s == UPSTREAM_SPEND_LIMIT_CODE
+    end
+
+    # Providers put the message in {error:{message}}, but `error` is also
+    # a bare string in the wild, where a nested dig would raise. Anything
+    # else — an HTML error page from a proxy — is logged as it arrived.
+    #
+    # Both this and the request id are upstream-controlled and go into one
+    # log line, so control characters are flattened: a newline in either
+    # would forge a second record. Bounded so one bad response cannot
+    # flood the log.
+    def upstream_error_detail(parsed, body)
+      error = parsed.is_a?(Hash) ? parsed["error"] : nil
+      message = case error
+                when Hash then error["message"].to_s
+                when String then error
+      end
+      (message.presence || body.to_s).gsub(/[[:cntrl:]]/, " ").squeeze(" ").strip.slice(0, 500)
+    end
+
+    # A known shape, so it is validated rather than sanitised: anything
+    # else is not a request id and should not reach the log as one.
+    def upstream_request_id(parsed)
+      id = parsed.is_a?(Hash) ? parsed["request_id"].to_s : ""
+      id[/\A[\w.-]{1,64}\z/] || "none"
+    end
+
+    # Deliberately narrow: a completed message that gives the client
+    # nothing to consume. Judged by the content, not the token count — a
+    # blank reply can bill a nonzero count. Substance is a tool_use block
+    # (a normal loop step) or non-blank text; a thinking block alone is
+    # not, because the client renders neither it nor the silence after it.
+    # Only end_turn counts: a refusal ships empty content the client
+    # handles and must never be retried, and other stop reasons mean the
+    # turn is not finished being answered.
+    def empty_reply?(parsed)
+      return false unless parsed.is_a?(Hash) && parsed["type"] == "message"
+      return false unless parsed["stop_reason"] == "end_turn"
+
+      blocks = parsed["content"]
+      return true if blocks.nil? || blocks == []
+      return false unless blocks.is_a?(Array)
+
+      blocks.none? do |b|
+        next false unless b.is_a?(Hash)
+
+        b["type"] == "tool_use" || (b["type"] == "text" && b["text"].to_s.strip.present?)
+      end
+    end
+
+    # Upstream-controlled and headed for one log line, so control
+    # characters are flattened and the length bounded — a newline would
+    # forge a second record.
+    def loggable_upstream_field(value)
+      value.to_s.gsub(/[[:cntrl:]]/, " ").strip.slice(0, 64).presence || "none"
     end
 
     def openrouter_error_envelope?(parsed)

@@ -60,6 +60,24 @@ PROFILE_FLOW_SPECS = %w[
   spec/requests/profile_custom_html_spec.rb
 ].freeze
 
+# Harvested from PRs that had to carry run-all-specs because these JS
+# trees have no per-file spec (ProductEdit, Settings, API docs, etc.).
+PRODUCT_FLOW_SPECS = %w[spec/requests/products].freeze
+SETTINGS_FLOW_SPECS = %w[spec/requests/settings].freeze
+ANALYTICS_FLOW_SPECS = %w[
+  spec/requests/analytics
+  spec/requests/dashboard_spec.rb
+].freeze
+API_DOCS_SPECS = %w[
+  spec/requests/api
+  spec/requests/oauth_applications_pages_spec.rb
+].freeze
+BUNDLE_FLOW_SPECS = %w[spec/requests/bundles].freeze
+AUDIENCE_FLOW_SPECS = %w[
+  spec/requests/analytics/audience_spec.rb
+  spec/requests/customers
+].freeze
+
 FANOUT = {
   %r{\Aapp/presenters/checkout/} => CHECKOUT_FLOW_SPECS,
   %r{\Aapp/javascript/components/Checkout/} => CHECKOUT_FLOW_SPECS,
@@ -84,6 +102,24 @@ FANOUT = {
   # Help-center article partials render through the help_center request specs;
   # the per-article view glob finds nothing because specs aren't per-article.
   %r{\Aapp/views/help_center/} => %w[spec/requests/help_center_spec.rb spec/requests/help_center],
+  %r{\Aapp/javascript/components/HelpCenterPage} => %w[spec/requests/help_center_spec.rb spec/requests/help_center],
+  %r{\Aapp/javascript/pages/HelpCenter/} => %w[spec/requests/help_center_spec.rb spec/requests/help_center],
+  # Recurring run-all-specs gaps (ProductEdit, Settings, API docs, Analytics,
+  # Audience, Bundles, Dashboard). These trees have no co-located rspec.
+  %r{\Aapp/javascript/components/ProductEdit/} => PRODUCT_FLOW_SPECS,
+  %r{\Aapp/javascript/components/Product/} => PRODUCT_FLOW_SPECS,
+  %r{\Aapp/javascript/pages/Products/} => PRODUCT_FLOW_SPECS,
+  %r{\Aapp/javascript/components/server-components/ProductEdit} => PRODUCT_FLOW_SPECS,
+  %r{\Aapp/javascript/pages/Settings/} => SETTINGS_FLOW_SPECS,
+  %r{\Aapp/javascript/components/ApiDocumentation} => API_DOCS_SPECS,
+  %r{\Aapp/javascript/components/Analytics/} => ANALYTICS_FLOW_SPECS,
+  %r{\Aapp/javascript/pages/Analytics/} => ANALYTICS_FLOW_SPECS,
+  %r{\Aapp/javascript/components/Audience/} => AUDIENCE_FLOW_SPECS,
+  %r{\Aapp/javascript/pages/Bundles/} => BUNDLE_FLOW_SPECS,
+  %r{\Aapp/javascript/components/BundleEdit/} => BUNDLE_FLOW_SPECS,
+  %r{\Aapp/javascript/components/DashboardPage} => %w[spec/requests/dashboard_spec.rb],
+  %r{\Aapp/javascript/data/customer_surcharge} => CHECKOUT_FLOW_SPECS,
+  %r{\Aspec/support/dynamodb\.rb\z} => %w[spec/services/email_engagement_dynamo_store_spec.rb],
 }.freeze
 
 # Config files with dedicated request coverage. Everything else under
@@ -121,6 +157,11 @@ IGNORED_PATTERNS = [
   %r{\.md\z},
   %r{\A\.agents/},
   %r{\A\.claude/},
+  # Static assets; rspec does not compile public/.
+  %r{\Apublic/},
+  # Other workflows are not the rspec suite. tests.yml still escalates via
+  # ESCALATE_PATTERNS (checked after this filter).
+  %r{\A\.github/workflows/(?!tests\.yml)},
   # Recorded HTTP, not helpers. A cassette-only diff must not force Slow;
   # the spec that plays the tape is already in the selection (or unchanged).
   %r{\Aspec/support/fixtures/vcr_cassettes/},
@@ -349,6 +390,9 @@ changed.each do |path|
     next
   elsif path == "bin/classify-hung-checkout" || path == "spec/bin/classify_hung_checkout_test.rb"
     # Same: standalone ruby (ruby spec/bin/classify_hung_checkout_test.rb), not rspec.
+    next
+  elsif path == "bin/reuse-full-suite" || path == "script/test-reuse-full-suite"
+    # Standalone bash; script/test-reuse-full-suite runs on every PR.
     next
   elsif path == ".github/workflows/rerun-hung-checkout.yml"
     # Only invokes the classifier; the job `if` is asserted in that standalone

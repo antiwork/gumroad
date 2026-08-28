@@ -56,5 +56,33 @@ describe EmbeddedJavascriptsController do
 
       expect(response.body).to include('var token = "";')
     end
+
+    it "mints a view token when the widget id is the custom permalink" do
+      product.update!(custom_permalink: "from-nothing-to-sold-bundle")
+      expect(Link.fetch(product.custom_permalink)).to be_nil
+
+      request.env["HTTP_REFERER"] = "https://landing.example/post"
+      get :analytics, params: { id: product.custom_permalink, token: product.analytics_script_token }, format: :js
+
+      token = response.body.match(/var token = "([^"]*)";/)[1]
+      expect(token).not_to eq("")
+      expect(product.analytics_view_token?(token, source_url: "https://landing.example/post")).to eq(true)
+      expect(response.body).to include("var id = \"#{product.unique_permalink}\";")
+    end
+
+    it "resolves the signed-token product when another seller reuses the custom permalink" do
+      product.update!(custom_permalink: "shared-landing")
+      other = create(:product, custom_permalink: "shared-landing")
+      expect(other.custom_permalink).to eq(product.custom_permalink)
+      expect(other.id).not_to eq(product.id)
+
+      request.env["HTTP_REFERER"] = "https://landing.example/post"
+      get :analytics, params: { id: product.custom_permalink, token: product.analytics_script_token }, format: :js
+
+      token = response.body.match(/var token = "([^"]*)";/)[1]
+      expect(product.analytics_view_token?(token, source_url: "https://landing.example/post")).to eq(true)
+      expect(other.analytics_view_token?(token, source_url: "https://landing.example/post")).to eq(false)
+      expect(response.body).to include("var id = \"#{product.unique_permalink}\";")
+    end
   end
 end

@@ -157,7 +157,7 @@
 - id: 124
   slug: "124-your-gumroad-profile-page"
   title: "Build a website on Gumroad"
-  description: "In this article: Set up your profile Build your profile page with your agent Add standalone pages to your store Legacy pages and sections Your store's colors and font"
+  description: "In this article: Set up your profile Build your profile page with your agent Add standalone pages to your store The sections editor Your store's colors and font"
   category_id: <%= HelpCenter::Category::OPEN_AN_ACCOUNT.id %>
 - id: 125
   slug: "125-how-to-compress-a-video-using-handbrake"

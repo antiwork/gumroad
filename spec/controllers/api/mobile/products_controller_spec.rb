@@ -37,6 +37,23 @@ describe Api::Mobile::ProductsController do
       expect(body["pagination"]).to eq("count" => 2, "page" => 1, "pages" => 1, "next" => nil)
     end
 
+    it "returns the thumbnail url when the product has a thumbnail" do
+      product = create(:product, user: @seller, name: "Brush pack")
+      thumbnail = create(:thumbnail, product:)
+
+      get :index, params: @params
+
+      expect(response.parsed_body["products"].first["thumbnail_url"]).to eq(thumbnail.url)
+    end
+
+    it "returns a nil thumbnail url when the product has no thumbnail" do
+      create(:product, user: @seller, name: "No cover")
+
+      get :index, params: @params
+
+      expect(response.parsed_body["products"].first["thumbnail_url"]).to be_nil
+    end
+
     it "filters products by name" do
       create(:product, user: @seller, name: "Photo pack")
       match = create(:product, user: @seller, name: "Writing guide")
@@ -69,6 +86,22 @@ describe Api::Mobile::ProductsController do
     it "deletes the seller's product" do
       product = create(:product, user: @seller, name: "To delete")
 
+      expect do
+        delete :destroy, params: @params.merge(id: product.unique_permalink)
+      end.to change { Event.where(event_name: "delete_product_mobile_app").count }.by(1)
+
+      expect(response).to be_successful
+      expect(response.parsed_body["success"]).to eq(true)
+      expect(product.reload.deleted?).to eq(true)
+      event = Event.where(event_name: "delete_product_mobile_app").last
+      expect(event.link_id).to eq(product.id)
+      expect(event.user_id).to eq(@seller.id)
+    end
+
+    it "still reports success if recording the delete event raises" do
+      product = create(:product, user: @seller, name: "To delete")
+      allow(controller).to receive(:create_user_event).and_raise(StandardError, "analytics down")
+
       delete :destroy, params: @params.merge(id: product.unique_permalink)
 
       expect(response).to be_successful
@@ -79,7 +112,9 @@ describe Api::Mobile::ProductsController do
     it "does not delete another seller's product" do
       other = create(:product, name: "Not yours")
 
-      delete :destroy, params: @params.merge(id: other.unique_permalink)
+      expect do
+        delete :destroy, params: @params.merge(id: other.unique_permalink)
+      end.not_to change { Event.where(event_name: "delete_product_mobile_app").count }
 
       expect(response).to have_http_status(:not_found)
       expect(other.reload.deleted?).to eq(false)

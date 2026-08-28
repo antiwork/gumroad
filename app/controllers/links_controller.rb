@@ -117,6 +117,7 @@ class LinksController < ApplicationController
     end
 
     create_user_event("add_product")
+    create_mobile_app_user_event("add_product_mobile_app")
     if ai_generated
       redirect_to edit_link_path(@product, ai_generated: true), status: :see_other
     else
@@ -685,6 +686,7 @@ class LinksController < ApplicationController
       ErrorNotifier.notify(e)
       return render json: { error_message: "Something went wrong while saving your changes. Please refresh the page and try again — if the problem continues, contact support." }, status: :unprocessable_entity
     end
+    create_mobile_app_user_event("edit_product_mobile_app")
     report_unapplied_deletions!
     report_unstated_confirmed_removals!
 
@@ -876,16 +878,10 @@ class LinksController < ApplicationController
       end
     end
 
-    # *** DO NOT USE THIS METHOD for actions that respond to non-subdomain URLs ***
-    #
-    # Used for actions where a product's general (custom or unique) permalink is used to identify the product.
-    # Usually these are public-facing URLs with permalink as part of the URL.
-    #
-    # Since custom permalinks aren't globally unique, this method is only guaranteed to fetch the unique product
-    # if the owner of the product can be identified by the URL's subdomain.
-    #
-    # To support legacy (non-subdomain) URLs, when no creator can be identify via subdomain, this method will fetch the
-    # oldest product with given unique or custom permalink.
+    # Do not use for actions that respond to non-subdomain URLs.
+    # Custom permalinks aren't globally unique — this is only unique when the
+    # owner is identified by the URL's subdomain. With no subdomain it fetches
+    # the oldest product with that unique or custom permalink (legacy URLs).
     def fetch_product_by_general_permalink
       custom_or_unique_permalink = params[:id] || params[:link_id]
       e404 if custom_or_unique_permalink.blank?
@@ -1227,35 +1223,18 @@ class LinksController < ApplicationController
       end
     end
 
-    # The editor only ever addresses the product's FIRST alive variant grouping
-    # — that is what the UI shows and what the payload's `variants` list means.
-    # Everything else the product owns (a second grouping left over from the
-    # older multi-category editor, or from the API) is simply not part of the
-    # request, so the save never visits it.
+    # The editor only addresses the first alive variant grouping; other
+    # groupings (legacy multi-category / API) are never in the payload, so the
+    # save never visits them. Under the contract a named deletion in an
+    # unvisited grouping is silently dropped (200, version still there).
     #
-    # That is fine while deletion is inferred from the payload, because a
-    # grouping nobody submitted has nothing to infer from. Under the save
-    # contract it stops being fine: the client can now name a specific variant
-    # id to delete, and if that variant lives in a grouping the save never
-    # visits, the deletion is silently dropped — the save returns success and
-    # the version is still there after a reload.
-    #
-    # So when (and only when) the contract is enforced and the request names ids
-    # or asks for a clear-all, the other alive groupings are appended as
-    # deletion-only entries (`options: nil`). Under the contract that route
-    # deletes exactly the named ids and nothing else
-    # (VariantCategoryUpdaterService#contract_scoped_category_deletions), so a
-    # grouping with no named ids is visited and left completely alone.
-    #
-    # Version-scoped deletions (a version's integrations) count as "names ids"
-    # for exactly the same reason: they name a version by its external id, and
-    # that version can live in any grouping. Without them in this condition a
-    # fresh, explicitly authorised request to disconnect an integration from a
-    # version outside the first grouping would return 200 with the integration
-    # still connected.
-    #
-    # Returns [] whenever the contract is off, which keeps the legacy single-
-    # grouping call byte-identical.
+    # When the contract is on and the request names variant ids, a clear-all,
+    # or version-scoped deletions (integrations name a version by external id,
+    # which can live in any grouping), append the other alive groupings as
+    # deletion-only (`options: nil`). That visits them so named ids apply, and
+    # a grouping with no named ids is left alone
+    # (VariantCategoryUpdaterService#contract_scoped_category_deletions).
+    # Returns [] when the contract is off (legacy single-grouping call).
     def deletion_only_category_params(alive_categories, except:)
       contract = product_save_contract
       return [] unless contract.enforced?
@@ -1270,34 +1249,19 @@ class LinksController < ApplicationController
         .map { { id: _1.external_id, options: nil } }
     end
 
-    # Who and which request is performing this save, for the deletion audit
-    # trail (ProductVariantDeletionAudit). `logged_in_user` rather than
-    # `current_seller`: on a collaborator or admin save those differ, and the
-    # audit wants the person who actually pressed save.
-    #
-    # `correlation_id` is a server-side digest, not the raw request id — Rails
-    # takes `X-Request-Id` from the client, so the raw value is caller-controlled
-    # (see AuditCorrelationId). `revision_token` is always nil today: the
-    # editor-scoped revision token proposed in gumroad-private#1379 does not
-    # exist yet, and the key is here so the audit shape doesn't change when it
-    # ships.
-    #
-    # The digest is computed here but NOT logged here: this context is built for
-    # every save, and most saves delete nothing. Logging at build time would emit
-    # a correlation line for saves that never produce an audit row, which is noise
-    # that makes the log useless for the one thing it exists for — finding the
-    # request behind an audit row. `ProductVariantDeletionAudit` logs the pair
-    # itself, at the point a row is actually scheduled.
+    # Deletion audit trail (ProductVariantDeletionAudit). `logged_in_user`, not
+    # `current_seller` — those differ on collaborator/admin saves.
+    # `correlation_id` is a server-side digest: Rails takes `X-Request-Id` from
+    # the client (see AuditCorrelationId). Do not log here — this runs on every
+    # save and most delete nothing; ProductVariantDeletionAudit logs when a row
+    # is actually scheduled.
     def deletion_audit_context
       @_deletion_audit_context ||= {
         actor_user_id: logged_in_user&.id,
         correlation_id: AuditCorrelationId.for(request.request_id),
         request_id: request.request_id,
-        # The snapshot token the client submitted, recorded so an audit row can
-        # be tied back to the editor session that asked for the deletion.
-        # Read straight from the params rather than from the contract: the audit
-        # must describe what the client actually sent even when the contract is
-        # disabled, and reading it here cannot start any revision work.
+        # Params, not the contract: describe what the client sent even when the
+        # contract is off, and don't start revision work.
         revision_token: params[:editor_revision].presence,
       }
     end
@@ -1342,17 +1306,12 @@ class LinksController < ApplicationController
       end
     end
 
-    # Descriptions of payload pages the server does NOT already know about.
-    # Editor sessions predating the id reconciliation in the save response keep
-    # their client-generated page ids across saves, so a resubmitted new page
-    # arrives under an unknown id: matching on content identifies it as a
-    # rewrite rather than a deletion. Pages submitted under an id the server
-    # already has are in-place updates of that page — their content must NOT
-    # unlock deleting a different stored page that happens to have the same
-    # content (two duplicate-content pages, an outdated payload omits one).
-    # NOTE: reads the RAW params, not the permitted ones — by the time the
-    # deletion guards run, the permitted variant params may have been
-    # consumed/mutated by earlier steps.
+    # Unknown-id pages (old editor sessions keep client-generated ids). Match
+    # on content to treat a resubmit as a rewrite, not a deletion. A known id
+    # is an in-place update — its content must not unlock deleting a different
+    # stored page that happens to have the same content.
+    # Reads RAW params: by the time deletion guards run, permitted variant
+    # params may have been consumed by earlier steps.
     def payload_page_descriptions
       @_payload_page_descriptions ||= begin
         pages = params[:rich_content].is_a?(Array) ? params[:rich_content].to_a : []
@@ -1427,20 +1386,9 @@ class LinksController < ApplicationController
       count + (params[:variants].is_a?(Array) ? params[:variants].sum { |variant| variant[:rich_content].is_a?(Array) ? variant[:rich_content].size : 0 } : 0)
     end
 
-    # A save that named deletions and applied fewer of them than it named is a
-    # success response the seller cannot tell apart from a real one
-    # (gumroad-private#1508). Under the save contract an unstated removal is a
-    # no-op by design, so the failure mode that used to be a wrong deletion is
-    # now a silent non-deletion: 200, nothing gone, nothing logged.
-    #
-    # Runs only on the success path, after the transaction committed, and only
-    # when the client actually stated deletions — so it costs one reload plus
-    # two id reads on the small minority of saves that delete something, and
-    # nothing at all on the rest.
-    #
-    # Never raises. This is a report, not a guard: the write already happened
-    # and failing the response here would tell the seller a committed save
-    # failed.
+    # Named-but-unapplied deletions look like a real 200 to the seller. After
+    # commit, and only when the client stated deletions. Report, not guard —
+    # never raise: the write already happened.
     def report_unapplied_deletions!
       contract = product_save_contract
       return unless contract.enforced?
@@ -1469,25 +1417,12 @@ class LinksController < ApplicationController
       ErrorNotifier.notify(e)
     end
 
-    # The blind spot in the report above: it is gated on `requested_deletion?`,
-    # so it cannot see a payload that named NO deletion at all. That is exactly
-    # the shape reported in gumroad-private#1508 — 200, nothing deleted, zero
-    # audit rows — and it is why the report has never fired.
-    #
-    # `confirmed_removed_variant_ids` is the witness. The editor sends it beside
-    # the deletion operations and both derive from the same in-session list, so a
+    # The report above is gated on `requested_deletion?`, so it misses a payload
+    # that named no deletion. `confirmed_removed_variant_ids` is the witness: a
     # contract-aware payload that confirms a removal while naming none of it is
-    # self-contradictory: the seller pressed "Yes, remove" and the request did
-    # not ask for it. Under Rule 1 the server correctly does nothing, which is
-    # what makes the failure silent.
-    #
-    # A current client cannot produce that contradiction — both lists come off
-    # one snapshot. This is a tripwire for the clients that can: a stale bundle,
-    # or a path nobody has found yet. It does NOT catch a row dropped from state
-    # with no confirmed id, which is undetectable here by contract design.
-    #
-    # Report, not guard: acting on the confirmed ids would delete rows through a
-    # route the contract deliberately closed.
+    # a contradiction (stale bundle / unknown path). Does not catch a row
+    # dropped from state with no confirmed id. Report, not guard — do not delete
+    # via the confirmed ids; that route is deliberately closed.
     def report_unstated_confirmed_removals!
       contract = product_save_contract
       return unless contract.enforced?
@@ -1792,18 +1727,6 @@ class LinksController < ApplicationController
         file_id_mappings: save_id_mappings[:files],
         rich_content_removed_file_embed_ids: save_id_mappings[:removed_file_embeds],
         **content_updated_at_response,
-        # The revision token for the state this save just committed
-        # (gumroad-private#1379). Every successful save moves the product's
-        # fingerprint, so the token the editor is holding — issued when the page
-        # loaded — is stale the moment the first save returns. Without handing
-        # back a fresh one, a seller who saves an ordinary edit and then deletes
-        # a version in the same session has the deletion silently refused as
-        # stale, and the row reappears on reload. The editor adopts this value
-        # and echoes it on the next save.
-        #
-        # Emitted only while the contract is enforced: with the flag off the
-        # token is meaningless and computing it would cost the fingerprint
-        # queries on every save for no benefit.
         **editor_revision_response,
       }
     end
