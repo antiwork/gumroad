@@ -60,4 +60,57 @@ RSpec.describe "config/domain.rb" do
       "MAILER_HOST" => "localhost:3001"
     )
   end
+
+  describe "PROTOCOL" do
+    # bin/vite requires config/domain.rb before Rails boots, so these load it the same way:
+    # bundler plus vite_ruby and nothing else. A `bin/rails runner` would pull in ActiveSupport
+    # and hide the constraint the examples below exist to protect.
+    PRE_RAILS_CMD = <<~'RUBY'
+      require "bundler/setup"
+      require "vite_ruby"
+      require File.expand_path("config/domain")
+      puts "PROTOCOL=#{PROTOCOL}"
+    RUBY
+
+    def pre_rails_protocol(env = {})
+      stdout, stderr, status = Open3.capture3(
+        env, "ruby", "-e", PRE_RAILS_CMD, chdir: Rails.root.to_s
+      )
+      [stdout[/^PROTOCOL=(.*)$/, 1], stderr, status]
+    end
+
+    it "falls back to the environment default when CUSTOM_PROTOCOL is unset" do
+      protocol, stderr, status = pre_rails_protocol("CUSTOM_PROTOCOL" => nil)
+
+      expect(status).to be_success, stderr
+      expect(protocol).to eq("http")
+    end
+
+    it "falls back to the environment default when CUSTOM_PROTOCOL is blank" do
+      # An empty string is truthy in Ruby, so a plain `||` would assign "" here and every
+      # absolute URL would come out as "://gumroad.dev".
+      protocol, stderr, status = pre_rails_protocol("CUSTOM_PROTOCOL" => "")
+
+      expect(status).to be_success, stderr
+      expect(protocol).to eq("http")
+    end
+
+    it "uses CUSTOM_PROTOCOL when it is set, so a local backend can serve the app over HTTPS" do
+      protocol, stderr, status = pre_rails_protocol("CUSTOM_PROTOCOL" => "https")
+
+      expect(status).to be_success, stderr
+      expect(protocol).to eq("https")
+    end
+
+    it "loads before Rails even with CUSTOM_DOMAIN set, without ActiveSupport predicates" do
+      # `present?`/`presence` raise NoMethodError in this path. CUSTOM_DOMAIN is what reaches the
+      # branch that used to call one, and it is exactly the setup CUSTOM_PROTOCOL pairs with.
+      protocol, stderr, status = pre_rails_protocol(
+        "CUSTOM_DOMAIN" => "gumroad.dev", "CUSTOM_PROTOCOL" => "https"
+      )
+
+      expect(status).to be_success, stderr
+      expect(protocol).to eq("https")
+    end
+  end
 end
