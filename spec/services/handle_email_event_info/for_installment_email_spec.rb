@@ -26,14 +26,13 @@ describe HandleEmailEventInfo::ForInstallmentEmail do
       expect(open_event.open_count).to eq 1
     end
 
-    it "sets cache for open event" do
+    it "reads live unique open counts after an open event" do
       params = { "_json" => [{ "event" => "open", "type" => "CreatorContactingCustomersMailer.purchase_installment",
                                "identifier" => @identifier, "installment_id" => @installment.id }] }
 
       HandleSendgridEventJob.new.perform(params)
 
-      unique_open_count = Rails.cache.read("unique_open_count_for_installment_#{@installment.id}_ddb")
-      expect(unique_open_count).to eq 1
+      expect(Installment.find(@installment.id).unique_open_count).to eq 1
     end
 
     it "creates a new CreatorEmailOpenEvent object and then update it if there are 2 identical open events" do
@@ -84,18 +83,15 @@ describe HandleEmailEventInfo::ForInstallmentEmail do
       expect(click_event.click_count).to eq 1
     end
 
-    it "sets cache on click event" do
+    it "reads live unique click and open counts after a click event" do
       params = { "_json" => [{ "event" => "click", "type" => "CreatorContactingCustomersMailer.purchase_installment",
                                "identifier" => @identifier, "installment_id" => @installment.id, "url" => "https://www&#46;gumroad&#46;com" }] }
 
       HandleSendgridEventJob.new.perform(params)
 
-      unique_click_count = Rails.cache.read("unique_click_count_for_installment_#{@installment.id}_ddb")
-      expect(unique_click_count).to eq 1
-
-      # It should also cache unique_open_count
-      unique_open_count = Rails.cache.read("unique_open_count_for_installment_#{@installment.id}_ddb")
-      expect(unique_open_count).to eq 1
+      installment = Installment.find(@installment.id)
+      expect(installment.unique_click_count).to eq 1
+      expect(installment.unique_open_count).to eq 1
     end
 
     it "creates 1 new CreatorEmailClickSummary and 2 CreatorEmailClickEvent objects for different URLs, \
