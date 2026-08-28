@@ -8,8 +8,11 @@ class Event < ApplicationRecord
   # We also create events that aren't in this list if they have a user_id (see Events#created_event),
   # but they're automatically deleted after a while (see DeleteOldUnusedEventsWorker).
   PERMITTED_NAMES = %w[
+    add_product_mobile_app
     audience_callout_dismissal
     chargeback
+    delete_product_mobile_app
+    edit_product_mobile_app
     first_purchase_on_profile_visit
     post_view
     product_refund_policy_fine_print_view

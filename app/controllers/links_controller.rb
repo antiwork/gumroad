@@ -117,6 +117,7 @@ class LinksController < ApplicationController
     end
 
     create_user_event("add_product")
+    create_mobile_app_user_event("add_product_mobile_app")
     if ai_generated
       redirect_to edit_link_path(@product, ai_generated: true), status: :see_other
     else
@@ -685,6 +686,7 @@ class LinksController < ApplicationController
       ErrorNotifier.notify(e)
       return render json: { error_message: "Something went wrong while saving your changes. Please refresh the page and try again — if the problem continues, contact support." }, status: :unprocessable_entity
     end
+    create_mobile_app_user_event("edit_product_mobile_app")
     report_unapplied_deletions!
     report_unstated_confirmed_removals!
 

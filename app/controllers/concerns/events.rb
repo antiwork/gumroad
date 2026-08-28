@@ -1,14 +1,20 @@
 # frozen_string_literal: true
 
 module Events
-  def create_user_event(name, seller_id: nil, on_custom_domain: false)
+  def create_user_event(name, seller_id: nil, on_custom_domain: false, user_id: nil)
     return if name.nil?
 
     create_event(
       event_name: name,
       on_custom_domain:,
-      user_id: logged_in_user&.id
+      user_id: user_id || logged_in_user&.id
     )
+  end
+
+  def create_user_event_without_raising(name, **kwargs)
+    create_user_event(name, **kwargs)
+  rescue StandardError => e
+    Rails.logger.error("Failed to record #{name}: #{e.class}: #{e.message}")
   end
 
   def create_post_event(installment)
