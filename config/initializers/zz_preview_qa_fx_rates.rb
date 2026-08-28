@@ -29,7 +29,6 @@ Rails.application.config.after_initialize do
   rescue StandardError => e
     Rails.logger.warn("[preview-qa] FX rate seed skipped: #{e.class} #{e.message}")
   end
-
 end
 
 # TEMP QA debug endpoint (test-mode only): tells apart a GeoIP miss from a missing FX
