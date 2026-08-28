@@ -78,16 +78,17 @@ configuration_by_env = {
   }
 }
 
+# bin/vite requires this file before Rails boots, so ActiveSupport is not loaded here. Keep every
+# check below to plain Ruby: `present?` and `presence` raise NoMethodError in that path.
 custom_domain       = ENV["CUSTOM_DOMAIN"]
 custom_short_domain = ENV["CUSTOM_SHORT_DOMAIN"]
+custom_protocol     = ENV["CUSTOM_PROTOCOL"]
 environment         = ENV["RAILS_ENV"]&.to_sym || :development
 config              = configuration_by_env[environment]
 
-# CUSTOM_PROTOCOL pairs with CUSTOM_DOMAIN for local HTTPS work — running the mobile app against
-# a local backend, for example. Without it, CUSTOM_DOMAIN changes the host but development stays
-# on "http", so asset and redirect URLs point at http://app.localhost:3000 and every page the
-# mobile app embeds in an HTTPS WebView renders blank with no error on either side.
-PROTOCOL            = ENV["CUSTOM_PROTOCOL"] || config[:protocol]
+# CUSTOM_PROTOCOL pairs with CUSTOM_DOMAIN for local HTTPS. Without it the scheme stays "http", so
+# pages the mobile app embeds in an HTTPS WebView fail silently on their assets.
+PROTOCOL            = custom_protocol.to_s.empty? ? config[:protocol] : custom_protocol
 DOMAIN              = custom_domain || config[:domain]
 ASSET_DOMAIN        = ENV["ASSET_DOMAIN"] || config[:asset_domain]
 ROOT_DOMAIN         = custom_domain || config[:root_domain]
@@ -104,7 +105,7 @@ ANYCABLE_HOST           = config[:anycable_host]
 if custom_domain
   VALID_REQUEST_HOSTS << custom_domain
   VALID_API_REQUEST_HOSTS << "api.#{custom_domain}"
-  VALID_API_REQUEST_HOSTS << custom_domain if ENV["BRANCH_DEPLOYMENT"].present? # Allow CORS to preview app's root domain
+  VALID_API_REQUEST_HOSTS << custom_domain unless ENV["BRANCH_DEPLOYMENT"].to_s.empty? # Allow CORS to preview app's root domain
   VALID_CORS_ORIGINS << custom_domain
   DISCOVER_DOMAIN = custom_domain
   VALID_DISCOVER_REQUEST_HOST = custom_domain
