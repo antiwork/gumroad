@@ -8,9 +8,10 @@
 # presentment lane under QA on antiwork/gumroad#5781 never activates.
 #
 # Seeds a few plausible USD-based rates at boot so QA testers (and the scripted QA run)
-# can exercise the presentment-mounted Payment Element. Gated to Stripe test mode so it
-# can never run in production (production runs live keys).
+# can exercise the presentment-mounted Payment Element. Gated to per-PR previews first,
+# with the Stripe test key retained as defense in depth.
 Rails.application.config.after_initialize do
+  next unless Rails.env.development? || (Rails.env.staging? && ENV["BRANCH_DEPLOYMENT"] == "true")
   next unless Stripe.api_key.to_s.start_with?("sk_test_")
 
   begin
@@ -20,6 +21,7 @@ Rails.application.config.after_initialize do
       "EUR" => "0.92",
       "GBP" => "0.79",
       "AUD" => "1.51",
+      "INR" => "87.5",
     }.each do |currency, rate|
       namespace.set(currency, rate) if namespace.get(currency).blank?
     end
@@ -45,15 +47,13 @@ end
 # test Stripe keys, so without this host check anyone could rewrite their apparent IP
 # there — the QA helper is only needed on the throwaway preview apps.
 class PreviewQaDebugMiddleware
-  PREVIEW_HOST_SUFFIX = ".apps.staging.gumroad.org"
-
   def initialize(app)
     @app = app
   end
 
   def call(env)
     return @app.call(env) unless Stripe.api_key.to_s.start_with?("sk_test_")
-    return @app.call(env) unless preview_or_development_host?(env)
+    return @app.call(env) unless preview_app_or_development?
 
     req = Rack::Request.new(env)
 
@@ -105,11 +105,8 @@ class PreviewQaDebugMiddleware
   end
 
   private
-    # Rack::Request#host strips the port and handles a missing Host header.
-    def preview_or_development_host?(env)
-      return true if Rails.env.development?
-
-      Rack::Request.new(env).host.to_s.end_with?(PREVIEW_HOST_SUFFIX)
+    def preview_app_or_development?
+      Rails.env.development? || (Rails.env.staging? && ENV["BRANCH_DEPLOYMENT"] == "true")
     end
 end
 Rails.application.config.middleware.insert_before(0, PreviewQaDebugMiddleware) if Rails.env.staging? || Rails.env.development?
