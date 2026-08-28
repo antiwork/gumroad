@@ -82,13 +82,14 @@ configuration_by_env = {
 # check below to plain Ruby: `present?` and `presence` raise NoMethodError in that path.
 custom_domain       = ENV["CUSTOM_DOMAIN"]
 custom_short_domain = ENV["CUSTOM_SHORT_DOMAIN"]
-custom_protocol     = ENV["CUSTOM_PROTOCOL"]
+custom_protocol     = ENV["CUSTOM_PROTOCOL"].to_s.strip
 environment         = ENV["RAILS_ENV"]&.to_sym || :development
 config              = configuration_by_env[environment]
 
 # CUSTOM_PROTOCOL pairs with CUSTOM_DOMAIN for local HTTPS. Without it the scheme stays "http", so
-# pages the mobile app embeds in an HTTPS WebView fail silently on their assets.
-PROTOCOL            = custom_protocol.to_s.empty? ? config[:protocol] : custom_protocol
+# pages the mobile app embeds in an HTTPS WebView fail silently on their assets. Blank or
+# whitespace-only falls back: an empty scheme yields URLs like "://gumroad.com".
+PROTOCOL            = custom_protocol.empty? ? config[:protocol] : custom_protocol
 DOMAIN              = custom_domain || config[:domain]
 ASSET_DOMAIN        = ENV["ASSET_DOMAIN"] || config[:asset_domain]
 ROOT_DOMAIN         = custom_domain || config[:root_domain]

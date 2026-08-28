@@ -95,6 +95,20 @@ RSpec.describe "config/domain.rb" do
       expect(protocol).to eq("http")
     end
 
+    it "falls back to the environment default when CUSTOM_PROTOCOL is only whitespace" do
+      protocol, stderr, status = pre_rails_protocol("CUSTOM_PROTOCOL" => "  ")
+
+      expect(status).to be_success, stderr
+      expect(protocol).to eq("http")
+    end
+
+    it "ignores surrounding whitespace in CUSTOM_PROTOCOL" do
+      protocol, stderr, status = pre_rails_protocol("CUSTOM_PROTOCOL" => " https ")
+
+      expect(status).to be_success, stderr
+      expect(protocol).to eq("https")
+    end
+
     it "uses CUSTOM_PROTOCOL when it is set, so a local backend can serve the app over HTTPS" do
       protocol, stderr, status = pre_rails_protocol("CUSTOM_PROTOCOL" => "https")
 
