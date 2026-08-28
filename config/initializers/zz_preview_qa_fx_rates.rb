@@ -122,13 +122,20 @@ class PreviewQaDebugMiddleware
       id: upi_product.id,
       currency: upi_product.price_currency_type,
       duration: upi_product.subscription_duration,
+      connect_account: upi_product.user.merchant_account(StripeChargeProcessor.charge_processor_id).present?,
+      subscriptions_enabled: Checkout::BuyerCurrencyEligibility.subscriptions_enabled?(upi_product.user),
+      recurring_upi_enabled: Feature.active?(Checkout::PaymentMethodResolver::UPI_RECURRING_LAUNCH_FEATURE, upi_product.user),
     }
     [200, { "Content-Type" => "application/json" }, [body.to_json]]
   end
 
   private
     def seed_upi_product
-      seller = User.find_by!(email: "seller@gumroad.com")
+      source_seller = User.find_by!(email: "seller@gumroad.com")
+      seller = User.find_by(email: "pr7367-upi-seller@example.com") || source_seller.dup.tap do |user|
+        user.assign_attributes(email: "pr7367-upi-seller@example.com", username: "pr7367-upi-seller", name: "PR 7367 UPI Seller")
+        user.save!(validate: false)
+      end
       %i[
         buyer_currency_charging
         buyer_local_currency
@@ -150,9 +157,10 @@ class PreviewQaDebugMiddleware
           is_physical: false,
           is_in_preorder_state: false,
         )
+        product.user_id = seller.id
         product.save!(validate: false)
       end
-      product.update_columns(price_currency_type: "inr", price_cents: 49_900, subscription_duration: "monthly")
+      product.update_columns(user_id: seller.id, price_currency_type: "inr", price_cents: 49_900, subscription_duration: "monthly")
       product.prices.alive.where(variant_id: nil).first_or_create!(price_cents: 49_900, currency: "inr", recurrence: "monthly")
       product.prices.alive.where(variant_id: nil).update_all(price_cents: 49_900, currency: "inr", recurrence: "monthly")
 
