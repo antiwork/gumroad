@@ -78,13 +78,15 @@ describe SendPostBlastEmailsJob, :freeze_time do
       expect($redis.exists?(pending_key)).to be(false)
     end
 
-    it "leaves the owed count positive when the send dies before the provider call" do
+    it "leaves the owed count positive through the stalled-blast scan window when the send dies before the provider call" do
       blast = create(:blast, :just_requested, post: basic_post_with_audience)
+      pending_key = RedisKey.blast_pending_recipients(blast.id)
       expect(PostSendgridApi).to receive(:process).and_raise(StandardError.new("API failure"))
 
       expect { described_class.new.perform(blast.id) }.to raise_error(StandardError, "API failure")
 
-      expect($redis.get(RedisKey.blast_pending_recipients(blast.id)).to_i).to eq(1)
+      expect($redis.get(pending_key).to_i).to eq(1)
+      expect($redis.ttl(pending_key)).to be_between(13.days.to_i, AlertOnStalledPostEmailBlastsJob::LOOKBACK.to_i).inclusive
       expect(described_class.fully_delivered?(blast.reload)).to be(false)
     end
 

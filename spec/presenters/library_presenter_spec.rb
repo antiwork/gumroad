@@ -574,6 +574,25 @@ describe LibraryPresenter do
         )
       end
 
+      it "omits a bundle filter option when the bundle product row is gone" do
+        surviving = { id: purchase2.link.external_id, label: purchase2.link.name }
+        purchase1.update_column(:link_id, Link.maximum(:id).to_i + 1)
+
+        expect { library_props }.not_to raise_error
+        expect(library_props[:bundles]).to eq([surviving])
+      end
+
+      it "omits bundle downloads for a selected bundle whose product row is gone" do
+        missing_bundle_link_id = Link.maximum(:id).to_i + 1
+        missing_bundle_external_id = Link.to_external_id(missing_bundle_link_id)
+        purchase1.update_column(:link_id, missing_bundle_link_id)
+
+        props = nil
+        expect { props = library_props(bundle_ids: [missing_bundle_external_id]) }.not_to raise_error
+        expect(props[:results].map { _1[:purchase][:id] }).to match_array(purchase1.product_purchases.map(&:external_id))
+        expect(props[:bundle_downloads]).to eq([])
+      end
+
       it "filters results to the members of the selected bundles" do
         matches = results(bundle_ids: [purchase1.link.external_id])
 
