@@ -70,11 +70,6 @@ export const getApplePayRecurringPaymentRequest = (
 const membershipRequest = (item: Product, managementURL: string): ApplePayRecurringPaymentRequest | null => {
   if (item.recurrence === null) return null;
 
-  // The renewal amount can differ from today's charge (e.g. a discount limited to the first
-  // billing cycle), so the caller computes it where discount details are available. Falling back
-  // to the current price keeps the declaration usable when no separate renewal price is known.
-  // Amounts are pre-tax, matching how prices are presented everywhere else at checkout; each
-  // renewal's tax is computed by the server when it is charged.
   const renewalAmount = item.renewalPriceCents ?? item.price;
   const months = numberOfMonthsInRecurrence(item.recurrence);
   const interval =
@@ -86,8 +81,18 @@ const membershipRequest = (item: Product, managementURL: string): ApplePayRecurr
   // months, so the agreement on the sheet is bounded by an end date rather than described as
   // billing until the buyer cancels.
   const totalBillingCycles = item.durationInMonths != null ? Math.ceil(item.durationInMonths / months) : null;
+
+  // A fixed-duration membership whose duration fits in a single billing cycle (e.g. a 12-month
+  // membership billed yearly, or a 1-month membership billed monthly) charges the buyer exactly
+  // once. It is effectively a one-time purchase, so declaring a recurring payment request would
+  // be wrong: Apple would present an auto-renewing agreement that never renews, and Stripe's
+  // `elements.create('payment')` rejects a `recurringPaymentEndDate` set to the current moment
+  // (a non-future date), which this code previously produced as `addMonthsClamped(new Date(), 0)`.
+  // Fall back to a plain one-time request (a device token) instead.
+  if (totalBillingCycles !== null && totalBillingCycles <= 1) return null;
+
   let recurringPaymentEndDate: Date | undefined;
-  if (totalBillingCycles != null) {
+  if (totalBillingCycles != null && totalBillingCycles > 1) {
     // The last charge happens one interval before the total duration elapses (the first charge is
     // today), so the agreement ends after (cycles - 1) further intervals.
     recurringPaymentEndDate = addMonthsClamped(new Date(), (totalBillingCycles - 1) * months);
@@ -134,7 +139,13 @@ const installmentPlanRequest = (item: Product, managementURL: string): ApplePayR
   const remainingInstallments = item.installmentPlan?.remainingInstallments ?? numberOfInstallments;
   if (remainingInstallments < 1) return null;
   const baseInstallmentAmount = item.renewalPriceCents ?? Math.floor(item.price / numberOfInstallments);
-  const endDate = addMonthsClamped(new Date(), remainingInstallments - 1);
+  // Installments are monthly; with `remainingInstallments` counting the plans left to charge, the
+  // last one lands `remainingInstallments - 1` months out. Floor at one month so a plan with a
+  // single remaining installment never hands Stripe a `recurringPaymentEndDate` in the past — a
+  // non-future date makes `elements.create('payment')` reject the whole checkout with a blank
+  // screen. (At checkout `remainingInstallments` defaults to the full plan count, so this is just
+  // the existing "last installment" date, guarded against the zero-month case.)
+  const endDate = addMonthsClamped(new Date(), Math.max(remainingInstallments - 1, 1));
 
   return {
     paymentDescription: `${item.name} (${remainingInstallments} monthly installments)`,
