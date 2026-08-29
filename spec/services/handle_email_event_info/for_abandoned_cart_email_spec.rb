@@ -31,20 +31,12 @@ describe HandleEmailEventInfo::ForAbandonedCartEmail do
 
     RSpec.shared_examples "handles opened events" do |email_provider|
       it "tracks an open event" do
-        now = Time.current
+        handler_class_for(email_provider).new.perform(params)
 
-        travel_to(now) do
-          handler_class_for(email_provider).new.perform(params)
-        end
-
-        expect(CreatorEmailOpenEvent.count).to eq(2)
-        CreatorEmailOpenEvent.each.with_index do |open_event, i|
-          expect(open_event.mailer_method).to eq("CustomerMailer.abandoned_cart")
-          expect(open_event.mailer_args).to eq(mailer_args_with_multiple_workflow_ids)
-          expect(open_event.installment_id).to eq([abandoned_cart_workflow_installment1.id, abandoned_cart_workflow_installment3.id][i])
-          expect(open_event.open_timestamps.sole.to_i).to eq(now.to_i)
-          expect(open_event.open_count).to eq(1)
-        end
+        expect(abandoned_cart_workflow_installment1.reload.unique_open_count).to eq(1)
+        expect(abandoned_cart_workflow_installment3.reload.unique_open_count).to eq(1)
+        expect(abandoned_cart_workflow_installment2.reload.unique_open_count).to eq(0)
+        expect(CreatorEmailOpenEvent.count).to eq(0)
       end
 
       it "reads live unique open counts after an open event" do
@@ -63,52 +55,23 @@ describe HandleEmailEventInfo::ForAbandonedCartEmail do
       end
 
       it "tracks an open event and update it if there are 2 identical open events" do
-        now = Time.current
-        travel_to(now) do
-          handler_class_for(email_provider).new.perform(params)
-        end
+        handler_class_for(email_provider).new.perform(params)
+        handler_class_for(email_provider).new.perform(params)
 
-        travel_to(now + 1.minute) do
-          handler_class_for(email_provider).new.perform(params)
-        end
-
-        expect(CreatorEmailOpenEvent.count).to eq(2)
-        CreatorEmailOpenEvent.each.with_index do |open_event, i|
-          expect(open_event.mailer_method).to eq("CustomerMailer.abandoned_cart")
-          expect(open_event.mailer_args).to eq(mailer_args_with_multiple_workflow_ids)
-          expect(open_event.installment_id).to eq([abandoned_cart_workflow_installment1.id, abandoned_cart_workflow_installment3.id][i])
-          expect(open_event.open_timestamps.count).to eq(2)
-          expect(open_event.open_timestamps.first.to_i).to eq(now.to_i)
-          expect(open_event.open_timestamps.last.to_i).to eq((now + 1.minute).to_i)
-          expect(open_event.open_count).to eq(2)
-        end
+        expect(abandoned_cart_workflow_installment1.reload.unique_open_count).to eq(1)
+        expect(abandoned_cart_workflow_installment3.reload.unique_open_count).to eq(1)
       end
     end
 
     RSpec.shared_examples "handles click events" do |email_provider|
       it "tracks a click event with email click summary" do
-        now = Time.current
+        handler_class_for(email_provider).new.perform(params1)
 
-        travel_to(now) do
-          handler_class_for(email_provider).new.perform(params1)
-        end
-
-        installments = [abandoned_cart_workflow_installment1.id, abandoned_cart_workflow_installment3.id]
-        expect(CreatorEmailClickSummary.count).to eq(2)
-        CreatorEmailClickSummary.each.with_index do |summary, i|
-          expect(summary.total_unique_clicks).to eq(1)
-          expect(summary.installment_id).to eq(installments[i])
-          expect(summary.urls).to eq("https://www&#46;gumroad&#46;com/checkout" => 1)
-        end
-        expect(CreatorEmailClickEvent.count).to eq(2)
-        CreatorEmailClickEvent.each.with_index do |click_event, i|
-          expect(click_event.mailer_method).to eq("CustomerMailer.abandoned_cart")
-          expect(click_event.mailer_args).to eq(mailer_args_with_multiple_workflow_ids)
-          expect(click_event.installment_id).to eq(installments[i])
-          expect(click_event.click_url).to eq "https://www&#46;gumroad&#46;com/checkout"
-          expect(click_event.click_timestamps.sole.to_i).to eq(now.to_i)
-          expect(click_event.click_count).to eq(1)
-        end
+        expect(abandoned_cart_workflow_installment1.reload.unique_click_count).to eq(1)
+        expect(abandoned_cart_workflow_installment3.reload.unique_click_count).to eq(1)
+        expect(abandoned_cart_workflow_installment2.reload.unique_click_count).to eq(0)
+        expect(CreatorEmailClickEvent.count).to eq(0)
+        expect(CreatorEmailClickSummary.count).to eq(0)
       end
 
       it "reads live unique click and open counts after a click event" do
@@ -133,81 +96,30 @@ describe HandleEmailEventInfo::ForAbandonedCartEmail do
       end
 
       it "tracks multiple click events and only one email click summary record for different URLs for an installment" do
-        now = Time.current
-        travel_to(now) do
-          handler_class_for(email_provider).new.perform(params1)
-        end
+        handler_class_for(email_provider).new.perform(params1)
+        handler_class_for(email_provider).new.perform(params2)
 
-        travel_to(now + 1.minute) do
-          handler_class_for(email_provider).new.perform(params2)
-        end
-
-        installments = [abandoned_cart_workflow_installment1.id, abandoned_cart_workflow_installment3.id]
-        expect(CreatorEmailClickSummary.count).to eq(2)
-        CreatorEmailClickSummary.each.with_index do |summary, i|
-          expect(summary.total_unique_clicks).to eq(1)
-          expect(summary.installment_id).to eq(installments[i])
-          expect(summary.urls).to eq(
-            "https://www&#46;gumroad&#46;com/checkout" => 1,
-            "https://seller&#46;gumroad&#46;com/l/abc" => 1
-          )
-        end
-        expect(CreatorEmailClickEvent.count).to eq(4)
-        expect(CreatorEmailClickEvent.where(installment_id: abandoned_cart_workflow_installment2.id).count).to eq(0)
-        CreatorEmailClickEvent.order(created_at: :asc).each_slice(2).with_index do |click_events, i|
-          click_events.each.with_index do |click_event, j|
-            expect(click_event.mailer_method).to eq("CustomerMailer.abandoned_cart")
-            expect(click_event.mailer_args).to eq(mailer_args_with_multiple_workflow_ids)
-            expect(click_event.installment_id).to eq(installments[j])
-            expect(click_event.click_url).to eq(["https://www&#46;gumroad&#46;com/checkout", "https://seller&#46;gumroad&#46;com/l/abc"][i])
-            expect(click_event.click_timestamps.sole.to_i).to eq([now, now + 1.minute][i].to_i)
-            expect(click_event.click_count).to eq(1)
-          end
-        end
+        expect(abandoned_cart_workflow_installment1.reload.unique_click_count).to eq(2)
+        expect(abandoned_cart_workflow_installment3.reload.unique_click_count).to eq(2)
+        expect(abandoned_cart_workflow_installment2.reload.unique_click_count).to eq(0)
       end
 
       it "records a single email click summary for duplicate click events and updates the timestamps for the tracked click event" do
-        now = Time.current
-        travel_to(now) do
-          handler_class_for(email_provider).new.perform(params1)
-        end
+        handler_class_for(email_provider).new.perform(params1)
+        handler_class_for(email_provider).new.perform(params1)
 
-        travel_to(now + 1.minute) do
-          handler_class_for(email_provider).new.perform(params1)
-        end
-
-        installments = [abandoned_cart_workflow_installment1.id, abandoned_cart_workflow_installment3.id]
-        expect(CreatorEmailClickSummary.count).to eq(2)
-        CreatorEmailClickSummary.each.with_index do |summary, i|
-          expect(summary.total_unique_clicks).to eq(1)
-          expect(summary.installment_id).to eq(installments[i])
-          expect(summary.urls).to eq("https://www&#46;gumroad&#46;com/checkout" => 1)
-        end
-        expect(CreatorEmailClickEvent.count).to eq(2)
-        CreatorEmailClickEvent.each.with_index do |click_event, i|
-          expect(click_event.mailer_method).to eq("CustomerMailer.abandoned_cart")
-          expect(click_event.mailer_args).to eq(mailer_args_with_multiple_workflow_ids)
-          expect(click_event.installment_id).to eq(installments[i])
-          expect(click_event.click_url).to eq("https://www&#46;gumroad&#46;com/checkout")
-          expect(click_event.click_timestamps.sole.to_i).to eq(now.to_i)
-        end
+        expect(abandoned_cart_workflow_installment1.reload.unique_click_count).to eq(1)
+        expect(abandoned_cart_workflow_installment3.reload.unique_click_count).to eq(1)
       end
     end
 
     RSpec.shared_examples "records an open event while tracking a click event when a corresponding open event does not exist yet" do |email_provider|
       it "records an open event while tracking a click event when a corresponding open event does not exist yet" do
-        now = Time.current
-        travel_to(now) do
-          handler_class_for(email_provider).new.perform(params)
-        end
+        handler_class_for(email_provider).new.perform(params)
 
-        expect(CreatorEmailOpenEvent.count).to eq(1)
-        open_event = CreatorEmailOpenEvent.last
-        expect(open_event.mailer_method).to eq("CustomerMailer.abandoned_cart")
-        expect(open_event.mailer_args).to eq(mailer_args_with_single_workflow_id)
-        expect(open_event.installment_id).to eq(abandoned_cart_workflow_installment1.id)
-        expect(open_event.open_timestamps.count).to eq(1)
-        expect(open_event.open_timestamps.last.to_i).to eq(now.to_i)
+        expect(abandoned_cart_workflow_installment1.reload.unique_open_count).to eq(1)
+        expect(abandoned_cart_workflow_installment1.unique_click_count).to eq(1)
+        expect(CreatorEmailOpenEvent.count).to eq(0)
       end
     end
 
@@ -254,65 +166,26 @@ describe HandleEmailEventInfo::ForAbandonedCartEmail do
         end
 
         it "handles the second event in the params array even if the first one is malformed" do
-          now = Time.current
           params = { "_json" => [{ "event" => "click" },
                                  { "event" => "click", "mailer_class" => "CustomerMailer", "mailer_method" => "abandoned_cart", "mailer_args" => mailer_args_with_multiple_workflow_ids, "url" => "https://www&#46;gumroad&#46;com/checkout" }] }
-          travel_to(now) do
-            handler_class_for(:sendgrid).new.perform(params)
-          end
+          handler_class_for(:sendgrid).new.perform(params)
 
-          installments = [abandoned_cart_workflow_installment1.id, abandoned_cart_workflow_installment3.id]
-          expect(CreatorEmailClickSummary.count).to eq(2)
-          CreatorEmailClickSummary.each.with_index do |summary, i|
-            expect(summary.total_unique_clicks).to eq(1)
-            expect(summary.installment_id).to eq(installments[i])
-            expect(summary.urls).to eq("https://www&#46;gumroad&#46;com/checkout" => 1)
-          end
-          expect(CreatorEmailClickEvent.count).to eq(2)
-          CreatorEmailClickEvent.each.with_index do |click_event, i|
-            expect(click_event.mailer_method).to eq("CustomerMailer.abandoned_cart")
-            expect(click_event.mailer_args).to eq(mailer_args_with_multiple_workflow_ids)
-            expect(click_event.installment_id).to eq(installments[i])
-            expect(click_event.click_url).to eq("https://www&#46;gumroad&#46;com/checkout")
-            expect(click_event.click_timestamps.sole.to_i).to eq(now.to_i)
-            expect(click_event.click_count).to eq(1)
-          end
+          expect(abandoned_cart_workflow_installment1.reload.unique_click_count).to eq(1)
+          expect(abandoned_cart_workflow_installment3.reload.unique_click_count).to eq(1)
         end
       end
 
       it "does not record an open event while recording a click event when a corresponding open event already exists" do
-        now = Time.current
         params = {
           "_json" => [
             { "event" => "open", "mailer_class" => "CustomerMailer", "mailer_method" => "abandoned_cart", "mailer_args" => mailer_args_with_single_workflow_id },
             { "event" => "click", "mailer_class" => "CustomerMailer", "mailer_method" => "abandoned_cart", "mailer_args" => mailer_args_with_single_workflow_id, "url" => "https://www&#46;gumroad&#46;com/checkout" }
           ]
         }
-        travel_to(now) do
-          handler_class_for(:sendgrid).new.perform(params)
-        end
+        handler_class_for(:sendgrid).new.perform(params)
 
-        expect(CreatorEmailOpenEvent.count).to eq(1)
-        open_event = CreatorEmailOpenEvent.last
-        expect(open_event.mailer_method).to eq("CustomerMailer.abandoned_cart")
-        expect(open_event.mailer_args).to eq(mailer_args_with_single_workflow_id)
-        expect(open_event.installment_id).to eq(abandoned_cart_workflow_installment1.id)
-        expect(open_event.open_timestamps.sole.to_i).to eq(now.to_i)
-
-        expect(CreatorEmailClickSummary.count).to eq(1)
-        summary = CreatorEmailClickSummary.last
-        expect(summary.total_unique_clicks).to eq(1)
-        expect(summary.installment_id).to eq(abandoned_cart_workflow_installment1.id)
-        expect(summary.urls).to eq("https://www&#46;gumroad&#46;com/checkout" => 1)
-        expect(CreatorEmailClickEvent.count).to eq(1)
-        click_event = CreatorEmailClickEvent.last
-        expect(click_event.mailer_method).to eq("CustomerMailer.abandoned_cart")
-        expect(click_event.mailer_args).to eq(mailer_args_with_single_workflow_id)
-        expect(click_event.installment_id).to eq(abandoned_cart_workflow_installment1.id)
-        expect(click_event.click_url).to eq("https://www&#46;gumroad&#46;com/checkout")
-        expect(click_event.click_timestamps.count).to eq(1)
-        expect(click_event.click_timestamps.sole.to_i).to eq(now.to_i)
-        expect(click_event.click_count).to eq(1)
+        expect(abandoned_cart_workflow_installment1.reload.unique_open_count).to eq(1)
+        expect(abandoned_cart_workflow_installment1.unique_click_count).to eq(1)
       end
     end
 

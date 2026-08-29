@@ -1,11 +1,10 @@
 # frozen_string_literal: true
 
 # Creates the email engagement table on the DynamoDB Local container. The
-# test suite reads and writes DynamoDB for real (reads_enabled? is true
-# outside production), so an unreachable endpoint is fatal. The test_ prefix
-# keeps the suite off lane 0's dev table; examples stay isolated from each
-# other because engagement partitions are keyed by installment id and every
-# example creates fresh installments.
+# test suite reads and writes DynamoDB for real, so an unreachable endpoint
+# is fatal. The test_ prefix keeps the suite off lane 0's dev table; examples
+# stay isolated from each other because engagement partitions are keyed by
+# installment id and every example creates fresh installments.
 class DynamodbSetup
   def self.prepare_test_environment
     attempts = 0

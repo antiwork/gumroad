@@ -757,14 +757,8 @@ class Installment < ApplicationRecord
   end
 
   def unique_open_count
-    if EmailEngagementDynamoStore.reads_enabled?
-      # DDB GetItem is cheap; caching it pins a first-read zero while opens still stream in.
-      dynamo_engagement_summary[:open_count]
-    else
-      Rails.cache.fetch(key_for_cache(:unique_open_count)) do
-        CreatorEmailOpenEvent.where(installment_id: id).count
-      end
-    end
+    # DDB GetItem is cheap; caching it pins a first-read zero while opens still stream in.
+    dynamo_engagement_summary[:open_count]
   end
 
   # One SUMMARY read serves both counters when a render misses both caches.
@@ -858,28 +852,13 @@ class Installment < ApplicationRecord
   end
 
   def unique_click_count
-    if EmailEngagementDynamoStore.reads_enabled?
-      dynamo_engagement_summary[:click_pair_count]
-    else
-      Rails.cache.fetch(key_for_cache(:unique_click_count)) do
-        summary = CreatorEmailClickSummary.where(installment_id: id).last
-        summary.present? ? summary[:total_unique_clicks] : 0
-      end
-    end
+    dynamo_engagement_summary[:click_pair_count]
   end
 
   def clicked_urls
-    if EmailEngagementDynamoStore.reads_enabled?
-      counts = EmailEngagementDynamoStore.url_click_counts(id)
-      return {} if counts.blank?
-      counts.sort_by { |_, v| -v }.to_h
-    else
-      summary = CreatorEmailClickSummary.where(installment_id: id).last
-      return {} if summary.blank?
-
-      summary.urls.keys.each { |k| summary.urls[k.gsub(/&#46;/, ".").sub(%r{^https?://}, "").sub(/^www./, "")] = summary.urls.delete(k) }
-      Hash[summary.urls.sort_by { |_, v| v }.reverse]
-    end
+    counts = EmailEngagementDynamoStore.url_click_counts(id)
+    return {} if counts.blank?
+    counts.sort_by { |_, v| -v }.to_h
   end
 
   # Public: Returns the percentage of email opens for this installment, or nil if one cannot be calculated.

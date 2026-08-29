@@ -41,24 +41,6 @@ class HandleEmailEventInfo::ForInstallmentEmail
     def handle_open_event!
       EmailEngagementDynamoStore.record_open(**dynamo_engagement_attributes)
 
-      open_event = CreatorEmailOpenEvent.where(
-        mailer_method: email_event_info.mailer_class_and_method,
-        mailer_args: email_event_info.mailer_args,
-        installment_id: email_event_info.installment_id
-      ).last
-      if open_event.present?
-        open_event.add_to_set(open_timestamps: Time.current)
-        open_event.inc(open_count: 1)
-      else
-        CreatorEmailOpenEvent.create!(
-          mailer_method: email_event_info.mailer_class_and_method,
-          mailer_args: email_event_info.mailer_args,
-          installment_id: email_event_info.installment_id,
-          open_timestamps: [Time.current],
-          open_count: 1
-        )
-      end
-
       email_info = pull_creator_contacting_customers_email_info(email_event_info)
       email_info.mark_opened!(email_event_info.created_at) if email_info.present?
 
@@ -69,70 +51,8 @@ class HandleEmailEventInfo::ForInstallmentEmail
       return if email_event_info.click_url_as_mongo_key.blank?
 
       EmailEngagementDynamoStore.record_click(**dynamo_engagement_attributes, click_url: email_event_info.click_url_as_mongo_key)
-
-      summary = CreatorEmailClickSummary.where(installment_id: email_event_info.installment_id).last
-      if summary.present?
-        email_click_event_args = {
-          installment_id: email_event_info.installment_id,
-          mailer_method: email_event_info.mailer_class_and_method,
-          mailer_args: email_event_info.mailer_args,
-        }
-        email_click_event_cache_key = Digest::MD5.hexdigest(email_click_event_args.inspect)
-
-        email_click_event_present = Rails.cache.fetch("#{email_event_info.email_provider}_#{email_click_event_cache_key}") do
-          # Return nil if `present?` returns false. That way, the query will be run again next time.
-          CreatorEmailClickEvent.where(email_click_event_args).last.present? || nil
-        end
-
-        if email_click_event_present
-          url_click_event_args = {
-            installment_id: email_event_info.installment_id,
-            mailer_method: email_event_info.mailer_class_and_method,
-            mailer_args: email_event_info.mailer_args,
-            click_url: email_event_info.click_url_as_mongo_key
-          }
-          url_click_event_cache_key = Digest::MD5.hexdigest(url_click_event_args.inspect)
-
-          url_click_event_present = Rails.cache.fetch("#{email_event_info.email_provider}_#{url_click_event_cache_key}") do
-            # Return nil if `present?` returns false. That way, the query will be run again next time.
-            CreatorEmailClickEvent.where(url_click_event_args).last.present? || nil
-          end
-
-          return if url_click_event_present
-        else
-          summary.inc(total_unique_clicks: 1)
-        end
-        summary.inc("urls.#{email_event_info.click_url_as_mongo_key}" => 1)
-      else
-        CreatorEmailClickSummary.create!(
-          installment_id: email_event_info.installment_id,
-          total_unique_clicks: 1,
-          urls: { email_event_info.click_url_as_mongo_key => 1 }
-        )
-      end
-
-      CreatorEmailClickEvent.create(
-        installment_id: email_event_info.installment_id,
-        mailer_args: email_event_info.mailer_args,
-        mailer_method: email_event_info.mailer_class_and_method,
-        click_url: email_event_info.click_url_as_mongo_key,
-        click_timestamps: [Time.current],
-        click_count: 1
-      )
       update_installment_cache(email_event_info.installment_id, :unique_click_count)
-
-      # If a corresponding open event does not exist, create a new open event. This compensates for blocked image tracking pixels.
-      unless creator_email_open_event_exists?(email_event_info)
-        CreatorEmailOpenEvent.create!(
-          installment_id: email_event_info.installment_id,
-          mailer_method: email_event_info.mailer_class_and_method,
-          mailer_args: email_event_info.mailer_args,
-          open_timestamps: [Time.current],
-          open_count: 1
-        )
-
-        update_installment_cache(email_event_info.installment_id, :unique_open_count)
-      end
+      update_installment_cache(email_event_info.installment_id, :unique_open_count)
 
       email_info = pull_creator_contacting_customers_email_info(email_event_info)
       email_info.mark_opened!(email_event_info.created_at) if email_info&.persisted? && !email_info.opened?
@@ -174,18 +94,10 @@ class HandleEmailEventInfo::ForInstallmentEmail
 
     def update_installment_cache(installment_id, key)
       installment = Installment.find(installment_id)
-
-      if EmailEngagementDynamoStore.reads_enabled?
-        # DDB aggregates are live GetItem reads. Clear stale cache entries for
-        # this event, but do not precompute counters from the discarded instance.
-        installment.invalidate_cache(key)
-        installment.invalidate_legacy_engagement_cache(key)
-        return
-      end
-
-      # Clear cache and precompute the result
+      # DDB aggregates are live GetItem reads. Clear stale cache entries for
+      # this event, but do not precompute counters from the discarded instance.
       installment.invalidate_cache(key)
-      installment.send(key)
+      installment.invalidate_legacy_engagement_cache(key)
     end
 
     def dynamo_engagement_attributes
@@ -194,13 +106,5 @@ class HandleEmailEventInfo::ForInstallmentEmail
         mailer_method: email_event_info.mailer_class_and_method,
         mailer_args: email_event_info.mailer_args,
       }
-    end
-
-    def creator_email_open_event_exists?(email_event_info)
-      CreatorEmailOpenEvent.where(
-        installment_id: email_event_info.installment_id,
-        mailer_method: email_event_info.mailer_class_and_method,
-        mailer_args: email_event_info.mailer_args,
-      ).exists?
     end
 end

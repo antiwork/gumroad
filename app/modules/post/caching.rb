@@ -1,10 +1,11 @@
 # frozen_string_literal: true
 
 module Post::Caching
-  # The _ddb namespace keeps legacy cached counters from surviving the read
-  # flip (Memcached cannot bulk-delete): flipping email_engagement_dynamodb_reads
-  # moves every fetch and every invalidation to fresh keys together.
-  def key_for_cache(key, dynamodb_reads: EmailEngagementDynamoStore.reads_enabled?)
+  # Default keys stay in the _ddb namespace so pre-cutover Mongo cache values
+  # cannot leak back onto the dashboard. dynamodb_reads: false still names the
+  # unsuffixed legacy key so event handlers can delete it (Memcached cannot
+  # bulk-delete).
+  def key_for_cache(key, dynamodb_reads: true)
     "#{key}_for_installment_#{id}#{dynamodb_reads ? "_ddb" : ""}"
   end
 

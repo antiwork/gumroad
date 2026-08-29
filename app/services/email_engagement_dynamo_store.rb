@@ -18,8 +18,6 @@
 class EmailEngagementDynamoStore
   TABLE_BASE_NAME = "email_engagement"
   SUMMARY_SORT_KEY = "SUMMARY"
-  DUAL_WRITE_FEATURE = :email_engagement_dynamodb_dual_write
-  READ_FEATURE = :email_engagement_dynamodb_reads
   BATCH_GET_LIMIT = 100
   BATCH_GET_MAX_ATTEMPTS = 5
 
@@ -27,31 +25,19 @@ class EmailEngagementDynamoStore
     attr_writer :client
 
     def record_open(installment_id:, mailer_method:, mailer_args:)
-      with_dual_write_guard do
-        upsert_open_item(installment_id: installment_id.to_i, mailer_method:, mailer_args:)
-      end
+      upsert_open_item(installment_id: installment_id.to_i, mailer_method:, mailer_args:)
     end
 
     def record_click(installment_id:, mailer_method:, mailer_args:, click_url:)
-      with_dual_write_guard do
-        installment_id = installment_id.to_i
-        recipient = recipient_digest(mailer_method:, mailer_args:)
+      installment_id = installment_id.to_i
+      recipient = recipient_digest(mailer_method:, mailer_args:)
 
-        # A repeat click of the same url by the same recipient counts nothing,
-        # matching the Mongo path's early return.
-        next unless put_click_item(installment_id:, mailer_method:, mailer_args:, click_url:, recipient:)
-
-        increment_url_click_count(installment_id:, click_url:)
-        increment_summary(installment_id:, attribute: "click_pair_count")
-        # The conditional marker put is both the "has this recipient clicked
-        # anything?" check and the claim, so concurrent first clicks on
-        # different urls can't double-increment the counter.
-        if put_clicker_marker(installment_id:, mailer_method:, mailer_args:, recipient:)
-          increment_summary(installment_id:, attribute: "click_count")
-        end
-        # A click implies an open; compensates for blocked tracking pixels.
-        ensure_open_item(installment_id:, mailer_method:, mailer_args:)
-      end
+      # Each of these is one TransactWrite so a retry after a mid-flight
+      # failure cannot skip derived counters. A duplicate same-url click
+      # cancels all three on ConditionalCheckFailed and counts nothing.
+      commit_click_and_counters(installment_id:, mailer_method:, mailer_args:, click_url:, recipient:)
+      commit_clicker_and_count(installment_id:, mailer_method:, mailer_args:, recipient:)
+      ensure_open_item(installment_id:, mailer_method:, mailer_args:)
     end
 
     def client
@@ -76,17 +62,6 @@ class EmailEngagementDynamoStore
 
     # Staging and production tables are Terraform-owned (antiwork/infrastructure#998)
     # and deletion-protected; this bootstrap is for dev, test, and branch apps.
-    # DynamoDB is the primary store outside production: dual writes always
-    # on, reads always served from DynamoDB. Production stays flag-controlled
-    # until the Mongo decommission completes.
-    def reads_enabled?
-      !Rails.env.production? || Feature.active?(READ_FEATURE)
-    end
-
-    def dual_writes_enabled?
-      !Rails.env.production? || Feature.active?(DUAL_WRITE_FEATURE)
-    end
-
     def summary(installment_id)
       item = client.get_item(table_name:, key: item_key(installment_id, SUMMARY_SORT_KEY)).item
       summary_from_item(item)
@@ -185,104 +160,127 @@ class EmailEngagementDynamoStore
     end
 
     private
-      def with_dual_write_guard
-        return unless dual_writes_enabled?
-        yield
-      rescue => e
-        # Mongo remains the source of truth during dual writes; a DynamoDB
-        # failure must not fail email event processing.
-        ErrorNotifier.notify(e)
-      end
-
       def upsert_open_item(installment_id:, mailer_method:, mailer_args:)
+        return if ensure_open_item(installment_id:, mailer_method:, mailer_args:)
+
         now = timestamp
-        previous = client.update_item(
+        client.update_item(
           table_name:,
           key: item_key(installment_id, open_sort_key(mailer_method:, mailer_args:)),
           update_expression: "ADD open_count :one " \
                              "SET mailer_method = :mailer_method, mailer_args = :mailer_args, " \
-                             "first_open_at = if_not_exists(first_open_at, :now), last_open_at = :now",
-          expression_attribute_values: { ":one" => 1, ":mailer_method" => mailer_method, ":mailer_args" => mailer_args, ":now" => now },
-          return_values: "ALL_OLD"
+                             "last_open_at = :now",
+          expression_attribute_values: { ":one" => 1, ":mailer_method" => mailer_method, ":mailer_args" => mailer_args, ":now" => now }
         )
-        increment_summary(installment_id:, attribute: "open_count") if previous.attributes.blank?
       end
 
       # Creates the open item only if absent, without touching an existing item's
       # open_count, mirroring the Mongo compensating-open behavior on clicks.
+      # Bundled with the summary increment so a retry cannot leave unique opens undercounted.
       def ensure_open_item(installment_id:, mailer_method:, mailer_args:)
         now = timestamp
-        client.put_item(
-          table_name:,
-          item: {
-            "pk" => partition_key(installment_id),
-            "sk" => open_sort_key(mailer_method:, mailer_args:),
-            "mailer_method" => mailer_method,
-            "mailer_args" => mailer_args,
-            "open_count" => 1,
-            "first_open_at" => now,
-            "last_open_at" => now,
-          },
-          condition_expression: "attribute_not_exists(pk)"
+        transact_unless_exists(
+          [
+            {
+              put: {
+                table_name:,
+                item: {
+                  "pk" => partition_key(installment_id),
+                  "sk" => open_sort_key(mailer_method:, mailer_args:),
+                  "mailer_method" => mailer_method,
+                  "mailer_args" => mailer_args,
+                  "open_count" => 1,
+                  "first_open_at" => now,
+                  "last_open_at" => now,
+                },
+                condition_expression: "attribute_not_exists(pk)",
+              }
+            },
+            summary_increment(installment_id, "open_count"),
+          ]
         )
-        increment_summary(installment_id:, attribute: "open_count")
-      rescue Aws::DynamoDB::Errors::ConditionalCheckFailedException
-        nil
       end
 
-      def put_click_item(installment_id:, mailer_method:, mailer_args:, click_url:, recipient:)
-        client.put_item(
-          table_name:,
-          item: {
-            "pk" => partition_key(installment_id),
-            "sk" => "CLICK##{recipient}##{url_digest(click_url)}",
-            "mailer_method" => mailer_method,
-            "mailer_args" => mailer_args,
-            "click_url" => click_url,
-            "click_count" => 1,
-            "first_click_at" => timestamp,
-          },
-          condition_expression: "attribute_not_exists(pk)"
+      def commit_click_and_counters(installment_id:, mailer_method:, mailer_args:, click_url:, recipient:)
+        transact_unless_exists(
+          [
+            {
+              put: {
+                table_name:,
+                item: {
+                  "pk" => partition_key(installment_id),
+                  "sk" => "CLICK##{recipient}##{url_digest(click_url)}",
+                  "mailer_method" => mailer_method,
+                  "mailer_args" => mailer_args,
+                  "click_url" => click_url,
+                  "click_count" => 1,
+                  "first_click_at" => timestamp,
+                },
+                condition_expression: "attribute_not_exists(pk)",
+              }
+            },
+            {
+              update: {
+                table_name:,
+                key: item_key(installment_id, url_sort_key(click_url)),
+                update_expression: "ADD click_count :one SET click_url = :click_url",
+                expression_attribute_values: { ":one" => 1, ":click_url" => click_url },
+              }
+            },
+            summary_increment(installment_id, "click_pair_count"),
+          ]
         )
+      end
+
+      def commit_clicker_and_count(installment_id:, mailer_method:, mailer_args:, recipient:)
+        transact_unless_exists(
+          [
+            {
+              put: {
+                table_name:,
+                item: {
+                  "pk" => partition_key(installment_id),
+                  "sk" => "CLICKER##{recipient}",
+                  "mailer_method" => mailer_method,
+                  "mailer_args" => mailer_args,
+                  "first_click_at" => timestamp,
+                },
+                condition_expression: "attribute_not_exists(pk)",
+              }
+            },
+            summary_increment(installment_id, "click_count"),
+          ]
+        )
+      end
+
+      def summary_increment(installment_id, attribute)
+        {
+          update: {
+            table_name:,
+            key: item_key(installment_id, SUMMARY_SORT_KEY),
+            update_expression: "ADD #counter :one",
+            expression_attribute_names: { "#counter" => attribute },
+            expression_attribute_values: { ":one" => 1 },
+          }
+        }
+      end
+
+      def transact_unless_exists(transact_items)
+        client.transact_write_items(transact_items:)
         true
-      rescue Aws::DynamoDB::Errors::ConditionalCheckFailedException
+      rescue Aws::DynamoDB::Errors::TransactionCanceledException => e
+        raise unless conditional_check_failed?(e)
         false
       end
 
-      def put_clicker_marker(installment_id:, mailer_method:, mailer_args:, recipient:)
-        client.put_item(
-          table_name:,
-          item: {
-            "pk" => partition_key(installment_id),
-            "sk" => "CLICKER##{recipient}",
-            "mailer_method" => mailer_method,
-            "mailer_args" => mailer_args,
-            "first_click_at" => timestamp,
-          },
-          condition_expression: "attribute_not_exists(pk)"
-        )
-        true
-      rescue Aws::DynamoDB::Errors::ConditionalCheckFailedException
-        false
-      end
-
-      def increment_url_click_count(installment_id:, click_url:)
-        client.update_item(
-          table_name:,
-          key: item_key(installment_id, url_sort_key(click_url)),
-          update_expression: "ADD click_count :one SET click_url = :click_url",
-          expression_attribute_values: { ":one" => 1, ":click_url" => click_url }
-        )
-      end
-
-      def increment_summary(installment_id:, attribute:)
-        client.update_item(
-          table_name:,
-          key: item_key(installment_id, SUMMARY_SORT_KEY),
-          update_expression: "ADD #counter :one",
-          expression_attribute_names: { "#counter" => attribute },
-          expression_attribute_values: { ":one" => 1 }
-        )
+      # A cancellation is the expected duplicate only when fully explained by
+      # condition checks; anything else (conflict, throttle) raises so Sidekiq
+      # retries the event. Stubbed clients raise with empty data, so fall back
+      # to the per-item reason list the service embeds in the message.
+      def conditional_check_failed?(error)
+        codes = error.data.try(:cancellation_reasons).to_a.map(&:code)
+        codes = error.message.to_s[/\[([^\]]+)\]\z/, 1].to_s.split(",").map(&:strip) if codes.empty?
+        codes.any? && codes.all? { |code| ["ConditionalCheckFailed", "None"].include?(code) }
       end
 
       def item_key(installment_id, sort_key)

@@ -9,7 +9,6 @@ describe EmailEngagementDynamoStore do
   let(:url_digest) { Digest::SHA256.hexdigest(click_url) }
 
   before do
-    Feature.activate(:email_engagement_dynamodb_dual_write)
     described_class.client = client
   end
 
@@ -32,137 +31,179 @@ describe EmailEngagementDynamoStore do
     hash.transform_values { plain(_1) }
   end
 
+  def stub_transact(*steps)
+    i = 0
+    client.stub_responses(:transact_write_items, lambda do |_context|
+      step = steps[i] || steps.last
+      i += 1
+      case step
+      when :ok
+        {}
+      when :conditional
+        raise Aws::DynamoDB::Errors::TransactionCanceledException.new(
+          nil,
+          "Transaction cancelled, please refer cancellation reasons for specific reasons [ConditionalCheckFailed, None, None]"
+        )
+      when :conflict
+        raise Aws::DynamoDB::Errors::TransactionCanceledException.new(
+          nil,
+          "Transaction cancelled, please refer cancellation reasons for specific reasons [TransactionConflict, None, None]"
+        )
+      else
+        step
+      end
+    end)
+  end
+
   describe ".record_open" do
-    it "does nothing in production when the feature flag is inactive" do
+    it "writes in production without a feature flag" do
       allow(Rails).to receive(:env).and_return(ActiveSupport::StringInquirer.new("production"))
-      Feature.deactivate(:email_engagement_dynamodb_dual_write)
 
       described_class.record_open(installment_id: 123, mailer_method:, mailer_args:)
 
-      expect(requests).to be_empty
+      expect(requests.map { _1[:operation_name] }).to eq([:transact_write_items])
     end
 
     it "upserts the open item and increments the summary open count on a recipient's first open" do
-      client.stub_responses(:update_item, [{ attributes: {} }, {}])
-
       described_class.record_open(installment_id: 123, mailer_method:, mailer_args:)
 
-      expect(requests.map { _1[:operation_name] }).to eq([:update_item, :update_item])
+      expect(requests.map { _1[:operation_name] }).to eq([:transact_write_items])
 
-      open_upsert = requests.first[:params]
-      expect(open_upsert[:table_name]).to eq(described_class.table_name)
-      expect(plain_hash(open_upsert[:key])).to eq("pk" => "123", "sk" => "OPEN##{recipient_digest}")
-      expect(open_upsert[:update_expression]).to include("ADD open_count :one")
-      expect(open_upsert[:update_expression]).to include("first_open_at = if_not_exists(first_open_at, :now)")
-      expect(plain(open_upsert[:expression_attribute_values][":mailer_method"])).to eq(mailer_method)
-      expect(plain(open_upsert[:expression_attribute_values][":mailer_args"])).to eq(mailer_args)
-      expect(open_upsert[:return_values]).to eq("ALL_OLD")
+      items = requests.first[:params][:transact_items]
+      open_put = items.first[:put]
+      expect(open_put[:table_name]).to eq(described_class.table_name)
+      expect(plain_hash(open_put[:item].slice("pk", "sk"))).to eq("pk" => "123", "sk" => "OPEN##{recipient_digest}")
+      expect(plain(open_put[:item]["mailer_method"])).to eq(mailer_method)
+      expect(plain(open_put[:item]["mailer_args"])).to eq(mailer_args)
+      expect(plain(open_put[:item]["open_count"])).to eq(1)
+      expect(open_put[:condition_expression]).to eq("attribute_not_exists(pk)")
 
-      summary_update = requests.last[:params]
+      summary_update = items.last[:update]
       expect(plain_hash(summary_update[:key])).to eq("pk" => "123", "sk" => "SUMMARY")
       expect(summary_update[:update_expression]).to eq("ADD #counter :one")
       expect(summary_update[:expression_attribute_names]).to eq("#counter" => "open_count")
     end
 
     it "does not touch the summary when the recipient has opened before" do
-      client.stub_responses(:update_item, { attributes: { "open_count" => 2 } })
+      stub_transact(:conditional)
 
       described_class.record_open(installment_id: 123, mailer_method:, mailer_args:)
 
-      expect(requests.map { _1[:operation_name] }).to eq([:update_item])
+      expect(requests.map { _1[:operation_name] }).to eq([:transact_write_items, :update_item])
+      expect(plain_hash(requests.last[:params][:key])).to eq("pk" => "123", "sk" => "OPEN##{recipient_digest}")
+      expect(requests.last[:params][:update_expression]).to include("ADD open_count :one")
+      expect(requests.last[:params][:update_expression]).to include("last_open_at = :now")
     end
 
-    it "notifies instead of raising when DynamoDB fails" do
-      client.stub_responses(:update_item, "InternalServerError")
-      expect(ErrorNotifier).to receive(:notify).with(kind_of(Aws::Errors::ServiceError))
+    it "raises when DynamoDB fails so Sidekiq can retry" do
+      client.stub_responses(:transact_write_items, "InternalServerError")
 
       expect do
         described_class.record_open(installment_id: 123, mailer_method:, mailer_args:)
-      end.not_to raise_error
+      end.to raise_error(Aws::Errors::ServiceError)
     end
   end
 
   describe ".record_click" do
-    it "does nothing in production when the feature flag is inactive" do
+    it "writes in production without a feature flag" do
       allow(Rails).to receive(:env).and_return(ActiveSupport::StringInquirer.new("production"))
-      Feature.deactivate(:email_engagement_dynamodb_dual_write)
 
       described_class.record_click(installment_id: 123, mailer_method:, mailer_args:, click_url:)
 
-      expect(requests).to be_empty
+      expect(requests).not_to be_empty
     end
 
     it "records a first-ever click with the url total, the pair count, the clicker marker, the summary click count, and a compensating open" do
       described_class.record_click(installment_id: 123, mailer_method:, mailer_args:, click_url:)
 
-      expect(requests.map { _1[:operation_name] }).to eq(
-        [:put_item, :update_item, :update_item, :put_item, :update_item, :put_item, :update_item]
-      )
+      expect(requests.map { _1[:operation_name] }).to eq([:transact_write_items, :transact_write_items, :transact_write_items])
 
-      click_put = requests[0][:params]
+      click_items = requests[0][:params][:transact_items]
+      click_put = click_items[0][:put]
       expect(plain(click_put[:item]["pk"])).to eq("123")
       expect(plain(click_put[:item]["sk"])).to eq("CLICK##{recipient_digest}##{url_digest}")
       expect(plain(click_put[:item]["click_url"])).to eq(click_url)
       expect(plain(click_put[:item]["click_count"])).to eq(1)
       expect(click_put[:condition_expression]).to eq("attribute_not_exists(pk)")
 
-      url_update = requests[1][:params]
+      url_update = click_items[1][:update]
       expect(plain_hash(url_update[:key])).to eq("pk" => "123", "sk" => "URL##{url_digest}")
       expect(url_update[:update_expression]).to eq("ADD click_count :one SET click_url = :click_url")
       expect(plain(url_update[:expression_attribute_values][":click_url"])).to eq(click_url)
 
-      pair_update = requests[2][:params]
+      pair_update = click_items[2][:update]
       expect(plain_hash(pair_update[:key])).to eq("pk" => "123", "sk" => "SUMMARY")
       expect(pair_update[:expression_attribute_names]).to eq("#counter" => "click_pair_count")
 
-      marker_put = requests[3][:params]
+      clicker_items = requests[1][:params][:transact_items]
+      marker_put = clicker_items[0][:put]
       expect(plain(marker_put[:item]["pk"])).to eq("123")
       expect(plain(marker_put[:item]["sk"])).to eq("CLICKER##{recipient_digest}")
       expect(plain(marker_put[:item]["mailer_args"])).to eq(mailer_args)
       expect(marker_put[:condition_expression]).to eq("attribute_not_exists(pk)")
 
-      summary_click_update = requests[4][:params]
+      summary_click_update = clicker_items[1][:update]
       expect(plain_hash(summary_click_update[:key])).to eq("pk" => "123", "sk" => "SUMMARY")
       expect(summary_click_update[:expression_attribute_names]).to eq("#counter" => "click_count")
 
-      open_put = requests[5][:params]
+      open_items = requests[2][:params][:transact_items]
+      open_put = open_items[0][:put]
       expect(plain(open_put[:item]["pk"])).to eq("123")
       expect(plain(open_put[:item]["sk"])).to eq("OPEN##{recipient_digest}")
       expect(plain(open_put[:item]["open_count"])).to eq(1)
       expect(open_put[:condition_expression]).to eq("attribute_not_exists(pk)")
 
-      summary_open_update = requests[6][:params]
+      summary_open_update = open_items[1][:update]
       expect(plain_hash(summary_open_update[:key])).to eq("pk" => "123", "sk" => "SUMMARY")
       expect(summary_open_update[:expression_attribute_names]).to eq("#counter" => "open_count")
     end
 
     it "counts the pair but not the summary click count when the recipient has clicked another url before" do
-      # The click item put succeeds; the clicker marker already exists, as does the open item.
-      client.stub_responses(:put_item, [{}, "ConditionalCheckFailedException", "ConditionalCheckFailedException"])
+      stub_transact(:ok, :conditional, :conditional)
 
       described_class.record_click(installment_id: 123, mailer_method:, mailer_args:, click_url:)
 
-      expect(requests.map { _1[:operation_name] }).to eq([:put_item, :update_item, :update_item, :put_item, :put_item])
-      expect(plain(requests[1][:params][:key]["sk"])).to eq("URL##{url_digest}")
-      expect(requests[2][:params][:expression_attribute_names]).to eq("#counter" => "click_pair_count")
-      expect(plain(requests[3][:params][:item]["sk"])).to eq("CLICKER##{recipient_digest}")
+      expect(requests.map { _1[:operation_name] }).to eq([:transact_write_items, :transact_write_items, :transact_write_items])
+      expect(plain(requests[0][:params][:transact_items][0][:put][:item]["sk"])).to eq("CLICK##{recipient_digest}##{url_digest}")
+      expect(plain_hash(requests[0][:params][:transact_items][1][:update][:key])).to eq("pk" => "123", "sk" => "URL##{url_digest}")
+      expect(requests[0][:params][:transact_items][2][:update][:expression_attribute_names]).to eq("#counter" => "click_pair_count")
+      expect(plain(requests[1][:params][:transact_items][0][:put][:item]["sk"])).to eq("CLICKER##{recipient_digest}")
     end
 
     it "counts nothing on a repeat click of the same url by the same recipient" do
-      client.stub_responses(:put_item, "ConditionalCheckFailedException")
+      stub_transact(:conditional)
 
       described_class.record_click(installment_id: 123, mailer_method:, mailer_args:, click_url:)
 
-      expect(requests.map { _1[:operation_name] }).to eq([:put_item])
+      expect(requests.map { _1[:operation_name] }).to eq([:transact_write_items, :transact_write_items, :transact_write_items])
+      expect(requests).to all(satisfy { |req| req[:operation_name] == :transact_write_items })
     end
 
-    it "notifies instead of raising when DynamoDB fails" do
-      client.stub_responses(:put_item, "ProvisionedThroughputExceededException")
-      expect(ErrorNotifier).to receive(:notify).with(kind_of(Aws::Errors::ServiceError))
+    it "still writes clicker and open counters when a retry finds the click item already committed" do
+      stub_transact(:conditional, :ok, :ok)
+
+      described_class.record_click(installment_id: 123, mailer_method:, mailer_args:, click_url:)
+
+      expect(requests.map { _1[:operation_name] }).to eq([:transact_write_items, :transact_write_items, :transact_write_items])
+      expect(plain(requests[1][:params][:transact_items][0][:put][:item]["sk"])).to eq("CLICKER##{recipient_digest}")
+      expect(requests[1][:params][:transact_items][1][:update][:expression_attribute_names]).to eq("#counter" => "click_count")
+      expect(plain(requests[2][:params][:transact_items][0][:put][:item]["sk"])).to eq("OPEN##{recipient_digest}")
+    end
+
+    it "raises when DynamoDB fails so Sidekiq can retry" do
+      client.stub_responses(:transact_write_items, "ProvisionedThroughputExceededException")
 
       expect do
         described_class.record_click(installment_id: 123, mailer_method:, mailer_args:, click_url:)
-      end.not_to raise_error
+      end.to raise_error(Aws::Errors::ServiceError)
+    end
+
+    it "raises retryable transaction cancellations that are not conditional duplicates" do
+      stub_transact(:conflict)
+
+      expect do
+        described_class.record_click(installment_id: 123, mailer_method:, mailer_args:, click_url:)
+      end.to raise_error(Aws::DynamoDB::Errors::TransactionCanceledException)
     end
   end
 
@@ -210,11 +251,12 @@ describe EmailEngagementDynamoStore do
     end
 
     it "lets DYNAMODB_TABLE_PREFIX override the environment default for branch apps" do
+      original = ENV["DYNAMODB_TABLE_PREFIX"]
       allow(Rails).to receive(:env).and_return(ActiveSupport::StringInquirer.new("staging"))
       ENV["DYNAMODB_TABLE_PREFIX"] = "branchapp-foo-"
       expect(described_class.table_name).to eq("branchapp-foo-email_engagement")
     ensure
-      ENV.delete("DYNAMODB_TABLE_PREFIX")
+      original.nil? ? ENV.delete("DYNAMODB_TABLE_PREFIX") : ENV["DYNAMODB_TABLE_PREFIX"] = original
     end
   end
 
