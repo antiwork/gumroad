@@ -149,6 +149,7 @@ class SendPostBlastEmailsJob
         members
       else
         Rails.logger.info("[#{self.class.name}] blast_id=#{@blast.id} resuming from audience snapshot (#{snapshotted_ids.size} members)")
+        $redis.expire(snapshot_key, AUDIENCE_SNAPSHOT_TTL.to_i)
         revalidate_snapshotted_members(snapshotted_ids.map(&:to_i))
       end
     end
@@ -198,6 +199,7 @@ class SendPostBlastEmailsJob
       checkpoint_key = RedisKey.blast_non_opener_emails(@blast.id)
       if $redis.exists?(checkpoint_key)
         emails = $redis.smembers(checkpoint_key).to_set
+        $redis.expire(checkpoint_key, AUDIENCE_SNAPSHOT_TTL.to_i) if emails.present?
         Rails.logger.info("[#{self.class.name}] blast_id=#{@blast.id} resuming from non-opener checkpoint (#{emails.size} emails)")
         return emails
       end

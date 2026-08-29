@@ -449,6 +449,19 @@ describe SendPostBlastEmailsJob, :freeze_time do
         expect(PostSendgridApi.mails[sent_sale.email]).to be_blank
       end
 
+      it "renews a reused checkpoint when the resumed send fails" do
+        $redis.sadd(checkpoint_key, [delivered_sale.email])
+        $redis.expire(checkpoint_key, 5.minutes.to_i)
+        allow(PostEmailApi).to receive(:provider_for).and_return(MailerInfo::EMAIL_PROVIDER_SENDGRID)
+        expect(PostSendgridApi).to receive(:process).and_raise(StandardError.new("API failure"))
+
+        expect do
+          described_class.new.perform(blast.id)
+        end.to raise_error(StandardError, "API failure")
+
+        expect($redis.ttl(checkpoint_key)).to be_between(13.days.to_i, AlertOnStalledPostEmailBlastsJob::LOOKBACK.to_i).inclusive
+      end
+
       it "keeps the checkpoint when the send fails so the next attempt can reuse it" do
         allow(PostEmailApi).to receive(:provider_for).and_return(MailerInfo::EMAIL_PROVIDER_SENDGRID)
         expect(PostSendgridApi).to receive(:process).and_raise(StandardError.new("API failure"))
@@ -535,6 +548,25 @@ describe SendPostBlastEmailsJob, :freeze_time do
       expect($redis.exists?(snapshot_key)).to eq(false)
     ensure
       $redis.del(snapshot_key)
+    end
+
+    it "renews a reused audience snapshot when the resumed send fails" do
+      post = basic_post_with_audience
+      blast = create(:blast, :just_requested, post:)
+      snapshot_key = RedisKey.blast_audience_snapshot(blast.id)
+      $redis.rpush(snapshot_key, AudienceMember.where(seller_id: post.seller_id).pluck(:id))
+      $redis.expire(snapshot_key, 5.minutes.to_i)
+      allow(PostEmailApi).to receive(:provider_for).and_return(MailerInfo::EMAIL_PROVIDER_SENDGRID)
+      expect(PostSendgridApi).to receive(:process).and_raise(StandardError.new("API failure"))
+
+      expect do
+        described_class.new.perform(blast.id)
+      end.to raise_error(StandardError, "API failure")
+
+      expect($redis.ttl(snapshot_key)).to be_between(13.days.to_i, AlertOnStalledPostEmailBlastsJob::LOOKBACK.to_i).inclusive
+      expect($redis.ttl(RedisKey.blast_pending_recipients(blast.id))).to be_between(13.days.to_i, AlertOnStalledPostEmailBlastsJob::LOOKBACK.to_i).inclusive
+    ensure
+      $redis.del(snapshot_key, RedisKey.blast_pending_recipients(blast.id)) if snapshot_key
     end
 
     it "revalidates the snapshot under the raised statement execution cap" do
