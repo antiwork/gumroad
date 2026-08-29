@@ -46,6 +46,8 @@ class Affiliate < ApplicationRecord
   scope :pending_or_confirmed_collaborators, -> { where(type: Collaborator.name) }
 
   scope :for_product, ->(product) do
+    return none if product.nil?
+
     affiliates_relation = Affiliate.joins("LEFT OUTER JOIN affiliates_links ON affiliates_links.affiliate_id = affiliates.id").where("affiliates_links.link_id = ?", product.id).direct_affiliates
     affiliates_relation = affiliates_relation.or(Affiliate.global_affiliates) if product.recommendable?
     affiliates_relation
