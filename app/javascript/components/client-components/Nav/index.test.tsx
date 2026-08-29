@@ -80,7 +80,10 @@ beforeAll(() => {
   });
 });
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  vi.unstubAllGlobals();
+});
 
 const seller: CurrentSeller = {
   id: "1",
@@ -299,6 +302,53 @@ describe("dashboard nav progressive disclosure", () => {
     fireEvent.click(control);
 
     expect(scrollTo).toHaveBeenCalledWith({ top: 280, behavior: "smooth" });
+
+    // The rAF scroll runs while the grid is still ~0fr and clamps, so the same scroll must be
+    // re-issued once the grid-template-rows transition has given the rows their height.
+    const panel = document.getElementById(control.getAttribute("aria-controls") ?? "");
+    if (!panel) throw new Error("Expected the disclosure panel to exist");
+    // happy-dom's TransitionEvent constructor drops propertyName, so define it on a plain Event.
+    const transitionEnd = new Event("transitionend", { bubbles: true });
+    Object.defineProperty(transitionEnd, "propertyName", { value: "grid-template-rows" });
+    fireEvent(panel, transitionEnd);
+
+    expect(scrollTo).toHaveBeenCalledTimes(2);
+    expect(scrollTo).toHaveBeenLastCalledWith({ top: 280, behavior: "smooth" });
+  });
+
+  it("scrolls without animation when the user prefers reduced motion", () => {
+    vi.stubGlobal("requestAnimationFrame", (cb: FrameRequestCallback) => {
+      cb(0);
+      return 0;
+    });
+    vi.stubGlobal("matchMedia", vi.fn().mockReturnValue({ matches: true }));
+    renderNav();
+
+    const region = navScrollRegion();
+    const scrollTo = vi.fn();
+    region.scrollTo = scrollTo;
+    Object.defineProperty(region, "scrollTop", { configurable: true, value: 40, writable: true });
+    vi.spyOn(region, "getBoundingClientRect").mockReturnValue({ top: 80 } as DOMRect);
+    const control = screen.getByRole("button", { name: "Everything else" });
+    vi.spyOn(control, "getBoundingClientRect").mockReturnValue({ top: 320 } as DOMRect);
+
+    fireEvent.click(control);
+
+    expect(scrollTo).toHaveBeenCalledWith({ top: 280, behavior: "auto" });
+  });
+
+  it("keeps the collapsed overflow inert so its rows are unreachable until it opens", () => {
+    renderNav();
+
+    const control = screen.getByRole("button", { name: "Everything else" });
+    const panel = document.getElementById(control.getAttribute("aria-controls") ?? "");
+    const wrapper = panel?.querySelector(".overflow-hidden");
+    if (!(wrapper instanceof HTMLElement)) throw new Error("Expected the overflow wrapper to exist");
+    expect(wrapper.hasAttribute("inert")).toBe(true);
+
+    fireEvent.click(control);
+
+    expect(wrapper.hasAttribute("inert")).toBe(false);
   });
 
   it("drops Everything else once nothing is left in it", () => {

@@ -326,20 +326,23 @@ const EverythingElse = ({ children }: { children: React.ReactNode }) => {
   const listId = React.useId();
   const buttonRef = React.useRef<HTMLButtonElement>(null);
 
-  const toggle = () => {
-    setOpen((prev) => {
-      const next = !prev;
-      if (next) {
-        requestAnimationFrame(() => {
-          const button = buttonRef.current;
-          const scroller = button?.closest(".overflow-y-auto");
-          if (!(button instanceof HTMLElement) || !(scroller instanceof HTMLElement)) return;
-          const offset = button.getBoundingClientRect().top - scroller.getBoundingClientRect().top;
-          scroller.scrollTo({ top: scroller.scrollTop + offset, behavior: "smooth" });
-        });
-      }
-      return next;
+  const scrollDisclosureToTop = () => {
+    const button = buttonRef.current;
+    const scroller = button?.closest(".overflow-y-auto");
+    if (!(button instanceof HTMLElement) || !(scroller instanceof HTMLElement)) return;
+    const offset = button.getBoundingClientRect().top - scroller.getBoundingClientRect().top;
+    scroller.scrollTo({
+      top: scroller.scrollTop + offset,
+      behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth",
     });
+  };
+
+  const toggle = () => {
+    const next = !open;
+    setOpen(next);
+    // The rAF scroll starts while the grid is still at ~0fr, so the scroll target clamps to the
+    // pre-expansion height; the transitionend handler below re-issues it once the rows are tall.
+    if (next) requestAnimationFrame(scrollDisclosureToTop);
   };
 
   return (
@@ -371,6 +374,10 @@ const EverythingElse = ({ children }: { children: React.ReactNode }) => {
       </button>
       <div
         id={listId}
+        onTransitionEnd={(event) => {
+          if (open && event.target === event.currentTarget && event.propertyName === "grid-template-rows")
+            scrollDisclosureToTop();
+        }}
         className={classNames(
           "grid transition-[grid-template-rows] duration-200 ease-out motion-reduce:transition-none",
           open ? "grid-rows-[1fr]" : "grid-rows-[0fr]",
