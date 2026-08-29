@@ -7,8 +7,11 @@ describe AlertOnStalledPostEmailBlastsJob do
 
   def stalled_blast(requested_hours_ago: 6, post: self.post, delivery_count: 0, started: true)
     requested_at = requested_hours_ago.hours.ago
-    create(:post_email_blast, post:, requested_at:, started_at: started ? requested_at + 1.minute : nil,
-                              completed_at: nil, delivery_count:)
+    started_at = started ? requested_at + 1.minute : nil
+    # Factory default last_email is 10 minutes ago (still-sending). A stalled fixture must
+    # look idle or last_email_recent? would classify every candidate as running.
+    create(:post_email_blast, post:, requested_at:, started_at:, completed_at: nil, delivery_count:,
+                              first_email_delivered_at: started_at, last_email_delivered_at: started_at)
   end
 
   def stub_sidekiq(dead: [], retrying: [], busy: [], queued: [])
@@ -172,6 +175,54 @@ describe AlertOnStalledPostEmailBlastsJob do
         expect(InternalNotificationWorker).to have_received(:perform_async) do |_room, _subject, message|
           expect(message).to match(/blast #{blast.id}.*HELD \(already auto-resumed/)
         end
+      end
+
+      it "retries again after the resume marker expires" do
+        blast = stalled_blast(requested_hours_ago: 6)
+        stub_sidekiq
+
+        described_class.new.perform
+        expect(SendPostBlastEmailsJob).to have_received(:perform_async).with(blast.id).once
+
+        $redis.del(RedisKey.stalled_blast_auto_resumed(blast.id))
+        described_class.new.perform
+        expect(SendPostBlastEmailsJob).to have_received(:perform_async).with(blast.id).twice
+      end
+
+      it "expires the resume marker after the stall threshold, not the lookback" do
+        blast = stalled_blast(requested_hours_ago: 6)
+        stub_sidekiq
+        allow($redis).to receive(:set).and_call_original
+        expect($redis).to receive(:set).with(
+          RedisKey.stalled_blast_auto_resumed(blast.id),
+          anything,
+          hash_including(nx: true, ex: described_class::STALL_THRESHOLD.to_i)
+        ).and_call_original
+
+        described_class.new.perform
+      end
+
+      it "treats a blast that emailed inside the stall threshold as running even without a Sidekiq worker" do
+        blast = stalled_blast(requested_hours_ago: 6)
+        blast.update!(last_email_delivered_at: 30.minutes.ago)
+        stub_sidekiq
+
+        described_class.new.perform
+
+        expect(SendPostBlastEmailsJob).not_to have_received(:perform_async)
+        expect($redis.exists?(RedisKey.stalled_blast_auto_resumed(blast.id))).to be(false)
+        expect(InternalNotificationWorker).not_to have_received(:perform_async)
+      end
+
+      it "resumes a blast past the window when recipients are still owed" do
+        blast = stalled_blast(requested_hours_ago: 30)
+        $redis.set(RedisKey.blast_pending_recipients(blast.id), 12)
+        stub_sidekiq(dead: [blast.id])
+
+        described_class.new.perform
+
+        expect(@dead_jobs.fetch(blast.id)).to have_received(:retry)
+        expect(InternalNotificationWorker).not_to have_received(:perform_async)
       end
 
       it "holds the blast when a concurrent run wins the NX claim between the check and the resume" do

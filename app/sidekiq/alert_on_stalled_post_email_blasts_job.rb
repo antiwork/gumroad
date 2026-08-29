@@ -10,11 +10,12 @@
 # (A hard-killed job itself is not the stranding mode: super_fetch resurrects it.)
 #
 # Auto-resume is deliberately conservative: only DEAD/UNACCOUNTED blasts still inside
-# AUTO_RESUME_WINDOW, at most once per blast, and never a non-opener resend while UNACCOUNTED —
-# its dedupe set is written only after delivery, so a duplicate racing a live sender the
-# snapshots missed would double-deliver. Older blasts may be time-boxed sale announcements worse
-# delivered late than not at all, and a blast that stalls AGAIN after a resume has something
-# wrong this job cannot see — all of these stay a human call and are reported as HELD.
+# AUTO_RESUME_WINDOW (unless recipients are still owed), not more than once per STALL_THRESHOLD,
+# and never a non-opener resend while UNACCOUNTED — its dedupe set is written only after
+# delivery, so a duplicate racing a live sender the snapshots missed would double-deliver.
+# A blast that emailed inside STALL_THRESHOLD is treated as running even when Sidekiq::Workers
+# does not list it — otherwise a still-sending large blast burns the resume marker and is
+# never tried again after the real death (gumroad-private#2338).
 #
 # The exception is a blast whose sender handed every recipient over and then died before
 # stamping `completed_at` (gumroad-private#2250). Resuming that one cannot double-send, so it
@@ -80,7 +81,7 @@ class AlertOnStalledPostEmailBlastsJob
 
       stalled = candidates.map do |blast|
         disposition =
-          if busy.include?(blast.id) then :running
+          if last_email_recent?(blast) || busy.include?(blast.id) then :running
           elsif queued.include?(blast.id) then :queued
           elsif retrying.include?(blast.id) then :retrying
           elsif @dead_entries.key?(blast.id) then :dead
@@ -124,7 +125,9 @@ class AlertOnStalledPostEmailBlastsJob
       # A DEAD entry proves its attempt chain ended; UNACCOUNTED can hide a live sender, and a
       # concurrent duplicate double-delivers a non-opener resend.
       return :held_non_opener if entry[:disposition] == :unaccounted && blast.to_non_openers?
-      return :held_past_window if blast.requested_at < AUTO_RESUME_WINDOW.ago
+      # Recipients still owed cannot double-send (SentPostEmail unique / per-blast sent set),
+      # so a late resume is the remaining delivery, not a time-boxed surprise.
+      return :held_past_window if blast.requested_at < AUTO_RESUME_WINDOW.ago && !recipients_still_owed?(blast)
       return :held_already_resumed if $redis.exists?(RedisKey.stalled_blast_auto_resumed(blast.id))
       return :would_resume unless live
       # Re-read the live sets at action time — the scan's snapshots are already stale by now.
@@ -137,6 +140,16 @@ class AlertOnStalledPostEmailBlastsJob
     # Three full Sidekiq scans per call, so memoize: `resolve_action` runs once per candidate and
     # the scan is bounded at MAX_CANDIDATES_SCANNED. One read per run is still "at action time" —
     # the point is that it is later than the dispositions taken in `scan_for_stalled_blasts`.
+    def last_email_recent?(blast)
+      emailed_at = blast.last_email_delivered_at
+      emailed_at.present? && emailed_at > STALL_THRESHOLD.ago
+    end
+
+    def recipients_still_owed?(blast)
+      pending = $redis.get(RedisKey.blast_pending_recipients(blast.id))
+      pending.present? && pending.to_i.positive?
+    end
+
     def sender_visible_now?(blast_id)
       @live_blast_ids ||= (busy_blast_ids + queued_blast_ids + retrying_blast_ids).to_set
       @live_blast_ids.include?(blast_id)
@@ -147,7 +160,9 @@ class AlertOnStalledPostEmailBlastsJob
       # Atomic NX claim, written before the resume: overlapping runs cannot both claim the same
       # blast, and a crash between claim and resume holds the blast for a human instead of risking
       # a second automated resume of a blast in an unknown state.
-      claimed = $redis.set(marker, Time.current.iso8601, nx: true, ex: LOOKBACK.to_i)
+      # TTL is the stall window, not the 14-day lookback: a resume that dies in minutes
+      # must be eligible again on the next scan instead of held for the rest of LOOKBACK.
+      claimed = $redis.set(marker, Time.current.iso8601, nx: true, ex: STALL_THRESHOLD.to_i)
       return false unless claimed
 
       if entry[:disposition] == :dead
