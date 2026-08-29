@@ -217,6 +217,9 @@ class LibraryPresenter
         .to_a
         .uniq(&:link_id)
       bundle_purchases.filter_map do |purchase|
+        link = purchase.link
+        next unless link
+
         redirect = purchase.url_redirect
         next if redirect.blank?
 
@@ -230,8 +233,8 @@ class LibraryPresenter
         end
 
         {
-          id: purchase.link.external_id,
-          label: purchase.link.name,
+          id: link.external_id,
+          label: link.name,
           download_url: archive.present? ? url_redirect_download_archive_path(redirect.token) : nil,
         }
       end
