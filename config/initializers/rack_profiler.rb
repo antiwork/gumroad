@@ -41,14 +41,6 @@ class EnsureHeadersIsRackHeadersObject
     # Rack::Headers object.
     response.add_header("X-Original-Headers-Class", headers.class.name)
 
-    # Rack 2 joined multiple cookies into one newline-separated string; Rack 3
-    # wants one array entry per cookie. Rack::Headers keeps the legacy string
-    # whole, which yields a single header carrying raw newlines — so split it
-    # here. Whether we see the legacy shape depends on where SecureHeaders sits
-    # relative to this middleware, and that order follows gem load order.
-    set_cookie = response.headers["set-cookie"]
-    response.headers["set-cookie"] = set_cookie.split("\n") if set_cookie.is_a?(String) && set_cookie.include?("\n")
-
     response.finish
   end
 end
