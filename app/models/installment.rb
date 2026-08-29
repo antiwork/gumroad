@@ -505,16 +505,10 @@ class Installment < ApplicationRecord
     (link.try(:name) || seller.name || "Creator").to_s + " - " + "Update"
   end
 
-  # Address that replies to this post's email should go to.
-  #
-  # Sellers can set a support email per product (Settings -> Main -> Support), which receipts
-  # already honor. A post that is scoped to one product should behave the same way, so replies
-  # land in the inbox the seller picked for that product. Posts that go to the whole audience
-  # are not tied to a product, so they fall back to the account-level support address.
-  #
-  # This reads the product's own column rather than Link#support_email_or_default because that
-  # method falls back to the product owner's address, which is not necessarily this post's
-  # seller; the fallback here always stays with the seller who is sending the post.
+  # Product-scoped posts reply to the product's support email (same as receipts).
+  # Read the column, not Link#support_email_or_default — that falls back to the
+  # product owner, who may not be this post's seller. Audience-wide posts use
+  # the seller's account support address.
   def reply_to_email
     link&.support_email.presence || seller.support_or_form_email
   end
@@ -730,19 +724,12 @@ class Installment < ApplicationRecord
     false
   end
 
-  # A seller-wide post (installment_type "seller") with NO product/variant
-  # targeting is addressed to every one of the seller's customers, so it is not
-  # "targeted at a purchased item" (targeted_at_purchased_item? is false for it
-  # by design). For a product whose buyers are entitled to the full post history
-  # (`should_show_all_posts?`, e.g. memberships), such a post should still be part
-  # of the buyer's library even if they were never individually emailed it.
-  # Audience filters (created_after, paid_more_than, active_customers_only, etc.)
-  # are still enforced separately via `purchase_passes_filters`.
-  #
-  # `single_recipient_email?` one-off emails are EXCLUDED: they are seller-type
-  # with no targeting but are private to a single purchase (single_recipient_purchase_id)
-  # and must never be surfaced seller-wide — they are guarded by the same flag in
-  # eligible_purchase?/the emailable-posts scopes, and must be guarded here too.
+  # Seller-wide posts with no product/variant targeting go to every customer, so
+  # they are not "targeted at a purchased item". Memberships (`should_show_all_posts?`)
+  # still include them in the buyer's library. Audience filters stay in
+  # `purchase_passes_filters`. Exclude `single_recipient_email?` — seller-type
+  # with no targeting but private to one purchase; same flag in
+  # eligible_purchase? / the emailable-posts scopes.
   def targeted_at_all_seller_customers?
     seller_type? && bought_products.blank? && bought_variants.blank? && !single_recipient_email?
   end
@@ -774,23 +761,12 @@ class Installment < ApplicationRecord
   # against a 350k-recipient post in production.
   EMAIL_INFO_BATCH_SIZE = 10_000
 
-  # How many purchase ids to put in a single `WHERE id IN (...)` when looking up those
-  # recipients' email addresses. This has to stay much smaller than the chunk size above,
-  # for a reason that is not obvious and produces no error when you get it wrong.
-  #
-  # MySQL's range optimizer has a memory budget (`range_optimizer_max_mem_size`, 8MB on
-  # our servers). To use the primary key for a long `IN` list it first has to build an
-  # in-memory representation of all those id ranges. If that estimate exceeds the budget,
-  # it does not fail or warn — it silently throws away the range plan and falls back to
-  # scanning the whole table. On production `purchases` that is ~327 million rows, so the
-  # query goes from milliseconds to not finishing inside a 120-second statement window.
-  #
-  # Measured against the same 350k-recipient post: at 2,000 ids the plan is still
-  # `range` on PRIMARY; by 2,500 it has flipped to `ALL` with 327M rows examined. Per-id
-  # throughput is flat (~0.35ms) as long as the plan holds, so there is nothing to gain
-  # from sailing close to that limit. 1,000 leaves 2x headroom, which matters because the
-  # threshold depends on how the ids are distributed, not just how many there are: a
-  # sparser list needs more ranges to describe and so tips over sooner.
+  # Purchase `WHERE id IN (...)` size. Must stay well below EMAIL_INFO_BATCH_SIZE:
+  # MySQL's range optimizer (`range_optimizer_max_mem_size`, 8MB here) silently
+  # drops the PRIMARY range plan past budget and full-scans `purchases` (~327M
+  # rows) until the 120s statement cap. Measured on a 350k post: 2,000 ids still
+  # `range`; 2,500 flips to `ALL`. Throughput is flat while the plan holds, so
+  # 1,000 leaves ~2x headroom — sparse ids need more ranges and tip sooner.
   PURCHASE_LOOKUP_BATCH_SIZE = 1_000
 
   # Purchase ids of recipients this post was emailed to, backed by the open-tracking
