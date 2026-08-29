@@ -12,8 +12,8 @@ import {
   BarChartBig,
   BookmarkHeart,
   Cart,
+  ChevronRight,
   DollarCircle,
-  DotsHorizontalRounded,
   Envelope,
   FileDetail,
   Gift,
@@ -310,12 +310,10 @@ export const Nav = (props: Props) => {
   return (
     <NavFramework footer={<NavbarFooter />} {...props}>
       <CloseOnNavigate />
-      <NavSection>{visibleItems.filter(isPinned).map(renderItem)}</NavSection>
-      {overflow.length > 0 ? (
-        <NavSection>
-          <EverythingElse>{overflow.map(renderOverflowItem)}</EverythingElse>
-        </NavSection>
-      ) : null}
+      <NavSection>
+        {visibleItems.filter(isPinned).map(renderItem)}
+        {overflow.length > 0 ? <EverythingElse>{overflow.map(renderOverflowItem)}</EverythingElse> : null}
+      </NavSection>
     </NavFramework>
   );
 };
@@ -326,29 +324,52 @@ export const Nav = (props: Props) => {
 const EverythingElse = ({ children }: { children: React.ReactNode }) => {
   const [open, setOpen] = React.useState(false);
   const listId = React.useId();
+  const buttonRef = React.useRef<HTMLButtonElement>(null);
+
+  const toggle = () => {
+    setOpen((prev) => {
+      const next = !prev;
+      if (next) {
+        requestAnimationFrame(() => {
+          const button = buttonRef.current;
+          const scroller = button?.closest(".overflow-y-auto");
+          if (!(button instanceof HTMLElement) || !(scroller instanceof HTMLElement)) return;
+          const offset = button.getBoundingClientRect().top - scroller.getBoundingClientRect().top;
+          scroller.scrollTo({ top: scroller.scrollTop + offset, behavior: "smooth" });
+        });
+      }
+      return next;
+    });
+  };
 
   return (
     <>
       <button
+        ref={buttonRef}
         type="button"
         aria-expanded={open}
         aria-controls={listId}
-        onClick={() => setOpen((prev) => !prev)}
+        onClick={toggle}
         className={classNames(
-          // `all-unset` clears box-sizing too, so `w-full` plus `px-6` would make the row 48px
-          // wider than the sidebar and the overhang would only be hidden by the nav's clip.
-          "box-border flex w-full cursor-pointer items-center truncate border-y border-white/50 px-6 py-4 text-left all-unset hover:text-accent dark:border-foreground/50",
-          // The button can never be :last-child (the controlled region always follows it), so it
-          // closes the section itself while collapsed rather than borrowing `last:border-b`.
-          open ? "border-b-transparent dark:border-b-transparent" : "border-b-white/50 dark:border-b-foreground/50",
+          // Same box as every other nav row: `all-unset` would otherwise drop border-box and the
+          // row would overhang the sidebar. Bottom border is transparent so this doesn't paint a
+          // double rule against the next row; the last overflow item (or this button, when closed)
+          // still needs an explicit bottom edge because the following node is a sibling, not a
+          // last-child row.
+          "box-border flex w-full cursor-pointer items-center truncate border-y border-white/50 border-b-transparent px-6 py-4 text-left all-unset hover:text-accent dark:border-foreground/50 dark:border-b-transparent",
+          !open && "border-b-white/50 dark:border-b-foreground/50",
         )}
       >
-        <DotsHorizontalRounded className="size-5" />
+        <ChevronRight
+          aria-hidden="true"
+          className={classNames(
+            "size-5 shrink-0 transition-transform duration-200 ease-out motion-reduce:transition-none",
+            open && "rotate-90",
+          )}
+        />
         <span className="ml-4">Everything else</span>
       </button>
-      <div id={listId} className="grid">
-        {open ? children : null}
-      </div>
+      <div id={listId}>{open ? children : null}</div>
     </>
   );
 };

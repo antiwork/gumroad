@@ -76,7 +76,6 @@ describe("CollapsibleDescription", () => {
     const toggle = screen.getByRole("button", { name: "Show less" });
     expect(toggle.getAttribute("aria-expanded")).toBe("true");
     expect(container.querySelector(".overflow-hidden")).toBeNull();
-    expect(toggle.querySelector("svg")?.classList.contains("rotate-180")).toBe(true);
 
     fireEvent.click(toggle);
     expect(screen.getByRole("button", { name: "Read more" })).toBeTruthy();

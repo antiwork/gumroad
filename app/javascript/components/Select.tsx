@@ -186,13 +186,7 @@ const ClearIndicator = <IsMulti extends boolean>(props: ClearIndicatorProps<Opti
 const DropdownIndicator = <IsMulti extends boolean>(props: DropdownIndicatorProps<Option, IsMulti>) =>
   props.isMulti ? null : (
     <components.DropdownIndicator {...props}>
-      <ChevronDown
-        aria-hidden="true"
-        className={classNames(
-          "size-5 text-muted transition-transform duration-200 ease-out motion-reduce:transition-none",
-          props.selectProps.menuIsOpen && "rotate-180",
-        )}
-      />
+      <ChevronDown className="size-5 text-muted" />
     </components.DropdownIndicator>
   );
 

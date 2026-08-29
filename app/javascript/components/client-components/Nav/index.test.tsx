@@ -228,6 +228,9 @@ describe("dashboard nav progressive disclosure", () => {
     const section = (name: string) => within(navScrollRegion()).getByRole("link", { name }).closest("section");
     expect(section("Library")).toBe(section("Home"));
     expect(section("Discover")).toBe(section("Home"));
+    expect(within(navScrollRegion()).getByRole("button", { name: "Everything else" }).closest("section")).toBe(
+      section("Home"),
+    );
   });
 
   it("keeps the page being viewed out of the overflow even before its promotion is recorded", () => {
@@ -245,6 +248,41 @@ describe("dashboard nav progressive disclosure", () => {
 
     const control = screen.getByRole("button", { name: "Everything else" });
     expect(control.className).toContain("box-border");
+  });
+
+  it("turns a chevron when Everything else opens, instead of a static ellipsis", () => {
+    renderNav();
+
+    const control = screen.getByRole("button", { name: "Everything else" });
+    const chevron = control.querySelector("svg");
+    expect(chevron).not.toBeNull();
+    expect(chevron?.classList.contains("rotate-90")).toBe(false);
+    expect(chevron?.classList.contains("transition-transform")).toBe(true);
+
+    fireEvent.click(control);
+
+    expect(control.getAttribute("aria-expanded")).toBe("true");
+    expect(control.querySelector("svg")?.classList.contains("rotate-90")).toBe(true);
+  });
+
+  it("scrolls the disclosure to the top of the nav so the new rows are on screen", () => {
+    vi.stubGlobal("requestAnimationFrame", (cb: FrameRequestCallback) => {
+      cb(0);
+      return 0;
+    });
+    renderNav();
+
+    const region = navScrollRegion();
+    const scrollTo = vi.fn();
+    region.scrollTo = scrollTo;
+    Object.defineProperty(region, "scrollTop", { configurable: true, value: 40, writable: true });
+    vi.spyOn(region, "getBoundingClientRect").mockReturnValue({ top: 80 } as DOMRect);
+    const control = screen.getByRole("button", { name: "Everything else" });
+    vi.spyOn(control, "getBoundingClientRect").mockReturnValue({ top: 320 } as DOMRect);
+
+    fireEvent.click(control);
+
+    expect(scrollTo).toHaveBeenCalledWith({ top: 280, behavior: "smooth" });
   });
 
   it("drops Everything else once nothing is left in it", () => {
