@@ -2140,7 +2140,11 @@ class Purchase < ApplicationRecord
   def create_product_affiliate
     return unless affiliate.present? && affiliate.global?
 
+    # Never return create_if_missing!'s "already assigned" false: state_machines terminates the
+    # after_transition chain on a callback returning exactly false, silently skipping every
+    # callback queued below this one — the sale ping included.
     ProductAffiliate.create_if_missing!(affiliate:, product: link)
+    nil
   end
 
   def create_url_redirect_for_failed_purchase
