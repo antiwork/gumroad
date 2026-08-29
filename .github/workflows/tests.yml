@@ -341,7 +341,7 @@ jobs:
             # Volume-mount cached precompile artifacts so Sprockets/Shakapacker
             # can skip recompiling unchanged assets (~4 min → ~30s on cache hit).
             COMPOSE_PROJECT_NAME=web_${{ github.run_id }}_${{ github.run_attempt }} \
-              docker compose -f docker/docker-compose-test-and-ci.yml up -d db_test redis mongo elasticsearch
+              docker compose -f docker/docker-compose-test-and-ci.yml up -d db_test redis elasticsearch
             docker run --rm --entrypoint="" \
               --network web_${{ github.run_id }}_${{ github.run_attempt }}_default \
               $WEB_REPO:$TEST_IMAGE_TAG \
@@ -483,13 +483,6 @@ jobs:
         ports:
           - 12111:12111
           - 12112:12112
-      mongo:
-        image: mongo:4.4
-        credentials:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_PASSWORD }}
-        ports:
-          - 27017:27017
       # DynamoDB Local for the email engagement store: the test env reads and
       # dual-writes it unconditionally. Default image command works; port
       # matches .env.test's localhost:8002.

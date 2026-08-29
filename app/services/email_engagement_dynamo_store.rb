@@ -1,7 +1,6 @@
 # frozen_string_literal: true
 
-# Dual-write adapter for the DynamoDB table replacing the CreatorEmailOpenEvent /
-# CreatorEmailClickEvent / CreatorEmailClickSummary Mongo collections.
+# The store for creator email engagement (opens/clicks), on one DynamoDB table.
 #
 # Partition key `pk` (S, the stringified installment id), sort key `sk` (S), one of:
 #   SUMMARY                    — open_count / click_count / click_pair_count counters;

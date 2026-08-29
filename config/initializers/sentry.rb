@@ -10,7 +10,6 @@ Sentry.init do |config|
     "ActionController::RoutingError",
     "ActionController::InvalidAuthenticityToken",
     "AbstractController::ActionNotFound",
-    "Mongoid::Errors::DocumentNotFound",
     "ActionController::UnknownFormat",
     "ActionController::UnknownHttpMethod",
     "ActionController::BadRequest",

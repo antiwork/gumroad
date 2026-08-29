@@ -69,7 +69,4 @@ Rails.application.configure do
   config.active_job.queue_adapter = :test
 
   config.action_controller.raise_on_missing_callback_actions = true
-
-  # Suppress mongoid queries in test
-  config.mongoid.logger.level = Logger::INFO
 end

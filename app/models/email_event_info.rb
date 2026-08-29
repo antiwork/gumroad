@@ -48,6 +48,8 @@ class EmailEventInfo
 
   SUBSCRIPTION_INSTALLMENT_MAILER_METHOD = "subscription_installment"
   ABANDONED_CART_MAILER_METHOD = "abandoned_cart"
+  # Sentinel key for clicks on the "view content" link rather than a real url.
+  VIEW_ATTACHMENTS_URL = "view_attachments_url"
   CUSTOMER_MAILER = "CustomerMailer"
 
   attr_reader :mailer_method, :mailer_class, :installment_id, :click_url
@@ -58,9 +60,10 @@ class EmailEventInfo
       return if unsubscribe_click? # Don't count unsubscribe clicks.
 
       if attachment_click?
-        CreatorEmailClickEvent::VIEW_ATTACHMENTS_URL
+        VIEW_ATTACHMENTS_URL
       else
-        # Encoding "." is necessary because Mongo doesn't allow periods as key names.
+        # "." stays encoded: the DynamoDB keys were backfilled from Mongo, whose
+        # map keys couldn't contain periods, and digests must stay stable.
         click_url.gsub(/\./, "&#46;")
       end
     end

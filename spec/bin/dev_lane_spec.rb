@@ -11,7 +11,6 @@ RSpec.describe "bin/dev-lane" do
       "DEV_LANE_PORT" => "3000",
       "VITE_RUBY_PORT" => "3036",
       "DATABASE_NAME" => "gumroad_development",
-      "MONGO_DATABASE_NAME" => "gumroad_log_development",
       "DYNAMODB_TABLE_PREFIX" => "",
       "ES_INDEX_SUFFIX" => "",
       "REDIS_HOST" => "localhost:6379/0",
@@ -31,7 +30,6 @@ RSpec.describe "bin/dev-lane" do
       "DEV_LANE_PORT" => "3001",
       "VITE_RUBY_PORT" => "3038",
       "DATABASE_NAME" => "gumroad_development_lane1",
-      "MONGO_DATABASE_NAME" => "gumroad_log_development_lane1",
       "DYNAMODB_TABLE_PREFIX" => "lane1_",
       "ES_INDEX_SUFFIX" => "_lane1",
       "REDIS_HOST" => "localhost:6379/4",
@@ -51,7 +49,6 @@ RSpec.describe "bin/dev-lane" do
       "DEV_LANE_PORT" => "3002",
       "VITE_RUBY_PORT" => "3040",
       "DATABASE_NAME" => "gumroad_development_lane2",
-      "MONGO_DATABASE_NAME" => "gumroad_log_development_lane2",
       "DYNAMODB_TABLE_PREFIX" => "lane2_",
       "ES_INDEX_SUFFIX" => "_lane2",
       "REDIS_HOST" => "localhost:6379/6",
@@ -71,7 +68,6 @@ RSpec.describe "bin/dev-lane" do
       "DEV_LANE_PORT" => "3003",
       "VITE_RUBY_PORT" => "3042",
       "DATABASE_NAME" => "gumroad_development_lane3",
-      "MONGO_DATABASE_NAME" => "gumroad_log_development_lane3",
       "DYNAMODB_TABLE_PREFIX" => "lane3_",
       "ES_INDEX_SUFFIX" => "_lane3",
       "REDIS_HOST" => "localhost:6379/8",
@@ -145,7 +141,7 @@ RSpec.describe "bin/dev-lane" do
   it "derives disjoint service values across all lanes" do
     environments = EXPECTED_LANE_ENVIRONMENTS.values
 
-    %w[PORT VITE_RUBY_PORT ANYCABLE_PORT ANYCABLE_RPC_PORT DATABASE_NAME MONGO_DATABASE_NAME ANYCABLE_WEBSOCKET_URL ANYCABLE_REDIS_CHANNEL PIDFILE].each do |key|
+    %w[PORT VITE_RUBY_PORT ANYCABLE_PORT ANYCABLE_RPC_PORT DATABASE_NAME ANYCABLE_WEBSOCKET_URL ANYCABLE_REDIS_CHANNEL PIDFILE].each do |key|
       values = environments.map { |environment| environment.fetch(key) }
       expect(values.uniq.length).to eq(4), "#{key} collides across lanes: #{values}"
     end
