@@ -82,14 +82,11 @@ const membershipRequest = (item: Product, managementURL: string): ApplePayRecurr
   // billing until the buyer cancels.
   const totalBillingCycles = item.durationInMonths != null ? Math.ceil(item.durationInMonths / months) : null;
 
-  // A fixed-duration membership whose duration fits in a single billing cycle (e.g. a 12-month
-  // membership billed yearly, or a 1-month membership billed monthly) charges the buyer exactly
-  // once. It is effectively a one-time purchase, so declaring a recurring payment request would
-  // be wrong: Apple would present an auto-renewing agreement that never renews, and Stripe's
-  // `elements.create('payment')` rejects a `recurringPaymentEndDate` set to the current moment
-  // (a non-future date), which this code previously produced as `addMonthsClamped(new Date(), 0)`.
-  // Fall back to a plain one-time request (a device token) instead.
-  if (totalBillingCycles !== null && totalBillingCycles <= 1) return null;
+  // Single-cycle purchases are one-time Apple Pay requests unless a later off-session charge
+  // still needs Apple's durable merchant token (free trials and subscription payment updates).
+  if (totalBillingCycles !== null && totalBillingCycles <= 1 && !item.hasFreeTrial && item.subscription_id == null) {
+    return null;
+  }
 
   let recurringPaymentEndDate: Date | undefined;
   if (totalBillingCycles != null && totalBillingCycles > 1) {
@@ -139,28 +136,21 @@ const installmentPlanRequest = (item: Product, managementURL: string): ApplePayR
   const remainingInstallments = item.installmentPlan?.remainingInstallments ?? numberOfInstallments;
   if (remainingInstallments < 1) return null;
   const baseInstallmentAmount = item.renewalPriceCents ?? Math.floor(item.price / numberOfInstallments);
-  // Installments are monthly; with `remainingInstallments` counting the plans left to charge, the
-  // last one lands `remainingInstallments - 1` months out. Floor at one month so a plan with a
-  // single remaining installment never hands Stripe a `recurringPaymentEndDate` in the past — a
-  // non-future date makes `elements.create('payment')` reject the whole checkout with a blank
-  // screen. (At checkout `remainingInstallments` defaults to the full plan count, so this is just
-  // the existing "last installment" date, guarded against the zero-month case.)
-  const endDate = addMonthsClamped(new Date(), Math.max(remainingInstallments - 1, 1));
+  const endDate = remainingInstallments > 1 ? addMonthsClamped(new Date(), remainingInstallments - 1) : undefined;
+  const installmentsLabel = `${remainingInstallments} monthly ${remainingInstallments === 1 ? "installment" : "installments"}`;
 
   return {
-    paymentDescription: `${item.name} (${remainingInstallments} monthly installments)`,
+    paymentDescription: `${item.name} (${installmentsLabel})`,
     managementURL,
     regularBilling: {
       label: item.name,
       amount: baseInstallmentAmount,
       recurringPaymentIntervalUnit: "month",
       recurringPaymentIntervalCount: 1,
-      recurringPaymentEndDate: endDate,
+      ...(endDate ? { recurringPaymentEndDate: endDate } : {}),
     },
-    billingAgreement: `${remainingInstallments} monthly installments of ${formatPriceCentsWithCurrencySymbol(
-      "usd",
-      baseInstallmentAmount,
-      { symbolFormat: "short" },
-    )}.`,
+    billingAgreement: `${installmentsLabel} of ${formatPriceCentsWithCurrencySymbol("usd", baseInstallmentAmount, {
+      symbolFormat: "short",
+    })}.`,
   };
 };

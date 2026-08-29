@@ -113,16 +113,39 @@ describe("getApplePayRecurringPaymentRequest", () => {
   });
 
   it("returns null for a single-charge fixed-duration membership so it is treated as a one-time purchase", () => {
-    // A 12-month membership billed yearly makes exactly one payment (charged today). Declaring a
-    // recurring payment request for it would hand Apple an auto-renewing agreement that never
-    // renews, and Stripe's `elements.create('payment')` rejects a `recurringPaymentEndDate` set to
-    // the current moment (a non-future date), which blank-screens the checkout. It falls back to a
-    // plain one-time request instead.
     const request = getApplePayRecurringPaymentRequest(
       [membership({ recurrence: "yearly", durationInMonths: 12 })],
       MANAGEMENT_URL,
     );
     expect(request).toBeNull();
+  });
+
+  it("keeps a recurring request for a single-cycle free trial membership", () => {
+    const request = getApplePayRecurringPaymentRequest(
+      [
+        membership({
+          recurrence: "yearly",
+          durationInMonths: 12,
+          hasFreeTrial: true,
+          price: 0,
+          renewalPriceCents: 1_000,
+        }),
+      ],
+      MANAGEMENT_URL,
+    );
+    expect(request?.trialBilling).toEqual({ label: "Free trial", amount: 0 });
+    expect(request?.regularBilling.recurringPaymentEndDate).toBeUndefined();
+    expect(request?.billingAgreement).toBe("$10 a year for 1 payment. Manage anytime from your Gumroad library.");
+  });
+
+  it("keeps a recurring request for a subscription update with one fixed-duration charge remaining", () => {
+    const request = getApplePayRecurringPaymentRequest(
+      [membership({ subscription_id: "sub_123", durationInMonths: 1, price: 0, renewalPriceCents: 1_000 })],
+      MANAGEMENT_URL,
+    );
+    expect(request?.regularBilling.amount).toBe(1_000);
+    expect(request?.regularBilling.recurringPaymentEndDate).toBeUndefined();
+    expect(request?.billingAgreement).toBe("$10 a month for 1 payment. Manage anytime from your Gumroad library.");
   });
 
   it("still bounds a multi-cycle fixed-duration membership with an end date", () => {
@@ -209,6 +232,24 @@ describe("getApplePayRecurringPaymentRequest", () => {
     expect(request?.regularBilling.amount).toBe(2_500);
     expect(request?.paymentDescription).toBe("Product A (2 monthly installments)");
     expect(request?.billingAgreement).toBe("2 monthly installments of $25.");
+  });
+
+  it("omits the end date for an installment plan with one remaining charge", () => {
+    const request = getApplePayRecurringPaymentRequest(
+      [
+        product({
+          price: 0,
+          renewalPriceCents: 2_500,
+          payInInstallments: true,
+          installmentPlan: { numberOfInstallments: 4, remainingInstallments: 1 },
+        }),
+      ],
+      MANAGEMENT_URL,
+    );
+    expect(request?.regularBilling.amount).toBe(2_500);
+    expect(request?.regularBilling.recurringPaymentEndDate).toBeUndefined();
+    expect(request?.paymentDescription).toBe("Product A (1 monthly installment)");
+    expect(request?.billingAgreement).toBe("1 monthly installment of $25.");
   });
 
   it("returns null for an installment plan with no payments remaining", () => {
