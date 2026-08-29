@@ -193,6 +193,8 @@ const navScrollRegion = () => {
   return region;
 };
 
+const clientRectAt = (top: number) => new DOMRect(0, top, 0, 0);
+
 const navLinkNames = () =>
   [...navScrollRegion().querySelectorAll("a")]
     .filter((link) => !link.closest("[inert], [hidden], [aria-hidden='true']"))
@@ -295,9 +297,9 @@ describe("dashboard nav progressive disclosure", () => {
     const scrollTo = vi.fn();
     region.scrollTo = scrollTo;
     Object.defineProperty(region, "scrollTop", { configurable: true, value: 40, writable: true });
-    vi.spyOn(region, "getBoundingClientRect").mockReturnValue({ top: 80 } as DOMRect);
+    vi.spyOn(region, "getBoundingClientRect").mockReturnValue(clientRectAt(80));
     const control = screen.getByRole("button", { name: "Everything else" });
-    vi.spyOn(control, "getBoundingClientRect").mockReturnValue({ top: 320 } as DOMRect);
+    vi.spyOn(control, "getBoundingClientRect").mockReturnValue(clientRectAt(320));
 
     fireEvent.click(control);
 
@@ -328,9 +330,9 @@ describe("dashboard nav progressive disclosure", () => {
     const scrollTo = vi.fn();
     region.scrollTo = scrollTo;
     Object.defineProperty(region, "scrollTop", { configurable: true, value: 40, writable: true });
-    vi.spyOn(region, "getBoundingClientRect").mockReturnValue({ top: 80 } as DOMRect);
+    vi.spyOn(region, "getBoundingClientRect").mockReturnValue(clientRectAt(80));
     const control = screen.getByRole("button", { name: "Everything else" });
-    vi.spyOn(control, "getBoundingClientRect").mockReturnValue({ top: 320 } as DOMRect);
+    vi.spyOn(control, "getBoundingClientRect").mockReturnValue(clientRectAt(320));
 
     fireEvent.click(control);
 
