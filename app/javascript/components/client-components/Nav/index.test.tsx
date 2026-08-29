@@ -191,7 +191,10 @@ const navScrollRegion = () => {
 };
 
 const navLinkNames = () =>
-  [...navScrollRegion().querySelectorAll("a")].map((link) => link.textContent.trim()).filter(Boolean);
+  [...navScrollRegion().querySelectorAll("a")]
+    .filter((link) => !link.closest("[inert], [hidden], [aria-hidden='true']"))
+    .map((link) => link.textContent.trim())
+    .filter(Boolean);
 
 describe("dashboard nav progressive disclosure", () => {
   it("shows only the core rows to a seller who has used nothing", () => {
@@ -263,6 +266,19 @@ describe("dashboard nav progressive disclosure", () => {
 
     expect(control.getAttribute("aria-expanded")).toBe("true");
     expect(control.querySelector("svg")?.classList.contains("rotate-90")).toBe(true);
+  });
+
+  it("slides the extra rows open instead of snapping them in", () => {
+    renderNav();
+
+    const control = screen.getByRole("button", { name: "Everything else" });
+    const panel = document.getElementById(control.getAttribute("aria-controls") ?? "");
+    expect(panel?.className).toContain("grid-rows-[0fr]");
+    expect(panel?.className).toContain("transition-[grid-template-rows]");
+
+    fireEvent.click(control);
+
+    expect(panel?.className).toContain("grid-rows-[1fr]");
   });
 
   it("scrolls the disclosure to the top of the nav so the new rows are on screen", () => {

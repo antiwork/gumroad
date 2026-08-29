@@ -369,7 +369,17 @@ const EverythingElse = ({ children }: { children: React.ReactNode }) => {
         />
         <span className="ml-4">Everything else</span>
       </button>
-      <div id={listId}>{open ? children : null}</div>
+      <div
+        id={listId}
+        className={classNames(
+          "grid transition-[grid-template-rows] duration-200 ease-out motion-reduce:transition-none",
+          open ? "grid-rows-[1fr]" : "grid-rows-[0fr]",
+        )}
+      >
+        <div className="min-h-0 overflow-hidden" inert={!open || undefined} aria-hidden={!open}>
+          {children}
+        </div>
+      </div>
     </>
   );
 };
