@@ -196,7 +196,12 @@ class LibraryPresenter
 
       link_ids = base.where(id: replaced_ids).order(id: :desc).pluck(:link_id).uniq
       links = Link.where(id: link_ids).index_by(&:id)
-      link_ids.map { |link_id| { id: links[link_id].external_id, label: links[link_id].name } }
+      link_ids.filter_map do |link_id|
+        link = links[link_id]
+        next unless link
+
+        { id: link.external_id, label: link.name }
+      end
     end
 
     def bundle_downloads(base, bundle_ids)

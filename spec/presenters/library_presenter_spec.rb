@@ -574,6 +574,14 @@ describe LibraryPresenter do
         )
       end
 
+      it "omits a bundle filter option when the bundle product row is gone" do
+        surviving = { id: purchase2.link.external_id, label: purchase2.link.name }
+        purchase1.update_column(:link_id, Link.maximum(:id).to_i + 1)
+
+        expect { library_props }.not_to raise_error
+        expect(library_props[:bundles]).to eq([surviving])
+      end
+
       it "filters results to the members of the selected bundles" do
         matches = results(bundle_ids: [purchase1.link.external_id])
 
