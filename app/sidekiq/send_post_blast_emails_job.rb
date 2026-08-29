@@ -71,14 +71,14 @@ class SendPostBlastEmailsJob
   end
 
   private
-    # How long the audience snapshot survives in Redis. Long enough to cover the full
-    # Sidekiq retry schedule of this job (10 retries spans roughly a day), short enough
-    # that an abandoned blast doesn't hold hundreds of thousands of entries forever.
-    AUDIENCE_SNAPSHOT_TTL = 3.days
+    # How long the point-in-time audience snapshot survives in Redis. It must cover the
+    # stalled-blast scan window: a late resume is only safe while the original audience
+    # still exists, otherwise the sender would rebuild the audience and include later joins.
+    AUDIENCE_SNAPSHOT_TTL = AlertOnStalledPostEmailBlastsJob::LOOKBACK
 
-    # Small counter key used by the stalled-blast monitor. Keep it for the full scan window;
-    # unlike the audience snapshot, it is tiny and is the only evidence for late safe resumes.
-    PENDING_RECIPIENTS_TTL = AlertOnStalledPostEmailBlastsJob::LOOKBACK
+    # Small counter key used by the stalled-blast monitor. Keep it aligned with the audience
+    # snapshot so "recipients still owed" never outlives the original recipient list.
+    PENDING_RECIPIENTS_TTL = AUDIENCE_SNAPSHOT_TTL
 
     # How many snapshotted member ids to revalidate per statement. Small on purpose:
     # MySQL's range optimizer silently drops the PK plan once an `IN (...)` list blows

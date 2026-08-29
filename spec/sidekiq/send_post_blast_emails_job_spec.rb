@@ -86,6 +86,10 @@ describe SendPostBlastEmailsJob, :freeze_time do
       expect { described_class.new.perform(blast.id) }.to raise_error(StandardError, "API failure")
 
       expect($redis.get(pending_key).to_i).to eq(1)
+      expect($redis.ttl(RedisKey.blast_audience_snapshot(blast.id))).to be_between(
+        13.days.to_i,
+        AlertOnStalledPostEmailBlastsJob::LOOKBACK.to_i
+      ).inclusive
       expect($redis.ttl(pending_key)).to be_between(13.days.to_i, AlertOnStalledPostEmailBlastsJob::LOOKBACK.to_i).inclusive
       expect(described_class.fully_delivered?(blast.reload)).to be(false)
     end
