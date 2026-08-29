@@ -28,14 +28,6 @@ services:
     ports:
       - "6379"
 
-  mongo:
-    image: mongo:4.0.19
-    volumes:
-      - mongo_data:/data/db
-    ports:
-      - "27017"
-    command: "mongod"
-
   dynamodb:
     image: amazon/dynamodb-local:3.3.1
     command: "-jar DynamoDBLocal.jar -inMemory -sharedDb"
@@ -127,5 +119,4 @@ services:
 
 volumes:
   redis_data:
-  mongo_data:
   minio_data:

@@ -58,7 +58,7 @@ class InstallmentPresenter
       attrs.merge!(
         clicked_urls: installment.clicked_urls.map do |(url, clicks_count)|
           {
-            url: url == CreatorEmailClickEvent::VIEW_ATTACHMENTS_URL ? "View content" : url,
+            url: url == EmailEventInfo::VIEW_ATTACHMENTS_URL ? "View content" : url,
             count: clicks_count
           }
         end,

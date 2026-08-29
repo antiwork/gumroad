@@ -25,7 +25,6 @@ describe HandleEmailEventInfo::ForInstallmentEmail do
     it "records a unique open in DynamoDB" do
       send_open
       expect(@installment.reload.unique_open_count).to eq 1
-      expect(CreatorEmailOpenEvent.count).to eq 0
     end
 
     it "does not GetItem installment summaries while recording an open" do
@@ -50,8 +49,6 @@ describe HandleEmailEventInfo::ForInstallmentEmail do
       send_click
       expect(@installment.reload.unique_click_count).to eq 1
       expect(@installment.unique_open_count).to eq 1
-      expect(CreatorEmailClickEvent.count).to eq 0
-      expect(CreatorEmailClickSummary.count).to eq 0
     end
 
     it "reads live unique click and open counts after a click event" do

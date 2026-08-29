@@ -25,14 +25,6 @@ services:
     volumes:
       - redis_data:/data
 
-  mongo:
-    image: mongo:4.0.19
-    ports:
-      - "27017:27017"
-    volumes:
-      - mongo_data:/data/db
-    command: "mongod"
-
   dynamodb:
     image: amazon/dynamodb-local:3.3.1
     # Root because the named volume mounts in root-owned and the sqlite data
@@ -131,6 +123,5 @@ volumes:
   elasticsearch7data:
   mysql_data:
   redis_data:
-  mongo_data:
   dynamodb_data:
   minio_data:

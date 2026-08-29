@@ -25,7 +25,7 @@ require "vcr"
 VCR.configure do |config|
   config.cassette_library_dir = Rails.root.join("spec", "support", "fixtures", "vcr_cassettes").to_s
   config.hook_into :webmock
-  config.ignore_hosts "gumroad-specs.s3.amazonaws.com", "s3.amazonaws.com", "codeclimate.com", "mongo", "redis", "elasticsearch", "minio"
+  config.ignore_hosts "gumroad-specs.s3.amazonaws.com", "s3.amazonaws.com", "codeclimate.com", "redis", "elasticsearch", "minio", "dynamodb"
   config.ignore_hosts "api.knapsackpro.com", "googlechromelabs.github.io", "storage.googleapis.com"
   config.ignore_localhost = true
   config.debug_logger = $stdout if ENV["VCR_DEBUG"]

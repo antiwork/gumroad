@@ -99,7 +99,7 @@ build_test:
 		--file docker/web/Dockerfile.test \
 		--compress .
 	COMPOSE_PROJECT_NAME=$(COMPOSE_PROJECT_NAME) \
-		$(DOCKER_COMPOSE_CMD) -f docker/docker-compose-test-and-ci.yml up -d db_test redis mongo elasticsearch
+		$(DOCKER_COMPOSE_CMD) -f docker/docker-compose-test-and-ci.yml up -d db_test redis elasticsearch
 	$(DOCKER_CMD) run --network $(COMPOSE_PROJECT_NAME)_default \
 		--entrypoint="" \
 		$(NEW_WEB_REPO):test-$(NEW_WEB_TAG) \
@@ -131,7 +131,7 @@ build_staging:
 	: $${GUM_AWS_SECRET_ACCESS_KEY?"Need to set GUM_AWS_SECRET_ACCESS_KEY"}
 	: $${RAILS_STAGING_MASTER_KEY?"Need to set RAILS_STAGING_MASTER_KEY"}
 	COMPOSE_PROJECT_NAME=$(COMPOSE_PROJECT_NAME) \
-		$(DOCKER_COMPOSE_CMD) -f docker/docker-compose-test-and-ci.yml up -d db_test mongo memcached redis
+		$(DOCKER_COMPOSE_CMD) -f docker/docker-compose-test-and-ci.yml up -d db_test memcached redis
 	$(DOCKER_CMD) run \
 		--name $(COMPOSE_PROJECT_NAME)_staging-assets \
 		--network $(COMPOSE_PROJECT_NAME)_default \
@@ -172,7 +172,7 @@ build_production:
 	: $${GUM_AWS_SECRET_ACCESS_KEY?"Need to set GUM_AWS_SECRET_ACCESS_KEY"}
 	: $${RAILS_PRODUCTION_MASTER_KEY?"Need to set RAILS_PRODUCTION_MASTER_KEY"}
 	COMPOSE_PROJECT_NAME=$(COMPOSE_PROJECT_NAME) \
-		$(DOCKER_COMPOSE_CMD) -f docker/docker-compose-test-and-ci.yml up -d db_test mongo memcached redis
+		$(DOCKER_COMPOSE_CMD) -f docker/docker-compose-test-and-ci.yml up -d db_test memcached redis
 	$(DOCKER_CMD) run \
 		--name $(COMPOSE_PROJECT_NAME)_production-assets \
 		--network $(COMPOSE_PROJECT_NAME)_default \
@@ -215,7 +215,7 @@ clean_local:
 	rm -f revision web_base_sha
 
 pull:
-	$(DOCKER_COMPOSE_CMD) -f docker/docker-compose-test-and-ci.yml pull db_test mongo elasticsearch
+	$(DOCKER_COMPOSE_CMD) -f docker/docker-compose-test-and-ci.yml pull db_test elasticsearch
 
 local:
 	COMPOSE_PROJECT_NAME=$(COMPOSE_PROJECT_NAME) \

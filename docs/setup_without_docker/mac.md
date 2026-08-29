@@ -10,7 +10,7 @@ For the versions required to match the docker setup, checkout `docker/docker-com
 
 - MySQL
 - Redis
-- MongoDB
+- DynamoDB
 - Elasticsearch
 
 #### MySQL
@@ -47,14 +47,18 @@ $(brew —-prefix mysql)/bin/mysqladmin -u root password <NEWPASSWORD>
 
    If it replies “PONG”, then it’s good to go!
 
-#### MongoDB
+#### DynamoDB
 
-Search for the available versions using `brew search mongo` and install the appropriate one.
-
-For example, to install version 3.6
+DynamoDB Local needs Java 17+.
 
 ```
-brew install mongodb/brew/mongodb-community@3.6
+brew install --cask temurin dynamodb-local
+```
+
+Run it on the port `DYNAMODB_ENDPOINT` expects (8002, not its 8000 default):
+
+```
+dynamodb-local -port 8002
 ```
 
 #### Elasticsearch

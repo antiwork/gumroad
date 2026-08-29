@@ -48,19 +48,22 @@ class EmailEventInfo
 
   SUBSCRIPTION_INSTALLMENT_MAILER_METHOD = "subscription_installment"
   ABANDONED_CART_MAILER_METHOD = "abandoned_cart"
+  # Sentinel key for clicks on the "view content" link rather than a real url.
+  VIEW_ATTACHMENTS_URL = "view_attachments_url"
   CUSTOMER_MAILER = "CustomerMailer"
 
   attr_reader :mailer_method, :mailer_class, :installment_id, :click_url
 
-  def click_url_as_mongo_key
-    @_click_url_as_mongo_key ||= begin
+  def click_url_as_engagement_key
+    @_click_url_as_engagement_key ||= begin
       return if click_url.blank?
       return if unsubscribe_click? # Don't count unsubscribe clicks.
 
       if attachment_click?
-        CreatorEmailClickEvent::VIEW_ATTACHMENTS_URL
+        VIEW_ATTACHMENTS_URL
       else
-        # Encoding "." is necessary because Mongo doesn't allow periods as key names.
+        # "." stays encoded: these keys were backfilled from documents whose
+        # map keys couldn't contain periods, and digests must stay stable.
         click_url.gsub(/\./, "&#46;")
       end
     end

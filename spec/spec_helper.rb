@@ -35,7 +35,6 @@ Capybara.enable_aria_label = true
 Capybara.enable_aria_role = true
 
 FactoryBot.definition_file_paths << Rails.root.join("spec", "support", "factories")
-Mongoid.load!(Rails.root.join("config", "mongoid.yml"))
 Braintree::Configuration.logger = Logger.new(File::NULL)
 PayPal::SDK.logger = Logger.new(File::NULL)
 
@@ -57,7 +56,7 @@ def configure_vcr
   VCR.configure do |config|
     config.cassette_library_dir = File.join(Rails.root, "spec", "support", "fixtures", "vcr_cassettes")
     config.hook_into :webmock
-    config.ignore_hosts "gumroad-specs.s3.amazonaws.com", "s3.amazonaws.com", "codeclimate.com", "mongo", "redis", "elasticsearch", "minio", "dynamodb"
+    config.ignore_hosts "gumroad-specs.s3.amazonaws.com", "s3.amazonaws.com", "codeclimate.com", "redis", "elasticsearch", "minio", "dynamodb"
     config.ignore_hosts "api.knapsackpro.com"
     config.ignore_hosts "googlechromelabs.github.io"
     config.ignore_hosts "storage.googleapis.com"
@@ -419,7 +418,6 @@ RSpec.configure do |config|
   config.around(:each) do |example|
     Thread.current[:_rspec_example_metadata] = example.metadata
     config.instance_variable_set(:@curr_file_path, example.metadata[:example_group][:file_path])
-    Mongoid.purge!
     options = %w[caching js] # delegate all the before- and after- hooks for these values to metaprogramming "setup" and "teardown" methods, below
     options.each { |opt| send("setup_#{opt}".to_sym, example.metadata[opt.to_sym]) }
     stub_webmock
