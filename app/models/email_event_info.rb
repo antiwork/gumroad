@@ -54,15 +54,15 @@ class EmailEventInfo
 
   attr_reader :mailer_method, :mailer_class, :installment_id, :click_url
 
-  def click_url_as_mongo_key
-    @_click_url_as_mongo_key ||= begin
+  def click_url_as_engagement_key
+    @_click_url_as_engagement_key ||= begin
       return if click_url.blank?
       return if unsubscribe_click? # Don't count unsubscribe clicks.
 
       if attachment_click?
         VIEW_ATTACHMENTS_URL
       else
-        # "." stays encoded: the DynamoDB keys were backfilled from Mongo, whose
+        # "." stays encoded: these keys were backfilled from documents whose
         # map keys couldn't contain periods, and digests must stay stable.
         click_url.gsub(/\./, "&#46;")
       end

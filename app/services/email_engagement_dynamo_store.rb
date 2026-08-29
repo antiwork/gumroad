@@ -128,8 +128,8 @@ class EmailEngagementDynamoStore
       )
     end
 
-    # The backfill must derive identical keys from the Mongo documents, so key
-    # derivation is public and must not change while Mongo remains around.
+    # Key derivation is public because the historical data was backfilled with
+    # these exact digests; changing it would orphan every existing item.
     def partition_key(installment_id)
       installment_id.to_i.to_s
     end
@@ -174,7 +174,7 @@ class EmailEngagementDynamoStore
       end
 
       # Creates the open item only if absent, without touching an existing item's
-      # open_count, mirroring the Mongo compensating-open behavior on clicks.
+      # open_count: a click implies an open even when no open event arrived.
       # Bundled with the summary increment so a retry cannot leave unique opens undercounted.
       def ensure_open_item(installment_id:, mailer_method:, mailer_args:)
         now = timestamp

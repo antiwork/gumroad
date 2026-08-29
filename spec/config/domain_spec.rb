@@ -18,8 +18,8 @@ RSpec.describe "config/domain.rb" do
       "bin/rails", "runner", RUNNER_CMD
     )
 
-    # The development boot logs Mongo driver chatter to stdout; keep only the
-    # KEY=VALUE lines the runner command prints.
+    # Boot chatter shares stdout with the runner; keep only the KEY=VALUE
+    # lines the runner command prints.
     constants = stdout.lines.filter_map do |line|
       line.chomp.split("=", 2) if line.match?(/\A[A-Z_]+=/)
     end.to_h

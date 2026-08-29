@@ -48,9 +48,9 @@ class HandleEmailEventInfo::ForInstallmentEmail
     end
 
     def handle_click_event!
-      return if email_event_info.click_url_as_mongo_key.blank?
+      return if email_event_info.click_url_as_engagement_key.blank?
 
-      EmailEngagementDynamoStore.record_click(**dynamo_engagement_attributes, click_url: email_event_info.click_url_as_mongo_key)
+      EmailEngagementDynamoStore.record_click(**dynamo_engagement_attributes, click_url: email_event_info.click_url_as_engagement_key)
       update_installment_cache(email_event_info.installment_id, :unique_click_count)
       update_installment_cache(email_event_info.installment_id, :unique_open_count)
 
