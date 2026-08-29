@@ -25,6 +25,7 @@ import {
   getCheckoutBuyerCurrencyDisplay,
   getCheckoutListedCurrencyDisplay,
   getCheckoutBuyerCurrencyQuoteToken,
+  isRecurringUpiPaymentConfig,
 } from "$app/components/Checkout/buyerCurrencyDisplay";
 import {
   buildBuyerCurrencyQuoteRecoveryDeps,
@@ -252,14 +253,19 @@ const CheckoutIndexPage = () => {
   const [state, dispatch] = reducer;
   const configuredDirectListedCurrency = getConfiguredDirectListedCurrency(state);
   const selectableDirectListedCurrency = getSelectableDirectListedCurrency(state);
-  const buyerCurrencyDisplay = configuredDirectListedCurrency
-    ? null
-    : getCheckoutBuyerCurrencyDisplay(state.surcharges.type === "loaded" ? state.surcharges.result : null, {
-        cartPermalinks: cartForm.data.cart.items.map((item) => item.product.permalink),
-        willSaveCard: state.willSaveCard,
-        paymentMethod: state.paymentMethod,
-        paymentElementType: state.paymentElementType,
-      });
+  // Recurring UPI mounts and charges the server-selected INR lane regardless of any quote
+  // (clientConfirmBuyerCurrencyPresentmentEnabled excludes it), so the quote must not be
+  // displayed — and, below, its token must not be submitted.
+  const recurringUpiRegistration = isRecurringUpiPaymentConfig(state.checkoutPayment);
+  const buyerCurrencyDisplay =
+    configuredDirectListedCurrency || recurringUpiRegistration
+      ? null
+      : getCheckoutBuyerCurrencyDisplay(state.surcharges.type === "loaded" ? state.surcharges.result : null, {
+          cartPermalinks: cartForm.data.cart.items.map((item) => item.product.permalink),
+          willSaveCard: state.willSaveCard,
+          paymentMethod: state.paymentMethod,
+          paymentElementType: state.paymentElementType,
+        });
   // The direct-listed currency lane, for the large-tip confirmation below and for the tip
   // basis the order submits. Suppressed whenever the FX-quoted buyer-currency lane is displaying,
   // exactly as the checkout summary's precedence does (`buyerCurrencyDisplay ?? listedCurrency`):
@@ -558,14 +564,15 @@ const CheckoutIndexPage = () => {
         },
         recaptchaResponse: state.status.recaptchaResponse ?? null,
         recaptchaChallengeFallback: state.status.challengeFallback ?? false,
-        buyerCurrencyQuote: configuredDirectListedCurrency
-          ? null
-          : getCheckoutBuyerCurrencyQuoteToken(state.surcharges.type === "loaded" ? state.surcharges.result : null, {
-              cartPermalinks: cartForm.data.cart.items.map((item) => item.product.permalink),
-              willSaveCard: state.willSaveCard,
-              paymentMethod: state.paymentMethod,
-              paymentElementType: state.paymentElementType,
-            }),
+        buyerCurrencyQuote:
+          configuredDirectListedCurrency || recurringUpiRegistration
+            ? null
+            : getCheckoutBuyerCurrencyQuoteToken(state.surcharges.type === "loaded" ? state.surcharges.result : null, {
+                cartPermalinks: cartForm.data.cart.items.map((item) => item.product.permalink),
+                willSaveCard: state.willSaveCard,
+                paymentMethod: state.paymentMethod,
+                paymentElementType: state.paymentElementType,
+              }),
         lineItems: (() => {
           // Precompute each line's discounted price bases once so the tip can be allocated
           // across the whole cart in a single pass. The per-line tips must sum exactly to

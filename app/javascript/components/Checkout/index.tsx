@@ -65,6 +65,7 @@ import {
   getCheckoutListedCurrencyAmounts,
   getCheckoutListedCurrencyDisplay,
   getCheckoutPresentmentAmounts,
+  isRecurringUpiPaymentConfig,
   toBuyerCurrencyCents,
   toCanonicalCents,
 } from "./buyerCurrencyDisplay";
@@ -380,14 +381,19 @@ export const Checkout = ({
   const selectableDirectListedCurrency = getSelectableDirectListedCurrency(state, {
     usingSavedCard: displayedUsingSavedCard,
   });
-  const buyerCurrencyDisplay = configuredDirectListedCurrency
-    ? null
-    : getCheckoutBuyerCurrencyDisplay(summarySurcharges, {
-        cartPermalinks: cart.items.map((item) => item.product.permalink),
-        willSaveCard: state.willSaveCard,
-        paymentMethod: state.paymentMethod,
-        paymentElementType: state.paymentElementType,
-      });
+  // Recurring UPI is a server-selected INR registration lane: the Element amount and mount
+  // currency already pin INR (see getStripePaymentElementAmount), so neither a stored USD
+  // preference nor an FX quote may repaint the summary in another currency.
+  const recurringUpiRegistration = isRecurringUpiPaymentConfig(state.checkoutPayment);
+  const buyerCurrencyDisplay =
+    configuredDirectListedCurrency || recurringUpiRegistration
+      ? null
+      : getCheckoutBuyerCurrencyDisplay(summarySurcharges, {
+          cartPermalinks: cart.items.map((item) => item.product.permalink),
+          willSaveCard: state.willSaveCard,
+          paymentMethod: state.paymentMethod,
+          paymentElementType: state.paymentElementType,
+        });
   // The buyer-currency amounts every row of the table renders from, so the visible numbers
   // sum exactly to the locked total the buyer is charged. An unusable allocation makes
   // buyerCurrencyDisplay null above, keeping every row and the submitted token canonical.
@@ -416,9 +422,10 @@ export const Checkout = ({
     ? state.buyerCurrencyRemint.previousCurrency
     : state.buyerCurrency;
   const directListedCurrencySelected =
-    configuredDirectListedCurrency === null
+    recurringUpiRegistration ||
+    (configuredDirectListedCurrency === null
       ? !(state.paymentMethod === "card" && displayedBuyerCurrency?.toLowerCase() === "usd")
-      : selectableDirectListedCurrency !== null && displayedBuyerCurrency?.toLowerCase() !== "usd";
+      : selectableDirectListedCurrency !== null && displayedBuyerCurrency?.toLowerCase() !== "usd");
   const listedCurrency =
     buyerCurrencyDisplay || !canUseStripePaymentElementClientConfirm(state) || !directListedCurrencySelected
       ? null
