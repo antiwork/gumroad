@@ -76,6 +76,10 @@ class SendPostBlastEmailsJob
     # that an abandoned blast doesn't hold hundreds of thousands of entries forever.
     AUDIENCE_SNAPSHOT_TTL = 3.days
 
+    # Small counter key used by the stalled-blast monitor. Keep it for the full scan window;
+    # unlike the audience snapshot, it is tiny and is the only evidence for late safe resumes.
+    PENDING_RECIPIENTS_TTL = AlertOnStalledPostEmailBlastsJob::LOOKBACK
+
     # How many snapshotted member ids to revalidate per statement. Small on purpose:
     # MySQL's range optimizer silently drops the PK plan once an `IN (...)` list blows
     # its memory budget, and looks the rows up through (seller_id, email) instead —
@@ -339,10 +343,10 @@ class SendPostBlastEmailsJob
     # Publishes how many recipients this attempt still owes the ESPs, so a monitor can tell a
     # blast that died mid-send from one that died after the last handoff but before the stamp
     # below (gumroad-private#2250). Written per attempt, after filtering: a retry owes only
-    # what is left. The TTL matches the audience snapshot — past it the answer is "unknown"
-    # and the monitor falls back to resuming.
+    # what is left. The TTL matches the stalled-blast scan window so old incomplete blasts
+    # can still be distinguished from completed-but-unstamped ones.
     def start_pending_recipients
-      $redis.set(RedisKey.blast_pending_recipients(@blast.id), @members.size, ex: AUDIENCE_SNAPSHOT_TTL.to_i)
+      $redis.set(RedisKey.blast_pending_recipients(@blast.id), @members.size, ex: PENDING_RECIPIENTS_TTL.to_i)
     end
 
     def decrement_pending_recipients(count)
