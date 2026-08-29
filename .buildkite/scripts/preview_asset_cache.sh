@@ -63,7 +63,8 @@ preview_asset_cache_logger() {
 #   2. Vite reads config/vite.json plus the plugins under config/vite/.
 #   3. app/javascript imports config/currencies.json directly.
 # Nothing else under config/ can reach the compiled artifacts: the other
-# initializers, locales, and service configs (database/puma/sidekiq/certs) only affect runtime behavior. If you add a new compile-time
+# initializers, locales, and service configs (database/puma/sidekiq/certs)
+# only affect runtime behavior. If you add a new compile-time
 # read of config/ — a JS `import` from config/, a new file consumed by
 # js:export or the Vite configs, or a routes-file reference to a constant
 # defined outside config/domain.rb — add its path here.
