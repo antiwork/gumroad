@@ -48,7 +48,7 @@ class Order::PreparePaymentIntentService
   def perform
     mark_free_or_test_purchases_successful
     return responses if purchases_to_charge.empty?
-    return responses if block_unexpected_buyer_currency_quote
+    return responses if block_invalid_buyer_currency_quote_signature
     return responses if block_multiple_sellers
     return responses if block_ineligible_for_client_confirm
     return responses if block_purchases_with_blocked_customer_emails
@@ -124,17 +124,14 @@ class Order::PreparePaymentIntentService
       true
     end
 
-    # The browser sends a buyer-currency quote token only when the checkout displayed
-    # local-currency totals, meaning the buyer confirmed that local amount. The client-confirm
-    # lane always charges canonical USD and has no machinery to honor a quote, so accepting a
-    # token here would silently charge a different amount than the buyer saw — the invariant
-    # the buyer-currency feature must never break (mirrors Charge::CreateService's fail-closed
-    # behavior on the server-confirm lane). Failing with the quote-invalid error code makes the
-    # checkout cancel, re-fetch surcharges, and re-run the display gates.
-    def block_unexpected_buyer_currency_quote
-      return false if params[:buyer_currency_quote].blank?
+    # Reject malformed quote tokens before making a Stripe request. Full seller, account,
+    # currency, and amount verification runs after the purchases and fees are resolved.
+    def block_invalid_buyer_currency_quote_signature
+      quote_token = params[:buyer_currency_quote].presence
+      return false if quote_token.blank?
+      return false if Checkout::BuyerCurrencyQuote.quoted_currency_hint(quote_token).present?
 
-      Rails.logger.error("Client-confirm prepare received a buyer_currency_quote for order #{order.id}; failing closed rather than charging canonical USD")
+      Rails.logger.error("Client-confirm prepare received an invalid buyer_currency_quote for order #{order.id}")
       purchases_to_charge.each { |purchase| purchase.error_code = PurchaseErrorCode::BUYER_CURRENCY_QUOTE_INVALID }
       fail_purchases_with(Charge::CreateService::BUYER_CURRENCY_QUOTE_INVALID_MESSAGE)
       true
@@ -515,7 +512,11 @@ class Order::PreparePaymentIntentService
 
       charge = build_charge
       presentment = client_confirm_presentment_for(charge)
-      return fail_purchases_with(GENERIC_CHARGE_ERROR) if presentment.nil? && client_confirm_presentment_required?
+      if presentment.nil? && client_confirm_presentment_required?
+        return fail_buyer_currency_quote if params[:buyer_currency_quote].present?
+
+        return fail_purchases_with(GENERIC_CHARGE_ERROR)
+      end
 
       @charge_with_prepare_time_presentment = charge if presentment.present?
       # Runs after the presentment because Pix's floor is denominated in BRL, which only the
@@ -581,22 +582,16 @@ class Order::PreparePaymentIntentService
       charge
     end
 
-    # When the deferred intent must be created in a non-USD currency, the presentment
-    # snapshot is built here at prepare time rather than at charge time as on the card
-    # path. That happens in two cases:
-    #   1. The buyer picked a method-forced local payment method (iDEAL/Bancontact —
-    #      methods that can only charge in one currency).
-    #   2. The buyer picked ANY other method (card, Link) on a Payment Element that was
-    #      mounted in a forced currency (the method-forced shape: a single item priced in a
-    #      forced currency whose resolver result offers a capability-eligible local method).
-    #      The ConfirmationToken inherits the element's currency, so a canonical USD
-    #      intent can never accept it.
-    #   3. A direct-listed card Element mounted in the buyer's matching listed currency.
+    # Build the non-USD snapshot before creating the deferred intent. It applies to a signed
+    # buyer-currency quote, a selected local method, a card/Link token that inherited a forced
+    # Element currency, or a direct-listed card Element.
     # Returns nil (canonical USD intent, no presentment rows — byte-for-byte today's
     # behavior) for every other checkout, for ineligible carts, and when the feature
     # flags are off. A non-USD Element never falls back to USD after tokenization; the
     # caller turns a missing presentment into a synchronous failure.
     def client_confirm_presentment_for(charge)
+      return buyer_currency_quote_presentment_for(charge) if params[:buyer_currency_quote].present?
+
       method_type = @previewed_payment_method_type
       return nil if method_type.blank?
       forced_currency = intent_forced_currency
@@ -610,7 +605,7 @@ class Order::PreparePaymentIntentService
         return nil
       end
 
-      direct_listed_decision = client_confirm_direct_listed_decision
+      direct_listed_decision = client_confirm_buyer_currency_decision
       if direct_listed_decision.eligible? && direct_listed_decision.direct_listed_amount? &&
          direct_listed_decision.currency == forced_currency
         return direct_listed_presentment_for(charge, direct_listed_decision)
@@ -630,8 +625,8 @@ class Order::PreparePaymentIntentService
       ).perform
     end
 
-    def client_confirm_direct_listed_decision
-      @client_confirm_direct_listed_decision ||= Checkout::BuyerCurrencyEligibility.new(
+    def client_confirm_buyer_currency_decision
+      @client_confirm_buyer_currency_decision ||= Checkout::BuyerCurrencyEligibility.new(
         order:,
         seller:,
         merchant_account:,
@@ -642,6 +637,62 @@ class Order::PreparePaymentIntentService
         off_session: false,
         client_confirm: true
       ).decision
+    end
+
+    def buyer_currency_quote_presentment_for(charge)
+      decision = client_confirm_buyer_currency_decision
+      unless decision.eligible? && !decision.direct_listed_amount?
+        Rails.logger.info("Client-confirm buyer currency quote rejected for order #{order.id}: #{decision.fallback_reason || :direct_listed_amount}")
+        return nil
+      end
+
+      unless reported_element_mount_currency == decision.currency
+        Rails.logger.error("Client-confirm buyer currency quote for order #{order.id} is #{decision.currency}, but the Payment Element reported #{reported_element_mount_currency.inspect}")
+        return nil
+      end
+
+      locked_quote = Checkout::BuyerCurrencyQuote.verify!(
+        token: params[:buyer_currency_quote],
+        seller:,
+        merchant_account:,
+        currency: decision.currency,
+        canonical_total_cents: amount_cents,
+        canonical_line_items: purchases_to_charge.filter_map do |purchase|
+          next if purchase.total_transaction_cents.zero?
+
+          { permalink: purchase.link.unique_permalink, total_cents: purchase.total_transaction_cents }
+        end,
+        later_charge_canonical_line_items: Purchase::FixLaterChargePresentmentService.canonical_line_items_for(purchases_to_charge)
+      )
+      orchestrator = Charge::PresentmentOrchestrator.new(
+        charge:,
+        merchant_account:,
+        purchases: purchases_to_charge,
+        amount_cents:,
+        gumroad_amount_cents:,
+        eligibility_decision: decision,
+        locked_quote:
+      )
+      result = orchestrator.perform
+      unless result
+        Rails.logger.info("Client-confirm buyer currency quote rejected for order #{order.id}: #{orchestrator.fallback_reason || :presentment_failed}")
+        return nil
+      end
+
+      Charge::MethodForcedPresentment::Result.new(
+        presentment_total_cents: result.processor_amount_cents,
+        presentment_currency: result.processor_currency,
+        presentment_gumroad_amount_cents: result.processor_gumroad_amount_cents,
+        stripe_fx_quote_id: result.stripe_fx_quote_id,
+        idempotency_key: Charge::MethodForcedPresentment.idempotency_key_for(
+          charge:,
+          presentment_currency: result.processor_currency,
+          stripe_fx_quote_id: result.stripe_fx_quote_id
+        )
+      )
+    rescue Checkout::BuyerCurrencyQuote::InvalidToken => e
+      Rails.logger.info("Client-confirm buyer currency quote rejected for order #{order.id}: #{e.message}")
+      nil
     end
 
     def direct_listed_presentment_for(charge, decision)
@@ -761,7 +812,7 @@ class Order::PreparePaymentIntentService
     # is chargeable: that stays server-side, on either the direct-listed eligibility decision or
     # the method-forced surface's gates. Anything else fails closed.
     def honorable_element_mount_currency?(currency)
-      direct_listed_decision = client_confirm_direct_listed_decision
+      direct_listed_decision = client_confirm_buyer_currency_decision
       return true if direct_listed_decision.eligible? && direct_listed_decision.direct_listed_amount? &&
                      direct_listed_decision.currency == currency
 
@@ -786,6 +837,7 @@ class Order::PreparePaymentIntentService
     # nothing — the canonical USD intent is exactly what that token confirms against, which is the
     # dominant shape in gumroad-private#1382.
     def client_confirm_presentment_required?
+      return true if params[:buyer_currency_quote].present?
       return false if @previewed_payment_method_type.blank?
 
       if Checkout::BuyerCurrencyEligibility.forced_currency_for(@previewed_payment_method_type).present?
@@ -1282,6 +1334,11 @@ class Order::PreparePaymentIntentService
         Purchase::MarkFailedService.new(purchase).perform
         responses[line_item_uid_for(purchase)] = error_response(error_message, purchase:)
       end
+    end
+
+    def fail_buyer_currency_quote
+      purchases_to_charge.each { |purchase| purchase.error_code = PurchaseErrorCode::BUYER_CURRENCY_QUOTE_INVALID }
+      fail_purchases_with(Charge::CreateService::BUYER_CURRENCY_QUOTE_INVALID_MESSAGE)
     end
 
     # For raw Stripe errors caught before the charge processor wraps them (the

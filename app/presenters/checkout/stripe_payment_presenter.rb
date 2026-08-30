@@ -64,12 +64,10 @@ class Checkout::StripePaymentPresenter
       return payment_element_props(STRIPE_ELEMENTS_MODE_FOR_SETUP_INTENT)
     end
 
-    # Server-confirm: deferred-intent does not consume the quote token.
-    # Before client-confirm — Prepare#block_unexpected_buyer_currency_quote fails closed
-    # on a token rather than charge USD behind a local total.
-    # Unquoted USD-GeoIP candidates take this branch too (no local-method tabs).
-    # Quote candidate + method-forced (EUR listing, CAD buyer) wins here; own-currency
-    # method-forced carts are not candidates and fall through.
+    # Prefer the dedicated server-confirm quote lane when the candidate is known at page load.
+    # Client-confirm can honor a quote selected later in the browser, but it must remount and
+    # narrow its original method list to do so. Own-currency method-forced carts are not
+    # candidates and fall through.
     if buyer_currency_presentment_element_shape?(checkout_items)
       return payment_element_props(
         STRIPE_ELEMENTS_MODE_FOR_PAYMENT_INTENT,

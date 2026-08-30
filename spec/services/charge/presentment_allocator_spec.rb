@@ -33,6 +33,30 @@ describe Charge::PresentmentAllocator do
              allocation.presentment_shipping_cents).to eq(allocation.presentment_total_cents)
     end
 
+    it "keeps an exact buyer-typed presentment tip and reconciles the line total" do
+      tip = instance_double(Tip, value_usd_cents: 3_50)
+      purchase = instance_double(Purchase,
+                                 total_transaction_cents: 13_50,
+                                 total_transaction_amount_for_gumroad_cents: 3_00,
+                                 tip:,
+                                 tax_cents: 0,
+                                 gumroad_tax_cents: 0,
+                                 shipping_cents: 0)
+
+      allocation = described_class.new(
+        purchases: [purchase],
+        presentment_total_cents: 16_88,
+        presentment_gumroad_amount_cents: 3_75,
+        presentment_component_overrides: [[nil, 4_37, nil, nil, nil]]
+      ).allocations.sole
+
+      expect(allocation).to have_attributes(
+        presentment_price_cents: 12_51,
+        presentment_tip_cents: 4_37,
+        presentment_total_cents: 16_88,
+      )
+    end
+
     it "splits an odd-cent presentment total across several purchases without losing cents" do
       # Three near-equal-weight items cannot split 10.01 evenly — the largest-remainder
       # pass must hand out the leftover cents instead of dropping them.

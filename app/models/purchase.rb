@@ -49,6 +49,7 @@ class Purchase < ApplicationRecord
   PIX_IOF_FEE_PER_THOUSAND = 35
 
   MAX_PRICE_RANGE = (-2_147_483_647..2_147_483_647)
+  BUYER_CURRENCY_QUOTE_ROUNDING_SLACK_CENTS = 5
 
   CHARGED_SUCCESS_STATES = %w[preorder_authorization_successful successful]
   NON_GIFT_SUCCESS_STATES = CHARGED_SUCCESS_STATES.dup.push("not_charged")
@@ -663,7 +664,7 @@ class Purchase < ApplicationRecord
                 :is_applying_plan_change, :setup_intent, :charge_intent, :setup_future_charges, :skip_preparing_for_charge,
                 :installment_plan, :authenticated_offer_code_buyer, :ip_location_inherited,
                 :submitted_pre_discount_price_cents, :once_per_cart_discount_allocation, :offer_code_cart_quantity,
-                :confirmed_duplicate_purchase
+                :buyer_currency_quote_canonical_components, :confirmed_duplicate_purchase
 
   delegate :email, :name, to: :seller, prefix: "seller"
   delegate :name, to: :link, prefix: "link", allow_nil: true
@@ -4604,10 +4605,14 @@ class Purchase < ApplicationRecord
       self.price_cents += shipping_cents
       self.total_transaction_cents += shipping_cents
 
+      apply_buyer_currency_quote_canonical_components!
+      return if errors.present?
+
       calculate_fees
 
       purchase_sales_tax_info.save
       save
+      tip.save! if errors.empty? && tip&.has_changes_to_save?
 
       return unless should_prepare_for_charge
 
@@ -4625,6 +4630,72 @@ class Purchase < ApplicationRecord
       end
 
       chargeable
+    end
+
+    def apply_buyer_currency_quote_canonical_components!
+      components = buyer_currency_quote_canonical_components
+      return if components.blank?
+      # PayPal/Braintree discard the quote before verify!. A leftover token must
+      # not overwrite the USD split, and a stale token must not fail the charge.
+      return unless buyer_currency_quote_components_may_apply?
+
+      component_price_cents = components.fetch(:price_cents).to_i
+      component_tip_cents = components.fetch(:tip_cents).to_i
+      component_seller_tax_cents = components.fetch(:seller_tax_cents).to_i
+      component_gumroad_tax_cents = components.fetch(:gumroad_tax_cents).to_i
+      component_shipping_cents = components.fetch(:shipping_cents).to_i
+      signed_total_cents = component_price_cents + component_tip_cents +
+        component_seller_tax_cents + component_gumroad_tax_cents + component_shipping_cents
+
+      submitted_tip_cents = tip&.value_usd_cents.to_i
+      submitted_price_cents = price_cents.to_i - submitted_tip_cents - shipping_cents.to_i
+      submitted_price_cents -= tax_cents.to_i if was_tax_excluded_from_price
+      submitted_components = [
+        submitted_price_cents,
+        submitted_tip_cents,
+        tax_cents.to_i,
+        gumroad_tax_cents.to_i,
+        shipping_cents.to_i,
+      ]
+      signed_components = [
+        component_price_cents,
+        component_tip_cents,
+        component_seller_tax_cents,
+        component_gumroad_tax_cents,
+        component_shipping_cents,
+      ]
+      # Rounding slack is for FX pennies, not non-price component presence.
+      # Stripe verify! only sees line totals, so a component appearing or
+      # disappearing within slack, or a same-total remap, must fail closed.
+      unless component_tip_cents.positive? == submitted_tip_cents.positive? &&
+          component_seller_tax_cents.positive? == tax_cents.to_i.positive? &&
+          component_gumroad_tax_cents.positive? == gumroad_tax_cents.to_i.positive? &&
+          component_shipping_cents.positive? == shipping_cents.to_i.positive? &&
+          signed_components.zip(submitted_components).all? do |signed_cents, submitted_cents|
+            (signed_cents - submitted_cents).abs <= BUYER_CURRENCY_QUOTE_ROUNDING_SLACK_CENTS
+          end &&
+          (submitted_components.sum - signed_total_cents).abs <= BUYER_CURRENCY_QUOTE_ROUNDING_SLACK_CENTS
+        reject_stale_buyer_currency_quote_components!
+        return
+      end
+
+      tip.value_usd_cents = component_tip_cents if tip.present?
+      self.tax_cents = component_seller_tax_cents
+      self.gumroad_tax_cents = component_gumroad_tax_cents
+      self.shipping_cents = component_shipping_cents
+      self.price_cents = component_price_cents + component_tip_cents
+      self.price_cents += component_seller_tax_cents if was_tax_excluded_from_price
+      self.price_cents += component_shipping_cents
+      self.total_transaction_cents = signed_total_cents
+    end
+
+    def buyer_currency_quote_components_may_apply?
+      charge_processor_id.blank? || stripe_charge_processor?
+    end
+
+    def reject_stale_buyer_currency_quote_components!
+      errors.add :base, Charge::CreateService::BUYER_CURRENCY_QUOTE_INVALID_MESSAGE
+      self.error_code = PurchaseErrorCode::BUYER_CURRENCY_QUOTE_INVALID
     end
 
     def load_flow_of_funds(processor_charge)

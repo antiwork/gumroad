@@ -24,7 +24,7 @@ class CustomerSurchargeController < ApplicationController
     # will display; if any request line can't produce one (unknown product, missing
     # subscription), the quote is withheld and the cart falls back to canonical USD.
     all_lines_quotable = true
-    products.each do |item|
+    products.each_with_index do |item, line_index|
       product = Link.find_by_unique_permalink(item[:permalink])
       unless product
         all_lines_quotable = false
@@ -67,6 +67,7 @@ class CustomerSurchargeController < ApplicationController
         product:,
         tax_result:,
         tip_cents: item[:tip_cents],
+        presentment_tip_cents: item[:presentment_tip_cents],
         shipping_usd_cents:,
         charge_tax_result: charge_details[:surcharges]&.fetch(:sales_tax_result),
         charge_tip_cents: charge_details[:tip_cents],
@@ -78,7 +79,9 @@ class CustomerSurchargeController < ApplicationController
         # shipping to canonical USD cents — not a fresh `get_rate` call (gumroad-private#1958,
         # Greptile review on #7149: a second independent read here can straddle a rate
         # refresh and disagree with the first one even within a single request).
-        listed_currency_rate: surcharges[:rate]
+        listed_currency_rate: surcharges[:rate],
+        uid: item[:uid],
+        line_index:
       )
     end
 
