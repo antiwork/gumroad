@@ -56,8 +56,17 @@ export const PriceEditor = ({
 }) => {
   const uid = React.useId();
   const isFreeProduct = priceCents === 0;
+  // Same split as Product::Prices#set_customizable_price: $0 with no paid options
+  // must be pay-what-you-want; $0 plus paid options cannot, or checkout would
+  // offer a $0 amount box for the paid tier.
+  const cannotBePWYW = isFreeProduct && !!hasPaidVariants;
   const mustBePWYW = isFreeProduct && !hasPaidVariants;
+  const pwywOn = isPWYW && !cannotBePWYW;
   const productEditContext = React.useContext(ProductEditContext);
+
+  React.useEffect(() => {
+    if (cannotBePWYW && isPWYW) setIsPWYW(false);
+  }, [cannotBePWYW, isPWYW, setIsPWYW]);
 
   // The regular product editor provides ProductEditContext; the bundle editor
   // passes the defaultOfferCode prop. Either way we can render the selector.
@@ -90,12 +99,17 @@ export const PriceEditor = ({
         currencyCodeSelector={currencyCodeSelector}
       />
       {mustBePWYW ? <Alert variant="info">Free products require a pay what they want price.</Alert> : null}
-      <Details open={isPWYW}>
+      {cannotBePWYW ? (
+        <Alert variant="info" role="status">
+          Pay what you want isn't available on products with paid pricing options.
+        </Alert>
+      ) : null}
+      <Details open={pwywOn}>
         <DetailsToggle chevronPosition="none" className="mb-0">
           <Switch
-            checked={isPWYW}
+            checked={pwywOn}
             onChange={(e) => setIsPWYW(e.target.checked)}
-            disabled={mustBePWYW}
+            disabled={mustBePWYW || cannotBePWYW}
             label={
               <a href="/help/article/133-pay-what-you-want-pricing" target="_blank" rel="noreferrer">
                 Allow customers to pay what they want
