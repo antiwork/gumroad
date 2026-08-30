@@ -38,7 +38,7 @@ import { WithTooltip } from "$app/components/WithTooltip";
 
 import placeholder from "$assets/images/placeholders/payouts.png";
 
-const MINIMUM_INSTANT_PAYOUT_AMOUNT_CENTS = 10000;
+const MINIMUM_INSTANT_PAYOUT_AMOUNT_CENTS = 100;
 const MAXIMUM_INSTANT_PAYOUT_AMOUNT_CENTS = 999900;
 
 type StripeConnectAccount = { payout_method_type: "stripe_connect"; stripe_connect_account_id: string };
@@ -709,6 +709,26 @@ export default function PayoutsIndex() {
                 ) : null}
               </Fieldset>
             </Modal>
+          </Alert>
+        ) : instant_payout.unpaid_amount_cents > 0 ? (
+          <Alert variant="info" role="status">
+            <div>
+              <b>
+                You have{" "}
+                {formatPriceCentsWithCurrencySymbol("usd", instant_payout.unpaid_amount_cents, {
+                  symbolFormat: "short",
+                  noCentsIfWhole: false,
+                })}{" "}
+                that hasn't settled yet.
+              </b>{" "}
+              Instant payout will be available here as soon as at least $1 of that balance clears, usually within a few
+              days.
+              <div style={{ marginTop: "var(--spacer-3)" }}>
+                <Button size="sm" color="primary" aria-label="Get paid now" disabled>
+                  Get paid!
+                </Button>
+              </div>
+            </div>
           </Alert>
         ) : null}
         {payouts_status === "paused" ? (
