@@ -953,6 +953,36 @@ describe("direct-listed card element", () => {
     expect(getStripePaymentElementMountCurrency(s)).toBe("cad");
   });
 
+  it("uses the final listed total for discounted percentage-tip direct-listed carts", () => {
+    const s = state({
+      checkoutPayment: directListedCardConfig,
+      products: [
+        product({
+          hasTippingEnabled: true,
+          listedPriceCents: 1_500,
+          listedChargePriceCents: 1_200,
+          listedCurrencyExchangeRate: 1.5,
+        }),
+      ],
+      tip: { type: "percentage", percentage: 15 },
+      surcharges: {
+        type: "loaded",
+        result: {
+          vat_id_valid: false,
+          has_vat_id_input: false,
+          shipping_rate_cents: 0,
+          tax_cents: 100,
+          tax_included_cents: 60,
+          subtotal: 900,
+          buyer_currency_quote: null,
+        },
+      },
+    });
+
+    expect(getStripePaymentElementAmount(s)).toBe(1_530);
+    expect(getStripePaymentElementMountCurrency(s)).toBe("cad");
+  });
+
   it("keeps the direct-listed lane and exact listed amount when a fixed tip is added", () => {
     const s = state({
       checkoutPayment: directListedCardConfig,
@@ -974,6 +1004,36 @@ describe("direct-listed card element", () => {
 
     expect(getSelectableDirectListedCurrency(s)).toBe("cad");
     expect(getStripePaymentElementAmount(s)).toBe(1_937);
+    expect(getStripePaymentElementMountCurrency(s)).toBe("cad");
+  });
+
+  it("uses the final listed total for discounted fixed-tip direct-listed carts", () => {
+    const s = state({
+      checkoutPayment: directListedCardConfig,
+      products: [
+        product({
+          hasTippingEnabled: true,
+          listedPriceCents: 1_500,
+          listedChargePriceCents: 1_200,
+          listedCurrencyExchangeRate: 1.5,
+        }),
+      ],
+      tip: { type: "fixed", amount: 291, listedAmount: 437 },
+      surcharges: {
+        type: "loaded",
+        result: {
+          vat_id_valid: false,
+          has_vat_id_input: false,
+          shipping_rate_cents: 0,
+          tax_cents: 100,
+          tax_included_cents: 60,
+          subtotal: 1_191,
+          buyer_currency_quote: null,
+        },
+      },
+    });
+
+    expect(getStripePaymentElementAmount(s)).toBe(1_787);
     expect(getStripePaymentElementMountCurrency(s)).toBe("cad");
   });
 
