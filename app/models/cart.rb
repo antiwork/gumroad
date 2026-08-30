@@ -30,11 +30,11 @@ class Cart < ApplicationRecord
   # each), which is well over that cliff.
   PURCHASE_LOOKUP_IN_LIST_BATCH_SIZE = 5_000
 
-  # Statement budget for the ownership lookup. Every caller is a background job, so a long
-  # statement is acceptable — the same rationale as the abandoned-cart scan's own budget — but
-  # these run outside that block, and `purchases` is the table whose size killed this job daily
-  # before it was batched (gumroad-private#1198).
-  PURCHASE_LOOKUP_TIME_BUDGET = 5.minutes
+  # Statement budget for the ownership lookup. Sized for the single cart the mailer asks about,
+  # which is milliseconds of work. A budget generous enough to cover a bulk caller is what let one
+  # pathological statement run long enough to kill a whole abandoned-cart run (gumroad-private#2343).
+  # Exceeding it now costs one email, which retries.
+  PURCHASE_LOOKUP_TIME_BUDGET = 30.seconds
 
   belongs_to :user, optional: true
   belongs_to :order, optional: true
@@ -79,10 +79,11 @@ class Cart < ApplicationRecord
   end
 
   # { cart_id => [owned product ids] } for the given carts, in a bounded number of queries
-  # regardless of how many carts are passed. An abandoned-cart run walks every alive cart on
-  # the platform, so a per-cart query here would add a round trip per cart to a loop that
-  # already had to be rewritten to stay inside MySQL's statement budget
-  # (gumroad-private#1198).
+  # regardless of how many carts are passed.
+  #
+  # Production passes exactly one cart (see #purchased_product_ids). Do not reintroduce a bulk
+  # caller: batching widens each statement to the union of every buyer's purchase history, and one
+  # heavy buyer then blows the budget for everyone in the batch (gumroad-private#2343).
   def self.purchased_product_ids_by_cart_id(carts)
     product_ids = carts.flat_map { _1.alive_cart_products.map(&:product_id) }.uniq
     return {} if product_ids.empty?

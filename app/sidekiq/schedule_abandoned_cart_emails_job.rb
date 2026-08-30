@@ -85,19 +85,17 @@ class ScheduleAbandonedCartEmailsJob
         carts = Cart.includes(:alive_cart_products, :user).where(id: batch_ids).reject do |cart|
           cart.user_id.blank? && cart.email.blank?
         end
-        purchased_product_ids_by_cart_id = Cart.purchased_product_ids_by_cart_id(carts)
 
+        # Products the recipient already owns are NOT filtered here. CustomerMailer#abandoned_cart
+        # re-derives that filter per cart at render time and has to, because the purchase can land
+        # between selection and delivery (gumroad-private#1626) — so a copy here decides nothing
+        # the mailer does not decide again. It cost the whole run: batching the lookup 500 carts at
+        # a time widens one statement to the union of those buyers' purchase histories, and a
+        # single heavy buyer took it past its budget, killing every remaining window
+        # (gumroad-private#2343). Per cart the same check is milliseconds.
         carts.each do |cart|
-          purchased_product_ids = purchased_product_ids_by_cart_id[cart.id] || []
-
           cart.alive_cart_products.each do |cart_product|
             product_id = cart_product.product_id
-            # Reminding someone about a product they already bought reads as an unfinished
-            # order and brings them in asking whether they were charged twice
-            # (gumroad-private#1626). Filtered per product, not per cart, so a genuinely
-            # mixed cart still earns an email about the part that is unbought.
-            next if purchased_product_ids.include?(product_id)
-
             variant_id = cart_product.option_id
             cart_product_ids_with_cart_ids[product_id] ||= {}
             cart_product_ids_with_cart_ids[product_id][cart.id] ||= []
