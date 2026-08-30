@@ -1,7 +1,14 @@
-import { ChevronDown, ChevronRight } from "@boxicons/react";
+import { ChevronRight } from "@boxicons/react";
 import * as React from "react";
 
 import { classNames } from "$app/utils/classNames";
+
+const chevronClassName = (isOpen: boolean, extra?: string) =>
+  classNames(
+    "size-5 shrink-0 transition-transform duration-200 ease-out motion-reduce:transition-none",
+    isOpen && "rotate-90",
+    extra,
+  );
 
 type DetailsContextValue = {
   isOpen: boolean;
@@ -49,13 +56,13 @@ export const DetailsToggle = React.forwardRef<
   } & React.HTMLAttributes<HTMLElement>
 >(({ children, className, onClick, chevronPosition = "left", ...props }, ref) => {
   const { isOpen, onToggle, open } = useDetails();
-  const Chevron = isOpen ? ChevronDown : ChevronRight;
 
   return (
     <summary
       ref={ref}
       className={classNames(
         "flex cursor-pointer items-center [&::-webkit-details-marker]:hidden [&::marker]:hidden",
+        "transition-[margin] duration-200 ease-out motion-reduce:transition-none",
         isOpen && "mb-2",
         className,
       )}
@@ -68,9 +75,13 @@ export const DetailsToggle = React.forwardRef<
       }}
       {...props}
     >
-      {chevronPosition === "left" ? <Chevron className="mr-1 size-5 shrink-0" /> : null}
+      {chevronPosition === "left" ? (
+        <ChevronRight aria-hidden="true" className={chevronClassName(isOpen, "mr-1")} />
+      ) : null}
       {children}
-      {chevronPosition === "right" ? <Chevron className="col-start-2 ml-auto size-5 shrink-0" /> : null}
+      {chevronPosition === "right" ? (
+        <ChevronRight aria-hidden="true" className={chevronClassName(isOpen, "col-start-2 ml-auto")} />
+      ) : null}
     </summary>
   );
 });

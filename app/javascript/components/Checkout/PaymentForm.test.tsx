@@ -15,8 +15,12 @@ import { LoggedInUserProvider } from "$app/components/LoggedInUser";
 vi.stubGlobal("Routes", new Proxy({}, { get: () => () => "#" }));
 vi.stubGlobal("SSR", false);
 
-const paymentElementInputRender = vi.hoisted<{ setupFutureUsage: "off_session" | undefined }>(() => ({
+const paymentElementInputRender = vi.hoisted<{
+  setupFutureUsage: "off_session" | undefined;
+  walletsEnabled: boolean | undefined;
+}>(() => ({
   setupFutureUsage: undefined,
+  walletsEnabled: undefined,
 }));
 
 type PayPalButtonsConfig = {
@@ -61,8 +65,15 @@ vi.mock("$app/components/Checkout/CreditCardInput", () => ({
   StripeElementsProvider: ({ children }: { children: React.ReactNode }) => children,
 }));
 vi.mock("$app/components/Checkout/PaymentElementInput", () => ({
-  PaymentElementInput: ({ setupFutureUsage }: { setupFutureUsage?: "off_session" | undefined }) => {
+  PaymentElementInput: ({
+    setupFutureUsage,
+    walletsEnabled,
+  }: {
+    setupFutureUsage?: "off_session" | undefined;
+    walletsEnabled: boolean;
+  }) => {
     paymentElementInputRender.setupFutureUsage = setupFutureUsage;
+    paymentElementInputRender.walletsEnabled = walletsEnabled;
     return null;
   },
 }));
@@ -206,6 +217,7 @@ describe("PaymentForm validation-failure feedback", () => {
   beforeEach(() => {
     scrollIntoView.mockClear();
     paymentElementInputRender.setupFutureUsage = undefined;
+    paymentElementInputRender.walletsEnabled = undefined;
     paypalMock.buttonsConfig = null;
     paypalMock.createBillingAgreement.mockReset();
     paypalMock.getPaymentMethodResult.mockReset();
@@ -314,6 +326,69 @@ describe("PaymentForm validation-failure feedback", () => {
     });
 
     expect(paymentElementInputRender.setupFutureUsage).toBe("off_session");
+  });
+
+  it("suppresses element wallets when a client-confirm checkout acquires a buyer-currency quote", () => {
+    type ClientConfirmPayment = Extract<CheckoutPaymentConfig, { integration: "payment_element_client_confirm" }>;
+    const checkoutPayment: ClientConfirmPayment = {
+      integration: "payment_element_client_confirm",
+      fallback_reason: null,
+      recurring_upi_registration: false,
+      disable_wallets: false,
+      request_apple_pay_merchant_tokens: false,
+      payment_element_wallets: true,
+      flat_payment_methods: true,
+      elements_options: {
+        stripe_elements_mode: "payment",
+        currency: "usd",
+        presentment_amount_cents: null,
+        listed_currency_display: null,
+        payment_method_types: ["card"],
+        payment_method_list_token: null,
+        stripe_link_enabled: false,
+        stripe_connect_account_id: null,
+      },
+    };
+    const checkoutState = state();
+    const [product] = checkoutState.products;
+    if (product === undefined) throw new Error("Expected a checkout product");
+    if (checkoutState.surcharges.type !== "loaded") throw new Error("Expected loaded surcharges");
+
+    renderPaymentForm({
+      ...checkoutState,
+      buyerCurrency: "cad",
+      products: [{ ...product, price: 2_013, requirePayment: true }],
+      surcharges: {
+        type: "loaded",
+        result: {
+          ...checkoutState.surcharges.result,
+          subtotal: 2_013,
+          buyer_currency_quote: {
+            token: "quote-token",
+            currency: "cad",
+            canonical_total_cents: 2_013,
+            presentment_total_cents: 2_813,
+            charge_presentment_total_cents: 2_813,
+            rate: 1.3974,
+            subunit_to_unit: 100,
+            expires_at: "2026-08-26T16:00:00Z",
+            line_allocations: [
+              {
+                permalink: "product-a",
+                price_cents: 2_813,
+                tip_cents: 0,
+                tax_cents: 0,
+                shipping_cents: 0,
+                total_cents: 2_813,
+              },
+            ],
+          },
+        },
+      },
+      checkoutPayment,
+    });
+
+    expect(paymentElementInputRender.walletsEnabled).toBe(false);
   });
 
   it("does not reuse a native PayPal agreement after PayPal changes the tax location", async () => {

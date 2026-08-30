@@ -171,16 +171,16 @@ export const getCheckoutListedCurrencyDisplay = (
   {
     paymentMethod = "card",
     usingSavedCard = false,
-    hasTip = false,
+    hasTip: _hasTip = false,
     hasShipping = false,
   }: CheckoutListedCurrencyOptions = {},
 ): CheckoutLocalCurrencyFormat | null => {
   if (checkoutPayment.integration !== "payment_element_client_confirm") return null;
   const listedCurrency = checkoutPayment.elements_options.listed_currency_display;
   if (!listedCurrency) return null;
-  // Keep tip and shipping aligned with payment.ts `directListedCardActive`: the Element
-  // still mounts product price only, so shipping carts must not claim listed-currency display.
-  if (checkoutPayment.elements_options.direct_listed_card && (hasTip || hasShipping)) return null;
+  // Keep shipping aligned with payment.ts `directListedCardActive`: shipping carts still fall
+  // back because the Element amount is not updated from a listed-currency shipping basis.
+  if (checkoutPayment.elements_options.direct_listed_card && hasShipping) return null;
   if (usingSavedCard || paymentMethod !== "card") return null;
   if (cartItems.length === 0) return null;
 

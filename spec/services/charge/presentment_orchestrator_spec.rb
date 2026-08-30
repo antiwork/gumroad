@@ -80,6 +80,20 @@ describe Charge::PresentmentOrchestrator do
                                                                     presentment_gumroad_amount_cents: 3_75)
   end
 
+  it "persists exact buyer-typed presentment components from the locked quote" do
+    purchase.build_tip(value_cents: 3_50, value_usd_cents: 3_50)
+    purchase.update!(price_cents: 10_00, total_transaction_cents: 13_50)
+    locked_quote.canonical_total_cents = 13_50
+    locked_quote.presentment_total_cents = 16_88
+    locked_quote.presentment_component_overrides = [[nil, 4_37, nil, nil, nil]]
+
+    expect(result).to have_attributes(processor_amount_cents: 16_88,
+                                      processor_currency: Currency::CAD)
+    expect(purchase.reload.purchase_presentment).to have_attributes(presentment_price_cents: 12_51,
+                                                                    presentment_tip_cents: 4_37,
+                                                                    presentment_total_cents: 16_88)
+  end
+
   it "persists one charge presentment and per-purchase presentments whose totals sum exactly to the locked total" do
     purchases = [3_34, 3_33, 3_34].map do |total_transaction_cents|
       create(:purchase,
@@ -252,7 +266,7 @@ describe Charge::PresentmentOrchestrator do
     # money that is already owed elsewhere, and spending it on a price reduction would mean
     # Gumroad paying Stripe out of pocket.
     it "refuses when the only fee left on a Gumroad-managed charge is the processor's own cost" do
-      gumroad_merchant_account = create(:merchant_account, user: nil)
+      gumroad_merchant_account = MerchantAccount.gumroad(StripeChargeProcessor.charge_processor_id)
       waived_purchase = create(:purchase,
                                link: product,
                                seller:,

@@ -709,6 +709,96 @@ describe("Checkout method-forced listed-currency amounts", () => {
   });
 });
 
+describe("Checkout recurring UPI registration amounts", () => {
+  // The server-selected INR registration lane: the Payment Element mounts INR for ₹730/month
+  // (getStripePaymentElementAmount pins the server-rendered amount), so the summary must show
+  // the same ₹730 no matter what currency preference or FX quote is lying around in state.
+  const recurringUpiPayment: CheckoutPaymentConfig = {
+    integration: "payment_element_client_confirm",
+    fallback_reason: null,
+    recurring_upi_registration: true,
+    disable_wallets: true,
+    request_apple_pay_merchant_tokens: false,
+    payment_element_wallets: false,
+    flat_payment_methods: true,
+    elements_options: {
+      stripe_elements_mode: "payment",
+      currency: "inr",
+      presentment_amount_cents: 73_000,
+      listed_currency_display: { currency: "inr", subunit_to_unit: 100 },
+      payment_method_types: ["card", "upi"],
+      payment_method_list_token: null,
+      stripe_link_enabled: false,
+      stripe_connect_account_id: null,
+    },
+  };
+
+  // A stored USD preference AND a usable CAD quote at once: either one repainting the INR
+  // summary is the bug, so the fixture carries both.
+  const upiSurcharges: SurchargesResponse = {
+    vat_id_valid: false,
+    has_vat_id_input: false,
+    shipping_rate_cents: 0,
+    tax_cents: 0,
+    tax_included_cents: 0,
+    subtotal: 1_000,
+    detected_buyer_currency: "cad",
+    available_buyer_currencies: [
+      { code: "usd", label: "$ (US Dollars)" },
+      { code: "cad", label: "CA$ (Canadian Dollars)" },
+    ],
+    buyer_currency_quote: {
+      token: "quote-token",
+      currency: "cad",
+      canonical_total_cents: 1_000,
+      presentment_total_cents: 1_250,
+      rate: 1.25,
+      subunit_to_unit: 100,
+      expires_at: "2999-01-01T00:00:00Z",
+      line_allocations: [
+        { permalink: "upi", price_cents: 1_250, tip_cents: 0, tax_cents: 0, shipping_cents: 0, total_cents: 1_250 },
+      ],
+    },
+  };
+
+  const upiState = (): State =>
+    buildState({
+      products: [stateProduct({ permalink: "upi", price: 1_000, recurrence: "monthly", listedPriceCents: 73_000 })],
+      checkoutPayment: recurringUpiPayment,
+      buyerCurrency: "usd",
+      surcharges: { type: "loaded", result: upiSurcharges },
+    });
+
+  const upiCart = (): CartState => ({
+    items: [
+      cartItem({
+        product: cartProduct({ id: "upi-product", permalink: "upi", currency_code: "inr", exchange_rate: 73 }),
+        price: 73_000,
+        recurrence: "monthly",
+      }),
+    ],
+    discountCodes: [],
+  });
+
+  it("keeps the summary on the listed INR amounts despite a stored USD preference and a usable quote", () => {
+    const { getAllByLabelText, getAllByText, queryByText } = renderCheckout(upiState(), upiCart());
+
+    expect(getAllByLabelText("Price").map((node) => node.textContent)).toEqual(["₹730"]);
+    // Subtotal and Total show the same listed amount the Element beside them mounts with.
+    expect(getAllByText("₹730")).toHaveLength(3);
+    // Neither the canonical figure the stored USD preference would paint...
+    expect(queryByText("US$10")).toBeNull();
+    // ...nor the FX quote's CAD total may replace the INR the buyer is charged.
+    expect(queryByText("CA$12.50")).toBeNull();
+  });
+
+  it("hides the currency picker so the stored USD preference cannot be re-offered", () => {
+    const { queryByLabelText } = renderCheckout(upiState(), upiCart());
+
+    expect(queryByLabelText("Currency")).toBeNull();
+  });
+});
+
 describe("Checkout direct-listed currency picker", () => {
   const directListedPayment: CheckoutPaymentConfig = {
     integration: "payment_element_client_confirm",
@@ -810,6 +900,34 @@ describe("Checkout direct-listed currency picker", () => {
     expect(getAllByLabelText("Price").map((node) => node.textContent)).toEqual(["US$10"]);
   });
 
+  it("keeps explicit USD selected after a tip while preserving the listed option", () => {
+    const { getAllByLabelText, getByLabelText } = renderCheckout(
+      directListedState({
+        buyerCurrency: "usd",
+        products: [stateProduct({ price: 1_000, hasTippingEnabled: true })],
+        tip: { type: "fixed", amount: 350, presentmentAmount: 437, presentmentCurrency: "cad" },
+      }),
+      {
+        ...directListedCart,
+        items: [
+          cartItem({
+            product: cartProduct({ currency_code: "cad", exchange_rate: 1.5, has_tipping_enabled: true }),
+            price: 1_500,
+          }),
+        ],
+      },
+    );
+    const picker = getByLabelText("Currency");
+
+    expect(picker).toHaveProperty("value", "usd");
+    expect(Array.from(picker.querySelectorAll<HTMLOptionElement>("option"), (option) => option.value)).toEqual([
+      "usd",
+      "cad",
+    ]);
+    expect(getAllByLabelText("Price").map((node) => node.textContent)).toEqual(["US$10"]);
+    expect(getByLabelText("Tip").getAttribute("value")).toBe("3.50");
+  });
+
   it("keeps the listed total while a switch to the saved card is being re-quoted", () => {
     // The held quote was minted for a new card, which charges the listed currency. Reading the
     // display off the surface being switched TO flips the same held amounts to USD for the length
@@ -833,8 +951,8 @@ describe("Checkout direct-listed currency picker", () => {
     expect(getAllByLabelText("Price").map((node) => node.textContent)).toEqual(["CA$15"]);
   });
 
-  it("does not expose quote-backed currencies after a tip moves the cart to canonical USD", () => {
-    const { getAllByLabelText, queryByLabelText } = renderCheckout(
+  it("keeps the listed option after a percentage tip without exposing quote-backed currencies", () => {
+    const { getAllByLabelText, getByLabelText } = renderCheckout(
       directListedState({
         products: [stateProduct({ price: 1_000, hasTippingEnabled: true })],
         tip: { type: "percentage", percentage: 10 },
@@ -849,9 +967,14 @@ describe("Checkout direct-listed currency picker", () => {
         ],
       },
     );
+    const picker = getByLabelText("Currency");
 
-    expect(queryByLabelText("Currency")).toBeNull();
-    expect(getAllByLabelText("Price").map((node) => node.textContent)).toEqual(["US$10"]);
+    expect(Array.from(picker.querySelectorAll<HTMLOptionElement>("option"), (option) => option.value)).toEqual([
+      "usd",
+      "cad",
+    ]);
+    expect(picker).toHaveProperty("value", "cad");
+    expect(getAllByLabelText("Price").map((node) => node.textContent)).toEqual(["CA$15"]);
   });
 });
 
@@ -983,6 +1106,44 @@ describe("Checkout currency picker", () => {
 
     expect(getByLabelText("Currency")).toBe(select);
     expect(document.activeElement).toBe(select);
+  });
+
+  it("keeps a custom buyer-currency tip as typed while the quote remints around canonical rounding", () => {
+    const state = buildState({
+      products: [stateProduct({ hasTippingEnabled: true })],
+      tip: { type: "fixed", amount: 350, presentmentAmount: 437, presentmentCurrency: "cad" },
+      surcharges: {
+        type: "loaded",
+        result: {
+          ...quotedSurcharges,
+          subtotal: 1_350,
+          buyer_currency_quote: quotedSurcharges.buyer_currency_quote
+            ? {
+                ...quotedSurcharges.buyer_currency_quote,
+                canonical_total_cents: 1_350,
+                presentment_total_cents: 1_688,
+                charge_presentment_total_cents: 1_688,
+                line_allocations: [
+                  {
+                    permalink: "prod",
+                    price_cents: 1_250,
+                    tip_cents: 438,
+                    tax_cents: 0,
+                    shipping_cents: 0,
+                    total_cents: 1_688,
+                  },
+                ],
+              }
+            : null,
+        },
+      },
+    });
+    const { getByLabelText } = renderCheckout(state, {
+      items: [cartItem({ product: cartProduct({ has_tipping_enabled: true }) })],
+      discountCodes: [],
+    });
+
+    expect(getByLabelText("Tip").getAttribute("value")).toBe("4.37");
   });
 
   it("names the currency the server refused instead of switching the total quietly", () => {

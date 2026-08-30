@@ -320,7 +320,8 @@ class Api::V2::SalesController < Api::V2::BaseController
     end
 
     def set_page # DEPRECATED
-      @page = (params[:page] || 1).to_i
+      page = params[:page]
+      @page = page.is_a?(Integer) || page.is_a?(String) ? page.to_i : 1
       error_400("Invalid page number. Page numbers start at 1.") unless @page > 0
     end
 end
