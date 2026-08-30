@@ -2277,6 +2277,39 @@ describe Order::PreparePaymentIntentService, :vcr do
         expect(purchase.tip.value_usd_cents).to eq(1_25)
       end
 
+      it "locks conversion when the page-issued token covers the whole multi-seller cart" do
+        other_seller = nil
+        other_seller = create(:user, check_merchant_account_is_linked: true, disable_buyer_local_currency: false)
+        other_product = create(:product, user: other_seller, price_currency_type: Currency::CAD, price_cents: 10_00)
+        Feature.activate_user(:buyer_local_currency, other_seller)
+        Feature.activate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, other_seller)
+        Feature.activate_user(Checkout::BuyerCurrencyEligibility::LISTED_CURRENCY_DIRECT_CHARGE_FEATURE_NAME, other_seller)
+        token = Checkout::PaymentMethodListToken.issue(
+          payment_method_types: %w[card link],
+          sellers: [seller, other_seller],
+          direct_listed_currency: Currency::CAD,
+          direct_listed_currency_rate: "0.8"
+        )
+        params = {
+          line_items: [
+            line_item.merge(perceived_price_cents: 15_00, price_cents: 15_00),
+            { uid: "unique-id-1", permalink: other_product.unique_permalink, perceived_price_cents: 10_00, price_cents: 10_00, quantity: 1 },
+          ],
+          payment_details_source: PurchasePaymentFlow::PAYMENT_ELEMENT,
+          payment_element_mount_currency: Currency::CAD,
+          payment_method_list_token: token,
+        }.merge(common_params)
+        allow_any_instance_of(Purchase).to receive(:get_rate).with(Currency::CAD).and_return(BigDecimal("0.5"))
+
+        order, = Order::CreateService.new(params:).perform
+
+        expect(order.purchases.map { _1.rate_converted_to_usd.to_d }.uniq).to eq([BigDecimal("0.8")])
+      ensure
+        Feature.deactivate_user(:buyer_local_currency, other_seller) if other_seller
+        Feature.deactivate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, other_seller) if other_seller
+        Feature.deactivate_user(Checkout::BuyerCurrencyEligibility::LISTED_CURRENCY_DIRECT_CHARGE_FEATURE_NAME, other_seller) if other_seller
+      end
+
       it "prepares the intent for the displayed CAD amount and persists quote-less presentment rows" do
         order, params = build_order
         purchase = order.purchases.first
