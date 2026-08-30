@@ -223,6 +223,31 @@ describe ScheduleAbandonedCartEmailsJob do
           end
         end
 
+        it "spends the ceiling on the freshest carts inside a window" do
+          # The match map is keyed in workflow-walk order, so the stale cart — created first and
+          # therefore reached first — would win without an explicit sort, and would keep winning
+          # for as long as the ceiling binds.
+          travel_to Time.current.noon do
+            window_start = 2.days.ago.beginning_of_day
+
+            stale_cart = create(:cart)
+            create(:cart_product, cart: stale_cart, product: seller1_product1)
+            stale_cart.update!(updated_at: window_start + 2.hours)
+
+            fresh_cart = create(:cart)
+            create(:cart_product, cart: fresh_cart, product: seller1_product1)
+            fresh_cart.update!(updated_at: window_start + 20.hours)
+
+            stub_const("#{described_class}::MAX_EMAILS_PER_RUN", 1)
+
+            expect do
+              described_class.new.perform
+            end.to have_enqueued_mail(CustomerMailer, :abandoned_cart).once
+              .and have_enqueued_mail(CustomerMailer, :abandoned_cart)
+                .with(fresh_cart.id, { seller1_abandoned_cart_workflow.id => [seller1_product1.id] }.stringify_keys)
+          end
+        end
+
         it "picks the deferred carts up on the next run" do
           travel_to Time.current.noon do
             newest_cart = create(:cart)

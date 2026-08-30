@@ -26,8 +26,8 @@ class ScheduleAbandonedCartEmailsJob
   IN_LIST_BATCH_SIZE = 5_000
 
   # Ceiling on the mails one run may enqueue: uncapped, a run works a backlog into a single mass
-  # enqueue (gumroad-private#2302). Windows are walked newest day first so the budget goes to the
-  # freshest carts; order within a window is unspecified, which does not matter across one day.
+  # enqueue (gumroad-private#2302). Windows are walked newest day first and carts within a window
+  # newest first, so a run that stops early spends its budget on the freshest carts.
   MAX_EMAILS_PER_RUN = 20_000
 
   sidekiq_options queue: :low, retry: 5, lock: :until_executed
@@ -78,6 +78,7 @@ class ScheduleAbandonedCartEmailsJob
       start_time = Time.current
       # { product_id => { cart_id => [variant_ids] } }
       cart_product_ids_with_cart_ids = {}
+      updated_at_by_cart_id = {}
       cart_ids = abandoned_cart_ids(window)
       cart_ids.each_slice(BATCH_SIZE) do |batch_ids|
         carts = Cart.includes(:alive_cart_products, :user).where(id: batch_ids).reject do |cart|
@@ -89,6 +90,7 @@ class ScheduleAbandonedCartEmailsJob
         # after selection (gumroad-private#1626). Batching it here widened one statement to the
         # union of 500 buyers' histories and cost the whole run (gumroad-private#2343).
         carts.each do |cart|
+          updated_at_by_cart_id[cart.id] = cart.updated_at
           cart.alive_cart_products.each do |cart_product|
             product_id = cart_product.product_id
             variant_id = cart_product.option_id
@@ -104,7 +106,12 @@ class ScheduleAbandonedCartEmailsJob
       cart_ids_with_matched_workflow_ids_and_product_ids = matched_workflow_ids_and_product_ids_by_cart_id(cart_product_ids_with_cart_ids)
 
       enqueued = 0
-      cart_ids_with_matched_workflow_ids_and_product_ids.each do |cart_id, workflow_ids_with_product_ids|
+      # Newest first: the match map is keyed in workflow-walk order, so without this a run that
+      # stops at the ceiling would favour whichever sellers happen to be walked first, every run
+      # for as long as the ceiling keeps binding.
+      ordered_matches = cart_ids_with_matched_workflow_ids_and_product_ids
+                          .sort_by { |cart_id, _| -updated_at_by_cart_id[cart_id].to_i }
+      ordered_matches.each do |cart_id, workflow_ids_with_product_ids|
         break if enqueued >= limit
 
         CustomerMailer.abandoned_cart(cart_id, workflow_ids_with_product_ids.stringify_keys).deliver_later(queue: "low")
