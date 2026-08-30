@@ -143,6 +143,14 @@ describe OfferCode do
       end
     end
 
+    describe "offer codes with neither a percentage nor a cents amount" do
+      it "rejects the code with a validation error instead of raising" do
+        expect { create(:offer_code, products: [@product], amount_percentage: nil, amount_cents: nil) }
+          .to raise_error(ActiveRecord::RecordInvalid, /Please enter a discount amount\./)
+        expect { create(:offer_code, products: [@product], amount_percentage: nil, amount_cents: nil) rescue nil }.to_not change { OfferCode.count }
+      end
+    end
+
     describe "universal offer codes" do
       before do
         create(:product, user: @product.user, price_cents: 1000, price_currency_type: "usd")
@@ -744,6 +752,10 @@ describe OfferCode do
         offer_code_3 = create(:offer_code, code: "2000_OFF", products: [@product], amount_cents: 2000)
         expect(offer_code_3.amount_off(@product.price_cents)).to eq 2000
       end
+    end
+
+    it "returns 0 when neither a cents amount nor a percentage is set" do
+      expect(OfferCode.new(amount_percentage: nil, amount_cents: nil).amount_off(@product.price_cents)).to eq 0
     end
   end
 
