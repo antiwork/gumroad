@@ -80,7 +80,10 @@ beforeAll(() => {
   });
 });
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  vi.unstubAllGlobals();
+});
 
 const seller: CurrentSeller = {
   id: "1",
@@ -190,8 +193,13 @@ const navScrollRegion = () => {
   return region;
 };
 
+const clientRectAt = (top: number) => new DOMRect(0, top, 0, 0);
+
 const navLinkNames = () =>
-  [...navScrollRegion().querySelectorAll("a")].map((link) => link.textContent.trim()).filter(Boolean);
+  [...navScrollRegion().querySelectorAll("a")]
+    .filter((link) => !link.closest("[inert], [hidden], [aria-hidden='true']"))
+    .map((link) => link.textContent.trim())
+    .filter(Boolean);
 
 describe("dashboard nav progressive disclosure", () => {
   it("shows only the core rows to a seller who has used nothing", () => {
@@ -228,6 +236,9 @@ describe("dashboard nav progressive disclosure", () => {
     const section = (name: string) => within(navScrollRegion()).getByRole("link", { name }).closest("section");
     expect(section("Library")).toBe(section("Home"));
     expect(section("Discover")).toBe(section("Home"));
+    expect(within(navScrollRegion()).getByRole("button", { name: "Everything else" }).closest("section")).toBe(
+      section("Home"),
+    );
   });
 
   it("keeps the page being viewed out of the overflow even before its promotion is recorded", () => {
@@ -245,6 +256,101 @@ describe("dashboard nav progressive disclosure", () => {
 
     const control = screen.getByRole("button", { name: "Everything else" });
     expect(control.className).toContain("box-border");
+  });
+
+  it("turns a chevron when Everything else opens, instead of a static ellipsis", () => {
+    renderNav();
+
+    const control = screen.getByRole("button", { name: "Everything else" });
+    const chevron = control.querySelector("svg");
+    expect(chevron).not.toBeNull();
+    expect(chevron?.classList.contains("rotate-90")).toBe(false);
+    expect(chevron?.classList.contains("transition-transform")).toBe(true);
+
+    fireEvent.click(control);
+
+    expect(control.getAttribute("aria-expanded")).toBe("true");
+    expect(control.querySelector("svg")?.classList.contains("rotate-90")).toBe(true);
+  });
+
+  it("slides the extra rows open instead of snapping them in", () => {
+    renderNav();
+
+    const control = screen.getByRole("button", { name: "Everything else" });
+    const panel = document.getElementById(control.getAttribute("aria-controls") ?? "");
+    expect(panel?.className).toContain("grid-rows-[0fr]");
+    expect(panel?.className).toContain("transition-[grid-template-rows]");
+
+    fireEvent.click(control);
+
+    expect(panel?.className).toContain("grid-rows-[1fr]");
+  });
+
+  it("scrolls the disclosure to the top of the nav so the new rows are on screen", () => {
+    vi.stubGlobal("requestAnimationFrame", (cb: FrameRequestCallback) => {
+      cb(0);
+      return 0;
+    });
+    renderNav();
+
+    const region = navScrollRegion();
+    const scrollTo = vi.fn();
+    region.scrollTo = scrollTo;
+    Object.defineProperty(region, "scrollTop", { configurable: true, value: 40, writable: true });
+    vi.spyOn(region, "getBoundingClientRect").mockReturnValue(clientRectAt(80));
+    const control = screen.getByRole("button", { name: "Everything else" });
+    vi.spyOn(control, "getBoundingClientRect").mockReturnValue(clientRectAt(320));
+
+    fireEvent.click(control);
+
+    expect(scrollTo).toHaveBeenCalledWith({ top: 280, behavior: "smooth" });
+
+    // The rAF scroll runs while the grid is still ~0fr and clamps, so the same scroll must be
+    // re-issued once the grid-template-rows transition has given the rows their height.
+    const panel = document.getElementById(control.getAttribute("aria-controls") ?? "");
+    if (!panel) throw new Error("Expected the disclosure panel to exist");
+    // happy-dom's TransitionEvent constructor drops propertyName, so define it on a plain Event.
+    const transitionEnd = new Event("transitionend", { bubbles: true });
+    Object.defineProperty(transitionEnd, "propertyName", { value: "grid-template-rows" });
+    fireEvent(panel, transitionEnd);
+
+    expect(scrollTo).toHaveBeenCalledTimes(2);
+    expect(scrollTo).toHaveBeenLastCalledWith({ top: 280, behavior: "smooth" });
+  });
+
+  it("scrolls without animation when the user prefers reduced motion", () => {
+    vi.stubGlobal("requestAnimationFrame", (cb: FrameRequestCallback) => {
+      cb(0);
+      return 0;
+    });
+    vi.stubGlobal("matchMedia", vi.fn().mockReturnValue({ matches: true }));
+    renderNav();
+
+    const region = navScrollRegion();
+    const scrollTo = vi.fn();
+    region.scrollTo = scrollTo;
+    Object.defineProperty(region, "scrollTop", { configurable: true, value: 40, writable: true });
+    vi.spyOn(region, "getBoundingClientRect").mockReturnValue(clientRectAt(80));
+    const control = screen.getByRole("button", { name: "Everything else" });
+    vi.spyOn(control, "getBoundingClientRect").mockReturnValue(clientRectAt(320));
+
+    fireEvent.click(control);
+
+    expect(scrollTo).toHaveBeenCalledWith({ top: 280, behavior: "auto" });
+  });
+
+  it("keeps the collapsed overflow inert so its rows are unreachable until it opens", () => {
+    renderNav();
+
+    const control = screen.getByRole("button", { name: "Everything else" });
+    const panel = document.getElementById(control.getAttribute("aria-controls") ?? "");
+    const wrapper = panel?.querySelector(".overflow-hidden");
+    if (!(wrapper instanceof HTMLElement)) throw new Error("Expected the overflow wrapper to exist");
+    expect(wrapper.hasAttribute("inert")).toBe(true);
+
+    fireEvent.click(control);
+
+    expect(wrapper.hasAttribute("inert")).toBe(false);
   });
 
   it("drops Everything else once nothing is left in it", () => {
