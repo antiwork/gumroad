@@ -3,8 +3,11 @@
 # Reports that abandoned-cart email has stopped going out (gumroad-private#2343).
 #
 # Alerting on failed attempts misses a run that half-succeeds, an enqueue dropped by a stranded
-# lock, and a schedule that stops firing. Freshness covers all three: it asks whether anything
-# actually reached a buyer.
+# lock, and this job's own schedule entry going away. Freshness covers all three: it asks whether
+# anything actually reached a buyer.
+#
+# Blind spot: it runs on the same sidekiq-cron schedule as the job it watches, so a total
+# scheduler failure silences both. Closing that needs an out-of-band check.
 class AlertOnStalledAbandonedCartEmailsJob
   include Sidekiq::Job
   sidekiq_options retry: 2, queue: :low
