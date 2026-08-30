@@ -743,7 +743,10 @@ function getDirectListedPaymentElementAmount(state: State) {
 
   const baseAmount = state.checkoutPayment.elements_options.presentment_amount_cents ?? 0;
   const linePrices = state.products.map((product) => ({
-    price: product.listedChargePriceCents ?? product.listedPriceCents ?? (state.products.length === 1 ? baseAmount : product.price),
+    price:
+      product.listedChargePriceCents ??
+      product.listedPriceCents ??
+      (state.products.length === 1 ? baseAmount : product.price),
     permalink: product.permalink,
   }));
   const lineTotal = linePrices.reduce<number>((sum, line) => sum + line.price, 0);
@@ -751,7 +754,9 @@ function getDirectListedPaymentElementAmount(state: State) {
     (sum, tip) => sum + (tip ?? 0),
     0,
   );
-  const listedRate = state.products.find((product) => product.listedCurrencyExchangeRate != null)?.listedCurrencyExchangeRate;
+  const listedRate = state.products.find(
+    (product) => product.listedCurrencyExchangeRate != null,
+  )?.listedCurrencyExchangeRate;
   const excludedTax = listedRate != null ? Math.round(state.surcharges.result.tax_cents * listedRate) : 0;
   const shipping = listedRate != null ? Math.round(state.surcharges.result.shipping_rate_cents * listedRate) : 0;
 
