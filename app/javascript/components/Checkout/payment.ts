@@ -133,6 +133,10 @@ export type Product = {
   // to detect price or quantity edits that no longer match the server-rendered INR Element
   // amount while allowing a limited discount to change only today's charge.
   listedPriceCents?: number;
+  // The post-discount amount the listed-currency charge will collect for this line today.
+  listedChargePriceCents?: number;
+  // Product exchange rate used to convert USD surcharge rows into the listed currency.
+  listedCurrencyExchangeRate?: number;
   // What one renewal of a membership will charge, when it differs from `price` (e.g. a discount
   // limited to the first billing cycle, or a payment-method update on the subscription manage
   // page where `price` is today's charge — often zero — rather than the plan price). For
@@ -735,10 +739,11 @@ function directListedCardActive(state: State, usingSavedCard = state.usingSavedC
 
 function getDirectListedPaymentElementAmount(state: State) {
   if (state.checkoutPayment.integration !== "payment_element_client_confirm") return getChargeTodayPrice(state);
+  if (state.surcharges.type !== "loaded") return null;
 
   const baseAmount = state.checkoutPayment.elements_options.presentment_amount_cents ?? 0;
   const linePrices = state.products.map((product) => ({
-    price: product.listedPriceCents ?? (state.products.length === 1 ? baseAmount : product.price),
+    price: product.listedChargePriceCents ?? product.listedPriceCents ?? (state.products.length === 1 ? baseAmount : product.price),
     permalink: product.permalink,
   }));
   const lineTotal = linePrices.reduce<number>((sum, line) => sum + line.price, 0);
@@ -746,8 +751,11 @@ function getDirectListedPaymentElementAmount(state: State) {
     (sum, tip) => sum + (tip ?? 0),
     0,
   );
+  const listedRate = state.products.find((product) => product.listedCurrencyExchangeRate != null)?.listedCurrencyExchangeRate;
+  const excludedTax = listedRate != null ? Math.round(state.surcharges.result.tax_cents * listedRate) : 0;
+  const shipping = listedRate != null ? Math.round(state.surcharges.result.shipping_rate_cents * listedRate) : 0;
 
-  return lineTotal + tipTotal;
+  return lineTotal + tipTotal + excludedTax + shipping;
 }
 
 export function isProcessing(state: State) {
