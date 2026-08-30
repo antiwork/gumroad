@@ -325,6 +325,14 @@ describe Api::V2::SalesController do
         }.as_json)
       end
 
+      it "treats a nested page param as the first deprecated page" do
+        get :index, params: @params.merge(page: { size: "100" })
+
+        sales_json = [@purchase.as_json(version: 2), @free_trial_purchase.as_json(version: 2)].map(&:as_json)
+        expect(response.code).to eq "200"
+        expect(response.parsed_body).to include({ success: true, sales: match_array(sales_json) })
+      end
+
       it "filters sales by product if one is specified" do
         matching_product = create(:product, user: @seller)
         matching_purchase = create(:purchase, purchaser: @purchaser, link: matching_product)
