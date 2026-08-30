@@ -36,9 +36,9 @@ describe("PriceEditor PWYW toggle", () => {
     const setIsPWYW = vi.fn();
     renderEditor({ isPWYW: true, setIsPWYW, hasPaidVariants: true, priceCents: 0 });
 
-    const toggle = screen.getByRole("switch") as HTMLInputElement;
-    expect(toggle.disabled).toBe(true);
-    expect(toggle.checked).toBe(false);
+    const toggle = screen.getByRole("switch");
+    expect(toggle).toHaveProperty("disabled", true);
+    expect(toggle).toHaveProperty("checked", false);
     expect(screen.getByText("Pay what you want isn't available on products with paid pricing options.")).toBeTruthy();
     expect(setIsPWYW).toHaveBeenCalledWith(false);
   });
@@ -47,9 +47,9 @@ describe("PriceEditor PWYW toggle", () => {
     const setIsPWYW = vi.fn();
     renderEditor({ isPWYW: true, setIsPWYW, hasPaidVariants: false, priceCents: 0 });
 
-    const toggle = screen.getByRole("switch") as HTMLInputElement;
-    expect(toggle.disabled).toBe(true);
-    expect(toggle.checked).toBe(true);
+    const toggle = screen.getByRole("switch");
+    expect(toggle).toHaveProperty("disabled", true);
+    expect(toggle).toHaveProperty("checked", true);
     expect(screen.getByText("Free products require a pay what they want price.")).toBeTruthy();
     expect(setIsPWYW).not.toHaveBeenCalled();
   });
@@ -58,8 +58,7 @@ describe("PriceEditor PWYW toggle", () => {
     const setIsPWYW = vi.fn();
     renderEditor({ isPWYW: false, setIsPWYW, hasPaidVariants: true, priceCents: 1500 });
 
-    const toggle = screen.getByRole("switch") as HTMLInputElement;
-    expect(toggle.disabled).toBe(false);
+    expect(screen.getByRole("switch")).toHaveProperty("disabled", false);
     expect(setIsPWYW).not.toHaveBeenCalled();
   });
 
@@ -85,9 +84,9 @@ describe("PriceEditor PWYW toggle", () => {
       />,
     );
 
-    const toggle = screen.getByRole("switch") as HTMLInputElement;
-    expect(toggle.disabled).toBe(true);
-    expect(toggle.checked).toBe(true);
+    const toggle = screen.getByRole("switch");
+    expect(toggle).toHaveProperty("disabled", true);
+    expect(toggle).toHaveProperty("checked", true);
     expect(setIsPWYW).toHaveBeenCalledWith(true);
   });
 });
