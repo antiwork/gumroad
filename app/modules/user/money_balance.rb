@@ -41,6 +41,12 @@ class User
       instantly_payable_unpaid_balances.sum(&:holding_amount_cents)
     end
 
+    # Stripe/Gumroad unpaid only — PayPal-held leftovers are not Instant Payout settling.
+    def instant_payout_pipeline_unpaid_balance_cents
+      unpaid_balances.select { _1.merchant_account&.holder_of_funds.in?([HolderOfFunds::STRIPE, HolderOfFunds::GUMROAD]) }
+        .sum(&:holding_amount_cents)
+    end
+
     def instantly_payable_unpaid_balance_cents_up_to_date(date)
       instantly_payable_unpaid_balances_up_to_date(date).sum(&:holding_amount_cents)
     end

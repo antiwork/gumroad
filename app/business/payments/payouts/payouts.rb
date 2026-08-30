@@ -143,8 +143,11 @@ class Payouts
       end
 
       amount_payable = user.instantly_payable_unpaid_balance_cents_up_to_date(date)
+      instant_minimum = StripePayoutProcessor::MINIMUM_INSTANT_PAYOUT_AMOUNT_CENTS
 
-      if amount_payable < MIN_AMOUNT_CENTS && add_comment && user.unpaid_balance_cents_up_to_date(date) >= MIN_AMOUNT_CENTS
+      # Same $1 Instant floor as the processor — a $60 settled leftover with $100+ still
+      # unpaid is payable now, not a settling skip. Weekly/monthly/quarterly keep MIN_AMOUNT_CENTS.
+      if amount_payable < instant_minimum && add_comment && user.unpaid_balance_cents_up_to_date(date) >= instant_minimum
         user.add_payout_note(content: "Instant Payout on #{payout_date} was skipped because funds are still settling. This should resolve within 1-2 days.")
         return false
       end

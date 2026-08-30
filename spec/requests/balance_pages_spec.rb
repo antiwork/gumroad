@@ -953,7 +953,7 @@ describe "Balance Pages Scenario", js: true, type: :system do
         before do
           allow_any_instance_of(User).to receive(:instant_payouts_supported?).and_return(true)
           allow_any_instance_of(User).to receive(:instantly_payable_unpaid_balance_cents).and_return(60_00)
-          allow_any_instance_of(User).to receive(:unpaid_balance_cents).and_return(60_00)
+          allow_any_instance_of(User).to receive(:instant_payout_pipeline_unpaid_balance_cents).and_return(60_00)
           allow_any_instance_of(User).to receive_message_chain(:active_bank_account, :bank_account_type).and_return("ACH")
           allow_any_instance_of(User).to receive_message_chain(:active_bank_account, :bank_name).and_return("Test Bank")
           allow_any_instance_of(User).to receive_message_chain(:active_bank_account, :routing_number).and_return("110000000")
@@ -981,7 +981,7 @@ describe "Balance Pages Scenario", js: true, type: :system do
         before do
           allow_any_instance_of(User).to receive(:instant_payouts_supported?).and_return(true)
           allow_any_instance_of(User).to receive(:instantly_payable_unpaid_balance_cents).and_return(0)
-          allow_any_instance_of(User).to receive(:unpaid_balance_cents).and_return(60_00)
+          allow_any_instance_of(User).to receive(:instant_payout_pipeline_unpaid_balance_cents).and_return(60_00)
           allow_any_instance_of(User).to receive_message_chain(:active_bank_account, :bank_account_type).and_return("ACH")
           allow_any_instance_of(User).to receive_message_chain(:active_bank_account, :bank_name).and_return("Test Bank")
           allow_any_instance_of(User).to receive_message_chain(:active_bank_account, :routing_number).and_return("110000000")

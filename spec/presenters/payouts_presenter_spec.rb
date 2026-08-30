@@ -106,7 +106,7 @@ describe PayoutsPresenter do
         {
           instant_payout_fee_percent: StripePayoutProcessor::INSTANT_PAYOUT_FEE_PERCENT,
           payable_amount_cents: 1000,
-          unpaid_amount_cents: user.unpaid_balance_cents,
+          unpaid_amount_cents: user.instant_payout_pipeline_unpaid_balance_cents,
           payable_balances: [],
           bank_account_type: "checking",
           bank_name: "Test Bank",
