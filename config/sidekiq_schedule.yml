@@ -180,6 +180,11 @@ schedule_abandoned_cart_emails:
   cron: "0 14 * * *" # UTC 14:00
   class: ScheduleAbandonedCartEmailsJob
   description: Schedules abandoned cart emails for users who have not completed their purchase
+alert_on_stalled_abandoned_cart_emails:
+  cron: "0 17 * * *" # UTC 17:00, three hours after the send job starts
+  class: AlertOnStalledAbandonedCartEmailsJob
+  queue: low
+  description: Reports when no abandoned cart email has been sent in over a day
 memberships_price_update_emails:
   cron: "10 8 * * *" # UTC 08:10
   class: SendMembershipsPriceUpdateEmailsJob
