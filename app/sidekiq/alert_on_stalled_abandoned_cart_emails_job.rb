@@ -6,8 +6,9 @@
 # lock, and this job's own schedule entry going away. Freshness covers all three: it asks whether
 # anything actually reached a buyer.
 #
-# Blind spot: it runs on the same sidekiq-cron schedule as the job it watches, so a total
-# scheduler failure silences both. Closing that needs an out-of-band check.
+# It rides the same sidekiq-cron schedule as the sender, so a scheduler-wide failure would silence
+# this too. /healthcheck/abandoned_cart_emails answers the same question over HTTP, which is what
+# covers that case.
 class AlertOnStalledAbandonedCartEmailsJob
   include Sidekiq::Job
   sidekiq_options retry: 2, queue: :low
