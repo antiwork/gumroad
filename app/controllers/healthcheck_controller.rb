@@ -94,7 +94,25 @@ class HealthcheckController < ApplicationController
     render plain: "Purchases: #{status}", status:
   end
 
+  # Abandoned-cart delivery freshness, as an endpoint and not only as a scheduled alert:
+  # AlertOnStalledAbandonedCartEmailsJob rides the same sidekiq-cron schedule as the sender it
+  # watches, so a scheduler-wide failure silences both. Polling this does not depend on Sidekiq at
+  # all (gumroad-private#2343).
+  def abandoned_cart_emails
+    last_sent_at = SentAbandonedCartEmail.order(id: :desc).limit(1).pick(:created_at)
+    healthy = last_sent_at.present? && last_sent_at > ABANDONED_CART_EMAIL_STALE_AFTER.ago
+    status = healthy ? :ok : :service_unavailable
+
+    render plain: "Abandoned cart emails: #{status}", status:
+  end
+
   SIDEKIQ_QUEUE_LIMITS = { critical: 12_000, default: 300_000 }
   SIDEKIQ_RETRIES_LIMIT = 20_000
-  private_constant :SIDEKIQ_QUEUE_LIMITS, :SIDEKIQ_RETRIES_LIMIT
+
+  # Wider than the job's own threshold because this is polled continuously: sends land in one daily
+  # burst, so a bare 24h window reads as stale for the few minutes each day between the 24h mark and
+  # that day's run landing.
+  ABANDONED_CART_EMAIL_STALE_AFTER = AlertOnStalledAbandonedCartEmailsJob::STALL_THRESHOLD + 2.hours
+
+  private_constant :SIDEKIQ_QUEUE_LIMITS, :SIDEKIQ_RETRIES_LIMIT, :ABANDONED_CART_EMAIL_STALE_AFTER
 end

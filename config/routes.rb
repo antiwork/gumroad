@@ -24,6 +24,7 @@ Rails.application.routes.draw do
   get "/healthcheck/stripe_balance" => "healthcheck#stripe_balance"
   get "/healthcheck/purchases" => "healthcheck#purchases"
   get "/healthcheck/apple_pay_domain" => "healthcheck#apple_pay_domain"
+  get "/healthcheck/abandoned_cart_emails" => "healthcheck#abandoned_cart_emails"
 
   # IndexNow key verification file (https://www.indexnow.org/documentation).
   # Deliberately unconstrained by host: the spec requires the key file to be
