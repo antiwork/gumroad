@@ -204,9 +204,8 @@ describe ScheduleAbandonedCartEmailsJob do
       end
 
       context "when the matching carts outnumber the per-run ceiling" do
-        # An uncapped run turns a backlog into one mass enqueue, the shape that took the
-        # platform down in gumroad-private#2302. Deferring the rest is safe: a delivered cart
-        # drops out of Cart.abandoned, so the next run resumes past it rather than repeating it.
+        # Deferring is safe because a delivered cart drops out of Cart.abandoned, so the next run
+        # resumes past it rather than repeating it.
         it "stops at the ceiling and spends it on the newest window" do
           travel_to Time.current.noon do
             newest_cart = create(:cart)
@@ -240,8 +239,8 @@ describe ScheduleAbandonedCartEmailsJob do
             stub_const("#{described_class}::MAX_EMAILS_PER_RUN", 1)
             described_class.new.perform
 
-            # Standing in for the delivery the first run enqueued: that row is what takes the
-            # cart out of Cart.abandoned and lets the next run reach the one behind it.
+            # Stands in for the first run's delivery: this row is what takes the cart out of
+            # Cart.abandoned.
             create(:sent_abandoned_cart_email, cart: newest_cart, installment: seller1_abandoned_cart_workflow.alive_installments.sole)
 
             expect do

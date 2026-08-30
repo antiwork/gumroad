@@ -25,11 +25,9 @@ class ScheduleAbandonedCartEmailsJob
   # range_optimizer_max_mem_size and silently falls back to a full table scan.
   IN_LIST_BATCH_SIZE = 5_000
 
-  # Ceiling on the mails one run may enqueue. A run only ever exceeds a normal day's volume
-  # when it is working through a backlog, and that is exactly when an uncapped fan-out becomes
-  # a mass-enqueue storm of the kind that took the platform down in gumroad-private#2302.
-  # Windows are walked newest-first, so the budget goes to the carts most likely to convert and
-  # the oldest age out rather than holding up the rest.
+  # Ceiling on the mails one run may enqueue: uncapped, a run works a backlog into a single mass
+  # enqueue (gumroad-private#2302). Windows are walked newest day first so the budget goes to the
+  # freshest carts; order within a window is unspecified, which does not matter across one day.
   MAX_EMAILS_PER_RUN = 20_000
 
   sidekiq_options queue: :low, retry: 5, lock: :until_executed
