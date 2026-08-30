@@ -30,10 +30,9 @@ class Cart < ApplicationRecord
   # each), which is well over that cliff.
   PURCHASE_LOOKUP_IN_LIST_BATCH_SIZE = 5_000
 
-  # Statement budget for the ownership lookup. Sized for the single cart the mailer asks about,
-  # which is milliseconds of work. A budget generous enough to cover a bulk caller is what let one
-  # pathological statement run long enough to kill a whole abandoned-cart run (gumroad-private#2343).
-  # Exceeding it now costs one email, which retries.
+  # Statement budget for the ownership lookup, sized for the single cart the mailer asks about.
+  # A bulk-sized budget is what let one statement run long enough to kill a run
+  # (gumroad-private#2343); exceeding this one costs a single email, which retries.
   PURCHASE_LOOKUP_TIME_BUDGET = 30.seconds
 
   belongs_to :user, optional: true
@@ -78,12 +77,11 @@ class Cart < ApplicationRecord
     self.class.purchased_product_ids_by_cart_id([self])[id] || []
   end
 
-  # { cart_id => [owned product ids] } for the given carts, in a bounded number of queries
-  # regardless of how many carts are passed.
+  # { cart_id => [owned product ids] } for the given carts, in a bounded number of queries.
   #
-  # Production passes exactly one cart (see #purchased_product_ids). Do not reintroduce a bulk
-  # caller: batching widens each statement to the union of every buyer's purchase history, and one
-  # heavy buyer then blows the budget for everyone in the batch (gumroad-private#2343).
+  # Production passes exactly one (see #purchased_product_ids). Do not reintroduce a bulk caller:
+  # batching widens the statement to the union of every buyer's history, so one heavy buyer blows
+  # the budget for the whole batch (gumroad-private#2343).
   def self.purchased_product_ids_by_cart_id(carts)
     product_ids = carts.flat_map { _1.alive_cart_products.map(&:product_id) }.uniq
     return {} if product_ids.empty?

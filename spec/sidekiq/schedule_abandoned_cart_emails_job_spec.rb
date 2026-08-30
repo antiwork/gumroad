@@ -38,8 +38,7 @@ describe ScheduleAbandonedCartEmailsJob do
       end
 
       context "when there are matching abandoned cart workflows" do
-        # Owned-product suppression lives in the mailer, so proving it takes delivering the mail
-        # the scheduler enqueues rather than inspecting the enqueue.
+        # Suppression lives in the mailer, so proving it takes delivering the enqueued mail.
         include ActiveJob::TestHelper
 
         let(:cart1) { create(:cart) }
@@ -102,10 +101,8 @@ describe ScheduleAbandonedCartEmailsJob do
         end
 
         it "enqueues a cart whose products the recipient already owns, leaving suppression to the mailer" do
-          # Deliberate: CustomerMailer#abandoned_cart re-derives the owned-product filter per cart
-          # at render time and has to, because the purchase can land between selection and delivery
-          # (gumroad-private#1626). A second copy here decided nothing the mailer does not decide
-          # again, and batching it 500 carts at a time is what killed the run (gumroad-private#2343).
+          # Deliberate: the mailer re-derives this filter per cart at render time and has to, since
+          # the purchase can land after selection (gumroad-private#1626).
           own_everything_in_cart1
 
           expect do
