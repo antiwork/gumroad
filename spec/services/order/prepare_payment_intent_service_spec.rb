@@ -2252,6 +2252,31 @@ describe Order::PreparePaymentIntentService, :vcr do
         [create_args, responses]
       end
 
+      it "locks purchase conversion to the page-issued direct-listed rate before preparing the intent" do
+        seller.update!(tipping_enabled: true)
+        token = Checkout::PaymentMethodListToken.issue(
+          payment_method_types: %w[card link],
+          sellers: [seller],
+          direct_listed_currency: Currency::CAD,
+          direct_listed_currency_rate: "0.8"
+        )
+        params = {
+          line_items: [line_item.merge(perceived_price_cents: 16_00, price_cents: 15_00, tip_cents: 1_00)],
+          payment_details_source: PurchasePaymentFlow::PAYMENT_ELEMENT,
+          payment_element_mount_currency: Currency::CAD,
+          payment_method_list_token: token,
+        }.merge(common_params)
+        allow_any_instance_of(Purchase).to receive(:get_rate).with(Currency::CAD).and_return(BigDecimal("0.5"))
+
+        order, _responses = Order::CreateService.new(params:).perform
+        purchase = order.purchases.first
+
+        expect(purchase).to be_present
+        expect(purchase.rate_converted_to_usd.to_d).to eq(BigDecimal("0.8"))
+        expect(purchase.price_cents).to eq(20_00)
+        expect(purchase.tip.value_usd_cents).to eq(1_25)
+      end
+
       it "prepares the intent for the displayed CAD amount and persists quote-less presentment rows" do
         order, params = build_order
         purchase = order.purchases.first

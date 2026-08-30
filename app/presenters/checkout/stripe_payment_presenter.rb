@@ -284,7 +284,12 @@ class Checkout::StripePaymentPresenter
           subunit_to_unit: subunit_to_unit(element_currency),
         } : nil,
         payment_method_types:,
-        payment_method_list_token: Checkout::PaymentMethodListToken.issue(payment_method_types:, sellers:),
+        payment_method_list_token: Checkout::PaymentMethodListToken.issue(
+          payment_method_types:,
+          sellers:,
+          direct_listed_currency: listed_currency ? element_currency : nil,
+          direct_listed_currency_rate: listed_currency ? listed_lane_rate(items) : nil,
+        ),
         stripe_link_enabled: payment_method_types.include?(Checkout::PaymentMethodResolver::LINK_PAYMENT_METHOD_TYPE),
         stripe_connect_account_id: resolution.stripe_connect_account_id,
       }
@@ -435,6 +440,12 @@ class Checkout::StripePaymentPresenter
     def listed_lane_rates_uniform?(items)
       rates = items.map { _1[:exchange_rate].to_f }
       rates.all?(&:positive?) && rates.uniq.one?
+    end
+
+    def listed_lane_rate(items)
+      return nil unless listed_lane_rates_uniform?(items)
+
+      items.first[:exchange_rate]
     end
 
     def method_forced_element_currency

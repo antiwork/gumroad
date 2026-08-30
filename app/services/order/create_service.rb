@@ -122,7 +122,8 @@ class Order::CreateService
           submitted_pre_discount_price_cents: submitted_pre_discount_price_cents(line_item_params, allocated_discount),
           once_per_cart_discount_allocation:,
           buyer_currency_quote_line_uid: line_item_uid,
-          buyer_currency_quote_line_index: line_item_index
+          buyer_currency_quote_line_index: line_item_index,
+          direct_listed_currency_rate: direct_listed_currency_rate_hint(product)
         )
 
         # Card params are excluded from build_purchase_params (charging is handled by
@@ -402,6 +403,18 @@ class Order::CreateService
 
     def normalize_discount_code(code)
       OfferCode.normalize_code(code)
+    end
+
+    def direct_listed_currency_rate_hint(product)
+      return if params[:buyer_currency_quote].present?
+      return unless params[:payment_details_source] == PurchasePaymentFlow::PAYMENT_ELEMENT
+      return unless params[:payment_element_mount_currency].to_s.downcase == product.price_currency_type.to_s.downcase
+
+      Checkout::PaymentMethodListToken.direct_listed_currency_rate(
+        params[:payment_method_list_token],
+        sellers: [product.user],
+        currency: product.price_currency_type
+      )
     end
 
     def build_purchase_params(product, purchase_params)
