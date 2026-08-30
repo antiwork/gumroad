@@ -30,11 +30,18 @@ class Checkout::PaymentMethodListToken
   PURPOSE = "checkout_payment_method_list"
 
   class << self
-    def issue(payment_method_types:, sellers:)
+    def issue(payment_method_types:, sellers:, direct_listed_currency: nil, direct_listed_currency_rate: nil)
       return nil if payment_method_types.blank?
 
+      payload = { "types" => payment_method_types.map(&:to_s), "sellers" => seller_ids(sellers) }
+      rate = positive_decimal(direct_listed_currency_rate)
+      if direct_listed_currency.present? && rate.present?
+        payload["direct_listed_currency"] = direct_listed_currency.to_s.downcase
+        payload["direct_listed_currency_rate"] = rate.to_s("F")
+      end
+
       verifier.generate(
-        { "types" => payment_method_types.map(&:to_s), "sellers" => seller_ids(sellers) },
+        payload,
         purpose: PURPOSE,
         expires_in: TTL,
       )
@@ -45,20 +52,40 @@ class Checkout::PaymentMethodListToken
     # re-resolving, i.e. today's behaviour. Never raises: a malformed token must not fail a checkout
     # that would otherwise succeed.
     def verify(token, sellers:)
-      return nil if token.blank?
-
-      payload = verifier.verified(token.to_s, purpose: PURPOSE)
-      return nil unless payload.is_a?(Hash)
+      payload = verified_payload(token, sellers:)
+      return nil unless payload
 
       types = payload["types"]
       return nil unless types.is_a?(Array) && types.all? { _1.is_a?(String) } && types.present?
-      return nil unless payload["sellers"] == seller_ids(sellers)
 
       types
     end
 
+    def direct_listed_currency_rate(token, sellers:, currency:)
+      payload = verified_payload(token, sellers:)
+      return nil unless payload
+      return nil unless payload["direct_listed_currency"] == currency.to_s.downcase
+
+      positive_decimal(payload["direct_listed_currency_rate"])
+    end
+
     private
       def seller_ids(sellers) = Array(sellers).compact.map(&:id).sort
+
+      def verified_payload(token, sellers:)
+        return nil if token.blank?
+
+        payload = verifier.verified(token.to_s, purpose: PURPOSE)
+        return nil unless payload.is_a?(Hash)
+        return nil unless payload["sellers"] == seller_ids(sellers)
+
+        payload
+      end
+
+      def positive_decimal(value)
+        rate = BigDecimal(value.to_s, exception: false)
+        rate if rate&.positive?
+      end
 
       def verifier = Rails.application.message_verifier(PURPOSE)
   end
