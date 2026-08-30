@@ -2,18 +2,15 @@
 
 # Reports that abandoned-cart email has stopped going out (gumroad-private#2343).
 #
-# This surface has died platform-wide three times (gumroad-private#1198, #1576, #2343) and was
-# never caught by monitoring: the job's own alerting reports failed *attempts*, so it says nothing
-# when a run half-succeeds, when the enqueue is silently dropped, or when the schedule stops firing.
-# Freshness is the one signal that covers all three, because it asks the only question that matters
-# — did anything reach a buyer.
+# Alerting on failed attempts misses a run that half-succeeds, an enqueue dropped by a stranded
+# lock, and a schedule that stops firing. Freshness covers all three: it asks whether anything
+# actually reached a buyer.
 class AlertOnStalledAbandonedCartEmailsJob
   include Sidekiq::Job
   sidekiq_options retry: 2, queue: :low
 
-  # ScheduleAbandonedCartEmailsJob runs daily and has historically produced its first rows within
-  # ten minutes, so a full day of silence is a failure rather than a slow run. Paired with a cron
-  # a few hours after that run, this alerts the same day rather than the next.
+  # The send job runs daily and produces its first rows within minutes, so a full day of silence is
+  # a failure rather than a slow run.
   STALL_THRESHOLD = 24.hours
 
   def perform
@@ -24,10 +21,8 @@ class AlertOnStalledAbandonedCartEmailsJob
   end
 
   private
-    # Newest id rather than MAX(created_at): sent_abandoned_cart_emails has no index on created_at,
-    # so the aggregate is a full scan that grows with the table, while this reads one row off the
-    # primary key. Rows are only ever inserted at delivery, so the newest id carries the newest
-    # timestamp.
+    # Newest id rather than MAX(created_at), which has no index and would scan the whole table.
+    # Rows are only inserted at delivery, so the newest id carries the newest timestamp.
     def last_send_time
       SentAbandonedCartEmail.order(id: :desc).limit(1).pick(:created_at)
     end
