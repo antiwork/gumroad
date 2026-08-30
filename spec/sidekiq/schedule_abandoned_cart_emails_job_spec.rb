@@ -205,6 +205,55 @@ describe ScheduleAbandonedCartEmailsJob do
         end
       end
 
+      context "when the matching carts outnumber the per-run ceiling" do
+        # An uncapped run turns a backlog into one mass enqueue, the shape that took the
+        # platform down in gumroad-private#2302. Deferring the rest is safe: a delivered cart
+        # drops out of Cart.abandoned, so the next run resumes past it rather than repeating it.
+        it "stops at the ceiling and spends it on the newest window" do
+          travel_to Time.current.noon do
+            newest_cart = create(:cart)
+            create(:cart_product, cart: newest_cart, product: seller1_product1)
+            newest_cart.update!(updated_at: 25.hours.ago)
+
+            older_cart = create(:cart)
+            create(:cart_product, cart: older_cart, product: seller1_product1)
+            older_cart.update!(updated_at: 3.days.ago)
+
+            stub_const("#{described_class}::MAX_EMAILS_PER_RUN", 1)
+
+            expect do
+              described_class.new.perform
+            end.to have_enqueued_mail(CustomerMailer, :abandoned_cart).once
+              .and have_enqueued_mail(CustomerMailer, :abandoned_cart)
+                .with(newest_cart.id, { seller1_abandoned_cart_workflow.id => [seller1_product1.id] }.stringify_keys)
+          end
+        end
+
+        it "picks the deferred carts up on the next run" do
+          travel_to Time.current.noon do
+            newest_cart = create(:cart)
+            create(:cart_product, cart: newest_cart, product: seller1_product1)
+            newest_cart.update!(updated_at: 25.hours.ago)
+
+            older_cart = create(:cart)
+            create(:cart_product, cart: older_cart, product: seller1_product1)
+            older_cart.update!(updated_at: 3.days.ago)
+
+            stub_const("#{described_class}::MAX_EMAILS_PER_RUN", 1)
+            described_class.new.perform
+
+            # Standing in for the delivery the first run enqueued: that row is what takes the
+            # cart out of Cart.abandoned and lets the next run reach the one behind it.
+            create(:sent_abandoned_cart_email, cart: newest_cart, installment: seller1_abandoned_cart_workflow.alive_installments.sole)
+
+            expect do
+              described_class.new.perform
+            end.to have_enqueued_mail(CustomerMailer, :abandoned_cart)
+              .with(older_cart.id, { seller1_abandoned_cart_workflow.id => [seller1_product1.id] }.stringify_keys)
+          end
+        end
+      end
+
       context "when there are multiple matching abandoned cart workflows for a cart" do
         let(:cart) { create(:cart) }
         let!(:cart_product1) { create(:cart_product, cart: cart, product: seller1_product1) }

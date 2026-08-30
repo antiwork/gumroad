@@ -25,6 +25,13 @@ class ScheduleAbandonedCartEmailsJob
   # range_optimizer_max_mem_size and silently falls back to a full table scan.
   IN_LIST_BATCH_SIZE = 5_000
 
+  # Ceiling on the mails one run may enqueue. A run only ever exceeds a normal day's volume
+  # when it is working through a backlog, and that is exactly when an uncapped fan-out becomes
+  # a mass-enqueue storm of the kind that took the platform down in gumroad-private#2302.
+  # Windows are walked newest-first, so the budget goes to the carts most likely to convert and
+  # the oldest age out rather than holding up the rest.
+  MAX_EMAILS_PER_RUN = 20_000
+
   sidekiq_options queue: :low, retry: 5, lock: :until_executed
 
   # Duplicate sends from an overlapping run are prevented by the unique index on
@@ -56,15 +63,20 @@ class ScheduleAbandonedCartEmailsJob
   # insert, which drops the duplicate.
   def perform
     days_to_process = (Cart::ABANDONED_IF_UPDATED_AFTER_AGO.to_i / 1.day.to_i)
+    remaining = MAX_EMAILS_PER_RUN
     (1..days_to_process).each do |day|
       day_start = day.days.ago.beginning_of_day
       day_end = day == 1 ? Cart::ABANDONED_IF_UPDATED_BEFORE_AGO.ago : (day - 1).days.ago.beginning_of_day
-      schedule_emails_for_window(day_start..day_end)
+      remaining -= schedule_emails_for_window(day_start..day_end, limit: remaining)
+      if remaining <= 0
+        Rails.logger.info "Stopped at MAX_EMAILS_PER_RUN (#{MAX_EMAILS_PER_RUN}) after day #{day}; the remaining windows carry over to the next run"
+        break
+      end
     end
   end
 
   private
-    def schedule_emails_for_window(window)
+    def schedule_emails_for_window(window, limit:)
       start_time = Time.current
       # { product_id => { cart_id => [variant_ids] } }
       cart_product_ids_with_cart_ids = {}
@@ -98,10 +110,15 @@ class ScheduleAbandonedCartEmailsJob
       start_time = Time.current
       cart_ids_with_matched_workflow_ids_and_product_ids = matched_workflow_ids_and_product_ids_by_cart_id(cart_product_ids_with_cart_ids)
 
+      enqueued = 0
       cart_ids_with_matched_workflow_ids_and_product_ids.each do |cart_id, workflow_ids_with_product_ids|
+        break if enqueued >= limit
+
         CustomerMailer.abandoned_cart(cart_id, workflow_ids_with_product_ids.stringify_keys).deliver_later(queue: "low")
+        enqueued += 1
       end
-      Rails.logger.info "Scheduled abandoned cart emails for #{cart_ids_with_matched_workflow_ids_and_product_ids.count} carts for #{window.begin} to #{window.end} in #{(Time.current - start_time).round(2)} seconds"
+      Rails.logger.info "Scheduled abandoned cart emails for #{enqueued} of #{cart_ids_with_matched_workflow_ids_and_product_ids.count} matched carts for #{window.begin} to #{window.end} in #{(Time.current - start_time).round(2)} seconds"
+      enqueued
     end
 
     # Returns { cart_id => { workflow_id => [product_ids] } } for the given
