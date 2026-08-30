@@ -215,6 +215,54 @@ describe "Rack::Attack throttle", type: :request do
     end
   end
 
+  describe "GET /api/v2/sales throttle with a nested (JSON:API) page param" do
+    before { reset_rack_attack! }
+    after { reset_rack_attack! }
+
+    it "does not raise when page is a nested Hash (page[size]=100)" do
+      request = Rack::Attack::Request.new(
+        Rack::MockRequest.env_for(
+          "/api/v2/sales?page[size]=100",
+          method: "GET",
+          input: "",
+          "HTTP_CF_CONNECTING_IP" => "203.0.113.95"
+        )
+      )
+
+      expect do
+        Rack::Attack.configuration.throttled?(request)
+      end.not_to raise_error
+    end
+
+    it "still throttles a scalar page past the depth limit" do
+      travel_to(Time.current) do
+        10.times do |i|
+          request = Rack::Attack::Request.new(
+            Rack::MockRequest.env_for(
+              "/api/v2/sales?page=#{i + 11}",
+              method: "GET",
+              input: "",
+              "HTTP_CF_CONNECTING_IP" => "203.0.113.96"
+            )
+          )
+
+          expect(Rack::Attack.configuration.throttled?(request)).to be(false), "request #{i + 1} unexpectedly throttled"
+        end
+
+        over = Rack::Attack::Request.new(
+          Rack::MockRequest.env_for(
+            "/api/v2/sales?page=21",
+            method: "GET",
+            input: "",
+            "HTTP_CF_CONNECTING_IP" => "203.0.113.96"
+          )
+        )
+
+        expect(Rack::Attack.configuration.throttled?(over)).to be(true)
+      end
+    end
+  end
+
   describe "POST /oauth/device/code issuance throttle" do
     before { reset_rack_attack! }
     after { reset_rack_attack! }

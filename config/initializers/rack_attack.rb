@@ -362,10 +362,13 @@ class Rack::Attack
                      period: 60.seconds,
                      throttle_params: Proc.new { |req| req.json_params.is_a?(Hash) && req.json_params.dig("user", "email").presence }
 
-  # Throttle requests to Sales API with slow pagination
+  # Throttle requests to Sales API with slow pagination; a non-scalar `page`
+  # (JSON:API `page[size]=`) is treated as page 0 so it cannot crash with a 500.
   throttle("/api/v2/sales", limit: 10, period: 1.second) do |req|
-    req.remote_ip if req.path.ends_with?("/v2/sales") && req.params["page"].to_i > 10
-  rescue Rack::QueryParser::InvalidParameterError, TypeError, Rack::Multipart::EmptyContentError
+    page = req.params["page"]
+    page_number = page.is_a?(Integer) || page.is_a?(String) ? page.to_i : 0
+    req.remote_ip if req.path.ends_with?("/v2/sales") && page_number > 10
+  rescue Rack::QueryParser::InvalidParameterError, TypeError, Rack::Multipart::EmptyContentError, NoMethodError
     nil
   end
 
