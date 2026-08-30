@@ -38,6 +38,9 @@ describe ScheduleAbandonedCartEmailsJob do
       end
 
       context "when there are matching abandoned cart workflows" do
+        # Suppression lives in the mailer, so proving it takes delivering the enqueued mail.
+        include ActiveJob::TestHelper
+
         let(:cart1) { create(:cart) }
         let!(:cart1_product1) { create(:cart_product, cart: cart1, product: seller1_product1) }
         let!(:cart1_product2) { create(:cart_product, cart: cart1, product: seller1_product2, option: seller1_product2_variant1) }
@@ -97,60 +100,52 @@ describe ScheduleAbandonedCartEmailsJob do
             .and have_enqueued_mail(CustomerMailer, :abandoned_cart).with(guest_cart1.id, { seller1_abandoned_cart_workflow.id => [seller1_product1.id, seller1_product2.id] }.stringify_keys)
         end
 
-        it "does not schedule an email for products the recipient already bought" do
-          create(:purchase, link: seller1_product1, email: cart1.user.email, purchaser: cart1.user)
-          create(:purchase, link: seller2_product1, email: cart2.user.email, purchaser: cart2.user)
-
-          expect do
-            described_class.new.perform
-          end.to have_enqueued_mail(CustomerMailer, :abandoned_cart).exactly(2).times
-            .and have_enqueued_mail(CustomerMailer, :abandoned_cart).with(cart1.id, { seller1_abandoned_cart_workflow.id => [seller1_product2.id] }.stringify_keys)
-            .and have_enqueued_mail(CustomerMailer, :abandoned_cart).with(guest_cart1.id, { seller1_abandoned_cart_workflow.id => [seller1_product1.id, seller1_product2.id] }.stringify_keys)
-        end
-
-        it "does not schedule an email for a guest cart whose email already bought the product" do
-          create(:purchase, link: seller1_product1, email: guest_cart1.email, purchaser: nil)
-
-          expect do
-            described_class.new.perform
-          end.to have_enqueued_mail(CustomerMailer, :abandoned_cart).with(guest_cart1.id, { seller1_abandoned_cart_workflow.id => [seller1_product2.id] }.stringify_keys)
-        end
-
-        it "schedules nothing for a cart whose every product is owned, and leaves it eligible" do
+        it "enqueues a cart whose products the recipient already owns, leaving suppression to the mailer" do
+          # Deliberate: the mailer re-derives this filter per cart at render time and has to, since
+          # the purchase can land after selection (gumroad-private#1626).
           own_everything_in_cart1
 
-          # guest_cart1 holds the same seller1 products under an unowned email, so the run
-          # staying otherwise intact proves the filter keys on the recipient, not the products.
           expect do
             described_class.new.perform
-          end.to have_enqueued_mail(CustomerMailer, :abandoned_cart).exactly(2).times
-            .and have_enqueued_mail(CustomerMailer, :abandoned_cart).with(cart2.id, { seller2_abandoned_cart_workflow.id => [seller2_product1.id] }.stringify_keys)
-            .and have_enqueued_mail(CustomerMailer, :abandoned_cart).with(guest_cart1.id, { seller1_abandoned_cart_workflow.id => [seller1_product1.id, seller1_product2.id] }.stringify_keys)
+          end.to have_enqueued_mail(CustomerMailer, :abandoned_cart)
+            .with(cart1.id, { seller1_abandoned_cart_workflow.id => [seller1_product1.id, seller1_product2.id] }.stringify_keys)
+        end
 
-          # Skipping a cart must not write the SentAbandonedCartEmail marker the mailer writes
-          # on delivery: that row is what takes a cart out of Cart.abandoned for good.
+        it "sends nothing for a cart whose every product is owned, and leaves it eligible" do
+          # guest_cart1 holds the same seller1 products under an unowned email, so the run staying
+          # otherwise intact proves the filter keys on the recipient, not the products.
+          own_everything_in_cart1
+
+          perform_enqueued_jobs { described_class.new.perform }
+
+          recipients = ActionMailer::Base.deliveries.flat_map(&:to)
+          expect(recipients).to include(guest_cart1.email)
+          expect(recipients).not_to include(cart1.user.email)
+
+          # Not writing the SentAbandonedCartEmail marker is what keeps the cart in
+          # Cart.abandoned, so a later reminder is still possible.
           expect(cart1.reload.sent_abandoned_cart_emails).to be_empty
           expect(cart1).to be_abandoned
         end
 
-        it "schedules an email for an all-owned cart once an unowned product is added to it" do
+        it "sends an email for an all-owned cart once an unowned product is added to it" do
           own_everything_in_cart1
-          described_class.new.perform
+          perform_enqueued_jobs { described_class.new.perform }
 
           create(:cart_product, cart: cart1, product: seller2_product1)
           cart1.update!(updated_at: 2.days.ago) # adding to a cart touches it
 
           expect do
-            described_class.new.perform
-          end.to have_enqueued_mail(CustomerMailer, :abandoned_cart).with(cart1.id, { seller2_abandoned_cart_workflow.id => [seller2_product1.id] }.stringify_keys)
+            perform_enqueued_jobs { described_class.new.perform }
+          end.to change { cart1.reload.sent_abandoned_cart_emails.count }.by(1)
         end
 
-        it "still schedules an email when a refunded purchase is the only one for a carted product" do
+        it "still sends when a refunded purchase is the only one for a carted product" do
           create(:purchase, :refunded, link: seller1_product1, email: cart1.user.email, purchaser: cart1.user)
 
-          expect do
-            described_class.new.perform
-          end.to have_enqueued_mail(CustomerMailer, :abandoned_cart).with(cart1.id, { seller1_abandoned_cart_workflow.id => [seller1_product1.id, seller1_product2.id] }.stringify_keys)
+          perform_enqueued_jobs { described_class.new.perform }
+
+          expect(ActionMailer::Base.deliveries.flat_map(&:to)).to include(cart1.user.email)
         end
 
         it "does not walk workflows of sellers with no products in the abandoned carts" do
