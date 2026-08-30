@@ -6,7 +6,7 @@ describe Checkout::StripePaymentPresenter do
   # is actually responsible for: that the list handed to the issuer is the one the Element mounted,
   # after every strip. The signing itself is Checkout::PaymentMethodListToken's own spec.
   before do
-    allow(Checkout::PaymentMethodListToken).to receive(:issue) do |payment_method_types:, sellers:|
+    allow(Checkout::PaymentMethodListToken).to receive(:issue) do |payment_method_types:, sellers:, **|
       "issued:#{payment_method_types.join(",")}" if payment_method_types.present?
     end
   end
