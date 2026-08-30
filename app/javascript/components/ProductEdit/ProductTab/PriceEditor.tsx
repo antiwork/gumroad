@@ -62,11 +62,13 @@ export const PriceEditor = ({
   // flip on and silently revert after save.
   const cannotBePWYW = isFreeProduct && Boolean(hasPaidVariants);
   const mustBePWYW = isFreeProduct && !hasPaidVariants;
+  const pwywOn = cannotBePWYW ? false : mustBePWYW ? true : isPWYW;
   const productEditContext = React.useContext(ProductEditContext);
 
   React.useEffect(() => {
     if (cannotBePWYW && isPWYW) setIsPWYW(false);
-  }, [cannotBePWYW, isPWYW, setIsPWYW]);
+    else if (mustBePWYW && !isPWYW) setIsPWYW(true);
+  }, [cannotBePWYW, mustBePWYW, isPWYW, setIsPWYW]);
 
   // The regular product editor provides ProductEditContext; the bundle editor
   // passes the defaultOfferCode prop. Either way we can render the selector.
@@ -102,10 +104,10 @@ export const PriceEditor = ({
       {cannotBePWYW ? (
         <Alert variant="info">Pay what you want isn't available on products with paid pricing options.</Alert>
       ) : null}
-      <Details open={isPWYW && !cannotBePWYW}>
+      <Details open={pwywOn}>
         <DetailsToggle chevronPosition="none" className="mb-0">
           <Switch
-            checked={isPWYW && !cannotBePWYW}
+            checked={pwywOn}
             onChange={(e) => setIsPWYW(e.target.checked)}
             disabled={mustBePWYW || cannotBePWYW}
             label={
