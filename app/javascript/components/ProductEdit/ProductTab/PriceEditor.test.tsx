@@ -1,0 +1,65 @@
+// @vitest-environment happy-dom
+import { cleanup, render, screen } from "@testing-library/react";
+import * as React from "react";
+import { afterEach, describe, expect, it, vi } from "vitest";
+
+import { PriceEditor } from "$app/components/ProductEdit/ProductTab/PriceEditor";
+
+afterEach(cleanup);
+
+const noop = () => undefined;
+
+const renderEditor = (
+  overrides: Partial<React.ComponentProps<typeof PriceEditor>> & {
+    isPWYW: boolean;
+    setIsPWYW: (isPWYW: boolean) => void;
+  },
+) =>
+  render(
+    <PriceEditor
+      priceCents={0}
+      suggestedPriceCents={null}
+      setPriceCents={noop}
+      setSuggestedPriceCents={noop}
+      currencyType="usd"
+      eligibleForInstallmentPlans={false}
+      allowInstallmentPlan={false}
+      numberOfInstallments={null}
+      onAllowInstallmentPlanChange={noop}
+      onNumberOfInstallmentsChange={noop}
+      {...overrides}
+    />,
+  );
+
+describe("PriceEditor PWYW toggle", () => {
+  it("disables PWYW on a $0-base product with paid variants and clears a stale on state", () => {
+    const setIsPWYW = vi.fn();
+    renderEditor({ isPWYW: true, setIsPWYW, hasPaidVariants: true, priceCents: 0 });
+
+    const toggle = screen.getByRole("switch") as HTMLInputElement;
+    expect(toggle.disabled).toBe(true);
+    expect(toggle.checked).toBe(false);
+    expect(screen.getByText("Pay what you want isn't available on products with paid pricing options.")).toBeTruthy();
+    expect(setIsPWYW).toHaveBeenCalledWith(false);
+  });
+
+  it("keeps a free product without variants locked on to PWYW", () => {
+    const setIsPWYW = vi.fn();
+    renderEditor({ isPWYW: true, setIsPWYW, hasPaidVariants: false, priceCents: 0 });
+
+    const toggle = screen.getByRole("switch") as HTMLInputElement;
+    expect(toggle.disabled).toBe(true);
+    expect(toggle.checked).toBe(true);
+    expect(screen.getByText("Free products require a pay what they want price.")).toBeTruthy();
+    expect(setIsPWYW).not.toHaveBeenCalled();
+  });
+
+  it("leaves PWYW editable on a paid product that also has paid variants", () => {
+    const setIsPWYW = vi.fn();
+    renderEditor({ isPWYW: false, setIsPWYW, hasPaidVariants: true, priceCents: 1500 });
+
+    const toggle = screen.getByRole("switch") as HTMLInputElement;
+    expect(toggle.disabled).toBe(false);
+    expect(setIsPWYW).not.toHaveBeenCalled();
+  });
+});
