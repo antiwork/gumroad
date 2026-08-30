@@ -998,6 +998,34 @@ describe "Balance Pages Scenario", js: true, type: :system do
         end
       end
 
+      context "when leftover is settled but below the $1 Instant floor" do
+        before do
+          allow_any_instance_of(User).to receive(:instant_payouts_supported?).and_return(true)
+          allow_any_instance_of(User).to receive(:instantly_payable_unpaid_balance_cents).and_return(50)
+          allow_any_instance_of(User).to receive(:instant_payout_unsettled_balance_cents).and_return(0)
+          allow_any_instance_of(User).to receive_message_chain(:active_bank_account, :bank_account_type).and_return("ACH")
+          allow_any_instance_of(User).to receive_message_chain(:active_bank_account, :bank_name).and_return("Test Bank")
+          allow_any_instance_of(User).to receive_message_chain(:active_bank_account, :routing_number).and_return("110000000")
+          allow_any_instance_of(User).to receive_message_chain(:active_bank_account, :account_number_visual).and_return("******6789")
+          allow_any_instance_of(User).to receive(:instantly_payable_unpaid_balances).and_return(
+            [
+              OpenStruct.new(
+                external_id: "1",
+                date: Time.current.to_s,
+                holding_amount_cents: 50
+              )
+            ]
+          )
+        end
+
+        it "does not claim the leftover is still settling" do
+          visit balance_path
+
+          expect(page).not_to have_status(text: "hasn't settled yet")
+          expect(page).not_to have_button("Get paid!")
+        end
+      end
+
       context "when user is eligible for instant payouts but their payout account does not support them" do
         before do
           allow_any_instance_of(User).to receive(:eligible_for_instant_payouts?).and_return(true)

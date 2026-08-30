@@ -96,6 +96,7 @@ describe PayoutsPresenter do
 
       allow(user).to receive(:instant_payouts_supported?).and_return(true)
       allow(user).to receive(:instantly_payable_unpaid_balance_cents).and_return(1000)
+      allow(user).to receive(:instant_payout_unsettled_balance_cents).and_return(0)
       allow(user).to receive(:instantly_payable_unpaid_balances).and_return([])
       allow(user).to receive_message_chain(:active_bank_account, :bank_account_type).and_return("checking")
       allow(user).to receive_message_chain(:active_bank_account, :bank_name).and_return("Test Bank")
@@ -106,7 +107,7 @@ describe PayoutsPresenter do
         {
           instant_payout_fee_percent: StripePayoutProcessor::INSTANT_PAYOUT_FEE_PERCENT,
           payable_amount_cents: 1000,
-          unpaid_amount_cents: user.instant_payout_pipeline_unpaid_balance_cents,
+          unpaid_amount_cents: 0,
           payable_balances: [],
           bank_account_type: "checking",
           bank_name: "Test Bank",
