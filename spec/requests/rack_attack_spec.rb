@@ -229,9 +229,7 @@ describe "Rack::Attack throttle", type: :request do
         )
       )
 
-      expect do
-        Rack::Attack.configuration.throttled?(request)
-      end.not_to raise_error
+      expect(Rack::Attack.configuration.throttled?(request)).to be(false)
     end
 
     it "still throttles a scalar page past the depth limit" do
