@@ -1,3 +1,4 @@
+import typia from "typia";
 import { describe, expect, it, vi } from "vitest";
 
 import type { SurchargesResponse } from "$app/data/customer_surcharge";
@@ -3146,5 +3147,18 @@ describe("paymentMethodTypesForMountCurrency", () => {
 
     expect(paymentMethodTypesForMountCurrency(usdMount, "usd")).toEqual(["card", "link", "cashapp"]);
     expect(paymentMethodTypesForMountCurrency(usdMount, "inr")).toEqual(["card", "link", "upi"]);
+  });
+});
+
+describe("CheckoutPaymentConfig wire compatibility", () => {
+  it("accepts a client-confirm cart-save response from a server that predates buyer_currency_presentment", () => {
+    // Show.tsx re-validates the cart PATCH response with typia.assert. During a rolling deploy
+    // that response can come from a server that does not emit the field yet; requiring it would
+    // strand the checkout on a stale configuration with Pay disabled.
+    const { buyer_currency_presentment: _omitted, ...legacyElementsOptions } =
+      paymentElementClientConfirmConfig.elements_options;
+    const legacy = { ...paymentElementClientConfirmConfig, elements_options: legacyElementsOptions };
+
+    expect(typia.assert<CheckoutPaymentConfig>(legacy)).toEqual(legacy);
   });
 });

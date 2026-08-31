@@ -72,8 +72,11 @@ export type ListedCurrencyDisplayConfig = {
 export type PaymentElementClientConfirmConfig = {
   stripe_elements_mode: typeof STRIPE_ELEMENTS_MODE_FOR_PAYMENT_INTENT;
   currency: string;
-  // True only when the server proved this client-confirm cart can honor a displayed FX quote at /orders/prepare.
-  buyer_currency_presentment: boolean;
+  // True only when the server proved this client-confirm cart can honor a displayed FX quote at
+  // /orders/prepare. Optional because a cart save during a rolling deploy can return a response
+  // from a server that predates the field — typia re-validates that response, so requiring it
+  // would strand the checkout with a stale configuration. Absent means false.
+  buyer_currency_presentment?: boolean;
   presentment_amount_cents: number | null;
   listed_currency_display: ListedCurrencyDisplayConfig | null;
   // Marks the GeoIP/listed-price card lane. Unlike the method-forced lane, shipping moves
