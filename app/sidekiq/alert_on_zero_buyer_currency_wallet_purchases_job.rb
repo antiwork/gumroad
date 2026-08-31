@@ -12,21 +12,11 @@ class AlertOnZeroBuyerCurrencyWalletPurchasesJob
   ALERT_ROOM = "agent_reports"
 
   def perform
-    return reset_zero_window unless buyer_currency_wallets_enabled?
-
-    recent_count = recent_wallet_presentment_purchase_count
-    return reset_zero_window if recent_count.positive?
-
-    first_seen_at = zero_volume_first_seen_at
-    if first_seen_at.blank?
-      record_zero_volume_started
-      return
-    end
-
-    return if first_seen_at > ZERO_VOLUME_WINDOW.ago
+    return reset_alert_throttle unless buyer_currency_wallets_enabled?
+    return reset_alert_throttle if recent_wallet_presentment_purchase_exists?
     return if recently_alerted?
 
-    InternalNotificationWorker.perform_async(ALERT_ROOM, "Buyer-currency wallet purchases at zero", message_for(first_seen_at))
+    InternalNotificationWorker.perform_async(ALERT_ROOM, "Buyer-currency wallet purchases at zero", message_for(last_wallet_presentment_purchase_at))
     record_alerted
   end
 
@@ -48,25 +38,23 @@ class AlertOnZeroBuyerCurrencyWalletPurchasesJob
       value.respond_to?(:any?) ? value.any? : value.to_i.positive?
     end
 
-    def recent_wallet_presentment_purchase_count
+    def wallet_presentment_purchases
       Purchase.successful
         .joins(:purchase_presentment, :purchase_wallet_type)
-        .where("purchases.created_at >= ?", ZERO_VOLUME_WINDOW.ago)
         .where(purchase_wallet_types: { wallet_type: WALLET_TYPES })
-        .count
     end
 
-    def zero_volume_first_seen_at
-      timestamp = $redis.get(RedisKey.buyer_currency_wallet_presentment_zero_first_seen_at)
-      Time.at(timestamp.to_i) if timestamp.present?
+    def recent_wallet_presentment_purchase_exists?
+      wallet_presentment_purchases.where("purchases.created_at >= ?", ZERO_VOLUME_WINDOW.ago).exists?
     end
 
-    def record_zero_volume_started
-      $redis.set(RedisKey.buyer_currency_wallet_presentment_zero_first_seen_at, Time.current.to_i)
+    # Newest id rather than MAX(created_at), which has no supporting index and can scan the table.
+    # Rows are only inserted at checkout, so the newest id carries the newest timestamp.
+    def last_wallet_presentment_purchase_at
+      wallet_presentment_purchases.order(id: :desc).limit(1).pick(:created_at)
     end
 
-    def reset_zero_window
-      $redis.del(RedisKey.buyer_currency_wallet_presentment_zero_first_seen_at)
+    def reset_alert_throttle
       $redis.del(RedisKey.buyer_currency_wallet_presentment_zero_alerted_at)
     end
 
@@ -79,11 +67,18 @@ class AlertOnZeroBuyerCurrencyWalletPurchasesJob
       $redis.set(RedisKey.buyer_currency_wallet_presentment_zero_alerted_at, Time.current.to_i, ex: ALERT_THROTTLE.to_i)
     end
 
-    def message_for(first_seen_at)
+    def message_for(last_purchase_at)
       [
-        "Buyer-currency wallet purchases have stayed at 0 for #{((Time.current - first_seen_at) / 1.hour).floor} hours while buyer_currency_wallets is enabled.",
+        headline(last_purchase_at),
         "",
         "Expected baseline before the Aug 16 regression was about 370–420 wallet purchases with presentment rows per day. Check antiwork/gumroad-private#2326 and the buyer_currency_wallets flag before closing the incident.",
       ].join("\n")
+    end
+
+    def headline(last_purchase_at)
+      return "No buyer-currency wallet purchase with a presentment row has ever been recorded while buyer_currency_wallets is enabled." if last_purchase_at.blank?
+
+      hours = ((Time.current - last_purchase_at) / 1.hour).floor
+      "No buyer-currency wallet purchase with a presentment row has been recorded in #{hours} hours while buyer_currency_wallets is enabled. The last one was at #{last_purchase_at.utc.strftime('%Y-%m-%d %H:%M UTC')}."
     end
 end
