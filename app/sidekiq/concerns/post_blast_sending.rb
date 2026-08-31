@@ -172,7 +172,10 @@ module PostBlastSending
   end
 
   def remove_already_emailed_members
-    already_sent_emails = Set.new(@post.sent_post_emails.pluck(:email))
+    emails = @members.map(&:email)
+    return if emails.empty?
+
+    already_sent_emails = Set.new(@post.sent_post_emails.where(email: emails).pluck(:email))
     return if already_sent_emails.empty?
 
     @members.delete_if { _1.email.in?(already_sent_emails) }
