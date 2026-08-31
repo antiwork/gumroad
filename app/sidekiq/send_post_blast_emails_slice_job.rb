@@ -13,24 +13,43 @@ class SendPostBlastEmailsSliceJob
     Rails.logger.info("[#{self.class.name}] blast_id=#{@blast.id} chunk=#{chunk_index}/#{total_chunks}")
     return unless @post.alive? && @post.published? && @post.send_emails? && @blast.completed_at.nil?
     return unless active_partition?(partition_key)
+    return if chunk_completed?(partition_key, chunk_index)
+    return unless claim_chunk(partition_key, chunk_index)
 
-    @blast.update!(started_at: Time.current) if @blast.started_at.nil?
+    begin
+      @blast.update!(started_at: Time.current) if @blast.started_at.nil?
 
-    @filters = @post.audience_members_filter_params
-    @members = load_chunk_members(member_ids)
-    # The parent already filtered out already-emailed members, but a retried slice job re-runs
-    # its own chunk and must not re-send the members its first attempt already marked sent.
-    remove_members_already_sent_in_this_blast if @blast.to_non_openers?
+      @filters = @post.audience_members_filter_params
+      @members = load_chunk_members(member_ids)
+      # The parent already filtered out already-emailed members, but a retried slice job re-runs
+      # its own chunk and must not re-send the members its first attempt already marked sent.
+      remove_members_already_sent_in_this_blast if @blast.to_non_openers?
 
-    send_members(@members)
-    mark_chunk_completed(partition_key, chunk_index, total_chunks)
+      send_members(@members)
+      mark_chunk_completed(partition_key, chunk_index, total_chunks)
+    ensure
+      release_chunk_claim(partition_key, chunk_index)
+    end
   end
 
   private
     CHUNK_REVALIDATION_SLICE_SIZE = 1_000
+    CHUNK_CLAIM_TTL = 4.hours
 
     def active_partition?(partition_key)
       $redis.get(RedisKey.blast_active_slice_partition(@blast.id)) == partition_key
+    end
+
+    def chunk_completed?(partition_key, chunk_index)
+      $redis.sismember(RedisKey.blast_done_slices(@blast.id, partition_key), chunk_index)
+    end
+
+    def claim_chunk(partition_key, chunk_index)
+      $redis.set(RedisKey.blast_slice_claim(@blast.id, partition_key, chunk_index), Time.current.iso8601, nx: true, ex: CHUNK_CLAIM_TTL.to_i)
+    end
+
+    def release_chunk_claim(partition_key, chunk_index)
+      $redis.del(RedisKey.blast_slice_claim(@blast.id, partition_key, chunk_index))
     end
 
     def load_chunk_members(member_ids)
