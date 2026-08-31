@@ -846,6 +846,89 @@ describe SendPostBlastEmailsJob, :freeze_time do
     end
   end
 
+  describe "splitting large blasts into slice jobs" do
+    # Each example builds its own seller + audience so follower counts are exact and no
+    # example's audience leaks into the next (the audience filter is all-of-the-seller's).
+    def audience_post_with_followers(count)
+      seller = create(:named_user)
+      post = create(:audience_post, :published, seller:)
+      create_list(:active_follower, count, user: seller)
+      [post, seller]
+    end
+
+    it "enqueues one slice job per chunk and sends nothing inline" do
+      post, = audience_post_with_followers(2_002)
+      blast = create(:blast, :just_requested, post:)
+
+      described_class.new.perform(blast.id)
+
+      jobs = SendPostBlastEmailsSliceJob.jobs.map { _1["args"] }
+      expect(jobs.size).to eq(2)
+      expect(jobs.first.first(3)).to eq([blast.id, 0, 2])
+      expect(jobs.last.first(3)).to eq([blast.id, 1, 2])
+      # The chunks are disjoint and cover the whole filtered audience, in order.
+      expect(jobs.first.last.size).to eq(2_000)
+      expect(jobs.last.last.size).to eq(2)
+      expect((jobs.first.last + jobs.last.last).uniq.size).to eq(2_002)
+      expect(PostSendgridApi.mails).to be_empty
+      # The parent only distributes; the last slice job stamps completion.
+      expect(blast.reload.completed_at).to be_nil
+      expect(blast.reload.started_at).to be_present
+    end
+
+    it "publishes the full owed count for the slice jobs to decrement" do
+      post, = audience_post_with_followers(2_002)
+      blast = create(:blast, :just_requested, post:)
+      pending_key = RedisKey.blast_pending_recipients(blast.id)
+
+      described_class.new.perform(blast.id)
+
+      expect($redis.get(pending_key).to_i).to eq(2_002)
+    ensure
+      $redis.del(pending_key)
+    end
+
+    it "sends inline for a blast at or under the split threshold" do
+      post, = audience_post_with_followers(2_000) # right at the threshold
+      blast = create(:blast, :just_requested, post:)
+
+      described_class.new.perform(blast.id)
+
+      expect(SendPostBlastEmailsSliceJob.jobs).to be_empty
+      expect_sent_count 2_000
+      expect(blast.reload.completed_at).to be_present
+    end
+
+    it "splits at the Redis-tunable threshold override" do
+      post, = audience_post_with_followers(11)
+      $redis.set(RedisKey.blast_child_split_threshold, 10)
+      blast = create(:blast, :just_requested, post:)
+
+      described_class.new.perform(blast.id)
+
+      jobs = SendPostBlastEmailsSliceJob.jobs.map { _1["args"] }
+      expect(jobs.size).to eq(2)
+      expect(jobs.map { _1[2] }).to eq([2, 2])
+      expect(PostSendgridApi.mails).to be_empty
+    ensure
+      $redis.del(RedisKey.blast_child_split_threshold)
+    end
+
+    it "respects the Redis-tunable slice size" do
+      post, = audience_post_with_followers(2_002)
+      $redis.set(RedisKey.blast_child_slice_size, 1_000)
+      blast = create(:blast, :just_requested, post:)
+
+      described_class.new.perform(blast.id)
+
+      jobs = SendPostBlastEmailsSliceJob.jobs.map { _1["args"] }
+      expect(jobs.size).to eq(3)
+      expect(jobs.map { _1.last.size }).to eq([1_000, 1_000, 2])
+    ensure
+      $redis.del(RedisKey.blast_child_slice_size)
+    end
+  end
+
   def expect_sent_count(count)
     expect(PostSendgridApi.mails.size).to eq(count)
   end

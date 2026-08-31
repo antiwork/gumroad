@@ -318,6 +318,37 @@ describe AlertOnStalledPostEmailBlastsJob do
         expect(SendPostBlastEmailsJob).not_to have_received(:perform_async)
         expect(InternalNotificationWorker).not_to have_received(:perform_async)
       end
+
+      it "does not resume a split blast while a slice job is still queued" do
+        blast = stalled_blast
+        queue = [instance_double(Sidekiq::Job, klass: "SendPostBlastEmailsSliceJob", args: [blast.id, 0, 2, []])]
+        allow(Sidekiq::Queue).to receive(:new).with("default").and_return(queue)
+        dead_set = instance_double(Sidekiq::DeadSet)
+        allow(Sidekiq::DeadSet).to receive(:new).and_return(dead_set)
+        allow(dead_set).to receive(:scan)
+        retry_set = instance_double(Sidekiq::RetrySet)
+        allow(Sidekiq::RetrySet).to receive(:new).and_return(retry_set)
+        allow(retry_set).to receive(:scan)
+        workers = instance_double(Sidekiq::Workers)
+        allow(Sidekiq::Workers).to receive(:new).and_return(workers)
+        allow(workers).to receive(:each)
+
+        described_class.new.perform
+
+        expect(SendPostBlastEmailsJob).not_to have_received(:perform_async)
+        expect(InternalNotificationWorker).not_to have_received(:perform_async)
+      end
+
+      it "treats a slice job in the busy set as a live sender" do
+        blast = stalled_blast
+        workers = instance_double(Sidekiq::Workers)
+        allow(Sidekiq::Workers).to receive(:new).and_return(workers)
+        allow(workers).to receive(:each) do |&block|
+          block.call("pid", "tid", { "payload" => { "class" => "SendPostBlastEmailsSliceJob", "args" => [blast.id, 0, 2, [1, 2]] }.to_json })
+        end
+
+        expect(described_class.new.send(:busy_blast_ids)).to include(blast.id)
+      end
     end
 
     context "when the blast already finished delivering" do
