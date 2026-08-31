@@ -43,6 +43,7 @@ import {
   Product,
   ProductEditContext,
   ProfileSection,
+  reconcileCustomizablePrice,
   ShippingCountry,
   TaxonomyAttribute,
 } from "$app/components/ProductEdit/state";
@@ -495,16 +496,40 @@ const findUpdatedContent = (product: Product, lastSavedProduct: Product) => {
 };
 
 const ProductEditPage = (props: Props) => {
-  const [product, setProduct] = React.useState(props.product);
+  // Products predating the backend guard can load with a PWYW flag the guard
+  // would clear on the next save; reconcile up front so the editor and preview
+  // never show a state that can't survive a save.
+  const [product, setProduct] = React.useState<Product>(() => ({
+    ...props.product,
+    customizable_price: reconcileCustomizablePrice(
+      props.product,
+      props.product.price_cents,
+      props.product.customizable_price,
+    ),
+  }));
   const [contentUpdates, setContentUpdates] = React.useState<ContentUpdates>(null);
   const [currencyType, setCurrencyType] = React.useState<CurrencyCode>(props.currency_type);
   const lastSavedProductRef = React.useRef<Product>(structuredClone(props.product));
+  // The seller's PWYW choice as of the last nonzero base price — what a dip to
+  // $0 (which forces the flag either way) restores when the price comes back.
+  const priorCustomizablePriceRef = React.useRef(
+    props.product.price_cents === 0 ? false : props.product.customizable_price,
+  );
 
   const updateProduct = (update: Partial<Product> | ((product: Product) => void)) =>
     setProduct((prevProduct) => {
       const updated = { ...prevProduct };
       if (typeof update === "function") update(updated);
       else Object.assign(updated, update);
+      // Every state write passes through here, so price and variant edits from
+      // any tab keep the PWYW flag consistent with the backend guard. The ref
+      // write is idempotent — replays of this updater converge on the same value.
+      updated.customizable_price = reconcileCustomizablePrice(
+        updated,
+        prevProduct.price_cents,
+        priorCustomizablePriceRef.current,
+      );
+      if (updated.price_cents !== 0) priorCustomizablePriceRef.current = updated.customizable_price;
       return updated;
     });
   const [existingFiles, setExistingFiles] = React.useState(props.existing_files);

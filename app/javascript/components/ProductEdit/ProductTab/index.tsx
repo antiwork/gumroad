@@ -35,7 +35,7 @@ import { ThumbnailEditor } from "$app/components/ProductEdit/ProductTab/Thumbnai
 import { TiersEditor } from "$app/components/ProductEdit/ProductTab/TiersEditor";
 import { VersionsEditor } from "$app/components/ProductEdit/ProductTab/VersionsEditor";
 import { RefundPolicySelector } from "$app/components/ProductEdit/RefundPolicy";
-import { useProductEditContext } from "$app/components/ProductEdit/state";
+import { hasPaidVariantPricing, useProductEditContext } from "$app/components/ProductEdit/state";
 import { ToggleSettingRow } from "$app/components/SettingRow";
 import { TypeSafeOptionSelect } from "$app/components/TypeSafeOptionSelect";
 import { Alert } from "$app/components/ui/Alert";
@@ -270,15 +270,7 @@ export const ProductTab = () => {
                         priceCents={product.price_cents}
                         suggestedPriceCents={product.suggested_price_cents}
                         isPWYW={product.customizable_price}
-                        setPriceCents={(priceCents) => {
-                          const hasPaidVariantPrices = product.variants.some(
-                            (v) => "price_difference_cents" in v && (v.price_difference_cents ?? 0) > 0,
-                          );
-                          updateProduct({
-                            price_cents: priceCents,
-                            ...(priceCents === 0 && !hasPaidVariantPrices && { customizable_price: true }),
-                          });
-                        }}
+                        setPriceCents={(priceCents) => updateProduct({ price_cents: priceCents })}
                         setSuggestedPriceCents={(suggestedPriceCents) =>
                           updateProduct({ suggested_price_cents: suggestedPriceCents })
                         }
@@ -307,9 +299,7 @@ export const ProductTab = () => {
                               ("price_difference_cents" in v ? (v.price_difference_cents ?? 0) : 0),
                           ),
                         )}
-                        hasPaidVariants={product.variants.some(
-                          (v) => "price_difference_cents" in v && (v.price_difference_cents ?? 0) > 0,
-                        )}
+                        hasPaidVariants={hasPaidVariantPricing(product)}
                       />
                       {product.native_type === "commission" ? (
                         <p
