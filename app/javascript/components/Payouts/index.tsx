@@ -236,6 +236,7 @@ export type PayoutsProps = {
   instant_payout: {
     instant_payout_fee_percent: number;
     payable_amount_cents: number;
+    unpaid_amount_cents: number;
     payable_balances: {
       id: string;
       date: string;

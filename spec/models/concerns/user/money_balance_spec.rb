@@ -44,4 +44,22 @@ describe User::MoneyBalance, :vcr do
       expect(user.instantly_payable_unpaid_balances).to match_array([bal1, bal2, bal3, bal4, bal5, bal6, bal7, bal8])
     end
   end
+
+  describe "#instant_payout_unsettled_balance_cents", vcr: false do
+    let(:user) { create(:user) }
+
+    it "is 0 when the leftover is already Instant-available (including sub-$1)" do
+      allow(user).to receive(:instant_payout_pipeline_unpaid_balance_cents).and_return(50)
+      allow(user).to receive(:instantly_payable_unpaid_balance_cents).and_return(50)
+
+      expect(user.instant_payout_unsettled_balance_cents).to eq(0)
+    end
+
+    it "keeps unpaid Stripe/Gumroad balance Instant cannot take yet" do
+      allow(user).to receive(:instant_payout_pipeline_unpaid_balance_cents).and_return(60_00)
+      allow(user).to receive(:instantly_payable_unpaid_balance_cents).and_return(0)
+
+      expect(user.instant_payout_unsettled_balance_cents).to eq(60_00)
+    end
+  end
 end
