@@ -1913,7 +1913,7 @@ describe Checkout::StripePaymentPresenter do
       expect(props[:elements_options][:inr_local_methods]).to eq(%w[upi])
       expect(issued[:payment_method_types]).to eq(%w[card link])
       expect(issued[:inr_payment_method_types]).to eq(%w[card link upi])
-      expect(issued[:quoted_payment_method_types]).to be_nil
+      expect(issued[:quoted_payment_method_types]).to eq(%w[card link])
     ensure
       if seller
         Feature.deactivate_user(:checkout_local_method_upi, seller)

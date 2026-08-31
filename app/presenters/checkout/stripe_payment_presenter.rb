@@ -412,7 +412,7 @@ class Checkout::StripePaymentPresenter
       Checkout::PaymentMethodListToken.issue(
         payment_method_types:,
         sellers:,
-        quoted_payment_method_types: quoted_types == payment_method_types ? nil : quoted_types,
+        quoted_payment_method_types: quoted_types,
         inr_payment_method_types: inr_local_method_types.present? ? inr_types : nil,
       )
     end
