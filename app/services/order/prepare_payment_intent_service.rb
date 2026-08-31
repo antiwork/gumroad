@@ -117,19 +117,25 @@ class Order::PreparePaymentIntentService
       true
     end
 
-    # A remounted non-USD Element's method list lives on the signed token (`quoted_types` /
-    # `inr_types`). Re-resolving from the USD-priced cart cannot reconstruct it — most
-    # critically it omits UPI from an INR ConfirmationToken. Expiry is routine on a long-open
-    # tab; fail closed so the buyer reloads rather than getting an intent the token cannot confirm.
+    # A remounted USD-priced cart's method list lives on the signed token (`quoted_types` /
+    # `inr_types`). Re-resolving from the USD cart cannot reconstruct it. Direct-listed and
+    # method-forced listings already priced in the mount currency can still re-resolve.
     def block_unverifiable_remount_method_list
       reported = reported_element_mount_currency
       return false if reported.blank? || reported == Checkout::StripePaymentPresenter::CLIENT_CONFIRM_CURRENCY
-      return false if params[:payment_method_list_token].blank?
       return false if issued_payment_method_types.present?
+      return false if remount_method_list_reconstructable_from_cart?(reported)
 
       Rails.logger.error("Client-confirm prepare cannot reconstruct a signed #{reported} method list for order #{order.id}; failing closed rather than re-resolving the USD cart")
       fail_purchases_with(GENERIC_CHARGE_ERROR)
       true
+    end
+
+    def remount_method_list_reconstructable_from_cart?(currency)
+      return true if uniform_method_forced_purchase_currency == currency
+
+      decision = client_confirm_buyer_currency_decision
+      decision.eligible? && decision.direct_listed_amount? && decision.currency == currency
     end
 
     # Reject malformed quote tokens before making a Stripe request. Full seller, account,

@@ -2492,6 +2492,14 @@ describe Order::PreparePaymentIntentService, :vcr do
         )
       end
 
+      def quoted_cad_method_list_token
+        Checkout::PaymentMethodListToken.issue(
+          payment_method_types: %w[card link cashapp],
+          sellers: [seller],
+          quoted_payment_method_types: %w[card link],
+        )
+      end
+
       before do
         allow(Checkout::BuyerCurrencyQuote).to receive(:quoted_currency_hint).and_call_original
         allow(Checkout::BuyerCurrencyQuote).to receive(:quoted_currency_hint)
@@ -2501,7 +2509,11 @@ describe Order::PreparePaymentIntentService, :vcr do
 
       it "reuses the displayed CAD quote instead of failing the remount closed" do
         order, params = build_order
-        params = params.merge(payment_element_mount_currency: "cad", buyer_currency_quote: "displayed-cad-quote")
+        params = params.merge(
+          payment_element_mount_currency: "cad",
+          buyer_currency_quote: "displayed-cad-quote",
+          payment_method_list_token: quoted_cad_method_list_token,
+        )
         allow(Checkout::BuyerCurrencyQuote).to receive(:verify!).and_return(locked_cad_quote)
         allow(Checkout::BuyerCurrencyEligibility).to receive(:stripe_test_mode?).and_return(false)
         expect(StripeFxQuote).not_to receive(:create)
@@ -2525,7 +2537,11 @@ describe Order::PreparePaymentIntentService, :vcr do
         }
         params = { line_items: [line_item, second_line] }.merge(common_params)
         order, = Order::CreateService.new(params:).perform
-        params = params.merge(payment_element_mount_currency: "cad", buyer_currency_quote: "displayed-cad-quote")
+        params = params.merge(
+          payment_element_mount_currency: "cad",
+          buyer_currency_quote: "displayed-cad-quote",
+          payment_method_list_token: quoted_cad_method_list_token,
+        )
         allow(Checkout::BuyerCurrencyQuote).to receive(:verify!).and_return(locked_cad_quote(presentment_total_cents: 20_27))
         allow(Checkout::BuyerCurrencyEligibility).to receive(:stripe_test_mode?).and_return(false)
 
@@ -2538,7 +2554,11 @@ describe Order::PreparePaymentIntentService, :vcr do
 
       it "returns the quote-invalid error when the displayed quote is rejected" do
         order, params = build_order
-        params = params.merge(payment_element_mount_currency: "cad", buyer_currency_quote: "displayed-cad-quote")
+        params = params.merge(
+          payment_element_mount_currency: "cad",
+          buyer_currency_quote: "displayed-cad-quote",
+          payment_method_list_token: quoted_cad_method_list_token,
+        )
         allow(Checkout::BuyerCurrencyQuote).to receive(:verify!)
           .and_raise(Checkout::BuyerCurrencyQuote::InvalidToken, "expired buyer currency quote")
         allow(Checkout::BuyerCurrencyEligibility).to receive(:stripe_test_mode?).and_return(false)
@@ -2727,6 +2747,25 @@ describe Order::PreparePaymentIntentService, :vcr do
           .and_return(Stripe::StripeObject.construct_from(payment_method_preview: preview))
 
         responses = described_class.new(order:, params:, confirmation_token: "ctoken_inr_expired_list").perform
+
+        expect(responses["unique-id-0"][:success]).to eq(false)
+        expect(order.purchases.first.reload).to be_failed
+      end
+
+      it "fails closed when an INR remount omits the signed method list" do
+        order, params = build_order
+        params = params.merge(
+          payment_element_mount_currency: Currency::INR,
+          buyer_currency_quote: "displayed-inr-quote",
+        )
+        order.purchases.each { _1.update!(ip_country: "India") }
+        allow(Checkout::BuyerCurrencyQuote).to receive(:quoted_currency_hint)
+          .with("displayed-inr-quote")
+          .and_return(Currency::INR)
+        allow(Checkout::BuyerCurrencyEligibility).to receive(:stripe_test_mode?).and_return(false)
+        expect(StripeDeferredPaymentIntent).not_to receive(:create)
+
+        responses = described_class.new(order:, params:, confirmation_token: "ctoken_inr_missing_list").perform
 
         expect(responses["unique-id-0"][:success]).to eq(false)
         expect(order.purchases.first.reload).to be_failed
