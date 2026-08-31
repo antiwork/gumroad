@@ -425,6 +425,11 @@ export const reconcileMountedEditorFileEmbedIds = (editor: Editor, fileIdMapping
   if (transaction.docChanged) editor.view.dispatch(transaction);
 };
 
+// Omit a null/empty custom URL so a content-tab snapshot cannot clear a slug
+// the seller set on a previous save. A non-empty slug is still sent.
+export const scalarSettingsForSave = (product: { custom_permalink: string | null }) =>
+  product.custom_permalink ? { custom_permalink: product.custom_permalink } : {};
+
 export const saveProduct = async (
   permalink: string,
   id: string,
@@ -457,13 +462,14 @@ export const saveProduct = async (
   // would make "Keep version content" delete files embedded in the hidden
   // pages even though that retry asks us to preserve every file.
   const files = filesForSave(product.files, fileIds, options.keepAllFiles ?? false);
-  const { custom_html: _customHtml, ...productParams } = product;
+  const { custom_html: _customHtml, custom_permalink, ...productParams } = product;
   const response = await request({
     method: "POST",
     accept: "json",
     url: Routes.link_path(permalink),
     data: {
       ...productParams,
+      ...scalarSettingsForSave({ custom_permalink }),
       files,
       price_currency_type: currencyType,
       covers: product.covers.map(({ id }) => id),

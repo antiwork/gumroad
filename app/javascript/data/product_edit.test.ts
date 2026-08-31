@@ -19,6 +19,7 @@ import {
   resolveServerIdMapping,
   richContentMoveSourceIds,
   saveProductError,
+  scalarSettingsForSave,
   StaleContentConflictError,
   StaleDeletionConflictError,
 } from "$app/data/product_edit";
@@ -43,6 +44,19 @@ describe("filesForSave", () => {
     expect(filesForSave(editorFiles, new Set(), false)).toEqual([]);
     expect(editorFiles).toEqual([file]);
     expect(filesForSave(editorFiles, new Set(), true)).toEqual([file]);
+  });
+});
+
+describe("scalarSettingsForSave", () => {
+  it("omits a null or empty custom permalink so a later save cannot clear it", () => {
+    expect(scalarSettingsForSave({ custom_permalink: null })).toEqual({});
+    expect(scalarSettingsForSave({ custom_permalink: "" })).toEqual({});
+  });
+
+  it("sends a non-empty custom permalink", () => {
+    expect(scalarSettingsForSave({ custom_permalink: "my-custom-url" })).toEqual({
+      custom_permalink: "my-custom-url",
+    });
   });
 });
 
