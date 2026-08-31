@@ -687,36 +687,16 @@ class Order::PreparePaymentIntentService
       end
     end
 
-    # The currency the deferred PaymentIntent must be created in, or nil for the canonical USD
-    # intent. Two kinds of payment method decide this differently.
+    # Currency for the deferred PaymentIntent, or nil for canonical USD.
+    # Forced-currency methods (iDEAL/Bancontact EUR, UPI INR, Pix BRL) pick their own; card/Link/
+    # wallets inherit the Payment Element mount currency the browser reported
+    # (`payment_element_mount_currency`). Page-load vs pay-time recompute can drift (flags,
+    # connected-account settlement, the cart); the browser is right because the ConfirmationToken
+    # was minted on that element. A mismatch is a Stripe currency-reject in the browser with no
+    # payment_failed webhook.
     #
-    # A method that can only ever charge in one currency (iDEAL and Bancontact in euros, UPI in
-    # rupees, Pix in reais) decides for itself: the buyer picked it, so the intent has to be in
-    # that currency or Stripe rejects the confirm.
-    #
-    # Every other method (card, Link, the wallets) inherits whatever currency the Payment Element
-    # was mounted in when the browser minted the ConfirmationToken, so the ELEMENT decides. The
-    # browser tells us which currency that was (payment_element_mount_currency), and we follow it:
-    # an Element mounted in dollars gets the canonical USD intent even on a cart priced in euros,
-    # and an Element mounted in euros gets the euro intent. Following the browser matters because
-    # the two sides compute the currency at different moments — the checkout page computes it when
-    # it renders and this service recomputes it when the buyer pays — and anything feeding the
-    # decision can move in between (the seller's local-method launch flags, the connected account's
-    # settlement state, the cart itself). When they disagree the browser is right about what the
-    # token can confirm against, because the token was minted on the element the browser mounted.
-    # Without this, a checkout whose page mounted dollars but whose pay-time recomputation said
-    # euros produced a euro intent the buyer's dollar token could never confirm, and Stripe
-    # rejected it in the browser with "The provided currency (eur) does not match the expected
-    # currency (usd)" — no charge, no payment_failed webhook, a dead end for the buyer
-    # (gumroad-private#1382, 57 orders over four days).
-    #
-    # A reported non-USD currency we cannot legitimately build an intent in (the seller is not
-    # enabled for buyer-currency charging, we force no method in that currency, or the cart is not
-    # uniformly priced in it) returns nil here, and #client_confirm_presentment_required? turns that
-    # into a clean synchronous failure rather than an intent the token can never confirm.
-    #
-    # Nothing reported at all means an older client, so fall back to inferring the mount currency
-    # server-side exactly as before.
+    # Reported non-USD we cannot honor → nil, and #client_confirm_presentment_required? fails
+    # closed. Nothing reported → older client, infer server-side.
     def intent_forced_currency
       method_type = @previewed_payment_method_type
       return nil if method_type.blank?
@@ -754,20 +734,11 @@ class Order::PreparePaymentIntentService
       uniform_method_forced_purchase_currency == currency
     end
 
-    # Once the buyer confirmed on a non-USD Payment Element — through a direct-listed card
-    # surface, a forced-currency method, or another method that Element offered — the
-    # canonical USD intent is never a usable fallback: Stripe rejects confirming such a
-    # ConfirmationToken against a USD intent, synchronously and without a payment_failed
-    # webhook, so the purchase would sit in_progress until the abandonment worker instead of
-    # failing cleanly here. A seller with buyer-currency disabled remains on the canonical USD
-    # path; a forced-currency token received after its local-method flag rolls back fails cleanly
-    # instead of creating an intent the token can never confirm.
-    #
-    # For card/Link the browser's report is the authority (see #intent_forced_currency): a
-    # non-USD mount currency REQUIRES a non-USD intent, so a presentment we could not build for it
-    # must fail the order rather than fall back to dollars. A reported USD mount currency requires
-    # nothing — the canonical USD intent is exactly what that token confirms against, which is the
-    # dominant shape in gumroad-private#1382.
+    # A non-USD ConfirmationToken cannot confirm a USD intent (Stripe rejects synchronously,
+    # no payment_failed webhook — the purchase would sit in_progress). Fail closed here.
+    # Browser report is authority for card/Link: non-USD mount requires a presentment; reported
+    # USD needs nothing. Seller with buyer-currency disabled stays on canonical USD; a
+    # forced-currency token after its flag rolls back fails cleanly.
     def client_confirm_presentment_required?
       return true if params[:buyer_currency_quote].present?
       return false if @previewed_payment_method_type.blank?
@@ -904,27 +875,12 @@ class Order::PreparePaymentIntentService
     # append (deduped below) keeps the confirmed method on the intent if the resolver's inputs
     # drift after the Element mounts, including in Stripe test mode.
     def intent_payment_method_types(presentment)
-      # The previewed-method append runs on EVERY lane, including the plain USD one (nil
-      # presentment): it is the safety net that keeps the buyer's actual selection on the
-      # intent when the resolver's inputs drift between the Element mounting and prepare
-      # running (a flag flip, a GeoIP re-eval, an amount-basis divergence for Klarna's
-      # window). Without it, a buyer who selected a method the re-run resolver dropped
-      # fails at confirm with no recourse — Stripe rejects a payment_method_types-scoped
-      # ConfirmationToken whose type is missing from the intent. The append runs BEFORE
-      # the currency-compatibility strip below so that strip is final — the confirmed
-      # method must never re-enter an intent whose currency it cannot charge in. For the
-      # same reason the append itself is currency-gated: a forced-currency method (iDEAL,
-      # Bancontact, UPI) is only appended when the intent is being created in its currency —
-      # appending it to a USD intent (e.g. its launch flag rolled back mid-checkout, so no
-      # presentment was built) would make Stripe reject the intent CREATE itself; leaving
-      # it off keeps the flag-off USD lane byte-for-byte and fails the stale token closed
-      # at confirm instead. Klarna gets the equivalent launch-flag gate: it is only
-      # appended while checkout_local_method_klarna is active for this seller, so a stale
-      # or crafted klarna token cannot re-enable the method after a rollback (or before a
-      # rollout ever reached the seller) — it fails closed at confirm, exactly like a
-      # forced-currency token after its flag rolled back. (Klarna's US-only buyer lock is
-      # separately enforced fail-closed, before this method runs, by
-      # block_region_locked_payment_method_country_mismatch.)
+      # Append the buyer's selection on every lane (including nil presentment) so a resolver
+      # re-run that dropped it (flag/GeoIP/Klarna-window drift) does not fail confirm. Append
+      # BEFORE the currency strip, and only if the method can charge this intent's currency —
+      # listing iDEAL on a USD intent fails CREATE. Klarna is similarly gated on
+      # checkout_local_method_klarna; its US-only buyer lock is already fail-closed in
+      # block_region_locked_payment_method_country_mismatch.
       method_types = (resolved_payment_method_types + [appendable_previewed_payment_method_type(presentment)]).compact.uniq
       # Narrow card selection so UPI's cap cannot reject an otherwise valid card signup.
       if recurring_upi_registration? && @previewed_payment_method_type == "card"
@@ -948,23 +904,11 @@ class Order::PreparePaymentIntentService
         method_types -= [Checkout::PaymentMethodResolver::ALIPAY_PAYMENT_METHOD_TYPE]
       end
 
-      # The mirror strip, for the intent this service now creates in dollars even though the cart
-      # is priced in a currency some local method forces (the buyer's Payment Element was mounted
-      # in dollars, so their ConfirmationToken can only confirm a dollar intent — see
-      # #intent_forced_currency). The resolver, which decides its method list from the cart's
-      # pricing rather than from the intent, still offers iDEAL/Bancontact/UPI/Pix on that cart,
-      # and Stripe rejects the intent CREATE outright when a listed method cannot charge the
-      # intent's currency ("Payments with ideal support the following currencies: eur"). That
-      # would fail the whole cart, card buyers included, so drop any method whose forced currency
-      # is not the intent's. A buyer who actually picked one of those methods never reaches here:
-      # the method decides the intent's currency for itself, so the intent is in its currency.
-      #
-      # One residual difference this leaves, deliberately: on a cart the page rendered as
-      # forced-currency-eligible, the element may have offered a method the intent no longer lists,
-      # so the intent's method list can be a strict subset of what the buyer saw. Stripe rejects a
-      # payment_method_types-scoped ConfirmationToken only when the CONFIRMED method is missing, so
-      # a card buyer confirming against this list is fine — and a subset that Stripe accepts is
-      # strictly better than a list Stripe refuses to create at all.
+      # Resolver lists methods from cart pricing, not intent currency. A dollar Element on a
+      # EUR-priced cart still offers iDEAL; listing it on a USD intent fails CREATE for the
+      # whole cart. Drop methods whose forced currency ≠ intent currency. A buyer who picked
+      # one never reaches here (that method chose the intent currency). The list may be a
+      # subset of what the Element showed; Stripe only rejects when the CONFIRMED method is missing.
       intent_currency = presentment&.presentment_currency || Checkout::StripePaymentPresenter::CLIENT_CONFIRM_CURRENCY
       method_types = method_types.reject do |method_type|
         forced = Checkout::BuyerCurrencyEligibility.forced_currency_for(method_type)
@@ -984,41 +928,19 @@ class Order::PreparePaymentIntentService
       method_types
     end
 
-    # The previewed method, or nil when it must not ride this intent: nil when no method
-    # preview was supplied (saved-card charges), and nil unless the method is one this
-    # seller could legitimately have been offered right now — the append is a drift
-    # safety net for methods the resolver COULD list, never a way for a client-supplied
-    # (stale or crafted) token type to enable a method past its rollout gate. Without
-    # this allowlist, a us_bank_account token would re-add ACH for a seller who never
-    # opted in (the intent create succeeds, so the buyer actually pays by a method the
-    # platform withdrew — gumroad-private#1143), and an afterpay/affirm token would make
-    # Stripe reject the whole intent create (gumroad-private#1026). Also nil when the
-    # method forces a currency the intent is not being created in — that token can never
-    # confirm against this intent anyway, and listing the method would make Stripe reject
-    # the intent create outright.
+    # Previewed method, or nil: no preview (saved-card), not currently offerable (stale/crafted
+    # token must not re-enable ACH #1143 or Afterpay/Affirm #1026), or forces a currency this
+    # intent is not in (listing it fails CREATE).
     def appendable_previewed_payment_method_type(presentment)
       method_type = @previewed_payment_method_type
       return nil if method_type.blank?
 
-      # The allowlist mirrors the resolver's sources of offerable methods: always-on
-      # launched methods, the seller's ACH opt-in, Klarna's launch flag + account gate,
-      # Alipay's launch flag + account gate, and the forced-currency local methods (their
-      # currency gate is below). Anything else —
-      # unlaunched, opted-out, or unknown types — must fail closed at confirm rather than
-      # ride the intent. The Klarna clause is load-bearing: it unconditionally re-adds
-      # klarna for flag-on sellers so the final-amount strip in intent_payment_method_types
-      # stays the single authority on Klarna's amount window (see the tips/rounding
-      # divergence notes on the PR). It re-checks the merchant-account gate too, not just
-      # the flag: capability/account drift after the Element mounts must not re-append
-      # klarna onto a non-US connected account's intent, where the incompatible entry
-      # fails the whole intent create (gumroad-private#1026).
-      # Alipay's clause mirrors Klarna's: flag plus the US merchant-account gate — no
-      # buyer-country lock and no amount window, but Stripe's Alipay presentment currencies are
-      # tied to the account's business country and `usd` is United States only, so account drift
-      # after the Element mounts must not re-append alipay onto a non-US connected account's
-      # intent, where the incompatible entry fails the whole intent create
-      # (gumroad-private#1026). See Checkout::PaymentMethodResolver#alipay_methods. The
-      # per-account capability re-check inside payment_method_offerable? applies on top of it.
+      # Same offerable sources as the resolver (launched methods, ACH opt-in, Klarna/Alipay
+      # flag+US-account, forced-currency locals). Klarna is re-added for flag-on sellers so
+      # the final-amount strip in intent_payment_method_types is the single amount-window
+      # authority; re-check the merchant-account gate so account drift cannot put klarna/alipay
+      # on a non-US connected intent (fails CREATE, #1026). Capability re-check is inside
+      # payment_method_offerable?.
       return nil unless payment_method_offerable?(method_type)
 
       forced_currency = Checkout::BuyerCurrencyEligibility.forced_currency_for(method_type)
