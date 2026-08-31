@@ -1096,6 +1096,20 @@ describe("client-confirm buyer-currency quote", () => {
     );
   });
 
+  it("keeps legacy client-confirm configs on canonical USD when a quote loads", () => {
+    const legacyElementsOptions = { ...paymentElementClientConfirmConfig.elements_options };
+    delete legacyElementsOptions.buyer_currency_presentment;
+    const s = state({
+      checkoutPayment: { ...paymentElementClientConfirmConfig, elements_options: legacyElementsOptions },
+      surcharges: quotedSurcharges,
+    });
+
+    expect(canDisplayBuyerCurrencyQuote(s)).toBe(false);
+    expect(getStripePaymentElementPresentment(s)).toBeNull();
+    expect(getStripePaymentElementAmount(s)).toBe(2_013);
+    expect(getStripePaymentElementMountCurrency(s)).toBe("usd");
+  });
+
   it("holds the method-forced mount while the replacement quote is loading", () => {
     const s = state({
       checkoutPayment: methodForcedEurConfig,
