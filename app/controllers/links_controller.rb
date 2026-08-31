@@ -908,13 +908,17 @@ class LinksController < ApplicationController
       end
     end
 
-    # Null/blank custom_permalink is "not specified", not "clear the slug".
-    # The editor posts a full snapshot, so a content-tab save would otherwise
-    # wipe a URL set on an earlier Product-tab save.
+    # Blank custom_permalink is "not specified" unless the current editor marks
+    # it as a deliberate clear. Older tabs send the whole snapshot without that
+    # marker, so their stale blank must not wipe a slug another tab set.
     def omit_unspecified_product_scalars!
       permitted = product_permitted_params
-      permitted.delete(:custom_permalink) if permitted[:custom_permalink].blank?
+      permitted.delete(:custom_permalink) if permitted[:custom_permalink].blank? && !custom_permalink_clear_requested?
       permitted.delete(:customizable_price) if permitted[:customizable_price].nil?
+    end
+
+    def custom_permalink_clear_requested?
+      ActiveModel::Type::Boolean.new.cast(params[:custom_permalink_changed])
     end
 
     # Built from PERMITTED params so submitted? sees collections as strong

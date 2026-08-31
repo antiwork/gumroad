@@ -425,10 +425,16 @@ export const reconcileMountedEditorFileEmbedIds = (editor: Editor, fileIdMapping
   if (transaction.docChanged) editor.view.dispatch(transaction);
 };
 
-// Omit a null/empty custom URL so a content-tab snapshot cannot clear a slug
-// the seller set on a previous save. A non-empty slug is still sent.
-export const scalarSettingsForSave = (product: { custom_permalink: string | null }) =>
-  product.custom_permalink ? { custom_permalink: product.custom_permalink } : {};
+// Only send a blank custom URL when this session is clearing one it knows
+// about; an unchanged blank can be a stale tab snapshot from before another
+// tab set the slug.
+export const scalarSettingsForSave = (
+  product: { custom_permalink: string | null },
+  lastSavedCustomPermalink: string | null,
+) => {
+  if (product.custom_permalink) return { custom_permalink: product.custom_permalink };
+  return lastSavedCustomPermalink ? { custom_permalink: null, custom_permalink_changed: true } : {};
+};
 
 export const saveProduct = async (
   permalink: string,
@@ -439,7 +445,7 @@ export const saveProduct = async (
   // (the kept pages were never loaded into this session), so filtering files
   // by the file-embeds found in the submitted content would wrongly delete
   // every file — including the ones the kept pages embed. Skip the filter.
-  options: { keepAllFiles?: boolean } = {},
+  options: { keepAllFiles?: boolean; lastSavedCustomPermalink?: string | null } = {},
 ): Promise<SaveProductResponse> => {
   // TODO remove this once we have a better content uploader
   const editor = new Editor(baseEditorOptions(extensions(id)));
@@ -469,7 +475,7 @@ export const saveProduct = async (
     url: Routes.link_path(permalink),
     data: {
       ...productParams,
-      ...scalarSettingsForSave({ custom_permalink }),
+      ...scalarSettingsForSave({ custom_permalink }, options.lastSavedCustomPermalink ?? null),
       files,
       price_currency_type: currencyType,
       covers: product.covers.map(({ id }) => id),

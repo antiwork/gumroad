@@ -1160,6 +1160,15 @@ class LinksControllerUpdateTest < ActionController::TestCase
     assert_equal "new-slug", @product.reload.custom_permalink
   end
 
+  test "PUT update clears a custom URL when the current editor marks the blank value as changed" do
+    @product.update!(custom_permalink: "kept-slug")
+
+    put :update, params: @params.merge(custom_permalink: nil, custom_permalink_changed: true), as: :json
+
+    assert_response :success
+    assert_nil @product.reload.custom_permalink
+  end
+
   test "PUT update returns the existing validation error when suggested price is set but the default price record is missing" do
     @product.prices.destroy_all
     @product.update_column(:customizable_price, true)

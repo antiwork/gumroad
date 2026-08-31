@@ -48,13 +48,20 @@ describe("filesForSave", () => {
 });
 
 describe("scalarSettingsForSave", () => {
-  it("omits a null or empty custom permalink so a later save cannot clear it", () => {
-    expect(scalarSettingsForSave({ custom_permalink: null })).toEqual({});
-    expect(scalarSettingsForSave({ custom_permalink: "" })).toEqual({});
+  it("omits an unchanged blank custom permalink so a stale tab cannot clear it", () => {
+    expect(scalarSettingsForSave({ custom_permalink: null }, null)).toEqual({});
+    expect(scalarSettingsForSave({ custom_permalink: "" }, null)).toEqual({});
+  });
+
+  it("sends a marker when this session clears an existing custom permalink", () => {
+    expect(scalarSettingsForSave({ custom_permalink: null }, "kept-slug")).toEqual({
+      custom_permalink: null,
+      custom_permalink_changed: true,
+    });
   });
 
   it("sends a non-empty custom permalink", () => {
-    expect(scalarSettingsForSave({ custom_permalink: "my-custom-url" })).toEqual({
+    expect(scalarSettingsForSave({ custom_permalink: "my-custom-url" }, null)).toEqual({
       custom_permalink: "my-custom-url",
     });
   });
