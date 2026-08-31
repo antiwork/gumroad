@@ -66,7 +66,7 @@ describe("Download Page – Rich Text Editor Content", type: :system, js: true) 
         expect(page.evaluate_script("window._messages[1]")).to eq(
           {
             type: "click",
-            payload: { resourceId: @video_file.external_id, isDownload: false, isPost: false, type: nil, isPlaying: nil, resumeAt: nil, contentLength: nil }
+            payload: { resourceId: @video_file.external_id, isDownload: false, isPost: false, type: nil, isPlaying: nil, resumeAt: "0", contentLength: nil }
           }.as_json
         )
         expect(page).not_to have_selector("[aria-label='Video Player']")
@@ -186,7 +186,7 @@ describe("Download Page – Rich Text Editor Content", type: :system, js: true) 
         expect(page.evaluate_script("window._messages[1]")).to eq(
           {
             type: "click",
-            payload: { resourceId: @video_file.external_id, isDownload: false, isPost: false, type: nil, isPlaying: nil, resumeAt: nil, contentLength: nil, extension: "MOV" }
+            payload: { resourceId: @video_file.external_id, isDownload: false, isPost: false, type: nil, isPlaying: nil, resumeAt: "0", contentLength: nil, extension: "MOV" }
           }.as_json
         )
         expect(page).not_to have_selector("[aria-label='Video Player']")

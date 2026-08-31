@@ -272,6 +272,52 @@ describe HealthcheckController do
     end
   end
 
+  describe "GET 'abandoned_cart_emails'" do
+    # The action reads the newest row in the table, so rows leaked by other examples would read as
+    # fresh. Clearing inside the example's transaction makes each case deterministic.
+    before { SentAbandonedCartEmail.delete_all }
+
+    context "when a send landed recently" do
+      it "returns HTTP success" do
+        create(:sent_abandoned_cart_email, created_at: 2.hours.ago)
+
+        get :abandoned_cart_emails
+
+        expect(response.status).to eq(200)
+        expect(response.body).to eq("Abandoned cart emails: ok")
+      end
+    end
+
+    context "when the newest send is older than the stale window" do
+      it "returns HTTP service_unavailable" do
+        create(:sent_abandoned_cart_email, created_at: 3.days.ago)
+
+        get :abandoned_cart_emails
+
+        expect(response.status).to eq(503)
+        expect(response.body).to eq("Abandoned cart emails: service_unavailable")
+      end
+    end
+
+    context "when nothing has ever been sent" do
+      it "returns HTTP service_unavailable" do
+        get :abandoned_cart_emails
+
+        expect(response.status).to eq(503)
+      end
+    end
+
+    # The daily send lands in one burst, so a threshold equal to the job's own would read as stale
+    # for the minutes between the 24h mark and that day's run.
+    it "stays healthy just past the job's own stall threshold" do
+      create(:sent_abandoned_cart_email, created_at: AlertOnStalledAbandonedCartEmailsJob::STALL_THRESHOLD.ago - 30.minutes)
+
+      get :abandoned_cart_emails
+
+      expect(response.status).to eq(200)
+    end
+  end
+
   describe "GET 'purchases'" do
     let(:redis_key) { RedisKey.min_successful_purchases_in_last_10_minutes }
 

@@ -635,6 +635,23 @@ describe Checkout::DiscountsController do
       expect(offer_code.products).to eq([subject_product])
     end
 
+    it "preserves a percentage offer code's amount on a partial update that omits both amount keys" do
+      percent_code = create(:percentage_offer_code, user: seller, code: "CODE1")
+
+      put :update, params: {
+        id: percent_code.external_id,
+        name: "Renamed discount",
+      }, as: :json
+
+      expect(response).to be_successful
+      expect(response.parsed_body["success"]).to eq(true)
+
+      percent_code.reload
+      expect(percent_code.name).to eq("Renamed discount")
+      expect(percent_code.amount_percentage).to eq(50)
+      expect(percent_code.amount_cents).to eq(nil)
+    end
+
     it "returns an error and keeps the product list when removing a product whose default discount is the offer code" do
       subject_product = create(:product, user: seller, price_cents: 2000)
       offer_code.update!(universal: false, products: [subject_product])

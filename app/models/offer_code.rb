@@ -113,6 +113,7 @@ class OfferCode < ApplicationRecord
 
   def amount_off(price_cents)
     return amount_cents if is_cents?
+    return 0 if amount_percentage.nil?
 
     (price_cents * (amount_percentage / 100.0)).round
   end
@@ -480,6 +481,7 @@ class OfferCode < ApplicationRecord
     def price_validation
       return if deleted_at.present?
       return errors.add(:base, "Please enter a positive discount amount.") if (is_percent? && amount_percentage.to_i < 0) || (is_cents? && amount_cents.to_i < 0)
+      return errors.add(:base, "Please enter a discount amount.") if !tiered? && !is_percent? && !is_cents?
 
       return errors.add(:base, "Please enter a discount amount that is 100% or less.") if is_percent? && amount_percentage > 100
 
