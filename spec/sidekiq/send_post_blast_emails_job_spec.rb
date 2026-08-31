@@ -846,6 +846,221 @@ describe SendPostBlastEmailsJob, :freeze_time do
     end
   end
 
+  describe "splitting large blasts into slice jobs" do
+    # Each example builds its own seller + audience so follower counts are exact and no
+    # example's audience leaks into the next (the audience filter is all-of-the-seller's).
+    def audience_post_with_followers(count)
+      seller = create(:named_user)
+      post = create(:audience_post, :published, seller:)
+      create_list(:active_follower, count, user: seller)
+      [post, seller]
+    end
+
+    it "enqueues one slice job per chunk and sends nothing inline" do
+      post, = audience_post_with_followers(2_002)
+      blast = create(:blast, :just_requested, post:)
+
+      described_class.new.perform(blast.id)
+
+      jobs = SendPostBlastEmailsSliceJob.jobs.map { _1["args"] }
+      expect(jobs.size).to eq(2)
+      expect(jobs.first[0]).to eq(blast.id)
+      expect(jobs.first[1]).to match(/\A[0-9a-f]{64}\z/)
+      expect(jobs.first[1]).to eq(jobs.last[1])
+      expect($redis.get(RedisKey.blast_active_slice_partition(blast.id))).to eq(jobs.first[1])
+      stored_chunks = $redis.lrange(RedisKey.blast_slice_partition_chunks(blast.id, jobs.first[1]), 0, -1).map { JSON.parse(_1) }
+      expect(stored_chunks).to eq(jobs.map(&:last))
+      expect(jobs.first[2, 2]).to eq([0, 2])
+      expect(jobs.last[2, 2]).to eq([1, 2])
+      # The chunks are disjoint and cover the whole filtered audience, in order.
+      expect(jobs.first.last.size).to eq(2_000)
+      expect(jobs.last.last.size).to eq(2)
+      expect((jobs.first.last + jobs.last.last).uniq.size).to eq(2_002)
+      expect(PostSendgridApi.mails).to be_empty
+      # The parent only distributes; the last slice job stamps completion.
+      expect(blast.reload.completed_at).to be_nil
+      expect(blast.reload.started_at).to be_present
+    end
+
+    it "holds the partition mutation lock while publishing a replacement partition" do
+      post, = audience_post_with_followers(2_002)
+      blast = create(:blast, :just_requested, post:)
+      lock_key = RedisKey.blast_slice_partition_mutation_lock(blast.id)
+      lock_was_held = nil
+      job = described_class.new
+      allow(job).to receive(:write_slice_partition).and_wrap_original do |original, partition_key, chunks|
+        lock_was_held = !$redis.set(lock_key, "intruder", nx: true, ex: 10)
+        original.call(partition_key, chunks)
+      end
+
+      job.perform(blast.id)
+
+      expect(lock_was_held).to be(true)
+      expect(SendPostBlastEmailsSliceJob.jobs.size).to eq(2)
+    ensure
+      $redis.del(lock_key) if lock_key
+    end
+
+    it "publishes the full owed count for the slice jobs to decrement" do
+      post, = audience_post_with_followers(2_002)
+      blast = create(:blast, :just_requested, post:)
+      pending_key = RedisKey.blast_pending_recipients(blast.id)
+
+      described_class.new.perform(blast.id)
+
+      expect($redis.get(pending_key).to_i).to eq(2_002)
+    ensure
+      $redis.del(pending_key)
+    end
+
+    it "reuses an active partition instead of repartitioning a parent retry" do
+      post, = audience_post_with_followers(11)
+      $redis.set(RedisKey.blast_child_split_threshold, 10)
+      $redis.set(RedisKey.blast_child_slice_size, 6)
+      blast = create(:blast, :just_requested, post:)
+      pending_key = RedisKey.blast_pending_recipients(blast.id)
+
+      described_class.new.perform(blast.id)
+      first_jobs = SendPostBlastEmailsSliceJob.jobs.map { _1["args"] }
+      partition_key = first_jobs.first[1]
+      $redis.set(pending_key, 7)
+      SendPostBlastEmailsSliceJob.jobs.clear
+
+      # The stored chunks already fix the recipients; the retry must not reload or
+      # revalidate the audience just to discard it.
+      expect(AudienceMember).not_to receive(:filter)
+      described_class.new.perform(blast.id)
+
+      expect(SendPostBlastEmailsSliceJob.jobs.map { _1["args"] }).to eq(first_jobs)
+      expect($redis.get(RedisKey.blast_active_slice_partition(blast.id))).to eq(partition_key)
+      expect($redis.get(pending_key).to_i).to eq(7)
+    ensure
+      $redis.del(RedisKey.blast_child_split_threshold, RedisKey.blast_child_slice_size, pending_key)
+    end
+
+    it "repartitions from a fresh audience load when the active partition's chunk list has expired" do
+      post, = audience_post_with_followers(11)
+      $redis.set(RedisKey.blast_child_split_threshold, 10)
+      $redis.set(RedisKey.blast_child_slice_size, 6)
+      blast = create(:blast, :just_requested, post:)
+      $redis.set(RedisKey.blast_active_slice_partition(blast.id), "expired-chunks-partition")
+
+      described_class.new.perform(blast.id)
+
+      jobs = SendPostBlastEmailsSliceJob.jobs.map { _1["args"] }
+      expect(jobs.size).to eq(2)
+      expect(jobs.first[1]).not_to eq("expired-chunks-partition")
+      expect($redis.get(RedisKey.blast_active_slice_partition(blast.id))).to eq(jobs.first[1])
+    ensure
+      $redis.del(RedisKey.blast_child_split_threshold, RedisKey.blast_child_slice_size)
+    end
+
+    it "reuses a partition another parent published while this parent loaded the audience" do
+      post, seller = audience_post_with_followers(11)
+      $redis.set(RedisKey.blast_child_split_threshold, 10)
+      $redis.set(RedisKey.blast_child_slice_size, 6)
+      blast = create(:blast, :just_requested, post:)
+      existing_partition_key = "existing-partition"
+      existing_chunks = AudienceMember.where(seller_id: seller).limit(2).pluck(:id).map { [_1] }
+      installed_existing_partition = false
+      allow(AudienceMember).to receive(:filter).and_wrap_original do |original, **kwargs|
+        original.call(**kwargs).tap do
+          unless installed_existing_partition
+            $redis.rpush(RedisKey.blast_slice_partition_chunks(blast.id, existing_partition_key), existing_chunks.map(&:to_json))
+            $redis.set(RedisKey.blast_active_slice_partition(blast.id), existing_partition_key)
+            installed_existing_partition = true
+          end
+        end
+      end
+
+      described_class.new.perform(blast.id)
+
+      jobs = SendPostBlastEmailsSliceJob.jobs.map { _1["args"] }
+      expect(jobs.map { _1[1] }).to eq([existing_partition_key, existing_partition_key])
+      expect(jobs.map(&:last)).to eq(existing_chunks)
+      expect($redis.get(RedisKey.blast_active_slice_partition(blast.id))).to eq(existing_partition_key)
+    ensure
+      $redis.del(RedisKey.blast_child_split_threshold, RedisKey.blast_child_slice_size,
+                 RedisKey.blast_active_slice_partition(blast.id),
+                 RedisKey.blast_slice_partition_chunks(blast.id, existing_partition_key)) if blast
+    end
+
+    it "checks already-emailed recipients in bounded IN-list batches" do
+      stub_const("PostBlastSending::ALREADY_EMAILED_SLICE_SIZE", 2)
+      post, = audience_post_with_followers(5)
+      blast = create(:blast, :just_requested, post:)
+      batch_sizes = []
+      allow_any_instance_of(Installment).to receive(:sent_post_emails).and_wrap_original do |original|
+        original.call.tap do |relation|
+          allow(relation).to receive(:where).and_wrap_original do |where_original, *args, **kwargs|
+            emails = kwargs[:email] || args.first&.[](:email)
+            batch_sizes << Array(emails).size if emails
+            where_original.call(*args, **kwargs)
+          end
+        end
+      end
+      allow_any_instance_of(described_class).to receive(:send_members)
+
+      described_class.new.perform(blast.id)
+
+      expect(batch_sizes).to all(be <= 2)
+      expect(batch_sizes.sum).to eq(5)
+    end
+
+    it "completes inline blasts without a slice partition" do
+      post, = audience_post_with_followers(1)
+      blast = create(:blast, :just_requested, post:)
+      allow_any_instance_of(described_class).to receive(:send_members)
+
+      described_class.new.perform(blast.id)
+
+      expect(blast.reload.completed_at).to be_present
+      expect($redis.exists?(RedisKey.blast_active_slice_partition(blast.id))).to be(false)
+    end
+
+    it "sends inline for a blast at or under the split threshold" do
+      post, = audience_post_with_followers(2_000) # right at the threshold
+      blast = create(:blast, :just_requested, post:)
+
+      described_class.new.perform(blast.id)
+
+      expect(SendPostBlastEmailsSliceJob.jobs).to be_empty
+      expect_sent_count 2_000
+      expect(blast.reload.completed_at).to be_present
+    end
+
+    it "splits at the Redis-tunable threshold override" do
+      post, = audience_post_with_followers(11)
+      $redis.set(RedisKey.blast_child_split_threshold, 10)
+      $redis.set(RedisKey.blast_child_slice_size, 6) # 11 members -> ceil(11/6) = 2 slices
+      blast = create(:blast, :just_requested, post:)
+
+      described_class.new.perform(blast.id)
+
+      jobs = SendPostBlastEmailsSliceJob.jobs.map { _1["args"] }
+      expect(jobs.size).to eq(2)
+      expect(jobs.map { _1[3] }).to eq([2, 2])
+      expect(jobs.map { _1.last.size }).to eq([6, 5])
+      expect(PostSendgridApi.mails).to be_empty
+    ensure
+      $redis.del(RedisKey.blast_child_split_threshold, RedisKey.blast_child_slice_size)
+    end
+
+    it "respects the Redis-tunable slice size" do
+      post, = audience_post_with_followers(2_002)
+      $redis.set(RedisKey.blast_child_slice_size, 1_000)
+      blast = create(:blast, :just_requested, post:)
+
+      described_class.new.perform(blast.id)
+
+      jobs = SendPostBlastEmailsSliceJob.jobs.map { _1["args"] }
+      expect(jobs.size).to eq(3)
+      expect(jobs.map { _1.last.size }).to eq([1_000, 1_000, 2])
+    ensure
+      $redis.del(RedisKey.blast_child_slice_size)
+    end
+  end
+
   def expect_sent_count(count)
     expect(PostSendgridApi.mails.size).to eq(count)
   end

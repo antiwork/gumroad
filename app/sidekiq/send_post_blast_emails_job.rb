@@ -3,6 +3,7 @@
 class SendPostBlastEmailsJob
   include Sidekiq::Job
   include ActionView::Helpers::SanitizeHelper
+  include PostBlastSending
   # Deliberately no `lock: :until_executed`. The digest keys on the blast id, and every caller
   # creates a fresh blast row before enqueuing, so it never deduplicated anything — but a hard-killed
   # worker skips its release, and the held digest then drops every later `perform_async` for that
@@ -29,6 +30,18 @@ class SendPostBlastEmailsJob
     return unless @post.alive? && @post.published? && @post.send_emails? && @blast.completed_at.nil?
 
     @blast.update!(started_at: Time.current) if @blast.started_at.nil?
+
+    # A retry that finds a live partition re-enqueues its stored chunks as-is; loading and
+    # revalidating the whole audience first would only be thrown away. An active key whose
+    # chunk list has expired still falls through — repartitioning needs the members.
+    partition_key = active_slice_partition_key
+    if partition_key.present?
+      chunks = load_slice_partition(partition_key)
+      if chunks.present?
+        enqueue_partition(partition_key, chunks)
+        return
+      end
+    end
 
     @filters = @post.audience_members_filter_params
     # The filter query can be expensive to run, it's better to run it on the replica DB.
@@ -58,17 +71,7 @@ class SendPostBlastEmailsJob
       return
     end
 
-    start_pending_recipients
-    cache = {}
-    @members.each_slice(recipients_slice_size) do |members_slice|
-      members_slice.group_by { PostEmailApi.provider_for(post: @post, email: _1.email) }.each do |provider, provider_members|
-        provider_members.each_slice(PostEmailApi.max_recipients_for(provider)) do |provider_members_slice|
-          send_provider_slice(provider: provider, members: provider_members_slice, cache: cache)
-        end
-      end
-    end
-
-    mark_blast_as_completed
+    split_blast? ? enqueue_slice_jobs : send_inline
   end
 
   private
@@ -76,10 +79,6 @@ class SendPostBlastEmailsJob
     # Sidekiq retry schedule of this job (10 retries spans roughly a day), short enough
     # that an abandoned blast doesn't hold hundreds of thousands of entries forever.
     AUDIENCE_SNAPSHOT_TTL = 3.days
-
-    # Small counter key used by the stalled-blast monitor. Keep it for the full scan window;
-    # unlike the audience snapshot, it is tiny and is the only evidence for late safe resumes.
-    PENDING_RECIPIENTS_TTL = AlertOnStalledPostEmailBlastsJob::LOOKBACK
 
     # How many snapshotted member ids to revalidate per statement. Small on purpose:
     # MySQL's range optimizer silently drops the PK plan once an `IN (...)` list blows
@@ -93,44 +92,91 @@ class SendPostBlastEmailsJob
     # Redis list/set writes only — no SQL — so this can stay large.
     REDIS_WRITE_SLICE_SIZE = 10_000
 
-    # The provider slice — not the mixed slice — is the retry unit. An ESP that has
-    # already accepted its recipients must not be handed them again because a later
-    # provider failed, so the cleanup below only rolls back the slice that raised.
-    def send_provider_slice(provider:, members:, cache:)
-      # Count the slice as handed over, not the post-dedupe remainder: anything
-      # `store_recipients_as_sent` drops was already emailed by someone else.
-      owed = members.size
-      members = store_recipients_as_sent(members)
-      recipients = prepare_recipients(members)
+    # Blasts above this many recipients are split into slice jobs. Small blasts send
+    # inline (one short-lived job); large ones must not run for hours as a single unit.
+    CHILD_SPLIT_THRESHOLD = 2_000
 
-      begin
-        deliver_provider_slice(provider: provider, recipients: recipients, cache: cache)
-        mark_members_sent_in_this_blast(members) if @blast.to_non_openers?
-        decrement_pending_recipients(owed)
-      rescue Exception => e
-        # Delete the sent_post_emails records if there's an error with the provider send.
-        # We cannot use `transaction` here because it exceeds the lock timeout.
-        # Rescuing Exception, not StandardError: a deploy's hard shutdown raises
-        # Sidekiq::Shutdown (an Interrupt), and letting that skip the cleanup would leave
-        # these recipients marked sent but never emailed — the retry filters them out as
-        # already-emailed, so they are silently dropped from the blast.
-        unless @blast.to_non_openers?
-          emails = members.map(&:email)
-          SentPostEmail.where(post: @post, email: emails).delete_all
-        end
-        raise e
-      end
+    # Recipients handed to each slice job. Tunable via Redis so an operator can resize
+    # future split attempts without a deploy.
+    CHILD_SLICE_SIZE = 2_000
+
+    def send_inline
+      start_pending_recipients
+      send_members(@members)
+      mark_blast_as_completed
     end
 
-    def deliver_provider_slice(provider:, recipients:, cache:)
-      case provider
-      when MailerInfo::EMAIL_PROVIDER_RESEND
-        PostResendApi.process(post: @post, recipients: recipients, cache: cache, blast: @blast)
-      when MailerInfo::EMAIL_PROVIDER_SENDGRID
-        PostSendgridApi.process(post: @post, recipients: recipients, cache: cache, blast: @blast)
-      else
-        raise ArgumentError, "Unknown email provider: #{provider}"
+    def split_blast?
+      @members.size > child_split_threshold
+    end
+
+    # Only reached without live stored chunks — `perform` re-enqueues those directly —
+    # so this always cuts a fresh partition from @members.
+    def enqueue_slice_jobs
+      slice_size = child_slice_size
+      member_ids = @members.map(&:id)
+      partition_key = slice_partition_key(member_ids, slice_size)
+      chunks = member_ids.each_slice(slice_size).to_a
+      partition_to_enqueue = nil
+      chunks_to_enqueue = nil
+
+      with_slice_partition_lock do
+        unless @blast.reload.completed_at.present?
+          active_partition_key = active_slice_partition_key
+          active_chunks = active_partition_key.present? ? load_slice_partition(active_partition_key) : []
+
+          if active_chunks.present?
+            partition_to_enqueue = active_partition_key
+            chunks_to_enqueue = active_chunks
+          else
+            write_slice_partition(partition_key, chunks)
+            $redis.set(RedisKey.blast_active_slice_partition(@blast.id), partition_key, ex: SLICE_DONE_TTL.to_i)
+            start_pending_recipients
+            partition_to_enqueue = partition_key
+            chunks_to_enqueue = chunks
+          end
+        end
       end
+      return if partition_to_enqueue.blank?
+
+      enqueue_partition(partition_to_enqueue, chunks_to_enqueue)
+    end
+
+    def enqueue_partition(partition_key, chunks)
+      total = chunks.size
+      chunks.each_with_index do |member_ids, index|
+        SendPostBlastEmailsSliceJob.perform_async(@blast.id, partition_key, index, total, member_ids)
+      end
+      Rails.logger.info("[#{self.class.name}] blast_id=#{@blast.id} split #{chunks.sum(&:size)} recipients into #{total} slice jobs")
+    end
+
+    def active_slice_partition_key
+      $redis.get(RedisKey.blast_active_slice_partition(@blast.id))
+    end
+
+    def load_slice_partition(partition_key)
+      $redis.lrange(RedisKey.blast_slice_partition_chunks(@blast.id, partition_key), 0, -1).map { JSON.parse(_1) }
+    end
+
+    def write_slice_partition(partition_key, chunks)
+      key = RedisKey.blast_slice_partition_chunks(@blast.id, partition_key)
+      $redis.del(key)
+      $redis.rpush(key, chunks.map(&:to_json))
+      $redis.expire(key, SLICE_DONE_TTL.to_i)
+    end
+
+    def slice_partition_key(member_ids, slice_size)
+      Digest::SHA256.hexdigest("#{slice_size}:#{member_ids.join(",")}")
+    end
+
+    # Tunable via Redis so a stuck blast can be unblocked without a deploy.
+    def child_split_threshold
+      ($redis.get(RedisKey.blast_child_split_threshold) || CHILD_SPLIT_THRESHOLD).to_i
+    end
+
+    # Tunable via Redis so an operator can resize split blasts mid-flight without a deploy.
+    def child_slice_size
+      ($redis.get(RedisKey.blast_child_slice_size) || CHILD_SLICE_SIZE).to_i.clamp(1..1_000_000)
     end
 
     # Filter query can blow the 5-minute statement cap and a mid-run kill loses it.
@@ -230,14 +276,6 @@ class SendPostBlastEmailsJob
       $redis.rename(tmp_key, checkpoint_key)
     end
 
-    def prepare_recipients(members)
-      members_with_specifics = members.index_with { { email: _1.email } }
-      enrich_with_gathered_records(members_with_specifics)
-      enrich_with_purchases_specifics(members_with_specifics)
-      enrich_with_url_redirects(members_with_specifics)
-      members_with_specifics.values
-    end
-
     # A blank-email member reaches the provider slice and raises there, and every retry re-reads
     # the same audience and dies on the same slice — ten retries later the blast is in the dead
     # set with the rest of the audience never emailed (gumroad-private#2338).
@@ -246,162 +284,6 @@ class SendPostBlastEmailsJob
       @members.select! { _1.email.present? }
       dropped = before - @members.size
       Rails.logger.info("[#{self.class.name}] blast_id=#{@blast.id} dropped #{dropped} members without an email") if dropped > 0
-    end
-
-    def remove_already_emailed_members
-      already_sent_emails = Set.new(@post.sent_post_emails.pluck(:email))
-      return if already_sent_emails.empty?
-
-      @members.delete_if { _1.email.in?(already_sent_emails) }
-    end
-
-    BLAST_DEDUPE_TTL = 7.days
-
-    def remove_members_already_sent_in_this_blast
-      already_sent = $redis.smembers(RedisKey.blast_sent_emails(@blast.id))
-      return if already_sent.empty?
-
-      already_sent_set = already_sent.to_set
-      @members.delete_if { already_sent_set.include?(_1.email) }
-    end
-
-    def mark_members_sent_in_this_blast(members)
-      emails = members.map(&:email)
-      return if emails.empty?
-
-      key = RedisKey.blast_sent_emails(@blast.id)
-      $redis.pipelined do |pipe|
-        pipe.sadd(key, emails)
-        pipe.expire(key, BLAST_DEDUPE_TTL.to_i)
-      end
-    end
-
-    def enrich_with_gathered_records(members_with_specifics)
-      members_with_specifics.each do |member, specifics|
-        if @post.seller_or_product_or_variant_type?
-          specifics[:purchase] = Purchase.new(id: member.purchase_id) if member.purchase_id
-        elsif @post.follower_type?
-          specifics[:follower] = Follower.new(id: member.follower_id) if member.follower_id
-        elsif @post.affiliate_type?
-          specifics[:affiliate] = Affiliate.new(id: member.affiliate_id) if member.affiliate_id
-        elsif @post.audience_type?
-          specifics[:follower] = Follower.new(id: member.follower_id) if member.follower_id
-          specifics[:affiliate] = Affiliate.new(id: member.affiliate_id) if member.follower_id.nil? && member.affiliate_id
-          specifics[:purchase] = Purchase.new(id: member.purchase_id) if member.follower_id.nil? && member.affiliate_id.nil? && member.purchase_id
-        end
-        specifics.compact_blank!
-      end
-    end
-
-    def enrich_with_purchases_specifics(members_with_specifics)
-      purchase_ids = members_with_specifics.map { _2[:purchase]&.id }.compact
-      return if purchase_ids.empty?
-
-      purchases = Purchase.joins(:link).where(id: purchase_ids).select(:id, :link_id, :json_data, :subscription_id, :full_name, "links.name as product_name").index_by(&:id)
-      members_with_specifics.each do |_member, specifics|
-        purchase_id = specifics[:purchase]&.id
-        next if purchase_id.nil?
-        purchase = purchases[purchase_id]
-        if purchase.link_id.present?
-          specifics[:product_id] = purchase.link_id
-          specifics[:product_name] = strip_tags(purchase.product_name)
-        end
-        specifics[:subscription] = Subscription.new(id: purchase.subscription_id) if purchase.subscription_id.present?
-        # :purchase here is a bare Purchase.new(id:) stub, so the name has to be carried separately —
-        # reading full_name off it would silently return nil for every recipient in a blast.
-        specifics[:purchaser_name] = purchase.full_name if purchase.full_name.present?
-      end
-    end
-
-    def enrich_with_url_redirects(members_with_specifics)
-      return if !post_has_files? && !@post.product_or_variant_type?
-
-      # Fetch url_redirect for this post * non-purchases.
-      # Because all followers and affiliates will end up seeing the same page, we only need to create one record.
-      if post_has_files?
-        members_with_specifics.each do |_member, specifics|
-          next if specifics.key?(:purchase)
-          @url_redirect_for_non_purchasers ||= UrlRedirect.find_or_create_by!(installment_id: @post.id, purchase_id: nil, subscription_id: nil, link_id: nil)
-          specifics[:url_redirect] = @url_redirect_for_non_purchasers
-        end
-      end
-
-      # Create url_redirects for this post * purchases.
-      url_redirects_to_create = {}
-
-      members_with_specifics.each do |member, specifics|
-        next if specifics.key?(:url_redirect)
-        url_redirects_to_create[UrlRedirect.generate_new_token] = {
-          attributes: {
-            installment_id: @post.id,
-            purchase_id: specifics[:purchase]&.id,
-            subscription_id: specifics[:subscription]&.id,
-            link_id: specifics[:product_id],
-          },
-          member:
-        }
-      end
-
-      if url_redirects_to_create.present?
-        UrlRedirect.insert_all!(url_redirects_to_create.map { _2[:attributes].merge(token: _1) })
-        url_redirects = UrlRedirect.where(token: url_redirects_to_create.keys).select(:id, :token).to_a
-        url_redirects.each do |url_redirect|
-          members_with_specifics[url_redirects_to_create[url_redirect.token][:member]][:url_redirect] = url_redirect
-        end
-      end
-    end
-
-    # Publishes how many recipients this attempt still owes the ESPs, so a monitor can tell a
-    # blast that died mid-send from one that died after the last handoff but before the stamp
-    # below (gumroad-private#2250). Written per attempt, after filtering: a retry owes only
-    # what is left. The TTL matches the stalled-blast scan window so old incomplete blasts
-    # can still be distinguished from completed-but-unstamped ones.
-    def start_pending_recipients
-      $redis.set(RedisKey.blast_pending_recipients(@blast.id), @members.size, ex: PENDING_RECIPIENTS_TTL.to_i)
-    end
-
-    def decrement_pending_recipients(count)
-      $redis.decrby(RedisKey.blast_pending_recipients(@blast.id), count)
-    end
-
-    def mark_blast_as_completed
-      @blast.update!(completed_at: Time.current)
-      # The blast is done, so the retry-resume snapshot, the non-opener checkpoint and the
-      # pending-recipient count have served their purpose. Also remove the temporary
-      # write-in-progress keys in case a previous attempt died mid-write (they carry a TTL,
-      # but no reason to keep them around).
-      snapshot_key = RedisKey.blast_audience_snapshot(@blast.id)
-      checkpoint_key = RedisKey.blast_non_opener_emails(@blast.id)
-      $redis.del(snapshot_key, "#{snapshot_key}:tmp", checkpoint_key, "#{checkpoint_key}:tmp",
-                 RedisKey.blast_pending_recipients(@blast.id))
-    end
-
-    # Stores email addresses in SentPostEmail, just before sending the emails.
-    # In the very unlikely situation an email is already present there, its member won't be returned.
-    # "Unlikely situation" because we've already filtered the sent emails beforehand with `remove_already_emailed_members`,
-    # this behavior only helps if an email is sent by something else in parallel, between the start and the end of this job.
-    def store_recipients_as_sent(members)
-      return members if @blast.to_non_openers?
-
-      emails = Set.new(SentPostEmail.insert_all_emails(post: @post, emails: members.map(&:email)))
-      return members if members.size == emails.size
-
-      members.select { _1.email.in?(emails) }
-    end
-
-    def post_has_files?
-      return @has_files if defined?(@has_files)
-      @has_files = @post.has_files?
-    end
-
-    def product
-      @post.link if @post.product_type? || @post.variant_type?
-    end
-
-    def recipients_slice_size
-      @recipients_slice_size ||= begin
-        $redis.get(RedisKey.blast_recipients_slice_size) || PostEmailApi.max_recipients
-      end.to_i.clamp(1..PostEmailApi.max_recipients)
     end
 
     # Tunable via Redis so a stuck blast can be unblocked without a deploy.

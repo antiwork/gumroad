@@ -48,6 +48,15 @@ class AlertOnStalledPostEmailBlastsJob
   # Rows the run acted on (or would have) are the audit trail; message_for never truncates them.
   AUDITED_ACTIONS = [:resumed, :resumed_to_complete, :would_resume, :would_complete, :skipped_reappeared].freeze
 
+  # Both the parent distributor and its slice jobs carry the blast id as args[0], so a
+  # mid-send split blast must be recognized as a live sender by the scans below or it would
+  # read as UNACCOUNTED and be auto-resumed into duplicate enqueues (gumroad-private#2353).
+  BLAST_SENDER_CLASSES = %w[SendPostBlastEmailsJob SendPostBlastEmailsSliceJob].freeze
+
+  def post_blast_sender?(klass)
+    klass.in?(BLAST_SENDER_CLASSES)
+  end
+
   def perform
     scan = scan_for_stalled_blasts
     return if scan[:stalled].empty? && !scan[:truncated]
@@ -179,22 +188,26 @@ class AlertOnStalledPostEmailBlastsJob
 
     def dead_blast_entries
       entries = {}
-      Sidekiq::DeadSet.new.scan("SendPostBlastEmailsJob") do |job|
-        entries[job.args[0]] = job if job.klass == "SendPostBlastEmailsJob"
+      BLAST_SENDER_CLASSES.each do |klass|
+        Sidekiq::DeadSet.new.scan(klass) do |job|
+          entries[job.args[0]] = job if job.klass == klass
+        end
       end
       entries
     end
 
     def retrying_blast_ids
       ids = []
-      Sidekiq::RetrySet.new.scan("SendPostBlastEmailsJob") do |job|
-        ids << job.args[0] if job.klass == "SendPostBlastEmailsJob"
+      BLAST_SENDER_CLASSES.each do |klass|
+        Sidekiq::RetrySet.new.scan(klass) do |job|
+          ids << job.args[0] if job.klass == klass
+        end
       end
       ids
     end
 
     def queued_blast_ids
-      Sidekiq::Queue.new("default").filter_map { |job| job.args[0] if job.klass == "SendPostBlastEmailsJob" }
+      Sidekiq::Queue.new("default").filter_map { |job| job.args[0] if post_blast_sender?(job.klass) }
     end
 
     def busy_blast_ids
@@ -203,7 +216,7 @@ class AlertOnStalledPostEmailBlastsJob
         # Sidekiq 7 hands the payload back as a JSON string here, not a parsed hash.
         payload = work["payload"]
         payload = JSON.parse(payload) if payload.is_a?(String)
-        ids << payload["args"][0] if payload && payload["class"] == "SendPostBlastEmailsJob"
+        ids << payload["args"][0] if payload && post_blast_sender?(payload["class"])
       rescue JSON::ParserError
         next
       end

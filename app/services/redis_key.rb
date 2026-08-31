@@ -45,6 +45,18 @@ class RedisKey
     def blast_audience_snapshot(blast_id) = "blast:#{blast_id}:audience_snapshot"
     def blast_non_opener_emails(blast_id) = "blast:#{blast_id}:non_opener_emails"
     def blast_pending_recipients(blast_id) = "blast:#{blast_id}:pending_recipients"
+    def blast_active_slice_partition(blast_id) = "blast:#{blast_id}:active_slice_partition"
+    def blast_slice_partition_chunks(blast_id, partition_key) = "blast:#{blast_id}:slice_partition:#{partition_key}:chunks"
+    def blast_slice_claim(blast_id, partition_key, chunk_index) = "blast:#{blast_id}:slice_claim:#{partition_key}:#{chunk_index}"
+    def blast_slice_partition_mutation_lock(blast_id) = "blast:#{blast_id}:slice_partition_mutation_lock"
+
+    def blast_done_slices(blast_id, partition_key = nil)
+      key = "blast:#{blast_id}:done_slices"
+      partition_key.present? ? "#{key}:#{partition_key}" : key
+    end
+
+    def blast_child_split_threshold = "blast:child_split_threshold"
+    def blast_child_slice_size = "blast:child_slice_size"
     def stalled_blast_auto_resumed(blast_id) = "blast:#{blast_id}:auto_resumed"
     def stalled_blast_completion_resumed(blast_id) = "blast:#{blast_id}:completion_resumed"
     def workflow_installment_rule_version(installment_id) = "workflow_installment_rule:#{installment_id}:version"
