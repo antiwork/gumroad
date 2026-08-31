@@ -882,6 +882,25 @@ describe SendPostBlastEmailsJob, :freeze_time do
       expect(blast.reload.started_at).to be_present
     end
 
+    it "holds the partition mutation lock while publishing a replacement partition" do
+      post, = audience_post_with_followers(2_002)
+      blast = create(:blast, :just_requested, post:)
+      lock_key = RedisKey.blast_slice_partition_mutation_lock(blast.id)
+      lock_was_held = nil
+      job = described_class.new
+      allow(job).to receive(:write_slice_partition).and_wrap_original do |original, partition_key, chunks|
+        lock_was_held = !$redis.set(lock_key, "intruder", nx: true, ex: 10)
+        original.call(partition_key, chunks)
+      end
+
+      job.perform(blast.id)
+
+      expect(lock_was_held).to be(true)
+      expect(SendPostBlastEmailsSliceJob.jobs.size).to eq(2)
+    ensure
+      $redis.del(lock_key) if lock_key
+    end
+
     it "publishes the full owed count for the slice jobs to decrement" do
       post, = audience_post_with_followers(2_002)
       blast = create(:blast, :just_requested, post:)

@@ -117,9 +117,18 @@ class SendPostBlastEmailsJob
       member_ids = @members.map(&:id)
       partition_key = slice_partition_key(member_ids, slice_size)
       chunks = member_ids.each_slice(slice_size).to_a
-      write_slice_partition(partition_key, chunks)
-      $redis.set(RedisKey.blast_active_slice_partition(@blast.id), partition_key, ex: SLICE_DONE_TTL.to_i)
-      start_pending_recipients
+      partition_installed = with_slice_partition_lock do
+        if @blast.reload.completed_at.present?
+          false
+        else
+          write_slice_partition(partition_key, chunks)
+          $redis.set(RedisKey.blast_active_slice_partition(@blast.id), partition_key, ex: SLICE_DONE_TTL.to_i)
+          start_pending_recipients
+          true
+        end
+      end
+      return unless partition_installed
+
       enqueue_partition(partition_key, chunks)
     end
 

@@ -16,6 +16,16 @@ module PostBlastSending
   # the monitor flags the blast via the (positive) pending count instead.
   SLICE_DONE_TTL = 3.days
 
+  SLICE_PARTITION_MUTATION_LOCK_TTL = 30.seconds
+  SLICE_PARTITION_MUTATION_LOCK_WAIT = 5.seconds
+  SLICE_PARTITION_MUTATION_LOCK_RETRY_INTERVAL = 0.05
+  RELEASE_SLICE_PARTITION_MUTATION_LOCK = <<~LUA
+    if redis.call("GET", KEYS[1]) == ARGV[1] then
+      return redis.call("DEL", KEYS[1])
+    end
+    return 0
+  LUA
+
   # Same IN-list bound as SendPostBlastEmailsJob::REVALIDATION_SLICE_SIZE: past a few
   # thousand entries MySQL silently abandons the indexed plan, and the parent's first
   # attempt passes its full (six-figure) audience through here.
@@ -198,6 +208,24 @@ module PostBlastSending
       pipe.sadd(key, emails)
       pipe.expire(key, BLAST_DEDUPE_TTL.to_i)
     end
+  end
+
+  def with_slice_partition_lock
+    token = SecureRandom.uuid
+    key = RedisKey.blast_slice_partition_mutation_lock(@blast.id)
+    deadline = Process.clock_gettime(Process::CLOCK_MONOTONIC) + SLICE_PARTITION_MUTATION_LOCK_WAIT
+    lock_acquired = false
+
+    until $redis.set(key, token, nx: true, ex: SLICE_PARTITION_MUTATION_LOCK_TTL.to_i)
+      raise "slice partition is already changing for blast #{@blast.id}" if Process.clock_gettime(Process::CLOCK_MONOTONIC) >= deadline
+
+      sleep SLICE_PARTITION_MUTATION_LOCK_RETRY_INTERVAL
+    end
+
+    lock_acquired = true
+    yield
+  ensure
+    $redis.eval(RELEASE_SLICE_PARTITION_MUTATION_LOCK, keys: [key], argv: [token]) if lock_acquired
   end
 
   def mark_blast_as_completed

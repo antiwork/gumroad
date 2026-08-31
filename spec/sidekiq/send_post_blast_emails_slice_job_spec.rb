@@ -115,6 +115,27 @@ describe SendPostBlastEmailsSliceJob, :freeze_time do
       $redis.del(old_done_key, active_key) if old_done_key && active_key
     end
 
+    it "holds the partition mutation lock while stamping completion" do
+      blast = create(:blast, :just_requested, post: post_with_audience)
+      active_key = RedisKey.blast_active_slice_partition(blast.id)
+      lock_key = RedisKey.blast_slice_partition_mutation_lock(blast.id)
+      activate_partition(blast)
+      lock_was_held = nil
+      job = described_class.new
+      allow(job).to receive(:send_members)
+      allow(job).to receive(:mark_blast_as_completed) do
+        lock_was_held = !$redis.set(lock_key, "replacement", nx: true, ex: 10)
+        blast.update!(completed_at: Time.current)
+      end
+
+      job.perform(blast.id, partition_key, 0, 1, audience_ids.first(1))
+
+      expect(lock_was_held).to be(true)
+      expect(blast.reload.completed_at).to be_present
+    ensure
+      $redis.del(active_key, lock_key) if active_key && lock_key
+    end
+
     it "ignores children from an older partition after the parent creates a replacement partition" do
       blast = create(:blast, :just_requested, post: post_with_audience)
       old_partition_key = "old-partition"

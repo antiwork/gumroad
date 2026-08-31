@@ -87,9 +87,12 @@ class SendPostBlastEmailsSliceJob
     def finalize_partition_if_complete(partition_key, total_chunks)
       key = RedisKey.blast_done_slices(@blast.id, partition_key)
       return if $redis.scard(key) < total_chunks
-      return unless active_partition?(partition_key)
 
-      mark_blast_as_completed
-      $redis.del(key)
+      with_slice_partition_lock do
+        if $redis.scard(key) >= total_chunks && active_partition?(partition_key) && @blast.reload.completed_at.blank?
+          mark_blast_as_completed
+          $redis.del(key)
+        end
+      end
     end
 end
