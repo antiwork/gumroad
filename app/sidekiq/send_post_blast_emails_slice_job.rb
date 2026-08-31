@@ -48,8 +48,13 @@ class SendPostBlastEmailsSliceJob
     end
 
     def claim_chunk!(partition_key, chunk_index)
-      claimed = $redis.set(RedisKey.blast_slice_claim(@blast.id, partition_key, chunk_index), Time.current.iso8601, nx: true, ex: CHUNK_CLAIM_TTL.to_i)
-      raise "slice #{chunk_index} is already claimed for blast #{@blast.id}" unless claimed
+      key = RedisKey.blast_slice_claim(@blast.id, partition_key, chunk_index)
+      return if $redis.set(key, jid.to_s, nx: true, ex: CHUNK_CLAIM_TTL.to_i)
+      # A super_fetch requeue re-runs the same jid while its own claim is still live; it must
+      # reclaim immediately rather than wait out the TTL. Only a different jid is a live copy.
+      return if jid.present? && $redis.get(key) == jid.to_s
+
+      raise "slice #{chunk_index} is already claimed for blast #{@blast.id}"
     end
 
     def release_chunk_claim(partition_key, chunk_index)
@@ -61,12 +66,15 @@ class SendPostBlastEmailsSliceJob
 
       # The send phase needs filter-provided virtual columns (purchase_id/follower_id/affiliate_id).
       Makara::Context.release_all
-      WithMaxExecutionTime.timeout_queries(seconds: 1.hour) do
+      members = WithMaxExecutionTime.timeout_queries(seconds: 1.hour) do
         member_ids.each_slice(CHUNK_REVALIDATION_SLICE_SIZE).flat_map do |ids_slice|
           AudienceMember.filter(seller_id: @post.seller_id, params: @filters, with_ids: true, ids: ids_slice)
             .select(:id, :email, :purchase_id, :follower_id, :affiliate_id).to_a
         end
       end
+      # An email blanked between partition create and a slice retry raises at the provider
+      # and strands the whole chunk, same as the parent's pre-split drop (gumroad-private#2338).
+      members.select { _1.email.present? }
     end
 
     def mark_chunk_completed(partition_key, chunk_index, total_chunks)

@@ -31,6 +31,18 @@ class SendPostBlastEmailsJob
 
     @blast.update!(started_at: Time.current) if @blast.started_at.nil?
 
+    # A retry that finds a live partition re-enqueues its stored chunks as-is; loading and
+    # revalidating the whole audience first would only be thrown away. An active key whose
+    # chunk list has expired still falls through — repartitioning needs the members.
+    partition_key = active_slice_partition_key
+    if partition_key.present?
+      chunks = load_slice_partition(partition_key)
+      if chunks.present?
+        enqueue_partition(partition_key, chunks)
+        return
+      end
+    end
+
     @filters = @post.audience_members_filter_params
     # The filter query can be expensive to run, it's better to run it on the replica DB.
     Makara::Context.release_all
@@ -46,11 +58,6 @@ class SendPostBlastEmailsJob
       # but we can already remove all of the ones we know have already been emailed, ahead of time (faster).
       # This check is only useful if the post has been published twice, or if this job is being retried.
       remove_already_emailed_members
-    end
-
-    if active_slice_partition_key.present?
-      enqueue_slice_jobs
-      return
     end
 
     return mark_blast_as_completed if @members.empty?
@@ -103,20 +110,16 @@ class SendPostBlastEmailsJob
       @members.size > child_split_threshold
     end
 
+    # Only reached without live stored chunks — `perform` re-enqueues those directly —
+    # so this always cuts a fresh partition from @members.
     def enqueue_slice_jobs
-      partition_key = active_slice_partition_key
-      chunks = partition_key.present? ? load_slice_partition(partition_key) : []
-
-      if chunks.empty?
-        slice_size = child_slice_size
-        member_ids = @members.map(&:id)
-        partition_key = slice_partition_key(member_ids, slice_size)
-        chunks = member_ids.each_slice(slice_size).to_a
-        write_slice_partition(partition_key, chunks)
-        $redis.set(RedisKey.blast_active_slice_partition(@blast.id), partition_key, ex: SLICE_DONE_TTL.to_i)
-        start_pending_recipients
-      end
-
+      slice_size = child_slice_size
+      member_ids = @members.map(&:id)
+      partition_key = slice_partition_key(member_ids, slice_size)
+      chunks = member_ids.each_slice(slice_size).to_a
+      write_slice_partition(partition_key, chunks)
+      $redis.set(RedisKey.blast_active_slice_partition(@blast.id), partition_key, ex: SLICE_DONE_TTL.to_i)
+      start_pending_recipients
       enqueue_partition(partition_key, chunks)
     end
 

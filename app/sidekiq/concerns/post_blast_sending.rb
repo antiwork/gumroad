@@ -16,6 +16,11 @@ module PostBlastSending
   # the monitor flags the blast via the (positive) pending count instead.
   SLICE_DONE_TTL = 3.days
 
+  # Same IN-list bound as SendPostBlastEmailsJob::REVALIDATION_SLICE_SIZE: past a few
+  # thousand entries MySQL silently abandons the indexed plan, and the parent's first
+  # attempt passes its full (six-figure) audience through here.
+  ALREADY_EMAILED_SLICE_SIZE = 1_000
+
   # Publishes how many recipients this attempt still owes the ESPs, so a monitor can tell a
   # blast that died mid-send from one that died after the last handoff but before the stamp
   # below (gumroad-private#2250). Written per attempt, after filtering: a retry owes only
@@ -175,7 +180,10 @@ module PostBlastSending
     emails = @members.map(&:email)
     return if emails.empty?
 
-    already_sent_emails = Set.new(@post.sent_post_emails.where(email: emails).pluck(:email))
+    already_sent_emails = Set.new
+    emails.each_slice(ALREADY_EMAILED_SLICE_SIZE) do |emails_slice|
+      already_sent_emails.merge(@post.sent_post_emails.where(email: emails_slice).pluck(:email))
+    end
     return if already_sent_emails.empty?
 
     @members.delete_if { _1.email.in?(already_sent_emails) }

@@ -110,11 +110,25 @@ describe SendPostBlastEmailsSliceJob, :freeze_time do
       $redis.del(old_done_key, RedisKey.blast_active_slice_partition(blast.id)) if old_done_key && blast
     end
 
+    it "skips a member whose email was blanked after the partition was created" do
+      post = post_with_audience
+      blast = create(:blast, :just_requested, post:)
+      chunk_ids = audience_ids
+      AudienceMember.find_by!(seller: @seller, email: "bravo@example.com").update_column(:email, "")
+      activate_partition(blast)
+
+      described_class.new.perform(blast.id, partition_key, 0, 1, chunk_ids)
+
+      expect_sent_count 2
+      expect(PostSendgridApi.mails.keys).to contain_exactly("alpha@example.com", "charlie@example.com")
+      expect(blast.reload.completed_at).to be_present
+    end
+
     it "retries a chunk another copy is already sending" do
       post = post_with_audience
       blast = create(:blast, :just_requested, post:, recipient_filter: PostEmailBlast::RECIPIENT_FILTER_UNOPENED)
       activate_partition(blast)
-      $redis.set(RedisKey.blast_slice_claim(blast.id, partition_key, 0), Time.current.iso8601)
+      $redis.set(RedisKey.blast_slice_claim(blast.id, partition_key, 0), "live-copy-jid")
 
       expect { described_class.new.perform(blast.id, partition_key, 0, 1, audience_ids.first(1)) }.to raise_error(/already claimed/)
 
@@ -152,6 +166,51 @@ describe SendPostBlastEmailsSliceJob, :freeze_time do
       expect(blast.reload.completed_at).to be_blank
     ensure
       $redis.del(done_key, RedisKey.blast_active_slice_partition(blast.id)) if done_key && blast
+    end
+
+    it "stores its jid as the chunk claim value" do
+      blast = create(:blast, :just_requested, post: post_with_audience)
+      activate_partition(blast)
+      claim_key = RedisKey.blast_slice_claim(blast.id, partition_key, 0)
+      claim_value = nil
+      allow_any_instance_of(described_class).to receive(:send_members) { claim_value = $redis.get(claim_key) }
+      job = described_class.new
+      job.jid = "claiming-jid"
+
+      job.perform(blast.id, partition_key, 0, 1, audience_ids)
+
+      expect(claim_value).to eq("claiming-jid")
+    end
+
+    it "lets the same jid reclaim its own chunk after a super_fetch requeue" do
+      post = post_with_audience
+      blast = create(:blast, :just_requested, post:)
+      activate_partition(blast)
+      # A hard-killed worker never runs the ensure release, so its claim outlives it.
+      $redis.set(RedisKey.blast_slice_claim(blast.id, partition_key, 0), "requeued-jid")
+      job = described_class.new
+      job.jid = "requeued-jid"
+
+      job.perform(blast.id, partition_key, 0, 1, audience_ids)
+
+      expect_sent_count 3
+      expect(blast.reload.completed_at).to be_present
+    end
+
+    it "does not let a different jid steal a held claim" do
+      post = post_with_audience
+      blast = create(:blast, :just_requested, post:)
+      activate_partition(blast)
+      $redis.set(RedisKey.blast_slice_claim(blast.id, partition_key, 0), "jid-a")
+      job = described_class.new
+      job.jid = "jid-b"
+
+      expect { job.perform(blast.id, partition_key, 0, 1, audience_ids) }.to raise_error(/already claimed/)
+
+      expect_sent_count 0
+      expect(blast.reload.completed_at).to be_blank
+    ensure
+      $redis.del(RedisKey.blast_slice_claim(blast.id, partition_key, 0), RedisKey.blast_active_slice_partition(blast.id)) if blast
     end
 
     it "releases the chunk claim when delivery raises" do

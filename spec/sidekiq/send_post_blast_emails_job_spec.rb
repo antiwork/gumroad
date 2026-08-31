@@ -907,6 +907,9 @@ describe SendPostBlastEmailsJob, :freeze_time do
       $redis.set(pending_key, 7)
       SendPostBlastEmailsSliceJob.jobs.clear
 
+      # The stored chunks already fix the recipients; the retry must not reload or
+      # revalidate the audience just to discard it.
+      expect(AudienceMember).not_to receive(:filter)
       described_class.new.perform(blast.id)
 
       expect(SendPostBlastEmailsSliceJob.jobs.map { _1["args"] }).to eq(first_jobs)
@@ -914,6 +917,45 @@ describe SendPostBlastEmailsJob, :freeze_time do
       expect($redis.get(pending_key).to_i).to eq(7)
     ensure
       $redis.del(RedisKey.blast_child_split_threshold, RedisKey.blast_child_slice_size, pending_key)
+    end
+
+    it "repartitions from a fresh audience load when the active partition's chunk list has expired" do
+      post, = audience_post_with_followers(11)
+      $redis.set(RedisKey.blast_child_split_threshold, 10)
+      $redis.set(RedisKey.blast_child_slice_size, 6)
+      blast = create(:blast, :just_requested, post:)
+      $redis.set(RedisKey.blast_active_slice_partition(blast.id), "expired-chunks-partition")
+
+      described_class.new.perform(blast.id)
+
+      jobs = SendPostBlastEmailsSliceJob.jobs.map { _1["args"] }
+      expect(jobs.size).to eq(2)
+      expect(jobs.first[1]).not_to eq("expired-chunks-partition")
+      expect($redis.get(RedisKey.blast_active_slice_partition(blast.id))).to eq(jobs.first[1])
+    ensure
+      $redis.del(RedisKey.blast_child_split_threshold, RedisKey.blast_child_slice_size)
+    end
+
+    it "checks already-emailed recipients in bounded IN-list batches" do
+      stub_const("PostBlastSending::ALREADY_EMAILED_SLICE_SIZE", 2)
+      post, = audience_post_with_followers(5)
+      blast = create(:blast, :just_requested, post:)
+      batch_sizes = []
+      allow_any_instance_of(Installment).to receive(:sent_post_emails).and_wrap_original do |original|
+        original.call.tap do |relation|
+          allow(relation).to receive(:where).and_wrap_original do |where_original, *args, **kwargs|
+            emails = kwargs[:email] || args.first&.[](:email)
+            batch_sizes << Array(emails).size if emails
+            where_original.call(*args, **kwargs)
+          end
+        end
+      end
+      allow_any_instance_of(described_class).to receive(:send_members)
+
+      described_class.new.perform(blast.id)
+
+      expect(batch_sizes).to all(be <= 2)
+      expect(batch_sizes.sum).to eq(5)
     end
 
     it "completes inline blasts without a slice partition" do
