@@ -914,8 +914,8 @@ class Checkout::BuyerCurrencyQuote
         next if line_item.presentment_tip_cents.to_i.zero?
 
         charge_tip_cents = line_item.charge_tip_cents.nil? ? line_item.tip_cents : line_item.charge_tip_cents
-        expected_tip_cents = presentment_cents_for(charge_tip_cents, fx_rate, buyer_currency)
-        next if (line_item.presentment_tip_cents - expected_tip_cents).abs > 1
+        submitted_tip_cents = (BigDecimal(line_item.presentment_tip_cents.to_s) * fx_rate * subunit_to_unit(Currency::USD) / subunit_to_unit(buyer_currency)).round
+        next unless submitted_tip_cents == charge_tip_cents
 
         [nil, line_item.presentment_tip_cents, nil, nil, nil]
       end
