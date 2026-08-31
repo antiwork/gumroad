@@ -48,6 +48,11 @@ class SendPostBlastEmailsJob
       remove_already_emailed_members
     end
 
+    if active_slice_partition_key.present?
+      enqueue_slice_jobs
+      return
+    end
+
     return mark_blast_as_completed if @members.empty?
     unless SellerLargeBlastQuota.allow?(
       seller_id: @post.seller_id,
@@ -58,8 +63,6 @@ class SendPostBlastEmailsJob
       requeue_for_daily_blast_limit
       return
     end
-
-    start_pending_recipients
 
     split_blast? ? enqueue_slice_jobs : send_inline
   end
@@ -91,6 +94,7 @@ class SendPostBlastEmailsJob
     CHILD_SLICE_SIZE = 2_000
 
     def send_inline
+      start_pending_recipients
       send_members(@members)
       mark_blast_as_completed
     end
@@ -100,15 +104,43 @@ class SendPostBlastEmailsJob
     end
 
     def enqueue_slice_jobs
-      slice_size = child_slice_size
-      member_ids = @members.map(&:id)
-      partition_key = slice_partition_key(member_ids, slice_size)
-      $redis.set(RedisKey.blast_active_slice_partition(@blast.id), partition_key, ex: SLICE_DONE_TTL.to_i)
-      total = (@members.size.to_f / slice_size).ceil
-      @members.each_slice(slice_size).with_index do |slice, index|
-        SendPostBlastEmailsSliceJob.perform_async(@blast.id, partition_key, index, total, slice.map(&:id))
+      partition_key = active_slice_partition_key
+      chunks = partition_key.present? ? load_slice_partition(partition_key) : []
+
+      if chunks.empty?
+        slice_size = child_slice_size
+        member_ids = @members.map(&:id)
+        partition_key = slice_partition_key(member_ids, slice_size)
+        chunks = member_ids.each_slice(slice_size).to_a
+        write_slice_partition(partition_key, chunks)
+        $redis.set(RedisKey.blast_active_slice_partition(@blast.id), partition_key, ex: SLICE_DONE_TTL.to_i)
+        start_pending_recipients
       end
-      Rails.logger.info("[#{self.class.name}] blast_id=#{@blast.id} split #{@members.size} recipients into #{total} slice jobs")
+
+      enqueue_partition(partition_key, chunks)
+    end
+
+    def enqueue_partition(partition_key, chunks)
+      total = chunks.size
+      chunks.each_with_index do |member_ids, index|
+        SendPostBlastEmailsSliceJob.perform_async(@blast.id, partition_key, index, total, member_ids)
+      end
+      Rails.logger.info("[#{self.class.name}] blast_id=#{@blast.id} split #{chunks.sum(&:size)} recipients into #{total} slice jobs")
+    end
+
+    def active_slice_partition_key
+      $redis.get(RedisKey.blast_active_slice_partition(@blast.id))
+    end
+
+    def load_slice_partition(partition_key)
+      $redis.lrange(RedisKey.blast_slice_partition_chunks(@blast.id, partition_key), 0, -1).map { JSON.parse(_1) }
+    end
+
+    def write_slice_partition(partition_key, chunks)
+      key = RedisKey.blast_slice_partition_chunks(@blast.id, partition_key)
+      $redis.del(key)
+      $redis.rpush(key, chunks.map(&:to_json))
+      $redis.expire(key, SLICE_DONE_TTL.to_i)
     end
 
     def slice_partition_key(member_ids, slice_size)
@@ -230,13 +262,6 @@ class SendPostBlastEmailsJob
       @members.select! { _1.email.present? }
       dropped = before - @members.size
       Rails.logger.info("[#{self.class.name}] blast_id=#{@blast.id} dropped #{dropped} members without an email") if dropped > 0
-    end
-
-    def remove_already_emailed_members
-      already_sent_emails = Set.new(@post.sent_post_emails.pluck(:email))
-      return if already_sent_emails.empty?
-
-      @members.delete_if { _1.email.in?(already_sent_emails) }
     end
 
     # Tunable via Redis so a stuck blast can be unblocked without a deploy.

@@ -171,6 +171,13 @@ module PostBlastSending
     @members.delete_if { already_sent_set.include?(_1.email) }
   end
 
+  def remove_already_emailed_members
+    already_sent_emails = Set.new(@post.sent_post_emails.pluck(:email))
+    return if already_sent_emails.empty?
+
+    @members.delete_if { _1.email.in?(already_sent_emails) }
+  end
+
   def mark_members_sent_in_this_blast(members)
     emails = members.map(&:email)
     return if emails.empty?
@@ -190,9 +197,11 @@ module PostBlastSending
     # mid-write (they carry a TTL, but no reason to keep them around).
     snapshot_key = RedisKey.blast_audience_snapshot(@blast.id)
     checkpoint_key = RedisKey.blast_non_opener_emails(@blast.id)
+    active_partition_key = $redis.get(RedisKey.blast_active_slice_partition(@blast.id))
+    partition_chunks_key = active_partition_key && RedisKey.blast_slice_partition_chunks(@blast.id, active_partition_key)
     $redis.del(snapshot_key, "#{snapshot_key}:tmp", checkpoint_key, "#{checkpoint_key}:tmp",
                RedisKey.blast_pending_recipients(@blast.id), RedisKey.blast_done_slices(@blast.id),
-               RedisKey.blast_active_slice_partition(@blast.id))
+               RedisKey.blast_active_slice_partition(@blast.id), partition_chunks_key)
   end
 
   # Stores email addresses in SentPostEmail, just before sending the emails.

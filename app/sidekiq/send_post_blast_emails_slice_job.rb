@@ -14,16 +14,16 @@ class SendPostBlastEmailsSliceJob
     return unless @post.alive? && @post.published? && @post.send_emails? && @blast.completed_at.nil?
     return unless active_partition?(partition_key)
     return if chunk_completed?(partition_key, chunk_index)
-    return unless claim_chunk(partition_key, chunk_index)
+    claim_chunk!(partition_key, chunk_index)
 
     begin
       @blast.update!(started_at: Time.current) if @blast.started_at.nil?
 
       @filters = @post.audience_members_filter_params
       @members = load_chunk_members(member_ids)
-      # The parent already filtered out already-emailed members, but a retried slice job re-runs
-      # its own chunk and must not re-send the members its first attempt already marked sent.
-      remove_members_already_sent_in_this_blast if @blast.to_non_openers?
+      # A retried slice re-runs its own chunk and must not double-decrement pending for
+      # recipients its first attempt already handed off.
+      @blast.to_non_openers? ? remove_members_already_sent_in_this_blast : remove_already_emailed_members
 
       send_members(@members)
       mark_chunk_completed(partition_key, chunk_index, total_chunks)
@@ -44,8 +44,9 @@ class SendPostBlastEmailsSliceJob
       $redis.sismember(RedisKey.blast_done_slices(@blast.id, partition_key), chunk_index)
     end
 
-    def claim_chunk(partition_key, chunk_index)
-      $redis.set(RedisKey.blast_slice_claim(@blast.id, partition_key, chunk_index), Time.current.iso8601, nx: true, ex: CHUNK_CLAIM_TTL.to_i)
+    def claim_chunk!(partition_key, chunk_index)
+      claimed = $redis.set(RedisKey.blast_slice_claim(@blast.id, partition_key, chunk_index), Time.current.iso8601, nx: true, ex: CHUNK_CLAIM_TTL.to_i)
+      raise "slice #{chunk_index} is already claimed for blast #{@blast.id}" unless claimed
     end
 
     def release_chunk_claim(partition_key, chunk_index)

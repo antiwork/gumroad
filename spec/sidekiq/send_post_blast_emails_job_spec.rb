@@ -868,6 +868,8 @@ describe SendPostBlastEmailsJob, :freeze_time do
       expect(jobs.first[1]).to match(/\A[0-9a-f]{64}\z/)
       expect(jobs.first[1]).to eq(jobs.last[1])
       expect($redis.get(RedisKey.blast_active_slice_partition(blast.id))).to eq(jobs.first[1])
+      stored_chunks = $redis.lrange(RedisKey.blast_slice_partition_chunks(blast.id, jobs.first[1]), 0, -1).map { JSON.parse(_1) }
+      expect(stored_chunks).to eq(jobs.map(&:last))
       expect(jobs.first[2, 2]).to eq([0, 2])
       expect(jobs.last[2, 2]).to eq([1, 2])
       # The chunks are disjoint and cover the whole filtered audience, in order.
@@ -890,6 +892,28 @@ describe SendPostBlastEmailsJob, :freeze_time do
       expect($redis.get(pending_key).to_i).to eq(2_002)
     ensure
       $redis.del(pending_key)
+    end
+
+    it "reuses an active partition instead of repartitioning a parent retry" do
+      post, = audience_post_with_followers(11)
+      $redis.set(RedisKey.blast_child_split_threshold, 10)
+      $redis.set(RedisKey.blast_child_slice_size, 6)
+      blast = create(:blast, :just_requested, post:)
+      pending_key = RedisKey.blast_pending_recipients(blast.id)
+
+      described_class.new.perform(blast.id)
+      first_jobs = SendPostBlastEmailsSliceJob.jobs.map { _1["args"] }
+      partition_key = first_jobs.first[1]
+      $redis.set(pending_key, 7)
+      SendPostBlastEmailsSliceJob.jobs.clear
+
+      described_class.new.perform(blast.id)
+
+      expect(SendPostBlastEmailsSliceJob.jobs.map { _1["args"] }).to eq(first_jobs)
+      expect($redis.get(RedisKey.blast_active_slice_partition(blast.id))).to eq(partition_key)
+      expect($redis.get(pending_key).to_i).to eq(7)
+    ensure
+      $redis.del(RedisKey.blast_child_split_threshold, RedisKey.blast_child_slice_size, pending_key)
     end
 
     it "sends inline for a blast at or under the split threshold" do
