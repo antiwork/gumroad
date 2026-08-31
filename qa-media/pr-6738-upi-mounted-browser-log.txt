@@ -1,4 +1,0 @@
-desktop  membership-upi-mounted   UPI=true recurring_upi_registration=true element=inr/49900 summaryTotal=US$5.23 MISMATCH=true
-desktop  onetime-control          UPI=true recurring_upi_registration=false element=inr/49900 summaryTotal=₹499.00 MISMATCH=false
-mobile   membership-upi-mounted   UPI=true recurring_upi_registration=true element=inr/49900 summaryTotal=US$5.23 MISMATCH=true
-mobile   onetime-control          UPI=true recurring_upi_registration=false element=inr/49900 summaryTotal=₹499.00 MISMATCH=false
