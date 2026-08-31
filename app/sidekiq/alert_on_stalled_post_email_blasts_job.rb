@@ -165,11 +165,13 @@ class AlertOnStalledPostEmailBlastsJob
       claimed = $redis.set(marker, Time.current.iso8601, nx: true, ex: STALL_THRESHOLD.to_i)
       return false unless claimed
 
-      if entry[:disposition] == :dead
-        @dead_entries.fetch(blast.id).retry
-      else
-        SendPostBlastEmailsJob.perform_async(blast.id)
-      end
+      # `retry` would re-push the dead entry's own jid, and super_fetch counts orphan recoveries
+      # per jid: a blast its poison-pill guard already dead-set has no budget left, so that job is
+      # killed again before it delivers (gumroad-private#2338). Drop the entry only after the
+      # enqueue — losing it without a replacement leaves an UNACCOUNTED blast, which is never
+      # auto-resumed when it is a non-opener resend.
+      SendPostBlastEmailsJob.perform_async(blast.id)
+      @dead_entries.fetch(blast.id).delete if entry[:disposition] == :dead
       true
     end
 
@@ -227,8 +229,10 @@ class AlertOnStalledPostEmailBlastsJob
           "duplicate sender would double-deliver. UNACCOUNTED usually means a lost enqueue or a " \
           "post no longer sendable (super_fetch resurrects hard-killed jobs on its own). HELD " \
           "rows need a human: confirm with the seller (time-boxed blasts may be worse late than " \
-          "never), then `job.retry` a DEAD entry or `SendPostBlastEmailsJob.perform_async(blast_id)` " \
-          "for an UNACCOUNTED one. A blast whose sender finished delivering but died before the " \
+          "never), then `SendPostBlastEmailsJob.perform_async(blast_id)` — for a DEAD row too. " \
+          "Never `job.retry` a dead blast: it reuses the jid super_fetch has already spent its " \
+          "orphan budget on, so it is killed again before it delivers (gumroad-private#2338). " \
+          "A blast whose sender finished delivering but died before the " \
           "completion stamp is resumed regardless of those limits — the resumed job has nothing " \
           "left to send and just stamps it (gumroad-private#2250). See gumroad-private#1750 for " \
           "a worked run.",
