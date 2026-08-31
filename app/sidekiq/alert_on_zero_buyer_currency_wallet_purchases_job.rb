@@ -8,8 +8,6 @@ class AlertOnZeroBuyerCurrencyWalletPurchasesJob
 
   WALLET_TYPES = %w[apple_pay google_pay].freeze
   ZERO_VOLUME_WINDOW = 24.hours
-  OVERLAP_LOOKBACK = 45.days
-  OVERLAP_SELLER_LIMIT = 100
   ALERT_THROTTLE = 24.hours
   ALERT_ROOM = "agent_reports"
 
@@ -23,26 +21,77 @@ class AlertOnZeroBuyerCurrencyWalletPurchasesJob
 
   private
     def wallet_lane_enabled?
-      return true if Feature.active?(Checkout::BuyerCurrencyEligibility::PAYMENT_ELEMENT_WALLETS_FEATURE_NAME) &&
-        Feature.active?(Checkout::BuyerCurrencyEligibility::WALLETS_FEATURE_NAME)
-
-      sellers_with_recent_wallet_presentment_history.any? do |seller|
-        Checkout::BuyerCurrencyEligibility.wallets_enabled?(seller)
-      end
+      feature_rollouts_overlap?(
+        Checkout::BuyerCurrencyEligibility::PAYMENT_ELEMENT_WALLETS_FEATURE_NAME,
+        Checkout::BuyerCurrencyEligibility::WALLETS_FEATURE_NAME,
+      )
     end
 
-    def sellers_with_recent_wallet_presentment_history
-      User.where(id: wallet_presentment_purchases
-        .where("purchases.created_at >= ?", OVERLAP_LOOKBACK.ago)
-        .distinct
-        .limit(OVERLAP_SELLER_LIMIT)
-        .pluck(:seller_id))
+    def feature_rollouts_overlap?(first_feature_name, second_feature_name)
+      return false unless feature_rollout_present?(first_feature_name) && feature_rollout_present?(second_feature_name)
+      return true if broad_rollout?(first_feature_name) && broad_rollout?(second_feature_name)
+      return true if broad_rollout_covers_targeted_actors?(first_feature_name, second_feature_name)
+      return true if broad_rollout_covers_targeted_actors?(second_feature_name, first_feature_name)
+
+      targeted_rollouts_overlap?(first_feature_name, second_feature_name)
+    end
+
+    def feature_rollout_present?(feature_name)
+      broad_rollout?(feature_name) || targeted_actor_values(feature_name).any? || targeted_group_values(feature_name).any?
+    end
+
+    def broad_rollout?(feature_name)
+      Feature.active?(feature_name) || percentage_rollout?(feature_name)
+    end
+
+    def percentage_rollout?(feature_name)
+      flipper_feature = Flipper[feature_name]
+      flipper_numeric_value(flipper_feature, :percentage_of_actors_value).positive? ||
+        flipper_numeric_value(flipper_feature, :percentage_of_time_value).positive?
+    end
+
+    def flipper_numeric_value(flipper_feature, method_name)
+      return 0 unless flipper_feature.respond_to?(method_name)
+
+      flipper_feature.public_send(method_name).to_i
+    end
+
+    def broad_rollout_covers_targeted_actors?(broad_feature_name, targeted_feature_name)
+      users_for_actor_values(targeted_actor_values(targeted_feature_name)).any? { Feature.active?(broad_feature_name, _1) } ||
+        targeted_group_values(targeted_feature_name).any?
+    end
+
+    def targeted_rollouts_overlap?(first_feature_name, second_feature_name)
+      users_for_actor_values(targeted_actor_values(first_feature_name) | targeted_actor_values(second_feature_name)).any? do |user|
+        Checkout::BuyerCurrencyEligibility.wallets_enabled?(user)
+      end || (targeted_group_values(first_feature_name) & targeted_group_values(second_feature_name)).any?
+    end
+
+    def targeted_actor_values(feature_name)
+      values_for(feature_name, :actors_value)
+    end
+
+    def targeted_group_values(feature_name)
+      values_for(feature_name, :groups_value)
+    end
+
+    def values_for(feature_name, method_name)
+      flipper_feature = Flipper[feature_name]
+      return [] unless flipper_feature.respond_to?(method_name)
+
+      Array(flipper_feature.public_send(method_name)).map(&:to_s)
+    end
+
+    def users_for_actor_values(actor_values)
+      user_ids = actor_values.filter_map { _1[/\AUser;(\d+)\z/, 1] }.map(&:to_i)
+      User.where(id: user_ids)
     end
 
     def wallet_presentment_purchases
       Purchase.successful
         .joins(:purchase_presentment, :purchase_wallet_type)
         .where(purchase_wallet_types: { wallet_type: WALLET_TYPES })
+        .where.not(purchase_presentments: { presentment_currency: Currency::USD })
     end
 
     def recent_wallet_presentment_purchase_exists?

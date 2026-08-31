@@ -17,11 +17,11 @@ describe AlertOnZeroBuyerCurrencyWalletPurchasesJob do
     Feature.activate(Checkout::BuyerCurrencyEligibility::PAYMENT_ELEMENT_WALLETS_FEATURE_NAME)
   end
 
-  def create_presentment_for(purchase)
+  def create_presentment_for(purchase, presentment_currency: Currency::CAD)
     PurchasePresentment.create!(
       purchase:,
       processor: StripeChargeProcessor.charge_processor_id,
-      presentment_currency: Currency::CAD,
+      presentment_currency:,
       presentment_price_cents: 12_00,
       presentment_tip_cents: 0,
       presentment_seller_tax_cents: 0,
@@ -32,9 +32,9 @@ describe AlertOnZeroBuyerCurrencyWalletPurchasesJob do
     )
   end
 
-  def create_wallet_presentment_purchase(created_at: Time.current, wallet_type: "apple_pay")
+  def create_wallet_presentment_purchase(created_at: Time.current, wallet_type: "apple_pay", presentment_currency: Currency::CAD)
     purchase = create(:purchase, purchase_state: "successful", created_at:)
-    create_presentment_for(purchase)
+    create_presentment_for(purchase, presentment_currency:)
     PurchaseWalletType.create!(purchase:, wallet_type:)
     purchase
   end
@@ -175,6 +175,15 @@ describe AlertOnZeroBuyerCurrencyWalletPurchasesJob do
       enable_wallet_lane
       purchase = create(:purchase, purchase_state: "successful", created_at: 2.hours.ago)
       create_presentment_for(purchase)
+
+      described_class.new.perform
+
+      expect(InternalNotificationWorker).to have_received(:perform_async)
+    end
+
+    it "does not treat a USD wallet presentment as buyer-currency volume" do
+      enable_wallet_lane
+      create_wallet_presentment_purchase(created_at: 2.hours.ago, presentment_currency: Currency::USD)
 
       described_class.new.perform
 
