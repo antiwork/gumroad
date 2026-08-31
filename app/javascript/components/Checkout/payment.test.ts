@@ -139,6 +139,7 @@ const directListedCardConfig: CheckoutPaymentConfig = {
     presentment_amount_cents: 1_500,
     listed_currency_display: { currency: "cad", subunit_to_unit: 100 },
     direct_listed_card: true,
+    direct_listed_currency_rate: 1.5,
   },
 };
 
@@ -961,7 +962,6 @@ describe("direct-listed card element", () => {
           hasTippingEnabled: true,
           listedPriceCents: 1_500,
           listedChargePriceCents: 1_200,
-          listedCurrencyExchangeRate: 1.5,
         }),
       ],
       tip: { type: "percentage", percentage: 15 },
@@ -1015,7 +1015,6 @@ describe("direct-listed card element", () => {
           hasTippingEnabled: true,
           listedPriceCents: 1_500,
           listedChargePriceCents: 1_200,
-          listedCurrencyExchangeRate: 1.5,
         }),
       ],
       tip: { type: "fixed", amount: 291, listedAmount: 437 },
@@ -1035,6 +1034,63 @@ describe("direct-listed card element", () => {
 
     expect(getStripePaymentElementAmount(s)).toBe(1_787);
     expect(getStripePaymentElementMountCurrency(s)).toBe("cad");
+  });
+
+  it("converts USD surcharge cents with the signed rate and listed subunit scale", () => {
+    const s = state({
+      checkoutPayment: {
+        ...directListedCardConfig,
+        elements_options: {
+          ...directListedCardConfig.elements_options,
+          currency: "jpy",
+          listed_currency_display: { currency: "jpy", subunit_to_unit: 1 },
+          direct_listed_currency_rate: 150,
+        },
+      },
+      products: [product({ listedChargePriceCents: 1_500 })],
+      buyerCurrency: "jpy",
+      surcharges: {
+        type: "loaded",
+        result: {
+          vat_id_valid: false,
+          has_vat_id_input: false,
+          shipping_rate_cents: 0,
+          tax_cents: 100,
+          tax_included_cents: 0,
+          subtotal: 1_000,
+          buyer_currency_quote: null,
+        },
+      },
+    });
+
+    expect(getStripePaymentElementAmount(s)).toBe(1_650);
+  });
+
+  it("does not mount a listed amount when excluded tax cannot use the signed rate", () => {
+    const s = state({
+      checkoutPayment: {
+        ...directListedCardConfig,
+        elements_options: {
+          ...directListedCardConfig.elements_options,
+          direct_listed_currency_rate: null,
+        },
+      },
+      products: [product({ listedChargePriceCents: 1_200 })],
+      surcharges: {
+        type: "loaded",
+        result: {
+          vat_id_valid: false,
+          has_vat_id_input: false,
+          shipping_rate_cents: 0,
+          tax_cents: 100,
+          tax_included_cents: 0,
+          subtotal: 900,
+          buyer_currency_quote: null,
+        },
+      },
+    });
+
+    expect(getStripePaymentElementAmount(s)).toBeNull();
   });
 
   it("remounts in canonical USD for a shipping cart", () => {
