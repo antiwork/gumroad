@@ -12,6 +12,7 @@ class SendPostBlastEmailsSliceJob
     @post = @blast.post
     Rails.logger.info("[#{self.class.name}] blast_id=#{@blast.id} chunk=#{chunk_index}/#{total_chunks}")
     return unless @post.alive? && @post.published? && @post.send_emails? && @blast.completed_at.nil?
+    return unless active_partition?(partition_key)
 
     @blast.update!(started_at: Time.current) if @blast.started_at.nil?
 
@@ -26,6 +27,10 @@ class SendPostBlastEmailsSliceJob
   end
 
   private
+    def active_partition?(partition_key)
+      $redis.get(RedisKey.blast_active_slice_partition(@blast.id)) == partition_key
+    end
+
     def load_chunk_members(member_ids)
       return [] if member_ids.empty?
 

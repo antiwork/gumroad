@@ -45,6 +45,7 @@ class RedisKey
     def blast_audience_snapshot(blast_id) = "blast:#{blast_id}:audience_snapshot"
     def blast_non_opener_emails(blast_id) = "blast:#{blast_id}:non_opener_emails"
     def blast_pending_recipients(blast_id) = "blast:#{blast_id}:pending_recipients"
+    def blast_active_slice_partition(blast_id) = "blast:#{blast_id}:active_slice_partition"
 
     def blast_done_slices(blast_id, partition_key = nil)
       key = "blast:#{blast_id}:done_slices"

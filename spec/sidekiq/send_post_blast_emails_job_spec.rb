@@ -867,6 +867,7 @@ describe SendPostBlastEmailsJob, :freeze_time do
       expect(jobs.first[0]).to eq(blast.id)
       expect(jobs.first[1]).to match(/\A[0-9a-f]{64}\z/)
       expect(jobs.first[1]).to eq(jobs.last[1])
+      expect($redis.get(RedisKey.blast_active_slice_partition(blast.id))).to eq(jobs.first[1])
       expect(jobs.first[2, 2]).to eq([0, 2])
       expect(jobs.last[2, 2]).to eq([1, 2])
       # The chunks are disjoint and cover the whole filtered audience, in order.

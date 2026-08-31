@@ -23,6 +23,10 @@ describe SendPostBlastEmailsSliceJob, :freeze_time do
 
   let(:partition_key) { "partition-v1" }
 
+  def activate_partition(blast, key = partition_key)
+    $redis.set(RedisKey.blast_active_slice_partition(blast.id), key)
+  end
+
   def expect_sent_count(count)
     expect(PostSendgridApi.mails.size).to eq(count)
   end
@@ -32,6 +36,7 @@ describe SendPostBlastEmailsSliceJob, :freeze_time do
       post = post_with_audience
       blast = create(:blast, :just_requested, post:)
       chunk_ids = audience_ids
+      activate_partition(blast)
 
       described_class.new.perform(blast.id, partition_key, 0, 1, chunk_ids)
 
@@ -44,6 +49,7 @@ describe SendPostBlastEmailsSliceJob, :freeze_time do
 
     it "decrements the pending recipient count the parent published" do
       blast = create(:blast, :just_requested, post: post_with_audience)
+      activate_partition(blast)
       pending_key = RedisKey.blast_pending_recipients(blast.id)
       $redis.set(pending_key, 3)
 
@@ -56,6 +62,7 @@ describe SendPostBlastEmailsSliceJob, :freeze_time do
 
     it "stamps completed_at only when the last distinct chunk finishes, even out of order" do
       blast = create(:blast, :just_requested, post: post_with_audience)
+      activate_partition(blast)
       done_key = RedisKey.blast_done_slices(blast.id, partition_key)
       # Chunk 1 of 2 already delivered; its SADD is in the set and the blast is still pending.
       $redis.sadd(done_key, 1)
@@ -73,6 +80,7 @@ describe SendPostBlastEmailsSliceJob, :freeze_time do
 
     it "keeps stale completion markers from an earlier partition from completing a retry" do
       blast = create(:blast, :just_requested, post: post_with_audience)
+      activate_partition(blast)
       old_partition_key = "old-partition"
       old_done_key = RedisKey.blast_done_slices(blast.id, old_partition_key)
       new_done_key = RedisKey.blast_done_slices(blast.id, partition_key)
@@ -84,6 +92,22 @@ describe SendPostBlastEmailsSliceJob, :freeze_time do
       expect($redis.smembers(new_done_key)).to eq(["0"])
     ensure
       $redis.del(old_done_key, new_done_key) if old_done_key && new_done_key
+    end
+
+    it "ignores children from an older partition after the parent creates a replacement partition" do
+      blast = create(:blast, :just_requested, post: post_with_audience)
+      old_partition_key = "old-partition"
+      old_done_key = RedisKey.blast_done_slices(blast.id, old_partition_key)
+      activate_partition(blast, partition_key)
+      $redis.sadd(old_done_key, 0)
+
+      described_class.new.perform(blast.id, old_partition_key, 1, 2, [])
+
+      expect_sent_count 0
+      expect(blast.reload.completed_at).to be_blank
+      expect($redis.smembers(old_done_key)).to eq(["0"])
+    ensure
+      $redis.del(old_done_key, RedisKey.blast_active_slice_partition(blast.id)) if old_done_key && blast
     end
 
     it "does not stamp or re-send when a sibling already completed the blast" do
@@ -98,6 +122,7 @@ describe SendPostBlastEmailsSliceJob, :freeze_time do
       post = create(:product_post, :published, seller: @seller, link: create(:product, user: @seller))
       sale = create(:purchase, link: post.link, seller: @seller)
       blast = create(:blast, :just_requested, post:, recipient_filter: PostEmailBlast::RECIPIENT_FILTER_UNOPENED)
+      activate_partition(blast)
       member_id = AudienceMember.where(seller_id: @seller).pluck(:id)
 
       # First attempt marked the recipient sent before failing; the retry hands the same id again.
@@ -113,6 +138,7 @@ describe SendPostBlastEmailsSliceJob, :freeze_time do
 
     it "records an empty chunk as done so the blast still completes" do
       blast = create(:blast, :just_requested, post: post_with_audience)
+      activate_partition(blast)
 
       described_class.new.perform(blast.id, partition_key, 0, 1, [])
 

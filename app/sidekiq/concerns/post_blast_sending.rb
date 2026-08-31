@@ -191,7 +191,8 @@ module PostBlastSending
     snapshot_key = RedisKey.blast_audience_snapshot(@blast.id)
     checkpoint_key = RedisKey.blast_non_opener_emails(@blast.id)
     $redis.del(snapshot_key, "#{snapshot_key}:tmp", checkpoint_key, "#{checkpoint_key}:tmp",
-               RedisKey.blast_pending_recipients(@blast.id), RedisKey.blast_done_slices(@blast.id))
+               RedisKey.blast_pending_recipients(@blast.id), RedisKey.blast_done_slices(@blast.id),
+               RedisKey.blast_active_slice_partition(@blast.id))
   end
 
   # Stores email addresses in SentPostEmail, just before sending the emails.

@@ -103,6 +103,7 @@ class SendPostBlastEmailsJob
       slice_size = child_slice_size
       member_ids = @members.map(&:id)
       partition_key = slice_partition_key(member_ids, slice_size)
+      $redis.set(RedisKey.blast_active_slice_partition(@blast.id), partition_key, ex: SLICE_DONE_TTL.to_i)
       total = (@members.size.to_f / slice_size).ceil
       @members.each_slice(slice_size).with_index do |slice, index|
         SendPostBlastEmailsSliceJob.perform_async(@blast.id, partition_key, index, total, slice.map(&:id))
