@@ -15,6 +15,11 @@ export type GetSurchargesRequest = {
     // Exact buyer-currency tip the buyer typed, when the checkout is already displaying an
     // FX quote. Optional for rolling deploy compatibility.
     presentment_tip_cents?: number | undefined;
+    // Direct-listed Payment Elements charge in the product's listed currency. Send the
+    // listed-currency line amount and tip so the surcharge response can return the same
+    // per-line rounded total the charge path will later persist.
+    listed_price_cents?: number | undefined;
+    listed_tip_cents?: number | undefined;
     pay_in_installments?: boolean | undefined;
     subscription_id?: string | undefined;
   }[];
@@ -37,6 +42,20 @@ export type SurchargesResponse = {
   subtotal: number;
   // The canonical-currency amount charged now. Optional for rolling deploy compatibility.
   charge_canonical_total_cents?: number | null | undefined;
+  // Server-owned listed-currency split for direct-listed Payment Elements. The browser
+  // sums this instead of converting aggregate USD tax/shipping, because charge time
+  // converts each purchase separately and then sums the rounded components.
+  direct_listed_line_allocations?:
+    | {
+        permalink: string;
+        price_cents: number;
+        tip_cents: number;
+        tax_cents: number;
+        shipping_cents: number;
+        total_cents: number;
+      }[]
+    | null
+    | undefined;
   buyer_currency_quote: {
     token: string;
     currency: CurrencyCode;

@@ -126,6 +126,12 @@ class CustomerSurchargeController < ApplicationController
       available = available.reject { |entry| entry[:code] == quote_currency }
     end
 
+    direct_listed_line_allocations = direct_listed_line_allocations_for(
+      all_lines_quotable ? quote_line_items : [],
+      direct_listed_selector_currency,
+      products
+    )
+
     render json: {
       vat_id_valid:,
       has_vat_id_input:,
@@ -136,6 +142,7 @@ class CustomerSurchargeController < ApplicationController
       # Unlike the agreement total above, this includes only the tax due on an installment's
       # first payment. Payment surfaces must use the amount the charge path will create now.
       charge_canonical_total_cents: all_lines_quotable ? quote_line_items.sum(&:charge_canonical_total_cents) : nil,
+      direct_listed_line_allocations:,
       buyer_currency_quote: quote_props,
       detected_buyer_currency:,
       available_buyer_currencies: available
@@ -189,6 +196,39 @@ class CustomerSurchargeController < ApplicationController
           }
         end,
       }
+    end
+
+    def direct_listed_line_allocations_for(line_items, currency, products)
+      return nil if currency.blank? || line_items.blank?
+
+      allocations = line_items.map do |line_item|
+        item = products[line_item.line_index]
+        listed_price_cents = numeric_cents(item[:listed_price_cents])
+        listed_tip_cents = numeric_cents(item[:listed_tip_cents]) || 0
+        rate = line_item.listed_currency_rate
+        return nil if listed_price_cents.nil? || rate.blank?
+
+        tax_cents = usd_cents_to_currency(currency, line_item.charge_seller_tax_cents.to_i, rate) +
+          usd_cents_to_currency(currency, line_item.charge_gumroad_tax_cents.to_i, rate)
+        shipping_cents = usd_cents_to_currency(currency, line_item.charge_shipping_cents.to_i, rate)
+        total_cents = listed_price_cents + listed_tip_cents + tax_cents + shipping_cents
+        {
+          permalink: line_item.permalink.to_s,
+          price_cents: listed_price_cents,
+          tip_cents: listed_tip_cents,
+          tax_cents:,
+          shipping_cents:,
+          total_cents:,
+        }
+      end
+
+      allocations
+    end
+
+    def numeric_cents(value)
+      return unless value.is_a?(String) || value.is_a?(Numeric)
+
+      value.to_d.to_i
     end
 
     def buyer_currency_charge_details(product:, item:, surcharges:)

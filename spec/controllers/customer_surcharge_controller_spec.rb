@@ -270,6 +270,42 @@ describe CustomerSurchargeController, :vcr do
       expect(codes).to contain_exactly(Currency::USD, Currency::CAD)
     end
 
+    it "returns per-line rounded direct-listed tax allocations for the Element total" do
+      Feature.activate_user(Checkout::BuyerCurrencyEligibility::LISTED_CURRENCY_DIRECT_CHARGE_FEATURE_NAME, @user)
+      first_product = create(:product, user: @user, price_currency_type: Currency::CAD, price_cents: 100)
+      second_product = create(:product, user: @user, price_currency_type: Currency::CAD, price_cents: 100)
+      allow_any_instance_of(CurrencyHelper).to receive(:get_rate).with(Currency::CAD).and_return("1.5")
+      tax_results = [first_product, second_product].map do
+        double(
+          business_vat_status: nil,
+          to_hash: { has_vat_id_input: false },
+          tax_cents: 1,
+          price_cents: 10,
+          zip_tax_rate: nil,
+          used_taxjar: true,
+          gumroad_is_mpf: true
+        )
+      end
+      allow(SalesTaxCalculator).to receive(:new).and_return(*tax_results.map { instance_double(SalesTaxCalculator, calculate: _1) })
+
+      post "calculate_all", params: {
+        products: [
+          { permalink: first_product.unique_permalink, price: 10, listed_price_cents: 15, quantity: 1 },
+          { permalink: second_product.unique_permalink, price: 10, listed_price_cents: 15, quantity: 1 },
+        ],
+        country: "US",
+        state: "CA",
+        payment_details_source: PurchasePaymentFlow::PAYMENT_ELEMENT,
+        payment_element_mount_currency: Currency::CAD,
+        payment_element_direct_listed_currency: Currency::CAD,
+      }, as: :json
+
+      allocations = response.parsed_body.fetch("direct_listed_line_allocations")
+      expect(allocations.map { _1.fetch("tax_cents") }).to eq([2, 2])
+      expect(allocations.sum { _1.fetch("total_cents") }).to eq(34)
+      expect(response.parsed_body.fetch("tax_cents")).to eq(2)
+    end
+
     it "does not advertise the listed currency for a saved-card checkout" do
       Feature.activate_user(Checkout::BuyerCurrencyEligibility::LISTED_CURRENCY_DIRECT_CHARGE_FEATURE_NAME, @user)
       cad_product = create(:product, user: @user, price_currency_type: Currency::CAD, price_cents: 10_00)
@@ -326,7 +362,7 @@ describe CustomerSurchargeController, :vcr do
       allow_any_instance_of(CurrencyHelper).to receive(:get_rate).with(Currency::CAD).and_return("0.8")
 
       post "calculate_all", params: {
-        products: [{ permalink: cad_product.unique_permalink, price: 11_00, tip_cents: 1_00, quantity: 1 }],
+        products: [{ permalink: cad_product.unique_permalink, price: 11_00, tip_cents: 1_00, listed_price_cents: 10_00, listed_tip_cents: 1_00, quantity: 1 }],
         buyer_currency: Currency::CAD,
         payment_details_source: PurchasePaymentFlow::PAYMENT_ELEMENT,
         payment_element_mount_currency: Currency::CAD,
@@ -336,6 +372,11 @@ describe CustomerSurchargeController, :vcr do
       expect(response.parsed_body.fetch("buyer_currency_quote")).to be_nil
       codes = response.parsed_body.fetch("available_buyer_currencies").map { |currency| currency["code"] }
       expect(codes).to contain_exactly(Currency::USD, Currency::CAD)
+      expect(response.parsed_body.fetch("direct_listed_line_allocations").sole).to include(
+        "price_cents" => 10_00,
+        "tip_cents" => 1_00,
+        "total_cents" => 11_00
+      )
     end
 
     it "does not advertise the listed currency when the seller's account cannot create the intent" do
