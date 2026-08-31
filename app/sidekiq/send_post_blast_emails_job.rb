@@ -61,8 +61,6 @@ class SendPostBlastEmailsJob
 
     start_pending_recipients
 
-    # Large blasts are split into slice jobs so no single job must survive hours of worker churn.
-    # A mid-run worker death then loses one chunk instead of the rest of the list.
     split_blast? ? enqueue_slice_jobs : send_inline
   end
 
@@ -89,7 +87,7 @@ class SendPostBlastEmailsJob
     CHILD_SPLIT_THRESHOLD = 2_000
 
     # Recipients handed to each slice job. Tunable via Redis so an operator can resize
-    # split blasts mid-flight without a deploy.
+    # future split attempts without a deploy.
     CHILD_SLICE_SIZE = 2_000
 
     def send_inline
@@ -102,11 +100,18 @@ class SendPostBlastEmailsJob
     end
 
     def enqueue_slice_jobs
-      total = (@members.size.to_f / child_slice_size).ceil
-      @members.each_slice(child_slice_size).with_index do |slice, index|
-        SendPostBlastEmailsSliceJob.perform_async(@blast.id, index, total, slice.map(&:id))
+      slice_size = child_slice_size
+      member_ids = @members.map(&:id)
+      partition_key = slice_partition_key(member_ids, slice_size)
+      total = (@members.size.to_f / slice_size).ceil
+      @members.each_slice(slice_size).with_index do |slice, index|
+        SendPostBlastEmailsSliceJob.perform_async(@blast.id, partition_key, index, total, slice.map(&:id))
       end
       Rails.logger.info("[#{self.class.name}] blast_id=#{@blast.id} split #{@members.size} recipients into #{total} slice jobs")
+    end
+
+    def slice_partition_key(member_ids, slice_size)
+      Digest::SHA256.hexdigest("#{slice_size}:#{member_ids.join(",")}")
     end
 
     # Tunable via Redis so a stuck blast can be unblocked without a deploy.

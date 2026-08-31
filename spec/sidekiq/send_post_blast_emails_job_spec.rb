@@ -864,8 +864,11 @@ describe SendPostBlastEmailsJob, :freeze_time do
 
       jobs = SendPostBlastEmailsSliceJob.jobs.map { _1["args"] }
       expect(jobs.size).to eq(2)
-      expect(jobs.first.first(3)).to eq([blast.id, 0, 2])
-      expect(jobs.last.first(3)).to eq([blast.id, 1, 2])
+      expect(jobs.first[0]).to eq(blast.id)
+      expect(jobs.first[1]).to match(/\A[0-9a-f]{64}\z/)
+      expect(jobs.first[1]).to eq(jobs.last[1])
+      expect(jobs.first[2, 2]).to eq([0, 2])
+      expect(jobs.last[2, 2]).to eq([1, 2])
       # The chunks are disjoint and cover the whole filtered audience, in order.
       expect(jobs.first.last.size).to eq(2_000)
       expect(jobs.last.last.size).to eq(2)
@@ -909,7 +912,7 @@ describe SendPostBlastEmailsJob, :freeze_time do
 
       jobs = SendPostBlastEmailsSliceJob.jobs.map { _1["args"] }
       expect(jobs.size).to eq(2)
-      expect(jobs.map { _1[2] }).to eq([2, 2])
+      expect(jobs.map { _1[3] }).to eq([2, 2])
       expect(jobs.map { _1.last.size }).to eq([6, 5])
       expect(PostSendgridApi.mails).to be_empty
     ensure

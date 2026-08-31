@@ -1,11 +1,6 @@
 # frozen_string_literal: true
 
-# The send phase shared by SendPostBlastEmailsJob (sends inline for small blasts) and
-# SendPostBlastEmailsSliceJob (sends one chunk of a large blast). Both operate on the
-# @blast / @post / @members ivars the including job has already set up.
-#
-# The recipient-pending counter lives here too because both senders decrement it as they
-# hand slices to an ESP, and it is the stalled-blast monitor's `fully_delivered?` signal.
+# Shared send phase for parent and slice jobs; callers set @blast, @post, and @members.
 module PostBlastSending
   include ActionView::Helpers::SanitizeHelper
 
