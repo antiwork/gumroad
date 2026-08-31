@@ -529,6 +529,7 @@ class Checkout::BuyerCurrencyQuote
     buyer_currency = currency.presence || buyer_currency_for_ip(ip)
     return if buyer_currency.blank? || buyer_currency == Currency::USD
     return unless StripeChargeProcessor.charge_minor_units_compatible?(buyer_currency)
+    return unless sellers.all? { Checkout::BuyerCurrencyEligibility.seller_enabled?(_1) }
     return unless self.class.buyer_currency_listing_quotable?(line_items:, buyer_currency:)
 
     charge_quotes = line_items_by_seller.map do |seller_id, seller_line_items|

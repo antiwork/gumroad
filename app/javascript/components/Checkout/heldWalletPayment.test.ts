@@ -38,6 +38,7 @@ const clientConfirmConfig: CheckoutPaymentConfig = {
   elements_options: {
     stripe_elements_mode: STRIPE_ELEMENTS_MODE_FOR_PAYMENT_INTENT,
     currency: "usd",
+    buyer_currency_presentment: false,
     presentment_amount_cents: null,
     listed_currency_display: null,
     payment_method_types: ["card"],
@@ -198,6 +199,7 @@ describe("resolveHeldWalletPayment", () => {
       elements_options: {
         ...clientConfirmConfig.elements_options,
         currency: "inr",
+        buyer_currency_presentment: false,
         presentment_amount_cents: 89_000,
         payment_method_types: ["upi"],
       },

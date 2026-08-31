@@ -55,5 +55,45 @@ describe Checkout::PaymentMethodListToken do
 
       expect(described_class.verify(token, sellers: [other_seller, seller])).to eq(types)
     end
+
+    it "returns the signed INR remount list when the Element remounted in INR" do
+      token = described_class.issue(
+        payment_method_types: %w[card link],
+        sellers: [seller],
+        inr_payment_method_types: %w[card link upi],
+      )
+
+      expect(described_class.verify(token, sellers: [seller], currency: "inr")).to eq(%w[card link upi])
+      expect(described_class.verify(token, sellers: [seller], currency: "usd")).to eq(%w[card link])
+      expect(described_class.verify(token, sellers: [seller])).to eq(%w[card link])
+    end
+
+    it "returns the signed quoted remount list for a non-USD, non-INR mount" do
+      token = described_class.issue(
+        payment_method_types: %w[card link cashapp],
+        sellers: [seller],
+        quoted_payment_method_types: %w[card link],
+      )
+
+      expect(described_class.verify(token, sellers: [seller], currency: "cad")).to eq(%w[card link])
+      expect(described_class.verify(token, sellers: [seller], currency: "usd")).to eq(%w[card link cashapp])
+    end
+
+    it "falls back from a missing INR list to quoted types before the USD mount list" do
+      token = described_class.issue(
+        payment_method_types: %w[card link cashapp],
+        sellers: [seller],
+        quoted_payment_method_types: %w[card link],
+      )
+
+      expect(described_class.verify(token, sellers: [seller], currency: "inr")).to eq(%w[card link])
+    end
+
+    it "falls back to the USD mount list when no remount key is present" do
+      token = described_class.issue(payment_method_types: %w[card link], sellers: [seller])
+
+      expect(described_class.verify(token, sellers: [seller], currency: "inr")).to eq(%w[card link])
+      expect(described_class.verify(token, sellers: [seller], currency: "cad")).to eq(%w[card link])
+    end
   end
 end

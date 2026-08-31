@@ -78,6 +78,7 @@ import {
   findCartItem,
 } from "./cartState";
 import {
+  canDisplayBuyerCurrencyQuote,
   canUseStripePaymentElementClientConfirm,
   computeTip,
   computeTipForListedLines,
@@ -160,10 +161,20 @@ const CurrencyPicker = ({
       )
     : availableOptions;
   const detected = surcharges?.detected_buyer_currency ?? null;
+  const quoted = surcharges?.buyer_currency_quote?.currency ?? null;
   // Unset buyerCurrency is the listed-currency default on this lane (mount treats
   // `null !== "usd"` as listed). Prefer that over GeoIP / options[0] or the picker
   // shows USD while the summary and Payment Element stay CAD.
-  const preferred = state.buyerCurrency ?? selectableDirectListedCurrency ?? detected ?? "usd";
+  // On the general quote lane, a non-USD selection is real only when this response carries its
+  // quote. The settlement menu can still list a currency that this cart cannot quote, so using the
+  // menu alone would leave that currency selected beside canonical USD totals.
+  const preferred = configuredDirectListedCurrency
+    ? (state.buyerCurrency ?? selectableDirectListedCurrency ?? detected ?? "usd")
+    : isRequoting
+      ? (state.buyerCurrency ?? quoted ?? "usd")
+      : state.buyerCurrency === "usd"
+        ? "usd"
+        : (quoted ?? "usd");
   const value = options.some((option) => option.code === preferred)
     ? preferred
     : detected && options.some((option) => option.code === detected)
@@ -175,7 +186,7 @@ const CurrencyPicker = ({
     !isWalletPaymentElementType(state.paymentElementType) &&
     (configuredDirectListedCurrency
       ? directListedCurrencyOptionAvailable || directListedUsdFallbackAvailable
-      : !state.willSaveCard && !isListedCurrency);
+      : canDisplayBuyerCurrencyQuote(state) && !state.willSaveCard && !isListedCurrency);
 
   React.useEffect(() => {
     if (!canChooseCurrency || state.buyerCurrency == null || state.buyerCurrency === value) return;
@@ -386,7 +397,7 @@ export const Checkout = ({
   // preference nor an FX quote may repaint the summary in another currency.
   const recurringUpiRegistration = isRecurringUpiPaymentConfig(state.checkoutPayment);
   const buyerCurrencyDisplay =
-    configuredDirectListedCurrency || recurringUpiRegistration
+    configuredDirectListedCurrency || recurringUpiRegistration || !canDisplayBuyerCurrencyQuote(state)
       ? null
       : getCheckoutBuyerCurrencyDisplay(summarySurcharges, {
           cartPermalinks: cart.items.map((item) => item.product.permalink),

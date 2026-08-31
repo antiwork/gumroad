@@ -122,6 +122,7 @@ describe("createReducer surcharge refetches", () => {
     elements_options: {
       stripe_elements_mode: "payment" as const,
       currency: "cad",
+      buyer_currency_presentment: false,
       presentment_amount_cents: 1_000,
       listed_currency_display: { currency: "cad", subunit_to_unit: 100 },
       payment_method_types: ["card"],

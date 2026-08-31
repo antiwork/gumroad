@@ -17,15 +17,17 @@
 #      USD on the purchase) are converted back using the purchase's own stored
 #      rate_converted_to_usd, the same rate that produced those USD figures, so no new
 #      FX exposure is introduced.
-#   2. USD-priced product: a Stripe FX quote is minted (same machinery as the card
-#      path's Checkout::BuyerCurrencyQuote) and the canonical USD total converts through
-#      it; quote fields are persisted exactly as on the card path.
+#   2. Quote-backed checkout: convert the canonical USD charge through the quote the
+#      buyer already saw. Mint only for legacy local-method cases that never remounted
+#      (iDEAL on a USD listing); a remounted element must reuse its displayed quote.
 #
 # Returns nil whenever the checkout is ineligible or anything fails, which leaves the
 # caller on today's canonical USD behavior. Cleanup of persisted rows when the prepared
 # intent later fails/expires is handled by the abandonment step, not here.
 class Charge::MethodForcedPresentment
   include CurrencyHelper
+
+  BUYER_CURRENCY_QUOTE_INVALID = :buyer_currency_quote_invalid
 
   Result = Struct.new(:presentment_total_cents,
                       :presentment_currency,
@@ -50,7 +52,8 @@ class Charge::MethodForcedPresentment
   end
 
   attr_reader :charge, :order, :seller, :merchant_account, :purchases, :amount_cents,
-              :gumroad_amount_cents, :payment_method_type, :forced_currency, :params
+              :gumroad_amount_cents, :payment_method_type, :forced_currency, :params,
+              :failure_reason
 
   # forced_currency: pass explicitly when the buyer picked a method that does not itself
   # force a currency (card/Link) on a Payment Element mounted in a forced currency — the
@@ -75,10 +78,15 @@ class Charge::MethodForcedPresentment
     decision = eligibility_decision
     unless decision.eligible?
       Rails.logger.info("Method-forced presentment fallback for charge #{charge.external_id}: #{decision.fallback_reason}")
+      reject_displayed_quote! if displayed_quote?
       return nil
     end
 
     if decision.direct_listed_amount?
+      if displayed_quote?
+        reject_displayed_quote!
+        return nil
+      end
       direct_listed_amount_result(decision)
     else
       quoted_result(decision)
@@ -100,6 +108,7 @@ class Charge::MethodForcedPresentment
       Rails.logger.warn("Failed to record settlement currency mismatch for merchant account #{merchant_account&.id}: #{persistence_error.class} #{persistence_error.message}")
     end
     Rails.logger.info("Method-forced presentment fallback for charge #{charge.external_id} (settlement currency mismatch): #{e.message}")
+    reject_displayed_quote! if displayed_quote?
     nil
   rescue StandardError => e
     ErrorNotifier.notify(e, context: {
@@ -109,15 +118,13 @@ class Charge::MethodForcedPresentment
                            payment_method_type:,
                          })
     Rails.logger.info("Method-forced presentment fallback for charge #{charge.external_id}: #{e.class} #{e.message}")
+    reject_displayed_quote! if displayed_quote?
     nil
   end
 
   private
     def eligibility_decision
-      # chargeable is nil: the client-confirmed flow has no server-side chargeable at
-      # prepare time (the browser confirms with a ConfirmationToken), and the
-      # method-forced eligibility mode does not consult it.
-      Checkout::BuyerCurrencyEligibility.new(
+      eligibility = Checkout::BuyerCurrencyEligibility.new(
         order:,
         seller:,
         merchant_account:,
@@ -125,8 +132,41 @@ class Charge::MethodForcedPresentment
         purchases:,
         params:,
         setup_future_charges: false,
-        off_session: false
-      ).method_forced_decision(payment_method: payment_method_type, forced_currency:)
+        off_session: false,
+        client_confirm: true
+      )
+
+      # A displayed quote already binds the cart's canonical lines and presentment
+      # currency, so use the quote lane's cart-shape gates. Without a quote, local
+      # methods and direct-listed Elements keep the narrower method-forced contract.
+      # Registry methods still need their live launch flag — a tab opened while UPI
+      # was on can keep a signed inr_types list after rollback.
+      decision = if displayed_quote?
+        eligibility.decision
+      else
+        eligibility.method_forced_decision(payment_method: payment_method_type, forced_currency:)
+      end
+      return decision unless displayed_quote? && decision.eligible?
+
+      if Checkout::BuyerCurrencyEligibility.forced_currency_for(payment_method_type).present? &&
+         !Checkout::BuyerCurrencyEligibility.stripe_test_mode? &&
+         !Checkout::BuyerCurrencyEligibility.local_method_launched?(payment_method_type, seller)
+        return Checkout::BuyerCurrencyEligibility::Decision.new(
+          eligible: false,
+          currency: nil,
+          fallback_reason: :method_not_launched
+        )
+      end
+
+      required_currency = forced_currency.presence ||
+        Checkout::BuyerCurrencyEligibility.forced_currency_for(payment_method_type)
+      return decision if required_currency.present? && decision.currency == required_currency
+
+      Checkout::BuyerCurrencyEligibility::Decision.new(
+        eligible: false,
+        currency: nil,
+        fallback_reason: :quote_currency_mismatch
+      )
     end
 
     # Case 1: every product is priced in the forced currency, so the buyer pays the listed
@@ -153,10 +193,7 @@ class Charge::MethodForcedPresentment
       )
     end
 
-    # Case 2: USD-priced product — mint a Stripe FX quote (the same underlying machinery
-    # Checkout::BuyerCurrencyQuote uses on the card path; that service's entry point is
-    # GeoIP-driven so it cannot be reused directly here, where the payment method fixes
-    # the currency) and convert the canonical USD totals through it.
+    # Case 2: quote-backed charge, or a legacy USD-listed local-method quote minted here.
     def quoted_result(decision)
       currency = decision.currency
       # Must be the account the intent is created on — Stripe honours a quote only in the
@@ -164,16 +201,69 @@ class Charge::MethodForcedPresentment
       quote_merchant_account = Checkout::BuyerCurrencyEligibility.fx_quote_merchant_account(merchant_account)
       return nil if quote_merchant_account.blank?
 
-      # Ramp gate for quoting a destination charge, a pairing production has never minted.
-      # Unlike the card lane, nil here refuses the checkout rather than falling back to USD:
-      # the caller (Order::PreparePaymentIntentService#client_confirm_presentment_required?)
-      # fails it, because the buyer's token was minted on a forced-currency element. Costs no
-      # live traffic — the quoted branch needs a USD-priced cart, and a currency-forcing method
-      # is only offered on a cart already priced in its own currency, which never quotes. The
-      # routing above stays ungated; only the decision to quote at all is gated here.
+      # Ramp gate for quoting a destination charge. Nil refuses the checkout rather than
+      # falling back to USD: the ConfirmationToken was minted on a forced-currency element.
       if Checkout::BuyerCurrencyEligibility.fx_quote_destination_account_id(merchant_account).present? &&
          !Checkout::BuyerCurrencyEligibility.destination_charge_quotes_enabled?(seller)
         Rails.logger.info("Method-forced presentment fallback for charge #{charge.external_id}: destination charge quoting disabled")
+        return nil
+      end
+
+      locked_quote = locked_or_minted_quote(currency, quote_merchant_account)
+      return nil if locked_quote.blank?
+
+      orchestrator = Charge::PresentmentOrchestrator.new(
+        charge:,
+        merchant_account:,
+        purchases:,
+        amount_cents:,
+        gumroad_amount_cents:,
+        eligibility_decision: decision,
+        locked_quote:
+      )
+      presentment = orchestrator.perform
+      if presentment.blank?
+        reject_displayed_quote! if displayed_quote?
+        return nil
+      end
+
+      Result.new(
+        presentment_total_cents: presentment.processor_amount_cents,
+        presentment_currency: presentment.processor_currency,
+        presentment_gumroad_amount_cents: presentment.processor_gumroad_amount_cents,
+        stripe_fx_quote_id: presentment.stripe_fx_quote_id,
+        idempotency_key: self.class.idempotency_key_for(
+          charge:,
+          presentment_currency: presentment.processor_currency,
+          stripe_fx_quote_id: presentment.stripe_fx_quote_id
+        )
+      )
+    end
+
+    # A displayed token is the amount the Payment Element mounted. An invalid token must
+    # not fall through to minting a second rate. UPI and an INR remount require that
+    # token — minting here would charge a different rate than the element showed.
+    # iDEAL on a USD listing never remounted, so no token still mints.
+    def locked_or_minted_quote(currency, quote_merchant_account)
+      token = params[:buyer_currency_quote].presence
+      if token.present?
+        return Checkout::BuyerCurrencyQuote.verify!(
+          token:,
+          seller:,
+          merchant_account:,
+          currency:,
+          canonical_total_cents: amount_cents,
+          canonical_line_items: purchases.filter_map do |purchase|
+            next if purchase.total_transaction_cents.zero?
+
+            { permalink: purchase.link.unique_permalink, total_cents: purchase.total_transaction_cents }
+          end,
+          later_charge_canonical_line_items: Purchase::FixLaterChargePresentmentService.canonical_line_items_for(purchases)
+        )
+      end
+
+      if displayed_quote_required?(currency)
+        Rails.logger.info("Method-forced presentment rejected missing displayed quote for charge #{charge.external_id}")
         return nil
       end
 
@@ -181,38 +271,37 @@ class Charge::MethodForcedPresentment
         to_currency: Currency::USD,
         from_currency: currency,
         stripe_account_id: quote_merchant_account.charge_processor_merchant_id,
-        # Declared up front because Stripe matches the quote's destination against the
-        # intent's transfer_data[destination] exactly; see StripeFxQuote#create.
         destination_account_id: Checkout::BuyerCurrencyEligibility.fx_quote_destination_account_id(merchant_account)
       )
-
       presentment_total_cents = presentment_cents_for(amount_cents, quote.fx_rate, currency)
-      presentment_gumroad_amount_cents = presentment_cents_for(gumroad_amount_cents, quote.fx_rate, currency)
-
-      allocations = Charge::PresentmentAllocator.new(
-        purchases:,
+      Checkout::BuyerCurrencyQuote::Result.new(
+        currency:,
         presentment_total_cents:,
-        presentment_gumroad_amount_cents:
-      ).allocations
-
-      Charge::PresentmentOrchestrator.persist!(
-        charge:,
-        presentment_currency: currency,
-        presentment_total_cents:,
-        presentment_gumroad_amount_cents:,
-        allocations:,
+        charge_presentment_total_cents: presentment_total_cents,
+        rounding_delta_cents: 0,
+        fx_rate: quote.fx_rate,
         stripe_fx_quote_id: quote.id,
-        stripe_fx_quote_expires_at: quote.expires_at,
-        fx_rate: quote.fx_rate
+        stripe_fx_quote_expires_at: quote.expires_at
       )
+    rescue Checkout::BuyerCurrencyQuote::InvalidToken => e
+      Rails.logger.info("Method-forced presentment rejected displayed quote for charge #{charge.external_id}: #{e.message}")
+      reject_displayed_quote!
+      nil
+    end
 
-      Result.new(
-        presentment_total_cents:,
-        presentment_currency: currency,
-        presentment_gumroad_amount_cents:,
-        stripe_fx_quote_id: quote.id,
-        idempotency_key: self.class.idempotency_key_for(charge:, presentment_currency: currency, stripe_fx_quote_id: quote.id)
-      )
+    def displayed_quote?
+      params[:buyer_currency_quote].present?
+    end
+
+    def reject_displayed_quote!
+      @failure_reason = BUYER_CURRENCY_QUOTE_INVALID
+    end
+
+    def displayed_quote_required?(currency)
+      return true if payment_method_type.to_s.downcase == "upi"
+
+      mount = params[:payment_element_mount_currency].to_s.downcase
+      mount.present? && mount == currency.to_s.downcase
     end
 
     # Same conversion as Checkout::BuyerCurrencyQuote / Charge::PresentmentOrchestrator:

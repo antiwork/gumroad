@@ -249,6 +249,15 @@ describe Checkout::BuyerCurrencyQuote do
       expect(locked.presentment_component_overrides).to be_nil
     end
 
+    it "withholds the quote when the seller hid local-currency display on product pages" do
+      seller.update!(disable_buyer_local_currency: true)
+      expect(StripeFxQuote).not_to receive(:create)
+
+      result = described_class.create(line_items: line_items_for(product), canonical_total_cents: 10_00, ip: "24.48.0.1")
+
+      expect(result).to be_nil
+    end
+
     it "reports the exact rate from the locked quote when the cart is one charge" do
       # A cart of one charge has one Stripe rate, so the browser gets that rate rather than a
       # ratio of totals that were each already rounded to the cent. At $3.34 the ratio would be

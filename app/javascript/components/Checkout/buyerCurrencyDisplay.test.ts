@@ -290,6 +290,7 @@ describe("getCheckoutListedCurrencyDisplay", () => {
     elements_options: {
       stripe_elements_mode: "payment",
       currency: "brl",
+      buyer_currency_presentment: false,
       presentment_amount_cents: 4_990,
       listed_currency_display: listedCurrencyDisplay,
       payment_method_types: ["card", "pix"],

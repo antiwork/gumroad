@@ -411,6 +411,7 @@ describe("Checkout method-forced listed-currency amounts", () => {
     elements_options: {
       stripe_elements_mode: "payment",
       currency: "brl",
+      buyer_currency_presentment: false,
       presentment_amount_cents: 4_990,
       listed_currency_display: { currency: "brl", subunit_to_unit: 100 },
       payment_method_types: ["card", "pix"],
@@ -662,12 +663,9 @@ describe("Checkout method-forced listed-currency amounts", () => {
     expect(getAllByLabelText("Price").map((node) => node.textContent)).toEqual(["US$9.15"]);
   });
 
-  it("defers to the FX-quoted lane when a quote is also usable, so only one lane is ever in effect", () => {
-    // The two lanes are near-mutually-exclusive but not provably so: a non-USD buyer of a
-    // non-USD-priced product can satisfy both. The quote's allocation is the one locked into the
-    // token and verified at charge time, so it must win. Pinned here because the tip basis in
-    // Show.tsx follows the same precedence — if display and submission ever disagreed about which
-    // lane is in effect, the tip would be computed in one currency and rendered in the other.
+  it("uses a later FX quote on an otherwise unmarked client-confirm surface", () => {
+    // A total-affecting edit can acquire a signed quote after the initial payment configuration.
+    // Prepare verifies that quote against the final purchases, so the summary and Element follow it.
     const { getAllByLabelText, queryByText } = renderCheckout(
       brlState({
         surcharges: {
@@ -724,6 +722,7 @@ describe("Checkout recurring UPI registration amounts", () => {
     elements_options: {
       stripe_elements_mode: "payment",
       currency: "inr",
+      buyer_currency_presentment: false,
       presentment_amount_cents: 73_000,
       listed_currency_display: { currency: "inr", subunit_to_unit: 100 },
       payment_method_types: ["card", "upi"],
@@ -811,6 +810,7 @@ describe("Checkout direct-listed currency picker", () => {
     elements_options: {
       stripe_elements_mode: "payment",
       currency: "cad",
+      buyer_currency_presentment: false,
       presentment_amount_cents: 1_500,
       listed_currency_display: { currency: "cad", subunit_to_unit: 100 },
       direct_listed_card: true,
@@ -1020,6 +1020,36 @@ describe("Checkout currency picker", () => {
       cart,
     );
     expect(getByLabelText("Currency")).toBeTruthy();
+  });
+
+  it("hides the picker when the server says this cart cannot present a buyer currency", () => {
+    const checkoutPayment: CheckoutPaymentConfig = {
+      ...paymentElementConfig,
+      elements_options: { ...paymentElementConfig.elements_options, buyer_currency_presentment: false },
+    };
+
+    const { queryByLabelText } = renderCheckout(
+      buildState({ checkoutPayment, surcharges: { type: "loaded", result: quotedSurcharges } }),
+      cart,
+    );
+
+    expect(queryByLabelText("Currency")).toBeNull();
+  });
+
+  it("shows USD when a stale non-USD preference has no matching quote", () => {
+    const { getAllByLabelText, getByLabelText } = renderCheckout(
+      buildState({
+        buyerCurrency: "cad",
+        surcharges: {
+          type: "loaded",
+          result: { ...quotedSurcharges, buyer_currency_quote: null },
+        },
+      }),
+      cart,
+    );
+
+    expect(getByLabelText("Currency")).toHaveProperty("value", "usd");
+    expect(getAllByLabelText("Price").map((node) => node.textContent)).toEqual(["US$10"]);
   });
 
   it("renders the picker directly below the Total row", () => {
