@@ -34,10 +34,11 @@ class SendPostBlastEmailsJob
     # The filter query can be expensive to run, it's better to run it on the replica DB.
     Makara::Context.release_all
     @members = load_audience_members
+    remove_members_without_email
 
     if @blast.to_non_openers?
       keep_emails = load_non_opener_emails
-      @members.select! { _1.email.present? && keep_emails.include?(_1.email.downcase) }
+      @members.select! { keep_emails.include?(_1.email.downcase) }
       remove_members_already_sent_in_this_blast
     else
       # We will check each batch of emails to see if they were already messaged,
@@ -235,6 +236,16 @@ class SendPostBlastEmailsJob
       enrich_with_purchases_specifics(members_with_specifics)
       enrich_with_url_redirects(members_with_specifics)
       members_with_specifics.values
+    end
+
+    # A blank-email member reaches the provider slice and raises there, and every retry re-reads
+    # the same audience and dies on the same slice — ten retries later the blast is in the dead
+    # set with the rest of the audience never emailed (gumroad-private#2338).
+    def remove_members_without_email
+      before = @members.size
+      @members.select! { _1.email.present? }
+      dropped = before - @members.size
+      Rails.logger.info("[#{self.class.name}] blast_id=#{@blast.id} dropped #{dropped} members without an email") if dropped > 0
     end
 
     def remove_already_emailed_members
