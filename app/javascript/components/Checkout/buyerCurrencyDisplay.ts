@@ -87,15 +87,11 @@ export const getCheckoutBuyerCurrencyDisplay = (
 ): CheckoutBuyerCurrencyDisplay | null => {
   const quote = surcharges?.buyer_currency_quote;
   // Saving a card charges through the canonical path (buyer-presentment excludes
-  // setup_future_charges in PR 1), so buyer-currency totals must not be displayed —
-  // the buyer would be charged canonical USD, not the locked local-currency amount.
-  // The same applies to non-card payment methods: PayPal and the legacy Payment
-  // Request Button quote canonical USD, and the charge path fails closed if a quote
-  // token arrives on a charge that cannot present. Wallets selected INSIDE the
-  // Payment Element are NOT excluded (`paymentMethod` stays "card"): their sheet
-  // quotes this same FX total and their charge presents it (#6441). Excluding them
-  // here breaks wallet selection outright — the element's mount currency reads this
-  // display, so returning null remounts the element in USD and wipes the buyer's
+  // setup_future_charges in PR 1), and non-card methods (PayPal, the legacy Payment
+  // Request Button) quote canonical USD — so both must show the USD totals they charge.
+  // Do NOT exclude wallets selected inside the Payment Element (`paymentMethod` stays
+  // "card"): their sheet presents this same quote, and the element's mount currency
+  // reads this display, so a null here remounts the element in USD and wipes the
   // wallet selection before the sheet can open (gumroad-private#2326).
   if (!quote || willSaveCard || paymentMethod !== "card") return null;
 

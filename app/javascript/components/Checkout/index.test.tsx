@@ -1033,9 +1033,8 @@ describe("Checkout currency picker", () => {
   });
 
   it("hides the picker but keeps the buyer-currency totals when Apple Pay is selected", () => {
-    // The picker stays hidden so a currency switch cannot remount the element and silently
-    // deselect the wallet — but the totals must stay in the quote currency: the wallet sheet
-    // quotes and charges that same locked amount (gumroad-private#2326).
+    // The picker stays hidden so a currency switch cannot silently deselect the wallet, but
+    // the totals stay in the quote currency the wallet sheet presents.
     const { queryByLabelText, getAllByText, queryByText } = renderCheckout(
       buildState({
         paymentElementType: "apple_pay",

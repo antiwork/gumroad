@@ -624,10 +624,8 @@ export function getStripePaymentElementPresentment(state: State): { currency: st
   if (!presentmentEnabled) return null;
   if (state.surcharges.type !== "loaded") return null;
 
-  // Deliberately independent of state.paymentElementType: a wallet selected inside the element
-  // keeps the presentment. Making wallets fall back to USD here changes the mount currency,
-  // which remounts the element and wipes the wallet selection before its sheet can open
-  // (gumroad-private#2326) — the wallet sheet presents and charges this same locked quote.
+  // Deliberately independent of state.paymentElementType: a wallet selection must keep the
+  // presentment, or the mount currency flips and the remount wipes the selection.
   const display = getCheckoutBuyerCurrencyDisplay(state.surcharges.result, {
     cartPermalinks: state.products.map((product) => product.permalink),
     willSaveCard: state.willSaveCard,

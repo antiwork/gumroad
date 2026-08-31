@@ -1139,10 +1139,8 @@ describe("buyer-currency presentment lane", () => {
   });
 
   it("holds the presentment mount while a wallet is selected inside the element", () => {
-    // A wallet selection must NOT flip the mount to USD: the mount currency is part of the
-    // Elements provider key, so flipping it remounts the element and wipes the wallet
-    // selection before the sheet can open. That loop made Apple Pay unusable on this lane
-    // (gumroad-private#2326); the sheet presents and charges the same locked quote as cards.
+    // A USD flip here remounts the element (currency is in the provider key) and wipes the
+    // wallet selection before the sheet can open.
     for (const wallet of ["apple_pay", "google_pay"]) {
       const s = state({
         checkoutPayment: buyerCurrencyPresentmentPaymentElementConfig,
