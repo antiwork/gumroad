@@ -528,6 +528,46 @@ describe("createReducer surcharge refetches", () => {
     });
   });
 
+  it("does not reinterpret rapid custom-tip edits while currency quotes are being replaced", async () => {
+    const requests = stubSurchargeRequests();
+    const { result } = renderCheckout();
+    await act(() => vi.advanceTimersByTimeAsync(300));
+    await act(async () => {
+      requests[0]?.resolve(
+        surchargesResponse({
+          detected_buyer_currency: "cad",
+          available_buyer_currencies: ["usd", "cad", "gbp", "eur", "jpy"].map((code) => ({ code, label: code })),
+          buyer_currency_quote: quote("cad-token"),
+        }),
+      );
+      await vi.advanceTimersByTimeAsync(0);
+    });
+
+    for (const buyerCurrency of ["gbp", "eur", "jpy", "cad"])
+      act(() => result.current[1]({ type: "set-value", buyerCurrency }));
+    for (const presentmentAmount of [111, 222, 333])
+      act(() =>
+        result.current[1]({
+          type: "set-value",
+          tip: {
+            type: "fixed",
+            amount: Math.round(presentmentAmount / 1.4),
+            presentmentAmount,
+            presentmentCurrency: "cad",
+          },
+        }),
+      );
+
+    expect(result.current[0].buyerCurrencyRemint?.previousCurrency).toBe("cad");
+    expect(result.current[0].tip).toMatchObject({ presentmentAmount: 333, presentmentCurrency: "cad" });
+
+    await act(() => vi.advanceTimersByTimeAsync(300));
+    expect(requests.at(-1)?.payload).toMatchObject({
+      buyer_currency: "cad",
+      products: [expect.objectContaining({ presentment_tip_cents: 333 })],
+    });
+  });
+
   it("passes the selected buyer currency on the next surcharge fetch", async () => {
     const requests = stubSurchargeRequests();
     const { result } = renderCheckout();

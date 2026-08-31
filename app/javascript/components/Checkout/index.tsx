@@ -351,11 +351,11 @@ export const Checkout = ({
       0,
     ) + computeTip(state);
 
-  // The quote the summary renders from. While a currency change is being re-quoted that is the
-  // quote the change replaced, so the card keeps its rows — and the picker sitting under them —
-  // instead of folding up around the control the buyer just used. Everything that gates paying
-  // still reads `state.surcharges` (isSubmitDisabled, the Element amount, the submitted quote
-  // token), so no amount shown from here can be charged.
+  // The quote the summary renders from. While a currency change or tip edit is being re-quoted,
+  // that is the quote the change replaced, so the card keeps its rows — and the currency format
+  // of the input the buyer is editing — instead of folding or briefly reverting to USD.
+  // Everything that gates paying still reads `state.surcharges` (isSubmitDisabled, the Element
+  // amount, the submitted quote token), so no amount shown from here can be charged.
   const summarySurcharges =
     state.surcharges.type === "loaded" ? state.surcharges.result : (state.buyerCurrencyRemint?.surcharges ?? null);
   // Only while a replacement is actually in flight. An errored fetch keeps the snapshot on screen

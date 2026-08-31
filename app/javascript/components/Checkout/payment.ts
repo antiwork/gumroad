@@ -308,12 +308,13 @@ export { readBuyerCurrencyPreference, writeBuyerCurrencyPreference };
 export type State = {
   products: Product[];
   buyerCurrency: string | null;
-  // The quote that was on screen when the buyer changed currency (or switched payment surface),
-  // held only until the replacement lands. Both leave the cart alone, and a currency change is the
-  // one whose control lives inside the summary it blanks, so the summary renders from this
-  // snapshot to keep its rows — and the picker the buyer is still holding focus in — in place
-  // across the round trip. `previousCurrency` is what the selection goes back to if the chosen
-  // currency turns out to be unquotable.
+  // The quote that was on screen when the buyer changed currency, edited a tip, or switched
+  // payment surface, held only until the replacement lands. A currency change leaves the cart
+  // alone; a tip edit changes the total but still needs the previous quote's currency format so
+  // the input cannot briefly become USD. The summary renders from this snapshot to keep its rows
+  // — and the picker the buyer is still holding focus in — in place across the round trip.
+  // `previousCurrency` is what the selection goes back to if the chosen currency turns out to be
+  // unquotable.
   buyerCurrencyRemint: {
     surcharges: SurchargesResponse;
     previousCurrency: string | null;
@@ -1203,8 +1204,13 @@ export const reduceCheckoutState = produce((state: State, action: Action) => {
       ) {
         // Hold the quote a currency change replaces, so the summary can keep its shape while the
         // new one is minted. A second change landing on top of an in-flight one keeps the snapshot
-        // already held: that one is the last quote the buyer actually saw. Every other
-        // invalidation edits the cart itself, which makes the old amounts wrong rather than stale.
+        // already held: that one is the last quote the buyer actually saw. A tip edit also keeps
+        // that snapshot long enough to preserve the currency and exchange rate of the input the
+        // buyer is editing. Without it, a tip typed while several currency requests are being
+        // replaced briefly becomes a USD input and can be converted back as a different amount.
+        // The held totals are visibly marked as updating and Pay remains disabled until the new
+        // quote arrives. Every other invalidation edits the cart itself, which makes the old
+        // amounts wrong rather than stale.
         if ("buyerCurrency" in action) {
           if (state.surcharges.type === "loaded")
             state.buyerCurrencyRemint = {
@@ -1221,6 +1227,16 @@ export const reduceCheckoutState = produce((state: State, action: Action) => {
               previousCurrency: state.buyerCurrency,
               surfaceSwitch: false,
             };
+        } else if ("tip" in action) {
+          if (state.surcharges.type === "loaded")
+            state.buyerCurrencyRemint = {
+              surcharges: state.surcharges.result,
+              previousCurrency: loadedBuyerCurrency(state),
+            };
+          // If a currency replacement is already in flight, keep its original snapshot. It is
+          // the format the tip field is still displaying, so every rapid edit remains tagged in
+          // that currency until the replacement quote settles.
+          state.unavailableBuyerCurrency = null;
         } else if ("usingSavedCard" in action) {
           // Switching surface re-asks the server which currencies it can charge, but it does not
           // touch the cart, so the loaded amounts are still the amounts. Hold them for the same
