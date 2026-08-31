@@ -94,6 +94,27 @@ describe SendPostBlastEmailsSliceJob, :freeze_time do
       $redis.del(old_done_key, new_done_key) if old_done_key && new_done_key
     end
 
+    it "does not let an old partition complete after a replacement appears mid-send" do
+      blast = create(:blast, :just_requested, post: post_with_audience)
+      old_partition_key = "old-partition"
+      replacement_partition_key = "replacement-partition"
+      old_done_key = RedisKey.blast_done_slices(blast.id, old_partition_key)
+      active_key = RedisKey.blast_active_slice_partition(blast.id)
+      activate_partition(blast, old_partition_key)
+      $redis.sadd(old_done_key, 0)
+      allow_any_instance_of(described_class).to receive(:send_members) do
+        $redis.set(active_key, replacement_partition_key)
+      end
+
+      described_class.new.perform(blast.id, old_partition_key, 1, 2, audience_ids.first(1))
+
+      expect(blast.reload.completed_at).to be_blank
+      expect($redis.get(active_key)).to eq(replacement_partition_key)
+      expect($redis.smembers(old_done_key)).to contain_exactly("0", "1")
+    ensure
+      $redis.del(old_done_key, active_key) if old_done_key && active_key
+    end
+
     it "ignores children from an older partition after the parent creates a replacement partition" do
       blast = create(:blast, :just_requested, post: post_with_audience)
       old_partition_key = "old-partition"
