@@ -28,6 +28,14 @@ describe("Product edit multiple-preview Scenario", type: :system, js: true) do
   end
 
   it "uploads an image via URL" do
+    # AssetPreview#url= downloads the image server-side; stub the external host
+    # so the spec doesn't fail whenever picsum.photos is down or rate-limits CI.
+    stub_request(:get, "https://picsum.photos/200/300")
+      .to_return(
+        body: File.binread(Rails.root.join("spec", "support", "fixtures", "smaller.png")),
+        headers: { "Content-Type" => "image/png" }
+      )
+
     visit(edit_link_path(product))
     click_on "Upload images or videos"
     select_tab "External link"
