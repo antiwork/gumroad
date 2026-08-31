@@ -19,5 +19,6 @@ else
   bundle exec sidekiq \
     -q critical \
     -q default \
-    -q low
+    -q low \
+    -q resend_webhooks
 fi

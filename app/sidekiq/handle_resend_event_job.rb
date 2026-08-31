@@ -2,7 +2,7 @@
 
 class HandleResendEventJob
   include Sidekiq::Job
-  sidekiq_options retry: 5, queue: :low
+  sidekiq_options retry: 5, queue: :resend_webhooks
 
   def perform(event_json)
     resend_event_info = ResendEventInfo.new(event_json)
