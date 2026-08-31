@@ -5,7 +5,10 @@ class StripePayoutProcessor
 
   DEBIT_CARD_PAYOUT_MAX = 300_000
   INSTANT_PAYOUT_FEE_PERCENT = 3
-  MINIMUM_INSTANT_PAYOUT_AMOUNT_CENTS = 100_00
+  # Instant (and daily) payouts can be any settled amount at or above Stripe's
+  # practical floor. Weekly/monthly/quarterly still use Payouts::MIN_AMOUNT_CENTS ($100).
+  # Stripe Instant Payouts reject amounts below ~$0.50; $1 matches GUMROAD_HELD_USD_MIN_TRANSFER_CENTS.
+  MINIMUM_INSTANT_PAYOUT_AMOUNT_CENTS = 1_00
   MAXIMUM_INSTANT_PAYOUT_AMOUNT_CENTS = 9_999_00
 
   # USD amounts below Stripe's destination-currency minimum get accepted by `Stripe::Transfer.create`
@@ -50,7 +53,7 @@ class StripePayoutProcessor
 
     if payout_type == Payouts::PAYOUT_TYPE_INSTANT
       if amount_payable_usd_cents < StripePayoutProcessor::MINIMUM_INSTANT_PAYOUT_AMOUNT_CENTS
-        user.add_payout_note(content: "Instant Payout on #{payout_date} was skipped because the account balance was less than the minimum instant payout amount of $100.") if add_comment
+        user.add_payout_note(content: "Instant Payout on #{payout_date} was skipped because the account balance was less than the minimum instant payout amount of $1.") if add_comment
         return false
       end
 

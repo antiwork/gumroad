@@ -635,6 +635,150 @@ describe Api::V2::Gumhead::MessagesController do
       expect(JSON.parse(response.body)["error"]["type"]).to eq("api_error")
     end
 
+    it "reports an upstream socket reset to the client instead of treating it as a disconnect" do
+      chunks = [
+        %(event: message_start\ndata: {"type":"message_start","message":{"model":"claude-sonnet-5","usage":{"input_tokens":50,"output_tokens":1}}}\n\n),
+        %(event: content_block_delta\ndata: {"type":"content_block_delta","delta":{"type":"text_delta","text":"Hel"}}\n\n),
+      ]
+      stub_request(:post, messages_url)
+        .to_return(status: 200, body: "", headers: { "Content-Type" => "text/event-stream" })
+      allow_any_instance_of(HTTP::Response::Body).to receive(:readpartial) do
+        chunks.empty? ? raise(Errno::ECONNRESET) : chunks.shift
+      end
+
+      allow(Rails.logger).to receive(:warn).and_call_original
+      post_messages(request_payload.merge(stream: true))
+
+      expect(Rails.logger).to have_received(:warn).with(a_string_including("Gumhead gateway upstream error"))
+      expect(response.body).to include("Hel")
+      # A truncated reply must not look finished: the runtime reads this
+      # frame and retries instead of accepting half an answer.
+      expect(response.body).to include("event: error")
+      expect(GumheadUsageEvent.sole.input_tokens).to eq(50)
+    end
+
+    it "answers a completed blank stream as retryable even when the socket resets at the final read" do
+      blank = [
+        %(event: message_start\ndata: {"type":"message_start","message":{"model":"claude-sonnet-5","usage":{"input_tokens":50,"output_tokens":1}}}\n\n),
+        %(event: message_delta\ndata: {"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":{"output_tokens":2}}\n\n),
+        %(event: message_stop\ndata: {"type":"message_stop"}\n\n),
+      ]
+      stub_request(:post, messages_url)
+        .to_return(status: 200, body: "", headers: { "Content-Type" => "text/event-stream" })
+      allow_any_instance_of(HTTP::Response::Body).to receive(:readpartial) do
+        blank.empty? ? raise(Errno::ECONNRESET) : blank.shift
+      end
+
+      post_messages(request_payload.merge(stream: true))
+
+      expect(response.status).to eq(502)
+      expect(JSON.parse(response.body)["error"]["message"]).to eq(described_class::UPSTREAM_ERRORS.fetch(:busy).last)
+    end
+
+    it "does not append an error frame when the socket resets after message_stop" do
+      chunks = sse_body.chars.each_slice(512).map(&:join)
+      stub_request(:post, messages_url)
+        .to_return(status: 200, body: "", headers: { "Content-Type" => "text/event-stream" })
+      allow_any_instance_of(HTTP::Response::Body).to receive(:readpartial) do
+        chunks.empty? ? raise(Errno::ECONNRESET) : chunks.shift
+      end
+
+      post_messages(request_payload.merge(stream: true))
+
+      expect(response.body).to include("event: message_stop")
+      expect(response.body).not_to include("event: error")
+      expect(GumheadUsageEvent.sole.output_tokens).to eq(42)
+    end
+
+    it "appends the error frame when the reset lands between message_stop and its delimiter" do
+      chunks = [
+        %(event: message_start\ndata: {"type":"message_start","message":{"model":"claude-sonnet-5","usage":{"input_tokens":50,"output_tokens":1}}}\n\n),
+        %(event: content_block_delta\ndata: {"type":"content_block_delta","delta":{"type":"text_delta","text":"Hi"}}\n\n),
+        %(event: message_stop\ndata: {"type":"message_stop"}),
+      ]
+      stub_request(:post, messages_url)
+        .to_return(status: 200, body: "", headers: { "Content-Type" => "text/event-stream" })
+      allow_any_instance_of(HTTP::Response::Body).to receive(:readpartial) do
+        chunks.empty? ? raise(Errno::ECONNRESET) : chunks.shift
+      end
+
+      post_messages(request_payload.merge(stream: true))
+
+      # The SSE contract dispatches an event only at its blank-line
+      # delimiter; without it the client never saw message_stop.
+      expect(response.body).to include("event: error")
+    end
+
+    it "does not append an error frame to a complete CRLF-framed stream" do
+      crlf = [
+        %(event: message_start\r\ndata: {"type":"message_start","message":{"model":"claude-sonnet-5","usage":{"input_tokens":50,"output_tokens":1}}}\r\n\r\n),
+        %(event: content_block_delta\r\ndata: {"type":"content_block_delta","delta":{"type":"text_delta","text":"Hi"}}\r\n\r\n),
+        %(event: message_delta\r\ndata: {"type":"message_delta","usage":{"output_tokens":42,"input_tokens":60}}\r\n\r\n),
+        %(event: message_stop\r\ndata: {"type":"message_stop"}\r\n\r\n),
+      ]
+      stub_request(:post, messages_url)
+        .to_return(status: 200, body: "", headers: { "Content-Type" => "text/event-stream" })
+      allow_any_instance_of(HTTP::Response::Body).to receive(:readpartial) do
+        crlf.empty? ? raise(Errno::ECONNRESET) : crlf.shift
+      end
+
+      post_messages(request_payload.merge(stream: true))
+
+      expect(response.body).to include("message_stop")
+      expect(response.body).not_to include("event: error")
+    end
+
+    it "appends the error frame when a CRLF stream resets after message_stop's own line ending" do
+      chunks = [
+        %(event: message_start\r\ndata: {"type":"message_start","message":{"model":"claude-sonnet-5","usage":{"input_tokens":50,"output_tokens":1}}}\r\n\r\n),
+        %(event: content_block_delta\r\ndata: {"type":"content_block_delta","delta":{"type":"text_delta","text":"Hi"}}\r\n\r\n),
+        %(event: message_stop\r\ndata: {"type":"message_stop"}\r\n),
+      ]
+      stub_request(:post, messages_url)
+        .to_return(status: 200, body: "", headers: { "Content-Type" => "text/event-stream" })
+      allow_any_instance_of(HTTP::Response::Body).to receive(:readpartial) do
+        chunks.empty? ? raise(Errno::ECONNRESET) : chunks.shift
+      end
+
+      post_messages(request_payload.merge(stream: true))
+
+      # One CRLF ends the data line; the blank line never arrived, so the
+      # client never dispatched message_stop.
+      expect(response.body).to include("event: error")
+    end
+
+    it "reports a wrapped connection error to the client mid-stream" do
+      chunks = [
+        %(event: message_start\ndata: {"type":"message_start","message":{"model":"claude-sonnet-5","usage":{"input_tokens":50,"output_tokens":1}}}\n\n),
+        %(event: content_block_delta\ndata: {"type":"content_block_delta","delta":{"type":"text_delta","text":"Hel"}}\n\n),
+      ]
+      stub_request(:post, messages_url)
+        .to_return(status: 200, body: "", headers: { "Content-Type" => "text/event-stream" })
+      allow_any_instance_of(HTTP::Response::Body).to receive(:readpartial) do
+        chunks.empty? ? raise(HTTP::ConnectionError, "connection reset") : chunks.shift
+      end
+
+      post_messages(request_payload.merge(stream: true))
+
+      expect(response.body).to include("Hel")
+      expect(response.body).to include("event: error")
+    end
+
+    it "logs a stream that ends without message_stop" do
+      truncated = [
+        %(event: message_start\ndata: {"type":"message_start","message":{"model":"claude-sonnet-5","usage":{"input_tokens":50,"output_tokens":1}}}\n\n),
+        %(event: content_block_delta\ndata: {"type":"content_block_delta","delta":{"type":"text_delta","text":"Hello"}}\n\n),
+      ].join
+      stub_request(:post, messages_url)
+        .to_return(status: 200, body: truncated, headers: { "Content-Type" => "text/event-stream" })
+
+      allow(Rails.logger).to receive(:warn).and_call_original
+      post_messages(request_payload.merge(stream: true))
+
+      expect(Rails.logger).to have_received(:warn).with(a_string_including("stream ended without message_stop"))
+      expect(response.body).to include("event: error")
+    end
+
     it "renders an upstream rejection as a buffered error instead of a stream" do
       stub_request(:post, messages_url)
         .to_return(status: 401, body: { type: "error", error: { type: "authentication_error", message: "bad key" } }.to_json)

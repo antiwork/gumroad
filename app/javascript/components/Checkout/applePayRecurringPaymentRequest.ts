@@ -70,11 +70,6 @@ export const getApplePayRecurringPaymentRequest = (
 const membershipRequest = (item: Product, managementURL: string): ApplePayRecurringPaymentRequest | null => {
   if (item.recurrence === null) return null;
 
-  // The renewal amount can differ from today's charge (e.g. a discount limited to the first
-  // billing cycle), so the caller computes it where discount details are available. Falling back
-  // to the current price keeps the declaration usable when no separate renewal price is known.
-  // Amounts are pre-tax, matching how prices are presented everywhere else at checkout; each
-  // renewal's tax is computed by the server when it is charged.
   const renewalAmount = item.renewalPriceCents ?? item.price;
   const months = numberOfMonthsInRecurrence(item.recurrence);
   const interval =
@@ -86,8 +81,15 @@ const membershipRequest = (item: Product, managementURL: string): ApplePayRecurr
   // months, so the agreement on the sheet is bounded by an end date rather than described as
   // billing until the buyer cancels.
   const totalBillingCycles = item.durationInMonths != null ? Math.ceil(item.durationInMonths / months) : null;
+
+  // Single-cycle purchases are one-time Apple Pay requests unless a later off-session charge
+  // still needs Apple's durable merchant token (free trials and subscription payment updates).
+  if (totalBillingCycles !== null && totalBillingCycles <= 1 && !item.hasFreeTrial && item.subscription_id == null) {
+    return null;
+  }
+
   let recurringPaymentEndDate: Date | undefined;
-  if (totalBillingCycles != null) {
+  if (totalBillingCycles != null && totalBillingCycles > 1) {
     // The last charge happens one interval before the total duration elapses (the first charge is
     // today), so the agreement ends after (cycles - 1) further intervals.
     recurringPaymentEndDate = addMonthsClamped(new Date(), (totalBillingCycles - 1) * months);
@@ -134,22 +136,21 @@ const installmentPlanRequest = (item: Product, managementURL: string): ApplePayR
   const remainingInstallments = item.installmentPlan?.remainingInstallments ?? numberOfInstallments;
   if (remainingInstallments < 1) return null;
   const baseInstallmentAmount = item.renewalPriceCents ?? Math.floor(item.price / numberOfInstallments);
-  const endDate = addMonthsClamped(new Date(), remainingInstallments - 1);
+  const endDate = remainingInstallments > 1 ? addMonthsClamped(new Date(), remainingInstallments - 1) : undefined;
+  const installmentsLabel = `${remainingInstallments} monthly ${remainingInstallments === 1 ? "installment" : "installments"}`;
 
   return {
-    paymentDescription: `${item.name} (${remainingInstallments} monthly installments)`,
+    paymentDescription: `${item.name} (${installmentsLabel})`,
     managementURL,
     regularBilling: {
       label: item.name,
       amount: baseInstallmentAmount,
       recurringPaymentIntervalUnit: "month",
       recurringPaymentIntervalCount: 1,
-      recurringPaymentEndDate: endDate,
+      ...(endDate ? { recurringPaymentEndDate: endDate } : {}),
     },
-    billingAgreement: `${remainingInstallments} monthly installments of ${formatPriceCentsWithCurrencySymbol(
-      "usd",
-      baseInstallmentAmount,
-      { symbolFormat: "short" },
-    )}.`,
+    billingAgreement: `${installmentsLabel} of ${formatPriceCentsWithCurrencySymbol("usd", baseInstallmentAmount, {
+      symbolFormat: "short",
+    })}.`,
   };
 };

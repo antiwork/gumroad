@@ -185,6 +185,11 @@ alert_on_stalled_abandoned_cart_emails:
   class: AlertOnStalledAbandonedCartEmailsJob
   queue: low
   description: Reports when no abandoned cart email has been sent in over a day
+alert_on_zero_buyer_currency_wallet_purchases:
+  cron: "5 * * * *" # hourly, with an in-job 24h zero-volume threshold
+  class: AlertOnZeroBuyerCurrencyWalletPurchasesJob
+  queue: low
+  description: Reports when buyer-currency wallet purchases stay at zero while the flag is enabled
 memberships_price_update_emails:
   cron: "10 8 * * *" # UTC 08:10
   class: SendMembershipsPriceUpdateEmailsJob

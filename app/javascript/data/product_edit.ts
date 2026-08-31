@@ -9,7 +9,7 @@ import { ResponseError, request } from "$app/utils/request";
 
 import { extensions } from "$app/components/ProductEdit/ContentTab";
 import { FileEmbed } from "$app/components/ProductEdit/ContentTab/FileEmbed";
-import { Product } from "$app/components/ProductEdit/state";
+import { Product, hasPaidVariantPricing } from "$app/components/ProductEdit/state";
 import { baseEditorOptions } from "$app/components/RichTextEditor";
 
 export type SaveProductResponse = {
@@ -425,6 +425,48 @@ export const reconcileMountedEditorFileEmbedIds = (editor: Editor, fileIdMapping
   if (transaction.docChanged) editor.view.dispatch(transaction);
 };
 
+// Only send a scalar when this session changed it or changed the input that
+// drives it. A blank custom URL is "not specified" unless the session is
+// clearing one it knows about; an unchanged blank can be a stale tab snapshot
+// from before another tab set the slug. `customizable_price` is DERIVED — the
+// $0 base + paid-variant force (and the editor's reconcileCustomizablePrice)
+// recompute it from price/variants, so a save that changes those MUST send the
+// recomputed flag even when it numerically matches the last-saved value. Only
+// a save where price, variant structure, and the flag are all unchanged omits
+// it (the stale-tab case). A null customizable_price baseline means the caller
+// does not track the last-saved value, so send it through unchanged (the
+// pre-#2348 always-submit behavior).
+export const scalarSettingsForSave = (
+  product: {
+    custom_permalink: string | null;
+    customizable_price: boolean;
+    price_cents: number;
+    hasPaidVariantPricing: boolean;
+  },
+  lastSaved: {
+    custom_permalink: string | null;
+    customizable_price: boolean | null;
+    price_cents: number;
+    hasPaidVariantPricing: boolean;
+  },
+) => {
+  const settings: Record<string, unknown> = {};
+  if (product.custom_permalink) {
+    settings.custom_permalink = product.custom_permalink;
+  } else if (lastSaved.custom_permalink) {
+    settings.custom_permalink = null;
+    settings.custom_permalink_changed = true;
+  }
+  const flagIsDerivedFromUnchangedInputs =
+    lastSaved.customizable_price !== null &&
+    product.price_cents === lastSaved.price_cents &&
+    product.hasPaidVariantPricing === lastSaved.hasPaidVariantPricing;
+  if (!flagIsDerivedFromUnchangedInputs || product.customizable_price !== lastSaved.customizable_price) {
+    settings.customizable_price = product.customizable_price;
+  }
+  return settings;
+};
+
 export const saveProduct = async (
   permalink: string,
   id: string,
@@ -434,7 +476,13 @@ export const saveProduct = async (
   // (the kept pages were never loaded into this session), so filtering files
   // by the file-embeds found in the submitted content would wrongly delete
   // every file — including the ones the kept pages embed. Skip the filter.
-  options: { keepAllFiles?: boolean } = {},
+  options: {
+    keepAllFiles?: boolean;
+    lastSavedCustomPermalink?: string | null;
+    lastSavedCustomizablePrice?: boolean | null;
+    lastSavedPriceCents?: number | null;
+    lastSavedHasPaidVariantPricing?: boolean | null;
+  } = {},
 ): Promise<SaveProductResponse> => {
   // TODO remove this once we have a better content uploader
   const editor = new Editor(baseEditorOptions(extensions(id)));
@@ -457,13 +505,27 @@ export const saveProduct = async (
   // would make "Keep version content" delete files embedded in the hidden
   // pages even though that retry asks us to preserve every file.
   const files = filesForSave(product.files, fileIds, options.keepAllFiles ?? false);
-  const { custom_html: _customHtml, ...productParams } = product;
+  const { custom_html: _customHtml, custom_permalink, customizable_price, ...productParams } = product;
   const response = await request({
     method: "POST",
     accept: "json",
     url: Routes.link_path(permalink),
     data: {
       ...productParams,
+      ...scalarSettingsForSave(
+        {
+          custom_permalink,
+          customizable_price,
+          price_cents: product.price_cents,
+          hasPaidVariantPricing: hasPaidVariantPricing(product),
+        },
+        {
+          custom_permalink: options.lastSavedCustomPermalink ?? null,
+          customizable_price: options.lastSavedCustomizablePrice ?? null,
+          price_cents: options.lastSavedPriceCents ?? product.price_cents,
+          hasPaidVariantPricing: options.lastSavedHasPaidVariantPricing ?? hasPaidVariantPricing(product),
+        },
+      ),
       files,
       price_currency_type: currencyType,
       covers: product.covers.map(({ id }) => id),

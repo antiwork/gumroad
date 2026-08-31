@@ -37,14 +37,19 @@ class Payouts
 
     amount_payable = user.unpaid_balance_cents_up_to_date(date)
     account_balance = amount_payable + user.paid_payments_cents_for_date(date)
-    below_minimum = account_balance < user.minimum_payout_amount_cents
+    minimum_payout_amount_cents = if payout_type == Payouts::PAYOUT_TYPE_INSTANT
+      StripePayoutProcessor::MINIMUM_INSTANT_PAYOUT_AMOUNT_CENTS
+    else
+      user.minimum_payout_amount_cents
+    end
+    below_minimum = account_balance < minimum_payout_amount_cents
 
     unless user.compliant? || from_admin
       if add_comment
         if user.not_reviewed? && below_minimum && account_balance > 0
           # A not-reviewed account isn't under any active review — the actual
           # blocker for the seller is the below-minimum balance, so say that.
-          add_below_minimum_payout_note(user, payout_date, account_balance)
+          add_below_minimum_payout_note(user, payout_date, account_balance, minimum_payout_amount_cents)
         else
           reason = user.not_reviewed? ? "under review" : "not compliant"
           user.add_payout_note(content: "Payout on #{payout_date} was skipped because the account was #{reason}.")
@@ -115,7 +120,7 @@ class Payouts
         (bypass_minimum_payout || user.unpaid_balance_cents_up_to_date_held_by_gumroad(date) == account_balance)
 
       unless is_payable_from_admin
-        add_below_minimum_payout_note(user, payout_date, account_balance) if add_comment && account_balance > 0
+        add_below_minimum_payout_note(user, payout_date, account_balance, minimum_payout_amount_cents) if add_comment && account_balance > 0
         return false
       end
     end
@@ -143,8 +148,9 @@ class Payouts
       end
 
       amount_payable = user.instantly_payable_unpaid_balance_cents_up_to_date(date)
-
-      if amount_payable < MIN_AMOUNT_CENTS && add_comment && user.unpaid_balance_cents_up_to_date(date) >= MIN_AMOUNT_CENTS
+      # Same $1 Instant floor as the processor — a $60 settled leftover with $100+ still
+      # unpaid is payable now, not a settling skip. Weekly/monthly/quarterly keep MIN_AMOUNT_CENTS.
+      if amount_payable < minimum_payout_amount_cents && add_comment && user.unpaid_balance_cents_up_to_date(date) >= minimum_payout_amount_cents
         user.add_payout_note(content: "Instant Payout on #{payout_date} was skipped because funds are still settling. This should resolve within 1-2 days.")
         return false
       end
@@ -215,9 +221,9 @@ class Payouts
   end
   private_class_method :newest_note_matches?
 
-  def self.add_below_minimum_payout_note(user, payout_date, account_balance)
+  def self.add_below_minimum_payout_note(user, payout_date, account_balance, minimum_payout_amount_cents = user.minimum_payout_amount_cents)
     current_balance = user.formatted_dollar_amount(account_balance)
-    minimum_balance = user.formatted_dollar_amount(user.minimum_payout_amount_cents)
+    minimum_balance = user.formatted_dollar_amount(minimum_payout_amount_cents)
     user.add_payout_note(content: "Your payout on #{payout_date} was skipped because your balance of #{current_balance} was below the #{minimum_balance} minimum. You'll be paid out automatically once your balance reaches #{minimum_balance}.")
   end
   private_class_method :add_below_minimum_payout_note
