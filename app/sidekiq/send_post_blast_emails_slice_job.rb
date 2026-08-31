@@ -27,6 +27,8 @@ class SendPostBlastEmailsSliceJob
   end
 
   private
+    CHUNK_REVALIDATION_SLICE_SIZE = 1_000
+
     def active_partition?(partition_key)
       $redis.get(RedisKey.blast_active_slice_partition(@blast.id)) == partition_key
     end
@@ -37,8 +39,10 @@ class SendPostBlastEmailsSliceJob
       # The send phase needs filter-provided virtual columns (purchase_id/follower_id/affiliate_id).
       Makara::Context.release_all
       WithMaxExecutionTime.timeout_queries(seconds: 1.hour) do
-        AudienceMember.filter(seller_id: @post.seller_id, params: @filters, with_ids: true, ids: member_ids)
-          .select(:id, :email, :purchase_id, :follower_id, :affiliate_id).to_a
+        member_ids.each_slice(CHUNK_REVALIDATION_SLICE_SIZE).flat_map do |ids_slice|
+          AudienceMember.filter(seller_id: @post.seller_id, params: @filters, with_ids: true, ids: ids_slice)
+            .select(:id, :email, :purchase_id, :follower_id, :affiliate_id).to_a
+        end
       end
     end
 

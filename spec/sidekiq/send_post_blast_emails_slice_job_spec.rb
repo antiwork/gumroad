@@ -110,6 +110,23 @@ describe SendPostBlastEmailsSliceJob, :freeze_time do
       $redis.del(old_done_key, RedisKey.blast_active_slice_partition(blast.id)) if old_done_key && blast
     end
 
+    it "rehydrates the handed ids in bounded batches" do
+      stub_const("#{described_class}::CHUNK_REVALIDATION_SLICE_SIZE", 2)
+      post = post_with_audience
+      blast = create(:blast, :just_requested, post:)
+      activate_partition(blast)
+      slice_sizes = []
+      allow(AudienceMember).to receive(:filter).and_wrap_original do |original, **kwargs|
+        slice_sizes << kwargs[:ids].size
+        original.call(**kwargs)
+      end
+      allow_any_instance_of(described_class).to receive(:send_members)
+
+      described_class.new.perform(blast.id, partition_key, 0, 1, audience_ids)
+
+      expect(slice_sizes).to eq([2, 1])
+    end
+
     it "does not stamp or re-send when a sibling already completed the blast" do
       blast = create(:blast, post: post_with_audience, completed_at: Time.current)
       described_class.new.perform(blast.id, partition_key, 0, 1, audience_ids)
