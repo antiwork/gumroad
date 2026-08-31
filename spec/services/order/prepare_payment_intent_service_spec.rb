@@ -2669,6 +2669,68 @@ describe Order::PreparePaymentIntentService, :vcr do
         expect(create_args[:currency]).to eq(Currency::INR)
         expect(create_args[:payment_method_types]).to eq(%w[card link upi])
       end
+
+      it "strips UPI from a verified INR remount list after the launch flag rolls back" do
+        Feature.deactivate_user(:checkout_local_method_upi, seller)
+        order, params = build_order
+        params = params.merge(
+          payment_element_mount_currency: Currency::INR,
+          buyer_currency_quote: "displayed-inr-quote",
+          payment_method_list_token: Checkout::PaymentMethodListToken.issue(
+            payment_method_types: %w[card link],
+            sellers: [seller],
+            inr_payment_method_types: %w[card link upi],
+          ),
+        )
+        order.purchases.each { _1.update!(ip_country: "India") }
+        allow(Checkout::BuyerCurrencyQuote).to receive(:quoted_currency_hint)
+          .with("displayed-inr-quote")
+          .and_return(Currency::INR)
+        allow(Checkout::BuyerCurrencyQuote).to receive(:verify!).and_return(locked_inr_quote)
+        allow(Checkout::BuyerCurrencyEligibility).to receive(:stripe_test_mode?).and_return(false)
+        expect(StripeFxQuote).not_to receive(:create)
+
+        preview = Stripe::StripeObject.construct_from(type: "card", card: { country: "IN" })
+        allow(Stripe::ConfirmationToken).to receive(:retrieve)
+          .and_return(Stripe::StripeObject.construct_from(payment_method_preview: preview))
+
+        charge_intent = instance_double(StripeChargeIntent, id: "pi_card_inr_rollback", client_secret: "pi_card_inr_rollback_secret")
+        create_args = nil
+        allow(StripeDeferredPaymentIntent).to receive(:create) do |**kwargs|
+          create_args = kwargs
+          charge_intent
+        end
+
+        responses = described_class.new(order:, params:, confirmation_token: "ctoken_card_inr_rollback").perform
+
+        expect(responses["unique-id-0"][:success]).to eq(true), responses.inspect
+        expect(create_args[:currency]).to eq(Currency::INR)
+        expect(create_args[:payment_method_types]).to eq(%w[card link])
+      end
+
+      it "fails closed when an INR remount cannot verify its signed method list" do
+        order, params = build_order
+        params = params.merge(
+          payment_element_mount_currency: Currency::INR,
+          buyer_currency_quote: "displayed-inr-quote",
+          payment_method_list_token: "not-a-real-token",
+        )
+        order.purchases.each { _1.update!(ip_country: "India") }
+        allow(Checkout::BuyerCurrencyQuote).to receive(:quoted_currency_hint)
+          .with("displayed-inr-quote")
+          .and_return(Currency::INR)
+        allow(Checkout::BuyerCurrencyEligibility).to receive(:stripe_test_mode?).and_return(false)
+        expect(StripeDeferredPaymentIntent).not_to receive(:create)
+
+        preview = Stripe::StripeObject.construct_from(type: "card", card: { country: "IN" })
+        allow(Stripe::ConfirmationToken).to receive(:retrieve)
+          .and_return(Stripe::StripeObject.construct_from(payment_method_preview: preview))
+
+        responses = described_class.new(order:, params:, confirmation_token: "ctoken_inr_expired_list").perform
+
+        expect(responses["unique-id-0"][:success]).to eq(false)
+        expect(order.purchases.first.reload).to be_failed
+      end
     end
 
     context "with a paid-upfront UPI Autopay membership" do

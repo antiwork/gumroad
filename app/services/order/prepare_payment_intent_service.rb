@@ -42,6 +42,7 @@ class Order::PreparePaymentIntentService
     return responses if block_invalid_buyer_currency_quote_signature
     return responses if block_unexpected_buyer_currency_quote
     return responses if block_multiple_sellers
+    return responses if block_unverifiable_remount_method_list
     return responses if block_ineligible_for_client_confirm
     return responses if block_purchases_with_blocked_customer_emails
 
@@ -112,6 +113,21 @@ class Order::PreparePaymentIntentService
       return false if purchases_to_charge.map(&:seller_id).uniq.one?
 
       Rails.logger.error("Multi-seller client-confirm prepare blocked for order #{order.id}")
+      fail_purchases_with(GENERIC_CHARGE_ERROR)
+      true
+    end
+
+    # A remounted non-USD Element's method list lives on the signed token (`quoted_types` /
+    # `inr_types`). Re-resolving from the USD-priced cart cannot reconstruct it — most
+    # critically it omits UPI from an INR ConfirmationToken. Expiry is routine on a long-open
+    # tab; fail closed so the buyer reloads rather than getting an intent the token cannot confirm.
+    def block_unverifiable_remount_method_list
+      reported = reported_element_mount_currency
+      return false if reported.blank? || reported == Checkout::StripePaymentPresenter::CLIENT_CONFIRM_CURRENCY
+      return false if params[:payment_method_list_token].blank?
+      return false if issued_payment_method_types.present?
+
+      Rails.logger.error("Client-confirm prepare cannot reconstruct a signed #{reported} method list for order #{order.id}; failing closed rather than re-resolving the USD cart")
       fail_purchases_with(GENERIC_CHARGE_ERROR)
       true
     end
@@ -1093,9 +1109,19 @@ class Order::PreparePaymentIntentService
         (method_type == Checkout::PaymentMethodResolver::ALIPAY_PAYMENT_METHOD_TYPE &&
           Feature.active?(Checkout::PaymentMethodResolver::ALIPAY_LAUNCH_FEATURE, seller) &&
           Checkout::PaymentMethodResolver.alipay_supported_merchant_account?(seller)) ||
-        Checkout::BuyerCurrencyEligibility.forced_currency_for(method_type).present?
+        forced_currency_method_offerable?(method_type)
 
       offerable && account_supports_previewed_method?(method_type)
+    end
+
+    # Registry methods stay on a signed remount list only while their live launch flag
+    # is on (or Stripe test mode, so QA is not gated). Without this, a card/Link prepare
+    # after `checkout_local_method_upi` rollback would still mint an INR intent that lists UPI.
+    def forced_currency_method_offerable?(method_type)
+      return false if Checkout::BuyerCurrencyEligibility.forced_currency_for(method_type).blank?
+
+      Checkout::BuyerCurrencyEligibility.stripe_test_mode? ||
+        Checkout::BuyerCurrencyEligibility.local_method_launched?(method_type, seller)
     end
 
     # Mirrors the resolver's account_supported_methods for the single previewed method: the
