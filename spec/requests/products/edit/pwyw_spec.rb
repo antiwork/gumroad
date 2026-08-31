@@ -78,4 +78,22 @@ describe("Product Edit pay what you want setting", type: :system, js: true) do
     pwyw_toggle = find_field("Allow customers to pay what they want")
     expect(pwyw_toggle).not_to be_disabled
   end
+
+  it "restores the seller's choice after the price dips to $0 on a product with paid pricing options" do
+    variant_category = create(:variant_category, link: product, title: "Pack")
+    create(:variant, variant_category:, name: "Home Kit", price_difference_cents: 1500)
+    product.update!(price_cents: 1500, customizable_price: true)
+
+    visit edit_link_path(product.unique_permalink)
+    expect(find_field("Allow customers to pay what they want")).to be_checked
+
+    fill_in "Amount", with: "0"
+    expect(page).to have_content("Pay what you want isn't available on products with paid pricing options.")
+    expect(find_field("Allow customers to pay what they want", disabled: true)).not_to be_checked
+
+    fill_in "Amount", with: "15"
+    pwyw_toggle = find_field("Allow customers to pay what they want")
+    expect(pwyw_toggle).to be_checked
+    expect(pwyw_toggle).not_to be_disabled
+  end
 end

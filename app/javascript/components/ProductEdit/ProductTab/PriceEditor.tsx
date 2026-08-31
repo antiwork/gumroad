@@ -58,17 +58,13 @@ export const PriceEditor = ({
   const isFreeProduct = priceCents === 0;
   // Backend Product::Prices#set_customizable_price forces PWYW off on a $0 base
   // with paid variants (otherwise checkout offers a $0 amount box next to a paid
-  // option). Keep the editor switch in the same state instead of letting it
-  // flip on and silently revert after save.
+  // option). The product editor keeps state in step via reconcileCustomizablePrice;
+  // deriving here too keeps the switch honest under parents that don't (the
+  // bundle editor has no variants and its own $0 transition handling).
   const cannotBePWYW = isFreeProduct && Boolean(hasPaidVariants);
   const mustBePWYW = isFreeProduct && !hasPaidVariants;
   const pwywOn = cannotBePWYW ? false : mustBePWYW ? true : isPWYW;
   const productEditContext = React.useContext(ProductEditContext);
-
-  React.useEffect(() => {
-    if (cannotBePWYW && isPWYW) setIsPWYW(false);
-    else if (mustBePWYW && !isPWYW) setIsPWYW(true);
-  }, [cannotBePWYW, mustBePWYW, isPWYW, setIsPWYW]);
 
   // The regular product editor provides ProductEditContext; the bundle editor
   // passes the defaultOfferCode prop. Either way we can render the selector.
