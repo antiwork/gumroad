@@ -100,6 +100,17 @@ describe("scalarSettingsForSave", () => {
       ),
     ).toEqual({ customizable_price: false });
   });
+
+  it("always sends customizable_price when the caller has no baseline", () => {
+    // A caller that does not track the last-saved value (null baseline) must
+    // keep the pre-fix always-submit behavior, so disabling PWYW still lands.
+    expect(
+      scalarSettingsForSave(
+        { custom_permalink: null, customizable_price: false },
+        { custom_permalink: null, customizable_price: null },
+      ),
+    ).toEqual({ customizable_price: false });
+  });
 });
 
 describe("copyRichContentPages", () => {

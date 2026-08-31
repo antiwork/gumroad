@@ -430,10 +430,12 @@ export const reconcileMountedEditorFileEmbedIds = (editor: Editor, fileIdMapping
 // blank can be a stale tab snapshot from before another tab set the slug. An
 // unchanged `customizable_price` (the editor always sends a boolean, never
 // nil) likewise must not revert a flag another tab turned on — only a
-// deliberate change this session is sent.
+// deliberate change this session is sent. A null customizable_price baseline
+// means the caller does not track the last-saved value, so send it through
+// unchanged (the pre-#2348 always-submit behavior).
 export const scalarSettingsForSave = (
   product: { custom_permalink: string | null; customizable_price: boolean },
-  lastSaved: { custom_permalink: string | null; customizable_price: boolean },
+  lastSaved: { custom_permalink: string | null; customizable_price: boolean | null },
 ) => {
   const settings: Record<string, unknown> = {};
   if (product.custom_permalink) {
@@ -442,7 +444,7 @@ export const scalarSettingsForSave = (
     settings.custom_permalink = null;
     settings.custom_permalink_changed = true;
   }
-  if (product.customizable_price !== lastSaved.customizable_price) {
+  if (lastSaved.customizable_price === null || product.customizable_price !== lastSaved.customizable_price) {
     settings.customizable_price = product.customizable_price;
   }
   return settings;
@@ -495,7 +497,7 @@ export const saveProduct = async (
         { custom_permalink, customizable_price },
         {
           custom_permalink: options.lastSavedCustomPermalink ?? null,
-          customizable_price: options.lastSavedCustomizablePrice ?? false,
+          customizable_price: options.lastSavedCustomizablePrice ?? null,
         },
       ),
       files,
