@@ -21,6 +21,10 @@ class EmailEngagementDynamoStore
   BATCH_GET_MAX_ATTEMPTS = 5
   TRANSACT_CONFLICT_MAX_ATTEMPTS = 3
   TRANSACT_CONFLICT_BACKOFF = 0.02
+  # Reasons that leave a transaction worth retrying in place. A throttle or
+  # validation reason means DynamoDB is rejecting the transact for a reason a
+  # retry will not clear, so it must raise for Sidekiq's own backoff instead.
+  RETRYABLE_CANCELLATION_CODES = ["ConditionalCheckFailed", "TransactionConflict", "None"].freeze
 
   class << self
     attr_writer :client
@@ -295,10 +299,15 @@ class EmailEngagementDynamoStore
         codes.any? && codes.all? { |code| ["ConditionalCheckFailed", "None"].include?(code) }
       end
 
-      # A mixed [ConditionalCheckFailed, TransactionConflict] is worth retrying: the
-      # condition check settles as a duplicate once the contended write lands.
+      # A transaction is worth retrying in place only when its cancellation is
+      # explained entirely by contention and condition checks: the [ConditionalCheckFailed,
+      # TransactionConflict] mix settles as a duplicate once the contended write lands.
+      # A throttle or validation reason means DynamoDB is rejecting the transact for a
+      # reason a retry will not clear, so it must raise for Sidekiq's own backoff instead.
       def transaction_conflict?(error)
-        cancellation_codes(error).include?("TransactionConflict")
+        codes = cancellation_codes(error)
+        codes.include?("TransactionConflict") &&
+          codes.all? { |code| RETRYABLE_CANCELLATION_CODES.include?(code) }
       end
 
       # Stubbed clients raise with empty data, so fall back to the per-item reason
