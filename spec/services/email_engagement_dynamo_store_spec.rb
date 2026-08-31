@@ -55,6 +55,11 @@ describe EmailEngagementDynamoStore do
           nil,
           "Transaction cancelled, please refer cancellation reasons for specific reasons [ConditionalCheckFailed, TransactionConflict]"
         )
+      when :conflict_and_throttle
+        raise Aws::DynamoDB::Errors::TransactionCanceledException.new(
+          nil,
+          "Transaction cancelled, please refer cancellation reasons for specific reasons [TransactionConflict, ProvisionedThroughputExceeded]"
+        )
       else
         step
       end
@@ -251,6 +256,16 @@ describe EmailEngagementDynamoStore do
       expect do
         described_class.record_open(installment_id: 123, mailer_method:, mailer_args:)
       end.to raise_error(Aws::Errors::ServiceError)
+
+      expect(requests.count { _1[:operation_name] == :transact_write_items }).to eq(1)
+    end
+
+    it "raises rather than retrying a mixed conflict-plus-throttle cancellation" do
+      stub_transact(:conflict_and_throttle)
+
+      expect do
+        described_class.record_open(installment_id: 123, mailer_method:, mailer_args:)
+      end.to raise_error(Aws::DynamoDB::Errors::TransactionCanceledException)
 
       expect(requests.count { _1[:operation_name] == :transact_write_items }).to eq(1)
     end
