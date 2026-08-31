@@ -156,6 +156,18 @@ describe AlertOnStalledPostEmailBlastsJob do
         expect(SendPostBlastEmailsJob).to have_received(:perform_async).with(blast.id)
       end
 
+      # The reverse order can leave a blast with neither a dead entry nor a sender, and an
+      # UNACCOUNTED non-opener resend is held for a human indefinitely.
+      it "keeps the dead entry when the fresh enqueue fails" do
+        blast = stalled_blast(requested_hours_ago: 6)
+        stub_sidekiq(dead: [blast.id])
+        allow(SendPostBlastEmailsJob).to receive(:perform_async).and_raise(Redis::CannotConnectError)
+
+        expect { described_class.new.perform }.to raise_error(Redis::CannotConnectError)
+
+        expect(@dead_jobs.fetch(blast.id)).not_to have_received(:delete)
+      end
+
       it "re-enqueues an UNACCOUNTED blast inside the resume window" do
         blast = stalled_blast(requested_hours_ago: 6)
         stub_sidekiq

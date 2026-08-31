@@ -165,14 +165,13 @@ class AlertOnStalledPostEmailBlastsJob
       claimed = $redis.set(marker, Time.current.iso8601, nx: true, ex: STALL_THRESHOLD.to_i)
       return false unless claimed
 
-      # Never `retry` the dead entry: it re-pushes the ORIGINAL jid, and super_fetch counts
-      # orphan recoveries per jid (`orphan-<jid>`, refreshed on every kill). A blast dead-set by
-      # its poison-pill guard has already blown that budget, so the retry runs, disappears at the
-      # next hourly orphan check, and leaves no failure metadata behind — the resume looks like it
-      # worked and delivers nothing (gumroad-private#2338). A fresh jid gets a fresh budget.
-      # Drop the dead entry first so a scan racing this one cannot resume the blast twice.
-      @dead_entries.fetch(blast.id).delete if entry[:disposition] == :dead
+      # `retry` would re-push the dead entry's own jid, and super_fetch counts orphan recoveries
+      # per jid: a blast its poison-pill guard already dead-set has no budget left, so that job is
+      # killed again before it delivers (gumroad-private#2338). Drop the entry only after the
+      # enqueue — losing it without a replacement leaves an UNACCOUNTED blast, which is never
+      # auto-resumed when it is a non-opener resend.
       SendPostBlastEmailsJob.perform_async(blast.id)
+      @dead_entries.fetch(blast.id).delete if entry[:disposition] == :dead
       true
     end
 
