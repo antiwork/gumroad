@@ -93,7 +93,7 @@ class PreviewQaDebugMiddleware
         %i[
           buyer_currency_charging buyer_local_currency checkout_listed_currency_direct_charge
           checkout_local_method_upi buyer_currency_destination_charges
-        ].each { Feature.activate(_1, seller) }
+        ].each { Feature.activate_user(_1, seller) }
       end
       body = { product: product.unique_permalink, enabled: enabled }.to_json
       return [200, { "Content-Type" => "application/json" }, [body]]
