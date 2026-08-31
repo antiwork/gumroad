@@ -738,11 +738,6 @@ function directListedCardActive(state: State, usingSavedCard = state.usingSavedC
   return state.paymentMethod === "card" && !usingSavedCard && !hasShipping(state);
 }
 
-function usdCentsToListedCurrency(usdCents: number, rate: number, subunitToUnit: number): number {
-  const converted = usdCents * rate;
-  return subunitToUnit === 1 ? Math.round(converted / 100) : Math.round(converted);
-}
-
 function getDirectListedPaymentElementAmount(state: State) {
   if (state.checkoutPayment.integration !== "payment_element_client_confirm") return getChargeTodayPrice(state);
   if (state.surcharges.type !== "loaded") return null;
@@ -755,6 +750,12 @@ function getDirectListedPaymentElementAmount(state: State) {
     if (allocationsMatchCart)
       return directListedAllocations.reduce((sum, allocation) => sum + allocation.total_cents, 0);
   }
+
+  const taxUsd = state.surcharges.result.tax_cents;
+  const shippingUsd = state.surcharges.result.shipping_rate_cents;
+  // Charge time converts each purchase separately. An aggregate USD→listed
+  // fallback can disagree by a cent on multi-line carts, so do not mount.
+  if (taxUsd !== 0 || shippingUsd !== 0) return null;
 
   const baseAmount = state.checkoutPayment.elements_options.presentment_amount_cents ?? 0;
   const linePrices = state.products.map((product) => ({
@@ -769,19 +770,8 @@ function getDirectListedPaymentElementAmount(state: State) {
     (sum, tip) => sum + (tip ?? 0),
     0,
   );
-  const listedRate = state.checkoutPayment.elements_options.direct_listed_currency_rate;
-  const subunitToUnit = state.checkoutPayment.elements_options.listed_currency_display?.subunit_to_unit;
-  const taxUsd = state.surcharges.result.tax_cents;
-  const shippingUsd = state.surcharges.result.shipping_rate_cents;
-  if ((taxUsd !== 0 || shippingUsd !== 0) && (listedRate == null || !(subunitToUnit && subunitToUnit > 0))) {
-    return null;
-  }
-  const excludedTax =
-    listedRate != null && subunitToUnit != null ? usdCentsToListedCurrency(taxUsd, listedRate, subunitToUnit) : 0;
-  const shipping =
-    listedRate != null && subunitToUnit != null ? usdCentsToListedCurrency(shippingUsd, listedRate, subunitToUnit) : 0;
 
-  return lineTotal + tipTotal + excludedTax + shipping;
+  return lineTotal + tipTotal;
 }
 
 export function isProcessing(state: State) {
@@ -1069,6 +1059,10 @@ export const loadSurcharges = (state: State, abortSignal?: AbortSignal) => {
       ...(paymentElementMountCurrency ? { payment_element_mount_currency: paymentElementMountCurrency } : {}),
       ...(paymentElementDirectListedCurrency
         ? { payment_element_direct_listed_currency: paymentElementDirectListedCurrency }
+        : {}),
+      ...(state.checkoutPayment.integration === "payment_element_client_confirm" &&
+      state.checkoutPayment.elements_options.payment_method_list_token
+        ? { payment_method_list_token: state.checkoutPayment.elements_options.payment_method_list_token }
         : {}),
     },
     abortSignal,

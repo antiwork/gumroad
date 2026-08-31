@@ -974,6 +974,16 @@ describe("direct-listed card element", () => {
           tax_cents: 100,
           tax_included_cents: 60,
           subtotal: 900,
+          direct_listed_line_allocations: [
+            {
+              permalink: "product-a",
+              price_cents: 1_200,
+              tip_cents: 180,
+              tax_cents: 150,
+              shipping_cents: 0,
+              total_cents: 1_530,
+            },
+          ],
           buyer_currency_quote: null,
         },
       },
@@ -1027,6 +1037,16 @@ describe("direct-listed card element", () => {
           tax_cents: 100,
           tax_included_cents: 60,
           subtotal: 1_191,
+          direct_listed_line_allocations: [
+            {
+              permalink: "product-a",
+              price_cents: 1_200,
+              tip_cents: 437,
+              tax_cents: 150,
+              shipping_cents: 0,
+              total_cents: 1_787,
+            },
+          ],
           buyer_currency_quote: null,
         },
       },
@@ -1078,7 +1098,7 @@ describe("direct-listed card element", () => {
     expect(getStripePaymentElementAmount(s)).toBe(2_004);
   });
 
-  it("converts USD surcharge cents with the signed rate and listed subunit scale", () => {
+  it("uses server allocations for JPY single-unit tax conversion", () => {
     const s = state({
       checkoutPayment: {
         ...directListedCardConfig,
@@ -1100,6 +1120,16 @@ describe("direct-listed card element", () => {
           tax_cents: 100,
           tax_included_cents: 0,
           subtotal: 1_000,
+          direct_listed_line_allocations: [
+            {
+              permalink: "product-a",
+              price_cents: 1_500,
+              tip_cents: 0,
+              tax_cents: 150,
+              shipping_cents: 0,
+              total_cents: 1_650,
+            },
+          ],
           buyer_currency_quote: null,
         },
       },
@@ -1108,15 +1138,9 @@ describe("direct-listed card element", () => {
     expect(getStripePaymentElementAmount(s)).toBe(1_650);
   });
 
-  it("does not mount a listed amount when excluded tax cannot use the signed rate", () => {
+  it("does not mount a listed amount when excluded tax has no matching per-line allocations", () => {
     const s = state({
-      checkoutPayment: {
-        ...directListedCardConfig,
-        elements_options: {
-          ...directListedCardConfig.elements_options,
-          direct_listed_currency_rate: null,
-        },
-      },
+      checkoutPayment: directListedCardConfig,
       products: [product({ listedChargePriceCents: 1_200 })],
       surcharges: {
         type: "loaded",

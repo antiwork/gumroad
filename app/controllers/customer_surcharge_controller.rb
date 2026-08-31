@@ -37,7 +37,7 @@ class CustomerSurchargeController < ApplicationController
         item[:price].to_d.to_i,
         subscription_id: item[:subscription_id],
         recommended_by: item[:recommended_by],
-        rate: rates_by_listed_currency.fetch(listed_currency, :unset)
+        rate: rates_by_listed_currency.fetch(listed_currency) { signed_direct_listed_rate(listed_currency) || :unset }
       )
       unless surcharges
         all_lines_quotable = false
@@ -201,12 +201,17 @@ class CustomerSurchargeController < ApplicationController
     def direct_listed_line_allocations_for(line_items, currency, products)
       return nil if currency.blank? || line_items.blank?
 
+      # Charge time converts tax/shipping with the page-issued token rate. A live
+      # get_rate here can refresh between page render and this request and mount
+      # the Element on a different listed total than the deferred intent.
+      rate = signed_direct_listed_rate(currency)
+      return nil if rate.blank?
+
       allocations = line_items.map do |line_item|
         item = products[line_item.line_index]
         listed_price_cents = numeric_cents(item[:listed_price_cents])
         listed_tip_cents = numeric_cents(item[:listed_tip_cents]) || 0
-        rate = line_item.listed_currency_rate
-        return nil if listed_price_cents.nil? || rate.blank?
+        return nil if listed_price_cents.nil?
 
         tax_cents = usd_cents_to_currency(currency, line_item.charge_seller_tax_cents.to_i, rate) +
           usd_cents_to_currency(currency, line_item.charge_gumroad_tax_cents.to_i, rate)
@@ -229,6 +234,28 @@ class CustomerSurchargeController < ApplicationController
       return unless value.is_a?(String) || value.is_a?(Numeric)
 
       value.to_d.to_i
+    end
+
+    def signed_direct_listed_rate(currency)
+      return if currency.blank?
+
+      @signed_direct_listed_rates ||= {}
+      return @signed_direct_listed_rates[currency] if @signed_direct_listed_rates.key?(currency)
+
+      @signed_direct_listed_rates[currency] = Checkout::PaymentMethodListToken.direct_listed_currency_rate(
+        params[:payment_method_list_token],
+        sellers: surcharge_cart_sellers,
+        currency:
+      )
+    end
+
+    def surcharge_cart_sellers
+      @surcharge_cart_sellers ||= begin
+        permalinks = Array(params[:products]).filter_map do |item|
+          item[:permalink] if item.is_a?(ActionController::Parameters) || item.is_a?(Hash)
+        end.uniq
+        Link.where(unique_permalink: permalinks).includes(:user).map(&:user).uniq
+      end
     end
 
     def buyer_currency_charge_details(product:, item:, surcharges:)
