@@ -1032,8 +1032,11 @@ describe("Checkout currency picker", () => {
     expect(total.compareDocumentPosition(picker) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
-  it("hides the picker and keeps USD totals when Apple Pay is selected", () => {
-    const { queryByLabelText, getAllByText } = renderCheckout(
+  it("hides the picker but keeps the buyer-currency totals when Apple Pay is selected", () => {
+    // The picker stays hidden so a currency switch cannot remount the element and silently
+    // deselect the wallet — but the totals must stay in the quote currency: the wallet sheet
+    // quotes and charges that same locked amount (gumroad-private#2326).
+    const { queryByLabelText, getAllByText, queryByText } = renderCheckout(
       buildState({
         paymentElementType: "apple_pay",
         surcharges: { type: "loaded", result: quotedSurcharges },
@@ -1041,7 +1044,8 @@ describe("Checkout currency picker", () => {
       cart,
     );
     expect(queryByLabelText("Currency")).toBeNull();
-    expect(getAllByText("US$10").length).toBeGreaterThan(0);
+    expect(getAllByText("CA$12.50").length).toBeGreaterThan(0);
+    expect(queryByText("US$10")).toBeNull();
   });
 
   it("hides the picker when PayPal is selected", () => {

@@ -624,11 +624,14 @@ export function getStripePaymentElementPresentment(state: State): { currency: st
   if (!presentmentEnabled) return null;
   if (state.surcharges.type !== "loaded") return null;
 
+  // Deliberately independent of state.paymentElementType: a wallet selected inside the element
+  // keeps the presentment. Making wallets fall back to USD here changes the mount currency,
+  // which remounts the element and wipes the wallet selection before its sheet can open
+  // (gumroad-private#2326) — the wallet sheet presents and charges this same locked quote.
   const display = getCheckoutBuyerCurrencyDisplay(state.surcharges.result, {
     cartPermalinks: state.products.map((product) => product.permalink),
     willSaveCard: state.willSaveCard,
     paymentMethod: state.paymentMethod,
-    paymentElementType: state.paymentElementType,
   });
   if (!display) return null;
 
@@ -640,13 +643,12 @@ export function shouldSuppressClientConfirmWallets(state: State) {
   if (state.buyerCurrency !== null && state.buyerCurrency.toLowerCase() !== "usd") return true;
   if (state.surcharges.type !== "loaded") return false;
 
-  // Ignore the current wallet selection here: it suppresses the display helper, but must not
-  // keep that same wallet surface alive after a valid quote arrives.
+  // Read the display as a plain card selection: the current wallet surface must not stay
+  // alive after a valid quote arrives.
   return (
     getCheckoutBuyerCurrencyDisplay(state.surcharges.result, {
       cartPermalinks: state.products.map((product) => product.permalink),
       paymentMethod: "card",
-      paymentElementType: "card",
     }) !== null
   );
 }

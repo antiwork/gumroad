@@ -1,4 +1,3 @@
-import { isWalletPaymentElementType } from "$app/data/card_payment_method_data";
 import type { SurchargesResponse } from "$app/data/customer_surcharge";
 import {
   CurrencyCode,
@@ -17,11 +16,6 @@ type CheckoutBuyerCurrencyOptions = {
   cartPermalinks: readonly string[];
   willSaveCard?: boolean;
   paymentMethod?: PaymentMethodType;
-  paymentElementType?: string;
-};
-
-type CheckoutBuyerCurrencyQuoteTokenOptions = CheckoutBuyerCurrencyOptions & {
-  paymentElementType: string;
 };
 
 export type CheckoutBuyerCurrencyDisplay = {
@@ -89,23 +83,21 @@ export const isRecurringUpiPaymentConfig = (checkoutPayment: CheckoutPaymentConf
 
 export const getCheckoutBuyerCurrencyDisplay = (
   surcharges: SurchargesResponse | null,
-  {
-    cartPermalinks,
-    willSaveCard = false,
-    paymentMethod = "card",
-    paymentElementType = "card",
-  }: CheckoutBuyerCurrencyOptions,
+  { cartPermalinks, willSaveCard = false, paymentMethod = "card" }: CheckoutBuyerCurrencyOptions,
 ): CheckoutBuyerCurrencyDisplay | null => {
   const quote = surcharges?.buyer_currency_quote;
   // Saving a card charges through the canonical path (buyer-presentment excludes
   // setup_future_charges in PR 1), so buyer-currency totals must not be displayed —
   // the buyer would be charged canonical USD, not the locked local-currency amount.
-  // The same applies to non-card payment methods and to Apple Pay / Google Pay
-  // selected inside the Payment Element (`paymentMethod` stays "card"): those
-  // charges can only be canonical USD, and the charge path fails closed if a quote
-  // token arrives on a charge that cannot present — so while such a method is
-  // selected the cart must show the USD totals it will charge.
-  if (!quote || willSaveCard || paymentMethod !== "card" || isWalletPaymentElementType(paymentElementType)) return null;
+  // The same applies to non-card payment methods: PayPal and the legacy Payment
+  // Request Button quote canonical USD, and the charge path fails closed if a quote
+  // token arrives on a charge that cannot present. Wallets selected INSIDE the
+  // Payment Element are NOT excluded (`paymentMethod` stays "card"): their sheet
+  // quotes this same FX total and their charge presents it (#6441). Excluding them
+  // here breaks wallet selection outright — the element's mount currency reads this
+  // display, so returning null remounts the element in USD and wipes the buyer's
+  // wallet selection before the sheet can open (gumroad-private#2326).
+  if (!quote || willSaveCard || paymentMethod !== "card") return null;
 
   const lineAllocations = quote.line_allocations;
   if (!Array.isArray(lineAllocations)) return null;
@@ -137,7 +129,7 @@ export const getCheckoutBuyerCurrencyDisplay = (
 // display (or vice versa) lets the charged amount diverge from what the buyer confirmed.
 export const getCheckoutBuyerCurrencyQuoteToken = (
   surcharges: SurchargesResponse | null,
-  options: CheckoutBuyerCurrencyQuoteTokenOptions,
+  options: CheckoutBuyerCurrencyOptions,
 ): string | null =>
   getCheckoutBuyerCurrencyDisplay(surcharges, options) ? (surcharges?.buyer_currency_quote?.token ?? null) : null;
 
