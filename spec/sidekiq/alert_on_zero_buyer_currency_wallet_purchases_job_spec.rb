@@ -87,7 +87,8 @@ describe AlertOnZeroBuyerCurrencyWalletPurchasesJob do
       end
     end
 
-    it "treats a percentage rollout as enabled" do
+    it "treats a percentage rollout as enabled when a historical seller is in both flags" do
+      create_wallet_presentment_purchase(created_at: 25.hours.ago)
       Feature.activate(Checkout::BuyerCurrencyEligibility::PAYMENT_ELEMENT_WALLETS_FEATURE_NAME)
       Feature.activate_percentage(Checkout::BuyerCurrencyEligibility::WALLETS_FEATURE_NAME, 100)
 
@@ -96,13 +97,25 @@ describe AlertOnZeroBuyerCurrencyWalletPurchasesJob do
       expect(InternalNotificationWorker).to have_received(:perform_async)
     end
 
-    it "treats a payment_element_wallets percentage rollout as the prerequisite being on" do
-      Feature.activate(Checkout::BuyerCurrencyEligibility::WALLETS_FEATURE_NAME)
-      Feature.activate_percentage(Checkout::BuyerCurrencyEligibility::PAYMENT_ELEMENT_WALLETS_FEATURE_NAME, 100)
+    it "alerts on actor rollouts only when the same historical seller is in both flags" do
+      purchase = create_wallet_presentment_purchase(created_at: 25.hours.ago)
+      Feature.activate_user(Checkout::BuyerCurrencyEligibility::PAYMENT_ELEMENT_WALLETS_FEATURE_NAME, purchase.seller)
+      Feature.activate_user(Checkout::BuyerCurrencyEligibility::WALLETS_FEATURE_NAME, purchase.seller)
 
       described_class.new.perform
 
       expect(InternalNotificationWorker).to have_received(:perform_async)
+    end
+
+    it "stays quiet when the two actor rollouts do not overlap on a historical seller" do
+      payment_element_purchase = create_wallet_presentment_purchase(created_at: 25.hours.ago)
+      buyer_currency_purchase = create_wallet_presentment_purchase(created_at: 25.hours.ago)
+      Feature.activate_user(Checkout::BuyerCurrencyEligibility::PAYMENT_ELEMENT_WALLETS_FEATURE_NAME, payment_element_purchase.seller)
+      Feature.activate_user(Checkout::BuyerCurrencyEligibility::WALLETS_FEATURE_NAME, buyer_currency_purchase.seller)
+
+      described_class.new.perform
+
+      expect(InternalNotificationWorker).not_to have_received(:perform_async)
     end
 
     it "throttles repeated alerts while the lane remains at zero" do
@@ -126,6 +139,15 @@ describe AlertOnZeroBuyerCurrencyWalletPurchasesJob do
       described_class.new.perform
 
       expect(InternalNotificationWorker).not_to have_received(:perform_async)
+    end
+
+    it "releases the throttle when enqueue fails so Sidekiq retries can alert" do
+      enable_wallet_lane
+      allow(InternalNotificationWorker).to receive(:perform_async).and_raise(Redis::BaseError)
+
+      expect { described_class.new.perform }.to raise_error(Redis::BaseError)
+
+      expect($redis.get(RedisKey.buyer_currency_wallet_presentment_zero_alerted_at)).to be_nil
     end
 
     it "stays quiet and clears the alert throttle when a recent wallet purchase has a presentment row" do

@@ -8,6 +8,8 @@ class AlertOnZeroBuyerCurrencyWalletPurchasesJob
 
   WALLET_TYPES = %w[apple_pay google_pay].freeze
   ZERO_VOLUME_WINDOW = 24.hours
+  OVERLAP_LOOKBACK = 45.days
+  OVERLAP_SELLER_LIMIT = 100
   ALERT_THROTTLE = 24.hours
   ALERT_ROOM = "agent_reports"
 
@@ -16,32 +18,25 @@ class AlertOnZeroBuyerCurrencyWalletPurchasesJob
     return reset_alert_throttle if recent_wallet_presentment_purchase_exists?
     return unless claim_alert_throttle
 
-    InternalNotificationWorker.perform_async(ALERT_ROOM, "Buyer-currency wallet purchases at zero", message_for(last_wallet_presentment_purchase_at))
+    enqueue_alert(last_wallet_presentment_purchase_at)
   end
 
   private
-    # Checkout::BuyerCurrencyEligibility.wallets_enabled? ANDs both flags per seller. Either
-    # flag fully off means wallets are intentionally dark, so a zero-volume day is not an incident.
     def wallet_lane_enabled?
-      feature_rollout_present?(Checkout::BuyerCurrencyEligibility::PAYMENT_ELEMENT_WALLETS_FEATURE_NAME) &&
-        feature_rollout_present?(Checkout::BuyerCurrencyEligibility::WALLETS_FEATURE_NAME)
+      return true if Feature.active?(Checkout::BuyerCurrencyEligibility::PAYMENT_ELEMENT_WALLETS_FEATURE_NAME) &&
+        Feature.active?(Checkout::BuyerCurrencyEligibility::WALLETS_FEATURE_NAME)
+
+      sellers_with_recent_wallet_presentment_history.any? do |seller|
+        Checkout::BuyerCurrencyEligibility.wallets_enabled?(seller)
+      end
     end
 
-    def feature_rollout_present?(feature_name)
-      return true if Feature.active?(feature_name)
-
-      flipper_feature = Flipper[feature_name]
-      flipper_value_present?(flipper_feature, :percentage_of_actors_value) ||
-        flipper_value_present?(flipper_feature, :percentage_of_time_value) ||
-        flipper_value_present?(flipper_feature, :actors_value) ||
-        flipper_value_present?(flipper_feature, :groups_value)
-    end
-
-    def flipper_value_present?(flipper_feature, method_name)
-      return false unless flipper_feature.respond_to?(method_name)
-
-      value = flipper_feature.public_send(method_name)
-      value.respond_to?(:any?) ? value.any? : value.to_i.positive?
+    def sellers_with_recent_wallet_presentment_history
+      User.where(id: wallet_presentment_purchases
+        .where("purchases.created_at >= ?", OVERLAP_LOOKBACK.ago)
+        .distinct
+        .limit(OVERLAP_SELLER_LIMIT)
+        .pluck(:seller_id))
     end
 
     def wallet_presentment_purchases
@@ -67,6 +62,13 @@ class AlertOnZeroBuyerCurrencyWalletPurchasesJob
     # Claim before enqueue so overlapping hourly (or manual) runs cannot both notify.
     def claim_alert_throttle
       $redis.set(RedisKey.buyer_currency_wallet_presentment_zero_alerted_at, Time.current.to_i, nx: true, ex: ALERT_THROTTLE.to_i)
+    end
+
+    def enqueue_alert(last_purchase_at)
+      InternalNotificationWorker.perform_async(ALERT_ROOM, "Buyer-currency wallet purchases at zero", message_for(last_purchase_at))
+    rescue StandardError
+      reset_alert_throttle
+      raise
     end
 
     def message_for(last_purchase_at)
