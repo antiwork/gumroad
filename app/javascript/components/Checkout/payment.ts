@@ -76,6 +76,9 @@ export type PaymentElementClientConfirmConfig = {
   // Marks the GeoIP/listed-price card lane. Unlike the method-forced lane, shipping moves
   // this Element back to canonical USD because charge-time eligibility excludes it.
   direct_listed_card?: boolean;
+  // Raw page-issued FX rate signed into payment_method_list_token. Matches
+  // CurrencyHelper#usd_cents_to_currency, not the display-scaled product.exchange_rate.
+  direct_listed_currency_rate?: number | null;
   payment_method_types: string[];
   // Signed server copy of payment_method_types above, echoed back at /orders/prepare so the
   // deferred intent is built from the list this page actually mounted rather than a second
@@ -135,8 +138,6 @@ export type Product = {
   listedPriceCents?: number;
   // The post-discount amount the listed-currency charge will collect for this line today.
   listedChargePriceCents?: number;
-  // Product exchange rate used to convert USD surcharge rows into the listed currency.
-  listedCurrencyExchangeRate?: number;
   // What one renewal of a membership will charge, when it differs from `price` (e.g. a discount
   // limited to the first billing cycle, or a payment-method update on the subscription manage
   // page where `price` is today's charge — often zero — rather than the plan price). For
@@ -737,6 +738,11 @@ function directListedCardActive(state: State, usingSavedCard = state.usingSavedC
   return state.paymentMethod === "card" && !usingSavedCard && !hasShipping(state);
 }
 
+function usdCentsToListedCurrency(usdCents: number, rate: number, subunitToUnit: number): number {
+  const converted = usdCents * rate;
+  return subunitToUnit === 1 ? Math.round(converted / 100) : Math.round(converted);
+}
+
 function getDirectListedPaymentElementAmount(state: State) {
   if (state.checkoutPayment.integration !== "payment_element_client_confirm") return getChargeTodayPrice(state);
   if (state.surcharges.type !== "loaded") return null;
@@ -754,11 +760,17 @@ function getDirectListedPaymentElementAmount(state: State) {
     (sum, tip) => sum + (tip ?? 0),
     0,
   );
-  const listedRate = state.products.find(
-    (product) => product.listedCurrencyExchangeRate != null,
-  )?.listedCurrencyExchangeRate;
-  const excludedTax = listedRate != null ? Math.round(state.surcharges.result.tax_cents * listedRate) : 0;
-  const shipping = listedRate != null ? Math.round(state.surcharges.result.shipping_rate_cents * listedRate) : 0;
+  const listedRate = state.checkoutPayment.elements_options.direct_listed_currency_rate;
+  const subunitToUnit = state.checkoutPayment.elements_options.listed_currency_display?.subunit_to_unit;
+  const taxUsd = state.surcharges.result.tax_cents;
+  const shippingUsd = state.surcharges.result.shipping_rate_cents;
+  if ((taxUsd !== 0 || shippingUsd !== 0) && (listedRate == null || !(subunitToUnit && subunitToUnit > 0))) {
+    return null;
+  }
+  const excludedTax =
+    listedRate != null && subunitToUnit != null ? usdCentsToListedCurrency(taxUsd, listedRate, subunitToUnit) : 0;
+  const shipping =
+    listedRate != null && subunitToUnit != null ? usdCentsToListedCurrency(shippingUsd, listedRate, subunitToUnit) : 0;
 
   return lineTotal + tipTotal + excludedTax + shipping;
 }

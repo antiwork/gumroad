@@ -3,6 +3,8 @@
 class Order::CreateService
   include Order::ResponseHelpers
 
+  LISTED_CURRENCY_RATE_EXPIRED_MESSAGE = "The listed-currency price changed or expired. Please refresh the page and try again."
+
   attr_accessor :params, :buyer, :order
 
   PARAM_TO_ATTRIBUTE_MAPPINGS = {
@@ -63,6 +65,11 @@ class Order::CreateService
 
       if product.nil?
         purchase_responses[line_item_uid] = error_response("Product not found")
+        next
+      end
+
+      if listed_payment_element_requires_signed_rate?(product) && direct_listed_currency_rate_hint(product).nil?
+        purchase_responses[line_item_uid] = error_response(LISTED_CURRENCY_RATE_EXPIRED_MESSAGE)
         next
       end
 
@@ -405,10 +412,17 @@ class Order::CreateService
       OfferCode.normalize_code(code)
     end
 
+    def listed_payment_element_requires_signed_rate?(product)
+      return false if params[:buyer_currency_quote].present?
+      return false unless params[:payment_details_source] == PurchasePaymentFlow::PAYMENT_ELEMENT
+
+      mount = params[:payment_element_mount_currency].to_s.downcase
+      listed = product.price_currency_type.to_s.downcase
+      mount.present? && mount == listed && listed != Currency::USD
+    end
+
     def direct_listed_currency_rate_hint(product)
-      return if params[:buyer_currency_quote].present?
-      return unless params[:payment_details_source] == PurchasePaymentFlow::PAYMENT_ELEMENT
-      return unless params[:payment_element_mount_currency].to_s.downcase == product.price_currency_type.to_s.downcase
+      return unless listed_payment_element_requires_signed_rate?(product)
 
       Checkout::PaymentMethodListToken.direct_listed_currency_rate(
         params[:payment_method_list_token],

@@ -2310,6 +2310,22 @@ describe Order::PreparePaymentIntentService, :vcr do
         Feature.deactivate_user(Checkout::BuyerCurrencyEligibility::LISTED_CURRENCY_DIRECT_CHARGE_FEATURE_NAME, other_seller) if other_seller
       end
 
+      it "does not fall back to live FX when the signed direct-listed rate is missing" do
+        params = {
+          line_items: [line_item.merge(perceived_price_cents: 15_00, price_cents: 15_00)],
+          payment_details_source: PurchasePaymentFlow::PAYMENT_ELEMENT,
+          payment_element_mount_currency: Currency::CAD,
+          payment_method_list_token: "not-a-token",
+        }.merge(common_params)
+        allow_any_instance_of(Purchase).to receive(:get_rate).with(Currency::CAD).and_return(BigDecimal("0.5"))
+
+        order, responses = Order::CreateService.new(params:).perform
+
+        expect(order.purchases).to be_empty
+        expect(responses["unique-id-0"][:success]).to eq(false)
+        expect(responses["unique-id-0"][:error_message]).to eq(Order::CreateService::LISTED_CURRENCY_RATE_EXPIRED_MESSAGE)
+      end
+
       it "prepares the intent for the displayed CAD amount and persists quote-less presentment rows" do
         order, params = build_order
         purchase = order.purchases.first
