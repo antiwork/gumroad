@@ -38,6 +38,18 @@ class SendPostBlastEmailsSliceJob
   private
     CHUNK_REVALIDATION_SLICE_SIZE = 1_000
     CHUNK_CLAIM_TTL = 4.hours
+    RELEASE_CHUNK_CLAIM_IF_HELD = <<~LUA
+      if redis.call("GET", KEYS[1]) == ARGV[1] then
+        return redis.call("DEL", KEYS[1])
+      end
+      return 0
+    LUA
+    RENEW_CHUNK_CLAIM_IF_HELD = <<~LUA
+      if redis.call("GET", KEYS[1]) == ARGV[1] then
+        return redis.call("EXPIRE", KEYS[1], ARGV[2])
+      end
+      return 0
+    LUA
 
     def active_partition?(partition_key)
       $redis.get(RedisKey.blast_active_slice_partition(@blast.id)) == partition_key
@@ -48,17 +60,21 @@ class SendPostBlastEmailsSliceJob
     end
 
     def claim_chunk!(partition_key, chunk_index)
-      key = RedisKey.blast_slice_claim(@blast.id, partition_key, chunk_index)
-      return if $redis.set(key, jid.to_s, nx: true, ex: CHUNK_CLAIM_TTL.to_i)
-      # A super_fetch requeue re-runs the same jid while its own claim is still live; it must
-      # reclaim immediately rather than wait out the TTL. Only a different jid is a live copy.
-      return if jid.present? && $redis.get(key) == jid.to_s
+      @chunk_claim_key = RedisKey.blast_slice_claim(@blast.id, partition_key, chunk_index)
+      @chunk_claim_token = SecureRandom.uuid
+      return if $redis.set(@chunk_claim_key, @chunk_claim_token, nx: true, ex: CHUNK_CLAIM_TTL.to_i)
 
       raise "slice #{chunk_index} is already claimed for blast #{@blast.id}"
     end
 
-    def release_chunk_claim(partition_key, chunk_index)
-      $redis.del(RedisKey.blast_slice_claim(@blast.id, partition_key, chunk_index))
+    def renew_chunk_claim!
+      return if $redis.eval(RENEW_CHUNK_CLAIM_IF_HELD, keys: [@chunk_claim_key], argv: [@chunk_claim_token, CHUNK_CLAIM_TTL.to_i]).to_i == 1
+
+      raise "slice claim was lost for blast #{@blast.id}"
+    end
+
+    def release_chunk_claim(_partition_key, _chunk_index)
+      $redis.eval(RELEASE_CHUNK_CLAIM_IF_HELD, keys: [@chunk_claim_key], argv: [@chunk_claim_token])
     end
 
     def load_chunk_members(member_ids)

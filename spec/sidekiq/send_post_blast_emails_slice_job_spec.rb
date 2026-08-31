@@ -210,7 +210,7 @@ describe SendPostBlastEmailsSliceJob, :freeze_time do
       $redis.del(done_key, RedisKey.blast_active_slice_partition(blast.id)) if done_key && blast
     end
 
-    it "stores its jid as the chunk claim value" do
+    it "stores a per-execution token as the chunk claim value" do
       blast = create(:blast, :just_requested, post: post_with_audience)
       activate_partition(blast)
       claim_key = RedisKey.blast_slice_claim(blast.id, partition_key, 0)
@@ -221,22 +221,24 @@ describe SendPostBlastEmailsSliceJob, :freeze_time do
 
       job.perform(blast.id, partition_key, 0, 1, audience_ids)
 
-      expect(claim_value).to eq("claiming-jid")
+      expect(claim_value).to be_present
+      expect(claim_value).not_to eq("claiming-jid")
     end
 
-    it "lets the same jid reclaim its own chunk after a super_fetch requeue" do
+    it "does not let the same jid steal a held claim" do
       post = post_with_audience
       blast = create(:blast, :just_requested, post:)
       activate_partition(blast)
-      # A hard-killed worker never runs the ensure release, so its claim outlives it.
-      $redis.set(RedisKey.blast_slice_claim(blast.id, partition_key, 0), "requeued-jid")
+      $redis.set(RedisKey.blast_slice_claim(blast.id, partition_key, 0), "live-execution-token")
       job = described_class.new
       job.jid = "requeued-jid"
 
-      job.perform(blast.id, partition_key, 0, 1, audience_ids)
+      expect { job.perform(blast.id, partition_key, 0, 1, audience_ids) }.to raise_error(/already claimed/)
 
-      expect_sent_count 3
-      expect(blast.reload.completed_at).to be_present
+      expect_sent_count 0
+      expect(blast.reload.completed_at).to be_blank
+    ensure
+      $redis.del(RedisKey.blast_slice_claim(blast.id, partition_key, 0), RedisKey.blast_active_slice_partition(blast.id)) if blast
     end
 
     it "does not let a different jid steal a held claim" do
@@ -265,6 +267,23 @@ describe SendPostBlastEmailsSliceJob, :freeze_time do
       expect { described_class.new.perform(blast.id, partition_key, 0, 1, audience_ids.first(1)) }.to raise_error(StandardError, "send failed")
 
       expect($redis.exists?(claim_key)).to be(false)
+    ensure
+      $redis.del(claim_key, RedisKey.blast_active_slice_partition(blast.id)) if claim_key && blast
+    end
+
+    it "does not release a successor claim after this execution loses the lease" do
+      post = post_with_audience
+      blast = create(:blast, :just_requested, post:)
+      activate_partition(blast)
+      claim_key = RedisKey.blast_slice_claim(blast.id, partition_key, 0)
+      allow_any_instance_of(described_class).to receive(:send_members) do
+        $redis.set(claim_key, "successor-token")
+        raise StandardError, "send failed"
+      end
+
+      expect { described_class.new.perform(blast.id, partition_key, 0, 1, audience_ids.first(1)) }.to raise_error(StandardError, "send failed")
+
+      expect($redis.get(claim_key)).to eq("successor-token")
     ensure
       $redis.del(claim_key, RedisKey.blast_active_slice_partition(blast.id)) if claim_key && blast
     end

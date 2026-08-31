@@ -59,6 +59,7 @@ module PostBlastSending
   # already accepted its recipients must not be handed them again because a later
   # provider failed, so the cleanup below only rolls back the slice that raised.
   def send_provider_slice(provider:, members:, cache:)
+    renew_chunk_claim! if respond_to?(:renew_chunk_claim!, true)
     # Count the slice as handed over, not the post-dedupe remainder: anything
     # `store_recipients_as_sent` drops was already emailed by someone else.
     owed = members.size
