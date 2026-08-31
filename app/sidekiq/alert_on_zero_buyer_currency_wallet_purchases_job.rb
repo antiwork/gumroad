@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
-# Reports when the buyer-currency wallet lane is enabled but no Apple Pay / Google Pay purchase
-# lands with a presentment row for a full day (gumroad-private#2326).
+# Reports when the buyer-currency wallet lane is globally enabled but no Apple Pay / Google Pay
+# purchase lands with a non-USD presentment row for a full day (gumroad-private#2326).
 class AlertOnZeroBuyerCurrencyWalletPurchasesJob
   include Sidekiq::Job
   sidekiq_options retry: 2, queue: :low
@@ -12,7 +12,7 @@ class AlertOnZeroBuyerCurrencyWalletPurchasesJob
   ALERT_ROOM = "agent_reports"
 
   def perform
-    return reset_alert_throttle unless wallet_lane_enabled?
+    return reset_alert_throttle unless wallet_lane_fully_enabled?
     return reset_alert_throttle if recent_wallet_presentment_purchase_exists?
     return unless claim_alert_throttle
 
@@ -20,71 +20,23 @@ class AlertOnZeroBuyerCurrencyWalletPurchasesJob
   end
 
   private
-    def wallet_lane_enabled?
-      feature_rollouts_overlap?(
-        Checkout::BuyerCurrencyEligibility::PAYMENT_ELEMENT_WALLETS_FEATURE_NAME,
-        Checkout::BuyerCurrencyEligibility::WALLETS_FEATURE_NAME,
-      )
+    def wallet_lane_fully_enabled?
+      feature_fully_enabled?(Checkout::BuyerCurrencyEligibility::PAYMENT_ELEMENT_WALLETS_FEATURE_NAME) &&
+        feature_fully_enabled?(Checkout::BuyerCurrencyEligibility::WALLETS_FEATURE_NAME)
     end
 
-    def feature_rollouts_overlap?(first_feature_name, second_feature_name)
-      return false unless feature_rollout_present?(first_feature_name) && feature_rollout_present?(second_feature_name)
-      return true if broad_rollout?(first_feature_name) && broad_rollout?(second_feature_name)
-      return true if broad_rollout_covers_targeted_actors?(first_feature_name, second_feature_name)
-      return true if broad_rollout_covers_targeted_actors?(second_feature_name, first_feature_name)
+    def feature_fully_enabled?(feature_name)
+      return true if Feature.active?(feature_name)
 
-      targeted_rollouts_overlap?(first_feature_name, second_feature_name)
-    end
-
-    def feature_rollout_present?(feature_name)
-      broad_rollout?(feature_name) || targeted_actor_values(feature_name).any? || targeted_group_values(feature_name).any?
-    end
-
-    def broad_rollout?(feature_name)
-      Feature.active?(feature_name) || percentage_rollout?(feature_name)
-    end
-
-    def percentage_rollout?(feature_name)
       flipper_feature = Flipper[feature_name]
-      flipper_numeric_value(flipper_feature, :percentage_of_actors_value).positive? ||
-        flipper_numeric_value(flipper_feature, :percentage_of_time_value).positive?
+      flipper_percentage_value(flipper_feature, :percentage_of_actors_value) >= 100 ||
+        flipper_percentage_value(flipper_feature, :percentage_of_time_value) >= 100
     end
 
-    def flipper_numeric_value(flipper_feature, method_name)
+    def flipper_percentage_value(flipper_feature, method_name)
       return 0 unless flipper_feature.respond_to?(method_name)
 
       flipper_feature.public_send(method_name).to_i
-    end
-
-    def broad_rollout_covers_targeted_actors?(broad_feature_name, targeted_feature_name)
-      users_for_actor_values(targeted_actor_values(targeted_feature_name)).any? { Feature.active?(broad_feature_name, _1) } ||
-        targeted_group_values(targeted_feature_name).any?
-    end
-
-    def targeted_rollouts_overlap?(first_feature_name, second_feature_name)
-      users_for_actor_values(targeted_actor_values(first_feature_name) | targeted_actor_values(second_feature_name)).any? do |user|
-        Checkout::BuyerCurrencyEligibility.wallets_enabled?(user)
-      end || (targeted_group_values(first_feature_name) & targeted_group_values(second_feature_name)).any?
-    end
-
-    def targeted_actor_values(feature_name)
-      values_for(feature_name, :actors_value)
-    end
-
-    def targeted_group_values(feature_name)
-      values_for(feature_name, :groups_value)
-    end
-
-    def values_for(feature_name, method_name)
-      flipper_feature = Flipper[feature_name]
-      return [] unless flipper_feature.respond_to?(method_name)
-
-      Array(flipper_feature.public_send(method_name)).map(&:to_s)
-    end
-
-    def users_for_actor_values(actor_values)
-      user_ids = actor_values.filter_map { _1[/\AUser;(\d+)\z/, 1] }.map(&:to_i)
-      User.where(id: user_ids)
     end
 
     def wallet_presentment_purchases
@@ -129,9 +81,9 @@ class AlertOnZeroBuyerCurrencyWalletPurchasesJob
     end
 
     def headline(last_purchase_at)
-      return "No buyer-currency wallet purchase with a presentment row has ever been recorded while the buyer-currency wallet lane is enabled." if last_purchase_at.blank?
+      return "No buyer-currency wallet purchase with a non-USD presentment row has ever been recorded while the buyer-currency wallet lane is fully enabled." if last_purchase_at.blank?
 
       hours = ((Time.current - last_purchase_at) / 1.hour).floor
-      "No buyer-currency wallet purchase with a presentment row has been recorded in #{hours} hours while the buyer-currency wallet lane is enabled. The last one was at #{last_purchase_at.utc.strftime('%Y-%m-%d %H:%M UTC')}."
+      "No buyer-currency wallet purchase with a non-USD presentment row has been recorded in #{hours} hours while the buyer-currency wallet lane is fully enabled. The last one was at #{last_purchase_at.utc.strftime('%Y-%m-%d %H:%M UTC')}."
     end
 end
