@@ -1,3 +1,4 @@
+import { ChevronDown } from "@boxicons/react";
 import * as React from "react";
 
 import { classNames } from "$app/utils/classNames";
@@ -45,10 +46,17 @@ export const CollapsibleDescription = ({ children }: { children: React.ReactNode
       </div>
       {isCollapsible ? (
         <button
-          className="mt-4 cursor-pointer underline all-unset lg:hidden"
+          className="mt-4 inline-flex cursor-pointer items-center gap-1 underline all-unset lg:hidden"
           aria-expanded={isExpanded}
           onClick={() => setIsExpanded(!isExpanded)}
         >
+          <ChevronDown
+            aria-hidden="true"
+            className={classNames(
+              "size-5 shrink-0 transition-transform duration-200 ease-out motion-reduce:transition-none",
+              isExpanded && "rotate-180",
+            )}
+          />
           {isExpanded ? "Show less" : "Read more"}
         </button>
       ) : null}

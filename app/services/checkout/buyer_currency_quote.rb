@@ -6,8 +6,9 @@ class Checkout::BuyerCurrencyQuote
   InvalidToken = Class.new(StandardError)
 
   # line_allocations is only present on freshly created quotes (it drives the checkout
-  # display); verified tokens don't carry it because the charge re-derives the allocation
-  # from its purchases with the same shared code (Charge::PresentmentAllocator).
+  # display); verified tokens normally re-derive the allocation from purchases with the same
+  # shared code. The optional presentment_component_overrides carry exact buyer-typed tips
+  # through that second allocation when no canonical USD cent round-trips to the typed amount.
   #
   # A created quote covers the whole cart, which can be several prospective charges (one per
   # seller), so its totals are cart-wide sums and `charges` holds the per-charge detail.
@@ -26,6 +27,7 @@ class Checkout::BuyerCurrencyQuote
                       :stripe_fx_quote_expires_at,
                       :charges,
                       :line_allocations,
+                      :presentment_component_overrides,
                       :later_charge_presentments,
                       :listed_currency_rates,
                       :listed_currency_codes,
@@ -57,7 +59,8 @@ class Checkout::BuyerCurrencyQuote
   # components mirror the layout Charge::PresentmentAllocator allocates at charge time
   # (price, tip, seller tax, Gumroad tax, shipping), so the quote-time allocation and the
   # persisted purchase rows are computed from identical inputs.
-  LineItem = Struct.new(:permalink, :product, :price_cents, :tip_cents,
+  LineItem = Struct.new(:permalink, :uid, :line_index, :product, :price_cents, :tip_cents,
+                        :presentment_tip_cents,
                         :seller_tax_cents, :gumroad_tax_cents, :shipping_cents,
                         :charge_price_cents, :charge_tip_cents,
                         :charge_seller_tax_cents, :charge_gumroad_tax_cents,
@@ -86,10 +89,10 @@ class Checkout::BuyerCurrencyQuote
     # taken at the same moment it converted this line to canonical USD cents
     # (gumroad-private#1958). Binding it here lets the charge path re-derive
     # `rate_converted_to_usd` from the token instead of a second, possibly-drifted read.
-    def self.from_surcharge(permalink:, product:, tax_result:, tip_cents:, shipping_usd_cents:,
+    def self.from_surcharge(permalink:, product:, tax_result:, tip_cents:, shipping_usd_cents:, presentment_tip_cents: nil,
                             charge_tax_result: nil, charge_tip_cents: nil, charge_shipping_usd_cents: nil,
                             later_charge_kind: nil, later_charge_price_cents: nil, charge_now: true,
-                            listed_currency_rate: nil)
+                            listed_currency_rate: nil, uid: nil, line_index: nil)
       price_cents = tax_result.price_cents.to_i
       # The submitted price and tip are buyer-controlled request params. A crafted
       # negative price would make clamp's bounds invalid (min > max) and raise, and a
@@ -97,6 +100,8 @@ class Checkout::BuyerCurrencyQuote
       # back to canonical USD (no quote) instead of erroring the surcharge endpoint.
       tip_cents = tip_cents.is_a?(String) || tip_cents.is_a?(Numeric) ? tip_cents.to_i : 0
       tip_cents = tip_cents.clamp(0, [price_cents, 0].max)
+      presentment_tip_cents = presentment_tip_cents.is_a?(String) || presentment_tip_cents.is_a?(Numeric) ? presentment_tip_cents.to_i : nil
+      presentment_tip_cents = [presentment_tip_cents, 0].max if presentment_tip_cents
       tax_cents = tax_result.tax_cents > 0 ? tax_result.tax_cents.round.to_i : 0
       seller_responsible = seller_responsible_for?(tax_result)
 
@@ -116,9 +121,12 @@ class Checkout::BuyerCurrencyQuote
 
       new(
         permalink:,
+        uid:,
+        line_index:,
         product:,
         price_cents: price_cents - tip_cents,
         tip_cents:,
+        presentment_tip_cents:,
         seller_tax_cents: seller_responsible ? tax_cents : 0,
         gumroad_tax_cents: seller_responsible ? 0 : tax_cents,
         shipping_cents: shipping_usd_cents.round.to_i,
@@ -195,7 +203,9 @@ class Checkout::BuyerCurrencyQuote
                            :stripe_fx_quote_expires_at,
                            :canonical_line_items,
                            :charge_canonical_line_items,
+                           :canonical_line_components,
                            :line_allocations,
+                           :presentment_component_overrides,
                            :future_installments_presentment_total_cents,
                            :later_charge_presentments,
                            :listed_currency_rates,
@@ -203,6 +213,10 @@ class Checkout::BuyerCurrencyQuote
                            keyword_init: true)
 
   TOKEN_PURPOSE = :buyer_currency_quote
+  # Payload had signed per-line components but this request did not bind one
+  # row. Callers on the Stripe verify path must fail closed rather than treat
+  # this like a pre-component legacy token.
+  CANONICAL_COMPONENTS_UNBOUND = :unbound
 
   # Each seller costs one serial Stripe FX quote (2s connect + 5s read, no retry) on the
   # surcharge request the buyer is waiting on, re-paid on every cart/tip/address/VAT edit.
@@ -217,7 +231,7 @@ class Checkout::BuyerCurrencyQuote
 
   # Whether this cart clears the gates in #create that no currency can get it past: a total that
   # isn't positive, lines that don't reconcile, more sellers than MAX_QUOTED_CHARGES, a seller who
-  # isn't enabled, a free trial, a mixed recurring cart, a tip on a non-USD listing. Asked by the
+  # isn't enabled, a free trial, or a mixed recurring cart. Asked by the
   # surcharge endpoint before it publishes a currency menu — a cart that fails one of these can be
   # quoted in nothing, so listing its settleable currencies would offer the buyer a row of choices
   # that each vanish the moment they are picked.
@@ -302,6 +316,7 @@ class Checkout::BuyerCurrencyQuote
       fx_rate: BigDecimal(charge_payload.fetch("fx_rate")),
       stripe_fx_quote_id: charge_payload.fetch("stripe_fx_quote_id"),
       stripe_fx_quote_expires_at: Time.zone.parse(charge_payload.fetch("stripe_fx_quote_expires_at")),
+      presentment_component_overrides: charge_payload["presentment_component_overrides"],
       later_charge_presentments: charge_payload["later_charge_presentments"] || [],
       listed_currency_rates: charge_payload["listed_currency_rates"] || {},
       listed_currency_codes: charge_payload["listed_currency_codes"] || {}
@@ -323,15 +338,9 @@ class Checkout::BuyerCurrencyQuote
       raise(InvalidToken, "quote covers no charge for this seller")
   end
 
-  # Signature- and expiry-checked but non-authoritative (gumroad-private#1958): confirms the
-  # token wasn't tampered with and is still inside its quote window, not
-  # seller/merchant-account/totals — `verify!` still runs the full check later via
-  # `Charge::CreateService#locked_buyer_currency_quote!` on Stripe charges. The expiry check is
-  # load-bearing on its own, though: non-Stripe charges (PayPal) never reach `verify!` — the
-  # charge service discards the token there — yet the rate bound here has already priced the
-  # purchase. Signatures do not age, so without this a buyer could replay a months-old token on
-  # a PayPal checkout and buy at a stale rate; with it, a replay is bounded by the quote window
-  # like every other consumer of the token.
+  # Signature- and expiry-checked but non-authoritative (gumroad-private#1958).
+  # Stripe callers may use this while constructing the purchase because `verify!` later binds
+  # the seller, merchant account, and totals; non-Stripe callers must ignore it.
   def self.listed_currency_rate_hint(token:, seller_id:, permalink:, currency:)
     return if token.blank?
 
@@ -344,6 +353,75 @@ class Checkout::BuyerCurrencyQuote
     return unless charge_payload.dig("listed_currency_codes", permalink.to_s).to_s.casecmp?(currency.to_s)
 
     charge_payload.dig("listed_currency_rates", permalink.to_s)&.to_d
+  rescue ActiveSupport::MessageVerifier::InvalidSignature, KeyError, TypeError, ArgumentError
+    nil
+  end
+
+  # Signature- and expiry-checked, then scoped to one line in one seller charge. Used while
+  # constructing a non-USD listed purchase from a quote token: the display price remains in the
+  # product's listed currency, but the charge must use the canonical component split the quote
+  # signed, or a rounded listed tip can make charge-time verification fail.
+  def self.canonical_components_hint(token:, seller_id:, permalink:, currency:, uid: nil, line_index: nil)
+    return if token.blank?
+
+    payload = verifier.verify(token)
+    charge_payloads = payload["charges"].presence || [payload]
+    charge_payload = charge_payloads.find { |cp| cp["seller_id"] == seller_id }
+    return if charge_payload.blank?
+    return if Time.zone.parse(charge_payload.fetch("stripe_fx_quote_expires_at")) <= Time.current
+
+    listed_code = charge_payload.dig("listed_currency_codes", permalink.to_s).to_s
+    if listed_code.present?
+      return unless listed_code.casecmp?(currency.to_s)
+    else
+      # USD lines are omitted from listed_currency_codes (no listed rate). They still
+      # carry signed components so a remapped tip can be restored on that line.
+      return unless currency.to_s.casecmp?(Currency::USD)
+    end
+
+    components_payload = charge_payload["canonical_line_components"]
+    return if components_payload.blank?
+
+    components = if components_payload.is_a?(Hash)
+      components_payload[permalink.to_s]
+    elsif components_payload.is_a?(Array)
+      # UID and line_index are client-supplied. Scope to the signed permalink first so a
+      # swapped identifier cannot apply another product's price/tip/tax/shipping split.
+      scoped = components_payload.select { |line| line.is_a?(Hash) && line["permalink"].to_s == permalink.to_s }
+      # Zero-cent lines are omitted from the signed payload on purpose. No row for
+      # this permalink is "nothing to apply", not an unbound paid split.
+      return if scoped.empty?
+
+      by_uid = uid.present? ? scoped.find { |line| line["uid"].to_s == uid.to_s } : nil
+      by_index = line_index.nil? ? nil : scoped.find { |line| line["line_index"].to_i == line_index.to_i }
+      if uid.present? && !line_index.nil?
+        # Both identifiers are client-supplied. Accept only when they name the
+        # same signed row. An old browser can mint a sole row without a UID but
+        # submit the order UID; preserve that rolling-deploy shape by index.
+        if by_uid && by_index && by_uid.equal?(by_index)
+          by_uid
+        elsif scoped.one? && by_index && by_index["uid"].blank?
+          by_index
+        end
+      elsif uid.present?
+        by_uid
+      elsif scoped.one?
+        # Index (or sole-row) fallback is safe only when this permalink has one
+        # signed row. Two same-permalink rows without a uid can otherwise bind a
+        # sibling variant/PWYW split through a client-controlled index.
+        line_index.nil? ? scoped.sole : by_index
+      end
+    end
+    return if components_payload.is_a?(Hash) && components.blank?
+    return CANONICAL_COMPONENTS_UNBOUND if components.blank?
+
+    {
+      price_cents: components.fetch("price_cents").to_i,
+      tip_cents: components.fetch("tip_cents").to_i,
+      seller_tax_cents: components.fetch("seller_tax_cents").to_i,
+      gumroad_tax_cents: components.fetch("gumroad_tax_cents").to_i,
+      shipping_cents: components.fetch("shipping_cents").to_i,
+    }
   rescue ActiveSupport::MessageVerifier::InvalidSignature, KeyError, TypeError, ArgumentError
     nil
   end
@@ -395,7 +473,7 @@ class Checkout::BuyerCurrencyQuote
     # A negative component means the submitted request was malformed (prices and tips
     # are sanitized above, but defense in depth: never lock a quote whose lines could
     # not represent a real cart).
-    return false if line_items.any? { |line| line.to_h.except(:permalink, :product, :later_charge_kind, :listed_currency_rate).values.compact.any?(&:negative?) }
+    return false if line_items.any? { |line| line.to_h.except(:permalink, :uid, :product, :later_charge_kind, :listed_currency_rate).values.compact.any?(&:negative?) }
     # A line item can carry a nil product when the caller built it from a product lookup
     # that found nothing (seen from an ad-hoc QA script — Sentry GUMROAD-Z5). The surcharge
     # endpoint already withholds the quote for unknown products, but the service must not
@@ -432,20 +510,6 @@ class Checkout::BuyerCurrencyQuote
     # complete that checkout at all, and reloading reproduced it.
     recurring, one_time = products.partition(&:is_recurring_billing?)
     return false if recurring.any? && one_time.any?
-    # Tip on a non-USD listing is not safe to quote: the surcharge request and the order
-    # builder split it over different price bases and convert at different points, so the
-    # two can disagree by a cent and `verify!` fails the buyer's payment on "total mismatch".
-    # Shipping now converts the same way on both paths (sum(convert) on each), so it's safe
-    # to quote; tip isn't.
-    #
-    # The gate is cart-level, not per-line, because the largest-remainder tip split can hand a
-    # cent to a different line between quote and submit, so a per-line check could mint a
-    # token whose per-line totals then fail verification.
-    if products.any? { |product| product.price_currency_type.to_s.downcase != Currency::USD } &&
-       line_items.any? { |line| line.tip_cents.to_i.positive? }
-      return false
-    end
-
     true
   end
 
@@ -705,7 +769,19 @@ class Checkout::BuyerCurrencyQuote
       else
         presentment_cents_for(current_canonical_total_cents, quote.fx_rate, buyer_currency)
       end
-      line_allocations = line_allocations_for(charge_line_items, converted_total_cents, rounding.delta_cents)
+      presentment_component_overrides = presentment_component_overrides_for(charge_line_items, fx_rate: quote.fx_rate, buyer_currency:)
+      display_presentment_component_overrides = presentment_component_overrides_for(
+        charge_line_items,
+        fx_rate: quote.fx_rate,
+        buyer_currency:,
+        include_zero_charge_slots: true
+      )
+      line_allocations = line_allocations_for(
+        charge_line_items,
+        converted_total_cents,
+        rounding.delta_cents,
+        presentment_component_overrides: display_presentment_component_overrides
+      )
       future_installments_presentment_total_cents = 0
       later_charge_presentments = charge_line_items.each_with_index.filter_map do |line_item, index|
         next if line_item.later_charge_kind.blank?
@@ -755,10 +831,26 @@ class Checkout::BuyerCurrencyQuote
 
           [line_item.permalink.to_s, line_item.charge_canonical_total_cents.to_i]
         end,
+        canonical_line_components: charge_line_items.filter_map do |line_item|
+          next if line_item.charge_canonical_total_cents.zero?
+
+          components = line_item.charge_canonical_component_cents
+          {
+            uid: line_item.uid.presence,
+            line_index: line_item.line_index,
+            permalink: line_item.permalink.to_s,
+            price_cents: components[0].to_i,
+            tip_cents: components[1].to_i,
+            seller_tax_cents: components[2].to_i,
+            gumroad_tax_cents: components[3].to_i,
+            shipping_cents: components[4].to_i,
+          }.compact
+        end,
         # Built from the EXACT converted total plus the rounding difference, so the tax the
         # checkout displays is the true converted tax and the cosmetic difference shows up on
         # the price/tip/shipping lines instead (see Charge::PresentmentAllocator).
         line_allocations:,
+        presentment_component_overrides:,
         future_installments_presentment_total_cents:,
         later_charge_presentments:,
         # Keep the existing scalar rate shape so older app instances can read tokens minted
@@ -788,10 +880,11 @@ class Checkout::BuyerCurrencyQuote
     # A raise from the allocator (a difference with no non-tax component to carry it) is
     # caught by #create's rescue, which drops the whole cart back to canonical USD — a
     # cosmetic price ending must never break a checkout.
-    def line_allocations_for(charge_line_items, converted_total_cents, rounding_delta_cents)
+    def line_allocations_for(charge_line_items, converted_total_cents, rounding_delta_cents, presentment_component_overrides:)
       Charge::PresentmentAllocator.allocate_lines(
         presentment_total_cents: converted_total_cents,
         rounding_delta_cents:,
+        presentment_component_overrides:,
         lines: charge_line_items.map do |line_item|
           Charge::PresentmentAllocator::Line.new(
             canonical_total_cents: line_item.canonical_total_cents,
@@ -811,6 +904,21 @@ class Checkout::BuyerCurrencyQuote
           presentment_total_cents: line_allocation.presentment_total_cents
         )
       end
+    end
+
+    def presentment_component_overrides_for(charge_line_items, fx_rate:, buyer_currency:, include_zero_charge_slots: false)
+      lines = include_zero_charge_slots ? charge_line_items : charge_line_items.reject { _1.charge_canonical_total_cents.zero? }
+      overrides = lines.map do |line_item|
+        next if include_zero_charge_slots && line_item.charge_canonical_total_cents.zero?
+        next if line_item.presentment_tip_cents.to_i.zero?
+
+        charge_tip_cents = line_item.charge_tip_cents.nil? ? line_item.tip_cents : line_item.charge_tip_cents
+        expected_tip_cents = presentment_cents_for(charge_tip_cents, fx_rate, buyer_currency)
+        next if (line_item.presentment_tip_cents - expected_tip_cents).abs > 1
+
+        [nil, line_item.presentment_tip_cents, nil, nil, nil]
+      end
+      overrides.any? ? overrides : nil
     end
 
     # The cart's line allocations back in the order the request listed them. The charges are
@@ -904,6 +1012,8 @@ class Checkout::BuyerCurrencyQuote
           presentment_total_cents: charge_quote.presentment_total_cents,
           charge_canonical_total_cents: charge_quote.charge_canonical_total_cents,
           charge_canonical_line_items: charge_quote.charge_canonical_line_items,
+          canonical_line_components: charge_quote.canonical_line_components,
+          presentment_component_overrides: charge_quote.presentment_component_overrides,
           charge_presentment_total_cents: charge_quote.charge_presentment_total_cents,
           later_charge_presentments: charge_quote.later_charge_presentments,
           # How far the rounding moved the amount, signed into the token so the charge

@@ -140,17 +140,27 @@ class Purchase::CreateService < Purchase::BaseService
         raise Purchase::PurchaseInvalid, purchase.upsell_purchase.errors.first.message unless purchase.upsell_purchase.valid?
       end
 
+      quoted_listed_rate = buyer_currency_quote_rate_hint(purchase)
+
       if params[:tip_cents].present? && params[:tip_cents] > 0
         raise Purchase::PurchaseInvalid, "Tip is not allowed for this product" unless purchase.seller.tipping_enabled? && product.not_is_tiered_membership?
 
         raise Purchase::PurchaseInvalid, "Tip is too large for this purchase" if (purchase_params[:perceived_price_cents].ceil - params[:tip_cents].floor) < purchase.minimum_paid_price_cents
 
-        purchase.build_tip(value_cents: params[:tip_cents], value_usd_cents: get_usd_cents(product.price_currency_type, params[:tip_cents]))
+        # Listed-currency tip_cents must convert at the quote's locked rate, the same
+        # rate prepare_for_charge! uses. A live-rate read here makes the submitted USD
+        # tip miss the signed split by more than rounding slack and fail-closes as
+        # buyer_currency_quote_invalid.
+        purchase.build_tip(
+          value_cents: params[:tip_cents],
+          value_usd_cents: get_usd_cents(product.price_currency_type, params[:tip_cents], rate: quoted_listed_rate)
+        )
       end
+      purchase.buyer_currency_quote_canonical_components = buyer_currency_quote_canonical_components_hint(purchase)
 
       validate_bundle_products
 
-      purchase.prepare_for_charge!(locked_rate: buyer_currency_quote_rate_hint(purchase))
+      purchase.prepare_for_charge!(locked_rate: quoted_listed_rate)
 
       purchase.build_purchase_wallet_type(wallet_type: params[:wallet_type]) if params[:wallet_type].present?
 
@@ -206,11 +216,12 @@ class Purchase::CreateService < Purchase::BaseService
   end
 
   private
-    # Every processor may use this signature- and expiry-checked hint while building the purchase.
-    # Stripe later performs the full amount verification; PayPal discards the token after the hint,
-    # which makes expiry the only bound on its pricing use (gumroad-private#1958).
+    # Only the Stripe-verified path may lock listed conversion to the leftover quote rate.
+    # PayPal/Braintree discard the signed components, so a rate hint here would reprice
+    # those charges at Stripe's stale FX instead of the legacy live conversion.
     def buyer_currency_quote_rate_hint(purchase)
       return if params[:buyer_currency_quote].blank?
+      return unless buyer_currency_quote_components_verified_path?
       return unless purchase.link.price_currency_type.to_s.downcase != Currency::USD
 
       Checkout::BuyerCurrencyQuote.listed_currency_rate_hint(
@@ -219,6 +230,48 @@ class Purchase::CreateService < Purchase::BaseService
         permalink: purchase.link.unique_permalink,
         currency: purchase.link.price_currency_type
       )
+    end
+
+    def buyer_currency_quote_canonical_components_hint(purchase)
+      return if params[:buyer_currency_quote].blank?
+      # Charge::CreateService discards the token for PayPal before verify!.
+      # Do not make that token authoritative over the USD split.
+      return unless buyer_currency_quote_components_verified_path?
+
+      # Do not require a submit-time tip or a non-USD listing. Quote-time largest-remainder
+      # can hand a cent to a different line — including a USD line in a mixed cart — so any
+      # quoted line may arrive with tip_cents=0 and still need its signed split.
+
+      hint = Checkout::BuyerCurrencyQuote.canonical_components_hint(
+        token: params[:buyer_currency_quote],
+        seller_id: purchase.seller.id,
+        permalink: purchase.link.unique_permalink,
+        currency: purchase.link.price_currency_type,
+        uid: params[:buyer_currency_quote_line_uid],
+        line_index: params[:buyer_currency_quote_line_index]
+      )
+      if hint == Checkout::BuyerCurrencyQuote::CANONICAL_COMPONENTS_UNBOUND
+        purchase.errors.add(:base, Charge::CreateService::BUYER_CURRENCY_QUOTE_INVALID_MESSAGE)
+        purchase.error_code = PurchaseErrorCode::BUYER_CURRENCY_QUOTE_INVALID
+        raise Purchase::PurchaseInvalid, Charge::CreateService::BUYER_CURRENCY_QUOTE_INVALID_MESSAGE
+      end
+
+      hint
+    end
+
+    def buyer_currency_quote_components_verified_path?
+      return false if params.values_at(
+        :paypal_order_id,
+        :billing_agreement_id,
+        :braintree_transient_customer_store_key,
+        :braintree_device_data
+      ).any?(&:present?)
+
+      chargeable = purchase_params&.[](:chargeable)
+      processor_id = chargeable.respond_to?(:charge_processor_id) ? chargeable.charge_processor_id : nil
+      return true if processor_id.blank?
+
+      processor_id == StripeChargeProcessor.charge_processor_id
     end
 
     def is_gift?

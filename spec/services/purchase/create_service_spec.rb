@@ -8,17 +8,17 @@ describe Purchase::CreateService, :vcr do
   let(:buyer) { create(:user, email:) }
   let(:zip_code) { "12345" }
 
-  def signed_buyer_currency_quote(seller:, product:, rate:)
-    payload = {
-      "charges" => [
-        {
-          "seller_id" => seller.id,
-          "stripe_fx_quote_expires_at" => 30.minutes.from_now.iso8601,
-          "listed_currency_rates" => { product.unique_permalink => rate },
-          "listed_currency_codes" => { product.unique_permalink => product.price_currency_type.to_s.downcase },
-        }
-      ]
+  def signed_buyer_currency_quote(seller:, product:, rate:, canonical_components: nil)
+    charge = {
+      "seller_id" => seller.id,
+      "stripe_fx_quote_expires_at" => 30.minutes.from_now.iso8601,
+      "listed_currency_rates" => { product.unique_permalink => rate },
+      "listed_currency_codes" => { product.unique_permalink => product.price_currency_type.to_s.downcase },
     }
+    if canonical_components.present?
+      charge["canonical_line_components"] = canonical_components.is_a?(Array) ? canonical_components : { product.unique_permalink => canonical_components.stringify_keys }
+    end
+    payload = { "charges" => [charge] }
     Rails.application.message_verifier(Checkout::BuyerCurrencyQuote::TOKEN_PURPOSE).generate(payload)
   end
 
@@ -114,6 +114,694 @@ describe Purchase::CreateService, :vcr do
       zip_code: "94117"
     )
     params
+  end
+
+  it "uses signed canonical tip components for a tipped non-USD quote" do
+    user.update!(tipping_enabled: true)
+    eur_product = create(:product, user:, price_currency_type: Currency::EUR, price_cents: 10_00)
+    quote = signed_buyer_currency_quote(
+      seller: user,
+      product: eur_product,
+      rate: "0.8",
+      canonical_components: {
+        price_cents: 12_50,
+        tip_cents: 1_26,
+        seller_tax_cents: 0,
+        gumroad_tax_cents: 0,
+        shipping_cents: 0,
+      }
+    )
+
+    purchase, error = described_class.new(
+      product: eur_product,
+      params: {
+        purchase: base_params.fetch(:purchase).merge(perceived_price_cents: 11_00),
+        tip_cents: 1_00,
+        buyer_currency_quote: quote,
+        is_part_of_combined_charge: true,
+      },
+      buyer:
+    ).perform
+
+    expect(error).to be_nil
+    expect(purchase.tip.value_cents).to eq(1_00)
+    expect(purchase.reload.tip.value_usd_cents).to eq(1_26)
+    expect(purchase.total_transaction_cents).to eq(13_76)
+  end
+
+  it "converts a listed non-USD tip at the quote's locked rate when the live rate has drifted" do
+    user.update!(tipping_enabled: true)
+    eur_product = create(:product, user:, price_currency_type: Currency::EUR, price_cents: 10_00)
+    quote = signed_buyer_currency_quote(
+      seller: user,
+      product: eur_product,
+      rate: "0.8",
+      canonical_components: {
+        price_cents: 12_50,
+        tip_cents: 1_26,
+        seller_tax_cents: 0,
+        gumroad_tax_cents: 0,
+        shipping_cents: 0,
+      }
+    )
+
+    allow_any_instance_of(described_class).to receive(:get_usd_cents).and_wrap_original do |method, currency_type, quantity, **kwargs|
+      kwargs = kwargs.merge(rate: 0.5) if kwargs[:rate].blank?
+      method.call(currency_type, quantity, **kwargs)
+    end
+
+    purchase, error = described_class.new(
+      product: eur_product,
+      params: {
+        purchase: base_params.fetch(:purchase).merge(perceived_price_cents: 11_00),
+        tip_cents: 1_00,
+        buyer_currency_quote: quote,
+        is_part_of_combined_charge: true,
+      },
+      buyer:
+    ).perform
+
+    expect(error).to be_nil
+    expect(purchase.tip.value_cents).to eq(1_00)
+    expect(purchase.tip.value_usd_cents).to eq(1_26)
+    expect(purchase.total_transaction_cents).to eq(13_76)
+  end
+
+  it "accepts the preview EUR-listed tipped CAD quote shape" do
+    user.update!(tipping_enabled: true)
+    eur_product = create(:product, user:, price_currency_type: Currency::EUR, price_cents: 15_00)
+    quote = signed_buyer_currency_quote(
+      seller: user,
+      product: eur_product,
+      rate: "0.8571",
+      canonical_components: {
+        price_cents: 17_50,
+        tip_cents: 2_63,
+        seller_tax_cents: 0,
+        gumroad_tax_cents: 0,
+        shipping_cents: 0,
+      }
+    )
+
+    purchase, error = described_class.new(
+      product: eur_product,
+      params: {
+        purchase: base_params.fetch(:purchase).merge(perceived_price_cents: 17_25),
+        tip_cents: 2_25,
+        buyer_currency_quote: quote,
+        is_part_of_combined_charge: true,
+      },
+      buyer:
+    ).perform
+
+    expect(error).to be_nil
+    expect(purchase.tip.value_cents).to eq(2_25)
+    expect(purchase.tip.value_usd_cents).to eq(2_63)
+    expect(purchase.total_transaction_cents).to eq(20_13)
+  end
+
+  it "refuses signed canonical components when submit-time tip remaps to zero" do
+    user.update!(tipping_enabled: true)
+    eur_product = create(:product, user:, price_currency_type: Currency::EUR, price_cents: 10_00)
+    quote = signed_buyer_currency_quote(
+      seller: user,
+      product: eur_product,
+      rate: "0.8",
+      canonical_components: {
+        price_cents: 12_50,
+        tip_cents: 1_26,
+        seller_tax_cents: 0,
+        gumroad_tax_cents: 0,
+        shipping_cents: 0,
+      }
+    )
+
+    purchase, error = described_class.new(
+      product: eur_product,
+      params: {
+        purchase: base_params.fetch(:purchase).merge(perceived_price_cents: 10_00),
+        tip_cents: 0,
+        buyer_currency_quote: quote,
+        is_part_of_combined_charge: true,
+      },
+      buyer:
+    ).perform
+
+    expect(error).to eq(Charge::CreateService::BUYER_CURRENCY_QUOTE_INVALID_MESSAGE)
+    expect(purchase.error_code).to eq(PurchaseErrorCode::BUYER_CURRENCY_QUOTE_INVALID)
+    expect(purchase.tip).to be_nil
+    expect(purchase.total_transaction_cents).to eq(12_50)
+  end
+
+  it "does not apply signed components when submit economics diverge from the quote" do
+    user.update!(tipping_enabled: true)
+    eur_product = create(:product, user:, price_currency_type: Currency::EUR, price_cents: 10_00)
+    quote = signed_buyer_currency_quote(
+      seller: user,
+      product: eur_product,
+      rate: "0.8",
+      canonical_components: {
+        price_cents: 12_50,
+        tip_cents: 1_26,
+        seller_tax_cents: 0,
+        gumroad_tax_cents: 0,
+        shipping_cents: 0,
+      }
+    )
+
+    purchase, error = described_class.new(
+      product: eur_product,
+      params: {
+        purchase: base_params.fetch(:purchase).merge(perceived_price_cents: 20_00, quantity: 2),
+        tip_cents: 0,
+        buyer_currency_quote: quote,
+        is_part_of_combined_charge: true,
+      },
+      buyer:
+    ).perform
+
+    expect(error).to eq(Charge::CreateService::BUYER_CURRENCY_QUOTE_INVALID_MESSAGE)
+    expect(purchase.error_code).to eq(PurchaseErrorCode::BUYER_CURRENCY_QUOTE_INVALID)
+    expect(purchase.total_transaction_cents).to eq(25_00)
+  end
+
+  it "does not apply signed components when only the aggregate non-tip total still matches" do
+    user.update!(tipping_enabled: true)
+    eur_product = create(:product, user:, price_currency_type: Currency::EUR, price_cents: 10_00)
+    quote = signed_buyer_currency_quote(
+      seller: user,
+      product: eur_product,
+      rate: "0.8",
+      canonical_components: {
+        price_cents: 11_50,
+        tip_cents: 1_26,
+        seller_tax_cents: 1_00,
+        gumroad_tax_cents: 0,
+        shipping_cents: 0,
+      }
+    )
+
+    purchase, error = described_class.new(
+      product: eur_product,
+      params: {
+        purchase: base_params.fetch(:purchase).merge(perceived_price_cents: 11_00),
+        tip_cents: 1_00,
+        buyer_currency_quote: quote,
+        is_part_of_combined_charge: true,
+      },
+      buyer:
+    ).perform
+
+    expect(error).to eq(Charge::CreateService::BUYER_CURRENCY_QUOTE_INVALID_MESSAGE)
+    expect(purchase.error_code).to eq(PurchaseErrorCode::BUYER_CURRENCY_QUOTE_INVALID)
+    expect(purchase.tip.value_usd_cents).to eq(1_25)
+    expect(purchase.tax_cents).to eq(0)
+    expect(purchase.total_transaction_cents).not_to eq(13_76)
+  end
+
+  it "does not apply signed components when a slack-sized signed tip has no submitted tip" do
+    user.update!(tipping_enabled: true)
+    usd_product = create(:product, user:, price_currency_type: Currency::USD, price_cents: 10_00)
+    quote = signed_buyer_currency_quote(
+      seller: user,
+      product: usd_product,
+      rate: "1",
+      canonical_components: {
+        price_cents: 10_00,
+        tip_cents: 5,
+        seller_tax_cents: 0,
+        gumroad_tax_cents: 0,
+        shipping_cents: 0,
+      }
+    )
+
+    purchase, error = described_class.new(
+      product: usd_product,
+      params: {
+        purchase: base_params.fetch(:purchase).merge(perceived_price_cents: 10_00),
+        tip_cents: 0,
+        buyer_currency_quote: quote,
+        is_part_of_combined_charge: true,
+      },
+      buyer:
+    ).perform
+
+    expect(error).to eq(Charge::CreateService::BUYER_CURRENCY_QUOTE_INVALID_MESSAGE)
+    expect(purchase.error_code).to eq(PurchaseErrorCode::BUYER_CURRENCY_QUOTE_INVALID)
+    expect(purchase.tip).to be_nil
+    expect(purchase.total_transaction_cents).to eq(10_00)
+  end
+
+  it "does not apply signed components when a slack-sized submitted tip has no signed tip" do
+    user.update!(tipping_enabled: true)
+    usd_product = create(:product, user:, price_currency_type: Currency::USD, price_cents: 10_00)
+    quote = signed_buyer_currency_quote(
+      seller: user,
+      product: usd_product,
+      rate: "1",
+      canonical_components: {
+        price_cents: 10_00,
+        tip_cents: 0,
+        seller_tax_cents: 0,
+        gumroad_tax_cents: 0,
+        shipping_cents: 0,
+      }
+    )
+
+    purchase, error = described_class.new(
+      product: usd_product,
+      params: {
+        purchase: base_params.fetch(:purchase).merge(perceived_price_cents: 10_05),
+        tip_cents: 5,
+        buyer_currency_quote: quote,
+        is_part_of_combined_charge: true,
+      },
+      buyer:
+    ).perform
+
+    expect(error).to eq(Charge::CreateService::BUYER_CURRENCY_QUOTE_INVALID_MESSAGE)
+    expect(purchase.error_code).to eq(PurchaseErrorCode::BUYER_CURRENCY_QUOTE_INVALID)
+    expect(purchase.tip.value_usd_cents).to eq(5)
+    expect(purchase.total_transaction_cents).to eq(10_05)
+  end
+
+  it "does not apply signed components when a slack-sized seller tax has no submitted tax" do
+    usd_product = create(:product, user:, price_currency_type: Currency::USD, price_cents: 10_00)
+    quote = signed_buyer_currency_quote(
+      seller: user,
+      product: usd_product,
+      rate: "1",
+      canonical_components: {
+        price_cents: 9_95,
+        tip_cents: 0,
+        seller_tax_cents: 5,
+        gumroad_tax_cents: 0,
+        shipping_cents: 0,
+      }
+    )
+
+    purchase, error = described_class.new(
+      product: usd_product,
+      params: {
+        purchase: base_params.fetch(:purchase).merge(perceived_price_cents: 10_00),
+        buyer_currency_quote: quote,
+        is_part_of_combined_charge: true,
+      },
+      buyer:
+    ).perform
+
+    expect(error).to eq(Charge::CreateService::BUYER_CURRENCY_QUOTE_INVALID_MESSAGE)
+    expect(purchase.error_code).to eq(PurchaseErrorCode::BUYER_CURRENCY_QUOTE_INVALID)
+    expect(purchase.tax_cents).to eq(0)
+    expect(purchase.total_transaction_cents).to eq(10_00)
+  end
+
+  it "does not apply signed components when slack-sized Gumroad tax has no submitted tax" do
+    usd_product = create(:product, user:, price_currency_type: Currency::USD, price_cents: 10_00)
+    quote = signed_buyer_currency_quote(
+      seller: user,
+      product: usd_product,
+      rate: "1",
+      canonical_components: {
+        price_cents: 9_95,
+        tip_cents: 0,
+        seller_tax_cents: 0,
+        gumroad_tax_cents: 5,
+        shipping_cents: 0,
+      }
+    )
+
+    purchase, error = described_class.new(
+      product: usd_product,
+      params: {
+        purchase: base_params.fetch(:purchase).merge(perceived_price_cents: 10_00),
+        buyer_currency_quote: quote,
+        is_part_of_combined_charge: true,
+      },
+      buyer:
+    ).perform
+
+    expect(error).to eq(Charge::CreateService::BUYER_CURRENCY_QUOTE_INVALID_MESSAGE)
+    expect(purchase.error_code).to eq(PurchaseErrorCode::BUYER_CURRENCY_QUOTE_INVALID)
+    expect(purchase.gumroad_tax_cents).to eq(0)
+    expect(purchase.total_transaction_cents).to eq(10_00)
+  end
+
+  it "does not apply signed components when slack-sized shipping has no submitted shipping" do
+    usd_product = create(:product, user:, price_currency_type: Currency::USD, price_cents: 10_00)
+    quote = signed_buyer_currency_quote(
+      seller: user,
+      product: usd_product,
+      rate: "1",
+      canonical_components: {
+        price_cents: 9_95,
+        tip_cents: 0,
+        seller_tax_cents: 0,
+        gumroad_tax_cents: 0,
+        shipping_cents: 5,
+      }
+    )
+
+    purchase, error = described_class.new(
+      product: usd_product,
+      params: {
+        purchase: base_params.fetch(:purchase).merge(perceived_price_cents: 10_00),
+        buyer_currency_quote: quote,
+        is_part_of_combined_charge: true,
+      },
+      buyer:
+    ).perform
+
+    expect(error).to eq(Charge::CreateService::BUYER_CURRENCY_QUOTE_INVALID_MESSAGE)
+    expect(purchase.error_code).to eq(PurchaseErrorCode::BUYER_CURRENCY_QUOTE_INVALID)
+    expect(purchase.shipping_cents).to eq(0)
+    expect(purchase.total_transaction_cents).to eq(10_00)
+  end
+
+  it "does not erase newly submitted slack-sized Gumroad tax" do
+    usd_product = create(:product, user:, price_currency_type: Currency::USD, price_cents: 10_00)
+    quote = signed_buyer_currency_quote(
+      seller: user,
+      product: usd_product,
+      rate: "1",
+      canonical_components: {
+        price_cents: 10_00,
+        tip_cents: 0,
+        seller_tax_cents: 0,
+        gumroad_tax_cents: 0,
+        shipping_cents: 0,
+      }
+    )
+    allow_any_instance_of(Purchase).to receive(:calculate_taxes) do |purchase|
+      purchase.gumroad_tax_cents = 5
+    end
+
+    purchase, error = described_class.new(
+      product: usd_product,
+      params: {
+        purchase: base_params.fetch(:purchase).merge(perceived_price_cents: 10_00),
+        buyer_currency_quote: quote,
+        is_part_of_combined_charge: true,
+      },
+      buyer:
+    ).perform
+
+    expect(error).to eq(Charge::CreateService::BUYER_CURRENCY_QUOTE_INVALID_MESSAGE)
+    expect(purchase.error_code).to eq(PurchaseErrorCode::BUYER_CURRENCY_QUOTE_INVALID)
+    expect(purchase.gumroad_tax_cents).to eq(5)
+    expect(purchase.total_transaction_cents).to eq(10_05)
+  end
+
+  it "does not erase newly submitted slack-sized shipping" do
+    usd_product = create(:product, user:, price_currency_type: Currency::USD, price_cents: 10_00)
+    quote = signed_buyer_currency_quote(
+      seller: user,
+      product: usd_product,
+      rate: "1",
+      canonical_components: {
+        price_cents: 10_00,
+        tip_cents: 0,
+        seller_tax_cents: 0,
+        gumroad_tax_cents: 0,
+        shipping_cents: 0,
+      }
+    )
+    allow_any_instance_of(Purchase).to receive(:calculate_shipping) do |purchase|
+      purchase.shipping_cents = 5
+    end
+
+    purchase, error = described_class.new(
+      product: usd_product,
+      params: {
+        purchase: base_params.fetch(:purchase).merge(perceived_price_cents: 10_00),
+        buyer_currency_quote: quote,
+        is_part_of_combined_charge: true,
+      },
+      buyer:
+    ).perform
+
+    expect(error).to eq(Charge::CreateService::BUYER_CURRENCY_QUOTE_INVALID_MESSAGE)
+    expect(purchase.error_code).to eq(PurchaseErrorCode::BUYER_CURRENCY_QUOTE_INVALID)
+    expect(purchase.shipping_cents).to eq(5)
+    expect(purchase.total_transaction_cents).to eq(10_05)
+  end
+
+  it "refuses signed components on a USD line when submit-time tip is removed" do
+    user.update!(tipping_enabled: true)
+    usd_product = create(:product, user:, price_currency_type: Currency::USD, price_cents: 10_00)
+    quote = signed_buyer_currency_quote(
+      seller: user,
+      product: usd_product,
+      rate: "1",
+      canonical_components: {
+        price_cents: 10_00,
+        tip_cents: 1_00,
+        seller_tax_cents: 0,
+        gumroad_tax_cents: 0,
+        shipping_cents: 0,
+      }
+    )
+
+    purchase, error = described_class.new(
+      product: usd_product,
+      params: {
+        purchase: base_params.fetch(:purchase).merge(perceived_price_cents: 10_00),
+        tip_cents: 0,
+        buyer_currency_quote: quote,
+        is_part_of_combined_charge: true,
+      },
+      buyer:
+    ).perform
+
+    expect(error).to eq(Charge::CreateService::BUYER_CURRENCY_QUOTE_INVALID_MESSAGE)
+    expect(purchase.error_code).to eq(PurchaseErrorCode::BUYER_CURRENCY_QUOTE_INVALID)
+    expect(purchase.tip).to be_nil
+    expect(purchase.total_transaction_cents).to eq(10_00)
+  end
+
+  it "fails closed when repeated permalink rows cannot be bound by uid" do
+    user.update!(tipping_enabled: true)
+    eur_product = create(:product, user:, price_currency_type: Currency::EUR, price_cents: 10_00)
+    quote = signed_buyer_currency_quote(
+      seller: user,
+      product: eur_product,
+      rate: "0.8",
+      canonical_components: [
+        {
+          "uid" => "line-a",
+          "line_index" => 0,
+          "permalink" => eur_product.unique_permalink,
+          "price_cents" => 12_50,
+          "tip_cents" => 1_26,
+          "seller_tax_cents" => 0,
+          "gumroad_tax_cents" => 0,
+          "shipping_cents" => 0,
+        },
+        {
+          "uid" => "line-b",
+          "line_index" => 1,
+          "permalink" => eur_product.unique_permalink,
+          "price_cents" => 12_50,
+          "tip_cents" => 1_27,
+          "seller_tax_cents" => 0,
+          "gumroad_tax_cents" => 0,
+          "shipping_cents" => 0,
+        },
+      ]
+    )
+
+    purchase, error = described_class.new(
+      product: eur_product,
+      params: {
+        purchase: base_params.fetch(:purchase).merge(perceived_price_cents: 11_00),
+        tip_cents: 1_00,
+        buyer_currency_quote: quote,
+        buyer_currency_quote_line_index: 1,
+        is_part_of_combined_charge: true,
+      },
+      buyer:
+    ).perform
+
+    expect(error).to eq(Charge::CreateService::BUYER_CURRENCY_QUOTE_INVALID_MESSAGE)
+    expect(purchase.error_code).to eq(PurchaseErrorCode::BUYER_CURRENCY_QUOTE_INVALID)
+  end
+
+  it "selects the matching signed components for repeated product rows by uid" do
+    user.update!(tipping_enabled: true)
+    eur_product = create(:product, user:, price_currency_type: Currency::EUR, price_cents: 10_00)
+    quote = signed_buyer_currency_quote(
+      seller: user,
+      product: eur_product,
+      rate: "0.8",
+      canonical_components: [
+        {
+          "uid" => "line-a",
+          "line_index" => 0,
+          "permalink" => eur_product.unique_permalink,
+          "price_cents" => 12_50,
+          "tip_cents" => 1_26,
+          "seller_tax_cents" => 0,
+          "gumroad_tax_cents" => 0,
+          "shipping_cents" => 0,
+        },
+        {
+          "uid" => "line-b",
+          "line_index" => 1,
+          "permalink" => eur_product.unique_permalink,
+          "price_cents" => 12_50,
+          "tip_cents" => 1_27,
+          "seller_tax_cents" => 0,
+          "gumroad_tax_cents" => 0,
+          "shipping_cents" => 0,
+        },
+      ]
+    )
+
+    purchase, error = described_class.new(
+      product: eur_product,
+      params: {
+        purchase: base_params.fetch(:purchase).merge(perceived_price_cents: 11_00),
+        tip_cents: 1_00,
+        buyer_currency_quote: quote,
+        buyer_currency_quote_line_uid: "line-b",
+        buyer_currency_quote_line_index: 1,
+        is_part_of_combined_charge: true,
+      },
+      buyer:
+    ).perform
+
+    expect(error).to be_nil
+    expect(purchase.tip.value_usd_cents).to eq(1_27)
+    expect(purchase.total_transaction_cents).to eq(13_77)
+  end
+
+  it "does not apply signed canonical components on a PayPal chargeable" do
+    user.update!(tipping_enabled: true)
+    eur_product = create(:product, user:, price_currency_type: Currency::EUR, price_cents: 10_00)
+    quote = signed_buyer_currency_quote(
+      seller: user,
+      product: eur_product,
+      rate: "0.8",
+      canonical_components: {
+        price_cents: 12_50,
+        tip_cents: 1_26,
+        seller_tax_cents: 0,
+        gumroad_tax_cents: 0,
+        shipping_cents: 0,
+      }
+    )
+
+    purchase, error = described_class.new(
+      product: eur_product,
+      params: {
+        purchase: base_params.fetch(:purchase).merge(
+          perceived_price_cents: 11_00,
+          chargeable: successful_paypal_chargeable
+        ),
+        tip_cents: 1_00,
+        buyer_currency_quote: quote,
+        is_part_of_combined_charge: true,
+      },
+      buyer:
+    ).perform
+
+    expect(error).to be_nil
+    expect(purchase.buyer_currency_quote_canonical_components).to be_nil
+    expect(purchase.tip.value_usd_cents).to eq(1_23)
+    expect(purchase.total_transaction_cents).not_to eq(13_76)
+  end
+
+  it "does not reprice a PayPal purchase at the leftover quote's locked listed rate" do
+    user.update!(tipping_enabled: true)
+    eur_product = create(:product, user:, price_currency_type: Currency::EUR, price_cents: 10_00)
+    quote = signed_buyer_currency_quote(
+      seller: user,
+      product: eur_product,
+      rate: "0.8",
+      canonical_components: {
+        price_cents: 12_50,
+        tip_cents: 1_26,
+        seller_tax_cents: 0,
+        gumroad_tax_cents: 0,
+        shipping_cents: 0,
+      }
+    )
+
+    allow_any_instance_of(described_class).to receive(:get_usd_cents).and_wrap_original do |method, currency_type, quantity, **kwargs|
+      kwargs = kwargs.merge(rate: 0.5) if kwargs[:rate].blank?
+      method.call(currency_type, quantity, **kwargs)
+    end
+    allow_any_instance_of(Purchase).to receive(:get_usd_cents).and_wrap_original do |method, currency_type, quantity, **kwargs|
+      kwargs = kwargs.merge(rate: 0.5) if kwargs[:rate].blank?
+      method.call(currency_type, quantity, **kwargs)
+    end
+
+    purchase, error = described_class.new(
+      product: eur_product,
+      params: {
+        purchase: base_params.fetch(:purchase).merge(
+          perceived_price_cents: 11_00,
+          chargeable: successful_paypal_chargeable
+        ),
+        tip_cents: 1_00,
+        buyer_currency_quote: quote,
+        is_part_of_combined_charge: true,
+      },
+      buyer:
+    ).perform
+
+    expect(error).to be_nil
+    expect(purchase.buyer_currency_quote_canonical_components).to be_nil
+    expect(purchase.tip.value_usd_cents).to eq(2_00)
+    expect(purchase.rate_converted_to_usd).not_to eq("0.8")
+  end
+
+  it "fails closed when signed quote components cannot be bound to this line" do
+    user.update!(tipping_enabled: true)
+    eur_product = create(:product, user:, price_currency_type: Currency::EUR, price_cents: 10_00)
+    quote = signed_buyer_currency_quote(
+      seller: user,
+      product: eur_product,
+      rate: "0.8",
+      canonical_components: [
+        {
+          "uid" => "line-a",
+          "line_index" => 0,
+          "permalink" => eur_product.unique_permalink,
+          "price_cents" => 12_50,
+          "tip_cents" => 1_26,
+          "seller_tax_cents" => 0,
+          "gumroad_tax_cents" => 0,
+          "shipping_cents" => 0,
+        },
+        {
+          "uid" => "line-b",
+          "line_index" => 1,
+          "permalink" => eur_product.unique_permalink,
+          "price_cents" => 12_50,
+          "tip_cents" => 1_27,
+          "seller_tax_cents" => 0,
+          "gumroad_tax_cents" => 0,
+          "shipping_cents" => 0,
+        },
+      ]
+    )
+
+    purchase, error = described_class.new(
+      product: eur_product,
+      params: {
+        purchase: base_params.fetch(:purchase).merge(perceived_price_cents: 11_00),
+        tip_cents: 1_00,
+        buyer_currency_quote: quote,
+        buyer_currency_quote_line_uid: "line-b",
+        buyer_currency_quote_line_index: 0,
+        is_part_of_combined_charge: true,
+      },
+      buyer:
+    ).perform
+
+    expect(error).to eq(Charge::CreateService::BUYER_CURRENCY_QUOTE_INVALID_MESSAGE)
+    expect(purchase.error_code).to eq(PurchaseErrorCode::BUYER_CURRENCY_QUOTE_INVALID)
   end
 
   it "creates a purchase and sets the proper state" do

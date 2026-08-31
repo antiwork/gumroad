@@ -180,6 +180,16 @@ schedule_abandoned_cart_emails:
   cron: "0 14 * * *" # UTC 14:00
   class: ScheduleAbandonedCartEmailsJob
   description: Schedules abandoned cart emails for users who have not completed their purchase
+alert_on_stalled_abandoned_cart_emails:
+  cron: "0 17 * * *" # UTC 17:00, three hours after the send job starts
+  class: AlertOnStalledAbandonedCartEmailsJob
+  queue: low
+  description: Reports when no abandoned cart email has been sent in over a day
+alert_on_zero_buyer_currency_wallet_purchases:
+  cron: "5 * * * *" # hourly, with an in-job 24h zero-volume threshold
+  class: AlertOnZeroBuyerCurrencyWalletPurchasesJob
+  queue: low
+  description: Reports when buyer-currency wallet purchases stay at zero while the flag is enabled
 memberships_price_update_emails:
   cron: "10 8 * * *" # UTC 08:10
   class: SendMembershipsPriceUpdateEmailsJob

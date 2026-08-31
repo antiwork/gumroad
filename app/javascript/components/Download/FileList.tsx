@@ -299,7 +299,7 @@ export const FileRow = ({
         {downloadButton}
 
         {!isEmbed && streamUrl != null ? (
-          <TrackClick eventName="stream_click" file={file}>
+          <TrackClick eventName="stream_click" file={file} resumeAt={resumeLocation || 0} contentLength={file.duration}>
             <NavigationButton color="primary" href={streamUrl} target="_blank">
               {file.latest_media_location != null && file.latest_media_location.location === file.content_length
                 ? "Watch again"
@@ -765,7 +765,7 @@ const VideoEmbedPreview = ({
           borderRadius: "var(--border-radius-1) var(--border-radius-1) 0 0",
         }}
       />
-      <TrackClick eventName="watch" file={file}>
+      <TrackClick eventName="watch" file={file} resumeAt={resumeLocation || 0} contentLength={file.duration}>
         <button
           className="cursor-pointer underline all-unset"
           style={{

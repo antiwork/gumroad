@@ -785,6 +785,54 @@ describe SendPostBlastEmailsJob, :freeze_time do
     end
   end
 
+  describe "members without an email" do
+    # The provider raises on a blank recipient email, and every retry re-reads the same audience
+    # and dies on the same slice, so one such row strands the whole blast (gumroad-private#2338).
+    def blank_out_audience_email(email)
+      AudienceMember.find_by!(seller: @seller, email:).update_column(:email, "")
+    end
+
+    it "delivers to the rest of the audience instead of raising" do
+      post = create(:audience_post, :published, seller: @seller)
+      create(:active_follower, user: @seller, email: "reachable@example.com")
+      create(:active_follower, user: @seller, email: "blank@example.com")
+      blank_out_audience_email("blank@example.com")
+      blast = create(:blast, :just_requested, post:)
+
+      described_class.new.perform(blast.id)
+
+      expect_sent_count 1
+      expect_sent_email "reachable@example.com"
+      expect(blast.reload.completed_at).to be_present
+    end
+
+    it "completes a blast whose entire audience has no email" do
+      post = create(:audience_post, :published, seller: @seller)
+      create(:active_follower, user: @seller, email: "blank@example.com")
+      blank_out_audience_email("blank@example.com")
+      blast = create(:blast, :just_requested, post:)
+
+      described_class.new.perform(blast.id)
+
+      expect_sent_count 0
+      expect(blast.reload.completed_at).to be_present
+    end
+
+    it "drops them on a non-opener resend too" do
+      post = create(:audience_post, :published, seller: @seller)
+      create(:active_follower, user: @seller, email: "reachable@example.com")
+      create(:active_follower, user: @seller, email: "blank@example.com")
+      blank_out_audience_email("blank@example.com")
+      blast = create(:blast, :just_requested, post:, recipient_filter: PostEmailBlast::RECIPIENT_FILTER_UNOPENED)
+      allow_any_instance_of(Installment).to receive(:unopened_recipient_emails).and_return(["reachable@example.com", ""])
+
+      described_class.new.perform(blast.id)
+
+      expect_sent_count 1
+      expect_sent_email "reachable@example.com"
+    end
+  end
+
   describe "one large blast per seller per day" do
     it "holds a second large blast until tomorrow" do
       blast = create(:blast, :just_requested, post: basic_post_with_audience)

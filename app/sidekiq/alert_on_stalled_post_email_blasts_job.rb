@@ -7,7 +7,9 @@
 # enqueue never reached Redis — while the seller's dashboard shows a plausible non-zero delivered
 # count, so the only detection channel was a seller who knew their own audience size writing in.
 # 11 blasts / ~1.6M undelivered emails accrued that way over ten days before anyone noticed.
-# (A hard-killed job itself is not the stranding mode: super_fetch resurrects it.)
+# A hard-killed job is not reliable to resurrect: super_fetch's cleanup_the_dead can retire a
+# process while its private queue still holds jobs, stranding them in no Sidekiq set
+# (gumroad-private#2352).
 #
 # Auto-resume is deliberately conservative: only DEAD/UNACCOUNTED blasts still inside
 # AUTO_RESUME_WINDOW (unless recipients are still owed), not more than once per STALL_THRESHOLD,
@@ -165,11 +167,13 @@ class AlertOnStalledPostEmailBlastsJob
       claimed = $redis.set(marker, Time.current.iso8601, nx: true, ex: STALL_THRESHOLD.to_i)
       return false unless claimed
 
-      if entry[:disposition] == :dead
-        @dead_entries.fetch(blast.id).retry
-      else
-        SendPostBlastEmailsJob.perform_async(blast.id)
-      end
+      # `retry` would re-push the dead entry's own jid, and super_fetch counts orphan recoveries
+      # per jid: a blast its poison-pill guard already dead-set has no budget left, so that job is
+      # killed again before it delivers (gumroad-private#2338). Drop the entry only after the
+      # enqueue — losing it without a replacement leaves an UNACCOUNTED blast, which is never
+      # auto-resumed when it is a non-opener resend.
+      SendPostBlastEmailsJob.perform_async(blast.id)
+      @dead_entries.fetch(blast.id).delete if entry[:disposition] == :dead
       true
     end
 
@@ -224,11 +228,15 @@ class AlertOnStalledPostEmailBlastsJob
         "RUNNING/QUEUED may just be a very large blast mid-pass. DEAD/UNACCOUNTED blasts requested " \
           "within #{AUTO_RESUME_WINDOW.inspect} are resumed automatically, once per blast " \
           "(gumroad-private#2106) — except UNACCOUNTED non-opener resends, which a concurrent " \
-          "duplicate sender would double-deliver. UNACCOUNTED usually means a lost enqueue or a " \
-          "post no longer sendable (super_fetch resurrects hard-killed jobs on its own). HELD " \
+          "duplicate sender would double-deliver. UNACCOUNTED usually means a lost enqueue, a " \
+          "post no longer sendable, or a job stranded in a retired process's private queue that " \
+          "no resurrection pass has reached — super_fetch does not reliably resurrect hard-killed " \
+          "jobs (gumroad-private#2352). HELD " \
           "rows need a human: confirm with the seller (time-boxed blasts may be worse late than " \
-          "never), then `job.retry` a DEAD entry or `SendPostBlastEmailsJob.perform_async(blast_id)` " \
-          "for an UNACCOUNTED one. A blast whose sender finished delivering but died before the " \
+          "never), then `SendPostBlastEmailsJob.perform_async(blast_id)` — for a DEAD row too. " \
+          "Never `job.retry` a dead blast: it reuses the jid super_fetch has already spent its " \
+          "orphan budget on, so it is killed again before it delivers (gumroad-private#2338). " \
+          "A blast whose sender finished delivering but died before the " \
           "completion stamp is resumed regardless of those limits — the resumed job has nothing " \
           "left to send and just stamps it (gumroad-private#2250). See gumroad-private#1750 for " \
           "a worked run.",

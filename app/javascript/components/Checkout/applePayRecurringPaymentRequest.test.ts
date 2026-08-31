@@ -112,21 +112,49 @@ describe("getApplePayRecurringPaymentRequest", () => {
     expect(request?.billingAgreement).toContain("for 4 payments");
   });
 
-  it("uses the singular 'payment' when the fixed duration fits in a single billing cycle", () => {
-    // A 12-month membership billed yearly makes exactly one payment (charged today), so the
-    // agreement text must not read "1 payments".
+  it("returns null for a single-charge fixed-duration membership so it is treated as a one-time purchase", () => {
     const request = getApplePayRecurringPaymentRequest(
       [membership({ recurrence: "yearly", durationInMonths: 12 })],
       MANAGEMENT_URL,
     );
+    expect(request).toBeNull();
+  });
+
+  it("keeps a recurring request for a single-cycle free trial membership", () => {
+    const request = getApplePayRecurringPaymentRequest(
+      [
+        membership({
+          recurrence: "yearly",
+          durationInMonths: 12,
+          hasFreeTrial: true,
+          price: 0,
+          renewalPriceCents: 1_000,
+        }),
+      ],
+      MANAGEMENT_URL,
+    );
+    expect(request?.trialBilling).toEqual({ label: "Free trial", amount: 0 });
+    expect(request?.regularBilling.recurringPaymentEndDate).toBeUndefined();
     expect(request?.billingAgreement).toBe("$10 a year for 1 payment. Manage anytime from your Gumroad library.");
-    // The end date marks the final charge, and with one billing cycle the only charge is today's,
-    // so the agreement ends the same day it starts. This is display-only on the payment sheet.
-    const today = new Date();
+  });
+
+  it("keeps a recurring request for a subscription update with one fixed-duration charge remaining", () => {
+    const request = getApplePayRecurringPaymentRequest(
+      [membership({ subscription_id: "sub_123", durationInMonths: 1, price: 0, renewalPriceCents: 1_000 })],
+      MANAGEMENT_URL,
+    );
+    expect(request?.regularBilling.amount).toBe(1_000);
+    expect(request?.regularBilling.recurringPaymentEndDate).toBeUndefined();
+    expect(request?.billingAgreement).toBe("$10 a month for 1 payment. Manage anytime from your Gumroad library.");
+  });
+
+  it("still bounds a multi-cycle fixed-duration membership with an end date", () => {
+    // A 12-month membership billed monthly makes 12 payments; the first is charged today, so the
+    // agreement ends 11 months out.
+    const request = getApplePayRecurringPaymentRequest([membership({ durationInMonths: 12 })], MANAGEMENT_URL);
     const endDate = request?.regularBilling.recurringPaymentEndDate;
-    expect(endDate?.getFullYear()).toBe(today.getFullYear());
-    expect(endDate?.getMonth()).toBe(today.getMonth());
-    expect(endDate?.getDate()).toBe(today.getDate());
+    expect(endDate?.getTime()).toBeGreaterThan(new Date().getTime());
+    expect(request?.regularBilling.recurringPaymentIntervalCount).toBe(1);
   });
 
   it("leaves open-ended memberships without an end date", () => {
@@ -204,6 +232,24 @@ describe("getApplePayRecurringPaymentRequest", () => {
     expect(request?.regularBilling.amount).toBe(2_500);
     expect(request?.paymentDescription).toBe("Product A (2 monthly installments)");
     expect(request?.billingAgreement).toBe("2 monthly installments of $25.");
+  });
+
+  it("omits the end date for an installment plan with one remaining charge", () => {
+    const request = getApplePayRecurringPaymentRequest(
+      [
+        product({
+          price: 0,
+          renewalPriceCents: 2_500,
+          payInInstallments: true,
+          installmentPlan: { numberOfInstallments: 4, remainingInstallments: 1 },
+        }),
+      ],
+      MANAGEMENT_URL,
+    );
+    expect(request?.regularBilling.amount).toBe(2_500);
+    expect(request?.regularBilling.recurringPaymentEndDate).toBeUndefined();
+    expect(request?.paymentDescription).toBe("Product A (1 monthly installment)");
+    expect(request?.billingAgreement).toBe("1 monthly installment of $25.");
   });
 
   it("returns null for an installment plan with no payments remaining", () => {

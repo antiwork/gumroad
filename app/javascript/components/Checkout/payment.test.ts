@@ -22,6 +22,7 @@ import {
   requiresPaymentElementReusablePaymentMethod,
   requiresReusablePaymentMethodForCardCollection,
   requiresReusablePaymentMethod,
+  shouldSuppressClientConfirmWallets,
   STRIPE_ELEMENTS_MODE_FOR_PAYMENT_INTENT,
   STRIPE_ELEMENTS_MODE_FOR_SETUP_INTENT,
   type CheckoutPaymentConfig,
@@ -138,6 +139,19 @@ const directListedCardConfig: CheckoutPaymentConfig = {
     presentment_amount_cents: 1_500,
     listed_currency_display: { currency: "cad", subunit_to_unit: 100 },
     direct_listed_card: true,
+  },
+};
+
+const methodForcedEurConfig: CheckoutPaymentConfig = {
+  ...paymentElementClientConfirmConfig,
+  disable_wallets: true,
+  flat_payment_methods: true,
+  elements_options: {
+    ...paymentElementClientConfirmConfig.elements_options,
+    currency: "eur",
+    presentment_amount_cents: 1_500,
+    listed_currency_display: { currency: "eur", subunit_to_unit: 100 },
+    payment_method_types: ["card", "ideal"],
   },
 };
 
@@ -498,6 +512,18 @@ describe("canUseStripePaymentElementClientConfirm", () => {
         }),
       ),
     ).toBe(true);
+  });
+
+  it("keeps recurring UPI on the server-rendered INR amount when a stale USD preference is stored", () => {
+    const s = clientConfirmState({
+      checkoutPayment: recurringUpiPaymentElementClientConfirmConfig,
+      products: [product({ recurrence: "monthly", price: 1_000, listedPriceCents: 73_000 })],
+      buyerCurrency: "usd",
+    });
+
+    expect(canUseStripePaymentElementClientConfirm(s)).toBe(true);
+    expect(getStripePaymentElementAmount(s)).toBe(73_000);
+    expect(getStripePaymentElementMountCurrency(s)).toBe("inr");
   });
 
   it("falls back when the server selected the server-confirm Payment Element integration", () => {
@@ -884,11 +910,30 @@ describe("direct-listed card element", () => {
     expect(getStripePaymentElementMountCurrency(s)).toBeNull();
   });
 
-  it("remounts in canonical USD when a tip makes the direct-listed charge ineligible", () => {
+  it("stays canonical USD after the refreshed config drops the direct-listed card marker", () => {
+    const s = state({
+      checkoutPayment: {
+        ...directListedCardConfig,
+        elements_options: {
+          ...directListedCardConfig.elements_options,
+          currency: "eur",
+          listed_currency_display: { currency: "eur", subunit_to_unit: 100 },
+          direct_listed_card: false,
+        },
+      },
+      buyerCurrency: "usd",
+    });
+
+    expect(getConfiguredDirectListedCurrency(s)).toBeNull();
+    expect(getStripePaymentElementAmount(s)).toBe(1_000);
+    expect(getStripePaymentElementMountCurrency(s)).toBe("usd");
+  });
+
+  it("keeps the direct-listed lane and amount when a percentage tip is added", () => {
     const s = state({
       checkoutPayment: directListedCardConfig,
-      products: [product({ hasTippingEnabled: true })],
-      tip: { type: "percentage", percentage: 10 },
+      products: [product({ hasTippingEnabled: true, listedPriceCents: 1_500 })],
+      tip: { type: "percentage", percentage: 15 },
       surcharges: {
         type: "loaded",
         result: {
@@ -897,15 +942,39 @@ describe("direct-listed card element", () => {
           shipping_rate_cents: 0,
           tax_cents: 0,
           tax_included_cents: 0,
-          subtotal: 1_100,
+          subtotal: 1_150,
           buyer_currency_quote: null,
         },
       },
     });
 
-    expect(getSelectableDirectListedCurrency(s)).toBeNull();
-    expect(getStripePaymentElementAmount(s)).toBe(1_100);
-    expect(getStripePaymentElementMountCurrency(s)).toBe("usd");
+    expect(getSelectableDirectListedCurrency(s)).toBe("cad");
+    expect(getStripePaymentElementAmount(s)).toBe(1_725);
+    expect(getStripePaymentElementMountCurrency(s)).toBe("cad");
+  });
+
+  it("keeps the direct-listed lane and exact listed amount when a fixed tip is added", () => {
+    const s = state({
+      checkoutPayment: directListedCardConfig,
+      products: [product({ hasTippingEnabled: true, listedPriceCents: 1_500 })],
+      tip: { type: "fixed", amount: 291, listedAmount: 437 },
+      surcharges: {
+        type: "loaded",
+        result: {
+          vat_id_valid: false,
+          has_vat_id_input: false,
+          shipping_rate_cents: 0,
+          tax_cents: 0,
+          tax_included_cents: 0,
+          subtotal: 1_291,
+          buyer_currency_quote: null,
+        },
+      },
+    });
+
+    expect(getSelectableDirectListedCurrency(s)).toBe("cad");
+    expect(getStripePaymentElementAmount(s)).toBe(1_937);
+    expect(getStripePaymentElementMountCurrency(s)).toBe("cad");
   });
 
   it("remounts in canonical USD for a shipping cart", () => {
@@ -928,6 +997,101 @@ describe("direct-listed card element", () => {
 
     expect(getStripePaymentElementAmount(s)).toBe(1_200);
     expect(getStripePaymentElementMountCurrency(s)).toBe("usd");
+  });
+});
+
+describe("client-confirm buyer-currency quote", () => {
+  const quotedSurcharges = {
+    type: "loaded" as const,
+    result: {
+      vat_id_valid: false,
+      has_vat_id_input: false,
+      shipping_rate_cents: 0,
+      tax_cents: 0,
+      tax_included_cents: 0,
+      subtotal: 2_013,
+      buyer_currency_quote: {
+        token: "quote-token",
+        currency: "cad" as const,
+        canonical_total_cents: 2_013,
+        presentment_total_cents: 2_813,
+        charge_presentment_total_cents: 2_813,
+        rate: 1.3974,
+        subunit_to_unit: 100,
+        expires_at: "2026-08-26T16:00:00Z",
+        line_allocations: [
+          {
+            permalink: "product-a",
+            price_cents: 2_446,
+            tip_cents: 367,
+            tax_cents: 0,
+            shipping_cents: 0,
+            total_cents: 2_813,
+          },
+        ],
+      },
+    },
+  };
+
+  it("remounts a stale method-forced element onto the tipped third-currency quote", () => {
+    const s = state({
+      checkoutPayment: methodForcedEurConfig,
+      buyerCurrency: "cad",
+      products: [product({ hasTippingEnabled: true })],
+      tip: { type: "percentage", percentage: 15 },
+      surcharges: quotedSurcharges,
+    });
+
+    expect(getConfiguredDirectListedCurrency(s)).toBeNull();
+    expect(getStripePaymentElementPresentment(s)).toEqual({ currency: "cad", amountCents: 2_813 });
+    expect(getStripePaymentElementAmount(s)).toBe(2_813);
+    expect(getStripePaymentElementMountCurrency(s)).toBe("cad");
+  });
+
+  it("suppresses wallets as soon as a client-confirm checkout selects or loads a buyer currency", () => {
+    expect(
+      shouldSuppressClientConfirmWallets(
+        state({
+          checkoutPayment: paymentElementClientConfirmConfig,
+          buyerCurrency: "cad",
+          surcharges: { type: "pending" },
+        }),
+      ),
+    ).toBe(true);
+
+    expect(
+      shouldSuppressClientConfirmWallets(
+        state({
+          checkoutPayment: paymentElementClientConfirmConfig,
+          paymentMethod: "stripePaymentRequest",
+          paymentElementType: "apple_pay",
+          surcharges: quotedSurcharges,
+        }),
+      ),
+    ).toBe(true);
+  });
+
+  it("does not suppress wallets on server-confirm presentment or canonical client-confirm checkout", () => {
+    expect(
+      shouldSuppressClientConfirmWallets(
+        state({ checkoutPayment: buyerCurrencyPresentmentPaymentElementConfig, surcharges: quotedSurcharges }),
+      ),
+    ).toBe(false);
+    expect(shouldSuppressClientConfirmWallets(state({ checkoutPayment: paymentElementClientConfirmConfig }))).toBe(
+      false,
+    );
+  });
+
+  it("holds the method-forced mount while the replacement quote is loading", () => {
+    const s = state({
+      checkoutPayment: methodForcedEurConfig,
+      products: [product({ hasTippingEnabled: true })],
+      tip: { type: "percentage", percentage: 15 },
+      surcharges: { type: "pending" },
+    });
+
+    expect(getStripePaymentElementAmount(s)).toBeNull();
+    expect(getStripePaymentElementMountCurrency(s)).toBeNull();
   });
 });
 
@@ -972,6 +1136,20 @@ describe("buyer-currency presentment lane", () => {
     });
     expect(getStripePaymentElementPresentment(s)).toEqual({ currency: "cad", amountCents: 625 });
     expect(getStripePaymentElementAmount(s)).toBe(625);
+  });
+
+  it("holds the presentment mount while a wallet is selected inside the element", () => {
+    // A USD flip here remounts the element (currency is in the provider key) and wipes the
+    // wallet selection before the sheet can open.
+    for (const wallet of ["apple_pay", "google_pay"]) {
+      const s = state({
+        checkoutPayment: buyerCurrencyPresentmentPaymentElementConfig,
+        surcharges: loadedSurchargesWithQuote,
+        paymentElementType: wallet,
+      });
+      expect(getStripePaymentElementPresentment(s)).toEqual({ currency: "cad", amountCents: 625 });
+      expect(getStripePaymentElementMountCurrency(s)).toBe("cad");
+    }
   });
 
   it("mounts canonical USD when the surcharge response has no quote", () => {
@@ -1458,6 +1636,22 @@ describe("reduceCheckoutState", () => {
   it("invalidates loaded surcharges for fields that change the totals", () => {
     const next = reduceCheckoutState(state(), { type: "set-value", tip: { type: "fixed", amount: 1_00 } });
 
+    expect(next.surcharges).toEqual({ type: "pending" });
+  });
+
+  it("keeps an exact buyer-currency tip tagged while another currency is selected", () => {
+    const exactTip = { type: "fixed", amount: 350, presentmentAmount: 437, presentmentCurrency: "cad" } as const;
+    const next = reduceCheckoutState(
+      state({
+        buyerCurrency: "cad",
+        products: [product({ hasTippingEnabled: true })],
+        tip: exactTip,
+        surcharges: loadedSurcharges(),
+      }),
+      { type: "set-value", buyerCurrency: "gbp" },
+    );
+
+    expect(next.tip).toEqual(exactTip);
     expect(next.surcharges).toEqual({ type: "pending" });
   });
 
@@ -2125,7 +2319,7 @@ describe("reduceCheckoutState", () => {
 
       expect(next.surcharges).toEqual({ type: "pending" });
       expect(next.buyerCurrencyRemint?.surcharges).toEqual(quoted("cad", ["usd", "cad", "gbp"]));
-      expect(next.buyerCurrencyRemint?.previousCurrency).toBeNull();
+      expect(next.buyerCurrencyRemint?.previousCurrency).toBe("cad");
     });
 
     it("keeps the first held quote when a second change lands before the first one returns", () => {
@@ -2137,7 +2331,7 @@ describe("reduceCheckoutState", () => {
       const pickedAgain = reduceCheckoutState(picked, { type: "set-value", buyerCurrency: "usd" });
 
       expect(pickedAgain.buyerCurrencyRemint?.surcharges).toEqual(quoted("cad", ["usd", "cad", "gbp"]));
-      expect(pickedAgain.buyerCurrencyRemint?.previousCurrency).toBeNull();
+      expect(pickedAgain.buyerCurrencyRemint?.previousCurrency).toBe("cad");
     });
 
     it("drops the held quote when the cart itself changes", () => {
@@ -2187,6 +2381,28 @@ describe("reduceCheckoutState", () => {
       expect(next.unavailableBuyerCurrency).toBe("gbp");
       expect(next.buyerCurrency).toBe("cad");
       // The response in hand is the USD fallback, so the restored CAD selection is re-quoted.
+      expect(next.surcharges).toEqual({ type: "pending" });
+      expect(next.buyerCurrencyRemint?.previousCurrency).toBe("cad");
+    });
+
+    it("keeps a tagged exact tip when a refused currency restores its previous currency", () => {
+      const exactTip = { type: "fixed", amount: 350, presentmentAmount: 437, presentmentCurrency: "cad" } as const;
+      const loading = state({
+        buyerCurrency: "gbp",
+        buyerCurrencyRemint: { surcharges: quoted("cad", ["usd", "cad", "gbp"]), previousCurrency: "cad" },
+        products: [product({ hasTippingEnabled: true })],
+        surcharges: { type: "loading", requestId: 1, abort: () => {} },
+        tip: exactTip,
+      });
+
+      const next = reduceCheckoutState(loading, {
+        type: "surcharges-fetch-succeeded",
+        requestId: 1,
+        result: quoted("usd", ["usd", "cad"]),
+      });
+
+      expect(next.buyerCurrency).toBe("cad");
+      expect(next.tip).toEqual(exactTip);
       expect(next.surcharges).toEqual({ type: "pending" });
       expect(next.buyerCurrencyRemint?.previousCurrency).toBe("cad");
     });

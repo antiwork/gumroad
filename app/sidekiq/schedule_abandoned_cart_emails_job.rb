@@ -25,6 +25,11 @@ class ScheduleAbandonedCartEmailsJob
   # range_optimizer_max_mem_size and silently falls back to a full table scan.
   IN_LIST_BATCH_SIZE = 5_000
 
+  # Ceiling on the mails one run may enqueue: uncapped, a run works a backlog into a single mass
+  # enqueue (gumroad-private#2302). Windows are walked newest day first and carts within a window
+  # newest first, so a run that stops early spends its budget on the freshest carts.
+  MAX_EMAILS_PER_RUN = 20_000
+
   sidekiq_options queue: :low, retry: 5, lock: :until_executed
 
   # Duplicate sends from an overlapping run are prevented by the unique index on
@@ -56,36 +61,38 @@ class ScheduleAbandonedCartEmailsJob
   # insert, which drops the duplicate.
   def perform
     days_to_process = (Cart::ABANDONED_IF_UPDATED_AFTER_AGO.to_i / 1.day.to_i)
+    remaining = MAX_EMAILS_PER_RUN
     (1..days_to_process).each do |day|
       day_start = day.days.ago.beginning_of_day
       day_end = day == 1 ? Cart::ABANDONED_IF_UPDATED_BEFORE_AGO.ago : (day - 1).days.ago.beginning_of_day
-      schedule_emails_for_window(day_start..day_end)
+      remaining -= schedule_emails_for_window(day_start..day_end, limit: remaining)
+      if remaining <= 0
+        Rails.logger.info "Stopped at MAX_EMAILS_PER_RUN (#{MAX_EMAILS_PER_RUN}) after day #{day}; the remaining windows carry over to the next run"
+        break
+      end
     end
   end
 
   private
-    def schedule_emails_for_window(window)
+    def schedule_emails_for_window(window, limit:)
       start_time = Time.current
       # { product_id => { cart_id => [variant_ids] } }
       cart_product_ids_with_cart_ids = {}
+      updated_at_by_cart_id = {}
       cart_ids = abandoned_cart_ids(window)
       cart_ids.each_slice(BATCH_SIZE) do |batch_ids|
         carts = Cart.includes(:alive_cart_products, :user).where(id: batch_ids).reject do |cart|
           cart.user_id.blank? && cart.email.blank?
         end
-        purchased_product_ids_by_cart_id = Cart.purchased_product_ids_by_cart_id(carts)
 
+        # Owned products are deliberately not filtered here: CustomerMailer#abandoned_cart
+        # re-derives the filter per cart at render time and has to, since the purchase can land
+        # after selection (gumroad-private#1626). Batching it here widened one statement to the
+        # union of 500 buyers' histories and cost the whole run (gumroad-private#2343).
         carts.each do |cart|
-          purchased_product_ids = purchased_product_ids_by_cart_id[cart.id] || []
-
+          updated_at_by_cart_id[cart.id] = cart.updated_at
           cart.alive_cart_products.each do |cart_product|
             product_id = cart_product.product_id
-            # Reminding someone about a product they already bought reads as an unfinished
-            # order and brings them in asking whether they were charged twice
-            # (gumroad-private#1626). Filtered per product, not per cart, so a genuinely
-            # mixed cart still earns an email about the part that is unbought.
-            next if purchased_product_ids.include?(product_id)
-
             variant_id = cart_product.option_id
             cart_product_ids_with_cart_ids[product_id] ||= {}
             cart_product_ids_with_cart_ids[product_id][cart.id] ||= []
@@ -98,10 +105,20 @@ class ScheduleAbandonedCartEmailsJob
       start_time = Time.current
       cart_ids_with_matched_workflow_ids_and_product_ids = matched_workflow_ids_and_product_ids_by_cart_id(cart_product_ids_with_cart_ids)
 
-      cart_ids_with_matched_workflow_ids_and_product_ids.each do |cart_id, workflow_ids_with_product_ids|
+      enqueued = 0
+      # Newest first: the match map is keyed in workflow-walk order, so without this a run that
+      # stops at the ceiling would favour whichever sellers happen to be walked first, every run
+      # for as long as the ceiling keeps binding.
+      ordered_matches = cart_ids_with_matched_workflow_ids_and_product_ids
+                          .sort_by { |cart_id, _| -updated_at_by_cart_id[cart_id].to_i }
+      ordered_matches.each do |cart_id, workflow_ids_with_product_ids|
+        break if enqueued >= limit
+
         CustomerMailer.abandoned_cart(cart_id, workflow_ids_with_product_ids.stringify_keys).deliver_later(queue: "low")
+        enqueued += 1
       end
-      Rails.logger.info "Scheduled abandoned cart emails for #{cart_ids_with_matched_workflow_ids_and_product_ids.count} carts for #{window.begin} to #{window.end} in #{(Time.current - start_time).round(2)} seconds"
+      Rails.logger.info "Scheduled abandoned cart emails for #{enqueued} of #{cart_ids_with_matched_workflow_ids_and_product_ids.count} matched carts for #{window.begin} to #{window.end} in #{(Time.current - start_time).round(2)} seconds"
+      enqueued
     end
 
     # Returns { cart_id => { workflow_id => [product_ids] } } for the given

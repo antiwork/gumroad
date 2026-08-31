@@ -1542,11 +1542,10 @@ describe Checkout::StripePaymentPresenter do
 
       # This cart is both shapes at once: an EUR listing carries the forced local methods, and
       # a Canadian buyer of it is an ordinary quote candidate. It must take the quote lane. The
-      # surcharge endpoint quotes this cart, so the checkout shows CA$ totals and submits the
-      # quote token — and the client-confirm lane rejects any request carrying a token
-      # (Order::PreparePaymentIntentService#block_unexpected_buyer_currency_quote), which would
-      # fail every payment attempt. Giving up the iDEAL/Bancontact tabs costs this buyer
-      # nothing: both methods need a bank in the country that issues them.
+      # surcharge endpoint quotes this cart, so the dedicated lane can mount CA$ immediately
+      # instead of mounting EUR and then remounting with a narrowed method list. Giving up the
+      # iDEAL/Bancontact tabs costs this buyer nothing: both methods need a bank in the country
+      # that issues them.
       expect(stripe_payment_props(add_products:)).to eq(
         payment_element_props(buyer_currency_presentment: true, disable_wallets: true)
       )
@@ -1628,9 +1627,8 @@ describe Checkout::StripePaymentPresenter do
       # get quoted. This one asserts the underlying rule against the quote service ITSELF, so the
       # pair cannot silently drift apart: if quotable_product? is ever widened to cover a cart the
       # method-forced lane still claims, this reddens even though both examples above still pass.
-      # What makes it load-bearing is that the combination is unpayable, not merely suboptimal —
-      # a quoted cart submits a token and client-confirm prepare fails closed on one
-      # (Order::PreparePaymentIntentService#block_unexpected_buyer_currency_quote).
+      # A known quote candidate belongs on the dedicated lane; client-confirm's quote path is the
+      # rolling-state fallback for a buyer who changes currency after the page was rendered.
       seller, product = buyer_currency_seller_with_product(price_cents: 1500)
       activate_buyer_currency_flags(seller)
       allow(Stripe).to receive(:api_key).and_return("sk_test_currency")

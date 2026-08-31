@@ -1139,6 +1139,36 @@ class LinksControllerUpdateTest < ActionController::TestCase
     assert_equal "kept-slug", @product.reload.custom_permalink
   end
 
+  test "PUT update does not clear a custom URL when the snapshot sends a blank permalink" do
+    @product.update!(custom_permalink: "kept-slug", price_cents: 500)
+    @product.update_column(:customizable_price, true)
+
+    put :update, params: @params.merge(custom_permalink: nil, customizable_price: nil), as: :json
+
+    assert_response :success
+    @product.reload
+    assert_equal "kept-slug", @product.custom_permalink
+    assert_equal true, @product.customizable_price
+  end
+
+  test "PUT update still writes a new custom URL when the snapshot sends one" do
+    @product.update!(custom_permalink: "kept-slug")
+
+    put :update, params: @params.merge(custom_permalink: "new-slug"), as: :json
+
+    assert_response :success
+    assert_equal "new-slug", @product.reload.custom_permalink
+  end
+
+  test "PUT update clears a custom URL when the current editor marks the blank value as changed" do
+    @product.update!(custom_permalink: "kept-slug")
+
+    put :update, params: @params.merge(custom_permalink: nil, custom_permalink_changed: true), as: :json
+
+    assert_response :success
+    assert_nil @product.reload.custom_permalink
+  end
+
   test "PUT update returns the existing validation error when suggested price is set but the default price record is missing" do
     @product.prices.destroy_all
     @product.update_column(:customizable_price, true)

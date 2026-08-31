@@ -10,6 +10,7 @@ describe EmailEngagementDynamoStore do
 
   before do
     described_class.client = client
+    allow(described_class).to receive(:sleep)
   end
 
   after do
@@ -48,6 +49,16 @@ describe EmailEngagementDynamoStore do
         raise Aws::DynamoDB::Errors::TransactionCanceledException.new(
           nil,
           "Transaction cancelled, please refer cancellation reasons for specific reasons [TransactionConflict, None, None]"
+        )
+      when :conditional_and_conflict
+        raise Aws::DynamoDB::Errors::TransactionCanceledException.new(
+          nil,
+          "Transaction cancelled, please refer cancellation reasons for specific reasons [ConditionalCheckFailed, TransactionConflict]"
+        )
+      when :conflict_and_throttle
+        raise Aws::DynamoDB::Errors::TransactionCanceledException.new(
+          nil,
+          "Transaction cancelled, please refer cancellation reasons for specific reasons [TransactionConflict, ProvisionedThroughputExceeded]"
         )
       else
         step
@@ -198,12 +209,65 @@ describe EmailEngagementDynamoStore do
       end.to raise_error(Aws::Errors::ServiceError)
     end
 
-    it "raises retryable transaction cancellations that are not conditional duplicates" do
+    it "raises a transaction conflict only after exhausting the in-process attempts" do
       stub_transact(:conflict)
 
       expect do
         described_class.record_click(installment_id: 123, mailer_method:, mailer_args:, click_url:)
       end.to raise_error(Aws::DynamoDB::Errors::TransactionCanceledException)
+
+      expect(requests.count { _1[:operation_name] == :transact_write_items })
+        .to eq(EmailEngagementDynamoStore::TRANSACT_CONFLICT_MAX_ATTEMPTS)
+    end
+  end
+
+  describe "SUMMARY item contention" do
+    it "retries a conflicted transaction in place rather than failing the event" do
+      stub_transact(:conflict, :ok)
+
+      expect do
+        described_class.record_open(installment_id: 123, mailer_method:, mailer_args:)
+      end.not_to raise_error
+
+      expect(requests.map { _1[:operation_name] }).to eq(%i[transact_write_items transact_write_items])
+    end
+
+    it "retries when a condition check and a conflict cancel the same transaction" do
+      stub_transact(:conditional_and_conflict, :conditional)
+
+      described_class.record_open(installment_id: 123, mailer_method:, mailer_args:)
+
+      # The retry settles as the duplicate it is, leaving the repeat-open update to bump
+      # last_open_at rather than the summary.
+      expect(requests.map { _1[:operation_name] }).to eq(%i[transact_write_items transact_write_items update_item])
+    end
+
+    it "backs off between attempts so contending writers do not line up again" do
+      stub_transact(:conflict, :ok)
+
+      expect(described_class).to receive(:sleep).once.with(a_value_between(0, EmailEngagementDynamoStore::TRANSACT_CONFLICT_BACKOFF))
+
+      described_class.record_open(installment_id: 123, mailer_method:, mailer_args:)
+    end
+
+    it "does not retry a throttle, which needs the job's own backoff" do
+      client.stub_responses(:transact_write_items, "ProvisionedThroughputExceededException")
+
+      expect do
+        described_class.record_open(installment_id: 123, mailer_method:, mailer_args:)
+      end.to raise_error(Aws::Errors::ServiceError)
+
+      expect(requests.count { _1[:operation_name] == :transact_write_items }).to eq(1)
+    end
+
+    it "raises rather than retrying a mixed conflict-plus-throttle cancellation" do
+      stub_transact(:conflict_and_throttle)
+
+      expect do
+        described_class.record_open(installment_id: 123, mailer_method:, mailer_args:)
+      end.to raise_error(Aws::DynamoDB::Errors::TransactionCanceledException)
+
+      expect(requests.count { _1[:operation_name] == :transact_write_items }).to eq(1)
     end
   end
 

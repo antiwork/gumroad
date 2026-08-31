@@ -159,7 +159,10 @@ class Checkout::DiscountsController < Sellers::BaseController
         params[:amount_cents] = nil
         params[:currency_type] = nil
         params[:once_per_cart] = false
-      else
+      elsif params.key?(:amount_cents)
+        # Only nil the percentage when the client actually submitted a cents amount
+        # (a percent→cents conversion). A partial update that sends neither amount
+        # must leave the existing percentage untouched, or it silently wipes it.
         params[:amount_percentage] = nil
       end
     end
