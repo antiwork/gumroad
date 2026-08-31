@@ -63,7 +63,18 @@ class Purchase::FinalizeConfirmedChargeService < Purchase::BaseService
     def finalize_successful_charge
       purchase.charge_intent = charge_intent
       assign_confirmed_card_presentation(charge_intent.charge)
-      purchase.save_charge_data(charge_intent.charge)
+      # Same missing-settlement deferral as Order::ChargeService / confirm_charge_intent!.
+      # Raising inside with_lock rolls back the stripe_transaction_id the retry jobs key on.
+      charge_data_saved = purchase.save_charge_data(
+        charge_intent.charge,
+        allow_missing_flow_of_funds: purchase.processor_settlement_deferrable?
+      )
+
+      if charge_data_saved == false
+        enqueue_processor_settlement_finalizer
+        return :pending
+      end
+
       persist_recurring_payment_method!
 
       if purchase.errors.present?
@@ -74,6 +85,15 @@ class Purchase::FinalizeConfirmedChargeService < Purchase::BaseService
 
       handle_purchase_success
       nil
+    end
+
+    def enqueue_processor_settlement_finalizer
+      charge = purchase.charge
+      if charge.present?
+        FinalizeBuyerPresentmentChargeJob.perform_in(FinalizeBuyerPresentmentChargeJob::INITIAL_DELAY, charge.id)
+      else
+        FinalizeBuyerPresentmentPurchaseJob.perform_in(FinalizeBuyerPresentmentPurchaseJob::INITIAL_DELAY, purchase.id)
+      end
     end
 
     # Persist the reusable method before creating the subscription. Any missing invariant rolls
