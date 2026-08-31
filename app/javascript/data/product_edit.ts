@@ -425,15 +425,27 @@ export const reconcileMountedEditorFileEmbedIds = (editor: Editor, fileIdMapping
   if (transaction.docChanged) editor.view.dispatch(transaction);
 };
 
-// Only send a blank custom URL when this session is clearing one it knows
-// about; an unchanged blank can be a stale tab snapshot from before another
-// tab set the slug.
+// Only send a scalar when this session changed it. A blank custom URL is "not
+// specified" unless the session is clearing one it knows about; an unchanged
+// blank can be a stale tab snapshot from before another tab set the slug. An
+// unchanged `customizable_price` (the editor always sends a boolean, never
+// nil) likewise must not revert a flag another tab turned on — only a
+// deliberate change this session is sent.
 export const scalarSettingsForSave = (
-  product: { custom_permalink: string | null },
-  lastSavedCustomPermalink: string | null,
+  product: { custom_permalink: string | null; customizable_price: boolean },
+  lastSaved: { custom_permalink: string | null; customizable_price: boolean },
 ) => {
-  if (product.custom_permalink) return { custom_permalink: product.custom_permalink };
-  return lastSavedCustomPermalink ? { custom_permalink: null, custom_permalink_changed: true } : {};
+  const settings: Record<string, unknown> = {};
+  if (product.custom_permalink) {
+    settings.custom_permalink = product.custom_permalink;
+  } else if (lastSaved.custom_permalink) {
+    settings.custom_permalink = null;
+    settings.custom_permalink_changed = true;
+  }
+  if (product.customizable_price !== lastSaved.customizable_price) {
+    settings.customizable_price = product.customizable_price;
+  }
+  return settings;
 };
 
 export const saveProduct = async (
@@ -445,7 +457,11 @@ export const saveProduct = async (
   // (the kept pages were never loaded into this session), so filtering files
   // by the file-embeds found in the submitted content would wrongly delete
   // every file — including the ones the kept pages embed. Skip the filter.
-  options: { keepAllFiles?: boolean; lastSavedCustomPermalink?: string | null } = {},
+  options: {
+    keepAllFiles?: boolean;
+    lastSavedCustomPermalink?: string | null;
+    lastSavedCustomizablePrice?: boolean | null;
+  } = {},
 ): Promise<SaveProductResponse> => {
   // TODO remove this once we have a better content uploader
   const editor = new Editor(baseEditorOptions(extensions(id)));
@@ -468,14 +484,20 @@ export const saveProduct = async (
   // would make "Keep version content" delete files embedded in the hidden
   // pages even though that retry asks us to preserve every file.
   const files = filesForSave(product.files, fileIds, options.keepAllFiles ?? false);
-  const { custom_html: _customHtml, custom_permalink, ...productParams } = product;
+  const { custom_html: _customHtml, custom_permalink, customizable_price, ...productParams } = product;
   const response = await request({
     method: "POST",
     accept: "json",
     url: Routes.link_path(permalink),
     data: {
       ...productParams,
-      ...scalarSettingsForSave({ custom_permalink }, options.lastSavedCustomPermalink ?? null),
+      ...scalarSettingsForSave(
+        { custom_permalink, customizable_price },
+        {
+          custom_permalink: options.lastSavedCustomPermalink ?? null,
+          customizable_price: options.lastSavedCustomizablePrice ?? false,
+        },
+      ),
       files,
       price_currency_type: currencyType,
       covers: product.covers.map(({ id }) => id),

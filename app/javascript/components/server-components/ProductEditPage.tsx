@@ -647,6 +647,7 @@ const ProductEditPage = (props: Props) => {
       const response = await saveProduct(props.unique_permalink, props.id, productSent, currencyType, {
         keepAllFiles: conflictResolution?.choice === "keep_version",
         lastSavedCustomPermalink: lastSavedProductRef.current.custom_permalink,
+        lastSavedCustomizablePrice: lastSavedProductRef.current.customizable_price,
       });
       saved = true;
       // The version pages the seller chose to keep were never loaded into this

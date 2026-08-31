@@ -48,22 +48,49 @@ describe("filesForSave", () => {
 });
 
 describe("scalarSettingsForSave", () => {
+  const lastSaved = {
+    custom_permalink: null,
+    customizable_price: false,
+  };
   it("omits an unchanged blank custom permalink so a stale tab cannot clear it", () => {
-    expect(scalarSettingsForSave({ custom_permalink: null }, null)).toEqual({});
-    expect(scalarSettingsForSave({ custom_permalink: "" }, null)).toEqual({});
+    expect(scalarSettingsForSave({ custom_permalink: null, customizable_price: false }, lastSaved)).toEqual({});
+    expect(scalarSettingsForSave({ custom_permalink: "", customizable_price: false }, lastSaved)).toEqual({});
   });
 
   it("sends a marker when this session clears an existing custom permalink", () => {
-    expect(scalarSettingsForSave({ custom_permalink: null }, "kept-slug")).toEqual({
+    expect(
+      scalarSettingsForSave(
+        { custom_permalink: null, customizable_price: false },
+        { custom_permalink: "kept-slug", customizable_price: false },
+      ),
+    ).toEqual({
       custom_permalink: null,
       custom_permalink_changed: true,
     });
   });
 
   it("sends a non-empty custom permalink", () => {
-    expect(scalarSettingsForSave({ custom_permalink: "my-custom-url" }, null)).toEqual({
+    expect(scalarSettingsForSave({ custom_permalink: "my-custom-url", customizable_price: false }, lastSaved)).toEqual({
       custom_permalink: "my-custom-url",
     });
+  });
+
+  it("omits an unchanged customizable_price so a stale tab cannot turn PWYW off", () => {
+    expect(
+      scalarSettingsForSave(
+        { custom_permalink: null, customizable_price: true },
+        { custom_permalink: null, customizable_price: true },
+      ),
+    ).toEqual({});
+  });
+
+  it("sends a customizable_price change this session made", () => {
+    expect(
+      scalarSettingsForSave(
+        { custom_permalink: null, customizable_price: true },
+        { custom_permalink: null, customizable_price: false },
+      ),
+    ).toEqual({ customizable_price: true });
   });
 });
 
