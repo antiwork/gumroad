@@ -265,7 +265,6 @@ const CheckoutIndexPage = () => {
           cartPermalinks: cartForm.data.cart.items.map((item) => item.product.permalink),
           willSaveCard: state.willSaveCard,
           paymentMethod: state.paymentMethod,
-          paymentElementType: state.paymentElementType,
         });
   // The direct-listed currency lane, for the large-tip confirmation below and for the tip
   // basis the order submits. Suppressed whenever the FX-quoted buyer-currency lane is displaying,
@@ -572,7 +571,6 @@ const CheckoutIndexPage = () => {
                 cartPermalinks: cartForm.data.cart.items.map((item) => item.product.permalink),
                 willSaveCard: state.willSaveCard,
                 paymentMethod: state.paymentMethod,
-                paymentElementType: state.paymentElementType,
               }),
         lineItems: (() => {
           // Precompute each line's discounted price bases once so the tip can be allocated

@@ -689,11 +689,12 @@ export function getStripePaymentElementPresentment(state: State): { currency: st
 
   if (!canDisplayBuyerCurrencyQuote(state)) return null;
 
+  // Deliberately independent of state.paymentElementType: a wallet selection must keep the
+  // presentment, or the mount currency flips and the remount wipes the selection.
   const display = getCheckoutBuyerCurrencyDisplay(state.surcharges.result, {
     cartPermalinks: state.products.map((product) => product.permalink),
     willSaveCard: state.willSaveCard,
     paymentMethod: state.paymentMethod,
-    paymentElementType: state.paymentElementType,
   });
   if (!display) return null;
 
@@ -715,13 +716,12 @@ export function shouldSuppressClientConfirmWallets(state: State) {
   if (state.buyerCurrency !== null && state.buyerCurrency.toLowerCase() !== "usd") return true;
   if (state.surcharges.type !== "loaded") return false;
 
-  // Ignore the current wallet selection here: it suppresses the display helper, but must not
-  // keep that same wallet surface alive after a valid quote arrives.
+  // Read the display as a plain card selection: the current wallet surface must not stay
+  // alive after a valid quote arrives.
   return (
     getCheckoutBuyerCurrencyDisplay(state.surcharges.result, {
       cartPermalinks: state.products.map((product) => product.permalink),
       paymentMethod: "card",
-      paymentElementType: "card",
     }) !== null
   );
 }

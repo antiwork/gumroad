@@ -1151,6 +1151,20 @@ describe("buyer-currency presentment lane", () => {
     expect(getStripePaymentElementAmount(s)).toBe(625);
   });
 
+  it("holds the presentment mount while a wallet is selected inside the element", () => {
+    // A USD flip here remounts the element (currency is in the provider key) and wipes the
+    // wallet selection before the sheet can open.
+    for (const wallet of ["apple_pay", "google_pay"]) {
+      const s = state({
+        checkoutPayment: buyerCurrencyPresentmentPaymentElementConfig,
+        surcharges: loadedSurchargesWithQuote,
+        paymentElementType: wallet,
+      });
+      expect(getStripePaymentElementPresentment(s)).toEqual({ currency: "cad", amountCents: 625 });
+      expect(getStripePaymentElementMountCurrency(s)).toBe("cad");
+    }
+  });
+
   it("mounts canonical USD when the surcharge response has no quote", () => {
     const s = state({
       checkoutPayment: buyerCurrencyPresentmentPaymentElementConfig,

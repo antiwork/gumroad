@@ -403,7 +403,6 @@ export const Checkout = ({
           cartPermalinks: cart.items.map((item) => item.product.permalink),
           willSaveCard: state.willSaveCard,
           paymentMethod: state.paymentMethod,
-          paymentElementType: state.paymentElementType,
         });
   // The buyer-currency amounts every row of the table renders from, so the visible numbers
   // sum exactly to the locked total the buyer is charged. An unusable allocation makes
