@@ -50,7 +50,8 @@ class Checkout::PaymentMethodListToken
     #
     # `currency` is the Element's mount currency at pay time. A USD-priced cart starts in USD
     # (`types`) and may remount in the quoted currency (`quoted_types`) or INR (`inr_types`).
-    # Missing remount keys (a tab older than this field) keep using `types`.
+    # A non-USD mount without its remount key returns nil so prepare fails closed instead of
+    # echoing the USD list onto an INR/CAD ConfirmationToken.
     def verify(token, sellers:, currency: nil)
       return nil if token.blank?
 
@@ -71,15 +72,17 @@ class Checkout::PaymentMethodListToken
 
       def types_for_currency(payload, currency)
         mount = currency.to_s.downcase.presence
-        candidates = []
         if mount == "inr"
-          candidates << payload["inr_types"]
-          candidates << payload["quoted_types"]
-        elsif mount.present? && mount != "usd"
-          candidates << payload["quoted_types"]
+          return payload["inr_types"] if string_types?(payload["inr_types"])
+          return payload["quoted_types"] if string_types?(payload["quoted_types"])
+          return nil
         end
-        candidates << payload["types"]
-        candidates.find { string_types?(_1) }
+        if mount.present? && mount != "usd"
+          return payload["quoted_types"] if string_types?(payload["quoted_types"])
+          return nil
+        end
+
+        payload["types"] if string_types?(payload["types"])
       end
 
       def string_types?(types)

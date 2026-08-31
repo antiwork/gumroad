@@ -2154,7 +2154,9 @@ describe Order::PreparePaymentIntentService, :vcr do
           payment_details_source: PurchasePaymentFlow::PAYMENT_ELEMENT,
           payment_element_mount_currency: mount_currency,
           payment_method_list_token: Checkout::PaymentMethodListToken.issue(
-            payment_method_types: %w[card link ideal], sellers: [seller]
+            payment_method_types: %w[card link ideal],
+            sellers: [seller],
+            quoted_payment_method_types: %w[card link],
           ),
         }.merge(common_params)
         order, = Order::CreateService.new(params:).perform

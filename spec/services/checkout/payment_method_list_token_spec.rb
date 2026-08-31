@@ -89,11 +89,12 @@ describe Checkout::PaymentMethodListToken do
       expect(described_class.verify(token, sellers: [seller], currency: "inr")).to eq(%w[card link])
     end
 
-    it "falls back to the USD mount list when no remount key is present" do
-      token = described_class.issue(payment_method_types: %w[card link], sellers: [seller])
+    it "returns nil for a non-USD remount when no remount key is present" do
+      token = described_class.issue(payment_method_types: %w[card link cashapp], sellers: [seller])
 
-      expect(described_class.verify(token, sellers: [seller], currency: "inr")).to eq(%w[card link])
-      expect(described_class.verify(token, sellers: [seller], currency: "cad")).to eq(%w[card link])
+      expect(described_class.verify(token, sellers: [seller], currency: "inr")).to be_nil
+      expect(described_class.verify(token, sellers: [seller], currency: "cad")).to be_nil
+      expect(described_class.verify(token, sellers: [seller], currency: "usd")).to eq(%w[card link cashapp])
     end
   end
 end
