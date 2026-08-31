@@ -299,11 +299,6 @@ class EmailEngagementDynamoStore
         codes.any? && codes.all? { |code| ["ConditionalCheckFailed", "None"].include?(code) }
       end
 
-      # A transaction is worth retrying in place only when its cancellation is
-      # explained entirely by contention and condition checks: the [ConditionalCheckFailed,
-      # TransactionConflict] mix settles as a duplicate once the contended write lands.
-      # A throttle or validation reason means DynamoDB is rejecting the transact for a
-      # reason a retry will not clear, so it must raise for Sidekiq's own backoff instead.
       def transaction_conflict?(error)
         codes = cancellation_codes(error)
         codes.include?("TransactionConflict") &&
