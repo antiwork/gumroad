@@ -19,6 +19,7 @@ import {
   resolveServerIdMapping,
   richContentMoveSourceIds,
   saveProductError,
+  scalarSettingsForSave,
   StaleContentConflictError,
   StaleDeletionConflictError,
 } from "$app/data/product_edit";
@@ -43,6 +44,26 @@ describe("filesForSave", () => {
     expect(filesForSave(editorFiles, new Set(), false)).toEqual([]);
     expect(editorFiles).toEqual([file]);
     expect(filesForSave(editorFiles, new Set(), true)).toEqual([file]);
+  });
+});
+
+describe("scalarSettingsForSave", () => {
+  it("omits an unchanged blank custom permalink so a stale tab cannot clear it", () => {
+    expect(scalarSettingsForSave({ custom_permalink: null }, null)).toEqual({});
+    expect(scalarSettingsForSave({ custom_permalink: "" }, null)).toEqual({});
+  });
+
+  it("sends a marker when this session clears an existing custom permalink", () => {
+    expect(scalarSettingsForSave({ custom_permalink: null }, "kept-slug")).toEqual({
+      custom_permalink: null,
+      custom_permalink_changed: true,
+    });
+  });
+
+  it("sends a non-empty custom permalink", () => {
+    expect(scalarSettingsForSave({ custom_permalink: "my-custom-url" }, null)).toEqual({
+      custom_permalink: "my-custom-url",
+    });
   });
 });
 

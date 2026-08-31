@@ -425,6 +425,17 @@ export const reconcileMountedEditorFileEmbedIds = (editor: Editor, fileIdMapping
   if (transaction.docChanged) editor.view.dispatch(transaction);
 };
 
+// Only send a blank custom URL when this session is clearing one it knows
+// about; an unchanged blank can be a stale tab snapshot from before another
+// tab set the slug.
+export const scalarSettingsForSave = (
+  product: { custom_permalink: string | null },
+  lastSavedCustomPermalink: string | null,
+) => {
+  if (product.custom_permalink) return { custom_permalink: product.custom_permalink };
+  return lastSavedCustomPermalink ? { custom_permalink: null, custom_permalink_changed: true } : {};
+};
+
 export const saveProduct = async (
   permalink: string,
   id: string,
@@ -434,7 +445,7 @@ export const saveProduct = async (
   // (the kept pages were never loaded into this session), so filtering files
   // by the file-embeds found in the submitted content would wrongly delete
   // every file — including the ones the kept pages embed. Skip the filter.
-  options: { keepAllFiles?: boolean } = {},
+  options: { keepAllFiles?: boolean; lastSavedCustomPermalink?: string | null } = {},
 ): Promise<SaveProductResponse> => {
   // TODO remove this once we have a better content uploader
   const editor = new Editor(baseEditorOptions(extensions(id)));
@@ -457,13 +468,14 @@ export const saveProduct = async (
   // would make "Keep version content" delete files embedded in the hidden
   // pages even though that retry asks us to preserve every file.
   const files = filesForSave(product.files, fileIds, options.keepAllFiles ?? false);
-  const { custom_html: _customHtml, ...productParams } = product;
+  const { custom_html: _customHtml, custom_permalink, ...productParams } = product;
   const response = await request({
     method: "POST",
     accept: "json",
     url: Routes.link_path(permalink),
     data: {
       ...productParams,
+      ...scalarSettingsForSave({ custom_permalink }, options.lastSavedCustomPermalink ?? null),
       files,
       price_currency_type: currencyType,
       covers: product.covers.map(({ id }) => id),

@@ -485,6 +485,8 @@ class LinksController < ApplicationController
           diagnostics: deletion_guard_diagnostics
         )
 
+        omit_unspecified_product_scalars!
+
         @product.assign_attributes(product_permitted_params.except(
           :products,
           :description,
@@ -904,6 +906,19 @@ class LinksController < ApplicationController
         permitted.delete(:custom_html) unless Feature.active?(:custom_html_pages, @product.user)
         permitted
       end
+    end
+
+    # Blank custom_permalink is "not specified" unless the current editor marks
+    # it as a deliberate clear. Older tabs send the whole snapshot without that
+    # marker, so their stale blank must not wipe a slug another tab set.
+    def omit_unspecified_product_scalars!
+      permitted = product_permitted_params
+      permitted.delete(:custom_permalink) if permitted[:custom_permalink].blank? && !custom_permalink_clear_requested?
+      permitted.delete(:customizable_price) if permitted[:customizable_price].nil?
+    end
+
+    def custom_permalink_clear_requested?
+      ActiveModel::Type::Boolean.new.cast(params[:custom_permalink_changed])
     end
 
     # Built from PERMITTED params so submitted? sees collections as strong
