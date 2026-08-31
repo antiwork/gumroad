@@ -7,7 +7,14 @@ describe AlertOnZeroBuyerCurrencyWalletPurchasesJob do
     allow(InternalNotificationWorker).to receive(:perform_async)
     Feature.deactivate(Checkout::BuyerCurrencyEligibility::WALLETS_FEATURE_NAME)
     Feature.deactivate_percentage(Checkout::BuyerCurrencyEligibility::WALLETS_FEATURE_NAME)
+    Feature.deactivate(Checkout::BuyerCurrencyEligibility::PAYMENT_ELEMENT_WALLETS_FEATURE_NAME)
+    Feature.deactivate_percentage(Checkout::BuyerCurrencyEligibility::PAYMENT_ELEMENT_WALLETS_FEATURE_NAME)
     $redis.del(RedisKey.buyer_currency_wallet_presentment_zero_alerted_at)
+  end
+
+  def enable_wallet_lane
+    Feature.activate(Checkout::BuyerCurrencyEligibility::WALLETS_FEATURE_NAME)
+    Feature.activate(Checkout::BuyerCurrencyEligibility::PAYMENT_ELEMENT_WALLETS_FEATURE_NAME)
   end
 
   def create_presentment_for(purchase)
@@ -42,8 +49,18 @@ describe AlertOnZeroBuyerCurrencyWalletPurchasesJob do
       expect($redis.get(RedisKey.buyer_currency_wallet_presentment_zero_alerted_at)).to be_nil
     end
 
-    it "alerts as soon as the already-full 24-hour purchase window is empty" do
+    it "stays quiet when payment_element_wallets is off even if buyer_currency_wallets is on" do
       Feature.activate(Checkout::BuyerCurrencyEligibility::WALLETS_FEATURE_NAME)
+      $redis.set(RedisKey.buyer_currency_wallet_presentment_zero_alerted_at, 1.hour.ago.to_i)
+
+      described_class.new.perform
+
+      expect(InternalNotificationWorker).not_to have_received(:perform_async)
+      expect($redis.get(RedisKey.buyer_currency_wallet_presentment_zero_alerted_at)).to be_nil
+    end
+
+    it "alerts as soon as the already-full 24-hour purchase window is empty" do
+      enable_wallet_lane
 
       described_class.new.perform
 
@@ -57,7 +74,7 @@ describe AlertOnZeroBuyerCurrencyWalletPurchasesJob do
     end
 
     it "reports the newest wallet-presentment purchase when the drought is older than the threshold" do
-      Feature.activate(Checkout::BuyerCurrencyEligibility::WALLETS_FEATURE_NAME)
+      enable_wallet_lane
       last_purchase_at = 25.hours.ago
       create_wallet_presentment_purchase(created_at: 3.days.ago)
       create_wallet_presentment_purchase(created_at: last_purchase_at)
@@ -71,6 +88,7 @@ describe AlertOnZeroBuyerCurrencyWalletPurchasesJob do
     end
 
     it "treats a percentage rollout as enabled" do
+      Feature.activate(Checkout::BuyerCurrencyEligibility::PAYMENT_ELEMENT_WALLETS_FEATURE_NAME)
       Feature.activate_percentage(Checkout::BuyerCurrencyEligibility::WALLETS_FEATURE_NAME, 100)
 
       described_class.new.perform
@@ -78,8 +96,17 @@ describe AlertOnZeroBuyerCurrencyWalletPurchasesJob do
       expect(InternalNotificationWorker).to have_received(:perform_async)
     end
 
-    it "throttles repeated alerts while the lane remains at zero" do
+    it "treats a payment_element_wallets percentage rollout as the prerequisite being on" do
       Feature.activate(Checkout::BuyerCurrencyEligibility::WALLETS_FEATURE_NAME)
+      Feature.activate_percentage(Checkout::BuyerCurrencyEligibility::PAYMENT_ELEMENT_WALLETS_FEATURE_NAME, 100)
+
+      described_class.new.perform
+
+      expect(InternalNotificationWorker).to have_received(:perform_async)
+    end
+
+    it "throttles repeated alerts while the lane remains at zero" do
+      enable_wallet_lane
       $redis.set(RedisKey.buyer_currency_wallet_presentment_zero_alerted_at, 1.hour.ago.to_i)
 
       described_class.new.perform
@@ -87,8 +114,22 @@ describe AlertOnZeroBuyerCurrencyWalletPurchasesJob do
       expect(InternalNotificationWorker).not_to have_received(:perform_async)
     end
 
+    it "does not enqueue when a concurrent run already claimed the throttle" do
+      enable_wallet_lane
+      allow($redis).to receive(:set).and_call_original
+      allow($redis).to receive(:set).with(
+        RedisKey.buyer_currency_wallet_presentment_zero_alerted_at,
+        anything,
+        hash_including(nx: true)
+      ).and_return(false)
+
+      described_class.new.perform
+
+      expect(InternalNotificationWorker).not_to have_received(:perform_async)
+    end
+
     it "stays quiet and clears the alert throttle when a recent wallet purchase has a presentment row" do
-      Feature.activate(Checkout::BuyerCurrencyEligibility::WALLETS_FEATURE_NAME)
+      enable_wallet_lane
       $redis.set(RedisKey.buyer_currency_wallet_presentment_zero_alerted_at, 2.days.ago.to_i)
       create_wallet_presentment_purchase(created_at: 2.hours.ago)
 
@@ -99,7 +140,7 @@ describe AlertOnZeroBuyerCurrencyWalletPurchasesJob do
     end
 
     it "ignores wallet purchases without a presentment row" do
-      Feature.activate(Checkout::BuyerCurrencyEligibility::WALLETS_FEATURE_NAME)
+      enable_wallet_lane
       purchase = create(:purchase, purchase_state: "successful", created_at: 2.hours.ago)
       PurchaseWalletType.create!(purchase:, wallet_type: "apple_pay")
 
@@ -109,7 +150,7 @@ describe AlertOnZeroBuyerCurrencyWalletPurchasesJob do
     end
 
     it "ignores presentment purchases that did not use a wallet" do
-      Feature.activate(Checkout::BuyerCurrencyEligibility::WALLETS_FEATURE_NAME)
+      enable_wallet_lane
       purchase = create(:purchase, purchase_state: "successful", created_at: 2.hours.ago)
       create_presentment_for(purchase)
 

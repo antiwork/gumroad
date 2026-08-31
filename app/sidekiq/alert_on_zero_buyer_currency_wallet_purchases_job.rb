@@ -12,19 +12,25 @@ class AlertOnZeroBuyerCurrencyWalletPurchasesJob
   ALERT_ROOM = "agent_reports"
 
   def perform
-    return reset_alert_throttle unless buyer_currency_wallets_enabled?
+    return reset_alert_throttle unless wallet_lane_enabled?
     return reset_alert_throttle if recent_wallet_presentment_purchase_exists?
-    return if recently_alerted?
+    return unless claim_alert_throttle
 
     InternalNotificationWorker.perform_async(ALERT_ROOM, "Buyer-currency wallet purchases at zero", message_for(last_wallet_presentment_purchase_at))
-    record_alerted
   end
 
   private
-    def buyer_currency_wallets_enabled?
-      return true if Feature.active?(Checkout::BuyerCurrencyEligibility::WALLETS_FEATURE_NAME)
+    # Checkout::BuyerCurrencyEligibility.wallets_enabled? ANDs both flags per seller. Either
+    # flag fully off means wallets are intentionally dark, so a zero-volume day is not an incident.
+    def wallet_lane_enabled?
+      feature_rollout_present?(Checkout::BuyerCurrencyEligibility::PAYMENT_ELEMENT_WALLETS_FEATURE_NAME) &&
+        feature_rollout_present?(Checkout::BuyerCurrencyEligibility::WALLETS_FEATURE_NAME)
+    end
 
-      flipper_feature = Flipper[Checkout::BuyerCurrencyEligibility::WALLETS_FEATURE_NAME]
+    def feature_rollout_present?(feature_name)
+      return true if Feature.active?(feature_name)
+
+      flipper_feature = Flipper[feature_name]
       flipper_value_present?(flipper_feature, :percentage_of_actors_value) ||
         flipper_value_present?(flipper_feature, :percentage_of_time_value) ||
         flipper_value_present?(flipper_feature, :actors_value) ||
@@ -58,27 +64,23 @@ class AlertOnZeroBuyerCurrencyWalletPurchasesJob
       $redis.del(RedisKey.buyer_currency_wallet_presentment_zero_alerted_at)
     end
 
-    def recently_alerted?
-      timestamp = $redis.get(RedisKey.buyer_currency_wallet_presentment_zero_alerted_at)
-      timestamp.present? && Time.at(timestamp.to_i) > ALERT_THROTTLE.ago
-    end
-
-    def record_alerted
-      $redis.set(RedisKey.buyer_currency_wallet_presentment_zero_alerted_at, Time.current.to_i, ex: ALERT_THROTTLE.to_i)
+    # Claim before enqueue so overlapping hourly (or manual) runs cannot both notify.
+    def claim_alert_throttle
+      $redis.set(RedisKey.buyer_currency_wallet_presentment_zero_alerted_at, Time.current.to_i, nx: true, ex: ALERT_THROTTLE.to_i)
     end
 
     def message_for(last_purchase_at)
       [
         headline(last_purchase_at),
         "",
-        "Expected baseline before the Aug 16 regression was about 370–420 wallet purchases with presentment rows per day. Check antiwork/gumroad-private#2326 and the buyer_currency_wallets flag before closing the incident.",
+        "Expected baseline before the Aug 16 regression was about 370–420 wallet purchases with presentment rows per day. Check antiwork/gumroad-private#2326 and the payment_element_wallets plus buyer_currency_wallets flags before closing the incident.",
       ].join("\n")
     end
 
     def headline(last_purchase_at)
-      return "No buyer-currency wallet purchase with a presentment row has ever been recorded while buyer_currency_wallets is enabled." if last_purchase_at.blank?
+      return "No buyer-currency wallet purchase with a presentment row has ever been recorded while the buyer-currency wallet lane is enabled." if last_purchase_at.blank?
 
       hours = ((Time.current - last_purchase_at) / 1.hour).floor
-      "No buyer-currency wallet purchase with a presentment row has been recorded in #{hours} hours while buyer_currency_wallets is enabled. The last one was at #{last_purchase_at.utc.strftime('%Y-%m-%d %H:%M UTC')}."
+      "No buyer-currency wallet purchase with a presentment row has been recorded in #{hours} hours while the buyer-currency wallet lane is enabled. The last one was at #{last_purchase_at.utc.strftime('%Y-%m-%d %H:%M UTC')}."
     end
 end
