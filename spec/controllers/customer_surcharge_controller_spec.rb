@@ -28,6 +28,15 @@ describe CustomerSurchargeController, :vcr do
     @zip_tax_rate = create(:zip_tax_rate, combined_rate: 0.1, zip_code: nil, state: "CA")
   end
 
+  def listed_payment_method_list_token(*products, rate:)
+    Checkout::PaymentMethodListToken.issue(
+      payment_method_types: ["card"],
+      sellers: products.map(&:user).uniq,
+      direct_listed_currency: products.first.price_currency_type,
+      direct_listed_currency_rate: rate
+    )
+  end
+
   it "responds with 400 when products is a string instead of an array" do
     post "calculate_all", params: { products: "not-an-array" }, as: :json
     expect(response).to have_http_status(:bad_request)
@@ -298,12 +307,57 @@ describe CustomerSurchargeController, :vcr do
         payment_details_source: PurchasePaymentFlow::PAYMENT_ELEMENT,
         payment_element_mount_currency: Currency::CAD,
         payment_element_direct_listed_currency: Currency::CAD,
+        payment_method_list_token: listed_payment_method_list_token(first_product, second_product, rate: "1.5"),
       }, as: :json
 
       allocations = response.parsed_body.fetch("direct_listed_line_allocations")
       expect(allocations.map { _1.fetch("tax_cents") }).to eq([2, 2])
       expect(allocations.sum { _1.fetch("total_cents") }).to eq(34)
       expect(response.parsed_body.fetch("tax_cents")).to eq(2)
+    end
+
+    it "converts direct-listed tax allocations with the signed page rate, not the live rate" do
+      Feature.activate_user(Checkout::BuyerCurrencyEligibility::LISTED_CURRENCY_DIRECT_CHARGE_FEATURE_NAME, @user)
+      cad_product = create(:product, user: @user, price_currency_type: Currency::CAD, price_cents: 100)
+      allow_any_instance_of(CurrencyHelper).to receive(:get_rate).with(Currency::CAD).and_return("1.5")
+      tax_result = double(
+        business_vat_status: nil,
+        to_hash: { has_vat_id_input: false },
+        tax_cents: 1,
+        price_cents: 10,
+        zip_tax_rate: nil,
+        used_taxjar: true,
+        gumroad_is_mpf: true
+      )
+      allow(SalesTaxCalculator).to receive(:new).and_return(instance_double(SalesTaxCalculator, calculate: tax_result))
+
+      post "calculate_all", params: {
+        products: [{ permalink: cad_product.unique_permalink, price: 10, listed_price_cents: 15, quantity: 1 }],
+        country: "US",
+        state: "CA",
+        payment_details_source: PurchasePaymentFlow::PAYMENT_ELEMENT,
+        payment_element_mount_currency: Currency::CAD,
+        payment_element_direct_listed_currency: Currency::CAD,
+        payment_method_list_token: listed_payment_method_list_token(cad_product, rate: "0.8"),
+      }, as: :json
+
+      expect(response.parsed_body.fetch("direct_listed_line_allocations").sole.fetch("tax_cents")).to eq(1)
+    end
+
+    it "omits direct-listed allocations when the page-issued rate token is missing" do
+      Feature.activate_user(Checkout::BuyerCurrencyEligibility::LISTED_CURRENCY_DIRECT_CHARGE_FEATURE_NAME, @user)
+      cad_product = create(:product, user: @user, price_currency_type: Currency::CAD, price_cents: 10_00)
+      allow_any_instance_of(CurrencyHelper).to receive(:get_rate).with(Currency::CAD).and_return("0.8")
+
+      post "calculate_all", params: {
+        products: [{ permalink: cad_product.unique_permalink, price: 10_00, listed_price_cents: 10_00, quantity: 1 }],
+        buyer_currency: Currency::CAD,
+        payment_details_source: PurchasePaymentFlow::PAYMENT_ELEMENT,
+        payment_element_mount_currency: Currency::CAD,
+        payment_element_direct_listed_currency: Currency::CAD,
+      }, as: :json
+
+      expect(response.parsed_body.fetch("direct_listed_line_allocations")).to be_nil
     end
 
     it "does not advertise the listed currency for a saved-card checkout" do
@@ -367,6 +421,7 @@ describe CustomerSurchargeController, :vcr do
         payment_details_source: PurchasePaymentFlow::PAYMENT_ELEMENT,
         payment_element_mount_currency: Currency::CAD,
         payment_element_direct_listed_currency: Currency::CAD,
+        payment_method_list_token: listed_payment_method_list_token(cad_product, rate: "0.8"),
       }, as: :json
 
       expect(response.parsed_body.fetch("buyer_currency_quote")).to be_nil

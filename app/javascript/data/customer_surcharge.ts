@@ -31,6 +31,9 @@ export type GetSurchargesRequest = {
   payment_details_source?: "payment_element" | "saved_payment_method" | undefined;
   payment_element_mount_currency?: string | null | undefined;
   payment_element_direct_listed_currency?: string | null | undefined;
+  // Page-issued list token. Direct-listed allocations convert tax/shipping with
+  // the rate signed into it so the Element total matches charge time.
+  payment_method_list_token?: string | null | undefined;
 };
 
 export type SurchargesResponse = {
