@@ -131,7 +131,8 @@ class Charge::PresentmentOrchestrator
       purchases:,
       presentment_total_cents: presentment_total_cents - rounding_delta_cents,
       presentment_gumroad_amount_cents:,
-      rounding_delta_cents:
+      rounding_delta_cents:,
+      presentment_component_overrides: locked_quote.presentment_component_overrides
     ).allocations
     self.class.persist!(
       charge:,

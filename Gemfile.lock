@@ -936,7 +936,8 @@ GEM
       nokogiri (>= 1.12.0)
     sassc (2.4.0)
       ffi (~> 1.9)
-    secure_headers (6.7.0)
+    secure_headers (7.3.0)
+      cgi (>= 0.1)
     securerandom (0.4.1)
     selenium-webdriver (4.35.0)
       base64 (~> 0.2)
@@ -1252,7 +1253,7 @@ DEPENDENCIES
   ruby-openai (~> 7.0)
   rubyzip (~> 2.3)
   sassc (~> 2.4)
-  secure_headers (~> 6.5)
+  secure_headers (~> 7.3)
   selenium-webdriver (~> 4.35)
   sendgrid-ruby (~> 6.6)
   sentry-rails

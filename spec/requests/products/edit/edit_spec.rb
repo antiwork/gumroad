@@ -576,7 +576,8 @@ describe("Product Edit Scenario", type: :system, js: true) do
     expect(product.customizable_price).to be false
 
     within_section "Pricing" do
-      expect(page).to have_unchecked_field("Allow customers to pay what they want", disabled: false)
+      expect(page).to have_unchecked_field("Allow customers to pay what they want", disabled: true)
+      expect(page).to have_content("Pay what you want isn't available on products with paid pricing options.")
       check "Allow customers to pay in installments"
       fill_in "Number of installments", with: 2
     end

@@ -71,7 +71,146 @@ describe Order::CreateService, :vcr do
     }.merge(common_order_params_without_payment)
   end
 
+  def signed_buyer_currency_quote(seller:, product:, rate:, canonical_components:)
+    payload = {
+      "charges" => [
+        {
+          "seller_id" => seller.id,
+          "stripe_fx_quote_expires_at" => 30.minutes.from_now.iso8601,
+          "listed_currency_rates" => { product.unique_permalink => rate },
+          "listed_currency_codes" => { product.unique_permalink => product.price_currency_type.to_s.downcase },
+          "canonical_line_components" => canonical_components,
+        }
+      ]
+    }
+    Rails.application.message_verifier(Checkout::BuyerCurrencyQuote::TOKEN_PURPOSE).generate(payload)
+  end
+
   describe "#perform" do
+    it "threads buyer-currency quote line binding through combined-order purchase creation" do
+      seller_1.update!(tipping_enabled: true)
+      product_1.update!(price_currency_type: Currency::EUR, price_cents: 15_00)
+      variant_category = create(:variant_category, link: product_1)
+      first_variant = create(:variant, variant_category:, name: "First")
+      second_variant = create(:variant, variant_category:, name: "Second")
+      first_uid = "tz a"
+      second_uid = "tz b"
+      params[:line_items] = [
+        {
+          uid: first_uid,
+          permalink: product_1.unique_permalink,
+          price_cents: 17_25,
+          perceived_price_cents: 17_25,
+          tip_cents: 2_25,
+          quantity: 1,
+          variants: [first_variant.external_id],
+        },
+        {
+          uid: second_uid,
+          permalink: product_1.unique_permalink,
+          price_cents: 17_25,
+          perceived_price_cents: 17_25,
+          tip_cents: 2_25,
+          quantity: 1,
+          variants: [second_variant.external_id],
+        },
+      ]
+      params[:buyer_currency_quote] = signed_buyer_currency_quote(
+        seller: seller_1,
+        product: product_1,
+        rate: "0.8571",
+        canonical_components: [
+          {
+            "uid" => first_uid,
+            "line_index" => 0,
+            "permalink" => product_1.unique_permalink,
+            "price_cents" => 17_50,
+            "tip_cents" => 2_63,
+            "seller_tax_cents" => 0,
+            "gumroad_tax_cents" => 0,
+            "shipping_cents" => 0,
+          },
+          {
+            "uid" => second_uid,
+            "line_index" => 1,
+            "permalink" => product_1.unique_permalink,
+            "price_cents" => 17_50,
+            "tip_cents" => 2_67,
+            "seller_tax_cents" => 0,
+            "gumroad_tax_cents" => 0,
+            "shipping_cents" => 0,
+          },
+        ]
+      )
+      params[:payment_details_source] = "payment_element"
+      params[:confirmation_token] = "ctoken_123"
+
+      order, purchase_responses = Order::CreateService.new(params:).perform
+
+      expect(purchase_responses).to be_empty
+      expect(order.purchases.map { _1.tip.value_usd_cents }).to contain_exactly(2_63, 2_67)
+      expect(order.purchases.map(&:total_transaction_cents)).to contain_exactly(20_13, 20_17)
+    end
+
+    it "ignores a leftover quote for native PayPal and Braintree order payments" do
+      seller_1.update!(tipping_enabled: true)
+      product_1.update!(price_currency_type: Currency::EUR, price_cents: 15_00)
+      line_uid = "non-stripe-line"
+      quote = signed_buyer_currency_quote(
+        seller: seller_1,
+        product: product_1,
+        rate: "0.8571",
+        canonical_components: [
+          {
+            "uid" => line_uid,
+            "line_index" => 0,
+            "permalink" => product_1.unique_permalink,
+            "price_cents" => 17_50,
+            "tip_cents" => 2_63,
+            "seller_tax_cents" => 0,
+            "gumroad_tax_cents" => 0,
+            "shipping_cents" => 0,
+          },
+        ]
+      )
+      allow_any_instance_of(Purchase::CreateService).to receive(:get_usd_cents).and_wrap_original do |method, currency_type, quantity, **kwargs|
+        method.call(currency_type, quantity, **kwargs.merge(rate: 0.5))
+      end
+      allow_any_instance_of(Purchase).to receive(:get_usd_cents).and_wrap_original do |method, currency_type, quantity, **kwargs|
+        method.call(currency_type, quantity, **kwargs.merge(rate: 0.5))
+      end
+
+      [
+        { billing_agreement_id: "B-123" },
+        { braintree_transient_customer_store_key: "store-key", braintree_device_data: "device-data" },
+      ].each_with_index do |payment_params, payment_index|
+        order_params = params.deep_dup.merge(
+          payment_params,
+          buyer_currency_quote: quote,
+          email: "native-payment-#{payment_index}@example.com",
+          browser_guid: SecureRandom.uuid
+        )
+        order_params[:purchase][:email] = order_params[:email]
+        order_params[:line_items] = [
+          {
+            uid: line_uid,
+            permalink: product_1.unique_permalink,
+            price_cents: 17_25,
+            perceived_price_cents: 17_25,
+            tip_cents: 2_25,
+            quantity: 1,
+          },
+        ]
+
+        order, purchase_responses = Order::CreateService.new(params: order_params).perform
+        purchase = order.purchases.sole
+
+        expect(purchase_responses).to be_empty
+        expect(purchase.buyer_currency_quote_canonical_components).to be_nil
+        expect(purchase.reload.tip.value_usd_cents).to eq(4_50)
+      end
+    end
+
     it "rejects carts above the product limit before allocating discounts" do
       stub_const("Cart::MAX_ALLOWED_CART_PRODUCTS", 4)
       expect(OfferCodeDiscountComputingService).not_to receive(:new)

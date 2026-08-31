@@ -175,7 +175,7 @@ describe "Checkout return page", :vcr, type: :request do
       cart = create(:cart, :guest, browser_guid: order_params[:browser_guid])
       order, charge = build_client_confirmed_order
       Stripe::PaymentIntent.confirm(charge.stripe_payment_intent_id, { payment_method: "pm_card_visa" })
-      allow_any_instance_of(Purchase).to receive(:save_charge_data) do |purchase|
+      allow_any_instance_of(Purchase).to receive(:save_charge_data) do |purchase, *_args, **_kwargs|
         purchase.errors.add(:base, "Something went wrong.")
       end
 
@@ -195,12 +195,12 @@ describe "Checkout return page", :vcr, type: :request do
     it "renders the pending page instead of silently redirecting" do
       order, charge = build_client_confirmed_order(line_items: [line_item, second_line_item])
       Stripe::PaymentIntent.confirm(charge.stripe_payment_intent_id, { payment_method: "pm_card_visa" })
-      allow_any_instance_of(Purchase).to receive(:save_charge_data).and_wrap_original do |original, *args|
+      allow_any_instance_of(Purchase).to receive(:save_charge_data).and_wrap_original do |original, *args, **kwargs|
         purchase = original.receiver
         if purchase.link_id == second_product.id
           purchase.errors.add(:base, "Something went wrong.")
         else
-          original.call(*args)
+          original.call(*args, **kwargs)
         end
       end
 

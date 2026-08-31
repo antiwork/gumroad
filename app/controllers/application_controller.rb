@@ -368,6 +368,8 @@ class ApplicationController < ActionController::Base
     end
 
     def fetch_affiliate(product, product_params = nil)
+      return if product.nil?
+
       affiliate_from_cookies(product) || affiliate_from_params(product, product_params || params)
     end
 

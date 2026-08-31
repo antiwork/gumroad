@@ -27,13 +27,21 @@ import { useFont } from "$app/components/DesignSettings";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { Fieldset } from "$app/components/ui/Fieldset";
 
-export type PaymentElementController = { stripe: Stripe; elements: StripeElements };
+export type PaymentElementController = { stripe: Stripe; elements: StripeElements; mountCurrency: string };
 
 // Server-confirm and client-confirm integrations share the Payment Element; only
 // server-confirm sets payment_method_creation: "manual".
 type CheckoutPaymentElementOptions = PaymentElementConfig | PaymentElementClientConfirmConfig;
 
 type PaymentElementWallets = NonNullable<StripePaymentElementOptions["wallets"]> & { link?: "auto" | "never" };
+
+const CLIENT_CONFIRM_USD_ONLY_PAYMENT_METHODS = new Set(["us_bank_account", "cashapp", "klarna", "alipay"]);
+const CLIENT_CONFIRM_FORCED_PAYMENT_METHOD_CURRENCIES: Record<string, string> = {
+  ideal: "eur",
+  bancontact: "eur",
+  upi: "inr",
+  pix: "brl",
+};
 
 // When the payment_element_wallets rollout flag is off, Apple Pay and Google Pay are pinned to
 // "never" — that was the Phase-1 duplication guard while the separate Payment Request Button
@@ -181,6 +189,7 @@ export const PaymentElementInput = ({
         >
           <PaymentElementControllerInput
             amount={mountedAmount}
+            mountCurrency={mountedCurrency ?? elementsOptions.currency}
             disabled={disabled}
             stripeLinkEnabled={elementsOptions.stripe_link_enabled}
             walletsEnabled={walletsEnabled}
@@ -207,6 +216,7 @@ export const PaymentElementInput = ({
 
 const PaymentElementControllerInput = ({
   amount,
+  mountCurrency,
   disabled,
   stripeLinkEnabled,
   walletsEnabled,
@@ -222,6 +232,7 @@ const PaymentElementControllerInput = ({
   onTouched,
 }: {
   amount: number | null;
+  mountCurrency: string;
   disabled?: boolean | undefined;
   stripeLinkEnabled: boolean;
   walletsEnabled: boolean;
@@ -254,9 +265,9 @@ const PaymentElementControllerInput = ({
   const billingDetailsCollection = paymentElementBillingDetailsCollection(selectedType, hasShippingCart);
 
   React.useEffect(() => {
-    onReady(stripe && elements && ready ? { stripe, elements } : null);
+    onReady(stripe && elements && ready ? { stripe, elements, mountCurrency } : null);
     return () => onReady(null);
-  }, [stripe, elements, ready, onReady]);
+  }, [stripe, elements, ready, mountCurrency, onReady]);
 
   React.useEffect(() => {
     if (amount !== null) elements?.update({ amount });
@@ -384,6 +395,17 @@ const StripePaymentElementProvider = ({
     ),
   );
   const currency = currencyOverride ?? elementsOptions.currency;
+  // Prepare applies the same narrowing before creating the deferred intent. This matters when a
+  // quote or surcharge edit remounts an Element whose server-issued list came from another currency.
+  const paymentMethodTypes = React.useMemo(
+    () =>
+      elementsOptions.payment_method_types.filter((paymentMethodType) => {
+        if (currency !== "usd" && CLIENT_CONFIRM_USD_ONLY_PAYMENT_METHODS.has(paymentMethodType)) return false;
+        const forcedCurrency = CLIENT_CONFIRM_FORCED_PAYMENT_METHOD_CURRENCIES[paymentMethodType];
+        return forcedCurrency === undefined || forcedCurrency === currency;
+      }),
+    [currency, elementsOptions.payment_method_types],
+  );
   // The amount and currency Elements is CREATED with, captured together. Later amount
   // changes reach the live element through elements.update() in
   // PaymentElementControllerInput, so this deliberately does not follow every amount
@@ -412,7 +434,7 @@ const StripePaymentElementProvider = ({
       currency,
       ...(initialAmount === null ? {} : { amount: initialAmount }),
       ...(setupFutureUsage ? { setupFutureUsage } : {}),
-      paymentMethodTypes: elementsOptions.payment_method_types,
+      paymentMethodTypes,
       // Stripe rejects createConfirmationToken({ elements }) when payment_method_creation is manual.
       ...("payment_method_creation" in elementsOptions
         ? { paymentMethodCreation: elementsOptions.payment_method_creation }
@@ -488,7 +510,17 @@ const StripePaymentElementProvider = ({
         },
       },
     }),
-    [colors, currency, elementsOptions, fontFamily, initialAmount, setupFutureUsage, flatLayout, stripeFonts],
+    [
+      colors,
+      currency,
+      elementsOptions,
+      flatLayout,
+      fontFamily,
+      initialAmount,
+      paymentMethodTypes,
+      setupFutureUsage,
+      stripeFonts,
+    ],
   );
 
   return (

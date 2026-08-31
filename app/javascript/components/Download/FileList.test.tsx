@@ -37,7 +37,14 @@ vi.mock("$app/data/user_action_event", () => ({ trackUserActionEvent: vi.fn() })
 afterEach(() => {
   cleanup();
   createJWPlayer.mockReset();
+  delete window.ReactNativeWebView;
 });
+
+const mockReactNativeWebView = () => {
+  const postMessage = vi.fn();
+  window.ReactNativeWebView = { postMessage };
+  return postMessage;
+};
 
 const folder = (overrides: Partial<FolderItem> = {}): FolderItem => ({
   type: "folder",
@@ -71,16 +78,19 @@ const videoFile = (overrides: Partial<FileItem> = {}): FileItem => ({
 
 // Renders the embedded-video row the way the content page does, so the tests can
 // check the frame the buyer actually gets rather than only the style helper.
-const renderEmbeddedRow = (file: FileItem, mediaUrls: Record<string, string[]> = {}) =>
+const renderFileRow = (file: FileItem, mediaUrls: Record<string, string[]> = {}, isEmbed = false) =>
   render(
     <PurchaseInfoProvider value={{ purchaseId: "purchase-1", redirectId: "redirect-1", token: "token-1" }}>
       <MediaUrlsProvider value={[mediaUrls, () => undefined]}>
         <IsMobileAppViewProvider value={false}>
-          <FileRow file={file} playingAudioForId={null} setPlayingAudioForId={() => undefined} isEmbed />
+          <FileRow file={file} playingAudioForId={null} setPlayingAudioForId={() => undefined} isEmbed={isEmbed} />
         </IsMobileAppViewProvider>
       </MediaUrlsProvider>
     </PurchaseInfoProvider>,
   );
+
+const renderEmbeddedRow = (file: FileItem, mediaUrls: Record<string, string[]> = {}) =>
+  renderFileRow(file, mediaUrls, true);
 
 describe("FileList", () => {
   it("renders folders collapsed by default when the page has multiple folders", () => {
@@ -144,6 +154,43 @@ describe("FileList", () => {
       expect(videoFrameIsPortrait(videoFile({ width: 1920, height: 1080 }))).toBe(false);
       expect(videoFrameIsPortrait(videoFile({ width: 1080, height: 1080 }))).toBe(false);
       expect(videoFrameIsPortrait(videoFile())).toBe(false);
+    });
+  });
+
+  describe("native app video clicks", () => {
+    it("passes the saved position to the native stream player", () => {
+      const postMessage = mockReactNativeWebView();
+      const file = videoFile({
+        duration: 1800,
+        content_length: 1800,
+        latest_media_location: { location: 1209, timestamp: "2026-08-29T18:56:02Z" },
+      });
+
+      renderFileRow(file);
+      fireEvent.click(screen.getByRole("link", { name: "Watch" }));
+
+      expect(JSON.parse(String(postMessage.mock.calls[0]?.[0]))).toMatchObject({
+        type: "click",
+        payload: { resourceId: file.id, resumeAt: "1209", contentLength: "1800" },
+      });
+    });
+
+    it("passes the saved position to embedded-video native watch clicks", () => {
+      const postMessage = mockReactNativeWebView();
+      const file = videoFile({
+        duration: 5400,
+        content_length: 5400,
+        latest_media_location: { location: 3476, timestamp: "2026-08-29T18:25:20Z" },
+      });
+
+      renderEmbeddedRow(file, { [file.id]: ["https://example.test/index.m3u8"] });
+      fireEvent.click(screen.getByRole("button", { name: "Watch" }));
+
+      expect(JSON.parse(String(postMessage.mock.calls[0]?.[0]))).toMatchObject({
+        type: "click",
+        payload: { resourceId: file.id, resumeAt: "3476", contentLength: "5400" },
+      });
+      expect(createJWPlayer).not.toHaveBeenCalled();
     });
   });
 

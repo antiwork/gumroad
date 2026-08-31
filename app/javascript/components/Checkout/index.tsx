@@ -65,6 +65,7 @@ import {
   getCheckoutListedCurrencyAmounts,
   getCheckoutListedCurrencyDisplay,
   getCheckoutPresentmentAmounts,
+  isRecurringUpiPaymentConfig,
   toBuyerCurrencyCents,
   toCanonicalCents,
 } from "./buyerCurrencyDisplay";
@@ -143,8 +144,20 @@ const CurrencyPicker = ({
   const [state, dispatch] = useState();
   const uid = React.useId();
   const availableOptions = surcharges?.available_buyer_currencies ?? [];
+  const directListedCurrencyOptionAvailable =
+    configuredDirectListedCurrency !== null && selectableDirectListedCurrency === configuredDirectListedCurrency;
+  const directListedUsdOptionAvailable =
+    configuredDirectListedCurrency !== null && availableOptions.some((option) => option.code === "usd");
+  const directListedUsdFallbackAvailable =
+    directListedUsdOptionAvailable &&
+    !directListedCurrencyOptionAvailable &&
+    state.buyerCurrency?.toLowerCase() === "usd";
   const options = configuredDirectListedCurrency
-    ? availableOptions.filter((option) => option.code === "usd" || option.code === configuredDirectListedCurrency)
+    ? availableOptions.filter(
+        (option) =>
+          option.code === "usd" ||
+          (directListedCurrencyOptionAvailable && option.code === configuredDirectListedCurrency),
+      )
     : availableOptions;
   const detected = surcharges?.detected_buyer_currency ?? null;
   // Unset buyerCurrency is the listed-currency default on this lane (mount treats
@@ -157,11 +170,11 @@ const CurrencyPicker = ({
       ? detected
       : (options[0]?.code ?? "usd");
   const canChooseCurrency =
-    options.length >= 2 &&
+    (options.length >= 2 || directListedUsdFallbackAvailable) &&
     state.paymentMethod === "card" &&
     !isWalletPaymentElementType(state.paymentElementType) &&
     (configuredDirectListedCurrency
-      ? selectableDirectListedCurrency === configuredDirectListedCurrency
+      ? directListedCurrencyOptionAvailable || directListedUsdFallbackAvailable
       : !state.willSaveCard && !isListedCurrency);
 
   React.useEffect(() => {
@@ -368,14 +381,18 @@ export const Checkout = ({
   const selectableDirectListedCurrency = getSelectableDirectListedCurrency(state, {
     usingSavedCard: displayedUsingSavedCard,
   });
-  const buyerCurrencyDisplay = configuredDirectListedCurrency
-    ? null
-    : getCheckoutBuyerCurrencyDisplay(summarySurcharges, {
-        cartPermalinks: cart.items.map((item) => item.product.permalink),
-        willSaveCard: state.willSaveCard,
-        paymentMethod: state.paymentMethod,
-        paymentElementType: state.paymentElementType,
-      });
+  // Recurring UPI is a server-selected INR registration lane: the Element amount and mount
+  // currency already pin INR (see getStripePaymentElementAmount), so neither a stored USD
+  // preference nor an FX quote may repaint the summary in another currency.
+  const recurringUpiRegistration = isRecurringUpiPaymentConfig(state.checkoutPayment);
+  const buyerCurrencyDisplay =
+    configuredDirectListedCurrency || recurringUpiRegistration
+      ? null
+      : getCheckoutBuyerCurrencyDisplay(summarySurcharges, {
+          cartPermalinks: cart.items.map((item) => item.product.permalink),
+          willSaveCard: state.willSaveCard,
+          paymentMethod: state.paymentMethod,
+        });
   // The buyer-currency amounts every row of the table renders from, so the visible numbers
   // sum exactly to the locked total the buyer is charged. An unusable allocation makes
   // buyerCurrencyDisplay null above, keeping every row and the submitted token canonical.
@@ -404,8 +421,10 @@ export const Checkout = ({
     ? state.buyerCurrencyRemint.previousCurrency
     : state.buyerCurrency;
   const directListedCurrencySelected =
-    configuredDirectListedCurrency === null ||
-    (selectableDirectListedCurrency !== null && displayedBuyerCurrency?.toLowerCase() !== "usd");
+    recurringUpiRegistration ||
+    (configuredDirectListedCurrency === null
+      ? !(state.paymentMethod === "card" && displayedBuyerCurrency?.toLowerCase() === "usd")
+      : selectableDirectListedCurrency !== null && displayedBuyerCurrency?.toLowerCase() !== "usd");
   const listedCurrency =
     buyerCurrencyDisplay || !canUseStripePaymentElementClientConfirm(state) || !directListedCurrencySelected
       ? null
@@ -724,8 +743,8 @@ const TipSelector = ({
 }: {
   buyerCurrencyDisplay?: CheckoutLocalCurrencyFormat | null;
   presentmentTipCents?: number | null;
-  // True while checkout displays the listed-currency lane. A positive tip moves the direct-card
-  // ramp back to USD; the method-forced lane preserves the listed tip exactly as typed.
+  // True while checkout displays the listed-currency lane. The listed lane preserves fixed tips
+  // exactly as typed instead of round-tripping them through canonical USD cents.
   isListedCurrency?: boolean;
 }) => {
   const [state, dispatch] = useState();
@@ -751,11 +770,15 @@ const TipSelector = ({
   const fixedTipCents =
     state.tip.type !== "fixed" || state.tip.amount == null
       ? null
-      : buyerCurrencyDisplay && presentmentTipCents != null
-        ? presentmentTipCents
-        : buyerCurrencyDisplay
-          ? toBuyerCurrencyCents(state.tip.amount, buyerCurrencyDisplay)
-          : state.tip.amount;
+      : buyerCurrencyDisplay &&
+          state.tip.presentmentAmount != null &&
+          state.tip.presentmentCurrency?.toLowerCase() === buyerCurrencyDisplay.currencyCode.toLowerCase()
+        ? state.tip.presentmentAmount
+        : buyerCurrencyDisplay && presentmentTipCents != null
+          ? presentmentTipCents
+          : buyerCurrencyDisplay
+            ? toBuyerCurrencyCents(state.tip.amount, buyerCurrencyDisplay)
+            : state.tip.amount;
 
   return (
     <div className="@container flex flex-col gap-2 sm:gap-3">
@@ -822,6 +845,8 @@ const TipSelector = ({
                   // it. `amount` above stays the canonical USD source of truth every other
                   // consumer reads; this is only consulted on that one lane.
                   listedAmount: isListedCurrency ? newAmount : null,
+                  presentmentAmount: buyerCurrencyDisplay ? newAmount : null,
+                  presentmentCurrency: buyerCurrencyDisplay?.currencyCode ?? null,
                 },
               });
             }}

@@ -53,6 +53,7 @@ const initialArgs = {
   products: [
     {
       permalink: "abc",
+      uid: "abc ",
       name: "Product",
       creator: { id: "creator", name: "Creator", profile_url: "", avatar_url: "" },
       quantity: 1,
@@ -243,6 +244,9 @@ describe("createReducer surcharge refetches", () => {
     await act(() => vi.advanceTimersByTimeAsync(300));
 
     expect(requests[0]?.payload).toMatchObject({
+      // Production uid is computed in Show.tsx getProducts (see cartItemUidMapping.test.ts).
+      // This example only proves loadSurcharges forwards a product that already has one.
+      products: [expect.objectContaining({ permalink: "abc", uid: "abc " })],
       payment_details_source: "payment_element",
       payment_element_mount_currency: "cad",
       payment_element_direct_listed_currency: "cad",
@@ -276,6 +280,177 @@ describe("createReducer surcharge refetches", () => {
       payment_element_mount_currency: "usd",
       payment_element_direct_listed_currency: "cad",
     });
+  });
+
+  it("uses but does not overwrite a stale stored buyer currency before publishing a USD-only surcharge response", async () => {
+    document.cookie = "gumroad_buyer_currency=cad; path=/";
+    const requests = stubSurchargeRequests();
+    const { result } = renderCheckout({ checkoutPayment: directListedCheckoutPayment });
+
+    await act(() => vi.advanceTimersByTimeAsync(300));
+    await act(async () => {
+      requests[0]?.resolve(
+        surchargesResponse({
+          detected_buyer_currency: "usd",
+          available_buyer_currencies: [{ code: "usd", label: "$ (US Dollars)" }],
+        }),
+      );
+      await vi.advanceTimersByTimeAsync(0);
+    });
+
+    expect(result.current[0].buyerCurrency).toBe("usd");
+    expect(document.cookie).toContain("gumroad_buyer_currency=cad");
+  });
+
+  it("requotes an implicit fallback when the replacement currency is not the response currency", async () => {
+    document.cookie = "gumroad_buyer_currency=cad; path=/";
+    const requests = stubSurchargeRequests();
+    const { result } = renderCheckout();
+
+    await act(() => vi.advanceTimersByTimeAsync(300));
+    expect(requests[0]?.payload).toMatchObject({ buyer_currency: "cad" });
+    await act(async () => {
+      requests[0]?.resolve(
+        surchargesResponse({
+          detected_buyer_currency: "gbp",
+          available_buyer_currencies: [
+            { code: "gbp", label: "£ (British Pounds)" },
+            { code: "usd", label: "$ (US Dollars)" },
+          ],
+        }),
+      );
+      await vi.advanceTimersByTimeAsync(0);
+    });
+
+    expect(result.current[0].buyerCurrency).toBe("gbp");
+    expect(result.current[0].surcharges.type).toBe("pending");
+    expect(document.cookie).toContain("gumroad_buyer_currency=cad");
+    await act(() => vi.advanceTimersByTimeAsync(300));
+    expect(requests[1]?.payload).toMatchObject({ buyer_currency: "gbp" });
+  });
+
+  it("does not reuse a CAD exact tip when a tipped direct-listed cart requests USD", async () => {
+    const requests = stubSurchargeRequests();
+    const { result } = renderCheckout({ checkoutPayment: directListedCheckoutPayment });
+
+    await act(() => vi.advanceTimersByTimeAsync(300));
+    await act(async () => {
+      requests[0]?.resolve(
+        surchargesResponse({
+          detected_buyer_currency: "cad",
+          available_buyer_currencies: [
+            { code: "usd", label: "$ (US Dollars)" },
+            { code: "cad", label: "CA$ (Canadian Dollars)" },
+          ],
+          buyer_currency_quote: quote("cad-token"),
+        }),
+      );
+      await vi.advanceTimersByTimeAsync(0);
+    });
+
+    act(() =>
+      result.current[1]({
+        type: "set-value",
+        tip: { type: "fixed", amount: 350, presentmentAmount: 437, presentmentCurrency: "cad" },
+      }),
+    );
+    await act(() => vi.advanceTimersByTimeAsync(300));
+    expect(requests.at(-1)?.payload).toMatchObject({
+      buyer_currency: "cad",
+      products: [expect.objectContaining({ presentment_tip_cents: 437 })],
+    });
+
+    act(() => result.current[1]({ type: "set-value", buyerCurrency: "usd" }));
+    await act(() => vi.advanceTimersByTimeAsync(300));
+
+    expect(requests.at(-1)?.payload).toMatchObject({
+      buyer_currency: "usd",
+      payment_details_source: "payment_element",
+      payment_element_mount_currency: "usd",
+    });
+    expect(requests.at(-1)?.payload).not.toMatchObject({
+      products: [expect.objectContaining({ presentment_tip_cents: expect.anything() })],
+    });
+  });
+
+  it("keeps an explicit USD pick through the tipped direct-listed payment-configuration refresh", async () => {
+    const requests = stubSurchargeRequests();
+    const { result } = renderCheckout({ checkoutPayment: directListedCheckoutPayment });
+
+    await act(() => vi.advanceTimersByTimeAsync(300));
+    await act(async () => {
+      requests[0]?.resolve(
+        surchargesResponse({
+          detected_buyer_currency: "cad",
+          available_buyer_currencies: [
+            { code: "usd", label: "$ (US Dollars)" },
+            { code: "cad", label: "CA$ (Canadian Dollars)" },
+          ],
+          buyer_currency_quote: quote("cad-token"),
+        }),
+      );
+      await vi.advanceTimersByTimeAsync(0);
+    });
+
+    act(() =>
+      result.current[1]({
+        type: "set-value",
+        tip: { type: "fixed", amount: 350, presentmentAmount: 437, presentmentCurrency: "cad" },
+      }),
+    );
+    await act(() => vi.advanceTimersByTimeAsync(300));
+    await act(async () => {
+      requests.at(-1)?.resolve(
+        surchargesResponse({
+          detected_buyer_currency: "cad",
+          available_buyer_currencies: [
+            { code: "usd", label: "$ (US Dollars)" },
+            { code: "cad", label: "CA$ (Canadian Dollars)" },
+          ],
+          buyer_currency_quote: quote("cad-tip-token"),
+        }),
+      );
+      await vi.advanceTimersByTimeAsync(0);
+    });
+
+    act(() => result.current[1]({ type: "set-value", buyerCurrency: "usd" }));
+    expect(document.cookie).toContain("gumroad_buyer_currency=usd");
+    act(() =>
+      result.current[1]({
+        type: "update-checkout-payment",
+        checkoutPayment: {
+          ...directListedCheckoutPayment,
+          elements_options: {
+            ...directListedCheckoutPayment.elements_options,
+            currency: "eur",
+            listed_currency_display: { currency: "eur", subunit_to_unit: 100 },
+            direct_listed_card: false,
+          },
+        },
+      }),
+    );
+    await act(() => vi.advanceTimersByTimeAsync(300));
+    expect(requests.at(-1)?.payload).toMatchObject({ buyer_currency: "usd" });
+    expect(requests.at(-1)?.payload).not.toMatchObject({
+      products: [expect.objectContaining({ presentment_tip_cents: expect.anything() })],
+    });
+    await act(async () => {
+      requests.at(-1)?.resolve(
+        surchargesResponse({
+          detected_buyer_currency: "cad",
+          available_buyer_currencies: [
+            { code: "usd", label: "$ (US Dollars)" },
+            { code: "cad", label: "CA$ (Canadian Dollars)" },
+          ],
+        }),
+      );
+      await vi.advanceTimersByTimeAsync(0);
+    });
+
+    expect(result.current[0].unavailableBuyerCurrency).toBeNull();
+    expect(result.current[0].buyerCurrency).toBe("usd");
+    expect(result.current[0].surcharges.type).toBe("loaded");
+    expect(document.cookie).toContain("gumroad_buyer_currency=usd");
   });
 
   it("marks saved-card surcharge requests so direct-listed currencies are not advertised", async () => {
@@ -317,6 +492,38 @@ describe("createReducer surcharge refetches", () => {
       payment_details_source: "payment_element",
       payment_element_mount_currency: "cad",
       payment_element_direct_listed_currency: "cad",
+    });
+  });
+
+  it("sends an exact presentment tip only when the selected currency matches its tag", async () => {
+    const requests = stubSurchargeRequests();
+    const { result } = renderCheckout();
+    await act(() => vi.advanceTimersByTimeAsync(300));
+
+    act(() =>
+      result.current[1]({
+        type: "set-value",
+        tip: { type: "fixed", amount: 350, presentmentAmount: 437, presentmentCurrency: "cad" },
+      }),
+    );
+    await act(() => vi.advanceTimersByTimeAsync(300));
+    expect(requests.at(-1)?.payload).toMatchObject({
+      buyer_currency: "cad",
+      products: [expect.objectContaining({ presentment_tip_cents: 437 })],
+    });
+
+    act(() => result.current[1]({ type: "set-value", buyerCurrency: "gbp" }));
+    await act(() => vi.advanceTimersByTimeAsync(300));
+    expect(requests.at(-1)?.payload).toMatchObject({
+      buyer_currency: "gbp",
+      products: [expect.not.objectContaining({ presentment_tip_cents: expect.anything() })],
+    });
+
+    act(() => result.current[1]({ type: "set-value", buyerCurrency: "cad" }));
+    await act(() => vi.advanceTimersByTimeAsync(300));
+    expect(requests.at(-1)?.payload).toMatchObject({
+      buyer_currency: "cad",
+      products: [expect.objectContaining({ presentment_tip_cents: 437 })],
     });
   });
 

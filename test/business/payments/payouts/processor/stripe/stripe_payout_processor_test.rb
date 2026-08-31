@@ -120,6 +120,7 @@ class StripePayoutProcessorTest < ActiveSupport::TestCase
     with_cassette("is_user_payable/instant_payouts/returns_true_when_the_user_has_an_eligible_balance") do
       setup_is_user_payable
       assert_equal true, StripePayoutProcessor.is_user_payable(@u1, 100_01, payout_type: Payouts::PAYOUT_TYPE_INSTANT)
+      assert_equal true, StripePayoutProcessor.is_user_payable(@u1, 60_00, payout_type: Payouts::PAYOUT_TYPE_INSTANT)
     end
   end
 
@@ -133,7 +134,7 @@ class StripePayoutProcessorTest < ActiveSupport::TestCase
   test "is_user_payable instant payouts returns false when the user has a balance below the minimum instant payout amount" do
     with_cassette("is_user_payable/instant_payouts/returns_false_when_the_user_has_a_balance_below_the_minimum_instant_payout_amount") do
       setup_is_user_payable
-      assert_equal false, StripePayoutProcessor.is_user_payable(@u1, 99_99, payout_type: Payouts::PAYOUT_TYPE_INSTANT)
+      assert_equal false, StripePayoutProcessor.is_user_payable(@u1, 99, payout_type: Payouts::PAYOUT_TYPE_INSTANT)
     end
   end
 

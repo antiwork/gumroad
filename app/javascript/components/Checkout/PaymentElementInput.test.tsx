@@ -4,7 +4,11 @@ import * as React from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { type CheckoutTheme, CheckoutThemeProvider } from "$app/components/Checkout/checkoutTheme";
-import { STRIPE_ELEMENTS_MODE_FOR_PAYMENT_INTENT, type PaymentElementConfig } from "$app/components/Checkout/payment";
+import {
+  STRIPE_ELEMENTS_MODE_FOR_PAYMENT_INTENT,
+  type PaymentElementClientConfirmConfig,
+  type PaymentElementConfig,
+} from "$app/components/Checkout/payment";
 import { PaymentElementInput, type PaymentElementController } from "$app/components/Checkout/PaymentElementInput";
 
 const elementsMounts = vi.hoisted<{ currencies: string[]; amounts: (number | undefined)[]; unmounts: number }>(() => ({
@@ -17,6 +21,7 @@ const elementsRender = vi.hoisted<{
   options: {
     fonts?: unknown;
     setupFutureUsage?: "off_session";
+    paymentMethodTypes?: string[];
     appearance?: {
       variables?: Record<string, string>;
       rules?: Record<string, Record<string, string>>;
@@ -53,6 +58,7 @@ vi.mock("@stripe/react-stripe-js", async () => {
         amount?: number;
         fonts?: unknown;
         setupFutureUsage?: "off_session";
+        paymentMethodTypes?: string[];
         appearance?: {
           variables?: Record<string, string>;
           rules?: Record<string, Record<string, string>>;
@@ -116,6 +122,17 @@ const elementsOptions: PaymentElementConfig = {
   payment_method_types: ["card"],
   payment_method_creation: "manual",
   stripe_link_enabled: true,
+};
+
+const methodForcedElementsOptions: PaymentElementClientConfirmConfig = {
+  stripe_elements_mode: STRIPE_ELEMENTS_MODE_FOR_PAYMENT_INTENT,
+  currency: "eur",
+  presentment_amount_cents: 1_500,
+  listed_currency_display: { currency: "eur", subunit_to_unit: 100 },
+  payment_method_types: ["card", "link", "ideal", "bancontact", "cashapp", "us_bank_account", "klarna", "alipay"],
+  payment_method_list_token: "signed-method-list",
+  stripe_link_enabled: true,
+  stripe_connect_account_id: null,
 };
 
 const stripeFontsCssSource =
@@ -304,6 +321,32 @@ describe("PaymentElementInput", () => {
     // amount in the creation request.
     expect(elementsMounts.amounts).toEqual([1_625, 1_300]);
     expect(elementsMounts.unmounts).toBe(1);
+  });
+
+  it("remounts a listed-currency element onto a third-currency quote", () => {
+    const { rerender } = render(
+      <PaymentElementInput
+        {...props}
+        elementsOptions={methodForcedElementsOptions}
+        amount={1_500}
+        mountCurrency="eur"
+      />,
+    );
+
+    rerender(
+      <PaymentElementInput
+        {...props}
+        elementsOptions={methodForcedElementsOptions}
+        amount={2_813}
+        mountCurrency="cad"
+      />,
+    );
+
+    expect(elementsMounts.currencies).toEqual(["eur", "cad"]);
+    expect(elementsMounts.amounts).toEqual([1_500, 2_813]);
+    expect(elementsMounts.unmounts).toBe(1);
+    expect(elementsRender.options?.paymentMethodTypes).toEqual(["card", "link"]);
+    expect(props.onReady.mock.lastCall?.[0]).toMatchObject({ mountCurrency: "cad" });
   });
 
   it("declares off-session future use for recurring UPI registration", () => {

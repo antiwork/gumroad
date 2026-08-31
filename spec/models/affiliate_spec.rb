@@ -47,6 +47,11 @@ describe Affiliate do
         affiliates = Affiliate.for_product(product)
         expect(affiliates).to match_array [direct_affiliate]
       end
+
+      it "returns none when the product is missing" do
+        expect(Affiliate.for_product(nil)).to be_empty
+        expect(Affiliate.valid_for_product(nil)).to be_empty
+      end
     end
 
     describe ".valid_for_product" do

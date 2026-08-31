@@ -401,6 +401,76 @@ describe ForeignWebhooksController do
         expect(HandleResendEventJob.jobs.size).to eq(0)
       end
     end
+
+    # A large send arrives as one callback per event, so anything the job would discard is
+    # worth discarding before it reaches the queue.
+    describe "discarding events the job would no-op on" do
+      before do
+        # The outer stub is scoped to one key, which makes header encryption raise.
+        allow(GlobalConfig).to receive(:get).and_call_original
+        allow(GlobalConfig).to receive(:get).with("RESEND_WEBHOOK_SECRET").and_return(secret)
+      end
+
+      def gum_header(name, value)
+        { "name" => MailerInfo.header_name(name), "value" => MailerInfo.encrypt(value) }
+      end
+
+      def sign_and_post(event)
+        json = event.to_json
+        signature = Base64.strict_encode64(
+          OpenSSL::HMAC.digest("SHA256", secret_bytes, "#{message_id}.#{timestamp}.#{json}")
+        )
+        request.headers["svix-signature"] = "v1,#{signature}"
+        post :resend, body: json, as: :json
+      end
+
+      let(:tracked_headers) do
+        [
+          gum_header(:mailer_class, "CustomerMailer"),
+          gum_header(:mailer_method, "receipt"),
+        ]
+      end
+
+      def event(type:, headers: tracked_headers)
+        {
+          "created_at" => "2025-01-02T00:14:12.391Z",
+          "type" => type,
+          "data" => {
+            "created_at" => "2025-01-02 00:14:11.140106+00",
+            "to" => ["buyer@example.com"],
+            "headers" => headers,
+          },
+        }
+      end
+
+      it "enqueues an event type we track" do
+        sign_and_post(event(type: "email.delivered"))
+
+        expect(response).to be_successful
+        expect(HandleResendEventJob.jobs.size).to eq(1)
+      end
+
+      it "does not enqueue an event type we do not track" do
+        sign_and_post(event(type: "email.sent"))
+
+        expect(response).to be_successful
+        expect(HandleResendEventJob.jobs.size).to eq(0)
+      end
+
+      it "does not enqueue mail sent without our mailer headers" do
+        sign_and_post(event(type: "email.delivered", headers: []))
+
+        expect(response).to be_successful
+        expect(HandleResendEventJob.jobs.size).to eq(0)
+      end
+
+      it "enqueues a payload it cannot parse, leaving the job to decide" do
+        sign_and_post({ "type" => "email.delivered" })
+
+        expect(response).to be_successful
+        expect(HandleResendEventJob.jobs.size).to eq(1)
+      end
+    end
   end
 
   describe "POST sns" do
