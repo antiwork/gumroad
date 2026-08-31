@@ -43,6 +43,7 @@ import {
   Product,
   ProductEditContext,
   ProfileSection,
+  hasPaidVariantPricing,
   reconcileCustomizablePrice,
   ShippingCountry,
   TaxonomyAttribute,
@@ -648,6 +649,8 @@ const ProductEditPage = (props: Props) => {
         keepAllFiles: conflictResolution?.choice === "keep_version",
         lastSavedCustomPermalink: lastSavedProductRef.current.custom_permalink,
         lastSavedCustomizablePrice: lastSavedProductRef.current.customizable_price,
+        lastSavedPriceCents: lastSavedProductRef.current.price_cents,
+        lastSavedHasPaidVariantPricing: hasPaidVariantPricing(lastSavedProductRef.current),
       });
       saved = true;
       // The version pages the seller chose to keep were never loaded into this

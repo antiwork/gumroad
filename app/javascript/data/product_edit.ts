@@ -9,7 +9,7 @@ import { ResponseError, request } from "$app/utils/request";
 
 import { extensions } from "$app/components/ProductEdit/ContentTab";
 import { FileEmbed } from "$app/components/ProductEdit/ContentTab/FileEmbed";
-import { Product } from "$app/components/ProductEdit/state";
+import { Product, hasPaidVariantPricing } from "$app/components/ProductEdit/state";
 import { baseEditorOptions } from "$app/components/RichTextEditor";
 
 export type SaveProductResponse = {
@@ -425,17 +425,30 @@ export const reconcileMountedEditorFileEmbedIds = (editor: Editor, fileIdMapping
   if (transaction.docChanged) editor.view.dispatch(transaction);
 };
 
-// Only send a scalar when this session changed it. A blank custom URL is "not
-// specified" unless the session is clearing one it knows about; an unchanged
-// blank can be a stale tab snapshot from before another tab set the slug. An
-// unchanged `customizable_price` (the editor always sends a boolean, never
-// nil) likewise must not revert a flag another tab turned on — only a
-// deliberate change this session is sent. A null customizable_price baseline
-// means the caller does not track the last-saved value, so send it through
-// unchanged (the pre-#2348 always-submit behavior).
+// Only send a scalar when this session changed it or changed the input that
+// drives it. A blank custom URL is "not specified" unless the session is
+// clearing one it knows about; an unchanged blank can be a stale tab snapshot
+// from before another tab set the slug. `customizable_price` is DERIVED — the
+// $0 base + paid-variant force (and the editor's reconcileCustomizablePrice)
+// recompute it from price/variants, so a save that changes those MUST send the
+// recomputed flag even when it numerically matches the last-saved value. Only
+// a save where price, variant structure, and the flag are all unchanged omits
+// it (the stale-tab case). A null customizable_price baseline means the caller
+// does not track the last-saved value, so send it through unchanged (the
+// pre-#2348 always-submit behavior).
 export const scalarSettingsForSave = (
-  product: { custom_permalink: string | null; customizable_price: boolean },
-  lastSaved: { custom_permalink: string | null; customizable_price: boolean | null },
+  product: {
+    custom_permalink: string | null;
+    customizable_price: boolean;
+    price_cents: number;
+    hasPaidVariantPricing: boolean;
+  },
+  lastSaved: {
+    custom_permalink: string | null;
+    customizable_price: boolean | null;
+    price_cents: number;
+    hasPaidVariantPricing: boolean;
+  },
 ) => {
   const settings: Record<string, unknown> = {};
   if (product.custom_permalink) {
@@ -444,7 +457,11 @@ export const scalarSettingsForSave = (
     settings.custom_permalink = null;
     settings.custom_permalink_changed = true;
   }
-  if (lastSaved.customizable_price === null || product.customizable_price !== lastSaved.customizable_price) {
+  const flagIsDerivedFromUnchangedInputs =
+    lastSaved.customizable_price !== null &&
+    product.price_cents === lastSaved.price_cents &&
+    product.hasPaidVariantPricing === lastSaved.hasPaidVariantPricing;
+  if (!flagIsDerivedFromUnchangedInputs || product.customizable_price !== lastSaved.customizable_price) {
     settings.customizable_price = product.customizable_price;
   }
   return settings;
@@ -463,6 +480,8 @@ export const saveProduct = async (
     keepAllFiles?: boolean;
     lastSavedCustomPermalink?: string | null;
     lastSavedCustomizablePrice?: boolean | null;
+    lastSavedPriceCents?: number | null;
+    lastSavedHasPaidVariantPricing?: boolean | null;
   } = {},
 ): Promise<SaveProductResponse> => {
   // TODO remove this once we have a better content uploader
@@ -494,10 +513,17 @@ export const saveProduct = async (
     data: {
       ...productParams,
       ...scalarSettingsForSave(
-        { custom_permalink, customizable_price },
+        {
+          custom_permalink,
+          customizable_price,
+          price_cents: product.price_cents,
+          hasPaidVariantPricing: hasPaidVariantPricing(product),
+        },
         {
           custom_permalink: options.lastSavedCustomPermalink ?? null,
           customizable_price: options.lastSavedCustomizablePrice ?? null,
+          price_cents: options.lastSavedPriceCents ?? product.price_cents,
+          hasPaidVariantPricing: options.lastSavedHasPaidVariantPricing ?? hasPaidVariantPricing(product),
         },
       ),
       files,
