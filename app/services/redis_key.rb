@@ -85,6 +85,7 @@ class RedisKey
     def long_running_jobs_in_flight = "deploy:long_running_jobs_in_flight"
     def stripe_balance_topup_needed = "stripe:balance_topup_needed"
     def min_successful_purchases_in_last_10_minutes = "healthcheck:min_successful_purchases_in_last_10_minutes"
+    def buyer_currency_wallet_presentment_zero_alerted_at = "buyer_currency_wallet_presentment_zero:alerted_at"
     def email_router_fallback(user_id) = "email_router_fallback:#{user_id}"
     def mobile_minimum_version = "mobile:minimum_version"
     def mobile_minimum_update_created_at = "mobile:minimum_update_created_at"
