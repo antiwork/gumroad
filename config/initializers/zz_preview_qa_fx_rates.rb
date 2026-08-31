@@ -84,6 +84,21 @@ class PreviewQaDebugMiddleware
       env["REMOTE_ADDR"] = spoof
     end
 
+    if req.path == "/qa/seller_currency"
+      product = Link.find_by!(unique_permalink: req.params["product"])
+      seller = product.user
+      enabled = ActiveModel::Type::Boolean.new.cast(req.params["enabled"])
+      seller.update!(disable_buyer_local_currency: !enabled)
+      if enabled
+        %i[
+          buyer_currency_charging buyer_local_currency checkout_listed_currency_direct_charge
+          checkout_local_method_upi buyer_currency_destination_charges
+        ].each { Feature.activate(_1, seller) }
+      end
+      body = { product: product.unique_permalink, enabled: enabled }.to_json
+      return [200, { "Content-Type" => "application/json" }, [body]]
+    end
+
     return @app.call(env) unless req.path == "/qa/preview_debug"
 
     helper = Class.new { include CurrencyHelper }.new
