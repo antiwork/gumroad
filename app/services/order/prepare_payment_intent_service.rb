@@ -131,11 +131,14 @@ class Order::PreparePaymentIntentService
       true
     end
 
+    # Cart shape alone answers reconstructability. The direct-listed eligibility decision is
+    # not usable this early: merchant accounts resolve later (resolve_merchant_account_and_fees),
+    # so consulting it here reads a nil account, refuses at :unsupported_processor, and — being
+    # memoized — would poison every later use. A cart priced in the mount currency re-resolves
+    # its method list; when direct-listed eligibility then refuses, the presentment gates
+    # downstream still fail the order closed.
     def remount_method_list_reconstructable_from_cart?(currency)
-      return true if uniform_method_forced_purchase_currency == currency
-
-      decision = client_confirm_buyer_currency_decision
-      decision.eligible? && decision.direct_listed_amount? && decision.currency == currency
+      charge_purchases.map { _1.link.price_currency_type.to_s.downcase }.uniq == [currency]
     end
 
     # Reject malformed quote tokens before making a Stripe request. Full seller, account,
