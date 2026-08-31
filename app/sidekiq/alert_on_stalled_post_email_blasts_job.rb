@@ -7,7 +7,9 @@
 # enqueue never reached Redis — while the seller's dashboard shows a plausible non-zero delivered
 # count, so the only detection channel was a seller who knew their own audience size writing in.
 # 11 blasts / ~1.6M undelivered emails accrued that way over ten days before anyone noticed.
-# (A hard-killed job itself is not the stranding mode: super_fetch resurrects it.)
+# A hard-killed job is not reliable to resurrect: super_fetch's cleanup_the_dead can retire a
+# process while its private queue still holds jobs, stranding them in no Sidekiq set
+# (gumroad-private#2352).
 #
 # Auto-resume is deliberately conservative: only DEAD/UNACCOUNTED blasts still inside
 # AUTO_RESUME_WINDOW (unless recipients are still owed), not more than once per STALL_THRESHOLD,
@@ -239,8 +241,10 @@ class AlertOnStalledPostEmailBlastsJob
         "RUNNING/QUEUED may just be a very large blast mid-pass. DEAD/UNACCOUNTED blasts requested " \
           "within #{AUTO_RESUME_WINDOW.inspect} are resumed automatically, once per blast " \
           "(gumroad-private#2106) — except UNACCOUNTED non-opener resends, which a concurrent " \
-          "duplicate sender would double-deliver. UNACCOUNTED usually means a lost enqueue or a " \
-          "post no longer sendable (super_fetch resurrects hard-killed jobs on its own). HELD " \
+          "duplicate sender would double-deliver. UNACCOUNTED usually means a lost enqueue, a " \
+          "post no longer sendable, or a job stranded in a retired process's private queue that " \
+          "no resurrection pass has reached — super_fetch does not reliably resurrect hard-killed " \
+          "jobs (gumroad-private#2352). HELD " \
           "rows need a human: confirm with the seller (time-boxed blasts may be worse late than " \
           "never), then `SendPostBlastEmailsJob.perform_async(blast_id)` — for a DEAD row too. " \
           "Never `job.retry` a dead blast: it reuses the jid super_fetch has already spent its " \

@@ -242,6 +242,61 @@ describe Purchase::FinalizeConfirmedChargeService do
       end
     end
 
+    context "when a buyer-presentment charge succeeded without Stripe settlement data" do
+      let(:seller) { create(:user) }
+      let(:product) { create(:product, user: seller) }
+      let(:merchant_account) do
+        MerchantAccount.gumroad(StripeChargeProcessor.charge_processor_id) ||
+          create(:merchant_account, user: nil, charge_processor_id: StripeChargeProcessor.charge_processor_id)
+      end
+      let(:charge) { create(:charge, seller:, merchant_account:) }
+      let(:purchase) do
+        create(:purchase_in_progress,
+               link: product,
+               seller:,
+               merchant_account:,
+               charge_processor_id: StripeChargeProcessor.charge_processor_id,
+               flow_of_funds: nil,
+               stripe_transaction_id: nil)
+      end
+      let(:processor_charge) do
+        BaseProcessorCharge.new.tap do |processor_charge|
+          processor_charge.charge_processor_id = StripeChargeProcessor.charge_processor_id
+          processor_charge.id = "ch_presentment_missing_settlement"
+          processor_charge.refunded = false
+          processor_charge.fee = 59
+          processor_charge.fee_currency = Currency::USD
+          processor_charge.card_fingerprint = "card_fp"
+          processor_charge.card_type = "visa"
+          processor_charge.card_country = "US"
+        end
+      end
+      let(:charge_intent) do
+        instance_double(StripeChargeIntent, succeeded?: true, processing?: false, charge: processor_charge)
+      end
+
+      before do
+        charge.purchases << purchase
+        charge_presentment = create(:charge_presentment, charge:)
+        create(:purchase_presentment, purchase:, charge_presentment:)
+      end
+
+      it "persists charge ids, stays in progress, and enqueues settlement finalization instead of rolling back" do
+        expect(ErrorNotifier).not_to receive(:notify)
+
+        result = described_class.new(purchase:, charge_intent:).perform
+
+        expect(result).to eq(:pending)
+        expect(purchase.reload).to be_in_progress
+        expect(purchase.stripe_transaction_id).to eq("ch_presentment_missing_settlement")
+        expect(purchase.flow_of_funds).to be_nil
+        expect(purchase.balance_transactions).to be_empty
+        expect(purchase).to be_pending_buyer_presentment_settlement
+        expect(FinalizeBuyerPresentmentChargeJob.jobs.size).to eq(1)
+        expect(FinalizeBuyerPresentmentChargeJob.jobs.first["args"]).to eq([charge.id])
+      end
+    end
+
     context "when the purchase is already successful" do
       let(:purchase) { create(:purchase_in_progress).tap { _1.update_column(:purchase_state, "successful") } }
 
