@@ -48,22 +48,76 @@ describe("filesForSave", () => {
 });
 
 describe("scalarSettingsForSave", () => {
+  const product = (overrides = {}) => ({
+    custom_permalink: null,
+    customizable_price: false,
+    price_cents: 100,
+    hasPaidVariantPricing: false,
+    ...overrides,
+  });
+  const lastSaved = (overrides = {}) => ({
+    custom_permalink: null,
+    customizable_price: false,
+    price_cents: 100,
+    hasPaidVariantPricing: false,
+    ...overrides,
+  });
+
   it("omits an unchanged blank custom permalink so a stale tab cannot clear it", () => {
-    expect(scalarSettingsForSave({ custom_permalink: null }, null)).toEqual({});
-    expect(scalarSettingsForSave({ custom_permalink: "" }, null)).toEqual({});
+    expect(scalarSettingsForSave(product(), lastSaved())).toEqual({});
+    expect(scalarSettingsForSave(product({ custom_permalink: "" }), lastSaved())).toEqual({});
   });
 
   it("sends a marker when this session clears an existing custom permalink", () => {
-    expect(scalarSettingsForSave({ custom_permalink: null }, "kept-slug")).toEqual({
+    expect(scalarSettingsForSave(product(), lastSaved({ custom_permalink: "kept-slug" }))).toEqual({
       custom_permalink: null,
       custom_permalink_changed: true,
     });
   });
 
   it("sends a non-empty custom permalink", () => {
-    expect(scalarSettingsForSave({ custom_permalink: "my-custom-url" }, null)).toEqual({
+    expect(scalarSettingsForSave(product({ custom_permalink: "my-custom-url" }), lastSaved())).toEqual({
       custom_permalink: "my-custom-url",
     });
+  });
+
+  it("omits an unchanged customizable_price when every driving input is unchanged", () => {
+    // A stale tab whose price, variant structure, and PWYW flag all match the
+    // last-saved state must not turn PWYW off on an unrelated section save.
+    expect(
+      scalarSettingsForSave(product({ customizable_price: true }), lastSaved({ customizable_price: true })),
+    ).toEqual({});
+  });
+
+  it("sends the recomputed customizable_price when the price changed, even if the flag looks unchanged", () => {
+    // The $0-base + paid-variant force re-derives the flag from price/variants.
+    // A save that sets Amount to 0 MUST send the recomputed false, not omit it
+    // (this is the failing edit_spec force case).
+    expect(
+      scalarSettingsForSave(
+        product({ customizable_price: false, price_cents: 0, hasPaidVariantPricing: true }),
+        lastSaved({ customizable_price: false, hasPaidVariantPricing: true }),
+      ),
+    ).toEqual({ customizable_price: false });
+  });
+
+  it("sends a customizable_price change this session made, in both directions", () => {
+    expect(scalarSettingsForSave(product({ customizable_price: true }), lastSaved())).toEqual({
+      customizable_price: true,
+    });
+    // Deliberate disabling must still send false — a truthiness-based refactor
+    // that drops `false` would silently leave PWYW enabled.
+    expect(
+      scalarSettingsForSave(product({ customizable_price: false }), lastSaved({ customizable_price: true })),
+    ).toEqual({ customizable_price: false });
+  });
+
+  it("always sends customizable_price when the caller has no baseline", () => {
+    // A caller that does not track the last-saved value (null baseline) must
+    // keep the pre-fix always-submit behavior, so disabling PWYW still lands.
+    expect(
+      scalarSettingsForSave(product({ customizable_price: false }), { ...lastSaved(), customizable_price: null }),
+    ).toEqual({ customizable_price: false });
   });
 });
 
