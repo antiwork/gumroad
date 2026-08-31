@@ -321,7 +321,7 @@ describe AlertOnStalledPostEmailBlastsJob do
 
       it "does not resume a split blast while a slice job is still queued" do
         blast = stalled_blast
-        queue = [instance_double(Sidekiq::Job, klass: "SendPostBlastEmailsSliceJob", args: [blast.id, 0, 2, []])]
+        queue = [instance_double(Sidekiq::JobRecord, klass: "SendPostBlastEmailsSliceJob", args: [blast.id, 0, 2, []])]
         allow(Sidekiq::Queue).to receive(:new).with("default").and_return(queue)
         dead_set = instance_double(Sidekiq::DeadSet)
         allow(Sidekiq::DeadSet).to receive(:new).and_return(dead_set)

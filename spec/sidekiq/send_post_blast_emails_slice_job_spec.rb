@@ -34,9 +34,7 @@ describe SendPostBlastEmailsSliceJob, :freeze_time do
       described_class.new.perform(blast.id, 0, 1, chunk_ids)
 
       expect_sent_count 3
-      expect(["alpha@example.com", "bravo@example.com", "charlie@example.com"]).to all(
-        ->(email) { PostSendgridApi.mails.key?(email) }
-      )
+      expect(PostSendgridApi.mails.keys).to contain_exactly("alpha@example.com", "bravo@example.com", "charlie@example.com")
       expect(blast.reload.completed_at).to be_present
       # Done-slices set is cleared by the completion stamp.
       expect($redis.exists?(RedisKey.blast_done_slices(blast.id))).to eq(false)
@@ -62,8 +60,11 @@ describe SendPostBlastEmailsSliceJob, :freeze_time do
 
       described_class.new.perform(blast.id, 0, 2, audience_ids.first(1))
 
-      expect($redis.smembers(done_key)).to contain_exactly("0", "1")
+      # The final distinct chunk raised the done-slices set to the full count, so the blast
+      # completed — and the completion stamp in mark_blast_as_completed clears the set (the
+      # same cleanup :29 asserts via its absence check), so its contents are gone afterwards.
       expect(blast.reload.completed_at).to be_present
+      expect($redis.exists?(done_key)).to eq(false)
     ensure
       $redis.del(done_key)
     end

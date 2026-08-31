@@ -902,6 +902,7 @@ describe SendPostBlastEmailsJob, :freeze_time do
     it "splits at the Redis-tunable threshold override" do
       post, = audience_post_with_followers(11)
       $redis.set(RedisKey.blast_child_split_threshold, 10)
+      $redis.set(RedisKey.blast_child_slice_size, 6) # 11 members -> ceil(11/6) = 2 slices
       blast = create(:blast, :just_requested, post:)
 
       described_class.new.perform(blast.id)
@@ -909,9 +910,10 @@ describe SendPostBlastEmailsJob, :freeze_time do
       jobs = SendPostBlastEmailsSliceJob.jobs.map { _1["args"] }
       expect(jobs.size).to eq(2)
       expect(jobs.map { _1[2] }).to eq([2, 2])
+      expect(jobs.map { _1.last.size }).to eq([6, 5])
       expect(PostSendgridApi.mails).to be_empty
     ensure
-      $redis.del(RedisKey.blast_child_split_threshold)
+      $redis.del(RedisKey.blast_child_split_threshold, RedisKey.blast_child_slice_size)
     end
 
     it "respects the Redis-tunable slice size" do

@@ -23,6 +23,7 @@ class SendPostBlastEmailsSliceJob
 
     @blast.update!(started_at: Time.current) if @blast.started_at.nil?
 
+    @filters = @post.audience_members_filter_params
     @members = load_chunk_members(member_ids)
     # The parent already filtered out already-emailed members, but a retried slice job re-runs
     # its own chunk and must not re-send the members its first attempt already marked sent.
@@ -36,7 +37,16 @@ class SendPostBlastEmailsSliceJob
     def load_chunk_members(member_ids)
       return [] if member_ids.empty?
 
-      AudienceMember.where(id: member_ids).select(:id, :email, :purchase_id, :follower_id, :affiliate_id).to_a
+      # purchase_id / follower_id / affiliate_id are virtual columns that only exist through
+      # AudienceMember.filter's JSON_TABLE join — a raw .where on audience_members has no such
+      # column. Restrict the filter to this chunk by id (same pattern as the parent's
+      # revalidate_snapshotted_members) so a slice rehydrates its recipients with their
+      # purchase/follower/affiliate identity for the send phase (gumroad-private#2353).
+      Makara::Context.release_all
+      WithMaxExecutionTime.timeout_queries(seconds: 1.hour) do
+        AudienceMember.filter(seller_id: @post.seller_id, params: @filters, with_ids: true, ids: member_ids)
+          .select(:id, :email, :purchase_id, :follower_id, :affiliate_id).to_a
+      end
     end
 
     # Records this chunk as delivered. Idempotent across retries and duplicate enqueues (SADD),
