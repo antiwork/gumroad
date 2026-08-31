@@ -77,7 +77,8 @@ class ForeignWebhooksController < ApplicationController
   end
 
   def resend
-    HandleResendEventJob.perform_async(params.to_unsafe_hash.to_hash)
+    event_json = params.to_unsafe_hash.to_hash
+    HandleResendEventJob.perform_async(event_json) if trackable_resend_event?(event_json)
 
     render json: { success: true }
   end
@@ -112,6 +113,18 @@ class ForeignWebhooksController < ApplicationController
   end
 
   private
+    # Resend sends a callback per event for every message we send, and a large send arrives
+    # as a burst. Events we don't track no-op inside the job anyway, so discard them before
+    # they cost a Redis write and a worker cycle each — and before they count toward the
+    # `low` queue depth that scales the Sidekiq fleet. This is header parsing only, no I/O.
+    # Anything we can't parse is still enqueued, leaving the job the one place that decides
+    # what an event means.
+    def trackable_resend_event?(event_json)
+      !ResendEventInfo.new(event_json).invalid?
+    rescue StandardError
+      true
+    end
+
     def validate_sns_webhook
       return if Aws::SNS::MessageVerifier.new.authentic?(request.raw_post)
 
