@@ -84,13 +84,21 @@ describe("scalarSettingsForSave", () => {
     ).toEqual({});
   });
 
-  it("sends a customizable_price change this session made", () => {
+  it("sends a customizable_price change this session made, in both directions", () => {
     expect(
       scalarSettingsForSave(
         { custom_permalink: null, customizable_price: true },
         { custom_permalink: null, customizable_price: false },
       ),
     ).toEqual({ customizable_price: true });
+    // Deliberate disabling must still send false — a truthiness-based refactor
+    // that drops `false` would silently leave PWYW enabled.
+    expect(
+      scalarSettingsForSave(
+        { custom_permalink: null, customizable_price: false },
+        { custom_permalink: null, customizable_price: true },
+      ),
+    ).toEqual({ customizable_price: false });
   });
 });
 
