@@ -747,6 +747,15 @@ function getDirectListedPaymentElementAmount(state: State) {
   if (state.checkoutPayment.integration !== "payment_element_client_confirm") return getChargeTodayPrice(state);
   if (state.surcharges.type !== "loaded") return null;
 
+  const directListedAllocations = state.surcharges.result.direct_listed_line_allocations;
+  if (directListedAllocations?.length === state.products.length) {
+    const allocationsMatchCart = directListedAllocations.every(
+      (allocation, index) => allocation.permalink === state.products[index]?.permalink,
+    );
+    if (allocationsMatchCart)
+      return directListedAllocations.reduce((sum, allocation) => sum + allocation.total_cents, 0);
+  }
+
   const baseAmount = state.checkoutPayment.elements_options.presentment_amount_cents ?? 0;
   const linePrices = state.products.map((product) => ({
     price:
@@ -1005,6 +1014,16 @@ export const loadSurcharges = (state: State, abortSignal?: AbortSignal) => {
     state,
     state.products.map((item) => ({ price: item.price, permalink: item.permalink })),
   );
+  const listedLineTips = paymentElementDirectListedCurrency
+    ? computeTipsForLines(
+        state,
+        state.products.map((item) => ({
+          price: item.listedChargePriceCents ?? item.listedPriceCents ?? item.price,
+          permalink: item.permalink,
+        })),
+        { basis: "listed" },
+      )
+    : [];
   const exactPresentmentTipCurrency =
     state.tip.type === "fixed" && state.tip.presentmentAmount != null ? (state.tip.presentmentCurrency ?? null) : null;
   const requestedBuyerCurrency = state.buyerCurrency ?? exactPresentmentTipCurrency;
@@ -1029,6 +1048,12 @@ export const loadSurcharges = (state: State, abortSignal?: AbortSignal) => {
           quantity: item.quantity,
           price: item.hasFreeTrial && !isGift ? 0 : Math.round(item.price + tipCents),
           tip_cents: tipCents,
+          ...(paymentElementDirectListedCurrency && item.listedChargePriceCents != null
+            ? { listed_price_cents: item.listedChargePriceCents }
+            : {}),
+          ...(paymentElementDirectListedCurrency && listedLineTips[index] != null
+            ? { listed_tip_cents: listedLineTips[index] }
+            : {}),
           ...(presentmentLineTips[index] != null ? { presentment_tip_cents: presentmentLineTips[index] } : {}),
           pay_in_installments: item.payInInstallments,
           subscription_id: item.subscription_id,

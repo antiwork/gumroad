@@ -1036,6 +1036,48 @@ describe("direct-listed card element", () => {
     expect(getStripePaymentElementMountCurrency(s)).toBe("cad");
   });
 
+  it("uses the server direct-listed allocations so per-line tax rounding matches charge time", () => {
+    const s = state({
+      checkoutPayment: directListedCardConfig,
+      products: [
+        product({ permalink: "product-a", listedChargePriceCents: 1_000 }),
+        product({ permalink: "product-b", listedChargePriceCents: 1_000 }),
+      ],
+      surcharges: {
+        type: "loaded",
+        result: {
+          vat_id_valid: false,
+          has_vat_id_input: false,
+          shipping_rate_cents: 0,
+          tax_cents: 2,
+          tax_included_cents: 0,
+          subtotal: 1_334,
+          direct_listed_line_allocations: [
+            {
+              permalink: "product-a",
+              price_cents: 1_000,
+              tip_cents: 0,
+              tax_cents: 2,
+              shipping_cents: 0,
+              total_cents: 1_002,
+            },
+            {
+              permalink: "product-b",
+              price_cents: 1_000,
+              tip_cents: 0,
+              tax_cents: 2,
+              shipping_cents: 0,
+              total_cents: 1_002,
+            },
+          ],
+          buyer_currency_quote: null,
+        },
+      },
+    });
+
+    expect(getStripePaymentElementAmount(s)).toBe(2_004);
+  });
+
   it("converts USD surcharge cents with the signed rate and listed subunit scale", () => {
     const s = state({
       checkoutPayment: {
