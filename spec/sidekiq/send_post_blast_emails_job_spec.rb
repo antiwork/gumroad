@@ -955,6 +955,36 @@ describe SendPostBlastEmailsJob, :freeze_time do
       $redis.del(RedisKey.blast_child_split_threshold, RedisKey.blast_child_slice_size)
     end
 
+    it "reuses a partition another parent published while this parent loaded the audience" do
+      post, seller = audience_post_with_followers(11)
+      $redis.set(RedisKey.blast_child_split_threshold, 10)
+      $redis.set(RedisKey.blast_child_slice_size, 6)
+      blast = create(:blast, :just_requested, post:)
+      existing_partition_key = "existing-partition"
+      existing_chunks = AudienceMember.where(seller_id: seller).limit(2).pluck(:id).map { [_1] }
+      installed_existing_partition = false
+      allow(AudienceMember).to receive(:filter).and_wrap_original do |original, **kwargs|
+        original.call(**kwargs).tap do
+          unless installed_existing_partition
+            $redis.rpush(RedisKey.blast_slice_partition_chunks(blast.id, existing_partition_key), existing_chunks.map(&:to_json))
+            $redis.set(RedisKey.blast_active_slice_partition(blast.id), existing_partition_key)
+            installed_existing_partition = true
+          end
+        end
+      end
+
+      described_class.new.perform(blast.id)
+
+      jobs = SendPostBlastEmailsSliceJob.jobs.map { _1["args"] }
+      expect(jobs.map { _1[1] }).to eq([existing_partition_key, existing_partition_key])
+      expect(jobs.map(&:last)).to eq(existing_chunks)
+      expect($redis.get(RedisKey.blast_active_slice_partition(blast.id))).to eq(existing_partition_key)
+    ensure
+      $redis.del(RedisKey.blast_child_split_threshold, RedisKey.blast_child_slice_size,
+                 RedisKey.blast_active_slice_partition(blast.id),
+                 RedisKey.blast_slice_partition_chunks(blast.id, existing_partition_key)) if blast
+    end
+
     it "checks already-emailed recipients in bounded IN-list batches" do
       stub_const("PostBlastSending::ALREADY_EMAILED_SLICE_SIZE", 2)
       post, = audience_post_with_followers(5)
