@@ -199,9 +199,9 @@ module PostBlastSending
     checkpoint_key = RedisKey.blast_non_opener_emails(@blast.id)
     active_partition_key = $redis.get(RedisKey.blast_active_slice_partition(@blast.id))
     partition_chunks_key = active_partition_key && RedisKey.blast_slice_partition_chunks(@blast.id, active_partition_key)
-    $redis.del(snapshot_key, "#{snapshot_key}:tmp", checkpoint_key, "#{checkpoint_key}:tmp",
-               RedisKey.blast_pending_recipients(@blast.id), RedisKey.blast_done_slices(@blast.id),
-               RedisKey.blast_active_slice_partition(@blast.id), partition_chunks_key)
+    $redis.del(*[snapshot_key, "#{snapshot_key}:tmp", checkpoint_key, "#{checkpoint_key}:tmp",
+                 RedisKey.blast_pending_recipients(@blast.id), RedisKey.blast_done_slices(@blast.id),
+                 RedisKey.blast_active_slice_partition(@blast.id), partition_chunks_key].compact)
   end
 
   # Stores email addresses in SentPostEmail, just before sending the emails.

@@ -13,7 +13,10 @@ class SendPostBlastEmailsSliceJob
     Rails.logger.info("[#{self.class.name}] blast_id=#{@blast.id} chunk=#{chunk_index}/#{total_chunks}")
     return unless @post.alive? && @post.published? && @post.send_emails? && @blast.completed_at.nil?
     return unless active_partition?(partition_key)
-    return if chunk_completed?(partition_key, chunk_index)
+    if chunk_completed?(partition_key, chunk_index)
+      finalize_partition_if_complete(partition_key, total_chunks)
+      return
+    end
     claim_chunk!(partition_key, chunk_index)
 
     begin
@@ -70,6 +73,11 @@ class SendPostBlastEmailsSliceJob
       key = RedisKey.blast_done_slices(@blast.id, partition_key)
       $redis.sadd(key, chunk_index)
       $redis.expire(key, SLICE_DONE_TTL.to_i)
+      finalize_partition_if_complete(partition_key, total_chunks)
+    end
+
+    def finalize_partition_if_complete(partition_key, total_chunks)
+      key = RedisKey.blast_done_slices(@blast.id, partition_key)
       return if $redis.scard(key) < total_chunks
 
       mark_blast_as_completed

@@ -124,6 +124,21 @@ describe SendPostBlastEmailsSliceJob, :freeze_time do
       $redis.del(RedisKey.blast_slice_claim(blast.id, partition_key, 0), RedisKey.blast_active_slice_partition(blast.id)) if blast
     end
 
+    it "finalizes when retrying a chunk after every chunk was already recorded" do
+      blast = create(:blast, :just_requested, post: post_with_audience)
+      activate_partition(blast)
+      done_key = RedisKey.blast_done_slices(blast.id, partition_key)
+      $redis.sadd(done_key, [0, 1])
+
+      described_class.new.perform(blast.id, partition_key, 1, 2, [])
+
+      expect_sent_count 0
+      expect(blast.reload.completed_at).to be_present
+      expect($redis.exists?(done_key)).to eq(false)
+    ensure
+      $redis.del(done_key, RedisKey.blast_active_slice_partition(blast.id)) if done_key && blast
+    end
+
     it "skips a chunk that already recorded completion in this partition" do
       post = post_with_audience
       blast = create(:blast, :just_requested, post:, recipient_filter: PostEmailBlast::RECIPIENT_FILTER_UNOPENED)

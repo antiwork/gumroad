@@ -916,6 +916,17 @@ describe SendPostBlastEmailsJob, :freeze_time do
       $redis.del(RedisKey.blast_child_split_threshold, RedisKey.blast_child_slice_size, pending_key)
     end
 
+    it "completes inline blasts without a slice partition" do
+      post, = audience_post_with_followers(1)
+      blast = create(:blast, :just_requested, post:)
+      allow_any_instance_of(described_class).to receive(:send_members)
+
+      described_class.new.perform(blast.id)
+
+      expect(blast.reload.completed_at).to be_present
+      expect($redis.exists?(RedisKey.blast_active_slice_partition(blast.id))).to be(false)
+    end
+
     it "sends inline for a blast at or under the split threshold" do
       post, = audience_post_with_followers(2_000) # right at the threshold
       blast = create(:blast, :just_requested, post:)
