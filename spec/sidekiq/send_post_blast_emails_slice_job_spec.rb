@@ -331,6 +331,38 @@ describe SendPostBlastEmailsSliceJob, :freeze_time do
       $redis.del(RedisKey.blast_sent_emails(blast.id), RedisKey.blast_done_slices(blast.id, partition_key))
     end
 
+    it "sends a product-post chunk whose product name contains tags" do
+      product = create(:product, user: @seller, name: "<b>Shattered</b> Samples")
+      post = create(:product_post, :published, seller: @seller, link: product, bought_products: [product.unique_permalink])
+      sale = create(:purchase, link: product, seller: @seller, email: "buyer@example.com")
+      blast = create(:blast, :just_requested, post:)
+      activate_partition(blast)
+      member_ids = AudienceMember.where(seller_id: @seller).pluck(:id)
+
+      described_class.new.perform(blast.id, partition_key, 0, 1, member_ids)
+
+      expect(PostSendgridApi.mails.keys).to include(sale.email)
+      expect(blast.reload.completed_at).to be_present
+    end
+
+    it "does not leave SentPostEmail rows when preparing recipients raises" do
+      post = post_with_audience
+      blast = create(:blast, :just_requested, post:)
+      activate_partition(blast)
+      allow_any_instance_of(described_class).to receive(:prepare_recipients).and_raise(NoMethodError, "undefined method 'full_sanitizer'")
+
+      expect {
+        described_class.new.perform(blast.id, partition_key, 0, 1, audience_ids)
+      }.to raise_error(NoMethodError, /full_sanitizer/)
+
+      expect(SentPostEmail.where(post:).count).to eq(0)
+    end
+
+    it "exposes SanitizeHelper class methods used by strip_tags" do
+      expect(described_class).to respond_to(:full_sanitizer)
+      expect(described_class.new.send(:strip_tags, "<b>Hi</b>")).to eq("Hi")
+    end
+
     it "records an empty chunk as done so the blast still completes" do
       blast = create(:blast, :just_requested, post: post_with_audience)
       activate_partition(blast)

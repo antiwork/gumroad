@@ -2,7 +2,12 @@
 
 # Shared send phase for parent and slice jobs; callers set @blast, @post, and @members.
 module PostBlastSending
-  include ActionView::Helpers::SanitizeHelper
+  extend ActiveSupport::Concern
+
+  included do
+    # strip_tags calls self.class.full_sanitizer; ClassMethods must land on the job.
+    include ActionView::Helpers::SanitizeHelper
+  end
 
   # Small counter key used by the stalled-blast monitor. Keep it for the full scan window;
   # unlike the audience snapshot, it is tiny and is the only evidence for late safe resumes.
@@ -64,9 +69,10 @@ module PostBlastSending
     # `store_recipients_as_sent` drops was already emailed by someone else.
     owed = members.size
     members = store_recipients_as_sent(members)
-    recipients = prepare_recipients(members)
 
     begin
+      # Inside this rescue so a raise after store_recipients_as_sent cannot leave ghost rows.
+      recipients = prepare_recipients(members)
       deliver_provider_slice(provider: provider, recipients: recipients, cache: cache)
       mark_members_sent_in_this_blast(members) if @blast.to_non_openers?
       decrement_pending_recipients(owed)
