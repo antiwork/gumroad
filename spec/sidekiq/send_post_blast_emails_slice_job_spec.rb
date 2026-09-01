@@ -357,9 +357,9 @@ describe SendPostBlastEmailsSliceJob, :freeze_time do
       activate_partition(blast)
       allow_any_instance_of(described_class).to receive(:prepare_recipients).and_raise(NoMethodError, "undefined method 'full_sanitizer'")
 
-      expect {
+      expect do
         described_class.new.perform(blast.id, partition_key, 0, 1, audience_ids)
-      }.to raise_error(NoMethodError, /full_sanitizer/)
+      end.to raise_error(NoMethodError, /full_sanitizer/)
 
       expect(SentPostEmail.where(post:).count).to eq(0)
     end
