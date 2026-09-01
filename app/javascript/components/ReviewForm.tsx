@@ -17,6 +17,7 @@ import { useReviewVideoUploader } from "$app/components/ReviewForm/useReviewVide
 import { showAlert } from "$app/components/server-components/Alert";
 import { Alert } from "$app/components/ui/Alert";
 import { Label } from "$app/components/ui/Label";
+import { LinkButton } from "$app/components/ui/LinkButton";
 import { Tab, Tabs } from "$app/components/ui/Tabs";
 import { Textarea } from "$app/components/ui/Textarea";
 
@@ -387,10 +388,7 @@ export const ReviewForm = React.forwardRef<
           uploadProgress.bitrate,
           videoState.kind === "recorded" ? videoState.file.size : 0,
         )}{" "}
-        -{" "}
-        <button onClick={cancelUpload} type="button" className="cursor-pointer underline all-unset">
-          Cancel
-        </button>
+        - <LinkButton onClick={cancelUpload}>Cancel</LinkButton>
       </div>
     ) : null;
 

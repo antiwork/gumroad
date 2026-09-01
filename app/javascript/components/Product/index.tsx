@@ -85,6 +85,7 @@ import { ReviewCard } from "$app/components/TiptapExtensions/ReviewCard";
 import { UpsellCard } from "$app/components/TiptapExtensions/UpsellCard";
 import { Alert } from "$app/components/ui/Alert";
 import { Card, CardContent } from "$app/components/ui/Card";
+import { LinkButton } from "$app/components/ui/LinkButton";
 import { useAddThirdPartyAnalytics } from "$app/components/useAddThirdPartyAnalytics";
 import { useOnChange } from "$app/components/useOnChange";
 import { useOriginalLocation } from "$app/components/useOriginalLocation";
@@ -1003,13 +1004,9 @@ const Reviews = ({
             />
           ))}
           {state.pagination.page < state.pagination.pages ? (
-            <button
-              className="cursor-pointer underline all-unset"
-              onClick={() => void loadNextPage()}
-              disabled={isLoading}
-            >
+            <LinkButton onClick={() => void loadNextPage()} disabled={isLoading}>
               Load more
-            </button>
+            </LinkButton>
           ) : null}
         </section>
       ) : null}

@@ -81,6 +81,7 @@ import { Checkbox } from "$app/components/ui/Checkbox";
 import { Fieldset, FieldsetTitle } from "$app/components/ui/Fieldset";
 import { Input } from "$app/components/ui/Input";
 import { Label } from "$app/components/ui/Label";
+import { LinkButton } from "$app/components/ui/LinkButton";
 import { Radio } from "$app/components/ui/Radio";
 import { Select } from "$app/components/ui/Select";
 import { useOnChangeSync } from "$app/components/useOnChange";
@@ -1116,14 +1117,13 @@ const CreditCardContent = ({
       {stripePaymentElementConfig && !useSavedCard ? (
         <div className="flex flex-col gap-4">
           {state.savedCreditCard && paymentElementReady ? (
-            <button
-              type="button"
-              className="-mt-10 cursor-pointer self-end font-normal underline all-unset"
+            <LinkButton
+              className="-mt-10 self-end font-normal"
               disabled={isProcessing(state)}
               onClick={() => setUseSavedCard(true)}
             >
               Use saved card
-            </button>
+            </LinkButton>
           ) : null}
           <PaymentElementInput
             amount={stripePaymentElementAmount}

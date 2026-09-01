@@ -40,6 +40,7 @@ import { NodeActionsMenu, NodeActionsWrapper } from "$app/components/TiptapExten
 import { Fieldset, FieldsetTitle } from "$app/components/ui/Fieldset";
 import { Input } from "$app/components/ui/Input";
 import { Label } from "$app/components/ui/Label";
+import { LinkButton } from "$app/components/ui/LinkButton";
 import { Menu, MenuItem } from "$app/components/ui/Menu";
 import { Placeholder } from "$app/components/ui/Placeholder";
 import { Row, RowActions, RowContent, RowDetails } from "$app/components/ui/Rows";
@@ -474,8 +475,7 @@ const FileEmbedNodeView = ({
                         borderRadius: "var(--border-radius-1) var(--border-radius-1) 0 0",
                       }}
                     />
-                    <button
-                      className="cursor-pointer underline all-unset"
+                    <LinkButton
                       style={{
                         position: "absolute",
                         top: "50%",
@@ -486,7 +486,7 @@ const FileEmbedNodeView = ({
                       aria-label="Watch"
                     >
                       <PlayVideoIcon />
-                    </button>
+                    </LinkButton>
                     <div style={{ position: "absolute", top: "var(--spacer-5)", right: "var(--spacer-5)" }}>
                       <WithTooltip tip="Replace thumbnail">
                         <label
@@ -563,10 +563,10 @@ const FileEmbedNodeView = ({
 
                   {file.is_streamable && isComplete ? (
                     <li>
-                      <button className="cursor-pointer underline all-unset" onClick={() => setExpanded(!expanded)}>
+                      <LinkButton onClick={() => setExpanded(!expanded)}>
                         {file.subtitle_files.length}{" "}
                         {file.subtitle_files.length === 1 ? "closed caption" : "closed captions"}
-                      </button>
+                      </LinkButton>
                     </li>
                   ) : null}
 

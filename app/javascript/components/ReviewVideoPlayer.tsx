@@ -6,6 +6,7 @@ import { createJWPlayer } from "$app/utils/jwPlayer";
 
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { PlayVideoIcon } from "$app/components/PlayVideoIcon";
+import { LinkButton } from "$app/components/ui/LinkButton";
 
 function usePlayer(videoId: string, uid: string) {
   const [loading, setLoading] = useState(false);
@@ -51,14 +52,14 @@ export const ReviewVideoPlayer = ({ videoId, thumbnail }: { videoId: string; thu
         {thumbnail ? (
           <img src={thumbnail} loading="lazy" className="absolute h-full w-full rounded-t bg-black object-cover" />
         ) : null}
-        <button
-          className="absolute! top-1/2! left-1/2! -translate-x-1/2! -translate-y-1/2! cursor-pointer underline all-unset"
+        <LinkButton
+          className="absolute! top-1/2! left-1/2! -translate-x-1/2! -translate-y-1/2!"
           onClick={() => void onPlay()}
           aria-label="Watch"
           disabled={loading}
         >
           {loading ? <LoadingSpinner className="size-12" /> : <PlayVideoIcon />}
-        </button>
+        </LinkButton>
       </figure>
     </div>
   );

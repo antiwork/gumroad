@@ -7,6 +7,7 @@ import { Button } from "$app/components/Button";
 import { Fieldset, FieldsetTitle } from "$app/components/ui/Fieldset";
 import { Input } from "$app/components/ui/Input";
 import { Label } from "$app/components/ui/Label";
+import { LinkButton } from "$app/components/ui/LinkButton";
 import { useOriginalLocation } from "$app/components/useOriginalLocation";
 
 type TwoFactorMethod = "email" | "totp" | "recovery";
@@ -137,43 +138,35 @@ function TwoFactorAuthentication() {
               case "totp":
                 return (
                   <div className="flex gap-6">
-                    <button
-                      type="button"
-                      className="cursor-pointer underline all-unset"
+                    <LinkButton
                       disabled={switchForm.processing}
                       onClick={() => switchForm.post(Routes.switch_to_email_two_factor_path({ user_id }))}
                     >
                       Use email instead
-                    </button>
-                    <button
-                      type="button"
-                      className="cursor-pointer underline all-unset"
+                    </LinkButton>
+                    <LinkButton
                       disabled={switchForm.processing}
                       onClick={() => switchForm.post(Routes.switch_to_recovery_two_factor_path({ user_id }))}
                     >
                       Use a recovery code
-                    </button>
+                    </LinkButton>
                   </div>
                 );
               case "recovery":
                 return (
                   <div className="flex gap-6">
-                    <button
-                      type="button"
-                      className="cursor-pointer underline all-unset"
+                    <LinkButton
                       disabled={switchForm.processing}
                       onClick={() => switchForm.post(Routes.switch_to_authenticator_two_factor_path({ user_id }))}
                     >
                       Use authenticator app
-                    </button>
-                    <button
-                      type="button"
-                      className="cursor-pointer underline all-unset"
+                    </LinkButton>
+                    <LinkButton
                       disabled={switchForm.processing}
                       onClick={() => switchForm.post(Routes.switch_to_email_two_factor_path({ user_id }))}
                     >
                       Use email instead
-                    </button>
+                    </LinkButton>
                   </div>
                 );
             }

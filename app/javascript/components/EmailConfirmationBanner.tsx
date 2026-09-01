@@ -5,6 +5,7 @@ import { request } from "$app/utils/request";
 
 import { showAlert } from "$app/components/server-components/Alert";
 import { Alert } from "$app/components/ui/Alert";
+import { LinkButton } from "$app/components/ui/LinkButton";
 
 export type EmailConfirmation = {
   email: string | null;
@@ -63,8 +64,7 @@ export const EmailConfirmationBanner = ({ email, can_resend, children }: EmailCo
             {resendState === "sent" ? (
               "Confirmation email sent!"
             ) : (
-              <button
-                className="cursor-pointer underline all-unset"
+              <LinkButton
                 disabled={resendState === "sending"}
                 onClick={(e) => {
                   e.preventDefault();
@@ -72,7 +72,7 @@ export const EmailConfirmationBanner = ({ email, can_resend, children }: EmailCo
                 }}
               >
                 {resendState === "sending" ? "Resending..." : "Resend confirmation email"}
-              </button>
+              </LinkButton>
             )}
           </>
         ) : null}

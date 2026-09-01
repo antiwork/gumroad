@@ -12,6 +12,7 @@ import { Checkbox } from "$app/components/ui/Checkbox";
 import { Fieldset, FieldsetDescription, FieldsetTitle } from "$app/components/ui/Fieldset";
 import { Input } from "$app/components/ui/Input";
 import { Label } from "$app/components/ui/Label";
+import { LinkButton } from "$app/components/ui/LinkButton";
 import { Select } from "$app/components/ui/Select";
 import { Tab, Tabs } from "$app/components/ui/Tabs";
 
@@ -828,14 +829,13 @@ const AccountDetailsSection = ({
                       </button>
                     ) : null}
                   </div>
-                  <button
-                    type="button"
-                    className="cursor-pointer self-start text-sm underline all-unset"
+                  <LinkButton
+                    className="self-start text-sm"
                     onClick={() => setIsEditingBusinessTaxId(true)}
                     disabled={isFormDisabled}
                   >
                     Change
-                  </button>
+                  </LinkButton>
                 </div>
               ) : (
                 <Input
@@ -1344,14 +1344,13 @@ const AccountDetailsSection = ({
                     </button>
                   ) : null}
                 </div>
-                <button
-                  type="button"
-                  className="cursor-pointer self-start text-sm underline all-unset"
+                <LinkButton
+                  className="self-start text-sm"
                   onClick={() => setIsEditingIndividualTaxId(true)}
                   disabled={isFormDisabled}
                 >
                   Change
-                </button>
+                </LinkButton>
               </div>
             ) : (
               <div className="flex flex-col gap-2">

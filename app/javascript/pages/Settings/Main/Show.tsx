@@ -23,6 +23,7 @@ import { FormSection } from "$app/components/ui/FormSection";
 import { Input } from "$app/components/ui/Input";
 import { InputGroup } from "$app/components/ui/InputGroup";
 import { Label } from "$app/components/ui/Label";
+import { LinkButton } from "$app/components/ui/LinkButton";
 import { Pill } from "$app/components/ui/Pill";
 import { Select } from "$app/components/ui/Select";
 import { Switch } from "$app/components/ui/Switch";
@@ -148,15 +149,14 @@ export default function MainPage() {
               <FieldsetDescription>
                 This email address has not been confirmed yet.{" "}
                 {resentConfirmationEmail ? null : (
-                  <button
-                    className="cursor-pointer underline all-unset"
+                  <LinkButton
                     onClick={(e) => {
                       e.preventDefault();
                       resendConfirmationEmail();
                     }}
                   >
                     {resendConfirmationEmailForm.processing ? "Resending..." : "Resend confirmation?"}
-                  </button>
+                  </LinkButton>
                 )}
               </FieldsetDescription>
             ) : null}
@@ -617,13 +617,7 @@ const InvalidateActiveSessionsSection = () => {
   return (
     <FormSection>
       <Fieldset>
-        <button
-          className="cursor-pointer underline all-unset"
-          type="button"
-          onClick={() => setIsConfirmationDialogOpen(true)}
-        >
-          Sign out from all active sessions
-        </button>
+        <LinkButton onClick={() => setIsConfirmationDialogOpen(true)}>Sign out from all active sessions</LinkButton>
         <FieldsetDescription>
           You will be signed out from all your active sessions including this session.
         </FieldsetDescription>

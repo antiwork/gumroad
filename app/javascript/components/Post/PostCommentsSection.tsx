@@ -21,6 +21,7 @@ import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { Modal } from "$app/components/Modal";
 import { Popover, PopoverClose, PopoverContent, PopoverTrigger } from "$app/components/Popover";
 import { showAlert } from "$app/components/server-components/Alert";
+import { LinkButton } from "$app/components/ui/LinkButton";
 import { Pill } from "$app/components/ui/Pill";
 import { Textarea } from "$app/components/ui/Textarea";
 
@@ -301,9 +302,7 @@ const CommentContainer = ({ comment, upsertComment, confirmCommentDeletion }: Co
         )}
         {replyDraft == null && comment.depth < max_allowed_depth ? (
           <footer>
-            <button className="cursor-pointer underline all-unset" onClick={() => setReplyDraft("")}>
-              Reply
-            </button>
+            <LinkButton onClick={() => setReplyDraft("")}>Reply</LinkButton>
           </footer>
         ) : null}
       </div>

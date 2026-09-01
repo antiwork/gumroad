@@ -18,6 +18,7 @@ import { FormSection } from "$app/components/ui/FormSection";
 import { Input } from "$app/components/ui/Input";
 import { InputGroup } from "$app/components/ui/InputGroup";
 import { Label } from "$app/components/ui/Label";
+import { LinkButton } from "$app/components/ui/LinkButton";
 import { PageHeader } from "$app/components/ui/PageHeader";
 import { Placeholder, PlaceholderImage } from "$app/components/ui/Placeholder";
 import { Switch } from "$app/components/ui/Switch";
@@ -174,9 +175,7 @@ export default function AffiliatesOnboarding() {
                 />
                 {enableAffiliateLink ? (
                   <CopyToClipboard text={affiliateRequestUrl}>
-                    <button type="button" className="cursor-pointer underline all-unset">
-                      Copy link
-                    </button>
+                    <LinkButton>Copy link</LinkButton>
                   </CopyToClipboard>
                 ) : null}
               </InputGroup>

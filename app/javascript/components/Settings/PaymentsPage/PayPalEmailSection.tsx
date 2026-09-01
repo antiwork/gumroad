@@ -6,6 +6,7 @@ import { Alert } from "$app/components/ui/Alert";
 import { Fieldset, FieldsetTitle } from "$app/components/ui/Fieldset";
 import { Input } from "$app/components/ui/Input";
 import { Label } from "$app/components/ui/Label";
+import { LinkButton } from "$app/components/ui/LinkButton";
 
 const PayPalEmailSection = ({
   canSetupBankPayouts,
@@ -43,13 +44,9 @@ const PayPalEmailSection = ({
       <div className="whitespace-pre-line">{feeInfoText}</div>
       <div className="grid gap-4">
         {canSetupBankPayouts && !isFormDisabled ? (
-          <button
-            type="button"
-            className="cursor-pointer justify-self-start underline all-unset"
-            onClick={() => updatePayoutMethod("bank")}
-          >
+          <LinkButton className="justify-self-start" onClick={() => updatePayoutMethod("bank")}>
             Switch to direct deposit
-          </button>
+          </LinkButton>
         ) : null}
         <Fieldset state={errorFieldNames.has("paypal_email_address") ? "danger" : undefined}>
           <FieldsetTitle>
