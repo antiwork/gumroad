@@ -57,6 +57,7 @@ import {
 import { CrossSellModal } from "$app/components/Checkout/CrossSellModal";
 import { computeInitialCheckout, type InitialCheckout } from "$app/components/Checkout/initialCheckout";
 import {
+  canDisplayBuyerCurrencyQuote,
   canUseStripePaymentElement,
   canUseStripePaymentElementClientConfirm,
   computeTip,
@@ -259,7 +260,7 @@ const CheckoutIndexPage = () => {
   // displayed — and, below, its token must not be submitted.
   const recurringUpiRegistration = isRecurringUpiPaymentConfig(state.checkoutPayment);
   const buyerCurrencyDisplay =
-    configuredDirectListedCurrency || recurringUpiRegistration
+    configuredDirectListedCurrency || recurringUpiRegistration || !canDisplayBuyerCurrencyQuote(state)
       ? null
       : getCheckoutBuyerCurrencyDisplay(state.surcharges.type === "loaded" ? state.surcharges.result : null, {
           cartPermalinks: cartForm.data.cart.items.map((item) => item.product.permalink),
@@ -566,7 +567,7 @@ const CheckoutIndexPage = () => {
         recaptchaResponse: state.status.recaptchaResponse ?? null,
         recaptchaChallengeFallback: state.status.challengeFallback ?? false,
         buyerCurrencyQuote:
-          configuredDirectListedCurrency || recurringUpiRegistration
+          configuredDirectListedCurrency || recurringUpiRegistration || !canDisplayBuyerCurrencyQuote(state)
             ? null
             : getCheckoutBuyerCurrencyQuoteToken(state.surcharges.type === "loaded" ? state.surcharges.result : null, {
                 cartPermalinks: cartForm.data.cart.items.map((item) => item.product.permalink),

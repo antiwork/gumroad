@@ -12,6 +12,7 @@ import { Skeleton } from "$app/components/Skeleton";
 import { Alert } from "$app/components/ui/Alert";
 import { Input } from "$app/components/ui/Input";
 import { Label } from "$app/components/ui/Label";
+import { LinkButton } from "$app/components/ui/LinkButton";
 
 type Step = "setup" | "recovery";
 
@@ -115,14 +116,13 @@ export const AuthenticatorSetup = ({ onCancel }: { onCancel: () => void }) => {
         </div>
         <p className="text-muted">
           Scan this QR code with your authenticator app. Can't scan? Use the{" "}
-          <button
-            type="button"
-            className="cursor-pointer underline all-unset disabled:cursor-default disabled:opacity-50"
+          <LinkButton
+            className="disabled:cursor-default disabled:opacity-50"
             onClick={() => setShowSecret(true)}
             disabled={!setupData}
           >
             setup key
-          </button>{" "}
+          </LinkButton>{" "}
           instead.
         </p>
         <Modal open={showSecret ? setupData !== null : false} title="Setup key" onClose={() => setShowSecret(false)}>

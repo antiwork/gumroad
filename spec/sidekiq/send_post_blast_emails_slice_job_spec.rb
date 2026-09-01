@@ -331,6 +331,44 @@ describe SendPostBlastEmailsSliceJob, :freeze_time do
       $redis.del(RedisKey.blast_sent_emails(blast.id), RedisKey.blast_done_slices(blast.id, partition_key))
     end
 
+    it "strips tags from purchase product names in prepare_recipients" do
+      product = create(:product, user: @seller, name: "<b>Shattered</b> Samples")
+      post = create(:product_post, :published, seller: @seller, link: product, bought_products: [product.unique_permalink])
+      sale = create(:purchase, link: product, seller: @seller, email: "buyer@example.com")
+      blast = create(:blast, :just_requested, post:)
+      member = AudienceMember.filter(
+        seller_id: @seller.id,
+        params: post.audience_members_filter_params,
+        with_ids: true,
+        ids: AudienceMember.where(seller_id: @seller, email: sale.email).pluck(:id)
+      ).select(:id, :email, :purchase_id, :follower_id, :affiliate_id).to_a
+      job = described_class.new
+      job.instance_variable_set(:@post, post)
+      job.instance_variable_set(:@blast, blast)
+
+      recipients = job.send(:prepare_recipients, member)
+
+      expect(recipients.map { _1[:product_name] }).to eq(["Shattered Samples"])
+    end
+
+    it "does not leave SentPostEmail rows when preparing recipients raises" do
+      post = post_with_audience
+      blast = create(:blast, :just_requested, post:)
+      activate_partition(blast)
+      allow_any_instance_of(described_class).to receive(:prepare_recipients).and_raise(NoMethodError, "undefined method 'full_sanitizer'")
+
+      expect do
+        described_class.new.perform(blast.id, partition_key, 0, 1, audience_ids)
+      end.to raise_error(NoMethodError, /full_sanitizer/)
+
+      expect(SentPostEmail.where(post:).count).to eq(0)
+    end
+
+    it "exposes SanitizeHelper class methods used by strip_tags" do
+      expect(described_class).to respond_to(:full_sanitizer)
+      expect(described_class.new.send(:strip_tags, "<b>Hi</b>")).to eq("Hi")
+    end
+
     it "records an empty chunk as done so the blast still completes" do
       blast = create(:blast, :just_requested, post: post_with_audience)
       activate_partition(blast)

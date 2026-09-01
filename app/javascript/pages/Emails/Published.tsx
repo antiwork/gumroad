@@ -14,6 +14,7 @@ import { DeleteEmailModal, EmailSheetActions, LoadMoreButton } from "$app/compon
 import { useEmailSearch } from "$app/components/EmailsPage/useEmailSearch";
 import { Modal } from "$app/components/Modal";
 import { Card, CardContent } from "$app/components/ui/Card";
+import { LinkButton } from "$app/components/ui/LinkButton";
 import { Sheet, SheetHeader } from "$app/components/ui/Sheet";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "$app/components/ui/Table";
 import { useUserAgentInfo } from "$app/components/UserAgent";
@@ -107,9 +108,8 @@ export default function EmailsPublished() {
                       </TableCell>
                       <TableCell className="whitespace-nowrap">
                         {installment.clicked_urls.length > 0 ? (
-                          <button
-                            type="button"
-                            className="cursor-pointer underline decoration-dotted underline-offset-2 all-unset hover:decoration-solid"
+                          <LinkButton
+                            className="decoration-dotted underline-offset-2 hover:decoration-solid"
                             aria-label={`View clicked URLs for ${installment.name}`}
                             onClick={(e) => {
                               // Clicking the count should only open the clicked-URLs
@@ -120,7 +120,7 @@ export default function EmailsPublished() {
                             }}
                           >
                             {formatStatNumber({ value: installment.click_count })}
-                          </button>
+                          </LinkButton>
                         ) : (
                           formatStatNumber({ value: installment.click_count })
                         )}

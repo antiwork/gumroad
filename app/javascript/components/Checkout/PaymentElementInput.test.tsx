@@ -11,9 +11,15 @@ import {
 } from "$app/components/Checkout/payment";
 import { PaymentElementInput, type PaymentElementController } from "$app/components/Checkout/PaymentElementInput";
 
-const elementsMounts = vi.hoisted<{ currencies: string[]; amounts: (number | undefined)[]; unmounts: number }>(() => ({
+const elementsMounts = vi.hoisted<{
+  currencies: string[];
+  amounts: (number | undefined)[];
+  paymentMethodTypes: (string[] | undefined)[];
+  unmounts: number;
+}>(() => ({
   currencies: [],
   amounts: [],
+  paymentMethodTypes: [],
   unmounts: 0,
 }));
 
@@ -56,9 +62,9 @@ vi.mock("@stripe/react-stripe-js", async () => {
       options: {
         currency: string;
         amount?: number;
+        paymentMethodTypes?: string[];
         fonts?: unknown;
         setupFutureUsage?: "off_session";
-        paymentMethodTypes?: string[];
         appearance?: {
           variables?: Record<string, string>;
           rules?: Record<string, Record<string, string>>;
@@ -69,6 +75,7 @@ vi.mock("@stripe/react-stripe-js", async () => {
       React.useEffect(() => {
         elementsMounts.currencies.push(options.currency);
         elementsMounts.amounts.push(options.amount);
+        elementsMounts.paymentMethodTypes.push(options.paymentMethodTypes);
         return () => {
           elementsMounts.unmounts += 1;
         };
@@ -127,6 +134,7 @@ const elementsOptions: PaymentElementConfig = {
 const methodForcedElementsOptions: PaymentElementClientConfirmConfig = {
   stripe_elements_mode: STRIPE_ELEMENTS_MODE_FOR_PAYMENT_INTENT,
   currency: "eur",
+  buyer_currency_presentment: true,
   presentment_amount_cents: 1_500,
   listed_currency_display: { currency: "eur", subunit_to_unit: 100 },
   payment_method_types: ["card", "link", "ideal", "bancontact", "cashapp", "us_bank_account", "klarna", "alipay"],
@@ -173,6 +181,7 @@ describe("PaymentElementInput", () => {
     );
     elementsMounts.currencies = [];
     elementsMounts.amounts = [];
+    elementsMounts.paymentMethodTypes = [];
     elementsMounts.unmounts = 0;
     elementsRender.options = null;
     props.onReady.mockClear();
@@ -347,6 +356,38 @@ describe("PaymentElementInput", () => {
     expect(elementsMounts.unmounts).toBe(1);
     expect(elementsRender.options?.paymentMethodTypes).toEqual(["card", "link"]);
     expect(props.onReady.mock.lastCall?.[0]).toMatchObject({ mountCurrency: "cad" });
+  });
+
+  it("creates the INR remount's Elements with UPI in its paymentMethodTypes, and the USD mount without it", () => {
+    // Stripe rejects a UPI-listed USD session, so UPI must be absent from the USD creation call
+    // and appear only in the options the INR remount's new Elements instance is created with —
+    // filtering in the helper alone is not enough if the provider stops passing the list through.
+    const remountOptions: PaymentElementClientConfirmConfig = {
+      stripe_elements_mode: STRIPE_ELEMENTS_MODE_FOR_PAYMENT_INTENT,
+      currency: "usd",
+      buyer_currency_presentment: true,
+      presentment_amount_cents: null,
+      listed_currency_display: null,
+      payment_method_types: ["card", "link", "cashapp"],
+      inr_local_methods: ["upi"],
+      payment_method_list_token: "signed-list",
+      stripe_link_enabled: true,
+      stripe_connect_account_id: null,
+    };
+    const { rerender } = render(
+      <PaymentElementInput {...props} elementsOptions={remountOptions} amount={1_625} mountCurrency="usd" />,
+    );
+
+    expect(elementsMounts.currencies).toEqual(["usd"]);
+    expect(elementsMounts.paymentMethodTypes).toEqual([["card", "link", "cashapp"]]);
+
+    rerender(<PaymentElementInput {...props} elementsOptions={remountOptions} amount={135_000} mountCurrency="inr" />);
+
+    expect(elementsMounts.currencies).toEqual(["usd", "inr"]);
+    expect(elementsMounts.paymentMethodTypes).toEqual([
+      ["card", "link", "cashapp"],
+      ["card", "link", "upi"],
+    ]);
   });
 
   it("declares off-session future use for recurring UPI registration", () => {

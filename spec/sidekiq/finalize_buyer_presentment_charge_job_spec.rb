@@ -30,6 +30,18 @@ describe FinalizeBuyerPresentmentChargeJob do
     expect(SendChargeReceiptJob.jobs.first["args"]).to eq([charge.id])
   end
 
+  it "polls in_progress purchases that have a PaymentIntent but no stripe_transaction_id" do
+    purchase.update!(stripe_transaction_id: nil)
+    charge.update!(stripe_payment_intent_id: nil, processor_transaction_id: nil)
+    purchase.create_processor_payment_intent!(intent_id: "pi_presentment")
+    sync_service = instance_double(Purchase::SyncStatusWithChargeProcessorService, perform: true)
+    expect(Purchase::SyncStatusWithChargeProcessorService).to receive(:new).with(purchase).and_return(sync_service)
+
+    described_class.new.perform(charge.id)
+
+    expect(SendChargeReceiptJob.jobs.size).to eq(1)
+  end
+
   it "retries with backoff while Stripe settlement data is missing" do
     sync_service = instance_double(Purchase::SyncStatusWithChargeProcessorService, perform: false)
     allow(Purchase::SyncStatusWithChargeProcessorService).to receive(:new).and_return(sync_service)

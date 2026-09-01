@@ -3,6 +3,8 @@ import * as React from "react";
 
 import { classNames } from "$app/utils/classNames";
 
+import { LinkButton } from "$app/components/ui/LinkButton";
+
 // On mobile, the product description sits above the purchase controls in a single-column layout,
 // so a long description buries the price and CTA far down the page. We collapse tall descriptions
 // behind a "Read more" toggle there. The collapse is purely CSS (max-height + overflow), so the
@@ -45,8 +47,8 @@ export const CollapsibleDescription = ({ children }: { children: React.ReactNode
         <div ref={contentRef}>{children}</div>
       </div>
       {isCollapsible ? (
-        <button
-          className="mt-4 inline-flex cursor-pointer items-center gap-1 underline all-unset lg:hidden"
+        <LinkButton
+          className="mt-4 inline-flex items-center gap-1 lg:hidden"
           aria-expanded={isExpanded}
           onClick={() => setIsExpanded(!isExpanded)}
         >
@@ -58,7 +60,7 @@ export const CollapsibleDescription = ({ children }: { children: React.ReactNode
             )}
           />
           {isExpanded ? "Show less" : "Read more"}
-        </button>
+        </LinkButton>
       ) : null}
     </>
   );

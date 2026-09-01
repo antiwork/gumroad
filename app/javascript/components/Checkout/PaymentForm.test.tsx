@@ -294,6 +294,7 @@ describe("PaymentForm validation-failure feedback", () => {
       elements_options: {
         stripe_elements_mode: "payment",
         currency: "inr",
+        buyer_currency_presentment: false,
         presentment_amount_cents: 73_000,
         listed_currency_display: { currency: "inr", subunit_to_unit: 100 },
         payment_method_types: ["card", "upi"],
@@ -341,6 +342,7 @@ describe("PaymentForm validation-failure feedback", () => {
       elements_options: {
         stripe_elements_mode: "payment",
         currency: "usd",
+        buyer_currency_presentment: true,
         presentment_amount_cents: null,
         listed_currency_display: null,
         payment_method_types: ["card"],

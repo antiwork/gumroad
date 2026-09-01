@@ -75,6 +75,7 @@ import { Fieldset, FieldsetTitle } from "$app/components/ui/Fieldset";
 import { InlineList } from "$app/components/ui/InlineList";
 import { Input } from "$app/components/ui/Input";
 import { Label } from "$app/components/ui/Label";
+import { LinkButton } from "$app/components/ui/LinkButton";
 import { PageHeader } from "$app/components/ui/PageHeader";
 import { Pill } from "$app/components/ui/Pill";
 import { Row, RowActions, RowContent, Rows } from "$app/components/ui/Rows";
@@ -997,9 +998,9 @@ const AddressSection = ({
       <div className="mb-4 flex items-center gap-2">
         <h3 className="grow">Shipping address</h3>
         {!isEditing ? (
-          <button className="cursor-pointer text-sm underline all-unset" onClick={() => setIsEditing(true)}>
+          <LinkButton className="text-sm" onClick={() => setIsEditing(true)}>
             Edit
-          </button>
+          </LinkButton>
         ) : null}
       </div>
       {isEditing ? (
@@ -1223,9 +1224,7 @@ const EmailSection = ({
             <section>
               <h5 className="grow font-bold">{currentEmail}</h5>
               {onSave ? (
-                <button className="cursor-pointer underline all-unset" onClick={() => setIsEditing(true)}>
-                  Edit
-                </button>
+                <LinkButton onClick={() => setIsEditing(true)}>Edit</LinkButton>
               ) : (
                 <small className="block text-muted">
                   You cannot change the email of this purchase, because it was made by an existing user. Please ask them
@@ -1509,9 +1508,7 @@ const OptionSection = ({
             ) : (
               <>
                 <h5>{option?.name ?? "None selected"}</h5>
-                <button className="cursor-pointer underline all-unset" onClick={() => setIsEditing(true)}>
-                  Edit
-                </button>
+                <LinkButton onClick={() => setIsEditing(true)}>Edit</LinkButton>
               </>
             )}
           </section>
@@ -1647,9 +1644,7 @@ const LicenseSection = ({
             >
               +
             </Button>
-            <button className="cursor-pointer underline all-unset" onClick={startEditingUses}>
-              Edit
-            </button>
+            <LinkButton onClick={startEditingUses}>Edit</LinkButton>
             {license.uses > 0 ? (
               <Button
                 outline
@@ -1736,9 +1731,7 @@ const SeatSection = ({ seats: currentSeats, onSave }: { seats: number; onSave: (
           <CardContent asChild>
             <section>
               <h5 className="grow font-bold">{seats}</h5>
-              <button className="cursor-pointer underline all-unset" onClick={() => setIsEditing(true)}>
-                Edit
-              </button>
+              <LinkButton onClick={() => setIsEditing(true)}>Edit</LinkButton>
             </section>
           </CardContent>
         )}
@@ -2022,12 +2015,9 @@ const ChargeRow = ({
         <div className="flex items-center gap-2">
           {canPing ? <PingButton purchaseId={purchase.id} /> : null}
           {!purchase.refunded && !purchase.chargedback && purchase.amount_refundable > 0 ? (
-            <button
-              className="cursor-pointer text-sm underline all-unset"
-              onClick={() => setIsRefunding((prev) => !prev)}
-            >
+            <LinkButton className="text-sm" onClick={() => setIsRefunding((prev) => !prev)}>
               Refund Options
-            </button>
+            </LinkButton>
           ) : null}
         </div>
       </div>

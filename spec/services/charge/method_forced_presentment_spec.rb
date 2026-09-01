@@ -80,6 +80,333 @@ describe Charge::MethodForcedPresentment do
     it "returns a quote-derived idempotency key" do
       expect(result.idempotency_key).to eq("buyer-currency-intent-#{charge.external_id}-fxq_forced")
     end
+
+    context "when checkout already displayed a locked quote" do
+      def displayed_quote_token(stripe_fx_quote_id:, fx_rate:, presentment_total_cents:, currency: Currency::EUR,
+                                rounding_delta_cents: 0,
+                                canonical_total_cents: 10_00,
+                                canonical_line_items: [[product.unique_permalink, 10_00]])
+        charge_payload = {
+          "seller_id" => seller.id,
+          "merchant_account_id" => merchant_account.id,
+          "stripe_account_id" => merchant_account.charge_processor_merchant_id,
+          "canonical_total_cents" => canonical_total_cents,
+          "canonical_line_items" => canonical_line_items,
+          "presentment_total_cents" => presentment_total_cents,
+          "charge_canonical_total_cents" => canonical_total_cents,
+          "charge_canonical_line_items" => canonical_line_items,
+          "charge_presentment_total_cents" => presentment_total_cents,
+          "rounding_delta_cents" => rounding_delta_cents,
+          "stripe_fx_quote_id" => stripe_fx_quote_id,
+          "stripe_fx_quote_expires_at" => 30.minutes.from_now.iso8601,
+          "fx_rate" => fx_rate.to_s("F"),
+        }
+        Rails.application.message_verifier(Checkout::BuyerCurrencyQuote::TOKEN_PURPOSE).generate(
+          charge_payload.merge("currency" => currency, "charges" => [charge_payload])
+        )
+      end
+
+      it "reuses the displayed quote instead of minting a second rate" do
+        token = displayed_quote_token(stripe_fx_quote_id: "fxq_displayed", fx_rate: BigDecimal("1.25"), presentment_total_cents: 8_00)
+        expect(StripeFxQuote).not_to receive(:create)
+
+        reused = described_class.new(charge:,
+                                     order:,
+                                     seller:,
+                                     merchant_account:,
+                                     purchases: [purchase],
+                                     amount_cents: 10_00,
+                                     gumroad_amount_cents: 3_00,
+                                     payment_method_type:,
+                                     params: { buyer_currency_quote: token }).perform
+
+        expect(reused).to have_attributes(presentment_total_cents: 8_00,
+                                          presentment_currency: Currency::EUR,
+                                          stripe_fx_quote_id: "fxq_displayed")
+        expect(charge.reload.charge_presentment.stripe_fx_quote_id).to eq("fxq_displayed")
+      end
+
+      it "honors a displayed quote for a multi-line USD cart" do
+        other_product = create(:product, user: seller, price_currency_type: Currency::USD, price_cents: 5_00)
+        other_purchase = create(:purchase,
+                                link: other_product,
+                                seller:,
+                                merchant_account:,
+                                price_cents: 5_00,
+                                total_transaction_cents: 5_00)
+        canonical_line_items = [
+          [product.unique_permalink, 10_00],
+          [other_product.unique_permalink, 5_00],
+        ]
+        token = displayed_quote_token(
+          stripe_fx_quote_id: "fxq_multi",
+          fx_rate: BigDecimal("1.25"),
+          presentment_total_cents: 12_00,
+          canonical_total_cents: 15_00,
+          canonical_line_items:
+        )
+        charge.update!(amount_cents: 15_00, gumroad_amount_cents: 4_50)
+
+        multi_line = described_class.new(
+          charge:,
+          order:,
+          seller:,
+          merchant_account:,
+          purchases: [purchase, other_purchase],
+          amount_cents: 15_00,
+          gumroad_amount_cents: 4_50,
+          payment_method_type: "card",
+          forced_currency: Currency::EUR,
+          params: { buyer_currency_quote: token, payment_element_mount_currency: Currency::EUR }
+        ).perform
+
+        expect(multi_line).to have_attributes(presentment_total_cents: 12_00,
+                                              presentment_currency: Currency::EUR,
+                                              stripe_fx_quote_id: "fxq_multi")
+        expect([purchase, other_purchase].map { _1.reload.purchase_presentment.presentment_total_cents }.sum).to eq(12_00)
+      end
+
+      it "books an upward price-ending adjustment to Gumroad and persists the delta" do
+        token = displayed_quote_token(
+          stripe_fx_quote_id: "fxq_rounded_up",
+          fx_rate: BigDecimal("1.25"),
+          presentment_total_cents: 8_01,
+          rounding_delta_cents: 1
+        )
+
+        rounded = described_class.new(charge:,
+                                      order:,
+                                      seller:,
+                                      merchant_account:,
+                                      purchases: [purchase],
+                                      amount_cents: 10_00,
+                                      gumroad_amount_cents: 3_00,
+                                      payment_method_type:,
+                                      params: { buyer_currency_quote: token }).perform
+
+        expect(rounded).to have_attributes(presentment_total_cents: 8_01,
+                                           presentment_gumroad_amount_cents: 2_41)
+        expect(charge.reload.charge_presentment).to have_attributes(rounding_delta_cents: 1,
+                                                                    presentment_total_cents: 8_01,
+                                                                    presentment_gumroad_amount_cents: 2_41)
+        expect(purchase.reload.purchase_presentment).to have_attributes(presentment_total_cents: 8_01,
+                                                                        presentment_gumroad_amount_cents: 2_41)
+      end
+
+      it "books a downward price-ending adjustment to Gumroad" do
+        allow(purchase).to receive(:gumroad_percentage_fee_cents).and_return(2_00)
+        token = displayed_quote_token(
+          stripe_fx_quote_id: "fxq_rounded_down",
+          fx_rate: BigDecimal("1.25"),
+          presentment_total_cents: 7_99,
+          rounding_delta_cents: -1
+        )
+
+        rounded = described_class.new(charge:,
+                                      order:,
+                                      seller:,
+                                      merchant_account:,
+                                      purchases: [purchase],
+                                      amount_cents: 10_00,
+                                      gumroad_amount_cents: 3_00,
+                                      payment_method_type:,
+                                      params: { buyer_currency_quote: token }).perform
+
+        expect(rounded).to have_attributes(presentment_total_cents: 7_99,
+                                           presentment_gumroad_amount_cents: 2_39)
+        expect(charge.reload.charge_presentment).to have_attributes(rounding_delta_cents: -1,
+                                                                    presentment_gumroad_amount_cents: 2_39)
+      end
+
+      it "fails closed when Gumroad's current fee can no longer absorb a round-down" do
+        allow(purchase).to receive(:gumroad_percentage_fee_cents).and_return(0)
+        token = displayed_quote_token(
+          stripe_fx_quote_id: "fxq_unfunded_round_down",
+          fx_rate: BigDecimal("1.25"),
+          presentment_total_cents: 7_99,
+          rounding_delta_cents: -1
+        )
+        service = described_class.new(charge:,
+                                      order:,
+                                      seller:,
+                                      merchant_account:,
+                                      purchases: [purchase],
+                                      amount_cents: 10_00,
+                                      gumroad_amount_cents: 3_00,
+                                      payment_method_type:,
+                                      params: { buyer_currency_quote: token })
+
+        expect(service.perform).to be_nil
+        expect(service.failure_reason).to eq(described_class::BUYER_CURRENCY_QUOTE_INVALID)
+        expect(charge.reload.charge_presentment).to be_nil
+      end
+
+      it "fails closed when the displayed quote does not match this charge" do
+        token = displayed_quote_token(stripe_fx_quote_id: "fxq_stale", fx_rate: BigDecimal("1.25"), presentment_total_cents: 8_00)
+        expect(StripeFxQuote).not_to receive(:create)
+
+        mismatched = described_class.new(charge:,
+                                         order:,
+                                         seller:,
+                                         merchant_account:,
+                                         purchases: [purchase],
+                                         amount_cents: 11_00,
+                                         gumroad_amount_cents: 3_00,
+                                         payment_method_type:,
+                                         params: { buyer_currency_quote: token }).perform
+
+        expect(mismatched).to be_nil
+        expect(charge.reload.charge_presentment).to be_nil
+      end
+
+      it "fails closed when the quote currency differs from the Element mount currency" do
+        token = displayed_quote_token(
+          stripe_fx_quote_id: "fxq_wrong_currency",
+          fx_rate: BigDecimal("1.25"),
+          presentment_total_cents: 8_00
+        )
+        service = described_class.new(
+          charge:,
+          order:,
+          seller:,
+          merchant_account:,
+          purchases: [purchase],
+          amount_cents: 10_00,
+          gumroad_amount_cents: 3_00,
+          payment_method_type: "card",
+          forced_currency: Currency::CAD,
+          params: { buyer_currency_quote: token, payment_element_mount_currency: Currency::CAD }
+        )
+
+        expect(service.perform).to be_nil
+        expect(service.failure_reason).to eq(described_class::BUYER_CURRENCY_QUOTE_INVALID)
+        expect(charge.reload.charge_presentment).to be_nil
+      end
+
+      it "fails closed when UPI is selected after its launch flag is deactivated" do
+        allow(Stripe).to receive(:api_key).and_return("sk_live_currency")
+        token = displayed_quote_token(
+          stripe_fx_quote_id: "fxq_upi_stale_tab",
+          fx_rate: BigDecimal("1.25"),
+          presentment_total_cents: 8_00,
+          currency: Currency::INR
+        )
+        expect(StripeFxQuote).not_to receive(:create)
+
+        service = described_class.new(
+          charge:,
+          order:,
+          seller:,
+          merchant_account:,
+          purchases: [purchase],
+          amount_cents: 10_00,
+          gumroad_amount_cents: 3_00,
+          payment_method_type: "upi",
+          params: { buyer_currency_quote: token, payment_element_mount_currency: Currency::INR }
+        )
+
+        expect(service.perform).to be_nil
+        expect(service.failure_reason).to eq(described_class::BUYER_CURRENCY_QUOTE_INVALID)
+        expect(charge.reload.charge_presentment).to be_nil
+      end
+
+      it "reuses a displayed UPI quote while the launch flag is on" do
+        allow(Stripe).to receive(:api_key).and_return("sk_live_currency")
+        Feature.activate_user(:checkout_local_method_upi, seller)
+        token = displayed_quote_token(
+          stripe_fx_quote_id: "fxq_upi_live",
+          fx_rate: BigDecimal("1.25"),
+          presentment_total_cents: 8_00,
+          currency: Currency::INR
+        )
+        expect(StripeFxQuote).not_to receive(:create)
+
+        reused = described_class.new(
+          charge:,
+          order:,
+          seller:,
+          merchant_account:,
+          purchases: [purchase],
+          amount_cents: 10_00,
+          gumroad_amount_cents: 3_00,
+          payment_method_type: "upi",
+          params: { buyer_currency_quote: token, payment_element_mount_currency: Currency::INR }
+        ).perform
+
+        expect(reused).to have_attributes(presentment_total_cents: 8_00,
+                                          presentment_currency: Currency::INR,
+                                          stripe_fx_quote_id: "fxq_upi_live")
+      ensure
+        Feature.deactivate_user(:checkout_local_method_upi, seller)
+      end
+
+      it "still reuses a displayed quote for a card remount when UPI is not launched" do
+        allow(Stripe).to receive(:api_key).and_return("sk_live_currency")
+        token = displayed_quote_token(
+          stripe_fx_quote_id: "fxq_card_inr",
+          fx_rate: BigDecimal("1.25"),
+          presentment_total_cents: 8_00,
+          currency: Currency::INR
+        )
+        expect(StripeFxQuote).not_to receive(:create)
+
+        reused = described_class.new(
+          charge:,
+          order:,
+          seller:,
+          merchant_account:,
+          purchases: [purchase],
+          amount_cents: 10_00,
+          gumroad_amount_cents: 3_00,
+          payment_method_type: "card",
+          forced_currency: Currency::INR,
+          params: { buyer_currency_quote: token, payment_element_mount_currency: Currency::INR }
+        ).perform
+
+        expect(reused).to have_attributes(presentment_total_cents: 8_00,
+                                          presentment_currency: Currency::INR,
+                                          stripe_fx_quote_id: "fxq_card_inr")
+      end
+    end
+
+    context "when UPI is selected without a displayed quote token" do
+      let(:payment_method_type) { "upi" }
+
+      before { Feature.activate_user(:checkout_local_method_upi, seller) }
+      after { Feature.deactivate_user(:checkout_local_method_upi, seller) }
+
+      it "fails closed instead of minting a second rate" do
+        expect(StripeFxQuote).not_to receive(:create)
+
+        expect(result).to be_nil
+        expect(charge.reload.charge_presentment).to be_nil
+      end
+    end
+
+    context "when the Payment Element remounted in INR without a quote token" do
+      subject(:result) do
+        described_class.new(charge:,
+                            order:,
+                            seller:,
+                            merchant_account:,
+                            purchases: [purchase],
+                            amount_cents: 10_00,
+                            gumroad_amount_cents: 3_00,
+                            payment_method_type: "card",
+                            forced_currency: Currency::INR,
+                            params: { payment_element_mount_currency: Currency::INR }).perform
+      end
+
+      before { Feature.activate_user(:checkout_local_method_upi, seller) }
+      after { Feature.deactivate_user(:checkout_local_method_upi, seller) }
+
+      it "fails closed instead of minting a second rate" do
+        expect(StripeFxQuote).not_to receive(:create)
+
+        expect(result).to be_nil
+        expect(charge.reload.charge_presentment).to be_nil
+      end
+    end
   end
 
   describe "product priced in the forced currency (direct listed-amount case)" do

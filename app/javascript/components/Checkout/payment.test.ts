@@ -1,9 +1,11 @@
+import typia from "typia";
 import { describe, expect, it, vi } from "vitest";
 
 import type { SurchargesResponse } from "$app/data/customer_surcharge";
 import type { CurrencyCode } from "$app/utils/currency";
 
 import {
+  canDisplayBuyerCurrencyQuote,
   canUseStripePaymentElement,
   canUseStripePaymentElementClientConfirm,
   computeTip,
@@ -18,6 +20,7 @@ import {
   getStripePaymentElementPresentment,
   isCardReadyToPay,
   isSubmitDisabled,
+  paymentMethodTypesForMountCurrency,
   reduceCheckoutState,
   requiresPaymentElementReusablePaymentMethod,
   requiresReusablePaymentMethodForCardCollection,
@@ -104,12 +107,23 @@ const paymentElementClientConfirmConfig: CheckoutPaymentConfig = {
   elements_options: {
     stripe_elements_mode: STRIPE_ELEMENTS_MODE_FOR_PAYMENT_INTENT,
     currency: "usd",
+    buyer_currency_presentment: false,
     presentment_amount_cents: null,
     listed_currency_display: null,
     payment_method_types: ["card"],
     payment_method_list_token: null,
     stripe_link_enabled: false,
     stripe_connect_account_id: null,
+  },
+};
+
+const buyerCurrencyClientConfirmConfig: CheckoutPaymentConfig = {
+  ...paymentElementClientConfirmConfig,
+  disable_wallets: true,
+  flat_payment_methods: true,
+  elements_options: {
+    ...paymentElementClientConfirmConfig.elements_options,
+    buyer_currency_presentment: true,
   },
 };
 
@@ -1311,6 +1325,20 @@ describe("client-confirm buyer-currency quote", () => {
     );
   });
 
+  it("keeps legacy client-confirm configs on canonical USD when a quote loads", () => {
+    const legacyElementsOptions = { ...paymentElementClientConfirmConfig.elements_options };
+    delete legacyElementsOptions.buyer_currency_presentment;
+    const s = state({
+      checkoutPayment: { ...paymentElementClientConfirmConfig, elements_options: legacyElementsOptions },
+      surcharges: quotedSurcharges,
+    });
+
+    expect(canDisplayBuyerCurrencyQuote(s)).toBe(false);
+    expect(getStripePaymentElementPresentment(s)).toBeNull();
+    expect(getStripePaymentElementAmount(s)).toBe(2_013);
+    expect(getStripePaymentElementMountCurrency(s)).toBe("usd");
+  });
+
   it("holds the method-forced mount while the replacement quote is loading", () => {
     const s = state({
       checkoutPayment: methodForcedEurConfig,
@@ -1450,10 +1478,34 @@ describe("buyer-currency presentment lane", () => {
     expect(getStripePaymentElementMountCurrency(s)).toBe("usd");
   });
 
-  it("ignores the quote when the server did not choose the presentment lane", () => {
+  it("ignores the quote on a server-confirm element that did not choose the presentment lane", () => {
     const s = state({ surcharges: loadedSurchargesWithQuote });
     expect(getStripePaymentElementPresentment(s)).toBeNull();
     expect(getStripePaymentElementAmount(s)).toBe(1_300);
+  });
+
+  it("remounts a client-confirm element in the quoted currency when the server marks it or a later edit acquires a quote", () => {
+    const s = state({
+      checkoutPayment: buyerCurrencyClientConfirmConfig,
+      surcharges: loadedSurchargesWithQuote,
+    });
+    expect(getStripePaymentElementPresentment(s)).toEqual({ currency: "cad", amountCents: 625 });
+    expect(getStripePaymentElementMountCurrency(s)).toBe("cad");
+
+    const unmarked = state({
+      checkoutPayment: paymentElementClientConfirmConfig,
+      surcharges: loadedSurchargesWithQuote,
+    });
+    expect(getStripePaymentElementPresentment(unmarked)).toEqual({ currency: "cad", amountCents: 625 });
+    expect(getStripePaymentElementMountCurrency(unmarked)).toBe("cad");
+  });
+
+  it("still displays a CardElement surcharge quote; willSaveCard is what suppresses save-card USD", () => {
+    const s = state({
+      checkoutPayment: cardElementConfig,
+      surcharges: loadedSurchargesWithQuote,
+    });
+    expect(canDisplayBuyerCurrencyQuote(s)).toBe(true);
   });
 
   it("returns null until surcharges load", () => {
@@ -1484,6 +1536,12 @@ describe("buyer-currency presentment lane", () => {
         const s = state({ checkoutPayment: buyerCurrencyPresentmentPaymentElementConfig, surcharges });
         expect(getStripePaymentElementMountCurrency(s)).toBeNull();
       }
+    });
+
+    it("keeps a client-confirm quote-presentment mount while a surcharge refresh is in flight", () => {
+      const s = state({ checkoutPayment: buyerCurrencyClientConfirmConfig, surcharges: { type: "pending" } });
+
+      expect(getStripePaymentElementMountCurrency(s)).toBeNull();
     });
 
     it("mounts canonical USD when a loaded surcharge response has no quote", () => {
@@ -2627,13 +2685,52 @@ describe("reduceCheckoutState", () => {
       const next = reduceCheckoutState(loading, {
         type: "surcharges-fetch-succeeded",
         requestId: 1,
-        result: quoted("usd", ["usd", "cad"]),
+        result: quoted("usd", ["usd", "cad", "gbp"]),
       });
 
       expect(next.buyerCurrency).toBe("cad");
       expect(next.tip).toEqual(exactTip);
       expect(next.surcharges).toEqual({ type: "pending" });
       expect(next.buyerCurrencyRemint?.previousCurrency).toBe("cad");
+    });
+
+    it("restores the previous currency when the menu keeps a currency that has no usable quote", () => {
+      const loading = state({
+        buyerCurrency: "cad",
+        buyerCurrencyRemint: { surcharges: quoted("usd", ["usd", "cad"]), previousCurrency: "usd" },
+        surcharges: { type: "loading", requestId: 1, abort: () => {} },
+      });
+
+      const next = reduceCheckoutState(loading, {
+        type: "surcharges-fetch-succeeded",
+        requestId: 1,
+        result: quoted("usd", ["usd", "cad"]),
+      });
+
+      expect(next.unavailableBuyerCurrency).toBe("cad");
+      expect(next.buyerCurrency).toBe("usd");
+      expect(next.surcharges.type).toBe("loaded");
+      expect(next.buyerCurrencyRemint).toBeNull();
+    });
+
+    it("falls back to USD when the currency restored after a refusal is also unquotable", () => {
+      const loading = state({
+        buyerCurrency: "cad",
+        unavailableBuyerCurrency: "gbp",
+        buyerCurrencyRemint: { surcharges: quoted("cad", ["usd", "cad", "gbp"]), previousCurrency: "cad" },
+        surcharges: { type: "loading", requestId: 1, abort: () => {} },
+      });
+
+      const next = reduceCheckoutState(loading, {
+        type: "surcharges-fetch-succeeded",
+        requestId: 1,
+        result: quoted("usd", ["usd", "cad", "gbp"]),
+      });
+
+      expect(next.unavailableBuyerCurrency).toBe("gbp");
+      expect(next.buyerCurrency).toBe("usd");
+      expect(next.surcharges.type).toBe("loaded");
+      expect(next.buyerCurrencyRemint).toBeNull();
     });
 
     it("keeps the canonical response when the restored selection is US dollars", () => {
@@ -3271,5 +3368,40 @@ describe("counting submits refused by client-side validation", () => {
 
     expect(refused.status).toEqual({ type: "input", errors: new Set(["email"]) });
     expect(refused.validationFailedCount).toBe(1);
+  });
+});
+
+describe("paymentMethodTypesForMountCurrency", () => {
+  const listedEur = {
+    payment_method_types: ["card", "link", "ideal", "bancontact"],
+    inr_local_methods: ["upi"],
+  };
+
+  it("keeps iDEAL on an EUR mount and drops it on a CAD remount", () => {
+    expect(paymentMethodTypesForMountCurrency(listedEur, "eur")).toEqual(["card", "link", "ideal", "bancontact"]);
+    expect(paymentMethodTypesForMountCurrency(listedEur, "cad")).toEqual(["card", "link"]);
+  });
+
+  it("adds UPI only after an INR remount and drops Cash App", () => {
+    const usdMount = {
+      payment_method_types: ["card", "link", "cashapp"],
+      inr_local_methods: ["upi"],
+    };
+
+    expect(paymentMethodTypesForMountCurrency(usdMount, "usd")).toEqual(["card", "link", "cashapp"]);
+    expect(paymentMethodTypesForMountCurrency(usdMount, "inr")).toEqual(["card", "link", "upi"]);
+  });
+});
+
+describe("CheckoutPaymentConfig wire compatibility", () => {
+  it("accepts a client-confirm cart-save response from a server that predates buyer_currency_presentment", () => {
+    // Show.tsx re-validates the cart PATCH response with typia.assert. During a rolling deploy
+    // that response can come from a server that does not emit the field yet; requiring it would
+    // strand the checkout on a stale configuration with Pay disabled.
+    const { buyer_currency_presentment: _omitted, ...legacyElementsOptions } =
+      paymentElementClientConfirmConfig.elements_options;
+    const legacy = { ...paymentElementClientConfirmConfig, elements_options: legacyElementsOptions };
+
+    expect(typia.assert<CheckoutPaymentConfig>(legacy)).toEqual(legacy);
   });
 });

@@ -34,6 +34,7 @@ import { ProgressPie } from "$app/components/ProgressPie";
 import { showAlert } from "$app/components/server-components/Alert";
 import { Fieldset, FieldsetDescription } from "$app/components/ui/Fieldset";
 import { Input } from "$app/components/ui/Input";
+import { LinkButton } from "$app/components/ui/LinkButton";
 import { Row, RowActions, RowContent, RowDetails, Rows } from "$app/components/ui/Rows";
 import { useOnOutsideClick } from "$app/components/useOnOutsideClick";
 import { useReactNativeMessage } from "$app/components/useReactNativeMessage";
@@ -766,8 +767,7 @@ const VideoEmbedPreview = ({
         }}
       />
       <TrackClick eventName="watch" file={file} resumeAt={resumeLocation || 0} contentLength={file.duration}>
-        <button
-          className="cursor-pointer underline all-unset"
+        <LinkButton
           style={{
             position: "absolute",
             top: "50%",
@@ -779,7 +779,7 @@ const VideoEmbedPreview = ({
           aria-label="Watch"
         >
           {isFetchingMediaUrls ? <LoadingSpinner className="size-16" /> : <PlayVideoIcon />}
-        </button>
+        </LinkButton>
       </TrackClick>
     </figure>
   );

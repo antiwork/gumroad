@@ -8,5 +8,7 @@
   </p>
   You can also click the following button to continue with your login.
   <%= link_to "Login", verify_two_factor_authentication_url(token: @authentication_token, user_id: @user.encrypted_external_id, format: :html), class: "button primary" %>
-  This authentication token and login link will expire in <%= distance_of_time_in_words(TwoFactorAuthentication::TOKEN_VALIDITY) %>.
+  <p>
+    This authentication token and login link will expire in <%= distance_of_time_in_words(TwoFactorAuthentication::TOKEN_VALIDITY) %>.
+  </p>
 </div>

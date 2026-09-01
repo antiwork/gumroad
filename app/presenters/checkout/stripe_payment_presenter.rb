@@ -33,7 +33,7 @@ class Checkout::StripePaymentPresenter
   # threaded into the deferred PaymentIntent by Order::PreparePaymentIntentService, so the Payment Element
   # and the intent cannot drift (Stripe rejects a payment_method_types-scoped ConfirmationToken against a
   # mismatched intent). Direct-listed and method-forced surfaces mount in their listed currency;
-  # every other client-confirm checkout stays in USD.
+  # other client-confirm checkouts start in USD and remount after the quote.
   CLIENT_CONFIRM_CURRENCY = "usd"
 
   attr_reader :cart, :add_products, :clear_cart, :saved_credit_card, :ip
@@ -64,10 +64,16 @@ class Checkout::StripePaymentPresenter
       return payment_element_props(STRIPE_ELEMENTS_MODE_FOR_SETUP_INTENT)
     end
 
-    # Prefer the dedicated server-confirm quote lane when the candidate is known at page load.
-    # Client-confirm can honor a quote selected later in the browser, but it must remount and
-    # narrow its original method list to do so. Own-currency method-forced carts are not
-    # candidates and fall through.
+    # Client-confirm can remount a single USD-priced quote (INR UPI, CAD card, etc.).
+    # Quoted carts it cannot remount — non-USD listings, multi-line USD — stay on the
+    # server-confirm presentment element: prepare honors that quote, and stealing them
+    # onto unmarked client-confirm hid the quote while the currency picker stayed on.
+    # Own-currency method-forced / unquoted carts still take client-confirm.
+    if client_confirm_eligible?
+      quoted = buyer_currency_presentment_element_shape?(checkout_items)
+      return client_confirm_props unless quoted && !client_confirm_quote_remount?
+    end
+
     if buyer_currency_presentment_element_shape?(checkout_items)
       return payment_element_props(
         STRIPE_ELEMENTS_MODE_FOR_PAYMENT_INTENT,
@@ -80,8 +86,6 @@ class Checkout::StripePaymentPresenter
     # one-time carts are one-time, and the UPI Autopay membership shape is paid upfront (it
     # excludes preorders and free trials), registering reuse on a PaymentIntent rather than a
     # SetupIntent.
-    return client_confirm_props if client_confirm_eligible?
-
     payment_element_props(STRIPE_ELEMENTS_MODE_FOR_PAYMENT_INTENT)
   end
 
@@ -140,6 +144,9 @@ class Checkout::StripePaymentPresenter
           # the browser mounts canonical USD exactly as if this flag were false.
           buyer_currency_presentment:,
           payment_method_types: ["card"],
+          # UPI confirm is the deferred client-confirm path. Advertising it here mounts
+          # a method this manual-creation card Element cannot charge.
+          inr_local_methods: [],
           payment_method_creation: "manual",
           # Link auto-enables with the Payment Element: it's inline (PaymentMethod-mode here, no
           # return-page/webhook dependency), and Stripe's dashboard payment-method settings remain
@@ -261,33 +268,40 @@ class Checkout::StripePaymentPresenter
       else
         CLIENT_CONFIRM_CURRENCY
       end
+      quote_remount = client_confirm_quote_remount?
+      inr_local_method_types = (quote_remount || listed_currency) ? inr_local_methods : []
+      # Never list a forced-currency method on an element that is not mounted in that
+      # currency — Stripe rejects the whole session, card included. UPI for a USD-priced
+      # cart is added only after the browser remounts in INR (inr_local_methods).
+      payment_method_types = Array(payment_method_types).reject do |payment_method_type|
+        forced_currency = Checkout::BuyerCurrencyEligibility.forced_currency_for(payment_method_type)
+        forced_currency.present? && forced_currency != element_currency
+      end
       # Listed-currency Elements stay wallet-free until their sheet can be guaranteed to carry
       # the same final tax/tip/shipping total as the deferred intent.
-      disable_wallets = listed_currency || items.any? { buyer_currency_presentment_candidate?(_1) }
+      disable_wallets = listed_currency || items.any? { buyer_currency_presentment_candidate?(_1) } || inr_local_method_types.any? || quote_remount
       if listed_currency
         # The ConfirmationToken inherits this currency and method set. Keep only methods the
         # matching non-USD intent can accept; prepare applies the same restrictions.
         payment_method_types -= Checkout::PaymentMethodResolver::US_LOCKED_PAYMENT_METHOD_TYPES
         payment_method_types -= [Checkout::PaymentMethodResolver::KLARNA_PAYMENT_METHOD_TYPE,
                                  Checkout::PaymentMethodResolver::ALIPAY_PAYMENT_METHOD_TYPE]
-        payment_method_types = payment_method_types.reject do |payment_method_type|
-          forced_currency = Checkout::BuyerCurrencyEligibility.forced_currency_for(payment_method_type)
-          forced_currency.present? && forced_currency != element_currency
-        end
       end
       signed_listed_rate = listed_currency ? listed_lane_rate(items) : nil
       elements_options = {
         stripe_elements_mode: STRIPE_ELEMENTS_MODE_FOR_PAYMENT_INTENT,
         currency: element_currency,
+        buyer_currency_presentment: quote_remount,
         presentment_amount_cents: listed_currency ? listed_element_amount_cents : nil,
         listed_currency_display: listed_currency ? {
           currency: element_currency,
           subunit_to_unit: subunit_to_unit(element_currency),
         } : nil,
         payment_method_types:,
-        payment_method_list_token: Checkout::PaymentMethodListToken.issue(
-          payment_method_types:,
-          sellers:,
+        inr_local_methods: inr_local_method_types,
+        payment_method_list_token: issued_payment_method_list_token(
+          payment_method_types,
+          inr_local_method_types:,
           direct_listed_currency: listed_currency ? element_currency : nil,
           direct_listed_currency_rate: signed_listed_rate,
         ),
@@ -388,6 +402,73 @@ class Checkout::StripePaymentPresenter
       resolution.payment_method_types.any? do |payment_method_type|
         Checkout::BuyerCurrencyEligibility.forced_currency_for(payment_method_type) == forced_currency
       end
+    end
+
+    # Methods a quoted remount can list. Cash App / ACH / Klarna / Alipay are USD-only;
+    # leaving them on a CAD/INR Element rejects the whole session, card included.
+    def quoted_remount_payment_method_types(payment_method_types)
+      payment_method_types -
+        Checkout::PaymentMethodResolver::US_LOCKED_PAYMENT_METHOD_TYPES -
+        [Checkout::PaymentMethodResolver::KLARNA_PAYMENT_METHOD_TYPE,
+         Checkout::PaymentMethodResolver::ALIPAY_PAYMENT_METHOD_TYPE]
+    end
+
+    def issued_payment_method_list_token(payment_method_types, inr_local_method_types: inr_local_methods, direct_listed_currency: nil, direct_listed_currency_rate: nil)
+      quoted_types = quoted_remount_payment_method_types(payment_method_types)
+      inr_types = (quoted_types + inr_local_method_types).uniq
+      Checkout::PaymentMethodListToken.issue(
+        payment_method_types:,
+        sellers:,
+        quoted_payment_method_types: quoted_types,
+        inr_payment_method_types: inr_local_method_types.present? ? inr_types : nil,
+        direct_listed_currency:,
+        direct_listed_currency_rate:,
+      )
+    end
+
+    # UPI on a USD-priced cart cannot ride the USD Payment Element (Stripe rejects the
+    # session). After the surcharge quote remounts the element in INR, the browser adds
+    # these methods. Recurring/commission/setup carts stay off — they cannot take one-shot UPI.
+    def inr_local_methods
+      return [] unless sellers.one?
+      return [] unless buyer_country == Checkout::PaymentMethodResolver::IN_ALPHA2
+      return [] if items.any? { _1[:recurrence].present? || _1[:pay_in_installments] || _1[:native_type] == Link::NATIVE_TYPE_COMMISSION }
+      return [] if setup_for_future_charges_without_charging?(items)
+      seller = sellers.first
+      return [] unless Checkout::BuyerCurrencyEligibility.seller_enabled?(seller)
+      return [] unless Checkout::BuyerCurrencyEligibility.stripe_test_mode? ||
+                       Checkout::BuyerCurrencyEligibility.local_method_launched?("upi", seller)
+
+      inr_method_resolution.payment_method_types & Checkout::PaymentMethodResolver::IN_LOCKED_PAYMENT_METHOD_TYPES
+    end
+
+    def inr_method_resolution
+      Checkout::PaymentMethodResolver.new(
+        sellers: [sellers.first],
+        recurring: false,
+        commission: false,
+        setup_for_future: false,
+        buyer_country:,
+        ppp_discounted: ppp_verification_applies?,
+        cart_product_currency: Currency::INR,
+        cart_total_usd_cents: nil,
+        recurring_upi_registration: false
+      ).resolve
+    end
+
+    # Client-confirm remounts the element in the quoted buyer currency. Wallets stay off
+    # because their sheet cannot carry that locked total.
+    def client_confirm_quote_remount?
+      return false unless sellers.one? && sellers.all? { Checkout::BuyerCurrencyEligibility.seller_enabled?(_1) }
+
+      currency = buyer_currency_for_ip(ip).to_s.downcase.presence
+      return false if currency.blank? || currency == Currency::USD
+      return false unless StripeChargeProcessor.charge_minor_units_compatible?(currency)
+
+      # Prepare can honor the displayed quote today only for a single USD-priced line. Multi-line
+      # USD carts and non-USD listing quotes still need the per-line quote basis work before a
+      # single client-confirm intent can safely leave USD.
+      items.one? && items.first[:product_currency] == Currency::USD
     end
 
     def recurring_upi_registration_shape?(items)

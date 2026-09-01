@@ -40,7 +40,9 @@ class Order::PreparePaymentIntentService
     mark_free_or_test_purchases_successful
     return responses if purchases_to_charge.empty?
     return responses if block_invalid_buyer_currency_quote_signature
+    return responses if block_unexpected_buyer_currency_quote
     return responses if block_multiple_sellers
+    return responses if block_unverifiable_remount_method_list
     return responses if block_ineligible_for_client_confirm
     return responses if block_purchases_with_blocked_customer_emails
 
@@ -115,6 +117,30 @@ class Order::PreparePaymentIntentService
       true
     end
 
+    # A remounted USD-priced cart's method list lives on the signed token (`quoted_types` /
+    # `inr_types`). Re-resolving from the USD cart cannot reconstruct it. Direct-listed and
+    # method-forced listings already priced in the mount currency can still re-resolve.
+    def block_unverifiable_remount_method_list
+      reported = reported_element_mount_currency
+      return false if reported.blank? || reported == Checkout::StripePaymentPresenter::CLIENT_CONFIRM_CURRENCY
+      return false if issued_payment_method_types.present?
+      return false if remount_method_list_reconstructable_from_cart?(reported)
+
+      Rails.logger.error("Client-confirm prepare cannot reconstruct a signed #{reported} method list for order #{order.id}; failing closed rather than re-resolving the USD cart")
+      fail_purchases_with(GENERIC_CHARGE_ERROR)
+      true
+    end
+
+    # Cart shape alone answers reconstructability. The direct-listed eligibility decision is
+    # not usable this early: merchant accounts resolve later (resolve_merchant_account_and_fees),
+    # so consulting it here reads a nil account, refuses at :unsupported_processor, and — being
+    # memoized — would poison every later use. A cart priced in the mount currency re-resolves
+    # its method list; when direct-listed eligibility then refuses, the presentment gates
+    # downstream still fail the order closed.
+    def remount_method_list_reconstructable_from_cart?(currency)
+      charge_purchases.map { _1.link.price_currency_type.to_s.downcase }.uniq == [currency]
+    end
+
     # Reject malformed quote tokens before making a Stripe request. Full seller, account,
     # currency, and amount verification runs after the purchases and fees are resolved.
     def block_invalid_buyer_currency_quote_signature
@@ -123,6 +149,23 @@ class Order::PreparePaymentIntentService
       return false if Checkout::BuyerCurrencyQuote.quoted_currency_hint(quote_token).present?
 
       Rails.logger.error("Client-confirm prepare received an invalid buyer_currency_quote for order #{order.id}")
+      purchases_to_charge.each { |purchase| purchase.error_code = PurchaseErrorCode::BUYER_CURRENCY_QUOTE_INVALID }
+      fail_purchases_with(Charge::CreateService::BUYER_CURRENCY_QUOTE_INVALID_MESSAGE)
+      true
+    end
+
+    # The browser sends a buyer-currency quote token when checkout displayed local-currency
+    # totals. A USD-mounted client-confirm Element cannot honor that token, so accepting one
+    # would charge a different amount than the buyer saw. An Element remounted in a forced
+    # currency (USD listing + UPI in INR) *can* honor it — prepare must reuse that quote
+    # rather than minting a second rate. Failing with the quote-invalid error code makes the
+    # checkout cancel, re-fetch surcharges, and re-run the display gates.
+    def block_unexpected_buyer_currency_quote
+      return false if params[:buyer_currency_quote].blank?
+      reported = reported_element_mount_currency
+      return false if reported.present? && reported != Checkout::StripePaymentPresenter::CLIENT_CONFIRM_CURRENCY
+
+      Rails.logger.error("Client-confirm prepare received a buyer_currency_quote on a USD mount for order #{order.id}")
       purchases_to_charge.each { |purchase| purchase.error_code = PurchaseErrorCode::BUYER_CURRENCY_QUOTE_INVALID }
       fail_purchases_with(Charge::CreateService::BUYER_CURRENCY_QUOTE_INVALID_MESSAGE)
       true
@@ -445,6 +488,7 @@ class Order::PreparePaymentIntentService
       charge = build_charge
       presentment = client_confirm_presentment_for(charge)
       if presentment.nil? && client_confirm_presentment_required?
+        return fail_purchases_with(@client_confirm_presentment_failure_message) if @client_confirm_presentment_failure_message.present?
         return fail_buyer_currency_quote if params[:buyer_currency_quote].present? || @direct_listed_amount_mismatch
 
         return fail_purchases_with(GENERIC_CHARGE_ERROR)
@@ -540,10 +584,15 @@ class Order::PreparePaymentIntentService
       direct_listed_decision = client_confirm_buyer_currency_decision
       if direct_listed_decision.eligible? && direct_listed_decision.direct_listed_amount? &&
          direct_listed_decision.currency == forced_currency
+        if params[:buyer_currency_quote].present?
+          Rails.logger.info("Client-confirm direct-listed presentment rejected a stale quote for order #{order.id}")
+          return reject_client_confirm_buyer_currency_quote!
+        end
+
         return direct_listed_presentment_for(charge, direct_listed_decision)
       end
 
-      Charge::MethodForcedPresentment.new(
+      service = Charge::MethodForcedPresentment.new(
         charge:,
         order:,
         seller:,
@@ -554,7 +603,20 @@ class Order::PreparePaymentIntentService
         payment_method_type: method_type,
         forced_currency:,
         params:
-      ).perform
+      )
+      presentment = service.perform
+      if presentment.nil? && service.failure_reason == Charge::MethodForcedPresentment::BUYER_CURRENCY_QUOTE_INVALID
+        reject_client_confirm_buyer_currency_quote!
+      end
+      presentment
+    end
+
+    def reject_client_confirm_buyer_currency_quote!
+      purchases_to_charge.each do |purchase|
+        purchase.error_code = PurchaseErrorCode::BUYER_CURRENCY_QUOTE_INVALID
+      end
+      @client_confirm_presentment_failure_message = Charge::CreateService::BUYER_CURRENCY_QUOTE_INVALID_MESSAGE
+      nil
     end
 
     def client_confirm_buyer_currency_decision
@@ -763,23 +825,40 @@ class Order::PreparePaymentIntentService
       return true if direct_listed_decision.eligible? && direct_listed_decision.direct_listed_amount? &&
                      direct_listed_decision.currency == currency
 
-      return false unless Checkout::BuyerCurrencyEligibility.seller_enabled?(seller)
-      return false unless Checkout::BuyerCurrencyEligibility::FORCED_CURRENCY_PAYMENT_METHODS.value?(currency)
+      if Checkout::BuyerCurrencyEligibility::FORCED_CURRENCY_PAYMENT_METHODS.value?(currency)
+        return true if Checkout::BuyerCurrencyEligibility.seller_enabled?(seller) &&
+                       uniform_method_forced_purchase_currency == currency
 
-      uniform_method_forced_purchase_currency == currency
+        # A quoted card remount in EUR/INR/BRL is bound by the signed quote, not by
+        # whether iDEAL/UPI/Pix is launched. Those launch flags only decide whether
+        # the local method itself may be offered. Require a launched local method only
+        # when there is no displayed quote to honor.
+        return true if quote_bound_presentment_currency?(currency)
+        return Checkout::BuyerCurrencyEligibility.local_method_quote_enabled?(seller, currency)
+      end
+
+      # Client-confirm remounts any quoted buyer currency. The signed quote is the
+      # chargeable-currency contract; a report without one is still fail-closed.
+      quote_bound_presentment_currency?(currency)
     end
 
-    # A non-USD ConfirmationToken cannot confirm a USD intent (Stripe rejects synchronously,
-    # no payment_failed webhook — the purchase would sit in_progress). Fail closed here.
-    # Browser report is authority for card/Link: non-USD mount requires a presentment; reported
-    # USD needs nothing. Seller with buyer-currency disabled stays on canonical USD; a
-    # forced-currency token after its flag rolls back fails cleanly.
+    def quote_bound_presentment_currency?(currency)
+      return false unless Checkout::BuyerCurrencyEligibility.seller_enabled?(seller)
+      return false if params[:buyer_currency_quote].blank?
+
+      StripeChargeProcessor.charge_minor_units_compatible?(currency)
+    end
+
+    # A ConfirmationToken from a non-USD Payment Element can never confirm a USD intent.
+    # UPI/iDEAL/Pix/Bancontact always require the forced-currency presentment, including
+    # after a local-method flag rollback. Card/Link follow the browser's reported mount currency
+    # (see #intent_forced_currency).
     def client_confirm_presentment_required?
       return true if params[:buyer_currency_quote].present?
       return false if @previewed_payment_method_type.blank?
 
       if Checkout::BuyerCurrencyEligibility.forced_currency_for(@previewed_payment_method_type).present?
-        Checkout::BuyerCurrencyEligibility.seller_enabled?(seller)
+        true
       else
         reported_currency = reported_element_mount_currency
         return element_mount_forced_currency.present? if reported_currency.nil?
@@ -892,7 +971,11 @@ class Order::PreparePaymentIntentService
       return @issued_payment_method_types if defined?(@issued_payment_method_types)
 
       submitted = params[:payment_method_list_token].presence
-      issued = Checkout::PaymentMethodListToken.verify(submitted, sellers: [seller])
+      issued = Checkout::PaymentMethodListToken.verify(
+        submitted,
+        sellers: [seller],
+        currency: reported_element_mount_currency,
+      )
       # Expiry (a long-open tab) is routine here; a tampered token or a presenter/service
       # disagreement about the seller set is not. Warn rather than error because the bucket mixes
       # both, and log at all because a silent fallback is what made #1528 invisible.
@@ -1001,9 +1084,19 @@ class Order::PreparePaymentIntentService
         (method_type == Checkout::PaymentMethodResolver::ALIPAY_PAYMENT_METHOD_TYPE &&
           Feature.active?(Checkout::PaymentMethodResolver::ALIPAY_LAUNCH_FEATURE, seller) &&
           Checkout::PaymentMethodResolver.alipay_supported_merchant_account?(seller)) ||
-        Checkout::BuyerCurrencyEligibility.forced_currency_for(method_type).present?
+        forced_currency_method_offerable?(method_type)
 
       offerable && account_supports_previewed_method?(method_type)
+    end
+
+    # Registry methods stay on a signed remount list only while their live launch flag
+    # is on (or Stripe test mode, so QA is not gated). Without this, a card/Link prepare
+    # after `checkout_local_method_upi` rollback would still mint an INR intent that lists UPI.
+    def forced_currency_method_offerable?(method_type)
+      return false if Checkout::BuyerCurrencyEligibility.forced_currency_for(method_type).blank?
+
+      Checkout::BuyerCurrencyEligibility.stripe_test_mode? ||
+        Checkout::BuyerCurrencyEligibility.local_method_launched?(method_type, seller)
     end
 
     # Mirrors the resolver's account_supported_methods for the single previewed method: the

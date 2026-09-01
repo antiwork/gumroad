@@ -204,7 +204,7 @@ describe Checkout::PresentmentRounding do
       expect(described_class.enabled_for?(seller)).to eq(false)
     end
 
-    it "is off when the seller opted out of buyer-local currency entirely" do
+    it "is off when the seller opted out of buyer-local currency" do
       seller.update!(disable_buyer_local_currency: true)
 
       expect(described_class.enabled_for?(seller)).to eq(false)
