@@ -6375,24 +6375,28 @@ class PurchaseTest < ActiveSupport::TestCase
   end
 
   test "#pending_processor_settlement? is true when only a PaymentIntent id is persisted" do
-    seller = create(:user)
-    merchant_account = create(:merchant_account_stripe_connect, user: seller)
-    purchase = create(:purchase,
-                      link: create(:product, user: seller),
-                      seller:,
-                      merchant_account:,
-                      purchase_state: "in_progress",
-                      stripe_transaction_id: nil,
-                      processor_payment_intent_id: "pi_presentment",
-                      flow_of_funds: nil)
-    create(:purchase_presentment, purchase:)
+    seller = create_user
+    merchant_account = create_merchant_account_stripe_connect(user: seller)
+    purchase = create_purchase_in_progress(
+      link: create_product(user: seller),
+      seller:,
+      merchant_account:,
+      is_part_of_combined_charge: true,
+      stripe_transaction_id: nil,
+      flow_of_funds: nil
+    )
+    charge = create_charge(order: create_order, seller:, merchant_account:)
+    charge.purchases << purchase
+    create_charge_presentment(charge:)
+    purchase.create_processor_payment_intent!(intent_id: "pi_presentment")
 
-    assert_equal true, purchase.pending_processor_settlement?
+    assert_nil purchase.reload.stripe_transaction_id
     assert_equal true, purchase.charged_at_processor?
+    assert_equal true, purchase.pending_processor_settlement?
   end
 
   test "#charged_at_processor? is false for an in_progress purchase with no processor ids" do
-    purchase = create(:purchase, purchase_state: "in_progress", stripe_transaction_id: nil, processor_payment_intent_id: nil)
+    purchase = create_purchase_in_progress(link: create_product, stripe_transaction_id: nil, processor_payment_intent_id: nil)
 
     assert_equal false, purchase.charged_at_processor?
     assert_equal false, purchase.pending_processor_settlement?
