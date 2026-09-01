@@ -1173,36 +1173,61 @@ describe("direct-listed card element", () => {
     expect(getStripePaymentElementAmount(s)).toBeNull();
   });
 
-  it("mounts a method-forced element on EU VAT converted at the signed page rate", () => {
-    // The method-forced lane never receives per-line allocations, so it converts the aggregate
-    // rather than refusing to mount — otherwise iDEAL/Bancontact buyers get a permanent spinner.
+  it("mounts a method-forced element on the per-line allocations, not the converted aggregate", () => {
+    // Two 1c USD tax lines at rate 1.5: the charge rounds each line (2 + 2 = 4 listed cents),
+    // while converting the 2c aggregate once would mount 3 and disagree with the intent.
     const s = state({
       checkoutPayment: {
         ...methodForcedEurConfig,
-        elements_options: { ...methodForcedEurConfig.elements_options, direct_listed_currency_rate: 0.9 },
+        elements_options: { ...methodForcedEurConfig.elements_options, direct_listed_currency_rate: 1.5 },
       },
+      products: [
+        product({ permalink: "product-a", listedChargePriceCents: 1_000 }),
+        product({ permalink: "product-b", listedChargePriceCents: 500 }),
+      ],
       surcharges: {
         type: "loaded",
         result: {
           vat_id_valid: false,
           has_vat_id_input: false,
           shipping_rate_cents: 0,
-          tax_cents: 100,
+          tax_cents: 2,
           tax_included_cents: 0,
-          subtotal: 1_100,
+          subtotal: 1_000,
+          direct_listed_line_allocations: [
+            {
+              permalink: "product-a",
+              price_cents: 1_000,
+              tip_cents: 0,
+              tax_cents: 2,
+              shipping_cents: 0,
+              total_cents: 1_002,
+            },
+            {
+              permalink: "product-b",
+              price_cents: 500,
+              tip_cents: 0,
+              tax_cents: 2,
+              shipping_cents: 0,
+              total_cents: 502,
+            },
+          ],
           buyer_currency_quote: null,
         },
       },
     });
 
     expect(getConfiguredDirectListedCurrency(s)).toBeNull();
-    expect(getStripePaymentElementAmount(s)).toBe(1_590);
+    expect(getStripePaymentElementAmount(s)).toBe(1_504);
     expect(getStripePaymentElementMountCurrency(s)).toBe("eur");
   });
 
-  it("does not mount a method-forced element with tax when the page signed no listed rate", () => {
+  it("does not mount a method-forced element with tax before the per-line allocations arrive", () => {
     const s = state({
-      checkoutPayment: methodForcedEurConfig,
+      checkoutPayment: {
+        ...methodForcedEurConfig,
+        elements_options: { ...methodForcedEurConfig.elements_options, direct_listed_currency_rate: 0.9 },
+      },
       surcharges: {
         type: "loaded",
         result: {

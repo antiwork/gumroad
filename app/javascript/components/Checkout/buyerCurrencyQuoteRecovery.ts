@@ -86,13 +86,19 @@ export const refreshedRatesFromLineItems = (lineItems: CartPurchaseResult["lineI
 
 // The amount refusal can mean an offer changed after surcharge calculation. Refreshing the cart's
 // offers before requoting prevents the browser from immediately remounting the same stale amount.
-export const withRefreshedOfferCodes = (cart: CartState, offerCodes: OfferCodes): CartState => ({
-  ...cart,
-  discountCodes: offerCodes.map((offerCode) => ({
-    ...offerCode,
-    fromUrl: cart.discountCodes.find(({ code }) => code === offerCode.code)?.fromUrl ?? false,
-  })),
-});
+//
+// An empty list is not "the buyer's discounts are gone": a quote/amount refusal carries no
+// replacement offers at all, so adopting it would requote the cart at full price.
+export const withRefreshedOfferCodes = (cart: CartState, offerCodes: OfferCodes): CartState =>
+  offerCodes.length === 0
+    ? cart
+    : {
+        ...cart,
+        discountCodes: offerCodes.map((offerCode) => ({
+          ...offerCode,
+          fromUrl: cart.discountCodes.find(({ code }) => code === offerCode.code)?.fromUrl ?? false,
+        })),
+      };
 
 export const recoverFromInvalidBuyerCurrencyQuote = ({
   lineItems,

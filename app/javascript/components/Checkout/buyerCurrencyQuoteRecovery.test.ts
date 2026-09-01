@@ -142,6 +142,31 @@ describe("recoverFromInvalidBuyerCurrencyQuote", () => {
     );
   });
 
+  it("keeps the cart's discounts when the refusal carries no replacement offers", () => {
+    // An expired amount token refuses with an empty offer list. Adopting it as the new discount
+    // list would retry the charge at full price.
+    const discountCodes = [
+      {
+        code: "SAVE",
+        products: {
+          eur: {
+            type: "fixed" as const,
+            cents: 500,
+            product_ids: null,
+            expires_at: null,
+            minimum_quantity: null,
+            duration_in_billing_cycles: null,
+            minimum_amount_cents: null,
+          },
+        },
+        fromUrl: true,
+      },
+    ];
+    const cart = { ...cartWith([cartItem()]), discountCodes };
+
+    expect(withRefreshedOfferCodes(cart, []).discountCodes).toEqual(discountCodes);
+  });
+
   it("re-quotes on the server's current rate, not the one the page rendered with", () => {
     const cart = cartWith([cartItem()]);
 
