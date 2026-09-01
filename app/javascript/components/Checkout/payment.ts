@@ -19,6 +19,7 @@ import { AbortError, assertResponseError } from "$app/utils/request";
 import { loadAcknowledgedEmails } from "$app/components/Checkout/acknowledgedEmails";
 import {
   getCheckoutBuyerCurrencyDisplay,
+  getMatchingDirectListedAllocations,
   isRecurringUpiPaymentConfig,
 } from "$app/components/Checkout/buyerCurrencyDisplay";
 import { Creator } from "$app/components/Checkout/cartState";
@@ -747,14 +748,12 @@ function getDirectListedPaymentElementAmount(state: State) {
   if (state.checkoutPayment.integration !== "payment_element_client_confirm") return getChargeTodayPrice(state);
   if (state.surcharges.type !== "loaded") return null;
 
-  const directListedAllocations = state.surcharges.result.direct_listed_line_allocations;
-  if (directListedAllocations?.length === state.products.length) {
-    const allocationsMatchCart = directListedAllocations.every(
-      (allocation, index) => allocation.permalink === state.products[index]?.permalink,
-    );
-    if (allocationsMatchCart)
-      return directListedAllocations.reduce((sum, allocation) => sum + allocation.total_cents, 0);
-  }
+  const directListedAllocations = getMatchingDirectListedAllocations(
+    state.surcharges.result,
+    state.products.map((product) => product.permalink),
+  );
+  if (directListedAllocations)
+    return directListedAllocations.reduce((sum, allocation) => sum + allocation.total_cents, 0);
 
   const taxUsd = state.surcharges.result.tax_cents;
   const shippingUsd = state.surcharges.result.shipping_rate_cents;

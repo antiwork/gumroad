@@ -65,6 +65,7 @@ import {
   getCheckoutListedCurrencyAmounts,
   getCheckoutListedCurrencyDisplay,
   getCheckoutPresentmentAmounts,
+  getMatchingDirectListedAllocations,
   isRecurringUpiPaymentConfig,
   toBuyerCurrencyCents,
   toCanonicalCents,
@@ -441,6 +442,13 @@ export const Checkout = ({
     price: hasFreeTrial(item, isGift) ? 0 : getDiscountedPrice(cart, item).price,
     permalink: item.product.permalink,
   }));
+  // When the server sent a listed-currency split for this cart, the sheet and the charge are both
+  // built from it, so the summary has to add up the same per-line rounding rather than converting
+  // the USD aggregate once.
+  const listedAllocations = getMatchingDirectListedAllocations(
+    summarySurcharges,
+    cart.items.map((item) => item.product.permalink),
+  );
   const listedAmounts = getCheckoutListedCurrencyAmounts(listedCurrency, {
     lines: cart.items.map((item) => ({
       priceCents: hasFreeTrial(item, isGift) ? 0 : item.price * item.quantity,
@@ -454,6 +462,8 @@ export const Checkout = ({
     usdTaxCents: summarySurcharges?.tax_cents ?? 0,
     usdTaxIncludedCents: summarySurcharges?.tax_included_cents ?? 0,
     usdShippingCents: summarySurcharges?.shipping_rate_cents ?? 0,
+    listedTaxCents: listedAllocations?.reduce((sum, allocation) => sum + allocation.tax_cents, 0),
+    listedShippingCents: listedAllocations?.reduce((sum, allocation) => sum + allocation.shipping_cents, 0),
   });
   // The one currency the whole summary is formatted in: the FX-quoted buyer currency when a quote
   // is being displayed, else the listed currency on the method-forced lane, else canonical USD
