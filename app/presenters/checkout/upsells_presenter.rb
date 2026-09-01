@@ -22,19 +22,29 @@ class Checkout::UpsellsPresenter
           upsell_variants: [:selected_variant, :offered_variant]
         ).map(&:as_json),
       pagination:,
-      products: pundit_user.seller.products
-        .visible_and_not_archived
-        .map { product_props(_1) }
+      products: product_props
     }
   end
 
   private
-    def product_props(product)
-      {
-        id: product.external_id,
-        name: product.name,
-        has_multiple_versions: product.alive_variants.limit(2).count > 1,
-        native_type: product.native_type
-      }
+    def product_props
+      products = pundit_user.seller.products.visible_and_not_archived.to_a
+      product_ids_with_multiple_versions = Variant.alive
+        .joins(:variant_category)
+        .merge(VariantCategory.alive)
+        .where(variant_categories: { link_id: products.map(&:id) })
+        .group("variant_categories.link_id")
+        .having("COUNT(base_variants.id) > 1")
+        .pluck("variant_categories.link_id")
+        .to_set
+
+      products.map do |product|
+        {
+          id: product.external_id,
+          name: product.name,
+          has_multiple_versions: product_ids_with_multiple_versions.include?(product.id),
+          native_type: product.native_type
+        }
+      end
     end
 end
