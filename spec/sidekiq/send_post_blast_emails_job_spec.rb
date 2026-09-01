@@ -86,6 +86,10 @@ describe SendPostBlastEmailsJob, :freeze_time do
       expect { described_class.new.perform(blast.id) }.to raise_error(StandardError, "API failure")
 
       expect($redis.get(pending_key).to_i).to eq(1)
+      expect($redis.ttl(RedisKey.blast_audience_snapshot(blast.id))).to be_between(
+        13.days.to_i,
+        AlertOnStalledPostEmailBlastsJob::LOOKBACK.to_i
+      ).inclusive
       expect($redis.ttl(pending_key)).to be_between(13.days.to_i, AlertOnStalledPostEmailBlastsJob::LOOKBACK.to_i).inclusive
       expect(described_class.fully_delivered?(blast.reload)).to be(false)
     end
@@ -445,6 +449,19 @@ describe SendPostBlastEmailsJob, :freeze_time do
         expect(PostSendgridApi.mails[sent_sale.email]).to be_blank
       end
 
+      it "renews a reused checkpoint when the resumed send fails" do
+        $redis.sadd(checkpoint_key, [delivered_sale.email])
+        $redis.expire(checkpoint_key, 5.minutes.to_i)
+        allow(PostEmailApi).to receive(:provider_for).and_return(MailerInfo::EMAIL_PROVIDER_SENDGRID)
+        expect(PostSendgridApi).to receive(:process).and_raise(StandardError.new("API failure"))
+
+        expect do
+          described_class.new.perform(blast.id)
+        end.to raise_error(StandardError, "API failure")
+
+        expect($redis.ttl(checkpoint_key)).to be_between(13.days.to_i, AlertOnStalledPostEmailBlastsJob::LOOKBACK.to_i).inclusive
+      end
+
       it "keeps the checkpoint when the send fails so the next attempt can reuse it" do
         allow(PostEmailApi).to receive(:provider_for).and_return(MailerInfo::EMAIL_PROVIDER_SENDGRID)
         expect(PostSendgridApi).to receive(:process).and_raise(StandardError.new("API failure"))
@@ -514,6 +531,99 @@ describe SendPostBlastEmailsJob, :freeze_time do
       expect(blast.reload.completed_at).to be_present
     end
 
+    it "does not rebuild the live audience when a late resume finds no snapshot" do
+      post = basic_post_with_audience
+      blast = create(:blast, :just_requested, post:)
+      blast.update!(started_at: 2.days.ago)
+      create(:active_follower, user: @seller)
+
+      unrestricted = false
+      allow(AudienceMember).to receive(:filter).and_wrap_original do |original, **kwargs|
+        unrestricted = true unless kwargs.key?(:ids)
+        original.call(**kwargs)
+      end
+
+      expect do
+        described_class.new.perform(blast.id)
+      end.to raise_error(RuntimeError, /missing audience snapshot for blast #{blast.id}/)
+
+      expect(unrestricted).to eq(false)
+      expect_sent_count 0
+      expect(blast.reload.completed_at).to be_nil
+    end
+
+    it "rebuilds the audience when a resume finds no snapshot inside the grace window" do
+      post = basic_post_with_audience
+      blast = create(:blast, :just_requested, post:)
+      blast.update!(started_at: 1.hour.ago)
+      create(:active_follower, user: @seller)
+
+      unrestricted = false
+      allow(AudienceMember).to receive(:filter).and_wrap_original do |original, **kwargs|
+        unrestricted = true unless kwargs.key?(:ids)
+        original.call(**kwargs)
+      end
+
+      described_class.new.perform(blast.id)
+
+      expect(unrestricted).to eq(true)
+      expect_sent_count 2
+      expect(blast.reload.completed_at).to be_present
+    end
+
+    it "refuses a resume with no snapshot inside the grace window when recipients are still pending" do
+      post = basic_post_with_audience
+      blast = create(:blast, :just_requested, post:)
+      blast.update!(started_at: 1.hour.ago)
+      pending_key = RedisKey.blast_pending_recipients(blast.id)
+      # An earlier attempt already published its recipient count, so it had a snapshot:
+      # the missing one is lost Redis state, not a first-run crash.
+      $redis.set(pending_key, 1)
+      create(:active_follower, user: @seller)
+
+      unrestricted = false
+      allow(AudienceMember).to receive(:filter).and_wrap_original do |original, **kwargs|
+        unrestricted = true unless kwargs.key?(:ids)
+        original.call(**kwargs)
+      end
+
+      expect do
+        described_class.new.perform(blast.id)
+      end.to raise_error(RuntimeError, /missing audience snapshot for blast #{blast.id}/)
+
+      expect(unrestricted).to eq(false)
+      expect_sent_count 0
+      expect(blast.reload.completed_at).to be_nil
+    ensure
+      $redis.del(pending_key) if pending_key
+    end
+
+    it "completes without a live rebuild when a resume with no snapshot owes no more recipients" do
+      post = basic_post_with_audience
+      blast = create(:blast, :just_requested, post:)
+      blast.update!(started_at: 1.hour.ago)
+      pending_key = RedisKey.blast_pending_recipients(blast.id)
+      # Everything was already handed to the ESP; this resume exists only to stamp
+      # `completed_at`, so a missing snapshot must neither stall it nor pull in the
+      # follower who joined after the original send.
+      $redis.set(pending_key, 0)
+      create(:active_follower, user: @seller)
+
+      unrestricted = false
+      allow(AudienceMember).to receive(:filter).and_wrap_original do |original, **kwargs|
+        unrestricted = true unless kwargs.key?(:ids)
+        original.call(**kwargs)
+      end
+
+      described_class.new.perform(blast.id)
+
+      expect(unrestricted).to eq(false)
+      expect_sent_count 0
+      expect(blast.reload.completed_at).to be_present
+    ensure
+      $redis.del(pending_key) if pending_key
+    end
+
     it "resumes from the snapshot on retry using only an id-restricted filter" do
       post = basic_post_with_audience
       blast = create(:blast, :just_requested, post:)
@@ -531,6 +641,25 @@ describe SendPostBlastEmailsJob, :freeze_time do
       expect($redis.exists?(snapshot_key)).to eq(false)
     ensure
       $redis.del(snapshot_key)
+    end
+
+    it "renews a reused audience snapshot when the resumed send fails" do
+      post = basic_post_with_audience
+      blast = create(:blast, :just_requested, post:)
+      snapshot_key = RedisKey.blast_audience_snapshot(blast.id)
+      $redis.rpush(snapshot_key, AudienceMember.where(seller_id: post.seller_id).pluck(:id))
+      $redis.expire(snapshot_key, 5.minutes.to_i)
+      allow(PostEmailApi).to receive(:provider_for).and_return(MailerInfo::EMAIL_PROVIDER_SENDGRID)
+      expect(PostSendgridApi).to receive(:process).and_raise(StandardError.new("API failure"))
+
+      expect do
+        described_class.new.perform(blast.id)
+      end.to raise_error(StandardError, "API failure")
+
+      expect($redis.ttl(snapshot_key)).to be_between(13.days.to_i, AlertOnStalledPostEmailBlastsJob::LOOKBACK.to_i).inclusive
+      expect($redis.ttl(RedisKey.blast_pending_recipients(blast.id))).to be_between(13.days.to_i, AlertOnStalledPostEmailBlastsJob::LOOKBACK.to_i).inclusive
+    ensure
+      $redis.del(snapshot_key, RedisKey.blast_pending_recipients(blast.id)) if snapshot_key
     end
 
     it "revalidates the snapshot under the raised statement execution cap" do

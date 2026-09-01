@@ -29,6 +29,9 @@ class SendPostBlastEmailsJob
     Rails.logger.info("[#{self.class.name}] blast_id=#{@blast.id} post_id=#{@post.id}")
     return unless @post.alive? && @post.published? && @post.send_emails? && @blast.completed_at.nil?
 
+    # Capture before the first-run stamp: a late resume with no Redis snapshot must
+    # not rebuild the live audience (people who joined after the original send).
+    @resume_without_snapshot = @blast.started_at.present?
     @blast.update!(started_at: Time.current) if @blast.started_at.nil?
 
     # A retry that finds a live partition re-enqueues its stored chunks as-is; loading and
@@ -75,10 +78,15 @@ class SendPostBlastEmailsJob
   end
 
   private
-    # How long the audience snapshot survives in Redis. Long enough to cover the full
-    # Sidekiq retry schedule of this job (10 retries spans roughly a day), short enough
-    # that an abandoned blast doesn't hold hundreds of thousands of entries forever.
-    AUDIENCE_SNAPSHOT_TTL = 3.days
+    # How long the point-in-time audience snapshot survives in Redis. It must cover the
+    # stalled-blast scan window: a late resume is only safe while the original audience
+    # still exists, otherwise the sender would rebuild the audience and include later joins.
+    AUDIENCE_SNAPSHOT_TTL = AlertOnStalledPostEmailBlastsJob::LOOKBACK
+
+    # How long after `started_at` a resume may still rebuild the live audience. Covers the
+    # first-run crash (stamp written, snapshot not yet) without covering a stalled blast that
+    # only auto-resumes days later, by which point the audience has moved on.
+    AUDIENCE_SNAPSHOT_GRACE = 1.day
 
     # How many snapshotted member ids to revalidate per statement. Small on purpose:
     # MySQL's range optimizer silently drops the PK plan once an `IN (...)` list blows
@@ -189,6 +197,25 @@ class SendPostBlastEmailsJob
       snapshotted_ids = $redis.lrange(snapshot_key, 0, -1)
 
       if snapshotted_ids.empty?
+        pending = $redis.get(RedisKey.blast_pending_recipients(@blast.id))
+
+        # Fully delivered (`fully_delivered?`) with the snapshot gone: every recipient the
+        # original attempt picked is already with the ESP, and this resume exists only to
+        # stamp `completed_at`. Rebuilding the audience here would email everyone who joined
+        # since, so hand back nothing — `perform` completes the blast on an empty audience.
+        # Age is irrelevant: there is nothing left to send at any age.
+        return [] if @resume_without_snapshot && pending.present? && pending.to_i <= 0
+
+        # First-run crash (started_at just set, no snapshot yet) must still load.
+        # A stalled auto-resume days later must not pick up people who joined after.
+        # A positive pending count means an earlier attempt got past the snapshot write
+        # with recipients still owed, so a missing snapshot is lost Redis state, not a
+        # first run — refuse inside the grace window too. The age check stands alone for
+        # the reverse loss: MySQL keeps `started_at` when Redis drops both keys.
+        if @resume_without_snapshot &&
+           (@blast.started_at < AUDIENCE_SNAPSHOT_GRACE.ago || (pending.present? && pending.to_i.positive?))
+          raise "missing audience snapshot for blast #{@blast.id}; refusing to rebuild the live audience"
+        end
         members = WithMaxExecutionTime.timeout_queries(seconds: audience_load_timeout_seconds) do
           AudienceMember.filter(seller_id: @post.seller_id, params: @filters, with_ids: true).select(:id, :email, :purchase_id, :follower_id, :affiliate_id).to_a
         end
@@ -196,6 +223,7 @@ class SendPostBlastEmailsJob
         members
       else
         Rails.logger.info("[#{self.class.name}] blast_id=#{@blast.id} resuming from audience snapshot (#{snapshotted_ids.size} members)")
+        $redis.expire(snapshot_key, AUDIENCE_SNAPSHOT_TTL.to_i)
         revalidate_snapshotted_members(snapshotted_ids.map(&:to_i))
       end
     end
@@ -245,6 +273,7 @@ class SendPostBlastEmailsJob
       checkpoint_key = RedisKey.blast_non_opener_emails(@blast.id)
       if $redis.exists?(checkpoint_key)
         emails = $redis.smembers(checkpoint_key).to_set
+        $redis.expire(checkpoint_key, AUDIENCE_SNAPSHOT_TTL.to_i) if emails.present?
         Rails.logger.info("[#{self.class.name}] blast_id=#{@blast.id} resuming from non-opener checkpoint (#{emails.size} emails)")
         return emails
       end
