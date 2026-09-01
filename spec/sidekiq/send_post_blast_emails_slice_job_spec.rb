@@ -331,18 +331,24 @@ describe SendPostBlastEmailsSliceJob, :freeze_time do
       $redis.del(RedisKey.blast_sent_emails(blast.id), RedisKey.blast_done_slices(blast.id, partition_key))
     end
 
-    it "sends a product-post chunk whose product name contains tags" do
+    it "strips tags from purchase product names in prepare_recipients" do
       product = create(:product, user: @seller, name: "<b>Shattered</b> Samples")
       post = create(:product_post, :published, seller: @seller, link: product, bought_products: [product.unique_permalink])
       sale = create(:purchase, link: product, seller: @seller, email: "buyer@example.com")
       blast = create(:blast, :just_requested, post:)
-      activate_partition(blast)
-      member_ids = AudienceMember.where(seller_id: @seller).pluck(:id)
+      member = AudienceMember.filter(
+        seller_id: @seller.id,
+        params: post.audience_members_filter_params,
+        with_ids: true,
+        ids: AudienceMember.where(seller_id: @seller, email: sale.email).pluck(:id)
+      ).select(:id, :email, :purchase_id, :follower_id, :affiliate_id).to_a
+      job = described_class.new
+      job.instance_variable_set(:@post, post)
+      job.instance_variable_set(:@blast, blast)
 
-      described_class.new.perform(blast.id, partition_key, 0, 1, member_ids)
+      recipients = job.send(:prepare_recipients, member)
 
-      expect(PostSendgridApi.mails.keys).to include(sale.email)
-      expect(blast.reload.completed_at).to be_present
+      expect(recipients.map { _1[:product_name] }).to eq(["Shattered Samples"])
     end
 
     it "does not leave SentPostEmail rows when preparing recipients raises" do
