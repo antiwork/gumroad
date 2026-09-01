@@ -5,12 +5,18 @@ import { NodeViewProps, NodeViewWrapper, ReactNodeViewRenderer } from "@tiptap/r
 import * as React from "react";
 
 import FileUtils, { FILE_TYPE_EXTENSIONS_MAP } from "$app/utils/file";
+import {
+  canResetFileInputAfterSnapshot,
+  fileListMatchesPickedFiles,
+  snapshotPickedFiles,
+} from "$app/utils/snapshotPickedFile";
 
 import { AudioPlayer } from "$app/components/AudioPlayer";
 import { Button } from "$app/components/Button";
 import { FileRowContent } from "$app/components/FileRowContent";
 import { usePublicFilesSettings } from "$app/components/ProductEdit/ProductTab/DescriptionEditor";
 import { MenuItem } from "$app/components/RichTextEditor";
+import { showAlert } from "$app/components/server-components/Alert";
 import { NodeActionsMenu, NodeActionsWrapper } from "$app/components/TiptapExtensions/NodeActionsMenu";
 import { Fieldset, FieldsetTitle } from "$app/components/ui/Fieldset";
 import { Input } from "$app/components/ui/Input";
@@ -142,12 +148,21 @@ export const PublicFileEmbed = TiptapNode.create({
           className="sr-only"
           accept={FILE_TYPE_EXTENSIONS_MAP.audio.map((ext) => `.${ext.toLowerCase()}`).join(",")}
           onChange={(e) => {
-            const files = [...(e.target.files || [])];
-            if (!files.length) return;
-            const file = files[0];
-            if (!file) return;
-            onUpload?.({ file });
-            e.target.value = "";
+            const input = e.target;
+            const picked = [...(input.files || [])];
+            if (!picked.length) return;
+            void snapshotPickedFiles(picked)
+              .then((files) => {
+                const file = files[0];
+                if (!file) return;
+                onUpload?.({ file });
+                if (fileListMatchesPickedFiles(input.files, picked) && canResetFileInputAfterSnapshot(picked, files))
+                  input.value = "";
+              })
+              .catch((error: unknown) => {
+                showAlert(error instanceof Error ? error.message : "Could not read the selected file.", "error");
+                if (fileListMatchesPickedFiles(input.files, picked)) input.value = "";
+              });
           }}
         />
       </>
