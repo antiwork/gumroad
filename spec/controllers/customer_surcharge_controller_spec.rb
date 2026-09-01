@@ -323,6 +323,48 @@ describe CustomerSurchargeController, :vcr do
       ).to eq(allocations)
     end
 
+    it "returns method-forced allocations without the listed-card ramp" do
+      Feature.activate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, @user)
+      first_product = create(:product, user: @user, price_currency_type: Currency::EUR, price_cents: 100)
+      second_product = create(:product, user: @user, price_currency_type: Currency::EUR, price_cents: 100)
+      allow_any_instance_of(CurrencyHelper).to receive(:get_rate).with(Currency::EUR).and_return("1.5")
+      tax_results = [first_product, second_product].map do
+        double(
+          business_vat_status: nil,
+          to_hash: { has_vat_id_input: false },
+          tax_cents: 1,
+          price_cents: 10,
+          zip_tax_rate: nil,
+          used_taxjar: true,
+          gumroad_is_mpf: true
+        )
+      end
+      allow(SalesTaxCalculator).to receive(:new).and_return(*tax_results.map { instance_double(SalesTaxCalculator, calculate: _1) })
+
+      post "calculate_all", params: {
+        products: [
+          { permalink: first_product.unique_permalink, price: 10, listed_price_cents: 15, quantity: 1 },
+          { permalink: second_product.unique_permalink, price: 10, listed_price_cents: 15, quantity: 1 },
+        ],
+        country: "DE",
+        payment_details_source: PurchasePaymentFlow::PAYMENT_ELEMENT,
+        payment_element_mount_currency: Currency::EUR,
+        payment_element_direct_listed_currency: Currency::EUR,
+        payment_method_list_token: listed_payment_method_list_token(first_product, second_product, rate: "1.5"),
+      }, as: :json
+
+      allocations = response.parsed_body.fetch("direct_listed_line_allocations")
+      expect(allocations.map { _1.fetch("tax_cents") }).to eq([2, 2])
+      expect(allocations.sum { _1.fetch("total_cents") }).to eq(34)
+      expect(
+        Checkout::DirectListedAmountToken.verify(
+          response.parsed_body.fetch("direct_listed_amount_token"),
+          sellers: [@user],
+          currency: Currency::EUR
+        )
+      ).to eq(allocations)
+    end
+
     it "signs only the paid allocation when the Element displays a paid and free line" do
       Feature.activate_user(Checkout::BuyerCurrencyEligibility::LISTED_CURRENCY_DIRECT_CHARGE_FEATURE_NAME, @user)
       paid_product = create(:product, user: @user, price_currency_type: Currency::CAD, price_cents: 10_00)

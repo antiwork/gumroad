@@ -128,9 +128,12 @@ class CustomerSurchargeController < ApplicationController
       available = available.reject { |entry| entry[:code] == quote_currency }
     end
 
+    direct_listed_allocation_currency = direct_listed_allocation_currency_for_cart(
+      all_lines_quotable ? quote_line_items : []
+    )
     direct_listed_line_allocations = direct_listed_line_allocations_for(
       all_lines_quotable ? quote_line_items : [],
-      direct_listed_selector_currency,
+      direct_listed_allocation_currency,
       products
     )
     direct_listed_amount_token = Checkout::DirectListedAmountToken.issue(
@@ -139,7 +142,7 @@ class CustomerSurchargeController < ApplicationController
         quote_line_items
       ),
       sellers: surcharge_cart_sellers,
-      currency: direct_listed_selector_currency
+      currency: direct_listed_allocation_currency
     )
 
     render json: {
@@ -463,5 +466,25 @@ class CustomerSurchargeController < ApplicationController
       # This capability keeps the listed option available after the Element switches to USD.
       # Prepare still validates the separately reported actual mount before creating an intent.
       currency if direct_listed_currency_offered_for_cart?(line_items, currency)
+    end
+
+    # Method-forced mounts (iDEAL/Bancontact/UPI/Pix) request the same per-line allocations
+    # without the listed-card selector ramp. Do not reuse selector currency for the picker.
+    def direct_listed_allocation_currency_for_cart(line_items)
+      selector = direct_listed_selector_currency_for_cart(line_items)
+      return selector if selector.present?
+
+      currency = params[:payment_element_direct_listed_currency].to_s.downcase.presence
+      return if currency.blank?
+      return unless params[:payment_details_source] == PurchasePaymentFlow::PAYMENT_ELEMENT
+      return unless params[:payment_element_mount_currency].to_s.downcase == currency
+      return unless Checkout::BuyerCurrencyEligibility::FORCED_CURRENCY_PAYMENT_METHODS.value?(currency)
+      return unless Checkout::BuyerCurrencyEligibility.direct_listed_line_items_eligible?(
+        line_items:,
+        buyer_currency: currency,
+        require_listed_direct_charge: false
+      )
+
+      currency
     end
 end

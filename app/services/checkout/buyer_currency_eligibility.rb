@@ -86,7 +86,7 @@ class Checkout::BuyerCurrencyEligibility
   # a currency prepare refuses for a reason already visible in the cart. What is left over is
   # purchase-only (a snapshotted displayed_price_currency_type that moved under the checkout, a
   # wallet or off-session submit) and still falls back there.
-  def self.direct_listed_line_items_eligible?(line_items:, buyer_currency:)
+  def self.direct_listed_line_items_eligible?(line_items:, buyer_currency:, require_listed_direct_charge: true)
     return false if line_items.blank?
 
     currency = buyer_currency.to_s.downcase
@@ -100,7 +100,9 @@ class Checkout::BuyerCurrencyEligibility
 
     seller = line_items.first.product.user
     return false unless seller_enabled?(seller)
-    return false unless listed_currency_direct_charge_enabled?(seller)
+    # Method-forced iDEAL/Bancontact/UPI/Pix already charge in the listed currency without
+    # the listed-card ramp; skip that flag only when the caller is allocating that mount.
+    return false if require_listed_direct_charge && !listed_currency_direct_charge_enabled?(seller)
     # #decision refuses at :unsupported_processor / :unsupported_charge_model before it reaches
     # the listed-currency gates, so a seller whose charging account cannot create the intent has
     # no listed lane to advertise.
