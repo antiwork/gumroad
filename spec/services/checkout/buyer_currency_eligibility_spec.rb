@@ -1276,6 +1276,16 @@ describe Checkout::BuyerCurrencyEligibility do
       expect(eligible_for?(cad_product, tip_cents: 200)).to be(true)
     end
 
+    it "allows shipping only for method-forced allocations, not the listed-card lane" do
+      merchant_account
+      shipped = [cad_line_item(cad_product, shipping_cents: 300)]
+
+      expect(described_class.direct_listed_line_items_eligible?(line_items: shipped, buyer_currency: Currency::CAD)).to be(false)
+      expect(
+        described_class.direct_listed_line_items_eligible?(line_items: shipped, buyer_currency: Currency::CAD, require_listed_direct_charge: false)
+      ).to be(true)
+    end
+
     it "refuses a seller whose charging account cannot create the intent" do
       # The seller's only account is a Gumroad-managed Stripe Custom account, outside the
       # destination-charge ramp. #decision refuses that at :unsupported_charge_model before it

@@ -4,6 +4,7 @@ require "spec_helper"
 
 describe CustomerSurchargeController, :vcr do
   include ManageSubscriptionHelpers
+  include CurrencyHelper
 
   def expected_surcharge_response(**overrides)
     expected = {
@@ -363,6 +364,40 @@ describe CustomerSurchargeController, :vcr do
           currency: Currency::EUR
         )
       ).to eq(allocations)
+    end
+
+    it "includes shipping converted at the signed rate in method-forced allocations for a physical line" do
+      Feature.activate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, @user)
+      eur_product = create(:physical_product, user: @user, price_currency_type: Currency::EUR, price_cents: 10_00)
+      eur_product.shipping_destinations.destroy_all
+      destination = create(:shipping_destination, country_code: Compliance::Countries::DEU.alpha2, one_item_rate_cents: 250, multiple_items_rate_cents: 200)
+      eur_product.shipping_destinations << destination
+      allow_any_instance_of(CurrencyHelper).to receive(:get_rate).with(Currency::EUR).and_return("1.5")
+
+      post "calculate_all", params: {
+        products: [{ permalink: eur_product.unique_permalink, price: 6_67, listed_price_cents: 10_00, quantity: 1 }],
+        postal_code: 10115,
+        country: Compliance::Countries::DEU.alpha2,
+        payment_details_source: PurchasePaymentFlow::PAYMENT_ELEMENT,
+        payment_element_mount_currency: Currency::EUR,
+        payment_element_direct_listed_currency: Currency::EUR,
+        payment_method_list_token: listed_payment_method_list_token(eur_product, rate: "1.5"),
+      }, as: :json
+
+      allocation = response.parsed_body.fetch("direct_listed_line_allocations").sole
+      shipping_usd_cents = destination.calculate_shipping_rate(quantity: 1, currency_type: Currency::EUR, rate: "1.5")
+      expected_shipping_cents = usd_cents_to_currency(Currency::EUR, shipping_usd_cents, "1.5")
+      expect(response.parsed_body.fetch("shipping_rate_cents")).to eq(shipping_usd_cents)
+      expect(expected_shipping_cents).to be_positive
+      expect(allocation.fetch("shipping_cents")).to eq(expected_shipping_cents)
+      expect(allocation.fetch("total_cents")).to eq(10_00 + allocation.fetch("tax_cents") + expected_shipping_cents)
+      expect(
+        Checkout::DirectListedAmountToken.verify(
+          response.parsed_body.fetch("direct_listed_amount_token"),
+          sellers: [@user],
+          currency: Currency::EUR
+        )
+      ).to eq([allocation])
     end
 
     it "signs only the paid allocation when the Element displays a paid and free line" do

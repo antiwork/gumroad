@@ -114,7 +114,9 @@ class Checkout::BuyerCurrencyEligibility
     # out-of-ramp later-charge products are facts about the product, and are checked as such.
     return false if line_items.any? { unquotable_product?(_1.product) }
     return false if line_items.any? { _1.later_charge_kind.present? }
-    return false if line_items.any? { _1.shipping_cents.to_i.positive? }
+    # Method-forced allocations convert per-line shipping at the signed page rate, so a physical
+    # line must stay eligible there or the Element mounts without the shipping prepare includes.
+    return false if require_listed_direct_charge && line_items.any? { _1.shipping_cents.to_i.positive? }
 
     rates = line_items.map { _1.listed_currency_rate.presence }
     rates.all? && rates.map(&:to_s).uniq.one? && rates.first.to_d.positive?
