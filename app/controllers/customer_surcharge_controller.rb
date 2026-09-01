@@ -132,7 +132,10 @@ class CustomerSurchargeController < ApplicationController
       products
     )
     direct_listed_amount_token = Checkout::DirectListedAmountToken.issue(
-      allocations: direct_listed_line_allocations,
+      allocations: direct_listed_charge_allocations_for_token(
+        direct_listed_line_allocations,
+        quote_line_items
+      ),
       sellers: surcharge_cart_sellers,
       currency: direct_listed_selector_currency
     )
@@ -234,6 +237,17 @@ class CustomerSurchargeController < ApplicationController
       end
 
       allocations
+    end
+
+    # The Element displays every cart line, including free lines, while prepare compares only
+    # purchases that contribute money to the PaymentIntent. Sign that same chargeable subset so
+    # a mixed paid/free cart does not reject an otherwise unchanged amount forever.
+    def direct_listed_charge_allocations_for_token(allocations, line_items)
+      return if allocations.blank? || allocations.length != line_items.length
+
+      allocations.zip(line_items).filter_map do |allocation, line_item|
+        allocation if line_item.charge_canonical_total_cents.positive?
+      end
     end
 
     def numeric_cents(value)

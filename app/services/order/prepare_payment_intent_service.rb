@@ -667,6 +667,11 @@ class Order::PreparePaymentIntentService
     # Only a signed surcharge snapshot can prove what mounted the Element. The browser cannot
     # alter it to make a changed offer look current, and the snapshot never sets charge amounts.
     def direct_listed_allocations_match?(actual_allocations, currency)
+      # A checkout tab opened before this snapshot shipped cannot send the token. Preserve the
+      # pre-deploy server-computed behavior for those in-flight tabs; any client that sends a
+      # token must still pass the exact comparison below.
+      return true if params[:direct_listed_amount_token].blank?
+
       reported = Checkout::DirectListedAmountToken.verify(
         params[:direct_listed_amount_token],
         sellers: purchases_to_charge.map(&:seller),

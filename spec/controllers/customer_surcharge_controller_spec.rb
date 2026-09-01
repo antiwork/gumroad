@@ -323,6 +323,34 @@ describe CustomerSurchargeController, :vcr do
       ).to eq(allocations)
     end
 
+    it "signs only the paid allocation when the Element displays a paid and free line" do
+      Feature.activate_user(Checkout::BuyerCurrencyEligibility::LISTED_CURRENCY_DIRECT_CHARGE_FEATURE_NAME, @user)
+      paid_product = create(:product, user: @user, price_currency_type: Currency::CAD, price_cents: 10_00)
+      free_product = create(:product, user: @user, price_currency_type: Currency::CAD, price_cents: 0)
+      allow_any_instance_of(CurrencyHelper).to receive(:get_rate).with(Currency::CAD).and_return("0.8")
+
+      post "calculate_all", params: {
+        products: [
+          { permalink: paid_product.unique_permalink, price: 10_00, listed_price_cents: 10_00, quantity: 1 },
+          { permalink: free_product.unique_permalink, price: 0, listed_price_cents: 0, quantity: 1 },
+        ],
+        payment_details_source: PurchasePaymentFlow::PAYMENT_ELEMENT,
+        payment_element_mount_currency: Currency::CAD,
+        payment_element_direct_listed_currency: Currency::CAD,
+        payment_method_list_token: listed_payment_method_list_token(paid_product, free_product, rate: "0.8"),
+      }, as: :json
+
+      allocations = response.parsed_body.fetch("direct_listed_line_allocations")
+      expect(allocations.map { _1.fetch("permalink") }).to eq([paid_product.unique_permalink, free_product.unique_permalink])
+      expect(
+        Checkout::DirectListedAmountToken.verify(
+          response.parsed_body.fetch("direct_listed_amount_token"),
+          sellers: [@user],
+          currency: Currency::CAD
+        )
+      ).to eq([allocations.first])
+    end
+
     it "converts direct-listed tax allocations with the signed page rate, not the live rate" do
       Feature.activate_user(Checkout::BuyerCurrencyEligibility::LISTED_CURRENCY_DIRECT_CHARGE_FEATURE_NAME, @user)
       cad_product = create(:product, user: @user, price_currency_type: Currency::CAD, price_cents: 100)

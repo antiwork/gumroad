@@ -2246,11 +2246,13 @@ describe Order::PreparePaymentIntentService, :vcr do
           shipping_cents: 0,
           total_cents: purchase.displayed_price_cents,
         }]
-        params[:direct_listed_amount_token] ||= Checkout::DirectListedAmountToken.issue(
-          allocations:,
-          sellers: [purchase.seller],
-          currency: mount_currency
-        )
+        unless params.key?(:direct_listed_amount_token)
+          params[:direct_listed_amount_token] = Checkout::DirectListedAmountToken.issue(
+            allocations:,
+            sellers: [purchase.seller],
+            currency: mount_currency
+          )
+        end
         preview = Stripe::StripeObject.construct_from(type: "card", card: { country: "CA" })
         allow(Stripe::ConfirmationToken).to receive(:retrieve)
           .and_return(Stripe::StripeObject.construct_from(payment_method_preview: preview))
@@ -2385,6 +2387,21 @@ describe Order::PreparePaymentIntentService, :vcr do
         expect(purchase.reload).to be_failed
         expect(order.charges.last.charge_presentment).to be_nil
         expect(purchase.purchase_presentment).to be_nil
+      end
+
+      it "preserves a token-less checkout opened before the snapshot deployed" do
+        order, params = build_order
+        purchase = order.purchases.first
+        purchase.update!(displayed_price_cents: 15_00,
+                         displayed_price_currency_type: Currency::CAD,
+                         rate_converted_to_usd: BigDecimal("0.8"))
+        params[:direct_listed_amount_token] = nil
+
+        create_args, responses = perform_with_direct_listed_card(order, params)
+
+        expect(create_args[:currency]).to eq(Currency::CAD)
+        expect(create_args[:amount_cents]).to eq(15_00)
+        expect(responses["unique-id-0"][:success]).to eq(true)
       end
 
       it "keeps the canonical USD intent when the Element reports that it displayed USD" do
