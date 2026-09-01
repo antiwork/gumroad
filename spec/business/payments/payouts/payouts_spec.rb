@@ -486,6 +486,39 @@ describe Payouts do
           described_class.is_user_payable(settling_seller, payout_date, payout_type: Payouts::PAYOUT_TYPE_INSTANT, add_comment: false)
         end.not_to change { settling_seller.comments.with_type_payout_note.count }
       end
+
+      it "does not treat a $60 settled leftover as still settling" do
+        allow(settling_seller).to receive(:instantly_payable_unpaid_balance_cents_up_to_date).and_return(60_00)
+        allow(StripePayoutProcessor).to receive(:is_user_payable).and_return(true)
+
+        expect(described_class.is_user_payable(
+          settling_seller,
+          payout_date,
+          processor_type: PayoutProcessorType::STRIPE,
+          payout_type: Payouts::PAYOUT_TYPE_INSTANT,
+          add_comment: true
+        )).to be(true)
+        expect(settling_seller.comments.with_type_payout_note).to be_empty
+      end
+
+      it "does not apply the standard $100 floor before a $60 instant payout" do
+        allow(settling_seller).to receive(:unpaid_balance_cents_up_to_date).and_return(60_00)
+        allow(settling_seller).to receive(:instantly_payable_unpaid_balance_cents_up_to_date).and_return(60_00)
+        expect(StripePayoutProcessor).to receive(:is_user_payable).with(
+          settling_seller,
+          60_00,
+          add_comment: false,
+          from_admin: false,
+          payout_type: Payouts::PAYOUT_TYPE_INSTANT
+        ).and_return(true)
+
+        expect(described_class.is_user_payable(
+          settling_seller,
+          payout_date,
+          processor_type: PayoutProcessorType::STRIPE,
+          payout_type: Payouts::PAYOUT_TYPE_INSTANT
+        )).to be(true)
+      end
     end
 
     describe "payout processor logic" do

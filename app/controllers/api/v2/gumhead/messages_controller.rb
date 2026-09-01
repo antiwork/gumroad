@@ -147,6 +147,16 @@ class Api::V2::Gumhead::MessagesController < Api::V2::BaseController
   #   $redis.set(RedisKey.gumhead_client_versions, { "min" => "0.1.0", "current" => "0.2.0" }.to_json)
   UPDATE_REQUIRED_MESSAGE = "This Gumhead build is too old for the gateway. Download the update from your Gumroad dashboard."
 
+  # IOError and SystemCallError cannot say which socket failed, and the
+  # stream loop must treat the two ends differently: a dead client is
+  # drained for the ledger, a dead upstream is reported to the client that
+  # is still listening. The read and write wrappers retag them — an
+  # upstream reset handled as a client disconnect closes the stream with
+  # no error frame and no log, and the runtime accepts the half reply as
+  # a finished turn.
+  ClientGone = Class.new(StandardError)
+  UpstreamGone = Class.new(StandardError)
+
   # One Gumhead turn is a whole tool loop of model calls, so the request
   # throttle is deliberately loose; the real spend control is the daily
   # token caps.
@@ -676,6 +686,10 @@ class Api::V2::Gumhead::MessagesController < Api::V2::BaseController
       # stream that long is being generated, not stalling.
       held = +""
       committed = false
+      # An SSE client dispatches an event only at the blank-line delimiter,
+      # so a terminal data line whose delimiter never arrived was never
+      # delivered — the error frame must not be suppressed for it.
+      stream_tail = +""
       hold_started_at = Process.clock_gettime(Process::CLOCK_MONOTONIC)
       begin
         last_renewal = Time.current
@@ -684,10 +698,11 @@ class Api::V2::Gumhead::MessagesController < Api::V2::BaseController
         # the one failure this gateway does not mint. Rewriting it means
         # re-framing SSE across chunk boundaries; that belongs in its own
         # change, not in the middle of this loop.
-        while (chunk = upstream.body.readpartial)
+        while (chunk = read_upstream_chunk(upstream))
           scanner << chunk
+          stream_tail = ((stream_tail + chunk)[-4..] || stream_tail + chunk)
           if committed
-            response.stream.write(chunk)
+            write_to_client(chunk)
           else
             held << chunk
             held_too_long = Process.clock_gettime(Process::CLOCK_MONOTONIC) - hold_started_at > MAX_HELD_STREAM_SECONDS
@@ -701,31 +716,43 @@ class Api::V2::Gumhead::MessagesController < Api::V2::BaseController
           # A completed blank stream is answered as retryable; anything
           # else — a refusal the client handles, an unfinished ending —
           # passes through as it arrived.
-          if scanner.terminal? && scanner.stop_reason == "end_turn"
-            Rails.logger.warn("Gumhead gateway empty reply: model=#{loggable_upstream_field(scanner.model)} stream=true")
-            render json: anthropic_error(*UPSTREAM_ERRORS.fetch(:busy)), status: :bad_gateway
-            return
-          end
+          return if render_blank_stream_retry(scanner)
           committed = commit_stream!(held)
         end
-        # A clean EOF without message_stop (or an upstream error event) is
-        # an interruption the client would otherwise see as a silent close.
-        write_stream_error_frame unless scanner.terminal?
-      rescue IOError, SystemCallError, ActionController::Live::ClientDisconnected
+        # A clean EOF without a delivered message_stop (or upstream error
+        # event) is an interruption the client would otherwise see as a
+        # silent close.
+        unless terminal_delivered?(scanner, stream_tail)
+          Rails.logger.warn("Gumhead gateway stream ended without message_stop: model=#{loggable_upstream_field(scanner.model || @body["model"])}")
+          write_stream_error_frame
+        end
+      rescue ClientGone
         # The client went away mid-turn, but Anthropic keeps generating and
         # billing until the message ends. Drain the rest of the upstream so
         # the final message_delta's cumulative counts reach the ledger —
         # otherwise disconnecting early would leave most of the output
         # unmetered. The in-flight slot stays held while draining.
         drain_upstream(upstream, scanner)
-      rescue HTTP::Error, OpenSSL::SSL::SSLError => e
+      rescue UpstreamGone, HTTP::Error, OpenSSL::SSL::SSLError => e
         # Upstream broke mid-stream. Emit the SSE error event before the
         # ensure closes the stream — a bare EOF (or, before the first chunk,
         # an empty 200) would leave the client guessing. Anthropic delivers
         # mid-stream failures the same way: an error event on the open stream.
-        Rails.logger.warn("Gumhead gateway upstream error: #{e.class} #{e.message}")
-        committed = commit_stream!(held) unless committed
-        write_stream_error_frame
+        # A reset after a delivered message_stop is a transport hiccup on a
+        # complete reply; an error frame there would make the runtime
+        # reject a message it already has.
+        delivered = terminal_delivered?(scanner, stream_tail)
+        Rails.logger.warn("Gumhead gateway upstream error: #{e.class} #{e.message}") unless delivered
+        # A reset at the final read must not weaken the blank-stream
+        # contract: a completed empty reply is still answered as
+        # retryable, never committed.
+        return if !committed && render_blank_stream_retry(scanner)
+        begin
+          committed = commit_stream!(held) unless committed
+        rescue ClientGone
+          # Both sides are gone; the ensure still meters what was scanned.
+        end
+        write_stream_error_frame unless delivered
       ensure
         if scanner.usage?
           record_usage!(model: scanner.model || @body["model"], usage: scanner.usage) unless scanner.unbilled_refusal?
@@ -767,8 +794,44 @@ class Api::V2::Gumhead::MessagesController < Api::V2::BaseController
       response.headers["X-Accel-Buffering"] = "no"
       # The stream buffer keeps a reference to what it is handed, so the
       # held bytes must not be mutated after the write.
-      response.stream.write(held.dup) unless held.empty?
+      write_to_client(held.dup) unless held.empty?
       true
+    end
+
+    # A completed blank stream gives the client nothing to consume; a 502
+    # makes the runtime retry instead (empty_reply? is the buffered twin).
+    # Only end_turn counts: a refusal ships empty content the client
+    # handles, and other stop reasons mean the reply is unfinished.
+    def render_blank_stream_retry(scanner)
+      return false unless scanner.terminal? && scanner.stop_reason == "end_turn"
+
+      Rails.logger.warn("Gumhead gateway empty reply: model=#{loggable_upstream_field(scanner.model)} stream=true")
+      render json: anthropic_error(*UPSTREAM_ERRORS.fetch(:busy)), status: :bad_gateway
+      true
+    end
+
+    def read_upstream_chunk(upstream)
+      upstream.body.readpartial
+    rescue IOError, SystemCallError => e
+      raise UpstreamGone, "#{e.class}: #{e.message}"
+    end
+
+    # Terminal for the CLIENT: the scanner saw the ending event AND its
+    # blank-line delimiter went out — an SSE client discards an event whose
+    # delimiter never arrived. CRLF is one line ending, so it is normalized
+    # before looking for the blank line; a trailing lone CR is inconclusive
+    # (it may be half of a CRLF whose LF never arrived) and does not count.
+    def terminal_delivered?(scanner, stream_tail)
+      return false unless scanner.terminal?
+
+      tail = stream_tail.gsub("\r\n", "\n")
+      tail.end_with?("\n\n", "\r\r")
+    end
+
+    def write_to_client(data)
+      response.stream.write(data)
+    rescue IOError, SystemCallError, ActionController::Live::ClientDisconnected => e
+      raise ClientGone, "#{e.class}: #{e.message}"
     end
 
     def write_stream_error_frame
