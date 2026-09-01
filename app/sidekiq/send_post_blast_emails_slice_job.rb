@@ -4,6 +4,7 @@
 # from one parent attempt from satisfying a later repartition of the same blast.
 class SendPostBlastEmailsSliceJob
   include Sidekiq::Job
+  include ActionView::Helpers::SanitizeHelper
   include PostBlastSending
   sidekiq_options retry: 10, queue: :default
 
