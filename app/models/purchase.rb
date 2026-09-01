@@ -32,7 +32,7 @@ class Purchase < ApplicationRecord
   # only when Gumroad absorbed the tax (Gumroad-held account, amount_includes_iof=always).
   # Direct charge to a connected account: no Gumroad cost, so no fee — whether or not IOF
   # applied. Different question from PreparePaymentIntentService#pix_iof_applies? (tax exists
-  # vs who paid it). Seller absorbs it (gumroad-private#1305).
+  # vs who paid it). Seller absorbs it.
   PIX_IOF_FEE_PER_THOUSAND = 35
 
   MAX_PRICE_RANGE = (-2_147_483_647..2_147_483_647)
