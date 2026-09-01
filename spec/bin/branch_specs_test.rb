@@ -125,6 +125,41 @@ check(
   expect_specs: %w[spec/requests/rack_attack_spec.rb],
 )
 
+# Nested oauth/device_authorizations controller -> flattened request spec name
+check(
+  "nested oauth controller maps to flattened request spec",
+  base_files: {
+    "spec/requests/oauth_device_authorizations_spec.rb" => SPEC_STUB,
+    "app/controllers/oauth/device_authorizations_controller.rb" => "old",
+  },
+  head_files: { "app/controllers/oauth/device_authorizations_controller.rb" => "new" },
+  expect_specs: %w[spec/requests/oauth_device_authorizations_spec.rb],
+)
+
+check(
+  "nested oauth device authorization view maps to flattened request spec",
+  base_files: {
+    "spec/requests/oauth_device_authorizations_spec.rb" => SPEC_STUB,
+    "app/views/oauth/device_authorizations/new.html.erb" => "old",
+  },
+  head_files: { "app/views/oauth/device_authorizations/new.html.erb" => "new" },
+  expect_specs: %w[spec/requests/oauth_device_authorizations_spec.rb],
+)
+
+check(
+  "doorkeeper authorize view maps to oauth authorize request specs",
+  base_files: {
+    "spec/requests/oauth_authorizations_spec.rb" => SPEC_STUB,
+    "spec/requests/oauth_authorize_scope_list_spec.rb" => SPEC_STUB,
+    "app/views/doorkeeper/authorizations/new.html.erb" => "old",
+  },
+  head_files: { "app/views/doorkeeper/authorizations/new.html.erb" => "new" },
+  expect_specs: %w[
+    spec/requests/oauth_authorizations_spec.rb
+    spec/requests/oauth_authorize_scope_list_spec.rb
+  ],
+)
+
 # Other config files must still escalate — the map is per-file, not per-dir.
 check(
   "unmapped config file still escalates",
