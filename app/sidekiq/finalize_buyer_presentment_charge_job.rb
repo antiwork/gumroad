@@ -18,7 +18,7 @@ class FinalizeBuyerPresentmentChargeJob
     charge = Charge.find(charge_id)
     return unless charge.settlement_deferrable?
 
-    pending_purchases = charge.purchases.select { _1.in_progress? && _1.stripe_transaction_id.present? }
+    pending_purchases = charge.purchases.select { _1.in_progress? && _1.charged_at_processor? }
     if pending_purchases.none?
       # No purchase is awaiting settlement. If the purchases already finalized but the
       # post-finalization SendChargeReceiptJob enqueue failed (e.g. a transient Redis error),

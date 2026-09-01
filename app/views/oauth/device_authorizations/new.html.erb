@@ -25,8 +25,8 @@
       <div class="flex flex-col gap-4 p-4">
         <h4 class="font-bold">This application will be able to:</h4>
         <ul>
-          <% @device_authorization.scope_list.each do |scope| %>
-            <li><%= oauth_scope_description(scope) %></li>
+          <% @device_authorization.scope_list.filter_map { |scope| oauth_scope_description(scope) }.each do |description| %>
+            <li><%= description %></li>
           <% end %>
         </ul>
       </div>

@@ -119,6 +119,9 @@ FANOUT = {
   %r{\Aapp/javascript/components/BundleEdit/} => BUNDLE_FLOW_SPECS,
   %r{\Aapp/javascript/components/DashboardPage} => %w[spec/requests/dashboard_spec.rb],
   %r{\Aapp/javascript/data/customer_surcharge} => CHECKOUT_FLOW_SPECS,
+  # Nested doorkeeper views have no spec/requests/doorkeeper/... file; the
+  # authorize screens live in oauth_authorizations*_spec.rb.
+  %r{\Aapp/views/doorkeeper/} => %w[spec/requests/oauth_authorizations_spec.rb spec/requests/oauth_authorize_scope_list_spec.rb],
   %r{\Aspec/support/dynamodb\.rb\z} => %w[spec/services/email_engagement_dynamo_store_spec.rb],
 }.freeze
 
@@ -334,7 +337,14 @@ def spec_candidates(path)
   when %r{\Aspec/.*_spec\.rb\z}
     [path]
   when %r{\Aapp/controllers/(.*)_controller\.rb\z}
-    ["spec/controllers/#{$1}_controller_spec.rb", "spec/requests/#{$1}_spec.rb"]
+    nested = $1
+    flat = nested.tr("/", "_")
+    [
+      "spec/controllers/#{nested}_controller_spec.rb",
+      "spec/requests/#{nested}_spec.rb",
+      "spec/controllers/#{flat}_controller_spec.rb",
+      "spec/requests/#{flat}_spec.rb"
+    ].uniq
   when %r{\Aapp/(models|services)/(.*/)?([^/]+)\.rb\z}
     # Unit specs (exact name, name-prefixed, and split-by-concern subdir)
     # plus any request specs named after the model/service, so a money-path
@@ -351,7 +361,9 @@ def spec_candidates(path)
     if File.exist?("app/mailers/#{$2}.rb")
       mailer_view_specs(path)
     else
-      Dir.glob("spec/requests/#{$1}*_spec.rb") + Dir.glob("spec/views/#{$1}/**/*_spec.rb")
+      Dir.glob("spec/requests/#{$1}*_spec.rb") +
+        Dir.glob("spec/requests/#{$1.tr('/', '_')}*_spec.rb") +
+        Dir.glob("spec/views/#{$1}/**/*_spec.rb")
     end
   when %r{\Aapp/([^/]+)/(.*)\.rb\z}
     ["spec/#{$1}/#{$2}_spec.rb"]

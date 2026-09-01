@@ -1703,8 +1703,13 @@ class Purchase < ApplicationRecord
 
   # True while a processor-backed purchase has been charged but settlement data has not
   # arrived yet; a finalization job completes the purchase once it does.
+  # Client-confirm deferral can persist the PaymentIntent without a Charge id yet.
   def pending_processor_settlement?
-    in_progress? && stripe_transaction_id.present? && processor_settlement_deferrable? && flow_of_funds.blank?
+    in_progress? && processor_settlement_deferrable? && flow_of_funds.blank? && charged_at_processor?
+  end
+
+  def charged_at_processor?
+    stripe_transaction_id.present? || processor_payment_intent_id.present? || charge&.stripe_payment_intent_id.present?
   end
 
   def pending_buyer_presentment_settlement?
