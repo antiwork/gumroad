@@ -738,6 +738,11 @@ function directListedCardActive(state: State, usingSavedCard = state.usingSavedC
   return state.paymentMethod === "card" && !usingSavedCard && !hasShipping(state);
 }
 
+function usdCentsToListedCurrency(usdCents: number, rate: number, subunitToUnit: number): number {
+  const converted = usdCents * rate;
+  return subunitToUnit === 1 ? Math.round(converted / 100) : Math.round(converted);
+}
+
 function getDirectListedPaymentElementAmount(state: State) {
   if (state.checkoutPayment.integration !== "payment_element_client_confirm") return getChargeTodayPrice(state);
   if (state.surcharges.type !== "loaded") return null;
@@ -753,9 +758,12 @@ function getDirectListedPaymentElementAmount(state: State) {
 
   const taxUsd = state.surcharges.result.tax_cents;
   const shippingUsd = state.surcharges.result.shipping_rate_cents;
-  // Charge time converts each purchase separately. An aggregate USD→listed
-  // fallback can disagree by a cent on multi-line carts, so do not mount.
-  if (taxUsd !== 0 || shippingUsd !== 0) return null;
+  // Only the direct-listed card lane asks for per-line allocations (see loadSurcharges), and charge
+  // time converts each of its purchases separately, so an aggregate USD→listed fallback can
+  // disagree by a cent on multi-line carts: refuse to mount instead. The method-forced lane
+  // (iDEAL/Bancontact, one-time UPI) is never sent allocations, so refusing there is just a stuck
+  // spinner — it keeps converting the aggregate at the signed page rate.
+  if ((taxUsd !== 0 || shippingUsd !== 0) && state.checkoutPayment.elements_options.direct_listed_card) return null;
 
   const baseAmount = state.checkoutPayment.elements_options.presentment_amount_cents ?? 0;
   const linePrices = state.products.map((product) => ({
@@ -770,8 +778,20 @@ function getDirectListedPaymentElementAmount(state: State) {
     (sum, tip) => sum + (tip ?? 0),
     0,
   );
+  if (taxUsd === 0 && shippingUsd === 0) return lineTotal + tipTotal;
 
-  return lineTotal + tipTotal;
+  const listedRate = state.checkoutPayment.elements_options.direct_listed_currency_rate;
+  const subunitToUnit = state.checkoutPayment.elements_options.listed_currency_display?.subunit_to_unit;
+  // The charge converts with the rate signed into the page's token; without it we cannot
+  // reproduce the intent amount, so do not mount.
+  if (listedRate == null || !(subunitToUnit && subunitToUnit > 0)) return null;
+
+  return (
+    lineTotal +
+    tipTotal +
+    usdCentsToListedCurrency(taxUsd, listedRate, subunitToUnit) +
+    usdCentsToListedCurrency(shippingUsd, listedRate, subunitToUnit)
+  );
 }
 
 export function isProcessing(state: State) {

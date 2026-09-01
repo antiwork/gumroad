@@ -1159,6 +1159,53 @@ describe("direct-listed card element", () => {
     expect(getStripePaymentElementAmount(s)).toBeNull();
   });
 
+  it("mounts a method-forced element on EU VAT converted at the signed page rate", () => {
+    // The method-forced lane never receives per-line allocations, so it converts the aggregate
+    // rather than refusing to mount — otherwise iDEAL/Bancontact buyers get a permanent spinner.
+    const s = state({
+      checkoutPayment: {
+        ...methodForcedEurConfig,
+        elements_options: { ...methodForcedEurConfig.elements_options, direct_listed_currency_rate: 0.9 },
+      },
+      surcharges: {
+        type: "loaded",
+        result: {
+          vat_id_valid: false,
+          has_vat_id_input: false,
+          shipping_rate_cents: 0,
+          tax_cents: 100,
+          tax_included_cents: 0,
+          subtotal: 1_100,
+          buyer_currency_quote: null,
+        },
+      },
+    });
+
+    expect(getConfiguredDirectListedCurrency(s)).toBeNull();
+    expect(getStripePaymentElementAmount(s)).toBe(1_590);
+    expect(getStripePaymentElementMountCurrency(s)).toBe("eur");
+  });
+
+  it("does not mount a method-forced element with tax when the page signed no listed rate", () => {
+    const s = state({
+      checkoutPayment: methodForcedEurConfig,
+      surcharges: {
+        type: "loaded",
+        result: {
+          vat_id_valid: false,
+          has_vat_id_input: false,
+          shipping_rate_cents: 0,
+          tax_cents: 100,
+          tax_included_cents: 0,
+          subtotal: 1_100,
+          buyer_currency_quote: null,
+        },
+      },
+    });
+
+    expect(getStripePaymentElementAmount(s)).toBeNull();
+  });
+
   it("remounts in canonical USD for a shipping cart", () => {
     const s = state({
       checkoutPayment: directListedCardConfig,
