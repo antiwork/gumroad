@@ -104,6 +104,28 @@ class PreviewQaDebugMiddleware
       end
     end
 
+    if req.path == "/qa/setup_discount"
+      begin
+        product = Link.find_by!(unique_permalink: req.params["product"])
+        seller = product.user
+        code = req.params["code"].presence || "PR7446TEMP"
+        seller.update!(tipping_enabled: true, disable_buyer_local_currency: false)
+        %i[
+          buyer_currency_charging buyer_local_currency checkout_listed_currency_direct_charge
+          buyer_currency_destination_charges
+        ].each { Feature.activate_user(_1, seller) }
+        offer_code = seller.offer_codes.alive.find_by(code: code)
+        offer_code ||= seller.offer_codes.build(code: code)
+        offer_code.assign_attributes(amount_percentage: 25, amount_cents: nil, products: [product])
+        offer_code.save!
+        body = { product: product.unique_permalink, code: offer_code.code, percent_off: offer_code.amount_percentage }.to_json
+        return [200, { "Content-Type" => "application/json" }, [body]]
+      rescue StandardError => e
+        body = { error: e.class.name, message: e.message }.to_json
+        return [500, { "Content-Type" => "application/json" }, [body]]
+      end
+    end
+
     return @app.call(env) unless req.path == "/qa/preview_debug"
 
     helper = Class.new { include CurrencyHelper }.new
