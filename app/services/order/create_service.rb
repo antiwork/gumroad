@@ -448,15 +448,17 @@ class Order::CreateService
       Checkout::PaymentMethodListToken.direct_listed_currency_rate(
         params[:payment_method_list_token],
         sellers: cart_sellers,
-        currency: product.price_currency_type
+        currency: product.price_currency_type,
+        permalinks: cart_permalinks
       )
     end
 
     def cart_sellers
-      @cart_sellers ||= begin
-        permalinks = params.fetch(:line_items, []).filter_map { _1[:permalink] }.uniq
-        Link.where(unique_permalink: permalinks).includes(:user).map(&:user).uniq
-      end
+      @cart_sellers ||= Link.where(unique_permalink: cart_permalinks).includes(:user).map(&:user).uniq
+    end
+
+    def cart_permalinks
+      @cart_permalinks ||= params.fetch(:line_items, []).filter_map { _1[:permalink] }.uniq
     end
 
     def build_purchase_params(product, purchase_params)

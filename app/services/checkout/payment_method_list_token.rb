@@ -30,7 +30,7 @@ class Checkout::PaymentMethodListToken
   PURPOSE = "checkout_payment_method_list"
 
   class << self
-    def issue(payment_method_types:, sellers:, quoted_payment_method_types: nil, inr_payment_method_types: nil, direct_listed_currency: nil, direct_listed_currency_rate: nil)
+    def issue(payment_method_types:, sellers:, quoted_payment_method_types: nil, inr_payment_method_types: nil, direct_listed_currency: nil, direct_listed_currency_rate: nil, permalinks: nil)
       return nil if payment_method_types.blank?
 
       payload = { "types" => payment_method_types.map(&:to_s), "sellers" => seller_ids(sellers) }
@@ -43,6 +43,10 @@ class Checkout::PaymentMethodListToken
       if direct_listed_currency.present? && rate.present?
         payload["direct_listed_currency"] = direct_listed_currency.to_s.downcase
         payload["direct_listed_currency_rate"] = rate.to_s("F")
+        # Bind the signed rate to the cart it was issued for. Seller+currency alone lets a
+        # rate from one of that seller's products be replayed onto another of their carts.
+        bound = normalized_permalinks(permalinks)
+        payload["permalinks"] = bound if bound.present?
       end
 
       verifier.generate(payload, purpose: PURPOSE, expires_in: TTL)
@@ -64,16 +68,24 @@ class Checkout::PaymentMethodListToken
       types_for_currency(payload, currency)
     end
 
-    def direct_listed_currency_rate(token, sellers:, currency:)
+    # `permalinks` is the cart the rate is being read for. A token issued before the cart bind
+    # shipped carries none, and keeps the seller+currency behaviour so a rolling deploy does not
+    # strip the signed rate from pages already open; a token that carries them must match exactly.
+    def direct_listed_currency_rate(token, sellers:, currency:, permalinks: nil)
       payload = verified_payload(token, sellers:)
       return nil unless payload
       return nil unless payload["direct_listed_currency"] == currency.to_s.downcase
+
+      bound = payload["permalinks"]
+      return nil if bound.present? && bound != normalized_permalinks(permalinks)
 
       positive_decimal(payload["direct_listed_currency_rate"])
     end
 
     private
       def seller_ids(sellers) = Array(sellers).compact.map(&:id).sort
+
+      def normalized_permalinks(permalinks) = Array(permalinks).compact.map(&:to_s).uniq.sort
 
       def verified_payload(token, sellers:)
         return nil if token.blank?

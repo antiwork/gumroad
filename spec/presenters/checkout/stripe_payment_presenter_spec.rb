@@ -19,6 +19,7 @@ describe Checkout::StripePaymentPresenter do
                            is_tiered_membership: product.is_tiered_membership)
     {
       product: {
+        permalink: product.unique_permalink,
         creator: { id: product.user.external_id },
         is_preorder:,
         free_trial: free_trial ? { duration: { unit: "day", amount: 1 } } : nil,
@@ -2269,6 +2270,25 @@ describe Checkout::StripePaymentPresenter do
       expect(props[:elements_options][:currency]).to eq("eur")
       expect(props[:elements_options][:payment_method_types]).not_to include("cashapp", "us_bank_account")
       expect(props[:elements_options][:payment_method_types]).to include("ideal", "bancontact")
+    ensure
+      deactivate_buyer_currency_flags(seller) if seller
+    end
+
+    it "signs the listed rate for the cart it was issued for" do
+      seller, product = buyer_currency_seller_with_product(price_cents: 1500)
+      other_product = create(:product, user: seller, price_currency_type: "eur", price_cents: 1500)
+      activate_buyer_currency_flags(seller)
+      allow(Stripe).to receive(:api_key).and_return("sk_test_currency")
+      issued = nil
+      allow(Checkout::PaymentMethodListToken).to receive(:issue) do |**kwargs|
+        issued = kwargs
+        "issued:#{kwargs[:payment_method_types].join(",")}" if kwargs[:payment_method_types].present?
+      end
+
+      stripe_payment_props(add_products: [checkout_product_for(product), checkout_product_for(other_product)])
+
+      expect(issued[:direct_listed_currency_rate]).to eq(0.8)
+      expect(issued[:permalinks]).to match_array([product.unique_permalink, other_product.unique_permalink])
     ensure
       deactivate_buyer_currency_flags(seller) if seller
     end

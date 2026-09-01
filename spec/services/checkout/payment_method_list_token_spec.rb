@@ -57,6 +57,32 @@ describe Checkout::PaymentMethodListToken do
       expect(described_class.direct_listed_currency_rate(token, sellers: [seller], currency: Currency::CAD)).to be_nil
     end
 
+    it "refuses a rate signed for a different cart" do
+      token = described_class.issue(
+        payment_method_types: types,
+        sellers: [seller],
+        direct_listed_currency: Currency::CAD,
+        direct_listed_currency_rate: "0.8",
+        permalinks: %w[abc def]
+      )
+
+      expect(described_class.direct_listed_currency_rate(token, sellers: [seller], currency: Currency::CAD, permalinks: %w[def abc])).to eq(BigDecimal("0.8"))
+      expect(described_class.direct_listed_currency_rate(token, sellers: [seller], currency: Currency::CAD, permalinks: %w[abc ghi])).to be_nil
+      expect(described_class.direct_listed_currency_rate(token, sellers: [seller], currency: Currency::CAD, permalinks: %w[abc])).to be_nil
+      expect(described_class.direct_listed_currency_rate(token, sellers: [seller], currency: Currency::CAD)).to be_nil
+    end
+
+    it "keeps honoring a rate signed before the cart bind shipped" do
+      token = described_class.issue(
+        payment_method_types: types,
+        sellers: [seller],
+        direct_listed_currency: Currency::CAD,
+        direct_listed_currency_rate: "0.8"
+      )
+
+      expect(described_class.direct_listed_currency_rate(token, sellers: [seller], currency: Currency::CAD, permalinks: %w[abc])).to eq(BigDecimal("0.8"))
+    end
+
     it "returns nil for a blank token, so a page that never sent one re-resolves" do
       expect(described_class.verify(nil, sellers: [seller])).to be_nil
       expect(described_class.verify("", sellers: [seller])).to be_nil
