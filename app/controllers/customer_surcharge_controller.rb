@@ -291,19 +291,17 @@ class CustomerSurchargeController < ApplicationController
       @signed_direct_listed_rates[currency] = Checkout::PaymentMethodListToken.direct_listed_currency_rate(
         params[:payment_method_list_token],
         sellers: surcharge_cart_sellers,
-        currency:,
-        permalinks: surcharge_cart_permalinks
+        currency:
       )
     end
 
     def surcharge_cart_sellers
-      @surcharge_cart_sellers ||= Link.where(unique_permalink: surcharge_cart_permalinks).includes(:user).map(&:user).uniq
-    end
-
-    def surcharge_cart_permalinks
-      @surcharge_cart_permalinks ||= Array(params[:products]).filter_map do |item|
-        item[:permalink] if item.is_a?(ActionController::Parameters) || item.is_a?(Hash)
-      end.uniq
+      @surcharge_cart_sellers ||= begin
+        permalinks = Array(params[:products]).filter_map do |item|
+          item[:permalink] if item.is_a?(ActionController::Parameters) || item.is_a?(Hash)
+        end.uniq
+        Link.where(unique_permalink: permalinks).includes(:user).map(&:user).uniq
+      end
     end
 
     def buyer_currency_charge_details(product:, item:, surcharges:)

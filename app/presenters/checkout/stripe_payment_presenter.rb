@@ -423,7 +423,6 @@ class Checkout::StripePaymentPresenter
         inr_payment_method_types: inr_local_method_types.present? ? inr_types : nil,
         direct_listed_currency:,
         direct_listed_currency_rate:,
-        permalinks: items.map { _1[:permalink] },
       )
     end
 
@@ -586,7 +585,6 @@ class Checkout::StripePaymentPresenter
         product = cart_product.product
         item(
           seller: product.user,
-          permalink: product.unique_permalink,
           price_cents: cart_product.price,
           quantity: cart_product.quantity,
           recurrence: cart_product.recurrence,
@@ -613,7 +611,6 @@ class Checkout::StripePaymentPresenter
         product = checkout_product[:product]
         item(
           seller: sellers_by_external_id[product.dig(:creator, :id)],
-          permalink: product[:permalink],
           price_cents: checkout_product[:price],
           quantity: checkout_product[:quantity],
           recurrence: checkout_product[:recurrence],
@@ -709,10 +706,9 @@ class Checkout::StripePaymentPresenter
 
     # quantity defaults to 1: price_cents is always the per-unit price, and the only current
     # consumer of quantity (the Klarna amount-window total) must not undercount multi-unit carts.
-    def item(seller:, permalink:, price_cents:, recurrence:, pay_in_installments:, offers_installment_plan:, is_preorder:, has_free_trial:, is_physical:, native_type:, buyer_currency_display:, quantity: 1, product_currency: nil, exchange_rate: nil, ppp_discounted: false, has_customizable_price: false)
+    def item(seller:, price_cents:, recurrence:, pay_in_installments:, offers_installment_plan:, is_preorder:, has_free_trial:, is_physical:, native_type:, buyer_currency_display:, quantity: 1, product_currency: nil, exchange_rate: nil, ppp_discounted: false, has_customizable_price: false)
       {
         seller:,
-        permalink:,
         price_cents:,
         quantity:,
         recurrence:,

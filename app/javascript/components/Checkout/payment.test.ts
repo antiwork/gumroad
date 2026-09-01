@@ -1243,7 +1243,7 @@ describe("direct-listed card element", () => {
           direct_listed_amount_token: "signed-method-forced-amount",
           direct_listed_line_allocations: [
             {
-              permalink: "product-a",
+              permalink: "product",
               price_cents: 1_000,
               tip_cents: 0,
               tax_cents: 2,
