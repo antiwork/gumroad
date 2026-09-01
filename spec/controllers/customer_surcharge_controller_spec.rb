@@ -366,6 +366,46 @@ describe CustomerSurchargeController, :vcr do
       ).to eq(allocations)
     end
 
+    it "returns method-forced allocations for a Custom account outside the destination-charge ramp" do
+      # The seller's only Stripe account is Gumroad-managed Custom. Prepare and the presenter
+      # already charge iDEAL on it as a DESTINATION without the card-lane ramp, so the Element
+      # needs the same allocations and amount token from here.
+      Feature.activate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, @user)
+      create(:merchant_account, user: @user, currency: Currency::USD)
+      eur_product = create(:product, user: @user, price_currency_type: Currency::EUR, price_cents: 100)
+      allow_any_instance_of(CurrencyHelper).to receive(:get_rate).with(Currency::EUR).and_return("1.5")
+      tax_result = double(
+        business_vat_status: nil,
+        to_hash: { has_vat_id_input: false },
+        tax_cents: 1,
+        price_cents: 10,
+        zip_tax_rate: nil,
+        used_taxjar: true,
+        gumroad_is_mpf: true
+      )
+      allow(SalesTaxCalculator).to receive(:new).and_return(instance_double(SalesTaxCalculator, calculate: tax_result))
+
+      post "calculate_all", params: {
+        products: [{ permalink: eur_product.unique_permalink, price: 10, listed_price_cents: 15, quantity: 1 }],
+        country: "DE",
+        payment_details_source: PurchasePaymentFlow::PAYMENT_ELEMENT,
+        payment_element_mount_currency: Currency::EUR,
+        payment_element_direct_listed_currency: Currency::EUR,
+        payment_method_list_token: listed_payment_method_list_token(eur_product, rate: "1.5"),
+      }, as: :json
+
+      allocation = response.parsed_body.fetch("direct_listed_line_allocations").sole
+      expect(allocation.fetch("tax_cents")).to eq(2)
+      expect(allocation.fetch("total_cents")).to eq(17)
+      expect(
+        Checkout::DirectListedAmountToken.verify(
+          response.parsed_body.fetch("direct_listed_amount_token"),
+          sellers: [@user],
+          currency: Currency::EUR
+        )
+      ).to eq([allocation])
+    end
+
     it "includes shipping converted at the signed rate in method-forced allocations for a physical line" do
       Feature.activate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, @user)
       eur_product = create(:physical_product, user: @user, price_currency_type: Currency::EUR, price_cents: 10_00)

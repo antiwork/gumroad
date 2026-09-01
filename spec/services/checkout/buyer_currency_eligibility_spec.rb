@@ -1295,6 +1295,22 @@ describe Checkout::BuyerCurrencyEligibility do
       expect(eligible_for?(cad_product)).to be(false)
     end
 
+    it "allocates for method-forced mounts on a Custom account outside the destination-charge ramp" do
+      # #method_forced_decision already charges this seller as a DESTINATION without the card-lane
+      # flag, so the surcharge allocations for iDEAL/UPI/Pix must not be gated on it.
+      create(:merchant_account, user: seller, currency: Currency::USD)
+      MerchantAccount.gumroad(StripeChargeProcessor.charge_processor_id) ||
+        create(:merchant_account, user: nil, charge_processor_merchant_id: "acct_gumroad_platform", currency: Currency::USD)
+
+      expect(
+        described_class.direct_listed_line_items_eligible?(
+          line_items: [cad_line_item(cad_product)],
+          buyer_currency: Currency::CAD,
+          require_listed_direct_charge: false
+        )
+      ).to be(true)
+    end
+
     # `later_charge_kind` is the caller's summary of the charge, not a fact about the product, so
     # it cannot be what keeps these shapes out. #decision refuses both from the product itself at
     # :unsupported_product_type, and a currency advertised here that prepare then refuses is a
