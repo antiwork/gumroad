@@ -29,6 +29,9 @@ class SendPostBlastEmailsJob
     Rails.logger.info("[#{self.class.name}] blast_id=#{@blast.id} post_id=#{@post.id}")
     return unless @post.alive? && @post.published? && @post.send_emails? && @blast.completed_at.nil?
 
+    # Capture before the first-run stamp: a late resume with no Redis snapshot must
+    # not rebuild the live audience (people who joined after the original send).
+    @resume_without_snapshot = @blast.started_at.present?
     @blast.update!(started_at: Time.current) if @blast.started_at.nil?
 
     # A retry that finds a live partition re-enqueues its stored chunks as-is; loading and
@@ -189,6 +192,11 @@ class SendPostBlastEmailsJob
       snapshotted_ids = $redis.lrange(snapshot_key, 0, -1)
 
       if snapshotted_ids.empty?
+        # First-run crash (started_at just set, no snapshot yet) must still load.
+        # A stalled auto-resume days later must not pick up people who joined after.
+        if @resume_without_snapshot && @blast.started_at < 1.day.ago
+          raise "missing audience snapshot for blast #{@blast.id}; refusing to rebuild the live audience"
+        end
         members = WithMaxExecutionTime.timeout_queries(seconds: audience_load_timeout_seconds) do
           AudienceMember.filter(seller_id: @post.seller_id, params: @filters, with_ids: true).select(:id, :email, :purchase_id, :follower_id, :affiliate_id).to_a
         end

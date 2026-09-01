@@ -531,6 +531,27 @@ describe SendPostBlastEmailsJob, :freeze_time do
       expect(blast.reload.completed_at).to be_present
     end
 
+    it "does not rebuild the live audience when a late resume finds no snapshot" do
+      post = basic_post_with_audience
+      blast = create(:blast, :just_requested, post:)
+      blast.update!(started_at: 2.days.ago)
+      create(:active_follower, user: @seller)
+
+      unrestricted = false
+      allow(AudienceMember).to receive(:filter).and_wrap_original do |original, **kwargs|
+        unrestricted = true unless kwargs.key?(:ids)
+        original.call(**kwargs)
+      end
+
+      expect do
+        described_class.new.perform(blast.id)
+      end.to raise_error(RuntimeError, /missing audience snapshot for blast #{blast.id}/)
+
+      expect(unrestricted).to eq(false)
+      expect_sent_count 0
+      expect(blast.reload.completed_at).to be_nil
+    end
+
     it "resumes from the snapshot on retry using only an id-restricted filter" do
       post = basic_post_with_audience
       blast = create(:blast, :just_requested, post:)
