@@ -314,6 +314,13 @@ describe CustomerSurchargeController, :vcr do
       expect(allocations.map { _1.fetch("tax_cents") }).to eq([2, 2])
       expect(allocations.sum { _1.fetch("total_cents") }).to eq(34)
       expect(response.parsed_body.fetch("tax_cents")).to eq(2)
+      expect(
+        Checkout::DirectListedAmountToken.verify(
+          response.parsed_body.fetch("direct_listed_amount_token"),
+          sellers: [@user],
+          currency: Currency::CAD
+        )
+      ).to eq(allocations)
     end
 
     it "converts direct-listed tax allocations with the signed page rate, not the live rate" do
@@ -358,6 +365,7 @@ describe CustomerSurchargeController, :vcr do
       }, as: :json
 
       expect(response.parsed_body.fetch("direct_listed_line_allocations")).to be_nil
+      expect(response.parsed_body.fetch("direct_listed_amount_token")).to be_nil
     end
 
     it "does not advertise the listed currency for a saved-card checkout" do

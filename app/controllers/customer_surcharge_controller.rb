@@ -131,6 +131,11 @@ class CustomerSurchargeController < ApplicationController
       direct_listed_selector_currency,
       products
     )
+    direct_listed_amount_token = Checkout::DirectListedAmountToken.issue(
+      allocations: direct_listed_line_allocations,
+      sellers: surcharge_cart_sellers,
+      currency: direct_listed_selector_currency
+    )
 
     render json: {
       vat_id_valid:,
@@ -143,6 +148,7 @@ class CustomerSurchargeController < ApplicationController
       # first payment. Payment surfaces must use the amount the charge path will create now.
       charge_canonical_total_cents: all_lines_quotable ? quote_line_items.sum(&:charge_canonical_total_cents) : nil,
       direct_listed_line_allocations:,
+      direct_listed_amount_token:,
       buyer_currency_quote: quote_props,
       detected_buyer_currency:,
       available_buyer_currencies: available

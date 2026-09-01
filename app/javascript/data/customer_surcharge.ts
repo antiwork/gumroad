@@ -36,6 +36,15 @@ export type GetSurchargesRequest = {
   payment_method_list_token?: string | null | undefined;
 };
 
+export type DirectListedLineAllocation = {
+  permalink: string;
+  price_cents: number;
+  tip_cents: number;
+  tax_cents: number;
+  shipping_cents: number;
+  total_cents: number;
+};
+
 export type SurchargesResponse = {
   vat_id_valid: boolean;
   has_vat_id_input: boolean;
@@ -48,17 +57,9 @@ export type SurchargesResponse = {
   // Server-owned listed-currency split for direct-listed Payment Elements. The browser
   // sums this instead of converting aggregate USD tax/shipping, because charge time
   // converts each purchase separately and then sums the rounded components.
-  direct_listed_line_allocations?:
-    | {
-        permalink: string;
-        price_cents: number;
-        tip_cents: number;
-        tax_cents: number;
-        shipping_cents: number;
-        total_cents: number;
-      }[]
-    | null
-    | undefined;
+  direct_listed_line_allocations?: DirectListedLineAllocation[] | null | undefined;
+  // Signed proof of the exact direct-listed split that mounted the Payment Element.
+  direct_listed_amount_token?: string | null | undefined;
   buyer_currency_quote: {
     token: string;
     currency: CurrencyCode;

@@ -64,6 +64,11 @@ class OrdersController < ApplicationController
       # accepts it. Verified (not trusted) in Order::PreparePaymentIntentService.
       payment_method_list_token: params[:payment_method_list_token].presence,
     )
+    prepare_params = order_params.merge(
+      # Surcharge calculation signs the amount that mounted the direct-listed Payment Element.
+      # Keep this prepare-only so it can prove consent without becoming a purchase attribute.
+      direct_listed_amount_token: params[:direct_listed_amount_token].presence
+    )
 
     order, purchase_responses, offer_codes = Order::CreateService.new(
       buyer: logged_in_user,
@@ -72,7 +77,7 @@ class OrdersController < ApplicationController
 
     prepare_responses = Order::PreparePaymentIntentService.new(
       order:,
-      params: order_params,
+      params: prepare_params,
       confirmation_token: params[:confirmation_token]
     ).perform
 

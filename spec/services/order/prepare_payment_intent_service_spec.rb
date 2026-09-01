@@ -2237,6 +2237,20 @@ describe Order::PreparePaymentIntentService, :vcr do
       def perform_with_direct_listed_card(order, params, mount_currency: Currency::CAD)
         params[:payment_details_source] = PurchasePaymentFlow::PAYMENT_ELEMENT
         params[:payment_element_mount_currency] = mount_currency
+        purchase = order.purchases.first
+        allocations = [{
+          permalink: purchase.link.unique_permalink,
+          price_cents: purchase.displayed_price_cents,
+          tip_cents: 0,
+          tax_cents: 0,
+          shipping_cents: 0,
+          total_cents: purchase.displayed_price_cents,
+        }]
+        params[:direct_listed_amount_token] ||= Checkout::DirectListedAmountToken.issue(
+          allocations:,
+          sellers: [purchase.seller],
+          currency: mount_currency
+        )
         preview = Stripe::StripeObject.construct_from(type: "card", card: { country: "CA" })
         allow(Stripe::ConfirmationToken).to receive(:retrieve)
           .and_return(Stripe::StripeObject.construct_from(payment_method_preview: preview))
@@ -2342,6 +2356,35 @@ describe Order::PreparePaymentIntentService, :vcr do
         expect(responses["unique-id-0"][:success]).to eq(true)
         expect(order.charges.last.charge_presentment)
           .to have_attributes(presentment_currency: Currency::CAD, presentment_total_cents: 15_00, stripe_fx_quote_id: nil)
+      end
+
+      it "rejects a stale displayed allocation before creating an intent" do
+        order, params = build_order
+        purchase = order.purchases.first
+        purchase.update!(displayed_price_cents: 15_00,
+                         displayed_price_currency_type: Currency::CAD,
+                         rate_converted_to_usd: BigDecimal("0.8"))
+        params[:direct_listed_amount_token] = Checkout::DirectListedAmountToken.issue(
+          allocations: [{
+            permalink: product.unique_permalink,
+            price_cents: 12_00,
+            tip_cents: 0,
+            tax_cents: 0,
+            shipping_cents: 0,
+            total_cents: 12_00,
+          }],
+          sellers: [seller],
+          currency: Currency::CAD
+        )
+
+        create_args, responses = perform_with_direct_listed_card(order, params)
+
+        expect(create_args).to be_nil
+        expect(responses["unique-id-0"][:success]).to eq(false)
+        expect(responses["unique-id-0"][:error_code]).to eq(PurchaseErrorCode::BUYER_CURRENCY_QUOTE_INVALID)
+        expect(purchase.reload).to be_failed
+        expect(order.charges.last.charge_presentment).to be_nil
+        expect(purchase.purchase_presentment).to be_nil
       end
 
       it "keeps the canonical USD intent when the Element reports that it displayed USD" do
