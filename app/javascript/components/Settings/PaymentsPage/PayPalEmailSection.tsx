@@ -41,9 +41,13 @@ const PayPalEmailSection = ({
         </Alert>
       ) : null}
       <div className="whitespace-pre-line">{feeInfoText}</div>
-      <div>
+      <div className="grid gap-4">
         {canSetupBankPayouts && !isFormDisabled ? (
-          <button className="cursor-pointer underline all-unset" onClick={() => updatePayoutMethod("bank")}>
+          <button
+            type="button"
+            className="cursor-pointer justify-self-start underline all-unset"
+            onClick={() => updatePayoutMethod("bank")}
+          >
             Switch to direct deposit
           </button>
         ) : null}
