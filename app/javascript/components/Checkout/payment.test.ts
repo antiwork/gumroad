@@ -14,6 +14,7 @@ import {
   getChargeTodayPrice,
   getConfiguredDirectListedCurrency,
   getFutureInstallmentsTotal,
+  getLoadedDirectListedAmountToken,
   getSelectableDirectListedCurrency,
   getStripePaymentElementAmount,
   getStripePaymentElementMountCurrency,
@@ -1220,6 +1221,43 @@ describe("direct-listed card element", () => {
     expect(getConfiguredDirectListedCurrency(s)).toBeNull();
     expect(getStripePaymentElementAmount(s)).toBe(1_504);
     expect(getStripePaymentElementMountCurrency(s)).toBe("eur");
+    expect(getLoadedDirectListedAmountToken(s)).toBeNull();
+  });
+
+  it("submits the loaded amount token for a method-forced listed mount", () => {
+    const s = state({
+      checkoutPayment: {
+        ...methodForcedEurConfig,
+        elements_options: { ...methodForcedEurConfig.elements_options, direct_listed_currency_rate: 1.5 },
+      },
+      products: [product({ listedChargePriceCents: 1_000 })],
+      surcharges: {
+        type: "loaded",
+        result: {
+          vat_id_valid: false,
+          has_vat_id_input: false,
+          shipping_rate_cents: 0,
+          tax_cents: 2,
+          tax_included_cents: 0,
+          subtotal: 1_000,
+          direct_listed_amount_token: "signed-method-forced-amount",
+          direct_listed_line_allocations: [
+            {
+              permalink: "product",
+              price_cents: 1_000,
+              tip_cents: 0,
+              tax_cents: 2,
+              shipping_cents: 0,
+              total_cents: 1_002,
+            },
+          ],
+          buyer_currency_quote: null,
+        },
+      },
+    });
+
+    expect(getConfiguredDirectListedCurrency(s)).toBeNull();
+    expect(getLoadedDirectListedAmountToken(s)).toBe("signed-method-forced-amount");
   });
 
   it("does not mount a method-forced element with tax before the per-line allocations arrive", () => {

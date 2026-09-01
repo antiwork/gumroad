@@ -844,6 +844,20 @@ function getMethodForcedDirectListedCurrency(state: State): string | null {
   return currency;
 }
 
+// Currency of a client-confirm Element that will be mounted from per-line listed allocations:
+// selectable listed CARD, or method-forced listed (iDEAL/Bancontact/UPI/Pix).
+export function getDirectListedAllocationCurrency(state: State): string | null {
+  return getSelectableDirectListedCurrency(state) ?? getMethodForcedDirectListedCurrency(state);
+}
+
+// The signed snapshot that mounted that Element. Method-forced has no listed-card selector, but
+// still needs the token so prepare can refuse a stale amount instead of creating a larger intent.
+export function getLoadedDirectListedAmountToken(state: State): string | null {
+  if (state.surcharges.type !== "loaded") return null;
+  if (!getDirectListedAllocationCurrency(state)) return null;
+  return state.surcharges.result.direct_listed_amount_token ?? null;
+}
+
 // Each cart line's price in the listed currency, in cart order. The Element amount and the
 // listed prices the surcharge request sends must come from this one basis, or the server splits
 // a total the Element never mounted on. The single-line presentment fallback covers a page whose
@@ -1112,9 +1126,7 @@ export const loadSurcharges = (state: State, abortSignal?: AbortSignal) => {
   const paymentElementMountCurrency =
     paymentDetailsSource === "payment_element" ? getDesiredStripePaymentElementMountCurrency(state) : null;
   const paymentElementDirectListedCurrency =
-    paymentDetailsSource === "payment_element"
-      ? (getSelectableDirectListedCurrency(state) ?? getMethodForcedDirectListedCurrency(state))
-      : null;
+    paymentDetailsSource === "payment_element" ? getDirectListedAllocationCurrency(state) : null;
   // Allocate the tip across cart lines in one pass so the per-line integers sum to the
   // tip the buyer selected — rounding each line independently can send more total tip
   // than the buyer chose (see computeTipsForLines).

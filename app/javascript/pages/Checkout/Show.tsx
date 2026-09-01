@@ -67,6 +67,7 @@ import {
   createReducer,
   getConfiguredDirectListedCurrency,
   getCustomFieldKey,
+  getLoadedDirectListedAmountToken,
   getSelectableDirectListedCurrency,
   getTotalPriceFromProducts,
   type Gift,
@@ -574,10 +575,7 @@ const CheckoutIndexPage = () => {
                 willSaveCard: state.willSaveCard,
                 paymentMethod: state.paymentMethod,
               }),
-        directListedAmountToken:
-          configuredDirectListedCurrency && state.surcharges.type === "loaded"
-            ? (state.surcharges.result.direct_listed_amount_token ?? null)
-            : null,
+        directListedAmountToken: getLoadedDirectListedAmountToken(state),
         lineItems: (() => {
           // Precompute each line's discounted price bases once so the tip can be allocated
           // across the whole cart in a single pass. The per-line tips must sum exactly to
