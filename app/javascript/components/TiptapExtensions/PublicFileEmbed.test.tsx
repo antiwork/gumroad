@@ -3,10 +3,15 @@ import { act, cleanup, fireEvent, render } from "@testing-library/react";
 import { Editor } from "@tiptap/core";
 import StarterKit from "@tiptap/starter-kit";
 import * as React from "react";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { PublicFilesSettingsContext } from "$app/components/ProductEdit/ProductTab/DescriptionEditor";
 import { PublicFileEmbed } from "$app/components/TiptapExtensions/PublicFileEmbed";
+
+const alerts = vi.hoisted((): { message: string; level: string }[] => []);
+vi.mock("$app/components/server-components/Alert", () => ({
+  showAlert: (message: string, level: string) => alerts.push({ message, level }),
+}));
 
 let editor: Editor | null = null;
 
@@ -14,6 +19,7 @@ afterEach(() => {
   cleanup();
   editor?.destroy();
   editor = null;
+  alerts.length = 0;
 });
 
 const attachPickedFile = (input: HTMLInputElement, picked: File) => {
@@ -97,6 +103,49 @@ describe("PublicFileEmbed picker", () => {
     expect(file.name).toBe("preview.mp3");
     expect(file.size).toBe(picked.size);
     expect(await file.text()).toBe("audio-bytes");
+    expect(valueWrites).toEqual([""]);
+  });
+
+  it("resets the input when snapshotting the pick fails", async () => {
+    const element = document.createElement("div");
+    document.body.append(element);
+
+    editor = new Editor({
+      element,
+      extensions: [StarterKit, PublicFileEmbed],
+      content: "<p>hello</p>",
+    });
+
+    const uploaded: File[] = [];
+
+    render(
+      <PublicFilesSettingsContext.Provider
+        value={{
+          files: [],
+          onUpload: ({ file }) => {
+            uploaded.push(file);
+          },
+        }}
+      >
+        <PublicFilePicker mountedEditor={editor} />
+      </PublicFilesSettingsContext.Provider>,
+    );
+
+    const input = document.querySelector<HTMLInputElement>('input[type="file"]');
+    if (!input) throw new Error("Public file input did not mount");
+
+    const picked = new File(["audio-bytes"], "preview.mp3", { type: "audio/mpeg" });
+    Object.defineProperty(picked, "arrayBuffer", { value: () => Promise.reject(new Error("read failed")) });
+    const valueWrites = attachPickedFile(input, picked);
+
+    await act(async () => {
+      fireEvent.change(input);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(alerts).toEqual([{ message: "read failed", level: "error" }]);
+    expect(uploaded).toEqual([]);
     expect(valueWrites).toEqual([""]);
   });
 });

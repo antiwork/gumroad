@@ -16,6 +16,7 @@ import { Button } from "$app/components/Button";
 import { FileRowContent } from "$app/components/FileRowContent";
 import { usePublicFilesSettings } from "$app/components/ProductEdit/ProductTab/DescriptionEditor";
 import { MenuItem } from "$app/components/RichTextEditor";
+import { showAlert } from "$app/components/server-components/Alert";
 import { NodeActionsMenu, NodeActionsWrapper } from "$app/components/TiptapExtensions/NodeActionsMenu";
 import { Fieldset, FieldsetTitle } from "$app/components/ui/Fieldset";
 import { Input } from "$app/components/ui/Input";
@@ -150,13 +151,18 @@ export const PublicFileEmbed = TiptapNode.create({
             const input = e.target;
             const picked = [...(input.files || [])];
             if (!picked.length) return;
-            void snapshotPickedFiles(picked).then((files) => {
-              const file = files[0];
-              if (!file) return;
-              onUpload?.({ file });
-              if (fileListMatchesPickedFiles(input.files, picked) && canResetFileInputAfterSnapshot(picked, files))
-                input.value = "";
-            });
+            void snapshotPickedFiles(picked)
+              .then((files) => {
+                const file = files[0];
+                if (!file) return;
+                onUpload?.({ file });
+                if (fileListMatchesPickedFiles(input.files, picked) && canResetFileInputAfterSnapshot(picked, files))
+                  input.value = "";
+              })
+              .catch((error: unknown) => {
+                showAlert(error instanceof Error ? error.message : "Could not read the selected file.", "error");
+                if (fileListMatchesPickedFiles(input.files, picked)) input.value = "";
+              });
           }}
         />
       </>
