@@ -42,6 +42,28 @@ describe FinalizeBuyerPresentmentPurchaseJob do
     expect(described_class.jobs.size).to eq(0)
   end
 
+  it "selects a PaymentIntent-only purchase with no Charge row" do
+    purchase.update!(stripe_transaction_id: nil, processor_payment_intent_id: "pi_ignored_column", flow_of_funds: nil)
+    purchase.create_processor_payment_intent!(intent_id: "pi_presentment")
+    expect(purchase.reload.charge).to be_nil
+    sync_service = instance_double(Purchase::SyncStatusWithChargeProcessorService, perform: true)
+    expect(Purchase::SyncStatusWithChargeProcessorService).to receive(:new).with(purchase).and_return(sync_service)
+
+    described_class.new.perform(purchase.id)
+
+    expect(described_class.jobs.size).to eq(0)
+  end
+
+  it "does not select an abandoned purchase with no PaymentIntent" do
+    purchase.update!(stripe_transaction_id: nil, processor_payment_intent_id: "pi_ignored_column", flow_of_funds: nil)
+    expect(purchase.reload.charge).to be_nil
+    expect(Purchase::SyncStatusWithChargeProcessorService).not_to receive(:new)
+
+    described_class.new.perform(purchase.id)
+
+    expect(described_class.jobs.size).to eq(0)
+  end
+
   it "no-ops for purchases without a presentment snapshot" do
     purchase.purchase_presentment.destroy!
     expect(Purchase::SyncStatusWithChargeProcessorService).not_to receive(:new)

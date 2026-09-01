@@ -31,7 +31,9 @@ describe FinalizeBuyerPresentmentChargeJob do
   end
 
   it "polls in_progress purchases that have a PaymentIntent but no stripe_transaction_id" do
-    purchase.update!(stripe_transaction_id: nil, processor_payment_intent_id: "pi_presentment")
+    purchase.update!(stripe_transaction_id: nil)
+    charge.update!(stripe_payment_intent_id: nil, processor_transaction_id: nil)
+    purchase.create_processor_payment_intent!(intent_id: "pi_presentment")
     sync_service = instance_double(Purchase::SyncStatusWithChargeProcessorService, perform: true)
     expect(Purchase::SyncStatusWithChargeProcessorService).to receive(:new).with(purchase).and_return(sync_service)
 
