@@ -470,6 +470,49 @@ describe CustomerSurchargeController, :vcr do
       )
     end
 
+    it "calculates direct-listed tax from the same combined listed price and tip as purchase creation" do
+      Feature.activate_user(Checkout::BuyerCurrencyEligibility::LISTED_CURRENCY_DIRECT_CHARGE_FEATURE_NAME, @user)
+      @user.update!(tipping_enabled: true)
+      cad_product = create(:product, user: @user, price_currency_type: Currency::CAD, price_cents: 1_99)
+      allow_any_instance_of(CurrencyHelper).to receive(:get_rate).with(Currency::CAD).and_return("1.35")
+      tax_result = double(
+        business_vat_status: nil,
+        to_hash: { has_vat_id_input: false },
+        tax_cents: 9,
+        price_cents: 1_70,
+        zip_tax_rate: nil,
+        used_taxjar: true,
+        gumroad_is_mpf: true
+      )
+      expect(SalesTaxCalculator).to receive(:new)
+        .with(hash_including(price_cents: 1_70))
+        .and_return(instance_double(SalesTaxCalculator, calculate: tax_result))
+
+      post "calculate_all", params: {
+        products: [{
+          permalink: cad_product.unique_permalink,
+          price: 1_69,
+          tip_cents: 22,
+          listed_price_cents: 1_99,
+          listed_tip_cents: 30,
+          quantity: 1,
+        }],
+        country: "CA",
+        state: "AB",
+        payment_details_source: PurchasePaymentFlow::PAYMENT_ELEMENT,
+        payment_element_mount_currency: Currency::CAD,
+        payment_element_direct_listed_currency: Currency::CAD,
+        payment_method_list_token: listed_payment_method_list_token(cad_product, rate: "1.35"),
+      }, as: :json
+
+      expect(response.parsed_body.fetch("direct_listed_line_allocations").sole).to include(
+        "price_cents" => 1_99,
+        "tip_cents" => 30,
+        "tax_cents" => 12,
+        "total_cents" => 2_41
+      )
+    end
+
     it "does not advertise the listed currency when the seller's account cannot create the intent" do
       # A Gumroad-managed Stripe Custom account outside the destination-charge ramp. Prepare
       # refuses this cart at :unsupported_charge_model, so offering the listed currency here would

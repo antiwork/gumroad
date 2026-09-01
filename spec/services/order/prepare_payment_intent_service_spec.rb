@@ -2342,6 +2342,48 @@ describe Order::PreparePaymentIntentService, :vcr do
         expect(responses["unique-id-0"][:error_message]).to eq(Order::CreateService::LISTED_CURRENCY_RATE_EXPIRED_MESSAGE)
       end
 
+      it "preserves the live-rate fallback for a valid method-forced token issued without a signed rate" do
+        eur_product = create(:product, user: seller, price_currency_type: Currency::EUR, price_cents: 15_00)
+        token = Checkout::PaymentMethodListToken.issue(
+          payment_method_types: %w[card ideal],
+          sellers: [seller]
+        )
+        params = {
+          line_items: [{ uid: "unique-id-0", permalink: eur_product.unique_permalink, perceived_price_cents: 15_00, price_cents: 15_00, quantity: 1 }],
+          payment_details_source: PurchasePaymentFlow::PAYMENT_ELEMENT,
+          payment_element_mount_currency: Currency::EUR,
+          payment_method_list_token: token,
+        }.merge(common_params)
+        allow_any_instance_of(Purchase).to receive(:get_rate).with(Currency::EUR.to_sym).and_return(BigDecimal("0.8"))
+
+        order, responses = Order::CreateService.new(params:).perform
+
+        expect(responses).to be_empty
+        expect(order.purchases.sole.rate_converted_to_usd.to_d).to eq(BigDecimal("0.8"))
+      end
+
+      it "still locks a method-forced purchase when its token includes a signed rate" do
+        eur_product = create(:product, user: seller, price_currency_type: Currency::EUR, price_cents: 15_00)
+        token = Checkout::PaymentMethodListToken.issue(
+          payment_method_types: %w[card ideal],
+          sellers: [seller],
+          direct_listed_currency: Currency::EUR,
+          direct_listed_currency_rate: "0.8"
+        )
+        params = {
+          line_items: [{ uid: "unique-id-0", permalink: eur_product.unique_permalink, perceived_price_cents: 15_00, price_cents: 15_00, quantity: 1 }],
+          payment_details_source: PurchasePaymentFlow::PAYMENT_ELEMENT,
+          payment_element_mount_currency: Currency::EUR,
+          payment_method_list_token: token,
+        }.merge(common_params)
+        allow_any_instance_of(Purchase).to receive(:get_rate).with(Currency::EUR.to_sym).and_return(BigDecimal("0.5"))
+
+        order, responses = Order::CreateService.new(params:).perform
+
+        expect(responses).to be_empty
+        expect(order.purchases.sole.rate_converted_to_usd.to_d).to eq(BigDecimal("0.8"))
+      end
+
       it "prepares the intent for the displayed CAD amount and persists quote-less presentment rows" do
         order, params = build_order
         purchase = order.purchases.first

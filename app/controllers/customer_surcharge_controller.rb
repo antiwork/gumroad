@@ -31,10 +31,12 @@ class CustomerSurchargeController < ApplicationController
         next
       end
       listed_currency = product.price_currency_type.to_s.downcase
+      submitted_price_cents = item[:price].to_d.to_i
+      surcharge_price_cents = direct_listed_surcharge_price_cents(product:, item:) || submitted_price_cents
       surcharges = calculate_surcharges(
         product,
         item[:quantity],
-        item[:price].to_d.to_i,
+        surcharge_price_cents,
         subscription_id: item[:subscription_id],
         recommended_by: item[:recommended_by],
         rate: rates_by_listed_currency.fetch(listed_currency) { signed_direct_listed_rate(listed_currency) || :unset }
@@ -254,6 +256,27 @@ class CustomerSurchargeController < ApplicationController
       return unless value.is_a?(String) || value.is_a?(Numeric)
 
       value.to_d.to_i
+    end
+
+    # The browser stores a listed-currency product price as an unrounded USD float, then adds a
+    # separately rounded USD tip before requesting tax. Purchase creation instead converts the
+    # combined listed price and tip once. Those operations can differ by one cent, so use the
+    # purchase basis whenever this request is calculating the direct-listed Element amount.
+    def direct_listed_surcharge_price_cents(product:, item:)
+      return unless params[:payment_details_source] == PurchasePaymentFlow::PAYMENT_ELEMENT
+
+      currency = product.price_currency_type.to_s.downcase
+      return unless params[:payment_element_mount_currency].to_s.downcase == currency
+      return unless params[:payment_element_direct_listed_currency].to_s.downcase == currency
+
+      rate = signed_direct_listed_rate(currency)
+      return if rate.blank?
+
+      listed_price_cents = numeric_cents(item[:listed_price_cents])
+      listed_tip_cents = numeric_cents(item[:listed_tip_cents]) || 0
+      return if listed_price_cents.nil?
+
+      get_usd_cents(currency, listed_price_cents + listed_tip_cents, rate:)
     end
 
     def signed_direct_listed_rate(currency)

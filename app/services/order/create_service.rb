@@ -413,6 +413,16 @@ class Order::CreateService
     end
 
     def listed_payment_element_requires_signed_rate?(product)
+      return false unless listed_payment_element_mount?(product)
+
+      # Before rates were added to the signed method-list token, local-method Elements already
+      # charged their product currency using the live rate. Preserve that rolling-deploy path for
+      # a valid token that proves this was an iDEAL/Bancontact/UPI-style surface. Direct-listed
+      # card mounts still require the signed rate because their displayed allocation depends on it.
+      !method_forced_payment_element_token?(product)
+    end
+
+    def listed_payment_element_mount?(product)
       return false if params[:buyer_currency_quote].present?
       return false unless params[:payment_details_source] == PurchasePaymentFlow::PAYMENT_ELEMENT
 
@@ -421,8 +431,19 @@ class Order::CreateService
       mount.present? && mount == listed && listed != Currency::USD
     end
 
+    def method_forced_payment_element_token?(product)
+      listed = product.price_currency_type.to_s.downcase
+      types = Checkout::PaymentMethodListToken.verify(
+        params[:payment_method_list_token],
+        sellers: cart_sellers
+      )
+      Array(types).any? do |payment_method_type|
+        Checkout::BuyerCurrencyEligibility.forced_currency_for(payment_method_type) == listed
+      end
+    end
+
     def direct_listed_currency_rate_hint(product)
-      return unless listed_payment_element_requires_signed_rate?(product)
+      return unless listed_payment_element_mount?(product)
 
       Checkout::PaymentMethodListToken.direct_listed_currency_rate(
         params[:payment_method_list_token],
