@@ -136,12 +136,15 @@ class CustomerSurchargeController < ApplicationController
       direct_listed_allocation_currency,
       products
     )
+    charge_allocations = direct_listed_charge_allocations_for_token(
+      direct_listed_line_allocations,
+      quote_line_items
+    )
     direct_listed_amount_token = Checkout::DirectListedAmountToken.issue(
-      allocations: direct_listed_charge_allocations_for_token(
-        direct_listed_line_allocations,
-        quote_line_items
-      ),
-      sellers: surcharge_cart_sellers,
+      allocations: charge_allocations,
+      # Prepare verifies against purchases_to_charge sellers, which omit free lines. Signing
+      # the full cart seller set would make a paid+free two-seller cart fail every attempt.
+      sellers: sellers_for_direct_listed_amount_token(charge_allocations, quote_line_items),
       currency: direct_listed_allocation_currency
     )
 
@@ -293,6 +296,12 @@ class CustomerSurchargeController < ApplicationController
         sellers: surcharge_cart_sellers,
         currency:
       )
+    end
+
+    def sellers_for_direct_listed_amount_token(allocations, line_items)
+      permalinks = Array(allocations).map { _1[:permalink].to_s }
+      paid_sellers = line_items.filter_map { _1.product.user if permalinks.include?(_1.permalink.to_s) }.uniq
+      paid_sellers.presence || surcharge_cart_sellers
     end
 
     def surcharge_cart_sellers
