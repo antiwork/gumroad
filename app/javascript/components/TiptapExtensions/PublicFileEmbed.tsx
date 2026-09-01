@@ -5,6 +5,11 @@ import { NodeViewProps, NodeViewWrapper, ReactNodeViewRenderer } from "@tiptap/r
 import * as React from "react";
 
 import FileUtils, { FILE_TYPE_EXTENSIONS_MAP } from "$app/utils/file";
+import {
+  canResetFileInputAfterSnapshot,
+  fileListMatchesPickedFiles,
+  snapshotPickedFiles,
+} from "$app/utils/snapshotPickedFile";
 
 import { AudioPlayer } from "$app/components/AudioPlayer";
 import { Button } from "$app/components/Button";
@@ -142,12 +147,16 @@ export const PublicFileEmbed = TiptapNode.create({
           className="sr-only"
           accept={FILE_TYPE_EXTENSIONS_MAP.audio.map((ext) => `.${ext.toLowerCase()}`).join(",")}
           onChange={(e) => {
-            const files = [...(e.target.files || [])];
-            if (!files.length) return;
-            const file = files[0];
-            if (!file) return;
-            onUpload?.({ file });
-            e.target.value = "";
+            const input = e.target;
+            const picked = [...(input.files || [])];
+            if (!picked.length) return;
+            void snapshotPickedFiles(picked).then((files) => {
+              const file = files[0];
+              if (!file) return;
+              onUpload?.({ file });
+              if (fileListMatchesPickedFiles(input.files, picked) && canResetFileInputAfterSnapshot(picked, files))
+                input.value = "";
+            });
           }}
         />
       </>
