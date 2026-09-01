@@ -78,7 +78,10 @@ const cartWith = (items: CartItem[]): CartState => ({ items, discountCodes: [] }
 // attaches a freshly built `updated_product` whose `exchange_rate` is today's stored rate.
 // Pass `null` for the product to model the shape the server sends when it has no purchase to
 // build one from, which is a refusal the recovery has to survive without a rate to read.
-const refusedLine = (product: CartProduct | null): CartPurchaseResult["lineItems"][string] => ({
+const refusedLine = (
+  product: CartProduct | null,
+  updated: Partial<NonNullable<CartPurchaseResult["lineItems"][string]["updated_product"]>> = {},
+): CartPurchaseResult["lineItems"][string] => ({
   success: false,
   error_message: "The local-currency price changed or expired.",
   name: product?.name ?? null,
@@ -101,6 +104,7 @@ const refusedLine = (product: CartProduct | null): CartPurchaseResult["lineItems
         accepted_offer: null,
         pay_in_installments: false,
         force_new_subscription: false,
+        ...updated,
       }
     : null,
 });
@@ -185,13 +189,27 @@ describe("recoverFromInvalidBuyerCurrencyQuote", () => {
       cartItem({ quantity: 3, price: 2_500, option_id: "variant-1", accepted_offer: { id: "offer-1" } }),
     ]);
 
-    const { requote } = run(cart, linesFor([cartProduct({ exchange_rate: 0.9 })]));
+    const lineItems = {
+      "eur variant-1": refusedLine(cartProduct({ exchange_rate: 0.9 }), { price: 2_500, quantity: 3, option_id: "variant-1", accepted_offer: { id: "offer-1" } }),
+    };
+    const { requote } = run(cart, lineItems);
 
     const item = requote.mock.calls[0]?.[0].items[0];
     expect(item?.quantity).toBe(3);
     expect(item?.price).toBe(2_500);
     expect(item?.option_id).toBe("variant-1");
     expect(item?.accepted_offer).toEqual({ id: "offer-1" });
+  });
+
+  it("retries with the server listed price, not the cart amount that failed the token", () => {
+    const cart = cartWith([cartItem({ price: 2_000 })]);
+    const product = cartProduct({ price_cents: 2_001 });
+    const { setCart, requote } = run(cart, { "eur ": refusedLine(product, { price: 2_001 }) });
+
+    expect(setCart).toHaveBeenCalledTimes(1);
+    expect(setCart.mock.calls[0]?.[0].items[0]?.price).toBe(2_001);
+    expect(requote.mock.calls[0]?.[0].items[0]?.price).toBe(2_001);
+    expect(requote.mock.calls[0]?.[0].items[0]?.product.price_cents).toBe(2_001);
   });
 
   // Saving the cart back to the server on every rejected quote would be a pointless write, and

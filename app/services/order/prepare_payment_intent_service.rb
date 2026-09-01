@@ -592,6 +592,16 @@ class Order::PreparePaymentIntentService
         return direct_listed_presentment_for(charge, direct_listed_decision)
       end
 
+      # Method-forced iDEAL/UPI/Pix still charge listed cents (including shipping) through
+      # DirectListedPresentment. The listed-card decision above skips that lane when shipping
+      # is present, so the amount token must be checked here or prepare can mint a different
+      # total than the Element mounted.
+      unless method_forced_listed_allocations_match?(charge, forced_currency)
+        @direct_listed_amount_mismatch = true
+        Rails.logger.info("Direct-listed client-confirm amount changed before prepare for order #{order.id}; refusing the stale Payment Element amount")
+        return nil
+      end
+
       service = Charge::MethodForcedPresentment.new(
         charge:,
         order:,
@@ -728,6 +738,18 @@ class Order::PreparePaymentIntentService
 
     # Only a signed surcharge snapshot can prove what mounted the Element. The browser cannot
     # alter it to make a changed offer look current, and the snapshot never sets charge amounts.
+    def method_forced_listed_allocations_match?(charge, currency)
+      return true unless purchases_to_charge.all? { _1.link.price_currency_type.to_s.downcase == currency }
+
+      listed = Charge::DirectListedPresentment.new(
+        charge:,
+        purchases: purchases_to_charge,
+        gumroad_amount_cents:,
+        currency:
+      )
+      direct_listed_allocations_match?(listed.allocations, currency)
+    end
+
     def direct_listed_allocations_match?(actual_allocations, currency)
       # A checkout tab opened before this snapshot shipped cannot send the token. Preserve the
       # pre-deploy server-computed behavior for those in-flight tabs; any client that sends a

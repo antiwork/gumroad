@@ -2,7 +2,7 @@ import * as React from "react";
 
 import { type CartPurchaseResult, type OfferCodes } from "$app/data/purchase";
 
-import { type CartState, withRefreshedExchangeRates } from "$app/components/Checkout/cartState";
+import { type CartItem, type CartState, withRefreshedExchangeRates } from "$app/components/Checkout/cartState";
 
 // What the checkout has to do when the server refuses the local-currency quote at charge time.
 //
@@ -106,14 +106,36 @@ export const recoverFromInvalidBuyerCurrencyQuote = ({
   setCart,
   requote,
 }: BuyerCurrencyQuoteRecoveryDeps & { lineItems: CartPurchaseResult["lineItems"] }) => {
-  const cart = getCart();
+  const cart = withUpdatedCartItems(getCart(), lineItems);
   const rates = refreshedRatesFromLineItems(lineItems);
   const updated = withRefreshedExchangeRates(cart, rates);
   // Persist only when a rate actually moved, so a refusal that had nothing to do with rates
   // doesn't cost a pointless cart save. Either way the checkout re-quotes, so the buyer is never
   // left looking at a disabled Pay button.
-  if (updated !== cart) setCart(updated);
+  if (updated !== getCart()) setCart(updated);
   requote(updated);
+};
+
+// The refusal also carries a rebuilt cart line. A one-cent listed price bump can pass purchase
+// creation and still fail the amount token; retrying the old price would mint the same token.
+const cartItemUid = (item: CartItem) => `${item.product.permalink} ${item.option_id ?? ""}`;
+
+export const withUpdatedCartItems = (cart: CartState, lineItems: CartPurchaseResult["lineItems"]): CartState => {
+  let changed = false;
+  const items = cart.items.map((item) => {
+    const line = lineItems[cartItemUid(item)];
+    if (line?.success !== false || !line.updated_product) return item;
+    const nextPrice = line.updated_product.price;
+    const nextProduct = line.updated_product.product;
+    if (nextPrice === item.price && nextProduct.price_cents === item.product.price_cents) return item;
+    changed = true;
+    return {
+      ...item,
+      product: nextProduct,
+      price: nextPrice,
+    };
+  });
+  return changed ? { ...cart, items } : cart;
 };
 
 // Builds the recovery's plumbing from the checkout page's own pieces.
