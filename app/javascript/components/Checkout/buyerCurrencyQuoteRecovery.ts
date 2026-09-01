@@ -1,6 +1,6 @@
 import * as React from "react";
 
-import { type CartPurchaseResult } from "$app/data/purchase";
+import { type CartPurchaseResult, type OfferCodes } from "$app/data/purchase";
 
 import { type CartState, withRefreshedExchangeRates } from "$app/components/Checkout/cartState";
 
@@ -83,6 +83,16 @@ export const refreshedRatesFromLineItems = (lineItems: CartPurchaseResult["lineI
   }
   return rates;
 };
+
+// The amount refusal can mean an offer changed after surcharge calculation. Refreshing the cart's
+// offers before requoting prevents the browser from immediately remounting the same stale amount.
+export const withRefreshedOfferCodes = (cart: CartState, offerCodes: OfferCodes): CartState => ({
+  ...cart,
+  discountCodes: offerCodes.map((offerCode) => ({
+    ...offerCode,
+    fromUrl: cart.discountCodes.find(({ code }) => code === offerCode.code)?.fromUrl ?? false,
+  })),
+});
 
 export const recoverFromInvalidBuyerCurrencyQuote = ({
   lineItems,

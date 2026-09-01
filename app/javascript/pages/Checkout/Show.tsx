@@ -31,6 +31,7 @@ import {
   buildBuyerCurrencyQuoteRecoveryDeps,
   recoverFromInvalidBuyerCurrencyQuote as recoverBuyerCurrencyQuote,
   useLatestCartGetter,
+  withRefreshedOfferCodes,
 } from "$app/components/Checkout/buyerCurrencyQuoteRecovery";
 import {
   type CartItem,
@@ -499,11 +500,11 @@ const CheckoutIndexPage = () => {
 
   // Recovers a checkout whose local-currency quote the server refused at charge time. The
   // reasoning lives with the helper in buyerCurrencyQuoteRecovery.ts.
-  function recoverFromInvalidBuyerCurrencyQuote(lineItems: CartPurchaseResult["lineItems"]) {
+  function recoverFromInvalidBuyerCurrencyQuote(lineItems: CartPurchaseResult["lineItems"], cart = getLatestCart()) {
     recoverBuyerCurrencyQuote({
       lineItems,
       ...buildBuyerCurrencyQuoteRecoveryDeps({
-        getLatestCart,
+        getLatestCart: () => cart,
         setCart: (cart) => cartForm.setData({ cart }),
         getProducts,
         dispatchUpdateProducts: (products) => dispatch({ type: "update-products", products }),
@@ -572,6 +573,10 @@ const CheckoutIndexPage = () => {
                 willSaveCard: state.willSaveCard,
                 paymentMethod: state.paymentMethod,
               }),
+        directListedAmountToken:
+          configuredDirectListedCurrency && state.surcharges.type === "loaded"
+            ? (state.surcharges.result.direct_listed_amount_token ?? null)
+            : null,
         lineItems: (() => {
           // Precompute each line's discounted price bases once so the tip can be allocated
           // across the whole cart in a single pass. The per-line tips must sum exactly to
@@ -697,7 +702,9 @@ const CheckoutIndexPage = () => {
       ) {
         showAlert(BUYER_CURRENCY_QUOTE_INVALID_MESSAGE, "warning");
         dispatch({ type: "cancel" });
-        recoverFromInvalidBuyerCurrencyQuote(result.lineItems);
+        const refreshedCart = withRefreshedOfferCodes(getLatestCart(), result.offerCodes);
+        cartForm.setData({ cart: refreshedCart });
+        recoverFromInvalidBuyerCurrencyQuote(result.lineItems, refreshedCart);
         return;
       }
 

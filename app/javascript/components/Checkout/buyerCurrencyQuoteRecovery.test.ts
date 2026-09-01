@@ -11,6 +11,7 @@ import {
   recoverFromInvalidBuyerCurrencyQuote,
   refreshedRatesFromLineItems,
   useLatestCartGetter,
+  withRefreshedOfferCodes,
 } from "$app/components/Checkout/buyerCurrencyQuoteRecovery";
 import type { CartItem, CartState, Product as CartProduct } from "$app/components/Checkout/cartState";
 
@@ -120,6 +121,27 @@ const run = (cart: CartState, lineItems: CartPurchaseResult["lineItems"]) => {
 // be refreshed before the retry — and it is read out of the refusal response, because creating the
 // order soft-deletes the buyer's cart, so there is no cart left on the server to re-read it from.
 describe("recoverFromInvalidBuyerCurrencyQuote", () => {
+  it("re-quotes with the server's current offer while preserving URL attribution", () => {
+    const oldDiscount = {
+      type: "fixed" as const,
+      cents: 500,
+      product_ids: null,
+      expires_at: null,
+      minimum_quantity: null,
+      duration_in_billing_cycles: null,
+      minimum_amount_cents: null,
+    };
+    const currentDiscount = { ...oldDiscount, cents: 300 };
+    const cart = {
+      ...cartWith([cartItem()]),
+      discountCodes: [{ code: "SAVE", products: { eur: oldDiscount }, fromUrl: true }],
+    };
+
+    expect(withRefreshedOfferCodes(cart, [{ code: "SAVE", products: { eur: currentDiscount } }]).discountCodes).toEqual(
+      [{ code: "SAVE", products: { eur: currentDiscount }, fromUrl: true }],
+    );
+  });
+
   it("re-quotes on the server's current rate, not the one the page rendered with", () => {
     const cart = cartWith([cartItem()]);
 

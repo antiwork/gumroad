@@ -445,7 +445,7 @@ class Order::PreparePaymentIntentService
       charge = build_charge
       presentment = client_confirm_presentment_for(charge)
       if presentment.nil? && client_confirm_presentment_required?
-        return fail_buyer_currency_quote if params[:buyer_currency_quote].present?
+        return fail_buyer_currency_quote if params[:buyer_currency_quote].present? || @direct_listed_amount_mismatch
 
         return fail_purchases_with(GENERIC_CHARGE_ERROR)
       end
@@ -628,12 +628,19 @@ class Order::PreparePaymentIntentService
     end
 
     def direct_listed_presentment_for(charge, decision)
-      presentment = Charge::DirectListedPresentment.new(
+      direct_listed_presentment = Charge::DirectListedPresentment.new(
         charge:,
         purchases: purchases_to_charge,
         gumroad_amount_cents:,
         currency: decision.currency
-      ).perform
+      )
+
+      unless direct_listed_allocations_match?(direct_listed_presentment.allocations, decision.currency)
+        @direct_listed_amount_mismatch = true
+        Rails.logger.info("Direct-listed client-confirm amount changed before prepare for order #{order.id}; refusing the stale Payment Element amount")
+        return nil
+      end
+      presentment = direct_listed_presentment.perform
 
       Charge::MethodForcedPresentment::Result.new(
         presentment_total_cents: presentment.presentment_total_cents,
@@ -655,6 +662,29 @@ class Order::PreparePaymentIntentService
                            })
       Rails.logger.error("Direct-listed client-confirm presentment failed for order #{order.id}: #{e.class} #{e.message}")
       nil
+    end
+
+    # Only a signed surcharge snapshot can prove what mounted the Element. The browser cannot
+    # alter it to make a changed offer look current, and the snapshot never sets charge amounts.
+    def direct_listed_allocations_match?(actual_allocations, currency)
+      reported = Checkout::DirectListedAmountToken.verify(
+        params[:direct_listed_amount_token],
+        sellers: purchases_to_charge.map(&:seller),
+        currency:
+      )
+      return false unless reported&.length == actual_allocations.length
+
+      expected = actual_allocations.map do |allocation|
+        {
+          "permalink" => allocation.purchase.link.unique_permalink,
+          "price_cents" => allocation.presentment_price_cents,
+          "tip_cents" => allocation.presentment_tip_cents,
+          "tax_cents" => allocation.presentment_seller_tax_cents + allocation.presentment_gumroad_tax_cents,
+          "shipping_cents" => allocation.presentment_shipping_cents,
+          "total_cents" => allocation.presentment_total_cents,
+        }
+      end
+      reported == expected
     end
 
     # Legacy fallback for clients that did not report their Element's mount currency. It

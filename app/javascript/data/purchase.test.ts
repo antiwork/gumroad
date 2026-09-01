@@ -127,6 +127,7 @@ describe("createPurchasesRequestData wallet_type threading", () => {
     recaptchaResponse: null,
     usedStripePaymentElement: true,
     buyerCurrencyQuote: null,
+    directListedAmountToken: null,
   });
 
   it("sends wallet_type for a wallet that paid through the server-confirm Payment Element", () => {
@@ -203,6 +204,15 @@ describe("createPurchasesRequestData wallet_type threading", () => {
     );
 
     expect(data.payment_method_list_token).toBeUndefined();
+  });
+
+  it("sends the signed direct-listed amount token that mounted the Payment Element", () => {
+    const data = createPurchasesRequestData(
+      { ...payloadWith({ type: "not-applicable" }), directListedAmountToken: "signed-amount-token" },
+      {},
+    );
+
+    expect(data.direct_listed_amount_token).toBe("signed-amount-token");
   });
 
   it("sends no wallet_type for a plain card through the Payment Element", () => {
