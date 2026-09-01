@@ -13,7 +13,7 @@ import {
   useLatestCartGetter,
   withRefreshedOfferCodes,
 } from "$app/components/Checkout/buyerCurrencyQuoteRecovery";
-import type { CartItem, CartState, Product as CartProduct } from "$app/components/Checkout/cartState";
+import type { CartItem, CartState, Product as CartProduct, ProductToAdd } from "$app/components/Checkout/cartState";
 
 const cartProduct = (overrides: Partial<CartProduct> = {}): CartProduct => ({
   id: "product-id",
@@ -80,7 +80,7 @@ const cartWith = (items: CartItem[]): CartState => ({ items, discountCodes: [] }
 // build one from, which is a refusal the recovery has to survive without a rate to read.
 const refusedLine = (
   product: CartProduct | null,
-  updated: Partial<NonNullable<CartPurchaseResult["lineItems"][string]["updated_product"]>> = {},
+  updated: Partial<ProductToAdd> = {},
 ): CartPurchaseResult["lineItems"][string] => ({
   success: false,
   error_message: "The local-currency price changed or expired.",
@@ -190,7 +190,12 @@ describe("recoverFromInvalidBuyerCurrencyQuote", () => {
     ]);
 
     const lineItems = {
-      "eur variant-1": refusedLine(cartProduct({ exchange_rate: 0.9 }), { price: 2_500, quantity: 3, option_id: "variant-1", accepted_offer: { id: "offer-1" } }),
+      "eur variant-1": refusedLine(cartProduct({ exchange_rate: 0.9 }), {
+        price: 2_500,
+        quantity: 3,
+        option_id: "variant-1",
+        accepted_offer: { id: "offer-1" },
+      }),
     };
     const { requote } = run(cart, lineItems);
 
