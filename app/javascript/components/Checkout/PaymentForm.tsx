@@ -702,7 +702,10 @@ const CreditCardContent = ({
   const usesPaymentElement = useStripePaymentElement || useStripePaymentElementClientConfirm;
   const stripePaymentElementConfig = usesPaymentElement ? state.checkoutPayment.elements_options : null;
   const suppressClientConfirmWallets = shouldSuppressClientConfirmWallets(state);
-  const paymentElementWalletsEnabled = state.checkoutPayment.payment_element_wallets && !suppressClientConfirmWallets;
+  const paymentElementWalletsEnabled =
+    state.checkoutPayment.payment_element_wallets &&
+    !suppressClientConfirmWallets &&
+    (getStripePaymentElementMountCurrency(state) ?? "usd") === "usd";
 
   // When the Payment Element renders Apple Pay, describe the cart's recurring agreement on the
   // sheet so Apple issues a device-independent merchant token (MPAN) — the exact same declaration

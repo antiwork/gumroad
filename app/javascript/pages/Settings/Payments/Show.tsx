@@ -1370,8 +1370,10 @@ export default function PaymentsPage() {
                 label="Show buyers their local currency on product pages"
               />
               <FieldsetDescription>
-                Buyers see an approximate price in their local currency in place of your set price. Checkout still uses
-                USD.
+                Buyers see an approximate price in their local currency in place of your set price.{" "}
+                {props.buyer_currency_charging_enabled
+                  ? "When this is on, buyers can also choose the currency they pay in at checkout. Your earnings and payouts are unchanged."
+                  : "Checkout still uses USD."}
               </FieldsetDescription>
             </Fieldset>
             {props.buyer_currency_charging_enabled && !form.data.disable_buyer_local_currency ? (

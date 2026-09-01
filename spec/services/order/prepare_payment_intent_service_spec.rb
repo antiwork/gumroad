@@ -1951,29 +1951,24 @@ describe Order::PreparePaymentIntentService, :vcr do
         end
       end
 
-      it "keeps today's canonical USD behavior byte-for-byte when the flag is off" do
+      # iDEAL can only confirm against a euro intent. When the seller is not enabled for
+      # buyer-currency charging there is no presentment machinery, and a USD fallback cannot
+      # confirm the token — fail closed instead of creating an unconfirmable intent.
+      it "fails an iDEAL token closed rather than building an unconfirmable USD intent when the flag is off" do
         Feature.deactivate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, seller)
         expect(StripeFxQuote).not_to receive(:create)
 
         order, params = build_order
         create_args, responses = perform_with_ideal_preview(order, params, confirmation_token: "ctoken_flag_off")
 
-        charge = order.charges.last
-        expect(create_args[:currency]).to eq(Checkout::StripePaymentPresenter::CLIENT_CONFIRM_CURRENCY)
-        expect(create_args[:amount_cents]).to eq(order.purchases.sum(&:total_transaction_cents))
-        expect(create_args[:idempotency_key]).to eq("deferred_intent_#{charge.external_id}_ctoken_flag_off")
-        expect(create_args[:payment_method_types]).not_to include("ideal")
-        expect(responses["unique-id-0"][:success]).to eq(true)
-        expect(charge.charge_presentment).to be_nil
-        expect(order.purchases.first.reload.purchase_presentment).to be_nil
+        expect(create_args).to be_nil
+        expect(responses["unique-id-0"][:success]).to eq(false)
+        expect(order.purchases.first.reload).to be_failed
+        expect(order.charges.last&.charge_presentment).to be_nil
       end
 
-      # The one flags-off shape this change DOES move: a euro-mounted element whose seller had
-      # buyer-currency charging turned off in between. There is no presentment machinery available
-      # to build a euro intent for a seller who is not enabled, and the canonical dollar intent is
-      # not a fallback — the euro token can never confirm against it, which is the dead end this
-      # whole change exists to remove. So fail the order cleanly instead. Requests that report
-      # nothing, or report dollars, are unchanged (the example above).
+      # Same fail-closed for a card token minted on a euro-mounted element after the flag
+      # rolled back: no presentment machinery, and the euro token cannot confirm USD.
       it "fails a EUR-mounted token closed rather than building an unconfirmable USD intent when the flag is off" do
         Feature.deactivate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, seller)
 
@@ -2159,7 +2154,9 @@ describe Order::PreparePaymentIntentService, :vcr do
           payment_details_source: PurchasePaymentFlow::PAYMENT_ELEMENT,
           payment_element_mount_currency: mount_currency,
           payment_method_list_token: Checkout::PaymentMethodListToken.issue(
-            payment_method_types: %w[card link ideal], sellers: [seller]
+            payment_method_types: %w[card link ideal],
+            sellers: [seller],
+            quoted_payment_method_types: %w[card link],
           ),
         }.merge(common_params)
         order, = Order::CreateService.new(params:).perform
@@ -2270,6 +2267,26 @@ describe Order::PreparePaymentIntentService, :vcr do
           .to have_attributes(presentment_currency: Currency::CAD, presentment_total_cents: 15_00, stripe_fx_quote_id: nil)
       end
 
+      it "rejects a stale quote token instead of charging a changed direct-listed amount" do
+        order, params = build_order
+        purchase = order.purchases.first
+        purchase.update!(displayed_price_cents: 15_00,
+                         displayed_price_currency_type: Currency::CAD,
+                         rate_converted_to_usd: BigDecimal("0.8"))
+        params[:buyer_currency_quote] = "stale-quoted-cart-token"
+        expect(Charge::DirectListedPresentment).not_to receive(:new)
+
+        create_args, responses = perform_with_direct_listed_card(order, params)
+
+        expect(create_args).to be_nil
+        expect(responses["unique-id-0"]).to include(
+          success: false,
+          error_code: PurchaseErrorCode::BUYER_CURRENCY_QUOTE_INVALID,
+          error_message: Charge::CreateService::BUYER_CURRENCY_QUOTE_INVALID_MESSAGE
+        )
+        expect(purchase.reload.purchase_presentment).to be_nil
+      end
+
       it "keeps the canonical USD intent when the Element reports that it displayed USD" do
         order, params = build_order
         expect(Charge::DirectListedPresentment).not_to receive(:new)
@@ -2363,8 +2380,399 @@ describe Order::PreparePaymentIntentService, :vcr do
         expect(order.charges).to be_empty
         expect(order.purchases.first.reload).to be_failed
       end
+
+      # Sellers who hide buyer-local currency are the exception to the USD-listing remount path.
+      # A stale or forged INR token from that cart must fail closed, not create a USD fallback.
+      context "on a USD-priced cart remounted in INR for a seller who hid local-currency display" do
+        let(:seller) { create(:user, check_merchant_account_is_linked: true, disable_buyer_local_currency: true) }
+        let(:product) { create(:product, user: seller, price_cents: 19_99) }
+        let(:quote) do
+          StripeFxQuote::Quote.new(id: "fxq_upi_usd", expires_at: 30.minutes.from_now, fx_rate: BigDecimal("83.0"))
+        end
+
+        before { allow(StripeFxQuote).to receive(:create).and_return(quote) }
+
+        it "fails closed when UPI is selected without the displayed quote" do
+          order, params = build_order
+          order.purchases.each { _1.update!(ip_country: "India") }
+          expect(StripeFxQuote).not_to receive(:create)
+
+          create_args, responses = perform_with_upi_preview(order, params)
+
+          expect(create_args).to be_nil
+          expect(responses["unique-id-0"][:success]).to eq(false)
+          expect(order.purchases.first.reload).to be_failed
+        end
+
+        it "fails closed when INR presentment cannot be recreated after a UPI selection" do
+          allow_any_instance_of(Charge::MethodForcedPresentment).to receive(:perform).and_return(nil)
+
+          order, params = build_order
+          order.purchases.each { _1.update!(ip_country: "India") }
+
+          create_args, responses = perform_with_upi_preview(order, params)
+
+          expect(create_args).to be_nil
+          expect(responses["unique-id-0"][:success]).to eq(false)
+          expect(order.purchases.first.reload).to be_failed
+        end
+
+        it "fails closed even if a stale displayed INR quote is submitted" do
+          order, params = build_order
+          params = params.merge(payment_element_mount_currency: Currency::INR, buyer_currency_quote: "displayed-inr-quote")
+          order.purchases.each { _1.update!(ip_country: "India") }
+          expect(Checkout::BuyerCurrencyQuote).not_to receive(:verify!)
+          expect(StripeFxQuote).not_to receive(:create)
+
+          create_args, responses = perform_with_upi_preview(order, params)
+
+          expect(create_args).to be_nil
+          expect(responses["unique-id-0"][:success]).to eq(false)
+          expect(order.purchases.first.reload).to be_failed
+        end
+
+        it "fails closed when a card token claims the opted-out INR remount" do
+          order, params = build_order
+          params = params.merge(payment_element_mount_currency: Currency::INR, buyer_currency_quote: "displayed-inr-quote")
+          order.purchases.each { _1.update!(ip_country: "India") }
+          expect(Checkout::BuyerCurrencyQuote).not_to receive(:verify!)
+          expect(StripeFxQuote).not_to receive(:create)
+
+          preview = Stripe::StripeObject.construct_from(type: "card", card: { country: "IN" })
+          allow(Stripe::ConfirmationToken).to receive(:retrieve)
+            .and_return(Stripe::StripeObject.construct_from(payment_method_preview: preview))
+
+          responses = described_class.new(order:, params:, confirmation_token: "ctoken_card_inr").perform
+
+          expect(responses["unique-id-0"][:success]).to eq(false)
+          expect(order.charges.last&.stripe_payment_intent_id).to be_nil
+          expect(order.purchases.first.reload).to be_failed
+        end
+      end
     end
 
+    context "on a USD-priced cart remounted in a quoted buyer currency" do
+      let(:seller) { create(:user, check_merchant_account_is_linked: true) }
+      let(:product) { create(:product, user: seller, price_cents: 10_00) }
+      let!(:connect_account) { create(:merchant_account_stripe_connect, user: seller) }
+
+      before do
+        Feature.activate_user(:buyer_local_currency, seller)
+        Feature.activate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, seller)
+      end
+
+      after do
+        Feature.deactivate_user(:buyer_local_currency, seller)
+        Feature.deactivate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, seller)
+      end
+
+      def perform_with_cad_card_preview(order, params)
+        preview = Stripe::StripeObject.construct_from(type: "card", card: { country: "CA" })
+        allow(Stripe::ConfirmationToken).to receive(:retrieve)
+          .and_return(Stripe::StripeObject.construct_from(payment_method_preview: preview))
+
+        charge_intent = instance_double(StripeChargeIntent, id: "pi_card_cad", client_secret: "pi_card_cad_secret")
+        create_args = nil
+        allow(StripeDeferredPaymentIntent).to receive(:create) do |**kwargs|
+          create_args = kwargs
+          charge_intent
+        end
+
+        responses = described_class.new(order:, params:, confirmation_token: "ctoken_card_cad").perform
+        [create_args, responses]
+      end
+
+      def locked_cad_quote(presentment_total_cents: 13_51)
+        Checkout::BuyerCurrencyQuote::Result.new(
+          currency: "cad",
+          presentment_total_cents:,
+          charge_presentment_total_cents: presentment_total_cents,
+          rounding_delta_cents: 0,
+          stripe_fx_quote_id: "fxq_displayed_cad",
+          fx_rate: BigDecimal("0.74"),
+          stripe_fx_quote_expires_at: 30.minutes.from_now,
+        )
+      end
+
+      def quoted_cad_method_list_token
+        Checkout::PaymentMethodListToken.issue(
+          payment_method_types: %w[card link cashapp],
+          sellers: [seller],
+          quoted_payment_method_types: %w[card link],
+        )
+      end
+
+      before do
+        allow(Checkout::BuyerCurrencyQuote).to receive(:quoted_currency_hint).and_call_original
+        allow(Checkout::BuyerCurrencyQuote).to receive(:quoted_currency_hint)
+          .with("displayed-cad-quote")
+          .and_return("cad")
+      end
+
+      it "reuses the displayed CAD quote instead of failing the remount closed" do
+        order, params = build_order
+        params = params.merge(
+          payment_element_mount_currency: "cad",
+          buyer_currency_quote: "displayed-cad-quote",
+          payment_method_list_token: quoted_cad_method_list_token,
+        )
+        allow(Checkout::BuyerCurrencyQuote).to receive(:verify!).and_return(locked_cad_quote)
+        allow(Checkout::BuyerCurrencyEligibility).to receive(:stripe_test_mode?).and_return(false)
+        expect(StripeFxQuote).not_to receive(:create)
+
+        create_args, responses = perform_with_cad_card_preview(order, params)
+
+        expect(responses["unique-id-0"][:success]).to eq(true), responses.inspect
+        expect(create_args[:currency]).to eq("cad")
+        expect(create_args[:stripe_fx_quote_id]).to eq("fxq_displayed_cad")
+        expect(create_args[:amount_cents]).to eq(13_51)
+        expect(Checkout::BuyerCurrencyQuote).to have_received(:verify!).with(hash_including(token: "displayed-cad-quote", currency: "cad"))
+      end
+
+      it "reuses a displayed CAD quote for a same-seller multi-line cart" do
+        other_product = create(:product, user: seller, price_cents: 5_00)
+        second_line = {
+          uid: "unique-id-1",
+          permalink: other_product.unique_permalink,
+          perceived_price_cents: other_product.price_cents,
+          quantity: 1,
+        }
+        params = { line_items: [line_item, second_line] }.merge(common_params)
+        order, = Order::CreateService.new(params:).perform
+        params = params.merge(
+          payment_element_mount_currency: "cad",
+          buyer_currency_quote: "displayed-cad-quote",
+          payment_method_list_token: quoted_cad_method_list_token,
+        )
+        allow(Checkout::BuyerCurrencyQuote).to receive(:verify!).and_return(locked_cad_quote(presentment_total_cents: 20_27))
+        allow(Checkout::BuyerCurrencyEligibility).to receive(:stripe_test_mode?).and_return(false)
+
+        create_args, responses = perform_with_cad_card_preview(order, params)
+
+        expect(responses.values).to all(include(success: true))
+        expect(create_args).to include(currency: "cad", amount_cents: 20_27, stripe_fx_quote_id: "fxq_displayed_cad")
+        expect(order.purchases.map { _1.reload.purchase_presentment }).to all(be_present)
+      end
+
+      it "returns the quote-invalid error when the displayed quote is rejected" do
+        order, params = build_order
+        params = params.merge(
+          payment_element_mount_currency: "cad",
+          buyer_currency_quote: "displayed-cad-quote",
+          payment_method_list_token: quoted_cad_method_list_token,
+        )
+        allow(Checkout::BuyerCurrencyQuote).to receive(:verify!)
+          .and_raise(Checkout::BuyerCurrencyQuote::InvalidToken, "expired buyer currency quote")
+        allow(Checkout::BuyerCurrencyEligibility).to receive(:stripe_test_mode?).and_return(false)
+
+        create_args, responses = perform_with_cad_card_preview(order, params)
+
+        expect(create_args).to be_nil
+        expect(responses["unique-id-0"]).to include(
+          success: false,
+          error_code: PurchaseErrorCode::BUYER_CURRENCY_QUOTE_INVALID,
+          error_message: Charge::CreateService::BUYER_CURRENCY_QUOTE_INVALID_MESSAGE
+        )
+      end
+
+      it "fails closed when the CAD remount has no displayed quote" do
+        order, params = build_order
+        params = params.merge(payment_element_mount_currency: "cad")
+        allow(Checkout::BuyerCurrencyEligibility).to receive(:stripe_test_mode?).and_return(false)
+        expect(StripeFxQuote).not_to receive(:create)
+
+        create_args, responses = perform_with_cad_card_preview(order, params)
+
+        expect(create_args).to be_nil
+        expect(responses["unique-id-0"][:success]).to eq(false)
+        expect(order.purchases.first.reload).to be_failed
+      end
+
+      it "echoes the signed quoted remount list instead of the USD-only Element list" do
+        order, params = build_order
+        params = params.merge(
+          payment_element_mount_currency: "cad",
+          buyer_currency_quote: "displayed-cad-quote",
+          payment_method_list_token: Checkout::PaymentMethodListToken.issue(
+            payment_method_types: %w[card link cashapp],
+            sellers: [seller],
+            quoted_payment_method_types: %w[card link],
+          ),
+        )
+        allow(Checkout::BuyerCurrencyQuote).to receive(:verify!).and_return(locked_cad_quote)
+        allow(Checkout::BuyerCurrencyEligibility).to receive(:stripe_test_mode?).and_return(false)
+
+        create_args, responses = perform_with_cad_card_preview(order, params)
+
+        expect(responses["unique-id-0"][:success]).to eq(true), responses.inspect
+        expect(create_args[:payment_method_types]).to include("card")
+        expect(create_args[:payment_method_types]).not_to include("cashapp")
+      end
+
+      it "treats a quoted EUR remount as honorable without the iDEAL launch flag" do
+        order, params = build_order
+        params = params.merge(
+          payment_element_mount_currency: "eur",
+          buyer_currency_quote: "displayed-eur-quote",
+        )
+
+        service = described_class.new(order:, params:, confirmation_token: "ctoken_card_eur")
+
+        expect(service.send(:honorable_element_mount_currency?, "eur")).to eq(true)
+      end
+    end
+
+    context "on an opted-in USD cart remounted in INR" do
+      let(:seller) { create(:user, check_merchant_account_is_linked: true, disable_buyer_local_currency: false) }
+      let(:product) { create(:product, user: seller, price_cents: 10_00) }
+      let!(:connect_account) { create(:merchant_account_stripe_connect, user: seller) }
+
+      before do
+        connect_account.update!(stripe_capabilities_snapshot: {
+                                  "capabilities" => { "link_payments" => "active", "upi_payments" => "active" },
+                                  "refreshed_at" => Time.current.iso8601,
+                                })
+        Feature.activate_user(:buyer_local_currency, seller)
+        Feature.activate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, seller)
+        Feature.activate_user(:checkout_local_method_upi, seller)
+      end
+
+      after do
+        Feature.deactivate_user(:buyer_local_currency, seller)
+        Feature.deactivate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, seller)
+        Feature.deactivate_user(:checkout_local_method_upi, seller)
+      end
+
+      def locked_inr_quote
+        Checkout::BuyerCurrencyQuote::Result.new(
+          currency: Currency::INR,
+          presentment_total_cents: 83_000,
+          charge_presentment_total_cents: 83_000,
+          rounding_delta_cents: 0,
+          stripe_fx_quote_id: "fxq_displayed_inr",
+          fx_rate: BigDecimal("83.0"),
+          stripe_fx_quote_expires_at: 30.minutes.from_now,
+        )
+      end
+
+      it "puts UPI on the INR intent even when the buyer confirmed with card" do
+        order, params = build_order
+        params = params.merge(
+          payment_element_mount_currency: Currency::INR,
+          buyer_currency_quote: "displayed-inr-quote",
+          payment_method_list_token: Checkout::PaymentMethodListToken.issue(
+            payment_method_types: %w[card link],
+            sellers: [seller],
+            inr_payment_method_types: %w[card link upi],
+          ),
+        )
+        order.purchases.each { _1.update!(ip_country: "India") }
+        allow(Checkout::BuyerCurrencyQuote).to receive(:quoted_currency_hint)
+          .with("displayed-inr-quote")
+          .and_return(Currency::INR)
+        allow(Checkout::BuyerCurrencyQuote).to receive(:verify!).and_return(locked_inr_quote)
+        allow(Checkout::BuyerCurrencyEligibility).to receive(:stripe_test_mode?).and_return(false)
+        expect(StripeFxQuote).not_to receive(:create)
+
+        preview = Stripe::StripeObject.construct_from(type: "card", card: { country: "IN" })
+        allow(Stripe::ConfirmationToken).to receive(:retrieve)
+          .and_return(Stripe::StripeObject.construct_from(payment_method_preview: preview))
+
+        charge_intent = instance_double(StripeChargeIntent, id: "pi_card_inr", client_secret: "pi_card_inr_secret")
+        create_args = nil
+        allow(StripeDeferredPaymentIntent).to receive(:create) do |**kwargs|
+          create_args = kwargs
+          charge_intent
+        end
+
+        responses = described_class.new(order:, params:, confirmation_token: "ctoken_card_inr").perform
+
+        expect(responses["unique-id-0"][:success]).to eq(true), responses.inspect
+        expect(create_args[:currency]).to eq(Currency::INR)
+        expect(create_args[:payment_method_types]).to eq(%w[card link upi])
+      end
+
+      it "strips UPI from a verified INR remount list after the launch flag rolls back" do
+        Feature.deactivate_user(:checkout_local_method_upi, seller)
+        order, params = build_order
+        params = params.merge(
+          payment_element_mount_currency: Currency::INR,
+          buyer_currency_quote: "displayed-inr-quote",
+          payment_method_list_token: Checkout::PaymentMethodListToken.issue(
+            payment_method_types: %w[card link],
+            sellers: [seller],
+            inr_payment_method_types: %w[card link upi],
+          ),
+        )
+        order.purchases.each { _1.update!(ip_country: "India") }
+        allow(Checkout::BuyerCurrencyQuote).to receive(:quoted_currency_hint)
+          .with("displayed-inr-quote")
+          .and_return(Currency::INR)
+        allow(Checkout::BuyerCurrencyQuote).to receive(:verify!).and_return(locked_inr_quote)
+        allow(Checkout::BuyerCurrencyEligibility).to receive(:stripe_test_mode?).and_return(false)
+        expect(StripeFxQuote).not_to receive(:create)
+
+        preview = Stripe::StripeObject.construct_from(type: "card", card: { country: "IN" })
+        allow(Stripe::ConfirmationToken).to receive(:retrieve)
+          .and_return(Stripe::StripeObject.construct_from(payment_method_preview: preview))
+
+        charge_intent = instance_double(StripeChargeIntent, id: "pi_card_inr_rollback", client_secret: "pi_card_inr_rollback_secret")
+        create_args = nil
+        allow(StripeDeferredPaymentIntent).to receive(:create) do |**kwargs|
+          create_args = kwargs
+          charge_intent
+        end
+
+        responses = described_class.new(order:, params:, confirmation_token: "ctoken_card_inr_rollback").perform
+
+        expect(responses["unique-id-0"][:success]).to eq(true), responses.inspect
+        expect(create_args[:currency]).to eq(Currency::INR)
+        expect(create_args[:payment_method_types]).to eq(%w[card link])
+      end
+
+      it "fails closed when an INR remount cannot verify its signed method list" do
+        order, params = build_order
+        params = params.merge(
+          payment_element_mount_currency: Currency::INR,
+          buyer_currency_quote: "displayed-inr-quote",
+          payment_method_list_token: "not-a-real-token",
+        )
+        order.purchases.each { _1.update!(ip_country: "India") }
+        allow(Checkout::BuyerCurrencyQuote).to receive(:quoted_currency_hint)
+          .with("displayed-inr-quote")
+          .and_return(Currency::INR)
+        allow(Checkout::BuyerCurrencyEligibility).to receive(:stripe_test_mode?).and_return(false)
+        expect(StripeDeferredPaymentIntent).not_to receive(:create)
+
+        preview = Stripe::StripeObject.construct_from(type: "card", card: { country: "IN" })
+        allow(Stripe::ConfirmationToken).to receive(:retrieve)
+          .and_return(Stripe::StripeObject.construct_from(payment_method_preview: preview))
+
+        responses = described_class.new(order:, params:, confirmation_token: "ctoken_inr_expired_list").perform
+
+        expect(responses["unique-id-0"][:success]).to eq(false)
+        expect(order.purchases.first.reload).to be_failed
+      end
+
+      it "fails closed when an INR remount omits the signed method list" do
+        order, params = build_order
+        params = params.merge(
+          payment_element_mount_currency: Currency::INR,
+          buyer_currency_quote: "displayed-inr-quote",
+        )
+        order.purchases.each { _1.update!(ip_country: "India") }
+        allow(Checkout::BuyerCurrencyQuote).to receive(:quoted_currency_hint)
+          .with("displayed-inr-quote")
+          .and_return(Currency::INR)
+        allow(Checkout::BuyerCurrencyEligibility).to receive(:stripe_test_mode?).and_return(false)
+        expect(StripeDeferredPaymentIntent).not_to receive(:create)
+
+        responses = described_class.new(order:, params:, confirmation_token: "ctoken_inr_missing_list").perform
+
+        expect(responses["unique-id-0"][:success]).to eq(false)
+        expect(order.purchases.first.reload).to be_failed
+      end
+    end
 
     context "with a paid-upfront UPI Autopay membership" do
       let(:seller) { create(:user, disable_buyer_local_currency: false) }

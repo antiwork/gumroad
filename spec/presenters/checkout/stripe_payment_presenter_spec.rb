@@ -6,7 +6,7 @@ describe Checkout::StripePaymentPresenter do
   # is actually responsible for: that the list handed to the issuer is the one the Element mounted,
   # after every strip. The signing itself is Checkout::PaymentMethodListToken's own spec.
   before do
-    allow(Checkout::PaymentMethodListToken).to receive(:issue) do |payment_method_types:, sellers:|
+    allow(Checkout::PaymentMethodListToken).to receive(:issue) do |payment_method_types:, sellers:, **|
       "issued:#{payment_method_types.join(",")}" if payment_method_types.present?
     end
   end
@@ -78,7 +78,7 @@ describe Checkout::StripePaymentPresenter do
   # The Element's Link toggle and the intent's method list derive from the same resolver output, so
   # they move together; Link is always launched, and the US-locked methods (cashapp/us_bank_account)
   # are passed explicitly by the region-gate specs.
-  def payment_element_client_confirm_props(stripe_link_enabled: true, payment_method_types: %w[card link], stripe_connect_account_id: nil, currency: "usd", presentment_amount_cents: nil, listed_currency_display: nil, recurring_upi_registration: false, direct_listed_card: false, disable_wallets: false, request_apple_pay_merchant_tokens: false, india_card_mandate_reliability: false, payment_element_wallets: false, flat_payment_methods: payment_element_wallets || disable_wallets)
+  def payment_element_client_confirm_props(stripe_link_enabled: true, payment_method_types: %w[card link], stripe_connect_account_id: nil, currency: "usd", buyer_currency_presentment: false, presentment_amount_cents: nil, listed_currency_display: nil, recurring_upi_registration: false, direct_listed_card: false, disable_wallets: false, request_apple_pay_merchant_tokens: false, india_card_mandate_reliability: false, payment_element_wallets: false, flat_payment_methods: payment_element_wallets || disable_wallets, inr_local_methods: [])
     {
       integration: described_class::STRIPE_PAYMENT_ELEMENT_CLIENT_CONFIRM_INTEGRATION,
       fallback_reason: nil,
@@ -91,6 +91,7 @@ describe Checkout::StripePaymentPresenter do
       elements_options: {
         stripe_elements_mode: described_class::STRIPE_ELEMENTS_MODE_FOR_PAYMENT_INTENT,
         currency:,
+        buyer_currency_presentment:,
         presentment_amount_cents:,
         # Every method-forced element mounts in a non-USD currency, so it also tells the checkout
         # summary to render that currency. Defaults to the forced currency at the standard 1/100
@@ -98,6 +99,7 @@ describe Checkout::StripePaymentPresenter do
         listed_currency_display: listed_currency_display ||
           (currency == "usd" ? nil : { currency:, subunit_to_unit: 100 }),
         payment_method_types:,
+        inr_local_methods:,
         # The presenter signs the list it mounted, so the fixture pins the post-strip list: a
         # region or amount strip that failed to reach the issuer would show up here.
         payment_method_list_token: "issued:#{payment_method_types.join(",")}",
@@ -108,7 +110,7 @@ describe Checkout::StripePaymentPresenter do
     }
   end
 
-  def payment_element_props(stripe_elements_mode: described_class::STRIPE_ELEMENTS_MODE_FOR_PAYMENT_INTENT, stripe_link_enabled: true, request_apple_pay_merchant_tokens: false, india_card_mandate_reliability: false, buyer_currency_presentment: false, disable_wallets: false, payment_element_wallets: false, flat_payment_methods: payment_element_wallets || disable_wallets)
+  def payment_element_props(stripe_elements_mode: described_class::STRIPE_ELEMENTS_MODE_FOR_PAYMENT_INTENT, stripe_link_enabled: true, request_apple_pay_merchant_tokens: false, india_card_mandate_reliability: false, buyer_currency_presentment: false, disable_wallets: false, payment_element_wallets: false, flat_payment_methods: payment_element_wallets || disable_wallets, inr_local_methods: [])
     {
       integration: described_class::STRIPE_PAYMENT_ELEMENT_INTEGRATION,
       fallback_reason: nil,
@@ -122,6 +124,7 @@ describe Checkout::StripePaymentPresenter do
         currency: "usd",
         buyer_currency_presentment:,
         payment_method_types: ["card"],
+        inr_local_methods:,
         payment_method_creation: "manual",
         stripe_link_enabled:,
       },
@@ -1737,7 +1740,8 @@ describe Checkout::StripePaymentPresenter do
       first[:product][:exchange_rate] = 0.8
       second = checkout_product_for(second_product)
       second[:product][:exchange_rate] = 0.9
-      expect(stripe_payment_props(add_products: [first, second], ip: "24.48.0.1")).to eq(payment_element_client_confirm_props)
+      expect(stripe_payment_props(add_products: [first, second], ip: "24.48.0.1"))
+        .to eq(payment_element_client_confirm_props)
     ensure
       if seller
         Feature.deactivate_user(Checkout::BuyerCurrencyEligibility::LISTED_CURRENCY_DIRECT_CHARGE_FEATURE_NAME, seller)
@@ -1860,6 +1864,7 @@ describe Checkout::StripePaymentPresenter do
           presentment_amount_cents: 7300,
           payment_method_types: %w[card link upi],
           disable_wallets: true,
+          inr_local_methods: %w[upi],
         )
       )
     ensure
@@ -1867,6 +1872,72 @@ describe Checkout::StripePaymentPresenter do
         Feature.deactivate_user(:checkout_local_method_upi, seller)
         deactivate_buyer_currency_flags(seller)
       end
+    end
+
+    it "does not advertise the INR remount upgrade when the seller hid local-currency display" do
+      seller, product = buyer_currency_seller_with_product(price_currency_type: "usd", price_cents: 1999)
+      seller.update!(disable_buyer_local_currency: true)
+      activate_buyer_currency_flags(seller)
+      Feature.activate_user(:checkout_local_method_upi, seller)
+      allow(Stripe).to receive(:api_key).and_return("sk_live_currency")
+      stub_geoip_country("203.0.113.21", "India")
+
+      props = stripe_payment_props(add_products: [checkout_product_for(product)], ip: "203.0.113.21")
+
+      expect(props[:elements_options][:currency]).to eq("usd")
+      expect(props[:elements_options][:payment_method_types]).not_to include("upi")
+      expect(props[:elements_options][:inr_local_methods]).to eq([])
+      expect(props[:disable_wallets]).to be(false)
+    ensure
+      if seller
+        Feature.deactivate_user(:checkout_local_method_upi, seller)
+        deactivate_buyer_currency_flags(seller)
+      end
+    end
+
+    it "signs the INR remount list with UPI so prepare can echo the remounted Element" do
+      seller, product = buyer_currency_seller_with_product(price_currency_type: "usd", price_cents: 1999)
+      activate_buyer_currency_flags(seller)
+      Feature.activate_user(:checkout_local_method_upi, seller)
+      allow(Stripe).to receive(:api_key).and_return("sk_live_currency")
+      stub_geoip_country("203.0.113.22", "India")
+      issued = nil
+      allow(Checkout::PaymentMethodListToken).to receive(:issue) do |**kwargs|
+        issued = kwargs
+        "issued:#{kwargs[:payment_method_types].join(",")}" if kwargs[:payment_method_types].present?
+      end
+
+      props = stripe_payment_props(add_products: [checkout_product_for(product)], ip: "203.0.113.22")
+
+      expect(props[:elements_options][:payment_method_types]).to eq(%w[card link])
+      expect(props[:elements_options][:inr_local_methods]).to eq(%w[upi])
+      expect(issued[:payment_method_types]).to eq(%w[card link])
+      expect(issued[:inr_payment_method_types]).to eq(%w[card link upi])
+      expect(issued[:quoted_payment_method_types]).to eq(%w[card link])
+    ensure
+      if seller
+        Feature.deactivate_user(:checkout_local_method_upi, seller)
+        deactivate_buyer_currency_flags(seller)
+      end
+    end
+
+    it "signs a quoted remount list that drops USD-only methods" do
+      seller, product = buyer_currency_seller_with_product(price_currency_type: "usd", price_cents: 1999)
+      activate_buyer_currency_flags(seller)
+      stub_geoip_country("203.0.113.23", "United States")
+      issued = nil
+      allow(Checkout::PaymentMethodListToken).to receive(:issue) do |**kwargs|
+        issued = kwargs
+        "issued:#{kwargs[:payment_method_types].join(",")}" if kwargs[:payment_method_types].present?
+      end
+
+      stripe_payment_props(add_products: [checkout_product_for(product)], ip: "203.0.113.23")
+
+      expect(issued[:payment_method_types]).to include("cashapp")
+      expect(issued[:quoted_payment_method_types]).to eq(issued[:payment_method_types] - %w[cashapp])
+      expect(issued[:inr_payment_method_types]).to be_nil
+    ensure
+      deactivate_buyer_currency_flags(seller) if seller
     end
 
     it "mounts card + UPI for the flagged single paid-upfront INR membership slice" do
@@ -2008,6 +2079,7 @@ describe Checkout::StripePaymentPresenter do
           presentment_amount_cents: 14600,
           payment_method_types: %w[card link upi],
           disable_wallets: true,
+          inr_local_methods: %w[upi],
         )
       )
     ensure
@@ -2058,10 +2130,11 @@ describe Checkout::StripePaymentPresenter do
       end
     end
 
-    it "selects the buyer-currency presentment Payment Element for a non-US buyer of a USD-priced product with the flags on" do
+    it "selects client-confirm quote presentment for a non-US buyer of a single USD-priced product with the flags on" do
       seller, product = buyer_currency_seller_with_product(price_currency_type: "usd", price_cents: 1500)
       activate_buyer_currency_flags(seller)
       allow(Stripe).to receive(:api_key).and_return("sk_test_currency")
+      stub_geoip_country("203.0.113.25", "Canada")
       add_products = [
         checkout_product_for(
           product,
@@ -2074,14 +2147,113 @@ describe Checkout::StripePaymentPresenter do
 
       # This cart used to dead-end on CardElement ("buyer_currency_presentment_unsupported"):
       # the method-forced QA surface only covers products priced in a forced currency, and the
-      # canonical USD element couldn't present buyer currency. The presentment element shape
-      # now carries it — a server-confirm Payment Element the browser mounts in the buyer's
-      # FX-quote currency.
-      expect(stripe_payment_props(add_products:)).to eq(
-        payment_element_props(buyer_currency_presentment: true, disable_wallets: true)
+      # canonical USD element could not present buyer currency. The client-confirm element now
+      # marks the quote-presentable shape so the browser can remount in the FX-quote currency.
+      expect(stripe_payment_props(add_products:, ip: "203.0.113.25")).to eq(
+        payment_element_client_confirm_props(buyer_currency_presentment: true, disable_wallets: true)
       )
     ensure
       deactivate_buyer_currency_flags(seller) if seller
+    end
+
+    it "advertises UPI on a real Indian buyer-local client-confirm remount" do
+      seller, product = buyer_currency_seller_with_product(price_currency_type: "usd", price_cents: 1500)
+      activate_buyer_currency_flags(seller)
+      Feature.activate_user(:checkout_local_method_upi, seller)
+      allow(Stripe).to receive(:api_key).and_return("sk_live_currency")
+      stub_geoip_country("203.0.113.24", "India")
+      add_products = [
+        checkout_product_for(
+          product,
+          buyer_currency_display: {
+            display_mode: "buyer_local",
+            buyer_currency_shown: Currency::INR,
+          }
+        )
+      ]
+
+      props = stripe_payment_props(add_products:, ip: "203.0.113.24")
+
+      expect(props).to eq(
+        payment_element_client_confirm_props(
+          buyer_currency_presentment: true,
+          disable_wallets: true,
+          payment_method_types: %w[card link],
+          inr_local_methods: %w[upi],
+        )
+      )
+    ensure
+      if seller
+        Feature.deactivate_user(:checkout_local_method_upi, seller)
+        deactivate_buyer_currency_flags(seller)
+      end
+    end
+
+    it "keeps multi-item USD carts on the server-confirm presentment element because client-confirm cannot honor one quoted intent yet" do
+      seller, product = buyer_currency_seller_with_product(price_currency_type: "usd", price_cents: 1500)
+      other_product = create(:product, user: seller, price_currency_type: Currency::USD, price_cents: 2500)
+      activate_buyer_currency_flags(seller)
+      Feature.activate_user(:checkout_local_method_upi, seller)
+      allow(Stripe).to receive(:api_key).and_return("sk_live_currency")
+      stub_geoip_country("203.0.113.26", "India")
+
+      props = stripe_payment_props(
+        add_products: [
+          checkout_product_for(
+            product,
+            buyer_currency_display: { display_mode: "buyer_local", buyer_currency_shown: Currency::INR }
+          ),
+          checkout_product_for(
+            other_product,
+            buyer_currency_display: { display_mode: "buyer_local", buyer_currency_shown: Currency::INR }
+          ),
+        ],
+        ip: "203.0.113.26"
+      )
+
+      expect(props).to eq(payment_element_props(buyer_currency_presentment: true, disable_wallets: true))
+      expect(props.dig(:elements_options, :inr_local_methods)).to eq([])
+    ensure
+      if seller
+        Feature.deactivate_user(:checkout_local_method_upi, seller)
+        deactivate_buyer_currency_flags(seller)
+      end
+    end
+
+    it "keeps a two-seller USD cart for an Indian buyer off the client-confirm remount" do
+      # Both the quote remount and the INR method list require a single seller — one
+      # ConfirmationToken funds one PaymentIntent — so a two-seller quoted cart must stay on
+      # the server-confirm presentment element with no UPI advertised.
+      seller, product = buyer_currency_seller_with_product(price_currency_type: "usd", price_cents: 1500)
+      other_seller, other_product = buyer_currency_seller_with_product(price_currency_type: "usd", price_cents: 2500)
+      [seller, other_seller].each do |current_seller|
+        activate_buyer_currency_flags(current_seller)
+        Feature.activate_user(:checkout_local_method_upi, current_seller)
+      end
+      allow(Stripe).to receive(:api_key).and_return("sk_live_currency")
+      stub_geoip_country("203.0.113.27", "India")
+
+      props = stripe_payment_props(
+        add_products: [
+          checkout_product_for(
+            product,
+            buyer_currency_display: { display_mode: "buyer_local", buyer_currency_shown: Currency::INR }
+          ),
+          checkout_product_for(
+            other_product,
+            buyer_currency_display: { display_mode: "buyer_local", buyer_currency_shown: Currency::INR }
+          ),
+        ],
+        ip: "203.0.113.27"
+      )
+
+      expect(props).to eq(payment_element_props(buyer_currency_presentment: true, disable_wallets: true))
+      expect(props.dig(:elements_options, :inr_local_methods)).to eq([])
+    ensure
+      [seller, other_seller].compact.each do |current_seller|
+        Feature.deactivate_user(:checkout_local_method_upi, current_seller)
+        deactivate_buyer_currency_flags(current_seller)
+      end
     end
 
     it "drops the US-locked methods (Cash App Pay, ACH) from the forced-currency element for a US buyer" do

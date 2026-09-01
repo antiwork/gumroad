@@ -304,3 +304,26 @@ describe("full-SSN re-entry validation", () => {
     expect(mocks.put).not.toHaveBeenCalled();
   });
 });
+
+describe("buyer local currency description", () => {
+  const renderWithCurrencyProps = (overrides: Record<string, unknown>) => {
+    mocks.usePage.mockReturnValue({ props: { ...pageProps(), buyer_local_currency_enabled: true, ...overrides } });
+    render(<PaymentsPage />);
+  };
+
+  it("describes the checkout currency choice only when buyer-currency charging is enabled", () => {
+    renderWithCurrencyProps({ buyer_currency_charging_enabled: true });
+
+    expect(
+      screen.getByText(/When this is on, buyers can also choose the currency they pay in at checkout/u),
+    ).toBeTruthy();
+    expect(screen.queryByText(/Checkout still uses USD/u)).toBeNull();
+  });
+
+  it("keeps the USD checkout description while charging is not enabled for the seller", () => {
+    renderWithCurrencyProps({ buyer_currency_charging_enabled: false });
+
+    expect(screen.getByText(/Checkout still uses USD/u)).toBeTruthy();
+    expect(screen.queryByText(/choose the currency they pay in/u)).toBeNull();
+  });
+});

@@ -153,6 +153,15 @@ class Checkout::BuyerCurrencyEligibility
       !seller.disable_buyer_local_currency?
   end
 
+  # True when `currency` is one a launched local method can charge (INR+UPI, EUR+iDEAL).
+  # Used by prepare to honor an INR remount on a USD-listed cart.
+  def self.local_method_quote_enabled?(seller, currency)
+    seller_enabled?(seller) &&
+      FORCED_CURRENCY_PAYMENT_METHODS.any? do |method, forced|
+        forced == currency.to_s.downcase && (stripe_test_mode? || local_method_launched?(method, seller))
+      end
+  end
+
   # Own ramp on top of seller_enabled?: a membership amount outlives checkout.
   # Pulling the flag stops NEW memberships; existing ones keep billing the stored
   # amount (renewal checks processor + stored-row facts, not this flag).
@@ -520,8 +529,18 @@ class Checkout::BuyerCurrencyEligibility
       if self.class.forced_currency_for(payment_method).present?
         self.class.local_method_launched?(payment_method, seller)
       else
-        self.class.forced_currency_surface_available?(currency: forced_currency, seller:)
+        self.class.forced_currency_surface_available?(currency: forced_currency, seller:) ||
+          quote_bound_card_surface?(forced_currency)
       end
+    end
+
+    # Card/Link on a remounted CAD/GBP/… element: no local method forces that currency,
+    # so the method-forced surface gate is the wrong one. The signed quote is.
+    def quote_bound_card_surface?(currency)
+      return false unless self.class.seller_enabled?(seller)
+      return false if params[:buyer_currency_quote].blank?
+
+      StripeChargeProcessor.charge_minor_units_compatible?(currency)
     end
 
     def usd_settling_merchant_account?(presentment_currency)

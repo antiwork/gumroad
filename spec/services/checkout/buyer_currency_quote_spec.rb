@@ -140,6 +140,21 @@ describe Checkout::BuyerCurrencyQuote do
       expect(locked.presentment_component_overrides).to eq([[nil, 4_37, nil, nil, nil]])
     end
 
+    it "keeps an exact INR tip that rounds to the submitted canonical cents" do
+      inr_quote = StripeFxQuote::Quote.new(id: "fxq_inr", expires_at: 30.minutes.from_now, fx_rate: BigDecimal("0.01036"))
+      allow(StripeFxQuote).to receive(:create).with(
+        to_currency: Currency::USD, from_currency: Currency::INR,
+        stripe_account_id: merchant_account.charge_processor_merchant_id, destination_account_id: nil
+      ).and_return(inr_quote)
+      line_item = described_class::LineItem.new(
+        permalink: product.unique_permalink, product:, price_cents: 10_00, tip_cents: 8,
+        presentment_tip_cents: 7_77, seller_tax_cents: 0, gumroad_tax_cents: 0, shipping_cents: 0
+      )
+      result = described_class.create(line_items: [line_item], canonical_total_cents: 10_08, ip: "106.51.72.1", currency: Currency::INR)
+      expect(result.line_allocations.sole.presentment_tip_cents).to eq(7_77)
+      expect(result.charges.sole.presentment_component_overrides).to eq([[nil, 7_77, nil, nil, nil]])
+    end
+
     it "keeps zero-charge line slots while displaying exact presentment tip overrides" do
       deferred_product = create(:product, user: seller, price_cents: 5_00, price_currency_type: Currency::USD)
       deferred_line = described_class::LineItem.new(
@@ -247,6 +262,15 @@ describe Checkout::BuyerCurrencyQuote do
         canonical_line_items: [{ permalink: product.unique_permalink, total_cents: 13_50 }]
       )
       expect(locked.presentment_component_overrides).to be_nil
+    end
+
+    it "withholds the quote when the seller hid local-currency display on product pages" do
+      seller.update!(disable_buyer_local_currency: true)
+      expect(StripeFxQuote).not_to receive(:create)
+
+      result = described_class.create(line_items: line_items_for(product), canonical_total_cents: 10_00, ip: "24.48.0.1")
+
+      expect(result).to be_nil
     end
 
     it "reports the exact rate from the locked quote when the cart is one charge" do
