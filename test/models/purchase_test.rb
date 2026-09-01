@@ -6374,6 +6374,63 @@ class PurchaseTest < ActiveSupport::TestCase
     assert_equal true, purchase.pending_buyer_presentment_settlement?
   end
 
+  test "#pending_processor_settlement? is true when only a PaymentIntent id is persisted" do
+    seller = create_user
+    merchant_account = create_merchant_account_stripe_connect(user: seller)
+    purchase = create_purchase_in_progress(
+      link: create_product(user: seller),
+      seller:,
+      merchant_account:,
+      is_part_of_combined_charge: true,
+      stripe_transaction_id: nil,
+      flow_of_funds: nil
+    )
+    charge = create_charge(order: create_order, seller:, merchant_account:)
+    charge.purchases << purchase
+    create_charge_presentment(charge:)
+    purchase.create_processor_payment_intent!(intent_id: "pi_presentment")
+
+    assert_nil purchase.reload.stripe_transaction_id
+    assert_equal true, purchase.charged_at_processor?
+    assert_equal true, purchase.pending_processor_settlement?
+  end
+
+  test "#pending_processor_settlement? is true for a PaymentIntent-only purchase with no Charge row" do
+    purchase = create_purchase_in_progress(
+      link: create_product,
+      stripe_transaction_id: nil,
+      processor_payment_intent_id: "pi_ignored_column",
+      flow_of_funds: nil
+    )
+    PurchasePresentment.create!(
+      purchase:,
+      charge_presentment: nil,
+      processor: StripeChargeProcessor.charge_processor_id,
+      presentment_currency: Currency::CAD,
+      presentment_price_cents: 12_00,
+      presentment_tip_cents: 0,
+      presentment_seller_tax_cents: 0,
+      presentment_gumroad_tax_cents: 1_50,
+      presentment_shipping_cents: 0,
+      presentment_total_cents: 13_50,
+      presentment_gumroad_amount_cents: 1_35
+    )
+    purchase.create_processor_payment_intent!(intent_id: "pi_presentment")
+
+    assert_nil purchase.reload.charge
+    assert_equal "pi_ignored_column", purchase.read_attribute(:processor_payment_intent_id)
+    assert_equal "pi_presentment", purchase.processor_payment_intent_id
+    assert_equal true, purchase.charged_at_processor?
+    assert_equal true, purchase.pending_processor_settlement?
+  end
+
+  test "#charged_at_processor? is false for an in_progress purchase with no processor ids" do
+    purchase = create_purchase_in_progress(link: create_product, stripe_transaction_id: nil, processor_payment_intent_id: nil)
+
+    assert_equal false, purchase.charged_at_processor?
+    assert_equal false, purchase.pending_processor_settlement?
+  end
+
   # ---- #save_charge_data ----------------------------------------------------
 
   test "#save_charge_data saves all charge related info from the given charge on the purchase" do
