@@ -552,6 +552,78 @@ describe SendPostBlastEmailsJob, :freeze_time do
       expect(blast.reload.completed_at).to be_nil
     end
 
+    it "rebuilds the audience when a resume finds no snapshot inside the grace window" do
+      post = basic_post_with_audience
+      blast = create(:blast, :just_requested, post:)
+      blast.update!(started_at: 1.hour.ago)
+      create(:active_follower, user: @seller)
+
+      unrestricted = false
+      allow(AudienceMember).to receive(:filter).and_wrap_original do |original, **kwargs|
+        unrestricted = true unless kwargs.key?(:ids)
+        original.call(**kwargs)
+      end
+
+      described_class.new.perform(blast.id)
+
+      expect(unrestricted).to eq(true)
+      expect_sent_count 2
+      expect(blast.reload.completed_at).to be_present
+    end
+
+    it "refuses a resume with no snapshot inside the grace window when recipients are still pending" do
+      post = basic_post_with_audience
+      blast = create(:blast, :just_requested, post:)
+      blast.update!(started_at: 1.hour.ago)
+      pending_key = RedisKey.blast_pending_recipients(blast.id)
+      # An earlier attempt already published its recipient count, so it had a snapshot:
+      # the missing one is lost Redis state, not a first-run crash.
+      $redis.set(pending_key, 1)
+      create(:active_follower, user: @seller)
+
+      unrestricted = false
+      allow(AudienceMember).to receive(:filter).and_wrap_original do |original, **kwargs|
+        unrestricted = true unless kwargs.key?(:ids)
+        original.call(**kwargs)
+      end
+
+      expect do
+        described_class.new.perform(blast.id)
+      end.to raise_error(RuntimeError, /missing audience snapshot for blast #{blast.id}/)
+
+      expect(unrestricted).to eq(false)
+      expect_sent_count 0
+      expect(blast.reload.completed_at).to be_nil
+    ensure
+      $redis.del(pending_key) if pending_key
+    end
+
+    it "completes without a live rebuild when a resume with no snapshot owes no more recipients" do
+      post = basic_post_with_audience
+      blast = create(:blast, :just_requested, post:)
+      blast.update!(started_at: 1.hour.ago)
+      pending_key = RedisKey.blast_pending_recipients(blast.id)
+      # Everything was already handed to the ESP; this resume exists only to stamp
+      # `completed_at`, so a missing snapshot must neither stall it nor pull in the
+      # follower who joined after the original send.
+      $redis.set(pending_key, 0)
+      create(:active_follower, user: @seller)
+
+      unrestricted = false
+      allow(AudienceMember).to receive(:filter).and_wrap_original do |original, **kwargs|
+        unrestricted = true unless kwargs.key?(:ids)
+        original.call(**kwargs)
+      end
+
+      described_class.new.perform(blast.id)
+
+      expect(unrestricted).to eq(false)
+      expect_sent_count 0
+      expect(blast.reload.completed_at).to be_present
+    ensure
+      $redis.del(pending_key) if pending_key
+    end
+
     it "resumes from the snapshot on retry using only an id-restricted filter" do
       post = basic_post_with_audience
       blast = create(:blast, :just_requested, post:)
