@@ -111,5 +111,22 @@ describe Checkout::UpsellsPresenter do
                  ]
                })
     end
+
+    it "checks version counts for all products in one query" do
+      create_list(:product_with_digital_versions, 3, user: seller)
+      variant_queries = []
+      callback = lambda do |*, payload|
+        sql = payload[:sql]
+        variant_queries << sql if sql.include?("FROM `base_variants`") && sql.include?("variant_categories")
+      end
+
+      props = nil
+      ActiveSupport::Notifications.subscribed(callback, "sql.active_record") do
+        props = presenter.upsells_props
+      end
+
+      expect(props[:products]).to all(include(has_multiple_versions: true))
+      expect(variant_queries.size).to eq(1), variant_queries.join("\n")
+    end
   end
 end
