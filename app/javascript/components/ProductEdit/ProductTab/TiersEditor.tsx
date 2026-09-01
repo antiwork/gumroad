@@ -32,6 +32,7 @@ import { Fieldset, FieldsetDescription, FieldsetTitle } from "$app/components/ui
 import { Input } from "$app/components/ui/Input";
 import { InputGroup } from "$app/components/ui/InputGroup";
 import { Label } from "$app/components/ui/Label";
+import { LinkButton } from "$app/components/ui/LinkButton";
 import { Placeholder } from "$app/components/ui/Placeholder";
 import { Row, RowActions, RowContent, RowDetails, Rows } from "$app/components/ui/Rows";
 import { Switch } from "$app/components/ui/Switch";
@@ -482,9 +483,7 @@ You can modify or cancel your membership at any time.`;
               We'll send an email reminder to your active members stating the new price 7 days prior to their next
               scheduled payment.
             </strong>{" "}
-            <button
-              type="button"
-              className="cursor-pointer underline all-unset"
+            <LinkButton
               onClick={() =>
                 void sendSamplePriceChangeEmail({
                   productPermalink: uniquePermalink,
@@ -504,7 +503,7 @@ You can modify or cancel your membership at any time.`;
               }
             >
               Get a sample
-            </button>
+            </LinkButton>
           </div>
           <Fieldset state={effectiveDate.error ? "danger" : undefined}>
             <FieldsetTitle>

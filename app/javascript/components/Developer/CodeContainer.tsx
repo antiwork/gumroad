@@ -3,6 +3,7 @@ import * as React from "react";
 import { CopyToClipboard } from "$app/components/CopyToClipboard";
 import { Fieldset, FieldsetDescription, FieldsetTitle } from "$app/components/ui/Fieldset";
 import { Label } from "$app/components/ui/Label";
+import { LinkButton } from "$app/components/ui/LinkButton";
 import { Textarea } from "$app/components/ui/Textarea";
 
 export const CodeContainer = ({ codeToCopy }: { codeToCopy: string }) => {
@@ -20,9 +21,7 @@ export const CodeContainer = ({ codeToCopy }: { codeToCopy: string }) => {
       <FieldsetTitle>
         <Label htmlFor={uid}>Copy and paste this code into your website</Label>
         <CopyToClipboard tooltipPosition="bottom" text={codeToCopy}>
-          <button type="button" className="cursor-pointer font-normal underline all-unset">
-            Copy embed code
-          </button>
+          <LinkButton className="font-normal">Copy embed code</LinkButton>
         </CopyToClipboard>
       </FieldsetTitle>
       <Textarea id={uid} ref={textAreaRef} aria-label="Widget code" readOnly value={codeToCopy} />

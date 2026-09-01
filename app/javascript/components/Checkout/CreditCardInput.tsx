@@ -16,6 +16,7 @@ import { useFont } from "$app/components/DesignSettings";
 import { Fieldset, FieldsetTitle } from "$app/components/ui/Fieldset";
 import { InputGroup } from "$app/components/ui/InputGroup";
 import { Label } from "$app/components/ui/Label";
+import { LinkButton } from "$app/components/ui/LinkButton";
 
 export const CreditCardInput = ({
   disabled,
@@ -53,14 +54,9 @@ export const CreditCardInput = ({
       <FieldsetTitle>
         <Label>Card information</Label>
         {savedCreditCard ? (
-          <button
-            type="button"
-            className="cursor-pointer font-normal underline all-unset"
-            disabled={disabled}
-            onClick={() => setUseSavedCard(!useSavedCard)}
-          >
+          <LinkButton className="font-normal" disabled={disabled} onClick={() => setUseSavedCard(!useSavedCard)}>
             {useSavedCard ? "Use a different card?" : "Use saved card"}
-          </button>
+          </LinkButton>
         ) : null}
       </FieldsetTitle>
       {savedCreditCard && useSavedCard ? (

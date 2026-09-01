@@ -16,6 +16,7 @@ import { useProductEditContext } from "$app/components/ProductEdit/state";
 import { ShareButtons } from "$app/components/ShareButtons";
 import { Alert } from "$app/components/ui/Alert";
 import { Fieldset } from "$app/components/ui/Fieldset";
+import { LinkButton } from "$app/components/ui/LinkButton";
 import { Switch } from "$app/components/ui/Switch";
 import { useRunOnce } from "$app/components/useRunOnce";
 
@@ -148,15 +149,15 @@ const DiscoverEligibilityPromo = () => {
             </a>
             .
           </div>
-          <button
-            className="w-max cursor-pointer underline all-unset"
+          <LinkButton
+            className="w-max"
             onClick={() => {
               localStorage.setItem("showDiscoverEligibilityPromo", "false");
               setShow(false);
             }}
           >
             Close
-          </button>
+          </LinkButton>
         </div>
       </div>
     </Alert>

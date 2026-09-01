@@ -7,6 +7,7 @@ import { Alert } from "$app/components/ui/Alert";
 import { Fieldset, FieldsetTitle } from "$app/components/ui/Fieldset";
 import { Input } from "$app/components/ui/Input";
 import { Label } from "$app/components/ui/Label";
+import { LinkButton } from "$app/components/ui/LinkButton";
 import { Switch } from "$app/components/ui/Switch";
 import { Textarea } from "$app/components/ui/Textarea";
 
@@ -67,9 +68,7 @@ export const GiftForm = ({ isMembership, className }: { isMembership: boolean; c
           ) : (
             <Alert variant="info">
               {gift.name}'s email has been hidden for privacy purposes.{" "}
-              <button className="cursor-pointer underline all-unset" onClick={() => setCancellingPresetGift(true)}>
-                Cancel gift option
-              </button>
+              <LinkButton onClick={() => setCancellingPresetGift(true)}>Cancel gift option</LinkButton>
               <Modal
                 open={cancellingPresetGift}
                 onClose={() => setCancellingPresetGift(false)}

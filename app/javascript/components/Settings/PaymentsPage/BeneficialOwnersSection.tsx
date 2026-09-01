@@ -18,6 +18,7 @@ import { Checkbox } from "$app/components/ui/Checkbox";
 import { Fieldset, FieldsetDescription, FieldsetTitle } from "$app/components/ui/Fieldset";
 import { Input } from "$app/components/ui/Input";
 import { Label } from "$app/components/ui/Label";
+import { LinkButton } from "$app/components/ui/LinkButton";
 import { Select } from "$app/components/ui/Select";
 import { Sheet, SheetHeader } from "$app/components/ui/Sheet";
 
@@ -1197,14 +1198,13 @@ const BeneficialOwnersSection = ({
                               disabled
                               readOnly
                             />
-                            <button
-                              type="button"
-                              className="cursor-pointer self-start text-sm underline all-unset"
+                            <LinkButton
+                              className="self-start text-sm"
                               onClick={() => setIsEditingTaxId(true)}
                               disabled={isFormDisabled}
                             >
                               Change
-                            </button>
+                            </LinkButton>
                           </div>
                         ) : (
                           <div className="flex flex-col gap-2">
@@ -1220,9 +1220,8 @@ const BeneficialOwnersSection = ({
                               onChange={(event) => updateForm({ id_number: event.target.value })}
                             />
                             {isUs ? (
-                              <button
-                                type="button"
-                                className="cursor-pointer self-start text-sm underline all-unset"
+                              <LinkButton
+                                className="self-start text-sm"
                                 onClick={() => {
                                   setUseGovernmentIdForUs((prev) => !prev);
                                   updateForm({ id_number: "" });
@@ -1232,7 +1231,7 @@ const BeneficialOwnersSection = ({
                                 {useGovernmentIdForUs
                                   ? "Use last 4 digits of Social Security number instead"
                                   : "Provide a government-issued ID number instead"}
-                              </button>
+                              </LinkButton>
                             ) : null}
                           </div>
                         )}

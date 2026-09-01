@@ -6,6 +6,7 @@ import { Fieldset, FieldsetDescription, FieldsetTitle } from "$app/components/ui
 import { Input } from "$app/components/ui/Input";
 import { InputGroup } from "$app/components/ui/InputGroup";
 import { Label } from "$app/components/ui/Label";
+import { LinkButton } from "$app/components/ui/LinkButton";
 import { Pill } from "$app/components/ui/Pill";
 
 // Must match the server's format validation on Link#custom_permalink
@@ -46,9 +47,7 @@ export const CustomPermalinkInput = ({
       <FieldsetTitle>
         <Label htmlFor={uid}>URL</Label>
         <CopyToClipboard text={url}>
-          <button type="button" className="cursor-pointer font-normal underline all-unset">
-            Copy URL
-          </button>
+          <LinkButton className="font-normal">Copy URL</LinkButton>
         </CopyToClipboard>
       </FieldsetTitle>
       <InputGroup>

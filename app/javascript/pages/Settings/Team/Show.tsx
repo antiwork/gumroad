@@ -33,6 +33,7 @@ import { Fieldset, FieldsetTitle } from "$app/components/ui/Fieldset";
 import { FormSection } from "$app/components/ui/FormSection";
 import { Input } from "$app/components/ui/Input";
 import { Label } from "$app/components/ui/Label";
+import { LinkButton } from "$app/components/ui/LinkButton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "$app/components/ui/Table";
 import { WithTooltip } from "$app/components/WithTooltip";
 
@@ -269,9 +270,7 @@ const TeamMembersSection = ({
         <Alert variant="success">
           <div className="flex flex-col justify-between sm:flex-row">
             {deletedMember.name !== "" ? deletedMember.name : deletedMember.email} was removed from team members
-            <button
-              className="cursor-pointer underline all-unset"
-              type="button"
+            <LinkButton
               onClick={asyncVoid(async () => {
                 try {
                   await restoreMember(deletedMember);
@@ -288,7 +287,7 @@ const TeamMembersSection = ({
               })}
             >
               Undo
-            </button>
+            </LinkButton>
           </div>
         </Alert>
       ) : null}

@@ -96,6 +96,21 @@ describe("Main Settings Scenario", type: :system, js: true) do
         expect(page).to have_alert(text: "Confirmation email resent!")
         expect(page).to_not have_link("Resend confirmation?")
       end
+
+      # "Resend confirmation?" is the only button inside this <form>. While it was a bare <button>
+      # with no type it defaulted to submit, which made it the form's default button: Enter in the
+      # email field resent the confirmation instead of doing nothing. LinkButton pins type="button".
+      it "does not resend the confirmation email when the seller presses Enter in the email field" do
+        visit settings_main_path
+
+        expect(page).to have_button("Resend confirmation?")
+        within_section "User details", section_element: :section do
+          find_field("Email").send_keys(:enter)
+        end
+
+        expect(page).to have_button("Resend confirmation?")
+        expect(page).to_not have_alert(text: "Confirmation email resent!")
+      end
     end
   end
 

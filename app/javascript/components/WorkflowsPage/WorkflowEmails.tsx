@@ -46,6 +46,7 @@ import { InvalidNameForEmailDeliveryWarning } from "$app/components/server-compo
 import { Avatar } from "$app/components/ui/Avatar";
 import { Fieldset } from "$app/components/ui/Fieldset";
 import { Input } from "$app/components/ui/Input";
+import { LinkButton } from "$app/components/ui/LinkButton";
 import { Placeholder } from "$app/components/ui/Placeholder";
 import { Row, RowActions, RowContent, RowDetails, Rows } from "$app/components/ui/Rows";
 import { Select } from "$app/components/ui/Select";
@@ -672,8 +673,8 @@ const AbandonedCartProductListNodeView = (props: NodeViewProps) => {
         )}
       </WithTooltip>
       {abandonedCartProducts.length > shownProductCount ? (
-        <button
-          className="cursor-pointer text-foreground underline all-unset"
+        <LinkButton
+          className="text-foreground"
           onClick={() =>
             setShownProductCount(
               shownProductCount + ABANDONED_CART_PRODUCTS_TO_LOAD_PER_PAGE > abandonedCartProducts.length
@@ -685,7 +686,7 @@ const AbandonedCartProductListNodeView = (props: NodeViewProps) => {
           {`and ${abandonedCartProducts.length - shownProductCount} more ${
             abandonedCartProducts.length - shownProductCount === 1 ? "product" : "products"
           }`}
-        </button>
+        </LinkButton>
       ) : null}
 
       <WithTooltip tip={isPreview ? null : "This cannot be deleted"} position="top">

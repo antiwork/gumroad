@@ -28,6 +28,7 @@ import { Fieldset, FieldsetTitle } from "$app/components/ui/Fieldset";
 import { Input } from "$app/components/ui/Input";
 import { InputGroup } from "$app/components/ui/InputGroup";
 import { Label } from "$app/components/ui/Label";
+import { LinkButton } from "$app/components/ui/LinkButton";
 import { Menu, MenuItem } from "$app/components/ui/Menu";
 import { Placeholder, PlaceholderImage } from "$app/components/ui/Placeholder";
 import { ProductCard, ProductCardFigure, ProductCardFooter, ProductCardHeader } from "$app/components/ui/ProductCard";
@@ -372,13 +373,7 @@ export default function LibraryPage() {
         {archivedCount > 0 && !activeSearch.show_archived_only && !showArchivedNotice ? (
           <Alert role="status" variant="info" className="mb-5">
             You have {archivedCount} archived purchase{archivedCount === 1 ? "" : "s"}.{" "}
-            <button
-              type="button"
-              className="cursor-pointer underline all-unset"
-              onClick={() => navigate({ show_archived_only: true })}
-            >
-              Click here to view
-            </button>
+            <LinkButton onClick={() => navigate({ show_archived_only: true })}>Click here to view</LinkButton>
           </Alert>
         ) : null}
         {bundleDownloads.map((bundleDownload) => (
@@ -417,12 +412,7 @@ export default function LibraryPage() {
                       : "No products found"}
                   </div>
                   {isDesktop ? null : (
-                    <button
-                      className="cursor-pointer underline all-unset"
-                      onClick={() => setMobileFiltersExpanded(!mobileFiltersExpanded)}
-                    >
-                      Filter
-                    </button>
+                    <LinkButton onClick={() => setMobileFiltersExpanded(!mobileFiltersExpanded)}>Filter</LinkButton>
                   )}
                 </header>
               </CardContent>
@@ -510,12 +500,7 @@ export default function LibraryPage() {
                       ))}
                       <div>
                         {creatorsSortedByName.length > 5 && !showingAllCreators ? (
-                          <button
-                            className="cursor-pointer underline all-unset"
-                            onClick={() => setShowingAllCreators(true)}
-                          >
-                            Show more
-                          </button>
+                          <LinkButton onClick={() => setShowingAllCreators(true)}>Show more</LinkButton>
                         ) : null}
                       </div>
                     </Fieldset>

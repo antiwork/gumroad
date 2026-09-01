@@ -15,6 +15,7 @@ import {
 import { Popover, PopoverClose, PopoverContent, PopoverTrigger } from "$app/components/Popover";
 import { ConfigurationSelector, PriceSelection } from "$app/components/Product/ConfigurationSelector";
 import { Thumbnail } from "$app/components/Product/Thumbnail";
+import { LinkButton } from "$app/components/ui/LinkButton";
 
 export const BundleProductItem = ({
   bundleProduct,
@@ -113,9 +114,7 @@ export const BundleProductItem = ({
             </PopoverContent>
           </Popover>
         ) : null}
-        <button className="cursor-pointer underline all-unset" onClick={removeBundleProduct}>
-          Remove
-        </button>
+        <LinkButton onClick={removeBundleProduct}>Remove</LinkButton>
       </CartItemEnd>
     </CartItem>
   );

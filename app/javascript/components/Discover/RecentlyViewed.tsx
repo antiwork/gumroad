@@ -4,6 +4,7 @@ import { CardProduct } from "$app/parsers/product";
 
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { Card } from "$app/components/Product/Card";
+import { LinkButton } from "$app/components/ui/LinkButton";
 import { ProductCardGrid } from "$app/components/ui/ProductCardGrid";
 
 export type RecentlyViewedProduct = CardProduct & { viewed_at: string };
@@ -62,9 +63,7 @@ export const RecentlyViewed = ({ data }: { data?: RecentlyViewedProps | null | u
     <section className="flex flex-col gap-4">
       <header className="flex items-center justify-between">
         <h2>Recently viewed</h2>
-        <button className="cursor-pointer underline all-unset" onClick={clear}>
-          Clear
-        </button>
+        <LinkButton onClick={clear}>Clear</LinkButton>
       </header>
       <ProductCardGrid>
         {products.map((product) => (

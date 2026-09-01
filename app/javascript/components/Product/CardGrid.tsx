@@ -20,6 +20,7 @@ import { Fieldset, FieldsetTitle } from "$app/components/ui/Fieldset";
 import { Input } from "$app/components/ui/Input";
 import { InputGroup } from "$app/components/ui/InputGroup";
 import { Label } from "$app/components/ui/Label";
+import { LinkButton } from "$app/components/ui/LinkButton";
 import { Pill } from "$app/components/ui/Pill";
 import { Placeholder } from "$app/components/ui/Placeholder";
 import { ProductCardGrid } from "$app/components/ui/ProductCardGrid";
@@ -167,9 +168,7 @@ const FilterCheckboxes = ({
         </Label>
       ))}
       {filters.length > 5 && !showingAll ? (
-        <button className="cursor-pointer underline all-unset" onClick={() => setShowingAll(true)}>
-          Show more
-        </button>
+        <LinkButton onClick={() => setShowingAll(true)}>Show more</LinkButton>
       ) : null}
     </>
   );
@@ -291,9 +290,7 @@ export const CardGrid = ({
               {title ?? "Filters"}
               {anyFilters ? (
                 <div className="grow text-right">
-                  <button className="cursor-pointer underline all-unset" onClick={resetFilters}>
-                    Clear
-                  </button>
+                  <LinkButton onClick={resetFilters}>Clear</LinkButton>
                 </div>
               ) : null}
             </header>
