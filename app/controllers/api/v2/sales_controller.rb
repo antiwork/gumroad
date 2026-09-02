@@ -17,6 +17,15 @@ class Api::V2::SalesController < Api::V2::BaseController
     :subscription,
     :tip,
     :utm_link,
+    :purchaser,
+    :seller,
+    :variant_attributes,
+    :purchase_custom_fields,
+    :shipment,
+    :product_review,
+    :offer_code,
+    { link: [:user, :variant_categories_alive, :product_review_stat] },
+    { upsell_purchase: [:upsell, :selected_product, { upsell_variant: :selected_variant }] },
     # buyer_presentment fields (v2): presentment row + its charge_presentment (fx_rate)
     # and refunds (in-memory presentment refunded sum) — avoids per-sale queries.
     :refunds,
@@ -65,9 +74,9 @@ class Api::V2::SalesController < Api::V2::BaseController
           has_next_page = paginated_sales.size > RESULTS_PER_PAGE
           paginated_sales = paginated_sales.first(RESULTS_PER_PAGE)
           if has_next_page
-            success_with_object(:sales, paginated_sales.as_json(version: 2, include_buyer_presentment: true), pagination_info(paginated_sales.last))
+            success_with_object(:sales, sales_json(paginated_sales), pagination_info(paginated_sales.last))
           else
-            success_with_object(:sales, paginated_sales.as_json(version: 2, include_buyer_presentment: true))
+            success_with_object(:sales, sales_json(paginated_sales))
           end
         end
       rescue WithMaxExecutionTime::QueryTimeoutError
@@ -103,7 +112,7 @@ class Api::V2::SalesController < Api::V2::BaseController
         has_next_page = paginated_sales.size > RESULTS_PER_PAGE
         paginated_sales = paginated_sales.first(RESULTS_PER_PAGE)
         additional_response = has_next_page ? pagination_info(paginated_sales.last) : {}
-        success_with_object(:sales, paginated_sales.as_json(version: 2, include_buyer_presentment: true), additional_response)
+        success_with_object(:sales, sales_json(paginated_sales), additional_response)
       end
     rescue WithMaxExecutionTime::QueryTimeoutError
       error_400("Query timed out. Try narrowing your date range with 'after'/'before' or filtering by product_id.")
@@ -226,6 +235,24 @@ class Api::V2::SalesController < Api::V2::BaseController
   private
     def success_with_sale(sale = nil)
       success_with_object(:sale, sale)
+    end
+
+    def sales_json(sales)
+      variants = sales.flat_map(&:variant_attributes).grep(Variant)
+      ActiveRecord::Associations::Preloader.new(records: variants, associations: :variant_category).call if variants.any?
+
+      following_emails = Follower.active
+        .where(followed_id: current_resource_owner.id, email: sales.map(&:email))
+        .pluck(:email)
+        .to_set
+
+      sales.map do |sale|
+        sale.as_json(
+          version: 2,
+          include_buyer_presentment: true,
+          is_following: following_emails.include?(sale.email)
+        )
+      end
     end
 
     def sale_purchase_policy(purchase)

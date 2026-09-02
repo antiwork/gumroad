@@ -78,6 +78,62 @@ describe Api::V2::SalesController do
         expect(per_row_queries).to be_empty
       end
 
+      it "serializes a full page without per-sale association lookups" do
+        purchases_with_upsells = (Api::V2::SalesController::RESULTS_PER_PAGE - 2).times.map do |index|
+          product = create(:physical_product, user: @seller, name: "Product #{index}")
+          variant_category = create(:variant_category, link: product, title: "Format")
+          variant = create(:variant, variant_category:, name: "Premium #{index}")
+          purchase = create(:physical_purchase, purchaser: create(:user), link: product, variant_attributes: [variant])
+          create(:purchase_custom_field, purchase:, name: "Company", value: "Buyer #{index}")
+          create(:shipment, purchase:)
+          create(:product_review, purchase:, rating: 5, message: "Review #{index}")
+          upsell = create(:upsell, seller: @seller, product:, name: "Upsell #{index}")
+          upsell_variant = create(:upsell_variant, upsell:, selected_variant: variant, offered_variant: variant)
+          create(:upsell_purchase, purchase:, upsell:, selected_product: product, upsell_variant:)
+          purchase
+        end
+
+        query_counts = Hash.new(0)
+        callback = lambda do |_name, _start, _finish, _id, payload|
+          table = payload[:sql].to_s[/FROM [`](users|links|base_variants|variant_categories|purchase_custom_fields|followers|upsells|upsell_purchases|upsell_variants|shipments|product_review_stats|product_reviews)[`]/, 1]
+          query_counts[table] += 1 if table
+        end
+
+        ActiveSupport::Notifications.subscribed(callback, "sql.active_record") do
+          get :index, params: @params
+        end
+
+        expect(response).to be_successful
+        sales = response.parsed_body["sales"]
+        expect(sales.size).to eq(Api::V2::SalesController::RESULTS_PER_PAGE)
+        purchases_with_upsells.each_with_index do |purchase, index|
+          expect(sales.find { _1["id"] == purchase.external_id }).to include(
+            "product_name" => "Product #{index}",
+            "variants" => { "Format" => "Premium #{index}" },
+            "upsell" => {
+              "name" => "Upsell #{index}",
+              "discount" => nil,
+              "selected_product" => "Product #{index}",
+              "selected_version" => "Premium #{index}",
+            },
+          )
+        end
+        expect(query_counts).to include(
+          "followers" => 1,
+          "purchase_custom_fields" => 1,
+          "shipments" => 1,
+          "product_reviews" => 2,
+          "upsells" => 1,
+          "upsell_purchases" => 1,
+          "upsell_variants" => 1,
+        )
+        expect(query_counts.fetch("users", 0)).to be <= 9
+        expect(query_counts.fetch("links", 0)).to be <= 3
+        expect(query_counts.fetch("base_variants", 0)).to be <= 2
+        expect(query_counts.fetch("variant_categories", 0)).to be <= 2
+        expect(query_counts.fetch("product_review_stats", 0)).to be <= 1
+      end
+
       it "includes web CSV parity fields in the response" do
         add_web_csv_api_fields(@purchase)
 
