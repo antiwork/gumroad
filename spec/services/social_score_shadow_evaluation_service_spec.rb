@@ -34,8 +34,11 @@ describe SocialScoreShadowEvaluationService do
       expect(described_class.new(user).evaluate).to be_nil
     end
 
-    it "returns nil for suspended users" do
+    it "returns nil for suspended users even when payouts are also paused internally" do
+      # Suspended states are already outside REVIEWABLE_RISK_STATES; the pause is what would
+      # otherwise classify this account as held, so it is what proves the suspended guard bites.
       user.update_columns(user_risk_state: "suspended_for_fraud")
+      user.update!(payouts_paused_internally: true, payouts_paused_by: User::PAYOUT_PAUSE_SOURCE_ADMIN)
 
       expect(described_class.new(user).evaluate).to be_nil
     end
