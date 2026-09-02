@@ -574,6 +574,17 @@ describe("canUseStripePaymentElementClientConfirm", () => {
     expect(getStripePaymentElementMountCurrency(s)).toBe("inr");
   });
 
+  it("mounts recurring UPI with a fixed tip at the typed listed figure, not its canonical rounding", () => {
+    // The buyer typed ₹100.00; the canonical rounding (1_150 USD cents here) must not replace it.
+    const s = clientConfirmState({
+      checkoutPayment: recurringUpiPaymentElementClientConfirmConfig,
+      products: [product({ recurrence: "monthly", price: 1_000, listedPriceCents: 73_000, hasTippingEnabled: true })],
+      tip: { type: "fixed", amount: 1_150, listedAmount: 10_000 },
+    });
+
+    expect(getStripePaymentElementAmount(s)).toBe(83_000);
+  });
+
   it("falls back when the server selected the server-confirm Payment Element integration", () => {
     expect(canUseStripePaymentElementClientConfirm(state())).toBe(false);
   });
