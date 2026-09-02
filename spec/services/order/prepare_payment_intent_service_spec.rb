@@ -1580,6 +1580,37 @@ describe Order::PreparePaymentIntentService, :vcr do
                                                                    presentment_total_cents: 15_00)
         end
 
+        it "rejects a stale method-forced allocation before creating an intent" do
+          order, params = build_order
+          purchase = order.purchases.first
+          purchase.update!(displayed_price_cents: 15_00,
+                           displayed_price_currency_type: Currency::EUR,
+                           rate_converted_to_usd: BigDecimal("0.8"))
+          params[:payment_details_source] = PurchasePaymentFlow::PAYMENT_ELEMENT
+          params[:payment_element_mount_currency] = Currency::EUR
+          params[:direct_listed_amount_token] = Checkout::DirectListedAmountToken.issue(
+            allocations: [{
+              permalink: product.unique_permalink,
+              price_cents: 12_00,
+              tip_cents: 0,
+              tax_cents: 0,
+              shipping_cents: 0,
+              total_cents: 12_00,
+            }],
+            sellers: [seller],
+            currency: Currency::EUR
+          )
+
+          create_args, responses = perform_with_ideal_preview(order, params, confirmation_token: "ctoken_stale_method_forced")
+
+          expect(create_args).to be_nil
+          expect(responses["unique-id-0"][:success]).to eq(false)
+          expect(responses["unique-id-0"][:error_code]).to eq(PurchaseErrorCode::BUYER_CURRENCY_QUOTE_INVALID)
+          expect(purchase.reload).to be_failed
+          expect(order.charges.last.charge_presentment).to be_nil
+          expect(purchase.purchase_presentment).to be_nil
+        end
+
         it "prepares one forced-currency intent for a multi-item cart uniformly priced in the forced currency" do
           expect(StripeFxQuote).not_to receive(:create)
           other_product = create(:product, user: seller, price_currency_type: Currency::EUR, price_cents: 7_00)
@@ -2234,6 +2265,22 @@ describe Order::PreparePaymentIntentService, :vcr do
       def perform_with_direct_listed_card(order, params, mount_currency: Currency::CAD)
         params[:payment_details_source] = PurchasePaymentFlow::PAYMENT_ELEMENT
         params[:payment_element_mount_currency] = mount_currency
+        purchase = order.purchases.first
+        allocations = [{
+          permalink: purchase.link.unique_permalink,
+          price_cents: purchase.displayed_price_cents,
+          tip_cents: 0,
+          tax_cents: 0,
+          shipping_cents: 0,
+          total_cents: purchase.displayed_price_cents,
+        }]
+        unless params.key?(:direct_listed_amount_token)
+          params[:direct_listed_amount_token] = Checkout::DirectListedAmountToken.issue(
+            allocations:,
+            sellers: [purchase.seller],
+            currency: mount_currency
+          )
+        end
         preview = Stripe::StripeObject.construct_from(type: "card", card: { country: "CA" })
         allow(Stripe::ConfirmationToken).to receive(:retrieve)
           .and_return(Stripe::StripeObject.construct_from(payment_method_preview: preview))
@@ -2247,6 +2294,122 @@ describe Order::PreparePaymentIntentService, :vcr do
 
         responses = described_class.new(order:, params:, confirmation_token: "ctoken_direct_cad").perform
         [create_args, responses]
+      end
+
+      it "locks purchase conversion to the page-issued direct-listed rate before preparing the intent" do
+        seller.update!(tipping_enabled: true)
+        token = Checkout::PaymentMethodListToken.issue(
+          payment_method_types: %w[card link],
+          sellers: [seller],
+          direct_listed_currency: Currency::CAD,
+          direct_listed_currency_rate: "0.8"
+        )
+        params = {
+          line_items: [line_item.merge(perceived_price_cents: 16_00, price_cents: 15_00, tip_cents: 1_00)],
+          payment_details_source: PurchasePaymentFlow::PAYMENT_ELEMENT,
+          payment_element_mount_currency: Currency::CAD,
+          payment_method_list_token: token,
+        }.merge(common_params)
+        allow_any_instance_of(Purchase).to receive(:get_rate).with(Currency::CAD).and_return(BigDecimal("0.5"))
+
+        order, _responses = Order::CreateService.new(params:).perform
+        purchase = order.purchases.first
+
+        expect(purchase).to be_present
+        expect(purchase.rate_converted_to_usd.to_d).to eq(BigDecimal("0.8"))
+        expect(purchase.price_cents).to eq(20_00)
+        expect(purchase.tip.value_usd_cents).to eq(1_25)
+      end
+
+      it "locks conversion when the page-issued token covers the whole multi-seller cart" do
+        other_seller = nil
+        other_seller = create(:user, check_merchant_account_is_linked: true, disable_buyer_local_currency: false)
+        other_product = create(:product, user: other_seller, price_currency_type: Currency::CAD, price_cents: 10_00)
+        Feature.activate_user(:buyer_local_currency, other_seller)
+        Feature.activate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, other_seller)
+        Feature.activate_user(Checkout::BuyerCurrencyEligibility::LISTED_CURRENCY_DIRECT_CHARGE_FEATURE_NAME, other_seller)
+        token = Checkout::PaymentMethodListToken.issue(
+          payment_method_types: %w[card link],
+          sellers: [seller, other_seller],
+          direct_listed_currency: Currency::CAD,
+          direct_listed_currency_rate: "0.8"
+        )
+        params = {
+          line_items: [
+            line_item.merge(perceived_price_cents: 15_00, price_cents: 15_00),
+            { uid: "unique-id-1", permalink: other_product.unique_permalink, perceived_price_cents: 10_00, price_cents: 10_00, quantity: 1 },
+          ],
+          payment_details_source: PurchasePaymentFlow::PAYMENT_ELEMENT,
+          payment_element_mount_currency: Currency::CAD,
+          payment_method_list_token: token,
+        }.merge(common_params)
+        allow_any_instance_of(Purchase).to receive(:get_rate).with(Currency::CAD).and_return(BigDecimal("0.5"))
+
+        order, = Order::CreateService.new(params:).perform
+
+        expect(order.purchases.map { _1.rate_converted_to_usd.to_d }.uniq).to eq([BigDecimal("0.8")])
+      ensure
+        Feature.deactivate_user(:buyer_local_currency, other_seller) if other_seller
+        Feature.deactivate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, other_seller) if other_seller
+        Feature.deactivate_user(Checkout::BuyerCurrencyEligibility::LISTED_CURRENCY_DIRECT_CHARGE_FEATURE_NAME, other_seller) if other_seller
+      end
+
+      it "does not fall back to live FX when the signed direct-listed rate is missing" do
+        params = {
+          line_items: [line_item.merge(perceived_price_cents: 15_00, price_cents: 15_00)],
+          payment_details_source: PurchasePaymentFlow::PAYMENT_ELEMENT,
+          payment_element_mount_currency: Currency::CAD,
+          payment_method_list_token: "not-a-token",
+        }.merge(common_params)
+        allow_any_instance_of(Purchase).to receive(:get_rate).with(Currency::CAD).and_return(BigDecimal("0.5"))
+
+        order, responses = Order::CreateService.new(params:).perform
+
+        expect(order.purchases).to be_empty
+        expect(responses["unique-id-0"][:success]).to eq(false)
+        expect(responses["unique-id-0"][:error_message]).to eq(Order::CreateService::LISTED_CURRENCY_RATE_EXPIRED_MESSAGE)
+      end
+
+      it "preserves the live-rate fallback for a valid method-forced token issued without a signed rate" do
+        eur_product = create(:product, user: seller, price_currency_type: Currency::EUR, price_cents: 15_00)
+        token = Checkout::PaymentMethodListToken.issue(
+          payment_method_types: %w[card ideal],
+          sellers: [seller]
+        )
+        params = {
+          line_items: [{ uid: "unique-id-0", permalink: eur_product.unique_permalink, perceived_price_cents: 15_00, price_cents: 15_00, quantity: 1 }],
+          payment_details_source: PurchasePaymentFlow::PAYMENT_ELEMENT,
+          payment_element_mount_currency: Currency::EUR,
+          payment_method_list_token: token,
+        }.merge(common_params)
+        allow_any_instance_of(Purchase).to receive(:get_rate).with(Currency::EUR.to_sym).and_return(BigDecimal("0.8"))
+
+        order, responses = Order::CreateService.new(params:).perform
+
+        expect(responses).to be_empty
+        expect(order.purchases.sole.rate_converted_to_usd.to_d).to eq(BigDecimal("0.8"))
+      end
+
+      it "still locks a method-forced purchase when its token includes a signed rate" do
+        eur_product = create(:product, user: seller, price_currency_type: Currency::EUR, price_cents: 15_00)
+        token = Checkout::PaymentMethodListToken.issue(
+          payment_method_types: %w[card ideal],
+          sellers: [seller],
+          direct_listed_currency: Currency::EUR,
+          direct_listed_currency_rate: "0.8"
+        )
+        params = {
+          line_items: [{ uid: "unique-id-0", permalink: eur_product.unique_permalink, perceived_price_cents: 15_00, price_cents: 15_00, quantity: 1 }],
+          payment_details_source: PurchasePaymentFlow::PAYMENT_ELEMENT,
+          payment_element_mount_currency: Currency::EUR,
+          payment_method_list_token: token,
+        }.merge(common_params)
+        allow_any_instance_of(Purchase).to receive(:get_rate).with(Currency::EUR.to_sym).and_return(BigDecimal("0.5"))
+
+        order, responses = Order::CreateService.new(params:).perform
+
+        expect(responses).to be_empty
+        expect(order.purchases.sole.rate_converted_to_usd.to_d).to eq(BigDecimal("0.8"))
       end
 
       it "prepares the intent for the displayed CAD amount and persists quote-less presentment rows" do
@@ -2265,6 +2428,50 @@ describe Order::PreparePaymentIntentService, :vcr do
         expect(responses["unique-id-0"][:success]).to eq(true)
         expect(order.charges.last.charge_presentment)
           .to have_attributes(presentment_currency: Currency::CAD, presentment_total_cents: 15_00, stripe_fx_quote_id: nil)
+      end
+
+      it "rejects a stale displayed allocation before creating an intent" do
+        order, params = build_order
+        purchase = order.purchases.first
+        purchase.update!(displayed_price_cents: 15_00,
+                         displayed_price_currency_type: Currency::CAD,
+                         rate_converted_to_usd: BigDecimal("0.8"))
+        params[:direct_listed_amount_token] = Checkout::DirectListedAmountToken.issue(
+          allocations: [{
+            permalink: product.unique_permalink,
+            price_cents: 12_00,
+            tip_cents: 0,
+            tax_cents: 0,
+            shipping_cents: 0,
+            total_cents: 12_00,
+          }],
+          sellers: [seller],
+          currency: Currency::CAD
+        )
+
+        create_args, responses = perform_with_direct_listed_card(order, params)
+
+        expect(create_args).to be_nil
+        expect(responses["unique-id-0"][:success]).to eq(false)
+        expect(responses["unique-id-0"][:error_code]).to eq(PurchaseErrorCode::BUYER_CURRENCY_QUOTE_INVALID)
+        expect(purchase.reload).to be_failed
+        expect(order.charges.last.charge_presentment).to be_nil
+        expect(purchase.purchase_presentment).to be_nil
+      end
+
+      it "preserves a token-less checkout opened before the snapshot deployed" do
+        order, params = build_order
+        purchase = order.purchases.first
+        purchase.update!(displayed_price_cents: 15_00,
+                         displayed_price_currency_type: Currency::CAD,
+                         rate_converted_to_usd: BigDecimal("0.8"))
+        params[:direct_listed_amount_token] = nil
+
+        create_args, responses = perform_with_direct_listed_card(order, params)
+
+        expect(create_args[:currency]).to eq(Currency::CAD)
+        expect(create_args[:amount_cents]).to eq(15_00)
+        expect(responses["unique-id-0"][:success]).to eq(true)
       end
 
       it "rejects a stale quote token instead of charging a changed direct-listed amount" do
