@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.1].define(version: 2026_12_09_041314) do
+ActiveRecord::Schema[7.1].define(version: 2026_12_09_113454) do
   create_table "active_storage_attachments", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
     t.string "name", limit: 191, null: false
     t.string "record_type", limit: 191, null: false
@@ -2502,6 +2502,20 @@ ActiveRecord::Schema[7.1].define(version: 2026_12_09_041314) do
     t.datetime "updated_at", null: false
     t.index ["platform", "uid"], name: "index_social_connect_verifications_on_platform_and_uid"
     t.index ["user_id", "platform"], name: "index_social_connect_verifications_on_user_id_and_platform", unique: true
+  end
+
+  create_table "social_score_shadow_evaluations", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
+    t.bigint "user_id", null: false
+    t.date "evaluated_on", null: false
+    t.string "hold_source", null: false
+    t.bigint "unpaid_balance_cents", null: false
+    t.integer "score", null: false
+    t.boolean "would_have_released", default: false, null: false
+    t.json "signals"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["evaluated_on", "would_have_released"], name: "idx_on_evaluated_on_would_have_released_82fce97dc0"
+    t.index ["user_id", "evaluated_on"], name: "index_social_score_shadow_evaluations_on_user_id_and_evaluated_", unique: true
   end
 
   create_table "staff_picked_products", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
