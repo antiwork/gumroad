@@ -841,8 +841,8 @@ describe SendPostBlastEmailsJob, :freeze_time do
 
       emails = [first_follower.email, second_follower.email]
       failed_email = (emails - [resend_email]).sole
-      # The provider that already accepted its slice keeps its rows; only the slice that
-      # raised is rolled back.
+      # The provider that already accepted its slice has its rows; the slice that raised
+      # never wrote any, so a retry re-sends exactly it.
       expect(SentPostEmail.where(post:, email: resend_email).count).to eq(1)
       expect(SentPostEmail.where(post:, email: failed_email).count).to eq(0)
       expect(blast.reload.completed_at).to be_blank
@@ -850,7 +850,7 @@ describe SendPostBlastEmailsJob, :freeze_time do
   end
 
   describe "error handling" do
-    it "deletes sent_post_emails records if a provider send raises an error" do
+    it "leaves no sent_post_emails records if a provider send raises an error" do
       # Setup post and blast
       post = create(:audience_post, :published, seller: @seller)
       create(:active_follower, user: @seller)
@@ -865,7 +865,7 @@ describe SendPostBlastEmailsJob, :freeze_time do
         described_class.new.perform(blast.id)
       end.to raise_error(StandardError, "API failure")
 
-      # Verify that no SentPostEmail records exist
+      # Rows are written only after the provider accepts, so a failed slice leaves none behind.
       expect(SentPostEmail.where(post: post).count).to eq(0)
     end
   end

@@ -60,35 +60,31 @@ module PostBlastSending
     end
   end
 
-  # The provider slice — not the mixed slice — is the retry unit. An ESP that has
-  # already accepted its recipients must not be handed them again because a later
-  # provider failed, so the cleanup below only rolls back the slice that raised.
+  # The provider slice — not the mixed slice — is the retry unit: an ESP that has already
+  # accepted its recipients is never handed them again because a later provider failed.
+  #
+  # The sent_post_emails rows are written AFTER the provider accepts, never before. A
+  # rescue-and-delete around a pre-write cannot be made airtight — SIGKILL, OOM, and a
+  # rescue that itself raises all skip it — and every row it leaves behind is a recipient
+  # `remove_already_emailed_members` filters out of every retry as "already sent", so the
+  # blast completes with a hole nobody can see (gumroad-private#2366: ~1.7M recipients
+  # across 147 blasts). A kill between the ESP accepting and the write landing costs one
+  # duplicate email for that provider slice (<= 1,000); the pre-write ordering cost a
+  # silent non-delivery for the same slice. Duplicates are visible and bounded.
   def send_provider_slice(provider:, members:, cache:)
     renew_chunk_claim! if respond_to?(:renew_chunk_claim!, true)
-    # Count the slice as handed over, not the post-dedupe remainder: anything
-    # `store_recipients_as_sent` drops was already emailed by someone else.
     owed = members.size
-    members = store_recipients_as_sent(members)
+    members = drop_members_already_sent(members)
+    return decrement_pending_recipients(owed) if members.empty?
 
-    begin
-      # Inside this rescue so a raise after store_recipients_as_sent cannot leave ghost rows.
-      recipients = prepare_recipients(members)
-      deliver_provider_slice(provider: provider, recipients: recipients, cache: cache)
-      mark_members_sent_in_this_blast(members) if @blast.to_non_openers?
-      decrement_pending_recipients(owed)
-    rescue Exception => e
-      # Delete the sent_post_emails records if there's an error with the provider send.
-      # We cannot use `transaction` here because it exceeds the lock timeout.
-      # Rescuing Exception, not StandardError: a deploy's hard shutdown raises
-      # Sidekiq::Shutdown (an Interrupt), and letting that skip the cleanup would leave
-      # these recipients marked sent but never emailed — the retry filters them out as
-      # already-emailed, so they are silently dropped from the blast.
-      unless @blast.to_non_openers?
-        emails = members.map(&:email)
-        SentPostEmail.where(post: @post, email: emails).delete_all
-      end
-      raise e
+    recipients = prepare_recipients(members)
+    deliver_provider_slice(provider: provider, recipients: recipients, cache: cache)
+    if @blast.to_non_openers?
+      mark_members_sent_in_this_blast(members)
+    else
+      store_recipients_as_sent(members)
     end
+    decrement_pending_recipients(owed)
   end
 
   def deliver_provider_slice(provider:, recipients:, cache:)
@@ -250,17 +246,24 @@ module PostBlastSending
                  RedisKey.blast_active_slice_partition(@blast.id), partition_chunks_key].compact)
   end
 
-  # Stores email addresses in SentPostEmail, just before sending the emails.
-  # In the very unlikely situation an email is already present there, its member won't be returned.
-  # "Unlikely situation" because we've already filtered the sent emails beforehand with `remove_already_emailed_members`,
-  # this behavior only helps if an email is sent by something else in parallel, between the start and the end of this job.
-  def store_recipients_as_sent(members)
+  # Re-checked per provider slice, right before the send: the chunk-level filter ran once at
+  # the start of a slice that can take minutes, and a second publish or a concurrent sender
+  # may have emailed some of these addresses since. Non-opener resends dedupe through their
+  # per-blast Redis set instead (`remove_members_already_sent_in_this_blast`).
+  def drop_members_already_sent(members)
     return members if @blast.to_non_openers?
 
-    emails = Set.new(SentPostEmail.insert_all_emails(post: @post, emails: members.map(&:email)))
-    return members if members.size == emails.size
+    already_sent = @post.sent_post_emails.where(email: members.map(&:email)).pluck(:email).to_set
+    return members if already_sent.empty?
 
-    members.select { _1.email.in?(emails) }
+    members.reject { already_sent.include?(_1.email) }
+  end
+
+  # Records the slice as sent. Runs only after the provider accepted, so a row here always
+  # has an email behind it. A concurrent sender racing the same address just loses the
+  # unique-index race; the duplicate it already sent is the bounded cost.
+  def store_recipients_as_sent(members)
+    SentPostEmail.insert_all_emails(post: @post, emails: members.map(&:email))
   end
 
   def post_has_files?

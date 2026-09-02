@@ -18,7 +18,7 @@ class SendPostBlastEmailsSliceJob
       finalize_partition_if_complete(partition_key, total_chunks)
       return
     end
-    claim_chunk!(partition_key, chunk_index)
+    return reschedule_behind_claim(blast_id, partition_key, chunk_index, total_chunks, member_ids) unless claim_chunk(partition_key, chunk_index)
 
     begin
       @blast.update!(started_at: Time.current) if @blast.started_at.nil?
@@ -38,7 +38,14 @@ class SendPostBlastEmailsSliceJob
 
   private
     CHUNK_REVALIDATION_SLICE_SIZE = 1_000
-    CHUNK_CLAIM_TTL = 4.hours
+    # Renewed on every provider slice (seconds apart), so this only has to outlive the chunk's
+    # member load plus one provider call. The claim key is the sole record that another copy is
+    # sending; a hard-killed copy never releases it, and every second of TTL past that is a
+    # second the chunk cannot resume.
+    CHUNK_CLAIM_TTL = 30.minutes
+    # A copy that finds the claim held waits this long past the claim's expiry before its next
+    # look, so a dead holder is noticed within a minute of the key lapsing.
+    CLAIM_RECHECK_SLACK = 1.minute
     RELEASE_CHUNK_CLAIM_IF_HELD = <<~LUA
       if redis.call("GET", KEYS[1]) == ARGV[1] then
         return redis.call("DEL", KEYS[1])
@@ -60,12 +67,22 @@ class SendPostBlastEmailsSliceJob
       $redis.sismember(RedisKey.blast_done_slices(@blast.id, partition_key), chunk_index)
     end
 
-    def claim_chunk!(partition_key, chunk_index)
+    def claim_chunk(partition_key, chunk_index)
       @chunk_claim_key = RedisKey.blast_slice_claim(@blast.id, partition_key, chunk_index)
       @chunk_claim_token = SecureRandom.uuid
-      return if $redis.set(@chunk_claim_key, @chunk_claim_token, nx: true, ex: CHUNK_CLAIM_TTL.to_i)
+      $redis.set(@chunk_claim_key, @chunk_claim_token, nx: true, ex: CHUNK_CLAIM_TTL.to_i)
+    end
 
-      raise "slice #{chunk_index} is already claimed for blast #{@blast.id}"
+    # A held claim is not an error, so it must not spend the job's retries: Sidekiq's backoff
+    # pushed every retry of a chunk whose first copy was hard-killed into that copy's still-held
+    # claim window, and the chunk landed in the dead set with its recipients never sent
+    # (gumroad-private#2366: 109 of 235 chunks on one blast). Come back once the claim can have
+    # lapsed; if the holder is alive and finishes, the completed-chunk check returns first.
+    def reschedule_behind_claim(blast_id, partition_key, chunk_index, total_chunks, member_ids)
+      ttl = $redis.ttl(@chunk_claim_key)
+      delay = (ttl.positive? ? ttl : 0) + CLAIM_RECHECK_SLACK.to_i
+      Rails.logger.info("[#{self.class.name}] blast_id=#{blast_id} chunk=#{chunk_index} claimed by another copy; rechecking in #{delay}s")
+      self.class.perform_in(delay, blast_id, partition_key, chunk_index, total_chunks, member_ids)
     end
 
     def renew_chunk_claim!
