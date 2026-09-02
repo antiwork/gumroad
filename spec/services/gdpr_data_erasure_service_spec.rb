@@ -689,6 +689,19 @@ describe GdprDataErasureService do
       expect(purchase.browser_guid).to be_nil
     end
 
+    it "destroys the user's social connect verifications without touching other users' rows" do
+      user.update!(twitter_user_id: "12345", twitter_handle: "johndoe")
+      verification = create(:social_connect_verification, user:, platform: "twitter", uid: "12345", handle: "johndoe")
+      other_verification = create(:social_connect_verification, platform: "twitter", uid: "12345", handle: "johndoe")
+
+      described_class.new(user, performed_by: admin).perform!
+
+      expect(SocialConnectVerification.exists?(id: verification.id)).to be(false)
+      expect(SocialConnectVerification.where(user_id: user.id)).to be_empty
+      expect(SocialConnectVerification.where(uid: "12345").pluck(:user_id)).to eq([other_verification.user_id])
+      expect(user.reload.twitter_user_id).to be_nil
+    end
+
     it "anonymizes all of the user's carts and credit card records" do
       historical_cart = create(:cart, user:, email: user.email, ip_address: "127.0.0.2", browser_guid: "historical-browser-guid")
       historical_cart.mark_deleted!

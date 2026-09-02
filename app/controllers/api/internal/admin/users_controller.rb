@@ -1011,7 +1011,9 @@ class Api::Internal::Admin::UsersController < Api::Internal::Admin::BaseControll
     def serialize_social_connect_verification(verification)
       {
         platform: verification.platform,
+        uid: verification.uid,
         handle: verification.handle,
+        currently_linked: currently_linked?(verification),
         account_created_at: verification.account_created_at&.iso8601,
         follower_count: verification.follower_count,
         post_count: verification.post_count,
@@ -1019,6 +1021,17 @@ class Api::Internal::Admin::UsersController < Api::Internal::Admin::BaseControll
         last_verified_at: verification.last_verified_at.iso8601,
         shared_identity_user_count: verification.shared_identity_user_ids.size,
       }
+    end
+
+    # Unlinking clears the user's twitter columns but keeps the verification row as evidence,
+    # so the row alone cannot tell a reviewer whether the connection is still live.
+    def currently_linked?(verification)
+      case verification.platform
+      when "twitter"
+        verification.user.twitter_user_id.present? && verification.user.twitter_user_id.to_s == verification.uid.to_s
+      else
+        false
+      end
     end
 
     def build_admin_note(user, content)

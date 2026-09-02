@@ -34,6 +34,17 @@ describe ConnectionsController do
       expect(response.body).to eq({ success: true }.to_json)
     end
 
+    it "keeps the social connect verification row while clearing the live twitter identity" do
+      verification = create(:social_connect_verification, user: seller, platform: "twitter", uid: "123", handle: "gumroad")
+
+      post :unlink_twitter
+
+      expect(response.body).to eq({ success: true }.to_json)
+      expect(seller.reload.twitter_user_id).to be_nil
+      expect(SocialConnectVerification.exists?(id: verification.id)).to be(true)
+      expect(verification.reload.uid).to eq("123")
+    end
+
     it "responds with an error message if the unlink fails" do
       allow_any_instance_of(User).to receive(:save!).and_raise("Failed to unlink Twitter")
 
