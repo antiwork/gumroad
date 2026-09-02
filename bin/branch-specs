@@ -155,6 +155,7 @@ ESCALATE_PATTERNS = [
 IGNORED_PATTERNS = [
   # Minitest suite; test_minitest runs all of it on every PR, unfiltered.
   %r{\Atest/},
+  %r{\Aqa-media/},
   %r{\Adocs?/},
   %r{\.md\z},
   %r{\A\.agents/},
