@@ -1052,7 +1052,7 @@ class Purchase < ApplicationRecord
       purchaser_id: purchaser.try(:external_id),
       is_recurring_billing: link.is_recurring_billing,
       can_contact: can_contact?,
-      is_following: is_following?,
+      is_following: options.key?(:is_following) ? options[:is_following] : is_following?,
       disputed: chargedback?,
       dispute_won: chargeback_reversed?,
       is_additional_contribution:,
@@ -2799,7 +2799,12 @@ class Purchase < ApplicationRecord
   end
 
   def variants_and_quantity
-    variants_and_quantity_displayable(variant_attributes.not_is_default_sku, quantity)
+    variants = if variant_attributes.loaded?
+      variant_attributes.reject(&:is_default_sku?)
+    else
+      variant_attributes.not_is_default_sku
+    end
+    variants_and_quantity_displayable(variants, quantity)
   end
 
   def is_recurring_subscription_charge
