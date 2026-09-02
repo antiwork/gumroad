@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.1].define(version: 2026_12_09_215800) do
+ActiveRecord::Schema[7.1].define(version: 2026_12_09_233000) do
   create_table "active_storage_attachments", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
     t.string "name", limit: 191, null: false
     t.string "record_type", limit: 191, null: false
@@ -2957,6 +2957,16 @@ ActiveRecord::Schema[7.1].define(version: 2026_12_09_215800) do
     t.index ["user_id"], name: "index_user_tax_forms_on_user_id"
   end
 
+  create_table "user_youtube_identities", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
+    t.bigint "user_id", null: false
+    t.string "channel_id", null: false
+    t.string "handle"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["channel_id"], name: "index_user_youtube_identities_on_channel_id"
+    t.index ["user_id"], name: "index_user_youtube_identities_on_user_id", unique: true
+  end
+
   create_table "users", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
     t.string "email", default: ""
     t.string "encrypted_password", limit: 128, default: "", null: false
@@ -3024,8 +3034,6 @@ ActiveRecord::Schema[7.1].define(version: 2026_12_09_215800) do
     t.integer "purchasing_power_parity_limit"
     t.string "tiktok_pixel_id"
     t.string "twitter_handle"
-    t.string "youtube_channel_id"
-    t.string "youtube_handle"
     t.index ["account_created_ip"], name: "index_users_on_account_created_ip"
     t.index ["confirmation_token"], name: "index_users_on_confirmation_token", length: 191
     t.index ["created_at"], name: "index_users_on_created_at"

@@ -1030,7 +1030,8 @@ class Api::Internal::Admin::UsersController < Api::Internal::Admin::BaseControll
       when "twitter"
         verification.user.twitter_user_id.present? && verification.user.twitter_user_id.to_s == verification.uid.to_s
       when "youtube"
-        verification.user.youtube_channel_id.present? && verification.user.youtube_channel_id.to_s == verification.uid.to_s
+        channel_id = verification.user.youtube_identity&.channel_id
+        channel_id.present? && channel_id.to_s == verification.uid.to_s
       else
         false
       end

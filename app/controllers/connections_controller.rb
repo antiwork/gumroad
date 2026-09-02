@@ -15,7 +15,7 @@ class ConnectionsController < Sellers::BaseController
   end
 
   def unlink_youtube
-    current_seller.update!(youtube_channel_id: nil, youtube_handle: nil)
+    current_seller.youtube_identity&.destroy!
 
     render json: { success: true }
   rescue => e

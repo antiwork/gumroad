@@ -691,6 +691,7 @@ describe GdprDataErasureService do
 
     it "destroys the user's social connect verifications without touching other users' rows" do
       user.update!(twitter_user_id: "12345", twitter_handle: "johndoe")
+      create(:user_youtube_identity, user:, channel_id: "UC123", handle: "johndoe")
       verification = create(:social_connect_verification, user:, platform: "twitter", uid: "12345", handle: "johndoe")
       other_verification = create(:social_connect_verification, platform: "twitter", uid: "12345", handle: "johndoe")
 
@@ -700,6 +701,7 @@ describe GdprDataErasureService do
       expect(SocialConnectVerification.where(user_id: user.id)).to be_empty
       expect(SocialConnectVerification.where(uid: "12345").pluck(:user_id)).to eq([other_verification.user_id])
       expect(user.reload.twitter_user_id).to be_nil
+      expect(user.youtube_identity).to be_nil
     end
 
     it "anonymizes all of the user's carts and credit card records" do

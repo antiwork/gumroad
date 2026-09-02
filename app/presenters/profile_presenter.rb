@@ -16,7 +16,7 @@ class ProfilePresenter
       avatar_url: seller.avatar_url,
       name: seller.name || seller.username,
       twitter_handle: seller.twitter_handle,
-      youtube_handle: seller.youtube_handle,
+      youtube_handle: seller.youtube_identity&.handle,
       subdomain: seller.subdomain,
       is_verified: !!seller.verified,
       can_edit: can_edit_profile?,

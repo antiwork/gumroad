@@ -228,8 +228,6 @@ class GdprDataErasureService
         facebook_access_token: nil,
         twitter_oauth_token: nil,
         twitter_oauth_secret: nil,
-        youtube_channel_id: nil,
-        youtube_handle: nil,
         profile_picture_url: nil,
         street_address: nil,
         city: nil,
@@ -256,6 +254,7 @@ class GdprDataErasureService
       # Erasure soft-deletes the user rather than destroying it, so the association's
       # `dependent: :destroy` never runs and the platform uid/handle must be removed here.
       @user.social_connect_verifications.destroy_all
+      @user.youtube_identity&.destroy
 
       anonymized_email
     end

@@ -613,8 +613,9 @@ describe User::OmniauthCallbacksController do
       post :youtube
 
       expect(response).to redirect_to profile_path
-      expect(user.reload.youtube_channel_id).to eq("UC_x5XG1OV2P6uZZ5FSM9Ttw")
-      expect(user.youtube_handle).to eq("googledevelopers")
+      identity = user.reload.youtube_identity
+      expect(identity.channel_id).to eq("UC_x5XG1OV2P6uZZ5FSM9Ttw")
+      expect(identity.handle).to eq("googledevelopers")
       expect(user.social_connect_verifications.find_by!(platform: "youtube").uid).to eq("UC_x5XG1OV2P6uZZ5FSM9Ttw")
     end
 

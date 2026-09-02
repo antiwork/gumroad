@@ -2170,14 +2170,15 @@ describe Api::Internal::Admin::UsersController do
     end
 
     it "reports currently_linked from the user's live youtube identity" do
-      user = create(:user, email: "seller@example.com", youtube_channel_id: "UC123")
+      user = create(:user, email: "seller@example.com")
+      create(:user_youtube_identity, user:, channel_id: "UC123")
       create(:social_connect_verification, user:, platform: "youtube", uid: "UC123", handle: "creator")
 
       get :social_connections, params: { email: user.email }
 
       expect(response.parsed_body["social_connections"].sole).to include("uid" => "UC123", "currently_linked" => true)
 
-      user.update!(youtube_channel_id: nil)
+      user.youtube_identity.destroy!
 
       get :social_connections, params: { email: user.email }
 

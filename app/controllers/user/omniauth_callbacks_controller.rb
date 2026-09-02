@@ -141,7 +141,8 @@ class User::OmniauthCallbacksController < Devise::OmniauthCallbacksController
 
     begin
       SocialConnectVerification.record_from_youtube!(logged_in_user, channel)
-      logged_in_user.update!(youtube_channel_id: channel["id"], youtube_handle: channel["handle"])
+      identity = logged_in_user.youtube_identity || logged_in_user.build_youtube_identity
+      identity.update!(channel_id: channel["id"], handle: channel["handle"])
     rescue StandardError => e
       Rails.logger.error("SocialConnectVerification youtube record failed for user #{logged_in_user.id}: #{e.message}")
       flash[:alert] = "Couldn't save your YouTube connection. Please try again."
