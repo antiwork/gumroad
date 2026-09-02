@@ -30,6 +30,7 @@ class User < ApplicationRecord
   include Purchase::Searchable::BuyerEmailCallbacks
 
   has_many :user_external_authentications, dependent: :destroy
+  has_many :social_connect_verifications, dependent: :destroy
 
   stripped_fields :name, :facebook_meta_tag, :google_analytics_id, :username, :email, :support_email
 
