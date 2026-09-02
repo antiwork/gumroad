@@ -120,13 +120,24 @@ export const recoverFromInvalidBuyerCurrencyQuote = ({
 // creation and still fail the amount token; retrying the old price would mint the same token.
 const cartItemUid = (item: CartItem) => `${item.product.permalink} ${item.option_id ?? ""}`;
 
+const isPwywItem = (item: CartItem) =>
+  item.product.is_tiered_membership
+    ? (item.product.options.find(({ id }) => id === item.option_id)?.is_pwyw ?? false)
+    : !!item.product.pwyw;
+
 export const withUpdatedCartItems = (cart: CartState, lineItems: CartPurchaseResult["lineItems"]): CartState => {
   let changed = false;
   const items = cart.items.map((item) => {
     const line = lineItems[cartItemUid(item)];
     if (line?.success !== false || !line.updated_product) return item;
-    const nextPrice = line.updated_product.price;
     const nextProduct = line.updated_product.product;
+    // For a PWYW line the server's `updated_product.price` is `Purchase#displayed_price_cents`:
+    // quantity- and tip-inclusive, while CartItem.price is one unit before tip. Keep the buyer's
+    // unit and only lift it to a listed minimum that rose past it; a pwyw tier's minimum is not
+    // `price_cents`, so its unit is kept as is.
+    const nextPrice = isPwywItem(item)
+      ? Math.max(item.price, item.product.is_tiered_membership ? 0 : nextProduct.price_cents)
+      : line.updated_product.price;
     if (nextPrice === item.price && nextProduct.price_cents === item.product.price_cents) return item;
     changed = true;
     return {

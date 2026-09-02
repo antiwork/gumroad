@@ -217,6 +217,40 @@ describe("recoverFromInvalidBuyerCurrencyQuote", () => {
     expect(requote.mock.calls[0]?.[0].items[0]?.product.price_cents).toBe(2_001);
   });
 
+  // For a PWYW purchase the server rebuilds the line from `Purchase#displayed_price_cents`, which
+  // is the whole perceived amount: unit × quantity plus tip. CartItem.price is one unit before tip
+  // and the checkout multiplies by quantity and adds the tip itself, so writing that total back
+  // would have Pay charge quantity × total (+ tip) on the retry.
+  it("keeps the buyer's per-unit PWYW price rather than adopting the displayed total", () => {
+    const pwyw = { suggested_price_cents: null };
+    const cart = cartWith([cartItem({ product: cartProduct({ pwyw }), price: 2_000, quantity: 3 })]);
+
+    // error_response passes no quantity into cart_item, so the rebuilt line carries the default.
+    for (const quantity of [3, 1]) {
+      const { requote } = run(cart, {
+        "eur ": refusedLine(cartProduct({ pwyw, exchange_rate: 0.9 }), { price: 2_000 * 3 + 500, quantity }),
+      });
+
+      const item = requote.mock.calls[0]?.[0].items[0];
+      expect(item?.price).toBe(2_000);
+      expect(item?.quantity).toBe(3);
+      expect(item?.product.exchange_rate).toBe(0.9);
+    }
+  });
+
+  it("lifts a qty>1 PWYW price to a raised listed minimum, not to the displayed total", () => {
+    const pwyw = { suggested_price_cents: null };
+    const cart = cartWith([cartItem({ product: cartProduct({ pwyw }), price: 2_000, quantity: 3 })]);
+    const product = cartProduct({ pwyw, price_cents: 2_001 });
+
+    const { setCart, requote } = run(cart, { "eur ": refusedLine(product, { price: 2_001 * 3 + 500, quantity: 3 }) });
+
+    expect(setCart).toHaveBeenCalledTimes(1);
+    expect(setCart.mock.calls[0]?.[0].items[0]?.price).toBe(2_001);
+    expect(requote.mock.calls[0]?.[0].items[0]?.price).toBe(2_001);
+    expect(requote.mock.calls[0]?.[0].items[0]?.product.price_cents).toBe(2_001);
+  });
+
   // Saving the cart back to the server on every rejected quote would be a pointless write, and
   // the checkout's cart-save effect fires on any new object identity.
   it("does not re-save the cart when the rate has not moved", () => {
