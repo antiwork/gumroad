@@ -16,8 +16,12 @@ class RecordSocialScoreShadowEvaluationsJob
 
   BATCH_SIZE = 500
 
-  def perform
-    evaluated_on = Time.current.to_date
+  def perform(evaluated_on = nil)
+    # The cron tick carries no args; re-enqueue with the date pinned so a
+    # Sidekiq retry after midnight still writes the original day's rows.
+    return self.class.perform_async(Time.current.to_date.to_s) if evaluated_on.nil?
+
+    evaluated_on = Date.parse(evaluated_on)
     failed_user_ids = []
 
     SocialConnectVerification.distinct.pluck(:user_id).each_slice(BATCH_SIZE) do |user_ids|

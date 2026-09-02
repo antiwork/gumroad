@@ -4,6 +4,24 @@ require "spec_helper"
 
 describe RecordSocialScoreShadowEvaluationsJob do
   describe "#perform" do
+    it "re-enqueues itself with today's date pinned when called without args" do
+      expect do
+        described_class.new.perform
+      end.to change(described_class.jobs, :size).by(1)
+
+      expect(described_class.jobs.last["args"]).to eq([Date.current.to_s])
+    end
+
+    it "writes rows under the passed date, not the wall-clock date" do
+      held = create(:user, user_risk_state: "flagged_for_fraud")
+      create(:social_connect_verification, user: held)
+      create(:balance, user: held, merchant_account: create(:merchant_account, user: held), amount_cents: 100_00)
+
+      described_class.new.perform(Date.yesterday.to_s)
+
+      expect(SocialScoreShadowEvaluation.last.evaluated_on).to eq(Date.yesterday)
+    end
+
     it "records one row per held seller with a verification and skips unheld sellers" do
       held = create(:user, user_risk_state: "flagged_for_fraud")
       # Deliberately weak signals (young account, no audience) so the recorded verdict is a
@@ -16,7 +34,7 @@ describe RecordSocialScoreShadowEvaluationsJob do
       create(:social_connect_verification, user: unheld)
       create(:balance, user: unheld, merchant_account: create(:merchant_account, user: unheld), amount_cents: 100_00)
 
-      expect { described_class.new.perform }.to change(SocialScoreShadowEvaluation, :count).by(1)
+      expect { described_class.new.perform(Date.current.to_s) }.to change(SocialScoreShadowEvaluation, :count).by(1)
 
       evaluation = SocialScoreShadowEvaluation.last
       expect(evaluation.user).to eq(held)
@@ -30,9 +48,9 @@ describe RecordSocialScoreShadowEvaluationsJob do
       create(:social_connect_verification, user: held)
       create(:balance, user: held, merchant_account: create(:merchant_account, user: held), amount_cents: 100_00)
 
-      described_class.new.perform
+      described_class.new.perform(Date.current.to_s)
 
-      expect { described_class.new.perform }.not_to change(SocialScoreShadowEvaluation, :count)
+      expect { described_class.new.perform(Date.current.to_s) }.not_to change(SocialScoreShadowEvaluation, :count)
     end
 
     it "never mutates payout or risk state" do
@@ -41,7 +59,7 @@ describe RecordSocialScoreShadowEvaluationsJob do
                                            follower_count: 5_000, post_count: 1_000, last_posted_at: 1.week.ago)
       create(:balance, user: held, merchant_account: create(:merchant_account, user: held), amount_cents: 100_00)
 
-      described_class.new.perform
+      described_class.new.perform(Date.current.to_s)
 
       held.reload
       expect(held.user_risk_state).to eq("flagged_for_fraud")
@@ -62,7 +80,7 @@ describe RecordSocialScoreShadowEvaluationsJob do
       allow(SocialScoreShadowEvaluationService).to receive(:new)
         .with(having_attributes(id: failing.id)).and_raise(StandardError, "boom")
 
-      expect { described_class.new.perform }.to raise_error(/failed for 1 users/)
+      expect { described_class.new.perform(Date.current.to_s) }.to raise_error(/failed for 1 users/)
       expect(SocialScoreShadowEvaluation.count).to eq(1)
       expect(SocialScoreShadowEvaluation.last.user).to eq(fine)
     end
