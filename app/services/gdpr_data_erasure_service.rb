@@ -228,6 +228,8 @@ class GdprDataErasureService
         facebook_access_token: nil,
         twitter_oauth_token: nil,
         twitter_oauth_secret: nil,
+        youtube_channel_id: nil,
+        youtube_handle: nil,
         profile_picture_url: nil,
         street_address: nil,
         city: nil,

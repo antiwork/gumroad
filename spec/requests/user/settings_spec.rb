@@ -136,6 +136,7 @@ describe "User profile settings page", type: :system, js: true do
     it "saves connected or disconnected Twitter account" do
       visit profile_path
       expect(page).to have_button("Connect to X")
+      expect(page).to have_button("Connect to YouTube")
       OmniAuth.config.test_mode = true
       OmniAuth.config.mock_auth[:twitter] = OmniAuth::AuthHash.new JSON.parse(File.open("#{Rails.root}/spec/support/fixtures/twitter_omniauth.json").read)
       OmniAuth.config.before_callback_phase do |env|

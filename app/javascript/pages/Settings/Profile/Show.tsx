@@ -1,10 +1,10 @@
-import { FontFamily, TwitterX } from "@boxicons/react";
+import { FontFamily, Google, TwitterX } from "@boxicons/react";
 import { Link, router, usePage } from "@inertiajs/react";
 import { isEqual } from "lodash-es";
 import * as React from "react";
 import typia from "typia";
 
-import { updateProfileSettings as saveProfileSettings, unlinkTwitter } from "$app/data/profile_settings";
+import { updateProfileSettings as saveProfileSettings, unlinkTwitter, unlinkYoutube } from "$app/data/profile_settings";
 import {
   ProfileSettingsForm,
   changedProfileSettings,
@@ -265,6 +265,16 @@ export default function SettingsPage() {
     }
   });
 
+  const handleUnlinkYoutube = asyncVoid(async () => {
+    try {
+      await unlinkYoutube();
+      router.reload();
+    } catch (e) {
+      assertResponseError(e);
+      showAlert(e.message, "error");
+    }
+  });
+
   const customLandingPageActive = custom_html_pages_enabled && has_custom_landing_page;
   const showPagesTab = !customLandingPageActive;
   const showCustomLandingPagePreview = customLandingPageActive && tab !== "design";
@@ -498,6 +508,17 @@ export default function SettingsPage() {
                     >
                       <TwitterX pack="brands" className="size-5" />
                       Connect to X
+                    </SocialAuthButton>
+                  )}
+                  {creatorProfile.youtube_handle ? (
+                    <Button type="button" color="google" onClick={handleUnlinkYoutube}>
+                      <Google pack="brands" className="size-5" />
+                      Disconnect {creatorProfile.youtube_handle} from YouTube
+                    </Button>
+                  ) : (
+                    <SocialAuthButton provider="google" href="/users/auth/youtube">
+                      <Google pack="brands" className="size-5" />
+                      Connect to YouTube
                     </SocialAuthButton>
                   )}
                 </Fieldset>

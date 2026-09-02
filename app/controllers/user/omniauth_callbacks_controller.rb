@@ -126,6 +126,31 @@ class User::OmniauthCallbacksController < Devise::OmniauthCallbacksController
     sign_in_with_oauth("Google")
   end
 
+  def youtube
+    if logged_in_user.blank?
+      flash[:alert] = "You need to be logged in to link your YouTube account."
+      return redirect_to login_path
+    end
+
+    token = request.env.dig("omniauth.auth", "credentials", "token")
+    channel = YoutubeChannelFetcher.new(token).fetch
+    if channel.blank?
+      flash[:alert] = "Couldn't read a YouTube channel for that Google account."
+      return redirect_to profile_path
+    end
+
+    begin
+      SocialConnectVerification.record_from_youtube!(logged_in_user, channel)
+      logged_in_user.update!(youtube_channel_id: channel["id"], youtube_handle: channel["handle"])
+    rescue StandardError => e
+      Rails.logger.error("SocialConnectVerification youtube record failed for user #{logged_in_user.id}: #{e.message}")
+      flash[:alert] = "Couldn't save your YouTube connection. Please try again."
+      return redirect_to profile_path
+    end
+
+    redirect_to profile_path
+  end
+
   def apple
     @user = User.find_or_create_for_apple_oauth(request.env["omniauth.auth"])
     sign_in_with_oauth("Apple")

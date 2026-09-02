@@ -1029,6 +1029,8 @@ class Api::Internal::Admin::UsersController < Api::Internal::Admin::BaseControll
       case verification.platform
       when "twitter"
         verification.user.twitter_user_id.present? && verification.user.twitter_user_id.to_s == verification.uid.to_s
+      when "youtube"
+        verification.user.youtube_channel_id.present? && verification.user.youtube_channel_id.to_s == verification.uid.to_s
       else
         false
       end

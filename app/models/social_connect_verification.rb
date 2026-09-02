@@ -35,6 +35,24 @@ class SocialConnectVerification < ApplicationRecord
     verification
   end
 
+  # YouTube Data API channel payload from YoutubeChannelFetcher.
+  def self.record_from_youtube!(user, channel)
+    uid = channel["id"].to_s
+    return if uid.blank?
+
+    verification = find_or_initialize_by(user:, platform: "youtube")
+    verification.update!(
+      uid:,
+      handle: channel["handle"],
+      account_created_at: parse_iso8601(channel["published_at"]),
+      follower_count: channel["subscriber_count"].presence&.to_i,
+      post_count: channel["video_count"].presence&.to_i,
+      last_posted_at: channel["last_posted_at"].is_a?(Time) ? channel["last_posted_at"] : parse_iso8601(channel["last_posted_at"]),
+      last_verified_at: Time.current,
+    )
+    verification
+  end
+
   def self.parse_twitter_time(value)
     return if value.blank?
 
@@ -44,4 +62,13 @@ class SocialConnectVerification < ApplicationRecord
     nil
   end
   private_class_method :parse_twitter_time
+
+  def self.parse_iso8601(value)
+    return if value.blank?
+
+    Time.iso8601(value.to_s)
+  rescue ArgumentError
+    nil
+  end
+  private_class_method :parse_iso8601
 end

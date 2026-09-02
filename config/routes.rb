@@ -696,6 +696,7 @@ Rails.application.routes.draw do
       resource :connections, only: [] do
         member do
           post :unlink_twitter
+          post :unlink_youtube
         end
       end
     end

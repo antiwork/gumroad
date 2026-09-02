@@ -41,6 +41,7 @@ describe ProfilePresenter do
           external_id: seller.external_id,
           name: seller.name,
           twitter_handle: nil,
+          youtube_handle: nil,
           subdomain: seller.subdomain,
           is_verified: false,
           can_edit: true,

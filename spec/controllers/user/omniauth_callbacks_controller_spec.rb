@@ -587,4 +587,51 @@ describe User::OmniauthCallbacksController do
       end
     end
   end
+
+  describe "#youtube" do
+    let(:user) { create(:user) }
+    let(:channel) do
+      {
+        "id" => "UC_x5XG1OV2P6uZZ5FSM9Ttw",
+        "handle" => "googledevelopers",
+        "published_at" => "2007-08-23T00:34:43Z",
+        "subscriber_count" => "2400000",
+        "video_count" => "5800",
+        "last_posted_at" => Time.iso8601("2026-08-01T12:00:00Z"),
+      }
+    end
+
+    before do
+      OmniAuth.config.mock_auth[:youtube] = OmniAuth::AuthHash.new fetch_json("google").merge("provider" => "youtube")
+      request.env["omniauth.auth"] = OmniAuth.config.mock_auth[:youtube]
+    end
+
+    it "records the YouTube channel on a signed-in user" do
+      allow(controller).to receive(:logged_in_user).and_return(user)
+      allow(YoutubeChannelFetcher).to receive(:new).and_return(instance_double(YoutubeChannelFetcher, fetch: channel))
+
+      post :youtube
+
+      expect(response).to redirect_to profile_path
+      expect(user.reload.youtube_channel_id).to eq("UC_x5XG1OV2P6uZZ5FSM9Ttw")
+      expect(user.youtube_handle).to eq("googledevelopers")
+      expect(user.social_connect_verifications.find_by!(platform: "youtube").uid).to eq("UC_x5XG1OV2P6uZZ5FSM9Ttw")
+    end
+
+    it "redirects to login when no user is signed in" do
+      allow(controller).to receive(:logged_in_user).and_return(nil)
+
+      post :youtube
+
+      expect(response).to redirect_to login_path
+      expect(flash[:alert]).to eq "You need to be logged in to link your YouTube account."
+    end
+
+    it "does not create a user from a YouTube connect" do
+      allow(controller).to receive(:logged_in_user).and_return(user)
+      allow(YoutubeChannelFetcher).to receive(:new).and_return(instance_double(YoutubeChannelFetcher, fetch: channel))
+
+      expect { post :youtube }.not_to change { User.count }
+    end
+  end
 end
