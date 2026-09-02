@@ -1,10 +1,7 @@
 # frozen_string_literal: true
 
-# Shadow-mode scorer for payout-hold risk reviews (gumroad-private#2371, slice 2).
-# Computes, for a seller whose payout is currently held, whether verified
-# social-connect signals WOULD have released the hold — and only logs the
-# verdict. Nothing here moves money or clears a hold; the release path stays
-# manual until measured precision says otherwise.
+# Log-only: computes whether verified social signals WOULD have released a
+# held payout. Nothing here moves money or clears a hold.
 class SocialScoreShadowEvaluationService
   # Chosen so that no single signal can release on its own: it takes a
   # multi-year account with real audience AND recent posting history to cross.
@@ -29,7 +26,9 @@ class SocialScoreShadowEvaluationService
 
     best = scored_verifications.max_by { |scored| scored[:score] }
     score = best&.dig(:score) || 0
-    shared_identity = best&.dig(:shared_identity_user_count).to_i.positive?
+    # ANY shared identity vetoes, not just the best-scoring verification's —
+    # a fraudster's weakest linked account is still a link.
+    shared_identity = scored_verifications.any? { |scored| scored[:shared_identity_user_count].positive? }
 
     {
       hold_source:,
@@ -49,15 +48,22 @@ class SocialScoreShadowEvaluationService
     end
 
     def hold_source
-      @_hold_source ||=
-        if user.payouts_paused_by_user?
-          nil
-        elsif user.payouts_paused_internally?
-          source = user.payouts_paused_by_source
-          source == User::PAYOUT_PAUSE_SOURCE_STRIPE ? nil : "payout_pause_#{source}"
-        elsif REVIEWABLE_RISK_STATES.include?(user.user_risk_state) && !user.compliant?
-          "risk_state_#{user.user_risk_state}"
-        end
+      # A self-pause or Stripe pause must not mask a coexisting reviewable
+      # hold — fall through to the risk state rather than returning early.
+      @_hold_source ||= internal_pause_source || risk_state_source
+    end
+
+    def internal_pause_source
+      return nil unless user.payouts_paused_internally?
+
+      source = user.payouts_paused_by_source
+      source == User::PAYOUT_PAUSE_SOURCE_STRIPE ? nil : "payout_pause_#{source}"
+    end
+
+    def risk_state_source
+      return nil unless REVIEWABLE_RISK_STATES.include?(user.user_risk_state) && !user.compliant?
+
+      "risk_state_#{user.user_risk_state}"
     end
 
     def unpaid_balance_cents

@@ -50,6 +50,22 @@ describe SocialScoreShadowEvaluationService do
       expect(described_class.new(user).evaluate).to be_nil
     end
 
+    it "still scores a self-paused seller whose risk state is reviewable" do
+      user.update!(payouts_paused_by_user: true)
+
+      result = described_class.new(user).evaluate
+
+      expect(result[:hold_source]).to eq("risk_state_flagged_for_fraud")
+    end
+
+    it "still scores a Stripe-paused seller whose risk state is reviewable" do
+      user.update!(payouts_paused_internally: true, payouts_paused_by: User::PAYOUT_PAUSE_SOURCE_STRIPE)
+
+      result = described_class.new(user).evaluate
+
+      expect(result[:hold_source]).to eq("risk_state_flagged_for_fraud")
+    end
+
     it "returns nil for a Stripe-sourced payout pause" do
       user.update!(user_risk_state: "compliant")
       user.update!(payouts_paused_internally: true, payouts_paused_by: User::PAYOUT_PAUSE_SOURCE_STRIPE)
@@ -79,6 +95,26 @@ describe SocialScoreShadowEvaluationService do
     it "does not release when the social identity vouches for another Gumroad account" do
       verification = strong_verification
       create(:social_connect_verification, user: create(:user), uid: verification.uid)
+
+      result = described_class.new(user).evaluate
+
+      expect(result[:score]).to be >= described_class::RELEASE_THRESHOLD
+      expect(result[:would_have_released]).to be(false)
+    end
+
+    it "does not release when a weaker, non-best verification carries the shared identity" do
+      strong_verification
+      weak = create(
+        :social_connect_verification,
+        user:,
+        platform: "youtube",
+        account_created_at: 1.month.ago,
+        follower_count: 0,
+        post_count: 0,
+        last_posted_at: nil,
+        last_verified_at: 1.day.ago,
+      )
+      create(:social_connect_verification, user: create(:user), platform: "youtube", uid: weak.uid)
 
       result = described_class.new(user).evaluate
 

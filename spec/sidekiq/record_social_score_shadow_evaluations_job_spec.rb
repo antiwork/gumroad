@@ -49,7 +49,7 @@ describe RecordSocialScoreShadowEvaluationsJob do
       expect(SocialScoreShadowEvaluation.last.would_have_released).to be(true)
     end
 
-    it "continues past a seller whose evaluation raises" do
+    it "records the surviving sellers and re-raises so Sidekiq retries the failed one" do
       failing = create(:user, user_risk_state: "flagged_for_fraud")
       create(:social_connect_verification, user: failing)
       create(:balance, user: failing, merchant_account: create(:merchant_account, user: failing), amount_cents: 100_00)
@@ -62,7 +62,8 @@ describe RecordSocialScoreShadowEvaluationsJob do
       allow(SocialScoreShadowEvaluationService).to receive(:new)
         .with(having_attributes(id: failing.id)).and_raise(StandardError, "boom")
 
-      expect { described_class.new.perform }.to change(SocialScoreShadowEvaluation, :count).by(1)
+      expect { described_class.new.perform }.to raise_error(/failed for 1 users/)
+      expect(SocialScoreShadowEvaluation.count).to eq(1)
       expect(SocialScoreShadowEvaluation.last.user).to eq(fine)
     end
   end
