@@ -844,11 +844,12 @@ function getMethodForcedDirectListedCurrency(state: State): string | null {
   return currency;
 }
 
-// Currency of a client-confirm Element that will be mounted from per-line listed allocations:
-// selectable listed CARD, method-forced listed (iDEAL/Bancontact/one-time UPI/Pix), or recurring
-// UPI. Recurring UPI stays INR under a stored USD preference, so the method-forced helper
-// (null when buyerCurrency differs) cannot name it — GST still needs those allocations or the
-// amount helper returns null and the Element never mounts.
+// Currency of a client-confirm Element that reports listed line prices/tips so surcharge tax
+// uses the purchase basis (listed price + listed tip converted once). Selectable listed CARD,
+// method-forced listed (iDEAL/Bancontact/one-time UPI/Pix), or recurring UPI. Recurring UPI
+// stays INR under a stored USD preference, so the method-forced helper (null when
+// buyerCurrency differs) cannot name it. The server still will not return allocations for a
+// subscription (later_charge_kind); this only keeps the listed tax basis on the request.
 export function getDirectListedAllocationCurrency(state: State): string | null {
   if (
     state.checkoutPayment.integration === "payment_element_client_confirm" &&
@@ -895,21 +896,27 @@ function getDirectListedPaymentElementAmount(state: State) {
   if (directListedAllocations)
     return directListedAllocations.reduce((sum, allocation) => sum + allocation.total_cents, 0);
 
-  const taxUsd = state.surcharges.result.tax_cents;
-  const shippingUsd = state.surcharges.result.shipping_rate_cents;
-  // Charge time converts each purchase's tax and shipping separately, so converting the USD
-  // aggregate once here can disagree by a cent on a multi-line cart. Both listed lanes ask for
-  // per-line allocations (see loadSurcharges); until they arrive, mount nothing rather than an
-  // amount the deferred intent will not match.
-  if (taxUsd !== 0 || shippingUsd !== 0) return null;
-
   const linePrices = getListedLinePrices(state);
   const lineTotal = linePrices.reduce<number>((sum, line) => sum + line.price, 0);
   const tipTotal = computeTipsForLines(state, linePrices, { basis: "listed" }).reduce<number>(
     (sum, tip) => sum + (tip ?? 0),
     0,
   );
-  return lineTotal + tipTotal;
+  const taxUsd = state.surcharges.result.tax_cents;
+  const shippingUsd = state.surcharges.result.shipping_rate_cents;
+  if (taxUsd === 0 && shippingUsd === 0) return lineTotal + tipTotal;
+
+  // Charge time converts each purchase's tax and shipping separately, so converting the USD
+  // aggregate once here can disagree by a cent on a multi-line cart. The listed lanes ask for
+  // per-line allocations (see loadSurcharges); until they arrive, mount nothing rather than an
+  // amount the deferred intent will not match.
+  if (!isRecurringUpiPaymentConfig(state.checkoutPayment)) return null;
+  // Recurring UPI never gets allocations — the server refuses to allocate a subscription line
+  // (later_charge_kind) — and is always one line, so one conversion at the signed page rate is
+  // exactly what the charge computes. INR is not single-unit, so no /100 here.
+  const rate = state.checkoutPayment.elements_options.direct_listed_currency_rate;
+  if (rate == null) return null;
+  return lineTotal + tipTotal + Math.round(taxUsd * rate) + Math.round(shippingUsd * rate);
 }
 
 export function isProcessing(state: State) {

@@ -139,6 +139,8 @@ const recurringUpiPaymentElementClientConfirmConfig: CheckoutPaymentConfig = {
     currency: "inr",
     presentment_amount_cents: 73_000,
     listed_currency_display: { currency: "inr", subunit_to_unit: 100 },
+    // Raw rate consistent with the ₹730 listing of a $10 price.
+    direct_listed_currency_rate: 73,
     payment_method_types: ["card", "upi"],
     stripe_link_enabled: false,
     stripe_connect_account_id: null,
@@ -586,7 +588,7 @@ describe("canUseStripePaymentElementClientConfirm", () => {
     expect(getStripePaymentElementAmount(s)).toBe(83_000);
   });
 
-  it("requests INR allocations for recurring UPI even when a USD preference is stored", () => {
+  it("reports the listed INR tax basis for recurring UPI even when a USD preference is stored", () => {
     const s = clientConfirmState({
       checkoutPayment: recurringUpiPaymentElementClientConfirmConfig,
       products: [product({ recurrence: "monthly", price: 1_000, listedPriceCents: 73_000, hasTippingEnabled: true })],
@@ -597,7 +599,9 @@ describe("canUseStripePaymentElementClientConfirm", () => {
     expect(getStripePaymentElementMountCurrency(s)).toBe("inr");
   });
 
-  it("does not mount recurring UPI when GST is due but per-line allocations have not arrived", () => {
+  it("mounts recurring UPI with exclusive GST converted at the signed page rate when no allocations arrive", () => {
+    // The surcharge response for a subscription carries no direct_listed_line_allocations: the
+    // server tags the membership with a later charge kind and refuses to allocate it.
     const s = clientConfirmState({
       checkoutPayment: recurringUpiPaymentElementClientConfirmConfig,
       products: [product({ recurrence: "monthly", price: 1_000, listedPriceCents: 73_000, hasTippingEnabled: true })],
@@ -617,40 +621,8 @@ describe("canUseStripePaymentElementClientConfirm", () => {
       },
     });
 
-    expect(getStripePaymentElementAmount(s)).toBeNull();
-  });
-
-  it("mounts recurring UPI GST from per-line allocations, not the untipped listed price", () => {
-    const s = clientConfirmState({
-      checkoutPayment: recurringUpiPaymentElementClientConfirmConfig,
-      products: [product({ recurrence: "monthly", price: 1_000, listedPriceCents: 73_000, hasTippingEnabled: true })],
-      buyerCurrency: "usd",
-      tip: { type: "percentage", percentage: 15 },
-      surcharges: {
-        type: "loaded",
-        result: {
-          vat_id_valid: false,
-          has_vat_id_input: false,
-          shipping_rate_cents: 0,
-          tax_cents: 180,
-          tax_included_cents: 0,
-          subtotal: 1_330,
-          direct_listed_line_allocations: [
-            {
-              permalink: "product-a",
-              price_cents: 73_000,
-              tip_cents: 10_950,
-              tax_cents: 15_111,
-              shipping_cents: 0,
-              total_cents: 99_061,
-            },
-          ],
-          buyer_currency_quote: null,
-        },
-      },
-    });
-
-    expect(getStripePaymentElementAmount(s)).toBe(99_061);
+    // ₹730.00 + 15% listed tip (₹109.50) + $1.80 GST at 73 (₹131.40).
+    expect(getStripePaymentElementAmount(s)).toBe(73_000 + 10_950 + 13_140);
     expect(getStripePaymentElementMountCurrency(s)).toBe("inr");
   });
 

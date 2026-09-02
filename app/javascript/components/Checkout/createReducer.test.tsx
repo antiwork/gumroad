@@ -284,7 +284,7 @@ describe("createReducer surcharge refetches", () => {
     });
   });
 
-  it("requests INR allocations for recurring UPI even when a USD preference is stored", async () => {
+  it("sends the listed INR tax basis for recurring UPI even when a USD preference is stored", async () => {
     const requests = stubSurchargeRequests();
     const recurringUpiCheckoutPayment: CheckoutPaymentConfig = {
       integration: "payment_element_client_confirm",
