@@ -21,6 +21,9 @@ module PostBlastSending
   # the monitor flags the blast via the (positive) pending count instead.
   SLICE_DONE_TTL = 3.days
 
+  # In-process attempts for the sent-row write that runs after the ESP accepted a slice.
+  POST_ACCEPT_WRITE_ATTEMPTS = 3
+
   SLICE_PARTITION_MUTATION_LOCK_TTL = 30.seconds
   SLICE_PARTITION_MUTATION_LOCK_WAIT = 5.seconds
   SLICE_PARTITION_MUTATION_LOCK_RETRY_INTERVAL = 0.05
@@ -60,35 +63,27 @@ module PostBlastSending
     end
   end
 
-  # The provider slice — not the mixed slice — is the retry unit. An ESP that has
-  # already accepted its recipients must not be handed them again because a later
-  # provider failed, so the cleanup below only rolls back the slice that raised.
+  # The provider slice — not the mixed slice — is the retry unit: an ESP that has already
+  # accepted its recipients is never handed them again because a later provider failed.
+  #
+  # sent_post_emails rows are written AFTER the provider accepts. Written before, any exit a
+  # rescue cannot see (SIGKILL, OOM) leaves rows that every retry then treats as sent, and the
+  # blast completes short with no signal. A kill between acceptance and the write costs at most
+  # one duplicate provider slice, which is visible and bounded.
   def send_provider_slice(provider:, members:, cache:)
     renew_chunk_claim! if respond_to?(:renew_chunk_claim!, true)
-    # Count the slice as handed over, not the post-dedupe remainder: anything
-    # `store_recipients_as_sent` drops was already emailed by someone else.
     owed = members.size
-    members = store_recipients_as_sent(members)
+    members = drop_members_already_sent(members)
+    return decrement_pending_recipients(owed) if members.empty?
 
-    begin
-      # Inside this rescue so a raise after store_recipients_as_sent cannot leave ghost rows.
-      recipients = prepare_recipients(members)
-      deliver_provider_slice(provider: provider, recipients: recipients, cache: cache)
-      mark_members_sent_in_this_blast(members) if @blast.to_non_openers?
-      decrement_pending_recipients(owed)
-    rescue Exception => e
-      # Delete the sent_post_emails records if there's an error with the provider send.
-      # We cannot use `transaction` here because it exceeds the lock timeout.
-      # Rescuing Exception, not StandardError: a deploy's hard shutdown raises
-      # Sidekiq::Shutdown (an Interrupt), and letting that skip the cleanup would leave
-      # these recipients marked sent but never emailed — the retry filters them out as
-      # already-emailed, so they are silently dropped from the blast.
-      unless @blast.to_non_openers?
-        emails = members.map(&:email)
-        SentPostEmail.where(post: @post, email: emails).delete_all
-      end
-      raise e
+    recipients = prepare_recipients(members)
+    deliver_provider_slice(provider: provider, recipients: recipients, cache: cache)
+    if @blast.to_non_openers?
+      mark_members_sent_in_this_blast(members)
+    else
+      store_recipients_as_sent(members)
     end
+    decrement_pending_recipients(owed)
   end
 
   def deliver_provider_slice(provider:, recipients:, cache:)
@@ -250,17 +245,32 @@ module PostBlastSending
                  RedisKey.blast_active_slice_partition(@blast.id), partition_chunks_key].compact)
   end
 
-  # Stores email addresses in SentPostEmail, just before sending the emails.
-  # In the very unlikely situation an email is already present there, its member won't be returned.
-  # "Unlikely situation" because we've already filtered the sent emails beforehand with `remove_already_emailed_members`,
-  # this behavior only helps if an email is sent by something else in parallel, between the start and the end of this job.
-  def store_recipients_as_sent(members)
+  # Re-checked right before each provider call: the chunk-level filter ran once at the start
+  # of a slice that can take minutes, and another sender may have emailed some of these since.
+  # Non-opener resends dedupe through their per-blast Redis set instead.
+  def drop_members_already_sent(members)
     return members if @blast.to_non_openers?
 
-    emails = Set.new(SentPostEmail.insert_all_emails(post: @post, emails: members.map(&:email)))
-    return members if members.size == emails.size
+    already_sent = @post.sent_post_emails.where(email: members.map(&:email)).pluck(:email).to_set
+    return members if already_sent.empty?
 
-    members.select { _1.email.in?(emails) }
+    members.reject { already_sent.include?(_1.email) }
+  end
+
+  # Only after the provider accepted, so a row here always has an email behind it. A transient
+  # DB error now converts into a redelivered slice on the job retry, so absorb those in-process
+  # first; a persistent failure still raises — the retry's redelivery is bounded and visible,
+  # a swallowed write is a silent dedupe hole.
+  def store_recipients_as_sent(members)
+    attempts = 0
+    begin
+      SentPostEmail.insert_all_emails(post: @post, emails: members.map(&:email))
+    rescue StandardError
+      attempts += 1
+      raise if attempts >= POST_ACCEPT_WRITE_ATTEMPTS
+      sleep(attempts)
+      retry
+    end
   end
 
   def post_has_files?
