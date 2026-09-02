@@ -15,8 +15,10 @@ class CreateSocialScoreShadowEvaluations < ActiveRecord::Migration[7.1]
       t.json :signals
       t.timestamps
 
-      t.index [:user_id, :evaluated_on], unique: true
-      t.index [:evaluated_on, :would_have_released]
+      # Explicit name: the Rails default for this pair exceeds the 62-byte
+      # auto-name limit and would get an opaque idx_on_<sha> name instead.
+      t.index [:user_id, :evaluated_on], unique: true, name: "index_sse_on_user_id_and_evaluated_on"
+      t.index [:evaluated_on, :would_have_released], name: "index_sse_on_evaluated_on_and_would_have_released"
     end
   end
 end

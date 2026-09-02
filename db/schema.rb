@@ -2514,8 +2514,8 @@ ActiveRecord::Schema[7.1].define(version: 2026_12_09_113454) do
     t.json "signals"
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
-    t.index ["evaluated_on", "would_have_released"], name: "idx_on_evaluated_on_would_have_released_82fce97dc0"
-    t.index ["user_id", "evaluated_on"], name: "index_social_score_shadow_evaluations_on_user_id_and_evaluated_", unique: true
+    t.index ["evaluated_on", "would_have_released"], name: "index_sse_on_evaluated_on_and_would_have_released"
+    t.index ["user_id", "evaluated_on"], name: "index_sse_on_user_id_and_evaluated_on", unique: true
   end
 
   create_table "staff_picked_products", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
