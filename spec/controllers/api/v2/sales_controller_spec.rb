@@ -78,6 +78,31 @@ describe Api::V2::SalesController do
         expect(per_row_queries).to be_empty
       end
 
+      it "reports is_following when the stored follower email uses different casing" do
+        mixed = "Buyer.Case@Example.COM"
+        purchase = create(:purchase, purchaser: create(:user), link: @product, email: mixed)
+        create(:active_follower, user: @seller, email: mixed)
+
+        expect(purchase.reload.email).to eq(mixed.downcase)
+        expect(Follower.find_by(followed_id: @seller.id, email: mixed).email).to eq(mixed)
+
+        get :index, params: @params
+
+        sale = response.parsed_body["sales"].find { _1["id"] == purchase.external_id }
+        expect(sale["is_following"]).to eq(true)
+      end
+
+      it "reports is_following when the stored purchase email uses different casing" do
+        purchase = create(:purchase, purchaser: create(:user), link: @product, email: "lookup.case@example.com")
+        purchase.update_columns(email: "Lookup.Case@Example.COM")
+        create(:active_follower, user: @seller, email: "lookup.case@example.com")
+
+        get :index, params: @params
+
+        sale = response.parsed_body["sales"].find { _1["id"] == purchase.external_id }
+        expect(sale["is_following"]).to eq(true)
+      end
+
       it "serializes a full page without per-sale association lookups" do
         purchases_with_upsells = (Api::V2::SalesController::RESULTS_PER_PAGE - 2).times.map do |index|
           product = create(:physical_product, user: @seller, name: "Product #{index}")

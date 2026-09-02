@@ -244,13 +244,13 @@ class Api::V2::SalesController < Api::V2::BaseController
       following_emails = Follower.active
         .where(followed_id: current_resource_owner.id, email: sales.map(&:email))
         .pluck(:email)
-        .to_set
+        .to_set { |email| email.to_s.downcase }
 
       sales.map do |sale|
         sale.as_json(
           version: 2,
           include_buyer_presentment: true,
-          is_following: following_emails.include?(sale.email)
+          is_following: following_emails.include?(sale.email.to_s.downcase)
         )
       end
     end
