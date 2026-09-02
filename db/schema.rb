@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.1].define(version: 2026_12_08_130000) do
+ActiveRecord::Schema[7.1].define(version: 2026_12_09_041314) do
   create_table "active_storage_attachments", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
     t.string "name", limit: 191, null: false
     t.string "record_type", limit: 191, null: false
@@ -2486,6 +2486,22 @@ ActiveRecord::Schema[7.1].define(version: 2026_12_08_130000) do
     t.integer "sku_id"
     t.index ["sku_id"], name: "index_skus_variants_on_sku_id"
     t.index ["variant_id"], name: "index_skus_variants_on_variant_id"
+  end
+
+  create_table "social_connect_verifications", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
+    t.bigint "user_id", null: false
+    t.string "platform", null: false
+    t.string "uid", null: false
+    t.string "handle"
+    t.datetime "account_created_at"
+    t.bigint "follower_count"
+    t.bigint "post_count"
+    t.datetime "last_posted_at"
+    t.datetime "last_verified_at", null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["platform", "uid"], name: "index_social_connect_verifications_on_platform_and_uid"
+    t.index ["user_id", "platform"], name: "index_social_connect_verifications_on_user_id_and_platform", unique: true
   end
 
   create_table "staff_picked_products", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
