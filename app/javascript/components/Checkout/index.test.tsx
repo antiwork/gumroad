@@ -791,6 +791,49 @@ describe("Checkout recurring UPI registration amounts", () => {
     expect(queryByText("CA$12.50")).toBeNull();
   });
 
+  it("shows the 15% tip on the listed INR total instead of leaving ₹730", () => {
+    const { getAllByLabelText, getAllByText, queryByText } = renderCheckout(
+      {
+        ...upiState(),
+        products: [
+          stateProduct({
+            permalink: "upi",
+            price: 1_000,
+            recurrence: "monthly",
+            listedPriceCents: 73_000,
+            hasTippingEnabled: true,
+          }),
+        ],
+        tip: { type: "percentage", percentage: 15 },
+        surcharges: {
+          type: "loaded",
+          result: { ...upiSurcharges, subtotal: 1_150 },
+        },
+      },
+      {
+        items: [
+          cartItem({
+            product: cartProduct({
+              id: "upi-product",
+              permalink: "upi",
+              currency_code: "inr",
+              exchange_rate: 73,
+              has_tipping_enabled: true,
+            }),
+            price: 73_000,
+            recurrence: "monthly",
+          }),
+        ],
+        discountCodes: [],
+      },
+    );
+
+    expect(getAllByLabelText("Price").map((node) => node.textContent)).toEqual(["₹730"]);
+    expect(getAllByText("₹109.50").length).toBeGreaterThan(0);
+    expect(getAllByText("₹839.50").length).toBeGreaterThan(0);
+    expect(queryByText("US$11.50")).toBeNull();
+  });
+
   it("hides the currency picker so the stored USD preference cannot be re-offered", () => {
     const { queryByLabelText } = renderCheckout(upiState(), upiCart());
 

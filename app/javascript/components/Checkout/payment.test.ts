@@ -542,6 +542,38 @@ describe("canUseStripePaymentElementClientConfirm", () => {
     expect(getStripePaymentElementMountCurrency(s)).toBe("inr");
   });
 
+  it("mounts recurring UPI at the tipped INR total instead of the untipped listed price", () => {
+    const s = clientConfirmState({
+      checkoutPayment: recurringUpiPaymentElementClientConfirmConfig,
+      products: [
+        product({
+          recurrence: "monthly",
+          price: 1_000,
+          listedPriceCents: 73_000,
+          hasTippingEnabled: true,
+        }),
+      ],
+      buyerCurrency: "usd",
+      tip: { type: "percentage", percentage: 15 },
+      surcharges: {
+        type: "loaded",
+        result: {
+          vat_id_valid: false,
+          has_vat_id_input: false,
+          shipping_rate_cents: 0,
+          tax_cents: 0,
+          tax_included_cents: 0,
+          subtotal: 1_150,
+          buyer_currency_quote: null,
+        },
+      },
+    });
+
+    expect(canUseStripePaymentElementClientConfirm(s)).toBe(true);
+    expect(getStripePaymentElementAmount(s)).toBe(83_950);
+    expect(getStripePaymentElementMountCurrency(s)).toBe("inr");
+  });
+
   it("falls back when the server selected the server-confirm Payment Element integration", () => {
     expect(canUseStripePaymentElementClientConfirm(state())).toBe(false);
   });

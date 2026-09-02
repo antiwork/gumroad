@@ -650,13 +650,13 @@ export function getStripePaymentElementAmount(state: State) {
   // loaded quote before the server-rendered listed amount from the stale initial configuration.
   const presentment = getStripePaymentElementPresentment(state);
   if (presentment) return presentment.amountCents;
-  // Recurring UPI is a server-selected INR registration lane. A stale stored USD picker
-  // preference must not reinterpret either the Element amount or its currency.
+  // Recurring UPI still mounts INR even with a stored USD preference, but the amount must
+  // include a listed-currency tip — same helper as the direct-listed lane.
   if (
     state.checkoutPayment.integration === "payment_element_client_confirm" &&
     isRecurringUpiPaymentConfig(state.checkoutPayment)
   )
-    return state.checkoutPayment.elements_options.presentment_amount_cents;
+    return getDirectListedPaymentElementAmount(state);
   // Direct-listed surfaces mount in the listed currency, so the USD total below would be the
   // wrong unit. Add any listed-currency tip the buyer selected to the server-rendered base amount
   // so Elements and the deferred intent stay aligned after surcharge-only tip edits.
