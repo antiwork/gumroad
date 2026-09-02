@@ -284,6 +284,50 @@ describe("createReducer surcharge refetches", () => {
     });
   });
 
+  it("requests INR allocations for recurring UPI even when a USD preference is stored", async () => {
+    const requests = stubSurchargeRequests();
+    const recurringUpiCheckoutPayment: CheckoutPaymentConfig = {
+      integration: "payment_element_client_confirm",
+      fallback_reason: null,
+      recurring_upi_registration: true,
+      disable_wallets: true,
+      request_apple_pay_merchant_tokens: false,
+      payment_element_wallets: false,
+      flat_payment_methods: true,
+      elements_options: {
+        stripe_elements_mode: "payment",
+        currency: "inr",
+        buyer_currency_presentment: false,
+        presentment_amount_cents: 73_000,
+        listed_currency_display: { currency: "inr", subunit_to_unit: 100 },
+        payment_method_types: ["card", "upi"],
+        payment_method_list_token: null,
+        stripe_link_enabled: false,
+        stripe_connect_account_id: null,
+        direct_listed_card: false,
+      },
+    };
+    document.cookie = "gumroad_buyer_currency=usd; path=/";
+    renderCheckout({
+      checkoutPayment: recurringUpiCheckoutPayment,
+      products: initialArgs.products.map((product) => ({
+        ...product,
+        recurrence: "monthly",
+        listedPriceCents: 73_000,
+        listedChargePriceCents: 73_000,
+      })),
+    });
+
+    await act(() => vi.advanceTimersByTimeAsync(300));
+
+    expect(requests[0]?.payload).toMatchObject({
+      products: [expect.objectContaining({ listed_price_cents: 73_000 })],
+      payment_details_source: "payment_element",
+      payment_element_mount_currency: "inr",
+      payment_element_direct_listed_currency: "inr",
+    });
+  });
+
   it("keeps the listed selector capability while requesting USD", async () => {
     const requests = stubSurchargeRequests();
     const { result } = renderCheckout({ checkoutPayment: directListedCheckoutPayment });

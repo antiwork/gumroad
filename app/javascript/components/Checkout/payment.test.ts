@@ -13,6 +13,7 @@ import {
   computeTipsForLines,
   getChargeTodayPrice,
   getConfiguredDirectListedCurrency,
+  getDirectListedAllocationCurrency,
   getFutureInstallmentsTotal,
   getLoadedDirectListedAmountToken,
   getSelectableDirectListedCurrency,
@@ -583,6 +584,74 @@ describe("canUseStripePaymentElementClientConfirm", () => {
     });
 
     expect(getStripePaymentElementAmount(s)).toBe(83_000);
+  });
+
+  it("requests INR allocations for recurring UPI even when a USD preference is stored", () => {
+    const s = clientConfirmState({
+      checkoutPayment: recurringUpiPaymentElementClientConfirmConfig,
+      products: [product({ recurrence: "monthly", price: 1_000, listedPriceCents: 73_000, hasTippingEnabled: true })],
+      buyerCurrency: "usd",
+    });
+
+    expect(getDirectListedAllocationCurrency(s)).toBe("inr");
+    expect(getStripePaymentElementMountCurrency(s)).toBe("inr");
+  });
+
+  it("does not mount recurring UPI when GST is due but per-line allocations have not arrived", () => {
+    const s = clientConfirmState({
+      checkoutPayment: recurringUpiPaymentElementClientConfirmConfig,
+      products: [product({ recurrence: "monthly", price: 1_000, listedPriceCents: 73_000, hasTippingEnabled: true })],
+      buyerCurrency: "usd",
+      tip: { type: "percentage", percentage: 15 },
+      surcharges: {
+        type: "loaded",
+        result: {
+          vat_id_valid: false,
+          has_vat_id_input: false,
+          shipping_rate_cents: 0,
+          tax_cents: 180,
+          tax_included_cents: 0,
+          subtotal: 1_150,
+          buyer_currency_quote: null,
+        },
+      },
+    });
+
+    expect(getStripePaymentElementAmount(s)).toBeNull();
+  });
+
+  it("mounts recurring UPI GST from per-line allocations, not the untipped listed price", () => {
+    const s = clientConfirmState({
+      checkoutPayment: recurringUpiPaymentElementClientConfirmConfig,
+      products: [product({ recurrence: "monthly", price: 1_000, listedPriceCents: 73_000, hasTippingEnabled: true })],
+      buyerCurrency: "usd",
+      tip: { type: "percentage", percentage: 15 },
+      surcharges: {
+        type: "loaded",
+        result: {
+          vat_id_valid: false,
+          has_vat_id_input: false,
+          shipping_rate_cents: 0,
+          tax_cents: 180,
+          tax_included_cents: 0,
+          subtotal: 1_330,
+          direct_listed_line_allocations: [
+            {
+              permalink: "product-a",
+              price_cents: 73_000,
+              tip_cents: 10_950,
+              tax_cents: 15_111,
+              shipping_cents: 0,
+              total_cents: 99_061,
+            },
+          ],
+          buyer_currency_quote: null,
+        },
+      },
+    });
+
+    expect(getStripePaymentElementAmount(s)).toBe(99_061);
+    expect(getStripePaymentElementMountCurrency(s)).toBe("inr");
   });
 
   it("falls back when the server selected the server-confirm Payment Element integration", () => {

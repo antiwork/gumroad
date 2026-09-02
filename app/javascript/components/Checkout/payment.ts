@@ -845,8 +845,16 @@ function getMethodForcedDirectListedCurrency(state: State): string | null {
 }
 
 // Currency of a client-confirm Element that will be mounted from per-line listed allocations:
-// selectable listed CARD, or method-forced listed (iDEAL/Bancontact/UPI/Pix).
+// selectable listed CARD, method-forced listed (iDEAL/Bancontact/one-time UPI/Pix), or recurring
+// UPI. Recurring UPI stays INR under a stored USD preference, so the method-forced helper
+// (null when buyerCurrency differs) cannot name it — GST still needs those allocations or the
+// amount helper returns null and the Element never mounts.
 export function getDirectListedAllocationCurrency(state: State): string | null {
+  if (
+    state.checkoutPayment.integration === "payment_element_client_confirm" &&
+    isRecurringUpiPaymentConfig(state.checkoutPayment)
+  )
+    return state.checkoutPayment.elements_options.currency;
   return getSelectableDirectListedCurrency(state) ?? getMethodForcedDirectListedCurrency(state);
 }
 
