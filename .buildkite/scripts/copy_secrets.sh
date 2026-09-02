@@ -32,7 +32,7 @@ copy_secrets() {
   logger "Copying files"
   cd "$CREDENTIALS_TMP_DIR"
 
-  files_to_remove=(".git" ".gitattributes" ".gitignore" "README.md" "copy_into" "docs" "test" "qa-media")
+  files_to_remove=(".git" ".gitattributes" ".gitignore" "README.md" "copy_into" "docs" "test")
   for file in "${files_to_remove[@]}"; do
     rm -rf "$file"
   done

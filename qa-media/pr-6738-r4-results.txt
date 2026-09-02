@@ -1,4 +1,0 @@
-pr-6738-r4-declined-card-control subject="Your card was declined." has="attempted to charge your card" lacks="saved UPI payment method" ASSERTED OK -> /tmp/qa6738/shots/pr-6738-r4-declined-card-control.png
-pr-6738-r4-declined-upi subject="Your payment method needs attention." has="saved UPI payment method" lacks="attempted to charge your card" ASSERTED OK -> /tmp/qa6738/shots/pr-6738-r4-declined-upi.png
-pr-6738-r4-warning-card-control subject="Your card was declined." has="attempted to charge your card" lacks="saved UPI payment method" ASSERTED OK -> /tmp/qa6738/shots/pr-6738-r4-warning-card-control.png
-pr-6738-r4-warning-upi subject="Your payment method needs attention." has="saved UPI payment method" lacks="attempted to charge your card" ASSERTED OK -> /tmp/qa6738/shots/pr-6738-r4-warning-upi.png
