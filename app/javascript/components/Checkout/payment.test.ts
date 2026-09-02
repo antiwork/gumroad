@@ -542,6 +542,30 @@ describe("canUseStripePaymentElementClientConfirm", () => {
     expect(getStripePaymentElementMountCurrency(s)).toBe("inr");
   });
 
+  it("adds a percentage tip to the recurring UPI Element amount in listed INR units", () => {
+    // gumroad-private#2190: ₹730 with a 15% tip must mount ₹839.50, not ₹730.
+    const s = clientConfirmState({
+      checkoutPayment: recurringUpiPaymentElementClientConfirmConfig,
+      products: [product({ recurrence: "monthly", price: 1_000, listedPriceCents: 73_000, hasTippingEnabled: true })],
+      tip: { type: "percentage", percentage: 15 },
+    });
+
+    expect(canUseStripePaymentElementClientConfirm(s)).toBe(true);
+    expect(getStripePaymentElementAmount(s)).toBe(83_950);
+    expect(getStripePaymentElementMountCurrency(s)).toBe("inr");
+  });
+
+  it("adds a fixed tip to the recurring UPI Element amount from the typed listed figure", () => {
+    // The buyer typed ₹100.00; the canonical rounding (1_150 USD cents here) must not replace it.
+    const s = clientConfirmState({
+      checkoutPayment: recurringUpiPaymentElementClientConfirmConfig,
+      products: [product({ recurrence: "monthly", price: 1_000, listedPriceCents: 73_000, hasTippingEnabled: true })],
+      tip: { type: "fixed", amount: 1_150, listedAmount: 10_000 },
+    });
+
+    expect(getStripePaymentElementAmount(s)).toBe(83_000);
+  });
+
   it("falls back when the server selected the server-confirm Payment Element integration", () => {
     expect(canUseStripePaymentElementClientConfirm(state())).toBe(false);
   });
