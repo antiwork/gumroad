@@ -21,6 +21,9 @@ module PostBlastSending
   # the monitor flags the blast via the (positive) pending count instead.
   SLICE_DONE_TTL = 3.days
 
+  # In-process attempts for the sent-row write that runs after the ESP accepted a slice.
+  POST_ACCEPT_WRITE_ATTEMPTS = 3
+
   SLICE_PARTITION_MUTATION_LOCK_TTL = 30.seconds
   SLICE_PARTITION_MUTATION_LOCK_WAIT = 5.seconds
   SLICE_PARTITION_MUTATION_LOCK_RETRY_INTERVAL = 0.05
@@ -254,9 +257,20 @@ module PostBlastSending
     members.reject { already_sent.include?(_1.email) }
   end
 
-  # Only after the provider accepted, so a row here always has an email behind it.
+  # Only after the provider accepted, so a row here always has an email behind it. A transient
+  # DB error now converts into a redelivered slice on the job retry, so absorb those in-process
+  # first; a persistent failure still raises — the retry's redelivery is bounded and visible,
+  # a swallowed write is a silent dedupe hole.
   def store_recipients_as_sent(members)
-    SentPostEmail.insert_all_emails(post: @post, emails: members.map(&:email))
+    attempts = 0
+    begin
+      SentPostEmail.insert_all_emails(post: @post, emails: members.map(&:email))
+    rescue StandardError
+      attempts += 1
+      raise if attempts >= POST_ACCEPT_WRITE_ATTEMPTS
+      sleep(attempts)
+      retry
+    end
   end
 
   def post_has_files?

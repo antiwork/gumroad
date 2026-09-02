@@ -39,9 +39,9 @@ class SendPostBlastEmailsSliceJob
 
   private
     CHUNK_REVALIDATION_SLICE_SIZE = 1_000
-    # The claim is renewed after the member load and on every provider slice, so it only has to
-    # outlive one of those steps. A hard-killed copy never releases it, and the chunk cannot
-    # resume until it lapses, so keep it short. Must stay above CHUNK_LOAD_TIMEOUT.
+    # Renewed on every member-load slice and every provider slice, so it only has to outlive
+    # one statement or one provider call. A hard-killed copy never releases it, and the chunk
+    # cannot resume until it lapses, so keep it short. Must stay above CHUNK_LOAD_TIMEOUT.
     CHUNK_CLAIM_TTL = 30.minutes
     # Statement cap for the member load. Below CHUNK_CLAIM_TTL so the claim cannot lapse mid-load.
     CHUNK_LOAD_TIMEOUT = 20.minutes
@@ -99,8 +99,11 @@ class SendPostBlastEmailsSliceJob
 
       # The send phase needs filter-provided virtual columns (purchase_id/follower_id/affiliate_id).
       Makara::Context.release_all
+      # CHUNK_LOAD_TIMEOUT caps each statement and the renewal below covers the gap between
+      # statements, so the claim cannot lapse mid-load however many slices run.
       members = WithMaxExecutionTime.timeout_queries(seconds: CHUNK_LOAD_TIMEOUT) do
         member_ids.each_slice(CHUNK_REVALIDATION_SLICE_SIZE).flat_map do |ids_slice|
+          renew_chunk_claim!
           AudienceMember.filter(seller_id: @post.seller_id, params: @filters, with_ids: true, ids: ids_slice)
             .select(:id, :email, :purchase_id, :follower_id, :affiliate_id).to_a
         end

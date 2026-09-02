@@ -439,6 +439,59 @@ describe SendPostBlastEmailsSliceJob, :freeze_time do
       expect_sent_count 3
     end
 
+    it "renews the chunk claim on every member-load slice" do
+      post = post_with_audience
+      blast = create(:blast, :just_requested, post:)
+      activate_partition(blast)
+      job = described_class.new
+      renewals_during_load = 0
+      allow(job).to receive(:renew_chunk_claim!).and_wrap_original do |original|
+        renewals_during_load += 1 if PostSendgridApi.mails.empty?
+        original.call
+      end
+      stub_const("#{described_class}::CHUNK_REVALIDATION_SLICE_SIZE", 1)
+
+      job.perform(blast.id, partition_key, 0, 1, audience_ids)
+
+      # One renewal per 1-member load slice, before any provider renewal.
+      expect(renewals_during_load).to be >= 3
+      expect_sent_count 3
+    end
+
+    it "retries the post-acceptance sent-row write in-process instead of re-sending the slice" do
+      post = post_with_audience
+      blast = create(:blast, :just_requested, post:)
+      activate_partition(blast)
+      calls = 0
+      allow(SentPostEmail).to receive(:insert_all_emails).and_wrap_original do |original, **kwargs|
+        calls += 1
+        raise ActiveRecord::Deadlocked if calls == 1
+        original.call(**kwargs)
+      end
+      allow_any_instance_of(described_class).to receive(:sleep)
+
+      described_class.new.perform(blast.id, partition_key, 0, 1, audience_ids)
+
+      # The provider was handed the slice exactly once; the write landed on the second try.
+      expect_sent_count 3
+      expect(SentPostEmail.where(post:).count).to eq(3)
+      expect(blast.reload.completed_at).to be_present
+    end
+
+    it "raises after the post-acceptance write attempts are exhausted" do
+      post = post_with_audience
+      blast = create(:blast, :just_requested, post:)
+      activate_partition(blast)
+      allow(SentPostEmail).to receive(:insert_all_emails).and_raise(ActiveRecord::Deadlocked)
+      allow_any_instance_of(described_class).to receive(:sleep)
+
+      expect do
+        described_class.new.perform(blast.id, partition_key, 0, 1, audience_ids)
+      end.to raise_error(ActiveRecord::Deadlocked)
+
+      expect(SentPostEmail).to have_received(:insert_all_emails).exactly(PostBlastSending::POST_ACCEPT_WRITE_ATTEMPTS).times
+    end
+
     it "re-sends recipients a killed copy left without a row, and skips the ones it recorded" do
       post = post_with_audience
       blast = create(:blast, :just_requested, post:)
