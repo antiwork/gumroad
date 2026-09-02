@@ -63,14 +63,10 @@ module PostBlastSending
   # The provider slice — not the mixed slice — is the retry unit: an ESP that has already
   # accepted its recipients is never handed them again because a later provider failed.
   #
-  # The sent_post_emails rows are written AFTER the provider accepts, never before. A
-  # rescue-and-delete around a pre-write cannot be made airtight — SIGKILL, OOM, and a
-  # rescue that itself raises all skip it — and every row it leaves behind is a recipient
-  # `remove_already_emailed_members` filters out of every retry as "already sent", so the
-  # blast completes with a hole nobody can see (gumroad-private#2366: ~1.7M recipients
-  # across 147 blasts). A kill between the ESP accepting and the write landing costs one
-  # duplicate email for that provider slice (<= 1,000); the pre-write ordering cost a
-  # silent non-delivery for the same slice. Duplicates are visible and bounded.
+  # sent_post_emails rows are written AFTER the provider accepts. Written before, any exit a
+  # rescue cannot see (SIGKILL, OOM) leaves rows that every retry then treats as sent, and the
+  # blast completes short with no signal. A kill between acceptance and the write costs at most
+  # one duplicate provider slice, which is visible and bounded.
   def send_provider_slice(provider:, members:, cache:)
     renew_chunk_claim! if respond_to?(:renew_chunk_claim!, true)
     owed = members.size
@@ -246,10 +242,9 @@ module PostBlastSending
                  RedisKey.blast_active_slice_partition(@blast.id), partition_chunks_key].compact)
   end
 
-  # Re-checked per provider slice, right before the send: the chunk-level filter ran once at
-  # the start of a slice that can take minutes, and a second publish or a concurrent sender
-  # may have emailed some of these addresses since. Non-opener resends dedupe through their
-  # per-blast Redis set instead (`remove_members_already_sent_in_this_blast`).
+  # Re-checked right before each provider call: the chunk-level filter ran once at the start
+  # of a slice that can take minutes, and another sender may have emailed some of these since.
+  # Non-opener resends dedupe through their per-blast Redis set instead.
   def drop_members_already_sent(members)
     return members if @blast.to_non_openers?
 
@@ -259,9 +254,7 @@ module PostBlastSending
     members.reject { already_sent.include?(_1.email) }
   end
 
-  # Records the slice as sent. Runs only after the provider accepted, so a row here always
-  # has an email behind it. A concurrent sender racing the same address just loses the
-  # unique-index race; the duplicate it already sent is the bounded cost.
+  # Only after the provider accepted, so a row here always has an email behind it.
   def store_recipients_as_sent(members)
     SentPostEmail.insert_all_emails(post: @post, emails: members.map(&:email))
   end

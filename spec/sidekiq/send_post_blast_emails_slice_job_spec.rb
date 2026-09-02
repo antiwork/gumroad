@@ -186,6 +186,28 @@ describe SendPostBlastEmailsSliceJob, :freeze_time do
       $redis.del(RedisKey.blast_slice_claim(blast.id, partition_key, 0), RedisKey.blast_active_slice_partition(blast.id)) if blast
     end
 
+    it "renews its claim after loading the chunk members" do
+      post = post_with_audience
+      blast = create(:blast, :just_requested, post:)
+      activate_partition(blast)
+      claim_key = RedisKey.blast_slice_claim(blast.id, partition_key, 0)
+      ttl_after_load = nil
+      allow_any_instance_of(described_class).to receive(:load_chunk_members).and_wrap_original do |original, *args|
+        # Pretend the load ran long enough for the claim to be close to lapsing.
+        $redis.expire(claim_key, 5)
+        original.call(*args)
+      end
+      allow_any_instance_of(described_class).to receive(:send_members) { ttl_after_load = $redis.ttl(claim_key) }
+
+      described_class.new.perform(blast.id, partition_key, 0, 1, audience_ids)
+
+      expect(ttl_after_load).to be > (described_class::CHUNK_CLAIM_TTL.to_i - 30)
+    end
+
+    it "keeps the member-load statement cap below the claim lifetime" do
+      expect(described_class::CHUNK_LOAD_TIMEOUT).to be < described_class::CHUNK_CLAIM_TTL
+    end
+
     it "sends the chunk once the previous copy's claim has lapsed" do
       post = post_with_audience
       blast = create(:blast, :just_requested, post:)
