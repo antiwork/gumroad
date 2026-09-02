@@ -119,6 +119,11 @@ release_chargeback_rate_payout_pauses:
   class: ReleaseChargebackRatePayoutPausesJob
   queue: low
   description: Lifts automatic chargeback-rate payout holds for sellers whose rate is back under the limit
+record_social_score_shadow_evaluations:
+  cron: "0 9 * * *" # UTC 09:00 daily, after the 07:30 chargeback-rate release so already-lifted holds aren't scored as held
+  class: RecordSocialScoreShadowEvaluationsJob
+  queue: low
+  description: Shadow-mode only — logs whether verified social signals WOULD have released each held payout (gumroad-private#2371); never releases anything
 expire_rental_purchases: # Duration: 45sec
   cron: "0 12 * * *" # UTC 12:00
   class: ExpireRentalPurchasesWorker
