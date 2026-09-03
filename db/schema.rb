@@ -239,6 +239,7 @@ ActiveRecord::Schema[7.1].define(version: 2026_12_09_113454) do
     t.datetime "follower_created_at", precision: nil
     t.datetime "min_affiliate_created_at", precision: nil
     t.datetime "max_affiliate_created_at", precision: nil
+    t.index ["email"], name: "idx_audience_on_email", length: 191
     t.index ["seller_id", "customer", "follower", "affiliate"], name: "idx_audience_on_seller_and_types"
     t.index ["seller_id", "email"], name: "index_audience_members_on_seller_id_and_email", unique: true
     t.index ["seller_id", "follower_created_at"], name: "idx_audience_on_seller_and_follower_created_at"
