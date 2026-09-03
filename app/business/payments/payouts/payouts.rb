@@ -65,7 +65,11 @@ class Payouts
       return false
     end
 
-    if user.payouts_paused?
+    if user.chargeback_rate_payout_reserve_active?
+      amount_payable -= chargeback_rate_reserve_cents(amount_payable)
+      account_balance = amount_payable + user.paid_payments_cents_for_date(date)
+      below_minimum = account_balance < minimum_payout_amount_cents
+    elsif user.payouts_paused?
       if add_comment
         payouts_paused_by = user.payouts_paused_by_source == User::PAYOUT_PAUSE_SOURCE_STRIPE ? "payout processor" : user.payouts_paused_by_source
         content = "Payout on #{payout_date} was skipped because payouts on the account were paused by the #{payouts_paused_by}."
@@ -148,6 +152,7 @@ class Payouts
       end
 
       amount_payable = user.instantly_payable_unpaid_balance_cents_up_to_date(date)
+      amount_payable -= chargeback_rate_reserve_cents(amount_payable) if user.chargeback_rate_payout_reserve_active?
       # Same $1 Instant floor as the processor — a $60 settled leftover with $100+ still
       # unpaid is payable now, not a settling skip. Weekly/monthly/quarterly keep MIN_AMOUNT_CENTS.
       if amount_payable < minimum_payout_amount_cents && add_comment && user.unpaid_balance_cents_up_to_date(date) >= minimum_payout_amount_cents
@@ -467,6 +472,7 @@ class Payouts
     if payout_processor.respond_to?(:filter_aggregate_payable_balances)
       payable_balances = payout_processor.filter_aggregate_payable_balances(user, payable_balances)
     end
+    payable_balances = apply_chargeback_rate_reserve(user, payable_balances)
 
     # Eligibility check and transition happen under the same lock, so only balances we
     # actually claim are returned.
@@ -480,4 +486,34 @@ class Payouts
     end
   end
   private_class_method :mark_balances_processing
+
+  # Cents held back so a payout never sends more than (100 - reserve)% of unpaid.
+  # Ceil so a 1-cent leftover cannot round the seller into a full payout.
+  def self.chargeback_rate_reserve_cents(unpaid_cents)
+    return 0 if unpaid_cents <= 0
+
+    (unpaid_cents * User::CHARGEBACK_RATE_PAYOUT_RESERVE_PERCENT / 100.0).ceil
+  end
+
+  # Oldest unpaid rows whose sum is at most 75% of the payable set. Do not split a row:
+  # a single balance larger than the cap stays unpaid this cycle.
+  def self.apply_chargeback_rate_reserve(user, balances)
+    return balances unless user.chargeback_rate_payout_reserve_active?
+
+    total = balances.sum(&:amount_cents)
+    cap = total - chargeback_rate_reserve_cents(total)
+    return [] if cap <= 0
+
+    selected = []
+    running = 0
+    balances.sort_by { |balance| [balance.date, balance.id] }.each do |balance|
+      next if balance.amount_cents <= 0
+      break if running + balance.amount_cents > cap
+
+      selected << balance
+      running += balance.amount_cents
+    end
+    selected
+  end
+  private_class_method :apply_chargeback_rate_reserve
 end

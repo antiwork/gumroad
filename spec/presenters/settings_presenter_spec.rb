@@ -736,6 +736,7 @@ describe SettingsPresenter do
         },
         payouts_paused_internally: false,
         payouts_paused_by: nil,
+        payout_reserve_percent: nil,
         payouts_paused_by_user: false,
         payout_threshold_cents: Payouts::MIN_AMOUNT_CENTS,
         minimum_payout_threshold_cents: Payouts::MIN_AMOUNT_CENTS,

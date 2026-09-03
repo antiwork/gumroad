@@ -28,6 +28,9 @@ module User::Risk
   # trailing window lets recent selling actually count, and the threshold moves up with it so the
   # change is a genuine loosening rather than a reshuffle.
   MAX_CHARGEBACK_RATE_ALLOWED_FOR_PAYOUTS = 1.5
+  # 25% rolling reserve while the chargeback-volume pause is on (Terms 11.3(b) fraction).
+  # Feature `:disable_chargeback_rate_payout_reserve` restores the old 100% skip.
+  CHARGEBACK_RATE_PAYOUT_RESERVE_PERCENT = 25
 
   # Only sales inside this trailing window count toward the payout gate's chargeback rate. Keep the
   # pause and the release measuring the identical window — a release that reads a different span
@@ -434,6 +437,14 @@ module User::Risk
                                   .last&.author_name
 
     last_pausing_author == SYSTEM_PAYOUT_PAUSE_COMMENT_AUTHORS[:high_chargeback_rate]
+  end
+
+  # True when the chargeback-volume hold should pay 75% and keep 25% unpaid, rather than skip.
+  # Other system pauses (repeated failed payouts) stay a full block.
+  def chargeback_rate_payout_reserve_active?
+    return false if Feature.active?(:disable_chargeback_rate_payout_reserve)
+
+    payouts_paused_for_chargeback_rate?
   end
 
   # Admin-callable: lifts an automatic refund-policy enforcement (see

@@ -211,6 +211,7 @@ type PaymentsPageProps = {
   formatted_balance_to_forfeit_on_payout_method_change: string | null;
   payouts_paused_internally: boolean;
   payouts_paused_by: "stripe" | "admin" | "system" | "user" | null;
+  payout_reserve_percent?: number | null;
   account_status: AccountStatus;
   payouts_paused_by_user: boolean;
   payout_threshold_cents: number;
@@ -1346,9 +1347,11 @@ export default function PaymentsPage() {
                     ? "Your payouts have been paused by Stripe."
                     : props.payouts_paused_by === "admin"
                       ? "Your payouts have been paused by Gumroad."
-                      : props.payouts_paused_by === "system"
-                        ? "Your payouts have been paused for a security review."
-                        : null
+                      : props.payouts_paused_by === "system" && props.payout_reserve_percent
+                        ? `We're holding ${props.payout_reserve_percent}% of your balance in reserve while your chargeback rate is above 1.5%. The rest pays out on the normal weekly schedule.`
+                        : props.payouts_paused_by === "system"
+                          ? "Your payouts have been paused for a security review."
+                          : null
                 }
               >
                 {payoutsPausedToggle}

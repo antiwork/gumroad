@@ -232,6 +232,7 @@ export type PayoutsProps = {
   processing_payout_periods_data: PayoutPeriodData[];
   payouts_status: "paused" | "payable";
   payouts_paused_by: "stripe" | "admin" | "system" | "user" | null;
+  payout_reserve_percent?: number | null;
   past_payout_period_data: PayoutPeriodData[];
   instant_payout: {
     instant_payout_fee_percent: number;
