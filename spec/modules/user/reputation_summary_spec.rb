@@ -107,5 +107,55 @@ describe User::ReputationSummary do
         expect(seller.seller_reputation_summary(exclude_product: product_one)).to be_nil
       end
     end
+
+    context "large catalogue (gumroad-private#2384)" do
+      before { Feature.activate_user(:seller_reputation_summary, seller) }
+
+      # The incident: an 11,633-product seller with zero nonzero review stats
+      # had EVERY product/profile view scan the whole catalogue join. The rollup
+      # must stay a single bounded aggregate regardless of catalogue size, and a
+      # large zero-review catalogue must still yield nil, not an O(catalogue)
+      # row materialisation per request.
+      # Regression for gumroad-private#2384: the read path must not materialise
+      # a ProductReviewStat/Link row per catalogue product, and the seller rollup
+      # must be a cache hit that issues NO review-stat query once warmed.
+      it "is a cache hit after warming, with no review-stat query issued" do
+        create_stat(product_one, five: 8)
+        create_stat(product_two, four: 4)
+        seller.bump_reputation_summary_version
+
+        # warm the cache
+        expect(seller.seller_reputation_summary).to eq(average: 4.7, count: 12, products_count: 2)
+
+        queries = []
+        callback = ->(_name, _started, _finished, _id, payload) { queries << payload[:sql] }
+        ::ActiveSupport::Notifications.subscribed(callback, "sql.active_record") do
+          3.times { expect(seller.seller_reputation_summary).to eq(average: 4.7, count: 12, products_count: 2) }
+        end
+
+        review_stat_queries = queries.count { |sql| sql.match?(/product_review_stats|JOIN\s+links/i) }
+        # Warm cache: no review-stat join should run at all on subsequent reads.
+        expect(review_stat_queries).to eq(0)
+      end
+
+      it "returns nil for a large zero-review catalogue" do
+        Array.new(230) { create(:product, user: seller) }
+        seller.bump_reputation_summary_version
+
+        expect(seller.seller_reputation_summary).to be_nil
+      end
+
+      it "invalidates the cached rollup when the write funnel bumps the seller version" do
+        create_stat(product_one, five: 8)
+        create_stat(product_two, four: 4)
+        expect(seller.seller_reputation_summary).to eq(average: 4.7, count: 12, products_count: 2)
+
+        seller.bump_reputation_summary_version
+        ProductReviewStat.find_by(link_id: product_one.id).update_with_added_rating(5)
+        seller.bump_reputation_summary_version
+
+        expect(seller.seller_reputation_summary[:count]).to eq(13)
+      end
+    end
   end
 end

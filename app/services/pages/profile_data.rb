@@ -64,30 +64,13 @@ class Pages::ProfileData
       seller.installments.visible_on_profile.cache_key_with_version,
       seller_profile&.cache_key_with_version,
       # Review writes touch product_review_stats, not links, so the products key
-      # above never moves when a rating lands; the flag state and this signature
-      # keep the cached seller_rating honest.
+      # above never moves when a rating lands; the flag state and this version
+      # (bumped by the review-stat write funnel) keep the cached seller_rating
+      # honest. The version is a Redis GET — the old signature recomputed the
+      # full review-stat SUM on every cache lookup (gumroad-private#2384).
       seller.reputation_summary_enabled?,
-      seller.reputation_summary_enabled? ? reputation_summary_cache_signature(seller) : nil,
+      seller.reputation_summary_enabled? ? seller.reputation_summary_cache_signature : nil,
     ].join("/")
-  end
-
-  # A digest of the values seller_reputation_summary aggregates, not a timestamp:
-  # updated_at has second precision, so two review-stat mutations in the same
-  # second would produce an identical maximum(:updated_at) and serve a stale
-  # cached rollup. Summing the actual counters changes whenever the rollup's
-  # output could change, regardless of how many writes land in one second.
-  #
-  # Scoped to match seller_reputation_summary's eligibility exactly (Link.alive.not_draft,
-  # reviews_count != 0, display_product_reviews flag) — otherwise a review-hidden or
-  # zero-review product's writes churn this cache key without changing seller_rating.
-  def self.reputation_summary_cache_signature(seller)
-    ProductReviewStat.joins(:link).merge(Link.alive.not_draft)
-      .where(links: { user_id: seller.id })
-      .where.not(reviews_count: 0)
-      .where(Arel.sql("links.flags & #{Link.flag_mapping["flags"][:display_product_reviews]} != 0"))
-      .pick(Arel.sql("SUM(reviews_count), SUM(ratings_of_one_count), SUM(ratings_of_two_count), " \
-                      "SUM(ratings_of_three_count), SUM(ratings_of_four_count), SUM(ratings_of_five_count), COUNT(*)"))
-      &.join(",")
   end
 
   def self.products(seller, base_url = seller.store_host_with_protocol, offset: 0, limit: MAX_ITEMS)

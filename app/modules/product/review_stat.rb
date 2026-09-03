@@ -30,6 +30,7 @@ module Product::ReviewStat
     else
       apply_rating_change_to_review_stat(product_review_stat, old_rating, new_rating)
     end
+    bump_seller_reputation_version
     enqueue_index_update_for_reviews
   end
 
@@ -63,6 +64,7 @@ module Product::ReviewStat
     elsif !product_review_stat.nil?
       product_review_stat.update!(data)
     end
+    bump_seller_reputation_version
   end
 
   def generate_review_stat_attributes
@@ -102,5 +104,12 @@ module Product::ReviewStat
 
     def enqueue_index_update_for_reviews
       enqueue_index_update_for(%w(average_rating reviews_count is_recommendable))
+    end
+
+    # Keep the seller's cached rollup honest after this product's review counters
+    # changed (they are the only input to the aggregate). Delegates to the seller
+    # so the flag-gate + Redis INCR live in one place (User::ReputationSummary).
+    def bump_seller_reputation_version
+      user.bump_reputation_summary_version
     end
 end
