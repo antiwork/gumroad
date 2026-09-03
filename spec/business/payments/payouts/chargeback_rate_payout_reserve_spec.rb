@@ -93,6 +93,26 @@ describe "chargeback-rate payout reserve" do
       end
     end
 
+    describe ".chargeback_rate_reserve_cents_for_run" do
+      it "anchors the 25 percent on unpaid plus what was already paid under the hold, so repeat runs cannot drain the reserve" do
+        seller = create(:user)
+        pause_for_chargeback_rate!(seller)
+        create(:payment_completed, user: seller, amount_cents: 75_00)
+
+        # $100 originally held: $75 paid on the first run, $25 remaining. The reserve is still
+        # 25% of $100, clamped to the $25 that is left — nothing more releases.
+        expect(described_class.chargeback_rate_reserve_cents_for_run(seller, 25_00)).to eq(25_00)
+      end
+
+      it "ignores payments made before the hold started" do
+        seller = create(:user)
+        create(:payment_completed, user: seller, amount_cents: 500_00, created_at: 2.days.ago)
+        pause_for_chargeback_rate!(seller)
+
+        expect(described_class.chargeback_rate_reserve_cents_for_run(seller, 100_00)).to eq(25_00)
+      end
+    end
+
     describe ".apply_chargeback_rate_reserve" do
       it "keeps the oldest rows whose sum is at most 75 percent and does not split a row" do
         seller = create(:user)
@@ -101,7 +121,7 @@ describe "chargeback-rate payout reserve" do
         middle = unpaid_balance(seller, cents: 30_00, on: Date.today - 5)
         newer = unpaid_balance(seller, cents: 30_00, on: Date.today - 2)
 
-        selected = described_class.send(:apply_chargeback_rate_reserve, seller, [newer, older, middle])
+        selected = described_class.send(:apply_chargeback_rate_reserve, seller, [newer, older, middle], minimum_cents: 0)
 
         expect(selected).to eq([older, middle])
         expect(selected.sum(&:amount_cents)).to eq(70_00)
@@ -113,7 +133,34 @@ describe "chargeback-rate payout reserve" do
         fat = unpaid_balance(seller, cents: 90_00, on: Date.today - 3)
         thin = unpaid_balance(seller, cents: 10_00, on: Date.today - 2)
 
-        selected = described_class.send(:apply_chargeback_rate_reserve, seller, [fat, thin])
+        selected = described_class.send(:apply_chargeback_rate_reserve, seller, [fat, thin], minimum_cents: 0)
+
+        expect(selected).to eq([])
+      end
+
+      it "pays nothing when whole-row selection stops below the payout minimum" do
+        seller = create(:user)
+        pause_for_chargeback_rate!(seller)
+        # Aggregate $200 clears the $100 minimum after the reserve ($150 cap), but only the
+        # $90 row fits under the cap once the $110 row cannot be split — $90 < $100 minimum.
+        small = unpaid_balance(seller, cents: 90_00, on: Date.today - 5)
+        big = unpaid_balance(seller, cents: 110_00, on: Date.today - 2)
+
+        selected = described_class.send(:apply_chargeback_rate_reserve, seller, [small, big], minimum_cents: 100_00)
+
+        expect(selected).to eq([])
+      end
+
+      it "releases nothing further on a later run once 75 percent has already been paid under the hold" do
+        seller = create(:user)
+        pause_for_chargeback_rate!(seller)
+        create(:payment_completed, user: seller, amount_cents: 75_00)
+        # Two rows, so a reserve recomputed from the $25 remainder (cap $18.75) would still
+        # select the $15 row — only the anchored reserve holds the whole remainder back.
+        remainder_old = unpaid_balance(seller, cents: 15_00, on: Date.today - 3)
+        remainder_new = unpaid_balance(seller, cents: 10_00, on: Date.today - 2)
+
+        selected = described_class.send(:apply_chargeback_rate_reserve, seller, [remainder_old, remainder_new], minimum_cents: 0)
 
         expect(selected).to eq([])
       end
@@ -122,7 +169,7 @@ describe "chargeback-rate payout reserve" do
         seller = create(:user)
         balances = [unpaid_balance(seller, cents: 40_00, on: Date.today - 2)]
 
-        expect(described_class.send(:apply_chargeback_rate_reserve, seller, balances)).to eq(balances)
+        expect(described_class.send(:apply_chargeback_rate_reserve, seller, balances, minimum_cents: 100_00)).to eq(balances)
       end
     end
   end

@@ -431,13 +431,22 @@ module User::Risk
     return false unless payouts_paused_internally?
     return false unless payouts_paused_by_source == PAYOUT_PAUSE_SOURCE_SYSTEM
 
-    last_pausing_author = comments.with_type_on_probation
-                                  .where(author_name: SYSTEM_PAYOUT_PAUSING_COMMENT_AUTHORS)
-                                  .order(:created_at, :id)
-                                  .last&.author_name
-
-    last_pausing_author == SYSTEM_PAYOUT_PAUSE_COMMENT_AUTHORS[:high_chargeback_rate]
+    last_system_payout_pause_comment&.author_name == SYSTEM_PAYOUT_PAUSE_COMMENT_AUTHORS[:high_chargeback_rate]
   end
+
+  # When the current chargeback-volume hold began. The reserve calculation anchors on this so
+  # payouts made under the hold keep counting toward the 25% base instead of shrinking it.
+  def chargeback_rate_payout_hold_started_at
+    last_system_payout_pause_comment&.created_at
+  end
+
+  def last_system_payout_pause_comment
+    comments.with_type_on_probation
+            .where(author_name: SYSTEM_PAYOUT_PAUSING_COMMENT_AUTHORS)
+            .order(:created_at, :id)
+            .last
+  end
+  private :last_system_payout_pause_comment
 
   # True when the chargeback-volume hold should pay 75% and keep 25% unpaid, rather than skip.
   # Other system pauses (repeated failed payouts) stay a full block.
