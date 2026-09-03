@@ -607,6 +607,7 @@ describe User::OmniauthCallbacksController do
     end
 
     it "records the YouTube channel on a signed-in user" do
+      Feature.activate_user(:youtube_connect, user)
       allow(controller).to receive(:logged_in_user).and_return(user)
       allow(YoutubeChannelFetcher).to receive(:new).and_return(instance_double(YoutubeChannelFetcher, fetch: channel))
 
@@ -629,10 +630,51 @@ describe User::OmniauthCallbacksController do
     end
 
     it "does not create a user from a YouTube connect" do
+      Feature.activate_user(:youtube_connect, user)
       allow(controller).to receive(:logged_in_user).and_return(user)
       allow(YoutubeChannelFetcher).to receive(:new).and_return(instance_double(YoutubeChannelFetcher, fetch: channel))
 
       expect { post :youtube }.not_to change { User.count }
+    end
+
+    it "does not connect when the youtube_connect flag is off" do
+      allow(controller).to receive(:logged_in_user).and_return(user)
+      fetcher = instance_double(YoutubeChannelFetcher)
+      allow(YoutubeChannelFetcher).to receive(:new).and_return(fetcher)
+
+      post :youtube
+
+      expect(YoutubeChannelFetcher).not_to have_received(:new)
+      expect(user.reload.youtube_identity).to be_nil
+      expect(flash[:alert]).to eq "YouTube connect is not available."
+      expect(response).to redirect_to profile_path
+    end
+
+    it "does not 500 when the channel fetch raises" do
+      Feature.activate_user(:youtube_connect, user)
+      allow(controller).to receive(:logged_in_user).and_return(user)
+      fetcher = instance_double(YoutubeChannelFetcher)
+      allow(YoutubeChannelFetcher).to receive(:new).and_return(fetcher)
+      allow(fetcher).to receive(:fetch).and_raise(Errno::ECONNRESET)
+
+      post :youtube
+
+      expect(response).to redirect_to profile_path
+      expect(flash[:alert]).to eq "Couldn't read a YouTube channel for that Google account."
+      expect(user.reload.youtube_identity).to be_nil
+    end
+  end
+
+  describe "#failure" do
+    it "redirects YouTube OAuth failures to profile instead of payments settings" do
+      user = create(:user)
+      allow(controller).to receive(:logged_in_user).and_return(user)
+      request.env["omniauth.error.strategy"] = instance_double(OmniAuth::Strategies::Youtube, name: "youtube")
+
+      get :failure, params: { error: "access_denied" }
+
+      expect(response).to redirect_to profile_path
+      expect(flash[:alert]).to eq "Couldn't connect YouTube. Please try again."
     end
   end
 end

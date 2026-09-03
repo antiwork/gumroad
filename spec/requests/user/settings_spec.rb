@@ -136,7 +136,7 @@ describe "User profile settings page", type: :system, js: true do
     it "saves connected or disconnected Twitter account" do
       visit profile_path
       expect(page).to have_button("Connect to X")
-      expect(page).to have_button("Connect to YouTube")
+      expect(page).not_to have_button("Connect to YouTube")
       OmniAuth.config.test_mode = true
       OmniAuth.config.mock_auth[:twitter] = OmniAuth::AuthHash.new JSON.parse(File.open("#{Rails.root}/spec/support/fixtures/twitter_omniauth.json").read)
       OmniAuth.config.before_callback_phase do |env|
@@ -151,6 +151,13 @@ describe "User profile settings page", type: :system, js: true do
       expect(page).to have_button("Connect to X")
       # Reset the before_callback_phase to avoid making other X tests flaky.
       OmniAuth.config.before_callback_phase = nil
+    end
+
+    it "shows Connect to YouTube when the youtube_connect flag is on" do
+      Feature.activate_user(:youtube_connect, @user)
+      visit profile_path
+
+      expect(page).to have_button("Connect to YouTube")
     end
 
     context "when logged user has role admin" do

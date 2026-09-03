@@ -42,4 +42,24 @@ describe YoutubeChannelFetcher do
   it "returns nil when the token is blank" do
     expect(described_class.new(nil).fetch).to be_nil
   end
+
+  it "omits handle when the channel has no custom URL" do
+    body = JSON.parse(channel_body)
+    body["items"][0]["snippet"].delete("customUrl")
+    stub_channel(body: body.to_json)
+    stub_playlist
+
+    expect(described_class.new(token).fetch["handle"]).to be_nil
+  end
+
+  it "logs the HTTP status and returns nil on non-2xx without the body or token" do
+    stub_channel(body: { error: { message: "accessNotConfigured" } }.to_json, status: 403)
+    logged = []
+    allow(Rails.logger).to receive(:error) { |msg| logged << msg.to_s }
+
+    expect(described_class.new(token).fetch).to be_nil
+    expect(logged.join).to include("HTTP 403")
+    expect(logged.join).not_to include("accessNotConfigured")
+    expect(logged.join).not_to include(token)
+  end
 end

@@ -26,17 +26,17 @@ class YoutubeChannelFetcher
       "video_count" => item.dig("statistics", "videoCount"),
       "last_posted_at" => last_upload_at(item),
     }
-  rescue HTTParty::Error, SocketError, Timeout::Error, JSON::ParserError => e
-    Rails.logger.error("YoutubeChannelFetcher failed: #{e.class}: #{e.message}")
+  rescue HTTParty::Error, SocketError, Timeout::Error, JSON::ParserError, Errno::ECONNRESET, OpenSSL::SSL::SSLError => e
+    Rails.logger.error("YoutubeChannelFetcher failed: #{e.class}")
     nil
   end
 
   private
     def handle_from(item)
       custom = item.dig("snippet", "customUrl")
-      return custom.delete_prefix("@").delete_prefix("/") if custom.present?
+      return if custom.blank?
 
-      item.dig("snippet", "title")
+      custom.delete_prefix("@").delete_prefix("/")
     end
 
     def last_upload_at(item)
@@ -57,7 +57,10 @@ class YoutubeChannelFetcher
         headers: { "Authorization" => "Bearer #{@access_token}" },
         timeout: 5,
       )
-      return unless response.success?
+      unless response.success?
+        Rails.logger.error("YoutubeChannelFetcher HTTP #{response.code}")
+        return
+      end
 
       response.parsed_response
     end

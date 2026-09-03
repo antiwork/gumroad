@@ -68,6 +68,9 @@ type ProfilePageProps = {
   editable_profile: ProfileEditorProps;
   profile_version: string;
   custom_html_pages_enabled: boolean;
+  youtube_connect_enabled: boolean;
+  youtube_connected: boolean;
+  youtube_handle: string | null;
   has_custom_landing_page: boolean;
   seller_fonts_css_source: string;
   username: string;
@@ -81,6 +84,9 @@ export default function SettingsPage() {
     editable_profile,
     profile_version,
     custom_html_pages_enabled,
+    youtube_connect_enabled,
+    youtube_connected,
+    youtube_handle,
     has_custom_landing_page,
     seller_fonts_css_source,
     username,
@@ -510,17 +516,17 @@ export default function SettingsPage() {
                       Connect to X
                     </SocialAuthButton>
                   )}
-                  {creatorProfile.youtube_handle ? (
+                  {youtube_connected ? (
                     <Button type="button" color="google" onClick={handleUnlinkYoutube}>
                       <Google pack="brands" className="size-5" />
-                      Disconnect {creatorProfile.youtube_handle} from YouTube
+                      Disconnect {youtube_handle ? `${youtube_handle} from YouTube` : "YouTube"}
                     </Button>
-                  ) : (
-                    <SocialAuthButton provider="google" href="/users/auth/youtube">
+                  ) : youtube_connect_enabled ? (
+                    <SocialAuthButton provider="google" href={Routes.user_youtube_omniauth_authorize_path()}>
                       <Google pack="brands" className="size-5" />
                       Connect to YouTube
                     </SocialAuthButton>
-                  )}
+                  ) : null}
                 </Fieldset>
               ) : null}
             </section>

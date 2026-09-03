@@ -1,4 +1,4 @@
-import { Pencil, Star, TwitterX } from "@boxicons/react";
+import { Pencil, Star, TwitterX, Youtube } from "@boxicons/react";
 import * as React from "react";
 
 import { CreatorProfile } from "$app/parsers/profile";
@@ -29,9 +29,10 @@ export const Layout = ({ creatorProfile, hideFollowForm, currencySelector, shown
   const appDomain = useAppDomain();
   const isDesktop = useIsAboveBreakpoint("lg");
   const hideSubscribeForm = hideFollowForm || Boolean(creatorProfile.hide_follow_form);
+  const youtubeChannelId = creatorProfile.youtube_channel_id;
 
   const headerButtons =
-    creatorProfile.can_edit || creatorProfile.twitter_handle || cartItemsCount ? (
+    creatorProfile.can_edit || creatorProfile.twitter_handle || youtubeChannelId || cartItemsCount ? (
       <div className="flex shrink-0 items-center gap-3 lg:ml-auto">
         {creatorProfile.can_edit ? (
           <NavigationButton color="filled" className="whitespace-nowrap" href={Routes.profile_url({ host: appDomain })}>
@@ -42,6 +43,16 @@ export const Layout = ({ creatorProfile, hideFollowForm, currencySelector, shown
         {creatorProfile.twitter_handle ? (
           <NavigationButton outline href={`https://twitter.com/${creatorProfile.twitter_handle}`} target="_blank">
             <TwitterX pack="brands" className="size-5" />
+          </NavigationButton>
+        ) : null}
+        {youtubeChannelId ? (
+          <NavigationButton
+            outline
+            href={`https://www.youtube.com/channel/${encodeURIComponent(youtubeChannelId)}`}
+            target="_blank"
+            aria-label="YouTube"
+          >
+            <Youtube pack="brands" className="size-5" />
           </NavigationButton>
         ) : null}
         <CartNavigationButton />
