@@ -66,8 +66,8 @@ class Payouts
     end
 
     # Instant / on-demand payouts stay fully skipped under the hold. Daily frequency
-    # also uses PAYOUT_TYPE_INSTANT; those sellers keep the pre-change 100% skip rather
-    # than unlocking a pull-funds-now path the UI does not advertise.
+    # also uses PAYOUT_TYPE_INSTANT here; returning false makes those sellers fall back
+    # to their scheduled weekly reserve payout rather than unlocking pull-funds-now.
     if user.chargeback_rate_payout_reserve_active? && payout_type != Payouts::PAYOUT_TYPE_INSTANT
       amount_payable = payable_cents_after_chargeback_rate_reserve(
         user, user.unpaid_balances_up_to_date(date), minimum_cents: minimum_payout_amount_cents
