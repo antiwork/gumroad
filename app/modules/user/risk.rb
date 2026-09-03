@@ -449,9 +449,12 @@ module User::Risk
   private :last_system_payout_pause_comment
 
   # True when the chargeback-volume hold should pay 75% and keep 25% unpaid, rather than skip.
-  # Other system pauses (repeated failed payouts) stay a full block.
+  # Other system pauses (repeated failed payouts) stay a full block. A seller's own pause
+  # on top of the hold also stays a full skip — payouts_paused_by_source still reports
+  # "system" when both are set, so this flag is what the UI and the payment path share.
   def chargeback_rate_payout_reserve_active?
     return false if Feature.active?(:disable_chargeback_rate_payout_reserve)
+    return false if payouts_paused_by_user?
 
     payouts_paused_for_chargeback_rate?
   end

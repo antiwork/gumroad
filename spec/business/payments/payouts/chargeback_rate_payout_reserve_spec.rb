@@ -46,6 +46,13 @@ describe "chargeback-rate payout reserve" do
       expect(seller.chargeback_rate_payout_reserve_active?).to eq(false)
     end
 
+    it "is off when the seller paused payouts themselves on top of the hold" do
+      pause_for_chargeback_rate!(seller)
+      seller.update!(payouts_paused_by_user: true)
+
+      expect(seller.chargeback_rate_payout_reserve_active?).to eq(false)
+    end
+
     it "is off when the kill switch is on" do
       pause_for_chargeback_rate!(seller)
       allow(Feature).to receive(:active?).and_call_original
@@ -92,6 +99,18 @@ describe "chargeback-rate payout reserve" do
         seller.update!(payouts_paused_by_user: true)
 
         expect(described_class.is_user_payable(seller, date, processor_type: PayoutProcessorType::STRIPE)).to eq(false)
+      end
+
+      it "still skips instant payouts under the chargeback-volume hold" do
+        seller = payable_stripe_seller
+        4.times { |i| unpaid_balance(seller, cents: 100_00, on: date - 5 + i) }
+        pause_for_chargeback_rate!(seller)
+
+        expect(
+          described_class.is_user_payable(
+            seller, date, processor_type: PayoutProcessorType::STRIPE, payout_type: Payouts::PAYOUT_TYPE_INSTANT
+          )
+        ).to eq(false)
       end
 
       it "skips when no whole unpaid row fits under the 75 percent cap" do
@@ -214,6 +233,25 @@ describe "chargeback-rate payout reserve" do
         balances = [unpaid_balance(seller, cents: 40_00, on: Date.today - 2)]
 
         expect(described_class.send(:apply_chargeback_rate_reserve, seller, balances, minimum_cents: 100_00)).to eq(balances)
+      end
+
+      it "uses the full unpaid pot as the cap even when selecting a processor-filtered slice" do
+        seller = create(:user)
+        pause_for_chargeback_rate!(seller)
+        stripe_row = unpaid_balance(seller, cents: 100_00, on: Date.today - 4)
+        unpaid_balance(seller, cents: 100_00, on: Date.today - 3)
+
+        # Slice is only the first rail's $100. Base is $200, so cap is $150 and the
+        # whole $100 row fits — a slice-only base would cap at $75 and skip it.
+        selected = described_class.send(
+          :apply_chargeback_rate_reserve,
+          seller,
+          [stripe_row],
+          minimum_cents: 0,
+          unpaid_cents: 200_00
+        )
+
+        expect(selected).to eq([stripe_row])
       end
     end
   end

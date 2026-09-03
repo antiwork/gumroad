@@ -65,17 +65,15 @@ class Payouts
       return false
     end
 
-    # User pause is independent of the internal chargeback hold. payouts_paused_by_source
-    # reports the internal source when both are set, so the reserve branch would otherwise
-    # pay 75% against an explicit seller pause (bank-account change, etc.).
-    if user.chargeback_rate_payout_reserve_active? && !user.payouts_paused_by_user?
-      unless payout_type == Payouts::PAYOUT_TYPE_INSTANT
-        amount_payable = payable_cents_after_chargeback_rate_reserve(
-          user, user.unpaid_balances_up_to_date(date), minimum_cents: minimum_payout_amount_cents
-        )
-        account_balance = amount_payable + user.paid_payments_cents_for_date(date)
-        below_minimum = account_balance < minimum_payout_amount_cents
-      end
+    # Instant / on-demand payouts stay fully skipped under the hold. Daily frequency
+    # also uses PAYOUT_TYPE_INSTANT; those sellers keep the pre-change 100% skip rather
+    # than unlocking a pull-funds-now path the UI does not advertise.
+    if user.chargeback_rate_payout_reserve_active? && payout_type != Payouts::PAYOUT_TYPE_INSTANT
+      amount_payable = payable_cents_after_chargeback_rate_reserve(
+        user, user.unpaid_balances_up_to_date(date), minimum_cents: minimum_payout_amount_cents
+      )
+      account_balance = amount_payable + user.paid_payments_cents_for_date(date)
+      below_minimum = account_balance < minimum_payout_amount_cents
     elsif user.payouts_paused?
       if add_comment
         payouts_paused_by = user.payouts_paused_by_source == User::PAYOUT_PAUSE_SOURCE_STRIPE ? "payout processor" : user.payouts_paused_by_source
@@ -159,11 +157,6 @@ class Payouts
       end
 
       amount_payable = user.instantly_payable_unpaid_balance_cents_up_to_date(date)
-      if user.chargeback_rate_payout_reserve_active? && !user.payouts_paused_by_user?
-        amount_payable = payable_cents_after_chargeback_rate_reserve(
-          user, user.instantly_payable_unpaid_balances_up_to_date(date), minimum_cents: minimum_payout_amount_cents
-        )
-      end
       # Same $1 Instant floor as the processor — a $60 settled leftover with $100+ still
       # unpaid is payable now, not a settling skip. Weekly/monthly/quarterly keep MIN_AMOUNT_CENTS.
       if amount_payable < minimum_payout_amount_cents && add_comment && user.unpaid_balance_cents_up_to_date(date) >= minimum_payout_amount_cents
@@ -484,7 +477,17 @@ class Payouts
       payable_balances = payout_processor.filter_aggregate_payable_balances(user, payable_balances)
     end
     minimum_cents = payout_type == Payouts::PAYOUT_TYPE_INSTANT ? StripePayoutProcessor::MINIMUM_INSTANT_PAYOUT_AMOUNT_CENTS : user.minimum_payout_amount_cents
-    payable_balances = apply_chargeback_rate_reserve(user, payable_balances, minimum_cents:)
+    if payout_type != Payouts::PAYOUT_TYPE_INSTANT
+      # Cap is 75% of ALL unpaid USD under the hold, not of this processor's slice.
+      # paid_cents_under_chargeback_rate_hold already counts every processor; using only
+      # the current rail's unpaid as `total` under-counts the pot after another rail paid.
+      payable_balances = apply_chargeback_rate_reserve(
+        user,
+        payable_balances,
+        minimum_cents:,
+        unpaid_cents: user.unpaid_balances_up_to_date(date).sum(&:amount_cents)
+      )
+    end
 
     # Eligibility check and transition happen under the same lock, so only balances we
     # actually claim are returned.
@@ -546,10 +549,13 @@ class Payouts
   # Stop at the first row that does not fit. Skipping it to take later smaller rows would pay
   # those now, raise paid_under_hold, and shrink the cap on the oversized oldest row so it
   # can never catch up. Waiting lets newer sales grow the pot until the oldest row itself fits.
-  def self.apply_chargeback_rate_reserve(user, balances, minimum_cents:)
+  #
+  # `unpaid_cents` is the reserve base (defaults to this slice). Payment selection is often
+  # processor-filtered; the 25% must still be of the whole unpaid pot plus paid-under-hold.
+  def self.apply_chargeback_rate_reserve(user, balances, minimum_cents:, unpaid_cents: nil)
     return balances unless user.chargeback_rate_payout_reserve_active?
 
-    total = balances.sum(&:amount_cents)
+    total = unpaid_cents.nil? ? balances.sum(&:amount_cents) : unpaid_cents
     cap = total - chargeback_rate_reserve_cents_for_run(user, total)
     return [] if cap <= 0
 
