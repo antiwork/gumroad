@@ -744,8 +744,8 @@ export default function PayoutsIndex() {
                 <strong>Your payouts have been paused by Gumroad.</strong>
               ) : payouts_paused_by === "system" && payout_reserve_percent ? (
                 <strong>
-                  We're holding {payout_reserve_percent}% of your balance in reserve while your chargeback rate is
-                  above 1.5%. The rest pays out on the normal weekly schedule.
+                  We're holding {payout_reserve_percent}% of your balance in reserve while your chargeback rate is above
+                  1.5%. The rest pays out on the normal weekly schedule.
                 </strong>
               ) : payouts_paused_by === "system" ? (
                 <strong>
