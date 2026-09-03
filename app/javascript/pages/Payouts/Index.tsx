@@ -244,9 +244,10 @@ const Period = ({ payoutPeriodData }: { payoutPeriodData: PayoutPeriodData }) =>
         ) : null}
         {"payout_reserve_cents" in payoutPeriodData &&
         payoutPeriodData.payout_reserve_cents != null &&
-        payoutPeriodData.payout_reserve_cents > 0 ? (
+        payoutPeriodData.payout_reserve_cents > 0 &&
+        payoutPeriodData.payout_reserve_percent != null ? (
           <CardContent>
-            <h4 className="grow font-bold">Held in reserve ({payoutPeriodData.payout_reserve_percent ?? 25}%)</h4>
+            <h4 className="grow font-bold">Held in reserve ({payoutPeriodData.payout_reserve_percent}%)</h4>
             <div>{formatNegativeDollarAmount(payoutPeriodData.payout_reserve_cents)}</div>
           </CardContent>
         ) : null}

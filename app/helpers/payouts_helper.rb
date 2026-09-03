@@ -74,8 +74,9 @@ module PayoutsHelper
         payout_period_data[:payout_cents] = Payouts.payable_cents_after_chargeback_rate_reserve(
           user, unpaid_balances, minimum_cents: user.minimum_payout_amount_cents
         )
-        # Seller-facing holdback for the breakdown: same 25% the payment path keeps unpaid.
-        payout_period_data[:payout_reserve_cents] = Payouts.chargeback_rate_reserve_cents_for_run(user, unpaid_cents)
+        # Dollars not going out this cycle under the reserve (25% policy + whole-row leftovers).
+        # unpaid - payable so the breakdown reconciles with the amount shown as the payout.
+        payout_period_data[:payout_reserve_cents] = unpaid_cents - payout_period_data[:payout_cents]
         payout_period_data[:payout_reserve_percent] = User::CHARGEBACK_RATE_PAYOUT_RESERVE_PERCENT
       else
         payout_period_data[:payout_cents] = user.unpaid_balance_cents_up_to_date(payout_period_end_date)

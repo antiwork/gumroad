@@ -590,6 +590,28 @@ describe PayoutsHelper do
       end
     end
 
+    it "holds unpaid minus payable when whole-row selection leaves more than 25% unpaid" do
+      travel_to(Time.find_zone("UTC").local(2015, 3, 1)) do
+        user = create(:user_with_compliance_info, user_risk_state: "compliant")
+        create(:ach_account, user:)
+        create(:merchant_account, user:)
+        # Three $100 rows: 25% of $300 is $75 (cap $225), so only two rows pay => $100 held.
+        3.times { |i| create(:balance, user:, amount_cents: 100_00, date: Date.new(2015, 2, 24) + i.days) }
+
+        user.update!(payouts_paused_internally: true, payouts_paused_by: User::PAYOUT_PAUSE_SOURCE_SYSTEM)
+        user.comments.create!(
+          content: "Payouts automatically paused due to chargeback rate.",
+          comment_type: Comment::COMMENT_TYPE_ON_PROBATION,
+          author_name: User::SYSTEM_PAYOUT_PAUSE_COMMENT_AUTHORS[:high_chargeback_rate]
+        )
+
+        data = self.payout_period_data(user)
+        expect(data[:payout_cents]).to eq(200_00)
+        expect(data[:payout_reserve_cents]).to eq(100_00)
+        expect(data[:payout_reserve_percent]).to eq(25)
+      end
+    end
+
     it "omits the reserve breakdown fields when the chargeback-rate reserve is not active" do
       travel_to(Time.find_zone("UTC").local(2015, 3, 1)) do
         user = create(:user)
