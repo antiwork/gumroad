@@ -498,15 +498,17 @@ class Payouts
       # The reserve chooses a global oldest-row prefix before each processor intersects it
       # with its own rail. Otherwise a newer PayPal/Stripe row can leapfrog an older row on
       # another rail, shrinking the future cap and starving the older balance.
+      # The minimum applies to that global prefix, matching the account-level check in
+      # is_user_payable — a rail's share can be under the minimum (as without the hold),
+      # but a per-rail floor would drop every slice of an eligible payout split across rails.
       reserve_selected_ids = apply_chargeback_rate_reserve(
         user,
         chargeback_rate_reserve_payable_balances(user, unpaid_balances),
-        minimum_cents: 0,
+        minimum_cents:,
         unpaid_cents: unpaid_balances.sum(&:amount_cents)
       ).map(&:id)
 
       payable_balances = payable_balances.select { |balance| reserve_selected_ids.include?(balance.id) }
-      payable_balances = [] if payable_balances.sum(&:amount_cents) < minimum_cents
     end
 
     # Eligibility check and transition happen under the same lock, so only balances we

@@ -393,6 +393,26 @@ describe "chargeback-rate payout reserve" do
         expect(older_other_rail.reload).to be_unpaid
         expect(newer_stripe_row.reload).to be_unpaid
       end
+
+      it "pays a rail's share below the minimum when the selected prefix as a whole clears it" do
+        seller = payable_stripe_seller
+        stripe_row = unpaid_balance(seller, cents: 60_00, on: date - 5)
+        paypal_row = unpaid_balance(seller, cents: 60_00, on: date - 4)
+        newer_paypal_row = unpaid_balance(seller, cents: 40_00, on: date - 3)
+        pause_for_chargeback_rate!(seller)
+        allow(StripePayoutProcessor).to receive(:is_balance_payable) { |balance| balance.id == stripe_row.id }
+        allow(StripePayoutProcessor).to receive(:filter_aggregate_payable_balances) { |_user, balances| balances }
+        allow(PaypalPayoutProcessor).to receive(:is_balance_payable) { |balance| [paypal_row.id, newer_paypal_row.id].include?(balance.id) }
+        stub_stripe_prepare!
+
+        # $160 unpaid, $40 reserve, $120 cap: the prefix is the two $60 rows, which clears the
+        # $100 minimum even though each rail's share is only $60. A per-rail floor pays nothing.
+        payment, payment_errors = described_class.create_payment(date.to_s, PayoutProcessorType::STRIPE, seller)
+
+        expect(payment_errors).to eq([])
+        expect(payment.balances.map(&:id)).to eq([stripe_row.id])
+        expect(newer_paypal_row.reload).to be_unpaid
+      end
     end
   end
 end
