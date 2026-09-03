@@ -487,6 +487,27 @@ describe "chargeback-rate payout reserve" do
         expect(paypal_payment.balances.map(&:id)).to eq([paypal_row.id])
         expect(newer_paypal_row.reload).to be_unpaid
       end
+
+      it "does not let a payment-less orphaned claim from another date pass the minimum" do
+        seller = payable_stripe_seller
+        # A processing balance with no Payment (payment.save! raised on an earlier run) must not
+        # credit a later date's minimum. Unpaid $240, orphan $60 in the reserve base → $75
+        # reserve, $165 cap: the $40 row fits but sits under the $100 minimum unless the orphan
+        # is (wrongly) credited toward it.
+        orphan = unpaid_balance(seller, cents: 60_00, on: date - 10)
+        orphan.mark_processing!
+        row = unpaid_balance(seller, cents: 40_00, on: date - 4)
+        unpaid_balance(seller, cents: 200_00, on: date - 3)
+        pause_for_chargeback_rate!(seller)
+        allow(StripePayoutProcessor).to receive(:is_balance_payable) { |balance| balance.id == row.id }
+        allow(StripePayoutProcessor).to receive(:filter_aggregate_payable_balances) { |_user, balances| balances }
+        stub_stripe_prepare!
+
+        payment = described_class.create_payment(date.to_s, PayoutProcessorType::STRIPE, seller)
+
+        expect(payment).to be_nil
+        expect(row.reload).to be_unpaid
+      end
     end
   end
 end

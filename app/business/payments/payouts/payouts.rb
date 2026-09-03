@@ -589,18 +589,18 @@ class Payouts
   private_class_method :paid_cents_under_chargeback_rate_hold
 
   # Cents another rail already claimed toward this payout date (balance USD cents, not the
-  # payout-currency amount), plus processing rows not yet attached to a Payment — the second
-  # rail can select while the first rail's Payment is still `creating`. Credited against the
-  # payout minimum only, never against the reserve cap.
+  # payout-currency amount), credited against the payout minimum only, never the reserve cap.
+  # Deliberately Payment-backed only — CREATING is enough, the row exists right after save!.
+  # Counting payment-less processing rows here would let a balance orphaned by a failed save!
+  # on an earlier date pass a later date's minimum; missing a concurrent rail still inside the
+  # claim-to-save gap just skips that share this cycle, the fail-closed direction.
   def self.claimed_cents_for_payout_date(user, date)
-    claimed_via_payments = user.payments.where(
+    user.payments.where(
       payout_period_end_date: date,
       state: [Payment::CREATING, Payment::PROCESSING, Payment::UNCLAIMED, Payment::COMPLETED]
     )
-                               .joins(:balances)
-                               .sum("balances.amount_cents")
-    claimed_without_payment = user.balances.processing.where.missing(:payments).sum(:amount_cents)
-    claimed_via_payments + claimed_without_payment
+        .joins(:balances)
+        .sum("balances.amount_cents")
   end
   private_class_method :claimed_cents_for_payout_date
 
