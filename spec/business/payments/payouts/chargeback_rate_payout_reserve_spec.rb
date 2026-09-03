@@ -328,6 +328,21 @@ describe "chargeback-rate payout reserve" do
         expect(selected).to eq([])
       end
 
+      it "credits cents already claimed this payout date toward the minimum" do
+        seller = create(:user)
+        pause_for_chargeback_rate!(seller)
+        # $100 pot, $25 reserve, $75 cap: only the $60 row fits. Alone it is under the $100
+        # minimum, but with $60 already claimed by another rail the date's total clears it.
+        row = unpaid_balance(seller, cents: 60_00, on: Date.today - 4)
+        newer = unpaid_balance(seller, cents: 40_00, on: Date.today - 3)
+
+        without_credit = described_class.send(:apply_chargeback_rate_reserve, seller, [row, newer], minimum_cents: 100_00, unpaid_cents: 100_00)
+        with_credit = described_class.send(:apply_chargeback_rate_reserve, seller, [row, newer], minimum_cents: 100_00, unpaid_cents: 100_00, paid_cents: 60_00)
+
+        expect(without_credit).to eq([])
+        expect(with_credit).to eq([row])
+      end
+
       it "releases nothing further on a later run once 75 percent has already been paid under the hold" do
         seller = create(:user)
         pause_for_chargeback_rate!(seller)
@@ -434,6 +449,33 @@ describe "chargeback-rate payout reserve" do
 
         expect(payment_errors).to eq([])
         expect(payment.balances.map(&:id)).to eq([stripe_row.id])
+        expect(newer_paypal_row.reload).to be_unpaid
+      end
+
+      it "pays the second rail's below-minimum share after the first rail claimed toward the same date" do
+        seller = payable_stripe_seller
+        seller.update!(payment_address: "reserve-paypal@example.com")
+        stripe_row = unpaid_balance(seller, cents: 60_00, on: date - 5)
+        paypal_row = unpaid_balance(seller, cents: 60_00, on: date - 4)
+        newer_paypal_row = unpaid_balance(seller, cents: 40_00, on: date - 3)
+        pause_for_chargeback_rate!(seller)
+        allow(StripePayoutProcessor).to receive(:is_balance_payable) { |balance| balance.id == stripe_row.id }
+        allow(StripePayoutProcessor).to receive(:filter_aggregate_payable_balances) { |_user, balances| balances }
+        allow(PaypalPayoutProcessor).to receive(:is_balance_payable) { |balance| [paypal_row.id, newer_paypal_row.id].include?(balance.id) }
+        stub_stripe_prepare!
+        allow(PaypalPayoutProcessor).to receive(:prepare_payment_and_set_amount) do |payment, balances|
+          payment.currency = Currency::USD
+          payment.amount_cents = balances.sum(&:holding_amount_cents)
+          []
+        end
+
+        described_class.create_payment(date.to_s, PayoutProcessorType::STRIPE, seller)
+        # Second rail re-selects from the $100 residual ($40 reserve of the $160 base leaves a
+        # $60 cap): its $60 share is under the $100 minimum alone, but the date's total clears it.
+        paypal_payment, paypal_errors = described_class.create_payment(date.to_s, PayoutProcessorType::PAYPAL, seller)
+
+        expect(paypal_errors).to eq([])
+        expect(paypal_payment.balances.map(&:id)).to eq([paypal_row.id])
         expect(newer_paypal_row.reload).to be_unpaid
       end
     end

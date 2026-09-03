@@ -70,7 +70,8 @@ class Payouts
     # to their scheduled weekly reserve payout rather than unlocking pull-funds-now.
     if user.chargeback_rate_payout_reserve_active? && payout_type != Payouts::PAYOUT_TYPE_INSTANT
       amount_payable = payable_cents_after_chargeback_rate_reserve(
-        user, user.unpaid_balances_up_to_date(date), minimum_cents: minimum_payout_amount_cents
+        user, user.unpaid_balances_up_to_date(date), minimum_cents: minimum_payout_amount_cents,
+        paid_cents: user.paid_payments_cents_for_date(date)
       )
       account_balance = amount_payable + user.paid_payments_cents_for_date(date)
       below_minimum = account_balance < minimum_payout_amount_cents
@@ -501,11 +502,14 @@ class Payouts
       # The minimum applies to that global prefix, matching the account-level check in
       # is_user_payable — a rail's share can be under the minimum (as without the hold),
       # but a per-rail floor would drop every slice of an eligible payout split across rails.
+      # paid_cents counts this date's earlier rail toward the minimum, as is_user_payable
+      # does — otherwise the second rail recomputes from the residual and skips its share.
       reserve_selected_ids = apply_chargeback_rate_reserve(
         user,
         chargeback_rate_reserve_payable_balances(user, unpaid_balances),
         minimum_cents:,
-        unpaid_cents: unpaid_balances.sum(&:amount_cents)
+        unpaid_cents: unpaid_balances.sum(&:amount_cents),
+        paid_cents: claimed_cents_for_payout_date(user, date)
       ).map(&:id)
 
       payable_balances = payable_balances.select { |balance| reserve_selected_ids.include?(balance.id) }
@@ -584,10 +588,26 @@ class Payouts
   end
   private_class_method :paid_cents_under_chargeback_rate_hold
 
+  # Cents another rail already claimed toward this payout date (balance USD cents, not the
+  # payout-currency amount), plus processing rows not yet attached to a Payment — the second
+  # rail can select while the first rail's Payment is still `creating`. Credited against the
+  # payout minimum only, never against the reserve cap.
+  def self.claimed_cents_for_payout_date(user, date)
+    claimed_via_payments = user.payments.where(
+      payout_period_end_date: date,
+      state: [Payment::CREATING, Payment::PROCESSING, Payment::UNCLAIMED, Payment::COMPLETED]
+    )
+                               .joins(:balances)
+                               .sum("balances.amount_cents")
+    claimed_without_payment = user.balances.processing.where.missing(:payments).sum(:amount_cents)
+    claimed_via_payments + claimed_without_payment
+  end
+  private_class_method :claimed_cents_for_payout_date
+
   # Same whole-row selection the payment path uses. Eligibility and the Payouts page must
   # not advertise aggregate 75% when no prefix of unpaid rows actually fits under the cap.
-  def self.payable_cents_after_chargeback_rate_reserve(user, balances, minimum_cents: 0)
-    apply_chargeback_rate_reserve(user, balances, minimum_cents:).sum(&:amount_cents)
+  def self.payable_cents_after_chargeback_rate_reserve(user, balances, minimum_cents: 0, paid_cents: 0)
+    apply_chargeback_rate_reserve(user, balances, minimum_cents:, paid_cents:).sum(&:amount_cents)
   end
 
   # Oldest unpaid rows whose sum is at most the payable set minus the reserve. Do not split a
@@ -601,7 +621,11 @@ class Payouts
   #
   # `unpaid_cents` is the reserve base (defaults to this slice). Payment selection is often
   # processor-filtered; the 25% must still be of the whole unpaid pot plus paid-under-hold.
-  def self.apply_chargeback_rate_reserve(user, balances, minimum_cents:, unpaid_cents: nil)
+  #
+  # `paid_cents` counts toward the minimum only: rails run sequentially, so the second rail
+  # re-selects from the residual pot and its share alone can sit under the minimum even though
+  # the payout date's total cleared it. Without the credit that share is stranded unpaid.
+  def self.apply_chargeback_rate_reserve(user, balances, minimum_cents:, unpaid_cents: nil, paid_cents: 0)
     return balances unless user.chargeback_rate_payout_reserve_active?
 
     total = unpaid_cents.nil? ? balances.sum(&:amount_cents) : unpaid_cents
@@ -617,7 +641,7 @@ class Payouts
       selected << balance
       running += balance.amount_cents
     end
-    return [] if running < minimum_cents
+    return [] if running + paid_cents < minimum_cents
 
     selected
   end
