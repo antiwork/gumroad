@@ -559,7 +559,9 @@ class Payouts
     # plus processing rows that have not been attached to a Payment yet. The seller
     # lock releases before create_payment, so the second rail must see the first
     # rail's claim even while its Payment is still `creating`.
-    paid_via_payments = user.payments.where(state: Payment::NON_TERMINAL_STATES)
+    paid_via_payments = user.payments.where(
+      state: [Payment::CREATING, Payment::PROCESSING, Payment::UNCLAIMED, Payment::COMPLETED]
+    )
                             .where("payments.created_at >= ?", hold_started_at)
                             .joins(:balances)
                             .sum("balances.amount_cents")
