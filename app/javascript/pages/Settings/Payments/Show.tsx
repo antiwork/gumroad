@@ -1247,7 +1247,11 @@ export default function PaymentsPage() {
         />
       ) : null}
       <form ref={formRef}>
-        <AccountStatusSection accountStatus={props.account_status} payoutsPausedBy={props.payouts_paused_by} />
+        <AccountStatusSection
+          accountStatus={props.account_status}
+          payoutsPausedBy={props.payouts_paused_by}
+          payoutReservePercent={props.payout_reserve_percent}
+        />
 
         {props.aus_backtax_details.show_au_backtax_prompt ? (
           <AusBackTaxesSection

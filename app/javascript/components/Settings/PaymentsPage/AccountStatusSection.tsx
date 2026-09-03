@@ -40,9 +40,11 @@ export type AccountStatus = {
 export default function AccountStatusSection({
   accountStatus,
   payoutsPausedBy,
+  payoutReservePercent,
 }: {
   accountStatus: AccountStatus;
   payoutsPausedBy: "stripe" | "admin" | "system" | "user" | null;
+  payoutReservePercent?: number | null;
 }) {
   if (!accountStatus.show_section) return null;
 
@@ -55,6 +57,12 @@ export default function AccountStatusSection({
     ) : payoutsPausedBy === "admin" ? (
       <>
         Your payouts have been paused by Gumroad.
+        <SupportLink />
+      </>
+    ) : payoutsPausedBy === "system" && payoutReservePercent ? (
+      <>
+        We're holding {payoutReservePercent}% of your balance in reserve while your chargeback rate is above 1.5%. The
+        rest pays out on the normal weekly schedule.
         <SupportLink />
       </>
     ) : payoutsPausedBy === "system" ? (
