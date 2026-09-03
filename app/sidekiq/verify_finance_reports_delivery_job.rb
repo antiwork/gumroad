@@ -24,10 +24,10 @@ class VerifyFinanceReportsDeliveryJob
   # shortly before this backstop) isn't flagged as missing.
   GRACE_PERIOD = 6.hours
   # A Redis read blip makes every completion key look missing. Re-enqueueing and
-  # emailing per fire then produces tens of false alerts and each :replace enqueue
-  # scans the Sidekiq scheduled set. Three distinct job classes missing in one tick
-  # is a read failure, not three independent missed reports.
-  MISS_STORM_CLASS_THRESHOLD = 3
+  # emailing per fire then produces tens of false alerts. The write/read probe
+  # below is the abort signal; a class-count heuristic is not — a real scheduler
+  # or deploy outage on the 1st legitimately misses several monthly jobs at once,
+  # which is the case this backstop exists to recover.
   READ_PROBE_REDIS_KEY = "finance_report_backstop_read_probe"
   # Set on the backstop's first ever run (which only records the baseline and checks
   # nothing). Fires from before this moment predate completion tracking — the runs may
@@ -69,13 +69,7 @@ class VerifyFinanceReportsDeliveryJob
       return
     end
 
-    misses = collect_misses(now, active_since)
-    missed_classes = misses.map { |miss| miss[:class_name] }.uniq
-    if missed_classes.size >= MISS_STORM_CLASS_THRESHOLD
-      abort_backstop("miss_storm", misses)
-      return
-    end
-
+    misses = confirm_still_missing(collect_misses(now, active_since))
     misses.each { |miss| reenqueue_and_alert(miss) }
   end
 
@@ -133,6 +127,22 @@ class VerifyFinanceReportsDeliveryJob
       $redis.get(READ_PROBE_REDIS_KEY) == token
     rescue
       false
+    end
+
+    # A GET-nil blip can mark a completed fire as missing. Re-probe Redis and
+    # re-read each miss before re-enqueueing; abort only when the probe itself fails.
+    def confirm_still_missing(misses)
+      return misses if misses.empty?
+
+      unless redis_reads_ok?
+        abort_backstop("redis_read_probe_failed", misses)
+        return []
+      end
+
+      misses.select do |miss|
+        last_completed_at = FinanceReportCompletionTracking.last_completed_at(miss[:class_name], miss[:args])
+        !(last_completed_at && last_completed_at >= miss[:fire_time])
+      end
     end
 
     def abort_backstop(reason, misses)

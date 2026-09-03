@@ -57,9 +57,11 @@ module StripeBalanceSummariesReport
   # Returns { csvs: { "Gumroad" => <csv string>, ... }, skipped: ["Flexile", ...] }.
   # `skipped` lists entities whose API key is not configured; a configured entity whose
   # reports fail raises instead, so Sidekiq retries (and the exhaustion alert) kick in.
-  def self.interval_for(month, year)
+  def self.interval_for(month, year, report_type: nil)
     month_start = Time.utc(year, month)
     month_end = month_start.next_month
+    return [month_start.to_i, month_end.to_i] unless report_type == "balance.summary.1"
+
     start_at = [month_start, DATA_AVAILABLE_FROM].max
     if start_at >= month_end
       raise ArgumentError, "Stripe balance.summary.1 has no data for #{month}/#{year} (data starts #{DATA_AVAILABLE_FROM.to_date})"
@@ -69,8 +71,6 @@ module StripeBalanceSummariesReport
   end
 
   def self.generate(month, year)
-    interval_start, interval_end = interval_for(month, year)
-
     csvs = {}
     skipped = []
     ENTITIES.each do |entity|
@@ -81,6 +81,7 @@ module StripeBalanceSummariesReport
       end
 
       raw_reports = REPORT_TYPES.index_with do |report_type|
+        interval_start, interval_end = interval_for(month, year, report_type:)
         run_report(api_key:, report_type:, interval_start:, interval_end:, usd_only: entity[:usd_only])
       end
       csvs[entity[:name]] = build_combined_csv(raw_reports)

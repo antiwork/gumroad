@@ -1,6 +1,6 @@
 <%= header_section("Finance report backstop aborted") %>
 <div>
-  <p>The daily backstop (<code>VerifyFinanceReportsDeliveryJob</code>) refused to treat completion keys as missing. Re-enqueueing would have produced a burst of false alerts (and each <code>on_conflict: :replace</code> enqueue scans the Sidekiq scheduled set).</p>
+  <p>The daily backstop (<code>VerifyFinanceReportsDeliveryJob</code>) refused to treat completion keys as missing because a Redis write/read probe failed. Re-enqueueing on a lying GET would produce a burst of false alerts.</p>
   <ul>
     <li>Reason: <code><%= @reason %></code></li>
     <li>Apparent misses: <%= @miss_count %></li>

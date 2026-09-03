@@ -279,7 +279,7 @@ describe VerifyFinanceReportsDeliveryJob do
     end
   end
 
-  it "does not re-enqueue a miss-storm of many job classes looking missing at once" do
+  it "re-enqueues several genuine misses in one tick rather than aborting on class count" do
     travel_to(backstop_run_time) do
       activate_backstop(at: Time.utc(2026, 6, 25))
       record_all_completions(backstop_run_time)
@@ -294,12 +294,34 @@ describe VerifyFinanceReportsDeliveryJob do
 
       described_class.new.perform
 
+      expect(SendFinancesReportWorker).to have_enqueued_sidekiq_job(6, 2026)
+      expect(SendDeferredRefundsReportWorker).to have_enqueued_sidekiq_job(6, 2026)
+      expect(UploadUsStatesSalesTaxToTaxjarJob).to have_enqueued_sidekiq_job("2026-06-30")
+      expect(AccountingMailer).not_to have_received(:finance_report_delivery_backstop_aborted)
+    end
+  end
+
+  it "does not re-enqueue a miss that a second Redis read finds completed" do
+    travel_to(backstop_run_time) do
+      activate_backstop(at: Time.utc(2026, 6, 25))
+      record_all_completions(backstop_run_time)
+      key = FinanceReportCompletionTracking.redis_key("SendFinancesReportWorker", [6, 2026])
+      stored = $redis.get(key)
+      reads = 0
+      allow($redis).to receive(:get).and_wrap_original do |orig, k, *rest|
+        if k == key
+          reads += 1
+          next stored if reads > 1
+          nil
+        else
+          orig.call(k, *rest)
+        end
+      end
+
+      described_class.new.perform
+
       expect(SendFinancesReportWorker.jobs).to be_empty
-      expect(SendDeferredRefundsReportWorker.jobs).to be_empty
-      expect(UploadUsStatesSalesTaxToTaxjarJob.jobs).to be_empty
       expect(AccountingMailer).not_to have_received(:finance_report_delivery_backstop_triggered)
-      expect(AccountingMailer).to have_received(:finance_report_delivery_backstop_aborted)
-        .with("miss_storm", 3, array_including("SendFinancesReportWorker", "SendDeferredRefundsReportWorker", "UploadUsStatesSalesTaxToTaxjarJob"))
     end
   end
 end
