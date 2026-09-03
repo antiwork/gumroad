@@ -168,4 +168,24 @@ describe User::ReputationSummary do
       end
     end
   end
+
+  describe "#bump_reputation_summary_version" do
+    before { Feature.activate_user(:seller_reputation_summary, seller) }
+
+    it "defers the bump to transaction commit so a concurrent read cannot cache pre-commit data" do
+      expect do
+        ActiveRecord::Base.transaction do
+          seller.bump_reputation_summary_version
+          expect(seller.reputation_summary_cache_signature).to eq(0)
+        end
+      end.to change { seller.reputation_summary_cache_signature }.by(1)
+    end
+
+    it "reports instead of raising when Redis is unavailable" do
+      allow($redis).to receive(:incr).and_raise(Redis::BaseError)
+      expect(ErrorNotifier).to receive(:notify).with(kind_of(Redis::BaseError), user_id: seller.id)
+
+      expect { seller.bump_reputation_summary_version }.not_to raise_error
+    end
+  end
 end

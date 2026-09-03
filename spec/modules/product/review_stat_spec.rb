@@ -226,6 +226,18 @@ describe Product::ReviewStat do
       expect(product.average_rating).to eq(2)
     end
 
+    it "bumps the seller reputation version when a purchase change removes or restores a counted review" do
+      product = create(:product)
+      Feature.activate_user(:seller_reputation_summary, product.user)
+      purchase = create(:purchase, link: product)
+      create(:product_review, purchase:, rating: 2)
+
+      expect { purchase.update!(stripe_refunded: true) }
+        .to change { product.user.reputation_summary_cache_signature }
+      expect { purchase.update!(stripe_refunded: false) }
+        .to change { product.user.reputation_summary_cache_signature }
+    end
+
     it "does nothing if there are no purchase changes" do
       product = create(:product)
       purchase = create(:purchase, link: product)

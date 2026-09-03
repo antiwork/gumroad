@@ -65,9 +65,8 @@ class Pages::ProfileData
       seller_profile&.cache_key_with_version,
       # Review writes touch product_review_stats, not links, so the products key
       # above never moves when a rating lands; the flag state and this version
-      # (bumped by the review-stat write funnel) keep the cached seller_rating
-      # honest. The version is a Redis GET — the old signature recomputed the
-      # full review-stat SUM on every cache lookup (gumroad-private#2384).
+      # (a Redis GET, bumped by the review-stat write funnel) keep the cached
+      # seller_rating honest.
       seller.reputation_summary_enabled?,
       seller.reputation_summary_enabled? ? seller.reputation_summary_cache_signature : nil,
     ].join("/")

@@ -1,17 +1,10 @@
 # frozen_string_literal: true
 
-# Seller-level rating rollup over per-product review stats. Everything here is
-# gated on the :seller_reputation_summary Flipper via reputation_summary_enabled?.
-#
-# Performance (gumroad-private#2384): the old read materialised every matching
-# ProductReviewStat + Link row into Ruby on every product/profile request and
-# iterated them, so an enumerating crawl over an 11k-product catalogue saturated
-# the DB master. The rollup is now computed once per seller per version bump as
-# a single SQL aggregate (bounded memory, one row back), then served from the
-# shared Rails cache. The per-seller version is bumped by the review-stat write
-# funnel (the only code that changes a product's review counters), so a product
-# /profile view is an O(1) cache read, and exclude_product subtracts one product's
-# stored stat rather than re-scanning the catalogue.
+# Seller-level rating rollup over per-product review stats, served as one
+# cached SQL aggregate keyed by a Redis version that the review-stat write
+# funnel bumps (gumroad-private#2384: the per-request scan of an 11k-product
+# catalogue saturated the DB master). Gated on the :seller_reputation_summary
+# Flipper via reputation_summary_enabled?.
 module User::ReputationSummary
   # Below these the rollup reads as noise, not signal (gumroad-private#1669).
   # Product-owned numbers: change them in one line, not by redesign.
@@ -27,26 +20,28 @@ module User::ReputationSummary
   # forever.
   CACHE_TTL = 10.minutes
 
-  # Bump the seller's rollup version. Product::ReviewStat calls this (via the
-  # link) after a review rank changed — it is the ONE writer of a product's
-  # review stats, so bumping here keeps every seller rollup honest while
-  # staying cheap (a Redis INCR, no DB scan). No-op when the flag is off or
-  # the seller is unknown.
+  # Called from the review-stat write funnel, which runs inside the review's
+  # transaction — defer the INCR to commit so a concurrent reader cannot fill
+  # the new version's cache slot from pre-commit counters. Redis being down
+  # must not roll back the review itself; the TTL bounds the staleness.
   def bump_reputation_summary_version
     return unless reputation_summary_enabled?
 
-    $redis.incr(reputation_version_key)
-    $redis.expire(reputation_version_key, CACHE_TTL + 60)
+    AfterCommitEverywhere.after_commit do
+      $redis.incr(reputation_version_key)
+      $redis.expire(reputation_version_key, CACHE_TTL + 60)
+    rescue Redis::BaseError, RedisClient::Error => e
+      ErrorNotifier.notify(e, user_id: id)
+    end
   end
 
   def reputation_summary_enabled?
     Feature.active?(:seller_reputation_summary, self)
   end
 
-  # Cheap (Redis GET) per-seller version bumped by the review-stat write funnel
-  # (bump_reputation_summary_version). Read by Pages::ProfileData so its cache
-  # key moves on a review write WITHOUT a scan of the review-stat join — the
-  # old signature recomputed the full SUM on every cache lookup (gp#2384).
+  # Cheap (Redis GET) per-seller version bumped by the review-stat write
+  # funnel; lets Pages::ProfileData move its cache key on a review write
+  # without scanning the review-stat join.
   def reputation_summary_cache_signature
     $redis.get(reputation_version_key).to_i
   end
