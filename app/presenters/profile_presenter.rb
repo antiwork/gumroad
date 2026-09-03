@@ -33,14 +33,9 @@ class ProfilePresenter
   end
 
   def profile_props(seller_custom_domain_url:, request:)
-    # editing: false keeps the public profile on the visitor section shape - the inline editor moved
-    # to /profile, so the public component no longer renders the owner/editing shape. The real viewer
-    # is still passed through, so "you own this", "already following this wishlist", and currency
-    # reflect them (including the seller viewing their own page).
-    # include_default_products_section only applies to the public page: creators with products
-    # but no saved sections get a virtual products section instead of a bare email signup box.
-    # The profile editor (profile_settings_props below) never asks for it, so the editing
-    # experience is unchanged.
+    # Public page uses the visitor section shape (inline editor lives at /profile).
+    # include_default_products_section synthesizes a products section when the creator
+    # has products but no saved sections; the editor never requests it.
     shared_profile_props(seller_custom_domain_url:, request:, editing: false, include_default_products_section: true).merge(creator_profile:, seller_analytics:)
   end
 
@@ -128,18 +123,10 @@ class ProfilePresenter
       ProfileSectionsPresenter.new(seller:, query: seller.seller_profile_sections.on_profile)
     end
 
-    # Seller GA/pixels never fired on the profile: startTrackingForSeller is only
-    # called from product/checkout surfaces (#5676). These props let Users/Show
-    # boot the account-scoped tracking. The GA/FB/TikTok pixels stay gated on the
-    # gr:*:enabled meta tags the frontend already checks via shouldTrack(), so
-    # this only supplies the ids for them. The universal raw-snippet iframe has
-    # NO shouldTrack() guard (addProfileThirdPartyAnalytics appends it directly),
-    # so its enablement must be honored server-side here — mirroring the custom
-    # HTML path's analytics_enabled?(seller:) gate (production/staging only, plus
-    # the seller's disable_third_party_analytics opt-out). Universal snippets are
-    # limited to location "all": "product"/"receipt" scope a snippet to the
-    # purchase flow, which a profile is not. The snippet iframe URL is
-    # username-based, so it's only offered when a username exists.
+    # Profile tracking props for Users/Show. Pixel ids only — shouldTrack() still gates
+    # GA/FB/TikTok. Universal snippet iframe has no shouldTrack() guard, so enablement
+    # is server-side here (third_party_analytics_enabled?). Location "all" only;
+    # snippet URL is username-based.
     def seller_analytics
       {
         seller_id: seller.external_id,
