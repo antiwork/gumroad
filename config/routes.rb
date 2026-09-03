@@ -593,6 +593,12 @@ Rails.application.routes.draw do
                path_names: { password: "forgot_password" })
 
     devise_scope :user do
+      # OmniAuth otherwise only invokes #failure via middleware. A real route
+      # lets the YouTube deny-path (and its controller spec) hit the action.
+      match "/users/auth/failure",
+            to: "user/omniauth_callbacks#failure",
+            via: [:get, :post]
+
       get "signup", to: "signup#new", as: :signup
       post "signup", to: "signup#create"
       post "save_to_library", to: "signup#save_to_library", as: :save_to_library
