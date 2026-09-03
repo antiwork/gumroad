@@ -81,7 +81,8 @@ module PayoutsHelper
       else
         payout_period_data[:payout_cents] = user.unpaid_balance_cents_up_to_date(payout_period_end_date)
       end
-      payout_period_data[:payout_displayed_amount] = formatted_dollar_amount(payout_period_data[:payout_cents])
+      # Always show cents so the total matches the breakdown lines above it ($300.00, not $300).
+      payout_period_data[:payout_displayed_amount] = formatted_dollar_amount(payout_period_data[:payout_cents], no_cents_if_whole: false)
       payout_period_data[:payout_date_formatted] = formatted_payout_date(user.next_payout_date)
       payout_period_data[:type] = if user.payout_frequency == User::DAILY && Payouts.is_user_payable(user, payout_period_end_date, payout_type: Payouts::PAYOUT_TYPE_INSTANT)
         Payouts::PAYOUT_TYPE_INSTANT
@@ -155,7 +156,7 @@ module PayoutsHelper
     payout_period_data[:payout_date_formatted] = formatted_payout_date(payment.created_at)
     payout_period_data[:payout_currency] = payment.currency
     payout_period_data[:payout_cents] = payment.amount_cents
-    payout_period_data[:payout_displayed_amount] = payment.displayed_amount
+    payout_period_data[:payout_displayed_amount] = payment.displayed_amount(no_cents_if_whole: false)
     payout_period_data[:is_processing] = payment.processing?
     payout_period_data[:arrival_date] = payment.arrival_date ? formatted_payout_date(Time.zone.at(payment.arrival_date)) : nil
     payout_period_data[:status] = payment.state

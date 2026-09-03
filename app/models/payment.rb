@@ -151,8 +151,8 @@ class Payment < ApplicationRecord
     send("mark_#{state}!")
   end
 
-  def displayed_amount
-    Money.new(amount_cents, currency).format(no_cents_if_whole: true, symbol: true, with_currency: currency != Currency::USD)
+  def displayed_amount(no_cents_if_whole: true)
+    Money.new(amount_cents, currency).format(no_cents_if_whole:, symbol: true, with_currency: currency != Currency::USD)
   end
 
   def credits

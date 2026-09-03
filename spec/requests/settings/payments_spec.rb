@@ -6677,6 +6677,12 @@ describe("Payments Settings Scenario", type: :system, js: true) do
 
         expect(page).to have_status(text: "We're holding 25% of your balance in reserve while your chargeback rate is above 1.5%. The rest pays out on the normal weekly schedule.")
         expect(page).not_to have_text("paused for a security review")
+
+        within_section "Payout schedule", section_element: :section do
+          toggle = find_field("Pause payouts", disabled: true, checked: true)
+          toggle.hover
+          expect(toggle).to have_tooltip(text: "Payout pausing is managed automatically while the reserve hold is active.")
+        end
       end
 
       it "shows the warning notice when payouts are paused by the user" do

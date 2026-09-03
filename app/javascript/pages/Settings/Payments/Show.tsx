@@ -1352,7 +1352,7 @@ export default function PaymentsPage() {
                     : props.payouts_paused_by === "admin"
                       ? "Your payouts have been paused by Gumroad."
                       : props.payouts_paused_by === "system" && props.payout_reserve_percent
-                        ? `We're holding ${props.payout_reserve_percent}% of your balance in reserve while your chargeback rate is above 1.5%. The rest pays out on the normal weekly schedule.`
+                        ? "Payout pausing is managed automatically while the reserve hold is active."
                         : props.payouts_paused_by === "system"
                           ? "Your payouts have been paused for a security review."
                           : null
