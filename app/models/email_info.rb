@@ -65,6 +65,13 @@ class EmailInfo < ApplicationRecord
     end
     return 0
   LUA
+  ACK_INFLIGHT_LUA = <<~LUA
+    if redis.call("GET", KEYS[1]) == ARGV[1] then
+      redis.call("DEL", KEYS[2])
+      return 1
+    end
+    return 0
+  LUA
   RELEASE_FLUSH_LOCK_LUA = <<~LUA
     if redis.call("GET", KEYS[1]) == ARGV[1] then
       return redis.call("DEL", KEYS[1])
@@ -102,7 +109,7 @@ class EmailInfo < ApplicationRecord
     begin
       loop do
         break if chunks >= MAX_FLUSH_CHUNKS
-        renew_flush_lock!(lock_key, token)
+        break unless renew_flush_lock!(lock_key, token)
 
         raw = $redis.lrange(inflight_key, 0, -1)
         if raw.blank?
@@ -110,8 +117,13 @@ class EmailInfo < ApplicationRecord
         end
         break if raw.blank?
 
-        apply_delivered_chunk!(raw.map { JSON.parse(_1) }) { renew_flush_lock!(lock_key, token) }
-        $redis.del(inflight_key)
+        lost_lock = false
+        apply_delivered_chunk!(raw.map { JSON.parse(_1) }) do
+          renew_flush_lock!(lock_key, token).tap { |held| lost_lock = true unless held }
+        end
+        break if lost_lock
+
+        $redis.eval(ACK_INFLIGHT_LUA, keys: [lock_key, inflight_key], argv: [token])
         chunks += 1
       end
     ensure
@@ -120,12 +132,12 @@ class EmailInfo < ApplicationRecord
   end
 
   def self.renew_flush_lock!(lock_key, token)
-    $redis.eval(RENEW_FLUSH_LOCK_LUA, keys: [lock_key], argv: [token, FLUSH_LOCK_TTL.to_i])
+    $redis.eval(RENEW_FLUSH_LOCK_LUA, keys: [lock_key], argv: [token, FLUSH_LOCK_TTL.to_i]).to_i == 1
   end
 
   def self.apply_delivered_chunk!(records)
     records.group_by { _1["i"] }.each do |installment_id, group|
-      yield if block_given?
+      return if block_given? && !yield
 
       delivered_at_by_purchase = group.each_with_object({}) do |record, acc|
         acc[record["p"]] = [acc[record["p"]], record["t"]].compact.min

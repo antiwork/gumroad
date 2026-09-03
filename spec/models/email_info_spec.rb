@@ -112,6 +112,21 @@ describe EmailInfo do
       expect { EmailInfo.flush_delivered_buffer! }.not_to raise_error
     end
 
+    it "does not delete inflight after losing the flush lock" do
+      email_info = create(:creator_contacting_customers_email_info_sent, installment: installment_a)
+      buffer(email_info)
+      allow(EmailInfo).to receive(:apply_delivered_chunk!).and_wrap_original do |original, *args, &blk|
+        $redis.set(RedisKey.email_info_delivered_flush_lock, "stolen", ex: 60)
+        original.call(*args, &blk)
+      end
+
+      EmailInfo.flush_delivered_buffer!
+
+      expect($redis.llen(RedisKey.email_info_delivered_inflight)).to eq(1)
+    ensure
+      $redis.del(RedisKey.email_info_delivered_flush_lock, RedisKey.email_info_delivered_inflight)
+    end
+
     it "leaves the buffer untouched when another flush holds the lock" do
       email_info = create(:creator_contacting_customers_email_info_sent, installment: installment_a)
       buffer(email_info)
