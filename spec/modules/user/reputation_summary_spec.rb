@@ -138,9 +138,10 @@ describe User::ReputationSummary do
         expect(review_stat_queries).to eq(0)
       end
 
-      # gumroad-private#2388: the aggregate must stay driven by the seller's
-      # indexed links set, not FROM product_review_stats.
-      it "drives the aggregate from links, not product_review_stats" do
+      # gumroad-private#2388: FROM order does not constrain the optimizer —
+      # the STRAIGHT_JOIN hint is what pins links as the driving table, so
+      # pin the hint itself.
+      it "pins links as the driving table via STRAIGHT_JOIN" do
         create_stat(product_one, five: 8)
         create_stat(product_two, four: 4)
         seller.bump_reputation_summary_version
@@ -153,8 +154,7 @@ describe User::ReputationSummary do
 
         aggregate_sql = queries.find { |sql| sql.include?("product_review_stats") && sql.include?("SUM") }
         expect(aggregate_sql).to be_present
-        expect(aggregate_sql).to match(/FROM\s+`links`/i)
-        expect(aggregate_sql).not_to match(/FROM\s+`product_review_stats`/i)
+        expect(aggregate_sql).to match(/FROM\s+`links`\s+STRAIGHT_JOIN\s+product_review_stats/i)
       end
 
       it "returns nil for a large zero-review catalogue" do
