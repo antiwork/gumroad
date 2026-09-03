@@ -74,11 +74,8 @@ module User::ReputationSummary
     # first MySQL scans it and probes links per row (gumroad-private#2388).
     # FROM order alone does not constrain MySQL's join order — the
     # STRAIGHT_JOIN hint is what pins links as the driving table.
-    # FORCE INDEX pins the access path on that table: on the production
-    # primary the optimizer chose a full scan of links (~9M rows, type ALL)
-    # for an 11k-product seller even with STRAIGHT_JOIN in place, so the
-    # page still hit the 120s timeout. Same query on the replica used
-    # index_links_on_user_id and returned in 72ms.
+    # FORCE INDEX pins the links access path: the production primary chose a
+    # full-table scan even with STRAIGHT_JOIN, timing out large catalogues.
     def reputation_aggregate
       Rails.cache.fetch(reputation_cache_key, expires_in: CACHE_TTL) do
         products_count, total, weighted = Link.alive.not_draft
