@@ -463,7 +463,14 @@ class Payouts
       payment_address: (user.paypal_payout_email if processor_type == ::PayoutProcessorType::PAYPAL),
       bank_account: (user.active_bank_account if processor_type != ::PayoutProcessorType::PAYPAL)
     )
-    payment.save!
+    begin
+      payment.save!
+    rescue
+      # A claimed row with no Payment would inflate the reserve base forever while never
+      # crediting the payout minimum. Return it to unpaid, as mark_failed does.
+      balances.each(&:mark_unpaid!)
+      raise
+    end
     payment_errors = payout_processor.prepare_payment_and_set_amount(payment, balances)
     # The payout processor can mark the payment as failed while preparing it (for example when
     # no valid merchant account exists, or a balance's holding currency does not match the payout

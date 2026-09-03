@@ -266,6 +266,24 @@ describe "chargeback-rate payout reserve" do
         expect(described_class.chargeback_rate_reserve_cents_for_run(seller, 250_00)).to eq(250_00)
       end
 
+      it "returns claimed balances to unpaid when the Payment fails to save, so an orphan cannot inflate the reserve" do
+        seller = payable_stripe_seller
+        pause_for_chargeback_rate!(seller)
+        date = Date.today - 1
+        4.times { |i| unpaid_balance(seller, cents: 100_00, on: date - 5 + i) }
+        allow(StripePayoutProcessor).to receive(:is_balance_payable).and_return(true)
+        allow_any_instance_of(Payment).to receive(:save!).and_raise(ActiveRecord::RecordNotSaved.new("boom"))
+
+        expect do
+          described_class.create_payment(date.to_s, PayoutProcessorType::STRIPE, seller)
+        end.to raise_error(ActiveRecord::RecordNotSaved)
+
+        expect(seller.balances.processing.count).to eq(0)
+        expect(seller.balances.unpaid.sum(:amount_cents)).to eq(400_00)
+        # An orphaned $300 claim would make this 25% of $700 = $175 instead of $100.
+        expect(described_class.chargeback_rate_reserve_cents_for_run(seller, 400_00)).to eq(100_00)
+      end
+
       it "counts in-flight processing balances before a Payment row exists" do
         seller = create(:user)
         pause_for_chargeback_rate!(seller)
