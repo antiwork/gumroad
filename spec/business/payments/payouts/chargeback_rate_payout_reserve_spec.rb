@@ -67,7 +67,8 @@ describe "chargeback-rate payout reserve" do
       it "holds 25 percent, rounding up so a payout cannot send more than 75 percent" do
         expect(described_class.chargeback_rate_reserve_cents(0)).to eq(0)
         expect(described_class.chargeback_rate_reserve_cents(100_00)).to eq(25_00)
-        expect(described_class.chargeback_rate_reserve_cents(199_084)).to eq(49_771)
+        # 100_01 * 25% = 2500.25; ceil is 2501. floor/to_i/round all give 2500.
+        expect(described_class.chargeback_rate_reserve_cents(100_01)).to eq(25_01)
       end
     end
 
@@ -167,9 +168,12 @@ describe "chargeback-rate payout reserve" do
 
       it "ignores payments made before the hold started" do
         seller = create(:user)
-        create(:payment_completed, user: seller, amount_cents: 500_00, created_at: 2.days.ago)
+        paid_row = unpaid_balance(seller, cents: 500_00, on: Date.today - 10)
+        payment = create(:payment_completed, user: seller, amount_cents: 500_00, created_at: 2.days.ago)
+        payment.balances << paid_row
         pause_for_chargeback_rate!(seller)
 
+        # Unanchored would count the $500 too: min(25% of $600, $100) = $100.
         expect(described_class.chargeback_rate_reserve_cents_for_run(seller, 100_00)).to eq(25_00)
       end
     end
@@ -252,6 +256,47 @@ describe "chargeback-rate payout reserve" do
         )
 
         expect(selected).to eq([stripe_row])
+      end
+    end
+
+    describe ".create_payment under the hold" do
+      let(:date) { Date.today - 1 }
+
+      def stub_stripe_prepare!
+        allow(StripePayoutProcessor).to receive(:prepare_payment_and_set_amount) do |payment, balances|
+          payment.currency = Currency::USD
+          payment.amount_cents = balances.sum(&:holding_amount_cents)
+          []
+        end
+      end
+
+      it "claims 75 percent of unpaid Stripe rows on the payment path" do
+        seller = payable_stripe_seller
+        4.times { |i| unpaid_balance(seller, cents: 100_00, on: date - 5 + i) }
+        pause_for_chargeback_rate!(seller)
+        allow(StripePayoutProcessor).to receive(:is_balance_payable).and_return(true)
+        stub_stripe_prepare!
+
+        payment, payment_errors = described_class.create_payment(date.to_s, PayoutProcessorType::STRIPE, seller)
+
+        expect(payment_errors).to eq([])
+        expect(payment.balances.sum(&:amount_cents)).to eq(300_00)
+        expect(seller.balances.unpaid.sum(:amount_cents)).to eq(100_00)
+      end
+
+      it "selects a processor slice using the full unpaid pot as the cap" do
+        seller = payable_stripe_seller
+        stripe_row = unpaid_balance(seller, cents: 100_00, on: date - 4)
+        other_row = unpaid_balance(seller, cents: 100_00, on: date - 3)
+        pause_for_chargeback_rate!(seller)
+        allow(StripePayoutProcessor).to receive(:is_balance_payable) { |balance| balance.id == stripe_row.id }
+        stub_stripe_prepare!
+
+        payment, payment_errors = described_class.create_payment(date.to_s, PayoutProcessorType::STRIPE, seller)
+
+        expect(payment_errors).to eq([])
+        expect(payment.balances.map(&:id)).to eq([stripe_row.id])
+        expect(other_row.reload).to be_unpaid
       end
     end
   end

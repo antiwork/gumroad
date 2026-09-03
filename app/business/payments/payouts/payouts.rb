@@ -468,6 +468,17 @@ class Payouts
   end
 
   def self.mark_balances_processing(date, processor_type, user, payout_type: Payouts::PAYOUT_TYPE_STANDARD)
+    # Seller lock while the hold is live: two processor jobs can otherwise both read the
+    # same unpaid total, pick disjoint rails under the same 75% cap, and pay 100%.
+    if user.chargeback_rate_payout_reserve_active? && payout_type != Payouts::PAYOUT_TYPE_INSTANT
+      user.with_lock { select_and_claim_payable_balances(date, processor_type, user, payout_type:) }
+    else
+      select_and_claim_payable_balances(date, processor_type, user, payout_type:)
+    end
+  end
+  private_class_method :mark_balances_processing
+
+  def self.select_and_claim_payable_balances(date, processor_type, user, payout_type:)
     payout_processor = ::PayoutProcessorType.get(processor_type)
     payable_balances = user.unpaid_balances_up_to_date(date).select do |balance|
       payout_processor.is_balance_payable(balance)
@@ -500,7 +511,7 @@ class Payouts
       end
     end
   end
-  private_class_method :mark_balances_processing
+  private_class_method :select_and_claim_payable_balances
 
   # Cents held back so the seller never receives more than (100 - reserve)% of what they had
   # under this hold. Ceil so a 1-cent leftover cannot round the seller into a full payout.
