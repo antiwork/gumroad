@@ -602,6 +602,5 @@ describe PayoutsHelper do
         expect(data[:payout_cents]).to eq(100_00)
       end
     end
-
   end
 end
