@@ -171,6 +171,15 @@ class AccountingMailer < ApplicationMailer
          to: PAYMENTS_NOTIFICATION_EMAIL
   end
 
+  def finance_report_delivery_backstop_aborted(reason, miss_count, class_names)
+    @reason = reason
+    @miss_count = miss_count
+    @class_names = Array(class_names)
+
+    mail subject: "#{SUBJECT_PREFIX}Finance report backstop aborted (#{reason}) - no re-enqueue",
+         to: PAYMENTS_NOTIFICATION_EMAIL
+  end
+
   def us_states_sales_tax_taxjar_upload_failed(date, error_class, error_message)
     @date = date
     @error_class = error_class

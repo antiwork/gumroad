@@ -25,6 +25,8 @@ module StripeBalanceSummariesReport
   ].freeze
 
   REPORT_TYPES = %w[balance.summary.1 balance_change_from_activity.summary.1 payouts.summary.1].freeze
+  # Stripe rejects balance.summary.1 runs whose interval_start is before this instant.
+  DATA_AVAILABLE_FROM = Time.utc(2026, 8, 22)
 
   POLL_INTERVAL = 5.seconds
   # Stripe report runs usually finish in under 30 seconds but can take a few minutes
@@ -55,9 +57,19 @@ module StripeBalanceSummariesReport
   # Returns { csvs: { "Gumroad" => <csv string>, ... }, skipped: ["Flexile", ...] }.
   # `skipped` lists entities whose API key is not configured; a configured entity whose
   # reports fail raises instead, so Sidekiq retries (and the exhaustion alert) kick in.
+  def self.interval_for(month, year)
+    month_start = Time.utc(year, month)
+    month_end = month_start.next_month
+    start_at = [month_start, DATA_AVAILABLE_FROM].max
+    if start_at >= month_end
+      raise ArgumentError, "Stripe balance.summary.1 has no data for #{month}/#{year} (data starts #{DATA_AVAILABLE_FROM.to_date})"
+    end
+
+    [start_at.to_i, month_end.to_i]
+  end
+
   def self.generate(month, year)
-    interval_start = Time.utc(year, month).to_i
-    interval_end = Time.utc(year, month).next_month.to_i
+    interval_start, interval_end = interval_for(month, year)
 
     csvs = {}
     skipped = []

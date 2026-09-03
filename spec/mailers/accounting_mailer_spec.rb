@@ -270,6 +270,24 @@ describe AccountingMailer, :vcr do
     end
   end
 
+  describe "#finance_report_delivery_backstop_aborted" do
+    let(:mail) do
+      AccountingMailer.finance_report_delivery_backstop_aborted(
+        "miss_storm", 40, %w[SendDailyFinanceLedgerReportJob SendFinancesReportWorker]
+      )
+    end
+
+    it "sends to the payments notification email" do
+      expect(mail.to).to eq([PAYMENTS_NOTIFICATION_EMAIL])
+    end
+
+    it "names the abort in the subject and does not claim a re-enqueue" do
+      expect(mail.subject).to include("Finance report backstop aborted (miss_storm)")
+      expect(mail.body.encoded).to include("Nothing was re-enqueued")
+      expect(mail.body.encoded).to include("SendDailyFinanceLedgerReportJob")
+    end
+  end
+
   describe "#payout_batch_failed" do
     let(:mail) do
       AccountingMailer.payout_batch_failed(
