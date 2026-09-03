@@ -479,25 +479,22 @@ class Payouts
   private_class_method :mark_balances_processing
 
   def self.select_and_claim_payable_balances(date, processor_type, user, payout_type:)
-    payout_processor = ::PayoutProcessorType.get(processor_type)
-    payable_balances = user.unpaid_balances_up_to_date(date).select do |balance|
-      payout_processor.is_balance_payable(balance)
-    end
-
-    if payout_processor.respond_to?(:filter_aggregate_payable_balances)
-      payable_balances = payout_processor.filter_aggregate_payable_balances(user, payable_balances)
-    end
+    unpaid_balances = user.unpaid_balances_up_to_date(date)
+    payable_balances = payable_balances_for_processor(user, unpaid_balances, processor_type)
     minimum_cents = payout_type == Payouts::PAYOUT_TYPE_INSTANT ? StripePayoutProcessor::MINIMUM_INSTANT_PAYOUT_AMOUNT_CENTS : user.minimum_payout_amount_cents
-    if payout_type != Payouts::PAYOUT_TYPE_INSTANT
-      # Cap is 75% of ALL unpaid USD under the hold, not of this processor's slice.
-      # paid_cents_under_chargeback_rate_hold already counts every processor; using only
-      # the current rail's unpaid as `total` under-counts the pot after another rail paid.
-      payable_balances = apply_chargeback_rate_reserve(
+    if payout_type != Payouts::PAYOUT_TYPE_INSTANT && user.chargeback_rate_payout_reserve_active?
+      # The reserve chooses a global oldest-row prefix before each processor intersects it
+      # with its own rail. Otherwise a newer PayPal/Stripe row can leapfrog an older row on
+      # another rail, shrinking the future cap and starving the older balance.
+      reserve_selected_ids = apply_chargeback_rate_reserve(
         user,
-        payable_balances,
-        minimum_cents:,
-        unpaid_cents: user.unpaid_balances_up_to_date(date).sum(&:amount_cents)
-      )
+        chargeback_rate_reserve_payable_balances(user, unpaid_balances),
+        minimum_cents: 0,
+        unpaid_cents: unpaid_balances.sum(&:amount_cents)
+      ).map(&:id)
+
+      payable_balances = payable_balances.select { |balance| reserve_selected_ids.include?(balance.id) }
+      payable_balances = [] if payable_balances.sum(&:amount_cents) < minimum_cents
     end
 
     # Eligibility check and transition happen under the same lock, so only balances we
@@ -512,6 +509,27 @@ class Payouts
     end
   end
   private_class_method :select_and_claim_payable_balances
+
+  def self.payable_balances_for_processor(user, balances, processor_type)
+    payout_processor = ::PayoutProcessorType.get(processor_type)
+    payable_balances = balances.select do |balance|
+      payout_processor.is_balance_payable(balance)
+    end
+
+    if payout_processor.respond_to?(:filter_aggregate_payable_balances)
+      payout_processor.filter_aggregate_payable_balances(user, payable_balances)
+    else
+      payable_balances
+    end
+  end
+  private_class_method :payable_balances_for_processor
+
+  def self.chargeback_rate_reserve_payable_balances(user, balances)
+    ::PayoutProcessorType.all.flat_map do |processor_type|
+      payable_balances_for_processor(user, balances, processor_type)
+    end.uniq
+  end
+  private_class_method :chargeback_rate_reserve_payable_balances
 
   # Cents held back so the seller never receives more than (100 - reserve)% of what they had
   # under this hold. Ceil so a 1-cent leftover cannot round the seller into a full payout.
@@ -537,17 +555,16 @@ class Payouts
     hold_started_at = user.chargeback_rate_payout_hold_started_at
     return 0 if hold_started_at.nil?
 
-    # Payments created under the hold (USD balances, not payout-currency amount_cents)
-    # plus processing rows that have not been attached to a Payment yet. The seller
-    # lock releases before create_payment, so the second rail must see the first
-    # rail's claim. Do not use balances.updated_at: a pre-hold processing payout
-    # that later mark_paid! would inflate the base.
-    paid_via_payments = user.payments.where(state: %w[processing unclaimed completed])
+    # Completed payments created under the hold (USD balances, not payout-currency amount_cents)
+    # plus processing balance rows claimed under the hold. The seller lock releases before
+    # create_payment, so the second rail must see the first rail's claim even while its Payment
+    # is still `creating`.
+    paid_via_payments = user.payments.completed
                             .where("payments.created_at >= ?", hold_started_at)
                             .joins(:balances)
                             .sum("balances.amount_cents")
-    claimed_without_payment = user.balances.processing.where.missing(:payments).sum(:amount_cents)
-    paid_via_payments + claimed_without_payment
+    claimed_under_hold = user.balances.processing.where("balances.updated_at >= ?", hold_started_at).sum(:amount_cents)
+    paid_via_payments + claimed_under_hold
   end
   private_class_method :paid_cents_under_chargeback_rate_hold
 

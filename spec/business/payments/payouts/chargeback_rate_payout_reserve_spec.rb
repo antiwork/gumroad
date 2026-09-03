@@ -198,6 +198,17 @@ describe "chargeback-rate payout reserve" do
 
         expect(described_class.chargeback_rate_reserve_cents_for_run(seller, 25_00)).to eq(25_00)
       end
+
+      it "counts balances attached to a Payment that is still creating" do
+        seller = create(:user)
+        pause_for_chargeback_rate!(seller)
+        row = unpaid_balance(seller, cents: 75_00, on: Date.today - 8)
+        row.mark_processing!
+        payment = create(:payment, user: seller, state: Payment::CREATING, created_at: Time.current)
+        payment.balances << row
+
+        expect(described_class.chargeback_rate_reserve_cents_for_run(seller, 25_00)).to eq(25_00)
+      end
     end
 
     describe ".apply_chargeback_rate_reserve" do
@@ -317,6 +328,22 @@ describe "chargeback-rate payout reserve" do
         expect(payment_errors).to eq([])
         expect(payment.balances.map(&:id)).to eq([stripe_row.id])
         expect(other_row.reload).to be_unpaid
+      end
+
+      it "does not let a newer processor slice leapfrog an older row on another rail" do
+        seller = payable_stripe_seller
+        older_other_rail = unpaid_balance(seller, cents: 1_000_00, on: date - 5)
+        newer_stripe_row = unpaid_balance(seller, cents: 300_00, on: date - 4)
+        pause_for_chargeback_rate!(seller)
+        allow(StripePayoutProcessor).to receive(:is_balance_payable) { |balance| balance.id == newer_stripe_row.id }
+        allow(StripePayoutProcessor).to receive(:filter_aggregate_payable_balances) { |_user, balances| balances }
+        allow(PaypalPayoutProcessor).to receive(:is_balance_payable) { |balance| balance.id == older_other_rail.id }
+
+        payment = described_class.create_payment(date.to_s, PayoutProcessorType::STRIPE, seller)
+
+        expect(payment).to be_nil
+        expect(older_other_rail.reload).to be_unpaid
+        expect(newer_stripe_row.reload).to be_unpaid
       end
     end
   end
