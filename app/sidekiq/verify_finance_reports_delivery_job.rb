@@ -57,17 +57,24 @@ class VerifyFinanceReportsDeliveryJob
 
     now = Time.current
 
+    unless redis_reads_ok?
+      abort_backstop("redis_read_probe_failed", [])
+      return
+    end
+
     active_since_raw = $redis.get(ACTIVE_SINCE_REDIS_KEY)
+    if active_since_raw.nil?
+      unless redis_reads_ok?
+        abort_backstop("redis_read_probe_failed", [])
+        return
+      end
+      active_since_raw = $redis.get(ACTIVE_SINCE_REDIS_KEY)
+    end
     if active_since_raw.nil?
       $redis.set(ACTIVE_SINCE_REDIS_KEY, now.to_i)
       return
     end
     active_since = Time.zone.at(active_since_raw.to_i)
-
-    unless redis_reads_ok?
-      abort_backstop("redis_read_probe_failed", [])
-      return
-    end
 
     misses = confirm_still_missing(collect_misses(now, active_since))
     misses.each { |miss| reenqueue_and_alert(miss) }
