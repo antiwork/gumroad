@@ -10,7 +10,7 @@
 # a single SQL aggregate (bounded memory, one row back), then served from the
 # shared Rails cache. The per-seller version is bumped by the review-stat write
 # funnel (the only code that changes a product's review counters), so a product
-#/profile view is an O(1) cache read, and exclude_product subtracts one product's
+# /profile view is an O(1) cache read, and exclude_product subtracts one product's
 # stored stat rather than re-scanning the catalogue.
 module User::ReputationSummary
   # Below these the rollup reads as noise, not signal (gumroad-private#1669).
