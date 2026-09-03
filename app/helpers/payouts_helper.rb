@@ -68,12 +68,17 @@ module PayoutsHelper
       payout_period_end_date = current_payout_end_date(user)
 
       payout_period_data[:displayable_payout_period_range] = displayable_payout_period_range(previous_payment, payout_period_end_date)
-      payout_period_data[:payout_cents] = if user.chargeback_rate_payout_reserve_active?
-        Payouts.payable_cents_after_chargeback_rate_reserve(
-          user, user.unpaid_balances_up_to_date(payout_period_end_date), minimum_cents: user.minimum_payout_amount_cents
+      unpaid_balances = user.unpaid_balances_up_to_date(payout_period_end_date)
+      if user.chargeback_rate_payout_reserve_active?
+        unpaid_cents = unpaid_balances.sum(&:amount_cents)
+        payout_period_data[:payout_cents] = Payouts.payable_cents_after_chargeback_rate_reserve(
+          user, unpaid_balances, minimum_cents: user.minimum_payout_amount_cents
         )
+        # Seller-facing holdback for the breakdown: same 25% the payment path keeps unpaid.
+        payout_period_data[:payout_reserve_cents] = Payouts.chargeback_rate_reserve_cents_for_run(user, unpaid_cents)
+        payout_period_data[:payout_reserve_percent] = User::CHARGEBACK_RATE_PAYOUT_RESERVE_PERCENT
       else
-        user.unpaid_balance_cents_up_to_date(payout_period_end_date)
+        payout_period_data[:payout_cents] = user.unpaid_balance_cents_up_to_date(payout_period_end_date)
       end
       payout_period_data[:payout_displayed_amount] = formatted_dollar_amount(payout_period_data[:payout_cents])
       payout_period_data[:payout_date_formatted] = formatted_payout_date(user.next_payout_date)
@@ -83,7 +88,7 @@ module PayoutsHelper
         Payouts::PAYOUT_TYPE_STANDARD
       end
 
-      balance_ids = user.unpaid_balances_up_to_date(payout_period_end_date).map(&:id)
+      balance_ids = unpaid_balances.map(&:id)
       payout_period_data.merge!(payout_sales_data(user:, balance_ids:,
                                                   start_date: previous_payment&.payout_period_end_date.try(:next),
                                                   end_date: payout_period_end_date))

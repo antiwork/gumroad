@@ -192,6 +192,8 @@ type CurrentPeriodPayoutData = (
   paypal_payout_cents: number;
   stripe_connect_payout_cents: number;
   loan_repayment_cents: number;
+  payout_reserve_cents?: number | null;
+  payout_reserve_percent?: number | null;
   payout_note?: string | null;
 };
 

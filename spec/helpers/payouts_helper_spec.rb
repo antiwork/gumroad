@@ -567,5 +567,41 @@ describe PayoutsHelper do
         expect(payout_data[:discover_fees_cents]).to eq(0)
       end
     end
+
+    it "includes the held reserve amount and percent on the current period when the chargeback-rate reserve is active" do
+      travel_to(Time.find_zone("UTC").local(2015, 3, 1)) do
+        user = create(:user_with_compliance_info, user_risk_state: "compliant")
+        create(:ach_account, user:)
+        create(:merchant_account, user:)
+        # Four $100 rows so a whole-row prefix fits under the $300 (75%) cap.
+        4.times { |i| create(:balance, user:, amount_cents: 100_00, date: Date.new(2015, 2, 24) + i.days) }
+
+        user.update!(payouts_paused_internally: true, payouts_paused_by: User::PAYOUT_PAUSE_SOURCE_SYSTEM)
+        user.comments.create!(
+          content: "Payouts automatically paused due to chargeback rate.",
+          comment_type: Comment::COMMENT_TYPE_ON_PROBATION,
+          author_name: User::SYSTEM_PAYOUT_PAUSE_COMMENT_AUTHORS[:high_chargeback_rate]
+        )
+
+        data = self.payout_period_data(user)
+        expect(data[:payout_reserve_percent]).to eq(User::CHARGEBACK_RATE_PAYOUT_RESERVE_PERCENT)
+        expect(data[:payout_reserve_cents]).to eq(100_00)
+        expect(data[:payout_cents]).to eq(300_00)
+      end
+    end
+
+    it "omits the reserve breakdown fields when the chargeback-rate reserve is not active" do
+      travel_to(Time.find_zone("UTC").local(2015, 3, 1)) do
+        user = create(:user)
+        create(:ach_account, user:)
+        create(:balance, user:, amount_cents: 100_00, date: Date.new(2015, 3, 6))
+
+        data = self.payout_period_data(user)
+        expect(data[:payout_reserve_cents]).to be_nil
+        expect(data[:payout_reserve_percent]).to be_nil
+        expect(data[:payout_cents]).to eq(100_00)
+      end
+    end
+
   end
 end
