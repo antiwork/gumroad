@@ -109,5 +109,38 @@ describe EmailInfo do
     it "is a no-op on an empty buffer" do
       expect { EmailInfo.flush_delivered_buffer! }.not_to raise_error
     end
+
+    it "leaves the buffer untouched when another flush holds the lock" do
+      email_info = create(:creator_contacting_customers_email_info_sent, installment: installment_a)
+      buffer(email_info)
+      $redis.set(RedisKey.email_info_delivered_flush_lock, "held", nx: true, ex: 60)
+
+      EmailInfo.flush_delivered_buffer!
+
+      expect($redis.llen(buffer_key)).to eq(1)
+      expect(email_info.reload.state).to eq("sent")
+    ensure
+      $redis.del(RedisKey.email_info_delivered_flush_lock)
+    end
+
+    it "stops after MAX_FLUSH_CHUNKS and leaves the rest for the next run" do
+      stub_const("EmailInfo::DELIVERED_BUFFER_CHUNK", 1)
+      stub_const("EmailInfo::MAX_FLUSH_CHUNKS", 1)
+      first = create(:creator_contacting_customers_email_info_sent, installment: installment_a)
+      second = create(:creator_contacting_customers_email_info_sent, installment: installment_a)
+      buffer(first)
+      buffer(second)
+
+      EmailInfo.flush_delivered_buffer!
+
+      expect(first.reload.state).to eq("delivered")
+      expect(second.reload.state).to eq("sent")
+      expect($redis.llen(buffer_key)).to eq(1)
+
+      EmailInfo.flush_delivered_buffer!
+
+      expect(second.reload.state).to eq("delivered")
+      expect($redis.llen(buffer_key)).to eq(0)
+    end
   end
 end

@@ -47,6 +47,8 @@ class EmailInfo < ApplicationRecord
   end
 
   DELIVERED_BUFFER_CHUNK = 1000
+  MAX_FLUSH_CHUNKS = 50
+  FLUSH_LOCK_TTL = 2.minutes
 
   # Delivered callbacks arrive in waves of ~1M within minutes; a row-per-event
   # UPDATE+commit is what shows up as COMMIT/binlog waits. Buffer in Redis and
@@ -68,15 +70,27 @@ class EmailInfo < ApplicationRecord
   end
 
   def self.flush_delivered_buffer!
-    key = RedisKey.email_info_delivered_buffer
-    loop do
-      # Peek then drop. LPOP-then-restore loses the chunk if both the UPDATE
-      # and the recovery RPUSH fail.
-      raw = $redis.lrange(key, 0, DELIVERED_BUFFER_CHUNK - 1)
-      break if raw.blank?
+    lock_key = RedisKey.email_info_delivered_flush_lock
+    token = SecureRandom.uuid
+    return unless $redis.set(lock_key, token, nx: true, ex: FLUSH_LOCK_TTL.to_i)
 
-      apply_delivered_chunk!(raw.map { JSON.parse(_1) })
-      $redis.ltrim(key, raw.size, -1)
+    key = RedisKey.email_info_delivered_buffer
+    chunks = 0
+    begin
+      loop do
+        break if chunks >= MAX_FLUSH_CHUNKS
+
+        # Peek then drop. Safe only with one consumer (the Redis lock above).
+        raw = $redis.lrange(key, 0, DELIVERED_BUFFER_CHUNK - 1)
+        break if raw.blank?
+
+        apply_delivered_chunk!(raw.map { JSON.parse(_1) })
+        $redis.ltrim(key, raw.size, -1)
+        chunks += 1
+        $redis.expire(lock_key, FLUSH_LOCK_TTL.to_i)
+      end
+    ensure
+      $redis.del(lock_key) if $redis.get(lock_key) == token
     end
   end
 
