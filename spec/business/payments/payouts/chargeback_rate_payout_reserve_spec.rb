@@ -35,6 +35,14 @@ describe "chargeback-rate payout reserve" do
     row
   end
 
+  def stub_stripe_prepare!
+    allow(StripePayoutProcessor).to receive(:prepare_payment_and_set_amount) do |payment, balances|
+      payment.currency = Currency::USD
+      payment.amount_cents = balances.sum(&:holding_amount_cents)
+      []
+    end
+  end
+
   describe User::Risk, "#chargeback_rate_payout_reserve_active?" do
     let(:seller) { create(:user) }
 
@@ -203,6 +211,29 @@ describe "chargeback-rate payout reserve" do
         expect(described_class.chargeback_rate_reserve_cents_for_run(seller, 100_00)).to eq(25_00)
       end
 
+      it "ignores a payout claimed before the hold whose Payment is saved after the hold starts" do
+        seller = payable_stripe_seller
+        date = Date.today - 1
+        unpaid_balance(seller, cents: 1_000_00, on: date - 5)
+        allow(StripePayoutProcessor).to receive(:is_balance_payable).and_return(true)
+        stub_stripe_prepare!
+        # No hold yet, so no seller lock: the pause lands between the claim and payment.save!.
+        allow(described_class).to receive(:mark_balances_processing).and_wrap_original do |original, *args, **kwargs|
+          balances = original.call(*args, **kwargs)
+          travel 1.hour
+          pause_for_chargeback_rate!(seller)
+          balances
+        end
+
+        payment, payment_errors = described_class.create_payment(date.to_s, PayoutProcessorType::STRIPE, seller)
+        expect(payment_errors).to eq([])
+        expect(payment.balances.sum(&:amount_cents)).to eq(1_000_00)
+
+        unpaid_balance(seller, cents: 400_00, on: date)
+        # Counting the $1000 would take 25% of $1400, clamped to $350 of the $400 remaining.
+        expect(described_class.chargeback_rate_reserve_cents_for_run(seller, 400_00)).to eq(100_00)
+      end
+
       it "counts in-flight processing balances before a Payment row exists" do
         seller = create(:user)
         pause_for_chargeback_rate!(seller)
@@ -317,14 +348,6 @@ describe "chargeback-rate payout reserve" do
 
     describe ".create_payment under the hold" do
       let(:date) { Date.today - 1 }
-
-      def stub_stripe_prepare!
-        allow(StripePayoutProcessor).to receive(:prepare_payment_and_set_amount) do |payment, balances|
-          payment.currency = Currency::USD
-          payment.amount_cents = balances.sum(&:holding_amount_cents)
-          []
-        end
-      end
 
       it "claims 75 percent of unpaid Stripe rows on the payment path" do
         seller = payable_stripe_seller

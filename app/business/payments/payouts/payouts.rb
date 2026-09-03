@@ -436,7 +436,12 @@ class Payouts
 
   def self.create_payment(date, processor_type, user, payout_type: Payouts::PAYOUT_TYPE_STANDARD)
     payout_processor = ::PayoutProcessorType.get(processor_type)
-    balances = mark_balances_processing(date, processor_type, user, payout_type:)
+    # Decide once and stamp the Payment with the claim time. Without the hold there is no seller
+    # lock, so a chargeback pause landing between the claim and `save!` would otherwise date this
+    # payout after hold_started_at and paid_cents_under_chargeback_rate_hold would count it forever.
+    under_reserve = under_chargeback_rate_reserve?(user, payout_type:)
+    claimed_at = Time.current
+    balances = mark_balances_processing(date, processor_type, user, payout_type:, under_reserve:)
     balance_cents = balances.sum(&:amount_cents)
 
     if balance_cents <= 0
@@ -452,6 +457,7 @@ class Payouts
       processor_fee_cents: 0,
       payout_period_end_date: date,
       payout_type:,
+      created_at: claimed_at,
       # TODO: Refactor PayPal to be a type of bank account rather than being a field on user.
       payment_address: (user.paypal_payout_email if processor_type == ::PayoutProcessorType::PAYPAL),
       bank_account: (user.active_bank_account if processor_type != ::PayoutProcessorType::PAYPAL)
@@ -467,22 +473,28 @@ class Payouts
     [payment, payment_errors]
   end
 
-  def self.mark_balances_processing(date, processor_type, user, payout_type: Payouts::PAYOUT_TYPE_STANDARD)
+  def self.under_chargeback_rate_reserve?(user, payout_type:)
+    payout_type != Payouts::PAYOUT_TYPE_INSTANT && user.chargeback_rate_payout_reserve_active?
+  end
+  private_class_method :under_chargeback_rate_reserve?
+
+  def self.mark_balances_processing(date, processor_type, user, payout_type: Payouts::PAYOUT_TYPE_STANDARD,
+                                    under_reserve: under_chargeback_rate_reserve?(user, payout_type:))
     # Seller lock while the hold is live: two processor jobs can otherwise both read the
     # same unpaid total, pick disjoint rails under the same 75% cap, and pay 100%.
-    if user.chargeback_rate_payout_reserve_active? && payout_type != Payouts::PAYOUT_TYPE_INSTANT
-      user.with_lock { select_and_claim_payable_balances(date, processor_type, user, payout_type:) }
+    if under_reserve
+      user.with_lock { select_and_claim_payable_balances(date, processor_type, user, payout_type:, under_reserve:) }
     else
-      select_and_claim_payable_balances(date, processor_type, user, payout_type:)
+      select_and_claim_payable_balances(date, processor_type, user, payout_type:, under_reserve:)
     end
   end
   private_class_method :mark_balances_processing
 
-  def self.select_and_claim_payable_balances(date, processor_type, user, payout_type:)
+  def self.select_and_claim_payable_balances(date, processor_type, user, payout_type:, under_reserve:)
     unpaid_balances = user.unpaid_balances_up_to_date(date)
     payable_balances = payable_balances_for_processor(user, unpaid_balances, processor_type)
     minimum_cents = payout_type == Payouts::PAYOUT_TYPE_INSTANT ? StripePayoutProcessor::MINIMUM_INSTANT_PAYOUT_AMOUNT_CENTS : user.minimum_payout_amount_cents
-    if payout_type != Payouts::PAYOUT_TYPE_INSTANT && user.chargeback_rate_payout_reserve_active?
+    if under_reserve
       # The reserve chooses a global oldest-row prefix before each processor intersects it
       # with its own rail. Otherwise a newer PayPal/Stripe row can leapfrog an older row on
       # another rail, shrinking the future cap and starving the older balance.
