@@ -217,12 +217,12 @@ describe "chargeback-rate payout reserve" do
         unpaid_balance(seller, cents: 1_000_00, on: date - 5)
         allow(StripePayoutProcessor).to receive(:is_balance_payable).and_return(true)
         stub_stripe_prepare!
-        # No hold yet, so no seller lock: the pause lands between the claim and payment.save!.
+        # No hold yet: the pause lands after the claim (and its seller lock) and before payment.save!.
         allow(described_class).to receive(:mark_balances_processing).and_wrap_original do |original, *args, **kwargs|
-          balances = original.call(*args, **kwargs)
+          balances, under_reserve = original.call(*args, **kwargs)
           travel 1.hour
           pause_for_chargeback_rate!(seller)
-          balances
+          [balances, under_reserve]
         end
 
         payment, payment_errors = described_class.create_payment(date.to_s, PayoutProcessorType::STRIPE, seller)
@@ -232,6 +232,29 @@ describe "chargeback-rate payout reserve" do
         unpaid_balance(seller, cents: 400_00, on: date)
         # Counting the $1000 would take 25% of $1400, clamped to $350 of the $400 remaining.
         expect(described_class.chargeback_rate_reserve_cents_for_run(seller, 400_00)).to eq(100_00)
+      end
+
+      it "does not pay the reserved 25 percent when the hold activates before balances are claimed" do
+        seller = payable_stripe_seller
+        date = Date.today - 1
+        4.times { |i| unpaid_balance(seller, cents: 250_00, on: date - 5 + i) }
+        allow(StripePayoutProcessor).to receive(:is_balance_payable).and_return(true)
+        stub_stripe_prepare!
+        # Hold is off on `seller` when create_payment starts; another process activates it
+        # before selection. Pause via a fresh find so in-memory flags on `seller` stay stale
+        # until with_lock reloads — otherwise the example cannot catch a same-object re-read.
+        expect(seller.chargeback_rate_payout_reserve_active?).to eq(false)
+        allow(described_class).to receive(:mark_balances_processing).and_wrap_original do |original, *args, **kwargs|
+          pause_for_chargeback_rate!(User.find(seller.id))
+          original.call(*args, **kwargs)
+        end
+
+        payment, payment_errors = described_class.create_payment(date.to_s, PayoutProcessorType::STRIPE, seller)
+        expect(payment_errors).to eq([])
+        expect(payment.balances.sum(&:amount_cents)).to eq(750_00)
+        expect(seller.balances.unpaid.sum(:amount_cents)).to eq(250_00)
+        # The $750 was claimed under the hold, so the next run still holds 25% of the original pot.
+        expect(described_class.chargeback_rate_reserve_cents_for_run(seller, 250_00)).to eq(250_00)
       end
 
       it "counts in-flight processing balances before a Payment row exists" do

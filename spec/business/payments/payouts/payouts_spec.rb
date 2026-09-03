@@ -819,7 +819,7 @@ describe Payouts do
       # Without the unpaid? guard, mark_processing! raises StateMachines::InvalidTransition.
       marked = nil
       expect do
-        marked = described_class.send(:mark_balances_processing, payout_date, PayoutProcessorType::STRIPE, user)
+        marked, _under_reserve = described_class.send(:mark_balances_processing, payout_date, PayoutProcessorType::STRIPE, user)
       end.not_to raise_error
 
       expect(marked).to eq([])
@@ -841,7 +841,7 @@ describe Payouts do
 
       marked = nil
       expect do
-        marked = described_class.send(:mark_balances_processing, payout_date, PayoutProcessorType::STRIPE, user)
+        marked, _under_reserve = described_class.send(:mark_balances_processing, payout_date, PayoutProcessorType::STRIPE, user)
       end.not_to raise_error
 
       expect(marked.map(&:id)).to eq([second.id])

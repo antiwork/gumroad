@@ -436,12 +436,12 @@ class Payouts
 
   def self.create_payment(date, processor_type, user, payout_type: Payouts::PAYOUT_TYPE_STANDARD)
     payout_processor = ::PayoutProcessorType.get(processor_type)
-    # Decide once and stamp the Payment with the claim time. Without the hold there is no seller
-    # lock, so a chargeback pause landing between the claim and `save!` would otherwise date this
-    # payout after hold_started_at and paid_cents_under_chargeback_rate_hold would count it forever.
-    under_reserve = under_chargeback_rate_reserve?(user, payout_type:)
+    # claimed_at stamps unrestricted claims so a hold landing after the claim, before save!, is
+    # not dated after hold_started_at (7f3d021b). The claim decides under with_lock (reload) so a
+    # cross-process hold before selection cannot pay 100%. Claims that ran under the hold are
+    # dated now so the 75% counts in the reserve base.
     claimed_at = Time.current
-    balances = mark_balances_processing(date, processor_type, user, payout_type:, under_reserve:)
+    balances, under_reserve = mark_balances_processing(date, processor_type, user, payout_type:)
     balance_cents = balances.sum(&:amount_cents)
 
     if balance_cents <= 0
@@ -457,7 +457,7 @@ class Payouts
       processor_fee_cents: 0,
       payout_period_end_date: date,
       payout_type:,
-      created_at: claimed_at,
+      created_at: under_reserve ? Time.current : claimed_at,
       # TODO: Refactor PayPal to be a type of bank account rather than being a field on user.
       payment_address: (user.paypal_payout_email if processor_type == ::PayoutProcessorType::PAYPAL),
       bank_account: (user.active_bank_account if processor_type != ::PayoutProcessorType::PAYPAL)
@@ -478,14 +478,14 @@ class Payouts
   end
   private_class_method :under_chargeback_rate_reserve?
 
-  def self.mark_balances_processing(date, processor_type, user, payout_type: Payouts::PAYOUT_TYPE_STANDARD,
-                                    under_reserve: under_chargeback_rate_reserve?(user, payout_type:))
-    # Seller lock while the hold is live: two processor jobs can otherwise both read the
-    # same unpaid total, pick disjoint rails under the same 75% cap, and pay 100%.
-    if under_reserve
-      user.with_lock { select_and_claim_payable_balances(date, processor_type, user, payout_type:, under_reserve:) }
-    else
-      select_and_claim_payable_balances(date, processor_type, user, payout_type:, under_reserve:)
+  def self.mark_balances_processing(date, processor_type, user, payout_type: Payouts::PAYOUT_TYPE_STANDARD)
+    # Decide under the seller lock. with_lock reloads, so a hold another process activated after
+    # create_payment started is visible and we apply the 75/25 filter instead of paying 100%.
+    # The lock also stops two processor jobs from each taking 75% of the same pot.
+    user.with_lock do
+      under_reserve = under_chargeback_rate_reserve?(user, payout_type:)
+      balances = select_and_claim_payable_balances(date, processor_type, user, payout_type:, under_reserve:)
+      [balances, under_reserve]
     end
   end
   private_class_method :mark_balances_processing
