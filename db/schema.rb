@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.1].define(version: 2026_12_09_113454) do
+ActiveRecord::Schema[7.1].define(version: 2026_12_10_081738) do
   create_table "active_storage_attachments", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
     t.string "name", limit: 191, null: false
     t.string "record_type", limit: 191, null: false
@@ -239,6 +239,7 @@ ActiveRecord::Schema[7.1].define(version: 2026_12_09_113454) do
     t.datetime "follower_created_at", precision: nil
     t.datetime "min_affiliate_created_at", precision: nil
     t.datetime "max_affiliate_created_at", precision: nil
+    t.index ["email"], name: "idx_audience_on_email", length: 191
     t.index ["seller_id", "customer", "follower", "affiliate"], name: "idx_audience_on_seller_and_types"
     t.index ["seller_id", "email"], name: "index_audience_members_on_seller_id_and_email", unique: true
     t.index ["seller_id", "follower_created_at"], name: "idx_audience_on_seller_and_follower_created_at"

@@ -448,6 +448,19 @@ class GdprBuyerErasureServiceGuestBuyerDataTest < ActiveSupport::TestCase
     end
   end
 
+  test "anonymizes audience member rows for sellers the buyer only follows" do
+    followed_seller = create_user
+    Follower.create!(email: @buyer_email, user: followed_seller, confirmed_at: Time.current)
+    member = AudienceMember.find_by(email: @buyer_email, seller: followed_seller)
+    assert_predicate member, :present?
+    assert_empty Purchase.where(email: @buyer_email, seller_id: followed_seller.id).ids
+
+    anonymized = GdprBuyerErasureService.new(@buyer_email, performed_by: @admin).send(:generate_anonymized_email)
+    GdprBuyerErasureService.new(@buyer_email, performed_by: @admin).perform!
+
+    assert_equal anonymized, member.reload.email
+  end
+
   test "anonymizes guest credit cards but leaves user-owned cards untouched" do
     guest_card = CreditCard.create!(
       visual: "UPI",
