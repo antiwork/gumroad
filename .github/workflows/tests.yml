@@ -965,7 +965,10 @@ jobs:
       - name: Compute relevant specs
         id: specs
         run: |
-          git fetch --no-tags --quiet origin main
+          # Best-effort: checkout (fetch-depth 0) already has origin/main, and this
+          # anonymous fetch (persist-credentials off) intermittently gets a
+          # credential prompt from GitHub, which would fail the job for nothing.
+          git fetch --no-tags --quiet origin main || echo "origin/main refresh failed; using the ref from checkout"
           set +e
           SPECS=$(ruby bin/branch-specs)
           STATUS=$?
