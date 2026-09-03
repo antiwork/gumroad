@@ -492,6 +492,15 @@ class Payouts
     # The lock also stops two processor jobs from each taking 75% of the same pot.
     user.with_lock do
       under_reserve = under_chargeback_rate_reserve?(user, payout_type:)
+      # A live hold that is not payable as a reserve (instant payout, seller's own pause on
+      # top, deleted account) is a full block, not an unrestricted claim — otherwise the same
+      # race the reserve re-check closes would release 100% here. Skipped when the kill switch
+      # is on so admin console payouts keep pre-reserve behavior.
+      if !under_reserve && user.payouts_paused_for_chargeback_rate? &&
+         !Feature.active?(:disable_chargeback_rate_payout_reserve)
+        next [[], false]
+      end
+
       balances = select_and_claim_payable_balances(date, processor_type, user, payout_type:, under_reserve:)
       [balances, under_reserve]
     end

@@ -538,6 +538,35 @@ describe "chargeback-rate payout reserve" do
         expect(payment).to be_nil
         expect(row.reload).to be_unpaid
       end
+
+      it "claims nothing for an instant payout while the hold is live" do
+        seller = payable_stripe_seller
+        row = unpaid_balance(seller, cents: 500_00, on: date - 5)
+        pause_for_chargeback_rate!(seller)
+        allow(StripePayoutProcessor).to receive(:is_balance_payable).and_return(true)
+        stub_stripe_prepare!
+
+        # is_user_payable blocks instant payouts up front; this pins the locked re-check so a
+        # hold activating after that eligibility pass cannot claim 100% via the instant path.
+        payment = described_class.create_payment(date.to_s, PayoutProcessorType::STRIPE, seller, payout_type: Payouts::PAYOUT_TYPE_INSTANT)
+
+        expect(payment).to be_nil
+        expect(row.reload).to be_unpaid
+      end
+
+      it "claims nothing when the seller paused payouts on top of the hold" do
+        seller = payable_stripe_seller
+        row = unpaid_balance(seller, cents: 500_00, on: date - 5)
+        pause_for_chargeback_rate!(seller)
+        seller.update!(payouts_paused_by_user: true)
+        allow(StripePayoutProcessor).to receive(:is_balance_payable).and_return(true)
+        stub_stripe_prepare!
+
+        payment = described_class.create_payment(date.to_s, PayoutProcessorType::STRIPE, seller)
+
+        expect(payment).to be_nil
+        expect(row.reload).to be_unpaid
+      end
     end
   end
 end
