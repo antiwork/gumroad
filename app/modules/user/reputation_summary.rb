@@ -69,11 +69,9 @@ module User::ReputationSummary
     # products — bounded regardless of catalogue size (gumroad-private#2384).
     # display_product_reviews is a Link flag bit, not a column, so it is
     # meshed here exactly the way ProfileData already does (links.flags & BIT).
-    # Drive from links.user_id, never FROM product_review_stats: with the
-    # stats table first, MySQL is free to scan it and probe links per row
-    # (product_review_stats is unique on link_id only), which timed out every
-    # product page at 120s and kept the cache permanently unfilled
-    # (gumroad-private#2388).
+    # Drive from links.user_id, never FROM product_review_stats:
+    # product_review_stats is unique on link_id only, so with the stats table
+    # first MySQL scans it and probes links per row (gumroad-private#2388).
     def reputation_aggregate
       Rails.cache.fetch(reputation_cache_key, expires_in: CACHE_TTL) do
         products_count, total, weighted = Link.alive.not_draft

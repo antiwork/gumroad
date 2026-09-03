@@ -138,10 +138,8 @@ describe User::ReputationSummary do
         expect(review_stat_queries).to eq(0)
       end
 
-      # Regression for gumroad-private#2388: FROM product_review_stats let
-      # MySQL drive the aggregate from the big stats table (unique on link_id
-      # only), timing out every cold-cache product page at 120s. The aggregate
-      # must start from the seller's indexed links set.
+      # gumroad-private#2388: the aggregate must stay driven by the seller's
+      # indexed links set, not FROM product_review_stats.
       it "drives the aggregate from links, not product_review_stats" do
         create_stat(product_one, five: 8)
         create_stat(product_two, four: 4)
