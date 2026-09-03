@@ -141,6 +141,7 @@ class RedisKey
     def seller_large_blast_quota(seller_id, day) = "seller_large_blast_quota:#{seller_id}:#{day}"
     # LIST of JSON {i: installment_id, p: purchase_id, t: epoch} pending an email_infos delivered UPDATE.
     def email_info_delivered_buffer = "email_info:delivered_buffer"
+    def email_info_delivered_inflight = "email_info:delivered_inflight"
     def email_info_delivered_flush_lock = "email_info:delivered_flush_lock"
   end
 end

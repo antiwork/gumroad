@@ -83,15 +83,29 @@ describe EmailInfo do
       expect { EmailInfo.flush_delivered_buffer! }.not_to change { CreatorContactingCustomersEmailInfo.count }
     end
 
-    it "keeps the chunk in the buffer and re-raises when the UPDATE fails" do
+    it "keeps the chunk in the inflight list and re-raises when the UPDATE fails" do
       email_info = create(:creator_contacting_customers_email_info_sent, installment: installment_a)
       buffer(email_info)
       allow(CreatorContactingCustomersEmailInfo).to receive(:where).and_raise(ActiveRecord::StatementInvalid, "boom")
 
       expect { EmailInfo.flush_delivered_buffer! }.to raise_error(ActiveRecord::StatementInvalid)
 
-      expect($redis.llen(buffer_key)).to eq(1)
+      expect($redis.llen(buffer_key)).to eq(0)
+      expect($redis.llen(RedisKey.email_info_delivered_inflight)).to eq(1)
       expect(email_info.reload.state).to eq("sent")
+    end
+
+    it "applies a leftover inflight chunk before taking more from the buffer" do
+      leftover = create(:creator_contacting_customers_email_info_sent, installment: installment_a)
+      later = create(:creator_contacting_customers_email_info_sent, installment: installment_a)
+      $redis.rpush(RedisKey.email_info_delivered_inflight, { i: leftover.installment_id, p: leftover.purchase_id, t: delivered_at.to_i }.to_json)
+      buffer(later)
+
+      EmailInfo.flush_delivered_buffer!
+
+      expect(leftover.reload).to have_attributes(state: "delivered", delivered_at:)
+      expect(later.reload.state).to eq("delivered")
+      expect($redis.llen(RedisKey.email_info_delivered_inflight)).to eq(0)
     end
 
     it "is a no-op on an empty buffer" do

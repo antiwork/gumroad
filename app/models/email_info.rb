@@ -54,6 +54,9 @@ class EmailInfo < ApplicationRecord
     local items = redis.call("LRANGE", KEYS[1], 0, tonumber(ARGV[1]) - 1)
     if #items == 0 then return {} end
     redis.call("LTRIM", KEYS[1], #items, -1)
+    for i = 1, #items do
+      redis.call("RPUSH", KEYS[2], items[i])
+    end
     return items
   LUA
   RENEW_FLUSH_LOCK_LUA = <<~LUA
@@ -94,23 +97,21 @@ class EmailInfo < ApplicationRecord
     return unless $redis.set(lock_key, token, nx: true, ex: FLUSH_LOCK_TTL.to_i)
 
     key = RedisKey.email_info_delivered_buffer
+    inflight_key = RedisKey.email_info_delivered_inflight
     chunks = 0
     begin
       loop do
         break if chunks >= MAX_FLUSH_CHUNKS
         renew_flush_lock!(lock_key, token)
 
-        # Claim the prefix atomically so a second flush cannot LTRIM a chunk it
-        # never applied if this run outlives the lock during the UPDATEs.
-        raw = $redis.eval(TAKE_CHUNK_LUA, keys: [key], argv: [DELIVERED_BUFFER_CHUNK])
+        raw = $redis.lrange(inflight_key, 0, -1)
+        if raw.blank?
+          raw = $redis.eval(TAKE_CHUNK_LUA, keys: [key, inflight_key], argv: [DELIVERED_BUFFER_CHUNK])
+        end
         break if raw.blank?
 
-        begin
-          apply_delivered_chunk!(raw.map { JSON.parse(_1) }) { renew_flush_lock!(lock_key, token) }
-        rescue StandardError
-          $redis.lpush(key, *raw.reverse) if raw.present?
-          raise
-        end
+        apply_delivered_chunk!(raw.map { JSON.parse(_1) }) { renew_flush_lock!(lock_key, token) }
+        $redis.del(inflight_key)
         chunks += 1
       end
     ensure
