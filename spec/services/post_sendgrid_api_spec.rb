@@ -366,6 +366,7 @@ describe PostSendgridApi, :freeze_time do
                   { email: "c1@example.com" },
                   { email: "c2@example.com" }
                 ], blast: blast_1)
+    Installment.flush_delivered_deltas!
 
     expect(@post.reload.customer_count).to eq(2)
     expect(blast_1.reload.delivery_count).to eq(2)
@@ -374,6 +375,7 @@ describe PostSendgridApi, :freeze_time do
     send_emails(recipients: [
                   { email: "c3@example.com" }
                 ], blast: blast_2)
+    Installment.flush_delivered_deltas!
 
     expect(@post.reload.customer_count).to eq(3)
     expect(blast_2.reload.delivery_count).to eq(1)

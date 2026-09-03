@@ -107,5 +107,105 @@ describe User::ReputationSummary do
         expect(seller.seller_reputation_summary(exclude_product: product_one)).to be_nil
       end
     end
+
+    context "large catalogue (gumroad-private#2384)" do
+      before { Feature.activate_user(:seller_reputation_summary, seller) }
+
+      # The incident: an 11,633-product seller with zero nonzero review stats
+      # had EVERY product/profile view scan the whole catalogue join. The rollup
+      # must stay a single bounded aggregate regardless of catalogue size, and a
+      # large zero-review catalogue must still yield nil, not an O(catalogue)
+      # row materialisation per request.
+      # Regression for gumroad-private#2384: the read path must not materialise
+      # a ProductReviewStat/Link row per catalogue product, and the seller rollup
+      # must be a cache hit that issues NO review-stat query once warmed.
+      it "is a cache hit after warming, with no review-stat query issued" do
+        create_stat(product_one, five: 8)
+        create_stat(product_two, four: 4)
+        seller.bump_reputation_summary_version
+
+        # warm the cache
+        expect(seller.seller_reputation_summary).to eq(average: 4.7, count: 12, products_count: 2)
+
+        queries = []
+        callback = ->(_name, _started, _finished, _id, payload) { queries << payload[:sql] }
+        ::ActiveSupport::Notifications.subscribed(callback, "sql.active_record") do
+          3.times { expect(seller.seller_reputation_summary).to eq(average: 4.7, count: 12, products_count: 2) }
+        end
+
+        review_stat_queries = queries.count { |sql| sql.match?(/product_review_stats|JOIN\s+links/i) }
+        # Warm cache: no review-stat join should run at all on subsequent reads.
+        expect(review_stat_queries).to eq(0)
+      end
+
+      it "returns nil for a large zero-review catalogue" do
+        Array.new(230) { create(:product, user: seller) }
+        seller.bump_reputation_summary_version
+
+        expect(seller.seller_reputation_summary).to be_nil
+      end
+
+      it "invalidates the cached rollup when the write funnel bumps the seller version" do
+        create_stat(product_one, five: 8)
+        create_stat(product_two, four: 4)
+        expect(seller.seller_reputation_summary).to eq(average: 4.7, count: 12, products_count: 2)
+
+        seller.bump_reputation_summary_version
+        ProductReviewStat.find_by(link_id: product_one.id).update_with_added_rating(5)
+        seller.bump_reputation_summary_version
+
+        expect(seller.seller_reputation_summary[:count]).to eq(13)
+      end
+
+      it "does not shadow ActiveRecord#cache_key on User" do
+        # gumroad-private#2384 panel catch: the module must NOT define its own
+        # #cache_key/#cache_key_with_version or it would override the AR
+        # Integration ones for every User and break fragment caching/ETags
+        # (and repoint them at the reputation aggregate). The module's key
+        # helper is deliberately named reputation_cache_key.
+        expect(seller.cache_key).to start_with("users/")
+        expect(seller.cache_key).not_to match(/seller_reputation_summary/)
+      end
+    end
+  end
+
+  describe "#bump_reputation_summary_version" do
+    before { Feature.activate_user(:seller_reputation_summary, seller) }
+
+    it "defers the bump to transaction commit so a concurrent read cannot cache pre-commit data" do
+      expect do
+        ActiveRecord::Base.transaction do
+          seller.bump_reputation_summary_version
+          expect(seller.reputation_summary_cache_signature).to eq(0)
+        end
+      end.to change { seller.reputation_summary_cache_signature }.by(1)
+    end
+
+    it "reports instead of raising when Redis is unavailable" do
+      allow($redis).to receive(:incr).and_raise(Redis::BaseError)
+      expect(ErrorNotifier).to receive(:notify).with(kind_of(Redis::BaseError), user_id: seller.id)
+
+      expect { seller.bump_reputation_summary_version }.not_to raise_error
+    end
+  end
+
+  describe "#reputation_summary_cache_signature" do
+    before { Feature.activate_user(:seller_reputation_summary, seller) }
+
+    it "never repeats after successive bumps (no expiry resets the counter)" do
+      seller.bump_reputation_summary_version
+      first = seller.reputation_summary_cache_signature
+      seller.bump_reputation_summary_version
+
+      expect($redis.ttl("#{described_class::CACHE_PREFIX}/version/#{seller.id}")).to eq(-1)
+      expect(seller.reputation_summary_cache_signature).to eq(first + 1)
+    end
+
+    it "returns a never-matching value instead of raising when Redis is unreadable" do
+      allow($redis).to receive(:get).and_raise(Redis::BaseError)
+      expect(ErrorNotifier).to receive(:notify).with(kind_of(Redis::BaseError), user_id: seller.id)
+
+      expect(seller.reputation_summary_cache_signature).to start_with("unavailable-")
+    end
   end
 end

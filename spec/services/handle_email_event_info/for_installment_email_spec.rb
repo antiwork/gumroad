@@ -194,14 +194,59 @@ describe HandleEmailEventInfo::ForInstallmentEmail do
             expect(@email_info.reload.state).to eq "bounced"
           end
 
-          it "marks it as delivered" do
+          it "buffers the delivered mark and applies it on flush" do
             params = { "_json" => [{ "event" => "delivered", "type" => "CreatorContactingCustomersMailer.purchase_installment",
                                      "identifier" => @identifier, "installment_id" => @installment.id, "timestamp" => 1.day.ago.to_i }] }
             travel_to(Time.current) do
               HandleSendgridEventJob.new.perform(params)
             end
 
+            expect(@email_info.reload.state).to eq "created"
+            expect(FlushDeliveredEmailInfosJob).to have_enqueued_sidekiq_job
+
+            FlushDeliveredEmailInfosJob.new.perform
+
             expect(CreatorContactingCustomersEmailInfo.count).to eq 1
+            expect(@email_info.reload.state).to eq "delivered"
+            expect(@email_info.reload.delivered_at).to eq(Time.zone.at(params["_json"].first["timestamp"]))
+          end
+
+          it "does not rewrite an already-delivered email_info" do
+            @email_info.mark_sent!
+            @email_info.mark_delivered!(2.days.ago)
+            original_delivered_at = @email_info.reload.delivered_at
+
+            params = { "_json" => [{ "event" => "delivered", "type" => "CreatorContactingCustomersMailer.purchase_installment",
+                                     "identifier" => @identifier, "installment_id" => @installment.id, "timestamp" => Time.current.to_i }] }
+            HandleSendgridEventJob.new.perform(params)
+            FlushDeliveredEmailInfosJob.new.perform
+
+            expect(@email_info.reload.state).to eq "delivered"
+            expect(@email_info.delivered_at.to_i).to eq(original_delivered_at.to_i)
+          end
+
+          it "does not downgrade an opened email_info on a late delivered event" do
+            @email_info.mark_sent!
+            @email_info.mark_delivered!
+            @email_info.mark_opened!
+            opened_at = @email_info.reload.opened_at
+
+            params = { "_json" => [{ "event" => "delivered", "type" => "CreatorContactingCustomersMailer.purchase_installment",
+                                     "identifier" => @identifier, "installment_id" => @installment.id, "timestamp" => Time.current.to_i }] }
+            HandleSendgridEventJob.new.perform(params)
+            FlushDeliveredEmailInfosJob.new.perform
+
+            expect(@email_info.reload.state).to eq "opened"
+            expect(@email_info.opened_at.to_i).to eq(opened_at.to_i)
+          end
+
+          it "marks it as delivered synchronously when Redis is unavailable" do
+            allow($redis).to receive(:rpush).and_raise(Redis::CannotConnectError)
+            params = { "_json" => [{ "event" => "delivered", "type" => "CreatorContactingCustomersMailer.purchase_installment",
+                                     "identifier" => @identifier, "installment_id" => @installment.id, "timestamp" => 1.day.ago.to_i }] }
+            HandleSendgridEventJob.new.perform(params)
+
+            expect(FlushDeliveredEmailInfosJob).not_to have_enqueued_sidekiq_job
             expect(@email_info.reload.state).to eq "delivered"
             expect(@email_info.reload.delivered_at).to eq(Time.zone.at(params["_json"].first["timestamp"]))
           end
@@ -269,17 +314,16 @@ describe HandleEmailEventInfo::ForInstallmentEmail do
             expect(CreatorContactingCustomersEmailInfo.last.email_name).to eq "purchase_installment"
           end
 
-          it "creates a new email info and mark it as delivered" do
+          it "does not create a new email info for a delivered event" do
             expect(CreatorContactingCustomersEmailInfo.count).to eq 0
             params = { "_json" => [{ "event" => "delivered", "type" => "CreatorContactingCustomersMailer.purchase_installment",
                                      "identifier" => @identifier, "installment_id" => @installment.id, "timestamp" => 1.day.ago.to_i }] }
             travel_to(Time.current) do
               HandleSendgridEventJob.new.perform(params)
             end
+            FlushDeliveredEmailInfosJob.new.perform
 
-            expect(CreatorContactingCustomersEmailInfo.count).to eq 1
-            expect(CreatorContactingCustomersEmailInfo.last.state).to eq "delivered"
-            expect(CreatorContactingCustomersEmailInfo.last.delivered_at).to eq(Time.zone.at(params["_json"].first["timestamp"]))
+            expect(CreatorContactingCustomersEmailInfo.count).to eq 0
           end
 
           it "creates a new email info and mark it as opened" do
@@ -321,6 +365,16 @@ describe HandleEmailEventInfo::ForInstallmentEmail do
             @email_info = create(:creator_contacting_customers_email_info, installment: @installment, purchase: @purchase)
           end
 
+          it "buffers the delivered mark against the original purchase and applies it on flush" do
+            params = { "_json" => [{ "event" => "delivered", "type" => "CreatorContactingCustomersMailer.subscription_installment",
+                                     "identifier" => "[#{@subscription.id}, #{@installment.id}]", "installment_id" => @installment.id, "timestamp" => 1.day.ago.to_i }] }
+            HandleSendgridEventJob.new.perform(params)
+            FlushDeliveredEmailInfosJob.new.perform
+
+            expect(@email_info.reload.state).to eq "delivered"
+            expect(@email_info.delivered_at).to eq(Time.zone.at(params["_json"].first["timestamp"]))
+          end
+
           it "marks it as opened" do
             params = { "_json" => [{ "event" => "open", "type" => "CreatorContactingCustomersMailer.subscription_installment",
                                      "identifier" => "[#{@subscription.id}, #{@installment.id}]", "installment_id" => @installment.id, "timestamp" => 1.hour.ago.to_i }] }
@@ -348,17 +402,16 @@ describe HandleEmailEventInfo::ForInstallmentEmail do
             expect(CreatorContactingCustomersEmailInfo.last.email_name).to eq "subscription_installment"
           end
 
-          it "creates a new email info and mark it as delivered" do
+          it "does not create a new email info for a delivered event" do
             expect(CreatorContactingCustomersEmailInfo.count).to eq 0
             params = { "_json" => [{ "event" => "delivered", "type" => "CreatorContactingCustomersMailer.subscription_installment",
                                      "identifier" => "[#{@subscription.id}, #{@installment.id}]", "installment_id" => @installment.id, "timestamp" => 1.day.ago.to_i }] }
             travel_to(Time.current) do
               HandleSendgridEventJob.new.perform(params)
             end
+            FlushDeliveredEmailInfosJob.new.perform
 
-            expect(CreatorContactingCustomersEmailInfo.count).to eq 1
-            expect(CreatorContactingCustomersEmailInfo.last.state).to eq "delivered"
-            expect(CreatorContactingCustomersEmailInfo.last.delivered_at).to eq(Time.zone.at(params["_json"].first["timestamp"]))
+            expect(CreatorContactingCustomersEmailInfo.count).to eq 0
           end
         end
       end

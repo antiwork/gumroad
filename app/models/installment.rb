@@ -872,7 +872,70 @@ class Installment < ApplicationRecord
   end
 
   def increment_total_delivered(by: 1)
-    self.class.update_counters id, customer_count: by
+    self.class.buffer_delivered_delta(id, by)
+  end
+
+  def self.buffer_delivered_delta(installment_id, by)
+    by = by.to_i
+    return if by == 0
+
+    key = RedisKey.installment_delivered_delta(installment_id)
+    begin
+      $redis.multi do |redis|
+        redis.incrby(key, by)
+        redis.expire(key, 2.days.to_i)
+        redis.sadd(RedisKey.installment_delivered_delta_ids, installment_id)
+      end
+    rescue Redis::BaseError, RedisClient::Error
+      update_counters installment_id, customer_count: by
+      return
+    end
+
+    FlushInstallmentDeliveredDeltasJob.perform_async
+  rescue Redis::BaseError, RedisClient::Error
+    # Buffer already committed; the minute cron will flush. Do not also
+    # write through — that double-counts when the cron runs.
+    nil
+  end
+
+  # Drops pending-set membership only while the delta is drained. An eager
+  # SREM would strand an increment that lands mid-flush: the producer's SADD
+  # is a no-op while the id is still in the set.
+  REMOVE_DELIVERED_DELTA_IF_DRAINED = <<~LUA
+    local delta = redis.call('GET', KEYS[1])
+    if delta == false or delta == '0' then
+      redis.call('DEL', KEYS[1])
+      redis.call('SREM', KEYS[2], ARGV[1])
+      return 1
+    end
+    return 0
+  LUA
+
+  def self.flush_delivered_deltas!
+    ids = $redis.smembers(RedisKey.installment_delivered_delta_ids)
+    return if ids.blank?
+
+    ids.each do |installment_id|
+      key = RedisKey.installment_delivered_delta(installment_id)
+      # Claim before MySQL: GETSET 0 so a crash after UPDATE cannot re-apply
+      # the same delta. INCRBY during the UPDATE lands on the zeroed key and
+      # the Lua SREM-if-drained leaves that remainder discoverable.
+      delta = $redis.getset(key, 0).to_i
+      if delta != 0
+        begin
+          update_counters installment_id, customer_count: delta
+        rescue StandardError
+          $redis.incrby(key, delta)
+          $redis.expire(key, 2.days.to_i)
+          raise
+        end
+      end
+      $redis.eval(REMOVE_DELIVERED_DELTA_IF_DRAINED,
+                  keys: [key, RedisKey.installment_delivered_delta_ids],
+                  argv: [installment_id])
+    end
+  rescue Redis::BaseError, RedisClient::Error
+    nil
   end
 
   def eligible_purchase_for_user(user)

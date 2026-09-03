@@ -30,6 +30,7 @@ module Product::ReviewStat
     else
       apply_rating_change_to_review_stat(product_review_stat, old_rating, new_rating)
     end
+    bump_seller_reputation_version
     enqueue_index_update_for_reviews
   end
 
@@ -46,10 +47,12 @@ module Product::ReviewStat
     if old_purchase_is_valid && !purchase_is_valid
       product_review_stat.update_with_removed_rating(product_review.rating)
       product_review.mark_deleted! unless product_review.deleted?
+      bump_seller_reputation_version
       enqueue_index_update_for_reviews
     elsif !old_purchase_is_valid && purchase_is_valid && product_review_stat.present?
       product_review_stat.update_with_added_rating(product_review.rating)
       product_review.mark_undeleted! unless product_review.alive?
+      bump_seller_reputation_version
       enqueue_index_update_for_reviews
     end
   end
@@ -63,6 +66,7 @@ module Product::ReviewStat
     elsif !product_review_stat.nil?
       product_review_stat.update!(data)
     end
+    bump_seller_reputation_version
   end
 
   def generate_review_stat_attributes
@@ -102,5 +106,11 @@ module Product::ReviewStat
 
     def enqueue_index_update_for_reviews
       enqueue_index_update_for(%w(average_rating reviews_count is_recommendable))
+    end
+
+    # Delegates so the flag gate + deferred Redis INCR live in one place
+    # (User::ReputationSummary).
+    def bump_seller_reputation_version
+      user.bump_reputation_summary_version
     end
 end

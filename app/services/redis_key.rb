@@ -139,5 +139,13 @@ class RedisKey
     def workflow_immediate_fanout_max_spread_seconds = "workflow_immediate_fanout_max_spread_seconds"
     def seller_large_blast_threshold = "seller_large_blast_threshold"
     def seller_large_blast_quota(seller_id, day) = "seller_large_blast_quota:#{seller_id}:#{day}"
+    # LIST of JSON {i: installment_id, p: purchase_id, t: epoch} pending an email_infos delivered UPDATE.
+    def email_info_delivered_buffer = "email_info:delivered_buffer"
+    def email_info_delivered_inflight = "email_info:delivered_inflight"
+    def email_info_delivered_flush_lock = "email_info:delivered_flush_lock"
+    # Buffered installment.customer_count increments. Midnight Resend callback
+    # waves (and blast sends) used to UPDATE the same row per event/batch.
+    def installment_delivered_delta(installment_id) = "installment:#{installment_id}:delivered_delta"
+    def installment_delivered_delta_ids = "installment:delivered_delta_ids"
   end
 end
