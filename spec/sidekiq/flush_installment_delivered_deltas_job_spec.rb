@@ -57,6 +57,28 @@ describe FlushInstallmentDeliveredDeltasJob do
     end.to change { installment.reload.customer_count }.from(4).to(7)
   end
 
+  it "does not write through when enqueueing the flush job fails" do
+    allow(FlushInstallmentDeliveredDeltasJob).to receive(:perform_async).and_raise(Redis::BaseError)
+    expect do
+      installment.increment_total_delivered(by: 2)
+    end.not_to change { installment.reload.customer_count }
+
+    allow(FlushInstallmentDeliveredDeltasJob).to receive(:perform_async).and_call_original
+    expect do
+      described_class.new.perform
+    end.to change { installment.reload.customer_count }.from(4).to(6)
+  end
+
+  it "does not re-apply a claimed delta on a second flush" do
+    installment.increment_total_delivered(by: 2)
+    described_class.new.perform
+    expect(installment.reload.customer_count).to eq(6)
+
+    expect do
+      described_class.new.perform
+    end.not_to change { installment.reload.customer_count }
+  end
+
   it "does not SELECT installments to drop engagement cache" do
     allow(Installment).to receive(:find).and_call_original
     Rails.cache.write(installment.key_for_cache(:unique_open_count), 0)

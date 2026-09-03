@@ -880,14 +880,22 @@ class Installment < ApplicationRecord
     return if by == 0
 
     key = RedisKey.installment_delivered_delta(installment_id)
-    $redis.multi do |redis|
-      redis.incrby(key, by)
-      redis.expire(key, 2.days.to_i)
-      redis.sadd(RedisKey.installment_delivered_delta_ids, installment_id)
+    begin
+      $redis.multi do |redis|
+        redis.incrby(key, by)
+        redis.expire(key, 2.days.to_i)
+        redis.sadd(RedisKey.installment_delivered_delta_ids, installment_id)
+      end
+    rescue Redis::BaseError, RedisClient::Error
+      update_counters installment_id, customer_count: by
+      return
     end
+
     FlushInstallmentDeliveredDeltasJob.perform_async
   rescue Redis::BaseError, RedisClient::Error
-    update_counters installment_id, customer_count: by
+    # Buffer already committed; the minute cron will flush. Do not also
+    # write through — that double-counts when the cron runs.
+    nil
   end
 
   # Drops pending-set membership only while the delta is drained. An eager
@@ -909,13 +917,18 @@ class Installment < ApplicationRecord
 
     ids.each do |installment_id|
       key = RedisKey.installment_delivered_delta(installment_id)
-      delta = $redis.get(key).to_i
+      # Claim before MySQL: GETSET 0 so a crash after UPDATE cannot re-apply
+      # the same delta. INCRBY during the UPDATE lands on the zeroed key and
+      # the Lua SREM-if-drained leaves that remainder discoverable.
+      delta = $redis.getset(key, 0).to_i
       if delta != 0
-        # MySQL write before the Redis ack: a failed UPDATE leaves the delta
-        # buffered for the Sidekiq retry. DECRBY (not SET 0) preserves
-        # increments that arrive during the UPDATE.
-        update_counters installment_id, customer_count: delta
-        $redis.decrby(key, delta)
+        begin
+          update_counters installment_id, customer_count: delta
+        rescue StandardError
+          $redis.incrby(key, delta)
+          $redis.expire(key, 2.days.to_i)
+          raise
+        end
       end
       $redis.eval(REMOVE_DELIVERED_DELTA_IF_DRAINED,
                   keys: [key, RedisKey.installment_delivered_delta_ids],
