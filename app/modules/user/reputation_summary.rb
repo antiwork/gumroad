@@ -74,9 +74,12 @@ module User::ReputationSummary
     # first MySQL scans it and probes links per row (gumroad-private#2388).
     # FROM order alone does not constrain MySQL's join order — the
     # STRAIGHT_JOIN hint is what pins links as the driving table.
+    # FORCE INDEX pins the links access path: the production primary chose a
+    # full-table scan even with STRAIGHT_JOIN, timing out large catalogues.
     def reputation_aggregate
       Rails.cache.fetch(reputation_cache_key, expires_in: CACHE_TTL) do
         products_count, total, weighted = Link.alive.not_draft
+          .from("`links` FORCE INDEX (index_links_on_user_id)")
           .where(user_id: id)
           .where(Arel.sql("links.flags & #{Link.flag_mapping["flags"][:display_product_reviews]} != 0"))
           .joins("STRAIGHT_JOIN product_review_stats ON product_review_stats.link_id = links.id")
