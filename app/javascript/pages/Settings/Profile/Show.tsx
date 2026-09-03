@@ -1,4 +1,4 @@
-import { FontFamily, Google, TwitterX } from "@boxicons/react";
+import { FontFamily, TwitterX, Youtube } from "@boxicons/react";
 import { Link, router, usePage } from "@inertiajs/react";
 import { isEqual } from "lodash-es";
 import * as React from "react";
@@ -517,13 +517,13 @@ export default function SettingsPage() {
                     </SocialAuthButton>
                   )}
                   {youtube_connected ? (
-                    <Button type="button" color="google" onClick={handleUnlinkYoutube}>
-                      <Google pack="brands" className="size-5" />
+                    <Button type="button" color="youtube" onClick={handleUnlinkYoutube}>
+                      <Youtube pack="brands" className="size-5" />
                       Disconnect {youtube_handle ? `${youtube_handle} from YouTube` : "YouTube"}
                     </Button>
                   ) : youtube_connect_enabled ? (
-                    <SocialAuthButton provider="google" href={Routes.user_youtube_omniauth_authorize_path()}>
-                      <Google pack="brands" className="size-5" />
+                    <SocialAuthButton provider="youtube" href={Routes.user_youtube_omniauth_authorize_path()}>
+                      <Youtube pack="brands" className="size-5" />
                       Connect to YouTube
                     </SocialAuthButton>
                   ) : null}
