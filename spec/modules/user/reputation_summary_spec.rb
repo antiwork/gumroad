@@ -138,6 +138,25 @@ describe User::ReputationSummary do
         expect(review_stat_queries).to eq(0)
       end
 
+      # gumroad-private#2388: FROM order does not constrain the optimizer —
+      # the STRAIGHT_JOIN hint is what pins links as the driving table, so
+      # pin the hint itself.
+      it "pins links as the driving table via STRAIGHT_JOIN" do
+        create_stat(product_one, five: 8)
+        create_stat(product_two, four: 4)
+        seller.bump_reputation_summary_version
+
+        queries = []
+        callback = ->(_name, _started, _finished, _id, payload) { queries << payload[:sql] }
+        ::ActiveSupport::Notifications.subscribed(callback, "sql.active_record") do
+          expect(seller.seller_reputation_summary).to eq(average: 4.7, count: 12, products_count: 2)
+        end
+
+        aggregate_sql = queries.find { |sql| sql.include?("product_review_stats") && sql.include?("SUM") }
+        expect(aggregate_sql).to be_present
+        expect(aggregate_sql).to match(/FROM\s+`links`\s+STRAIGHT_JOIN\s+product_review_stats/i)
+      end
+
       it "returns nil for a large zero-review catalogue" do
         Array.new(230) { create(:product, user: seller) }
         seller.bump_reputation_summary_version
