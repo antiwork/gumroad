@@ -41,6 +41,7 @@ describe ProfilePresenter do
           external_id: seller.external_id,
           name: seller.name,
           twitter_handle: nil,
+          youtube_channel_id: nil,
           subdomain: seller.subdomain,
           is_verified: false,
           can_edit: true,
@@ -48,6 +49,17 @@ describe ProfilePresenter do
           hide_follow_form: false,
         }
       )
+    end
+
+
+    it "includes the YouTube channel id on the public profile and the handle only on settings props" do
+      create(:user_youtube_identity, user: seller, channel_id: "UC123", handle: "googledevelopers")
+      seller.reload
+
+      expect(described_class.new(pundit_user: SellerContext.logged_out, seller:).creator_profile).not_to have_key(:youtube_handle)
+      expect(described_class.new(pundit_user: SellerContext.logged_out, seller:).creator_profile[:youtube_channel_id]).to eq("UC123")
+      expect(described_class.new(pundit_user:, seller:).profile_settings_props(request:)[:youtube_handle]).to eq("googledevelopers")
+      expect(described_class.new(pundit_user:, seller:).profile_settings_props(request:)[:youtube_connected]).to eq(true)
     end
 
     it "includes hide_follow_form when the seller has turned it on" do
@@ -294,6 +306,9 @@ describe ProfilePresenter do
           seller_fonts_css_source: SellerProfile.seller_fonts_css_source,
           email_confirmation: nil,
           custom_html_pages_enabled: false,
+          youtube_connect_enabled: false,
+          youtube_connected: false,
+          youtube_handle: nil,
           has_custom_landing_page: false,
           username: seller.username,
           # seller_analytics is only added to the public profile_props — the settings

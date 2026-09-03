@@ -16,6 +16,7 @@ class ProfilePresenter
       avatar_url: seller.avatar_url,
       name: seller.name || seller.username,
       twitter_handle: seller.twitter_handle,
+      youtube_channel_id: seller.youtube_identity&.channel_id,
       subdomain: seller.subdomain,
       is_verified: !!seller.verified,
       can_edit: can_edit_profile?,
@@ -85,6 +86,9 @@ class ProfilePresenter
         # username feeds the agent prompt. The HTML itself is never sent here - the form never edits
         # it, it only sends "" to reset, so has_custom_landing_page is all the UI needs.
         custom_html_pages_enabled: Feature.active?(:custom_html_pages, seller),
+        youtube_connect_enabled: Feature.active?(:youtube_connect, seller),
+        youtube_connected: seller.youtube_identity.present?,
+        youtube_handle: seller.youtube_identity&.handle,
         has_custom_landing_page: seller.has_custom_landing_page?,
         username: seller.username,
       }

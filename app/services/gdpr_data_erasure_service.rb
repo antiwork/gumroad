@@ -254,6 +254,7 @@ class GdprDataErasureService
       # Erasure soft-deletes the user rather than destroying it, so the association's
       # `dependent: :destroy` never runs and the platform uid/handle must be removed here.
       @user.social_connect_verifications.destroy_all
+      @user.youtube_identity&.destroy
 
       anonymized_email
     end

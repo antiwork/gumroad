@@ -126,13 +126,53 @@ class User::OmniauthCallbacksController < Devise::OmniauthCallbacksController
     sign_in_with_oauth("Google")
   end
 
+  def youtube
+    if logged_in_user.blank?
+      flash[:alert] = "You need to be logged in to link your YouTube account."
+      return redirect_to login_path
+    end
+
+    unless Feature.active?(:youtube_connect, logged_in_user)
+      flash[:alert] = "YouTube connect is not available."
+      return redirect_to profile_path
+    end
+
+    begin
+      token = request.env.dig("omniauth.auth", "credentials", "token")
+      channel = YoutubeChannelFetcher.new(token).fetch
+    rescue StandardError => e
+      Rails.logger.error("YoutubeChannelFetcher raised #{e.class} for user #{logged_in_user.id}")
+      channel = nil
+    end
+
+    if channel.blank?
+      flash[:alert] = "Couldn't read a YouTube channel for that Google account."
+      return redirect_to profile_path
+    end
+
+    begin
+      SocialConnectVerification.record_from_youtube!(logged_in_user, channel)
+      identity = logged_in_user.youtube_identity || logged_in_user.build_youtube_identity
+      identity.update!(channel_id: channel["id"], handle: channel["handle"])
+    rescue StandardError => e
+      Rails.logger.error("SocialConnectVerification youtube record failed for user #{logged_in_user.id}: #{e.class}")
+      flash[:alert] = "Couldn't save your YouTube connection. Please try again."
+      return redirect_to profile_path
+    end
+
+    redirect_to profile_path
+  end
+
   def apple
     @user = User.find_or_create_for_apple_oauth(request.env["omniauth.auth"])
     sign_in_with_oauth("Apple")
   end
 
   def failure
-    if params[:error_description].present?
+    if request.env["omniauth.error.strategy"]&.name.to_s == "youtube"
+      flash[:alert] = "Couldn't connect YouTube. Please try again."
+      redirect_to(logged_in_user.present? ? profile_path : login_path)
+    elsif params[:error_description].present?
       redirect_to settings_payments_path, notice: params[:error_description]
     elsif params[REQ_PARAM_STATE] != :async_link_twitter_account.to_s
       Rails.logger.info("OAuth failure and request state unexpected: #{params}")

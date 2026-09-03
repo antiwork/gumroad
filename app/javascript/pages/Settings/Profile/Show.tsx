@@ -1,10 +1,10 @@
-import { FontFamily, TwitterX } from "@boxicons/react";
+import { FontFamily, Google, TwitterX } from "@boxicons/react";
 import { Link, router, usePage } from "@inertiajs/react";
 import { isEqual } from "lodash-es";
 import * as React from "react";
 import typia from "typia";
 
-import { updateProfileSettings as saveProfileSettings, unlinkTwitter } from "$app/data/profile_settings";
+import { updateProfileSettings as saveProfileSettings, unlinkTwitter, unlinkYoutube } from "$app/data/profile_settings";
 import {
   ProfileSettingsForm,
   changedProfileSettings,
@@ -68,6 +68,9 @@ type ProfilePageProps = {
   editable_profile: ProfileEditorProps;
   profile_version: string;
   custom_html_pages_enabled: boolean;
+  youtube_connect_enabled: boolean;
+  youtube_connected: boolean;
+  youtube_handle: string | null;
   has_custom_landing_page: boolean;
   seller_fonts_css_source: string;
   username: string;
@@ -81,6 +84,9 @@ export default function SettingsPage() {
     editable_profile,
     profile_version,
     custom_html_pages_enabled,
+    youtube_connect_enabled,
+    youtube_connected,
+    youtube_handle,
     has_custom_landing_page,
     seller_fonts_css_source,
     username,
@@ -258,6 +264,16 @@ export default function SettingsPage() {
   const handleUnlinkTwitter = asyncVoid(async () => {
     try {
       await unlinkTwitter();
+      router.reload();
+    } catch (e) {
+      assertResponseError(e);
+      showAlert(e.message, "error");
+    }
+  });
+
+  const handleUnlinkYoutube = asyncVoid(async () => {
+    try {
+      await unlinkYoutube();
       router.reload();
     } catch (e) {
       assertResponseError(e);
@@ -500,6 +516,17 @@ export default function SettingsPage() {
                       Connect to X
                     </SocialAuthButton>
                   )}
+                  {youtube_connected ? (
+                    <Button type="button" color="google" onClick={handleUnlinkYoutube}>
+                      <Google pack="brands" className="size-5" />
+                      Disconnect {youtube_handle ? `${youtube_handle} from YouTube` : "YouTube"}
+                    </Button>
+                  ) : youtube_connect_enabled ? (
+                    <SocialAuthButton provider="google" href={Routes.user_youtube_omniauth_authorize_path()}>
+                      <Google pack="brands" className="size-5" />
+                      Connect to YouTube
+                    </SocialAuthButton>
+                  ) : null}
                 </Fieldset>
               ) : null}
             </section>

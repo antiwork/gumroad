@@ -79,4 +79,38 @@ describe SocialConnectVerification do
       expect(verification.account_created_at).to be_nil
     end
   end
+
+  describe ".record_from_youtube!" do
+    let(:user) { create(:user) }
+    let(:channel) do
+      {
+        "id" => "UC_x5XG1OV2P6uZZ5FSM9Ttw",
+        "handle" => "googledevelopers",
+        "published_at" => "2007-08-23T00:34:43Z",
+        "subscriber_count" => "2400000",
+        "video_count" => "5800",
+        "last_posted_at" => Time.iso8601("2026-08-01T12:00:00Z"),
+      }
+    end
+
+    it "stores verified channel metadata" do
+      verification = described_class.record_from_youtube!(user, channel)
+
+      expect(verification.reload).to have_attributes(
+        platform: "youtube",
+        uid: "UC_x5XG1OV2P6uZZ5FSM9Ttw",
+        handle: "googledevelopers",
+        follower_count: 2_400_000,
+        post_count: 5_800,
+      )
+      expect(verification.account_created_at).to eq(Time.iso8601("2007-08-23T00:34:43Z"))
+      expect(verification.last_posted_at).to eq(Time.iso8601("2026-08-01T12:00:00Z"))
+    end
+
+    it "records nothing when the channel id is missing" do
+      expect do
+        described_class.record_from_youtube!(user, channel.merge("id" => ""))
+      end.not_to change { described_class.count }
+    end
+  end
 end

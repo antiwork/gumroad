@@ -3,6 +3,7 @@ export type CreatorProfile = {
   avatar_url: string;
   name: string;
   twitter_handle: string | null;
+  youtube_channel_id?: string | null;
   subdomain: string | null;
   is_verified: boolean;
   can_edit: boolean;
