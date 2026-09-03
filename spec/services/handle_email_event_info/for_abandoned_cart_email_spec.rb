@@ -22,6 +22,7 @@ describe HandleEmailEventInfo::ForAbandonedCartEmail do
       it "tracks a delivered event" do
         expect do
           handler_class_for(email_provider).new.perform(params)
+          Installment.flush_delivered_deltas!
         end.to change { abandoned_cart_workflow_installment1.reload.customer_count }.from(nil).to(1)
           .and change { abandoned_cart_workflow_installment3.reload.customer_count }.from(nil).to(1)
 

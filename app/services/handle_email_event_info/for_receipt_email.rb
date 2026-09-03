@@ -18,9 +18,9 @@ class HandleEmailEventInfo::ForReceiptEmail
     when EmailEventInfo::EVENT_BOUNCED
       email_info.mark_bounced!
     when EmailEventInfo::EVENT_DELIVERED
-      email_info.mark_delivered!(email_event_info.created_at)
+      email_info.mark_delivered!(email_event_info.created_at) unless email_info.already_delivered?
     when EmailEventInfo::EVENT_OPENED
-      email_info.mark_opened!(email_event_info.created_at)
+      email_info.mark_opened!(email_event_info.created_at) unless email_info.already_opened?
     when EmailEventInfo::EVENT_COMPLAINED
       unless email_event_info.email_provider == MailerInfo::EMAIL_PROVIDER_RESEND
         Purchase.find_by(id: email_event_info.purchase_id)

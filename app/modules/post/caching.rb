@@ -1,12 +1,27 @@
 # frozen_string_literal: true
 
 module Post::Caching
-  # The _ddb suffix is permanent: dropping it would resurface counts cached
-  # before the engagement store moved. dynamodb_reads: false still names the
-  # unsuffixed legacy key so event handlers can purge it per installment
-  # (Memcached cannot bulk-delete).
+  def self.included(base)
+    base.extend(ClassMethods)
+  end
+
+  module ClassMethods
+    # The _ddb suffix is permanent: dropping it would resurface counts cached
+    # before the engagement store moved. dynamodb_reads: false still names the
+    # unsuffixed legacy key so event handlers can purge it per installment
+    # (Memcached cannot bulk-delete).
+    def cache_key_for(installment_id, key, dynamodb_reads: true)
+      "#{key}_for_installment_#{installment_id}#{dynamodb_reads ? "_ddb" : ""}"
+    end
+
+    def invalidate_engagement_cache(installment_id, key)
+      Rails.cache.delete(cache_key_for(installment_id, key))
+      Rails.cache.delete(cache_key_for(installment_id, key, dynamodb_reads: false))
+    end
+  end
+
   def key_for_cache(key, dynamodb_reads: true)
-    "#{key}_for_installment_#{id}#{dynamodb_reads ? "_ddb" : ""}"
+    self.class.cache_key_for(id, key, dynamodb_reads:)
   end
 
   def invalidate_cache(key)
