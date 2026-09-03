@@ -567,6 +567,21 @@ describe "chargeback-rate payout reserve" do
         expect(payment).to be_nil
         expect(row.reload).to be_unpaid
       end
+
+      it "claims nothing under the hold when the kill switch is on (pre-reserve full skip)" do
+        seller = payable_stripe_seller
+        row = unpaid_balance(seller, cents: 500_00, on: date - 5)
+        pause_for_chargeback_rate!(seller)
+        allow(Feature).to receive(:active?).and_call_original
+        allow(Feature).to receive(:active?).with(:disable_chargeback_rate_payout_reserve).and_return(true)
+        allow(StripePayoutProcessor).to receive(:is_balance_payable).and_return(true)
+        stub_stripe_prepare!
+
+        payment = described_class.create_payment(date.to_s, PayoutProcessorType::STRIPE, seller)
+
+        expect(payment).to be_nil
+        expect(row.reload).to be_unpaid
+      end
     end
   end
 end

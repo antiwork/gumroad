@@ -493,13 +493,11 @@ class Payouts
     user.with_lock do
       under_reserve = under_chargeback_rate_reserve?(user, payout_type:)
       # A live hold that is not payable as a reserve (instant payout, seller's own pause on
-      # top, deleted account) is a full block, not an unrestricted claim — otherwise the same
-      # race the reserve re-check closes would release 100% here. Skipped when the kill switch
-      # is on so admin console payouts keep pre-reserve behavior.
-      if !under_reserve && user.payouts_paused_for_chargeback_rate? &&
-         !Feature.active?(:disable_chargeback_rate_payout_reserve)
-        next [[], false]
-      end
+      # top, deleted account, kill switch on) is a full block, not an unrestricted claim —
+      # otherwise the same race the reserve re-check closes would release 100% here. This
+      # holds under the kill switch too: the pre-reserve behavior for this hold was a full
+      # skip, and an admin who wants to pay a held seller lifts the pause first.
+      next [[], false] if !under_reserve && user.payouts_paused_for_chargeback_rate?
 
       balances = select_and_claim_payable_balances(date, processor_type, user, payout_type:, under_reserve:)
       [balances, under_reserve]
@@ -525,7 +523,8 @@ class Payouts
         chargeback_rate_reserve_payable_balances(user, unpaid_balances),
         minimum_cents:,
         unpaid_cents: unpaid_balances.sum(&:amount_cents),
-        paid_cents: claimed_cents_for_payout_date(user, date)
+        paid_cents: claimed_cents_for_payout_date(user, date),
+        reserve_active: true
       ).map(&:id)
 
       payable_balances = payable_balances.select { |balance| reserve_selected_ids.include?(balance.id) }
@@ -647,8 +646,12 @@ class Payouts
   # `paid_cents` counts toward the minimum only: rails run sequentially, so the second rail
   # re-selects from the residual pot and its share alone can sit under the minimum even though
   # the payout date's total cleared it. Without the credit that share is stranded unpaid.
-  def self.apply_chargeback_rate_reserve(user, balances, minimum_cents:, unpaid_cents: nil, paid_cents: 0)
-    return balances unless user.chargeback_rate_payout_reserve_active?
+  #
+  # `reserve_active` lets the payment path pin the decision it made under the seller lock — a
+  # kill-switch flip between that decision and this call must not turn a 75% claim into 100%.
+  def self.apply_chargeback_rate_reserve(user, balances, minimum_cents:, unpaid_cents: nil, paid_cents: 0, reserve_active: nil)
+    reserve_active = user.chargeback_rate_payout_reserve_active? if reserve_active.nil?
+    return balances unless reserve_active
 
     total = unpaid_cents.nil? ? balances.sum(&:amount_cents) : unpaid_cents
     cap = total - chargeback_rate_reserve_cents_for_run(user, total)
