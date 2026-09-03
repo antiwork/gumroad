@@ -890,17 +890,36 @@ class Installment < ApplicationRecord
     update_counters installment_id, customer_count: by
   end
 
+  # Drops pending-set membership only while the delta is drained. An eager
+  # SREM would strand an increment that lands mid-flush: the producer's SADD
+  # is a no-op while the id is still in the set.
+  REMOVE_DELIVERED_DELTA_IF_DRAINED = <<~LUA
+    local delta = redis.call('GET', KEYS[1])
+    if delta == false or delta == '0' then
+      redis.call('DEL', KEYS[1])
+      redis.call('SREM', KEYS[2], ARGV[1])
+      return 1
+    end
+    return 0
+  LUA
+
   def self.flush_delivered_deltas!
     ids = $redis.smembers(RedisKey.installment_delivered_delta_ids)
     return if ids.blank?
 
     ids.each do |installment_id|
       key = RedisKey.installment_delivered_delta(installment_id)
-      delta = $redis.getset(key, "0").to_i
-      $redis.srem(RedisKey.installment_delivered_delta_ids, installment_id)
-      next if delta == 0
-
-      update_counters installment_id, customer_count: delta
+      delta = $redis.get(key).to_i
+      if delta != 0
+        # MySQL write before the Redis ack: a failed UPDATE leaves the delta
+        # buffered for the Sidekiq retry. DECRBY (not SET 0) preserves
+        # increments that arrive during the UPDATE.
+        update_counters installment_id, customer_count: delta
+        $redis.decrby(key, delta)
+      end
+      $redis.eval(REMOVE_DELIVERED_DELTA_IF_DRAINED,
+                  keys: [key, RedisKey.installment_delivered_delta_ids],
+                  argv: [installment_id])
     end
   rescue Redis::BaseError, RedisClient::Error
     nil
