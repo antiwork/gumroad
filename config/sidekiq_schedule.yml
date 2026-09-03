@@ -18,6 +18,10 @@ update_purchase_healthcheck_threshold:
   cron: "* * * * *" # Every minute — the threshold carries a 1h TTL, so the healthcheck fails closed if this stalls
   class: UpdatePurchaseHealthcheckThresholdJob
   description: Recomputes the /healthcheck/purchases threshold from the prior 7 days' purchase rate
+flush_installment_delivered_deltas:
+  cron: "* * * * *" # Every minute
+  class: FlushInstallmentDeliveredDeltasJob
+  description: Flushes Redis-buffered installment customer_count increments from blast sends and email callbacks
 
 # Hourly
 repair_order_charge_outcomes:

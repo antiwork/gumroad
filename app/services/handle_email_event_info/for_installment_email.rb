@@ -35,14 +35,16 @@ class HandleEmailEventInfo::ForInstallmentEmail
 
     def handle_delivered_event!
       email_info = pull_creator_contacting_customers_email_info(email_event_info)
-      email_info.mark_delivered!(email_event_info.created_at) if email_info.present?
+      return if email_info.blank? || email_info.already_delivered?
+
+      email_info.mark_delivered!(email_event_info.created_at)
     end
 
     def handle_open_event!
       EmailEngagementDynamoStore.record_open(**dynamo_engagement_attributes)
 
       email_info = pull_creator_contacting_customers_email_info(email_event_info)
-      email_info.mark_opened!(email_event_info.created_at) if email_info.present?
+      email_info.mark_opened!(email_event_info.created_at) if email_info.present? && !email_info.already_opened?
 
       update_installment_cache(email_event_info.installment_id, :unique_open_count)
     end
@@ -55,7 +57,7 @@ class HandleEmailEventInfo::ForInstallmentEmail
       update_installment_cache(email_event_info.installment_id, :unique_open_count)
 
       email_info = pull_creator_contacting_customers_email_info(email_event_info)
-      email_info.mark_opened!(email_event_info.created_at) if email_info&.persisted? && !email_info.opened?
+      email_info.mark_opened!(email_event_info.created_at) if email_info&.persisted? && !email_info.already_opened?
     end
 
     def handle_spamreport_event!
@@ -93,11 +95,10 @@ class HandleEmailEventInfo::ForInstallmentEmail
     end
 
     def update_installment_cache(installment_id, key)
-      installment = Installment.find(installment_id)
       # DDB aggregates are live GetItem reads. Clear stale cache entries for
-      # this event, but do not precompute counters from the discarded instance.
-      installment.invalidate_cache(key)
-      installment.invalidate_legacy_engagement_cache(key)
+      # this event, but do not precompute counters from a discarded instance —
+      # and do not SELECT installments just to build a key from the id.
+      Installment.invalidate_engagement_cache(installment_id, key)
     end
 
     def dynamo_engagement_attributes

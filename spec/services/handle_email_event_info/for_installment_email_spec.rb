@@ -206,6 +206,33 @@ describe HandleEmailEventInfo::ForInstallmentEmail do
             expect(@email_info.reload.delivered_at).to eq(Time.zone.at(params["_json"].first["timestamp"]))
           end
 
+          it "does not rewrite an already-delivered email_info" do
+            @email_info.mark_sent!
+            @email_info.mark_delivered!(2.days.ago)
+            original_delivered_at = @email_info.reload.delivered_at
+
+            params = { "_json" => [{ "event" => "delivered", "type" => "CreatorContactingCustomersMailer.purchase_installment",
+                                     "identifier" => @identifier, "installment_id" => @installment.id, "timestamp" => Time.current.to_i }] }
+            HandleSendgridEventJob.new.perform(params)
+
+            expect(@email_info.reload.state).to eq "delivered"
+            expect(@email_info.delivered_at.to_i).to eq(original_delivered_at.to_i)
+          end
+
+          it "does not downgrade an opened email_info on a late delivered event" do
+            @email_info.mark_sent!
+            @email_info.mark_delivered!
+            @email_info.mark_opened!
+            opened_at = @email_info.reload.opened_at
+
+            params = { "_json" => [{ "event" => "delivered", "type" => "CreatorContactingCustomersMailer.purchase_installment",
+                                     "identifier" => @identifier, "installment_id" => @installment.id, "timestamp" => Time.current.to_i }] }
+            HandleSendgridEventJob.new.perform(params)
+
+            expect(@email_info.reload.state).to eq "opened"
+            expect(@email_info.opened_at.to_i).to eq(opened_at.to_i)
+          end
+
           it "marks it as opened" do
             params = { "_json" => [{ "event" => "open", "type" => "CreatorContactingCustomersMailer.purchase_installment",
                                      "identifier" => @identifier, "installment_id" => @installment.id, "timestamp" => 1.hour.ago.to_i }] }

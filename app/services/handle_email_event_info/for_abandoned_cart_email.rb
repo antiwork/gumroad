@@ -46,8 +46,7 @@ class HandleEmailEventInfo::ForAbandonedCartEmail
     end
 
     def update_installment_cache(installment, key)
-      installment.invalidate_cache(key)
-      installment.invalidate_legacy_engagement_cache(key)
+      Installment.invalidate_engagement_cache(installment.id, key)
     end
 
     def common_event_attributes(installment)
