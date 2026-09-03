@@ -71,6 +71,15 @@ describe "chargeback-rate payout reserve" do
       expect(seller.chargeback_rate_payout_reserve_active?).to eq(false)
     end
 
+    it "is off for an account deleted while under the hold" do
+      pause_for_chargeback_rate!(seller)
+      # Deletion keeps payouts_paused_by "system" and the chargeback comment stays newest,
+      # so without the deleted? guard the reserve would pay 75% of a closed account.
+      seller.update!(deleted_at: Time.current)
+
+      expect(seller.chargeback_rate_payout_reserve_active?).to eq(false)
+    end
+
     it "is off when the kill switch is on" do
       pause_for_chargeback_rate!(seller)
       allow(Feature).to receive(:active?).and_call_original

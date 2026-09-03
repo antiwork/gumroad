@@ -455,6 +455,9 @@ module User::Risk
   def chargeback_rate_payout_reserve_active?
     return false if Feature.active?(:disable_chargeback_rate_payout_reserve)
     return false if payouts_paused_by_user?
+    # Deletion/GDPR set the pause flag without touching payouts_paused_by, so an account
+    # deleted mid-hold still matches the predicate below. Deleted accounts get no carve-out.
+    return false if deleted?
 
     payouts_paused_for_chargeback_rate?
   end
