@@ -66,7 +66,7 @@ describe StripeBalanceSummariesReport do
               interval_start: Time.utc(2026, 9, 1).to_i, interval_end: Time.utc(2026, 10, 1).to_i, usd_only: false)
     end
 
-    it "clamps only balance.summary.1; activity and payouts keep the full August interval" do
+    it "clamps only Gumroad balance.summary.1; other types and accounts keep the full August interval" do
       described_class.generate(8, 2026)
 
       expect(described_class).to have_received(:run_report)
@@ -78,6 +78,9 @@ describe StripeBalanceSummariesReport do
       expect(described_class).to have_received(:run_report)
         .with(api_key: STRIPE_SECRET, report_type: "payouts.summary.1",
               interval_start: Time.utc(2026, 8, 1).to_i, interval_end: Time.utc(2026, 9, 1).to_i, usd_only: true)
+      expect(described_class).to have_received(:run_report)
+        .with(api_key: "rk_live_flexile", report_type: "balance.summary.1",
+              interval_start: Time.utc(2026, 8, 1).to_i, interval_end: Time.utc(2026, 9, 1).to_i, usd_only: false)
     end
 
     it "rejects months that end before Stripe balance.summary.1 data exists" do
