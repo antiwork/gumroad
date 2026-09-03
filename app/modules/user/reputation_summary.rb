@@ -68,7 +68,7 @@ module User::ReputationSummary
     # display_product_reviews is a Link flag bit, not a column, so it is
     # meshed here exactly the way ProfileData already does (links.flags & BIT).
     def reputation_aggregate
-      Rails.cache.fetch(cache_key, expires_in: CACHE_TTL) do
+      Rails.cache.fetch(reputation_cache_key, expires_in: CACHE_TTL) do
         products_count, total, weighted = ProductReviewStat.joins(:link)
           .merge(Link.alive.not_draft)
           .where(links: { user_id: id })
@@ -83,7 +83,7 @@ module User::ReputationSummary
     # drafted/deleted/flag-flipped, i.e. links.updated_at changes) + the funnel
     # version (moves on review-stat writes, which touch product_review_stats,
     # not links). Both are cheap reads; neither scans the review-stat join.
-    def cache_key
+    def reputation_cache_key
       lifecycle = products.cache_key_with_version
       version = $redis.get(reputation_version_key).to_i
       "#{CACHE_PREFIX}/#{CACHE_VERSION}/#{id}/#{lifecycle}/#{version}"

@@ -156,6 +156,16 @@ describe User::ReputationSummary do
 
         expect(seller.seller_reputation_summary[:count]).to eq(13)
       end
+
+      it "does not shadow ActiveRecord#cache_key on User" do
+        # gumroad-private#2384 panel catch: the module must NOT define its own
+        # #cache_key/#cache_key_with_version or it would override the AR
+        # Integration ones for every User and break fragment caching/ETags
+        # (and repoint them at the reputation aggregate). The module's key
+        # helper is deliberately named reputation_cache_key.
+        expect(seller.cache_key).to start_with("users/")
+        expect(seller.cache_key).not_to match(/seller_reputation_summary/)
+      end
     end
   end
 end
