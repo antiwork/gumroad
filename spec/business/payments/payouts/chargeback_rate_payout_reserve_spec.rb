@@ -191,6 +191,18 @@ describe "chargeback-rate payout reserve" do
         expect(described_class.chargeback_rate_reserve_cents_for_run(seller, 100_00)).to eq(25_00)
       end
 
+      it "ignores a pre-hold processing payout that is touched after the hold starts" do
+        seller = create(:user)
+        row = unpaid_balance(seller, cents: 500_00, on: Date.today - 10)
+        row.mark_processing!
+        payment = create(:payment, user: seller, amount_cents: 500_00, created_at: 2.days.ago)
+        payment.balances << row
+        pause_for_chargeback_rate!(seller)
+        row.touch
+
+        expect(described_class.chargeback_rate_reserve_cents_for_run(seller, 100_00)).to eq(25_00)
+      end
+
       it "counts in-flight processing balances before a Payment row exists" do
         seller = create(:user)
         pause_for_chargeback_rate!(seller)

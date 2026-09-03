@@ -555,16 +555,16 @@ class Payouts
     hold_started_at = user.chargeback_rate_payout_hold_started_at
     return 0 if hold_started_at.nil?
 
-    # Completed payments created under the hold (USD balances, not payout-currency amount_cents)
-    # plus processing balance rows claimed under the hold. The seller lock releases before
-    # create_payment, so the second rail must see the first rail's claim even while its Payment
-    # is still `creating`.
-    paid_via_payments = user.payments.completed
+    # Payments created under the hold (USD balances, not payout-currency amount_cents)
+    # plus processing rows that have not been attached to a Payment yet. The seller
+    # lock releases before create_payment, so the second rail must see the first
+    # rail's claim even while its Payment is still `creating`.
+    paid_via_payments = user.payments.where(state: Payment::NON_TERMINAL_STATES)
                             .where("payments.created_at >= ?", hold_started_at)
                             .joins(:balances)
                             .sum("balances.amount_cents")
-    claimed_under_hold = user.balances.processing.where("balances.updated_at >= ?", hold_started_at).sum(:amount_cents)
-    paid_via_payments + claimed_under_hold
+    claimed_without_payment = user.balances.processing.where.missing(:payments).sum(:amount_cents)
+    paid_via_payments + claimed_without_payment
   end
   private_class_method :paid_cents_under_chargeback_rate_hold
 
