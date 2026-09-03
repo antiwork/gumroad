@@ -583,7 +583,13 @@ class Payouts
                             .where("payments.created_at >= ?", hold_started_at)
                             .joins(:balances)
                             .sum("balances.amount_cents")
-    claimed_without_payment = user.balances.processing.where.missing(:payments).sum(:amount_cents)
+    # updated_at is the claim time (mark_processing! touches it), mirroring the created_at
+    # anchor above: a payment-less processing row orphaned by a failed save! BEFORE the hold
+    # must not inflate the base forever. A later touch re-includes such a row, which only
+    # over-reserves — the fail-closed direction.
+    claimed_without_payment = user.balances.processing.where.missing(:payments)
+                                  .where("balances.updated_at >= ?", hold_started_at)
+                                  .sum(:amount_cents)
     paid_via_payments + claimed_without_payment
   end
   private_class_method :paid_cents_under_chargeback_rate_hold

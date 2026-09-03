@@ -274,6 +274,18 @@ describe "chargeback-rate payout reserve" do
         expect(described_class.chargeback_rate_reserve_cents_for_run(seller, 25_00)).to eq(25_00)
       end
 
+      it "ignores a payment-less processing balance orphaned before the hold started" do
+        seller = create(:user)
+        orphan = unpaid_balance(seller, cents: 1_000_00, on: Date.today - 30)
+        orphan.mark_processing!
+        # Claimed (and orphaned by a failed save!) before the hold: without the updated_at
+        # anchor it inflates the base forever and blocks every reserve payout.
+        orphan.update_column(:updated_at, 2.days.ago)
+        pause_for_chargeback_rate!(seller)
+
+        expect(described_class.chargeback_rate_reserve_cents_for_run(seller, 100_00)).to eq(25_00)
+      end
+
       it "counts balances attached to a Payment that is still creating" do
         seller = create(:user)
         pause_for_chargeback_rate!(seller)
