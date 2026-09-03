@@ -48,29 +48,50 @@ describe Pages::ProfileData do
         expect(Pages::ProfileData.build(seller)[:seller_rating]).to eq(summary)
       end
 
-      it "changes the cache key when a qualifying review stat moves" do
+      it "expires the cached payload so a lost Redis bump cannot pin seller_rating forever" do
+        # Stub the rollup so this example only sees the outer payload TTL. A
+        # lost INCR leaves the cache key unchanged; without expires_in the
+        # second summary would never appear.
+        Feature.activate_user(:seller_reputation_summary, seller)
+        allow_any_instance_of(User).to receive(:seller_reputation_summary)
+          .and_return({ average: 4.8, count: 12, products_count: 2 })
+
+        expect(Pages::ProfileData.build(seller)[:seller_rating][:average]).to eq(4.8)
+
+        allow_any_instance_of(User).to receive(:seller_reputation_summary)
+          .and_return({ average: 3.1, count: 12, products_count: 2 })
+        expect(Pages::ProfileData.build(seller)[:seller_rating][:average]).to eq(4.8)
+
+        travel(Pages::ProfileData::CACHE_TTL + 1.second) do
+          expect(Pages::ProfileData.build(seller)[:seller_rating][:average]).to eq(3.1)
+        end
+      end
+
+      it "changes the cache key when a qualifying review stat moves through the write funnel" do
+        # The cache key tracks a per-seller version bumped ONLY by the review-stat write
+        # funnel (Product::ReviewStat), the single production writer of the counters
+        # (gumroad-private#2384). A direct stat write without the funnel does not move it.
         Feature.activate_user(:seller_reputation_summary, seller)
         product = create(:product, user: seller)
         seller_profile = SellerProfile.find_by(seller_id: seller.id)
         key_before = Pages::ProfileData.cache_key(seller.reload, seller_profile)
 
-        ProductReviewStat.create!(link: product, reviews_count: 1, average_rating: 5, ratings_of_five_count: 1)
+        product.update_review_stat_via_rating_change(nil, 5)
 
         expect(Pages::ProfileData.cache_key(seller.reload, seller_profile)).not_to eq(key_before)
       end
 
-      it "changes the cache key when two review-stat mutations land in the same second" do
-        # maximum(:updated_at) has second precision, so a naive timestamp-based key would
-        # reuse the same value for both writes below and silently serve the stale rollup.
+      it "changes the cache key for two review-stat mutations in the same second" do
+        # A naive timestamp-based key has second precision and would reuse the same value
+        # for both writes below; the funnel uses a monotonic Redis version so the second
+        # bump must still move the key (the rollup it guards is recomputed after each).
         Feature.activate_user(:seller_reputation_summary, seller)
         product = create(:product, user: seller)
         seller_profile = SellerProfile.find_by(seller_id: seller.id)
-        stat = ProductReviewStat.create!(link: product, reviews_count: 1, average_rating: 5, ratings_of_five_count: 1)
+        product.update_review_stat_via_rating_change(nil, 5)
         key_before = Pages::ProfileData.cache_key(seller.reload, seller_profile)
 
-        travel_to(stat.updated_at) do
-          stat.update!(reviews_count: 2, ratings_of_five_count: 1, ratings_of_one_count: 1)
-        end
+        product.update_review_stat_via_rating_change(5, 4)
 
         expect(Pages::ProfileData.cache_key(seller.reload, seller_profile)).not_to eq(key_before)
       end

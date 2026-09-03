@@ -9,6 +9,10 @@ class Pages::ProfileData
   CACHE_VERSION = "v7"
   MAX_ITEMS = 100
   DESCRIPTION_LIMIT = 200
+  # Intentional on every seller: a cheap rebuild vs pinning any key gap
+  # (known case: lost Redis INCR of the reputation version). Stacks with
+  # User::ReputationSummary::CACHE_TTL on seller_rating.
+  CACHE_TTL = 10.minutes
 
   def self.build(seller)
     # Look the profile up directly rather than via seller.seller_profile, which builds and leaves an
@@ -16,7 +20,7 @@ class Pages::ProfileData
     # no profile row yet, so every read off this is nil-safe.
     seller_profile = SellerProfile.find_by(seller_id: seller.id)
     base_url = seller.store_host_with_protocol
-    Rails.cache.fetch(cache_key(seller, seller_profile, base_url)) do
+    Rails.cache.fetch(cache_key(seller, seller_profile, base_url), expires_in: CACHE_TTL) do
       {
         products: products(seller, base_url),
         posts: posts(seller, base_url),
@@ -44,7 +48,7 @@ class Pages::ProfileData
   def self.products_page(seller, offset:, limit:)
     seller_profile = SellerProfile.find_by(seller_id: seller.id)
     base_url = seller.store_host_with_protocol
-    Rails.cache.fetch([cache_key(seller, seller_profile, base_url), "products", offset, limit].join("/")) do
+    Rails.cache.fetch([cache_key(seller, seller_profile, base_url), "products", offset, limit].join("/"), expires_in: CACHE_TTL) do
       {
         products: products(seller, base_url, offset:, limit:),
         products_total: products_total(seller),
@@ -64,30 +68,12 @@ class Pages::ProfileData
       seller.installments.visible_on_profile.cache_key_with_version,
       seller_profile&.cache_key_with_version,
       # Review writes touch product_review_stats, not links, so the products key
-      # above never moves when a rating lands; the flag state and this signature
-      # keep the cached seller_rating honest.
+      # above never moves when a rating lands; the flag state and this version
+      # (a Redis GET, bumped by the review-stat write funnel) keep the cached
+      # seller_rating honest.
       seller.reputation_summary_enabled?,
-      seller.reputation_summary_enabled? ? reputation_summary_cache_signature(seller) : nil,
+      seller.reputation_summary_enabled? ? seller.reputation_summary_cache_signature : nil,
     ].join("/")
-  end
-
-  # A digest of the values seller_reputation_summary aggregates, not a timestamp:
-  # updated_at has second precision, so two review-stat mutations in the same
-  # second would produce an identical maximum(:updated_at) and serve a stale
-  # cached rollup. Summing the actual counters changes whenever the rollup's
-  # output could change, regardless of how many writes land in one second.
-  #
-  # Scoped to match seller_reputation_summary's eligibility exactly (Link.alive.not_draft,
-  # reviews_count != 0, display_product_reviews flag) — otherwise a review-hidden or
-  # zero-review product's writes churn this cache key without changing seller_rating.
-  def self.reputation_summary_cache_signature(seller)
-    ProductReviewStat.joins(:link).merge(Link.alive.not_draft)
-      .where(links: { user_id: seller.id })
-      .where.not(reviews_count: 0)
-      .where(Arel.sql("links.flags & #{Link.flag_mapping["flags"][:display_product_reviews]} != 0"))
-      .pick(Arel.sql("SUM(reviews_count), SUM(ratings_of_one_count), SUM(ratings_of_two_count), " \
-                      "SUM(ratings_of_three_count), SUM(ratings_of_four_count), SUM(ratings_of_five_count), COUNT(*)"))
-      &.join(",")
   end
 
   def self.products(seller, base_url = seller.store_host_with_protocol, offset: 0, limit: MAX_ITEMS)
