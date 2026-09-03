@@ -48,7 +48,26 @@ class EmailInfo < ApplicationRecord
 
   DELIVERED_BUFFER_CHUNK = 1000
   MAX_FLUSH_CHUNKS = 50
-  FLUSH_LOCK_TTL = 2.minutes
+  FLUSH_LOCK_TTL = 10.minutes
+
+  TAKE_CHUNK_LUA = <<~LUA
+    local items = redis.call("LRANGE", KEYS[1], 0, tonumber(ARGV[1]) - 1)
+    if #items == 0 then return {} end
+    redis.call("LTRIM", KEYS[1], #items, -1)
+    return items
+  LUA
+  RENEW_FLUSH_LOCK_LUA = <<~LUA
+    if redis.call("GET", KEYS[1]) == ARGV[1] then
+      return redis.call("EXPIRE", KEYS[1], ARGV[2])
+    end
+    return 0
+  LUA
+  RELEASE_FLUSH_LOCK_LUA = <<~LUA
+    if redis.call("GET", KEYS[1]) == ARGV[1] then
+      return redis.call("DEL", KEYS[1])
+    end
+    return 0
+  LUA
 
   # Delivered callbacks arrive in waves of ~1M within minutes; a row-per-event
   # UPDATE+commit is what shows up as COMMIT/binlog waits. Buffer in Redis and
@@ -79,23 +98,34 @@ class EmailInfo < ApplicationRecord
     begin
       loop do
         break if chunks >= MAX_FLUSH_CHUNKS
+        renew_flush_lock!(lock_key, token)
 
-        # Peek then drop. Safe only with one consumer (the Redis lock above).
-        raw = $redis.lrange(key, 0, DELIVERED_BUFFER_CHUNK - 1)
+        # Claim the prefix atomically so a second flush cannot LTRIM a chunk it
+        # never applied if this run outlives the lock during the UPDATEs.
+        raw = $redis.eval(TAKE_CHUNK_LUA, keys: [key], argv: [DELIVERED_BUFFER_CHUNK])
         break if raw.blank?
 
-        apply_delivered_chunk!(raw.map { JSON.parse(_1) })
-        $redis.ltrim(key, raw.size, -1)
+        begin
+          apply_delivered_chunk!(raw.map { JSON.parse(_1) }) { renew_flush_lock!(lock_key, token) }
+        rescue StandardError
+          $redis.lpush(key, *raw.reverse) if raw.present?
+          raise
+        end
         chunks += 1
-        $redis.expire(lock_key, FLUSH_LOCK_TTL.to_i)
       end
     ensure
-      $redis.del(lock_key) if $redis.get(lock_key) == token
+      $redis.eval(RELEASE_FLUSH_LOCK_LUA, keys: [lock_key], argv: [token])
     end
+  end
+
+  def self.renew_flush_lock!(lock_key, token)
+    $redis.eval(RENEW_FLUSH_LOCK_LUA, keys: [lock_key], argv: [token, FLUSH_LOCK_TTL.to_i])
   end
 
   def self.apply_delivered_chunk!(records)
     records.group_by { _1["i"] }.each do |installment_id, group|
+      yield if block_given?
+
       delivered_at_by_purchase = group.each_with_object({}) do |record, acc|
         acc[record["p"]] = [acc[record["p"]], record["t"]].compact.min
       end
