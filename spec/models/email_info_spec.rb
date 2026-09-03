@@ -94,6 +94,18 @@ describe EmailInfo do
       expect(email_info.reload.state).to eq("sent")
     end
 
+    it "keeps the chunk even if Redis would reject a recovery write" do
+      email_info = create(:creator_contacting_customers_email_info_sent, installment: installment_a)
+      buffer(email_info)
+      allow(CreatorContactingCustomersEmailInfo).to receive(:where).and_raise(ActiveRecord::StatementInvalid, "boom")
+      allow($redis).to receive(:rpush).and_raise(Redis::CannotConnectError)
+
+      expect { EmailInfo.flush_delivered_buffer! }.to raise_error(ActiveRecord::StatementInvalid)
+
+      expect($redis.llen(buffer_key)).to eq(1)
+      expect(email_info.reload.state).to eq("sent")
+    end
+
     it "is a no-op on an empty buffer" do
       expect { EmailInfo.flush_delivered_buffer! }.not_to raise_error
     end

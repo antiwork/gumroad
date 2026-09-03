@@ -70,17 +70,13 @@ class EmailInfo < ApplicationRecord
   def self.flush_delivered_buffer!
     key = RedisKey.email_info_delivered_buffer
     loop do
-      raw = $redis.lpop(key, DELIVERED_BUFFER_CHUNK)
+      # Peek then drop. LPOP-then-restore loses the chunk if both the UPDATE
+      # and the recovery RPUSH fail.
+      raw = $redis.lrange(key, 0, DELIVERED_BUFFER_CHUNK - 1)
       break if raw.blank?
 
-      begin
-        apply_delivered_chunk!(raw.map { JSON.parse(_1) })
-      rescue StandardError
-        # Re-applying is harmless: the state filter makes the UPDATE idempotent,
-        # so a chunk that half-landed can be replayed by the retry.
-        $redis.rpush(key, raw)
-        raise
-      end
+      apply_delivered_chunk!(raw.map { JSON.parse(_1) })
+      $redis.ltrim(key, raw.size, -1)
     end
   end
 
