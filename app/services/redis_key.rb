@@ -143,5 +143,9 @@ class RedisKey
     def email_info_delivered_buffer = "email_info:delivered_buffer"
     def email_info_delivered_inflight = "email_info:delivered_inflight"
     def email_info_delivered_flush_lock = "email_info:delivered_flush_lock"
+    # Buffered installment.customer_count increments. Midnight Resend callback
+    # waves (and blast sends) used to UPDATE the same row per event/batch.
+    def installment_delivered_delta(installment_id) = "installment:#{installment_id}:delivered_delta"
+    def installment_delivered_delta_ids = "installment:delivered_delta_ids"
   end
 end

@@ -22,6 +22,10 @@ flush_delivered_email_infos:
   cron: "* * * * *" # Every minute
   class: FlushDeliveredEmailInfosJob
   description: Applies Redis-buffered email_infos delivered marks from Resend/SendGrid callbacks when the fast-path enqueue was lost
+flush_installment_delivered_deltas:
+  cron: "* * * * *" # Every minute
+  class: FlushInstallmentDeliveredDeltasJob
+  description: Flushes Redis-buffered installment customer_count increments from blast sends and email callbacks
 
 # Hourly
 repair_order_charge_outcomes:

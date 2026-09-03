@@ -156,6 +156,14 @@ class EmailInfo < ApplicationRecord
     end
   end
 
+  def already_delivered?
+    delivered? || opened?
+  end
+
+  def already_opened?
+    opened?
+  end
+
   def most_recent_state_at
     if opened_at.present?
       opened_at
