@@ -68,9 +68,12 @@ module PayoutsHelper
       payout_period_end_date = current_payout_end_date(user)
 
       payout_period_data[:displayable_payout_period_range] = displayable_payout_period_range(previous_payment, payout_period_end_date)
-      payout_period_data[:payout_cents] = user.unpaid_balance_cents_up_to_date(payout_period_end_date)
-      if user.chargeback_rate_payout_reserve_active?
-        payout_period_data[:payout_cents] -= Payouts.chargeback_rate_reserve_cents_for_run(user, payout_period_data[:payout_cents])
+      payout_period_data[:payout_cents] = if user.chargeback_rate_payout_reserve_active?
+        Payouts.payable_cents_after_chargeback_rate_reserve(
+          user, user.unpaid_balances_up_to_date(payout_period_end_date), minimum_cents: user.minimum_payout_amount_cents
+        )
+      else
+        user.unpaid_balance_cents_up_to_date(payout_period_end_date)
       end
       payout_period_data[:payout_displayed_amount] = formatted_dollar_amount(payout_period_data[:payout_cents])
       payout_period_data[:payout_date_formatted] = formatted_payout_date(user.next_payout_date)

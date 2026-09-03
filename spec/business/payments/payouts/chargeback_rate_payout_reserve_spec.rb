@@ -69,7 +69,8 @@ describe "chargeback-rate payout reserve" do
 
       it "lets a chargeback-volume hold through at 75 percent instead of skipping" do
         seller = payable_stripe_seller
-        unpaid_balance(seller, cents: 400_00, on: date - 2)
+        # Four $100 rows so a prefix fits under the $300 cap; a single $400 row cannot.
+        4.times { |i| unpaid_balance(seller, cents: 100_00, on: date - 5 + i) }
         pause_for_chargeback_rate!(seller)
 
         expect(described_class.is_user_payable(seller, date, processor_type: PayoutProcessorType::STRIPE)).to eq(true)
@@ -82,6 +83,23 @@ describe "chargeback-rate payout reserve" do
 
         expect(described_class.is_user_payable(seller, date, processor_type: PayoutProcessorType::STRIPE, add_comment: true)).to eq(false)
         expect(seller.comments.with_type_payout_note.last.content).to include("paused by the system")
+      end
+
+      it "still skips when the seller paused payouts themselves on top of the chargeback-volume hold" do
+        seller = payable_stripe_seller
+        4.times { |i| unpaid_balance(seller, cents: 100_00, on: date - 5 + i) }
+        pause_for_chargeback_rate!(seller)
+        seller.update!(payouts_paused_by_user: true)
+
+        expect(described_class.is_user_payable(seller, date, processor_type: PayoutProcessorType::STRIPE)).to eq(false)
+      end
+
+      it "skips when no whole unpaid row fits under the 75 percent cap" do
+        seller = payable_stripe_seller
+        unpaid_balance(seller, cents: 400_00, on: date - 2)
+        pause_for_chargeback_rate!(seller)
+
+        expect(described_class.is_user_payable(seller, date, processor_type: PayoutProcessorType::STRIPE)).to eq(false)
       end
 
       it "skips when 75 percent of the unpaid balance is below the minimum" do

@@ -65,10 +65,17 @@ class Payouts
       return false
     end
 
-    if user.chargeback_rate_payout_reserve_active?
-      amount_payable -= chargeback_rate_reserve_cents_for_run(user, amount_payable)
-      account_balance = amount_payable + user.paid_payments_cents_for_date(date)
-      below_minimum = account_balance < minimum_payout_amount_cents
+    # User pause is independent of the internal chargeback hold. payouts_paused_by_source
+    # reports the internal source when both are set, so the reserve branch would otherwise
+    # pay 75% against an explicit seller pause (bank-account change, etc.).
+    if user.chargeback_rate_payout_reserve_active? && !user.payouts_paused_by_user?
+      unless payout_type == Payouts::PAYOUT_TYPE_INSTANT
+        amount_payable = payable_cents_after_chargeback_rate_reserve(
+          user, user.unpaid_balances_up_to_date(date), minimum_cents: minimum_payout_amount_cents
+        )
+        account_balance = amount_payable + user.paid_payments_cents_for_date(date)
+        below_minimum = account_balance < minimum_payout_amount_cents
+      end
     elsif user.payouts_paused?
       if add_comment
         payouts_paused_by = user.payouts_paused_by_source == User::PAYOUT_PAUSE_SOURCE_STRIPE ? "payout processor" : user.payouts_paused_by_source
@@ -152,7 +159,11 @@ class Payouts
       end
 
       amount_payable = user.instantly_payable_unpaid_balance_cents_up_to_date(date)
-      amount_payable -= chargeback_rate_reserve_cents_for_run(user, amount_payable) if user.chargeback_rate_payout_reserve_active?
+      if user.chargeback_rate_payout_reserve_active? && !user.payouts_paused_by_user?
+        amount_payable = payable_cents_after_chargeback_rate_reserve(
+          user, user.instantly_payable_unpaid_balances_up_to_date(date), minimum_cents: minimum_payout_amount_cents
+        )
+      end
       # Same $1 Instant floor as the processor — a $60 settled leftover with $100+ still
       # unpaid is payable now, not a settling skip. Weekly/monthly/quarterly keep MIN_AMOUNT_CENTS.
       if amount_payable < minimum_payout_amount_cents && add_comment && user.unpaid_balance_cents_up_to_date(date) >= minimum_payout_amount_cents
@@ -518,10 +529,20 @@ class Payouts
   end
   private_class_method :paid_cents_under_chargeback_rate_hold
 
+  # Same whole-row selection the payment path uses. Eligibility and the Payouts page must
+  # not advertise aggregate 75% when no prefix of unpaid rows actually fits under the cap.
+  def self.payable_cents_after_chargeback_rate_reserve(user, balances, minimum_cents: 0)
+    apply_chargeback_rate_reserve(user, balances, minimum_cents:).sum(&:amount_cents)
+  end
+
   # Oldest unpaid rows whose sum is at most the payable set minus the reserve. Do not split a
   # row: a single balance larger than the cap stays unpaid this cycle. The selected sum must
   # itself clear minimum_cents — the aggregate can pass eligibility while whole-row selection
   # stops short of it (e.g. $90 + $110 rows: eligible at $150, but only the $90 row fits).
+  #
+  # Stop at the first row that does not fit. Skipping it to take later smaller rows would pay
+  # those now, raise paid_under_hold, and shrink the cap on the oversized oldest row so it
+  # can never catch up. Waiting lets newer sales grow the pot until the oldest row itself fits.
   def self.apply_chargeback_rate_reserve(user, balances, minimum_cents:)
     return balances unless user.chargeback_rate_payout_reserve_active?
 
