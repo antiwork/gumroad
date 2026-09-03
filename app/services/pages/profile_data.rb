@@ -9,6 +9,10 @@ class Pages::ProfileData
   CACHE_VERSION = "v7"
   MAX_ITEMS = 100
   DESCRIPTION_LIMIT = 200
+  # Intentional on every seller: a cheap rebuild vs pinning any key gap
+  # (known case: lost Redis INCR of the reputation version). Stacks with
+  # User::ReputationSummary::CACHE_TTL on seller_rating.
+  CACHE_TTL = 10.minutes
 
   def self.build(seller)
     # Look the profile up directly rather than via seller.seller_profile, which builds and leaves an
@@ -16,7 +20,7 @@ class Pages::ProfileData
     # no profile row yet, so every read off this is nil-safe.
     seller_profile = SellerProfile.find_by(seller_id: seller.id)
     base_url = seller.store_host_with_protocol
-    Rails.cache.fetch(cache_key(seller, seller_profile, base_url)) do
+    Rails.cache.fetch(cache_key(seller, seller_profile, base_url), expires_in: CACHE_TTL) do
       {
         products: products(seller, base_url),
         posts: posts(seller, base_url),
@@ -44,7 +48,7 @@ class Pages::ProfileData
   def self.products_page(seller, offset:, limit:)
     seller_profile = SellerProfile.find_by(seller_id: seller.id)
     base_url = seller.store_host_with_protocol
-    Rails.cache.fetch([cache_key(seller, seller_profile, base_url), "products", offset, limit].join("/")) do
+    Rails.cache.fetch([cache_key(seller, seller_profile, base_url), "products", offset, limit].join("/"), expires_in: CACHE_TTL) do
       {
         products: products(seller, base_url, offset:, limit:),
         products_total: products_total(seller),

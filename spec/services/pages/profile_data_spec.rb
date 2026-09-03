@@ -48,6 +48,25 @@ describe Pages::ProfileData do
         expect(Pages::ProfileData.build(seller)[:seller_rating]).to eq(summary)
       end
 
+      it "expires the cached payload so a lost Redis bump cannot pin seller_rating forever" do
+        # Stub the rollup so this example only sees the outer payload TTL. A
+        # lost INCR leaves the cache key unchanged; without expires_in the
+        # second summary would never appear.
+        Feature.activate_user(:seller_reputation_summary, seller)
+        allow_any_instance_of(User).to receive(:seller_reputation_summary)
+          .and_return({ average: 4.8, count: 12, products_count: 2 })
+
+        expect(Pages::ProfileData.build(seller)[:seller_rating][:average]).to eq(4.8)
+
+        allow_any_instance_of(User).to receive(:seller_reputation_summary)
+          .and_return({ average: 3.1, count: 12, products_count: 2 })
+        expect(Pages::ProfileData.build(seller)[:seller_rating][:average]).to eq(4.8)
+
+        travel(Pages::ProfileData::CACHE_TTL + 1.second) do
+          expect(Pages::ProfileData.build(seller)[:seller_rating][:average]).to eq(3.1)
+        end
+      end
+
       it "changes the cache key when a qualifying review stat moves through the write funnel" do
         # The cache key tracks a per-seller version bumped ONLY by the review-stat write
         # funnel (Product::ReviewStat), the single production writer of the counters
