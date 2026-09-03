@@ -139,5 +139,7 @@ class RedisKey
     def workflow_immediate_fanout_max_spread_seconds = "workflow_immediate_fanout_max_spread_seconds"
     def seller_large_blast_threshold = "seller_large_blast_threshold"
     def seller_large_blast_quota(seller_id, day) = "seller_large_blast_quota:#{seller_id}:#{day}"
+    # LIST of JSON {i: installment_id, p: purchase_id, t: epoch} pending an email_infos delivered UPDATE.
+    def email_info_delivered_buffer = "email_info:delivered_buffer"
   end
 end

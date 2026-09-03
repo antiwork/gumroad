@@ -34,6 +34,14 @@ class HandleEmailEventInfo::ForInstallmentEmail
     end
 
     def handle_delivered_event!
+      ids = creator_contacting_customers_email_info_ids(email_event_info)
+      return if ids.nil?
+
+      # No row is created here for ancient purchases: the batch UPDATE just
+      # affects 0 rows. Bounce/open still go through the loading path.
+      return if EmailInfo.buffer_delivered(installment_id: ids[:installment_id], purchase_id: ids[:purchase_id],
+                                           delivered_at: email_event_info.created_at || Time.current)
+
       email_info = pull_creator_contacting_customers_email_info(email_event_info)
       email_info.mark_delivered!(email_event_info.created_at) if email_info.present?
     end
@@ -71,25 +79,31 @@ class HandleEmailEventInfo::ForInstallmentEmail
     end
 
     def pull_creator_contacting_customers_email_info(email_event_info)
-      purchase_id = email_event_info.purchase_id
-      installment_id = email_event_info.installment_id
-      email_name = nil
-      if email_event_info.mailer_class_and_method.end_with?(EmailEventInfo::PURCHASE_INSTALLMENT_MAILER_METHOD)
-        email_name = EmailEventInfo::PURCHASE_INSTALLMENT_MAILER_METHOD
-        email_info = CreatorContactingCustomersEmailInfo.where(purchase_id:, installment_id:).last
-      elsif email_event_info.mailer_class_and_method.end_with?(EmailEventInfo::SUBSCRIPTION_INSTALLMENT_MAILER_METHOD)
-        email_name = EmailEventInfo::SUBSCRIPTION_INSTALLMENT_MAILER_METHOD
-        purchase_id = Subscription.find(email_event_info.purchase_id).original_purchase.id
-        email_info = CreatorContactingCustomersEmailInfo.where(purchase_id:, installment_id:).last
-      else
-        return nil
-      end
+      ids = creator_contacting_customers_email_info_ids(email_event_info)
+      return nil if ids.nil?
+
+      email_info = CreatorContactingCustomersEmailInfo.where(purchase_id: ids[:purchase_id], installment_id: ids[:installment_id]).last
 
       # We create these records when sending emails so we shouldn't really need to create them again here.
       # However, this code needs to stay so as to support events which are triggered on emails which were sent before
       # the code to create these records was in place. From our investigation, we saw that we still receive events
       # for ancient purchases.
-      email_info || CreatorContactingCustomersEmailInfo.new(purchase_id:, installment_id:, email_name:)
+      email_info || CreatorContactingCustomersEmailInfo.new(**ids)
+    end
+
+    def creator_contacting_customers_email_info_ids(email_event_info)
+      purchase_id = email_event_info.purchase_id
+      installment_id = email_event_info.installment_id
+      if email_event_info.mailer_class_and_method.end_with?(EmailEventInfo::PURCHASE_INSTALLMENT_MAILER_METHOD)
+        email_name = EmailEventInfo::PURCHASE_INSTALLMENT_MAILER_METHOD
+      elsif email_event_info.mailer_class_and_method.end_with?(EmailEventInfo::SUBSCRIPTION_INSTALLMENT_MAILER_METHOD)
+        email_name = EmailEventInfo::SUBSCRIPTION_INSTALLMENT_MAILER_METHOD
+        purchase_id = Subscription.find(email_event_info.purchase_id).original_purchase.id
+      else
+        return nil
+      end
+
+      { purchase_id:, installment_id:, email_name: }
     end
 
     def update_installment_cache(installment_id, key)
