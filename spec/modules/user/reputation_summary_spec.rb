@@ -141,7 +141,7 @@ describe User::ReputationSummary do
       # gumroad-private#2388: FROM order does not constrain the optimizer —
       # the STRAIGHT_JOIN hint is what pins links as the driving table, so
       # pin the hint itself.
-      it "pins links as the driving table via STRAIGHT_JOIN" do
+      it "pins links as the driving table via STRAIGHT_JOIN and its access path via FORCE INDEX" do
         create_stat(product_one, five: 8)
         create_stat(product_two, four: 4)
         seller.bump_reputation_summary_version
@@ -154,7 +154,7 @@ describe User::ReputationSummary do
 
         aggregate_sql = queries.find { |sql| sql.include?("product_review_stats") && sql.include?("SUM") }
         expect(aggregate_sql).to be_present
-        expect(aggregate_sql).to match(/FROM\s+`links`\s+STRAIGHT_JOIN\s+product_review_stats/i)
+        expect(aggregate_sql).to match(/FROM\s+`links`\s+FORCE INDEX \(index_links_on_user_id\)\s+STRAIGHT_JOIN\s+product_review_stats/i)
       end
 
       it "returns nil for a large zero-review catalogue" do
