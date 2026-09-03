@@ -171,7 +171,7 @@ class User::OmniauthCallbacksController < Devise::OmniauthCallbacksController
   def failure
     if request.env["omniauth.error.strategy"]&.name.to_s == "youtube"
       flash[:alert] = "Couldn't connect YouTube. Please try again."
-      return redirect_to(logged_in_user.present? ? profile_path : login_path)
+      redirect_to(logged_in_user.present? ? profile_path : login_path)
     elsif params[:error_description].present?
       redirect_to settings_payments_path, notice: params[:error_description]
     elsif params[REQ_PARAM_STATE] != :async_link_twitter_account.to_s
