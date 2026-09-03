@@ -209,6 +209,19 @@ describe "chargeback-rate payout reserve" do
 
         expect(described_class.chargeback_rate_reserve_cents_for_run(seller, 25_00)).to eq(25_00)
       end
+
+      it "counts processing balances attached to processing or unclaimed payments" do
+        seller = create(:user)
+        pause_for_chargeback_rate!(seller)
+        processing_row = unpaid_balance(seller, cents: 50_00, on: Date.today - 8)
+        unclaimed_row = unpaid_balance(seller, cents: 25_00, on: Date.today - 7)
+        processing_row.mark_processing!
+        unclaimed_row.mark_processing!
+        create(:payment, user: seller, state: Payment::PROCESSING, created_at: Time.current).balances << processing_row
+        create(:payment, user: seller, state: Payment::UNCLAIMED, created_at: Time.current).balances << unclaimed_row
+
+        expect(described_class.chargeback_rate_reserve_cents_for_run(seller, 25_00)).to eq(25_00)
+      end
     end
 
     describe ".apply_chargeback_rate_reserve" do
