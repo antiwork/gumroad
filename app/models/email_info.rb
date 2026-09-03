@@ -46,6 +46,116 @@ class EmailInfo < ApplicationRecord
     self.opened_at = nil
   end
 
+  DELIVERED_BUFFER_CHUNK = 1000
+  MAX_FLUSH_CHUNKS = 50
+  FLUSH_LOCK_TTL = 10.minutes
+
+  TAKE_CHUNK_LUA = <<~LUA
+    local items = redis.call("LRANGE", KEYS[1], 0, tonumber(ARGV[1]) - 1)
+    if #items == 0 then return {} end
+    redis.call("LTRIM", KEYS[1], #items, -1)
+    for i = 1, #items do
+      redis.call("RPUSH", KEYS[2], items[i])
+    end
+    return items
+  LUA
+  RENEW_FLUSH_LOCK_LUA = <<~LUA
+    if redis.call("GET", KEYS[1]) == ARGV[1] then
+      return redis.call("EXPIRE", KEYS[1], ARGV[2])
+    end
+    return 0
+  LUA
+  ACK_INFLIGHT_LUA = <<~LUA
+    if redis.call("GET", KEYS[1]) == ARGV[1] then
+      redis.call("DEL", KEYS[2])
+      return 1
+    end
+    return 0
+  LUA
+  RELEASE_FLUSH_LOCK_LUA = <<~LUA
+    if redis.call("GET", KEYS[1]) == ARGV[1] then
+      return redis.call("DEL", KEYS[1])
+    end
+    return 0
+  LUA
+
+  # Delivered callbacks arrive in waves of ~1M within minutes; a row-per-event
+  # UPDATE+commit is what shows up as COMMIT/binlog waits. Buffer in Redis and
+  # let FlushDeliveredEmailInfosJob apply one UPDATE per installment.
+  # Returns false when Redis rejects the push so the caller can write through.
+  def self.buffer_delivered(installment_id:, purchase_id:, delivered_at:)
+    payload = { i: installment_id, p: purchase_id, t: delivered_at.to_i }.to_json
+    begin
+      $redis.rpush(RedisKey.email_info_delivered_buffer, payload)
+    rescue Redis::BaseError, RedisClient::Error
+      return false
+    end
+
+    # Buffered already; if the enqueue fails the minute cron picks it up.
+    FlushDeliveredEmailInfosJob.perform_async
+    true
+  rescue Redis::BaseError, RedisClient::Error
+    true
+  end
+
+  def self.flush_delivered_buffer!
+    lock_key = RedisKey.email_info_delivered_flush_lock
+    token = SecureRandom.uuid
+    return unless $redis.set(lock_key, token, nx: true, ex: FLUSH_LOCK_TTL.to_i)
+
+    key = RedisKey.email_info_delivered_buffer
+    inflight_key = RedisKey.email_info_delivered_inflight
+    chunks = 0
+    begin
+      loop do
+        break if chunks >= MAX_FLUSH_CHUNKS
+        break unless renew_flush_lock!(lock_key, token)
+
+        raw = $redis.lrange(inflight_key, 0, -1)
+        if raw.blank?
+          raw = $redis.eval(TAKE_CHUNK_LUA, keys: [key, inflight_key], argv: [DELIVERED_BUFFER_CHUNK])
+        end
+        break if raw.blank?
+
+        lost_lock = false
+        apply_delivered_chunk!(raw.map { JSON.parse(_1) }) do
+          renew_flush_lock!(lock_key, token).tap { |held| lost_lock = true unless held }
+        end
+        break if lost_lock
+
+        $redis.eval(ACK_INFLIGHT_LUA, keys: [lock_key, inflight_key], argv: [token])
+        chunks += 1
+      end
+    ensure
+      $redis.eval(RELEASE_FLUSH_LOCK_LUA, keys: [lock_key], argv: [token])
+    end
+  end
+
+  def self.renew_flush_lock!(lock_key, token)
+    $redis.eval(RENEW_FLUSH_LOCK_LUA, keys: [lock_key], argv: [token, FLUSH_LOCK_TTL.to_i]).to_i == 1
+  end
+
+  def self.apply_delivered_chunk!(records)
+    records.group_by { _1["i"] }.each do |installment_id, group|
+      return if block_given? && !yield
+
+      delivered_at_by_purchase = group.each_with_object({}) do |record, acc|
+        acc[record["p"]] = [acc[record["p"]], record["t"]].compact.min
+      end
+
+      delivered_at_by_purchase.each_slice(DELIVERED_BUFFER_CHUNK) do |slice|
+        whens = slice.map do |purchase_id, epoch|
+          sanitize_sql_array(["WHEN ? THEN ?", purchase_id, Time.zone.at(epoch)])
+        end
+        # Only created/sent rows move: a late delivered callback must never
+        # downgrade opened, and an existing delivered_at is kept.
+        CreatorContactingCustomersEmailInfo
+          .where(installment_id:, purchase_id: slice.map(&:first), state: %w[created sent])
+          .update_all(Arel.sql("state = 'delivered', delivered_at = CASE purchase_id #{whens.join(' ')} END"))
+      end
+    end
+  end
+
   def already_delivered?
     delivered? || opened?
   end
