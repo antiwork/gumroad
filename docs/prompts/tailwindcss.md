@@ -40,8 +40,8 @@ I'm migrating a CSS component to Tailwind CSS. Please help me convert the existi
   import cx from "classnames";
   cx("base-class", condition && "conditional-class");
 
-  import twMerge from "tailwind-merge";
-  twMerge("base-class", condition && "conditional-class");
+  import { classNames } from "$app/utils/classNames";
+  classNames("base-class", condition && "conditional-class");
   ```
 
 #### Avoid `!important`
