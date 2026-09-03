@@ -115,10 +115,34 @@ describe "chargeback-rate payout reserve" do
       it "anchors the 25 percent on unpaid plus what was already paid under the hold, so repeat runs cannot drain the reserve" do
         seller = create(:user)
         pause_for_chargeback_rate!(seller)
-        create(:payment_completed, user: seller, amount_cents: 75_00)
+        paid_row = unpaid_balance(seller, cents: 75_00, on: Date.today - 8)
+        payment = create(:payment_completed, user: seller, amount_cents: 75_00)
+        payment.balances << paid_row
 
         # $100 originally held: $75 paid on the first run, $25 remaining. The reserve is still
         # 25% of $100, clamped to the $25 that is left — nothing more releases.
+        expect(described_class.chargeback_rate_reserve_cents_for_run(seller, 25_00)).to eq(25_00)
+      end
+
+      it "counts paid USD balance cents, not payout-currency Payment#amount_cents" do
+        seller = create(:user)
+        pause_for_chargeback_rate!(seller)
+        paid_row = unpaid_balance(seller, cents: 75_00, on: Date.today - 8)
+        payment = create(:payment_completed, user: seller, amount_cents: 6_375_00, currency: Currency::INR)
+        payment.balances << paid_row
+
+        # Remaining unpaid is large so an inflated local-currency paid amount would
+        # clamp the reserve to the whole pot instead of 25% of (paid USD + unpaid).
+        expect(described_class.chargeback_rate_reserve_cents_for_run(seller, 400_00)).to eq(118_75)
+      end
+
+      it "counts paid USD balance cents, not the instant-payout fee-net amount" do
+        seller = create(:user)
+        pause_for_chargeback_rate!(seller)
+        paid_row = unpaid_balance(seller, cents: 75_00, on: Date.today - 8)
+        payment = create(:payment_completed, user: seller, amount_cents: 73_17)
+        payment.balances << paid_row
+
         expect(described_class.chargeback_rate_reserve_cents_for_run(seller, 25_00)).to eq(25_00)
       end
 
@@ -172,7 +196,9 @@ describe "chargeback-rate payout reserve" do
       it "releases nothing further on a later run once 75 percent has already been paid under the hold" do
         seller = create(:user)
         pause_for_chargeback_rate!(seller)
-        create(:payment_completed, user: seller, amount_cents: 75_00)
+        paid_row = unpaid_balance(seller, cents: 75_00, on: Date.today - 8)
+        payment = create(:payment_completed, user: seller, amount_cents: 75_00)
+        payment.balances << paid_row
         # Two rows, so a reserve recomputed from the $25 remainder (cap $18.75) would still
         # select the $15 row — only the anchored reserve holds the whole remainder back.
         remainder_old = unpaid_balance(seller, cents: 15_00, on: Date.today - 3)

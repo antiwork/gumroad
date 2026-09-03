@@ -523,9 +523,12 @@ class Payouts
     hold_started_at = user.chargeback_rate_payout_hold_started_at
     return 0 if hold_started_at.nil?
 
+    # Payment#amount_cents is the payout-currency amount (and instant-fee net). The
+    # reserve is 25% of USD Balance#amount_cents, so count the balances those payments took.
     user.payments.where(state: %w[processing unclaimed completed])
-        .where("created_at >= ?", hold_started_at)
-        .sum(:amount_cents)
+        .where("payments.created_at >= ?", hold_started_at)
+        .joins(:balances)
+        .sum("balances.amount_cents")
   end
   private_class_method :paid_cents_under_chargeback_rate_hold
 
