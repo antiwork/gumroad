@@ -39,8 +39,9 @@ type PageProps = {
 // The copy-paste prompt for building a page with an agent. The CLI commands it
 // references are the same ones a seller can run by hand. The follow-form
 // instructions match the serve-time gumroad:follow bridge: a form marked
-// data-gumroad-follow gets wired to the seller's email audience automatically.
-const followFormHint = `If I want an email signup, add a \`<form data-gumroad-follow>\` with an email input and an element marked \`data-gumroad-follow-message\` for the confirmation text — Gumroad wires the form to my email audience automatically.`;
+// data-gumroad-follow gets wired to the seller's email audience after
+// Gumroad has reviewed and marked the seller account compliant.
+const followFormHint = `If I want an email signup, add a \`<form data-gumroad-follow>\` with an email input and an element marked \`data-gumroad-follow-message\` for the confirmation text — Gumroad wires the form to my email audience automatically after my account has been reviewed and marked compliant. Until then, visitors are sent to my Gumroad subscribe page instead.`;
 
 const agentPrompt = (username: string, slug: string | null, isProfile: boolean) =>
   isProfile
