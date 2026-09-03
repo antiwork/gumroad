@@ -1250,7 +1250,7 @@ export default function PaymentsPage() {
         <AccountStatusSection
           accountStatus={props.account_status}
           payoutsPausedBy={props.payouts_paused_by}
-          payoutReservePercent={props.payout_reserve_percent}
+          payoutReservePercent={props.payout_reserve_percent ?? null}
         />
 
         {props.aus_backtax_details.show_au_backtax_prompt ? (
