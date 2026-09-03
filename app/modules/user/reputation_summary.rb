@@ -23,13 +23,15 @@ module User::ReputationSummary
   # Called from the review-stat write funnel, which runs inside the review's
   # transaction — defer the INCR to commit so a concurrent reader cannot fill
   # the new version's cache slot from pre-commit counters. Redis being down
-  # must not roll back the review itself; the TTL bounds the staleness.
+  # must not roll back the review itself; the aggregate's TTL bounds the
+  # staleness of a lost bump. No EXPIRE: the version must be monotonic — an
+  # expiring counter restarts at 1 and re-hits stale cache entries stored
+  # under earlier values of the same number.
   def bump_reputation_summary_version
     return unless reputation_summary_enabled?
 
     AfterCommitEverywhere.after_commit do
       $redis.incr(reputation_version_key)
-      $redis.expire(reputation_version_key, CACHE_TTL + 60)
     rescue Redis::BaseError, RedisClient::Error => e
       ErrorNotifier.notify(e, user_id: id)
     end
@@ -41,9 +43,14 @@ module User::ReputationSummary
 
   # Cheap (Redis GET) per-seller version bumped by the review-stat write
   # funnel; lets Pages::ProfileData move its cache key on a review write
-  # without scanning the review-stat join.
+  # without scanning the review-stat join. When Redis is unreadable, return a
+  # value that can never match a stored key — reusing a guessed version could
+  # serve a stale rollup, and raising would fail the profile render.
   def reputation_summary_cache_signature
     $redis.get(reputation_version_key).to_i
+  rescue Redis::BaseError, RedisClient::Error => e
+    ErrorNotifier.notify(e, user_id: id)
+    "unavailable-#{SecureRandom.hex(8)}"
   end
 
   # Returns { average:, count:, products_count: } or nil when the seller does
@@ -78,10 +85,11 @@ module User::ReputationSummary
     # drafted/deleted/flag-flipped, i.e. links.updated_at changes) + the funnel
     # version (moves on review-stat writes, which touch product_review_stats,
     # not links). Both are cheap reads; neither scans the review-stat join.
+    # Redis being unreadable yields a never-matching version, so the read falls
+    # through to the (bounded) SQL aggregate rather than a possibly stale entry.
     def reputation_cache_key
       lifecycle = products.cache_key_with_version
-      version = $redis.get(reputation_version_key).to_i
-      "#{CACHE_PREFIX}/#{CACHE_VERSION}/#{id}/#{lifecycle}/#{version}"
+      "#{CACHE_PREFIX}/#{CACHE_VERSION}/#{id}/#{lifecycle}/#{reputation_summary_cache_signature}"
     end
 
     def reputation_version_key

@@ -188,4 +188,24 @@ describe User::ReputationSummary do
       expect { seller.bump_reputation_summary_version }.not_to raise_error
     end
   end
+
+  describe "#reputation_summary_cache_signature" do
+    before { Feature.activate_user(:seller_reputation_summary, seller) }
+
+    it "never repeats after successive bumps (no expiry resets the counter)" do
+      seller.bump_reputation_summary_version
+      first = seller.reputation_summary_cache_signature
+      seller.bump_reputation_summary_version
+
+      expect($redis.ttl("#{described_class::CACHE_PREFIX}/version/#{seller.id}")).to eq(-1)
+      expect(seller.reputation_summary_cache_signature).to eq(first + 1)
+    end
+
+    it "returns a never-matching value instead of raising when Redis is unreadable" do
+      allow($redis).to receive(:get).and_raise(Redis::BaseError)
+      expect(ErrorNotifier).to receive(:notify).with(kind_of(Redis::BaseError), user_id: seller.id)
+
+      expect(seller.reputation_summary_cache_signature).to start_with("unavailable-")
+    end
+  end
 end
