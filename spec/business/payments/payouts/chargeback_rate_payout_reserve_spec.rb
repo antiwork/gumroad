@@ -25,6 +25,12 @@ describe "chargeback-rate payout reserve" do
     create(:balance, user:, merchant_account:, date: on, amount_cents: cents, holding_amount_cents: cents)
   end
 
+  def claim_balance!(row)
+    row.mark_processing!
+    row.mark_paid!
+    row
+  end
+
   describe User::Risk, "#chargeback_rate_payout_reserve_active?" do
     let(:seller) { create(:user) }
 
@@ -135,46 +141,47 @@ describe "chargeback-rate payout reserve" do
       it "anchors the 25 percent on unpaid plus what was already paid under the hold, so repeat runs cannot drain the reserve" do
         seller = create(:user)
         pause_for_chargeback_rate!(seller)
-        paid_row = unpaid_balance(seller, cents: 75_00, on: Date.today - 8)
-        payment = create(:payment_completed, user: seller, amount_cents: 75_00)
-        payment.balances << paid_row
+        claim_balance!(unpaid_balance(seller, cents: 75_00, on: Date.today - 8))
 
         # $100 originally held: $75 paid on the first run, $25 remaining. The reserve is still
         # 25% of $100, clamped to the $25 that is left — nothing more releases.
         expect(described_class.chargeback_rate_reserve_cents_for_run(seller, 25_00)).to eq(25_00)
       end
 
-      it "counts paid USD balance cents, not payout-currency Payment#amount_cents" do
+      it "counts claimed USD balance cents, not a payout-currency amount" do
         seller = create(:user)
         pause_for_chargeback_rate!(seller)
-        paid_row = unpaid_balance(seller, cents: 75_00, on: Date.today - 8)
-        payment = create(:payment_completed, user: seller, amount_cents: 6_375_00, currency: Currency::INR)
-        payment.balances << paid_row
+        claim_balance!(unpaid_balance(seller, cents: 75_00, on: Date.today - 8))
 
-        # Remaining unpaid is large so an inflated local-currency paid amount would
+        # Remaining unpaid is large so counting a local-currency payout amount would
         # clamp the reserve to the whole pot instead of 25% of (paid USD + unpaid).
         expect(described_class.chargeback_rate_reserve_cents_for_run(seller, 400_00)).to eq(118_75)
       end
 
-      it "counts paid USD balance cents, not the instant-payout fee-net amount" do
+      it "counts claimed USD balance cents after the hold, not a fee-net payout amount" do
         seller = create(:user)
         pause_for_chargeback_rate!(seller)
-        paid_row = unpaid_balance(seller, cents: 75_00, on: Date.today - 8)
-        payment = create(:payment_completed, user: seller, amount_cents: 73_17)
-        payment.balances << paid_row
+        claim_balance!(unpaid_balance(seller, cents: 75_00, on: Date.today - 8))
 
         expect(described_class.chargeback_rate_reserve_cents_for_run(seller, 25_00)).to eq(25_00)
       end
 
-      it "ignores payments made before the hold started" do
+      it "ignores balances claimed before the hold started" do
         seller = create(:user)
-        paid_row = unpaid_balance(seller, cents: 500_00, on: Date.today - 10)
-        payment = create(:payment_completed, user: seller, amount_cents: 500_00, created_at: 2.days.ago)
-        payment.balances << paid_row
+        paid_row = claim_balance!(unpaid_balance(seller, cents: 500_00, on: Date.today - 10))
+        paid_row.update_columns(updated_at: 2.days.ago)
         pause_for_chargeback_rate!(seller)
 
         # Unanchored would count the $500 too: min(25% of $600, $100) = $100.
         expect(described_class.chargeback_rate_reserve_cents_for_run(seller, 100_00)).to eq(25_00)
+      end
+
+      it "counts in-flight processing balances before a Payment row exists" do
+        seller = create(:user)
+        pause_for_chargeback_rate!(seller)
+        unpaid_balance(seller, cents: 75_00, on: Date.today - 8).mark_processing!
+
+        expect(described_class.chargeback_rate_reserve_cents_for_run(seller, 25_00)).to eq(25_00)
       end
     end
 
@@ -219,9 +226,7 @@ describe "chargeback-rate payout reserve" do
       it "releases nothing further on a later run once 75 percent has already been paid under the hold" do
         seller = create(:user)
         pause_for_chargeback_rate!(seller)
-        paid_row = unpaid_balance(seller, cents: 75_00, on: Date.today - 8)
-        payment = create(:payment_completed, user: seller, amount_cents: 75_00)
-        payment.balances << paid_row
+        claim_balance!(unpaid_balance(seller, cents: 75_00, on: Date.today - 8))
         # Two rows, so a reserve recomputed from the $25 remainder (cap $18.75) would still
         # select the $15 row — only the anchored reserve holds the whole remainder back.
         remainder_old = unpaid_balance(seller, cents: 15_00, on: Date.today - 3)
