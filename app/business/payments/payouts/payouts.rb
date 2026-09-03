@@ -71,7 +71,7 @@ class Payouts
     if user.chargeback_rate_payout_reserve_active? && payout_type != Payouts::PAYOUT_TYPE_INSTANT
       amount_payable = payable_cents_after_chargeback_rate_reserve(
         user, user.unpaid_balances_up_to_date(date), minimum_cents: minimum_payout_amount_cents,
-        paid_cents: user.paid_payments_cents_for_date(date)
+                                                     paid_cents: user.paid_payments_cents_for_date(date)
       )
       account_balance = amount_payable + user.paid_payments_cents_for_date(date)
       below_minimum = account_balance < minimum_payout_amount_cents
