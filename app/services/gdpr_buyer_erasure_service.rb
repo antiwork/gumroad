@@ -153,9 +153,12 @@ class GdprBuyerErasureService
     end
 
     def anonymize_audience_members!
-      conflict_seller_ids = AudienceMember.where(email: @anonymized_email).pluck(:seller_id)
+      seller_ids = audience_member_seller_ids
+      return if seller_ids.empty?
+
+      conflict_seller_ids = AudienceMember.where(seller_id: seller_ids, email: @anonymized_email).pluck(:seller_id)
       if conflict_seller_ids.any?
-        conflicting_members = AudienceMember.where(email: email, seller_id: conflict_seller_ids)
+        conflicting_members = AudienceMember.where(seller_id: conflict_seller_ids, email: email)
         deleted_member_ids = conflicting_members.ids
         conflicting_members.delete_all
         deleted_member_ids.each do |member_id|
@@ -179,7 +182,7 @@ class GdprBuyerErasureService
         min_affiliate_created_at: nil,
         max_affiliate_created_at: nil,
       }
-      members = AudienceMember.where(email: email).to_a
+      members = AudienceMember.where(seller_id: seller_ids, email: email).to_a
       counts[:audience_members] = AudienceMember.where(id: members.map(&:id)).update_all(anonymized_attributes)
       # The indexer worker re-reads rows from a possibly-lagging replica; passing the
       # document body inline guarantees the pre-erasure PII can never be re-indexed.
@@ -190,6 +193,16 @@ class GdprBuyerErasureService
           { "record_id" => member.id, "class_name" => "AudienceMember", "body" => member.as_indexed_json },
         )
       end
+    end
+
+    # audience_members is indexed only on (seller_id, email), so an unscoped
+    # where(email:) scans the table. A row exists only where the buyer bought,
+    # followed, or is an affiliate (AudienceMember#apply_refresh) — and affiliates
+    # are Users, which perform! refuses — leaving purchases and followers.
+    def audience_member_seller_ids
+      @audience_member_seller_ids ||= (
+        @seller_ids + Follower.where(email: [email, @anonymized_email]).distinct.pluck(:followed_id)
+      ).uniq
     end
 
     def anonymize_followers!

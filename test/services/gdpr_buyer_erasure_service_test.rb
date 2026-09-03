@@ -448,6 +448,41 @@ class GdprBuyerErasureServiceGuestBuyerDataTest < ActiveSupport::TestCase
     end
   end
 
+  test "anonymizes audience member rows for sellers the buyer only follows" do
+    followed_seller = create_user
+    Follower.create!(email: @buyer_email, user: followed_seller, confirmed_at: Time.current)
+    member = AudienceMember.find_by(email: @buyer_email, seller: followed_seller)
+    assert_predicate member, :present?
+    assert_empty Purchase.where(email: @buyer_email, seller_id: followed_seller.id).ids
+
+    anonymized = GdprBuyerErasureService.new(@buyer_email, performed_by: @admin).send(:generate_anonymized_email)
+    GdprBuyerErasureService.new(@buyer_email, performed_by: @admin).perform!
+
+    assert_equal anonymized, member.reload.email
+  end
+
+  # audience_members is indexed only on (seller_id, email), so an email filter without
+  # a seller_id scans the whole table.
+  test "filters audience_members by seller_id alongside email so the lookup stays indexed" do
+    statements = []
+    collector = ->(_name, _start, _finish, _id, payload) { statements << payload[:sql] }
+
+    ActiveSupport::Notifications.subscribed(collector, "sql.active_record") do
+      GdprBuyerErasureService.new(@buyer_email, performed_by: @admin).perform!
+    end
+
+    email_filters = statements.filter_map do |sql|
+      next unless sql.include?("`audience_members`")
+      conditions = sql.split(/\bWHERE\b/, 2)[1]
+      conditions if conditions&.include?("`email`")
+    end
+
+    assert_predicate email_filters, :present?
+    email_filters.each do |conditions|
+      assert_includes conditions, "`seller_id`", "audience_members email filter must be seller-scoped: #{conditions}"
+    end
+  end
+
   test "anonymizes guest credit cards but leaves user-owned cards untouched" do
     guest_card = CreditCard.create!(
       visual: "UPI",
