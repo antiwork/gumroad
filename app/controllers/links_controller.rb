@@ -1901,16 +1901,15 @@ class LinksController < ApplicationController
         generate_product_cover_and_thumbnail_using_ai
         generate_product_content_using_ai
       else
-        # Raw Thread.new leaks AR checkouts until the Puma worker dies (gp#2383).
+        # Raw Thread.new skips the executor complete hook, so any AR checkout the
+        # child takes stays owned by a live thread for the whole join (gp#2383).
+        # Wrap the thread; lease AR only around DB sections inside the generators
+        # so the OpenAI round-trip does not pin a pool slot.
         cover_thread = Thread.new do
-          Rails.application.executor.wrap do
-            ActiveRecord::Base.connection_pool.with_connection { generate_product_cover_and_thumbnail_using_ai }
-          end
+          Rails.application.executor.wrap { generate_product_cover_and_thumbnail_using_ai }
         end
         content_thread = Thread.new do
-          Rails.application.executor.wrap do
-            ActiveRecord::Base.connection_pool.with_connection { generate_product_content_using_ai }
-          end
+          Rails.application.executor.wrap { generate_product_content_using_ai }
         end
 
         # Child threads take the load interlock via executor.wrap; joining without
@@ -1929,28 +1928,30 @@ class LinksController < ApplicationController
         service = Ai::ProductDetailsGeneratorService.new(current_seller:)
         result = service.generate_cover_image(product_name: @product.name)
         image_data = result[:image_data]
-        create_blob = ->(identifier) {
-          ActiveStorage::Blob.create_and_upload!(
-            io: StringIO.new(image_data),
-            filename: "#{@product.external_id}_#{identifier}_#{Time.now.to_i}.jpeg",
-            content_type: "image/jpeg",
-            identify: false
-          )
-        }
+        ActiveRecord::Base.connection_pool.with_connection do
+          create_blob = ->(identifier) {
+            ActiveStorage::Blob.create_and_upload!(
+              io: StringIO.new(image_data),
+              filename: "#{@product.external_id}_#{identifier}_#{Time.now.to_i}.jpeg",
+              content_type: "image/jpeg",
+              identify: false
+            )
+          }
 
-        cover_image_blob = create_blob.call("cover")
-        cover_image_blob.analyze
-        asset_preview = @product.asset_previews.build
-        asset_preview.file.attach(cover_image_blob)
-        asset_preview.analyze_file
-        asset_preview.save!
+          cover_image_blob = create_blob.call("cover")
+          cover_image_blob.analyze
+          asset_preview = @product.asset_previews.build
+          asset_preview.file.attach(cover_image_blob)
+          asset_preview.analyze_file
+          asset_preview.save!
 
-        thumbnail_image_blob = create_blob.call("thumbnail")
-        thumbnail_image_blob.analyze
-        thumbnail = @product.build_thumbnail
-        thumbnail.file.attach(thumbnail_image_blob)
-        thumbnail.file.analyze
-        thumbnail.save!
+          thumbnail_image_blob = create_blob.call("thumbnail")
+          thumbnail_image_blob.analyze
+          thumbnail = @product.build_thumbnail
+          thumbnail.file.attach(thumbnail_image_blob)
+          thumbnail.file.analyze
+          thumbnail.save!
+        end
       rescue => e
         ErrorNotifier.notify(e)
       end
@@ -1961,9 +1962,11 @@ class LinksController < ApplicationController
 
       number_of_content_pages = params[:link][:number_of_content_pages]
       if number_of_content_pages.present? && @product.native_type == Link::NATIVE_TYPE_EBOOK
-        attribute = @product.custom_attributes.find { _1["name"] == "Pages" }
-        attribute["value"] = number_of_content_pages.to_s if attribute.present?
-        @product.save!
+        ActiveRecord::Base.connection_pool.with_connection do
+          attribute = @product.custom_attributes.find { _1["name"] == "Pages" }
+          attribute["value"] = number_of_content_pages.to_s if attribute.present?
+          @product.save!
+        end
       end
 
       begin
@@ -1976,12 +1979,14 @@ class LinksController < ApplicationController
         service = Ai::ProductDetailsGeneratorService.new(current_seller:)
         response = service.generate_rich_content_pages(product_info)
 
-        response[:pages].each.with_index do |page_data, index|
-          rich_content = @product.alive_rich_contents.build
-          rich_content.title = page_data["title"]
-          rich_content.description = page_data["content"] || []
-          rich_content.position = index
-          rich_content.save!
+        ActiveRecord::Base.connection_pool.with_connection do
+          response[:pages].each.with_index do |page_data, index|
+            rich_content = @product.alive_rich_contents.build
+            rich_content.title = page_data["title"]
+            rich_content.description = page_data["content"] || []
+            rich_content.position = index
+            rich_content.save!
+          end
         end
       rescue => e
         ErrorNotifier.notify(e)
