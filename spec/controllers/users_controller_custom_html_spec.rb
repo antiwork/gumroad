@@ -40,6 +40,10 @@ describe UsersController, :vcr, type: :controller do
       get :show
       expect(response.body).to include("gumroad:navigate")
       expect(response.body).to include("STORE_HOSTNAMES")
+      # Opaque-origin e.origin isn't usable (Chrome reports "null", other
+      # engines report the frame URL). Gate on e.source only.
+      expect(response.body).not_to include('e.origin !== "null"')
+      expect(response.body).to include("e.source !== frame.contentWindow")
     end
 
     describe "facebook-domain-verification meta tag" do
@@ -83,6 +87,10 @@ describe UsersController, :vcr, type: :controller do
       expect(response.body).to include("data-gumroad-products-wrapper")
       expect(response.body).to include("gumroad:products:result")
       expect(response.body).to include("/landing/products")
+      # Opaque-origin e.origin isn't usable (Chrome reports "null", other
+      # engines report the frame URL). Gate on e.source only.
+      expect(response.body).not_to include('e.origin !== "null"')
+      expect(response.body).to include("e.source !== frame.contentWindow")
     end
 
     it "falls back to the default profile page when custom_html is blank" do
