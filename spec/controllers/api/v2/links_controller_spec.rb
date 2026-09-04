@@ -197,6 +197,7 @@ describe Api::V2::LinksController do
 
       it "batch loads associations used to serialize products" do
         global_custom_field = create(:custom_field, seller: @user, global: true)
+        membership = create(:membership_product_with_preset_tiered_pricing, user: @user, name: "Membership", created_at: Time.current + 7200)
         product_custom_fields = [@product1, @product2].index_with do |product|
           create(:custom_field, seller: @user, name: "Field for #{product.name}").tap { product.custom_fields << _1 }
         end
@@ -224,6 +225,12 @@ describe Api::V2::LinksController do
           expect(custom_field_ids).to contain_exactly(global_custom_field.external_id, product_custom_fields.fetch(product).external_id)
         end
 
+        membership_json = products_by_id.fetch(membership.external_id)
+        expect(membership_json.fetch("is_tiered_membership")).to eq(true)
+        expect(membership_json.fetch("recurrences")).to include("monthly")
+
+        # Product-level alive_prices + tier/variant alive_prices. Membership must not add
+        # per-product prices.alive.is_buy lookups during recurrence serialization.
         expect(queries.grep(/FROM `prices`/).count).to eq(2)
         expect(queries.grep(/FROM `thumbnails`/).count).to eq(1)
         expect(queries.grep(/FROM `product_files`/).count).to eq(1)
@@ -231,10 +238,14 @@ describe Api::V2::LinksController do
         expect(queries.grep(/FROM `custom_fields`/).count).to be_between(1, 2)
         expect(queries.grep(/MIN\(`base_variants`\.`price_difference_cents`\)/)).to be_empty
 
-        thumbnail_attachment_queries = queries.grep(/FROM `active_storage_attachments`.*record_type.*Thumbnail/)
-        thumbnail_blob_queries = queries.grep(/FROM `active_storage_blobs`/)
-        expect(thumbnail_attachment_queries.one? { _1.include?("IN (") }).to be true
-        expect(thumbnail_blob_queries.one? { _1.include?("IN (") }).to be true
+        thumbnail_attachment_queries = queries.grep(/FROM `active_storage_attachments`.*Thumbnail/)
+        expect(thumbnail_attachment_queries.count { _1.include?("IN (") }).to be >= 1
+        expect(queries.grep(/FROM `active_storage_blobs`/).count { _1.include?("IN (") }).to be >= 1
+        # Deep thumbnail preload batches variant_records so Thumbnail#url does not look them up per product.
+        variant_record_queries = queries.grep(/FROM `active_storage_variant_records`/)
+        expect(variant_record_queries).not_to be_empty
+        expect(variant_record_queries.count).to eq(1)
+        expect(variant_record_queries.first).to include("IN (")
       end
     end
   end

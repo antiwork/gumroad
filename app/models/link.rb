@@ -1385,7 +1385,11 @@ class Link < ApplicationRecord
   end
 
   def recurrence_price_enabled?(recurrence)
-    prices.alive.is_buy.exists?(recurrence:)
+    if association(:alive_prices).loaded?
+      alive_prices.any? { |price| price.is_buy? && price.recurrence == recurrence.to_s }
+    else
+      prices.alive.is_buy.exists?(recurrence:)
+    end
   end
 
   def ppp_details(ip)

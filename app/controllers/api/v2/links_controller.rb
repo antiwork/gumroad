@@ -13,7 +13,7 @@ class Api::V2::LinksController < Api::V2::BaseController
     :product_checkout_custom_fields,
     :ordered_alive_product_files,
     :skus_alive,
-    { thumbnail: [:file_attachment, :file_blob] },
+    { thumbnail: { file_attachment: { blob: { variant_records: { image_attachment: :blob } } } } },
     { tiers: [:alive_prices] },
     { default_tier: [:alive_prices] },
     { variant_categories_alive: [{ alive_variants: [:alive_prices] }] },
