@@ -40,6 +40,39 @@ RSpec.describe ContentModeration::ModerateRecordService, :vcr do
       expect(result.reasons).to eq([])
     end
 
+    it "runs AI strategy threads inside the Rails executor without pinning AR" do
+      wraps = 0
+      allow(Rails.application.executor).to receive(:wrap).and_wrap_original do |method, *args, &block|
+        wraps += 1
+        method.call(*args, &block)
+      end
+      permits = 0
+      allow(ActiveSupport::Dependencies.interlock).to receive(:permit_concurrent_loads).and_wrap_original do |method, *args, &block|
+        # Count only this service's join wrapper (other code may also yield the interlock).
+        if block&.source_location&.first&.end_with?("moderate_record_service.rb")
+          permits += 1
+        end
+        method.call(*args, &block)
+      end
+      checkouts = 0
+      allow(ActiveRecord::Base.connection_pool).to receive(:with_connection).and_wrap_original do |method, *args, &block|
+        checkouts += 1
+        method.call(*args, &block)
+      end
+      %w[ClassifierStrategy PromptStrategy].each do |name|
+        klass = ContentModeration::Strategies.const_get(name)
+        allow(klass).to receive(:new).and_return(
+          instance_double(klass, perform: strategy_result.new(status: "compliant", reasoning: []))
+        )
+      end
+
+      described_class.check(product, :product)
+
+      expect(wraps).to eq(2)
+      expect(permits).to eq(1)
+      expect(checkouts).to eq(0)
+    end
+
     it "skips moderation for verified sellers" do
       seller.update!(verified: true)
       expect(ContentModeration::ContentExtractor).not_to receive(:new)

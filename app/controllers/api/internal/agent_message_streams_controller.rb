@@ -94,32 +94,36 @@ class Api::Internal::AgentMessageStreamsController < Api::Internal::BaseControll
       # interruptible sleep: it returns nil each interval until the ensure below pushes the stop
       # signal, so shutdown is immediate rather than waiting out a sleep.
       heartbeat = Thread.new do
-        socket_alive = true
-        until stop_heartbeat.pop(timeout: STREAM_HEARTBEAT_INTERVAL.to_f)
-          # The marker refresh must outlive the socket: the request thread keeps generating after
-          # a client disconnect (silent tool iterations write nothing, so nothing raises) and can
-          # legitimately persist the turn minutes later — and a recovering client is told
-          # "in_progress" only while this marker lives. So refresh unconditionally, and only skip
-          # the socket write once the client is known to be gone. A Redis blip must not kill the
-          # heartbeat either — the socket comment below is what keeps the client's stall detector
-          # fed — so refresh failures are logged and retried on the next tick.
-          begin
-            refresh_agent_turn_in_progress!(client_turn_id)
-          rescue => e
-            Rails.logger.error("Store agent heartbeat marker refresh failed: #{e.message}")
-          end
-          next unless socket_alive
+        Rails.application.executor.wrap do
+          socket_alive = true
+          until stop_heartbeat.pop(timeout: STREAM_HEARTBEAT_INTERVAL.to_f)
+            # The marker refresh must outlive the socket: the request thread keeps generating after
+            # a client disconnect (silent tool iterations write nothing, so nothing raises) and can
+            # legitimately persist the turn minutes later — and a recovering client is told
+            # "in_progress" only while this marker lives. So refresh unconditionally, and only skip
+            # the socket write once the client is known to be gone. A Redis blip must not kill the
+            # heartbeat either — the socket comment below is what keeps the client's stall detector
+            # fed — so refresh failures are logged and retried on the next tick.
+            begin
+              refresh_agent_turn_in_progress!(client_turn_id)
+            rescue => e
+              Rails.logger.error("Store agent heartbeat marker refresh failed: #{e.message}")
+            end
+            next unless socket_alive
 
-          begin
-            write_lock.synchronize { response.stream.write(": heartbeat\n\n") }
-          rescue IOError, SystemCallError, ActionController::Live::ClientDisconnected
-            # The client is gone — stop writing to the dead socket, but keep the marker refreshes
-            # going. The request thread's own next write surfaces the disconnect through its
-            # existing handling. SystemCallError is included because a dead socket can surface as
-            # Errno::EPIPE / Errno::ECONNRESET rather than the wrapped ClientDisconnected, and an
-            # uncaught error here would kill the whole heartbeat thread, refreshes included.
-            socket_alive = false
+            begin
+              write_lock.synchronize { response.stream.write(": heartbeat\n\n") }
+            rescue IOError, SystemCallError, ActionController::Live::ClientDisconnected
+              # The client is gone — stop writing to the dead socket, but keep the marker refreshes
+              # going. The request thread's own next write surfaces the disconnect through its
+              # existing handling. SystemCallError is included because a dead socket can surface as
+              # Errno::EPIPE / Errno::ECONNRESET rather than the wrapped ClientDisconnected, and an
+              # uncaught error here would kill the whole heartbeat thread, refreshes included.
+              socket_alive = false
+            end
           end
+        ensure
+          ActiveRecord::Base.connection_pool.release_connection
         end
       end
 
@@ -216,9 +220,10 @@ class Api::Internal::AgentMessageStreamsController < Api::Internal::BaseControll
       # markers still reading "in_progress", never a recorded outcome.
       if heartbeat
         stop_heartbeat << true
-        heartbeat.join
+        ActiveSupport::Dependencies.interlock.permit_concurrent_loads { heartbeat.join }
       end
       sse.close
+      ActiveRecord::Base.connection_pool.release_connection
     end
   end
 

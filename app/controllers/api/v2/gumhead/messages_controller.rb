@@ -763,6 +763,7 @@ class Api::V2::Gumhead::MessagesController < Api::V2::BaseController
           record_usage!(model: @body["model"], usage: synthetic_input_usage.merge("output_tokens" => 0))
         end
         response.stream.close if committed
+        ActiveRecord::Base.connection_pool.release_connection
       end
     rescue HTTP::ConnectTimeoutError => e
       # TCP connect failed; the request never reached Anthropic.

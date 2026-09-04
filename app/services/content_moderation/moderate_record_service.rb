@@ -407,11 +407,13 @@ class ContentModeration::ModerateRecordService
         Thread.new do
           # Silence Ruby's stderr dump on thread death; Thread#value re-raises for the caller.
           Thread.current.report_on_exception = false
-          strategy.perform
+          # Strategies are HTTP/GlobalConfig only; do not pin an AR lease for the
+          # OpenAI round-trip. executor.wrap still clears any lazy checkout.
+          Rails.application.executor.wrap { strategy.perform }
         end
       end
 
-      threads.map(&:value)
+      ActiveSupport::Dependencies.interlock.permit_concurrent_loads { threads.map(&:value) }
     end
 
     # The preset is about EMPTY listings that route buyers off-platform, so the emptiness half
