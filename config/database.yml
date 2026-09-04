@@ -9,11 +9,13 @@ development: &development
   # concurrency so that Sidekiq jobs don't run out of Active Record connections to the database.
   # Sidekiq sets ENV["DB_POOL_SIZE"] to its concurrency. Web Puma does not, and
   # ActionController::Live plus publish-time AI threads checkout extra connections
-  # beyond RAILS_MAX_THREADS (gp#2383), so production/staging fall back to 10
-  # instead of Rails' 5. Tests and development keep 5.
+  # beyond RAILS_MAX_THREADS (gp#2383). Production/staging never drop below 10,
+  # even when RAILS_MAX_THREADS is set to Puma's thread count. Tests and
+  # development keep the requested size, or 5.
   # See https://github.com/gumroad/infrastructure/issues/479 for more details.
-  <% web_pool_fallback = %w[production staging].include?(ENV.fetch("RAILS_ENV", "development")) ? 10 : 5 %>
-  pool: <%= ENV["DB_POOL_SIZE"].presence || ENV["RAILS_MAX_THREADS"].presence || web_pool_fallback %>
+  <% requested_pool = (ENV["DB_POOL_SIZE"].presence || ENV["RAILS_MAX_THREADS"].presence)&.to_i %>
+  <% web_pool_floor = %w[production staging].include?(ENV.fetch("RAILS_ENV", "development")) ? 10 : nil %>
+  pool: <%= web_pool_floor ? [requested_pool, web_pool_floor].compact.max : (requested_pool || 5) %>
   <%= "reconnect: true" unless ENV["SKIP_NATIVE_MYSQL_RECONNECT"] == "true" %>
   socket: <%= [
   '/var/run/mysqld/mysqld.sock',
