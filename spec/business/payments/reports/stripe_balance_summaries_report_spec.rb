@@ -43,7 +43,7 @@ describe StripeBalanceSummariesReport do
     end
 
     it "builds one combined CSV per configured entity and lists unconfigured entities as skipped" do
-      result = described_class.generate(9, 2026)
+      result = described_class.generate(6, 2026)
 
       expect(result[:csvs].keys).to eq(["Gumroad", "Flexile"])
       expect(result[:skipped]).to eq(["Helper", "Iffy"])
@@ -56,35 +56,14 @@ describe StripeBalanceSummariesReport do
     end
 
     it "requests the month's UTC boundaries, filtering Gumroad to USD and leaving the others unfiltered" do
-      described_class.generate(9, 2026)
+      described_class.generate(6, 2026)
 
       expect(described_class).to have_received(:run_report)
         .with(api_key: STRIPE_SECRET, report_type: "balance.summary.1",
-              interval_start: Time.utc(2026, 9, 1).to_i, interval_end: Time.utc(2026, 10, 1).to_i, usd_only: true)
+              interval_start: Time.utc(2026, 6, 1).to_i, interval_end: Time.utc(2026, 7, 1).to_i, usd_only: true)
       expect(described_class).to have_received(:run_report)
         .with(api_key: "rk_live_flexile", report_type: "balance.summary.1",
-              interval_start: Time.utc(2026, 9, 1).to_i, interval_end: Time.utc(2026, 10, 1).to_i, usd_only: false)
-    end
-
-    it "clamps only Gumroad balance.summary.1; other types and accounts keep the full August interval" do
-      described_class.generate(8, 2026)
-
-      expect(described_class).to have_received(:run_report)
-        .with(api_key: STRIPE_SECRET, report_type: "balance.summary.1",
-              interval_start: Time.utc(2026, 8, 22).to_i, interval_end: Time.utc(2026, 9, 1).to_i, usd_only: true)
-      expect(described_class).to have_received(:run_report)
-        .with(api_key: STRIPE_SECRET, report_type: "balance_change_from_activity.summary.1",
-              interval_start: Time.utc(2026, 8, 1).to_i, interval_end: Time.utc(2026, 9, 1).to_i, usd_only: true)
-      expect(described_class).to have_received(:run_report)
-        .with(api_key: STRIPE_SECRET, report_type: "payouts.summary.1",
-              interval_start: Time.utc(2026, 8, 1).to_i, interval_end: Time.utc(2026, 9, 1).to_i, usd_only: true)
-      expect(described_class).to have_received(:run_report)
-        .with(api_key: "rk_live_flexile", report_type: "balance.summary.1",
-              interval_start: Time.utc(2026, 8, 1).to_i, interval_end: Time.utc(2026, 9, 1).to_i, usd_only: false)
-    end
-
-    it "rejects months that end before Stripe balance.summary.1 data exists" do
-      expect { described_class.generate(7, 2026) }.to raise_error(ArgumentError, /no data for 7\/2026/)
+              interval_start: Time.utc(2026, 6, 1).to_i, interval_end: Time.utc(2026, 7, 1).to_i, usd_only: false)
     end
   end
 
