@@ -81,22 +81,26 @@ class Api::Mobile::AgentStreamsController < Api::Mobile::BaseController
       mark_agent_turn_in_progress!(client_turn_id)
 
       heartbeat = Thread.new do
-        socket_alive = true
-        until stop_heartbeat.pop(timeout: STREAM_HEARTBEAT_INTERVAL.to_f)
-          begin
-            refresh_agent_turn_in_progress!(client_turn_id)
-          rescue => e
-            Rails.logger.error("Mobile store agent heartbeat marker refresh failed: #{e.message}")
-          end
-          next unless socket_alive
+        Rails.application.executor.wrap do
+          socket_alive = true
+          until stop_heartbeat.pop(timeout: STREAM_HEARTBEAT_INTERVAL.to_f)
+            begin
+              refresh_agent_turn_in_progress!(client_turn_id)
+            rescue => e
+              Rails.logger.error("Mobile store agent heartbeat marker refresh failed: #{e.message}")
+            end
+            next unless socket_alive
 
-          begin
-            write_lock.synchronize { response.stream.write(": heartbeat\n\n") }
-          rescue IOError, SystemCallError, ActionController::Live::ClientDisconnected
-            # Keep refreshing the recovery marker after the socket dies. The request thread can
-            # still finish the turn and persist it during a silent tool iteration.
-            socket_alive = false
+            begin
+              write_lock.synchronize { response.stream.write(": heartbeat\n\n") }
+            rescue IOError, SystemCallError, ActionController::Live::ClientDisconnected
+              # Keep refreshing the recovery marker after the socket dies. The request thread can
+              # still finish the turn and persist it during a silent tool iteration.
+              socket_alive = false
+            end
           end
+        ensure
+          ActiveRecord::Base.connection_pool.release_connection
         end
       end
 
@@ -186,6 +190,7 @@ class Api::Mobile::AgentStreamsController < Api::Mobile::BaseController
         heartbeat.join
       end
       sse.close
+      ActiveRecord::Base.connection_pool.release_connection
     end
   end
 

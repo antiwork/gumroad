@@ -7,12 +7,13 @@ development: &development
   port: <%= ENV.fetch("DATABASE_PORT") %>
   # Makara does not work well with Sidekiq's threaded model. We set the pool size to be more than the Sidekiq
   # concurrency so that Sidekiq jobs don't run out of Active Record connections to the database.
-  # As of writing this, only Sidekiq workers set ENV["DB_POOL_SIZE"]. `ENV["RAILS_MAX_THREADS"].presence` is put in the
-  # condition so that migrating to anything that uses the ENV var will require no changes to this file. (also a fallback)
-  # If both the ENV vars are missing the pool size will evaluate to 5 (which is the Rails default in case you're
-  # wondering).
+  # Sidekiq sets ENV["DB_POOL_SIZE"] to its concurrency. Web Puma does not, and
+  # ActionController::Live plus publish-time AI threads checkout extra connections
+  # beyond RAILS_MAX_THREADS (gp#2383), so production/staging fall back to 10
+  # instead of Rails' 5. Tests and development keep 5.
   # See https://github.com/gumroad/infrastructure/issues/479 for more details.
-  pool: <%= ENV["DB_POOL_SIZE"].presence || ENV["RAILS_MAX_THREADS"].presence || 5 %>
+  <% web_pool_fallback = %w[production staging].include?(ENV.fetch("RAILS_ENV", "development")) ? 10 : 5 %>
+  pool: <%= ENV["DB_POOL_SIZE"].presence || ENV["RAILS_MAX_THREADS"].presence || web_pool_fallback %>
   <%= "reconnect: true" unless ENV["SKIP_NATIVE_MYSQL_RECONNECT"] == "true" %>
   socket: <%= [
   '/var/run/mysqld/mysqld.sock',

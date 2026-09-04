@@ -407,7 +407,9 @@ class ContentModeration::ModerateRecordService
         Thread.new do
           # Silence Ruby's stderr dump on thread death; Thread#value re-raises for the caller.
           Thread.current.report_on_exception = false
-          strategy.perform
+          Rails.application.executor.wrap do
+            ActiveRecord::Base.connection_pool.with_connection { strategy.perform }
+          end
         end
       end
 

@@ -1901,8 +1901,17 @@ class LinksController < ApplicationController
         generate_product_cover_and_thumbnail_using_ai
         generate_product_content_using_ai
       else
-        cover_thread = Thread.new { generate_product_cover_and_thumbnail_using_ai }
-        content_thread = Thread.new { generate_product_content_using_ai }
+        # Raw Thread.new leaks AR checkouts until the Puma worker dies (gp#2383).
+        cover_thread = Thread.new do
+          Rails.application.executor.wrap do
+            ActiveRecord::Base.connection_pool.with_connection { generate_product_cover_and_thumbnail_using_ai }
+          end
+        end
+        content_thread = Thread.new do
+          Rails.application.executor.wrap do
+            ActiveRecord::Base.connection_pool.with_connection { generate_product_content_using_ai }
+          end
+        end
 
         cover_thread.join
         content_thread.join
