@@ -278,7 +278,7 @@ module Product::AsJson
       # serialization does not re-query prices.alive.is_buy per product.
       def membership_buy_recurrences
         if association(:alive_prices).loaded?
-          alive_prices.select(&:is_buy?).map(&:recurrence).uniq
+          alive_prices.filter_map { |price| price.recurrence if price.is_buy? }.uniq
         else
           prices.alive.is_buy.map(&:recurrence).uniq
         end
