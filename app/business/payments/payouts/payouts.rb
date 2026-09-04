@@ -465,11 +465,16 @@ class Payouts
     )
     begin
       payment.save!
-    rescue
+    rescue => save_error
       # A claimed row with no Payment would inflate the reserve base forever while never
-      # crediting the payout minimum. Return it to unpaid, as mark_failed does.
-      balances.each(&:mark_unpaid!)
-      raise
+      # crediting the payout minimum. Return them to unpaid atomically — a loop interrupted
+      # partway would strand the tail as exactly the orphans this unwind exists to prevent.
+      begin
+        ActiveRecord::Base.transaction { balances.each(&:mark_unpaid!) }
+      rescue => unwind_error
+        ErrorNotifier.notify(unwind_error, user_id: user.id, balance_ids: balances.map(&:id))
+      end
+      raise save_error
     end
     payment_errors = payout_processor.prepare_payment_and_set_amount(payment, balances)
     # The payout processor can mark the payment as failed while preparing it (for example when
