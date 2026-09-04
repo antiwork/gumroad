@@ -48,7 +48,10 @@ RSpec.describe ContentModeration::ModerateRecordService, :vcr do
       end
       permits = 0
       allow(ActiveSupport::Dependencies.interlock).to receive(:permit_concurrent_loads).and_wrap_original do |method, *args, &block|
-        permits += 1
+        # AR checkout also yields the interlock; count only this service's join wrapper.
+        if block&.source_location&.first&.end_with?("moderate_record_service.rb")
+          permits += 1
+        end
         method.call(*args, &block)
       end
       checkout = lambda do
