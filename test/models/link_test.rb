@@ -4193,6 +4193,15 @@ class LinkTest < ActiveSupport::TestCase
     assert_equal [global_custom_field, custom_field], product.checkout_custom_fields
   end
 
+  test "checkout_custom_fields reflects custom field mutations on the same instance" do
+    product = create_product
+    first = create_custom_field(name: "First", products: [product])
+    assert_equal [first], product.checkout_custom_fields
+
+    second = create_custom_field(name: "Second", products: [product])
+    assert_equal [first, second], product.checkout_custom_fields
+  end
+
   test "custom_field_descriptors returns formatted custom fields" do
     product = create_product
     product.custom_fields << create_custom_field(name: "I'm custom!")

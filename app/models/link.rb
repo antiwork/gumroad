@@ -1265,7 +1265,12 @@ class Link < ApplicationRecord
   end
 
   def checkout_custom_fields
-    global_checkout_custom_fields.to_a.concat(product_checkout_custom_fields.to_a)
+    if association(:global_checkout_custom_fields).loaded? &&
+       association(:product_checkout_custom_fields).loaded?
+      global_checkout_custom_fields.to_a.concat(product_checkout_custom_fields.to_a)
+    else
+      user.custom_fields.not_is_post_purchase.global.to_a.concat(custom_fields.not_is_post_purchase)
+    end
   end
 
   def custom_field_descriptors
