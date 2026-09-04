@@ -411,6 +411,14 @@ module Product::Prices
       # 1. there are multiple tiers, or
       # 2. any tiers have PWYW enabled, or
       # 3. there's only 1 tier but it has multiple prices
+      if (preloaded_tiers = preloaded_membership_tiers_with_prices)
+        any_customizable = preloaded_tiers.any?(&:customizable_price?)
+        # With one tier, that tier is the default; only then do multiple buy prices matter.
+        multiple_tier_prices = preloaded_tiers.size == 1 &&
+          preloaded_tiers.first.alive_prices.count(&:is_buy?) > 1
+        return preloaded_tiers.size > 1 || any_customizable || multiple_tier_prices
+      end
+
       any_customizable =
         if association(:tiers).loaded?
           tiers.any?(&:customizable_price?)
@@ -429,20 +437,39 @@ module Product::Prices
     def lowest_tier_price(for_default_duration: false)
       return unless is_tiered_membership
 
-      lowest =
-        if association(:tiers).loaded? && tiers.all? { |t| t.association(:alive_prices).loaded? }
-          candidates = tiers.flat_map(&:alive_prices).select(&:is_buy?)
-          candidates = candidates.select { |p| p.recurrence == subscription_duration } if for_default_duration
-          candidates.min_by(&:price_cents)
-        else
-          relation = VariantPrice.where(variant_id: tiers.map(&:id)).alive.is_buy
-          relation = relation.where(recurrence: subscription_duration) if for_default_duration
-          relation.order("price_cents asc").take
-        end
+      if (preloaded_tiers = preloaded_membership_tiers_with_prices)
+        candidates = preloaded_tiers.flat_map(&:alive_prices).select(&:is_buy?)
+        candidates = candidates.select { |p| p.recurrence == subscription_duration } if for_default_duration
+        return candidates.min_by(&:price_cents) ||
+               VariantPrice.new(price_cents: 0, recurrence: subscription_duration)
+      end
+
+      relation = VariantPrice.where(variant_id: tiers.map(&:id)).alive.is_buy
+      relation = relation.where(recurrence: subscription_duration) if for_default_duration
+      lowest = relation.order("price_cents asc").take
 
       lowest ||
         default_tier&.prices&.is_buy&.build(price_cents: 0, recurrence: subscription_duration) ||
         VariantPrice.new(price_cents: 0, recurrence: subscription_duration)
+    end
+
+    # Prefer tiers: :alive_prices, else the Api::V2 index tree
+    # variant_categories_alive -> alive_variants -> alive_prices (tier category title "Tier").
+    def preloaded_membership_tiers_with_prices
+      if association(:tiers).loaded? && tiers.all? { |tier| tier.association(:alive_prices).loaded? }
+        return tiers.to_a
+      end
+
+      return nil unless association(:variant_categories_alive).loaded?
+
+      tier_categories = variant_categories_alive.select { |category| category.title == "Tier" }
+      return nil if tier_categories.empty?
+      return nil unless tier_categories.all? { |category| category.association(:alive_variants).loaded? }
+
+      membership_tiers = tier_categories.flat_map(&:alive_variants)
+      return nil unless membership_tiers.all? { |tier| tier.association(:alive_prices).loaded? }
+
+      membership_tiers
     end
 
     def lowest_variant_price_difference_cents
@@ -456,11 +483,17 @@ module Product::Prices
       # CollabProductsPagePresenter#display_price_cents,
       # Product::StructuredData#minimum_offer_price_cents) don't pay a
       # per-category N+1.
-      if association(:variant_categories_alive).loaded? &&
-         variant_categories_alive.all? { |c| c.association(:alive_variants).loaded? } &&
-         association(:skus).loaded?
-        candidates = skus.select(&:alive?) +
-                     variant_categories_alive.flat_map(&:alive_variants)
+      preloaded_skus =
+        if association(:skus_alive).loaded?
+          skus_alive.to_a
+        elsif association(:skus).loaded?
+          skus.select(&:alive?)
+        end
+
+      if preloaded_skus &&
+         association(:variant_categories_alive).loaded? &&
+         variant_categories_alive.all? { |c| c.association(:alive_variants).loaded? }
+        candidates = preloaded_skus + variant_categories_alive.flat_map(&:alive_variants)
         candidates.map(&:price_difference_cents).compact.min
       else
         current_base_variants.minimum(:price_difference_cents)

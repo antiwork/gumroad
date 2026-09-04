@@ -378,6 +378,26 @@ describe Product::Prices do
           expect(per_row_alive_variants).to be_empty,
                                             "Expected no per-row alive_variants queries when associations are not preloaded, got:\n#{per_row_alive_variants.join("\n")}"
         end
+
+        it "uses the scoped SKU preload without querying variants again" do
+          create(:sku, link: product, price_difference_cents: 99)
+          create(:sku, link: product, price_difference_cents: 50, deleted_at: 1.hour.ago)
+          fresh_product = Link.includes(:alive_prices, :skus_alive, variant_categories_alive: :alive_variants).find(product.id)
+
+          expect(fresh_product.association(:skus_alive)).to be_loaded
+          expect(fresh_product.skus_alive.map(&:price_difference_cents)).to contain_exactly(99)
+
+          queries = []
+          counter = lambda do |*, payload|
+            queries << payload[:sql] if payload[:name] != "SCHEMA" && !payload[:cached]
+          end
+
+          ActiveSupport::Notifications.subscribed(counter, "sql.active_record") do
+            expect(fresh_product.display_price_cents).to eq 5_99
+          end
+
+          expect(queries.grep(/FROM `base_variants`/)).to be_empty
+        end
       end
     end
 

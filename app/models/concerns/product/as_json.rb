@@ -102,7 +102,7 @@ module Product::AsJson
         "custom_fields" => custom_field_descriptors.as_json,
         "custom_summary" => custom_summary,
         "is_tiered_membership" => is_tiered_membership?,
-        "recurrences" => is_tiered_membership? ? prices.alive.is_buy.map(&:recurrence).uniq : nil,
+        "recurrences" => is_tiered_membership? ? membership_buy_recurrences : nil,
         "covers" => display_asset_previews.as_json,
         "main_cover_id" => main_preview&.guid,
         "bundle_products" => is_bundle? ? bundle_products.select(&:alive?).sort_by(&:position).map do |bp|
@@ -272,5 +272,15 @@ module Product::AsJson
         return "Membership" if is_tiered_membership?
 
         "Subscription"
+      end
+
+      # Prefer preloaded alive_prices (Api::V2 products index) so membership
+      # serialization does not re-query prices.alive.is_buy per product.
+      def membership_buy_recurrences
+        if association(:alive_prices).loaded?
+          alive_prices.filter_map { |price| price.recurrence if price.is_buy? }.uniq
+        else
+          prices.alive.is_buy.map(&:recurrence).uniq
+        end
       end
 end

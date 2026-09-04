@@ -23,7 +23,9 @@ module WithProductFiles
   # Call this method only if you're sure that you're not changing the files within the same action.
   def alive_product_files
     cached_alive_product_files || self.cached_alive_product_files =
-      if association(:product_files).loaded?
+      if association(:ordered_alive_product_files).loaded?
+        ordered_alive_product_files.to_a
+      elsif association(:product_files).loaded?
         # Match MySQL's `ORDER BY position ASC` (used by the `in_order`
         # scope on the cold-cache branch): NULLs sort FIRST in MySQL's
         # default NULL-handling. Ruby's `sort_by` puts unknowns where you

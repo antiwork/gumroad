@@ -194,6 +194,62 @@ describe Api::V2::LinksController do
         expect(cover_blob_queries.count).to eq(1)
         expect(cover_blob_queries.first).to include("IN (")
       end
+
+      it "batch loads associations used to serialize products" do
+        global_custom_field = create(:custom_field, seller: @user, global: true)
+        membership = create(:membership_product_with_preset_tiered_pricing, user: @user, name: "Membership", created_at: Time.current + 7200)
+        product_custom_fields = [@product1, @product2].index_with do |product|
+          create(:custom_field, seller: @user, name: "Field for #{product.name}").tap { product.custom_fields << _1 }
+        end
+        [@product1, @product2].each do |product|
+          create(:product_file, link: product)
+          category = create(:variant_category, link: product)
+          create(:variant, variant_category: category, price_difference_cents: 100)
+        end
+        create(:thumbnail, product: @product1)
+        create(:thumbnail, product: @product2)
+
+        queries = []
+        counter = lambda do |*, payload|
+          queries << payload[:sql] unless payload[:name] == "SCHEMA"
+        end
+
+        ActiveSupport::Notifications.subscribed(counter, "sql.active_record") do
+          get @action, params: @params
+        end
+
+        expect(response).to be_successful
+        products_by_id = response.parsed_body["products"].index_by { _1["id"] }
+        [@product1, @product2].each do |product|
+          custom_field_ids = products_by_id.fetch(product.external_id).fetch("custom_fields").pluck("id")
+          expect(custom_field_ids).to contain_exactly(global_custom_field.external_id, product_custom_fields.fetch(product).external_id)
+        end
+
+        membership_json = products_by_id.fetch(membership.external_id)
+        expect(membership_json.fetch("is_tiered_membership")).to eq(true)
+        expect(membership_json.fetch("recurrences")).to include("monthly")
+
+        # Product-level alive_prices + one batched variant/tier alive_prices preload.
+        # Membership must reuse that variant tree (not extra tiers/default_tier price loads,
+        # and not per-product prices.alive.is_buy during recurrence serialization).
+        price_queries = queries.grep(/FROM `prices`/)
+        expect(price_queries.count).to eq(2)
+        expect(price_queries.count { _1.include?("IN (") }).to eq(2)
+        expect(queries.grep(/FROM `thumbnails`/).count).to eq(1)
+        expect(queries.grep(/FROM `product_files`/).count).to eq(1)
+        # Global + product-scoped preloads are two queries; some runs combine them into one.
+        expect(queries.grep(/FROM `custom_fields`/).count).to be_between(1, 2)
+        expect(queries.grep(/MIN\(`base_variants`\.`price_difference_cents`\)/)).to be_empty
+
+        thumbnail_attachment_queries = queries.grep(/FROM `active_storage_attachments`.*Thumbnail/)
+        expect(thumbnail_attachment_queries.count { _1.include?("IN (") }).to be >= 1
+        expect(queries.grep(/FROM `active_storage_blobs`/).count { _1.include?("IN (") }).to be >= 1
+        # Deep thumbnail preload batches variant_records so Thumbnail#url does not look them up per product.
+        variant_record_queries = queries.grep(/FROM `active_storage_variant_records`/)
+        expect(variant_record_queries).not_to be_empty
+        expect(variant_record_queries.count).to eq(1)
+        expect(variant_record_queries.first).to include("IN (")
+      end
     end
   end
 
