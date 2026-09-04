@@ -24,6 +24,18 @@ describe CreateIndiaSalesReportJob do
       end.to raise_error(ArgumentError)
     end
 
+    it "does not use on_conflict: :replace (that strategy scans the scheduled set)" do
+      expect(described_class.sidekiq_options["on_conflict"].to_s).to eq("log")
+    end
+
+    it "raises a clear error when the India GST ZipTaxRate row is missing" do
+      allow(ZipTaxRate).to receive_message_chain(:where, :alive, :last).and_return(nil)
+      allow(ZipTaxRate.connection).to receive(:respond_to?).and_call_original
+      allow(ZipTaxRate.connection).to receive(:respond_to?).with(:stick_to_primary!).and_return(false)
+
+      expect { described_class.new.perform(8, 2026) }.to raise_error(/India GST ZipTaxRate/)
+    end
+
     it "defaults to previous month when no parameters provided" do
       travel_to(Time.zone.local(2023, 6, 15)) do
         # Mock S3 to prevent real API calls

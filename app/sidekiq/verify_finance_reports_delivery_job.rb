@@ -23,6 +23,12 @@ class VerifyFinanceReportsDeliveryJob
   # Only fires older than this are checked, so a run that is merely slow (or scheduled
   # shortly before this backstop) isn't flagged as missing.
   GRACE_PERIOD = 6.hours
+  # A Redis read blip makes every completion key look missing. Re-enqueueing and
+  # emailing per fire then produces tens of false alerts. The write/read probe
+  # below is the abort signal; a class-count heuristic is not — a real scheduler
+  # or deploy outage on the 1st legitimately misses several monthly jobs at once,
+  # which is the case this backstop exists to recover.
+  READ_PROBE_REDIS_KEY = "finance_report_backstop_read_probe"
   # Set on the backstop's first ever run (which only records the baseline and checks
   # nothing). Fires from before this moment predate completion tracking — the runs may
   # well have completed without leaving a Redis key — so they are skipped instead of
@@ -51,58 +57,113 @@ class VerifyFinanceReportsDeliveryJob
 
     now = Time.current
 
+    unless redis_reads_ok?
+      abort_backstop("redis_read_probe_failed", [])
+      return
+    end
+
     active_since_raw = $redis.get(ACTIVE_SINCE_REDIS_KEY)
+    if active_since_raw.nil?
+      unless redis_reads_ok?
+        abort_backstop("redis_read_probe_failed", [])
+        return
+      end
+      active_since_raw = $redis.get(ACTIVE_SINCE_REDIS_KEY)
+    end
     if active_since_raw.nil?
       $redis.set(ACTIVE_SINCE_REDIS_KEY, now.to_i)
       return
     end
     active_since = Time.zone.at(active_since_raw.to_i)
 
-    schedule = YAML.load_file(Rails.root.join("config", "sidekiq_schedule.yml"))
-    schedule.each_value do |entry|
-      class_name = entry["class"]
-      args_builder = VERIFIED_JOBS[class_name]
-      next if args_builder.nil?
-
-      # The schedule's cron expressions are documented (and fired in production) in UTC —
-      # pin the parse to UTC explicitly so this doesn't drift with server TZ.
-      cron = Fugit::Cron.parse("#{entry['cron'].sub(/#.*/, '').strip} UTC")
-
-      # EVERY fire since activation is checked, not just the most recent one. Checking
-      # only the latest fire loses older gaps: if the verifier is down while a monthly
-      # fire is missed and the NEXT month's fire then completes, a latest-only check sees
-      # that newer completion and the older missed month is never re-enqueued or alerted.
-      # Each period has its own completion key, so walking back through the fires reads
-      # each one independently and a newer completion can't mask an older gap.
-      #
-      # The walk is bounded (besides by activation) by the completion keys' own lifetime:
-      # keys expire after 120 days (FinanceReportCompletionTracking::REDIS_KEY_TTL), so a
-      # fire older than that may have completed and had its key expire — unknowable, not
-      # missing, same as pre-activation fires. The most recent fire alone is still
-      # checked with no age cutoff, so even after a very long outage the newest gap is
-      # always caught. Fires from before activation predate completion tracking entirely
-      # and are skipped as unknowable, not missing.
-      oldest_verifiable_fire = now - FinanceReportCompletionTracking::REDIS_KEY_TTL
-      fire_time = cron.previous_time(now - GRACE_PERIOD).to_t.utc
-      # Jobs without period args (their builder ignores the fire time) resolve every
-      # fire to the same completion key — checking that key once covers the whole walk,
-      # and skipping the repeats avoids re-enqueueing the identical job several times.
-      seen_period_keys = Set.new
-      while fire_time >= active_since
-        args = args_builder.call(fire_time)
-        if seen_period_keys.add?(FinanceReportCompletionTracking.redis_key(class_name, args))
-          verify_fire(class_name, args, fire_time)
-        end
-        fire_time = cron.previous_time(fire_time).to_t.utc
-        break if fire_time < oldest_verifiable_fire
-      end
-    end
+    misses = confirm_still_missing(collect_misses(now, active_since))
+    misses.each { |miss| reenqueue_and_alert(miss) }
   end
 
   private
-    def verify_fire(class_name, args, fire_time)
-      last_completed_at = FinanceReportCompletionTracking.last_completed_at(class_name, args)
-      return if last_completed_at && last_completed_at >= fire_time
+    def collect_misses(now, active_since)
+      misses = []
+      schedule = YAML.load_file(Rails.root.join("config", "sidekiq_schedule.yml"))
+      schedule.each_value do |entry|
+        class_name = entry["class"]
+        args_builder = VERIFIED_JOBS[class_name]
+        next if args_builder.nil?
+
+        # The schedule's cron expressions are documented (and fired in production) in UTC —
+        # pin the parse to UTC explicitly so this doesn't drift with server TZ.
+        cron = Fugit::Cron.parse("#{entry['cron'].sub(/#.*/, '').strip} UTC")
+
+        # EVERY fire since activation is checked, not just the most recent one. Checking
+        # only the latest fire loses older gaps: if the verifier is down while a monthly
+        # fire is missed and the NEXT month's fire then completes, a latest-only check sees
+        # that newer completion and the older missed month is never re-enqueued or alerted.
+        # Each period has its own completion key, so walking back through the fires reads
+        # each one independently and a newer completion can't mask an older gap.
+        #
+        # The walk is bounded (besides by activation) by the completion keys' own lifetime:
+        # keys expire after 120 days (FinanceReportCompletionTracking::REDIS_KEY_TTL), so a
+        # fire older than that may have completed and had its key expire — unknowable, not
+        # missing, same as pre-activation fires. The most recent fire alone is still
+        # checked with no age cutoff, so even after a very long outage the newest gap is
+        # always caught. Fires from before activation predate completion tracking entirely
+        # and are skipped as unknowable, not missing.
+        oldest_verifiable_fire = now - FinanceReportCompletionTracking::REDIS_KEY_TTL
+        fire_time = cron.previous_time(now - GRACE_PERIOD).to_t.utc
+        # Jobs without period args (their builder ignores the fire time) resolve every
+        # fire to the same completion key — checking that key once covers the whole walk,
+        # and skipping the repeats avoids re-enqueueing the identical job several times.
+        seen_period_keys = Set.new
+        while fire_time >= active_since
+          args = args_builder.call(fire_time)
+          if seen_period_keys.add?(FinanceReportCompletionTracking.redis_key(class_name, args))
+            last_completed_at = FinanceReportCompletionTracking.last_completed_at(class_name, args)
+            unless last_completed_at && last_completed_at >= fire_time
+              misses << { class_name:, args:, fire_time:, last_completed_at: }
+            end
+          end
+          fire_time = cron.previous_time(fire_time).to_t.utc
+          break if fire_time < oldest_verifiable_fire
+        end
+      end
+      misses
+    end
+
+    def redis_reads_ok?
+      token = SecureRandom.hex(16)
+      $redis.set(READ_PROBE_REDIS_KEY, token, ex: 60)
+      $redis.get(READ_PROBE_REDIS_KEY) == token
+    rescue
+      false
+    end
+
+    # A GET-nil blip can mark a completed fire as missing. Re-probe Redis and
+    # re-read each miss before re-enqueueing; abort only when the probe itself fails.
+    def confirm_still_missing(misses)
+      return misses if misses.empty?
+
+      unless redis_reads_ok?
+        abort_backstop("redis_read_probe_failed", misses)
+        return []
+      end
+
+      misses.select do |miss|
+        last_completed_at = FinanceReportCompletionTracking.last_completed_at(miss[:class_name], miss[:args])
+        !(last_completed_at && last_completed_at >= miss[:fire_time])
+      end
+    end
+
+    def abort_backstop(reason, misses)
+      class_names = misses.map { |miss| miss[:class_name] }.uniq
+      AccountingMailer.finance_report_delivery_backstop_aborted(
+        reason, misses.size, class_names
+      ).deliver_later
+    end
+
+    def reenqueue_and_alert(miss)
+      class_name = miss[:class_name]
+      args = miss[:args]
+      fire_time = miss[:fire_time]
+      last_completed_at = miss[:last_completed_at]
 
       # A duplicate enqueue can raise for unique jobs with on_conflict: :raise (e.g.
       # yesterday's backstop re-run is still queued or running). The gap still gets

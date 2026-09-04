@@ -4,7 +4,9 @@ class CreateIndiaSalesReportJob
   include Sidekiq::Job
   include FinanceReportFailureAlert
   include LongRunningJobTracking
-  sidekiq_options retry: 5, queue: :default, lock: :until_executed, on_conflict: :replace
+  # :replace walks the Sidekiq scheduled set (millions of SendWorkflowInstallmentWorker
+  # rows) and times out, so a missed-month re-enqueue never lands.
+  sidekiq_options retry: 5, queue: :default, lock: :until_executed, on_conflict: :log
 
   # Monthly, enqueued with no args, so the digest is constant. The report's own statement budget is
   # 1h (redis-overridable); 2h covers that plus the S3 write.
@@ -38,7 +40,7 @@ class CreateIndiaSalesReportJob
       start_date = Date.new(year, month).beginning_of_month.beginning_of_day
       end_date = Date.new(year, month).end_of_month.end_of_day
 
-      india_tax_rate = ZipTaxRate.where(country: "IN", state: nil, user_id: nil).alive.last.combined_rate
+      india_tax_rate = india_gst_combined_rate
       india_tax_rate_percentage = (india_tax_rate * 100).to_i
 
       timeout_seconds = ($redis.get("create_india_sales_report_job_max_execution_time_seconds") || 1.hour).to_i
@@ -119,6 +121,22 @@ class CreateIndiaSalesReportJob
   end
 
   private
+    def india_gst_combined_rate
+      row = india_gst_rate_row
+      raise "India GST ZipTaxRate (country=IN, state=nil) is missing" unless row
+
+      row.combined_rate
+    end
+
+    def india_gst_rate_row
+      scope = ZipTaxRate.where(country: "IN", state: nil, user_id: nil).alive
+      row = scope.last
+      return row if row
+
+      ZipTaxRate.connection.stick_to_primary! if ZipTaxRate.connection.respond_to?(:stick_to_primary!)
+      scope.last
+    end
+
     def row_headers
       [
         "ID",

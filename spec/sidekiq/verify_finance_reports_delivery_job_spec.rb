@@ -4,6 +4,7 @@ describe VerifyFinanceReportsDeliveryJob do
   before do
     allow(Rails.env).to receive(:production?).and_return(true)
     allow(AccountingMailer).to receive(:finance_report_delivery_backstop_triggered).and_return(double("mailer", deliver_later: true))
+    allow(AccountingMailer).to receive(:finance_report_delivery_backstop_aborted).and_return(double("mailer", deliver_later: true))
     $redis.del(described_class::ACTIVE_SINCE_REDIS_KEY)
   end
 
@@ -259,6 +260,94 @@ describe VerifyFinanceReportsDeliveryJob do
 
       expect(completion_args).to eq(fire_args),
                                  "#{class_name}: completion key #{completion_args.inspect} != verifier key #{fire_args.inspect}"
+    end
+  end
+
+  it "does not re-enqueue when Redis GET does not round-trip a probe write" do
+    travel_to(backstop_run_time) do
+      activate_backstop(at: Time.utc(2026, 6, 25))
+      allow($redis).to receive(:set).and_call_original
+      allow($redis).to receive(:get).and_call_original
+      allow($redis).to receive(:get).with(described_class::READ_PROBE_REDIS_KEY).and_return(nil)
+
+      described_class.new.perform
+
+      expect(SendFinancesReportWorker.jobs).to be_empty
+      expect(AccountingMailer).not_to have_received(:finance_report_delivery_backstop_triggered)
+      expect(AccountingMailer).to have_received(:finance_report_delivery_backstop_aborted)
+        .with("redis_read_probe_failed", 0, [])
+      expect($redis.get(described_class::ACTIVE_SINCE_REDIS_KEY)).to eq(Time.utc(2026, 6, 25).to_i.to_s)
+    end
+  end
+
+  it "does not reset the activation baseline when GET of the existing key blips to nil" do
+    travel_to(backstop_run_time) do
+      original = Time.utc(2026, 6, 25)
+      activate_backstop(at: original)
+      record_all_completions(backstop_run_time)
+      reads = 0
+      allow($redis).to receive(:get).and_wrap_original do |orig, k, *rest|
+        if k == described_class::ACTIVE_SINCE_REDIS_KEY
+          reads += 1
+          next orig.call(k, *rest) if reads > 1
+
+          nil
+        else
+          orig.call(k, *rest)
+        end
+      end
+
+      described_class.new.perform
+
+      expect($redis.get(described_class::ACTIVE_SINCE_REDIS_KEY)).to eq(original.to_i.to_s)
+      expect(SendFinancesReportWorker.jobs).to be_empty
+      expect(AccountingMailer).not_to have_received(:finance_report_delivery_backstop_aborted)
+    end
+  end
+
+  it "re-enqueues several genuine misses in one tick rather than aborting on class count" do
+    travel_to(backstop_run_time) do
+      activate_backstop(at: Time.utc(2026, 6, 25))
+      record_all_completions(backstop_run_time)
+      %w[
+        SendFinancesReportWorker
+        SendDeferredRefundsReportWorker
+        UploadUsStatesSalesTaxToTaxjarJob
+      ].each do |class_name|
+        fire = class_name == "UploadUsStatesSalesTaxToTaxjarJob" ? taxjar_fire : monthly_fire
+        clear_completion_for_fire(class_name, fire)
+      end
+
+      described_class.new.perform
+
+      expect(SendFinancesReportWorker).to have_enqueued_sidekiq_job(6, 2026)
+      expect(SendDeferredRefundsReportWorker).to have_enqueued_sidekiq_job(6, 2026)
+      expect(UploadUsStatesSalesTaxToTaxjarJob).to have_enqueued_sidekiq_job("2026-06-30")
+      expect(AccountingMailer).not_to have_received(:finance_report_delivery_backstop_aborted)
+    end
+  end
+
+  it "does not re-enqueue a miss that a second Redis read finds completed" do
+    travel_to(backstop_run_time) do
+      activate_backstop(at: Time.utc(2026, 6, 25))
+      record_all_completions(backstop_run_time)
+      key = FinanceReportCompletionTracking.redis_key("SendFinancesReportWorker", [6, 2026])
+      stored = $redis.get(key)
+      reads = 0
+      allow($redis).to receive(:get).and_wrap_original do |orig, k, *rest|
+        if k == key
+          reads += 1
+          next stored if reads > 1
+          nil
+        else
+          orig.call(k, *rest)
+        end
+      end
+
+      described_class.new.perform
+
+      expect(SendFinancesReportWorker.jobs).to be_empty
+      expect(AccountingMailer).not_to have_received(:finance_report_delivery_backstop_triggered)
     end
   end
 end
