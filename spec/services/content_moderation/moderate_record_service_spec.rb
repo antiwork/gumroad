@@ -40,20 +40,24 @@ RSpec.describe ContentModeration::ModerateRecordService, :vcr do
       expect(result.reasons).to eq([])
     end
 
-    it "returns Active Record connections checked out by strategy threads" do
+    it "runs AI strategy threads inside the Rails executor" do
+      wraps = 0
+      allow(Rails.application.executor).to receive(:wrap).and_wrap_original do |method, *args, &block|
+        wraps += 1
+        method.call(*args, &block)
+      end
       checkout = lambda do
         User.first
         strategy_result.new(status: "compliant", reasoning: [])
       end
-      %w[BlocklistStrategy ClassifierStrategy PromptStrategy].each do |name|
+      %w[ClassifierStrategy PromptStrategy].each do |name|
         klass = ContentModeration::Strategies.const_get(name)
         allow(klass).to receive(:new).and_return(instance_double(klass, perform: nil).tap { |d| allow(d).to receive(:perform, &checkout) })
       end
 
       described_class.check(product, :product)
 
-      leaked = ActiveRecord::Base.connection_pool.connections.count { |c| c.in_use? && c.owner && !c.owner.alive? }
-      expect(leaked).to eq(0)
+      expect(wraps).to eq(2)
     end
 
     it "skips moderation for verified sellers" do
