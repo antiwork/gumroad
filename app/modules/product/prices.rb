@@ -462,7 +462,8 @@ module Product::Prices
 
       return nil unless association(:variant_categories_alive).loaded?
 
-      tier_categories = variant_categories_alive.select { |category| category.title == "Tier" }
+      # is_tier_category is where(title: "Tier") on utf8mb4_unicode_ci; match that in memory.
+      tier_categories = variant_categories_alive.select { |category| category.title.to_s.casecmp?("Tier") }
       return nil if tier_categories.empty?
       return nil unless tier_categories.all? { |category| category.association(:alive_variants).loaded? }
 
