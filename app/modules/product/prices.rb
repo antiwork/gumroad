@@ -456,11 +456,17 @@ module Product::Prices
       # CollabProductsPagePresenter#display_price_cents,
       # Product::StructuredData#minimum_offer_price_cents) don't pay a
       # per-category N+1.
-      if association(:variant_categories_alive).loaded? &&
-         variant_categories_alive.all? { |c| c.association(:alive_variants).loaded? } &&
-         association(:skus).loaded?
-        candidates = skus.select(&:alive?) +
-                     variant_categories_alive.flat_map(&:alive_variants)
+      preloaded_skus =
+        if association(:skus_alive).loaded?
+          skus_alive.to_a
+        elsif association(:skus).loaded?
+          skus.select(&:alive?)
+        end
+
+      if preloaded_skus &&
+         association(:variant_categories_alive).loaded? &&
+         variant_categories_alive.all? { |c| c.association(:alive_variants).loaded? }
+        candidates = preloaded_skus + variant_categories_alive.flat_map(&:alive_variants)
         candidates.map(&:price_difference_cents).compact.min
       else
         current_base_variants.minimum(:price_difference_cents)

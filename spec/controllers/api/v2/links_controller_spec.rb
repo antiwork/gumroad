@@ -194,6 +194,47 @@ describe Api::V2::LinksController do
         expect(cover_blob_queries.count).to eq(1)
         expect(cover_blob_queries.first).to include("IN (")
       end
+
+      it "batch loads associations used to serialize products" do
+        global_custom_field = create(:custom_field, seller: @user, global: true)
+        product_custom_fields = [@product1, @product2].index_with do |product|
+          create(:custom_field, seller: @user, name: "Field for #{product.name}").tap { product.custom_fields << _1 }
+        end
+        [@product1, @product2].each do |product|
+          create(:product_file, link: product)
+          category = create(:variant_category, link: product)
+          create(:variant, variant_category: category, price_difference_cents: 100)
+        end
+        create(:thumbnail, product: @product1)
+        create(:thumbnail, product: @product2)
+
+        queries = []
+        counter = lambda do |*, payload|
+          queries << payload[:sql] unless payload[:name] == "SCHEMA"
+        end
+
+        ActiveSupport::Notifications.subscribed(counter, "sql.active_record") do
+          get @action, params: @params
+        end
+
+        expect(response).to be_successful
+        products_by_id = response.parsed_body["products"].index_by { _1["id"] }
+        [@product1, @product2].each do |product|
+          custom_field_ids = products_by_id.fetch(product.external_id).fetch("custom_fields").pluck("id")
+          expect(custom_field_ids).to contain_exactly(global_custom_field.external_id, product_custom_fields.fetch(product).external_id)
+        end
+
+        expect(queries.grep(/FROM `prices`/).count).to eq(2)
+        expect(queries.grep(/FROM `thumbnails`/).count).to eq(1)
+        expect(queries.grep(/FROM `product_files`/).count).to eq(1)
+        expect(queries.grep(/FROM `custom_fields`/).count).to eq(1)
+        expect(queries.grep(/MIN\(`base_variants`\.`price_difference_cents`\)/)).to be_empty
+
+        thumbnail_attachment_queries = queries.grep(/FROM `active_storage_attachments`.*record_type.*Thumbnail/)
+        thumbnail_blob_queries = queries.grep(/FROM `active_storage_blobs`/)
+        expect(thumbnail_attachment_queries.one? { _1.include?("IN (") }).to be true
+        expect(thumbnail_blob_queries.one? { _1.include?("IN (") }).to be true
+      end
     end
   end
 

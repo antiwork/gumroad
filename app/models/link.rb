@@ -130,6 +130,7 @@ class Link < ApplicationRecord
   has_one :tier_category, -> { alive.is_tier_category }, class_name: "VariantCategory"
   has_one :default_tier, through: :tier_category
   has_many :skus
+  has_many :skus_alive, -> { alive }, class_name: "Sku"
   has_many :skus_alive_not_default, -> { alive.not_is_default_sku }, class_name: "Sku"
   has_many :installments
   has_many :subscriptions
@@ -174,6 +175,9 @@ class Link < ApplicationRecord
       .or(where(universal: true))
   }, through: :user, source: :available_cross_sells
   has_and_belongs_to_many :custom_fields, join_table: "custom_fields_products", foreign_key: "product_id"
+  has_many :global_checkout_custom_fields, -> { global.not_is_post_purchase }, through: :user, source: :custom_fields
+  has_and_belongs_to_many :product_checkout_custom_fields, -> { not_is_post_purchase },
+                          class_name: "CustomField", join_table: "custom_fields_products", foreign_key: "product_id"
   has_one :product_refund_policy, foreign_key: "product_id"
   has_one :staff_picked_product, foreign_key: "product_id"
   has_one :custom_domain, -> { alive }, foreign_key: "product_id"
@@ -1261,7 +1265,7 @@ class Link < ApplicationRecord
   end
 
   def checkout_custom_fields
-    user.custom_fields.not_is_post_purchase.global.to_a.concat(custom_fields.not_is_post_purchase)
+    global_checkout_custom_fields.to_a.concat(product_checkout_custom_fields.to_a)
   end
 
   def custom_field_descriptors
