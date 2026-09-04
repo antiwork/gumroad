@@ -46,6 +46,11 @@ RSpec.describe ContentModeration::ModerateRecordService, :vcr do
         wraps += 1
         method.call(*args, &block)
       end
+      permits = 0
+      allow(ActiveSupport::Dependencies.interlock).to receive(:permit_concurrent_loads).and_wrap_original do |method, *args, &block|
+        permits += 1
+        method.call(*args, &block)
+      end
       checkout = lambda do
         User.first
         strategy_result.new(status: "compliant", reasoning: [])
@@ -58,6 +63,7 @@ RSpec.describe ContentModeration::ModerateRecordService, :vcr do
       described_class.check(product, :product)
 
       expect(wraps).to eq(2)
+      expect(permits).to eq(1)
     end
 
     it "skips moderation for verified sellers" do

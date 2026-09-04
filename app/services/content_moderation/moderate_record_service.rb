@@ -413,7 +413,7 @@ class ContentModeration::ModerateRecordService
         end
       end
 
-      threads.map(&:value)
+      ActiveSupport::Dependencies.interlock.permit_concurrent_loads { threads.map(&:value) }
     end
 
     # The preset is about EMPTY listings that route buyers off-platform, so the emptiness half

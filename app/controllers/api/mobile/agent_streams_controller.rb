@@ -187,7 +187,7 @@ class Api::Mobile::AgentStreamsController < Api::Mobile::BaseController
     ensure
       if heartbeat
         stop_heartbeat << true
-        heartbeat.join
+        ActiveSupport::Dependencies.interlock.permit_concurrent_loads { heartbeat.join }
       end
       sse.close
       ActiveRecord::Base.connection_pool.release_connection

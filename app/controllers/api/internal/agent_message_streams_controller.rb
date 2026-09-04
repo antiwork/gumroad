@@ -220,7 +220,7 @@ class Api::Internal::AgentMessageStreamsController < Api::Internal::BaseControll
       # markers still reading "in_progress", never a recorded outcome.
       if heartbeat
         stop_heartbeat << true
-        heartbeat.join
+        ActiveSupport::Dependencies.interlock.permit_concurrent_loads { heartbeat.join }
       end
       sse.close
       ActiveRecord::Base.connection_pool.release_connection

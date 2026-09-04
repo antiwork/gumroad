@@ -1913,8 +1913,12 @@ class LinksController < ApplicationController
           end
         end
 
-        cover_thread.join
-        content_thread.join
+        # Child threads take the load interlock via executor.wrap; joining without
+        # yielding deadlocks a concurrent reload in development (no-op in production).
+        ActiveSupport::Dependencies.interlock.permit_concurrent_loads do
+          cover_thread.join
+          content_thread.join
+        end
       end
     end
 
