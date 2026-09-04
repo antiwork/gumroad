@@ -373,9 +373,8 @@ class UsersController < ApplicationController
                 var STORE_HOSTNAMES = #{store_hostnames_json};
                 #{custom_html_navigation_allowlist_js.indent(16).strip}
                 window.addEventListener("message", function (e) {
-                  // Only the sandboxed landing iframe (opaque origin, so
-                  // e.origin is the literal string "null") may drive this.
-                  if (e.source !== frame.contentWindow || e.origin !== "null") return;
+                  // Opaque-origin e.origin isn't a usable check — gate on e.source.
+                  if (!frame || e.source !== frame.contentWindow) return;
                   if (!e.data || typeof e.data !== "object" || e.data.type !== "gumroad:navigate") return;
                   var url;
                   try { url = new URL(String(e.data.url), window.location.href); } catch (_err) { return; }

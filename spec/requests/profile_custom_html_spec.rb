@@ -232,6 +232,10 @@ describe "Profile custom HTML rendering", type: :request do
       # signed-in visitor following with their own verified email skip the
       # confirmation-email round trip.
       expect(response.body).to include(%(name="csrf-token"))
+      # Opaque-origin e.origin isn't usable (Chrome reports "null", other
+      # engines report the frame URL). Gate on e.source only.
+      expect(response.body).not_to include('e.origin !== "null"')
+      expect(response.body).to include("e.source !== frame.contentWindow")
     end
 
     # These two examples are about ROUTING: that the follow endpoint is

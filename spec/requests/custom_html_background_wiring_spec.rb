@@ -14,6 +14,13 @@ describe "Custom HTML background bridge wiring", type: :request do
 
   before { Feature.activate_user(:custom_html_pages, seller) }
 
+  # Product wrappers always load custom_html_analytics via vite_typescript_tag.
+  # Stub the tag so this wiring guard stays about the background bridge, not Vite.
+  before do
+    allow_any_instance_of(ActionView::Base).to receive(:vite_typescript_tag)
+      .with("custom_html_analytics").and_return(%(<script src="/custom_html_analytics.js"></script>).html_safe)
+  end
+
   shared_examples "a surface carrying both halves of the bridge" do
     it "injects the reporter into the sandboxed embed" do
       get "#{host}#{embed_path}"
@@ -45,6 +52,10 @@ describe "Custom HTML background bridge wiring", type: :request do
       # oklch(… / 0). Pinning the shared source on both sides is what makes a
       # re-fork fail here rather than in a browser months later.
       expect(response.body).to include(RendersCustomHtmlPages::CANVAS_OPAQUE_FN.strip)
+      # Opaque-origin e.origin isn't usable (Chrome reports "null", other
+      # engines report the frame URL). Gate on e.source only.
+      expect(response.body).not_to include('e.origin !== "null"')
+      expect(response.body).to include("e.source !== frame.contentWindow")
     end
   end
 

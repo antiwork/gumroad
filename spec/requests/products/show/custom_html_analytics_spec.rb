@@ -119,4 +119,16 @@ describe "Custom HTML landing page analytics", type: :request do
       expect(props["has_product_third_party_analytics"]).to eq(true)
     end
   end
+
+  # The checkout listener lives in the Vite entrypoint, not the rendered wrapper
+  # HTML, so pin the source the same way the product-wrapper controller spec pins
+  # the inline script: no origin "null" gate, source check stays.
+  it "gates the checkout message on event.source only" do
+    source = File.read(Rails.root.join("app/javascript/entrypoints/custom_html_analytics.ts"))
+
+    # Opaque-origin event.origin isn't usable (Chrome reports "null", other
+    # engines report the frame URL). Gate on event.source only.
+    expect(source).not_to include('event.origin !== "null"')
+    expect(source).to include("event.source !== landingFrame?.contentWindow")
+  end
 end
