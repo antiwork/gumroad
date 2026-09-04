@@ -14,8 +14,8 @@ class Api::V2::LinksController < Api::V2::BaseController
     :ordered_alive_product_files,
     :skus_alive,
     { thumbnail: { file_attachment: { blob: { variant_records: { image_attachment: :blob } } } } },
-    { tiers: [:alive_prices] },
-    { default_tier: [:alive_prices] },
+    # Tier/default_tier prices live on the same Variant rows as variant_categories_alive;
+    # preload once here so membership index stays at 2 prices queries (product + variants).
     { variant_categories_alive: [{ alive_variants: [:alive_prices] }] },
   ]).freeze
 

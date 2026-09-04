@@ -229,9 +229,12 @@ describe Api::V2::LinksController do
         expect(membership_json.fetch("is_tiered_membership")).to eq(true)
         expect(membership_json.fetch("recurrences")).to include("monthly")
 
-        # Product-level alive_prices + tier/variant alive_prices. Membership must not add
-        # per-product prices.alive.is_buy lookups during recurrence serialization.
-        expect(queries.grep(/FROM `prices`/).count).to eq(2)
+        # Product-level alive_prices + one batched variant/tier alive_prices preload.
+        # Membership must reuse that variant tree (not extra tiers/default_tier price loads,
+        # and not per-product prices.alive.is_buy during recurrence serialization).
+        price_queries = queries.grep(/FROM `prices`/)
+        expect(price_queries.count).to eq(2)
+        expect(price_queries.count { _1.include?("IN (") }).to eq(2)
         expect(queries.grep(/FROM `thumbnails`/).count).to eq(1)
         expect(queries.grep(/FROM `product_files`/).count).to eq(1)
         # Global + product-scoped preloads are two queries; some runs combine them into one.
