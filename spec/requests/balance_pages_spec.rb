@@ -435,6 +435,60 @@ describe "Balance Pages Scenario", js: true, type: :system do
           end
         end
 
+        context "when the chargeback-rate reserve is active" do
+          before do
+            seller.update!(payouts_paused_internally: true, payouts_paused_by: User::PAYOUT_PAUSE_SOURCE_SYSTEM)
+            seller.comments.create!(
+              content: "Payouts automatically paused due to chargeback rate.",
+              comment_type: Comment::COMMENT_TYPE_ON_PROBATION,
+              author_name: User::SYSTEM_PAYOUT_PAUSE_COMMENT_AUTHORS[:high_chargeback_rate]
+            )
+          end
+
+          it "shows the reserve banner and a Held in reserve line with the withheld dollar amount" do
+            data = {
+              should_be_shown_currencies_always: true,
+              displayable_payout_period_range: "Activity up to May 6th, 2022",
+              payout_date_formatted: "May 14th, 2022",
+              payout_currency: "USD",
+              payout_cents: 300_00,
+              payout_displayed_amount: "$300.00 USD",
+              arrival_date: nil,
+              status: "paused",
+              sales_cents: 400_00,
+              refunds_cents: 0,
+              chargebacks_cents: 0,
+              credits_cents: 0,
+              loan_repayment_cents: 0,
+              fees_cents: 0,
+              taxes_cents: 0,
+              discover_fees_cents: 0,
+              direct_fees_cents: 0,
+              discover_sales_count: 0,
+              direct_sales_count: 0,
+              affiliate_credits_cents: 0,
+              affiliate_fees_cents: 0,
+              paypal_payout_cents: 0,
+              stripe_connect_payout_cents: 0,
+              payout_reserve_cents: 100_00,
+              payout_reserve_percent: 25,
+              payout_method_type: "none",
+              payout_note: nil,
+              type: Payouts::PAYOUT_TYPE_STANDARD,
+              has_stripe_connect: false
+            }
+            allow_any_instance_of(UserBalanceStatsService).to receive(:payout_period_data).and_return(data)
+
+            visit balance_path
+
+            expect(page).to have_status(text: "We're holding 25% of your balance in reserve while your chargeback rate is above 1.5%. The rest pays out on the normal weekly schedule.")
+            expect(page).to have_content("Held in reserve (25%)")
+            expect(get_label_value.call("Held in reserve (25%)")).to eq("- $100.00 USD")
+            expect(page).to have_content("Sales")
+            expect(page).to have_content("Fees")
+          end
+        end
+
         context "when payouts have been paused by Stripe" do
           before do
             seller.update!(payouts_paused_internally: true, payouts_paused_by: User::PAYOUT_PAUSE_SOURCE_STRIPE)

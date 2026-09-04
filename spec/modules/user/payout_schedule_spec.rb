@@ -3,6 +3,15 @@
 require "spec_helper"
 
 describe User::PayoutSchedule do
+  def pause_for_chargeback_rate!(user)
+    user.update!(payouts_paused_internally: true, payouts_paused_by: User::PAYOUT_PAUSE_SOURCE_SYSTEM)
+    user.comments.create!(
+      content: "Payouts automatically paused due to chargeback rate (4.0%) exceeding #{User::MAX_CHARGEBACK_RATE_ALLOWED_FOR_PAYOUTS}% volume over the last #{User::PAYOUT_CHARGEBACK_RATE_WINDOW.inspect}.",
+      comment_type: Comment::COMMENT_TYPE_ON_PROBATION,
+      author_name: User::SYSTEM_PAYOUT_PAUSE_COMMENT_AUTHORS[:high_chargeback_rate]
+    )
+  end
+
   describe "#next_payout_date" do
     let(:user) { create(:user, payment_address: "bob1@example.com") }
 
@@ -107,6 +116,23 @@ describe User::PayoutSchedule do
             .with(user, anything, payout_type: Payouts::PAYOUT_TYPE_INSTANT).and_return(false)
 
           expect(user.next_payout_date).to eq Date.new(2025, 9, 26)
+        end
+      end
+
+      it "falls back to the scheduled reserve payout when daily instant payouts are held" do
+        travel_to(Date.new(2025, 9, 22)) do
+          daily_seller = create(:user_with_compliance_info, payment_address: "daily@example.com", payout_frequency: User::PayoutSchedule::DAILY)
+          daily_seller.update!(user_risk_state: "compliant")
+          merchant_account = create(:merchant_account, user: daily_seller)
+          4.times do |i|
+            create(:balance, user: daily_seller, merchant_account:, amount_cents: 100_00, date: Date.new(2025, 9, 18) + i)
+          end
+          pause_for_chargeback_rate!(daily_seller)
+
+          expect(Payouts.is_user_payable(daily_seller, Date.current, payout_type: Payouts::PAYOUT_TYPE_INSTANT)).to eq(false)
+          expect(daily_seller.next_payout_date).to eq Date.new(2025, 9, 26)
+          payout_period_end_date = daily_seller.payout_period_end_date_for_payout_date(daily_seller.next_payout_date)
+          expect(Payouts.is_user_payable(daily_seller, payout_period_end_date)).to eq(true)
         end
       end
     end

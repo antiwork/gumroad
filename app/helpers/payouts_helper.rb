@@ -68,8 +68,21 @@ module PayoutsHelper
       payout_period_end_date = current_payout_end_date(user)
 
       payout_period_data[:displayable_payout_period_range] = displayable_payout_period_range(previous_payment, payout_period_end_date)
-      payout_period_data[:payout_cents] = user.unpaid_balance_cents_up_to_date(payout_period_end_date)
-      payout_period_data[:payout_displayed_amount] = formatted_dollar_amount(payout_period_data[:payout_cents])
+      unpaid_balances = user.unpaid_balances_up_to_date(payout_period_end_date)
+      if user.chargeback_rate_payout_reserve_active?
+        unpaid_cents = unpaid_balances.sum(&:amount_cents)
+        payout_period_data[:payout_cents] = Payouts.payable_cents_after_chargeback_rate_reserve(
+          user, unpaid_balances, minimum_cents: user.minimum_payout_amount_cents
+        )
+        # Dollars not going out this cycle under the reserve (25% policy + whole-row leftovers).
+        # unpaid - payable so the breakdown reconciles with the amount shown as the payout.
+        payout_period_data[:payout_reserve_cents] = unpaid_cents - payout_period_data[:payout_cents]
+        payout_period_data[:payout_reserve_percent] = User::CHARGEBACK_RATE_PAYOUT_RESERVE_PERCENT
+      else
+        payout_period_data[:payout_cents] = user.unpaid_balance_cents_up_to_date(payout_period_end_date)
+      end
+      # Always show cents so the total matches the breakdown lines above it ($300.00, not $300).
+      payout_period_data[:payout_displayed_amount] = formatted_dollar_amount(payout_period_data[:payout_cents], no_cents_if_whole: false)
       payout_period_data[:payout_date_formatted] = formatted_payout_date(user.next_payout_date)
       payout_period_data[:type] = if user.payout_frequency == User::DAILY && Payouts.is_user_payable(user, payout_period_end_date, payout_type: Payouts::PAYOUT_TYPE_INSTANT)
         Payouts::PAYOUT_TYPE_INSTANT
@@ -77,7 +90,7 @@ module PayoutsHelper
         Payouts::PAYOUT_TYPE_STANDARD
       end
 
-      balance_ids = user.unpaid_balances_up_to_date(payout_period_end_date).map(&:id)
+      balance_ids = unpaid_balances.map(&:id)
       payout_period_data.merge!(payout_sales_data(user:, balance_ids:,
                                                   start_date: previous_payment&.payout_period_end_date.try(:next),
                                                   end_date: payout_period_end_date))
@@ -143,7 +156,7 @@ module PayoutsHelper
     payout_period_data[:payout_date_formatted] = formatted_payout_date(payment.created_at)
     payout_period_data[:payout_currency] = payment.currency
     payout_period_data[:payout_cents] = payment.amount_cents
-    payout_period_data[:payout_displayed_amount] = payment.displayed_amount
+    payout_period_data[:payout_displayed_amount] = payment.displayed_amount(no_cents_if_whole: false)
     payout_period_data[:is_processing] = payment.processing?
     payout_period_data[:arrival_date] = payment.arrival_date ? formatted_payout_date(Time.zone.at(payment.arrival_date)) : nil
     payout_period_data[:status] = payment.state

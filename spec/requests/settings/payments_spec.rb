@@ -6665,6 +6665,26 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         expect(page).to have_status(text: "Your payouts have been paused for a security review.")
       end
 
+      it "shows the reserve notice instead when the chargeback-rate reserve is active" do
+        user.update!(payouts_paused_internally: true, payouts_paused_by: User::PAYOUT_PAUSE_SOURCE_SYSTEM)
+        user.comments.create!(
+          content: "Payouts automatically paused due to chargeback rate.",
+          comment_type: Comment::COMMENT_TYPE_ON_PROBATION,
+          author_name: User::SYSTEM_PAYOUT_PAUSE_COMMENT_AUTHORS[:high_chargeback_rate]
+        )
+
+        visit settings_payments_path
+
+        expect(page).to have_status(text: "We're holding 25% of your balance in reserve while your chargeback rate is above 1.5%. The rest pays out on the normal weekly schedule.")
+        expect(page).not_to have_text("paused for a security review")
+
+        within_section "Payout schedule", section_element: :section do
+          toggle = find_field("Pause payouts", disabled: true, checked: true)
+          toggle.hover
+          expect(toggle).to have_tooltip(text: "Payout pausing is managed automatically while the reserve hold is active.")
+        end
+      end
+
       it "shows the warning notice when payouts are paused by the user" do
         user.update!(payouts_paused_by_user: true)
         visit settings_payments_path

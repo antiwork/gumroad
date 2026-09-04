@@ -242,6 +242,15 @@ const Period = ({ payoutPeriodData }: { payoutPeriodData: PayoutPeriodData }) =>
             <div>{formatNegativeDollarAmount(payoutPeriodData.stripe_connect_payout_cents)}</div>
           </CardContent>
         ) : null}
+        {"payout_reserve_cents" in payoutPeriodData &&
+        payoutPeriodData.payout_reserve_cents != null &&
+        payoutPeriodData.payout_reserve_cents > 0 &&
+        payoutPeriodData.payout_reserve_percent != null ? (
+          <CardContent>
+            <h4 className="grow font-bold">Held in reserve ({payoutPeriodData.payout_reserve_percent}%)</h4>
+            <div>{formatNegativeDollarAmount(payoutPeriodData.payout_reserve_cents)}</div>
+          </CardContent>
+        ) : null}
         {payoutPeriodData.taxes_cents !== 0 ? (
           <CardContent>
             <h4 className="grow font-bold">
@@ -444,6 +453,7 @@ export default function PayoutsIndex() {
     processing_payout_periods_data,
     payouts_status,
     payouts_paused_by,
+    payout_reserve_percent,
     instant_payout,
     show_instant_payouts_notice,
     tax_center_enabled,
@@ -741,6 +751,11 @@ export default function PayoutsIndex() {
                 </strong>
               ) : payouts_paused_by === "admin" ? (
                 <strong>Your payouts have been paused by Gumroad.</strong>
+              ) : payouts_paused_by === "system" && payout_reserve_percent ? (
+                <strong>
+                  We're holding {payout_reserve_percent}% of your balance in reserve while your chargeback rate is above
+                  1.5%. The rest pays out on the normal weekly schedule.
+                </strong>
               ) : payouts_paused_by === "system" ? (
                 <strong>
                   Your payouts have been automatically paused for a security review and will be resumed once the review

@@ -65,7 +65,17 @@ class Payouts
       return false
     end
 
-    if user.payouts_paused?
+    # Instant / on-demand payouts stay fully skipped under the hold. Daily frequency
+    # also uses PAYOUT_TYPE_INSTANT here; returning false makes those sellers fall back
+    # to their scheduled weekly reserve payout rather than unlocking pull-funds-now.
+    if user.chargeback_rate_payout_reserve_active? && payout_type != Payouts::PAYOUT_TYPE_INSTANT
+      amount_payable = payable_cents_after_chargeback_rate_reserve(
+        user, user.unpaid_balances_up_to_date(date), minimum_cents: minimum_payout_amount_cents,
+                                                     paid_cents: user.paid_payments_cents_for_date(date)
+      )
+      account_balance = amount_payable + user.paid_payments_cents_for_date(date)
+      below_minimum = account_balance < minimum_payout_amount_cents
+    elsif user.payouts_paused?
       if add_comment
         payouts_paused_by = user.payouts_paused_by_source == User::PAYOUT_PAUSE_SOURCE_STRIPE ? "payout processor" : user.payouts_paused_by_source
         content = "Payout on #{payout_date} was skipped because payouts on the account were paused by the #{payouts_paused_by}."
@@ -427,7 +437,12 @@ class Payouts
 
   def self.create_payment(date, processor_type, user, payout_type: Payouts::PAYOUT_TYPE_STANDARD)
     payout_processor = ::PayoutProcessorType.get(processor_type)
-    balances = mark_balances_processing(date, processor_type, user)
+    # claimed_at stamps unrestricted claims so a hold landing after the claim, before save!, is
+    # not dated after hold_started_at (7f3d021b). The claim decides under with_lock (reload) so a
+    # cross-process hold before selection cannot pay 100%. Claims that ran under the hold are
+    # dated now so the 75% counts in the reserve base.
+    claimed_at = Time.current
+    balances, under_reserve = mark_balances_processing(date, processor_type, user, payout_type:)
     balance_cents = balances.sum(&:amount_cents)
 
     if balance_cents <= 0
@@ -443,11 +458,24 @@ class Payouts
       processor_fee_cents: 0,
       payout_period_end_date: date,
       payout_type:,
+      created_at: under_reserve ? Time.current : claimed_at,
       # TODO: Refactor PayPal to be a type of bank account rather than being a field on user.
       payment_address: (user.paypal_payout_email if processor_type == ::PayoutProcessorType::PAYPAL),
       bank_account: (user.active_bank_account if processor_type != ::PayoutProcessorType::PAYPAL)
     )
-    payment.save!
+    begin
+      payment.save!
+    rescue => save_error
+      # A claimed row with no Payment would inflate the reserve base forever while never
+      # crediting the payout minimum. Return them to unpaid atomically — a loop interrupted
+      # partway would strand the tail as exactly the orphans this unwind exists to prevent.
+      begin
+        ActiveRecord::Base.transaction { balances.each(&:mark_unpaid!) }
+      rescue => unwind_error
+        ErrorNotifier.notify(unwind_error, user_id: user.id, balance_ids: balances.map(&:id))
+      end
+      raise save_error
+    end
     payment_errors = payout_processor.prepare_payment_and_set_amount(payment, balances)
     # The payout processor can mark the payment as failed while preparing it (for example when
     # no valid merchant account exists, or a balance's holding currency does not match the payout
@@ -458,14 +486,55 @@ class Payouts
     [payment, payment_errors]
   end
 
-  def self.mark_balances_processing(date, processor_type, user)
-    payout_processor = ::PayoutProcessorType.get(processor_type)
-    payable_balances = user.unpaid_balances_up_to_date(date).select do |balance|
-      payout_processor.is_balance_payable(balance)
-    end
+  def self.under_chargeback_rate_reserve?(user, payout_type:)
+    payout_type != Payouts::PAYOUT_TYPE_INSTANT && user.chargeback_rate_payout_reserve_active?
+  end
+  private_class_method :under_chargeback_rate_reserve?
 
-    if payout_processor.respond_to?(:filter_aggregate_payable_balances)
-      payable_balances = payout_processor.filter_aggregate_payable_balances(user, payable_balances)
+  def self.mark_balances_processing(date, processor_type, user, payout_type: Payouts::PAYOUT_TYPE_STANDARD)
+    # Decide under the seller lock. with_lock reloads, so a hold another process activated after
+    # create_payment started is visible and we apply the 75/25 filter instead of paying 100%.
+    # The lock also stops two processor jobs from each taking 75% of the same pot.
+    user.with_lock do
+      under_reserve = under_chargeback_rate_reserve?(user, payout_type:)
+      # Any live pause that is not payable as a reserve (instant payout, seller's own pause
+      # on top, deleted account, kill switch on, admin/Stripe pause) is a full block, not an
+      # unrestricted claim — otherwise the same race the reserve re-check closes would release
+      # 100% here. Checking payouts_paused? rather than the chargeback predicate matters when
+      # an admin or Stripe pause lands after eligibility: it overwrites payouts_paused_by, so
+      # the chargeback predicate goes false and the stronger pause would claim everything,
+      # reserve included. An admin who wants to pay a paused seller lifts the pause first.
+      next [[], false] if !under_reserve && user.payouts_paused?
+
+      balances = select_and_claim_payable_balances(date, processor_type, user, payout_type:, under_reserve:)
+      [balances, under_reserve]
+    end
+  end
+  private_class_method :mark_balances_processing
+
+  def self.select_and_claim_payable_balances(date, processor_type, user, payout_type:, under_reserve:)
+    unpaid_balances = user.unpaid_balances_up_to_date(date)
+    payable_balances = payable_balances_for_processor(user, unpaid_balances, processor_type)
+    minimum_cents = payout_type == Payouts::PAYOUT_TYPE_INSTANT ? StripePayoutProcessor::MINIMUM_INSTANT_PAYOUT_AMOUNT_CENTS : user.minimum_payout_amount_cents
+    if under_reserve
+      # The reserve chooses a global oldest-row prefix before each processor intersects it
+      # with its own rail. Otherwise a newer PayPal/Stripe row can leapfrog an older row on
+      # another rail, shrinking the future cap and starving the older balance.
+      # The minimum applies to that global prefix, matching the account-level check in
+      # is_user_payable — a rail's share can be under the minimum (as without the hold),
+      # but a per-rail floor would drop every slice of an eligible payout split across rails.
+      # paid_cents counts this date's earlier rail toward the minimum, as is_user_payable
+      # does — otherwise the second rail recomputes from the residual and skips its share.
+      reserve_selected_ids = apply_chargeback_rate_reserve(
+        user,
+        chargeback_rate_reserve_payable_balances(user, unpaid_balances),
+        minimum_cents:,
+        unpaid_cents: unpaid_balances.sum(&:amount_cents),
+        paid_cents: claimed_cents_for_payout_date(user, date),
+        reserve_active: true
+      ).map(&:id)
+
+      payable_balances = payable_balances.select { |balance| reserve_selected_ids.include?(balance.id) }
     end
 
     # Eligibility check and transition happen under the same lock, so only balances we
@@ -479,5 +548,134 @@ class Payouts
       end
     end
   end
-  private_class_method :mark_balances_processing
+  private_class_method :select_and_claim_payable_balances
+
+  def self.payable_balances_for_processor(user, balances, processor_type)
+    payout_processor = ::PayoutProcessorType.get(processor_type)
+    payable_balances = balances.select do |balance|
+      payout_processor.is_balance_payable(balance)
+    end
+
+    if payout_processor.respond_to?(:filter_aggregate_payable_balances)
+      payout_processor.filter_aggregate_payable_balances(user, payable_balances)
+    else
+      payable_balances
+    end
+  end
+  private_class_method :payable_balances_for_processor
+
+  def self.chargeback_rate_reserve_payable_balances(user, balances)
+    ::PayoutProcessorType.all.flat_map do |processor_type|
+      payable_balances_for_processor(user, balances, processor_type)
+    end.uniq
+  end
+  private_class_method :chargeback_rate_reserve_payable_balances
+
+  # Cents held back so the seller never receives more than (100 - reserve)% of what they had
+  # under this hold. Ceil so a 1-cent leftover cannot round the seller into a full payout.
+  def self.chargeback_rate_reserve_cents(unpaid_cents)
+    return 0 if unpaid_cents <= 0
+
+    (unpaid_cents * User::CHARGEBACK_RATE_PAYOUT_RESERVE_PERCENT / 100.0).ceil
+  end
+
+  # Reserve for THIS run. The 25% is taken of (unpaid + already paid under this hold), not of
+  # the current unpaid remainder — recomputing from the remainder each schedule would release
+  # 25% of an ever-smaller pot and drain the reserve across runs. Clamped to unpaid_cents:
+  # the hold can never owe back more than what is still here.
+  def self.chargeback_rate_reserve_cents_for_run(user, unpaid_cents)
+    return 0 if unpaid_cents <= 0
+
+    paid_under_hold = paid_cents_under_chargeback_rate_hold(user)
+    reserve = chargeback_rate_reserve_cents(unpaid_cents + paid_under_hold)
+    [reserve, unpaid_cents].min
+  end
+
+  def self.paid_cents_under_chargeback_rate_hold(user)
+    hold_started_at = user.chargeback_rate_payout_hold_started_at
+    return 0 if hold_started_at.nil?
+
+    # Payments created under the hold (USD balances, not payout-currency amount_cents)
+    # plus processing rows that have not been attached to a Payment yet. The seller
+    # lock releases before create_payment, so the second rail must see the first
+    # rail's claim even while its Payment is still `creating`.
+    paid_via_payments = user.payments.where(
+      state: [Payment::CREATING, Payment::PROCESSING, Payment::UNCLAIMED, Payment::COMPLETED]
+    )
+                            .where("payments.created_at >= ?", hold_started_at)
+                            .joins(:balances)
+                            .sum("balances.amount_cents")
+    # updated_at is the claim time (mark_processing! touches it), mirroring the created_at
+    # anchor above: a payment-less processing row orphaned by a failed save! BEFORE the hold
+    # must not inflate the base forever. A later touch re-includes such a row, which only
+    # over-reserves — the fail-closed direction.
+    claimed_without_payment = user.balances.processing.where.missing(:payments)
+                                  .where("balances.updated_at >= ?", hold_started_at)
+                                  .sum(:amount_cents)
+    paid_via_payments + claimed_without_payment
+  end
+  private_class_method :paid_cents_under_chargeback_rate_hold
+
+  # Cents another rail already claimed toward this payout date (balance USD cents, not the
+  # payout-currency amount), credited against the payout minimum only, never the reserve cap.
+  # Deliberately Payment-backed only — CREATING is enough, the row exists right after save!.
+  # Counting payment-less processing rows here would let a balance orphaned by a failed save!
+  # on an earlier date pass a later date's minimum; missing a concurrent rail still inside the
+  # claim-to-save gap just skips that share this cycle, the fail-closed direction.
+  def self.claimed_cents_for_payout_date(user, date)
+    user.payments.where(
+      payout_period_end_date: date,
+      state: [Payment::CREATING, Payment::PROCESSING, Payment::UNCLAIMED, Payment::COMPLETED]
+    )
+        .joins(:balances)
+        .sum("balances.amount_cents")
+  end
+  private_class_method :claimed_cents_for_payout_date
+
+  # Same whole-row selection the payment path uses. Eligibility and the Payouts page must
+  # not advertise aggregate 75% when no prefix of unpaid rows actually fits under the cap.
+  def self.payable_cents_after_chargeback_rate_reserve(user, balances, minimum_cents: 0, paid_cents: 0)
+    apply_chargeback_rate_reserve(user, balances, minimum_cents:, paid_cents:).sum(&:amount_cents)
+  end
+
+  # Oldest unpaid rows whose sum is at most the payable set minus the reserve. Do not split a
+  # row: a single balance larger than the cap stays unpaid this cycle. The selected sum must
+  # itself clear minimum_cents — the aggregate can pass eligibility while whole-row selection
+  # stops short of it (e.g. $90 + $110 rows: eligible at $150, but only the $90 row fits).
+  #
+  # Stop at the first row that does not fit. Skipping it to take later smaller rows would pay
+  # those now, raise paid_under_hold, and shrink the cap on the oversized oldest row so it
+  # can never catch up. Waiting lets newer sales grow the pot until the oldest row itself fits.
+  #
+  # `unpaid_cents` is the reserve base (defaults to this slice). Payment selection is often
+  # processor-filtered; the 25% must still be of the whole unpaid pot plus paid-under-hold.
+  #
+  # `paid_cents` counts toward the minimum only: rails run sequentially, so the second rail
+  # re-selects from the residual pot and its share alone can sit under the minimum even though
+  # the payout date's total cleared it. Without the credit that share is stranded unpaid.
+  #
+  # `reserve_active` lets the payment path pin the decision it made under the seller lock — a
+  # kill-switch flip between that decision and this call must not turn a 75% claim into 100%.
+  def self.apply_chargeback_rate_reserve(user, balances, minimum_cents:, unpaid_cents: nil, paid_cents: 0, reserve_active: nil)
+    reserve_active = user.chargeback_rate_payout_reserve_active? if reserve_active.nil?
+    return balances unless reserve_active
+
+    total = unpaid_cents.nil? ? balances.sum(&:amount_cents) : unpaid_cents
+    cap = total - chargeback_rate_reserve_cents_for_run(user, total)
+    return [] if cap <= 0
+
+    selected = []
+    running = 0
+    balances.sort_by { |balance| [balance.date, balance.id] }.each do |balance|
+      next if balance.amount_cents <= 0
+      break if running + balance.amount_cents > cap
+
+      selected << balance
+      running += balance.amount_cents
+    end
+    return [] if running + paid_cents < minimum_cents
+
+    selected
+  end
+  private_class_method :apply_chargeback_rate_reserve
 end

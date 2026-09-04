@@ -28,6 +28,9 @@ module User::Risk
   # trailing window lets recent selling actually count, and the threshold moves up with it so the
   # change is a genuine loosening rather than a reshuffle.
   MAX_CHARGEBACK_RATE_ALLOWED_FOR_PAYOUTS = 1.5
+  # 25% rolling reserve while the chargeback-volume pause is on (Terms 11.3(b) fraction).
+  # Feature `:disable_chargeback_rate_payout_reserve` restores the old 100% skip.
+  CHARGEBACK_RATE_PAYOUT_RESERVE_PERCENT = 25
 
   # Only sales inside this trailing window count toward the payout gate's chargeback rate. Keep the
   # pause and the release measuring the identical window — a release that reads a different span
@@ -428,12 +431,35 @@ module User::Risk
     return false unless payouts_paused_internally?
     return false unless payouts_paused_by_source == PAYOUT_PAUSE_SOURCE_SYSTEM
 
-    last_pausing_author = comments.with_type_on_probation
-                                  .where(author_name: SYSTEM_PAYOUT_PAUSING_COMMENT_AUTHORS)
-                                  .order(:created_at, :id)
-                                  .last&.author_name
+    last_system_payout_pause_comment&.author_name == SYSTEM_PAYOUT_PAUSE_COMMENT_AUTHORS[:high_chargeback_rate]
+  end
 
-    last_pausing_author == SYSTEM_PAYOUT_PAUSE_COMMENT_AUTHORS[:high_chargeback_rate]
+  # When the current chargeback-volume hold began. The reserve calculation anchors on this so
+  # payouts made under the hold keep counting toward the 25% base instead of shrinking it.
+  def chargeback_rate_payout_hold_started_at
+    last_system_payout_pause_comment&.created_at
+  end
+
+  def last_system_payout_pause_comment
+    comments.with_type_on_probation
+            .where(author_name: SYSTEM_PAYOUT_PAUSING_COMMENT_AUTHORS)
+            .order(:created_at, :id)
+            .last
+  end
+  private :last_system_payout_pause_comment
+
+  # True when the chargeback-volume hold should pay 75% and keep 25% unpaid, rather than skip.
+  # Other system pauses (repeated failed payouts) stay a full block. A seller's own pause
+  # on top of the hold also stays a full skip — payouts_paused_by_source still reports
+  # "system" when both are set, so this flag is what the UI and the payment path share.
+  def chargeback_rate_payout_reserve_active?
+    return false if Feature.active?(:disable_chargeback_rate_payout_reserve)
+    return false if payouts_paused_by_user?
+    # Deletion/GDPR set the pause flag without touching payouts_paused_by, so an account
+    # deleted mid-hold still matches the predicate below. Deleted accounts get no carve-out.
+    return false if deleted?
+
+    payouts_paused_for_chargeback_rate?
   end
 
   # Admin-callable: lifts an automatic refund-policy enforcement (see
