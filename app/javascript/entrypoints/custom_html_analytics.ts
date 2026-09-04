@@ -77,11 +77,10 @@ if (configElement) {
     // a "gumroad:checkout" message to this wrapper (see custom_html_wrapper_document),
     // which then navigates to checkout. That message is the custom page's equivalent
     // of the product page's "I want this" CTA, so mirror its add_to_cart tracking.
-    // We re-check origin/source exactly like the wrapper's navigation handler so a
-    // message from anything but the sandboxed (opaque-origin) iframe is ignored.
+    // Gate on e.source like the wrapper. Opaque-origin e.origin isn't usable.
     const landingFrame = document.querySelector<HTMLIFrameElement>("#gumroad-landing-frame");
     window.addEventListener("message", (event) => {
-      if (event.source !== landingFrame?.contentWindow || event.origin !== "null") return;
+      if (event.source !== landingFrame?.contentWindow) return;
       const data: unknown = event.data;
       const isCheckout =
         data === "gumroad:checkout" || (typia.is<{ type: string }>(data) && data.type === "gumroad:checkout");

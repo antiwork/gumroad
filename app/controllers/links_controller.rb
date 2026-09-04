@@ -2175,7 +2175,8 @@ class LinksController < ApplicationController
                 } catch (_e) { return base; }
               }
               window.addEventListener("message", function (e) {
-                if (e.source !== frame.contentWindow || e.origin !== "null") return;
+                // Opaque-origin e.origin isn't a usable check — gate on e.source.
+                if (!frame || e.source !== frame.contentWindow) return;
                 // String form: back-compat for any caller still sending the old signal.
                 if (e.data === "gumroad:checkout") { window.location.href = BASE_CHECKOUT; return; }
                 // Structured form: {type:"gumroad:checkout", params:{variant,quantity,price,recurrence}}.

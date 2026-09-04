@@ -702,7 +702,7 @@ module RendersCustomHtmlPages
             var ENDPOINT = #{endpoint_json};
             var GENERIC_ERROR = "Something went wrong. Please try again.";
             window.addEventListener("message", function (e) {
-              if (!frame || e.source !== frame.contentWindow || e.origin !== "null") return;
+              if (!frame || e.source !== frame.contentWindow) return;
               var d = e.data;
               if (!d || typeof d !== "object" || d.type !== "gumroad:follow") return;
               // Echoed back so the child can route each reply to the form that
@@ -744,7 +744,7 @@ module RendersCustomHtmlPages
     # gumroad:products messages from the sandboxed landing iframe and fetches the requested
     # catalogue slice from the profile's landing/products endpoint. The iframe content is
     # seller-authored and untrusted, so this side is the security boundary:
-    # - only messages from the landing frame's opaque origin are accepted;
+    # - only messages from the landing frame (e.source) are accepted;
     # - the endpoint URL is baked from this wrapper's render context — nothing in the message
     #   picks the seller, so the page can never read another seller's catalogue slice;
     # - offset/limit are validated as non-negative integers and limit is clamped to MAX_ITEMS
@@ -764,7 +764,7 @@ module RendersCustomHtmlPages
             var ENDPOINT = #{endpoint_json};
             var MAX_ITEMS = #{Pages::ProfileData::MAX_ITEMS};
             window.addEventListener("message", function (e) {
-              if (!frame || e.source !== frame.contentWindow || e.origin !== "null") return;
+              if (!frame || e.source !== frame.contentWindow) return;
               var d = e.data;
               if (!d || typeof d !== "object" || d.type !== "gumroad:products") return;
               var requestId = typeof d.requestId === "string" ? d.requestId : null;
@@ -862,7 +862,7 @@ module RendersCustomHtmlPages
               frame.contentWindow.postMessage({ type: "gumroad:background:request" }, "*");
             });
             window.addEventListener("message", function (e) {
-              if (!frame || e.source !== frame.contentWindow || e.origin !== "null") return;
+              if (!frame || e.source !== frame.contentWindow) return;
               var d = e.data;
               if (!d || typeof d !== "object" || d.type !== "gumroad:background") return;
               var colorScheme = d.colorScheme == null ? null : d.colorScheme;
