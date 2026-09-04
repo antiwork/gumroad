@@ -593,6 +593,22 @@ describe "chargeback-rate payout reserve" do
         expect(row.reload).to be_unpaid
       end
 
+      it "claims nothing when an admin pause replaces the hold after eligibility" do
+        seller = payable_stripe_seller
+        row = unpaid_balance(seller, cents: 500_00, on: date - 5)
+        pause_for_chargeback_rate!(seller)
+        # An admin pause overwrites payouts_paused_by, so the chargeback predicate goes false:
+        # the stronger pause must be a full block, not an unrestricted 100% claim.
+        seller.update!(payouts_paused_by: "admin-actor-1")
+        allow(StripePayoutProcessor).to receive(:is_balance_payable).and_return(true)
+        stub_stripe_prepare!
+
+        payment = described_class.create_payment(date.to_s, PayoutProcessorType::STRIPE, seller)
+
+        expect(payment).to be_nil
+        expect(row.reload).to be_unpaid
+      end
+
       it "claims nothing under the hold when the kill switch is on (pre-reserve full skip)" do
         seller = payable_stripe_seller
         row = unpaid_balance(seller, cents: 500_00, on: date - 5)

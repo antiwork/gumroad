@@ -497,12 +497,14 @@ class Payouts
     # The lock also stops two processor jobs from each taking 75% of the same pot.
     user.with_lock do
       under_reserve = under_chargeback_rate_reserve?(user, payout_type:)
-      # A live hold that is not payable as a reserve (instant payout, seller's own pause on
-      # top, deleted account, kill switch on) is a full block, not an unrestricted claim —
-      # otherwise the same race the reserve re-check closes would release 100% here. This
-      # holds under the kill switch too: the pre-reserve behavior for this hold was a full
-      # skip, and an admin who wants to pay a held seller lifts the pause first.
-      next [[], false] if !under_reserve && user.payouts_paused_for_chargeback_rate?
+      # Any live pause that is not payable as a reserve (instant payout, seller's own pause
+      # on top, deleted account, kill switch on, admin/Stripe pause) is a full block, not an
+      # unrestricted claim — otherwise the same race the reserve re-check closes would release
+      # 100% here. Checking payouts_paused? rather than the chargeback predicate matters when
+      # an admin or Stripe pause lands after eligibility: it overwrites payouts_paused_by, so
+      # the chargeback predicate goes false and the stronger pause would claim everything,
+      # reserve included. An admin who wants to pay a paused seller lifts the pause first.
+      next [[], false] if !under_reserve && user.payouts_paused?
 
       balances = select_and_claim_payable_balances(date, processor_type, user, payout_type:, under_reserve:)
       [balances, under_reserve]
