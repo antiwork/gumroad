@@ -54,7 +54,10 @@ class SocialConnectVerification < ApplicationRecord
   end
 
   def self.record_from_instagram!(user, profile)
-    uid = (profile["user_id"].presence || profile["id"]).to_s
+    # Meta's deauthorize/data-deletion signed_request carries the app-scoped
+    # (token) user id, so that must be the canonical uid or those callbacks
+    # delete nothing.
+    uid = (profile["token_user_id"].presence || profile["user_id"].presence || profile["id"]).to_s
     return if uid.blank?
 
     verification = find_or_initialize_by(user:, platform: "instagram")

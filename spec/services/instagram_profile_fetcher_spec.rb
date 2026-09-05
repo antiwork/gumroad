@@ -45,6 +45,30 @@ describe InstagramProfileFetcher do
     )
   end
 
+  it "accepts the flat /me response shape" do
+    stub_profile(body: profile_body[:data].first)
+    stub_media
+
+    result = described_class.new(token).fetch
+
+    expect(result).to include(
+      "user_id" => "17841400000000000",
+      "last_posted_at" => "2026-09-01T12:00:00+0000",
+    )
+  end
+
+  it "falls back to the id field when user_id is absent" do
+    stub_profile(body: { id: "17841400000000000", username: "gumroad" })
+    stub_media
+
+    result = described_class.new(token).fetch
+
+    expect(result).to include(
+      "id" => "17841400000000000",
+      "last_posted_at" => "2026-09-01T12:00:00+0000",
+    )
+  end
+
   it "returns nil when the profile has no user identifier" do
     stub_profile(body: { data: [{ username: "gumroad" }] })
 

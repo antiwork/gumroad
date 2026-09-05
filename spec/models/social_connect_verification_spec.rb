@@ -140,6 +140,12 @@ describe SocialConnectVerification do
       )
     end
 
+    it "prefers the app-scoped token user id so deauthorize callbacks can match" do
+      verification = described_class.record_from_instagram!(user, profile.merge("token_user_id" => "998877"))
+
+      expect(verification.reload.uid).to eq("998877")
+    end
+
     it "records nothing when the user id is missing" do
       expect do
         described_class.record_from_instagram!(user, profile.except("user_id"))

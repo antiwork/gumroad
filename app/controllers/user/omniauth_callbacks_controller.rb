@@ -175,13 +175,14 @@ class User::OmniauthCallbacksController < Devise::OmniauthCallbacksController
     end
 
     token = request.env.dig("omniauth.auth", "credentials", "token")
+    token_user_id = request.env.dig("omniauth.auth", "uid")
     profile = InstagramProfileFetcher.new(token).fetch
     if profile.blank?
       flash[:alert] = "Couldn't read an Instagram professional account."
       return redirect_to profile_path
     end
 
-    SocialConnectVerification.record_from_instagram!(logged_in_user, profile)
+    SocialConnectVerification.record_from_instagram!(logged_in_user, profile.merge("token_user_id" => token_user_id))
     redirect_to profile_path
   rescue StandardError => e
     Rails.logger.error("Instagram connect failed for user #{logged_in_user.id}: #{e.class}")
