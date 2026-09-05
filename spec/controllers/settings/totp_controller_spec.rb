@@ -90,6 +90,20 @@ describe Settings::TotpController, type: :controller do
         expect(json["error_message"]).to eq("Invalid code. Please try again.")
         expect(credential.reload).not_to be_confirmed
       end
+
+      it "rejects confirm when another request finishes enrollment before the row lock is taken" do
+        code = credential.otp_code
+        allow_any_instance_of(TotpCredential).to receive(:with_lock).and_wrap_original do |method, *args, &block|
+          method.receiver.update_columns(confirmed_at: Time.current) if method.receiver.id == credential.id
+          method.call(*args, &block)
+        end
+
+        post :confirm, params: { code: }
+
+        expect(response).to have_http_status(:unprocessable_entity)
+        expect(response.parsed_body["error_message"]).to eq("No pending TOTP setup found.")
+        expect(credential.reload.recovery_codes).to be_blank
+      end
     end
 
     context "when user has no totp credential" do
