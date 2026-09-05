@@ -1,0 +1,5 @@
+Serialize Discover eligibility scans without dropping follow-ups
+
+while_executing lets a bank-account transition enqueue a follow-up
+during a scan, then reschedules it until the in-flight scan finishes
+so an older Elasticsearch write cannot overwrite current eligibility.
