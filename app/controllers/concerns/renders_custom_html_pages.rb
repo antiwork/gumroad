@@ -541,8 +541,9 @@ module RendersCustomHtmlPages
   module ClassMethods
     # Shared Tailwind for custom pages. Prefer a <link> to the fingerprinted
     # asset (~4.9 MB; inlining put the full sheet on every page and preview).
-    # Falls back to inlining public/pages-tailwind.css when the manifest is
-    # missing, else empty. Memoized per process — files only change on deploy.
+    # Falls back to inlining public/pages-tailwind.css when the manifest or
+    # fingerprinted asset is unavailable, else empty. Memoized per process —
+    # files only change on deploy.
     def pages_tailwind_head
       return @pages_tailwind_head if @pages_tailwind_head
 
@@ -713,10 +714,11 @@ module RendersCustomHtmlPages
 
     # Trusted-wrapper half of the products bridge (gumroad-private#1691).
     # Untrusted iframe: only e.source === landing frame; endpoint URL is baked
-    # here so the page cannot pick another seller; offset/limit are clamped to
-    # MAX_ITEMS here and re-validated on the server. Reply echoes requestId so
-    # in-flight requests don't cross. targetOrigin is "*" (opaque frame origin);
-    # the reply is the public catalogue data page 1 already exposes.
+    # here so the page cannot pick another seller; offset is a non-negative
+    # integer, limit is clamped to MAX_ITEMS, both re-validated on the server.
+    # Reply echoes requestId so in-flight requests don't cross. targetOrigin
+    # is "*" (opaque frame origin); the reply is the public catalogue data
+    # page 1 already exposes.
     def custom_html_products_wrapper_script(products_src:, nonce:)
       endpoint_json = ERB::Util.json_escape(products_src.to_json)
       <<~HTML
