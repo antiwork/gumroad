@@ -185,6 +185,7 @@ class MerchantAccount < ApplicationRecord
   end
 
   def delete_charge_processor_account!
+    clear_non_hash_json_data_for_disconnect!
     mark_deleted!
     self.meta = {} unless is_a_stripe_connect_account?
     self.charge_processor_deleted_at = Time.current
@@ -278,6 +279,16 @@ class MerchantAccount < ApplicationRecord
   end
 
   private
+    # JsonData#json_data raises ArgumentError on non-Hash, which aborts mark_deleted! validations
+    # and meta=. Reset corrupt metadata so disconnect can finish. Discover refresh still sees the
+    # prior value via changes_to_save on the first save.
+    def clear_non_hash_json_data_for_disconnect!
+      data = self[:json_data]
+      return if data.nil? || data.is_a?(Hash)
+
+      self[:json_data] = {}
+    end
+
     def schedule_products_recommendability_refresh
       current_attributes = attributes
       previous_attributes = current_attributes.merge(changes_to_save.transform_values(&:first))

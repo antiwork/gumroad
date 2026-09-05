@@ -172,8 +172,13 @@ describe MerchantAccount do
       expect(RefreshMerchantAccountProductsRecommendationEligibilityJob).to receive(:perform_async).with(seller.id).once
 
       expect { merchant_account.delete_charge_processor_account! }.not_to raise_error
-      expect(merchant_account.reload).to be_deleted
+      merchant_account.reload
+      expect(merchant_account).to be_deleted
       expect(merchant_account).to be_charge_processor_deleted
+      # Revert check: without clear_non_hash_json_data_for_disconnect! (or without
+      # JsonData treating non-Hash was/current as {}), disconnect raises ArgumentError
+      # and never reaches charge_processor_deleted_at / a Hash json_data.
+      expect(merchant_account.json_data).to eq({})
     end
 
     it "does not enqueue when another payout method remains" do
