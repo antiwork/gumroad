@@ -2459,7 +2459,11 @@ describe UrlRedirectsController, inertia: true do
         post :change_purchaser, params: { id: @token, next: "/r/#{@token}", email: @url_redirect.purchase.email }
       end.not_to change { @url_redirect.purchase.reload.purchaser }
 
-      expect(response).to redirect_to(login_path(next: url_redirect_check_purchaser_path(id: @token, next: "/r/#{@token}")))
+      expect(response).to redirect_to(login_url(
+        next: url_redirect_check_purchaser_path(id: @token, next: "/r/#{@token}"),
+        host: DOMAIN,
+        protocol: PROTOCOL
+      ))
     end
 
     it "redirects to root path when next param is missing" do

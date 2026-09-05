@@ -271,8 +271,13 @@ class UrlRedirectsController < ApplicationController
     end
 
     # A signed-out claim would persist a nil purchaser, silently removing the purchase from its
-    # current owner's library.
-    return redirect_to login_path(next: url_redirect_check_purchaser_path({ id: @url_redirect.token, next: params[:next].presence }.compact)) if logged_in_user.nil?
+    # current owner's library. Pin login to the app domain: /login is not routed on seller
+    # subdomains or custom domains (same reason library_url uses host: DOMAIN above).
+    return redirect_to login_url(
+      next: url_redirect_check_purchaser_path({ id: @url_redirect.token, next: params[:next].presence }.compact),
+      host: DOMAIN,
+      protocol: PROTOCOL
+    ), allow_other_host: true if logged_in_user.nil?
 
     # A purchaser-only claim must not re-run charge validation: `financial_transaction_validation`
     # is registered on the `:successful` state and would reject a success row whose charge fields
