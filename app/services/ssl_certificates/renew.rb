@@ -22,8 +22,8 @@ module SslCertificates
     private
       # Uniform random offset within the fanout window, on top of the 2s base
       # delay. The unique lock on GenerateSslCertificate (keyed on the domain
-      # id) means only one pending renewal exists per domain even if two hourly
-      # runs overlap, and it replaces the stale pending job with the newest.
+      # id, constant-time conflict) means only one pending fresh renewal exists
+      # per domain even if two hourly runs overlap.
       def renewal_delay
         2 + rand(FANOUT_WINDOW.to_i)
       end
