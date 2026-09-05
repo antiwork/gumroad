@@ -1276,6 +1276,16 @@ describe Checkout::BuyerCurrencyEligibility do
       expect(eligible_for?(cad_product, tip_cents: 200)).to be(true)
     end
 
+    it "allows shipping only for method-forced allocations, not the listed-card lane" do
+      merchant_account
+      shipped = [cad_line_item(cad_product, shipping_cents: 300)]
+
+      expect(described_class.direct_listed_line_items_eligible?(line_items: shipped, buyer_currency: Currency::CAD)).to be(false)
+      expect(
+        described_class.direct_listed_line_items_eligible?(line_items: shipped, buyer_currency: Currency::CAD, require_listed_direct_charge: false)
+      ).to be(true)
+    end
+
     it "refuses a seller whose charging account cannot create the intent" do
       # The seller's only account is a Gumroad-managed Stripe Custom account, outside the
       # destination-charge ramp. #decision refuses that at :unsupported_charge_model before it
@@ -1283,6 +1293,22 @@ describe Checkout::BuyerCurrencyEligibility do
       create(:merchant_account, user: seller, currency: Currency::USD)
 
       expect(eligible_for?(cad_product)).to be(false)
+    end
+
+    it "allocates for method-forced mounts on a Custom account outside the destination-charge ramp" do
+      # #method_forced_decision already charges this seller as a DESTINATION without the card-lane
+      # flag, so the surcharge allocations for iDEAL/UPI/Pix must not be gated on it.
+      create(:merchant_account, user: seller, currency: Currency::USD)
+      MerchantAccount.gumroad(StripeChargeProcessor.charge_processor_id) ||
+        create(:merchant_account, user: nil, charge_processor_merchant_id: "acct_gumroad_platform", currency: Currency::USD)
+
+      expect(
+        described_class.direct_listed_line_items_eligible?(
+          line_items: [cad_line_item(cad_product)],
+          buyer_currency: Currency::CAD,
+          require_listed_direct_charge: false
+        )
+      ).to be(true)
     end
 
     # `later_charge_kind` is the caller's summary of the charge, not a fact about the product, so

@@ -2872,6 +2872,16 @@ describe OrdersController, :vcr do
       expect(response.parsed_body["line_items"]["unique-id-0"]["requires_payment_confirmation"]).to be(true)
     end
 
+    it "passes the signed direct-listed amount token only to the prepare service" do
+      prepare_service = instance_double(Order::PreparePaymentIntentService, perform: {})
+
+      expect(Order::PreparePaymentIntentService).to receive(:new).with(
+        hash_including(params: hash_including(direct_listed_amount_token: "signed-amount-token"))
+      ).and_return(prepare_service)
+
+      post :prepare, params: { line_items:, confirmation_token: "ctoken-test", direct_listed_amount_token: "signed-amount-token" }.merge(common_params)
+    end
+
     it "enforces reCAPTCHA before building the order or issuing a client_secret" do
       allow(CheckoutRecaptcha).to receive(:site_key).and_return("test-site-key")
       allow_any_instance_of(described_class).to receive(:valid_recaptcha_response_and_hostname?).and_return(false)

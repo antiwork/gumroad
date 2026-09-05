@@ -1,8 +1,8 @@
 import * as React from "react";
 
-import { type CartPurchaseResult } from "$app/data/purchase";
+import { type CartPurchaseResult, type OfferCodes } from "$app/data/purchase";
 
-import { type CartState, withRefreshedExchangeRates } from "$app/components/Checkout/cartState";
+import { type CartItem, type CartState, withRefreshedExchangeRates } from "$app/components/Checkout/cartState";
 
 // What the checkout has to do when the server refuses the local-currency quote at charge time.
 //
@@ -84,20 +84,69 @@ export const refreshedRatesFromLineItems = (lineItems: CartPurchaseResult["lineI
   return rates;
 };
 
+// The amount refusal can mean an offer changed after surcharge calculation. Refreshing the cart's
+// offers before requoting prevents the browser from immediately remounting the same stale amount.
+//
+// An empty list is not "the buyer's discounts are gone": a quote/amount refusal carries no
+// replacement offers at all, so adopting it would requote the cart at full price.
+export const withRefreshedOfferCodes = (cart: CartState, offerCodes: OfferCodes): CartState =>
+  offerCodes.length === 0
+    ? cart
+    : {
+        ...cart,
+        discountCodes: offerCodes.map((offerCode) => ({
+          ...offerCode,
+          fromUrl: cart.discountCodes.find(({ code }) => code === offerCode.code)?.fromUrl ?? false,
+        })),
+      };
+
 export const recoverFromInvalidBuyerCurrencyQuote = ({
   lineItems,
   getCart,
   setCart,
   requote,
 }: BuyerCurrencyQuoteRecoveryDeps & { lineItems: CartPurchaseResult["lineItems"] }) => {
-  const cart = getCart();
+  const cart = withUpdatedCartItems(getCart(), lineItems);
   const rates = refreshedRatesFromLineItems(lineItems);
   const updated = withRefreshedExchangeRates(cart, rates);
   // Persist only when a rate actually moved, so a refusal that had nothing to do with rates
   // doesn't cost a pointless cart save. Either way the checkout re-quotes, so the buyer is never
   // left looking at a disabled Pay button.
-  if (updated !== cart) setCart(updated);
+  if (updated !== getCart()) setCart(updated);
   requote(updated);
+};
+
+// The refusal also carries a rebuilt cart line. A one-cent listed price bump can pass purchase
+// creation and still fail the amount token; retrying the old price would mint the same token.
+const cartItemUid = (item: CartItem) => `${item.product.permalink} ${item.option_id ?? ""}`;
+
+const isPwywItem = (item: CartItem) =>
+  item.product.is_tiered_membership
+    ? (item.product.options.find(({ id }) => id === item.option_id)?.is_pwyw ?? false)
+    : !!item.product.pwyw;
+
+export const withUpdatedCartItems = (cart: CartState, lineItems: CartPurchaseResult["lineItems"]): CartState => {
+  let changed = false;
+  const items = cart.items.map((item) => {
+    const line = lineItems[cartItemUid(item)];
+    if (line?.success !== false || !line.updated_product) return item;
+    const nextProduct = line.updated_product.product;
+    // For a PWYW line the server's `updated_product.price` is `Purchase#displayed_price_cents`:
+    // quantity- and tip-inclusive, while CartItem.price is one unit before tip. Keep the buyer's
+    // unit and only lift it to a listed minimum that rose past it; a pwyw tier's minimum is not
+    // `price_cents`, so its unit is kept as is.
+    const nextPrice = isPwywItem(item)
+      ? Math.max(item.price, item.product.is_tiered_membership ? 0 : nextProduct.price_cents)
+      : line.updated_product.price;
+    if (nextPrice === item.price && nextProduct.price_cents === item.product.price_cents) return item;
+    changed = true;
+    return {
+      ...item,
+      product: nextProduct,
+      price: nextPrice,
+    };
+  });
+  return changed ? { ...cart, items } : cart;
 };
 
 // Builds the recovery's plumbing from the checkout page's own pieces.

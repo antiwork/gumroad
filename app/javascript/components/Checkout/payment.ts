@@ -19,6 +19,7 @@ import { AbortError, assertResponseError } from "$app/utils/request";
 import { loadAcknowledgedEmails } from "$app/components/Checkout/acknowledgedEmails";
 import {
   getCheckoutBuyerCurrencyDisplay,
+  getMatchingDirectListedAllocations,
   isRecurringUpiPaymentConfig,
 } from "$app/components/Checkout/buyerCurrencyDisplay";
 import { Creator } from "$app/components/Checkout/cartState";
@@ -83,6 +84,9 @@ export type PaymentElementClientConfirmConfig = {
   // Marks the GeoIP/listed-price card lane. Unlike the method-forced lane, shipping moves
   // this Element back to canonical USD because charge-time eligibility excludes it.
   direct_listed_card?: boolean;
+  // Raw page-issued FX rate signed into payment_method_list_token. Matches
+  // CurrencyHelper#usd_cents_to_currency, not the display-scaled product.exchange_rate.
+  direct_listed_currency_rate?: number | null;
   payment_method_types: string[];
   // Methods the browser may add only after remounting in INR. Listing UPI on a USD
   // element makes Stripe reject the whole session, card included.
@@ -178,6 +182,8 @@ export type Product = {
   // to detect price or quantity edits that no longer match the server-rendered INR Element
   // amount while allowing a limited discount to change only today's charge.
   listedPriceCents?: number;
+  // The post-discount amount the listed-currency charge will collect for this line today.
+  listedChargePriceCents?: number;
   // What one renewal of a membership will charge, when it differs from `price` (e.g. a discount
   // limited to the first billing cycle, or a payment-method update on the subscription manage
   // page where `price` is today's charge — often zero — rather than the plan price). For
@@ -818,20 +824,83 @@ function directListedCardActive(state: State, usingSavedCard = state.usingSavedC
   return state.paymentMethod === "card" && !usingSavedCard && !hasShipping(state);
 }
 
-function getDirectListedPaymentElementAmount(state: State) {
-  if (state.checkoutPayment.integration !== "payment_element_client_confirm") return getChargeTodayPrice(state);
+// The listed currency a method-forced element mounts in (iDEAL/Bancontact EUR, one-time UPI, Pix).
+// `direct_listed_card` is false there, so the card-lane selector above never names it, but the
+// charge still bills each listed line on its own — these carts need the same per-line allocations
+// (see getDirectListedPaymentElementAmount). Skipped once the buyer picks another currency: that
+// cart is quoted, not direct-listed, and claiming the listed lane would drop the chosen currency
+// from the picker.
+function getMethodForcedDirectListedCurrency(state: State): string | null {
+  if (state.checkoutPayment.integration !== "payment_element_client_confirm") return null;
+  if (isRecurringUpiPaymentConfig(state.checkoutPayment)) return null;
 
-  const baseAmount = state.checkoutPayment.elements_options.presentment_amount_cents ?? 0;
-  const linePrices = state.products.map((product) => ({
-    price: product.listedPriceCents ?? (state.products.length === 1 ? baseAmount : product.price),
+  const options = state.checkoutPayment.elements_options;
+  if (options.direct_listed_card || options.presentment_amount_cents === null) return null;
+
+  const currency = options.currency.toLowerCase();
+  if (currency === "usd") return null;
+  if (state.buyerCurrency !== null && state.buyerCurrency.toLowerCase() !== currency) return null;
+
+  return currency;
+}
+
+// Currency of a client-confirm Element that will be mounted from per-line listed allocations:
+// selectable listed CARD, or method-forced listed (iDEAL/Bancontact/UPI/Pix).
+export function getDirectListedAllocationCurrency(state: State): string | null {
+  return getSelectableDirectListedCurrency(state) ?? getMethodForcedDirectListedCurrency(state);
+}
+
+// The signed snapshot that mounted that Element. Method-forced has no listed-card selector, but
+// still needs the token so prepare can refuse a stale amount instead of creating a larger intent.
+export function getLoadedDirectListedAmountToken(state: State): string | null {
+  if (state.surcharges.type !== "loaded") return null;
+  if (!getDirectListedAllocationCurrency(state)) return null;
+  return state.surcharges.result.direct_listed_amount_token ?? null;
+}
+
+// Each cart line's price in the listed currency, in cart order. The Element amount and the
+// listed prices the surcharge request sends must come from this one basis, or the server splits
+// a total the Element never mounted on. The single-line presentment fallback covers a page whose
+// cart rows carry no listed price: the server rendered the Element from that same amount.
+function getListedLinePrices(state: State) {
+  const baseAmount =
+    state.checkoutPayment.integration === "payment_element_client_confirm"
+      ? (state.checkoutPayment.elements_options.presentment_amount_cents ?? 0)
+      : 0;
+  return state.products.map((product) => ({
+    price:
+      product.listedChargePriceCents ??
+      product.listedPriceCents ??
+      (state.products.length === 1 ? baseAmount : product.price),
     permalink: product.permalink,
   }));
+}
+
+function getDirectListedPaymentElementAmount(state: State) {
+  if (state.checkoutPayment.integration !== "payment_element_client_confirm") return getChargeTodayPrice(state);
+  if (state.surcharges.type !== "loaded") return null;
+
+  const directListedAllocations = getMatchingDirectListedAllocations(
+    state.surcharges.result,
+    state.products.map((product) => product.permalink),
+  );
+  if (directListedAllocations)
+    return directListedAllocations.reduce((sum, allocation) => sum + allocation.total_cents, 0);
+
+  const taxUsd = state.surcharges.result.tax_cents;
+  const shippingUsd = state.surcharges.result.shipping_rate_cents;
+  // Charge time converts each purchase's tax and shipping separately, so converting the USD
+  // aggregate once here can disagree by a cent on a multi-line cart. Both listed lanes ask for
+  // per-line allocations (see loadSurcharges); until they arrive, mount nothing rather than an
+  // amount the deferred intent will not match.
+  if (taxUsd !== 0 || shippingUsd !== 0) return null;
+
+  const linePrices = getListedLinePrices(state);
   const lineTotal = linePrices.reduce<number>((sum, line) => sum + line.price, 0);
   const tipTotal = computeTipsForLines(state, linePrices, { basis: "listed" }).reduce<number>(
     (sum, tip) => sum + (tip ?? 0),
     0,
   );
-
   return lineTotal + tipTotal;
 }
 
@@ -1057,7 +1126,7 @@ export const loadSurcharges = (state: State, abortSignal?: AbortSignal) => {
   const paymentElementMountCurrency =
     paymentDetailsSource === "payment_element" ? getDesiredStripePaymentElementMountCurrency(state) : null;
   const paymentElementDirectListedCurrency =
-    paymentDetailsSource === "payment_element" ? getSelectableDirectListedCurrency(state) : null;
+    paymentDetailsSource === "payment_element" ? getDirectListedAllocationCurrency(state) : null;
   // Allocate the tip across cart lines in one pass so the per-line integers sum to the
   // tip the buyer selected — rounding each line independently can send more total tip
   // than the buyer chose (see computeTipsForLines).
@@ -1065,6 +1134,10 @@ export const loadSurcharges = (state: State, abortSignal?: AbortSignal) => {
     state,
     state.products.map((item) => ({ price: item.price, permalink: item.permalink })),
   );
+  const listedLinePrices = getListedLinePrices(state);
+  const listedLineTips = paymentElementDirectListedCurrency
+    ? computeTipsForLines(state, listedLinePrices, { basis: "listed" })
+    : [];
   const exactPresentmentTipCurrency =
     state.tip.type === "fixed" && state.tip.presentmentAmount != null ? (state.tip.presentmentCurrency ?? null) : null;
   const requestedBuyerCurrency = state.buyerCurrency ?? exactPresentmentTipCurrency;
@@ -1083,12 +1156,19 @@ export const loadSurcharges = (state: State, abortSignal?: AbortSignal) => {
     {
       products: state.products.map((item, index) => {
         const tipCents = item.hasFreeTrial && !isGift ? 0 : (lineTips[index] ?? 0);
+        const listedPriceCents = listedLinePrices[index]?.price;
         return {
           permalink: item.permalink,
           uid: item.uid,
           quantity: item.quantity,
           price: item.hasFreeTrial && !isGift ? 0 : Math.round(item.price + tipCents),
           tip_cents: tipCents,
+          ...(paymentElementDirectListedCurrency && listedPriceCents != null
+            ? { listed_price_cents: listedPriceCents }
+            : {}),
+          ...(paymentElementDirectListedCurrency && listedLineTips[index] != null
+            ? { listed_tip_cents: listedLineTips[index] }
+            : {}),
           ...(presentmentLineTips[index] != null ? { presentment_tip_cents: presentmentLineTips[index] } : {}),
           pay_in_installments: item.payInInstallments,
           subscription_id: item.subscription_id,
@@ -1104,6 +1184,10 @@ export const loadSurcharges = (state: State, abortSignal?: AbortSignal) => {
       ...(paymentElementMountCurrency ? { payment_element_mount_currency: paymentElementMountCurrency } : {}),
       ...(paymentElementDirectListedCurrency
         ? { payment_element_direct_listed_currency: paymentElementDirectListedCurrency }
+        : {}),
+      ...(state.checkoutPayment.integration === "payment_element_client_confirm" &&
+      state.checkoutPayment.elements_options.payment_method_list_token
+        ? { payment_method_list_token: state.checkoutPayment.elements_options.payment_method_list_token }
         : {}),
     },
     abortSignal,

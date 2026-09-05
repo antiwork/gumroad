@@ -4,6 +4,7 @@ require "spec_helper"
 
 describe CustomerSurchargeController, :vcr do
   include ManageSubscriptionHelpers
+  include CurrencyHelper
 
   def expected_surcharge_response(**overrides)
     expected = {
@@ -26,6 +27,15 @@ describe CustomerSurchargeController, :vcr do
     country_code = Compliance::Countries::USA.alpha2
     @physical_product.shipping_destinations << create(:shipping_destination, country_code:, one_item_rate_cents: 20)
     @zip_tax_rate = create(:zip_tax_rate, combined_rate: 0.1, zip_code: nil, state: "CA")
+  end
+
+  def listed_payment_method_list_token(*products, rate:)
+    Checkout::PaymentMethodListToken.issue(
+      payment_method_types: ["card"],
+      sellers: products.map(&:user).uniq,
+      direct_listed_currency: products.first.price_currency_type,
+      direct_listed_currency_rate: rate
+    )
   end
 
   it "responds with 400 when products is a string instead of an array" do
@@ -270,6 +280,239 @@ describe CustomerSurchargeController, :vcr do
       expect(codes).to contain_exactly(Currency::USD, Currency::CAD)
     end
 
+    it "returns per-line rounded direct-listed tax allocations for the Element total" do
+      Feature.activate_user(Checkout::BuyerCurrencyEligibility::LISTED_CURRENCY_DIRECT_CHARGE_FEATURE_NAME, @user)
+      first_product = create(:product, user: @user, price_currency_type: Currency::CAD, price_cents: 100)
+      second_product = create(:product, user: @user, price_currency_type: Currency::CAD, price_cents: 100)
+      allow_any_instance_of(CurrencyHelper).to receive(:get_rate).with(Currency::CAD).and_return("1.5")
+      tax_results = [first_product, second_product].map do
+        double(
+          business_vat_status: nil,
+          to_hash: { has_vat_id_input: false },
+          tax_cents: 1,
+          price_cents: 10,
+          zip_tax_rate: nil,
+          used_taxjar: true,
+          gumroad_is_mpf: true
+        )
+      end
+      allow(SalesTaxCalculator).to receive(:new).and_return(*tax_results.map { instance_double(SalesTaxCalculator, calculate: _1) })
+
+      post "calculate_all", params: {
+        products: [
+          { permalink: first_product.unique_permalink, price: 10, listed_price_cents: 15, quantity: 1 },
+          { permalink: second_product.unique_permalink, price: 10, listed_price_cents: 15, quantity: 1 },
+        ],
+        country: "US",
+        state: "CA",
+        payment_details_source: PurchasePaymentFlow::PAYMENT_ELEMENT,
+        payment_element_mount_currency: Currency::CAD,
+        payment_element_direct_listed_currency: Currency::CAD,
+        payment_method_list_token: listed_payment_method_list_token(first_product, second_product, rate: "1.5"),
+      }, as: :json
+
+      allocations = response.parsed_body.fetch("direct_listed_line_allocations")
+      expect(allocations.map { _1.fetch("tax_cents") }).to eq([2, 2])
+      expect(allocations.sum { _1.fetch("total_cents") }).to eq(34)
+      expect(response.parsed_body.fetch("tax_cents")).to eq(2)
+      expect(
+        Checkout::DirectListedAmountToken.verify(
+          response.parsed_body.fetch("direct_listed_amount_token"),
+          sellers: [@user],
+          currency: Currency::CAD
+        )
+      ).to eq(allocations)
+    end
+
+    it "returns method-forced allocations without the listed-card ramp" do
+      Feature.activate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, @user)
+      first_product = create(:product, user: @user, price_currency_type: Currency::EUR, price_cents: 100)
+      second_product = create(:product, user: @user, price_currency_type: Currency::EUR, price_cents: 100)
+      allow_any_instance_of(CurrencyHelper).to receive(:get_rate).with(Currency::EUR).and_return("1.5")
+      tax_results = [first_product, second_product].map do
+        double(
+          business_vat_status: nil,
+          to_hash: { has_vat_id_input: false },
+          tax_cents: 1,
+          price_cents: 10,
+          zip_tax_rate: nil,
+          used_taxjar: true,
+          gumroad_is_mpf: true
+        )
+      end
+      allow(SalesTaxCalculator).to receive(:new).and_return(*tax_results.map { instance_double(SalesTaxCalculator, calculate: _1) })
+
+      post "calculate_all", params: {
+        products: [
+          { permalink: first_product.unique_permalink, price: 10, listed_price_cents: 15, quantity: 1 },
+          { permalink: second_product.unique_permalink, price: 10, listed_price_cents: 15, quantity: 1 },
+        ],
+        country: "DE",
+        payment_details_source: PurchasePaymentFlow::PAYMENT_ELEMENT,
+        payment_element_mount_currency: Currency::EUR,
+        payment_element_direct_listed_currency: Currency::EUR,
+        payment_method_list_token: listed_payment_method_list_token(first_product, second_product, rate: "1.5"),
+      }, as: :json
+
+      allocations = response.parsed_body.fetch("direct_listed_line_allocations")
+      expect(allocations.map { _1.fetch("tax_cents") }).to eq([2, 2])
+      expect(allocations.sum { _1.fetch("total_cents") }).to eq(34)
+      expect(
+        Checkout::DirectListedAmountToken.verify(
+          response.parsed_body.fetch("direct_listed_amount_token"),
+          sellers: [@user],
+          currency: Currency::EUR
+        )
+      ).to eq(allocations)
+    end
+
+    it "returns method-forced allocations for a Custom account outside the destination-charge ramp" do
+      # The seller's only Stripe account is Gumroad-managed Custom. Prepare and the presenter
+      # already charge iDEAL on it as a DESTINATION without the card-lane ramp, so the Element
+      # needs the same allocations and amount token from here.
+      Feature.activate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, @user)
+      create(:merchant_account, user: @user, currency: Currency::USD)
+      eur_product = create(:product, user: @user, price_currency_type: Currency::EUR, price_cents: 100)
+      allow_any_instance_of(CurrencyHelper).to receive(:get_rate).with(Currency::EUR).and_return("1.5")
+      tax_result = double(
+        business_vat_status: nil,
+        to_hash: { has_vat_id_input: false },
+        tax_cents: 1,
+        price_cents: 10,
+        zip_tax_rate: nil,
+        used_taxjar: true,
+        gumroad_is_mpf: true
+      )
+      allow(SalesTaxCalculator).to receive(:new).and_return(instance_double(SalesTaxCalculator, calculate: tax_result))
+
+      post "calculate_all", params: {
+        products: [{ permalink: eur_product.unique_permalink, price: 10, listed_price_cents: 15, quantity: 1 }],
+        country: "DE",
+        payment_details_source: PurchasePaymentFlow::PAYMENT_ELEMENT,
+        payment_element_mount_currency: Currency::EUR,
+        payment_element_direct_listed_currency: Currency::EUR,
+        payment_method_list_token: listed_payment_method_list_token(eur_product, rate: "1.5"),
+      }, as: :json
+
+      allocation = response.parsed_body.fetch("direct_listed_line_allocations").sole
+      expect(allocation.fetch("tax_cents")).to eq(2)
+      expect(allocation.fetch("total_cents")).to eq(17)
+      expect(
+        Checkout::DirectListedAmountToken.verify(
+          response.parsed_body.fetch("direct_listed_amount_token"),
+          sellers: [@user],
+          currency: Currency::EUR
+        )
+      ).to eq([allocation])
+    end
+
+    it "includes shipping converted at the signed rate in method-forced allocations for a physical line" do
+      Feature.activate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, @user)
+      eur_product = create(:physical_product, user: @user, price_currency_type: Currency::EUR, price_cents: 10_00)
+      eur_product.shipping_destinations.destroy_all
+      destination = create(:shipping_destination, country_code: Compliance::Countries::DEU.alpha2, one_item_rate_cents: 250, multiple_items_rate_cents: 200)
+      eur_product.shipping_destinations << destination
+      allow_any_instance_of(CurrencyHelper).to receive(:get_rate).with(Currency::EUR).and_return("1.5")
+
+      post "calculate_all", params: {
+        products: [{ permalink: eur_product.unique_permalink, price: 6_67, listed_price_cents: 10_00, quantity: 1 }],
+        postal_code: 10115,
+        country: Compliance::Countries::DEU.alpha2,
+        payment_details_source: PurchasePaymentFlow::PAYMENT_ELEMENT,
+        payment_element_mount_currency: Currency::EUR,
+        payment_element_direct_listed_currency: Currency::EUR,
+        payment_method_list_token: listed_payment_method_list_token(eur_product, rate: "1.5"),
+      }, as: :json
+
+      allocation = response.parsed_body.fetch("direct_listed_line_allocations").sole
+      shipping_usd_cents = destination.calculate_shipping_rate(quantity: 1, currency_type: Currency::EUR, rate: "1.5")
+      expected_shipping_cents = usd_cents_to_currency(Currency::EUR, shipping_usd_cents, "1.5")
+      expect(response.parsed_body.fetch("shipping_rate_cents")).to eq(shipping_usd_cents)
+      expect(expected_shipping_cents).to be_positive
+      expect(allocation.fetch("shipping_cents")).to eq(expected_shipping_cents)
+      expect(allocation.fetch("total_cents")).to eq(10_00 + allocation.fetch("tax_cents") + expected_shipping_cents)
+      expect(
+        Checkout::DirectListedAmountToken.verify(
+          response.parsed_body.fetch("direct_listed_amount_token"),
+          sellers: [@user],
+          currency: Currency::EUR
+        )
+      ).to eq([allocation])
+    end
+
+    it "signs only the paid allocation when the Element displays a paid and free line" do
+      Feature.activate_user(Checkout::BuyerCurrencyEligibility::LISTED_CURRENCY_DIRECT_CHARGE_FEATURE_NAME, @user)
+      paid_product = create(:product, user: @user, price_currency_type: Currency::CAD, price_cents: 10_00)
+      free_product = create(:product, user: @user, price_currency_type: Currency::CAD, price_cents: 0)
+      allow_any_instance_of(CurrencyHelper).to receive(:get_rate).with(Currency::CAD).and_return("0.8")
+
+      post "calculate_all", params: {
+        products: [
+          { permalink: paid_product.unique_permalink, price: 10_00, listed_price_cents: 10_00, quantity: 1 },
+          { permalink: free_product.unique_permalink, price: 0, listed_price_cents: 0, quantity: 1 },
+        ],
+        payment_details_source: PurchasePaymentFlow::PAYMENT_ELEMENT,
+        payment_element_mount_currency: Currency::CAD,
+        payment_element_direct_listed_currency: Currency::CAD,
+        payment_method_list_token: listed_payment_method_list_token(paid_product, free_product, rate: "0.8"),
+      }, as: :json
+
+      allocations = response.parsed_body.fetch("direct_listed_line_allocations")
+      expect(allocations.map { _1.fetch("permalink") }).to eq([paid_product.unique_permalink, free_product.unique_permalink])
+      expect(
+        Checkout::DirectListedAmountToken.verify(
+          response.parsed_body.fetch("direct_listed_amount_token"),
+          sellers: [@user],
+          currency: Currency::CAD
+        )
+      ).to eq([allocations.first])
+    end
+
+    it "converts direct-listed tax allocations with the signed page rate, not the live rate" do
+      Feature.activate_user(Checkout::BuyerCurrencyEligibility::LISTED_CURRENCY_DIRECT_CHARGE_FEATURE_NAME, @user)
+      cad_product = create(:product, user: @user, price_currency_type: Currency::CAD, price_cents: 100)
+      allow_any_instance_of(CurrencyHelper).to receive(:get_rate).with(Currency::CAD).and_return("1.5")
+      tax_result = double(
+        business_vat_status: nil,
+        to_hash: { has_vat_id_input: false },
+        tax_cents: 1,
+        price_cents: 10,
+        zip_tax_rate: nil,
+        used_taxjar: true,
+        gumroad_is_mpf: true
+      )
+      allow(SalesTaxCalculator).to receive(:new).and_return(instance_double(SalesTaxCalculator, calculate: tax_result))
+
+      post "calculate_all", params: {
+        products: [{ permalink: cad_product.unique_permalink, price: 10, listed_price_cents: 15, quantity: 1 }],
+        country: "US",
+        state: "CA",
+        payment_details_source: PurchasePaymentFlow::PAYMENT_ELEMENT,
+        payment_element_mount_currency: Currency::CAD,
+        payment_element_direct_listed_currency: Currency::CAD,
+        payment_method_list_token: listed_payment_method_list_token(cad_product, rate: "0.8"),
+      }, as: :json
+
+      expect(response.parsed_body.fetch("direct_listed_line_allocations").sole.fetch("tax_cents")).to eq(1)
+    end
+
+    it "omits direct-listed allocations when the page-issued rate token is missing" do
+      Feature.activate_user(Checkout::BuyerCurrencyEligibility::LISTED_CURRENCY_DIRECT_CHARGE_FEATURE_NAME, @user)
+      cad_product = create(:product, user: @user, price_currency_type: Currency::CAD, price_cents: 10_00)
+      allow_any_instance_of(CurrencyHelper).to receive(:get_rate).with(Currency::CAD).and_return("0.8")
+
+      post "calculate_all", params: {
+        products: [{ permalink: cad_product.unique_permalink, price: 10_00, listed_price_cents: 10_00, quantity: 1 }],
+        buyer_currency: Currency::CAD,
+        payment_details_source: PurchasePaymentFlow::PAYMENT_ELEMENT,
+        payment_element_mount_currency: Currency::CAD,
+        payment_element_direct_listed_currency: Currency::CAD,
+      }, as: :json
+
+      expect(response.parsed_body.fetch("direct_listed_line_allocations")).to be_nil
+      expect(response.parsed_body.fetch("direct_listed_amount_token")).to be_nil
+    end
+
     it "does not advertise the listed currency for a saved-card checkout" do
       Feature.activate_user(Checkout::BuyerCurrencyEligibility::LISTED_CURRENCY_DIRECT_CHARGE_FEATURE_NAME, @user)
       cad_product = create(:product, user: @user, price_currency_type: Currency::CAD, price_cents: 10_00)
@@ -326,16 +569,65 @@ describe CustomerSurchargeController, :vcr do
       allow_any_instance_of(CurrencyHelper).to receive(:get_rate).with(Currency::CAD).and_return("0.8")
 
       post "calculate_all", params: {
-        products: [{ permalink: cad_product.unique_permalink, price: 11_00, tip_cents: 1_00, quantity: 1 }],
+        products: [{ permalink: cad_product.unique_permalink, price: 11_00, tip_cents: 1_00, listed_price_cents: 10_00, listed_tip_cents: 1_00, quantity: 1 }],
         buyer_currency: Currency::CAD,
         payment_details_source: PurchasePaymentFlow::PAYMENT_ELEMENT,
         payment_element_mount_currency: Currency::CAD,
         payment_element_direct_listed_currency: Currency::CAD,
+        payment_method_list_token: listed_payment_method_list_token(cad_product, rate: "0.8"),
       }, as: :json
 
       expect(response.parsed_body.fetch("buyer_currency_quote")).to be_nil
       codes = response.parsed_body.fetch("available_buyer_currencies").map { |currency| currency["code"] }
       expect(codes).to contain_exactly(Currency::USD, Currency::CAD)
+      expect(response.parsed_body.fetch("direct_listed_line_allocations").sole).to include(
+        "price_cents" => 10_00,
+        "tip_cents" => 1_00,
+        "total_cents" => 11_00
+      )
+    end
+
+    it "calculates direct-listed tax from the same combined listed price and tip as purchase creation" do
+      Feature.activate_user(Checkout::BuyerCurrencyEligibility::LISTED_CURRENCY_DIRECT_CHARGE_FEATURE_NAME, @user)
+      @user.update!(tipping_enabled: true)
+      cad_product = create(:product, user: @user, price_currency_type: Currency::CAD, price_cents: 1_99)
+      allow_any_instance_of(CurrencyHelper).to receive(:get_rate).with(Currency::CAD).and_return("1.35")
+      tax_result = double(
+        business_vat_status: nil,
+        to_hash: { has_vat_id_input: false },
+        tax_cents: 9,
+        price_cents: 1_70,
+        zip_tax_rate: nil,
+        used_taxjar: true,
+        gumroad_is_mpf: true
+      )
+      expect(SalesTaxCalculator).to receive(:new)
+        .with(hash_including(price_cents: 1_70))
+        .and_return(instance_double(SalesTaxCalculator, calculate: tax_result))
+
+      post "calculate_all", params: {
+        products: [{
+          permalink: cad_product.unique_permalink,
+          price: 1_69,
+          tip_cents: 22,
+          listed_price_cents: 1_99,
+          listed_tip_cents: 30,
+          quantity: 1,
+        }],
+        country: "CA",
+        state: "AB",
+        payment_details_source: PurchasePaymentFlow::PAYMENT_ELEMENT,
+        payment_element_mount_currency: Currency::CAD,
+        payment_element_direct_listed_currency: Currency::CAD,
+        payment_method_list_token: listed_payment_method_list_token(cad_product, rate: "1.35"),
+      }, as: :json
+
+      expect(response.parsed_body.fetch("direct_listed_line_allocations").sole).to include(
+        "price_cents" => 1_99,
+        "tip_cents" => 30,
+        "tax_cents" => 12,
+        "total_cents" => 2_41
+      )
     end
 
     it "does not advertise the listed currency when the seller's account cannot create the intent" do
