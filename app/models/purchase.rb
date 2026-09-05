@@ -3301,11 +3301,10 @@ class Purchase < ApplicationRecord
       subscription.save!
     end
 
-    begin
-      save!
-    rescue ActiveRecord::RecordInvalid => e
-      logger.info("Attaching user to purchase #{id}: Could save purchase after attaching user #{user.id}. Exception: #{e.message}")
-    end
+    # Same legacy charge-incomplete successful rows as change_purchaser: a plain
+    # save! re-runs financial_transaction_validation and the attach no-ops. Skip
+    # validators only; keep callbacks and updated_at.
+    save!(validate: false)
   end
 
   def seller_balance_update_eligible?

@@ -198,13 +198,15 @@ class UsersController < ApplicationController
 
       if logged_in_user.present?
         purchase.purchaser = logged_in_user
-        purchase.save
+        # Same legacy charge-incomplete successful rows as change_purchaser: skip
+        # charge-field validators so a library claim does not silently no-op.
+        purchase.save!(validate: false)
         return render json: { success: true, redirect_location: library_path }
       else
         user = User.alive.find_by(email: purchase.email)
         if user.present? && user.valid_password?(params["user"]["password"])
           purchase.purchaser = user
-          purchase.save
+          purchase.save!(validate: false)
 
           sign_in_or_prepare_for_two_factor_auth(user)
 
