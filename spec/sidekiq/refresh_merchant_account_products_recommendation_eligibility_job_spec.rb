@@ -5,9 +5,9 @@ require "spec_helper"
 describe RefreshMerchantAccountProductsRecommendationEligibilityJob do
   it "serializes scans while allowing a transition during a scan to schedule a follow-up" do
     expect(described_class.sidekiq_options).to include(
-      "lock" => :until_and_while_executing,
+      "lock" => :until_executing,
       "lock_ttl" => 6.hours.to_i,
-      "on_conflict" => { "client" => :log, "server" => :reschedule }
+      "on_conflict" => { "client" => :log }
     )
   end
 

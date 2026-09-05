@@ -212,9 +212,7 @@ describe MerchantAccount do
 
     it "does not let an enqueue failure interrupt account disconnection" do
       merchant_account = create(:merchant_account_paypal, user: seller)
-      fallback_job = instance_double(RefreshMerchantAccountProductsRecommendationEligibilityJob, perform: nil)
       allow(RefreshMerchantAccountProductsRecommendationEligibilityJob).to receive(:perform_async).and_raise("Redis unavailable")
-      allow(RefreshMerchantAccountProductsRecommendationEligibilityJob).to receive(:new).and_return(fallback_job)
       allow(ErrorNotifier).to receive(:notify)
 
       expect { merchant_account.delete_charge_processor_account! }.not_to raise_error
@@ -226,15 +224,11 @@ describe MerchantAccount do
         merchant_account_id: merchant_account.id,
         user_id: seller.id
       )
-      expect(fallback_job).to have_received(:perform).with(seller.id)
     end
 
-    it "does not let refresh or observability failures escape after disconnection commits" do
+    it "does not let observability failures escape after disconnection commits" do
       merchant_account = create(:merchant_account_paypal, user: seller)
-      fallback_job = instance_double(RefreshMerchantAccountProductsRecommendationEligibilityJob)
       allow(RefreshMerchantAccountProductsRecommendationEligibilityJob).to receive(:perform_async).and_raise("Redis unavailable")
-      allow(RefreshMerchantAccountProductsRecommendationEligibilityJob).to receive(:new).and_return(fallback_job)
-      allow(fallback_job).to receive(:perform).and_raise("Elasticsearch unavailable")
       allow(ErrorNotifier).to receive(:notify).and_raise("Sentry unavailable")
 
       expect { merchant_account.delete_charge_processor_account! }.not_to raise_error
@@ -246,10 +240,8 @@ describe MerchantAccount do
     it "reports the affected seller when an owner-transfer refresh fails" do
       new_seller = create(:user, payment_address: nil)
       merchant_account = create(:merchant_account_paypal, user: seller)
-      fallback_job = instance_double(RefreshMerchantAccountProductsRecommendationEligibilityJob, perform: nil)
       allow(RefreshMerchantAccountProductsRecommendationEligibilityJob).to receive(:perform_async).with(seller.id).and_raise("Redis unavailable")
       allow(RefreshMerchantAccountProductsRecommendationEligibilityJob).to receive(:perform_async).with(new_seller.id)
-      allow(RefreshMerchantAccountProductsRecommendationEligibilityJob).to receive(:new).and_return(fallback_job)
       allow(ErrorNotifier).to receive(:notify)
 
       merchant_account.update!(user: new_seller)
@@ -259,7 +251,6 @@ describe MerchantAccount do
         merchant_account_id: merchant_account.id,
         user_id: seller.id
       )
-      expect(fallback_job).to have_received(:perform).with(seller.id)
       expect(RefreshMerchantAccountProductsRecommendationEligibilityJob).to have_received(:perform_async).with(new_seller.id)
     end
   end

@@ -318,12 +318,6 @@ class MerchantAccount < ApplicationRecord
       RefreshMerchantAccountProductsRecommendationEligibilityJob.perform_async(affected_user_id)
     rescue => enqueue_error
       report_recommendability_refresh_error(enqueue_error, "enqueue", affected_user_id)
-
-      begin
-        RefreshMerchantAccountProductsRecommendationEligibilityJob.new.perform(affected_user_id)
-      rescue => refresh_error
-        report_recommendability_refresh_error(refresh_error, "run synchronously", affected_user_id)
-      end
     end
 
     def user_has_another_payout_method?(affected_user_id)

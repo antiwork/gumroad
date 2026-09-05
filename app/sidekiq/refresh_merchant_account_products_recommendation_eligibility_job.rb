@@ -2,12 +2,14 @@
 
 class RefreshMerchantAccountProductsRecommendationEligibilityJob
   include Sidekiq::Job
-  # Follow-up scans must remain enqueueable and cannot overtake the scan already running.
+  # lock: :until_executing so a payout-account transition during a scan can
+  # enqueue a follow-up. :until_and_while_executing held the client lock and
+  # client: :log dropped that follow-up, leaving mixed is_recommendable values.
   sidekiq_options retry: 3,
                   queue: :low,
-                  lock: :until_and_while_executing,
+                  lock: :until_executing,
                   lock_ttl: 6.hours.to_i,
-                  on_conflict: { client: :log, server: :reschedule }
+                  on_conflict: { client: :log }
 
   def perform(user_id)
     user = User.find_by(id: user_id)
