@@ -3,11 +3,13 @@
 require "spec_helper"
 
 describe RefreshUserProductsRecommendationEligibilityJob do
-  it "dedupes queued scans while allowing a transition during a scan to enqueue a follow-up" do
+  it "serializes scans while allowing a transition during a scan to enqueue a follow-up" do
     expect(described_class.sidekiq_options).to include(
-      "lock" => :until_executing,
+      "lock" => :while_executing,
+      "lock_timeout" => 0,
       "lock_ttl" => 6.hours.to_i,
-      "on_conflict" => { "client" => :log }
+      "schedule_in" => 1.minute.to_i,
+      "on_conflict" => { "server" => :reschedule }
     )
   end
 

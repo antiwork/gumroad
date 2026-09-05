@@ -2,14 +2,15 @@
 
 class RefreshUserProductsRecommendationEligibilityJob
   include Sidekiq::Job
-  # lock: :until_executing so a bank-account transition during a scan can
-  # enqueue a follow-up. :until_and_while_executing + client: :log dropped
-  # that follow-up and left mixed is_recommendable values.
+  # Runtime-only lock: until_and_while + client: :log dropped a mid-scan
+  # follow-up; until_executing let an older Elasticsearch write finish after it.
   sidekiq_options retry: 3,
                   queue: :low,
-                  lock: :until_executing,
+                  lock: :while_executing,
+                  lock_timeout: 0,
                   lock_ttl: 6.hours.to_i,
-                  on_conflict: { client: :log }
+                  schedule_in: 1.minute.to_i,
+                  on_conflict: { server: :reschedule }
 
   def perform(user_id)
     user = User.find_by(id: user_id)
