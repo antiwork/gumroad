@@ -405,11 +405,19 @@ export const CreateProduct = () => (
     path="/products"
     description={
       <>
-        Create a new product (as a draft). Requires the <code>edit_products</code> or <code>account</code> scope.
+        Create a new product. The product is published immediately unless you pass <code>draft=true</code>. If
+        publishing is blocked (for example, your email address is not confirmed or no payout method is set up), the
+        product is saved as a draft and the response includes a <code>warning</code> explaining why; publish it later
+        with <code>POST /v2/products/:id/enable</code>. Requires the <code>edit_products</code> or <code>account</code>{" "}
+        scope.
       </>
     }
   >
     <ApiParameters>
+      <ApiParameter
+        name="draft"
+        description="(optional, true or false, default false) save as an unpublished draft instead of publishing"
+      />
       <ApiParameter
         name="native_type"
         description='(optional, "digital" (default), "course", "ebook", "membership", "bundle", "coffee", "call", or "commission") cannot be changed later'
@@ -492,7 +500,7 @@ export const CreateProduct = () => (
     "taxonomy_id": 123,
     "category": "design/ui-and-web/figma",
     "category_label": "Figma",
-    "published": false,
+    "published": true,
     "files": [],
     "covers": [],
     "main_cover_id": null,
