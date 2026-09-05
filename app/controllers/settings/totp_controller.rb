@@ -31,20 +31,31 @@ class Settings::TotpController < Settings::BaseController
 
   def confirm
     credential = @user.totp_credential
-
-    if credential.blank? || credential.confirmed?
+    if credential.blank?
       return render json: { success: false, error_message: "No pending TOTP setup found." }, status: :unprocessable_entity
     end
 
-    if credential.verify_code(params[:code])
-      codes = TotpCredential.transaction do
+    result = nil
+    codes = nil
+    credential.with_lock do
+      if credential.confirmed?
+        result = :missing
+      elsif credential.verify_code(params[:code])
         credential.update!(confirmed_at: Time.current)
-        credential.generate_recovery_codes
+        codes = credential.generate_recovery_codes
+        result = :ok
+      else
+        result = :invalid
       end
+    end
 
+    case result
+    when :ok
       render json: { success: true, recovery_codes: format_recovery_codes(codes) }
-    else
+    when :invalid
       render json: { success: false, error_message: "Invalid code. Please try again." }, status: :unprocessable_entity
+    else
+      render json: { success: false, error_message: "No pending TOTP setup found." }, status: :unprocessable_entity
     end
   end
 
