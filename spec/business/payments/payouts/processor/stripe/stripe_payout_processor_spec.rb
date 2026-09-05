@@ -28,6 +28,7 @@ describe StripePayoutProcessor do
 
       allow(Stripe::Payout).to receive(:create).and_raise(stripe_error)
       allow(RefreshUserProductsRecommendationEligibilityJob).to receive(:perform_async).and_raise("Redis unavailable")
+      allow(RefreshUserProductsRecommendationEligibilityJob).to receive(:new).and_call_original
       allow(ErrorNotifier).to receive(:notify)
       allow(described_class).to receive(:reverse_internal_transfer_or_hold_payouts!)
 
@@ -38,6 +39,7 @@ describe StripePayoutProcessor do
         Payment::FailureReason::BANK_ACCOUNT_NOT_FOUND_AT_STRIPE,
         reraise: true
       )
+      expect(RefreshUserProductsRecommendationEligibilityJob).not_to have_received(:new)
       expect(payment.reload.failure_reason).to eq(Payment::FailureReason::BANK_ACCOUNT_NOT_FOUND_AT_STRIPE)
       expect(bank_account.reload).to be_deleted
     end

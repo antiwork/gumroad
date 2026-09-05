@@ -316,6 +316,14 @@ describe "Product::Searchable - Indexing scenarios" do
         bank_account.mark_undeleted!
       end
 
+      it "does not enqueue a refresh when a restored bank account is not the only payout method" do
+        bank_account = create(:canadian_bank_account, deleted_at: 1.day.ago, user: @product.user)
+        @product.user.update!(payment_address: "seller@example.com")
+        expect(RefreshUserProductsRecommendationEligibilityJob).not_to receive(:perform_async)
+
+        bank_account.mark_undeleted!
+      end
+
       it "does not index products when bank account deletion is rolled back" do
         bank_account = create(:canadian_bank_account, user: @product.user)
         @product.user.update!(payment_address: nil)
@@ -356,9 +364,8 @@ describe "Product::Searchable - Indexing scenarios" do
       it "does not let an enqueue failure interrupt bank account deletion" do
         bank_account = create(:canadian_bank_account, user: @product.user)
         @product.user.update!(payment_address: nil)
-        fallback_job = instance_double(RefreshUserProductsRecommendationEligibilityJob, perform: nil)
         allow(RefreshUserProductsRecommendationEligibilityJob).to receive(:perform_async).and_raise("Redis unavailable")
-        allow(RefreshUserProductsRecommendationEligibilityJob).to receive(:new).and_return(fallback_job)
+        allow(RefreshUserProductsRecommendationEligibilityJob).to receive(:new).and_call_original
         allow(ErrorNotifier).to receive(:notify)
 
         expect { bank_account.mark_deleted! }.not_to raise_error
@@ -368,16 +375,13 @@ describe "Product::Searchable - Indexing scenarios" do
           bank_account_id: bank_account.id,
           user_id: @product.user_id
         )
-        expect(fallback_job).to have_received(:perform).with(@product.user_id)
+        expect(RefreshUserProductsRecommendationEligibilityJob).not_to have_received(:new)
       end
 
-      it "does not let refresh or observability failures escape after deletion commits" do
+      it "does not let observability failures escape after deletion commits" do
         bank_account = create(:canadian_bank_account, user: @product.user)
         @product.user.update!(payment_address: nil)
-        fallback_job = instance_double(RefreshUserProductsRecommendationEligibilityJob)
         allow(RefreshUserProductsRecommendationEligibilityJob).to receive(:perform_async).and_raise("Redis unavailable")
-        allow(RefreshUserProductsRecommendationEligibilityJob).to receive(:new).and_return(fallback_job)
-        allow(fallback_job).to receive(:perform).and_raise("Elasticsearch unavailable")
         allow(ErrorNotifier).to receive(:notify).and_raise("Sentry unavailable")
 
         expect { bank_account.mark_deleted! }.not_to raise_error

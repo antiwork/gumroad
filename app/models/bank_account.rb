@@ -185,13 +185,10 @@ class BankAccount < ApplicationRecord
 
       RefreshUserProductsRecommendationEligibilityJob.perform_async(user_id)
     rescue => enqueue_error
+      # Do not run the catalog refresh inline: Stripe payout recovery calls
+      # mark_deleted! before reverse_internal_transfer_or_hold_payouts!, and a
+      # large-catalog sync pass would delay money reverse/hold when Redis is down.
       report_recommendability_refresh_error(enqueue_error, "enqueue")
-
-      begin
-        RefreshUserProductsRecommendationEligibilityJob.new.perform(user_id)
-      rescue => refresh_error
-        report_recommendability_refresh_error(refresh_error, "run synchronously")
-      end
     end
 
     def user_has_another_payout_method?
