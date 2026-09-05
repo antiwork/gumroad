@@ -24,6 +24,20 @@ class TotpCredential < ApplicationRecord
     authenticate_otp(code, drift: DRIFT).present?
   end
 
+  # Single-use transition from pending to confirmed, protected by a row lock so two
+  # concurrent confirms carrying the same code cannot both complete (gp#2402). Returns
+  # the freshly minted recovery codes on success, nil if the credential is already
+  # confirmed (replayed/redundant), or false if the code is invalid.
+  def confirm(code)
+    with_lock do
+      return nil if confirmed?
+      return false unless verify_code(code)
+
+      update!(confirmed_at: Time.current)
+      generate_recovery_codes
+    end
+  end
+
   def totp_provisioning_uri
     provisioning_uri(user.email, issuer: ISSUER_NAME)
   end
