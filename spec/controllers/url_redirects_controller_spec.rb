@@ -2430,6 +2430,27 @@ describe UrlRedirectsController, inertia: true do
       expect(response).to redirect_to("/r/#{@token}")
     end
 
+    it "claims a successful purchase with incomplete charge fields without re-running charge validation" do
+      user = create(:user)
+      # Older/migrated or imported purchases can be successful and paid (price_cents > 0) while
+      # missing charge fields, which fails `financial_transaction_validation` on a `save!`. Write
+      # the row directly to bypass that validator exactly like production's legacy rows.
+      @url_redirect.purchase.update_columns(
+        price_cents: 100,
+        stripe_transaction_id: nil,
+        stripe_fingerprint: nil,
+        merchant_account_id: nil,
+        charge_processor_id: nil
+      )
+
+      expect do
+        sign_in user
+        post :change_purchaser, params: { id: @token, next: "/r/#{@token}", email: @url_redirect.purchase.email }
+      end.to change { @url_redirect.purchase.reload.purchaser }.to(user)
+
+      expect(response).to redirect_to("/r/#{@token}")
+    end
+
     it "redirects to root path when next param is missing" do
       user = create(:user)
 
