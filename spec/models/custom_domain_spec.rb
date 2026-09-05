@@ -200,6 +200,43 @@ describe CustomDomain do
     end
   end
 
+  describe "#certificate_orderable?" do
+    before do
+      @domain = create(:custom_domain, domain: "www.example.com")
+      Rails.cache.clear
+    end
+
+    it "returns true for a structurally valid domain with no negative cache" do
+      expect(@domain.certificate_orderable?).to eq true
+    end
+
+    it "returns false for a domain whose order was recently cached as failed" do
+      Rails.cache.write("domain_check_www.example.com", false)
+      expect(@domain.certificate_orderable?).to eq false
+    end
+
+    it "returns false for a name Let's Encrypt rejects outright" do
+      @domain.domain = "domains.example..com"
+      @domain.save(validate: false)
+
+      expect(@domain.certificate_orderable?).to eq false
+    end
+
+    it "returns false for a domain under a forbidden suffix" do
+      stub_const("ROOT_DOMAIN", "gumroad.com")
+      stub_const("DOMAIN", "gumroad.com")
+      stub_const("SHORT_DOMAIN", "gumroad.com")
+      stub_const("API_DOMAIN", "api.gumroad.com")
+      stub_const("DISCOVER_DOMAIN", "discover.gumroad.com")
+      stub_const("INTERNAL_GUMROAD_DOMAIN", "internal.gumroad.com")
+
+      @domain.domain = "test.gumroad.com"
+      @domain.save(validate: false)
+
+      expect(@domain.certificate_orderable?).to eq false
+    end
+  end
+
   describe "#reset_ssl_certificate_issued_at" do
     before do
       @domain = create(:custom_domain, domain: "www.example.com")
