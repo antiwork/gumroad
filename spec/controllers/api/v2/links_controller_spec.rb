@@ -517,6 +517,21 @@ describe Api::V2::LinksController do
         expect(@user.links.last.draft).to be true
       end
 
+      it "reports the product as published when a post-publish step raises after the row is live" do
+        allow_any_instance_of(Link).to receive(:publish!) do |product|
+          product.update_columns(draft: false, purchase_disabled_at: nil)
+          raise StandardError, "after_commit boom"
+        end
+        expect(ErrorNotifier).to receive(:notify).with(instance_of(StandardError), product_id: kind_of(Integer))
+
+        post @action, params: @params
+
+        expect(response.parsed_body["success"]).to be true
+        expect(response.parsed_body["product"]["published"]).to be true
+        expect(response.parsed_body["warning"]).to eq("Published, but a post-publish step failed and has been reported.")
+        expect(@user.links.last.draft).to be false
+      end
+
       it "saves tags correctly" do
         post @action, params: @params.merge(tags: ["valid-tag"])
 

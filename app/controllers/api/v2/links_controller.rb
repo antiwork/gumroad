@@ -695,7 +695,12 @@ class Api::V2::LinksController < Api::V2::BaseController
       "Saved as a draft: #{reason}"
     rescue => e
       ErrorNotifier.notify(e, product_id: @product.id)
-      "Saved as a draft: publishing failed. Retry with POST /v2/products/#{@product.external_id}/enable."
+      # publish! runs after_commit work (affiliate mail, transcoding) once the row is already live, so read the persisted state.
+      if @product.reload.published?
+        "Published, but a post-publish step failed and has been reported."
+      else
+        "Saved as a draft: publishing failed. Retry with POST /v2/products/#{@product.external_id}/enable."
+      end
     end
 
     def normalize_price_currency_type(currency)

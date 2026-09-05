@@ -46,8 +46,8 @@ const CreateProductResponseFields = () => (
         name: "warning",
         type: "string",
         description:
-          "Explains why the product was saved as a draft instead of being published (for example, an unconfirmed email address). Publish it later with POST /v2/products/:id/enable.",
-        condition: "present when the product could not be published",
+          "Explains why the product was saved as a draft instead of being published (for example, an unconfirmed email address; publish it later with POST /v2/products/:id/enable), or that a post-publish step failed. Check the product's published field for its actual state.",
+        condition: "present when publishing did not fully succeed",
       },
     ])}
   </ApiResponseFields>
