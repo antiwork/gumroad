@@ -2451,6 +2451,17 @@ describe UrlRedirectsController, inertia: true do
       expect(response).to redirect_to("/r/#{@token}")
     end
 
+    it "requires sign-in and does not clear the existing purchaser for signed-out claims" do
+      owner = create(:user)
+      @url_redirect.purchase.update!(purchaser: owner)
+
+      expect do
+        post :change_purchaser, params: { id: @token, next: "/r/#{@token}", email: @url_redirect.purchase.email }
+      end.not_to change { @url_redirect.purchase.reload.purchaser }
+
+      expect(response).to redirect_to(login_path(next: url_redirect_check_purchaser_path(id: @token, next: "/r/#{@token}")))
+    end
+
     it "redirects to root path when next param is missing" do
       user = create(:user)
 

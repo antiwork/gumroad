@@ -270,6 +270,10 @@ class UrlRedirectsController < ApplicationController
       return redirect_to url_redirect_check_purchaser_path({ id: @url_redirect.token, next: params[:next].presence }.compact)
     end
 
+    # A signed-out claim would persist a nil purchaser, silently removing the purchase from its
+    # current owner's library.
+    return redirect_to login_path(next: url_redirect_check_purchaser_path({ id: @url_redirect.token, next: params[:next].presence }.compact)) if logged_in_user.nil?
+
     # A purchaser-only claim must not re-run charge validation: `financial_transaction_validation`
     # is registered on the `:successful` state and would reject a success row whose charge fields
     # are incomplete (older/migrated or imported purchases), turning the claim into a 500. Save with
