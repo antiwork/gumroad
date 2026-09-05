@@ -34,6 +34,7 @@ class OfferCode < ApplicationRecord
   MAX_OWNERSHIP_DURATION_TIERS = 10
   # Enough for the seller to recognise the products without an unbounded message.
   NAMED_DEFAULT_DISCOUNT_PRODUCTS = 3
+  PRODUCT_REINDEX_BATCH_SIZE = 1_000
 
   # Regex modified from https://stackoverflow.com/a/26900132
   validates :code, presence: true, format: { with: /\A[A-Za-zÀ-ÖØ-öø-ÿ0-9\-_]*\z/, message: "can only contain numbers, letters, dashes, and underscores." }, unless: -> { is_cancellation_discount? || upsell.present? }
@@ -616,12 +617,27 @@ class OfferCode < ApplicationRecord
       # A universal code's applicable set is every alive product, so running the
       # per-product index updates inline after_commit blows the request timeout
       # for large catalogs. Enqueue them as background jobs after the row commits.
-      product_ids = products_to_reindex.map(&:id)
       AfterCommitEverywhere.after_commit do
-        SendToElasticsearchWorker.perform_bulk(
-          product_ids.map { |product_id| [product_id, "update", ["offer_codes"]] }
-        )
+        enqueue_offer_code_document_updates(products_to_reindex)
       end
+    end
+
+    def enqueue_offer_code_document_updates(products_to_reindex)
+      if products_to_reindex.is_a?(ActiveRecord::Relation)
+        products_to_reindex.in_batches(of: PRODUCT_REINDEX_BATCH_SIZE) do |batch|
+          enqueue_offer_code_document_ids(batch.ids)
+        end
+      else
+        enqueue_offer_code_document_ids(Array(products_to_reindex).map(&:id))
+      end
+    end
+
+    def enqueue_offer_code_document_ids(product_ids)
+      return if product_ids.empty?
+
+      SendToElasticsearchWorker.perform_bulk(
+        product_ids.map { |product_id| [product_id, "update", ["offer_codes"]] }
+      )
     end
 
     def reindex_removed_product(product)

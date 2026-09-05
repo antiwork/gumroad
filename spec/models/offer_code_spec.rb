@@ -1488,6 +1488,22 @@ describe OfferCode do
         expect(SendToElasticsearchWorker).to have_enqueued_sidekiq_job(product1.id, "update", ["offer_codes"])
       end
 
+      it "enqueues the previous universal catalog in bounded batches" do
+        universal_offer_code = create(:universal_offer_code, user: creator)
+        SendToElasticsearchWorker.clear
+        stub_const("OfferCode::PRODUCT_REINDEX_BATCH_SIZE", 1)
+
+        batch_sizes = []
+        allow(SendToElasticsearchWorker).to receive(:perform_bulk) do |args, **|
+          batch_sizes << args.size
+        end
+
+        universal_offer_code.update!(universal: false, products: [product2])
+
+        expect(batch_sizes.max).to eq(1)
+        expect(batch_sizes.sum).to be >= 2
+      end
+
       it "reindexes products removed from a product-specific offer code" do
         SendToElasticsearchWorker.clear
 
