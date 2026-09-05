@@ -207,7 +207,14 @@ class Api::V2::LinksController < Api::V2::BaseController
       @product.generate_product_files_archives! if params.key?(:files)
     end
 
-    success_with_product(@product.reload)
+    additional_info = {}
+    if !create_as_draft?
+      # Outside the create transaction: publish! takes its own row lock and schedules after_commit work.
+      warning = publish_created_product
+      additional_info[:warning] = warning if warning
+    end
+
+    success_with_object(:product, @product.reload, additional_info)
   rescue ActiveRecord::RecordNotSaved, ActiveRecord::RecordInvalid => e
     if e.respond_to?(:record) && e.record != @product
       render_response(false, message: e.record.errors.full_messages.to_sentence)
@@ -671,6 +678,24 @@ class Api::V2::LinksController < Api::V2::BaseController
   private
     def success_with_product(product = nil)
       success_with_object(:product, product)
+    end
+
+    def create_as_draft?
+      boolean = ActiveModel::Type::Boolean.new
+      boolean.cast(params[:draft]) == true || (params.key?(:published) && boolean.cast(params[:published]) == false)
+    end
+
+    def publish_created_product
+      return "Saved as a draft: #{@product.errors.full_messages.to_sentence}" unless @product.validate_product_price_against_all_offer_codes?
+
+      @product.publish!
+      nil
+    rescue Link::LinkInvalid, ActiveRecord::RecordInvalid => e
+      reason = @product.errors.full_messages.to_sentence.presence || e.message
+      "Saved as a draft: #{reason}"
+    rescue => e
+      ErrorNotifier.notify(e, product_id: @product.id)
+      "Saved as a draft: publishing failed. Retry with POST /v2/products/#{@product.external_id}/enable."
     end
 
     def normalize_price_currency_type(currency)
