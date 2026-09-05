@@ -112,12 +112,17 @@ class PaypalMerchantAccountManager
         return "There was an error connecting your PayPal account with Gumroad." unless merchant_account.save
       end
 
-      oauth_integration = parsed_response.dig("oauth_integrations", 0)
+      gumroad_oauth_integration = Array.wrap(parsed_response["oauth_integrations"]).find do |oauth_integration|
+        next false unless oauth_integration.is_a?(Hash)
 
-      if oauth_integration && parsed_response["primary_email_confirmed"] && parsed_response["payments_receivable"] &&
-          oauth_integration["integration_type"] == "OAUTH_THIRD_PARTY" &&
-          oauth_integration["integration_method"] == "PAYPAL"
-        oauth_integration["oauth_third_party"][0]["partner_client_id"] == PAYPAL_PARTNER_CLIENT_ID
+        oauth_integration["integration_type"] == "OAUTH_THIRD_PARTY" &&
+          oauth_integration["integration_method"] == "PAYPAL" &&
+          Array.wrap(oauth_integration["oauth_third_party"]).any? do |oauth_grant|
+            oauth_grant.is_a?(Hash) && oauth_grant["partner_client_id"] == PAYPAL_PARTNER_CLIENT_ID
+          end
+      end
+
+      if gumroad_oauth_integration && parsed_response["primary_email_confirmed"] && parsed_response["payments_receivable"]
         merchant_account.charge_processor_alive_at = Time.current
         merchant_account.mark_charge_processor_verified!
         MerchantRegistrationMailer.paypal_account_updated(user.id).deliver_later(queue: "default")
