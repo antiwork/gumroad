@@ -22,6 +22,14 @@ class ConnectionsController < Sellers::BaseController
     render json: { success: false, error_message: e.message }
   end
 
+  def unlink_instagram
+    current_seller.social_connect_verifications.find_by(platform: "instagram")&.destroy!
+
+    render json: { success: true }
+  rescue => e
+    render json: { success: false, error_message: e.message }
+  end
+
   private
     def authorize
       super([:settings, :profile], :manage_social_connections?)

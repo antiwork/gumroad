@@ -113,4 +113,37 @@ describe SocialConnectVerification do
       end.not_to change { described_class.count }
     end
   end
+
+  describe ".record_from_instagram!" do
+    let(:user) { create(:user) }
+    let(:profile) do
+      {
+        "user_id" => "17841400000000000",
+        "username" => "gumroad",
+        "followers_count" => 250_000,
+        "media_count" => 1_200,
+        "last_posted_at" => "2026-09-01T12:00:00Z",
+      }
+    end
+
+    it "stores verified professional-account metadata" do
+      verification = described_class.record_from_instagram!(user, profile)
+
+      expect(verification.reload).to have_attributes(
+        platform: "instagram",
+        uid: "17841400000000000",
+        handle: "gumroad",
+        account_created_at: nil,
+        follower_count: 250_000,
+        post_count: 1_200,
+        last_posted_at: Time.iso8601("2026-09-01T12:00:00Z"),
+      )
+    end
+
+    it "records nothing when the user id is missing" do
+      expect do
+        described_class.record_from_instagram!(user, profile.except("user_id"))
+      end.not_to change { described_class.count }
+    end
+  end
 end

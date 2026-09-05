@@ -138,6 +138,41 @@ describe SocialScoreShadowEvaluationService do
       expect(result[:would_have_released]).to be(false)
     end
 
+    it "uses all available Instagram signals instead of requiring an unavailable account age" do
+      create(
+        :social_connect_verification,
+        user:,
+        platform: "instagram",
+        account_created_at: nil,
+        follower_count: 5_000,
+        post_count: 1_000,
+        last_posted_at: 1.day.ago,
+      )
+
+      result = described_class.new(user).evaluate
+
+      expect(result[:score]).to eq(55)
+      expect(result[:signals][:release_threshold]).to eq(55)
+      expect(result[:would_have_released]).to be(true)
+    end
+
+    it "does not release an Instagram account without every available signal" do
+      create(
+        :social_connect_verification,
+        user:,
+        platform: "instagram",
+        account_created_at: nil,
+        follower_count: 500,
+        post_count: 1_000,
+        last_posted_at: 1.day.ago,
+      )
+
+      result = described_class.new(user).evaluate
+
+      expect(result[:score]).to eq(40)
+      expect(result[:would_have_released]).to be(false)
+    end
+
     it "ignores stale verifications" do
       strong_verification.update!(last_verified_at: 1.year.ago)
 

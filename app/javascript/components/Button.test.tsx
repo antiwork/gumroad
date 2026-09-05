@@ -26,4 +26,19 @@ describe("Button brand colors", () => {
     expect(youtube.className).toBe(x.className);
     expect(youtube.className).toContain("bg-black");
   });
+
+  it("fills the Instagram button like the X button", () => {
+    render(
+      <>
+        <Button color="twitter">Connect to X</Button>
+        <Button color="instagram">Connect to Instagram</Button>
+      </>,
+    );
+
+    const x = screen.getByRole("button", { name: "Connect to X" });
+    const instagram = screen.getByRole("button", { name: "Connect to Instagram" });
+
+    expect(instagram.className).toBe(x.className);
+    expect(instagram.className).toContain("bg-black");
+  });
 });

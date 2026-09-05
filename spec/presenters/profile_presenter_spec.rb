@@ -309,6 +309,9 @@ describe ProfilePresenter do
           youtube_connect_enabled: false,
           youtube_connected: false,
           youtube_handle: nil,
+          instagram_connect_enabled: false,
+          instagram_connected: false,
+          instagram_handle: nil,
           has_custom_landing_page: false,
           username: seller.username,
           # seller_analytics is only added to the public profile_props — the settings

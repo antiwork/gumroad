@@ -40,6 +40,7 @@ class ProfilePresenter
   end
 
   def profile_settings_props(request:)
+    instagram_verification = seller.social_connect_verifications.find_by(platform: "instagram")
     memberships = seller.products.membership.alive.not_archived.includes(ProductPresenter::ASSOCIATIONS_FOR_CARD)
     # Sample the version before reading the editor payload below. If a concurrent save lands in
     # between, the payload may be newer than this token — which makes the next save a harmless
@@ -84,6 +85,9 @@ class ProfilePresenter
         youtube_connect_enabled: Feature.active?(:youtube_connect, seller),
         youtube_connected: seller.youtube_identity.present?,
         youtube_handle: seller.youtube_identity&.handle,
+        instagram_connect_enabled: Feature.active?(:instagram_connect, seller),
+        instagram_connected: instagram_verification.present?,
+        instagram_handle: instagram_verification&.handle,
         has_custom_landing_page: seller.has_custom_landing_page?,
         username: seller.username,
       }

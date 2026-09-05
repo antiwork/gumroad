@@ -69,4 +69,15 @@ describe ConnectionsController do
       expect(SocialConnectVerification.exists?(id: verification.id)).to be(true)
     end
   end
+
+  describe "POST unlink_instagram" do
+    it "deletes the stored Instagram connection" do
+      verification = create(:social_connect_verification, user: seller, platform: "instagram")
+
+      post :unlink_instagram
+
+      expect(response.body).to eq({ success: true }.to_json)
+      expect(SocialConnectVerification.exists?(verification.id)).to be(false)
+    end
+  end
 end

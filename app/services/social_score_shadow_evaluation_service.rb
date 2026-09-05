@@ -3,9 +3,10 @@
 # Log-only: computes whether verified social signals WOULD have released a
 # held payout. Nothing here moves money or clears a hold.
 class SocialScoreShadowEvaluationService
-  # Chosen so that no single signal can release on its own: it takes a
-  # multi-year account with real audience AND recent posting history to cross.
+  # The default requires account age, audience, and recent posting history.
   RELEASE_THRESHOLD = 70
+  # Instagram exposes no creation date, so require every available signal.
+  RELEASE_THRESHOLDS = { "instagram" => 55 }.freeze
 
   MAX_VERIFICATION_AGE = 180.days
 
@@ -24,7 +25,9 @@ class SocialScoreShadowEvaluationService
   def evaluate
     return nil unless held?
 
-    best = scored_verifications.max_by { |scored| scored[:score] }
+    best = scored_verifications.max_by do |scored|
+      [scored[:meets_threshold] ? 1 : 0, scored[:score].fdiv(scored[:release_threshold])]
+    end
     score = best&.dig(:score) || 0
     # ANY shared identity vetoes, not just the best-scoring verification's —
     # a fraudster's weakest linked account is still a link.
@@ -34,7 +37,7 @@ class SocialScoreShadowEvaluationService
       hold_source:,
       unpaid_balance_cents:,
       score:,
-      would_have_released: score >= RELEASE_THRESHOLD && !shared_identity,
+      would_have_released: scored_verifications.any? { _1[:meets_threshold] } && !shared_identity,
       signals: best,
     }
   end
@@ -77,10 +80,15 @@ class SocialScoreShadowEvaluationService
         shared_identity_user_count = verification.shared_identity_user_ids.size
         components = score_components(verification)
 
+        score = components.values.sum
+        release_threshold = RELEASE_THRESHOLDS.fetch(verification.platform, RELEASE_THRESHOLD)
+
         {
           platform: verification.platform,
           handle: verification.handle,
-          score: components.values.sum,
+          score:,
+          release_threshold:,
+          meets_threshold: score >= release_threshold,
           components:,
           shared_identity_user_count:,
         }
