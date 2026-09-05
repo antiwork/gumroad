@@ -7,6 +7,8 @@ class ReindexRecommendableProductsWorker
   SCROLL_SIZE = 1000
   SCROLL_SORT = ["_doc"]
 
+  SALES_VOLUME_ATTRIBUTES = ["sales_volume", "total_fee_cents", "past_year_fee_cents"].freeze
+
   def perform
     response = EsClient.search(
       index: Link.index_name,
@@ -20,17 +22,24 @@ class ReindexRecommendableProductsWorker
     index = 0
     loop do
       hits = response.dig("hits", "hits")
-      ids = hits.map { |hit| hit["_id"] }
+      ids = hits.map { |hit| hit["_id"].to_i }
 
-      filtered_ids = Purchase.
+      recent_sale_ids = Purchase.
         where(link_id: ids).
         group(:link_id).
         having("max(created_at) >= ?", Product::Searchable::DEFAULT_SALES_VOLUME_RECENTNESS.ago).
-        pluck(:link_id)
+        pluck(:link_id).
+        to_set
 
-      unless filtered_ids.empty?
-        args = filtered_ids.map do |id|
-          [id, "update", ["sales_volume", "total_fee_cents", "past_year_fee_cents"]]
+      unless ids.empty?
+        # Every scrolled document gets is_recommendable reconciled: a refund-time
+        # refresh can be lost when both the enqueue and the synchronous fallback
+        # fail, leaving an ineligible product indexed as recommendable until this
+        # runs. Sales-volume fields stay limited to products with recent sales.
+        args = ids.map do |id|
+          attributes = ["is_recommendable"]
+          attributes = SALES_VOLUME_ATTRIBUTES + attributes if recent_sale_ids.include?(id)
+          [id, "update", attributes]
         end
 
         Sidekiq::Client.push_bulk(
