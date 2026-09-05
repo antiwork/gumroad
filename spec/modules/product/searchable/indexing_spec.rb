@@ -291,6 +291,100 @@ describe "Product::Searchable - Indexing scenarios" do
         create(:canadian_bank_account, user: @product.user)
       end
 
+      it "sends updated is_recommendable flag when the only active bank account is deleted" do
+        bank_account = create(:canadian_bank_account, user: @product.user)
+        @product.user.update!(payment_address: nil)
+        expect(RefreshUserProductsRecommendationEligibilityJob).to receive(:perform_async).with(@product.user_id)
+
+        bank_account.mark_deleted!
+      end
+
+      it "does not index products when another active bank account remains" do
+        bank_account = create(:canadian_bank_account, user: @product.user)
+        create(:canadian_bank_account, user: @product.user)
+        @product.user.update!(payment_address: nil)
+        expect(RefreshUserProductsRecommendationEligibilityJob).not_to receive(:perform_async)
+
+        bank_account.mark_deleted!
+      end
+
+      it "sends updated is_recommendable flag when the first bank account is restored" do
+        bank_account = create(:canadian_bank_account, deleted_at: 1.day.ago, user: @product.user)
+        @product.user.update!(payment_address: nil)
+        expect(RefreshUserProductsRecommendationEligibilityJob).to receive(:perform_async).with(@product.user_id)
+
+        bank_account.mark_undeleted!
+      end
+
+      it "does not index products when bank account deletion is rolled back" do
+        bank_account = create(:canadian_bank_account, user: @product.user)
+        @product.user.update!(payment_address: nil)
+        expect(RefreshUserProductsRecommendationEligibilityJob).not_to receive(:perform_async)
+
+        ActiveRecord::Base.transaction do
+          bank_account.mark_deleted!
+          raise ActiveRecord::Rollback
+        end
+      end
+
+      it "does not enqueue a refresh when another payout method remains" do
+        bank_account = create(:canadian_bank_account, user: @product.user)
+        @product.user.update!(payment_address: "seller@example.com")
+        expect(RefreshUserProductsRecommendationEligibilityJob).not_to receive(:perform_async)
+
+        bank_account.mark_deleted!
+      end
+
+      it "does not enqueue a refresh when Stripe Connect remains" do
+        bank_account = create(:canadian_bank_account, user: @product.user)
+        create(:merchant_account_stripe_connect, user: @product.user)
+        @product.user.update!(payment_address: nil)
+        expect(RefreshUserProductsRecommendationEligibilityJob).not_to receive(:perform_async)
+
+        bank_account.mark_deleted!
+      end
+
+      it "does not enqueue a refresh when PayPal remains" do
+        bank_account = create(:canadian_bank_account, user: @product.user)
+        create(:merchant_account_paypal, user: @product.user)
+        @product.user.update!(payment_address: nil)
+        expect(RefreshUserProductsRecommendationEligibilityJob).not_to receive(:perform_async)
+
+        bank_account.mark_deleted!
+      end
+
+      it "does not let an enqueue failure interrupt bank account deletion" do
+        bank_account = create(:canadian_bank_account, user: @product.user)
+        @product.user.update!(payment_address: nil)
+        fallback_job = instance_double(RefreshUserProductsRecommendationEligibilityJob, perform: nil)
+        allow(RefreshUserProductsRecommendationEligibilityJob).to receive(:perform_async).and_raise("Redis unavailable")
+        allow(RefreshUserProductsRecommendationEligibilityJob).to receive(:new).and_return(fallback_job)
+        allow(ErrorNotifier).to receive(:notify)
+
+        expect { bank_account.mark_deleted! }.not_to raise_error
+        expect(bank_account.reload).to be_deleted
+        expect(ErrorNotifier).to have_received(:notify).with(
+          instance_of(RuntimeError),
+          bank_account_id: bank_account.id,
+          user_id: @product.user_id
+        )
+        expect(fallback_job).to have_received(:perform).with(@product.user_id)
+      end
+
+      it "does not let refresh or observability failures escape after deletion commits" do
+        bank_account = create(:canadian_bank_account, user: @product.user)
+        @product.user.update!(payment_address: nil)
+        fallback_job = instance_double(RefreshUserProductsRecommendationEligibilityJob)
+        allow(RefreshUserProductsRecommendationEligibilityJob).to receive(:perform_async).and_raise("Redis unavailable")
+        allow(RefreshUserProductsRecommendationEligibilityJob).to receive(:new).and_return(fallback_job)
+        allow(fallback_job).to receive(:perform).and_raise("Elasticsearch unavailable")
+        allow(ErrorNotifier).to receive(:notify).and_raise("Sentry unavailable")
+
+        expect { bank_account.mark_deleted! }.not_to raise_error
+
+        expect(bank_account.reload).to be_deleted
+      end
+
       it "sends updated is_recommendable field when user is marked compliant" do
         expect_product_update %w[is_recommendable]
         @product.user.mark_compliant!(author_id: create(:user).id)
