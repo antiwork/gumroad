@@ -296,9 +296,15 @@ class MerchantAccount < ApplicationRecord
       return if account_attributes["charge_processor_deleted_at"].present?
 
       charge_processor_id = account_attributes["charge_processor_id"]
+      json_data = account_attributes["json_data"] || {}
+      stripe_connect = if json_data.is_a?(Hash)
+        json_data.dig("meta", "stripe_connect") == "true"
+      else
+        # Non-Hash metadata is the same shape the backfill treats as a connected payout account.
+        true
+      end
       connected_account = charge_processor_id == PaypalChargeProcessor.charge_processor_id ||
-                          (charge_processor_id == StripeChargeProcessor.charge_processor_id &&
-                            account_attributes["json_data"].to_h.dig("meta", "stripe_connect") == "true")
+                          (charge_processor_id == StripeChargeProcessor.charge_processor_id && stripe_connect)
       account_attributes["user_id"] if connected_account
     end
 

@@ -165,6 +165,17 @@ describe MerchantAccount do
       merchant_account.delete_charge_processor_account!
     end
 
+    it "does not abort a Stripe disconnect when json_data is not a Hash" do
+      merchant_account = create(:merchant_account, user: seller)
+      merchant_account.update_column(:json_data, '"not a hash"')
+      merchant_account.reload
+      expect(RefreshMerchantAccountProductsRecommendationEligibilityJob).to receive(:perform_async).with(seller.id).once
+
+      expect { merchant_account.delete_charge_processor_account! }.not_to raise_error
+      expect(merchant_account.reload).to be_deleted
+      expect(merchant_account).to be_charge_processor_deleted
+    end
+
     it "does not enqueue when another payout method remains" do
       merchant_account = create(:merchant_account_paypal, user: seller)
       seller.update!(payment_address: "seller@example.com")
