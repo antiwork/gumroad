@@ -539,19 +539,10 @@ module RendersCustomHtmlPages
   HTML
 
   module ClassMethods
-    # The <head> markup that loads the shared Tailwind build for custom pages.
-    # Preferred form is a <link> to the fingerprinted copy on the asset host:
-    # the build is ~4.9 MB, and inlining it (the old behavior) made every
-    # custom page, product landing, and agent preview response carry the full
-    # stylesheet on every view. As an immutable fingerprinted asset it
-    # downloads once per browser and that one cached copy serves every
-    # seller's pages.
-    #
+    # Shared Tailwind for custom pages. Prefer a <link> to the fingerprinted
+    # asset (~4.9 MB; inlining put the full sheet on every page and preview).
     # Falls back to inlining public/pages-tailwind.css when the manifest is
-    # missing (a checkout that hasn't rerun `npm run build:pages-tailwind`
-    # since fingerprinting was introduced), and renders nothing when no build
-    # exists at all. Memoized per process — both files ship with the deployed
-    # artifact and only change on deploy, which restarts the process.
+    # missing, else empty. Memoized per process — files only change on deploy.
     def pages_tailwind_head
       return @pages_tailwind_head if @pages_tailwind_head
 
@@ -586,12 +577,9 @@ module RendersCustomHtmlPages
     end
 
     private
-      # The manifest maps the logical stylesheet name to its current
-      # fingerprinted path (e.g. "assets/pages/pages-tailwind-<sha>.css").
-      # Both are written by scripts/build_pages_tailwind.mjs. The path is only
-      # trusted if it looks like a build output and the file is actually
-      # present on disk — the same tree that gets synced to the asset host —
-      # so we never emit a <link> to a stylesheet that wasn't built.
+      # Logical name → fingerprinted path from scripts/build_pages_tailwind.mjs.
+      # Only emit a <link> if the path looks like a build output and the file
+      # exists on disk (the tree synced to the asset host).
       def pages_tailwind_asset_path
         manifest_path = Rails.root.join("public/pages-tailwind-manifest.json")
         return nil unless File.exist?(manifest_path)
@@ -607,16 +595,10 @@ module RendersCustomHtmlPages
   end
 
   private
-    # Emits gumroadNavigationTarget(url, storeHostnames), used by BOTH halves of
-    # the navigate bridge: the in-iframe interceptor picks which clicks to hand
-    # up, each trusted wrapper decides where to send the tab. Both sides must
-    # agree or a link either silently does nothing or is intercepted and then
-    # refused.
-    #
-    # GLOBAL_NAV_PATHS live on a host no seller controls, so putting that host in
-    # the hostname allowlist would let seller HTML drive the visitor's tab to any
-    # gumroad.com path. Matched on an exact path instead, query and fragment
-    # dropped rather than rejected.
+    # gumroadNavigationTarget(url, storeHostnames) — iframe interceptor and
+    # trusted wrapper must agree or a link is dropped or intercepted then refused.
+    # GLOBAL_NAV_PATHS live on a host no seller controls, so they match on exact
+    # path (query/fragment dropped), never via the hostname allowlist.
     def custom_html_navigation_allowlist_js
       <<~JS
         var GUMROAD_NAV_HOSTS = #{ERB::Util.json_escape(VALID_REQUEST_HOSTS.to_json)};
@@ -631,14 +613,11 @@ module RendersCustomHtmlPages
       JS
     end
 
-    # Injected at serve time so plain store links work without seller HTML
-    # changes. A link click would otherwise navigate the IFRAME, rendering the
-    # destination on the opaque origin where cookies and storage are unavailable —
-    # checkout hangs or the page fails outright. The sandbox deliberately omits
-    # allow-top-navigation (and the sanitizer strips target="_top"), so store links
-    # are handed to the parent instead. The parent re-validates against the same
-    # hostname allowlist, so nothing here is load-bearing for security. Foreign
-    # hosts and target="_blank" keep their default behavior.
+    # Serve-time so store links work without seller HTML changes. A click would
+    # otherwise navigate the iframe onto the opaque origin (no cookies/storage).
+    # Sandbox omits allow-top-navigation and the sanitizer strips target="_top",
+    # so we hand store links to the parent, which re-validates the same allowlist.
+    # Foreign hosts and target="_blank" keep default behavior.
     def custom_html_navigation_bridge_script(allowed_hostnames:)
       hostnames_json = ERB::Util.json_escape(allowed_hostnames.to_json)
       <<~HTML
@@ -675,22 +654,14 @@ module RendersCustomHtmlPages
       HTML
     end
 
-    # The trusted-wrapper half of the follow bridge, shared by UsersController and
-    # UserPagesController so the two surfaces can't drift. The iframe content is
-    # untrusted, so this side is the security boundary: the seller id comes only
-    # from this wrapper's render context (a seller_id in the message is ignored, so
-    # a page can never subscribe a visitor to someone else's audience) and the
-    # email is validated server-side.
-    #
-    # The body must be form-encoded, not JSON: the endpoint's per-(IP, seller)
-    # Rack::Attack throttle keys on req.params["seller_id"] and Rack only parses
-    # form bodies, so JSON would collapse it into one per-IP bucket across all
-    # sellers. The CSRF token comes from the placeholder meta tag CsrfTokenInjector
-    # fills in after render; with a valid token the visitor's session survives
-    # forgery protection, so a signed-in visitor following with their own verified
-    # email is confirmed instantly instead of by email. targetOrigin must be "*"
-    # because the frame's origin is opaque — the reply carries only a boolean and
-    # a public message.
+    # Trusted-wrapper half of the follow bridge (UsersController and
+    # UserPagesController). Untrusted iframe: seller id comes only from this
+    # render context (a seller_id in the message is ignored). Body must be
+    # form-encoded — Rack::Attack keys on req.params["seller_id"] and Rack only
+    # parses form bodies, so JSON would collapse the throttle to one per-IP
+    # bucket. CSRF token is the placeholder meta CsrfTokenInjector fills after
+    # render. targetOrigin is "*" because the frame origin is opaque; the reply
+    # is only a boolean and a public message.
     def custom_html_follow_wrapper_script(seller_external_id:, nonce:)
       seller_id_json = ERB::Util.json_escape(seller_external_id.to_json)
       endpoint_json = ERB::Util.json_escape(follow_user_from_embed_form_path.to_json)
@@ -740,21 +711,12 @@ module RendersCustomHtmlPages
       HTML
     end
 
-    # The trusted-wrapper half of the products bridge (gumroad-private#1691). It listens for
-    # gumroad:products messages from the sandboxed landing iframe and fetches the requested
-    # catalogue slice from the profile's landing/products endpoint. The iframe content is
-    # seller-authored and untrusted, so this side is the security boundary:
-    # - only messages from the landing frame (e.source) are accepted;
-    # - the endpoint URL is baked from this wrapper's render context — nothing in the message
-    #   picks the seller, so the page can never read another seller's catalogue slice;
-    # - offset/limit are validated as non-negative integers and limit is clamped to MAX_ITEMS
-    #   here, and the server re-validates both, so a hostile page can't turn one message into
-    #   an unbounded query.
-    # The reply echoes the child's request id (same convention as the follow bridge) so two
-    # in-flight requests can't cross. Overlapping requests are allowed — abuse is bounded by
-    # the endpoint's Rack::Attack throttle, not by this script. targetOrigin must be "*"
-    # because the sandboxed frame's origin is opaque — the reply carries only the public
-    # catalogue data the page 1 payload already exposes.
+    # Trusted-wrapper half of the products bridge (gumroad-private#1691).
+    # Untrusted iframe: only e.source === landing frame; endpoint URL is baked
+    # here so the page cannot pick another seller; offset/limit are clamped to
+    # MAX_ITEMS here and re-validated on the server. Reply echoes requestId so
+    # in-flight requests don't cross. targetOrigin is "*" (opaque frame origin);
+    # the reply is the public catalogue data page 1 already exposes.
     def custom_html_products_wrapper_script(products_src:, nonce:)
       endpoint_json = ERB::Util.json_escape(products_src.to_json)
       <<~HTML
@@ -933,14 +895,11 @@ module RendersCustomHtmlPages
       }
     end
 
-    # The full sandboxed document for a profile custom-HTML page. Shared by the live
-    # /landing/embed endpoint (UsersController) and the agent's proposed-change preview
-    # (Api::Internal::AgentCustomHtmlPreviewsController) so a preview can never drift from what
-    # actually ships. Both serve it over HTTP with CUSTOM_HTML_CSP as a response header — never
-    # as an iframe srcdoc, which would inherit the embedding dashboard's CSP and block every
-    # inline script in the page (a meta CSP tag can't undo that: policies only intersect).
-    # `scroll_to_change` adds the preview-only script that jumps to the PREVIEW_CHANGED_MARKER
-    # comment, so an edit further down the page opens in view instead of hiding below the fold.
+    # Sandboxed document for a profile custom-HTML page. Shared by live
+    # /landing/embed and the agent preview so they cannot drift. Served over HTTP
+    # with CUSTOM_HTML_CSP — never iframe srcdoc (srcdoc inherits the dashboard
+    # CSP; a meta tag cannot loosen it). `scroll_to_change` jumps to
+    # PREVIEW_CHANGED_MARKER so an edit further down the page opens in view.
     def profile_custom_html_document(custom_html, data_json: "{}", prices_json: nil, live_fields: false, navigation_bridge: "", follow_bridge: "", products_bridge: "", scroll_to_change: false)
       <<~HTML
         <!doctype html>

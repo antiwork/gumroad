@@ -253,15 +253,10 @@ class UsersController < ApplicationController
       @is_user_custom_domain ? "/landing/#{suffix}" : "/#{user.username}/landing/#{suffix}"
     end
 
-    # Hostnames the navigation bridge accepts as "this seller's own store":
-    # the host serving the current request (subdomain or custom domain), the
-    # seller's canonical subdomain, and their live custom domain. Product URLs
-    # in the injected gumroad-data JSON are built on the subdomain
-    # (Link#long_url), so a visitor browsing the custom domain still needs the
-    # subdomain host allowlisted for those links to bridge. Both the injected
-    # child script and the parent wrapper validate against this same list —
-    # the parent-side check is the one that matters for security, since the
-    # sandboxed child is seller-authored and untrusted.
+    # Navigation-bridge allowlist: request host, canonical subdomain, live custom
+    # domain. Product URLs in gumroad-data are built on the subdomain
+    # (Link#long_url), so a custom-domain visitor still needs that host. The
+    # parent-side check is the security boundary — the sandboxed child is untrusted.
     def profile_store_hostnames(user)
       hostnames = []
       # Only trust the request host when it is one of the seller's OWN hosts
@@ -275,31 +270,23 @@ class UsersController < ApplicationController
       hostnames.compact.uniq
     end
 
-    # Omitting `allow-same-origin` keeps the seller's HTML on an opaque origin —
-    # no access to gumroad.com cookies or the parent DOM. We also omit
-    # `allow-top-navigation` so the seller's HTML can never navigate the
-    # visitor's tab away from gumroad.com. Like the product wrapper's checkout
-    # bridge, store navigation instead goes through a postMessage handshake:
-    # the sandboxed page posts `gumroad:navigate` and this trusted wrapper
-    # validates the URL against the seller's own store hostnames before
-    # navigating the top-level window. Without the bridge, clicking a product
-    # link navigates the sandboxed IFRAME to the product page, which then runs
-    # on the opaque origin with no cookies/storage and checkout breaks.
+    # Omit allow-same-origin (opaque origin — no gumroad.com cookies or parent
+    # DOM) and allow-top-navigation (seller HTML cannot drive the tab). Store
+    # navigation is a postMessage handshake: gumroad:navigate, then this wrapper
+    # validates against the seller's store hostnames. Without the bridge, a
+    # product link navigates the iframe onto the opaque origin and checkout breaks.
     def profile_custom_html_wrapper_document(user)
       iframe_src = ERB::Util.h(profile_landing_src(user, "embed"))
       title = ERB::Util.h(user.name_or_username.to_s)
       canonical = ERB::Util.h(user.profile_url(custom_domain_url: seller_custom_domain_url).to_s)
       store_hostnames_json = ERB::Util.json_escape(profile_store_hostnames(user).to_json)
       nonce = SecureHeaders.content_security_policy_script_nonce(request)
-      # Share-card chain mirroring the standard profile (PageMeta::User): the
-      # branded subscribe-preview card wins, then a real uploaded avatar, then
-      # Gumroad's generic banner. avatar_url always returns a value (it falls back
-      # to the default avatar), so only advertise it when the seller uploaded one.
-      # Resolve the preview once — it rescues to nil internally, so re-reading it
-      # could mix the two branches' tags. This <head> is hand-built and gets none
-      # of PageMeta::Base's defaults, so the generic fallback is spelled out here;
-      # it must be absolute, since a relative path would resolve against the
-      # seller's custom domain, which does not serve Gumroad's assets.
+      # Share-card chain (PageMeta::User): subscribe-preview, then uploaded
+      # avatar, then generic banner. avatar_url always returns a value — only
+      # advertise it when the seller uploaded one. Resolve the preview once
+      # (rescues to nil internally). This <head> is hand-built, so the generic
+      # fallback must be an absolute URL: a relative path would resolve against
+      # the seller's custom domain, which does not serve Gumroad's assets.
       preview_url = user.subscribe_preview_url.presence
       avatar_url = user.avatar_url if user.avatar.attached?
       share_image = preview_url || avatar_url || ActionController::Base.helpers.image_url("opengraph_image.png")
@@ -400,15 +387,12 @@ class UsersController < ApplicationController
       HTML
     end
 
-    # Mirrors LinksController#custom_html_analytics_head for the profile wrapper:
-    # a custom profile bypasses the Inertia profile page, so the seller's
-    # analytics would otherwise never load (#5676). The tracking runs only in
-    # this trusted same-origin wrapper — the global CSP allowlists the analytics
-    # hosts — never in the sandboxed landing iframe, whose strict CSP blocks
-    # them by design. The payload carries no permalink/name, which routes the
-    # shared custom_html_analytics entry point down its profile branch:
-    # page-view + pixel init + universal snippets only, no product events and no
-    # checkout listener, because a profile has no buy affordance.
+    # Profile counterpart of LinksController#custom_html_analytics_head: a custom
+    # profile bypasses Inertia, so analytics would never load (#5676). Tracking
+    # runs only in this trusted wrapper (global CSP allowlists the hosts), never
+    # in the sandboxed iframe. No permalink/name routes the shared entry point
+    # to its profile branch — page-view + pixel init + universal snippets, no
+    # product events or checkout listener.
     def profile_custom_html_analytics_head(user)
       return "" unless analytics_enabled?(seller: user)
 
