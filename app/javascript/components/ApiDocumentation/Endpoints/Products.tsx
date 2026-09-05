@@ -37,6 +37,22 @@ const SingleProductResponseFields = () => (
   </ApiResponseFields>
 );
 
+const CreateProductResponseFields = () => (
+  <ApiResponseFields>
+    {renderFields([
+      { name: "success", type: "boolean", description: "Whether the request succeeded" },
+      { name: "product", type: "object", description: "The product object", children: PRODUCT_FIELDS },
+      {
+        name: "warning",
+        type: "string",
+        description:
+          "Explains why the product was saved as a draft instead of being published (for example, an unconfirmed email address). Publish it later with POST /v2/products/:id/enable.",
+        condition: "present when the product could not be published",
+      },
+    ])}
+  </ApiResponseFields>
+);
+
 const CategoriesResponseFields = () => (
   <ApiResponseFields>
     {renderFields([
@@ -472,7 +488,7 @@ export const CreateProduct = () => (
       Cover images and thumbnails are attached separately via <code>POST /v2/products/:id/covers</code> and{" "}
       <code>POST /v2/products/:id/thumbnail</code>.
     </p>
-    <SingleProductResponseFields />
+    <CreateProductResponseFields />
     <CodeSnippet caption="cURL example">
       {`curl https://api.gumroad.com/v2/products \\
   -d "access_token=ACCESS_TOKEN" \\
