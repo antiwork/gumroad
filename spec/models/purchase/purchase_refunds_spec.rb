@@ -7,6 +7,132 @@ describe "PurchaseRefunds", :vcr do
   include ProductsHelper
   include ActiveJob::TestHelper
 
+  it "removes a product from recommendable search results when its last sale is fully refunded", :elasticsearch_wait_for_refresh do
+    seller = create(:compliant_user, name: "Refunded sale seller")
+    product = create(:product, user: seller, taxonomy: create(:taxonomy))
+    create(:merchant_account, user: nil, charge_processor_merchant_id: "acct_refund_search_#{SecureRandom.hex(8)}")
+    purchase = create(:purchase, link: product, seller:)
+    index_model_records(Link)
+
+    recommendable_product_ids = -> {
+      Link.search(Link.search_options(ids: [product.id], include_rated_as_adult: true)).records.map(&:id)
+    }
+    expect(product.reload.recommendable?).to eq(true)
+    expect(recommendable_product_ids.call).to eq([product.id])
+
+    flow_of_funds = FlowOfFunds.build_simple_flow_of_funds(Currency::USD, purchase.total_transaction_cents)
+    expect(purchase.refund_purchase!(flow_of_funds, seller.id)).to eq(true)
+    SendToElasticsearchWorker.drain
+    Link.__elasticsearch__.refresh_index!
+
+    expect(product.reload.recommendable?).to eq(false)
+    expect(EsClient.get(index: Link.index_name, id: product.id).dig("_source", "is_recommendable")).to eq(false)
+    expect(recommendable_product_ids.call).to be_empty
+  end
+
+  describe "product recommendation refresh after refund status changes" do
+    before do
+      create(:merchant_account, user: nil, charge_processor_merchant_id: "acct_refund_callback_#{SecureRandom.hex(8)}")
+    end
+
+    let!(:purchase) { create(:purchase) }
+    let(:job_args) { [purchase.link_id, "update", %w[is_recommendable]] }
+
+    it "enqueues after a refund and after a failed-refund reversal" do
+      expect do
+        purchase.update!(stripe_refunded: true)
+      end.to change(SendToElasticsearchWorker.jobs, :size).by(1)
+      expect(SendToElasticsearchWorker.jobs.last.fetch("args")).to eq(job_args)
+
+      SendToElasticsearchWorker.jobs.clear
+
+      expect do
+        purchase.update!(stripe_refunded: false)
+      end.to change(SendToElasticsearchWorker.jobs, :size).by(1)
+      expect(SendToElasticsearchWorker.jobs.last.fetch("args")).to eq(job_args)
+    end
+
+    it "retains the refund refresh across multiple saves in one transaction" do
+      expect do
+        ActiveRecord::Base.transaction do
+          purchase.update!(stripe_refunded: true)
+          purchase.update!(email: "updated@example.com")
+        end
+      end.to change(SendToElasticsearchWorker.jobs, :size).by(1)
+      expect(SendToElasticsearchWorker.jobs.last.fetch("args")).to eq(job_args)
+    end
+
+    it "does not enqueue a rolled-back refund change or leak it into a later save" do
+      expect do
+        ActiveRecord::Base.transaction do
+          purchase.update!(stripe_refunded: true)
+          raise ActiveRecord::Rollback
+        end
+      end.not_to change(SendToElasticsearchWorker.jobs, :size)
+
+      expect do
+        purchase.reload.update!(email: "updated@example.com")
+      end.not_to change(SendToElasticsearchWorker.jobs, :size)
+    end
+
+    it "discards a refresh registered inside a rolled-back savepoint" do
+      expect do
+        ActiveRecord::Base.transaction do
+          ActiveRecord::Base.transaction(requires_new: true) do
+            purchase.update!(stripe_refunded: true)
+            raise ActiveRecord::Rollback
+          end
+          purchase.reload.update!(email: "updated@example.com")
+        end
+      end.not_to change(SendToElasticsearchWorker.jobs, :size)
+    end
+
+    it "does not enqueue when only the partial-refund marker changes" do
+      expect do
+        purchase.update!(stripe_partially_refunded: true)
+      end.not_to change(SendToElasticsearchWorker.jobs, :size)
+    end
+
+    it "does not enqueue when an unset refund flag is persisted as false" do
+      purchase.update_column(:stripe_refunded, nil)
+
+      expect do
+        purchase.update!(stripe_refunded: false)
+      end.not_to change(SendToElasticsearchWorker.jobs, :size)
+    end
+
+    it "does not let an enqueue failure change the committed refund state" do
+      allow(SendToElasticsearchWorker).to receive(:perform_async).and_raise("Redis unavailable")
+      allow(ErrorNotifier).to receive(:notify)
+      allow(ProductIndexingService).to receive(:perform)
+
+      expect { purchase.update!(stripe_refunded: true) }.not_to raise_error
+
+      expect(purchase.reload).to be_stripe_refunded
+      expect(ProductIndexingService).to have_received(:perform).with(
+        product: purchase.link,
+        action: "update",
+        attributes_to_update: %w[is_recommendable]
+      )
+      expect(ErrorNotifier).to have_received(:notify).with(
+        instance_of(RuntimeError),
+        purchase_id: purchase.id,
+        link_id: purchase.link_id
+      )
+    end
+
+
+    it "does not let observability failures escape after the refund commits" do
+      allow(SendToElasticsearchWorker).to receive(:perform_async).and_raise("Redis unavailable")
+      allow(ProductIndexingService).to receive(:perform).and_raise("Elasticsearch unavailable")
+      allow(ErrorNotifier).to receive(:notify).and_raise("Sentry unavailable")
+
+      expect { purchase.update!(stripe_refunded: true) }.not_to raise_error
+
+      expect(purchase.reload).to be_stripe_refunded
+    end
+  end
+
   def verify_balance(user, expected_balance)
     expect(user.unpaid_balance_cents).to eq expected_balance
   end

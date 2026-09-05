@@ -412,6 +412,8 @@ class Purchase < ApplicationRecord
     purchase.stripe_refunded_previously_changed?
   }
 
+  before_save :schedule_product_search_refresh_after_refund
+
   after_commit :enqueue_record_order_charge_outcome, if: -> (purchase) {
     purchase.purchase_state_previously_changed? &&
       ORDER_OUTCOME_STATES.include?(purchase.purchase_state)
@@ -6061,6 +6063,38 @@ class Purchase < ApplicationRecord
       # If we indexed sales_volume synchronously, it's likely to fetch outdated data from the purchases index,
       # thus not reflecting the latest purchase that was just made here.
       SendToElasticsearchWorker.perform_in(5.seconds, link.id, "update", ["sales_volume", "total_fee_cents", "past_year_fee_cents"])
+    end
+
+    def enqueue_product_search_refresh_after_refund
+      SendToElasticsearchWorker.perform_async(link_id, "update", %w[is_recommendable])
+    rescue => enqueue_error
+      report_product_search_refresh_error(enqueue_error, "enqueue")
+
+      begin
+        ProductIndexingService.perform(
+          product: link,
+          action: "update",
+          attributes_to_update: %w[is_recommendable]
+        )
+      rescue => indexing_error
+        report_product_search_refresh_error(indexing_error, "update synchronously")
+      end
+    end
+
+    def report_product_search_refresh_error(error, action)
+      Rails.logger.error("Failed to #{action} product search after refunding purchase #{id}: #{error.class}: #{error.message}")
+      ErrorNotifier.notify(error, purchase_id: id, link_id:)
+    rescue
+      nil
+    end
+
+    def schedule_product_search_refresh_after_refund
+      return unless will_save_change_to_stripe_refunded?
+
+      previous_value, new_value = stripe_refunded_change_to_be_saved
+      return if (previous_value == true) == (new_value == true)
+
+      after_commit { enqueue_product_search_refresh_after_refund }
     end
 
     def send_failure_email
