@@ -24,7 +24,7 @@ describe SslCertificates::Renew do
 
     it "enqueues a job for each orderable domain, with a delay smeared across the hour" do
       expect(CustomDomain).to receive(:certificate_absent_or_older_than).with(@obj.send(:renew_in))
-      expect(@custom_domain).to receive(:generate_ssl_certificate).with(delay: kind_of(Numeric))
+      expect(@custom_domain).to receive(:generate_ssl_certificate).with(delay: kind_of(Numeric), dedupe: true)
 
       @obj.process
     end
@@ -38,7 +38,7 @@ describe SslCertificates::Renew do
 
     it "spreads the enqueue delay within the fanout window" do
       allow(@obj).to receive(:rand).and_return(1234)
-      expect(@custom_domain).to receive(:generate_ssl_certificate).with(delay: 1236)
+      expect(@custom_domain).to receive(:generate_ssl_certificate).with(delay: 1236, dedupe: true)
 
       @obj.process
     end

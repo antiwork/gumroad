@@ -138,8 +138,12 @@ class CustomDomain < ApplicationRecord
     self.save!
   end
 
-  def generate_ssl_certificate(delay: 2.seconds)
-    GenerateSslCertificate.perform_in(delay, id)
+  def generate_ssl_certificate(delay: 2.seconds, dedupe: false)
+    if dedupe
+      GenerateSslCertificate.set(GenerateSslCertificate::RENEWAL_LOCK_OPTIONS).perform_in(delay, id)
+    else
+      GenerateSslCertificate.perform_in(delay, id)
+    end
   end
 
   # Cheap enqueue gate for SslCertificates::Renew: skips domains that cannot get
@@ -149,12 +153,6 @@ class CustomDomain < ApplicationRecord
     certificate_domain_valid? &&
       certificate_domain_allowed? &&
       Rails.cache.read(domain_check_cache_key) != false
-  end
-
-  # Called when DNS starts resolving to Gumroad again, so a fresh order isn't
-  # blocked by a stale cached failure.
-  def clear_certificate_order_failure_cache!
-    Rails.cache.delete(domain_check_cache_key)
   end
 
   def has_valid_certificate?(renew_certificate_in)

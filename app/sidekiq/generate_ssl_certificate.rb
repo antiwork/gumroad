@@ -2,12 +2,15 @@
 
 class GenerateSslCertificate
   include Sidekiq::Job
-  # One pending order per domain (lock_args ignores the reschedule counter), so
-  # overlapping hourly Renew fanouts drop duplicates instead of stacking them.
-  # :until_executing releases at execution start — required so the rate-limit
-  # reschedule below isn't dropped by its own job's lock — and the TTL bounds a
-  # stranded lock to less than the smear window plus a queue backlog.
-  sidekiq_options retry: 5, queue: :low, lock: :until_executing, on_conflict: :log, lock_ttl: 3.hours
+  sidekiq_options retry: 5, queue: :low
+
+  # Applied only to the hourly renewal fanout (CustomDomain#generate_ssl_certificate
+  # with dedupe: true) so overlapping runs don't stack duplicate jobs per domain.
+  # Urgent orders (domain save, verify, routability recovery) carry no lock and are
+  # never suppressed by a smeared pending renewal. :until_executing releases at
+  # execution start, so the rate-limit reschedule below is never dropped by its own
+  # job's lock; the TTL bounds a lock stranded by a killed enqueue.
+  RENEWAL_LOCK_OPTIONS = { "lock" => "until_executing", "on_conflict" => "log", "lock_ttl" => 3.hours.to_i }.freeze
 
   def self.lock_args(args)
     [args.first]

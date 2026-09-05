@@ -104,6 +104,10 @@ describe SslCertificates::Generate do
         allow_any_instance_of(CustomDomainVerificationService).to receive(:domains_resolving_to_gumroad).and_return([])
       end
 
+      after do
+        Rails.cache.delete("domain_check_www.example.com")
+      end
+
       it "returns false when no domains resolve to Gumroad" do
         expect(@obj.send(:can_order_certificates?)).to eq [false, "No domains resolve to Gumroad"]
       end
@@ -116,19 +120,16 @@ describe SslCertificates::Generate do
       end
     end
 
-    context "when a previous order failure is cached" do
+    context "when DNS resolves again after a cached order failure" do
       before do
         Rails.cache.write("domain_check_www.example.com", false)
+        allow_any_instance_of(CustomDomainVerificationService).to receive(:domains_resolving_to_gumroad).and_return(["www.example.com"])
       end
 
-      after do
-        Rails.cache.delete("domain_check_www.example.com")
-      end
-
-      it "returns false without a DNS lookup" do
-        expect_any_instance_of(CustomDomainVerificationService).not_to receive(:domains_resolving_to_gumroad)
-
-        expect(@obj.send(:can_order_certificates?)).to eq [false, "Domain check cached as failed"]
+      it "orders and clears the stale negative cache" do
+        expect(@obj.send(:can_order_certificates?)).to eq true
+        expect(Rails.cache.read("domain_check_www.example.com")).to be_nil
+        expect(@custom_domain.certificate_orderable?).to eq true
       end
     end
   end

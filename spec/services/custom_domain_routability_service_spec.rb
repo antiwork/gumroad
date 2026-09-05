@@ -51,14 +51,11 @@ describe CustomDomainRoutabilityService do
     let(:has_valid_certificate) { false }
 
     it "keeps the host unroutable and forces certificate issuance" do
-      Rails.cache.write("domain_check_#{custom_domain.domain}", false)
-
       service.process
 
       expect(custom_domain.reload).not_to be_routable
       expect(custom_domain.ssl_certificate_issued_at).to be_nil
       expect(custom_domain.routability_checked_at).to eq(observed_at)
-      expect(Rails.cache.read("domain_check_#{custom_domain.domain}")).to be_nil
       expect(GenerateSslCertificate).to have_enqueued_sidekiq_job(custom_domain.id)
     end
   end

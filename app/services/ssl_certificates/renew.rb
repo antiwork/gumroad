@@ -13,7 +13,7 @@ module SslCertificates
       custom_domains.each do |custom_domain|
         next unless custom_domain.certificate_orderable?
 
-        custom_domain.generate_ssl_certificate(delay: renewal_delay)
+        custom_domain.generate_ssl_certificate(delay: renewal_delay, dedupe: true)
       end
     end
 

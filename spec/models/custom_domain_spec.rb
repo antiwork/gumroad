@@ -198,6 +198,18 @@ describe CustomDomain do
 
       @domain.save!
     end
+
+    it "applies the renewal dedupe lock only when asked" do
+      GenerateSslCertificate.clear
+
+      @domain.generate_ssl_certificate
+      expect(GenerateSslCertificate.jobs.last).not_to include("lock")
+
+      @domain.generate_ssl_certificate(dedupe: true)
+      expect(GenerateSslCertificate.jobs.last).to include(
+        "lock" => "until_executing", "on_conflict" => "log", "lock_ttl" => 3.hours.to_i
+      )
+    end
   end
 
   describe "#certificate_orderable?" do
