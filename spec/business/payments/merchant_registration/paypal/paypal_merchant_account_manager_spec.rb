@@ -351,4 +351,32 @@ describe PaypalMerchantAccountManager, :vcr do
       expect(creator.merchant_account("paypal").charge_processor_merchant_id).to eq(new_paypal_merchant_id)
     end
   end
+
+  describe "#disconnect" do
+    it "removes products from recommendable search results when PayPal was the seller's only payout method", :elasticsearch_wait_for_refresh do
+      seller = create(:compliant_user, name: "PayPal seller", payment_address: nil)
+      product = create(:product, user: seller, taxonomy: create(:taxonomy))
+      create(:merchant_account, user: nil)
+      create(:purchase, link: product, seller:, price_cents: product.price_cents)
+      create(:merchant_account_paypal, user: seller, charge_processor_verified_at: Time.current)
+      index_model_records(Link)
+
+      recommendable_product_ids = -> {
+        Link.search(Link.search_options(ids: [product.id], include_rated_as_adult: true)).records.map(&:id)
+      }
+      expect(product.reload.recommendable?).to eq(true)
+      expect(recommendable_product_ids.call).to eq([product.id])
+
+      RefreshMerchantAccountProductsRecommendationEligibilityJob.jobs.clear
+      expect do
+        described_class.new.disconnect(user: seller)
+      end.to change(RefreshMerchantAccountProductsRecommendationEligibilityJob.jobs, :size).by(1)
+      RefreshMerchantAccountProductsRecommendationEligibilityJob.drain
+      Link.__elasticsearch__.refresh_index!
+
+      expect(product.reload.recommendable?).to eq(false)
+      expect(EsClient.get(index: Link.index_name, id: product.id).dig("_source", "is_recommendable")).to eq(false)
+      expect(recommendable_product_ids.call).to be_empty
+    end
+  end
 end
