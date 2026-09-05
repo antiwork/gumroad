@@ -20,7 +20,7 @@ class OfferCode < ApplicationRecord
 
   stripped_fields :code
 
-  has_and_belongs_to_many :products, class_name: "Link", join_table: "offer_codes_products", association_foreign_key: "product_id", after_add: :note_applicability_change, after_remove: [:note_applicability_change, :note_removed_product]
+  has_and_belongs_to_many :products, class_name: "Link", join_table: "offer_codes_products", association_foreign_key: "product_id", after_add: :note_applicability_change, after_remove: [:note_applicability_change, :note_removed_product, :reindex_removed_product]
   has_and_belongs_to_many :ownership_products, class_name: "Link", join_table: "offer_codes_ownership_products", association_foreign_key: "product_id"
   has_and_belongs_to_many :excluded_products, class_name: "Link", join_table: "offer_codes_excluded_products", association_foreign_key: "product_id", after_add: [:invalidate_excluded_product_cache, :note_applicability_change], after_remove: [:invalidate_excluded_product_cache, :note_applicability_change]
   belongs_to :user
@@ -52,6 +52,7 @@ class OfferCode < ApplicationRecord
   after_save :invalidate_product_cache
   after_save :reindex_associated_products
   after_save :note_column_applicability_changes
+  before_update :reindex_previous_universal_products
   after_commit :repair_detached_default_discounts, if: -> { @applicability_changed }
   after_rollback :forget_applicability_changes
   before_destroy :capture_associated_product_ids
@@ -621,6 +622,18 @@ class OfferCode < ApplicationRecord
           product_ids.map { |product_id| [product_id, "update", ["offer_codes"]] }
         )
       end
+    end
+
+    def reindex_removed_product(product)
+      reindex_associated_products(products_to_reindex: [product])
+    end
+
+    def reindex_previous_universal_products
+      return unless universal_in_database && (will_save_change_to_universal? || will_save_change_to_currency_type?)
+
+      products = Link.alive.where(user_id: user_id_in_database)
+      products = products.where(price_currency_type: currency_type_in_database) if currency_type_in_database.present?
+      reindex_associated_products(products_to_reindex: products)
     end
 
     def capture_associated_product_ids
