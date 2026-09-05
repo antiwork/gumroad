@@ -870,6 +870,24 @@ describe UsersController do
       expect(@purchase.reload.purchaser).to eq @user
     end
 
+    it "claims a successful purchase with incomplete charge fields without re-running charge validation" do
+      # Older/migrated or imported purchases can be successful and paid while missing
+      # charge fields, which fails financial_transaction_validation on a plain save.
+      @purchase.update_columns(
+        price_cents: 100,
+        stripe_transaction_id: nil,
+        stripe_fingerprint: nil,
+        merchant_account_id: nil,
+        charge_processor_id: nil
+      )
+
+      sign_in(@user)
+      post :add_purchase_to_library, params: @params
+
+      expect(@purchase.reload.purchaser).to eq @user
+      expect(response.parsed_body["success"]).to eq true
+    end
+
     it "associates the purchase to the user if the password is correct" do
       post :add_purchase_to_library, params: @params
       expect(@purchase.reload.purchaser).to eq @user
