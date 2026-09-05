@@ -270,10 +270,8 @@ class UrlRedirectsController < ApplicationController
       return redirect_to url_redirect_check_purchaser_path({ id: @url_redirect.token, next: params[:next].presence }.compact)
     end
 
-    # A purchaser-only claim must not re-run charge validation. `financial_transaction_validation`
-    # is registered on the `:successful` state and raises on success rows whose charge fields are
-    # incomplete (older/migrated or imported purchases), which a `save!` here would turn into a 500.
-    # `update_column` writes just `purchaser_id`, skipping that validator so the claim succeeds.
+    # `update_column` skips `financial_transaction_validation`, which raises on successful
+    # legacy/imported purchases with incomplete charge fields and would 500 the claim.
     purchase.update_column(:purchaser_id, logged_in_user.id)
     redirect_to_next
   end
