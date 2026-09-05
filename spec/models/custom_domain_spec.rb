@@ -218,6 +218,10 @@ describe CustomDomain do
       Rails.cache.clear
     end
 
+    after do
+      Rails.cache.delete("domain_check_www.example.com")
+    end
+
     it "returns true for a structurally valid domain with no negative cache" do
       expect(@domain.certificate_orderable?).to eq true
     end
