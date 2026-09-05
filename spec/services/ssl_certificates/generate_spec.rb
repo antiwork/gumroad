@@ -107,6 +107,29 @@ describe SslCertificates::Generate do
       it "returns false when no domains resolve to Gumroad" do
         expect(@obj.send(:can_order_certificates?)).to eq [false, "No domains resolve to Gumroad"]
       end
+
+      it "caches the negative result so the renewal fanout can skip the domain" do
+        @obj.send(:can_order_certificates?)
+
+        expect(Rails.cache.read("domain_check_www.example.com")).to eq false
+        expect(@custom_domain.certificate_orderable?).to eq false
+      end
+    end
+
+    context "when a previous order failure is cached" do
+      before do
+        Rails.cache.write("domain_check_www.example.com", false)
+      end
+
+      after do
+        Rails.cache.delete("domain_check_www.example.com")
+      end
+
+      it "returns false without a DNS lookup" do
+        expect_any_instance_of(CustomDomainVerificationService).not_to receive(:domains_resolving_to_gumroad)
+
+        expect(@obj.send(:can_order_certificates?)).to eq [false, "Domain check cached as failed"]
+      end
     end
   end
 

@@ -2,17 +2,16 @@
 
 class GenerateSslCertificate
   include Sidekiq::Job
-  # `lock: :until_executed` keeps at most one pending fresh order per domain:
-  # when an hourly Renew fanout enqueues a domain whose job is still waiting or
-  # in flight, the duplicate is dropped (`on_conflict: :log`) instead of stacking
-  # a job that only inflates the queue. `:log` is constant-time; `:replace`
-  # would have scanned the scheduled set on every conflict. The finite lock TTL
-  # bounds a stranded lock: without one, a worker killed mid-order (OOM, deploy
-  # reap) would hold the lock forever and every later renewal for that domain
-  # would be silently rejected with no retry-exhaustion alert (#488 class).
-  # 3h comfortably covers the up-to-1h enqueue smear plus a normal ACME order,
-  # and recovers a dead worker's lock well inside the 15-day renewal buffer.
-  sidekiq_options retry: 5, queue: :low, lock: :until_executed, on_conflict: :log, lock_ttl: 3.hours
+  # One pending order per domain (lock_args ignores the reschedule counter), so
+  # overlapping hourly Renew fanouts drop duplicates instead of stacking them.
+  # :until_executing releases at execution start — required so the rate-limit
+  # reschedule below isn't dropped by its own job's lock — and the TTL bounds a
+  # stranded lock to less than the smear window plus a queue backlog.
+  sidekiq_options retry: 5, queue: :low, lock: :until_executing, on_conflict: :log, lock_ttl: 3.hours
+
+  def self.lock_args(args)
+    [args.first]
+  end
 
   # Fallback delay when the rate-limit error doesn't tell us when to retry.
   RATE_LIMIT_FALLBACK_DELAY = 1.hour

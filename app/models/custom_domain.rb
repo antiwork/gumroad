@@ -142,16 +142,19 @@ class CustomDomain < ApplicationRecord
     GenerateSslCertificate.perform_in(delay, id)
   end
 
-  # Renewal enqueue gate used by SslCertificates::Renew. The worker
-  # (SslCertificates::Generate) runs the authoritative checks just before
-  # ordering; this cheap subset skips enqueueing a job for a domain that
-  # cannot get a certificate in the current window — a name Let's Encrypt
-  # rejects outright, or one whose last order failed and is cached as
-  # unorderable for the retry window (Generate writes `domain_check_*`).
+  # Cheap enqueue gate for SslCertificates::Renew: skips domains that cannot get
+  # a certificate right now (names Let's Encrypt rejects outright, or a recent
+  # failed order cached by the worker). The worker still runs the full checks.
   def certificate_orderable?
     certificate_domain_valid? &&
       certificate_domain_allowed? &&
       Rails.cache.read(domain_check_cache_key) != false
+  end
+
+  # Called when DNS starts resolving to Gumroad again, so a fresh order isn't
+  # blocked by a stale cached failure.
+  def clear_certificate_order_failure_cache!
+    Rails.cache.delete(domain_check_cache_key)
   end
 
   def has_valid_certificate?(renew_certificate_in)

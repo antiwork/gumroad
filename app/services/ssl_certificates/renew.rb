@@ -2,11 +2,9 @@
 
 module SslCertificates
   class Renew < Base
-    # Spread the hourly renewal fanout across the whole hour so the `low`
-    # queue — and the Sidekiq fleet the autoscaler keys on it — don't spike at
-    # the top of every hour. Jobs land in the scheduled set and drain
-    # gradually; certificates are renewed at 75 days against a 90-day lifetime,
-    # so up to an hour's extra delay is immaterial.
+    # Smear the fanout so the `low` queue (which the autoscaler keys on) doesn't
+    # spike hourly; renewals run 15 days before expiry, so an hour's delay is
+    # immaterial.
     FANOUT_WINDOW = 1.hour
 
     def process
@@ -20,10 +18,8 @@ module SslCertificates
     end
 
     private
-      # Uniform random offset within the fanout window, on top of the 2s base
-      # delay. The unique lock on GenerateSslCertificate (keyed on the domain
-      # id, constant-time conflict) means only one pending fresh renewal exists
-      # per domain even if two hourly runs overlap.
+      # The unique lock on GenerateSslCertificate dedupes per domain when two
+      # hourly runs overlap.
       def renewal_delay
         2 + rand(FANOUT_WINDOW.to_i)
       end

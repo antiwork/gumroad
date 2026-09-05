@@ -16,6 +16,9 @@ class CustomDomainRoutabilityService
     if verification_service.has_valid_ssl_certificate_for?(checked_domain)
       custom_domain.set_routability!(true, checked_domain:, observed_at:)
     elsif custom_domain.require_certificate_for_routability!(checked_domain:, observed_at:)
+      # DNS resolves to us again — drop any cached order failure so the order
+      # isn't skipped as a no-op.
+      custom_domain.clear_certificate_order_failure_cache!
       GenerateSslCertificate.perform_async(custom_domain.id)
     end
   end
