@@ -4,6 +4,18 @@ class GenerateSslCertificate
   include Sidekiq::Job
   sidekiq_options retry: 5, queue: :low
 
+  # Applied only to the hourly renewal fanout (CustomDomain#generate_ssl_certificate
+  # with dedupe: true) so overlapping runs don't stack duplicate jobs per domain.
+  # Urgent orders (domain save, verify, routability recovery) carry no lock and are
+  # never suppressed by a smeared pending renewal. :until_executing releases at
+  # execution start, so the rate-limit reschedule below is never dropped by its own
+  # job's lock; the TTL bounds a lock stranded by a killed enqueue.
+  RENEWAL_LOCK_OPTIONS = { "lock" => "until_executing", "on_conflict" => "log", "lock_ttl" => 3.hours.to_i }.freeze
+
+  def self.lock_args(args)
+    [args.first]
+  end
+
   # Fallback delay when the rate-limit error doesn't tell us when to retry.
   RATE_LIMIT_FALLBACK_DELAY = 1.hour
   # Random extra delay added to every rate-limited reschedule. Let's Encrypt

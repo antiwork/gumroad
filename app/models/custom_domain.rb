@@ -61,19 +61,11 @@ class CustomDomain < ApplicationRecord
   def validate_domain_format
     # LetsEncrypt allows only valid hostnames when generating SSL certificates
     # Ref: https://github.com/letsencrypt/boulder/pull/1437#issuecomment-533533967
-    if domain.blank? || !domain.match?(/\A[a-zA-Z0-9\-.]+[^.]\z/) || malformed_label?(domain) || !PublicSuffix.valid?(domain) || ip_address?(domain)
-      errors.add(:base, "#{domain} is not a valid domain name.")
-    end
+    errors.add(:base, "#{domain} is not a valid domain name.") unless certificate_domain_valid?
   end
 
   def validate_domain_is_allowed
-    forbidden_suffixes = [DOMAIN, ROOT_DOMAIN, SHORT_DOMAIN, DISCOVER_DOMAIN, API_DOMAIN, INTERNAL_GUMROAD_DOMAIN].freeze
-
-    forbidden_suffixes.each do |suffix|
-      if domain == suffix || domain.to_s.ends_with?(".#{suffix}")
-        return errors.add(:base, "#{domain} is not a valid domain name.")
-      end
-    end
+    errors.add(:base, "#{domain} is not a valid domain name.") unless certificate_domain_allowed?
   end
 
   def verify(allow_incrementing_failed_verification_attempts_count: true, verification_service: CustomDomainVerificationService.new(domain:))
@@ -146,8 +138,21 @@ class CustomDomain < ApplicationRecord
     self.save!
   end
 
-  def generate_ssl_certificate
-    GenerateSslCertificate.perform_in(2.seconds, id)
+  def generate_ssl_certificate(delay: 2.seconds, dedupe: false)
+    if dedupe
+      GenerateSslCertificate.set(GenerateSslCertificate::RENEWAL_LOCK_OPTIONS).perform_in(delay, id)
+    else
+      GenerateSslCertificate.perform_in(delay, id)
+    end
+  end
+
+  # Cheap enqueue gate for SslCertificates::Renew: skips domains that cannot get
+  # a certificate right now (names Let's Encrypt rejects outright, or a recent
+  # failed order cached by the worker). The worker still runs the full checks.
+  def certificate_orderable?
+    certificate_domain_valid? &&
+      certificate_domain_allowed? &&
+      Rails.cache.read(domain_check_cache_key) != false
   end
 
   def has_valid_certificate?(renew_certificate_in)
@@ -169,6 +174,28 @@ class CustomDomain < ApplicationRecord
       self.ssl_certificate_issued_at = nil
       self.routable = nil
       self.routability_checked_at = nil
+    end
+
+    def certificate_domain_valid?
+      domain.present? &&
+        domain.match?(/\A[a-zA-Z0-9\-.]+[^.]\z/) &&
+        !malformed_label?(domain) &&
+        PublicSuffix.valid?(domain) &&
+        !ip_address?(domain)
+    end
+
+    def certificate_domain_allowed?
+      forbidden_suffixes.none? { |suffix| domain == suffix || domain.to_s.ends_with?(".#{suffix}") }
+    end
+
+    def forbidden_suffixes
+      [DOMAIN, ROOT_DOMAIN, SHORT_DOMAIN, DISCOVER_DOMAIN, API_DOMAIN, INTERNAL_GUMROAD_DOMAIN].freeze
+    end
+
+    # Matches SslCertificates::Generate#domain_check_cache_key so the negative
+    # cache the worker writes on a failed order is honored here too.
+    def domain_check_cache_key
+      "domain_check_#{domain}"
     end
 
     def persist_routability!(routable:, checked_domain:, observed_at:, clear_certificate:)

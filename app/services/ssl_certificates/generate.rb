@@ -82,12 +82,15 @@ module SslCertificates
         return false, "Hourly limit reached" if hourly_rate_limit_reached?
         return false, "Invalid domain" unless custom_domain.valid?
 
-        Rails.cache.fetch(domain_check_cache_key, expires_in: invalid_domain_cache_expires_in) do
-          if domain_verification_service.domains_resolving_to_gumroad.any?
-            return true
-          else
-            return false, "No domains resolve to Gumroad"
-          end
+        if domain_verification_service.domains_resolving_to_gumroad.any?
+          Rails.cache.delete(domain_check_cache_key)
+          true
+        else
+          # Read by CustomDomain#certificate_orderable? so the hourly renewal
+          # fanout skips the domain; explicit orders still reach the live DNS
+          # check above, which clears the entry once DNS resolves to us again.
+          Rails.cache.write(domain_check_cache_key, false, expires_in: invalid_domain_cache_expires_in)
+          [false, "No domains resolve to Gumroad"]
         end
       end
   end

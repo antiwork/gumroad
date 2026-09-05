@@ -1,6 +1,13 @@
 # frozen_string_literal: true
 
 describe GenerateSslCertificate do
+  describe ".lock_args" do
+    it "keys the unique lock on the domain id only, ignoring the reschedule counter" do
+      expect(described_class.lock_args([42, 3])).to eq [42]
+      expect(described_class.lock_args([42])).to eq [42]
+    end
+  end
+
   describe "#perform" do
     before do
       @custom_domain = create(:custom_domain, domain: "www.example.com")
