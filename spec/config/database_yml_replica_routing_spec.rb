@@ -72,6 +72,36 @@ describe "config/database.yml replica routing" do
     expect(replica.fetch("database")).to eq("gumroad_staging_replica")
   end
 
+  it "ignores retired worker replica hosts in lag monitoring" do
+    constants = Rails.root.join("config/initializers/004_constants.rb").read
+    definition = constants[/REPLICAS_HOSTS = .*?(?=\n\n)/m]
+    hosts = {
+      "DATABASE_HOST" => "primary.example",
+      "DATABASE_WORKER_REPLICA1_HOST" => "worker.example",
+      "DATABASE_WORKER_REPLICA2_HOST" => "retired.example",
+      "DATABASE_REPLICA2_HOST" => "staging.example"
+    }
+    allow(ENV).to receive(:[]).and_call_original
+    hosts.each { |key, value| allow(ENV).to receive(:[]).with(key).and_return(value) }
+
+    config = Module.new
+    config.module_eval(definition)
+
+    expect(config.const_get(:REPLICAS_HOSTS)).to include("worker.example", "staging.example")
+    expect(config.const_get(:REPLICAS_HOSTS)).not_to include("retired.example", "primary.example")
+  end
+
+  it "keeps branch-app staging on mysql2 without the worker flag" do
+    ENV.delete("USE_DB_WORKER_REPLICAS")
+    staging = YAML.safe_load(
+      ERB.new(Rails.root.join("config/database.branch-app.yml").read).result,
+      aliases: true
+    ).fetch("staging")
+
+    expect(staging.fetch("adapter")).to eq("mysql2")
+    expect(staging).not_to have_key("primary_replica")
+  end
+
   it "gives branch-app staging a same-host replica so connects_to can boot" do
     ENV["USE_DB_WORKER_REPLICAS"] = "true"
     staging = YAML.safe_load(

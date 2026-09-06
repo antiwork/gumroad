@@ -51,7 +51,7 @@ module WithMaxExecutionTime
     if role == :writing && !replica_roles_configured?
       yield ActiveRecord::Base.connection
     else
-      ApplicationRecord.connected_to(role: role) { yield ActiveRecord::Base.connection }
+      ApplicationRecord.connected_to(role: role) { yield ApplicationRecord.connection }
     end
   end
   private_class_method :with_role

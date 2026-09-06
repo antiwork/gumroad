@@ -88,9 +88,8 @@ FILE_REGEX = {
   word_document: /doc/i
 }.stringify_keys
 
-REPLICAS_HOSTS = 1.upto(3).map do |i|
-  [ENV["DATABASE_REPLICA#{i}_HOST"], ENV["DATABASE_WORKER_REPLICA#{i}_HOST"]]
-end.flatten.keep_if(&:present?).uniq - [ENV["DATABASE_HOST"]]
+REPLICAS_HOSTS = (1.upto(3).map { |i| ENV["DATABASE_REPLICA#{i}_HOST"] } +
+                  [ENV["DATABASE_WORKER_REPLICA1_HOST"]]).keep_if(&:present?).uniq - [ENV["DATABASE_HOST"]]
 
 MAX_FILE_NAME_BYTESIZE = 255
 

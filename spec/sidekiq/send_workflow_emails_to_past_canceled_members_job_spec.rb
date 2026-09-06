@@ -40,6 +40,37 @@ describe SendWorkflowEmailsToPastCanceledMembersJob, :freeze_time do
     end.to raise_error(described_class::RuleNotCommittedError)
   end
 
+  [false, true].each do |rescheduling|
+    it "pins rule reads and #{rescheduling ? "pins rescheduled" : "releases ordinary"} cancellation scans", :rule_version_only do
+      writing = false
+      phases = []
+      allow(ApplicationRecord).to receive(:connected_to).and_wrap_original do |original, **options, &block|
+        previous = writing
+        writing = options[:role] == :writing
+        original.call(**options, &block)
+      ensure
+        writing = previous
+      end
+      job = described_class.new
+      allow(Installment).to receive(:find_by).and_wrap_original do |original, **options|
+        phases << [:post, writing]
+        original.call(**options)
+      end
+      allow(job).to receive(:cache_rule_version).and_wrap_original do |original, rule|
+        phases << [:rule, writing]
+        original.call(rule)
+      end
+      allow(job).to receive(:candidate_subscriptions).and_wrap_original do |original, *args, **options|
+        phases << [:subscriptions, writing]
+        original.call(*args, **options)
+      end
+
+      job.perform(@installment.id, rescheduling ? 2.days.to_i : nil, rescheduling ? Time.current.iso8601 : nil, @rule.version)
+
+      expect(phases).to eq([[:post, true], [:rule, true], [:subscriptions, rescheduling]])
+    end
+  end
+
   it "continues when the version cache is unavailable", :rule_version_only do
     subscription = create(:subscription, link: @product, cancelled_at: 30.days.ago, deactivated_at: 30.days.ago)
     create(:free_purchase, is_original_subscription_purchase: true, link: @product, subscription:, created_at: 60.days.ago)
@@ -265,7 +296,7 @@ describe SendWorkflowEmailsToPastCanceledMembersJob, "primary repair scans", :fr
     cutoff_reference_time = Time.current.change(usec: 0)
     candidate_scope = instance_double(ActiveRecord::Relation)
     loaded_scope = instance_double(ActiveRecord::Relation)
-    expect(ApplicationRecord).to receive(:connected_to).with(role: :writing).ordered.and_call_original
+    expect(ApplicationRecord).to receive(:connected_to).with(role: :writing).twice.ordered.and_call_original
     expect(job).to receive(:candidate_subscriptions).with(
       workflow,
       deactivated_after: cutoff_reference_time - 2.days

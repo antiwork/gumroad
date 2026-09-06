@@ -35,9 +35,8 @@ test:
     Makara used to SQL-route SELECTs to those replicas. Rails 7.2 cannot keep
     mysql2_makara, so the same flag now expands a native primary + replica pair
     and mysql2_proxy does the statement-level split. Web/Puma leave the flag
-    unset and keep a single primary pool. Proxy adapters support one replica;
-    replica1 takes the AR reading role, replica2 stays in REPLICAS_HOSTS for lag
-    watching. %>
+    unset and keep a single primary pool. Production has one worker replica;
+    staging uses DATABASE_REPLICA2 instead. %>
 <% if ENV["USE_DB_WORKER_REPLICAS"] == "true" %>
 staging:
   primary:

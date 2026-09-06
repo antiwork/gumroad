@@ -76,6 +76,10 @@ class SendWorkflowPostEmailsJob
         @recipient_cutoff_time
       end
       apply_recipient_cutoff_to_filters
+    end
+
+    # Cutoff recovery must see recipients committed alongside the new rule.
+    with_primary_database(@recipient_cutoff_time.present? || @reschedule_on_stale) do
       @recovered_affiliate_member_ids = Set.new
       # Same protection as SendPostBlastEmailsJob: for sellers with very large audiences the
       # filter query can exceed the database's default 5-minute statement cap, so raise it for
@@ -119,25 +123,26 @@ class SendWorkflowPostEmailsJob
       return unless keep_unemitted_fanout
       normalize_affiliate_matches(@members)
       return unless keep_unemitted_fanout
-      unless claim_daily_large_blast_slot
-        requeue_for_daily_blast_limit(
-          post_id, earliest_valid_time, reschedule_on_stale, minimum_rule_version,
-          schedule_intent_token, schedule_intent_fanout_token
-        )
-        return
-      end
+    end
 
-      case enqueue_all_member_jobs
-      when :complete
-        WorkflowInstallmentScheduleIntent.mark_processed(
-          schedule_intent_token,
-          fanout_token: schedule_intent_fanout_token
-        )
-      when :ownership_lost
-        requeue_unemitted_fanout
-      else
-        raise FanoutNotEnqueuedError, "Unexpected fanout result"
-      end
+    unless claim_daily_large_blast_slot
+      requeue_for_daily_blast_limit(
+        post_id, earliest_valid_time, reschedule_on_stale, minimum_rule_version,
+        schedule_intent_token, schedule_intent_fanout_token
+      )
+      return
+    end
+
+    case enqueue_all_member_jobs
+    when :complete
+      WorkflowInstallmentScheduleIntent.mark_processed(
+        schedule_intent_token,
+        fanout_token: schedule_intent_fanout_token
+      )
+    when :ownership_lost
+      requeue_unemitted_fanout
+    else
+      raise FanoutNotEnqueuedError, "Unexpected fanout result"
     end
   ensure
     @seller_fanout_lock&.release

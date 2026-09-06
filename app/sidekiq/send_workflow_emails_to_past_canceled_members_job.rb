@@ -13,7 +13,7 @@ class SendWorkflowEmailsToPastCanceledMembersJob
     @schedule_intent_fanout_token = schedule_intent_fanout_token
     rescheduling = old_delayed_delivery_time.present? && cutoff_reference_time.present?
     primary_pinned = minimum_rule_version.present? || schedule_intent_token.present? || schedule_intent_fanout_token.present? || rescheduling
-    with_primary_database(primary_pinned) do
+    installment, workflow, rule = with_primary_database(primary_pinned) do
       return unless WorkflowInstallmentScheduleIntent.begin_fanout(
         intent_token: schedule_intent_token,
         fanout_token: schedule_intent_fanout_token
@@ -49,7 +49,11 @@ class SendWorkflowEmailsToPastCanceledMembersJob
       end
       raise RuleNotCommittedError if minimum_rule_version.present? && rule.version < minimum_rule_version
       cache_rule_version(rule)
+      [installment, workflow, rule]
+    end
 
+    # A reschedule must see cancellations committed alongside the new rule.
+    with_primary_database(rescheduling) do
       delay = rule.delayed_delivery_time
       rule_version = rule.version
       cutoff = Time.zone.iso8601(cutoff_reference_time) if rescheduling
