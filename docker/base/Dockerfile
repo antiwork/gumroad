@@ -54,7 +54,6 @@ RUN cd /tmp \
   libtag1-dev \
   libxrender1 \
   libgcrypt20 \
-  libvips-dev \
   libxml2-dev \
   libyaml-dev \
   percona-toolkit \

@@ -28,7 +28,6 @@ RUN sed -i "s/bullseye main/bullseye main contrib non-free/" /etc/apt/sources.li
     default-libmysqlclient-dev \
     libssl-dev \
     libtag1-dev \
-    libvips-dev \
     libxrender1 \
     locales \
     netcat \
