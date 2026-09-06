@@ -444,10 +444,12 @@ describe Api::V2::LinksController do
         expect(response.parsed_body["message"]).to be_present
       end
 
-      it "publishes the product by default" do
+      it "publishes the product by default, even with no files or rich content" do
         post @action, params: @params
 
         product = @user.links.last
+        expect(product.alive_product_files).to be_empty
+        expect(product.has_content?).to be false
         expect(product.draft).to be false
         expect(product.purchase_disabled_at).to be_nil
         expect(response.parsed_body["product"]["published"]).to be true
@@ -504,6 +506,25 @@ describe Api::V2::LinksController do
         expect(response.parsed_body["success"]).to be true
         expect(response.parsed_body["warning"]).to start_with("Saved as a draft: ")
         expect(@user.links.last.draft).to be true
+      end
+
+      it "saves a draft with a warning when content moderation blocks publishing" do
+        allow(ContentModeration::ModerateRecordService).to receive(:check)
+          .and_return(ContentModeration::ModerateRecordService::CheckResult.new(passed: false, reasons: ["Matched blocked word: forbidden"]))
+
+        expect do
+          post @action, params: @params
+        end.to change { @user.links.count }.by(1)
+
+        body = response.parsed_body
+        expect(body["success"]).to be true
+        expect(body["product"]["published"]).to be false
+        expect(body["warning"]).to start_with("Saved as a draft: ")
+        expect(body["warning"]).to include("content guidelines")
+
+        product = @user.links.last
+        expect(product.draft).to be true
+        expect(product.purchase_disabled_at).to be_present
       end
 
       it "notifies and keeps the draft when publishing raises unexpectedly" do
