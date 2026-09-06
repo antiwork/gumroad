@@ -421,11 +421,11 @@ export const CreateProduct = () => (
     path="/products"
     description={
       <>
-        Create a new product. The product is published immediately unless you pass <code>draft=true</code>. If
-        publishing is blocked (for example, your email address is not confirmed or no payout method is set up), the
-        product is saved as a draft and the response includes a <code>warning</code> explaining why; publish it later
-        with <code>POST /v2/products/:id/enable</code>. Requires the <code>edit_products</code> or <code>account</code>{" "}
-        scope.
+        Create a new product. The product is published immediately unless you pass <code>draft=true</code> or{" "}
+        <code>published=false</code>. If publishing is blocked (for example, your email address is not confirmed or no
+        payout method is set up), the product is saved as a draft and the response includes a <code>warning</code>{" "}
+        explaining why; publish it later with <code>POST /v2/products/:id/enable</code>. Requires the{" "}
+        <code>edit_products</code> or <code>account</code> scope.
       </>
     }
   >
@@ -433,6 +433,10 @@ export const CreateProduct = () => (
       <ApiParameter
         name="draft"
         description="(optional, true or false, default false) save as an unpublished draft instead of publishing"
+      />
+      <ApiParameter
+        name="published"
+        description="(optional, true or false, default true) false saves as an unpublished draft, same as draft=true"
       />
       <ApiParameter
         name="native_type"
