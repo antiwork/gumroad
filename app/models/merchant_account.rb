@@ -63,6 +63,8 @@ class MerchantAccount < ApplicationRecord
   validates :charge_processor_merchant_id, presence: true, if: -> { user && charge_processor_alive? }
   validates :charge_processor_merchant_id, uniqueness: { case_sensitive: true, message: "This account is already connected with another Gumroad account" }, allow_blank: true, if: proc { |ma| ma.is_a_gumroad_managed_stripe_account? }
 
+  before_save :schedule_products_recommendability_refresh
+
   scope :charge_processor_alive, -> { where.not(charge_processor_alive_at: nil).where(charge_processor_deleted_at: nil) }
   scope :charge_processor_verified, -> { where.not(charge_processor_verified_at: nil) }
   scope :charge_processor_unverified, -> { where(charge_processor_verified_at: nil) }
@@ -183,6 +185,7 @@ class MerchantAccount < ApplicationRecord
   end
 
   def delete_charge_processor_account!
+    clear_non_hash_json_data_for_disconnect!
     mark_deleted!
     self.meta = {} unless is_a_stripe_connect_account?
     self.charge_processor_deleted_at = Time.current
@@ -276,6 +279,77 @@ class MerchantAccount < ApplicationRecord
   end
 
   private
+    # JsonData#json_data raises ArgumentError on non-Hash, which aborts mark_deleted! validations
+    # and meta=. Reset corrupt metadata so disconnect can finish. Discover refresh still sees the
+    # prior value via changes_to_save on the first save.
+    def clear_non_hash_json_data_for_disconnect!
+      data = self[:json_data]
+      return if data.nil? || data.is_a?(Hash)
+
+      self[:json_data] = {}
+    end
+
+    def schedule_products_recommendability_refresh
+      current_attributes = attributes
+      previous_attributes = current_attributes.merge(changes_to_save.transform_values(&:first))
+      previous_user_id = recommendation_payout_account_user_id_for(previous_attributes)
+      current_user_id = recommendation_payout_account_user_id_for(current_attributes)
+      return if previous_user_id == current_user_id
+
+      affected_user_ids = [previous_user_id, current_user_id].compact.uniq
+      AfterCommitEverywhere.after_commit { enqueue_products_recommendability_refresh(affected_user_ids) }
+    end
+
+    def recommendation_payout_account_user_id_for(account_attributes)
+      return if account_attributes["user_id"].blank?
+      return if account_attributes["deleted_at"].present?
+      return if account_attributes["charge_processor_alive_at"].blank?
+      return if account_attributes["charge_processor_deleted_at"].present?
+
+      charge_processor_id = account_attributes["charge_processor_id"]
+      json_data = account_attributes["json_data"] || {}
+      stripe_connect = if json_data.is_a?(Hash)
+        json_data.dig("meta", "stripe_connect") == "true"
+      else
+        # Non-Hash metadata is the same shape the backfill treats as a connected payout account.
+        true
+      end
+      connected_account = charge_processor_id == PaypalChargeProcessor.charge_processor_id ||
+                          (charge_processor_id == StripeChargeProcessor.charge_processor_id && stripe_connect)
+      account_attributes["user_id"] if connected_account
+    end
+
+    def enqueue_products_recommendability_refresh(affected_user_ids)
+      affected_user_ids.each { |affected_user_id| enqueue_products_recommendability_refresh_for(affected_user_id) }
+    end
+
+    def enqueue_products_recommendability_refresh_for(affected_user_id)
+      return if user_has_another_payout_method?(affected_user_id)
+
+      RefreshMerchantAccountProductsRecommendationEligibilityJob.perform_async(affected_user_id)
+    rescue => enqueue_error
+      report_recommendability_refresh_error(enqueue_error, "enqueue", affected_user_id)
+    end
+
+    def user_has_another_payout_method?(affected_user_id)
+      affected_user = User.find_by(id: affected_user_id)
+      return false if affected_user.nil?
+      return true if affected_user.payment_address.present? || affected_user.active_bank_account.present?
+
+      affected_user.merchant_accounts
+        .alive
+        .charge_processor_alive
+        .where.not(id:)
+        .any? { |account| account.is_a_paypal_connect_account? || account.is_a_stripe_connect_account? }
+    end
+
+    def report_recommendability_refresh_error(error, action, affected_user_id)
+      Rails.logger.error("Failed to #{action} product recommendation refresh for merchant account #{id}, user #{affected_user_id}: #{error.class}: #{error.message}")
+      ErrorNotifier.notify(error, merchant_account_id: id, user_id: affected_user_id)
+    rescue
+      nil
+    end
+
     # Shared TTL check for both marker formats (per-currency map values and the legacy
     # blanket timestamp).
     def fresh_mismatch_timestamp?(raw)

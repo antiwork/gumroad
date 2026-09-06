@@ -130,4 +130,18 @@ describe JsonData do
       user.update!(name: "Fresh name")
     end
   end
+
+  describe "corrupt non-Hash json_data" do
+    let!(:user) { create(:user) }
+
+    it "allows a rewrite save when the stored value is a JSON string scalar" do
+      user.update_column(:json_data, '"not a hash"')
+      user.reload
+      user[:json_data] = {}
+      user.payout_threshold_cents = 1234
+
+      expect { user.save! }.not_to raise_error
+      expect(user.reload.payout_threshold_cents).to eq(1234)
+    end
+  end
 end

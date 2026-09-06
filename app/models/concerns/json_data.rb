@@ -88,13 +88,17 @@ module JsonData
     # until the enclosing save commits; without it the merge is just a narrower version of the
     # same race.
     def merge_json_data_with_current_row
-      base = (json_data_was || {}).deep_stringify_keys
+      # Non-Hash was/current can appear when a row was written corruptly (e.g. a JSON string
+      # scalar). deep_stringify_keys is Hash-only; treat corrupt shapes as {} so an intentional
+      # rewrite (MerchantAccount disconnect clearing meta) is not aborted mid-save.
+      was = json_data_was
+      base = (was.is_a?(Hash) ? was : {}).deep_stringify_keys
       mine = json_data
 
       current = self.class.unscoped.lock.where(id:).pick(:json_data)
       return if current.nil?
 
-      merged = current.deep_stringify_keys
+      merged = (current.is_a?(Hash) ? current : {}).deep_stringify_keys
       (base.keys | mine.keys).each do |key|
         next if base.key?(key) == mine.key?(key) && base[key] == mine[key]
 

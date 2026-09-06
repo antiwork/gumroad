@@ -100,6 +100,164 @@ describe MerchantAccount do
     end
   end
 
+  describe "recommendation eligibility refresh" do
+    let(:seller) { create(:user, payment_address: nil) }
+
+    it "enqueues a refresh when an active PayPal account is created" do
+      expect(RefreshMerchantAccountProductsRecommendationEligibilityJob).to receive(:perform_async).with(seller.id).once
+
+      create(:merchant_account_paypal, user: seller)
+    end
+
+    it "enqueues one refresh when an active PayPal account is disconnected" do
+      merchant_account = create(:merchant_account_paypal, user: seller)
+      expect(RefreshMerchantAccountProductsRecommendationEligibilityJob).to receive(:perform_async).with(seller.id).once
+
+      merchant_account.delete_charge_processor_account!
+    end
+
+    it "enqueues a refresh when a PayPal account becomes active again" do
+      merchant_account = create(
+        :merchant_account_paypal,
+        user: seller,
+        deleted_at: 1.day.ago,
+        charge_processor_alive_at: nil,
+        charge_processor_deleted_at: 1.day.ago
+      )
+      expect(RefreshMerchantAccountProductsRecommendationEligibilityJob).to receive(:perform_async).with(seller.id).once
+
+      merchant_account.update!(
+        deleted_at: nil,
+        charge_processor_alive_at: Time.current,
+        charge_processor_deleted_at: nil
+      )
+    end
+
+    it "enqueues a refresh when a connected Stripe account is disconnected" do
+      merchant_account = create(:merchant_account_stripe_connect, user: seller)
+      expect(RefreshMerchantAccountProductsRecommendationEligibilityJob).to receive(:perform_async).with(seller.id).once
+
+      merchant_account.delete_charge_processor_account!
+    end
+
+    it "enqueues refreshes for both sellers when an active account changes owners" do
+      new_seller = create(:user, payment_address: nil)
+      merchant_account = create(:merchant_account_paypal, user: seller)
+      expect(RefreshMerchantAccountProductsRecommendationEligibilityJob).to receive(:perform_async).with(seller.id).once
+      expect(RefreshMerchantAccountProductsRecommendationEligibilityJob).to receive(:perform_async).with(new_seller.id).once
+
+      merchant_account.update!(user: new_seller)
+    end
+
+    it "retains the disconnect refresh across multiple saves in an outer transaction" do
+      merchant_account = create(:merchant_account_paypal, user: seller)
+      expect(RefreshMerchantAccountProductsRecommendationEligibilityJob).to receive(:perform_async).with(seller.id).once
+
+      ActiveRecord::Base.transaction do
+        merchant_account.delete_charge_processor_account!
+      end
+    end
+
+    it "ignores Gumroad-managed Stripe account changes" do
+      merchant_account = create(:merchant_account, user: seller)
+      expect(RefreshMerchantAccountProductsRecommendationEligibilityJob).not_to receive(:perform_async)
+
+      merchant_account.delete_charge_processor_account!
+    end
+
+    it "does not abort a Stripe disconnect when json_data is not a Hash" do
+      merchant_account = create(:merchant_account, user: seller)
+      merchant_account.update_column(:json_data, '"not a hash"')
+      merchant_account.reload
+      expect(RefreshMerchantAccountProductsRecommendationEligibilityJob).to receive(:perform_async).with(seller.id).once
+
+      expect { merchant_account.delete_charge_processor_account! }.not_to raise_error
+      merchant_account.reload
+      expect(merchant_account).to be_deleted
+      expect(merchant_account).to be_charge_processor_deleted
+      # Without the harden, disconnect raises before charge_processor_deleted_at is set.
+      expect(merchant_account.json_data).to eq("meta" => {})
+    end
+
+    it "does not enqueue when another payout method remains" do
+      merchant_account = create(:merchant_account_paypal, user: seller)
+      seller.update!(payment_address: "seller@example.com")
+      expect(RefreshMerchantAccountProductsRecommendationEligibilityJob).not_to receive(:perform_async)
+
+      merchant_account.delete_charge_processor_account!
+    end
+
+    it "does not enqueue when an active bank account remains" do
+      merchant_account = create(:merchant_account_paypal, user: seller)
+      create(:canadian_bank_account, user: seller)
+      expect(RefreshMerchantAccountProductsRecommendationEligibilityJob).not_to receive(:perform_async)
+
+      merchant_account.delete_charge_processor_account!
+    end
+
+    it "does not enqueue when another connected account remains" do
+      merchant_account = create(:merchant_account_paypal, user: seller)
+      create(:merchant_account_stripe_connect, user: seller)
+      expect(RefreshMerchantAccountProductsRecommendationEligibilityJob).not_to receive(:perform_async)
+
+      merchant_account.delete_charge_processor_account!
+    end
+
+    it "does not enqueue a rolled-back state change" do
+      merchant_account = create(:merchant_account_paypal, user: seller)
+      expect(RefreshMerchantAccountProductsRecommendationEligibilityJob).not_to receive(:perform_async)
+
+      ActiveRecord::Base.transaction do
+        merchant_account.mark_deleted!
+        raise ActiveRecord::Rollback
+      end
+    end
+
+    it "does not let an enqueue failure interrupt account disconnection" do
+      merchant_account = create(:merchant_account_paypal, user: seller)
+      allow(RefreshMerchantAccountProductsRecommendationEligibilityJob).to receive(:perform_async).and_raise("Redis unavailable")
+      allow(ErrorNotifier).to receive(:notify)
+
+      expect { merchant_account.delete_charge_processor_account! }.not_to raise_error
+
+      expect(merchant_account.reload).to be_deleted
+      expect(merchant_account).to be_charge_processor_deleted
+      expect(ErrorNotifier).to have_received(:notify).with(
+        instance_of(RuntimeError),
+        merchant_account_id: merchant_account.id,
+        user_id: seller.id
+      )
+    end
+
+    it "does not let observability failures escape after disconnection commits" do
+      merchant_account = create(:merchant_account_paypal, user: seller)
+      allow(RefreshMerchantAccountProductsRecommendationEligibilityJob).to receive(:perform_async).and_raise("Redis unavailable")
+      allow(ErrorNotifier).to receive(:notify).and_raise("Sentry unavailable")
+
+      expect { merchant_account.delete_charge_processor_account! }.not_to raise_error
+
+      expect(merchant_account.reload).to be_deleted
+      expect(merchant_account).to be_charge_processor_deleted
+    end
+
+    it "reports the affected seller when an owner-transfer refresh fails" do
+      new_seller = create(:user, payment_address: nil)
+      merchant_account = create(:merchant_account_paypal, user: seller)
+      allow(RefreshMerchantAccountProductsRecommendationEligibilityJob).to receive(:perform_async).with(seller.id).and_raise("Redis unavailable")
+      allow(RefreshMerchantAccountProductsRecommendationEligibilityJob).to receive(:perform_async).with(new_seller.id)
+      allow(ErrorNotifier).to receive(:notify)
+
+      merchant_account.update!(user: new_seller)
+
+      expect(ErrorNotifier).to have_received(:notify).with(
+        instance_of(RuntimeError),
+        merchant_account_id: merchant_account.id,
+        user_id: seller.id
+      )
+      expect(RefreshMerchantAccountProductsRecommendationEligibilityJob).to have_received(:perform_async).with(new_seller.id)
+    end
+  end
+
   describe "#is_a_paypal_connect_account?" do
     it "returns true if charge_processor_id is PayPal otherwise false" do
       merchant_account = create(:merchant_account, charge_processor_id: PaypalChargeProcessor.charge_processor_id)
