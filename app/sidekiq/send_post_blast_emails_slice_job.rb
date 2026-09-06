@@ -98,7 +98,6 @@ class SendPostBlastEmailsSliceJob
       return [] if member_ids.empty?
 
       # The send phase needs filter-provided virtual columns (purchase_id/follower_id/affiliate_id).
-      Makara::Context.release_all
       # CHUNK_LOAD_TIMEOUT caps each statement and the renewal below covers the gap between
       # statements, so the claim cannot lapse mid-load however many slices run.
       members = WithMaxExecutionTime.timeout_queries(seconds: CHUNK_LOAD_TIMEOUT) do

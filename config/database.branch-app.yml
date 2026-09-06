@@ -1,5 +1,46 @@
+<%# Branch apps copy this file over database.yml (setup_deployment_environment).
+    They set USE_DB_WORKER_REPLICAS=true; replica is the same host as primary,
+    matching the old Makara branch-app config so connects_to can boot. %>
+<% if ENV["USE_DB_WORKER_REPLICAS"] == "true" %>
 staging:
-  adapter: mysql2_makara
+  primary:
+    adapter: mysql2_proxy
+    encoding: utf8mb4
+    collation: utf8mb4_unicode_ci
+    database: <%= ENV.fetch("DATABASE_NAME") %>
+    host: <%= ENV.fetch("DATABASE_HOST") %>
+    port: <%= ENV.fetch("DATABASE_PORT") %>
+    reconnect: true
+    socket: <%= [
+    '/var/run/mysqld/mysqld.sock',
+    '/var/lib/mysql/mysql.sock',
+    '/tmp/mysqld.sock',
+    '/tmp/mysql.sock'].detect { |socket| File.exist?(socket) } %>
+    username: <%= ENV.fetch("DATABASE_USERNAME") %>
+    password: <%= ENV.fetch("DATABASE_PASSWORD", "") %>
+    variables:
+      sql_mode: 'NO_ENGINE_SUBSTITUTION'
+  primary_replica:
+    adapter: mysql2
+    replica: true
+    encoding: utf8mb4
+    collation: utf8mb4_unicode_ci
+    database: <%= ENV.fetch("DATABASE_NAME") %>
+    host: <%= ENV.fetch("DATABASE_HOST") %>
+    port: <%= ENV.fetch("DATABASE_PORT") %>
+    reconnect: true
+    socket: <%= [
+    '/var/run/mysqld/mysqld.sock',
+    '/var/lib/mysql/mysql.sock',
+    '/tmp/mysqld.sock',
+    '/tmp/mysql.sock'].detect { |socket| File.exist?(socket) } %>
+    username: <%= ENV.fetch("DATABASE_USERNAME") %>
+    password: <%= ENV.fetch("DATABASE_PASSWORD", "") %>
+    variables:
+      sql_mode: 'NO_ENGINE_SUBSTITUTION'
+<% else %>
+staging:
+  adapter: mysql2
   encoding: utf8mb4
   collation: utf8mb4_unicode_ci
   database: <%= ENV.fetch("DATABASE_NAME") %>
@@ -15,15 +56,4 @@ staging:
   password: <%= ENV.fetch("DATABASE_PASSWORD", "") %>
   variables:
     sql_mode: 'NO_ENGINE_SUBSTITUTION'
-
-  makara:
-    id: mysql
-    connections:
-      - role: master
-        host: <%= ENV.fetch("DATABASE_HOST") %>
-        name: Master
-      <% if ENV["USE_DB_WORKER_REPLICAS"] == "true" %>
-      - role: slave
-        host: <%= ENV.fetch("DATABASE_HOST") %>
-        name: Worker Replica 1
-      <% end %>
+<% end %>

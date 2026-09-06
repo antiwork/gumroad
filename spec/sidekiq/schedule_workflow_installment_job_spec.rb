@@ -441,11 +441,10 @@ describe ScheduleWorkflowInstallmentJob do
     )
   end
 
-  it "releases the primary connection after execution" do
+  it "runs on the primary connection" do
     intent = create_intent
-    expect(ActiveRecord::Base.connection).to receive(:stick_to_primary!).at_least(:once).and_call_original
+    expect(ApplicationRecord).to receive(:connected_to).with(role: :writing).at_least(:once).and_call_original
     expect_any_instance_of(Workflow).to receive(:schedule_installment).and_return(:not_applicable)
-    expect(Makara::Context).to receive(:release_all)
 
     described_class.new.perform(intent.token)
   end

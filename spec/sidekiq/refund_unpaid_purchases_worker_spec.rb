@@ -27,7 +27,7 @@ describe RefundUnpaidPurchasesWorker, :vcr do
       create(:refund, purchase:, amount_cents: 5_00, gumroad_tax_cents: 1_00)
 
       expect_any_instance_of(Purchase).not_to receive(:gross_amount_refundable_cents)
-      expect(ActiveRecord::Base.connection).not_to receive(:stick_to_primary!)
+      expect(ApplicationRecord).not_to receive(:connected_to)
 
       expected_summary = {
         count: 1,

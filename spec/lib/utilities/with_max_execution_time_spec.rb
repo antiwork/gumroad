@@ -38,6 +38,35 @@ describe WithMaxExecutionTime do
       expect(returned_value).to eq(:foo)
     end
 
+    it "sets and restores each ApplicationRecord role without changing the caller's role" do
+      allow(described_class).to receive(:replica_roles_configured?).and_return(true)
+      writing_connection = double("writing connection")
+      reading_connection = double("reading connection")
+      role = nil
+      allow(ApplicationRecord).to receive(:connected_to) do |role:, &block|
+        previous = @timeout_role
+        @timeout_role = role
+        block.call
+      ensure
+        @timeout_role = previous
+      end
+      allow(ApplicationRecord).to receive(:connection) do
+        @timeout_role == :writing ? writing_connection : reading_connection
+      end
+      expect(ActiveRecord::Base).not_to receive(:connection)
+      expect(writing_connection).to receive(:execute).with("select @@max_execution_time").and_return([[300_000]])
+      expect(reading_connection).to receive(:execute).with("select @@max_execution_time").and_return([[200_000]])
+      expect(writing_connection).to receive(:execute).with("set max_execution_time = 5000").ordered
+      expect(reading_connection).to receive(:execute).with("set max_execution_time = 5000").ordered
+      expect(writing_connection).to receive(:execute).with("set max_execution_time = 300000").ordered
+      expect(reading_connection).to receive(:execute).with("set max_execution_time = 200000").ordered
+
+      described_class.timeout_queries(seconds: 5) { role = @timeout_role }
+
+      expect(role).to be_nil
+      expect(@timeout_role).to be_nil
+    end
+
     context "when restoring max_execution_time fails" do
       it "does not mask QueryTimeoutError from the caller" do
         connection = ActiveRecord::Base.connection

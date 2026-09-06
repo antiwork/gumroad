@@ -5,6 +5,7 @@ class SendWorkflowEmailsToPastCanceledMembersJob
   class RuleNotCommittedError < StandardError; end
 
   include Sidekiq::Job
+  include PrimaryDatabasePinning
   sidekiq_options retry: 5, queue: :low
 
   def perform(installment_id, old_delayed_delivery_time = nil, cutoff_reference_time = nil, minimum_rule_version = nil, schedule_intent_token = nil, schedule_intent_fanout_token = nil)
@@ -12,75 +13,73 @@ class SendWorkflowEmailsToPastCanceledMembersJob
     @schedule_intent_fanout_token = schedule_intent_fanout_token
     rescheduling = old_delayed_delivery_time.present? && cutoff_reference_time.present?
     primary_pinned = minimum_rule_version.present? || schedule_intent_token.present? || schedule_intent_fanout_token.present? || rescheduling
-    ActiveRecord::Base.connection.stick_to_primary! if primary_pinned
-    return unless WorkflowInstallmentScheduleIntent.begin_fanout(
-      intent_token: schedule_intent_token,
-      fanout_token: schedule_intent_fanout_token
-    )
-    @next_fanout_heartbeat_at = fanout_heartbeat_time + WorkflowInstallmentScheduleIntent::FANOUT_HEARTBEAT_INTERVAL.to_f
-    installment = Installment.find_by(id: installment_id)
-    if installment.nil?
-      WorkflowInstallmentScheduleIntent.mark_processed(
-        schedule_intent_token,
+    installment, workflow, rule = with_primary_database(primary_pinned) do
+      return unless WorkflowInstallmentScheduleIntent.begin_fanout(
+        intent_token: schedule_intent_token,
         fanout_token: schedule_intent_fanout_token
       )
-      return
-    end
-    workflow = installment.workflow
-    unless workflow&.alive? && installment.alive? && installment.published? &&
-           workflow.member_cancellation_trigger? &&
-           (workflow.send_to_past_customers? || rescheduling) &&
-           workflow.seller_or_product_or_variant_type?
-      WorkflowInstallmentScheduleIntent.mark_processed(
-        schedule_intent_token,
-        fanout_token: schedule_intent_fanout_token
-      )
-      return
+      @next_fanout_heartbeat_at = fanout_heartbeat_time + WorkflowInstallmentScheduleIntent::FANOUT_HEARTBEAT_INTERVAL.to_f
+      installment = Installment.find_by(id: installment_id)
+      if installment.nil?
+        WorkflowInstallmentScheduleIntent.mark_processed(
+          schedule_intent_token,
+          fanout_token: schedule_intent_fanout_token
+        )
+        return
+      end
+      workflow = installment.workflow
+      unless workflow&.alive? && installment.alive? && installment.published? &&
+             workflow.member_cancellation_trigger? &&
+             (workflow.send_to_past_customers? || rescheduling) &&
+             workflow.seller_or_product_or_variant_type?
+        WorkflowInstallmentScheduleIntent.mark_processed(
+          schedule_intent_token,
+          fanout_token: schedule_intent_fanout_token
+        )
+        return
+      end
+
+      rule = installment.installment_rule
+      if rule.nil?
+        WorkflowInstallmentScheduleIntent.mark_processed(
+          schedule_intent_token,
+          fanout_token: schedule_intent_fanout_token
+        )
+        return
+      end
+      raise RuleNotCommittedError if minimum_rule_version.present? && rule.version < minimum_rule_version
+      cache_rule_version(rule)
+      [installment, workflow, rule]
     end
 
-    rule = installment.installment_rule
-    if rule.nil?
-      WorkflowInstallmentScheduleIntent.mark_processed(
-        schedule_intent_token,
-        fanout_token: schedule_intent_fanout_token
-      )
-      return
-    end
-    raise RuleNotCommittedError if minimum_rule_version.present? && rule.version < minimum_rule_version
-    cache_rule_version(rule)
+    # A reschedule must see cancellations committed alongside the new rule.
+    with_primary_database(rescheduling) do
+      delay = rule.delayed_delivery_time
+      rule_version = rule.version
+      cutoff = Time.zone.iso8601(cutoff_reference_time) if rescheduling
+      deactivated_after = cutoff - old_delayed_delivery_time if rescheduling
 
-    delay = rule.delayed_delivery_time
-    rule_version = rule.version
-    cutoff = Time.zone.iso8601(cutoff_reference_time) if rescheduling
-    deactivated_after = cutoff - old_delayed_delivery_time if rescheduling
-    @keep_primary_for_cutoff_scan = rescheduling
-    unless rescheduling
-      Makara::Context.release_all
-      primary_pinned = false
-    end
-
-    case enqueue_all_member_jobs(
-      workflow:,
-      installment:,
-      delay:,
-      rule_version:,
-      rescheduling:,
-      old_delayed_delivery_time:,
-      cutoff:,
-      deactivated_after:
-    )
-    when :complete
-      WorkflowInstallmentScheduleIntent.mark_processed(
-        schedule_intent_token,
-        fanout_token: schedule_intent_fanout_token
+      case enqueue_all_member_jobs(
+        workflow:,
+        installment:,
+        delay:,
+        rule_version:,
+        rescheduling:,
+        old_delayed_delivery_time:,
+        cutoff:,
+        deactivated_after:
       )
-    when :ownership_lost
-      nil
-    else
-      raise FanoutNotEnqueuedError, "Unexpected fanout result"
+      when :complete
+        WorkflowInstallmentScheduleIntent.mark_processed(
+          schedule_intent_token,
+          fanout_token: schedule_intent_fanout_token
+        )
+      when :ownership_lost
+        nil
+      else
+        raise FanoutNotEnqueuedError, "Unexpected fanout result"
+      end
     end
-  ensure
-    Makara::Context.release_all if primary_pinned
   end
 
   private
@@ -131,7 +130,6 @@ class SendWorkflowEmailsToPastCanceledMembersJob
         intent_token: @schedule_intent_token,
         fanout_token: @schedule_intent_fanout_token
       )
-      Makara::Context.release_all unless @keep_primary_for_cutoff_scan
       @next_fanout_heartbeat_at = now + WorkflowInstallmentScheduleIntent::FANOUT_HEARTBEAT_INTERVAL.to_f if renewed
       renewed
     end

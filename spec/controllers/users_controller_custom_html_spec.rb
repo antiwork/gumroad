@@ -121,9 +121,9 @@ describe UsersController, :vcr, type: :controller do
 
     it "sticks to primary before fetching the seller for the landing page HTML" do
       steps = []
-      allow(ActiveRecord::Base.connection).to receive(:stick_to_primary!).and_wrap_original do |method, *args|
+      allow(ApplicationRecord).to receive(:connected_to).and_wrap_original do |method, **kwargs, &block|
         steps << :stick_to_primary
-        method.call(*args)
+        method.call(**kwargs, &block)
       end
       allow(controller).to receive(:set_user_and_custom_domain_config).and_wrap_original do |method, *args|
         steps << :fetch_user
@@ -340,9 +340,9 @@ describe UsersController, :vcr, type: :controller do
     # rendered, so this pins to primary before the seller lookup like the embed does.
     it "sticks to primary before fetching the seller" do
       steps = []
-      allow(ActiveRecord::Base.connection).to receive(:stick_to_primary!).and_wrap_original do |method, *args|
+      allow(ApplicationRecord).to receive(:connected_to).and_wrap_original do |method, **kwargs, &block|
         steps << :stick_to_primary
-        method.call(*args)
+        method.call(**kwargs, &block)
       end
       allow(controller).to receive(:set_user_and_custom_domain_config).and_wrap_original do |method, *args|
         steps << :fetch_user

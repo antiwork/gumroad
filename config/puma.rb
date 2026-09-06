@@ -53,7 +53,6 @@ if env != "development"
   on_worker_boot do
     if defined?(ActiveRecord::Base)
       ActiveRecord::Base.establish_connection
-      Makara::Context.release_all
     end
   end
 end

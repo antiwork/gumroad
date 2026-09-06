@@ -9841,8 +9841,7 @@ describe StripeMerchantAccountManager, :vcr do
             raise rejection if attributes.dig(:individual, :id_number).present?
           end
           allow(user).to receive(:add_payout_note).and_wrap_original do |original, **kwargs|
-            # RecordInvalid, not a connection-flavored error: Makara reads "server has gone away"
-            # as a dead primary and blacklists the pool for the rest of the process.
+            # RecordInvalid, not a connection-flavored error, so the connection pool stays healthy.
             raise ActiveRecord::RecordInvalid.new(Comment.new) if kwargs[:content].start_with?(StripeMerchantAccountManager::IDENTITY_REJECTION_NOTE_PREFIX)
 
             original.call(**kwargs)

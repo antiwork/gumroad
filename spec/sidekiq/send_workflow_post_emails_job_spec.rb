@@ -37,18 +37,40 @@ describe SendWorkflowPostEmailsJob, :freeze_time do
       expect(SendWorkflowInstallmentWorker.jobs).to be_empty
     end
 
-    it "reads the primary database for a required rule version" do
-      expect(ActiveRecord::Base.connection).to receive(:stick_to_primary!).at_least(:once).and_call_original
+    [false, true].each do |cutoff_scan|
+      it "pins rule reads, #{cutoff_scan ? "pins cutoff recovery" : "releases ordinary scans"}, and releases enqueueing" do
+        cutoff = 3.days.ago.iso8601 if cutoff_scan
+        writing = false
+        phases = []
+        allow(ApplicationRecord).to receive(:connected_to).and_wrap_original do |original, **options, &block|
+          previous = writing
+          writing = options[:role] == :writing
+          original.call(**options, &block)
+        ensure
+          writing = previous
+        end
+        job = described_class.new
+        allow(Installment).to receive(:find_by).and_wrap_original do |original, **options|
+          phases << [:post, writing]
+          original.call(**options)
+        end
+        allow(job).to receive(:cache_rule_version).and_wrap_original do |original, rule|
+          phases << [:rule, writing]
+          original.call(rule)
+        end
+        allow(AudienceMember).to receive(:filter).and_wrap_original do |original, **options|
+          phases << [:audience, writing]
+          original.call(**options)
+        end
+        allow(job).to receive(:enqueue_all_member_jobs).and_wrap_original do |original|
+          phases << [:enqueue, writing]
+          original.call
+        end
 
-      described_class.new.perform(@post.id, nil, false, @post_rule.version)
-    end
+        job.perform(@post.id, cutoff, false, @post_rule.version)
 
-    it "keeps a cutoff scan on the primary database until the audience loads" do
-      expect(ActiveRecord::Base.connection).to receive(:stick_to_primary!).ordered.and_call_original
-      expect(WithMaxExecutionTime).to receive(:timeout_queries).exactly(3).times.ordered.and_call_original
-      expect(Makara::Context).to receive(:release_all).ordered
-
-      described_class.new.perform(@post.id, 1.day.ago.iso8601)
+        expect(phases).to include([:post, true], [:rule, true], [:audience, cutoff.present?], [:enqueue, false])
+      end
     end
 
     it "retries if the required rule version is not visible" do

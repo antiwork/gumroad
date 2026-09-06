@@ -3004,7 +3004,7 @@ describe OrdersController, :vcr do
           stripe_error_message: "Bad state.",
         )
       )
-      expect(ActiveRecord::Base.connection).to receive(:stick_to_primary!).and_call_original
+      expect(ApplicationRecord).to receive(:connected_to).with(role: :writing).and_call_original
 
       post :confirm_error, params: {
         id: order.secure_external_id(scope: "confirm"),

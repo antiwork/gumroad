@@ -18,6 +18,8 @@
 #   Onetime::DeduplicateProductAffiliates.process_commission_divergent(dry_run: false)
 module Onetime
   class DeduplicateProductAffiliates
+    include PrimaryDatabasePinning
+
     CONTENT_COLUMNS = %w[affiliate_basis_points destination_url flags].freeze
     COMMISSION_COLUMNS = %w[affiliate_basis_points flags].freeze
     BATCH_SIZE = 100
@@ -35,24 +37,25 @@ module Onetime
     end
 
     def process(dry_run: true)
-      stick_to_primary unless dry_run
-      identical, divergent = duplicate_pairs.partition { |pair| identical?(*pair) }
-      puts "Found #{duplicate_pairs.size} duplicate pair(s): #{identical.size} identical, #{divergent.size} divergent"
+      with_primary_database(!dry_run) do
+        identical, divergent = duplicate_pairs.partition { |pair| identical?(*pair) }
+        puts "Found #{duplicate_pairs.size} duplicate pair(s): #{identical.size} identical, #{divergent.size} divergent"
 
-      deleted = 0
-      identical.each_slice(BATCH_SIZE) do |pairs|
-        ReplicaLagWatcher.watch unless dry_run
-        pairs.each { |affiliate_id, link_id| deleted += dedupe_pair(affiliate_id, link_id, dry_run:) }
-      end
+        deleted = 0
+        identical.each_slice(BATCH_SIZE) do |pairs|
+          ReplicaLagWatcher.watch unless dry_run
+          pairs.each { |affiliate_id, link_id| deleted += dedupe_pair(affiliate_id, link_id, dry_run:) }
+        end
 
-      puts "Divergent pair(s) left untouched: #{divergent.size}" if divergent.any?
-      if dry_run
-        puts "Dry run — no changes made. Re-run with dry_run: false to apply."
-      else
-        puts "Deleted #{deleted} surplus row(s)."
-        report_remaining_duplicates
+        puts "Divergent pair(s) left untouched: #{divergent.size}" if divergent.any?
+        if dry_run
+          puts "Dry run — no changes made. Re-run with dry_run: false to apply."
+        else
+          puts "Deleted #{deleted} surplus row(s)."
+          report_remaining_duplicates
+        end
+        deleted
       end
-      deleted
     end
 
     # Pass 2a of the cleanup. Pairs whose rows agree on commission terms
@@ -66,23 +69,24 @@ module Onetime
     # updated_at cannot rank URLs: any unrelated persisted change advances it. Pairs
     # with commission divergence stay untouched; they need a reviewed keep-rule.
     def process_url_divergent(dry_run: true)
-      stick_to_primary unless dry_run
-      eligible, held_for_review = divergent_pairs.partition { |pair| url_only_divergent?(*pair) }
-      puts "Found #{divergent_pairs.size} divergent pair(s): #{eligible.size} differ only on destination_url, #{held_for_review.size} held for review"
+      with_primary_database(!dry_run) do
+        eligible, held_for_review = divergent_pairs.partition { |pair| url_only_divergent?(*pair) }
+        puts "Found #{divergent_pairs.size} divergent pair(s): #{eligible.size} differ only on destination_url, #{held_for_review.size} held for review"
 
-      deleted = 0
-      eligible.each_slice(BATCH_SIZE) do |pairs|
-        ReplicaLagWatcher.watch unless dry_run
-        pairs.each { |affiliate_id, link_id| deleted += dedupe_url_divergent_pair(affiliate_id, link_id, dry_run:) }
-      end
+        deleted = 0
+        eligible.each_slice(BATCH_SIZE) do |pairs|
+          ReplicaLagWatcher.watch unless dry_run
+          pairs.each { |affiliate_id, link_id| deleted += dedupe_url_divergent_pair(affiliate_id, link_id, dry_run:) }
+        end
 
-      if dry_run
-        puts "Dry run — no changes made. Re-run with dry_run: false to apply."
-      else
-        puts "Deleted #{deleted} surplus row(s)."
-        report_remaining_duplicates
+        if dry_run
+          puts "Dry run — no changes made. Re-run with dry_run: false to apply."
+        else
+          puts "Deleted #{deleted} surplus row(s)."
+          report_remaining_duplicates
+        end
+        deleted
       end
-      deleted
     end
 
     # Collapses pairs that still diverge on commission terms, keeping the row
@@ -90,23 +94,24 @@ module Onetime
     # not change. Recency is not a safe ranking here: updated_at advances on
     # unrelated writes.
     def process_commission_divergent(dry_run: true)
-      stick_to_primary unless dry_run
-      eligible, untouched = divergent_pairs.partition { |pair| commission_divergent?(*pair) }
-      puts "Found #{divergent_pairs.size} divergent pair(s): #{eligible.size} differ on commission terms, #{untouched.size} untouched"
+      with_primary_database(!dry_run) do
+        eligible, untouched = divergent_pairs.partition { |pair| commission_divergent?(*pair) }
+        puts "Found #{divergent_pairs.size} divergent pair(s): #{eligible.size} differ on commission terms, #{untouched.size} untouched"
 
-      deleted = 0
-      eligible.each_slice(BATCH_SIZE) do |pairs|
-        ReplicaLagWatcher.watch unless dry_run
-        pairs.each { |affiliate_id, link_id| deleted += dedupe_commission_divergent_pair(affiliate_id, link_id, dry_run:) }
-      end
+        deleted = 0
+        eligible.each_slice(BATCH_SIZE) do |pairs|
+          ReplicaLagWatcher.watch unless dry_run
+          pairs.each { |affiliate_id, link_id| deleted += dedupe_commission_divergent_pair(affiliate_id, link_id, dry_run:) }
+        end
 
-      if dry_run
-        puts "Dry run — no changes made. Re-run with dry_run: false to apply."
-      else
-        puts "Deleted #{deleted} surplus row(s)."
-        report_remaining_duplicates
+        if dry_run
+          puts "Dry run — no changes made. Re-run with dry_run: false to apply."
+        else
+          puts "Deleted #{deleted} surplus row(s)."
+          report_remaining_duplicates
+        end
+        deleted
       end
-      deleted
     end
 
     def divergent_pairs
@@ -114,12 +119,6 @@ module Onetime
     end
 
     private
-      # Live runs discover candidates and report leftovers with plain SELECTs; a lagging
-      # replica would silently skip primary-side duplicates. Dry runs stay on the replica.
-      def stick_to_primary
-        ActiveRecord::Base.connection.stick_to_primary!
-      end
-
       def duplicate_pairs
         @duplicate_pairs ||= ProductAffiliate.group(:affiliate_id, :link_id).having("COUNT(*) > 1").count.keys
       end

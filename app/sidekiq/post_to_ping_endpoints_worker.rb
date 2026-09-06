@@ -5,33 +5,33 @@ class PostToPingEndpointsWorker
   sidekiq_options retry: 20, queue: :critical
 
   def perform(purchase_id, url_parameters, resource_name = ResourceSubscription::SALE_RESOURCE_NAME, subscription_id = nil, additional_params = {})
-    ActiveRecord::Base.connection.stick_to_primary!
+    ApplicationRecord.connected_to(role: :writing) do
+      if subscription_id.present?
+        subscription = Subscription.find(subscription_id)
+        return if resource_name == ResourceSubscription::SUBSCRIPTION_ENDED_RESOURCE_NAME && subscription.deactivated_at.blank?
+        return if resource_name == ResourceSubscription::SUBSCRIPTION_RESTARTED_RESOURCE_NAME && subscription.termination_date.present?
+        user = subscription.link.user
+        ping_params = subscription.payload_for_ping_notification(resource_name:, additional_params:)
+      else
+        purchase = Purchase.find(purchase_id)
+        user = purchase.seller
+        ping_params = purchase.payload_for_ping_notification(url_parameters: url_parameters.presence || purchase.url_parameters, resource_name:)
+      end
 
-    if subscription_id.present?
-      subscription = Subscription.find(subscription_id)
-      return if resource_name == ResourceSubscription::SUBSCRIPTION_ENDED_RESOURCE_NAME && subscription.deactivated_at.blank?
-      return if resource_name == ResourceSubscription::SUBSCRIPTION_RESTARTED_RESOURCE_NAME && subscription.termination_date.present?
-      user = subscription.link.user
-      ping_params = subscription.payload_for_ping_notification(resource_name:, additional_params:)
-    else
-      purchase = Purchase.find(purchase_id)
-      user = purchase.seller
-      ping_params = purchase.payload_for_ping_notification(url_parameters: url_parameters.presence || purchase.url_parameters, resource_name:)
-    end
+      targets = user.ping_notification_targets(resource_name)
+      # Notified from the delivery path only. urls_for_ping_notification also backs the can_ping flag
+      # on every sale JSON render, and a read has no business emailing anyone.
+      notify_undeliverable_subscriptions(targets.undeliverable_subscriptions)
 
-    targets = user.ping_notification_targets(resource_name)
-    # Notified from the delivery path only. urls_for_ping_notification also backs the can_ping flag
-    # on every sale JSON render, and a read has no business emailing anyone.
-    notify_undeliverable_subscriptions(targets.undeliverable_subscriptions)
+      post_urls = targets.post_urls
+      return if post_urls.empty?
 
-    post_urls = targets.post_urls
-    return if post_urls.empty?
-
-    # No URL vetting here: SsrfFilter.post in the individual worker validates the resolved IPs at
-    # connect time (and per redirect hop), and a pre-check here meant a transient empty DNS lookup
-    # silently dropped the ping with no retry (gp#2155).
-    post_urls.each do |post_url, content_type|
-      PostToIndividualPingEndpointWorker.perform_async(post_url, ping_params.deep_stringify_keys, content_type, user.id)
+      # No URL vetting here: SsrfFilter.post in the individual worker validates the resolved IPs at
+      # connect time (and per redirect hop), and a pre-check here meant a transient empty DNS lookup
+      # silently dropped the ping with no retry (gp#2155).
+      post_urls.each do |post_url, content_type|
+        PostToIndividualPingEndpointWorker.perform_async(post_url, ping_params.deep_stringify_keys, content_type, user.id)
+      end
     end
   end
 

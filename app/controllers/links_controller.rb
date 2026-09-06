@@ -29,7 +29,7 @@ class LinksController < ApplicationController
   after_action :verify_authorized, except: PUBLIC_ACTIONS
   skip_before_action :require_account_email, only: PUBLIC_ACTIONS + %i[publish]
 
-  before_action :stick_to_primary_for_landing_iframe, only: %i[landing_iframe_content landing_version]
+  around_action :stick_to_primary_for_landing_iframe, only: %i[landing_iframe_content landing_version]
   before_action :fetch_product_for_show, only: %i[show landing_iframe_content landing_version]
   before_action :check_banned, only: %i[show landing_iframe_content landing_version]
   before_action :ensure_seller_is_not_deleted, only: %i[show landing_iframe_content landing_version]
@@ -127,106 +127,107 @@ class LinksController < ApplicationController
 
   def show
     return redirect_to custom_domain_coffee_path if @product.native_type == Link::NATIVE_TYPE_COFFEE
-    ActiveRecord::Base.connection.stick_to_primary!
-    # Force a preload of all association data used in rendering
-    preload_product
-    set_favicon_meta_tags(@product.user)
+    ApplicationRecord.connected_to(role: :writing) do
+      # Force a preload of all association data used in rendering
+      preload_product
+      set_favicon_meta_tags(@product.user)
 
-    if params[:wanted] == "true"
-      params[:option] ||= params[:variant] && @product.options.find { |o| o[:name] == params[:variant] }&.[](:id)
-      BasePrice::Recurrence::ALLOWED_RECURRENCES.each do |r|
-        params[:recurrence] ||= r if params[r] == "true"
-      end
-      params[:price] = price_cents_from_units(params[:price]) if params[:price].present?
-      cart_item = @product.cart_item(params)
+      if params[:wanted] == "true"
+        params[:option] ||= params[:variant] && @product.options.find { |o| o[:name] == params[:variant] }&.[](:id)
+        BasePrice::Recurrence::ALLOWED_RECURRENCES.each do |r|
+          params[:recurrence] ||= r if params[r] == "true"
+        end
+        params[:price] = price_cents_from_units(params[:price]) if params[:price].present?
+        cart_item = @product.cart_item(params)
 
-      unless (@product.customizable_price || cart_item[:option]&.[](:is_pwyw)) &&
-             (params[:price].blank? || params[:price] < cart_item[:price])
-        discount_result = BestOfferCodeService.new(
-          product: @product,
-          url_code: params[:offer_code] || params[:code],
-          quantity: (params[:quantity] || 1).to_i,
-          buyer: logged_in_user
-        ).result
-        code = discount_result&.dig(:code) if discount_result&.dig(:valid)
-        redirect_params = params.permit!.except(:code, :offer_code)
-        return redirect_to checkout_url(**redirect_params, host: DOMAIN, product: @product.unique_permalink,
-                                                           rent: cart_item[:rental], recurrence: cart_item[:recurrence],
-                                                           price: cart_item[:price],
-                                                           code: code,
-                                                           affiliate_id: params[:affiliate_id] || params[:a],
-                                                           referrer: params[:referrer] || request.referrer),
-                           allow_other_host: true
-      end
-    end
-
-    @card_data_handling_mode = CardDataHandlingMode.get_card_data_handling_mode(@product.user)
-    @paypal_merchant_currency = @product.user.native_paypal_payment_enabled? ?
-                                  @product.user.merchant_account_currency(PaypalChargeProcessor.charge_processor_id) :
-                                  ChargeProcessor::DEFAULT_CURRENCY_CODE
-    @pay_with_card_enabled = @product.user.pay_with_card_enabled?
-    presenter = ProductPresenter.new(pundit_user:, product: @product, request:)
-    presenter_props = {
-      recommended_by: params[:recommended_by],
-      discount_code: params[:offer_code] || params[:code],
-      quantity: (params[:quantity] || 1).to_i,
-      layout: params[:layout],
-      seller_custom_domain_url:,
-      # Review reminder emails link logged-out bundle buyers here with their purchase's
-      # external id and email digest, so the page can recognize the purchase and show
-      # the review form without a signed-in session.
-      purchase_id: params[:purchase_id],
-      purchase_email_digest: params[:purchase_email_digest],
-    }
-    @body_class = "iframe" if params[:overlay] || params[:embed]
-
-    if ["search", "discover"].include?(params[:recommended_by])
-      # The clicked product's own category, not the browsed one: Discover click-throughs land here
-      # without the taxonomy params the results page had, so this is the only side that can attribute
-      # a click to a category at all.
-      create_discover_search!(
-        clicked_resource: @product,
-        taxonomy_id: @product.taxonomy_id,
-        query: params[:query],
-        autocomplete: params[:autocomplete] == "true"
-      )
-    end
-
-    set_noindex_header if !@product.alive?
-
-    respond_to do |format|
-      format.html do
-        case params[:layout]
-        when Product::Layout::PROFILE
-          render inertia: "Products/Profile/Show", props: presenter.profile_product_props(**presenter_props)
-        when Product::Layout::DISCOVER
-          if request.headers["X-Inertia-Partial-Data"] == "autocomplete_results"
-            return render inertia: "Products/Discover/Show", props: {
-              autocomplete_results: Discover::AutocompletePresenter.new(
-                query: params[:query],
-                user: logged_in_user,
-                browser_guid: cookies[:_gumroad_guid]
-              ).props
-            }
-          end
-          discover_props = { taxonomy_path: @product.taxonomy&.ancestry_path&.join("/"), taxonomies_for_nav: }
-          render inertia: "Products/Discover/Show", props: presenter.discover_product_props(discover_props:, **presenter_props)
-        else
-          if params[:embed] || params[:overlay]
-            render inertia: "Products/Iframe/Show", props: presenter.iframe_product_props(**presenter_props)
-          elsif @product.user.product_page_storefront_enabled? && pundit_user&.seller != @product.user
-            # Storefront-wrapped product page (gumroad-private#2196): profile header above the
-            # product, catalog below (injected in ProductPresenter#product_page_props). Same
-            # component the `layout=profile` branch above renders. The seller's own view keeps
-            # the standalone page — the presenter suppresses the catalog for owners anyway.
-            render inertia: "Products/Profile/Show", props: presenter.profile_product_props(**presenter_props)
-          else
-            render inertia: "Products/Show", props: presenter.product_page_props(**presenter_props)
-          end
+        unless (@product.customizable_price || cart_item[:option]&.[](:is_pwyw)) &&
+               (params[:price].blank? || params[:price] < cart_item[:price])
+          discount_result = BestOfferCodeService.new(
+            product: @product,
+            url_code: params[:offer_code] || params[:code],
+            quantity: (params[:quantity] || 1).to_i,
+            buyer: logged_in_user
+          ).result
+          code = discount_result&.dig(:code) if discount_result&.dig(:valid)
+          redirect_params = params.permit!.except(:code, :offer_code)
+          return redirect_to checkout_url(**redirect_params, host: DOMAIN, product: @product.unique_permalink,
+                                                             rent: cart_item[:rental], recurrence: cart_item[:recurrence],
+                                                             price: cart_item[:price],
+                                                             code: code,
+                                                             affiliate_id: params[:affiliate_id] || params[:a],
+                                                             referrer: params[:referrer] || request.referrer),
+                             allow_other_host: true
         end
       end
-      format.json { render json: ProductPresenter::PublicApiProps.new(product: @product, seller_custom_domain_url:).props }
-      format.any { e404 }
+
+      @card_data_handling_mode = CardDataHandlingMode.get_card_data_handling_mode(@product.user)
+      @paypal_merchant_currency = @product.user.native_paypal_payment_enabled? ?
+                                    @product.user.merchant_account_currency(PaypalChargeProcessor.charge_processor_id) :
+                                    ChargeProcessor::DEFAULT_CURRENCY_CODE
+      @pay_with_card_enabled = @product.user.pay_with_card_enabled?
+      presenter = ProductPresenter.new(pundit_user:, product: @product, request:)
+      presenter_props = {
+        recommended_by: params[:recommended_by],
+        discount_code: params[:offer_code] || params[:code],
+        quantity: (params[:quantity] || 1).to_i,
+        layout: params[:layout],
+        seller_custom_domain_url:,
+        # Review reminder emails link logged-out bundle buyers here with their purchase's
+        # external id and email digest, so the page can recognize the purchase and show
+        # the review form without a signed-in session.
+        purchase_id: params[:purchase_id],
+        purchase_email_digest: params[:purchase_email_digest],
+      }
+      @body_class = "iframe" if params[:overlay] || params[:embed]
+
+      if ["search", "discover"].include?(params[:recommended_by])
+        # The clicked product's own category, not the browsed one: Discover click-throughs land here
+        # without the taxonomy params the results page had, so this is the only side that can attribute
+        # a click to a category at all.
+        create_discover_search!(
+          clicked_resource: @product,
+          taxonomy_id: @product.taxonomy_id,
+          query: params[:query],
+          autocomplete: params[:autocomplete] == "true"
+        )
+      end
+
+      set_noindex_header if !@product.alive?
+
+      respond_to do |format|
+        format.html do
+          case params[:layout]
+          when Product::Layout::PROFILE
+            render inertia: "Products/Profile/Show", props: presenter.profile_product_props(**presenter_props)
+          when Product::Layout::DISCOVER
+            if request.headers["X-Inertia-Partial-Data"] == "autocomplete_results"
+              return render inertia: "Products/Discover/Show", props: {
+                autocomplete_results: Discover::AutocompletePresenter.new(
+                  query: params[:query],
+                  user: logged_in_user,
+                  browser_guid: cookies[:_gumroad_guid]
+                ).props
+              }
+            end
+            discover_props = { taxonomy_path: @product.taxonomy&.ancestry_path&.join("/"), taxonomies_for_nav: }
+            render inertia: "Products/Discover/Show", props: presenter.discover_product_props(discover_props:, **presenter_props)
+          else
+            if params[:embed] || params[:overlay]
+              render inertia: "Products/Iframe/Show", props: presenter.iframe_product_props(**presenter_props)
+            elsif @product.user.product_page_storefront_enabled? && pundit_user&.seller != @product.user
+              # Storefront-wrapped product page (gumroad-private#2196): profile header above the
+              # product, catalog below (injected in ProductPresenter#product_page_props). Same
+              # component the `layout=profile` branch above renders. The seller's own view keeps
+              # the standalone page — the presenter suppresses the catalog for owners anyway.
+              render inertia: "Products/Profile/Show", props: presenter.profile_product_props(**presenter_props)
+            else
+              render inertia: "Products/Show", props: presenter.product_page_props(**presenter_props)
+            end
+          end
+        end
+        format.json { render json: ProductPresenter::PublicApiProps.new(product: @product, seller_custom_domain_url:).props }
+        format.any { e404 }
+      end
     end
   end
 

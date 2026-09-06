@@ -47,8 +47,6 @@ class SendPostBlastEmailsJob
     end
 
     @filters = @post.audience_members_filter_params
-    # The filter query can be expensive to run, it's better to run it on the replica DB.
-    Makara::Context.release_all
     @members = load_audience_members
     remove_members_without_email
 

@@ -237,66 +237,67 @@ class BalanceTransaction < ApplicationRecord
   # Returns the balance found or created.
   def find_or_create_balance
     # Working around Octopus choosing the slave db for all selects, even the ones with "FOR UPDATE"
-    ActiveRecord::Base.connection.stick_to_primary!
-    unpaid_balances = Balance.where(
-      user:,
-      merchant_account:,
-      currency: issued_amount_currency,
-      holding_currency: holding_amount_currency,
-      state: "unpaid"
-    ).order(date: :asc)
+    ApplicationRecord.connected_to(role: :writing) do
+      unpaid_balances = Balance.where(
+        user:,
+        merchant_account:,
+        currency: issued_amount_currency,
+        holding_currency: holding_amount_currency,
+        state: "unpaid"
+      ).order(date: :asc)
 
-    # attempt to find an existing balance this transaction can be applied to, as close to when the money first moved relating to this change in balance
-    balance =
-      if purchase
-        unpaid_balances.where(date: purchase.succeeded_at.to_date).first
-      elsif refund
-        unpaid_balances.where(date: refund.purchase.succeeded_at.to_date).first || unpaid_balances.first
-      elsif dispute
-        unpaid_balances.where(date: dispute.disputable.dispute_balance_date).first || unpaid_balances.first
-      elsif credit&.financing_paydown_purchase
-        unpaid_balances.where(date: credit.financing_paydown_purchase.succeeded_at.to_date).first || unpaid_balances.first
-      elsif credit&.fee_retention_refund
-        unpaid_balances.first
-      elsif credit
-        unpaid_balances.first
+      # attempt to find an existing balance this transaction can be applied to, as close to when the money first moved relating to this change in balance
+      balance =
+        if purchase
+          unpaid_balances.where(date: purchase.succeeded_at.to_date).first
+        elsif refund
+          unpaid_balances.where(date: refund.purchase.succeeded_at.to_date).first || unpaid_balances.first
+        elsif dispute
+          unpaid_balances.where(date: dispute.disputable.dispute_balance_date).first || unpaid_balances.first
+        elsif credit&.financing_paydown_purchase
+          unpaid_balances.where(date: credit.financing_paydown_purchase.succeeded_at.to_date).first || unpaid_balances.first
+        elsif credit&.fee_retention_refund
+          unpaid_balances.first
+        elsif credit
+          unpaid_balances.first
+        end
+
+      # create the balance as a last resort
+      if balance.nil?
+        # get the date this balance transaction has occurred, based on the associated object
+        occurred_at =
+          if purchase
+            purchase.succeeded_at.to_date
+          elsif refund
+            refund.created_at.to_date
+          elsif dispute
+            dispute.formalized_at.to_date
+          elsif credit&.returned_payment
+            credit.returned_payment.balances.order(date: :asc).first&.date || credit.created_at.to_date
+          elsif credit
+            credit.created_at.to_date
+          end
+
+        # create a new balance at the date this balance transaction occurred
+        balance =
+          begin
+            Balance.create!(
+              user:,
+              merchant_account:,
+              currency: issued_amount_currency,
+              holding_currency: holding_amount_currency,
+              date: occurred_at
+            )
+          rescue ActiveRecord::RecordInvalid, ActiveRecord::RecordNotUnique => e
+            logger.info("Creating balance for transaction #{id}: Balance already exists in the DB; we are not duplicating it. Exception: #{e.message}")
+            unpaid_balances.where(date: occurred_at).first
+          end
       end
 
-    # create the balance as a last resort
-    if balance.nil?
-      # get the date this balance transaction has occurred, based on the associated object
-      occurred_at =
-        if purchase
-          purchase.succeeded_at.to_date
-        elsif refund
-          refund.created_at.to_date
-        elsif dispute
-          dispute.formalized_at.to_date
-        elsif credit&.returned_payment
-          credit.returned_payment.balances.order(date: :asc).first&.date || credit.created_at.to_date
-        elsif credit
-          credit.created_at.to_date
-        end
+      raise BalanceCouldNotBeFoundOrCreated, id if balance.nil?
 
-      # create a new balance at the date this balance transaction occurred
-      balance =
-        begin
-          Balance.create!(
-            user:,
-            merchant_account:,
-            currency: issued_amount_currency,
-            holding_currency: holding_amount_currency,
-            date: occurred_at
-          )
-        rescue ActiveRecord::RecordInvalid, ActiveRecord::RecordNotUnique => e
-          logger.info("Creating balance for transaction #{id}: Balance already exists in the DB; we are not duplicating it. Exception: #{e.message}")
-          unpaid_balances.where(date: occurred_at).first
-        end
+      balance
     end
-
-    raise BalanceCouldNotBeFoundOrCreated, id if balance.nil?
-
-    balance
   end
 
   private

@@ -3794,8 +3794,7 @@ class StripePayoutProcessorTest < ActiveSupport::TestCase
 
     # The RSpec suite tags the reversal cases `:sidekiq_inline`. We can't use
     # Sidekiq::Testing.inline! here — running *every* incidental job inline (ES
-    # reindexes etc.) inside the fixture transaction trips Makara's
-    # BlacklistedWhileInTransaction guard. Instead each test drains the one worker
+    # reindexes etc.) inside the fixture transaction is fragile. Instead each test drains the one worker
     # whose effect it asserts (drain runs jobs regardless of their scheduled time),
     # so this wrapper is just a readable marker for those cases.
     def with_sidekiq_inline

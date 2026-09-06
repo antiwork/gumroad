@@ -679,34 +679,35 @@ class StripePayoutProcessor
     end
 
     # We lookup the payment on master to ensure we're looking at the latest version and have the latest state.
-    ActiveRecord::Base.connection.stick_to_primary!
-    # Find the matching Payment
-    payment = Payment
-              .processed_by(PayoutProcessorType::STRIPE)
-              .find_by(stripe_connect_account_id:, stripe_transfer_id: stripe_payout_id)
-    raise "Stripe Event #{stripe_event_id}: payout does not match any payment." if payment.nil?
-    raise "Stripe Event #{stripe_event_id}: payout mismatches on payment ID." if payment.external_id != stripe_payout["metadata"]["payment"]
+    ApplicationRecord.connected_to(role: :writing) do
+      # Find the matching Payment
+      payment = Payment
+                .processed_by(PayoutProcessorType::STRIPE)
+                .find_by(stripe_connect_account_id:, stripe_transfer_id: stripe_payout_id)
+      raise "Stripe Event #{stripe_event_id}: payout does not match any payment." if payment.nil?
+      raise "Stripe Event #{stripe_event_id}: payout mismatches on payment ID." if payment.external_id != stripe_payout["metadata"]["payment"]
 
-    if is_payout_reversal
-      reversing_payout_id = event_object["id"]
+      if is_payout_reversal
+        reversing_payout_id = event_object["id"]
 
-      case stripe_event_type
-      when "payout.paid"
-        # Wait 7 calendar days before checking the reversing payout's status because state changes within next 5 business
-        # days aren't final: https://stripe.com/docs/api/payouts/object#payout_object-status
-        # https://github.com/gumroad/web/pull/23719
-        HandlePayoutReversedWorker.perform_in(7.days, payment.id, reversing_payout_id, stripe_connect_account_id)
-      when "payout.failed"
-        handle_stripe_event_payout_reversal_failed(payment, reversing_payout_id)
-      end
-    else
-      case stripe_event_type
-      when "payout.paid"
-        handle_stripe_event_payout_paid(payment, stripe_payout)
-      when "payout.canceled"
-        handle_stripe_event_payout_cancelled(payment)
-      when "payout.failed"
-        handle_stripe_event_payout_failed(payment, failure_reason: stripe_payout["failure_code"].presence)
+        case stripe_event_type
+        when "payout.paid"
+          # Wait 7 calendar days before checking the reversing payout's status because state changes within next 5 business
+          # days aren't final: https://stripe.com/docs/api/payouts/object#payout_object-status
+          # https://github.com/gumroad/web/pull/23719
+          HandlePayoutReversedWorker.perform_in(7.days, payment.id, reversing_payout_id, stripe_connect_account_id)
+        when "payout.failed"
+          handle_stripe_event_payout_reversal_failed(payment, reversing_payout_id)
+        end
+      else
+        case stripe_event_type
+        when "payout.paid"
+          handle_stripe_event_payout_paid(payment, stripe_payout)
+        when "payout.canceled"
+          handle_stripe_event_payout_cancelled(payment)
+        when "payout.failed"
+          handle_stripe_event_payout_failed(payment, failure_reason: stripe_payout["failure_code"].presence)
+        end
       end
     end
   end

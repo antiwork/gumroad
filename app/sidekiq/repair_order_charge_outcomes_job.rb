@@ -23,12 +23,12 @@ class RepairOrderChargeOutcomesJob
   MAX_BACKLOG_SCANNED = 2_000
 
   def perform
-    ActiveRecord::Base.connection.stick_to_primary!
+    ApplicationRecord.connected_to(role: :writing) do
+      recent_ids = recent_candidate_ids
+      backlog_ids = backlog_candidate_ids(remaining_budget: MAX_BACKLOG_SCANNED - recent_ids.size)
 
-    recent_ids = recent_candidate_ids
-    backlog_ids = backlog_candidate_ids(remaining_budget: MAX_BACKLOG_SCANNED - recent_ids.size)
-
-    (recent_ids + backlog_ids).uniq.each { Order.find_by(id: _1)&.record_charge_outcome! }
+      (recent_ids + backlog_ids).uniq.each { Order.find_by(id: _1)&.record_charge_outcome! }
+    end
   end
 
   private

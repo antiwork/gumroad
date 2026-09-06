@@ -10,8 +10,8 @@ class RecordOrderChargeOutcomeJob
   def perform(order_id)
     # Read the sibling purchase states from the primary: a replica that has not yet caught up with
     # the line item that just committed reads it as unsettled, and the flag is never written.
-    ActiveRecord::Base.connection.stick_to_primary!
-
-    Order.find_by(id: order_id)&.record_charge_outcome!
+    ApplicationRecord.connected_to(role: :writing) do
+      Order.find_by(id: order_id)&.record_charge_outcome!
+    end
   end
 end

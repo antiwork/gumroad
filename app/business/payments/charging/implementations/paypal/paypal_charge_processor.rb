@@ -68,20 +68,21 @@ class PaypalChargeProcessor
   # in the method below) hence, we don't do anything on these events.
   def self.handle_order_events(event_info)
     # Use the master DB to ensure we're looking at the latest version and have the latest state.
-    ActiveRecord::Base.connection.stick_to_primary!
-    case event_info["event_type"]
-    when PaypalEventType::CUSTOMER_DISPUTE_CREATED
-      handle_dispute_created_event(event_info)
-    when PaypalEventType::CUSTOMER_DISPUTE_RESOLVED
-      handle_dispute_resolved_event(event_info)
-    when PaypalEventType::PAYMENT_CAPTURE_COMPLETED
-      handle_payment_capture_completed_event(event_info)
-    when PaypalEventType::PAYMENT_CAPTURE_DENIED
-      handle_payment_capture_denied_event(event_info)
-    when PaypalEventType::PAYMENT_CAPTURE_REVERSED
-      handle_payment_capture_reversed_event(event_info)
-    when PaypalEventType::PAYMENT_CAPTURE_REFUNDED
-      handle_payment_capture_refunded_event(event_info)
+    ApplicationRecord.connected_to(role: :writing) do
+      case event_info["event_type"]
+      when PaypalEventType::CUSTOMER_DISPUTE_CREATED
+        handle_dispute_created_event(event_info)
+      when PaypalEventType::CUSTOMER_DISPUTE_RESOLVED
+        handle_dispute_resolved_event(event_info)
+      when PaypalEventType::PAYMENT_CAPTURE_COMPLETED
+        handle_payment_capture_completed_event(event_info)
+      when PaypalEventType::PAYMENT_CAPTURE_DENIED
+        handle_payment_capture_denied_event(event_info)
+      when PaypalEventType::PAYMENT_CAPTURE_REVERSED
+        handle_payment_capture_reversed_event(event_info)
+      when PaypalEventType::PAYMENT_CAPTURE_REFUNDED
+        handle_payment_capture_refunded_event(event_info)
+      end
     end
   end
 

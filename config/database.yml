@@ -1,12 +1,11 @@
 development: &development
-  adapter: mysql2_makara
+  adapter: mysql2
   encoding: utf8mb4
   collation: utf8mb4_unicode_ci
   database: <%= ENV.fetch("DATABASE_NAME") %>
   host: <%= ENV.fetch("DATABASE_HOST") %>
   port: <%= ENV.fetch("DATABASE_PORT") %>
-  # Makara does not work well with Sidekiq's threaded model. We set the pool size to be more than the Sidekiq
-  # concurrency so that Sidekiq jobs don't run out of Active Record connections to the database.
+  # Keep the pool size above the Sidekiq concurrency so jobs don't run out of Active Record connections.
   # Sidekiq sets ENV["DB_POOL_SIZE"] to its concurrency. Web Puma does not, and
   # ActionController::Live plus publish-time AI threads checkout extra connections
   # beyond RAILS_MAX_THREADS (gp#2383). Production/staging never drop below 10,
@@ -28,60 +27,46 @@ development: &development
     max_execution_time: <%= 5 * 60000 %> # 5 minutes
     sql_mode: 'NO_ENGINE_SUBSTITUTION'
 
-  makara:
-    id: mysql
-    connections:
-      - role: primary
-        host: <%= ENV.fetch("DATABASE_HOST") %>
-        name: primary
-      <% if ENV["USE_DB_WORKER_REPLICAS"] == "true" %>
-      - role: replica
-        host: <%= ENV.fetch("DATABASE_HOST") %>
-        name: Worker Replica 1
-      <% end %>
-
 test:
   <<: *development
   database: <%= ENV.fetch("TEST_DATABASE_NAME", "gumroad_test") %>
 
+<%# Production Sidekiq/rpush/anycable set USE_DB_WORKER_REPLICAS=true (nomad).
+    Makara used to SQL-route SELECTs to those replicas. Rails 7.2 cannot keep
+    mysql2_makara, so the same flag now expands a native primary + replica pair
+    and mysql2_proxy does the statement-level split. Web/Puma leave the flag
+    unset and keep a single primary pool. Production has one worker replica;
+    staging uses DATABASE_REPLICA2 instead. %>
+<% if ENV["USE_DB_WORKER_REPLICAS"] == "true" %>
+staging:
+  primary:
+    <<: *development
+    adapter: mysql2_proxy
+  primary_replica:
+    <<: *development
+    adapter: mysql2
+    replica: true
+    database: <%= ENV["DATABASE_REPLICA2_NAME"] %>
+    username: <%= ENV["DATABASE_REPLICA2_USERNAME"] %>
+    password: <%= ENV["DATABASE_REPLICA2_PASSWORD"] %>
+    host: <%= ENV["DATABASE_REPLICA2_HOST"] %>
+
+production:
+  primary:
+    <<: *development
+    adapter: mysql2_proxy
+  primary_replica:
+    <<: *development
+    adapter: mysql2
+    replica: true
+    database: <%= ENV["DATABASE_WORKER_REPLICA1_NAME"] %>
+    username: <%= ENV["DATABASE_WORKER_REPLICA1_USERNAME"] %>
+    password: <%= ENV["DATABASE_WORKER_REPLICA1_PASSWORD"] %>
+    host: <%= ENV["DATABASE_WORKER_REPLICA1_HOST"] %>
+<% else %>
 staging: &staging
   <<: *development
 
-  makara:
-    id: mysql
-    connections:
-      - role: primary
-        host: <%= ENV.fetch("DATABASE_HOST") %>
-        name: primary
-      <% if ENV["USE_DB_WORKER_REPLICAS"] == "true" %>
-      - role: replica
-        database: <%= ENV["DATABASE_REPLICA2_NAME"] %>
-        username: <%= ENV["DATABASE_REPLICA2_USERNAME"] %>
-        password: <%= ENV["DATABASE_REPLICA2_PASSWORD"] %>
-        host: <%= ENV["DATABASE_REPLICA2_HOST"] %>
-        name: Worker Replica 1
-      <% end %>
-
 production:
   <<: *staging
-
-  makara:
-    id: mysql
-    connections:
-      - role: primary
-        host: <%= ENV.fetch("DATABASE_HOST") %>
-        name: primary
-      <% if ENV["USE_DB_WORKER_REPLICAS"] == "true" %>
-      - role: replica
-        database: <%= ENV["DATABASE_WORKER_REPLICA1_NAME"] %>
-        username: <%= ENV["DATABASE_WORKER_REPLICA1_USERNAME"] %>
-        password: <%= ENV["DATABASE_WORKER_REPLICA1_PASSWORD"] %>
-        host: <%= ENV["DATABASE_WORKER_REPLICA1_HOST"] %>
-        name: Worker Replica 1
-      - role: replica
-        database: <%= ENV["DATABASE_WORKER_REPLICA2_NAME"] %>
-        username: <%= ENV["DATABASE_WORKER_REPLICA2_USERNAME"] %>
-        password: <%= ENV["DATABASE_WORKER_REPLICA2_PASSWORD"] %>
-        host: <%= ENV["DATABASE_WORKER_REPLICA2_HOST"] %>
-        name: Worker Replica 2
-      <% end %>
+<% end %>

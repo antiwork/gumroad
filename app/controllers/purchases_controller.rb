@@ -37,19 +37,20 @@ class PurchasesController < ApplicationController
   before_action :set_noindex_header, only: [:receipt, :confirm_receipt_email]
 
   def confirm
-    ActiveRecord::Base.connection.stick_to_primary!
-    @purchase = Purchase.find_by_secure_external_id(params[:id], scope: "confirm")
-    e404 unless @purchase
+    ApplicationRecord.connected_to(role: :writing) do
+      @purchase = Purchase.find_by_secure_external_id(params[:id], scope: "confirm")
+      e404 unless @purchase
 
-    error = Purchase::ConfirmService.new(purchase: @purchase, params:).perform
+      error = Purchase::ConfirmService.new(purchase: @purchase, params:).perform
 
-    if error
-      render_error(error, purchase: @purchase)
-    else
-      create_purchase_event(@purchase)
-      handle_recommended_purchase(@purchase) if @purchase.was_product_recommended
+      if error
+        render_error(error, purchase: @purchase)
+      else
+        create_purchase_event(@purchase)
+        handle_recommended_purchase(@purchase) if @purchase.was_product_recommended
 
-      render_create_success(@purchase)
+        render_create_success(@purchase)
+      end
     end
   end
 

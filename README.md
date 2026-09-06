@@ -109,12 +109,13 @@ We use `imagemagick` for preview editing.
 - For MacOS: `brew install imagemagick`
 - For Linux: `sudo apt-get install imagemagick`
 
-##### libvips
+##### libvips (optional)
 
-For newer image formats we use `libvips` for image processing with ActiveStorage.
+ActiveStorage's `variant_processor` is `:mini_magick`, so `libvips` is not
+required. If you install it, Rails 7.2+ refuses to boot with libvips older than
+8.13 (Debian bullseye ships 8.10; the Docker images do not install it).
 
 - For MacOS: `brew install libvips`
-- For Linux: `sudo apt-get install libvips-dev`
 
 #### FFmpeg
 

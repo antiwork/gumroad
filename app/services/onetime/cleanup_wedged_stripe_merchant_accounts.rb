@@ -24,6 +24,8 @@
 # are logged so support can prompt them to re-enter their payout details.
 module Onetime
   class CleanupWedgedStripeMerchantAccounts
+    include PrimaryDatabasePinning
+
     BATCH_SIZE = 100
 
     # Skip rows young enough that they might be a live onboarding still in flight
@@ -36,50 +38,50 @@ module Onetime
 
     def process(dry_run: true, merchant_account_ids: nil)
       stats = Hash.new(0)
-      ActiveRecord::Base.connection.stick_to_primary! unless dry_run
+      with_primary_database(!dry_run) do
+        candidates(merchant_account_ids).find_in_batches(batch_size: BATCH_SIZE) do |batch|
+          ReplicaLagWatcher.watch
 
-      candidates(merchant_account_ids).find_in_batches(batch_size: BATCH_SIZE) do |batch|
-        ReplicaLagWatcher.watch
+          batch.each do |merchant_account|
+            stats[:scanned] += 1
 
-        batch.each do |merchant_account|
-          stats[:scanned] += 1
+            user = merchant_account.user
+            if user.nil?
+              stats[:skipped_no_user] += 1
+              next
+            end
 
-          user = merchant_account.user
-          if user.nil?
-            stats[:skipped_no_user] += 1
-            next
+            if user.merchant_accounts.alive.stripe.charge_processor_alive.exists?
+              stats[:skipped_has_alive_account] += 1
+              next
+            end
+
+            if user.unpaid_balance_cents > 0
+              stats[:wedged_with_balance] += 1
+              puts "balance: user #{user.id} merchant_account #{merchant_account.id} balance #{user.unpaid_balance_cents}c"
+            end
+
+            if dry_run
+              stats[:would_clean] += 1
+              puts "DRY-RUN clean merchant_account #{merchant_account.id} user #{user.id}"
+              next
+            end
+
+            merchant_account.reload
+            unless merchant_account.alive? && merchant_account.charge_processor_alive_at.nil?
+              stats[:skipped_no_longer_wedged] += 1
+              next
+            end
+
+            StripeMerchantAccountManager.cleanup_failed_merchant_account(merchant_account)
+            stats[:cleaned] += 1
+            puts "cleaned merchant_account #{merchant_account.id} user #{user.id}"
           end
-
-          if user.merchant_accounts.alive.stripe.charge_processor_alive.exists?
-            stats[:skipped_has_alive_account] += 1
-            next
-          end
-
-          if user.unpaid_balance_cents > 0
-            stats[:wedged_with_balance] += 1
-            puts "balance: user #{user.id} merchant_account #{merchant_account.id} balance #{user.unpaid_balance_cents}c"
-          end
-
-          if dry_run
-            stats[:would_clean] += 1
-            puts "DRY-RUN clean merchant_account #{merchant_account.id} user #{user.id}"
-            next
-          end
-
-          merchant_account.reload
-          unless merchant_account.alive? && merchant_account.charge_processor_alive_at.nil?
-            stats[:skipped_no_longer_wedged] += 1
-            next
-          end
-
-          StripeMerchantAccountManager.cleanup_failed_merchant_account(merchant_account)
-          stats[:cleaned] += 1
-          puts "cleaned merchant_account #{merchant_account.id} user #{user.id}"
         end
-      end
 
-      puts "done: #{stats.to_h}"
-      stats.to_h
+        puts "done: #{stats.to_h}"
+        stats.to_h
+      end
     end
 
     private

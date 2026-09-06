@@ -40,7 +40,7 @@ class Follower::CreateService
       create_new_follower
     end
 
-    confirm_follower
+    ApplicationRecord.connected_to(role: :writing) { confirm_follower }
 
     @follower
   end
@@ -63,9 +63,10 @@ class Follower::CreateService
       begin
         @follower.save!
       rescue ActiveRecord::RecordNotUnique
-        ActiveRecord::Base.connection.stick_to_primary!
-        @follower = followers.find_by(email: follower_email)
-        reactivate_follower
+        ApplicationRecord.connected_to(role: :writing) do
+          @follower = followers.find_by(email: follower_email)
+          reactivate_follower
+        end
       rescue ActiveRecord::RecordInvalid => e
         Rails.logger.error("Cannot add follower to the database. Exception: #{e.message}")
         Rails.logger.error(e.backtrace.join("\n"))
