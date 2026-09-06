@@ -66,9 +66,10 @@ class ElasticsearchIndexerWorker
     # from masquerading as a deletion.
     raise unless params["class_name"].in?(HARD_DELETED_CLASSES)
 
-    ActiveRecord::Base.connection.stick_to_primary!
-    searched_id = params["record_id"]
-    raise if searched_id.nil? || params.fetch("class_name").constantize.exists?(searched_id)
+    ApplicationRecord.connected_to(role: :writing) do
+      searched_id = params["record_id"]
+      raise if searched_id.nil? || params.fetch("class_name").constantize.exists?(searched_id)
+    end
   end
 
   def self.columns_to_fields(columns, mapping:)

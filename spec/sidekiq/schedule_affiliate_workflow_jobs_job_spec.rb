@@ -8,7 +8,7 @@ describe ScheduleAffiliateWorkflowJobsJob do
 
   it "schedules workflows after the product assignment commits" do
     product_affiliate
-    expect(ActiveRecord::Base.connection).to receive(:stick_to_primary!).at_least(:once).and_call_original
+    expect(ApplicationRecord).to receive(:connected_to).with(role: :writing).at_least(:once).and_call_original
     expect_any_instance_of(DirectAffiliate).to receive(:schedule_workflow_jobs).with(
       triggering_product_affiliates: [product_affiliate]
     )

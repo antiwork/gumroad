@@ -5,6 +5,7 @@ class SendWorkflowPostEmailsJob
   class RuleNotCommittedError < StandardError; end
 
   include Sidekiq::Job
+  include PrimaryDatabasePinning
   sidekiq_options retry: 5, queue: :low
 
   FOLLOWER_LOOKUP_BATCH_SIZE = 1_000
@@ -22,134 +23,124 @@ class SendWorkflowPostEmailsJob
                             schedule_intent_token, schedule_intent_fanout_token]
     primary_pinned = minimum_rule_version.present? || schedule_intent_token.present? ||
                      schedule_intent_fanout_token.present? || earliest_valid_time.present? || reschedule_on_stale
-    ActiveRecord::Base.connection.stick_to_primary! if primary_pinned
-    @post = Installment.find_by(id: post_id)
-    if @post.nil?
-      WorkflowInstallmentScheduleIntent.mark_processed(
-        schedule_intent_token,
+    with_primary_database(primary_pinned) do
+      @post = Installment.find_by(id: post_id)
+      if @post.nil?
+        WorkflowInstallmentScheduleIntent.mark_processed(
+          schedule_intent_token,
+          fanout_token: schedule_intent_fanout_token
+        )
+        return
+      end
+      unless claim_seller_fanout_lock
+        requeue_for_seller_fanout_limit(
+          post_id, earliest_valid_time, reschedule_on_stale, minimum_rule_version,
+          schedule_intent_token, schedule_intent_fanout_token
+        )
+        return
+      end
+      return unless WorkflowInstallmentScheduleIntent.begin_fanout(
+        intent_token: schedule_intent_token,
         fanout_token: schedule_intent_fanout_token
       )
-      return
-    end
-    unless claim_seller_fanout_lock
-      requeue_for_seller_fanout_limit(
-        post_id, earliest_valid_time, reschedule_on_stale, minimum_rule_version,
-        schedule_intent_token, schedule_intent_fanout_token
-      )
-      return
-    end
-    return unless WorkflowInstallmentScheduleIntent.begin_fanout(
-      intent_token: schedule_intent_token,
-      fanout_token: schedule_intent_fanout_token
-    )
-    @next_fanout_heartbeat_at = fanout_heartbeat_time + WorkflowInstallmentScheduleIntent::FANOUT_HEARTBEAT_INTERVAL.to_f
-    @workflow = @post.workflow
-    @reschedule_on_stale = reschedule_on_stale
-    unless @workflow&.alive? && @post.alive? && @post.published?
-      WorkflowInstallmentScheduleIntent.mark_processed(
-        schedule_intent_token,
-        fanout_token: schedule_intent_fanout_token
-      )
-      return
-    end
+      @next_fanout_heartbeat_at = fanout_heartbeat_time + WorkflowInstallmentScheduleIntent::FANOUT_HEARTBEAT_INTERVAL.to_f
+      @workflow = @post.workflow
+      @reschedule_on_stale = reschedule_on_stale
+      unless @workflow&.alive? && @post.alive? && @post.published?
+        WorkflowInstallmentScheduleIntent.mark_processed(
+          schedule_intent_token,
+          fanout_token: schedule_intent_fanout_token
+        )
+        return
+      end
 
-    rule = @post.installment_rule
-    if rule.nil?
-      WorkflowInstallmentScheduleIntent.mark_processed(
-        schedule_intent_token,
-        fanout_token: schedule_intent_fanout_token
-      )
-      return
-    end
-    raise RuleNotCommittedError if minimum_rule_version.present? && rule.version < minimum_rule_version
-    cache_rule_version(rule)
-    @rule_version = rule.version
-    @rule_delay = rule.delayed_delivery_time
+      rule = @post.installment_rule
+      if rule.nil?
+        WorkflowInstallmentScheduleIntent.mark_processed(
+          schedule_intent_token,
+          fanout_token: schedule_intent_fanout_token
+        )
+        return
+      end
+      raise RuleNotCommittedError if minimum_rule_version.present? && rule.version < minimum_rule_version
+      cache_rule_version(rule)
+      @rule_version = rule.version
+      @rule_delay = rule.delayed_delivery_time
 
-    @filters = @post.audience_members_filter_params
-    @original_filters = @filters.dup
-    @recipient_cutoff_time = Time.zone.parse(earliest_valid_time) if earliest_valid_time
-    @recipient_filter_cutoff_time = if @recipient_cutoff_time == @post.published_at
-      @recipient_cutoff_time - 1.second
-    else
-      @recipient_cutoff_time
-    end
-    apply_recipient_cutoff_to_filters
-    @keep_primary_for_cutoff_scan = @recipient_cutoff_time.present? || @reschedule_on_stale
-    unless @keep_primary_for_cutoff_scan
-      Makara::Context.release_all
-      primary_pinned = false
-    end
-    @recovered_affiliate_member_ids = Set.new
-    # Same protection as SendPostBlastEmailsJob: for sellers with very large audiences the
-    # filter query can exceed the database's default 5-minute statement cap, so raise it for
-    # this one query.
-    audience_timeout = audience_load_timeout_seconds
-    return unless keep_unemitted_fanout
-    @members = WithMaxExecutionTime.timeout_queries(seconds: audience_timeout) do
-      filter_params = @post.affiliate_type? && @recipient_cutoff_time ? @original_filters : @filters
-      filter_ids = affiliate_member_ids_after_cutoff if @post.affiliate_type? && @recipient_cutoff_time
-      filter_options = { seller_id: @post.seller_id, params: filter_params, with_ids: true }
-      filter_options[:ids] = filter_ids if filter_ids
-      AudienceMember.filter(**filter_options).
-        select(:id, :email, :details, :purchase_id, :follower_id, :affiliate_id).to_a
-    end
-    return unless keep_unemitted_fanout
-    if confirmed_follower_recovery?
-      unless WithMaxExecutionTime.timeout_queries(seconds: audience_timeout) { merge_confirmed_followers_after_cutoff(@members) }
+      @filters = @post.audience_members_filter_params
+      @original_filters = @filters.dup
+      @recipient_cutoff_time = Time.zone.parse(earliest_valid_time) if earliest_valid_time
+      @recipient_filter_cutoff_time = if @recipient_cutoff_time == @post.published_at
+        @recipient_cutoff_time - 1.second
+      else
+        @recipient_cutoff_time
+      end
+      apply_recipient_cutoff_to_filters
+      @recovered_affiliate_member_ids = Set.new
+      # Same protection as SendPostBlastEmailsJob: for sellers with very large audiences the
+      # filter query can exceed the database's default 5-minute statement cap, so raise it for
+      # this one query.
+      audience_timeout = audience_load_timeout_seconds
+      return unless keep_unemitted_fanout
+      @members = WithMaxExecutionTime.timeout_queries(seconds: audience_timeout) do
+        filter_params = @post.affiliate_type? && @recipient_cutoff_time ? @original_filters : @filters
+        filter_ids = affiliate_member_ids_after_cutoff if @post.affiliate_type? && @recipient_cutoff_time
+        filter_options = { seller_id: @post.seller_id, params: filter_params, with_ids: true }
+        filter_options[:ids] = filter_ids if filter_ids
+        AudienceMember.filter(**filter_options).
+          select(:id, :email, :details, :purchase_id, :follower_id, :affiliate_id).to_a
+      end
+      return unless keep_unemitted_fanout
+      if confirmed_follower_recovery?
+        unless WithMaxExecutionTime.timeout_queries(seconds: audience_timeout) { merge_confirmed_followers_after_cutoff(@members) }
+          requeue_unemitted_fanout
+          return
+        end
+        return unless keep_unemitted_fanout
+      end
+      if affiliate_recovery?
+        unless WithMaxExecutionTime.timeout_queries(seconds: audience_timeout) { merge_affiliates_after_cutoff(@members) }
+          requeue_unemitted_fanout
+          return
+        end
+        return unless keep_unemitted_fanout
+      end
+      @follower_confirmation_times_by_id = follower_confirmation_times_by_id(@members)
+      if @follower_confirmation_times_by_id.nil?
         requeue_unemitted_fanout
         return
       end
       return unless keep_unemitted_fanout
-    end
-    if affiliate_recovery?
-      unless WithMaxExecutionTime.timeout_queries(seconds: audience_timeout) { merge_affiliates_after_cutoff(@members) }
+      @affiliate_recipients_by_key = affiliate_recipients_by_key(@members)
+      if @affiliate_recipients_by_key.nil?
         requeue_unemitted_fanout
         return
       end
       return unless keep_unemitted_fanout
-    end
-    @follower_confirmation_times_by_id = follower_confirmation_times_by_id(@members)
-    if @follower_confirmation_times_by_id.nil?
-      requeue_unemitted_fanout
-      return
-    end
-    return unless keep_unemitted_fanout
-    @affiliate_recipients_by_key = affiliate_recipients_by_key(@members)
-    if @affiliate_recipients_by_key.nil?
-      requeue_unemitted_fanout
-      return
-    end
-    return unless keep_unemitted_fanout
-    normalize_affiliate_matches(@members)
-    return unless keep_unemitted_fanout
-    if @keep_primary_for_cutoff_scan
-      @keep_primary_for_cutoff_scan = false
-      Makara::Context.release_all
-      primary_pinned = false
-    end
-    unless claim_daily_large_blast_slot
-      requeue_for_daily_blast_limit(
-        post_id, earliest_valid_time, reschedule_on_stale, minimum_rule_version,
-        schedule_intent_token, schedule_intent_fanout_token
-      )
-      return
-    end
+      normalize_affiliate_matches(@members)
+      return unless keep_unemitted_fanout
+      unless claim_daily_large_blast_slot
+        requeue_for_daily_blast_limit(
+          post_id, earliest_valid_time, reschedule_on_stale, minimum_rule_version,
+          schedule_intent_token, schedule_intent_fanout_token
+        )
+        return
+      end
 
-    case enqueue_all_member_jobs
-    when :complete
-      WorkflowInstallmentScheduleIntent.mark_processed(
-        schedule_intent_token,
-        fanout_token: schedule_intent_fanout_token
-      )
-    when :ownership_lost
-      requeue_unemitted_fanout
-    else
-      raise FanoutNotEnqueuedError, "Unexpected fanout result"
+      case enqueue_all_member_jobs
+      when :complete
+        WorkflowInstallmentScheduleIntent.mark_processed(
+          schedule_intent_token,
+          fanout_token: schedule_intent_fanout_token
+        )
+      when :ownership_lost
+        requeue_unemitted_fanout
+      else
+        raise FanoutNotEnqueuedError, "Unexpected fanout result"
+      end
     end
   ensure
     @seller_fanout_lock&.release
-    Makara::Context.release_all if primary_pinned
   end
 
   private
@@ -218,7 +209,6 @@ class SendWorkflowPostEmailsJob
         fanout_token: @schedule_intent_fanout_token
       )
       renewed &&= @seller_fanout_lock.nil? || @seller_fanout_lock.renew
-      Makara::Context.release_all unless @keep_primary_for_cutoff_scan
       @next_fanout_heartbeat_at = now + WorkflowInstallmentScheduleIntent::FANOUT_HEARTBEAT_INTERVAL.to_f if renewed
       renewed
     end

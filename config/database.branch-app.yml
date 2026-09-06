@@ -1,5 +1,5 @@
 staging:
-  adapter: mysql2_makara
+  adapter: mysql2
   encoding: utf8mb4
   collation: utf8mb4_unicode_ci
   database: <%= ENV.fetch("DATABASE_NAME") %>
@@ -16,14 +16,3 @@ staging:
   variables:
     sql_mode: 'NO_ENGINE_SUBSTITUTION'
 
-  makara:
-    id: mysql
-    connections:
-      - role: master
-        host: <%= ENV.fetch("DATABASE_HOST") %>
-        name: Master
-      <% if ENV["USE_DB_WORKER_REPLICAS"] == "true" %>
-      - role: slave
-        host: <%= ENV.fetch("DATABASE_HOST") %>
-        name: Worker Replica 1
-      <% end %>

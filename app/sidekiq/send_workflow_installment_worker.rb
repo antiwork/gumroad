@@ -5,90 +5,51 @@ class SendWorkflowInstallmentWorker
   class RuleNotCommittedError < StandardError; end
 
   include Sidekiq::Job
+  include PrimaryDatabasePinning
   sidekiq_options retry: 5, queue: :low
 
   def perform(installment_id, version, purchase_id, follower_id, affiliate_user_id = nil, subscription_id = nil, reschedule_reference_time = nil)
     reschedule_recipient = [purchase_id, follower_id, affiliate_user_id, subscription_id].one?(&:present?)
     reschedule_reference_time = nil unless reschedule_recipient
-    primary_pinned = false
     expected_rule_version = current_rule_version(installment_id)
     return if expected_rule_version.nil?
 
-    if expected_rule_version != version || reschedule_reference_time.present?
-      ActiveRecord::Base.connection.stick_to_primary!
-      primary_pinned = true
-    end
-
-    installment = Installment.find_by(id: installment_id)
-    installment_rule = installment&.installment_rule
+    primary_pinned = expected_rule_version != version || reschedule_reference_time.present?
+    installment, installment_rule = with_primary_database(primary_pinned) { find_installment_and_rule(installment_id) }
     if installment.nil? || installment_rule.nil? || installment_rule.version != version
-      unless primary_pinned
-        ActiveRecord::Base.connection.stick_to_primary!
-        primary_pinned = true
-      end
-      installment = Installment.find_by(id: installment_id)
-      return if installment.nil?
-
-      installment_rule = installment.installment_rule
-      return if installment_rule.nil?
+      primary_pinned = true
+      installment, installment_rule = with_primary_database { find_installment_and_rule(installment_id) }
+      return if installment.nil? || installment_rule.nil?
     end
     if installment_rule.version < expected_rule_version || installment_rule.version < version
       raise RuleNotCommittedError
     end
 
-    return if installment.seller&.suspended?
-    return unless installment.workflow.alive?
-    return unless installment.alive?
-    return unless installment.published?
+    with_primary_database(primary_pinned) do
+      return if installment.seller&.suspended?
+      return unless installment.workflow.alive?
+      return unless installment.alive?
+      return unless installment.published?
 
-    if installment_rule.version != version
-      current_reference_time = current_recipient_reference_time(
-        installment:,
-        purchase_id:,
-        follower_id:,
-        affiliate_user_id:,
-        subscription_id:
-      )
-      if reschedule_reference_time.nil? || purchase_id.present?
-        reschedule_reference_time = current_reference_time
-      end
-      return if reschedule_reference_time.nil?
-      return unless recipient_matches_current_audience?(
-        installment:,
-        purchase_id:,
-        follower_id:,
-        affiliate_user_id:,
-        subscription_id:,
-        reschedule_reference_time:
-      )
-      reschedule_with_current_rule(
-        installment:,
-        installment_rule:,
-        version:,
-        purchase_id:,
-        follower_id:,
-        affiliate_user_id:,
-        subscription_id:,
-        reschedule_reference_time:
-      )
-      return
-    end
-    if purchase_id.present? && reschedule_reference_time.present?
-      current_reference_time = current_recipient_reference_time(
-        installment:,
-        purchase_id:,
-        follower_id:,
-        affiliate_user_id:,
-        subscription_id:
-      )
-      if current_reference_time.present? && current_reference_time != reschedule_reference_time
+      if installment_rule.version != version
+        current_reference_time = current_recipient_reference_time(
+          installment:,
+          purchase_id:,
+          follower_id:,
+          affiliate_user_id:,
+          subscription_id:
+        )
+        if reschedule_reference_time.nil? || purchase_id.present?
+          reschedule_reference_time = current_reference_time
+        end
+        return if reschedule_reference_time.nil?
         return unless recipient_matches_current_audience?(
           installment:,
           purchase_id:,
           follower_id:,
           affiliate_user_id:,
           subscription_id:,
-          reschedule_reference_time: current_reference_time
+          reschedule_reference_time:
         )
         reschedule_with_current_rule(
           installment:,
@@ -98,41 +59,74 @@ class SendWorkflowInstallmentWorker
           follower_id:,
           affiliate_user_id:,
           subscription_id:,
-          reschedule_reference_time: current_reference_time
+          reschedule_reference_time:
         )
         return
       end
-    end
-    if reschedule_reference_time.present?
-      return unless recipient_matches_current_audience?(
-        installment:,
-        purchase_id:,
-        follower_id:,
-        affiliate_user_id:,
-        subscription_id:,
-        reschedule_reference_time:
-      )
-    end
+      if purchase_id.present? && reschedule_reference_time.present?
+        current_reference_time = current_recipient_reference_time(
+          installment:,
+          purchase_id:,
+          follower_id:,
+          affiliate_user_id:,
+          subscription_id:
+        )
+        if current_reference_time.present? && current_reference_time != reschedule_reference_time
+          return unless recipient_matches_current_audience?(
+            installment:,
+            purchase_id:,
+            follower_id:,
+            affiliate_user_id:,
+            subscription_id:,
+            reschedule_reference_time: current_reference_time
+          )
+          reschedule_with_current_rule(
+            installment:,
+            installment_rule:,
+            version:,
+            purchase_id:,
+            follower_id:,
+            affiliate_user_id:,
+            subscription_id:,
+            reschedule_reference_time: current_reference_time
+          )
+          return
+        end
+      end
+      if reschedule_reference_time.present?
+        return unless recipient_matches_current_audience?(
+          installment:,
+          purchase_id:,
+          follower_id:,
+          affiliate_user_id:,
+          subscription_id:,
+          reschedule_reference_time:
+        )
+      end
 
-    if purchase_id.present? && follower_id.nil? && affiliate_user_id.nil? && subscription_id.nil?
-      installment.send_installment_from_workflow_for_purchase(purchase_id, reschedule_reference_time:)
-    elsif follower_id.present? && purchase_id.nil? && affiliate_user_id.nil? && subscription_id.nil?
-      installment.send_installment_from_workflow_for_follower(follower_id)
-    elsif affiliate_user_id.present? && purchase_id.nil? && follower_id.nil? && subscription_id.nil?
-      installment.send_installment_from_workflow_for_affiliate_user(affiliate_user_id)
-    elsif subscription_id.present? && purchase_id.nil? && follower_id.nil? && affiliate_user_id.nil?
-      installment.send_installment_from_workflow_for_member_cancellation(subscription_id)
-    else
-      # Exactly one recipient id is expected. Anything else (most importantly all four nil)
-      # used to fall through and return without sending, erroring, or retrying, which is how
-      # a whole class of workflows could deliver nothing at all without anyone noticing.
-      Rails.logger.error("[#{self.class.name}] installment_id=#{installment_id} got an unusable recipient combination (purchase=#{purchase_id.inspect} follower=#{follower_id.inspect} affiliate=#{affiliate_user_id.inspect} subscription=#{subscription_id.inspect}); nothing sent")
+      if purchase_id.present? && follower_id.nil? && affiliate_user_id.nil? && subscription_id.nil?
+        installment.send_installment_from_workflow_for_purchase(purchase_id, reschedule_reference_time:)
+      elsif follower_id.present? && purchase_id.nil? && affiliate_user_id.nil? && subscription_id.nil?
+        installment.send_installment_from_workflow_for_follower(follower_id)
+      elsif affiliate_user_id.present? && purchase_id.nil? && follower_id.nil? && subscription_id.nil?
+        installment.send_installment_from_workflow_for_affiliate_user(affiliate_user_id)
+      elsif subscription_id.present? && purchase_id.nil? && follower_id.nil? && affiliate_user_id.nil?
+        installment.send_installment_from_workflow_for_member_cancellation(subscription_id)
+      else
+        # Exactly one recipient id is expected. Anything else (most importantly all four nil)
+        # used to fall through and return without sending, erroring, or retrying, which is how
+        # a whole class of workflows could deliver nothing at all without anyone noticing.
+        Rails.logger.error("[#{self.class.name}] installment_id=#{installment_id} got an unusable recipient combination (purchase=#{purchase_id.inspect} follower=#{follower_id.inspect} affiliate=#{affiliate_user_id.inspect} subscription=#{subscription_id.inspect}); nothing sent")
+      end
     end
-  ensure
-    Makara::Context.release_all if primary_pinned
   end
 
   private
+    def find_installment_and_rule(installment_id)
+      installment = Installment.find_by(id: installment_id)
+      [installment, installment&.installment_rule]
+    end
+
     def current_rule_version(installment_id)
       cache_read_failed = false
       pending = false
@@ -143,25 +137,23 @@ class SendWorkflowInstallmentWorker
         cache_read_failed = true
       end
 
-      primary_pinned = true
-      ActiveRecord::Base.connection.stick_to_primary!
-      effective_version = InstallmentRule.transaction do
-        rule = InstallmentRule.lock.find_by(installment_id:)
-        if cache_read_failed
-          rule&.version
-        else
-          begin
-            rule&.cache_version!
-          rescue Redis::BaseError, RedisClient::Error
+      effective_version = with_primary_database do
+        InstallmentRule.transaction do
+          rule = InstallmentRule.lock.find_by(installment_id:)
+          if cache_read_failed
             rule&.version
+          else
+            begin
+              rule&.cache_version!
+            rescue Redis::BaseError, RedisClient::Error
+              rule&.version
+            end
           end
         end
       end
       raise RuleNotCommittedError if effective_version.nil? && pending
 
       effective_version
-    ensure
-      Makara::Context.release_all if primary_pinned
     end
 
     def current_recipient_reference_time(installment:, purchase_id:, follower_id:, affiliate_user_id:, subscription_id:)

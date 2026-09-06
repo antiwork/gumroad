@@ -23,44 +23,45 @@ class ProductDuplicatorService
   end
 
   def duplicate
-    ApplicationRecord.connection.stick_to_primary!
-    ApplicationRecord.connection.transaction do
-      @duplicated_product = product.dup
-      duplicated_product.unique_permalink = nil
-      duplicated_product.send(:set_unique_permalink)
-      duplicated_product.custom_permalink = nil
-      duplicated_product.name = "#{product.name} (copy)"
-      duplicated_product.price_cents = product.price_cents
-      duplicated_product.rental_price_cents = product.rental_price_cents if product.rental_price_cents.present?
-      duplicated_product.is_collab = false
-      mark_duplicate_product_as_draft
-      duplicated_product.is_duplicating = false
-      enforce_one_coffee_per_user!
-      duplicated_product.save!(validate: false) # Skip validations since the duplicated product may have invalid state (e.g. missing required fields) that will be fixed by subsequent duplication steps
+    ApplicationRecord.connected_to(role: :writing) do
+      ApplicationRecord.connection.transaction do
+        @duplicated_product = product.dup
+        duplicated_product.unique_permalink = nil
+        duplicated_product.send(:set_unique_permalink)
+        duplicated_product.custom_permalink = nil
+        duplicated_product.name = "#{product.name} (copy)"
+        duplicated_product.price_cents = product.price_cents
+        duplicated_product.rental_price_cents = product.rental_price_cents if product.rental_price_cents.present?
+        duplicated_product.is_collab = false
+        mark_duplicate_product_as_draft
+        duplicated_product.is_duplicating = false
+        enforce_one_coffee_per_user!
+        duplicated_product.save!(validate: false) # Skip validations since the duplicated product may have invalid state (e.g. missing required fields) that will be fixed by subsequent duplication steps
 
-      duplicate_prices
-      duplicate_asset_previews
-      duplicate_thumbnail
-      duplicate_product_files # Copy product files before copying the variants and skus.
-      duplicate_public_product_files
-      duplicate_rich_content(original_entity: product, duplicate_entity: duplicated_product)
-      duplicate_offer_codes
-      duplicate_product_taggings
-      duplicate_skus # Copy skus before variant categories and variants
-      duplicate_variant_categories_and_variants
-      duplicate_preorder_link
-      duplicate_third_party_analytics
-      duplicate_shipping_destinations
-      duplicate_refund_policy
-      duplicate_profile_sections
+        duplicate_prices
+        duplicate_asset_previews
+        duplicate_thumbnail
+        duplicate_product_files # Copy product files before copying the variants and skus.
+        duplicate_public_product_files
+        duplicate_rich_content(original_entity: product, duplicate_entity: duplicated_product)
+        duplicate_offer_codes
+        duplicate_product_taggings
+        duplicate_skus # Copy skus before variant categories and variants
+        duplicate_variant_categories_and_variants
+        duplicate_preorder_link
+        duplicate_third_party_analytics
+        duplicate_shipping_destinations
+        duplicate_refund_policy
+        duplicate_profile_sections
+      end
+
+      # Post process Asset Previews if product was persisted from outside the transaction
+      post_process_attachments
+
+      set_recently_duplicated_product
+
+      duplicated_product.reload
     end
-
-    # Post process Asset Previews if product was persisted from outside the transaction
-    post_process_attachments
-
-    set_recently_duplicated_product
-
-    duplicated_product.reload
   rescue => e
     error_message = e.is_a?(ActiveRecord::RecordInvalid) ? e.record.errors.full_messages.first : e.message
     store_duplication_error(error_message)

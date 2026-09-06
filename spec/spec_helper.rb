@@ -199,18 +199,21 @@ end
 # unlock and connection cleanup. Without this, a single SAVEPOINT failure
 # poisons every subsequent retry because lock_thread is never reset and
 # clear_active_connections! is never called.
+# Rails 7.2 tracks fixture transactions per pool (`@fixture_connection_pools`,
+# `pin_connection!` / `unpin_connection!`) rather than per connection.
 module ResilientFixtureTeardown
   def teardown_fixtures
     if run_in_transaction?
       ActiveSupport::Notifications.unsubscribe(@connection_subscriber) if @connection_subscriber
-      @fixture_connections.each do |connection|
-        connection.rollback_transaction if connection.transaction_open?
+      pools = @fixture_connection_pools || []
+      pools.each do |pool|
+        pool.unpin_connection!
       rescue StandardError => e
-        Rails.logger.warn("[RSpec] fixture rollback failed: #{e.message}")
+        Rails.logger.warn("[RSpec] fixture unpin failed: #{e.message}")
       ensure
-        connection.pool.lock_thread = false
+        pool.lock_thread = false
       end
-      @fixture_connections.clear
+      pools.clear
       teardown_shared_connection_pool
     else
       ActiveRecord::FixtureSet.reset_cache

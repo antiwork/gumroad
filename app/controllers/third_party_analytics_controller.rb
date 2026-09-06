@@ -32,8 +32,9 @@ try { window.onabort = null; } catch(error) { }
 
       # the purchase was just created and may not be in the read replicas so look in master
       if purchase.nil?
-        ActiveRecord::Base.connection.stick_to_primary!
-        purchase = @product.sales.find_by_external_id(params[:purchase_id])
+        ApplicationRecord.connected_to(role: :writing) do
+          purchase = @product.sales.find_by_external_id(params[:purchase_id])
+        end
       end
 
       e404 if purchase.nil?

@@ -33,7 +33,7 @@ describe SendWorkflowEmailsToPastCanceledMembersJob, :freeze_time do
   end
 
   it "retries if the required rule version is not visible", :rule_version_only do
-    expect(ActiveRecord::Base.connection).to receive(:stick_to_primary!).at_least(:once).and_call_original
+    expect(ApplicationRecord).to receive(:connected_to).with(role: :writing).at_least(:once).and_call_original
 
     expect do
       described_class.new.perform(@installment.id, nil, nil, @rule.version + 1)
@@ -265,14 +265,13 @@ describe SendWorkflowEmailsToPastCanceledMembersJob, "primary repair scans", :fr
     cutoff_reference_time = Time.current.change(usec: 0)
     candidate_scope = instance_double(ActiveRecord::Relation)
     loaded_scope = instance_double(ActiveRecord::Relation)
-    expect(ActiveRecord::Base.connection).to receive(:stick_to_primary!).ordered.and_call_original
+    expect(ApplicationRecord).to receive(:connected_to).with(role: :writing).ordered.and_call_original
     expect(job).to receive(:candidate_subscriptions).with(
       workflow,
       deactivated_after: cutoff_reference_time - 2.days
     ).ordered.and_return(candidate_scope)
     expect(candidate_scope).to receive(:includes).with(:original_purchase).ordered.and_return(loaded_scope)
     expect(loaded_scope).to receive(:find_each).ordered
-    expect(Makara::Context).to receive(:release_all).ordered
 
     job.perform(
       installment.id,

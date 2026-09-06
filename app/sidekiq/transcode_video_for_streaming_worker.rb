@@ -16,25 +16,26 @@ class TranscodeVideoForStreamingWorker
 
 
   def perform(id, klass_name = ProductFile.name, transcoder = GRMC, allowed_when_processing = false)
-    ActiveRecord::Base.connection.stick_to_primary!
-    Rails.logger.info "TranscodeVideoForStreamingWorker: performing for id=#{id}, klass_name=#{klass_name}, transcoder=#{transcoder}"
+    ApplicationRecord.connected_to(role: :writing) do
+      Rails.logger.info "TranscodeVideoForStreamingWorker: performing for id=#{id}, klass_name=#{klass_name}, transcoder=#{transcoder}"
 
-    if klass_name == Link.name
-      Rails.logger.warn "TranscodeVideoForStreamingWorker called for Link ID #{id}. We don't transcode Links anymore."
-      return
-    end
-    streamable = klass_name.constantize.find(id)
+      if klass_name == Link.name
+        Rails.logger.warn "TranscodeVideoForStreamingWorker called for Link ID #{id}. We don't transcode Links anymore."
+        return
+      end
+      streamable = klass_name.constantize.find(id)
 
-    return if streamable.deleted?
+      return if streamable.deleted?
 
-    return unless streamable.attempt_to_transcode?(allowed_when_processing:)
-    streamable.transcoded_videos.alive.processing.find_each(&:mark_error) if allowed_when_processing
+      return unless streamable.attempt_to_transcode?(allowed_when_processing:)
+      streamable.transcoded_videos.alive.processing.find_each(&:mark_error) if allowed_when_processing
 
-    if streamable.transcodable?
-      create_hls_transcode_job(streamable, streamable.s3_key, streamable.height, transcoder)
-    else
-      Rails.logger.warn "ProductFile with ID #{id} is not transcodable"
-      streamable.transcoding_failed
+      if streamable.transcodable?
+        create_hls_transcode_job(streamable, streamable.s3_key, streamable.height, transcoder)
+      else
+        Rails.logger.warn "ProductFile with ID #{id} is not transcodable"
+        streamable.transcoding_failed
+      end
     end
   end
 

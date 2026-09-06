@@ -124,10 +124,6 @@ describe "workflow installment schedule intent completion", :freeze_time do
         events << :renew
         method.call(**kwargs)
       end
-      allow(Makara::Context).to receive(:release_all).and_wrap_original do |method|
-        events << :release
-        method.call
-      end
       allow(WithMaxExecutionTime).to receive(:timeout_queries).and_wrap_original do |method, *args, **kwargs, &block|
         events << :query
         result = method.call(*args, **kwargs, &block)
@@ -137,9 +133,8 @@ describe "workflow installment schedule intent completion", :freeze_time do
 
       described_class.new.perform(post.id, nil, false, rule.version, intent.token, fanout_token)
 
-      expect(events.first(6)).to eq([:release, :renew, :release, :query, :query_complete, :renew])
-      expect(events.drop(6).each_with_index.all? { |event, index| event == (index.even? ? :release : :renew) }).to be(true)
-      expect(events.last).to eq(:release)
+      expect(events.first(4)).to eq([:renew, :query, :query_complete, :renew])
+      expect(events.drop(4)).to all(eq(:renew))
       expect(intent.reload.processed_at).to be_present
     end
 
@@ -253,7 +248,7 @@ describe "workflow installment schedule intent completion", :freeze_time do
       expect(SendWorkflowInstallmentWorker).to have_enqueued_sidekiq_job(installment.id, rule.version, nil, nil, nil, subscription.id)
     end
 
-    it "releases Makara after renewing its lease" do
+    it "renews its lease during the fanout" do
       intent = create_intent(installment:, rule:)
       fanout_token = claim_fanout(intent)
       events = []
@@ -263,14 +258,10 @@ describe "workflow installment schedule intent completion", :freeze_time do
         events << :renew
         method.call(**kwargs)
       end
-      allow(Makara::Context).to receive(:release_all).and_wrap_original do |method|
-        events << :release
-        method.call
-      end
 
       job.perform(installment.id, nil, nil, rule.version, intent.token, fanout_token)
 
-      expect(events).to eq([:release, :renew, :release])
+      expect(events).to eq([:renew])
       expect(intent.reload.processed_at).to be_present
     end
 

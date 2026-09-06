@@ -17,7 +17,7 @@ class UserPagesController < ApplicationController
   include CustomDomainConfig
   include RendersCustomHtmlPages
 
-  before_action :stick_to_primary_for_landing_iframe, only: %i[landing_iframe_content landing_version]
+  around_action :stick_to_primary_for_landing_iframe, only: %i[landing_iframe_content landing_version]
   before_action :set_user_by_domain
   before_action :set_page
 

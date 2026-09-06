@@ -2270,8 +2270,9 @@ class Purchase < ApplicationRecord
   end
 
   def gumroad_tax_refundable_cents
-    ActiveRecord::Base.connection.stick_to_primary!
-    gumroad_tax_cents - gumroad_tax_refunded_cents
+    ApplicationRecord.connected_to(role: :writing) do
+      gumroad_tax_cents - gumroad_tax_refunded_cents
+    end
   end
 
   def mark_giftee_purchase_as_refunded(is_partially_refunded: false)

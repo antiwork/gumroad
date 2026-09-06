@@ -38,15 +38,14 @@ describe SendWorkflowPostEmailsJob, :freeze_time do
     end
 
     it "reads the primary database for a required rule version" do
-      expect(ActiveRecord::Base.connection).to receive(:stick_to_primary!).at_least(:once).and_call_original
+      expect(ApplicationRecord).to receive(:connected_to).with(role: :writing).at_least(:once).and_call_original
 
       described_class.new.perform(@post.id, nil, false, @post_rule.version)
     end
 
     it "keeps a cutoff scan on the primary database until the audience loads" do
-      expect(ActiveRecord::Base.connection).to receive(:stick_to_primary!).ordered.and_call_original
+      expect(ApplicationRecord).to receive(:connected_to).with(role: :writing).ordered.and_call_original
       expect(WithMaxExecutionTime).to receive(:timeout_queries).exactly(3).times.ordered.and_call_original
-      expect(Makara::Context).to receive(:release_all).ordered
 
       described_class.new.perform(@post.id, 1.day.ago.iso8601)
     end

@@ -294,9 +294,9 @@ describe LinksController, :vcr, type: :controller do
 
     it "sticks to primary before fetching the product for the landing page HTML" do
       steps = []
-      allow(ActiveRecord::Base.connection).to receive(:stick_to_primary!).and_wrap_original do |method, *args|
+      allow(ApplicationRecord).to receive(:connected_to).and_wrap_original do |method, **kwargs, &block|
         steps << :stick_to_primary
-        method.call(*args)
+        method.call(**kwargs, &block)
       end
       allow(controller).to receive(:fetch_product_for_show).and_wrap_original do |method, *args|
         steps << :fetch_product

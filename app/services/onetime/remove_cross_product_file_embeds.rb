@@ -31,14 +31,15 @@ module Onetime
 
     private
       def remediate!(rich_content, foreign_ids)
-        ApplicationRecord.connection.stick_to_primary!
-        ApplicationRecord.transaction do
-          rich_content.update!(description: RichContent.reject_file_embeds(rich_content.description, foreign_ids.to_set))
+        ApplicationRecord.connected_to(role: :writing) do
+          ApplicationRecord.transaction do
+            rich_content.update!(description: RichContent.reject_file_embeds(rich_content.description, foreign_ids.to_set))
 
-          entity = rich_content.entity
-          if entity.is_a?(BaseVariant)
-            stale_join_files = entity.product_files.where(id: foreign_ids)
-            entity.product_files.delete(stale_join_files)
+            entity = rich_content.entity
+            if entity.is_a?(BaseVariant)
+              stale_join_files = entity.product_files.where(id: foreign_ids)
+              entity.product_files.delete(stale_join_files)
+            end
           end
         end
       end

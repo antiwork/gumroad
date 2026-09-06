@@ -181,109 +181,110 @@ module StripeMerchantAccountManager
     account_params = {}
     merchant_account = nil
 
-    ActiveRecord::Base.connection.stick_to_primary!
-    user.with_lock do
-      raise MerchantRegistrationUserNotReadyError.new(user.id, "is not supported yet") unless user.native_payouts_supported?
+    ApplicationRecord.connected_to(role: :writing) do
+      user.with_lock do
+        raise MerchantRegistrationUserNotReadyError.new(user.id, "is not supported yet") unless user.native_payouts_supported?
 
-      discard_stale_hollow_managed_accounts!(user)
-      user_has_a_merchant_account = if from_admin
-        user_has_stripe_connect_merchant_account?(user)
-      else
-        blocks_new_managed_account?(user)
+        discard_stale_hollow_managed_accounts!(user)
+        user_has_a_merchant_account = if from_admin
+          user_has_stripe_connect_merchant_account?(user)
+        else
+          blocks_new_managed_account?(user)
+        end
+        raise MerchantRegistrationUserAlreadyHasAccountError.new(user.id, StripeChargeProcessor.charge_processor_id) if user_has_a_merchant_account
+        raise MerchantRegistrationUserNotReadyError.new(user.id, "has not agreed to TOS") if user.tos_agreements.empty?
+
+        tos_agreement = user.tos_agreements.last
+        user_compliance_info = user.alive_user_compliance_info
+        bank_account = user.active_bank_account
+
+        country_code = user_compliance_info.legal_entity_country_code
+        raise MerchantRegistrationUserNotReadyError.new(user.id, "does not have a legal entity country") if country_code.blank?
+        raise MerchantRegistrationUserNotReadyError.new(user.id, "is not supported yet") if NEW_ACCOUNT_CREATION_BLOCKED_COUNTRIES.include?(country_code)
+        country = Country.new(country_code)
+
+        currency = country.payout_currency
+        raise MerchantRegistrationUserNotReadyError.new(user.id, "has no default currency defined for it's legal entity's country") if currency.blank?
+
+        # Stripe doesn't let us use non-USD bank accounts in the test environment, so we allow a USD bank account to be associated with a non-USD account
+        # outside of production to facilitate testing and debugging.
+        raise MerchantRegistrationUserNotReadyError.new(user.id, "has #{bank_account.type} #{bank_account.currency} that != #{country_code} #{currency}.") if Rails.env.production? && bank_account && bank_account.currency != currency
+
+        capabilities = country.stripe_capabilities
+
+        account_params = {
+          type: "custom",
+          requested_capabilities: capabilities,
+          country: country_code,
+          default_currency: currency
+        }
+        account_params.deep_merge!(account_hash(user, tos_agreement, user_compliance_info, passphrase:))
+        account_params.deep_merge!(bank_account_hash(bank_account, passphrase:)) if bank_account && !bank_account.is_a?(CardBankAccount)
+
+        merchant_account = MerchantAccount.create!(
+          user:,
+          country: country_code,
+          currency:,
+          charge_processor_id: StripeChargeProcessor.charge_processor_id
+        )
       end
-      raise MerchantRegistrationUserAlreadyHasAccountError.new(user.id, StripeChargeProcessor.charge_processor_id) if user_has_a_merchant_account
-      raise MerchantRegistrationUserNotReadyError.new(user.id, "has not agreed to TOS") if user.tos_agreements.empty?
 
-      tos_agreement = user.tos_agreements.last
-      user_compliance_info = user.alive_user_compliance_info
-      bank_account = user.active_bank_account
+      stripe_account = Stripe::Account.create(force_utf8_encoding(account_params))
 
-      country_code = user_compliance_info.legal_entity_country_code
-      raise MerchantRegistrationUserNotReadyError.new(user.id, "does not have a legal entity country") if country_code.blank?
-      raise MerchantRegistrationUserNotReadyError.new(user.id, "is not supported yet") if NEW_ACCOUNT_CREATION_BLOCKED_COUNTRIES.include?(country_code)
-      country = Country.new(country_code)
+      merchant_account.charge_processor_merchant_id = stripe_account.id
+      merchant_account.save!
 
-      currency = country.payout_currency
-      raise MerchantRegistrationUserNotReadyError.new(user.id, "has no default currency defined for it's legal entity's country") if currency.blank?
+      if user_compliance_info.is_business?
+        person_params = person_hash(user_compliance_info, passphrase)
+        person_params.deep_merge!(relationship: { representative: true, owner: true, title: user_compliance_info.job_title.presence || DEFAULT_RELATIONSHIP_TITLE, percent_ownership: 100 })
+        Stripe::Account.create_person(stripe_account.id, force_utf8_encoding(person_params))
+      end
 
-      # Stripe doesn't let us use non-USD bank accounts in the test environment, so we allow a USD bank account to be associated with a non-USD account
-      # outside of production to facilitate testing and debugging.
-      raise MerchantRegistrationUserNotReadyError.new(user.id, "has #{bank_account.type} #{bank_account.currency} that != #{country_code} #{currency}.") if Rails.env.production? && bank_account && bank_account.currency != currency
+      # An under-18 seller can't be verified alone, so the guardian goes on as a second Person.
+      # Sync failure must not fail account creation — the merchant account is already live and the
+      # guardian is re-synced on every later update_account, so a miss just leaves Stripe's
+      # legal-guardian requirement unmet, same as if we'd never tried.
+      # Rescue StandardError, not Stripe::StripeError: the sync also writes locally, and a deadlock
+      # or lock-wait timeout there must not escape and abort creation before the account is marked
+      # alive.
+      begin
+        StripeGuardianManager.sync(user, stripe_account, passphrase:)
+      rescue => e
+        ErrorNotifier.notify(e)
+      end
 
-      capabilities = country.stripe_capabilities
+      # We need to update with empty full_name_aliases here as setting full_name_aliases is mandatory for Singapore accounts.
+      # It is a property on the `person` entity associated with the Stripe::Account.
+      # Ref: https://stripe.com/docs/api/persons/object#person_object-full_name_aliases
+      if user_compliance_info.country_code == Compliance::Countries::SGP.alpha2
+        stripe_person = Stripe::Account.list_persons(stripe_account.id)["data"].last
+        Stripe::Account.update_person(stripe_account.id, stripe_person.id, { full_name_aliases: [""] }) if stripe_person.present?
+      end
 
-      account_params = {
-        type: "custom",
-        requested_capabilities: capabilities,
-        country: country_code,
-        default_currency: currency
-      }
-      account_params.deep_merge!(account_hash(user, tos_agreement, user_compliance_info, passphrase:))
-      account_params.deep_merge!(bank_account_hash(bank_account, passphrase:)) if bank_account && !bank_account.is_a?(CardBankAccount)
+      merchant_account.charge_processor_alive_at = Time.current
+      merchant_account.save!
 
-      merchant_account = MerchantAccount.create!(
-        user:,
-        country: country_code,
-        currency:,
-        charge_processor_id: StripeChargeProcessor.charge_processor_id
-      )
+      # Non-Card bank accounts are saved at account creation time.
+      #
+      # Card bank accounts are saved when we are notified via account.updated event that charges are enabled on the account
+      # because token generation fails unless charges are enabled.
+      if bank_account && !bank_account.is_a?(CardBankAccount)
+        save_stripe_bank_account_info(bank_account, stripe_account)
+      end
+
+      begin
+        DefaultAbandonedCartWorkflowGeneratorService.new(seller: user).generate if merchant_account.is_a_stripe_connect_account?
+      rescue => e
+        Rails.logger.error("Failed to generate default abandoned cart workflow for user #{user.id}: #{e.message}")
+        ErrorNotifier.notify(e)
+      end
+
+      clear_stale_postal_code_failure_notes(user)
+      clear_stale_bank_sync_failure_notes(user)
+      clear_stale_payout_setup_rejection_notes(user)
+
+      merchant_account
     end
-
-    stripe_account = Stripe::Account.create(force_utf8_encoding(account_params))
-
-    merchant_account.charge_processor_merchant_id = stripe_account.id
-    merchant_account.save!
-
-    if user_compliance_info.is_business?
-      person_params = person_hash(user_compliance_info, passphrase)
-      person_params.deep_merge!(relationship: { representative: true, owner: true, title: user_compliance_info.job_title.presence || DEFAULT_RELATIONSHIP_TITLE, percent_ownership: 100 })
-      Stripe::Account.create_person(stripe_account.id, force_utf8_encoding(person_params))
-    end
-
-    # An under-18 seller can't be verified alone, so the guardian goes on as a second Person.
-    # Sync failure must not fail account creation — the merchant account is already live and the
-    # guardian is re-synced on every later update_account, so a miss just leaves Stripe's
-    # legal-guardian requirement unmet, same as if we'd never tried.
-    # Rescue StandardError, not Stripe::StripeError: the sync also writes locally, and a deadlock
-    # or lock-wait timeout there must not escape and abort creation before the account is marked
-    # alive.
-    begin
-      StripeGuardianManager.sync(user, stripe_account, passphrase:)
-    rescue => e
-      ErrorNotifier.notify(e)
-    end
-
-    # We need to update with empty full_name_aliases here as setting full_name_aliases is mandatory for Singapore accounts.
-    # It is a property on the `person` entity associated with the Stripe::Account.
-    # Ref: https://stripe.com/docs/api/persons/object#person_object-full_name_aliases
-    if user_compliance_info.country_code == Compliance::Countries::SGP.alpha2
-      stripe_person = Stripe::Account.list_persons(stripe_account.id)["data"].last
-      Stripe::Account.update_person(stripe_account.id, stripe_person.id, { full_name_aliases: [""] }) if stripe_person.present?
-    end
-
-    merchant_account.charge_processor_alive_at = Time.current
-    merchant_account.save!
-
-    # Non-Card bank accounts are saved at account creation time.
-    #
-    # Card bank accounts are saved when we are notified via account.updated event that charges are enabled on the account
-    # because token generation fails unless charges are enabled.
-    if bank_account && !bank_account.is_a?(CardBankAccount)
-      save_stripe_bank_account_info(bank_account, stripe_account)
-    end
-
-    begin
-      DefaultAbandonedCartWorkflowGeneratorService.new(seller: user).generate if merchant_account.is_a_stripe_connect_account?
-    rescue => e
-      Rails.logger.error("Failed to generate default abandoned cart workflow for user #{user.id}: #{e.message}")
-      ErrorNotifier.notify(e)
-    end
-
-    clear_stale_postal_code_failure_notes(user)
-    clear_stale_bank_sync_failure_notes(user)
-    clear_stale_payout_setup_rejection_notes(user)
-
-    merchant_account
   rescue => e
     if merchant_account.present? && merchant_account.charge_processor_alive_at.nil?
       cleanup_failed_merchant_account(merchant_account)
@@ -1884,8 +1885,9 @@ module StripeMerchantAccountManager
   def self.user_has_stripe_connect_merchant_account?(user)
     # It's really important we don't have two merchant accounts per user, so we do this check on the master database
     # to ensure we're looking at the latest data.
-    ActiveRecord::Base.connection.stick_to_primary!
-    user.stripe_account.present?
+    ApplicationRecord.connected_to(role: :writing) do
+      user.stripe_account.present?
+    end
   end
 
   private_class_method
