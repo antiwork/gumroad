@@ -287,24 +287,24 @@ module StripeMerchantAccountManager
     end
   rescue => e
     ApplicationRecord.connected_to(role: :writing) do
-    if merchant_account.present? && merchant_account.charge_processor_alive_at.nil?
-      cleanup_failed_merchant_account(merchant_account)
-      # Bank-account, tax-ID, phone-number, JP address/kanji, and postal-code rejections are
-      # expected seller-input errors — Stripe's message shows inline on the settings page and the
-      # seller can just fix it (bank/postal-code rejections also get a payout-note breadcrumb
-      # below, and postal codes are auto-retried weekly by RetryStripeRejectedPayoutSetupsJob).
-      # Don't page Sentry for them; only unexpected failures should alert.
-      ErrorNotifier.notify(e) unless bank_account_invalid_error?(e) || tax_id_invalid_error?(e) || phone_number_invalid_error?(e) || jp_address_invalid_error?(e) || postal_code_invalid_error?(e)
-    end
-    record_postal_code_failure_note(user, e) if notify && postal_code_invalid_error?(e)
-    record_bank_sync_failure_note(user, e, bank_account:) if notify && bank_account_invalid_error?(e)
-    # A seller who has no connected account yet fails here, not in update_account: the settings
-    # page calls create_account once the bank account exists, and every rejection used to leave
-    # nothing behind except a merchant-account row created and soft-deleted in the same second.
-    # Record which field Stripe objected to unless the rejection already has its own dedicated
-    # breadcrumb above, so support can read the cause off the account instead of reproducing it.
-    record_account_rejection_note(user, e) if notify && undiagnosed_stripe_rejection?(e)
-    raise
+      if merchant_account.present? && merchant_account.charge_processor_alive_at.nil?
+        cleanup_failed_merchant_account(merchant_account)
+        # Bank-account, tax-ID, phone-number, JP address/kanji, and postal-code rejections are
+        # expected seller-input errors — Stripe's message shows inline on the settings page and the
+        # seller can just fix it (bank/postal-code rejections also get a payout-note breadcrumb
+        # below, and postal codes are auto-retried weekly by RetryStripeRejectedPayoutSetupsJob).
+        # Don't page Sentry for them; only unexpected failures should alert.
+        ErrorNotifier.notify(e) unless bank_account_invalid_error?(e) || tax_id_invalid_error?(e) || phone_number_invalid_error?(e) || jp_address_invalid_error?(e) || postal_code_invalid_error?(e)
+      end
+      record_postal_code_failure_note(user, e) if notify && postal_code_invalid_error?(e)
+      record_bank_sync_failure_note(user, e, bank_account:) if notify && bank_account_invalid_error?(e)
+      # A seller who has no connected account yet fails here, not in update_account: the settings
+      # page calls create_account once the bank account exists, and every rejection used to leave
+      # nothing behind except a merchant-account row created and soft-deleted in the same second.
+      # Record which field Stripe objected to unless the rejection already has its own dedicated
+      # breadcrumb above, so support can read the cause off the account instead of reproducing it.
+      record_account_rejection_note(user, e) if notify && undiagnosed_stripe_rejection?(e)
+      raise
     end
   end
 
