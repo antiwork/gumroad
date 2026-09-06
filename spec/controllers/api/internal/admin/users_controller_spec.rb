@@ -2185,6 +2185,22 @@ describe Api::Internal::Admin::UsersController do
       expect(response.parsed_body["social_connections"].sole).to include("uid" => "UC123", "currently_linked" => false)
     end
 
+    it "reports currently_linked from the user's live Instagram identity" do
+      user = create(:user, email: "seller@example.com")
+      create(:user_instagram_identity, user:, instagram_user_id: "17841400000000000")
+      create(:social_connect_verification, user:, platform: "instagram", uid: "17841400000000000", handle: "gumroad")
+
+      get :social_connections, params: { email: user.email }
+
+      expect(response.parsed_body["social_connections"].sole).to include("uid" => "17841400000000000", "currently_linked" => true)
+
+      user.instagram_identity.destroy!
+
+      get :social_connections, params: { email: user.email }
+
+      expect(response.parsed_body["social_connections"].sole).to include("uid" => "17841400000000000", "currently_linked" => false)
+    end
+
     it "returns an empty list for a user with no connections" do
       user = create(:user, email: "seller@example.com")
 

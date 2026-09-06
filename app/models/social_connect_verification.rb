@@ -53,6 +53,26 @@ class SocialConnectVerification < ApplicationRecord
     verification
   end
 
+  def self.record_from_instagram!(user, profile)
+    # Meta's deauthorize/data-deletion signed_request carries the app-scoped
+    # (token) user id, so that must be the canonical uid or those callbacks
+    # delete nothing.
+    uid = (profile["token_user_id"].presence || profile["user_id"].presence || profile["id"]).to_s
+    return if uid.blank?
+
+    verification = find_or_initialize_by(user:, platform: "instagram")
+    verification.update!(
+      uid:,
+      handle: profile["username"],
+      account_created_at: nil,
+      follower_count: profile["followers_count"].presence&.to_i,
+      post_count: profile["media_count"].presence&.to_i,
+      last_posted_at: parse_iso8601(profile["last_posted_at"]),
+      last_verified_at: Time.current,
+    )
+    verification
+  end
+
   def self.parse_twitter_time(value)
     return if value.blank?
 
