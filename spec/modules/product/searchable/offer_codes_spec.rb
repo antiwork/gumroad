@@ -5,6 +5,7 @@ require "spec_helper"
 describe "Product::Searchable - Offer codes filtering" do
   describe "filtering by offer_codes", :elasticsearch_wait_for_refresh do
     before do
+      create(:merchant_account, user: nil, charge_processor_merchant_id: "offer_search_#{SecureRandom.hex(12)}")
       Link.__elasticsearch__.create_index!(force: true)
 
       Feature.activate(:offer_codes_search)
@@ -44,6 +45,18 @@ describe "Product::Searchable - Offer codes filtering" do
       expect(records).to include(@product_with_offer)
       expect(records).to include(@product_without_offer)
       expect(records).to include(@product_with_other_offer)
+    end
+
+    it "stops matching a product removed from the discount" do
+      args = Link.search_options(offer_code: @offer_code.code)
+      expect(Link.__elasticsearch__.search(args).records.to_a).to include(@product_with_offer)
+      SendToElasticsearchWorker.clear
+
+      @offer_code.reload.update!(products: [])
+      SendToElasticsearchWorker.drain
+
+      expect(@product_with_offer.reload.product_and_universal_offer_codes).not_to include(@offer_code)
+      expect(Link.__elasticsearch__.search(args).records.to_a).not_to include(@product_with_offer)
     end
 
     it "returns no products when searching with __no_match__ code" do

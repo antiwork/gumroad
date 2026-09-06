@@ -1403,6 +1403,117 @@ describe OfferCode do
     let!(:offer_code) { create(:offer_code, user: creator, code: "BLACKFRIDAY2025", products: [product1, product2]) }
 
     describe "after_save callback" do
+      it "waits for the enclosing transaction before indexing a removed product" do
+        SendToElasticsearchWorker.clear
+
+        OfferCode.transaction(requires_new: true) do
+          OfferCode.transaction(requires_new: true) do
+            offer_code.update!(products: [product2])
+          end
+          expect(SendToElasticsearchWorker.jobs.size).to eq(0)
+        end
+
+        expect(SendToElasticsearchWorker).to have_enqueued_sidekiq_job(product1.id, "update", ["offer_codes"])
+      end
+
+      it "does not index a removal rolled back with its transaction" do
+        SendToElasticsearchWorker.clear
+
+        OfferCode.transaction(requires_new: true) do
+          offer_code.update!(products: [product2])
+          raise ActiveRecord::Rollback
+        end
+
+        expect(SendToElasticsearchWorker.jobs.size).to eq(0)
+        expect(offer_code.reload.products).to contain_exactly(product1, product2)
+      end
+
+      it "does not index a removal rolled back to a savepoint" do
+        SendToElasticsearchWorker.clear
+
+        OfferCode.transaction(requires_new: true) do
+          OfferCode.transaction(requires_new: true) do
+            offer_code.update!(products: [product2])
+            raise ActiveRecord::Rollback
+          end
+        end
+
+        expect(SendToElasticsearchWorker.jobs.size).to eq(0)
+        expect(offer_code.reload.products).to contain_exactly(product1, product2)
+      end
+
+      it "indexes a successful retry after a failed removal update" do
+        SendToElasticsearchWorker.clear
+
+        expect(offer_code.update(products: [product2], amount_cents: -1)).to be(false)
+        expect(SendToElasticsearchWorker.jobs.size).to eq(0)
+        expect(offer_code.reload.products).to contain_exactly(product1, product2)
+
+        offer_code.update!(products: [product2])
+
+        expect(SendToElasticsearchWorker).to have_enqueued_sidekiq_job(product1.id, "update", ["offer_codes"])
+      end
+
+      it "does not index an old universal scope when its change rolls back" do
+        universal_offer_code = create(:universal_offer_code, user: creator)
+        SendToElasticsearchWorker.clear
+
+        OfferCode.transaction(requires_new: true) do
+          universal_offer_code.update!(universal: false, products: [product2])
+          raise ActiveRecord::Rollback
+        end
+
+        expect(SendToElasticsearchWorker.jobs.size).to eq(0)
+        expect(universal_offer_code.reload).to be_universal
+      end
+
+      it "reindexes formerly eligible products when a universal code becomes product-specific" do
+        universal_offer_code = create(:universal_offer_code, user: creator)
+        SendToElasticsearchWorker.clear
+
+        universal_offer_code.update!(universal: false, products: [product2])
+
+        expect(product1.reload.product_and_universal_offer_codes).not_to include(universal_offer_code)
+        expect(SendToElasticsearchWorker).to have_enqueued_sidekiq_job(product1.id, "update", ["offer_codes"])
+      end
+
+      it "reindexes the old currency's products when a universal discount changes currency" do
+        universal_offer_code = create(:universal_offer_code, user: creator, currency_type: "usd")
+        create(:product, user: creator, price_currency_type: "eur")
+        SendToElasticsearchWorker.clear
+
+        universal_offer_code.update!(currency_type: "eur")
+
+        expect(product1.reload.product_and_universal_offer_codes).not_to include(universal_offer_code)
+        expect(SendToElasticsearchWorker).to have_enqueued_sidekiq_job(product1.id, "update", ["offer_codes"])
+      end
+
+      it "enqueues the previous universal catalog in bounded batches" do
+        universal_offer_code = create(:universal_offer_code, user: creator)
+        SendToElasticsearchWorker.clear
+        stub_const("OfferCode::PRODUCT_REINDEX_BATCH_SIZE", 1)
+
+        batch_sizes = []
+        allow(SendToElasticsearchWorker).to receive(:perform_bulk) do |args, **|
+          batch_sizes << args.size
+        end
+
+        universal_offer_code.update!(universal: false, products: [product2])
+
+        expect(batch_sizes.max).to eq(1)
+        expect(batch_sizes.sum).to be >= 2
+      end
+
+      it "reindexes products removed from a product-specific offer code" do
+        SendToElasticsearchWorker.clear
+
+        offer_code.update!(products: [product2])
+
+        expect(product1.reload.product_and_universal_offer_codes).not_to include(offer_code)
+        expect(SendToElasticsearchWorker).to have_enqueued_sidekiq_job(product1.id, "update", ["offer_codes"])
+        expect(SendToElasticsearchWorker).to have_enqueued_sidekiq_job(product2.id, "update", ["offer_codes"])
+      end
+
       it "reindexes products when they are excluded from a universal offer code" do
         universal_offer_code = create(:universal_offer_code, user: creator)
 
