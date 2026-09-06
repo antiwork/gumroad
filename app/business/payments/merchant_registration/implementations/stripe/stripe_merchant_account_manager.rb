@@ -2652,16 +2652,20 @@ module StripeMerchantAccountManager
 
   def self.handle_new_user_compliance_info(user_compliance_info, notify: true, force_address_resync: false)
     return if user_compliance_info.user.has_stripe_account_connected?
-    return unless user_has_stripe_connect_merchant_account?(user_compliance_info.user)
+    ApplicationRecord.connected_to(role: :writing) do
+      return unless user_has_stripe_connect_merchant_account?(user_compliance_info.user)
 
-    update_account(user_compliance_info.user, passphrase: GlobalConfig.get("STRONGBOX_GENERAL_PASSWORD"), notify:, force_address_resync:)
+      update_account(user_compliance_info.user, passphrase: GlobalConfig.get("STRONGBOX_GENERAL_PASSWORD"), notify:, force_address_resync:)
+    end
   end
 
   def self.handle_new_bank_account(bank_account)
     return if bank_account.user.has_stripe_account_connected?
-    return unless user_has_stripe_connect_merchant_account?(bank_account.user)
+    ApplicationRecord.connected_to(role: :writing) do
+      return unless user_has_stripe_connect_merchant_account?(bank_account.user)
 
-    update_bank_account(bank_account.user, passphrase: GlobalConfig.get("STRONGBOX_GENERAL_PASSWORD"))
+      update_bank_account(bank_account.user, passphrase: GlobalConfig.get("STRONGBOX_GENERAL_PASSWORD"))
+    end
   end
 
   SOFT_FUTURE_REQUIREMENT_GRACE_PERIOD = 30.days

@@ -7,6 +7,17 @@ describe Follower::CreateService do
   let(:active_follower) { create(:active_follower, user:) }
   let(:deleted_follower) { create(:deleted_follower, user:) }
 
+  it "keeps dependent confirmation reads on primary" do
+    service = described_class.new(followed_user: user, follower_email: follower.email)
+    expect(service).to receive(:confirm_follower) do
+      expect(ApplicationRecord.connected_to_stack).to include(
+        include(role: :writing, klasses: include(ApplicationRecord))
+      )
+    end
+
+    service.perform
+  end
+
   context "when follower is present" do
     it "updates the source of the follow and follower_user_id" do
       Follower::CreateService.perform(

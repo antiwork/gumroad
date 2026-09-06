@@ -40,7 +40,7 @@ class Follower::CreateService
       create_new_follower
     end
 
-    confirm_follower
+    ApplicationRecord.connected_to(role: :writing) { confirm_follower }
 
     @follower
   end

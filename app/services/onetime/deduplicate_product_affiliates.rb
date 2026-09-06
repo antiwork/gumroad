@@ -18,6 +18,8 @@
 #   Onetime::DeduplicateProductAffiliates.process_commission_divergent(dry_run: false)
 module Onetime
   class DeduplicateProductAffiliates
+    include PrimaryDatabasePinning
+
     CONTENT_COLUMNS = %w[affiliate_basis_points destination_url flags].freeze
     COMMISSION_COLUMNS = %w[affiliate_basis_points flags].freeze
     BATCH_SIZE = 100
@@ -35,7 +37,7 @@ module Onetime
     end
 
     def process(dry_run: true)
-      ApplicationRecord.connected_to(role: :writing) do
+      with_primary_database(!dry_run) do
         identical, divergent = duplicate_pairs.partition { |pair| identical?(*pair) }
         puts "Found #{duplicate_pairs.size} duplicate pair(s): #{identical.size} identical, #{divergent.size} divergent"
 
@@ -67,7 +69,7 @@ module Onetime
     # updated_at cannot rank URLs: any unrelated persisted change advances it. Pairs
     # with commission divergence stay untouched; they need a reviewed keep-rule.
     def process_url_divergent(dry_run: true)
-      ApplicationRecord.connected_to(role: :writing) do
+      with_primary_database(!dry_run) do
         eligible, held_for_review = divergent_pairs.partition { |pair| url_only_divergent?(*pair) }
         puts "Found #{divergent_pairs.size} divergent pair(s): #{eligible.size} differ only on destination_url, #{held_for_review.size} held for review"
 
@@ -92,7 +94,7 @@ module Onetime
     # not change. Recency is not a safe ranking here: updated_at advances on
     # unrelated writes.
     def process_commission_divergent(dry_run: true)
-      ApplicationRecord.connected_to(role: :writing) do
+      with_primary_database(!dry_run) do
         eligible, untouched = divergent_pairs.partition { |pair| commission_divergent?(*pair) }
         puts "Found #{divergent_pairs.size} divergent pair(s): #{eligible.size} differ on commission terms, #{untouched.size} untouched"
 

@@ -21,7 +21,7 @@ module Onetime
           puts "[#{self.class.name}] rich_content=#{rich_content.id} entity=#{rich_content.entity_type}##{rich_content.entity_id} removing=#{foreign_ids.sort}"
           next if dry_run
 
-          remediate!(rich_content, foreign_ids)
+          remediate!(rich_content)
         end
       end
 
@@ -30,9 +30,12 @@ module Onetime
     end
 
     private
-      def remediate!(rich_content, foreign_ids)
+      def remediate!(rich_content)
         ApplicationRecord.connected_to(role: :writing) do
-          ApplicationRecord.transaction do
+          rich_content.with_lock do
+            foreign_ids = rich_content.cross_product_file_embed_ids
+            next if foreign_ids.empty?
+
             rich_content.update!(description: RichContent.reject_file_embeds(rich_content.description, foreign_ids.to_set))
 
             entity = rich_content.entity
