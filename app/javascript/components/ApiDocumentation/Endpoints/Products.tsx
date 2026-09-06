@@ -37,6 +37,22 @@ const SingleProductResponseFields = () => (
   </ApiResponseFields>
 );
 
+const CreateProductResponseFields = () => (
+  <ApiResponseFields>
+    {renderFields([
+      { name: "success", type: "boolean", description: "Whether the request succeeded" },
+      { name: "product", type: "object", description: "The product object", children: PRODUCT_FIELDS },
+      {
+        name: "warning",
+        type: "string",
+        description:
+          "Explains why the product was saved as a draft instead of being published (for example, an unconfirmed email address; publish it later with POST /v2/products/:id/enable), or that a post-publish step failed. Check the product's published field for its actual state.",
+        condition: "present when publishing did not fully succeed",
+      },
+    ])}
+  </ApiResponseFields>
+);
+
 const CategoriesResponseFields = () => (
   <ApiResponseFields>
     {renderFields([
@@ -405,11 +421,23 @@ export const CreateProduct = () => (
     path="/products"
     description={
       <>
-        Create a new product (as a draft). Requires the <code>edit_products</code> or <code>account</code> scope.
+        Create a new product. The product is published immediately unless you pass <code>draft=true</code> or{" "}
+        <code>published=false</code>. If publishing is blocked (for example, your email address is not confirmed or no
+        payout method is set up), the product is saved as a draft and the response includes a <code>warning</code>{" "}
+        explaining why; publish it later with <code>POST /v2/products/:id/enable</code>. Requires the{" "}
+        <code>edit_products</code> or <code>account</code> scope.
       </>
     }
   >
     <ApiParameters>
+      <ApiParameter
+        name="draft"
+        description="(optional, true or false, default false) save as an unpublished draft instead of publishing"
+      />
+      <ApiParameter
+        name="published"
+        description="(optional, true or false, default true) false saves as an unpublished draft, same as draft=true"
+      />
       <ApiParameter
         name="native_type"
         description='(optional, "digital" (default), "course", "ebook", "membership", "bundle", "coffee", "call", or "commission") cannot be changed later'
@@ -464,7 +492,7 @@ export const CreateProduct = () => (
       Cover images and thumbnails are attached separately via <code>POST /v2/products/:id/covers</code> and{" "}
       <code>POST /v2/products/:id/thumbnail</code>.
     </p>
-    <SingleProductResponseFields />
+    <CreateProductResponseFields />
     <CodeSnippet caption="cURL example">
       {`curl https://api.gumroad.com/v2/products \\
   -d "access_token=ACCESS_TOKEN" \\
@@ -492,7 +520,7 @@ export const CreateProduct = () => (
     "taxonomy_id": 123,
     "category": "design/ui-and-web/figma",
     "category_label": "Figma",
-    "published": false,
+    "published": true,
     "files": [],
     "covers": [],
     "main_cover_id": null,

@@ -282,8 +282,8 @@ describe Api::V2::LinksController do
         expect(product.name).to eq("Some product")
         expect(product.price_cents).to eq(200)
         expect(product.native_type).to eq("digital")
-        expect(product.draft).to be true
-        expect(product.purchase_disabled_at).to be_present
+        expect(product.draft).to be false
+        expect(product.purchase_disabled_at).to be_nil
         expect(product.display_product_reviews).to be true
       end
 
@@ -444,12 +444,113 @@ describe Api::V2::LinksController do
         expect(response.parsed_body["message"]).to be_present
       end
 
-      it "starts as a draft with purchase_disabled_at set" do
+      it "publishes the product by default, even with no files or rich content" do
         post @action, params: @params
+
+        product = @user.links.last
+        expect(product.alive_product_files).to be_empty
+        expect(product.has_content?).to be false
+        expect(product.draft).to be false
+        expect(product.purchase_disabled_at).to be_nil
+        expect(response.parsed_body["product"]["published"]).to be true
+        expect(response.parsed_body).not_to have_key("warning")
+      end
+
+      it "keeps the product as a draft when draft is true" do
+        post @action, params: @params.merge(draft: "true")
 
         product = @user.links.last
         expect(product.draft).to be true
         expect(product.purchase_disabled_at).to be_present
+        expect(response.parsed_body["product"]["published"]).to be false
+        expect(response.parsed_body).not_to have_key("warning")
+      end
+
+      it "keeps the product as a draft when published is false" do
+        post @action, params: @params.merge(published: "false")
+
+        product = @user.links.last
+        expect(product.draft).to be true
+        expect(product.purchase_disabled_at).to be_present
+      end
+
+      it "publishes when draft is false" do
+        post @action, params: @params.merge(draft: "false")
+
+        expect(@user.links.last.draft).to be false
+      end
+
+      it "saves a draft with a warning when publishing is blocked" do
+        @user.update!(confirmed_at: nil)
+
+        expect do
+          post @action, params: @params
+        end.to change { @user.links.count }.by(1)
+
+        expect(response).to be_successful
+        body = response.parsed_body
+        expect(body["success"]).to be true
+        expect(body["product"]["published"]).to be false
+        expect(body["warning"]).to eq("Saved as a draft: You have to confirm your email address before you can do that.")
+
+        product = @user.links.last
+        expect(product.draft).to be true
+        expect(product.purchase_disabled_at).to be_present
+      end
+
+      it "saves a draft with a warning when the seller has no payout method" do
+        @user.update!(payment_address: nil)
+
+        post @action, params: @params
+
+        expect(response.parsed_body["success"]).to be true
+        expect(response.parsed_body["warning"]).to start_with("Saved as a draft: ")
+        expect(@user.links.last.draft).to be true
+      end
+
+      it "saves a draft with a warning when content moderation blocks publishing" do
+        allow(ContentModeration::ModerateRecordService).to receive(:check)
+          .and_return(ContentModeration::ModerateRecordService::CheckResult.new(passed: false, reasons: ["Matched blocked word: forbidden"]))
+
+        expect do
+          post @action, params: @params
+        end.to change { @user.links.count }.by(1)
+
+        body = response.parsed_body
+        expect(body["success"]).to be true
+        expect(body["product"]["published"]).to be false
+        expect(body["warning"]).to start_with("Saved as a draft: ")
+        expect(body["warning"]).to include("content guidelines")
+
+        product = @user.links.last
+        expect(product.draft).to be true
+        expect(product.purchase_disabled_at).to be_present
+      end
+
+      it "notifies and keeps the draft when publishing raises unexpectedly" do
+        allow_any_instance_of(Link).to receive(:publish!).and_raise(StandardError, "boom")
+        expect(ErrorNotifier).to receive(:notify).with(instance_of(StandardError), product_id: kind_of(Integer))
+
+        post @action, params: @params
+
+        expect(response.parsed_body["success"]).to be true
+        expect(response.parsed_body["warning"]).to include("Saved as a draft: publishing failed")
+        expect(@user.links.last.draft).to be true
+      end
+
+      it "reports the product as published when a post-publish step raises after the row is live" do
+        allow_any_instance_of(Link).to receive(:publish!) do |product|
+          product.update_columns(draft: false, purchase_disabled_at: nil)
+          raise StandardError, "after_commit boom"
+        end
+        expect(ErrorNotifier).to receive(:notify).with(instance_of(StandardError), product_id: kind_of(Integer))
+
+        post @action, params: @params
+
+        expect(response.parsed_body["success"]).to be true
+        expect(response.parsed_body["product"]["published"]).to be true
+        expect(response.parsed_body["warning"]).to eq("Published, but a post-publish step failed and has been reported.")
+        expect(@user.links.last.draft).to be false
       end
 
       it "saves tags correctly" do
@@ -850,7 +951,7 @@ describe Api::V2::LinksController do
         expect(body["product"]).to be_present
         expect(body["product"]["name"]).to eq("Some product")
         expect(body["product"]["price"]).to eq(200)
-        expect(body["product"]["published"]).to be false
+        expect(body["product"]["published"]).to be true
       end
     end
 
