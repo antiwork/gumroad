@@ -22,6 +22,7 @@ class BankAccount < ApplicationRecord
   after_create_commit :handle_stripe_bank_account
   after_create_commit :handle_compliance_info_request
   after_create :update_user_products_search_index
+  after_update_commit :enqueue_user_products_recommendability_refresh, if: :active_status_changed?
 
   # This state machine can be expanded once we implement a complex verification process.
   state_machine(:state, initial: :unverified) do
@@ -173,5 +174,34 @@ class BankAccount < ApplicationRecord
       user.products.find_each do |product|
         product.enqueue_index_update_for(["is_recommendable"])
       end
+    end
+
+    def active_status_changed?
+      saved_change_to_deleted_at? && saved_change_to_deleted_at.any?(&:nil?)
+    end
+
+    def enqueue_user_products_recommendability_refresh
+      return if user_has_another_payout_method?
+
+      RefreshUserProductsRecommendationEligibilityJob.perform_async(user_id)
+    rescue => enqueue_error
+      # Do not run the catalog refresh inline: Stripe payout recovery calls
+      # mark_deleted! before reverse_internal_transfer_or_hold_payouts!, and a
+      # large-catalog sync pass would delay money reverse/hold when Redis is down.
+      report_recommendability_refresh_error(enqueue_error, "enqueue")
+    end
+
+    def user_has_another_payout_method?
+      user.payment_address.present? ||
+        user.bank_accounts.alive.where.not(id:).exists? ||
+        user.stripe_connect_account.present? ||
+        user.has_paypal_account_connected?
+    end
+
+    def report_recommendability_refresh_error(error, action)
+      Rails.logger.error("Failed to #{action} product recommendation refresh for bank account #{id}: #{error.class}: #{error.message}")
+      ErrorNotifier.notify(error, bank_account_id: id, user_id:)
+    rescue
+      nil
     end
 end

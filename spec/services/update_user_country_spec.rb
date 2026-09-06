@@ -82,6 +82,31 @@ describe UpdateUserCountry do
       expect(old_bank_account.reload.deleted?).to eq(true)
     end
 
+    it "removes products from recommendable search results after deleting the seller's only payout method", :elasticsearch_wait_for_refresh do
+      seller = create(:compliant_user, name: "Country change seller")
+      product = create(:product, user: seller, taxonomy: create(:taxonomy))
+      create(:merchant_account, user: nil)
+      create(:purchase, link: product, seller: seller, price_cents: product.price_cents)
+      create(:user_compliance_info, user: seller)
+      create(:canadian_bank_account, user: seller)
+      seller.update!(payment_address: nil)
+      index_model_records(Link)
+
+      recommendable_product_ids = -> {
+        Link.search(Link.search_options(ids: [product.id], include_rated_as_adult: true)).records.map(&:id)
+      }
+      expect(product.reload.recommendable?).to eq(true)
+      expect(recommendable_product_ids.call).to eq([product.id])
+
+      UpdateUserCountry.new(new_country_code: "GB", user: seller).process
+      RefreshUserProductsRecommendationEligibilityJob.drain
+      Link.__elasticsearch__.refresh_index!
+
+      expect(product.reload.recommendable?).to eq(false)
+      expect(EsClient.get(index: Link.index_name, id: product.id).dig("_source", "is_recommendable")).to eq(false)
+      expect(recommendable_product_ids.call).to be_empty
+    end
+
     it "adds country changed comment" do
       UpdateUserCountry.new(new_country_code: "GB", user: @user).process
 
