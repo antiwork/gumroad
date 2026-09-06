@@ -71,4 +71,18 @@ describe "config/database.yml replica routing" do
     expect(replica.fetch("host")).to eq("staging-replica.example")
     expect(replica.fetch("database")).to eq("gumroad_staging_replica")
   end
+
+  it "gives branch-app staging a same-host replica so connects_to can boot" do
+    ENV["USE_DB_WORKER_REPLICAS"] = "true"
+    staging = YAML.safe_load(
+      ERB.new(Rails.root.join("config/database.branch-app.yml").read).result,
+      aliases: true
+    ).fetch("staging")
+
+    expect(staging.fetch("primary").fetch("adapter")).to eq("mysql2_proxy")
+    replica = staging.fetch("primary_replica")
+    expect(replica.fetch("adapter")).to eq("mysql2")
+    expect(replica.fetch("replica")).to eq(true)
+    expect(replica.fetch("host")).to eq(ENV.fetch("DATABASE_HOST"))
+  end
 end
