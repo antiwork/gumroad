@@ -26,7 +26,15 @@ ARG BUNDLE_GEMS__CONTRIBSYS__COM
 RUN mkdir -p /usr/share/man/man1
 
 # PACKAGES
+#
+# Debian 11 (bullseye) LTS ended 2026-08-31 and the bullseye-security pool
+# was removed from deb.debian.org while the index still lists it, so
+# apt-get install 404s on every security-suite package. archive.debian.org
+# does not carry bullseye-security yet; pin the suite to the last
+# snapshot.debian.org state instead (check-valid-until=no: the snapshot's
+# Release file is frozen and would otherwise expire a week later).
 RUN cd /tmp \
+  && sed -i "s|deb http://deb.debian.org/debian-security bullseye-security main|deb [check-valid-until=no] http://snapshot.debian.org/archive/debian-security/20260831T000000Z bullseye-security main|" /etc/apt/sources.list \
   && sed -i "s/bullseye main/bullseye main contrib non-free/" /etc/apt/sources.list \
   && apt-get update -y -qq \
   && apt-get install -yq --no-install-recommends \
