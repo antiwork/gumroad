@@ -148,6 +148,9 @@ class Purchase < ApplicationRecord
 
   has_and_belongs_to_many :variant_attributes, class_name: "BaseVariant"
   has_many :base_variants_purchases, class_name: "BaseVariantsPurchase" # used for preloading variant ids without having to also query their records
+  # Keep this as the only `has_one :call`. A second declaration drops autosave, and
+  # Rails 7.2 then reports nested call errors as "Call is invalid" instead of the
+  # slot-availability message checkout shows the buyer.
   has_one :call, autosave: true
 
   has_one :affiliate_credit
@@ -181,7 +184,6 @@ class Purchase < ApplicationRecord
   has_many :product_purchases, through: :product_purchase_records
   has_one :bundle_purchase_record, class_name: "BundleProductPurchase", foreign_key: :product_purchase_id
   has_one :bundle_purchase, through: :bundle_purchase_record, source: :bundle_purchase
-  has_one :call
 
   # Normal purchase state transitions:
   #
