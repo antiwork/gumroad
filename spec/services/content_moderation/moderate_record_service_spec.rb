@@ -54,10 +54,14 @@ RSpec.describe ContentModeration::ModerateRecordService, :vcr do
         end
         method.call(*args, &block)
       end
+      # Rails 7.2 routes its own reads/writes through with_connection(prevent_permanent_checkout:),
+      # so materialize the record first and only count checkouts made from the strategy threads.
+      product
+      main_thread = Thread.current
       checkouts = 0
-      allow(ActiveRecord::Base.connection_pool).to receive(:with_connection).and_wrap_original do |method, *args, &block|
-        checkouts += 1
-        method.call(*args, &block)
+      allow(ActiveRecord::Base.connection_pool).to receive(:with_connection).and_wrap_original do |method, *args, **kwargs, &block|
+        checkouts += 1 unless Thread.current == main_thread
+        method.call(*args, **kwargs, &block)
       end
       %w[ClassifierStrategy PromptStrategy].each do |name|
         klass = ContentModeration::Strategies.const_get(name)
