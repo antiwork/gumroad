@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
-# Runs the block on the primary database when `pinned` is true. Without
+# Runs the block on the primary database when `pinned` is true. On worker
+# processes with USE_DB_WORKER_REPLICAS, that is the writing role. Without
 # `connects_to` replicas configured, `connected_to(role: :writing)` just yields.
 module PrimaryDatabasePinning
   private

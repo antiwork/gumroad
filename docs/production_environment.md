@@ -42,6 +42,7 @@ Sidekiq processes background jobs for the application.
 
 - **Threads**: Set via `RAILS_MAX_THREADS` (default: 2)
 - **Memory**: Recommended 2GB per instance
+- **Database Replicas**: Set `USE_DB_WORKER_REPLICAS=true` to use read replicas for database operations
 
 ### Push Notification Service (RPush)
 

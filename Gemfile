@@ -136,6 +136,9 @@ gem "maxmind-geoip2", "~> 1.1"
 gem "mime-types", "~> 3.4"
 gem "money", "~> 6.16"
 gem "mysql2", ">= 0.5.6"
+# Makara replacement: statement-level primary/replica split on Rails 7.2.
+# Only used when database.yml sets adapter: mysql2_proxy (USE_DB_WORKER_REPLICAS).
+gem "active_record_proxy_adapters", "~> 0.11", require: "active_record_proxy_adapters/railties/mysql2"
 gem "nokogiri", "~> 1.19"
 gem "omniauth-apple", "~> 1.3"
 gem "omniauth-google-oauth2", "~> 1.1", ">= 1.1.1"

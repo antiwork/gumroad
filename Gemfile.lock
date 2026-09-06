@@ -83,6 +83,12 @@ GEM
     active_model_otp (2.3.4)
       activemodel
       rotp (~> 6.3.0)
+    active_record_proxy_adapters (0.11.1)
+      activerecord (>= 7.2.0, < 8.2)
+      activesupport (>= 7.2.0, < 8.2)
+      digest (>= 3.1.0)
+      json
+      logger
     active_record_query_trace (1.8.3)
       activerecord (>= 6.0.0)
     activejob (7.2.3.2)
@@ -262,6 +268,7 @@ GEM
       devise (~> 4)
       pwned (~> 2.4)
     diff-lcs (1.5.1)
+    digest (3.2.1)
     discordrb (3.5.0)
       discordrb-webhooks (~> 3.5.0)
       ffi (>= 1.9.24)
@@ -1112,6 +1119,7 @@ DEPENDENCIES
   actionpack-cloudflare (~> 1.1)
   active_hash (~> 3.3)
   active_model_otp (~> 2.3)
+  active_record_proxy_adapters (~> 0.11)
   active_record_query_trace (~> 1.8)
   activerecord-mysql-index-hint (~> 0.0)
   after_commit_everywhere (~> 1.3)
