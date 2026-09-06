@@ -1347,6 +1347,7 @@ describe CustomerMailer do
     let(:call) { create(:call) }
 
     before do
+      create(:merchant_account, user: nil, charge_processor_merchant_id: "reminder_#{SecureRandom.hex(12)}")
       call.purchase.update!(variant_attributes: [create(:variant, name: "1 hour")])
       call.purchase.seller.update!(name: "Phone Man")
       call.purchase.create_url_redirect!
@@ -1362,6 +1363,48 @@ describe CustomerMailer do
       expect(mail.body.sanitized).to have_text("Call schedule #{call.formatted_time_range} #{call.formatted_date_range}")
       expect(mail.body.sanitized).to have_text("Duration 1 hour")
       expect(mail.body.sanitized).to have_text("Product price $1")
+    end
+
+    it "does not deliver a queued reminder after a full refund" do
+      expect do
+        CustomerMailer.upcoming_call_reminder(call.id).deliver_later
+      end.to have_enqueued_mail(CustomerMailer, :upcoming_call_reminder).with(call.id)
+      call.purchase.update!(stripe_refunded: true)
+      create(:refund, purchase: call.purchase, amount_cents: call.purchase.price_cents)
+
+      expect(call.reload.eligible_for_reminder?).to be(false)
+      expect do
+        perform_enqueued_jobs(only: CustomerMailer.delivery_job)
+      end.not_to change(ActionMailer::Base.deliveries, :count)
+    end
+
+    it "does not deliver a queued reminder after the payment fails" do
+      call.purchase.update!(purchase_state: "in_progress")
+      expect(call.reload.eligible_for_reminder?).to be(true)
+      expect do
+        CustomerMailer.upcoming_call_reminder(call.id).deliver_later
+      end.to have_enqueued_mail(CustomerMailer, :upcoming_call_reminder).with(call.id)
+      call.purchase.update!(purchase_state: "failed")
+
+      expect do
+        perform_enqueued_jobs(only: CustomerMailer.delivery_job)
+      end.not_to change(ActionMailer::Base.deliveries, :count)
+    end
+
+    it "does not send a reminder for a charged-back purchase" do
+      call.purchase.update!(chargeback_date: Time.current)
+
+      expect(CustomerMailer.upcoming_call_reminder(call.id).message).to be_a(ActionMailer::Base::NullMail)
+    end
+
+    it "still sends a reminder after a partial refund" do
+      call.purchase.update!(stripe_partially_refunded: true)
+      create(:refund, purchase: call.purchase, amount_cents: call.purchase.price_cents / 2)
+
+      expect do
+        CustomerMailer.upcoming_call_reminder(call.id).deliver_now
+      end.to change(ActionMailer::Base.deliveries, :count).by(1)
+      expect(ActionMailer::Base.deliveries.last.to).to eq([call.purchase.email])
     end
   end
 

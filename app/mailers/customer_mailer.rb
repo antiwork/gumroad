@@ -371,7 +371,10 @@ class CustomerMailer < ApplicationMailer
   end
 
   def upcoming_call_reminder(call_id)
-    @purchase = Call.find(call_id).purchase
+    call = Call.find(call_id)
+    return unless call.eligible_for_reminder?
+
+    @purchase = call.purchase
     @subject = "Your scheduled call with #{@purchase.seller.display_name} is tomorrow!"
     @item_info = ReceiptPresenter::ItemInfo.new(@purchase)
     mail(
