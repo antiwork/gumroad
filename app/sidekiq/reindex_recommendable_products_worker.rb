@@ -32,10 +32,8 @@ class ReindexRecommendableProductsWorker
         to_set
 
       unless ids.empty?
-        # Every scrolled document gets is_recommendable reconciled: a refund-time
-        # refresh can be lost when both the enqueue and the synchronous fallback
-        # fail, leaving an ineligible product indexed as recommendable until this
-        # runs. Sales-volume fields stay limited to products with recent sales.
+        # Reconcile is_recommendable on every document: a lost refund-time refresh
+        # can leave an ineligible product indexed as recommendable until this runs.
         args = ids.map do |id|
           attributes = ["is_recommendable"]
           attributes = SALES_VOLUME_ATTRIBUTES + attributes if recent_sale_ids.include?(id)
