@@ -206,13 +206,15 @@ module ResilientFixtureTeardown
     if run_in_transaction?
       ActiveSupport::Notifications.unsubscribe(@connection_subscriber) if @connection_subscriber
       pools = @fixture_connection_pools || []
-      pools.each do |pool|
+      clean = pools.map do |pool|
         pool.unpin_connection!
       rescue StandardError => e
+        # unpin_connection! rolls back and releases the pinned connection's lock
+        # itself; a failure here means the transaction state is unknown.
         Rails.logger.warn("[RSpec] fixture unpin failed: #{e.message}")
-      ensure
-        pool.lock_thread = false
+        false
       end
+      invalidate_already_loaded_fixtures unless clean.all?
       pools.clear
       teardown_shared_connection_pool
     else
