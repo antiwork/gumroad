@@ -286,6 +286,7 @@ module StripeMerchantAccountManager
       merchant_account
     end
   rescue => e
+    ApplicationRecord.connected_to(role: :writing) do
     if merchant_account.present? && merchant_account.charge_processor_alive_at.nil?
       cleanup_failed_merchant_account(merchant_account)
       # Bank-account, tax-ID, phone-number, JP address/kanji, and postal-code rejections are
@@ -304,6 +305,7 @@ module StripeMerchantAccountManager
     # breadcrumb above, so support can read the cause off the account instead of reproducing it.
     record_account_rejection_note(user, e) if notify && undiagnosed_stripe_rejection?(e)
     raise
+    end
   end
 
   # True for Stripe rejections that would otherwise leave no trace. Postal-code and bank-account
