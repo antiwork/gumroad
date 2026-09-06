@@ -42,7 +42,7 @@ test:
 staging:
   primary:
     <<: *development
-    adapter: mysql2
+    adapter: mysql2_proxy
   primary_replica:
     <<: *development
     adapter: mysql2
