@@ -79,6 +79,12 @@ describe InstagramProfileFetcher do
     expect(described_class.new(nil).fetch).to be_nil
   end
 
+  it "returns nil when the /me body is not a Hash" do
+    stub_profile(body: ["not", "a", "profile"])
+
+    expect(described_class.new(token).fetch).to be_nil
+  end
+
   it "does not log the response body or token on an HTTP error" do
     stub_profile(body: { error: { message: "private failure" } }, status: 403)
     logged = []

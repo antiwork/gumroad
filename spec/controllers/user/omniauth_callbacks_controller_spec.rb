@@ -694,6 +694,9 @@ describe User::OmniauthCallbacksController do
       post :instagram
 
       expect(response).to redirect_to profile_path
+      identity = user.reload.instagram_identity
+      expect(identity.instagram_user_id).to eq("17841400000000000")
+      expect(identity.handle).to eq("gumroad")
       expect(user.social_connect_verifications.find_by!(platform: "instagram")).to have_attributes(
         uid: "17841400000000000",
         handle: "gumroad",
@@ -715,6 +718,7 @@ describe User::OmniauthCallbacksController do
       post :instagram
 
       expect(user.social_connect_verifications.find_by(platform: "instagram")).to be_nil
+      expect(user.reload.instagram_identity).to be_nil
       expect(flash[:alert]).to eq "Instagram connect is not available."
       expect(response).to redirect_to profile_path
     end

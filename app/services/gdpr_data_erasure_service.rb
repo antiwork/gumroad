@@ -255,6 +255,7 @@ class GdprDataErasureService
       # `dependent: :destroy` never runs and the platform uid/handle must be removed here.
       @user.social_connect_verifications.destroy_all
       @user.youtube_identity&.destroy
+      @user.instagram_identity&.destroy
 
       anonymized_email
     end

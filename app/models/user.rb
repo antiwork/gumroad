@@ -32,6 +32,7 @@ class User < ApplicationRecord
   has_many :user_external_authentications, dependent: :destroy
   has_many :social_connect_verifications, dependent: :destroy
   has_one :youtube_identity, class_name: "UserYoutubeIdentity", dependent: :destroy
+  has_one :instagram_identity, class_name: "UserInstagramIdentity", dependent: :destroy
 
   stripped_fields :name, :facebook_meta_tag, :google_analytics_id, :username, :email, :support_email
 

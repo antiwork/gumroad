@@ -138,6 +138,33 @@ describe SocialScoreShadowEvaluationService do
       expect(result[:would_have_released]).to be(false)
     end
 
+    it "prefers a threshold-passing Instagram score over a higher raw score that misses its own threshold" do
+      create(
+        :social_connect_verification,
+        user:,
+        platform: "twitter",
+        account_created_at: 3.months.ago,
+        follower_count: 100_000,
+        post_count: 5_000,
+        last_posted_at: 1.day.ago,
+      )
+      create(
+        :social_connect_verification,
+        user:,
+        platform: "instagram",
+        account_created_at: nil,
+        follower_count: 5_000,
+        post_count: 1_000,
+        last_posted_at: 1.day.ago,
+      )
+
+      result = described_class.new(user).evaluate
+
+      expect(result[:signals][:platform]).to eq("instagram")
+      expect(result[:score]).to eq(55)
+      expect(result[:would_have_released]).to be(true)
+    end
+
     it "uses all available Instagram signals instead of requiring an unavailable account age" do
       create(
         :social_connect_verification,

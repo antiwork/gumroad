@@ -26,6 +26,8 @@ class InstagramCallbacksController < ApplicationController
   def data_deletion_status
     return head :not_found unless signed_request.valid_confirmation_code?(params[:confirmation_code])
 
+    # Deletion runs synchronously in #data_deletion, so any valid confirmation
+    # code means the work is already done; this endpoint is intentionally stateless.
     render plain: "Instagram data deletion completed."
   end
 
@@ -40,5 +42,6 @@ class InstagramCallbacksController < ApplicationController
 
     def delete_instagram_data(user_id)
       SocialConnectVerification.where(platform: "instagram", uid: user_id).delete_all
+      UserInstagramIdentity.where(instagram_user_id: user_id).delete_all
     end
 end

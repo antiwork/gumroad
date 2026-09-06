@@ -12,8 +12,13 @@ class InstagramProfileFetcher
 
     response = get_json("#{GRAPH_URL}/#{INSTAGRAM_API_VERSION}/me", fields: "user_id,username,followers_count,media_count")
     # Meta documents /me both flat and wrapped in a data array; accept either.
-    profile = response.is_a?(Hash) && response.key?("data") ? response.dig("data", 0) : response
-    uid = profile&.fetch("user_id", nil).presence || profile&.fetch("id", nil)
+    # Non-Hash bodies (empty string, array-only error shapes) are not profiles.
+    return unless response.is_a?(Hash)
+
+    profile = response.key?("data") ? response.dig("data", 0) : response
+    return unless profile.is_a?(Hash)
+
+    uid = profile["user_id"].presence || profile["id"].presence
     return if uid.blank?
 
     profile.merge("last_posted_at" => last_posted_at(uid))

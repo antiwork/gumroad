@@ -23,7 +23,9 @@ class ConnectionsController < Sellers::BaseController
   end
 
   def unlink_instagram
-    current_seller.social_connect_verifications.find_by(platform: "instagram")&.destroy!
+    # Keep SocialConnectVerification as dormant shared-identity evidence, like X/YouTube.
+    # Live "connected" state is UserInstagramIdentity only.
+    current_seller.instagram_identity&.destroy!
 
     render json: { success: true }
   rescue => e

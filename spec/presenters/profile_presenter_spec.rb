@@ -62,6 +62,22 @@ describe ProfilePresenter do
       expect(described_class.new(pundit_user:, seller:).profile_settings_props(request:)[:youtube_connected]).to eq(true)
     end
 
+    it "reports Instagram connected from the live identity, not a dormant verification row" do
+      create(:social_connect_verification, user: seller, platform: "instagram", uid: "17841400000000000", handle: "oldhandle")
+      seller.reload
+
+      props = described_class.new(pundit_user:, seller:).profile_settings_props(request:)
+      expect(props[:instagram_connected]).to eq(false)
+      expect(props[:instagram_handle]).to be_nil
+
+      create(:user_instagram_identity, user: seller, instagram_user_id: "17841400000000000", handle: "gumroad")
+      seller.reload
+
+      props = described_class.new(pundit_user:, seller:).profile_settings_props(request:)
+      expect(props[:instagram_connected]).to eq(true)
+      expect(props[:instagram_handle]).to eq("gumroad")
+    end
+
     it "includes hide_follow_form when the seller has turned it on" do
       seller.update!(hide_follow_form: true)
 

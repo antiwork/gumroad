@@ -182,7 +182,13 @@ class User::OmniauthCallbacksController < Devise::OmniauthCallbacksController
       return redirect_to profile_path
     end
 
-    SocialConnectVerification.record_from_instagram!(logged_in_user, profile.merge("token_user_id" => token_user_id))
+    verification = SocialConnectVerification.record_from_instagram!(logged_in_user, profile.merge("token_user_id" => token_user_id))
+    if verification.blank?
+      flash[:alert] = "Couldn't save your Instagram connection. Please try again."
+      return redirect_to profile_path
+    end
+    identity = logged_in_user.instagram_identity || logged_in_user.build_instagram_identity
+    identity.update!(instagram_user_id: verification.uid, handle: verification.handle)
     redirect_to profile_path
   rescue StandardError => e
     Rails.logger.error("Instagram connect failed for user #{logged_in_user.id}: #{e.class}")

@@ -19,12 +19,16 @@ describe InstagramCallbacksController do
       first = create(:social_connect_verification, platform: "instagram", uid: instagram_user_id)
       second = create(:social_connect_verification, platform: "instagram", uid: instagram_user_id)
       other = create(:social_connect_verification, platform: "instagram")
+      first_identity = create(:user_instagram_identity, user: first.user, instagram_user_id: instagram_user_id)
+      other_identity = create(:user_instagram_identity, user: other.user, instagram_user_id: other.uid)
 
       post :deauthorize, params: { signed_request: "signed-request" }
 
       expect(response).to have_http_status(:ok)
       expect(SocialConnectVerification.where(id: [first.id, second.id])).to be_empty
       expect(SocialConnectVerification.exists?(other.id)).to be(true)
+      expect(UserInstagramIdentity.exists?(first_identity.id)).to be(false)
+      expect(UserInstagramIdentity.exists?(other_identity.id)).to be(true)
     end
 
     it "rejects an invalid signed request" do
