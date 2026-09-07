@@ -26,7 +26,7 @@ module WithMaxExecutionTime
   end
 
   def self.replica_roles_configured?
-    ENV["USE_DB_WORKER_REPLICAS"] == "true"
+    ApplicationRecord.replica_roles_configured?
   end
   private_class_method :replica_roles_configured?
 
