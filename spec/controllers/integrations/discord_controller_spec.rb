@@ -4,9 +4,10 @@ require "spec_helper"
 
 describe Integrations::DiscordController do
   before do
-    sign_in create(:user)
+    sign_in buyer
   end
 
+  let(:buyer) { create(:user) }
   let(:oauth_request_body) do
     {
       grant_type: "authorization_code",
@@ -159,7 +160,7 @@ describe Integrations::DiscordController do
     let(:user_id) { "user-0" }
     let(:integration) { create(:discord_integration) }
     let(:product) { create(:product, active_integrations: [integration]) }
-    let(:purchase) { create(:purchase, link: product) }
+    let(:purchase) { create(:free_purchase, link: product, purchaser: buyer) }
 
     it "adds member to server for a purchase with an enabled integration and a valid code" do
       WebMock.stub_request(:post, DISCORD_OAUTH_TOKEN_URL).
@@ -188,10 +189,30 @@ describe Integrations::DiscordController do
       expect(purchase_discord_integration.discord_user_id).to eq(user_id)
     end
 
+    it "rejects a signed-out user" do
+      sign_out buyer
+
+      expect do
+        get :join_server, format: :json, params: { code: "test_code", purchase_id: purchase.external_id }
+      end.not_to change { PurchaseIntegration.count }
+
+      expect(response.status).not_to eq(200)
+    end
+
+    it "rejects a signed-in user joining a purchase they do not own" do
+      other_purchase = create(:free_purchase, link: product, purchaser: create(:user))
+
+      expect do
+        get :join_server, format: :json, params: { code: "test_code", purchase_id: other_purchase.external_id }
+      end.not_to change { PurchaseIntegration.count }
+
+      expect(response.parsed_body).to eq({ "success" => false })
+    end
+
     it "adds member to server for a variant purchase with an enabled integration and a valid code" do
       variant_category = create(:variant_category, link: product)
       variant = create(:variant, variant_category:, active_integrations: [integration])
-      purchase = create(:purchase, link: product, variant_attributes: [variant])
+      purchase = create(:free_purchase, link: product, variant_attributes: [variant], purchaser: buyer)
 
       WebMock.stub_request(:post, DISCORD_OAUTH_TOKEN_URL).
         with(body: oauth_request_body, headers: oauth_request_header).
@@ -306,7 +327,7 @@ describe Integrations::DiscordController do
     end
 
     it "fails if purchased product does not have an integration" do
-      purchase = create(:purchase)
+      purchase = create(:free_purchase, purchaser: buyer)
 
       WebMock.stub_request(:post, DISCORD_OAUTH_TOKEN_URL).
         with(body: oauth_request_body, headers: oauth_request_header).
@@ -392,7 +413,7 @@ describe Integrations::DiscordController do
     let(:user_id) { "user-0" }
     let(:integration) { create(:discord_integration) }
     let(:product) { create(:product, active_integrations: [integration]) }
-    let(:purchase) { create(:purchase, link: product) }
+    let(:purchase) { create(:free_purchase, link: product, purchaser: buyer) }
 
     it "removes member from server if integration is active" do
       create(:purchase_integration, integration:, purchase:, discord_user_id: user_id)
@@ -405,6 +426,28 @@ describe Integrations::DiscordController do
 
       expect(response.status).to eq(200)
       expect(response.parsed_body).to eq({ "success" => true, "server_name" => "Gaming" })
+    end
+
+    it "rejects a signed-out user" do
+      create(:purchase_integration, integration:, purchase:, discord_user_id: user_id)
+      sign_out buyer
+
+      expect do
+        get :leave_server, format: :json, params: { purchase_id: purchase.external_id }
+      end.to change { purchase.live_purchase_integrations.reload.count }.by(0)
+
+      expect(response.status).not_to eq(200)
+    end
+
+    it "rejects a signed-in user leaving a purchase they do not own" do
+      other_purchase = create(:free_purchase, link: product, purchaser: create(:user))
+      create(:purchase_integration, integration:, purchase: other_purchase, discord_user_id: user_id)
+
+      expect do
+        get :leave_server, format: :json, params: { purchase_id: other_purchase.external_id }
+      end.not_to change { other_purchase.live_purchase_integrations.reload.count }
+
+      expect(response.parsed_body).to eq({ "success" => false })
     end
 
     it "marks the purchase integration as deleted if the Discord server is deleted" do
@@ -430,7 +473,7 @@ describe Integrations::DiscordController do
     end
 
     it "fails if purchased product does not have an integration" do
-      purchase = create(:purchase)
+      purchase = create(:free_purchase, purchaser: buyer)
 
       expect do
         get :leave_server, format: :json, params: { purchase_id: purchase.external_id }

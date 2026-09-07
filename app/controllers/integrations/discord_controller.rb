@@ -1,7 +1,10 @@
 # frozen_string_literal: true
 
 class Integrations::DiscordController < ApplicationController
-  before_action :authenticate_user!, except: [:oauth_redirect, :join_server, :leave_server]
+  # join_server and leave_server gate on the signed-in purchaser: the purchase's
+  # external id is public (it is echoed on product reviews), so an unauthenticated
+  # lookup alone would let anyone add or remove the buyer's Discord membership.
+  before_action :authenticate_user!, except: [:oauth_redirect]
 
   def server_info
     discord_api = DiscordApi.new
@@ -23,7 +26,11 @@ class Integrations::DiscordController < ApplicationController
   end
 
   def join_server
+    # Verify the signed-in purchaser before spending a Discord OAuth exchange on an unowned purchase.
     return render json: { success: false } if params[:code].blank? || params[:purchase_id].blank?
+
+    purchase = Purchase.find_by_external_id(params[:purchase_id])
+    return render json: { success: false } unless purchase&.purchaser == current_user
 
     discord_api = DiscordApi.new
     oauth_response = discord_api.oauth_token(params[:code], oauth_redirect_integrations_discord_index_url(host: DOMAIN, protocol: PROTOCOL))
@@ -36,7 +43,6 @@ class Integrations::DiscordController < ApplicationController
       user_response = discord_api.identify(access_token)
       user = JSON.parse(user_response)
 
-      purchase = Purchase.find_by_external_id(params[:purchase_id])
       integration = purchase.find_enabled_integration(Integration::DISCORD)
       return render json: { success: false } if integration.nil?
 
@@ -58,6 +64,8 @@ class Integrations::DiscordController < ApplicationController
     return render json: { success: false } if params[:purchase_id].blank?
 
     purchase = Purchase.find_by_external_id(params[:purchase_id])
+    return render json: { success: false } unless purchase&.purchaser == current_user
+
     integration = purchase.find_integration_by_name(Integration::DISCORD)
     discord_user_id = DiscordIntegration.discord_user_id_for(purchase)
     return render json: { success: false } if integration.nil? || discord_user_id.blank?
