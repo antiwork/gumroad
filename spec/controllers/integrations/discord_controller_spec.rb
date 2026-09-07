@@ -189,14 +189,14 @@ describe Integrations::DiscordController do
       expect(purchase_discord_integration.discord_user_id).to eq(user_id)
     end
 
-    it "rejects a signed-out user" do
+    it "rejects a signed-out user without a download token" do
       sign_out buyer
 
       expect do
         get :join_server, format: :json, params: { code: "test_code", purchase_id: purchase.external_id }
       end.not_to change { PurchaseIntegration.count }
 
-      expect(response.status).not_to eq(200)
+      expect(response.parsed_body).to eq({ "success" => false })
     end
 
     it "rejects a signed-in user joining a purchase they do not own" do
@@ -204,6 +204,44 @@ describe Integrations::DiscordController do
 
       expect do
         get :join_server, format: :json, params: { code: "test_code", purchase_id: other_purchase.external_id }
+      end.not_to change { PurchaseIntegration.count }
+
+      expect(response.parsed_body).to eq({ "success" => false })
+    end
+
+    it "lets a signed-out purchaser holding the download token join" do
+      redirect = create(:url_redirect, purchase:)
+      sign_out buyer
+
+      WebMock.stub_request(:post, DISCORD_OAUTH_TOKEN_URL).
+        with(body: oauth_request_body, headers: oauth_request_header).
+        to_return(status: 200,
+                  body: { access_token: "test_access_token" }.to_json,
+                  headers: { content_type: "application/json" })
+
+      WebMock.stub_request(:get, "#{Discordrb::API.api_base}/users/@me").
+        with(headers: { "Authorization" => "Bearer test_access_token" }).
+        to_return(status: 200,
+                  body: { username: "gumbot", id: user_id }.to_json,
+                  headers: { content_type: "application/json" })
+
+      WebMock.stub_request(:put, "#{Discordrb::API.api_base}/guilds/0/members/#{user_id}").to_return(status: 201)
+
+      expect do
+        get :join_server, format: :json, params: { code: "test_code", purchase_id: purchase.external_id, token: redirect.token }
+      end.to change { PurchaseIntegration.count }.by(1)
+
+      expect(response.status).to eq(200)
+      expect(response.parsed_body).to eq({ "success" => true, "server_name" => "Gaming" })
+    end
+
+    it "rejects a signed-out user with a token for a different purchase" do
+      other_purchase = create(:free_purchase, link: product, purchaser: create(:user))
+      redirect = create(:url_redirect, purchase: other_purchase)
+      sign_out buyer
+
+      expect do
+        get :join_server, format: :json, params: { code: "test_code", purchase_id: purchase.external_id, token: redirect.token }
       end.not_to change { PurchaseIntegration.count }
 
       expect(response.parsed_body).to eq({ "success" => false })
@@ -428,7 +466,7 @@ describe Integrations::DiscordController do
       expect(response.parsed_body).to eq({ "success" => true, "server_name" => "Gaming" })
     end
 
-    it "rejects a signed-out user" do
+    it "rejects a signed-out user without a download token" do
       create(:purchase_integration, integration:, purchase:, discord_user_id: user_id)
       sign_out buyer
 
@@ -436,7 +474,22 @@ describe Integrations::DiscordController do
         get :leave_server, format: :json, params: { purchase_id: purchase.external_id }
       end.to change { purchase.live_purchase_integrations.reload.count }.by(0)
 
-      expect(response.status).not_to eq(200)
+      expect(response.parsed_body).to eq({ "success" => false })
+    end
+
+    it "lets a signed-out purchaser holding the download token leave" do
+      create(:purchase_integration, integration:, purchase:, discord_user_id: user_id)
+      redirect = create(:url_redirect, purchase:)
+      sign_out buyer
+
+      WebMock.stub_request(:delete, "#{Discordrb::API.api_base}/guilds/0/members/#{user_id}").to_return(status: 204)
+
+      expect do
+        get :leave_server, format: :json, params: { purchase_id: purchase.external_id, token: redirect.token }
+      end.to change { purchase.live_purchase_integrations.reload.count }.by(-1)
+
+      expect(response.status).to eq(200)
+      expect(response.parsed_body).to eq({ "success" => true, "server_name" => "Gaming" })
     end
 
     it "rejects a signed-in user leaving a purchase they do not own" do

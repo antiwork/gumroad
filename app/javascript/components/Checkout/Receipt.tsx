@@ -97,6 +97,7 @@ const SuccessfulLineItemResultEntry = ({ name, result }: { name: string; result:
               <CardContent>
                 <DiscordButton
                   purchaseId={result.id}
+                  token={result.redirect_token}
                   connected={false}
                   redirectSettings={{ host: result.domain, protocol: result.protocol }}
                   customState={JSON.stringify({

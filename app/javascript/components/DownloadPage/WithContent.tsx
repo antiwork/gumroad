@@ -249,7 +249,7 @@ export const WithContent = ({
       headerActions={
         <>
           {props.purchase && content.discord ? (
-            <DiscordButton purchaseId={props.purchase.id} connected={content.discord.connected} />
+            <DiscordButton purchaseId={props.purchase.id} token={props.token} connected={content.discord.connected} />
           ) : null}
           {content.community_chat_url ? (
             <Button asChild color="accent">
