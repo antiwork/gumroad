@@ -138,7 +138,10 @@ gem "money", "~> 6.16"
 gem "mysql2", ">= 0.5.6"
 # Makara replacement: statement-level primary/replica split on Rails 7.2.
 # Only used when database.yml sets adapter: mysql2_proxy (USE_DB_WORKER_REPLICAS).
-gem "active_record_proxy_adapters", "~> 0.11", require: "active_record_proxy_adapters/railties/mysql2"
+# Pinned to 0.11.x: pre-1.0, and its SQL matchers decide primary vs. replica, so a
+# minor bump can silently re-route queries. spec/config/mysql2_proxy_semantics_spec.rb
+# asserts on its internals and would go quietly stale rather than fail.
+gem "active_record_proxy_adapters", "~> 0.11.1", require: "active_record_proxy_adapters/railties/mysql2"
 gem "nokogiri", "~> 1.19"
 gem "omniauth-apple", "~> 1.3"
 gem "omniauth-google-oauth2", "~> 1.1", ">= 1.1.1"

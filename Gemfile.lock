@@ -1119,7 +1119,7 @@ DEPENDENCIES
   actionpack-cloudflare (~> 1.1)
   active_hash (~> 3.3)
   active_model_otp (~> 2.3)
-  active_record_proxy_adapters (~> 0.11)
+  active_record_proxy_adapters (~> 0.11.1)
   active_record_query_trace (~> 1.8)
   activerecord-mysql-index-hint (~> 0.0)
   after_commit_everywhere (~> 1.3)
