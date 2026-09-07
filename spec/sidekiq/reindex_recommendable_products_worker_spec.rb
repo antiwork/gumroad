@@ -3,7 +3,7 @@
 require "spec_helper"
 
 describe ReindexRecommendableProductsWorker do
-  it "updates time-dependent fields" do
+  it "updates time-dependent fields and reconciles indexed recommendability" do
     freeze_time
 
     products = create_list(:product, 5)
@@ -36,8 +36,8 @@ describe ReindexRecommendableProductsWorker do
     expect(Sidekiq::Client).to receive(:push_bulk).with(
       "class" => SendToElasticsearchWorker,
       "args" => [
-        [products[0].id, "update", ["sales_volume", "total_fee_cents", "past_year_fee_cents"]],
-        [products[2].id, "update", ["sales_volume", "total_fee_cents", "past_year_fee_cents"]]
+        [products[0].id, "update", ["sales_volume", "total_fee_cents", "past_year_fee_cents", "is_recommendable"]],
+        [products[2].id, "update", ["sales_volume", "total_fee_cents", "past_year_fee_cents", "is_recommendable"]]
       ],
       "queue" => "low",
       "at" => Time.current.to_i
@@ -45,7 +45,8 @@ describe ReindexRecommendableProductsWorker do
     expect(Sidekiq::Client).to receive(:push_bulk).with(
       "class" => SendToElasticsearchWorker,
       "args" => [
-        [products[3].id, "update", ["sales_volume", "total_fee_cents", "past_year_fee_cents"]]
+        [products[3].id, "update", ["sales_volume", "total_fee_cents", "past_year_fee_cents", "is_recommendable"]],
+        [products[4].id, "update", ["is_recommendable"]]
       ],
       "queue" => "low",
       "at" => 1.minute.from_now.to_i

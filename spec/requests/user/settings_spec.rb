@@ -160,6 +160,13 @@ describe "User profile settings page", type: :system, js: true do
       expect(page).to have_button("Connect to YouTube")
     end
 
+    it "shows Connect to Instagram when the instagram_connect flag is on" do
+      Feature.activate_user(:instagram_connect, @user)
+      visit profile_path
+
+      expect(page).to have_button("Connect to Instagram")
+    end
+
     context "when logged user has role admin" do
       include_context "with switching account to user as admin for seller" do
         let(:seller) { @user }

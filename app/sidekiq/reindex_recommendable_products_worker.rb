@@ -7,6 +7,8 @@ class ReindexRecommendableProductsWorker
   SCROLL_SIZE = 1000
   SCROLL_SORT = ["_doc"]
 
+  SALES_VOLUME_ATTRIBUTES = ["sales_volume", "total_fee_cents", "past_year_fee_cents"].freeze
+
   def perform
     response = EsClient.search(
       index: Link.index_name,
@@ -20,17 +22,22 @@ class ReindexRecommendableProductsWorker
     index = 0
     loop do
       hits = response.dig("hits", "hits")
-      ids = hits.map { |hit| hit["_id"] }
+      ids = hits.map { |hit| hit["_id"].to_i }
 
-      filtered_ids = Purchase.
+      recent_sale_ids = Purchase.
         where(link_id: ids).
         group(:link_id).
         having("max(created_at) >= ?", Product::Searchable::DEFAULT_SALES_VOLUME_RECENTNESS.ago).
-        pluck(:link_id)
+        pluck(:link_id).
+        to_set
 
-      unless filtered_ids.empty?
-        args = filtered_ids.map do |id|
-          [id, "update", ["sales_volume", "total_fee_cents", "past_year_fee_cents"]]
+      unless ids.empty?
+        # Reconcile is_recommendable on every document: a lost refund-time refresh
+        # can leave an ineligible product indexed as recommendable until this runs.
+        args = ids.map do |id|
+          attributes = ["is_recommendable"]
+          attributes = SALES_VOLUME_ATTRIBUTES + attributes if recent_sale_ids.include?(id)
+          [id, "update", attributes]
         end
 
         Sidekiq::Client.push_bulk(

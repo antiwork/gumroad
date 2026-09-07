@@ -84,6 +84,9 @@ class ProfilePresenter
         youtube_connect_enabled: Feature.active?(:youtube_connect, seller),
         youtube_connected: seller.youtube_identity.present?,
         youtube_handle: seller.youtube_identity&.handle,
+        instagram_connect_enabled: Feature.active?(:instagram_connect, seller),
+        instagram_connected: seller.instagram_identity.present?,
+        instagram_handle: seller.instagram_identity&.handle,
         has_custom_landing_page: seller.has_custom_landing_page?,
         username: seller.username,
       }

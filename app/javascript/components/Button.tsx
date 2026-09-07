@@ -18,6 +18,7 @@ export const brandNames = [
   "zoom",
   "google",
   "youtube",
+  "instagram",
 ] as const;
 
 export type BrandName = (typeof brandNames)[number];
@@ -62,6 +63,7 @@ export const buttonVariants = cva(
         zoom: "bg-[#4087fc] text-white border-[#4087fc]",
         google: "bg-[#5383ec] text-white border-[#5383ec]",
         youtube: "bg-black text-white",
+        instagram: "bg-black text-white",
       },
     },
     compoundVariants: [

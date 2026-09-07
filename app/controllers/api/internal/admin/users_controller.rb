@@ -1032,6 +1032,9 @@ class Api::Internal::Admin::UsersController < Api::Internal::Admin::BaseControll
       when "youtube"
         channel_id = verification.user.youtube_identity&.channel_id
         channel_id.present? && channel_id.to_s == verification.uid.to_s
+      when "instagram"
+        instagram_user_id = verification.user.instagram_identity&.instagram_user_id
+        instagram_user_id.present? && instagram_user_id.to_s == verification.uid.to_s
       else
         false
       end

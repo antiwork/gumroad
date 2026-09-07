@@ -247,6 +247,25 @@ describe Ai::StoreAgentApiCatalog do
     end
   end
 
+  describe "create_product endpoint" do
+    it "accepts the draft and published opt-outs alongside the product fields" do
+      endpoint = described_class.find("create_product")
+
+      expect(endpoint.params).to include("draft", "published")
+      expect(endpoint.unknown_param_keys_error("name" => "Book", "price" => 500, "draft" => true)).to be_nil
+      expect(endpoint.unknown_param_keys_error("name" => "Book", "price" => 500, "published" => false)).to be_nil
+    end
+
+    # The product goes on sale the moment it is created, so the model has to know that before it proposes the write.
+    it "tells the model the product publishes by default and how to opt out" do
+      summary = described_class.find("create_product").summary
+
+      expect(summary).to match(/published .* immediately/i)
+      expect(summary).to include("draft=true")
+      expect(summary).to include("published=false")
+    end
+  end
+
   describe "product custom HTML endpoints" do
     it "requires the full targeted product-page read before either product-page write" do
       %w[update_product_custom_html edit_product_custom_html].each do |id|

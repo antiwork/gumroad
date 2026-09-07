@@ -1,7 +1,7 @@
 FROM nginx:1.23.4
 
-
 COPY public /public
+COPY docker/nginx/main.conf /etc/nginx/nginx.conf
 COPY docker/nginx/nginx.conf /nginx.conf
 COPY docker/nginx/run_nginx.sh /run_nginx.sh
 

@@ -626,6 +626,10 @@ Rails.application.routes.draw do
       end
     end
 
+    post "/instagram/deauthorize", to: "instagram_callbacks#deauthorize", as: :instagram_deauthorize
+    post "/instagram/data_deletion", to: "instagram_callbacks#data_deletion", as: :instagram_data_deletion
+    get "/instagram/data_deletion/:confirmation_code", to: "instagram_callbacks#data_deletion_status", as: :instagram_data_deletion_status
+
     namespace :sellers do
       resource "switch", only: :create, controller: "switch"
       resources :brand_accounts, only: :create
@@ -703,6 +707,7 @@ Rails.application.routes.draw do
         member do
           post :unlink_twitter
           post :unlink_youtube
+          post :unlink_instagram
         end
       end
     end

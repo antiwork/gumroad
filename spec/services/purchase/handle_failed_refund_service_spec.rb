@@ -5,11 +5,15 @@ require "spec_helper"
 describe Purchase::HandleFailedRefundService do
   let(:seller) { create(:user) }
   let(:product) { create(:product, user: seller, price_cents: 2000) }
+  let(:merchant_account) do
+    create(:merchant_account, user: nil, charge_processor_merchant_id: "acct_failed_refund_#{SecureRandom.hex(8)}")
+  end
 
   let(:purchase) do
     create(:purchase_with_balance,
            link: product,
            seller:,
+           merchant_account:,
            price_cents: 2000,
            total_transaction_cents: 2000)
   end
@@ -119,6 +123,17 @@ describe Purchase::HandleFailedRefundService do
       expect { described_class.new(refund:).perform }
         .to change { purchase.reload.stripe_refunded? }.from(true).to(false)
       expect(purchase.stripe_partially_refunded?).to eq(false)
+    end
+
+    it "refreshes product recommendation eligibility after restoring the sale" do
+      SendToElasticsearchWorker.jobs.clear
+
+      expect do
+        described_class.new(refund:).perform
+      end.to change(SendToElasticsearchWorker.jobs, :size).by(1)
+      expect(SendToElasticsearchWorker.jobs.last.fetch("args")).to eq(
+        [product.id, "update", %w[is_recommendable]]
+      )
     end
 
     it "credits a live balance when the debited balance was already paid out, leaving the paid balance untouched" do
@@ -372,7 +387,11 @@ describe Purchase::HandleFailedRefundService do
         # Stripe custom account: charged_using_gumroad_merchant_account? is true, but
         # the refund also debited the connected account outside our ledger, so an
         # automatic offset here would claim money the external account no longer has.
-        stripe_held_account = create(:merchant_account, user: seller)
+        stripe_held_account = create(
+          :merchant_account,
+          user: seller,
+          charge_processor_merchant_id: "acct_stripe_held_#{SecureRandom.hex(8)}"
+        )
         expect(stripe_held_account.holder_of_funds).to eq(HolderOfFunds::STRIPE)
         purchase.update!(merchant_account: stripe_held_account)
 
@@ -830,7 +849,19 @@ describe Purchase::HandleFailedRefundService do
     let(:product) { create(:product, price_cents: 10_00) }
     let(:seller) { product.user }
     let(:affiliate) { create(:direct_affiliate, affiliate_user:, seller:, affiliate_basis_points: 1000, products: [product]) }
-    let(:purchase) { create(:purchase_in_progress, link: product, seller:, affiliate:, chargeable: create(:chargeable)) }
+    let(:real_path_merchant_account) do
+      create(:merchant_account, user: nil, charge_processor_merchant_id: "acct_real_refund_#{SecureRandom.hex(8)}")
+    end
+    let(:purchase) do
+      create(
+        :purchase_in_progress,
+        link: product,
+        seller:,
+        affiliate:,
+        chargeable: create(:chargeable),
+        merchant_account: real_path_merchant_account
+      )
+    end
 
     def stub_processor_refund!(purchase, amount_cents: nil)
       refunded_cents = amount_cents || purchase.total_transaction_cents
