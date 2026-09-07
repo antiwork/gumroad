@@ -51,7 +51,8 @@ describe "Custom HTML background bridge wiring", type: :request do
     end
 
     it "does not interpolate a non-hex store theme into the wrapper style" do
-      seller.seller_profile.update_columns(background_color: "#000000; } body { display: none } /*")
+      profile = seller.seller_profile.tap(&:save!)
+      profile.update_columns(background_color: "#000000; } body { display: none } /*")
 
       get "#{host}#{wrapper_path}"
 
