@@ -12,6 +12,17 @@ class SendWorkflowPostEmailsJob
   IMMEDIATE_FANOUT_THRESHOLD = 2_000
   DEFAULT_IMMEDIATE_ENQUEUE_PER_SECOND = 20
 
+  # Reserves the next delivery slot on a cursor shared by ALL fanout jobs, so concurrent
+  # sellers collectively respect the cap instead of each getting the full rate.
+  RESERVE_PACING_SLOT = <<~LUA
+    local now = tonumber(ARGV[1])
+    local step = tonumber(ARGV[2])
+    local base = tonumber(redis.call("GET", KEYS[1]))
+    if not base or base < now then base = now end
+    redis.call("SET", KEYS[1], base + step, "EX", math.ceil(base + step - now) + 60)
+    return tostring(base)
+  LUA
+
   def perform(post_id, earliest_valid_time = nil, reschedule_on_stale = false, minimum_rule_version = nil, schedule_intent_token = nil, schedule_intent_fanout_token = nil)
     @schedule_intent_token = schedule_intent_token
     @schedule_intent_fanout_token = schedule_intent_fanout_token
@@ -308,9 +319,21 @@ class SendWorkflowPostEmailsJob
       now = @immediate_fanout_started_at || Time.current
       return natural_at if natural_at > now
 
+      Time.zone.at(reserve_pacing_slot(now))
+    end
+
+    def reserve_pacing_slot(now)
+      slot = $redis.eval(
+        RESERVE_PACING_SLOT,
+        keys: [RedisKey.workflow_immediate_fanout_pacing_cursor],
+        argv: [now.to_f, 1.0 / immediate_enqueue_per_second]
+      ).to_f
+      @immediate_fanout_index += 1
+      slot
+    rescue Redis::BaseError, RedisClient::Error
       offset = @immediate_fanout_index.to_f / immediate_enqueue_per_second
       @immediate_fanout_index += 1
-      now + offset
+      now.to_f + offset
     end
 
     def pace_immediate_fanout?

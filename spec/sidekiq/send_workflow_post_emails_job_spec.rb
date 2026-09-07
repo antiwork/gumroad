@@ -968,6 +968,7 @@ describe SendWorkflowPostEmailsJob, :freeze_time do
       @post_rule.update!(delayed_delivery_time: 0)
       stub_const("#{described_class}::IMMEDIATE_FANOUT_THRESHOLD", 3)
       stub_const("#{described_class}::DEFAULT_IMMEDIATE_ENQUEUE_PER_SECOND", 2)
+      $redis.del(RedisKey.workflow_immediate_fanout_pacing_cursor)
       @paced_purchases = []
       4.times do |i|
         purchase = create(:free_purchase, link: @product, email: "paced-buyer-#{i}@example.com", created_at: 1.hour.ago)
@@ -984,6 +985,28 @@ describe SendWorkflowPostEmailsJob, :freeze_time do
       ats = jobs.filter_map { _1["at"] }.sort
       expect(ats.size).to eq(3)
       expect(ats.last - Time.current.to_f).to be_within(0.05).of(1.5)
+    end
+
+    it "shares the pacing cursor across fanouts so concurrent sellers respect the aggregate cap" do
+      other_seller = create(:named_user)
+      other_workflow = create(:audience_workflow, seller: other_seller)
+      other_product = create(:product, user: other_seller, price_cents: 0)
+      other_post = create(:audience_post, :published, workflow: other_workflow, seller: other_seller,
+                                                      installment_type: Installment::PRODUCT_TYPE,
+                                                      link: other_product,
+                                                      bought_products: [other_product.unique_permalink])
+      create(:post_rule, installment: other_post, delayed_delivery_time: 0)
+      4.times do |i|
+        create(:free_purchase, link: other_product, email: "paced-other-#{i}@example.com", created_at: 1.hour.ago)
+          .rebuild_audience_member_details
+      end
+
+      described_class.new.perform(@post.id)
+      described_class.new.perform(other_post.id)
+
+      ats = SendWorkflowInstallmentWorker.jobs.filter_map { _1["at"] }.sort
+      expect(SendWorkflowInstallmentWorker.jobs.size).to eq(8)
+      expect(ats.last - Time.current.to_f).to be_within(0.05).of(3.5)
     end
 
     it "does not raise the paced rate to fit a shorter spread window" do
