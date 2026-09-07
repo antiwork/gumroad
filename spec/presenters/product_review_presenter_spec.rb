@@ -16,13 +16,19 @@ describe ProductReviewPresenter do
             name: "Anonymous"
           },
           rating: product_review.rating,
-          purchase_id: product_review.purchase.external_id,
+          purchase_id: nil,
           created_at: product_review.created_at.iso8601,
           is_new: true,
           response: nil,
           video: nil
         }
       )
+    end
+
+    it "only discloses the purchase external id when explicitly requested for the seller" do
+      expect(described_class.new(product_review).product_review_props[:purchase_id]).to be_nil
+      expect(described_class.new(product_review).product_review_props(include_purchase_id: true)[:purchase_id])
+        .to eq(product_review.purchase.external_id)
     end
 
     context "product review is more than a month old" do

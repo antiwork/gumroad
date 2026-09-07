@@ -25,7 +25,7 @@ class ProductReviewsController < ApplicationController
 
     render json: {
       pagination: PagyPresenter.new(pagination).props,
-      reviews: reviews.map { ProductReviewPresenter.new(_1).product_review_props }
+      reviews: reviews.map { ProductReviewPresenter.new(_1).product_review_props(include_purchase_id: current_seller == product.user) }
     }
   end
 
@@ -37,7 +37,7 @@ class ProductReviewsController < ApplicationController
       .find_by_external_id!(permitted_params[:id])
 
     render json: {
-      review: ProductReviewPresenter.new(review).product_review_props
+      review: ProductReviewPresenter.new(review).product_review_props(include_purchase_id: current_seller == review.link.user)
     }
   end
 

@@ -80,7 +80,7 @@ export const Review = ({
           </section>
         </section>
       ) : null}
-      {canRespond && !hideResponse ? (
+      {canRespond && !hideResponse && review.purchase_id != null ? (
         <section className="ml-4">
           <ReviewResponseForm
             message={review.response?.message}

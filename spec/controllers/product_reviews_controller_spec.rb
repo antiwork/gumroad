@@ -280,6 +280,20 @@ describe ProductReviewsController do
       expect(response.parsed_body["reviews"]).to eq([])
       expect(response.parsed_body["pagination"]).to include("pages" => 2, "page" => 99)
     end
+
+    it "omits purchase external ids from the public payload" do
+      get :index, params: { product_id: product.external_id }
+
+      expect(response.parsed_body["reviews"].map { _1["purchase_id"] }).to all(be_nil)
+    end
+
+    it "includes purchase external ids for the product's seller" do
+      sign_in product.user
+      get :index, params: { product_id: product.external_id }
+
+      expect(response.parsed_body["reviews"].map { _1["purchase_id"] })
+        .to eq(reviews.reverse.first(2).map { _1.purchase.external_id })
+    end
   end
 
   describe "#show" do
