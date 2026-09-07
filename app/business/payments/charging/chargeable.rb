@@ -83,6 +83,11 @@ class Chargeable
     chargeable.respond_to?(:stripe_payment_intent_id) ? chargeable.stripe_payment_intent_id : nil
   end
 
+  def use_connected_account_payment_method!(payment_method_id)
+    chargeable = @chargeables.values.first
+    chargeable.use_connected_account_payment_method!(payment_method_id) if chargeable.respond_to?(:use_connected_account_payment_method!)
+  end
+
   def reusable_token_for!(charge_processor_id, user)
     chargeable = get_chargeable_for(charge_processor_id)
     return chargeable.reusable_token!(user) if chargeable

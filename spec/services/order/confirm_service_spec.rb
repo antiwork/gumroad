@@ -256,12 +256,15 @@ describe Order::ConfirmService, :vcr do
       end
 
       before do
+        # Stripe rejects confirming a `processing` intent whose India debit is already
+        # scheduled — the setup-charge path must always finalize from a retrieve-only intent.
         allow_any_instance_of(Purchase).to receive(:confirm_charge_intent!)
+          .and_raise("confirm_charge_intent! must not be called for setup-charged groups")
         allow_any_instance_of(Purchase).to receive(:increment_sellers_balance!)
         allow_any_instance_of(Purchase).to receive(:financial_transaction_validation)
       end
 
-      it "creates one combined off-session charge for the seller group once the SetupIntent succeeded" do
+      it "creates one combined off-session charge and reports the group's processing debit as pending" do
         setup_intent = instance_double(StripeSetupIntent, succeeded?: true)
         expect(ChargeProcessor).to receive(:get_setup_intent).with(merchant_account, "seti_confirm_india").once.and_return(setup_intent)
         charge_intent = StripeChargeIntent.new(
@@ -277,13 +280,17 @@ describe Order::ConfirmService, :vcr do
           charge.charge_intent = charge_intent
           charge
         end
+        expect(Purchase::FinalizeConfirmedChargeService).to receive(:new).twice.and_call_original
 
-        responses, = Order::ConfirmService.new(order:, params: {}).perform
+        responses, = Order::ConfirmService.new(order:, params: { buyer_currency_quote: "quote-token" }).perform
 
         expect(captured_kwargs[:purchases]).to match_array(order.purchases.to_a)
         expect(captured_kwargs[:off_session]).to eq(true)
         expect(captured_kwargs[:setup_future_charges]).to eq(false)
         expect(captured_kwargs[:mandate_options]).to be_nil
+        # The pause happened before the group's original charge, so the resume charge is the
+        # first (and only) one that can lock the checkout's buyer-currency quote.
+        expect(captured_kwargs[:params]).to eq(buyer_currency_quote: "quote-token")
         expect(captured_kwargs[:amount_cents]).to eq(order.purchases.sum(&:total_transaction_cents))
         expect(captured_kwargs[:merchant_account]).to eq(merchant_account)
         # Built via CreditCard#to_chargeable: a real StripeChargeableCreditCard must carry the
@@ -292,11 +299,100 @@ describe Order::ConfirmService, :vcr do
         expect(captured_kwargs[:chargeable].stripe_setup_intent_id).to eq("seti_confirm_india")
 
         purchases.each do |purchase|
-          expect(purchase.reload.processor_payment_intent.intent_id).to eq("pi_confirm_india")
-          expect(purchase.purchase_state).to eq("successful")
+          purchase.reload
+          expect(purchase.processor_payment_intent.intent_id).to eq("pi_confirm_india")
+          # The debit stays scheduled at Stripe for up to 26h; the purchase must not be marked
+          # successful (or failed) until the payment_intent webhooks resolve it.
+          expect(purchase.purchase_state).to eq("in_progress")
+          expect(purchase.stripe_status).to eq(StripeIntentStatus::PROCESSING)
+          expect(responses[purchase.id]).to eq(success: true, processing: true, permalink: purchase.link.unique_permalink)
         end
         expect(india_card.reload.stripe_payment_intent_id).to eq("pi_confirm_india")
-        expect(responses.values).to all(include(success: true))
+      end
+
+      it "finalizes each purchase through FinalizeConfirmedChargeService when the charge succeeds synchronously" do
+        setup_intent = instance_double(StripeSetupIntent, succeeded?: true)
+        allow(ChargeProcessor).to receive(:get_setup_intent).and_return(setup_intent)
+        stripe_charge = instance_double(StripeCharge)
+        allow_any_instance_of(StripeChargeProcessor).to receive(:get_charge).with("ch_confirm_india", merchant_account: nil).and_return(stripe_charge)
+        created_charge_intent = StripeChargeIntent.new(
+          payment_intent: Stripe::PaymentIntent.construct_from(
+            id: "pi_confirm_india",
+            status: StripeIntentStatus::SUCCESS,
+            latest_charge: "ch_confirm_india"
+          )
+        )
+        create_service = instance_double(Charge::CreateService)
+        allow(Charge::CreateService).to receive(:new).and_return(create_service)
+        allow(create_service).to receive(:perform) do
+          charge.charge_intent = created_charge_intent
+          charge
+        end
+        finalized_purchase_ids = []
+        allow(Purchase::FinalizeConfirmedChargeService).to receive(:new) do |purchase:, charge_intent:|
+          expect(charge_intent).to eq(created_charge_intent)
+          finalized_purchase_ids << purchase.id
+          instance_double(Purchase::FinalizeConfirmedChargeService, perform: nil)
+        end
+
+        responses, = Order::ConfirmService.new(order:, params: {}).perform
+
+        expect(finalized_purchase_ids).to match_array(purchases.map(&:id))
+        purchases.each do |purchase|
+          expect(purchase.reload.processor_payment_intent.intent_id).to eq("pi_confirm_india")
+          expect(responses[purchase.id]).to eq(purchase.purchase_response)
+        end
+      end
+
+      it "charges a Stripe Connect group with the SetupIntent's connected-account payment method instead of cloning a new one" do
+        connect_account = create(:merchant_account_stripe_connect, user: seller)
+        purchases.each { |purchase| purchase.update!(merchant_account: connect_account) }
+        setup_intent = instance_double(StripeSetupIntent, succeeded?: true, payment_method_id: "pm_on_connect_account")
+        expect(ChargeProcessor).to receive(:get_setup_intent).with(connect_account, "seti_confirm_india").once.and_return(setup_intent)
+        # The mandate is bound to the payment method the SetupIntent was confirmed with; a
+        # fresh clone would be a different, mandate-less method.
+        expect(Stripe::PaymentMethod).not_to receive(:create)
+        charge_intent = StripeChargeIntent.new(
+          payment_intent: Stripe::PaymentIntent.construct_from(id: "pi_confirm_india", status: StripeIntentStatus::PROCESSING)
+        )
+        captured_kwargs = nil
+        create_service = instance_double(Charge::CreateService)
+        allow(Charge::CreateService).to receive(:new) do |**kwargs|
+          captured_kwargs = kwargs
+          create_service
+        end
+        allow(create_service).to receive(:perform) do
+          charge.charge_intent = charge_intent
+          charge
+        end
+
+        responses, = Order::ConfirmService.new(order:, params: {}).perform
+
+        stripe_chargeable = captured_kwargs[:chargeable].get_chargeable_for(StripeChargeProcessor.charge_processor_id)
+        expect(stripe_chargeable.stripe_charge_params).to eq(payment_method: "pm_on_connect_account")
+        purchases.each do |purchase|
+          expect(responses[purchase.id]).to eq(success: true, processing: true, permalink: purchase.link.unique_permalink)
+        end
+      end
+
+      it "finalizes an already-charged group from a retrieved intent instead of re-confirming it" do
+        purchases.each do |purchase|
+          purchase.create_processor_payment_intent!(intent_id: "pi_confirm_india")
+          purchase.update!(stripe_status: StripeIntentStatus::PROCESSING)
+        end
+        charge_intent = StripeChargeIntent.new(
+          payment_intent: Stripe::PaymentIntent.construct_from(id: "pi_confirm_india", status: StripeIntentStatus::PROCESSING)
+        )
+        expect(ChargeProcessor).to receive(:get_charge_intent).with(merchant_account, "pi_confirm_india").once.and_return(charge_intent)
+        expect(ChargeProcessor).not_to receive(:get_setup_intent)
+        expect(Charge::CreateService).not_to receive(:new)
+
+        responses, = Order::ConfirmService.new(order:, params: {}).perform
+
+        purchases.each do |purchase|
+          expect(purchase.reload.purchase_state).to eq("in_progress")
+          expect(responses[purchase.id]).to eq(success: true, processing: true, permalink: purchase.link.unique_permalink)
+        end
       end
 
       it "fails the group without charging when the SetupIntent did not succeed" do

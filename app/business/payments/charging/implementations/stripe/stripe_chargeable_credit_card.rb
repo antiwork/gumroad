@@ -85,6 +85,13 @@ class StripeChargeableCreditCard
     end
   end
 
+  # Charge with a payment method that already lives on the connected account — e.g. the clone a
+  # confirmed SetupIntent registered its e-mandate on. Stripe binds mandates to the exact payment
+  # method, so cloning again via #prepare_for_direct_charge would drop the mandate.
+  def use_connected_account_payment_method!(payment_method_id)
+    @payment_method_id_on_connect_account = payment_method_id
+  end
+
   def update_card_details
     card = @payment_method_on_connect_account&.card
     return unless card.present?

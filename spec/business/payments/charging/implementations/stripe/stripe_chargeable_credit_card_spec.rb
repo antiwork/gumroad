@@ -68,6 +68,36 @@ describe StripeChargeableCreditCard, :vcr do
     end
   end
 
+  describe "#use_connected_account_payment_method!" do
+    it "charges with the given connected-account payment method without cloning a new one" do
+      merchant_account = create(:merchant_account_stripe_connect)
+      chargeable = StripeChargeableCreditCard.new(
+        merchant_account, "cus_saved", "pm_saved", "fp_saved", "seti_confirmed", nil,
+        "4242", 16, "**** **** **** 4242", 12, 2030, CardType::VISA, "IN"
+      )
+
+      expect(Stripe::PaymentMethod).not_to receive(:create)
+      chargeable.use_connected_account_payment_method!("pm_on_connect_account")
+
+      expect(chargeable.stripe_charge_params).to eq(payment_method: "pm_on_connect_account")
+    end
+
+    it "is reachable through the Chargeable wrapper" do
+      merchant_account = create(:merchant_account_stripe_connect)
+      wrapped = Chargeable.new([
+                                 StripeChargeableCreditCard.new(
+                                   merchant_account, "cus_saved", "pm_saved", "fp_saved", nil, nil,
+                                   "4242", 16, "**** **** **** 4242", 12, 2030, CardType::VISA, "IN"
+                                 )
+                               ])
+
+      wrapped.use_connected_account_payment_method!("pm_on_connect_account")
+
+      expect(wrapped.get_chargeable_for(StripeChargeProcessor.charge_processor_id).stripe_charge_params)
+        .to eq(payment_method: "pm_on_connect_account")
+    end
+  end
+
   describe "#stripe_charge_params" do
     it "returns customer and payment method" do
       chargeable.prepare!

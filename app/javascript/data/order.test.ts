@@ -693,6 +693,95 @@ describe("startOrderCreation", () => {
       error_message: "We are unable to authenticate your payment method.",
     });
   });
+
+  it("forwards the checkout's buyer currency quote to the confirm request", async () => {
+    // A mandate pause happens before the group's charge exists, so the confirm request is the
+    // first chance to lock the quote — dropping it would fall back to canonical USD.
+    vi.stubGlobal("Routes", {
+      orders_path: () => "/orders",
+      confirm_order_path: (id: string) => `/orders/${id}/confirm`,
+    });
+    requestMock.mockReset();
+    getStripeInstanceMock.mockReset();
+    const stripe = typia.assert<Stripe>({});
+    stripe.confirmCardSetup = vi.fn().mockResolvedValue({});
+    getStripeInstanceMock.mockResolvedValue(stripe);
+
+    const lineItem = requestData.lineItems.at(0);
+    if (!lineItem) throw new Error("Missing test line item");
+    requestMock
+      .mockResolvedValueOnce(
+        jsonResponse({
+          success: true,
+          line_items: {
+            [lineItem.uid]: {
+              success: true,
+              requires_card_setup: true,
+              client_secret: "seti_secret",
+              order: { id: "order-token", stripe_connect_account_id: null },
+            },
+          },
+          can_buyer_sign_up: false,
+          offer_codes: [],
+        }),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({
+          success: true,
+          line_items: { [lineItem.uid]: confirmedPurchase(lineItem.permalink) },
+          can_buyer_sign_up: false,
+          offer_codes: [],
+        }),
+      );
+
+    await startOrderCreation({ ...requestData, buyerCurrencyQuote: "quote-token" }, []);
+
+    const confirmCall = requestMock.mock.calls.find(([options]) => options.url === "/orders/order-token/confirm");
+    expect(confirmCall?.[0]).toMatchObject({ data: { buyer_currency_quote: "quote-token" } });
+  });
+
+  it("throws a non-resubmittable error when confirm reports a processing debit", async () => {
+    // An India e-mandate debit stays `processing` at Stripe after the charge is created; the
+    // buyer must see a pending outcome, never a resubmittable cart that risks a second charge.
+    vi.stubGlobal("Routes", {
+      orders_path: () => "/orders",
+      confirm_order_path: (id: string) => `/orders/${id}/confirm`,
+    });
+    requestMock.mockReset();
+    getStripeInstanceMock.mockReset();
+    const stripe = typia.assert<Stripe>({});
+    stripe.confirmCardSetup = vi.fn().mockResolvedValue({});
+    getStripeInstanceMock.mockResolvedValue(stripe);
+
+    const lineItem = requestData.lineItems.at(0);
+    if (!lineItem) throw new Error("Missing test line item");
+    requestMock
+      .mockResolvedValueOnce(
+        jsonResponse({
+          success: true,
+          line_items: {
+            [lineItem.uid]: {
+              success: true,
+              requires_card_setup: true,
+              client_secret: "seti_secret",
+              order: { id: "order-token", stripe_connect_account_id: null },
+            },
+          },
+          can_buyer_sign_up: false,
+          offer_codes: [],
+        }),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({
+          success: true,
+          line_items: { "123456": { success: true, processing: true, permalink: lineItem.permalink } },
+          can_buyer_sign_up: false,
+          offer_codes: [],
+        }),
+      );
+
+    await expect(startOrderCreation(requestData, [])).rejects.toBeInstanceOf(PaymentConfirmedError);
+  });
 });
 
 describe("startClientConfirmOrderCreation", () => {

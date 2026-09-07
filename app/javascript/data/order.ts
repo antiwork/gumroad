@@ -37,9 +37,13 @@ type OrderSuccessResponse = {
   can_buyer_sign_up: boolean;
   offer_codes: OfferCodes;
 };
+// #confirm can return a `processing` line item when the group's off-session charge settles
+// asynchronously (India e-mandate debits stay `processing` at Stripe for hours after the
+// SetupIntent is confirmed), so the union must accept that shape — otherwise typia.assert
+// throws and a scheduled debit is misreported as a resubmittable failure.
 type ConfirmOrderResponse = {
   success: true;
-  line_items: Record<LineItemUid, ConfirmedPurchaseResponse | PurchaseErrorResponse>;
+  line_items: Record<LineItemUid, ConfirmedPurchaseResponse | PurchaseErrorResponse | ProcessingPurchaseResponse>;
   can_buyer_sign_up: boolean;
   offer_codes: OfferCodes;
 };
@@ -176,16 +180,26 @@ export const startOrderCreation = async (
         // alongside the one the buyer could not authenticate.
         stripeError: anyIntentConfirmed ? undefined : stripeError,
         retryOfferCodes: retryOfferCodeCandidates(requestData, retryOfferCodes),
+        // A mandate pause happens before the group's charge is created, so the resume charge
+        // still needs the quote the checkout displayed to present in the buyer's currency.
+        buyerCurrencyQuote: requestData.buyerCurrencyQuote,
       });
+      const confirmLineItems: Record<LineItemUid, ConfirmedPurchaseResponse | PurchaseErrorResponse> = {};
+      for (const [uid, lineItem] of Object.entries(orderConfirmResponse.line_items)) {
+        // A processing line item means the charge is created and its debit scheduled — surface
+        // a pending outcome; a resubmittable failure here risks a second charge.
+        if ("processing" in lineItem) throw new PaymentConfirmedError();
+        confirmLineItems[uid] = lineItem;
+      }
       // Key by uid, not permalink, which collides when the cart holds two variants of one product.
       // The legacy confirm endpoint (Order::ConfirmService) still keys its line items by
       // purchase id, which matches no cart uid — fall back to permalink matching for those
       // responses, or every SCA outcome (including its error_message) is silently dropped and
       // the buyer sees the generic "Sorry, something went wrong." copy.
-      const confirmLineItemResults = Object.values(orderConfirmResponse.line_items);
+      const confirmLineItemResults = Object.values(confirmLineItems);
       const lineItems = requestData.lineItems.reduce<CartPurchaseResult["lineItems"]>((lineItems, lineItem) => {
         const resultItem =
-          orderConfirmResponse.line_items[lineItem.uid] ??
+          confirmLineItems[lineItem.uid] ??
           confirmLineItemResults.find((item) => item.permalink === lineItem.permalink);
         if (resultItem) lineItems[lineItem.uid] = resultItem;
         return lineItems;
@@ -199,6 +213,9 @@ export const startOrderCreation = async (
     }
     return translateOrderSuccessIntoLineItemSuccess(response);
   } catch (error) {
+    // The charge is already created; the consumer shows the "payment is being processed"
+    // outcome instead of a resubmittable cart.
+    if (error instanceof PaymentConfirmedError) throw error;
     // Treat parsing errors, timeout, etc as failed purchase, but print a log entry
     // eslint-disable-next-line no-console
     console.error("Error occurred processing order", error);
@@ -298,11 +315,13 @@ const confirmOrderAfterAction = async ({
   clientSecret,
   stripeError,
   retryOfferCodes,
+  buyerCurrencyQuote,
 }: {
   orderId: string;
   clientSecret: string;
   stripeError: StripeError | undefined;
   retryOfferCodes: ReturnType<typeof retryOfferCodeCandidates>;
+  buyerCurrencyQuote: string | null;
 }): Promise<ConfirmOrderResponse> => {
   const response = await request({
     method: "POST",
@@ -312,6 +331,7 @@ const confirmOrderAfterAction = async ({
       client_secret: clientSecret,
       stripe_error: stripeError,
       retry_offer_codes: retryOfferCodes,
+      buyer_currency_quote: buyerCurrencyQuote || "",
     },
   });
   if (!response.ok) throw new ResponseError();

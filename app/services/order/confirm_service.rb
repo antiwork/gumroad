@@ -20,7 +20,20 @@ class Order::ConfirmService
     charge_seller_groups_awaiting_setup_confirmation!
 
     order.purchases.each do |purchase|
-      error = Purchase::ConfirmService.new(purchase:, params:).perform
+      error =
+        if setup_charge_results.key?(purchase.id)
+          result = setup_charge_results[purchase.id]
+          if result == :pending
+            # Same shape as Order::FinalizeConfirmedChargeService#response_for: the debit is
+            # scheduled (India intents stay `processing` for hours), so the buyer must see a
+            # pending outcome, never a resubmittable failure.
+            purchase_responses[purchase.id] = { success: true, processing: true, permalink: purchase.link.unique_permalink }
+            next
+          end
+          result
+        else
+          Purchase::ConfirmService.new(purchase:, params:).perform
+        end
 
       if error
         failed_purchases << purchase
@@ -56,11 +69,17 @@ class Order::ConfirmService
   end
 
   private
+    # Per-purchase finalize results from the setup-confirmed charge path, keyed by purchase id:
+    # nil (finalized successful), :pending (debit scheduled/processing), or a buyer-facing error.
+    def setup_charge_results
+      @setup_charge_results ||= {}
+    end
+
     # A multi-seller cart with an India e-mandate pauses at a SetupIntent needing 3DS
     # (Order::ChargeService#register_india_mandate_for_off_session_cart!) — no PaymentIntent
     # exists yet for those seller groups. Now that the buyer has confirmed, create each
-    # group's single combined off-session charge so the per-purchase confirms above finalize
-    # a real charge; without it they would mark paid purchases successful with no money moved.
+    # group's single combined off-session charge and finalize its purchases from the created
+    # intent; without it they would be marked successful with no money moved.
     def charge_seller_groups_awaiting_setup_confirmation!
       # A browser-reported Stripe error means the buyer failed authentication; the
       # per-purchase confirms fail everything via check_for_card_handling_error.
@@ -68,15 +87,31 @@ class Order::ConfirmService
 
       order.purchases.group_by { |purchase| purchase.charge&.id }.each_value do |seller_purchases|
         pending = seller_purchases.select { |purchase| awaiting_charge_after_setup?(purchase) }
-        next if pending.none?
+        charged = seller_purchases.select { |purchase| charged_after_setup_awaiting_finalization?(purchase) }
+        next if pending.none? && charged.none?
 
         begin
-          charge_setup_confirmed_purchases!(pending)
+          if pending.any?
+            charge_setup_confirmed_purchases!(pending)
+          else
+            # A retried confirm: the group's off-session charge already exists, and India debits
+            # stay `processing` inside Stripe's 26h window. Purchase::ConfirmService would
+            # re-confirm the intent, which Stripe rejects for a processing intent whose debit is
+            # already scheduled — finalize from a retrieve-only intent instead.
+            finalize_setup_charged_purchases!(charged)
+          end
         rescue => e
           Rails.logger.error("Error charging confirmed setup intent for order #{order.id}: #{e.class} => #{e.message}")
           ErrorNotifier.notify(e, order_id: order.id)
-          pending.each do |purchase|
-            purchase.errors.add(:base, "There is a temporary problem, please try again (your card was not charged).") if purchase.errors.empty?
+          (pending + charged).each do |purchase|
+            if purchase.processor_payment_intent.present?
+              # The charge exists, so its debit may already be scheduled; failing the purchase
+              # (or letting Purchase::ConfirmService re-confirm the intent) could lose a payment
+              # that is still going to capture. Report processing and let webhooks finish it.
+              setup_charge_results[purchase.id] = :pending unless setup_charge_results.key?(purchase.id)
+            elsif purchase.errors.empty?
+              purchase.errors.add(:base, "There is a temporary problem, please try again (your card was not charged).")
+            end
           end
         end
       end
@@ -95,13 +130,47 @@ class Order::ConfirmService
         !purchase.is_preorder_authorization?
     end
 
+    # A purchase this path already charged (this request or an earlier one) that is still
+    # in_progress — typically because the intent is `processing`. It must be finalized from a
+    # retrieved intent, never re-confirmed.
+    def charged_after_setup_awaiting_finalization?(purchase)
+      purchase.in_progress? &&
+        purchase.errors.empty? &&
+        purchase.processor_setup_intent_id.present? &&
+        purchase.processor_payment_intent.present? &&
+        purchase.stripe_transaction_id.blank? &&
+        !purchase.free_purchase? &&
+        !purchase.is_test_purchase? &&
+        !purchase.is_free_trial_purchase? &&
+        !purchase.is_preorder_authorization?
+    end
+
     def charge_setup_confirmed_purchases!(purchases)
       reference_purchase = purchases.first
       reference_purchase.with_lock do
-        # A concurrently retried confirm may have charged this group while we waited.
-        next if reference_purchase.processor_payment_intent.present? || !reference_purchase.in_progress?
+        next unless reference_purchase.in_progress?
 
-        charge_setup_confirmed_purchases_locked!(purchases)
+        if reference_purchase.processor_payment_intent.present?
+          # A concurrently retried confirm charged this group while we waited for the lock.
+          finalize_setup_charged_purchases!(purchases)
+        else
+          charge_setup_confirmed_purchases_locked!(purchases)
+        end
+      end
+    end
+
+    def finalize_setup_charged_purchases!(purchases)
+      reference_purchase = purchases.first
+      charge_intent = ChargeProcessor.get_charge_intent(
+        reference_purchase.merchant_account,
+        reference_purchase.processor_payment_intent.intent_id
+      )
+      finalize_charged_purchases(purchases, charge_intent)
+    end
+
+    def finalize_charged_purchases(purchases, charge_intent)
+      purchases.each do |purchase|
+        setup_charge_results[purchase.id] = Purchase::FinalizeConfirmedChargeService.new(purchase:, charge_intent:).perform
       end
     end
 
@@ -124,9 +193,14 @@ class Order::ConfirmService
       # The card's json_data can hold another group's (or an older order's) intent; this
       # group's charge must reference the SetupIntent the buyer just confirmed for it.
       chargeable.stripe_setup_intent_id = setup_intent_id if chargeable.respond_to?(:stripe_setup_intent_id=)
-      # The checkout request's prepared chargeable is gone; direct charges need the payment
-      # method cloned to the connected account again before charging.
-      chargeable.prepare!
+      if merchant_account.is_a_stripe_connect_account? && setup_intent.payment_method_id.present?
+        # Stripe binds the confirmed e-mandate to the exact payment method the SetupIntent was
+        # confirmed with — the clone already on the connected account. prepare! would clone a
+        # fresh copy, which Stripe treats as a different, mandate-less method off-session.
+        chargeable.use_connected_account_payment_method!(setup_intent.payment_method_id)
+      else
+        chargeable.prepare!
+      end
 
       charge = Charge::CreateService.new(
         order:,
@@ -142,7 +216,10 @@ class Order::ConfirmService
         # The confirmed SetupIntent already carries the mandate; the charge references it
         # through the chargeable instead of asking Stripe to mint new terms off-session.
         mandate_options: nil,
-        params: {},
+        # The SetupIntent pause happened before the group's original charge, so presentment
+        # never ran; the resume charge must lock the same buyer-currency quote the checkout
+        # displayed (Charge::CreateService fails closed if it expired).
+        params: { buyer_currency_quote: params[:buyer_currency_quote].presence },
       ).perform
 
       charge_intent = charge.charge_intent
@@ -158,5 +235,10 @@ class Order::ConfirmService
       purchases.each do |purchase|
         purchase.create_processor_payment_intent!(intent_id: charge_intent.id)
       end
+      # Finalize from the intent we just created instead of leaving these purchases to
+      # Purchase::ConfirmService: its confirm_charge_intent! re-confirms any non-succeeded
+      # intent, and Stripe rejects that for a `processing` one (India debits stay processing
+      # for up to 26h with the debit already scheduled).
+      finalize_charged_purchases(purchases, charge_intent)
     end
 end
