@@ -36,8 +36,19 @@ test:
     mysql2_makara, so the same flag now expands a native primary + replica pair
     and mysql2_proxy does the statement-level split. Web/Puma leave the flag
     unset and keep a single primary pool. Production has one worker replica;
-    staging uses DATABASE_REPLICA2 instead. %>
+    staging uses DATABASE_REPLICA2 instead.
+
+    Fall back to the primary, as a whole group, when the environment has no
+    replica secret: staging's Vault holds only secret/web/RDS, so these four
+    would all be nil and the reading pool would attempt (and fail) a localhost
+    connect on every read the proxy routes to it. Falling back per key instead
+    of per group would pair a replica host with primary credentials. Same shape
+    as database.branch-app.yml, which points the replica at the primary's host
+    for the same reason. %>
+<% replica_env = ->(prefix) { ENV["#{prefix}_HOST"].present? ? prefix : "DATABASE" } %>
 <% if ENV["USE_DB_WORKER_REPLICAS"] == "true" %>
+<% staging_replica = replica_env.call("DATABASE_REPLICA2") %>
+<% production_replica = replica_env.call("DATABASE_WORKER_REPLICA1") %>
 staging:
   primary:
     <<: *development
@@ -46,10 +57,10 @@ staging:
     <<: *development
     adapter: mysql2
     replica: true
-    database: <%= ENV["DATABASE_REPLICA2_NAME"] %>
-    username: <%= ENV["DATABASE_REPLICA2_USERNAME"] %>
-    password: <%= ENV["DATABASE_REPLICA2_PASSWORD"] %>
-    host: <%= ENV["DATABASE_REPLICA2_HOST"] %>
+    database: <%= ENV.fetch("#{staging_replica}_NAME") %>
+    username: <%= ENV.fetch("#{staging_replica}_USERNAME") %>
+    password: <%= ENV.fetch("#{staging_replica}_PASSWORD", "") %>
+    host: <%= ENV.fetch("#{staging_replica}_HOST") %>
 
 production:
   primary:
@@ -59,10 +70,10 @@ production:
     <<: *development
     adapter: mysql2
     replica: true
-    database: <%= ENV["DATABASE_WORKER_REPLICA1_NAME"] %>
-    username: <%= ENV["DATABASE_WORKER_REPLICA1_USERNAME"] %>
-    password: <%= ENV["DATABASE_WORKER_REPLICA1_PASSWORD"] %>
-    host: <%= ENV["DATABASE_WORKER_REPLICA1_HOST"] %>
+    database: <%= ENV.fetch("#{production_replica}_NAME") %>
+    username: <%= ENV.fetch("#{production_replica}_USERNAME") %>
+    password: <%= ENV.fetch("#{production_replica}_PASSWORD", "") %>
+    host: <%= ENV.fetch("#{production_replica}_HOST") %>
 <% else %>
 staging: &staging
   <<: *development

@@ -72,6 +72,19 @@ describe "config/database.yml replica routing" do
     expect(replica.fetch("database")).to eq("gumroad_staging_replica")
   end
 
+  it "falls back to the primary as a group when the environment has no replica secret" do
+    ENV["USE_DB_WORKER_REPLICAS"] = "true"
+    %w[NAME USERNAME PASSWORD HOST].each { |key| ENV.delete("DATABASE_REPLICA2_#{key}") }
+
+    replica = parsed_config.fetch("staging").fetch("primary_replica")
+
+    # A nil host makes every proxy-routed read attempt a localhost connect first,
+    # and falling back per key would pair a replica host with primary credentials.
+    expect(replica.fetch("host")).to eq(ENV.fetch("DATABASE_HOST"))
+    expect(replica.fetch("database")).to eq(ENV.fetch("DATABASE_NAME"))
+    expect(replica.fetch("username")).to eq(ENV.fetch("DATABASE_USERNAME"))
+  end
+
   it "ignores retired worker replica hosts in lag monitoring" do
     constants = Rails.root.join("config/initializers/004_constants.rb").read
     definition = constants[/REPLICAS_HOSTS = .*?(?=\n\n)/m]
