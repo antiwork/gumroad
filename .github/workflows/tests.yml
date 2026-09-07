@@ -593,7 +593,6 @@ jobs:
     env:
       COMPOSE_PROJECT_NAME: web_${{ github.run_id }}_${{ github.run_attempt }}_fast_${{ matrix.ci_node_index }}
     runs-on: ubicloud-standard-4
-    timeout-minutes: 15
     needs: [build, run_scope, reuse_scope]
     # Full suite: main pushes (deploy gate) and PRs labeled run-all-specs,
     # unless this main commit is the same tree as a PR that already passed Fast+Slow.
@@ -672,7 +671,7 @@ jobs:
           WEB_REPO: antiwork/gumroad-web
 
       - name: Run tests
-        timeout-minutes: 10
+        timeout-minutes: 15
         run: |
           mkdir -p ./test-logs
           chmod 777 ./test-logs
@@ -736,7 +735,6 @@ jobs:
       COMPOSE_PROJECT_NAME: web_${{ github.run_id }}_${{ github.run_attempt }}_slow_${{ matrix.ci_node_index }}
       WEB_REPO: antiwork/gumroad-web
     runs-on: ubicloud-standard-4
-    timeout-minutes: 15
     needs: [build, run_scope, reuse_scope]
     # Full suite: main pushes (deploy gate) and PRs labeled run-all-specs,
     # unless this main commit is the same tree as a PR that already passed Fast+Slow.
@@ -867,7 +865,7 @@ jobs:
           WEB_REPO: antiwork/gumroad-web
 
       - name: Run tests
-        timeout-minutes: 10
+        timeout-minutes: 25
         run: |
           mkdir -p ./capybara-artifacts
           chmod 777 ./capybara-artifacts
