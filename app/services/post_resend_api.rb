@@ -247,8 +247,9 @@ class PostResendApi
         state: "sent",
         sent_at: Time.current,
       }
-      # Rails 7.2 no longer forwards create_with values into insert_all!, so merge the STI `type`
-      # and shared columns into each row.
+      # Rails 7.2's insert_all! drops the STI column from the create_with scope
+      # (InsertAll#initialize: `scope_for_create.except(inheritance_column)`), so `type`
+      # would come through NULL. Merge the shared columns into each row instead.
       EmailInfo.insert_all!(attributes.map { |row| base_attributes.merge(row) })
     end
 
