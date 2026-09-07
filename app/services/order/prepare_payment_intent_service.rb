@@ -7,6 +7,10 @@ class Order::PreparePaymentIntentService
 
   # The browser's resolved card country is more trustworthy than a client-supplied field.
   CARD_COUNTRY_SOURCE = "stripe"
+  # The direct-listed amount token fields compared at prepare: what the buyer agreed to (price,
+  # tip) plus the deterministic shipping rate. Tax is deliberately absent; see
+  # #direct_listed_allocations_match?.
+  DIRECT_LISTED_AMOUNT_COMPARED_FIELDS = %w[permalink price_cents tip_cents shipping_cents].freeze
   GENERIC_CHARGE_ERROR = "There is a temporary problem, please try again (your card was not charged)."
   # A Klarna amount-window rejection is deterministic — retrying Klarna on the same cart can
   # never succeed — so it must not reuse the retry-oriented generic message above. Tell the
@@ -736,8 +740,12 @@ class Order::PreparePaymentIntentService
       nil
     end
 
-    # Only a signed surcharge snapshot can prove what mounted the Element. The browser cannot
+    # Only a signed surcharge snapshot can prove what the buyer agreed to. The browser cannot
     # alter it to make a changed offer look current, and the snapshot never sets charge amounts.
+    # Tax is not compared: it is the server's own number, recomputed at prepare from the submitted
+    # address/VAT ID, and the same inputs can produce a different result seconds apart. Failing
+    # the charge on that delta loops the buyer through "price changed" until they give up, while
+    # the canonical USD lane has always charged the prepare-time tax.
     def method_forced_listed_allocations_match?(charge, currency)
       return true unless purchases_to_charge.all? { _1.link.price_currency_type.to_s.downcase == currency }
 
@@ -768,12 +776,10 @@ class Order::PreparePaymentIntentService
           "permalink" => allocation.purchase.link.unique_permalink,
           "price_cents" => allocation.presentment_price_cents,
           "tip_cents" => allocation.presentment_tip_cents,
-          "tax_cents" => allocation.presentment_seller_tax_cents + allocation.presentment_gumroad_tax_cents,
           "shipping_cents" => allocation.presentment_shipping_cents,
-          "total_cents" => allocation.presentment_total_cents,
         }
       end
-      reported == expected
+      reported.map { _1.slice(*DIRECT_LISTED_AMOUNT_COMPARED_FIELDS) } == expected
     end
 
     # Legacy fallback for clients that did not report their Element's mount currency. It
