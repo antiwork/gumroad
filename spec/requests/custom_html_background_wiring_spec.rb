@@ -41,6 +41,25 @@ describe "Custom HTML background bridge wiring", type: :request do
       expect(response.body).to include("visibilitychange")
     end
 
+    it "paints the wrapper from the store theme before the iframe loads" do
+      seller.seller_profile.update!(background_color: "#000000")
+
+      get "#{host}#{wrapper_path}"
+
+      expect(response).to be_successful
+      expect(response.body).to include("html,body,iframe{background:#000000}")
+    end
+
+    it "does not interpolate a non-hex store theme into the wrapper style" do
+      seller.seller_profile.update_columns(background_color: "#000000; } body { display: none } /*")
+
+      get "#{host}#{wrapper_path}"
+
+      expect(response).to be_successful
+      expect(response.body).not_to include("display: none")
+      expect(response.body).not_to include("html,body,iframe{background:")
+    end
+
     it "injects the listener into the trusted wrapper" do
       get "#{host}#{wrapper_path}"
 
