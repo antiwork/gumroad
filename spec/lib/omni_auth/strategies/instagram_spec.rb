@@ -57,6 +57,30 @@ describe OmniAuth::Strategies::Instagram do
     end
   end
 
+  describe "#build_access_token" do
+    it "uses the authorization redirect URI without callback query parameters" do
+      allow(strategy).to receive(:full_host).and_return("https://example.com")
+      allow(strategy).to receive(:instagram_connect_enabled?).and_return(true)
+      strategy.options.callback_path = "/users/auth/instagram/callback"
+      strategy.instance_variable_set(:@env, Rack::MockRequest.env_for("https://example.com/users/auth/instagram").merge("rack.session" => {}))
+
+      _, headers, = strategy.request_phase
+      redirect_uri = Rack::Utils.parse_query(URI(headers["Location"]).query).fetch("redirect_uri")
+      expect(redirect_uri).to eq("https://example.com/users/auth/instagram/callback")
+
+      callback_request = Rack::Request.new(Rack::MockRequest.env_for("#{redirect_uri}?code=authorization-code&state=oauth-state"))
+      allow(strategy).to receive(:request).and_return(callback_request)
+      token_request = stub_request(:post, "https://api.instagram.com/oauth/access_token")
+        .to_return(
+          headers: { "Content-Type" => "application/json" },
+          body: { access_token: "instagram-token", user_id: "123" }.to_json,
+        )
+
+      expect(strategy.send(:build_access_token).token).to eq("instagram-token")
+      expect(token_request.with(body: hash_including("code" => "authorization-code", "redirect_uri" => redirect_uri))).to have_been_requested.once
+    end
+  end
+
   it "uses the current Instagram Login parameters" do
     expect(strategy.options.authorize_params.to_h).to include(
       "enable_fb_login" => "false",
