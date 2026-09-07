@@ -30,6 +30,35 @@ describe SendPostBlastEmailsJob, :freeze_time do
   end
 
   describe "#perform" do
+    # The `started_at` stamp is a write that lands immediately before the audience
+    # filter, and mysql2_proxy routes reads to the primary for proxy_delay after a
+    # write — so without an explicit reading role the most expensive query in the
+    # job runs on the primary on every first attempt.
+    it "loads the audience on the replica despite the started_at write" do
+      blast = create(:blast, :just_requested, post: basic_post_with_audience)
+      allow(ApplicationRecord).to receive(:replica_roles_configured?).and_return(true)
+      current_role = nil
+      allow(ApplicationRecord).to receive(:connected_to).and_wrap_original do |_method, **options, &block|
+        previous = current_role
+        current_role = options[:role]
+        block.call
+      ensure
+        current_role = previous
+      end
+      roles = []
+      %i[load_audience_members remove_members_without_email].each do |phase|
+        allow_any_instance_of(described_class).to receive(phase).and_wrap_original do |method, *args|
+          roles << [phase, current_role]
+          method.call(*args)
+        end
+      end
+
+      described_class.new.perform(blast.id)
+
+      expect(roles).to eq([[:load_audience_members, :reading], [:remove_members_without_email, :reading]])
+      expect(current_role).to be_nil
+    end
+
     it "ignores deleted posts" do
       basic_post_with_audience.mark_deleted!
       blast = create(:blast, :just_requested, post: basic_post_with_audience)
