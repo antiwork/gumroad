@@ -280,6 +280,42 @@ class Order::ChargeService
     purchase.charge.update!(credit_card_id: purchase.credit_card.id)
   end
 
+  # Multi-seller carts charge off-session. India cards need an e-mandate on that
+  # path; the frontend SetupIntent is supposed to register it, but a first-time
+  # charge with no stripe_setup_intent_id still hits Stripe as
+  # payment_intent_mandate_invalid (gp#2437). Register here, then the off-session
+  # PaymentIntents can reference the mandate.
+  def register_india_mandate_for_off_session_cart!(purchases, chargeable, merchant_account, mandate_options)
+    return if chargeable.stripe_setup_intent_id.present?
+
+    self.setup_intent = ChargeProcessor.setup_future_charges!(merchant_account, chargeable, mandate_options:)
+    return unless setup_intent.present?
+
+    chargeable.stripe_setup_intent_id = setup_intent.id if chargeable.respond_to?(:stripe_setup_intent_id=)
+    params[:stripe_setup_intent_id] = setup_intent.id if params.respond_to?(:[]=)
+
+    purchases.each do |purchase|
+      purchase.update!(processor_setup_intent_id: setup_intent.id)
+      purchase.charge&.update!(stripe_setup_intent_id: setup_intent.id)
+      next unless purchase.credit_card&.requires_mandate?
+
+      purchase.mark_indian_card_mandate_registration!
+      purchase.credit_card.update!(
+        json_data: purchase.credit_card.json_data.to_h.merge("stripe_setup_intent_id" => setup_intent.id)
+      )
+    end
+
+    if setup_intent.requires_action?
+      purchases.each do |purchase|
+        FailAbandonedPurchaseWorker.perform_in(ChargeProcessor::TIME_TO_COMPLETE_SCA, purchase.id)
+      end
+    elsif !setup_intent.succeeded?
+      purchases.each do |purchase|
+        purchase.errors.add :base, "Sorry, something went wrong." if purchase.errors.empty?
+      end
+    end
+  end
+
   def create_charge_for_seller_purchases(purchases, chargeable, off_session, setup_future_charges)
     purchases_to_charge = purchases.reject do |purchase|
       purchase.is_free_trial_purchase? || purchase.is_preorder_authorization? || purchase.is_test_purchase? ||
@@ -297,6 +333,12 @@ class Order::ChargeService
       seller = User.find(purchases.first.seller_id)
       statement_description = seller.name_or_username
       mandate_options = mandate_options_for_stripe(purchases: mandate_purchases) if mandate_purchases.present?
+      india_off_session_mandate = off_session && chargeable&.requires_mandate? && merchant_account.stripe_charge_processor?
+      if india_off_session_mandate
+        mandate_options ||= mandate_options_for_stripe(purchases: purchases_to_charge, with_currency: true)
+        register_india_mandate_for_off_session_cart!(purchases_to_charge, chargeable, merchant_account, mandate_options)
+        return if setup_intent&.requires_action? || purchases_to_charge.any? { |purchase| purchase.errors.present? }
+      end
       if setup_future_charges && mandate_options.present? && chargeable&.requires_mandate?
         mandate_purchases.each(&:mark_indian_card_mandate_registration!)
       end
@@ -312,7 +354,7 @@ class Order::ChargeService
         setup_future_charges:,
         off_session:,
         statement_description:,
-        mandate_options: setup_future_charges ? mandate_options : nil,
+        mandate_options: (setup_future_charges || india_off_session_mandate) ? mandate_options : nil,
         params:,
       ).perform
 

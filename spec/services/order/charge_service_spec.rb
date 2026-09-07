@@ -1588,6 +1588,74 @@ describe Order::ChargeService, :vcr do
       Feature.deactivate_user(StripeChargeProcessor::INDIA_CARD_MANDATE_RELIABILITY_FEATURE, seller_1)
     end
 
+    it "registers an India e-mandate setup intent before an off-session charge with no prior setup intent" do
+      order = create(:order)
+      merchant_account = create(:merchant_account_stripe_connect, user: seller_1)
+      purchase = create(:purchase,
+                        link: product_1,
+                        seller: seller_1,
+                        merchant_account:,
+                        purchase_state: "in_progress",
+                        is_multi_buy: true,
+                        total_transaction_cents: 10_00)
+      chargeable = instance_double(Chargeable, requires_mandate?: true, stripe_setup_intent_id: nil)
+      allow(chargeable).to receive(:stripe_setup_intent_id=)
+      setup_intent = SetupIntent.new
+      setup_intent.id = "seti_india"
+      allow(setup_intent).to receive_messages(succeeded?: true, requires_action?: false)
+      allow(ChargeProcessor).to receive(:setup_future_charges!).and_return(setup_intent)
+      charge = instance_double(Charge, charge_intent: nil, credit_card: nil)
+      create_service = instance_double(Charge::CreateService, perform: charge)
+      captured_kwargs = nil
+      allow(Charge::CreateService).to receive(:new) do |**kwargs|
+        captured_kwargs = kwargs
+        create_service
+      end
+      mandate_options = { payment_method_options: { card: { mandate_options: { amount: 10_00 } } } }
+      service = described_class.new(order:, params: {})
+      allow(service).to receive(:mandate_options_for_stripe).and_return(mandate_options)
+
+      service.send(:create_charge_for_seller_purchases, [purchase], chargeable, true, false)
+
+      expect(ChargeProcessor).to have_received(:setup_future_charges!).with(
+        merchant_account,
+        chargeable,
+        mandate_options:
+      )
+      expect(captured_kwargs[:off_session]).to eq(true)
+      expect(captured_kwargs[:mandate_options]).to eq(mandate_options)
+      expect(captured_kwargs[:setup_future_charges]).to eq(false)
+      expect(purchase.reload.processor_setup_intent_id).to eq("seti_india")
+    end
+
+    it "does not off-session charge an India card whose mandate setup still requires action" do
+      order = create(:order)
+      merchant_account = create(:merchant_account_stripe_connect, user: seller_1)
+      purchase = create(:purchase,
+                        link: product_1,
+                        seller: seller_1,
+                        merchant_account:,
+                        purchase_state: "in_progress",
+                        is_multi_buy: true,
+                        total_transaction_cents: 10_00)
+      chargeable = instance_double(Chargeable, requires_mandate?: true, stripe_setup_intent_id: nil)
+      allow(chargeable).to receive(:stripe_setup_intent_id=)
+      setup_intent = SetupIntent.new
+      setup_intent.id = "seti_india_sca"
+      allow(setup_intent).to receive_messages(succeeded?: false, requires_action?: true)
+      allow(ChargeProcessor).to receive(:setup_future_charges!).and_return(setup_intent)
+      allow(FailAbandonedPurchaseWorker).to receive(:perform_in)
+      service = described_class.new(order:, params: {})
+      allow(service).to receive(:mandate_options_for_stripe).and_return(
+        { payment_method_options: { card: { mandate_options: { amount: 10_00 } } } }
+      )
+
+      expect(Charge::CreateService).not_to receive(:new)
+      service.send(:create_charge_for_seller_purchases, [purchase], chargeable, true, false)
+      expect(FailAbandonedPurchaseWorker).to have_received(:perform_in)
+      expect(purchase.reload.purchase_state).to eq("in_progress")
+    end
+
     it "does not read a missing payment intent when a mandate card's processor outcome is already handled" do
       order = create(:order)
       merchant_account = create(:merchant_account_stripe_connect, user: seller_1)

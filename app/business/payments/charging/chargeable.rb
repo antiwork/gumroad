@@ -73,6 +73,11 @@ class Chargeable
     chargeable.respond_to?(:stripe_setup_intent_id) ? chargeable.stripe_setup_intent_id : nil
   end
 
+  def stripe_setup_intent_id=(id)
+    chargeable = @chargeables.values.first
+    chargeable.stripe_setup_intent_id = id if chargeable.respond_to?(:stripe_setup_intent_id=)
+  end
+
   def stripe_payment_intent_id
     chargeable = @chargeables.values.first
     chargeable.respond_to?(:stripe_payment_intent_id) ? chargeable.stripe_payment_intent_id : nil
