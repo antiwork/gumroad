@@ -968,6 +968,7 @@ describe SendWorkflowPostEmailsJob, :freeze_time do
       @post_rule.update!(delayed_delivery_time: 0)
       stub_const("#{described_class}::IMMEDIATE_FANOUT_THRESHOLD", 3)
       stub_const("#{described_class}::DEFAULT_IMMEDIATE_ENQUEUE_PER_SECOND", 2)
+      $redis.del(RedisKey.workflow_immediate_fanout_pacing_cursor)
       @paced_purchases = []
       4.times do |i|
         purchase = create(:free_purchase, link: @product, email: "paced-buyer-#{i}@example.com", created_at: 1.hour.ago)
@@ -986,7 +987,39 @@ describe SendWorkflowPostEmailsJob, :freeze_time do
       expect(ats.last - Time.current.to_f).to be_within(0.05).of(1.5)
     end
 
-    it "keeps oversized due-now fanouts inside the window without a terminal burst" do
+    it "shares the pacing cursor across fanouts so concurrent sellers respect the aggregate cap" do
+      other_seller = create(:named_user)
+      other_workflow = create(:audience_workflow, seller: other_seller)
+      other_product = create(:product, user: other_seller, price_cents: 0)
+      other_post = create(:audience_post, :published, workflow: other_workflow, seller: other_seller,
+                                                      installment_type: Installment::PRODUCT_TYPE,
+                                                      link: other_product,
+                                                      bought_products: [other_product.unique_permalink])
+      create(:post_rule, installment: other_post, delayed_delivery_time: 0)
+      4.times do |i|
+        create(:free_purchase, link: other_product, email: "paced-other-#{i}@example.com", created_at: 1.hour.ago)
+          .rebuild_audience_member_details
+      end
+
+      described_class.new.perform(@post.id)
+      described_class.new.perform(other_post.id)
+
+      ats = SendWorkflowInstallmentWorker.jobs.filter_map { _1["at"] }.sort
+      expect(SendWorkflowInstallmentWorker.jobs.size).to eq(8)
+      expect(ats.last - Time.current.to_f).to be_within(0.05).of(3.5)
+    end
+
+    it "notifies when the shared cursor is far behind aggregate demand" do
+      $redis.set(RedisKey.workflow_immediate_fanout_pacing_cursor, 16.minutes.from_now.to_f)
+      expect(ErrorNotifier).to receive(:notify).once.with(/pacing cursor/, installment_id: @post.id)
+
+      described_class.new.perform(@post.id)
+
+      ats = SendWorkflowInstallmentWorker.jobs.filter_map { _1["at"] }.sort
+      expect(ats.first - Time.current.to_f).to be_within(1).of(16.minutes.to_f)
+    end
+
+    it "does not raise the paced rate to fit a shorter spread window" do
       $redis.set(RedisKey.workflow_immediate_fanout_max_spread_seconds, 1)
 
       described_class.new.perform(@post.id)
@@ -995,13 +1028,12 @@ describe SendWorkflowPostEmailsJob, :freeze_time do
       expect(jobs.size).to eq(4)
       ats = jobs.filter_map { _1["at"] }.sort
       expect(ats.size).to eq(3)
-      expect(ats.last - Time.current.to_f).to be_between(0.6, 1.0)
-      expect(ats.last - ats[-2]).to be > 0.1
+      expect(ats.last - Time.current.to_f).to be_within(0.05).of(1.5)
     ensure
       $redis.del(RedisKey.workflow_immediate_fanout_max_spread_seconds)
     end
 
-    it "sizes the pacing rate from due-now recipients, not future recipients" do
+    it "paces due-now recipients at the configured rate rather than compressing them" do
       $redis.set(RedisKey.workflow_immediate_fanout_max_spread_seconds, 1)
       @paced_purchases.last.update!(created_at: 1.day.from_now)
       @paced_purchases.last.rebuild_audience_member_details
@@ -1011,7 +1043,7 @@ describe SendWorkflowPostEmailsJob, :freeze_time do
       ats = SendWorkflowInstallmentWorker.jobs.filter_map { _1["at"] }.sort
       due_now_ats = ats.select { _1 < 1.hour.from_now.to_f }
       expect(due_now_ats.size).to eq(2)
-      expect(due_now_ats.last - Time.current.to_f).to be_between(0.6, 0.8)
+      expect(due_now_ats.last - Time.current.to_f).to be_within(0.05).of(1.0)
       expect(ats.last).to be_within(1).of(1.day.from_now.to_f)
     ensure
       $redis.del(RedisKey.workflow_immediate_fanout_max_spread_seconds)
