@@ -1009,6 +1009,16 @@ describe SendWorkflowPostEmailsJob, :freeze_time do
       expect(ats.last - Time.current.to_f).to be_within(0.05).of(3.5)
     end
 
+    it "notifies when the shared cursor is far behind aggregate demand" do
+      $redis.set(RedisKey.workflow_immediate_fanout_pacing_cursor, 16.minutes.from_now.to_f)
+      expect(ErrorNotifier).to receive(:notify).once.with(/pacing cursor/, installment_id: @post.id)
+
+      described_class.new.perform(@post.id)
+
+      ats = SendWorkflowInstallmentWorker.jobs.filter_map { _1["at"] }.sort
+      expect(ats.first - Time.current.to_f).to be_within(1).of(16.minutes.to_f)
+    end
+
     it "does not raise the paced rate to fit a shorter spread window" do
       $redis.set(RedisKey.workflow_immediate_fanout_max_spread_seconds, 1)
 

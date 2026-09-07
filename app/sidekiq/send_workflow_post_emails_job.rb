@@ -11,6 +11,7 @@ class SendWorkflowPostEmailsJob
   AFFILIATE_LOOKUP_BATCH_SIZE = 1_000
   IMMEDIATE_FANOUT_THRESHOLD = 2_000
   DEFAULT_IMMEDIATE_ENQUEUE_PER_SECOND = 20
+  PACING_BACKLOG_WARNING_SECONDS = 15.minutes.to_i
 
   # Reserves the next delivery slot on a cursor shared by ALL fanout jobs, so concurrent
   # sellers collectively respect the cap instead of each getting the full rate.
@@ -329,11 +330,22 @@ class SendWorkflowPostEmailsJob
         argv: [now.to_f, 1.0 / immediate_enqueue_per_second]
       ).to_f
       @immediate_fanout_index += 1
+      warn_on_pacing_backlog(slot - now.to_f)
       slot
     rescue Redis::BaseError, RedisClient::Error
       offset = @immediate_fanout_index.to_f / immediate_enqueue_per_second
       @immediate_fanout_index += 1
       now.to_f + offset
+    end
+
+    def warn_on_pacing_backlog(lag_seconds)
+      return if @pacing_backlog_notified || lag_seconds <= PACING_BACKLOG_WARNING_SECONDS
+
+      @pacing_backlog_notified = true
+      ErrorNotifier.notify(
+        "SendWorkflowPostEmailsJob: shared pacing cursor is #{lag_seconds.round}s behind aggregate demand",
+        installment_id: @post.id
+      )
     end
 
     def pace_immediate_fanout?
