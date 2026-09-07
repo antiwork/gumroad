@@ -33,7 +33,12 @@ export const joinServer = async (
 ): Promise<{ ok: true; serverName: string } | { ok: false }> => {
   const response = await request({
     method: "GET",
-    url: Routes.join_server_integrations_discord_index_path({ format: "json", code, purchase_id: purchaseId, token: token ?? undefined }),
+    url: Routes.join_server_integrations_discord_index_path({
+      format: "json",
+      code,
+      purchase_id: purchaseId,
+      token: token ?? undefined,
+    }),
     accept: "json",
   });
   if (response.ok) {
@@ -54,7 +59,11 @@ export const leaveServer = async (
 ): Promise<{ ok: true; serverName: string } | { ok: false }> => {
   const response = await request({
     method: "GET",
-    url: Routes.leave_server_integrations_discord_index_path({ format: "json", purchase_id: purchaseId, token: token ?? undefined }),
+    url: Routes.leave_server_integrations_discord_index_path({
+      format: "json",
+      purchase_id: purchaseId,
+      token: token ?? undefined,
+    }),
     accept: "json",
   });
   if (response.ok) {
