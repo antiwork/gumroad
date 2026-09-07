@@ -1626,6 +1626,37 @@ describe Order::ChargeService, :vcr do
       expect(captured_kwargs[:mandate_options]).to eq(mandate_options)
       expect(captured_kwargs[:setup_future_charges]).to eq(false)
       expect(purchase.reload.processor_setup_intent_id).to eq("seti_india")
+      # The SetupIntent is scoped to this seller group's Stripe account; leaking it
+      # into params would make later seller groups inherit and misresolve it.
+      expect(service.params).not_to have_key(:stripe_setup_intent_id)
+    end
+
+    it "fails the purchase with an actionable error when India e-mandate setup neither succeeds nor requires action" do
+      order = create(:order)
+      merchant_account = create(:merchant_account_stripe_connect, user: seller_1)
+      purchase = create(:purchase,
+                        link: product_1,
+                        seller: seller_1,
+                        merchant_account:,
+                        purchase_state: "in_progress",
+                        is_multi_buy: true,
+                        total_transaction_cents: 10_00)
+      chargeable = instance_double(Chargeable, requires_mandate?: true, stripe_setup_intent_id: nil)
+      allow(chargeable).to receive(:stripe_setup_intent_id=)
+      setup_intent = SetupIntent.new
+      setup_intent.id = "seti_india_failed"
+      allow(setup_intent).to receive_messages(succeeded?: false, requires_action?: false)
+      allow(ChargeProcessor).to receive(:setup_future_charges!).and_return(setup_intent)
+      service = described_class.new(order:, params: {})
+      allow(service).to receive(:mandate_options_for_stripe).and_return(
+        { payment_method_options: { card: { mandate_options: { amount: 10_00 } } } }
+      )
+
+      expect(Charge::CreateService).not_to receive(:new)
+      service.send(:create_charge_for_seller_purchases, [purchase], chargeable, true, false)
+
+      expect(purchase.error_code).to eq(PurchaseErrorCode::INDIA_CARD_MANDATE_MISSING)
+      expect(purchase.errors[:base]).to include("We couldn't authorize your card for this payment. Please try again or use a different payment method.")
     end
 
     it "does not off-session charge an India card whose mandate setup still requires action" do

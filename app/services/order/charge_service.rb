@@ -280,19 +280,19 @@ class Order::ChargeService
     purchase.charge.update!(credit_card_id: purchase.credit_card.id)
   end
 
-  # Multi-seller carts charge off-session. India cards need an e-mandate on that
-  # path; the frontend SetupIntent is supposed to register it, but a first-time
-  # charge with no stripe_setup_intent_id still hits Stripe as
-  # payment_intent_mandate_invalid (gp#2437). Register here, then the off-session
-  # PaymentIntents can reference the mandate.
+  # Multi-seller carts charge off-session; an India card with no SetupIntent yet
+  # must register its e-mandate here or Stripe rejects the charge as
+  # payment_intent_mandate_invalid (gp#2437).
   def register_india_mandate_for_off_session_cart!(purchases, chargeable, merchant_account, mandate_options)
     return if chargeable.stripe_setup_intent_id.present?
 
     self.setup_intent = ChargeProcessor.setup_future_charges!(merchant_account, chargeable, mandate_options:)
     return unless setup_intent.present?
 
+    # Mutate only this seller group's chargeable — the SetupIntent lives on this
+    # group's Stripe account. Writing it into the shared `params` would leak it
+    # into the chargeables rebuilt for later seller groups.
     chargeable.stripe_setup_intent_id = setup_intent.id if chargeable.respond_to?(:stripe_setup_intent_id=)
-    params[:stripe_setup_intent_id] = setup_intent.id if params.respond_to?(:[]=)
 
     purchases.each do |purchase|
       purchase.update!(processor_setup_intent_id: setup_intent.id)
@@ -311,7 +311,9 @@ class Order::ChargeService
       end
     elsif !setup_intent.succeeded?
       purchases.each do |purchase|
-        purchase.errors.add :base, "Sorry, something went wrong." if purchase.errors.empty?
+        next unless purchase.errors.empty?
+        purchase.error_code = PurchaseErrorCode::INDIA_CARD_MANDATE_MISSING
+        purchase.errors.add :base, "We couldn't authorize your card for this payment. Please try again or use a different payment method."
       end
     end
   end
