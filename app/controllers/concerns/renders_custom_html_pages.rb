@@ -958,9 +958,10 @@ module RendersCustomHtmlPages
     end
 
     # The landing iframe HTML must reflect a just-published edit, so read from the
-    # primary rather than a possibly-lagging replica. Wired via an around_action in
-    # each controller (the product and profile embed actions both need it).
-    def stick_to_primary_for_landing_iframe(&block)
+    # primary rather than a possibly-lagging replica. Wired as an around_action in
+    # each controller (the product and profile embed actions both need it) so the
+    # before_actions declared after it are covered too.
+    def use_primary_for_landing_iframe(&block)
       ApplicationRecord.connected_to(role: :writing, &block)
     end
 

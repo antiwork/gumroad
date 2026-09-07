@@ -29,7 +29,7 @@ class LinksController < ApplicationController
   after_action :verify_authorized, except: PUBLIC_ACTIONS
   skip_before_action :require_account_email, only: PUBLIC_ACTIONS + %i[publish]
 
-  around_action :stick_to_primary_for_landing_iframe, only: %i[landing_iframe_content landing_version]
+  around_action :use_primary_for_landing_iframe, only: %i[landing_iframe_content landing_version]
   before_action :fetch_product_for_show, only: %i[show landing_iframe_content landing_version]
   before_action :check_banned, only: %i[show landing_iframe_content landing_version]
   before_action :ensure_seller_is_not_deleted, only: %i[show landing_iframe_content landing_version]
