@@ -11,12 +11,20 @@ module Feature
     Flipper.enable_actor(feature_name, user)
   end
 
+  def activate_group(feature_name, group_name)
+    Flipper.enable_group(feature_name, group_name)
+  end
+
   def deactivate(feature_name)
     Flipper.disable(feature_name)
   end
 
   def deactivate_user(feature_name, user)
     Flipper.disable_actor(feature_name, user)
+  end
+
+  def deactivate_group(feature_name, group_name)
+    Flipper.disable_group(feature_name, group_name)
   end
 
   def activate_percentage(feature_name, percentage)

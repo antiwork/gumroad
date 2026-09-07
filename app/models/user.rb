@@ -431,6 +431,7 @@ class User < ApplicationRecord
             58 => :product_page_storefront_enabled, # Product pages render inside the creator's storefront (profile header above, catalog below). Defaulted on for new accounts only, so lift can be measured against existing creators before enabling for all (gumroad-private#2196). Sellers can turn it off in profile settings.
             59 => :has_dismissed_gumhead_promo,
             60 => :hide_follow_form, # Seller setting: hides the subscribe box in the public profile header. Custom HTML pages omit it by not including the form.
+            61 => :gumhead_enabled, # Gumhead beta membership as a flag bit, so the cohort can exceed Flipper's 100-actor-per-feature limit (flipper 1.3 default). Flipper :gumhead is gated through the :gumhead_beta group (feature_toggle.rb); Gumhead beta has passed $100. Tracker #2433.
             :column => "flags",
             :flag_query_mode => :bit_operator,
             check_for_column: false
