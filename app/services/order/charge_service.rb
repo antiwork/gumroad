@@ -290,26 +290,19 @@ class Order::ChargeService
     return unless setup_intent.present?
 
     # Mutate only this seller group's chargeable — the SetupIntent lives on this
-    # group's Stripe account. Writing it into the shared `params` would leak it
-    # into the chargeables rebuilt for later seller groups.
+    # group's Stripe account. Writing it into the shared `params` or into the saved
+    # card's json_data would leak it into the chargeables rebuilt for later seller
+    # groups, whose charges settle on other accounts. Purchase#processor_setup_intent_id
+    # is the durable, group-scoped record.
     chargeable.stripe_setup_intent_id = setup_intent.id if chargeable.respond_to?(:stripe_setup_intent_id=)
 
     purchases.each do |purchase|
       purchase.update!(processor_setup_intent_id: setup_intent.id)
       purchase.charge&.update!(stripe_setup_intent_id: setup_intent.id)
-      next unless purchase.credit_card&.requires_mandate?
-
-      purchase.mark_indian_card_mandate_registration!
-      purchase.credit_card.update!(
-        json_data: purchase.credit_card.json_data.to_h.merge("stripe_setup_intent_id" => setup_intent.id)
-      )
+      purchase.mark_indian_card_mandate_registration! if purchase.credit_card&.requires_mandate?
     end
 
-    if setup_intent.requires_action?
-      purchases.each do |purchase|
-        FailAbandonedPurchaseWorker.perform_in(ChargeProcessor::TIME_TO_COMPLETE_SCA, purchase.id)
-      end
-    elsif !setup_intent.succeeded?
+    if !setup_intent.requires_action? && !setup_intent.succeeded?
       purchases.each do |purchase|
         next unless purchase.errors.empty?
         purchase.error_code = PurchaseErrorCode::INDIA_CARD_MANDATE_MISSING
@@ -337,8 +330,13 @@ class Order::ChargeService
       mandate_options = mandate_options_for_stripe(purchases: mandate_purchases) if mandate_purchases.present?
       india_off_session_mandate = off_session && chargeable&.requires_mandate? && merchant_account.stripe_charge_processor?
       if india_off_session_mandate
-        mandate_options ||= mandate_options_for_stripe(purchases: purchases_to_charge, with_currency: true)
-        register_india_mandate_for_off_session_cart!(purchases_to_charge, chargeable, merchant_account, mandate_options)
+        # A SetupIntent has no amount, so Stripe requires the mandate currency here, and the
+        # combined charge below references this mandate immediately — the cap must clear the
+        # group's total today as well as the largest single renewal later.
+        setup_mandate_options = mandate_options_for_stripe(purchases: (purchases_to_charge | mandate_purchases), with_currency: true)
+        setup_mandate_cap = setup_mandate_options&.dig(:payment_method_options, :card, :mandate_options)
+        setup_mandate_cap[:amount] = [setup_mandate_cap[:amount], amount_cents].max if setup_mandate_cap
+        register_india_mandate_for_off_session_cart!(purchases_to_charge, chargeable, merchant_account, setup_mandate_options)
         return if setup_intent&.requires_action? || purchases_to_charge.any? { |purchase| purchase.errors.present? }
       end
       if setup_future_charges && mandate_options.present? && chargeable&.requires_mandate?
@@ -356,7 +354,10 @@ class Order::ChargeService
         setup_future_charges:,
         off_session:,
         statement_description:,
-        mandate_options: setup_future_charges ? mandate_options : nil,
+        # An India off-session group resolves its mandate from the chargeable's SetupIntent;
+        # sending mandate_options too would ask Stripe to mint different terms on an
+        # off-session charge, which it rejects.
+        mandate_options: setup_future_charges && !india_off_session_mandate ? mandate_options : nil,
         params:,
       ).perform
 
@@ -446,7 +447,7 @@ class Order::ChargeService
           client_secret: charge_intent.client_secret,
           order: {
             id: order.secure_external_id(scope: "confirm", expires_at: 1.hour.from_now),
-            stripe_connect_account_id: order.charges.last.merchant_account.is_a_stripe_connect_account? ? order.charges.last.merchant_account.charge_processor_merchant_id : nil
+            stripe_connect_account_id: stripe_connect_account_id_for(purchase)
           }
         }
       elsif setup_intent&.requires_action?
@@ -456,7 +457,7 @@ class Order::ChargeService
           client_secret: setup_intent.client_secret,
           order: {
             id: order.secure_external_id(scope: "confirm", expires_at: 1.hour.from_now),
-            stripe_connect_account_id: order.purchases.last.merchant_account.is_a_stripe_connect_account? ? order.purchases.last.merchant_account.charge_processor_merchant_id : nil
+            stripe_connect_account_id: stripe_connect_account_id_for(purchase)
           }
         }
       elsif purchase_waiting_for_flow_of_funds?(purchase) && purchase_has_charge_data?(purchase)
@@ -470,6 +471,14 @@ class Order::ChargeService
 
   def purchase_has_charge_data?(purchase)
     purchase.errors.empty? && (purchase.stripe_transaction_id.present? || purchase.paypal_order_id.present?)
+  end
+
+  # The pending intent was created on this line item's own merchant account —
+  # `order.charges.last` / `order.purchases.last` can belong to a different seller group in a
+  # multi-seller cart, handing the browser the wrong Stripe account to confirm on.
+  def stripe_connect_account_id_for(purchase)
+    merchant_account = purchase.merchant_account
+    merchant_account&.is_a_stripe_connect_account? ? merchant_account.charge_processor_merchant_id : nil
   end
 
   def save_processor_payment_intent!(purchase, intent_id)

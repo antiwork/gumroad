@@ -39,6 +39,20 @@ class Purchase::ConfirmService < Purchase::BaseService
       return
     end
 
+    # A paid purchase that reaches confirmation with only a SetupIntent was never charged
+    # (gp#2437): finalizing it would send receipts and book seller balances with no money
+    # moved. Order::ConfirmService creates the group's off-session charge before confirming;
+    # if that didn't happen, refuse to finalize rather than mark it paid.
+    if purchase.processor_setup_intent_id.present? &&
+       purchase.processor_payment_intent_id.blank? &&
+       purchase.stripe_transaction_id.blank? &&
+       !purchase.free_purchase? && !purchase.is_free_trial_purchase? && !purchase.is_test_purchase?
+      purchase.errors.add(:base, "There is a temporary problem, please try again (your card was not charged).") if purchase.errors.empty?
+      error_message = purchase.errors.full_messages[0]
+      handle_purchase_failure
+      return error_message
+    end
+
     purchase.confirm_charge_intent!
 
     if purchase.errors.present?

@@ -43,6 +43,31 @@ describe StripeChargeableCreditCard, :vcr do
     end
   end
 
+  describe "#stripe_setup_intent_id=" do
+    it "persists a setup intent registered after the chargeable was built from a saved card" do
+      chargeable = StripeChargeableCreditCard.new(
+        nil, "cus_saved", "pm_saved", "fp_saved", nil, nil,
+        "4242", 16, "**** **** **** 4242", 12, 2030, CardType::VISA, "IN"
+      )
+
+      expect(chargeable.stripe_setup_intent_id).to be_nil
+      chargeable.stripe_setup_intent_id = "seti_registered_later"
+      expect(chargeable.stripe_setup_intent_id).to eq("seti_registered_later")
+    end
+
+    it "is writable through the Chargeable wrapper so India e-mandate registration sticks" do
+      wrapped = Chargeable.new([
+                                 StripeChargeableCreditCard.new(
+                                   nil, "cus_saved", "pm_saved", "fp_saved", nil, nil,
+                                   "4242", 16, "**** **** **** 4242", 12, 2030, CardType::VISA, "IN"
+                                 )
+                               ])
+
+      wrapped.stripe_setup_intent_id = "seti_registered_later"
+      expect(wrapped.stripe_setup_intent_id).to eq("seti_registered_later")
+    end
+  end
+
   describe "#stripe_charge_params" do
     it "returns customer and payment method" do
       chargeable.prepare!

@@ -12,7 +12,7 @@ import {
 import type { ConfirmedPurchaseResponse, StartCartPurchaseRequestPayload } from "$app/data/purchase";
 import type { Discount } from "$app/parsers/checkout";
 import { request } from "$app/utils/request";
-import { getStripeInstance } from "$app/utils/stripe_loader";
+import { getConnectedAccountStripeInstance, getStripeInstance } from "$app/utils/stripe_loader";
 
 vi.mock("$app/utils/request", () => ({
   ResponseError: class ResponseError extends Error {},
@@ -30,6 +30,7 @@ vi.mock("typia", () => ({ default: { assert: (value: unknown) => value } }));
 
 const requestMock = vi.mocked(request);
 const getStripeInstanceMock = vi.mocked(getStripeInstance);
+const getConnectedAccountStripeInstanceMock = vi.mocked(getConnectedAccountStripeInstance);
 const confirmPaymentMock = vi.fn();
 
 const jsonResponse = (body: unknown) => new Response(JSON.stringify(body), { status: 200 });
@@ -504,6 +505,131 @@ describe("startOrderCreation", () => {
     expect(result.lineItems[firstLine.uid]).toMatchObject({ success: true, permalink: firstLine.permalink });
     expect(result.lineItems[secondLine.uid]).toMatchObject({ success: true, permalink: secondLine.permalink });
     expect(result.lineItems[firstLine.uid]).not.toBe(result.lineItems[secondLine.uid]);
+  });
+
+  it("confirms every seller group's intent on its own Stripe account before confirming the order", async () => {
+    vi.stubGlobal("Routes", {
+      orders_path: () => "/orders",
+      confirm_order_path: (id: string) => `/orders/${id}/confirm`,
+    });
+    requestMock.mockReset();
+    getStripeInstanceMock.mockReset();
+    getConnectedAccountStripeInstanceMock.mockReset();
+    const platformStripe = typia.assert<Stripe>({});
+    platformStripe.confirmCardSetup = vi.fn().mockResolvedValue({});
+    platformStripe.confirmCardPayment = vi.fn().mockResolvedValue({});
+    getStripeInstanceMock.mockResolvedValue(platformStripe);
+    const connectStripe = typia.assert<Stripe>({});
+    connectStripe.confirmCardSetup = vi.fn().mockResolvedValue({});
+    connectStripe.confirmCardPayment = vi.fn().mockResolvedValue({});
+    getConnectedAccountStripeInstanceMock.mockResolvedValue(connectStripe);
+
+    const firstLine = requestData.lineItems.at(0);
+    if (!firstLine) throw new Error("Missing test line item");
+    const secondLine = { ...firstLine, uid: "product-b ", permalink: "product-b" };
+    const mixedRequestData = { ...requestData, lineItems: [firstLine, secondLine] };
+    requestMock
+      .mockResolvedValueOnce(
+        jsonResponse({
+          success: true,
+          line_items: {
+            [firstLine.uid]: {
+              success: true,
+              requires_card_setup: true,
+              client_secret: "seti_connect_secret",
+              order: { id: "order-token", stripe_connect_account_id: "acct_connect" },
+            },
+            [secondLine.uid]: {
+              success: true,
+              requires_card_action: true,
+              client_secret: "pi_platform_secret",
+              order: { id: "order-token", stripe_connect_account_id: null },
+            },
+          },
+          can_buyer_sign_up: false,
+          offer_codes: [],
+        }),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({
+          success: true,
+          line_items: {
+            [firstLine.uid]: confirmedPurchase(firstLine.permalink),
+            [secondLine.uid]: confirmedPurchase(secondLine.permalink),
+          },
+          can_buyer_sign_up: false,
+          offer_codes: [],
+        }),
+      );
+
+    const result = await startOrderCreation(mixedRequestData, []);
+
+    expect(getConnectedAccountStripeInstanceMock).toHaveBeenCalledWith("acct_connect");
+    expect(connectStripe.confirmCardSetup).toHaveBeenCalledTimes(1);
+    expect(connectStripe.confirmCardSetup).toHaveBeenCalledWith("seti_connect_secret");
+    expect(platformStripe.confirmCardPayment).toHaveBeenCalledTimes(1);
+    expect(platformStripe.confirmCardPayment).toHaveBeenCalledWith("pi_platform_secret");
+    // One confirm POST finalizes the whole order after all confirmations.
+    const confirmCalls = requestMock.mock.calls.filter(([options]) => options.url === "/orders/order-token/confirm");
+    expect(confirmCalls).toHaveLength(1);
+    expect(result.lineItems[firstLine.uid]).toMatchObject({ success: true });
+    expect(result.lineItems[secondLine.uid]).toMatchObject({ success: true });
+  });
+
+  it("stops at the first failed confirmation and forwards its error when nothing was confirmed yet", async () => {
+    vi.stubGlobal("Routes", {
+      orders_path: () => "/orders",
+      confirm_order_path: (id: string) => `/orders/${id}/confirm`,
+    });
+    requestMock.mockReset();
+    getStripeInstanceMock.mockReset();
+    const stripe = typia.assert<Stripe>({});
+    const stripeError = { type: "card_error", message: "We are unable to authenticate your payment method." };
+    stripe.confirmCardSetup = vi.fn().mockResolvedValue({ error: stripeError });
+    stripe.confirmCardPayment = vi.fn().mockResolvedValue({});
+    getStripeInstanceMock.mockResolvedValue(stripe);
+
+    const firstLine = requestData.lineItems.at(0);
+    if (!firstLine) throw new Error("Missing test line item");
+    const secondLine = { ...firstLine, uid: "product-b ", permalink: "product-b" };
+    const mixedRequestData = { ...requestData, lineItems: [firstLine, secondLine] };
+    requestMock
+      .mockResolvedValueOnce(
+        jsonResponse({
+          success: true,
+          line_items: {
+            [firstLine.uid]: {
+              success: true,
+              requires_card_setup: true,
+              client_secret: "seti_group_1_secret",
+              order: { id: "order-token", stripe_connect_account_id: null },
+            },
+            [secondLine.uid]: {
+              success: true,
+              requires_card_action: true,
+              client_secret: "pi_group_2_secret",
+              order: { id: "order-token", stripe_connect_account_id: null },
+            },
+          },
+          can_buyer_sign_up: false,
+          offer_codes: [],
+        }),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({
+          success: true,
+          line_items: {},
+          can_buyer_sign_up: false,
+          offer_codes: [],
+        }),
+      );
+
+    await startOrderCreation(mixedRequestData, []);
+
+    // The remaining group's charge must not be confirmed against a card that just failed.
+    expect(stripe.confirmCardPayment).not.toHaveBeenCalled();
+    const confirmCall = requestMock.mock.calls.find(([options]) => options.url === "/orders/order-token/confirm");
+    expect(confirmCall?.[0]).toMatchObject({ data: { stripe_error: stripeError } });
   });
 
   it("maps a purchase-id-keyed confirm response back to the cart line by permalink", async () => {

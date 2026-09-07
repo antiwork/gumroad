@@ -214,5 +214,143 @@ describe Order::ConfirmService, :vcr do
         expect(responses).to be_empty
       end.not_to raise_error
     end
+
+    context "when a multi-seller India cart paused at a SetupIntent" do
+      let(:india_card) do
+        CreditCard.create!(
+          charge_processor_id: StripeChargeProcessor.charge_processor_id,
+          stripe_customer_id: "cus_confirm_india",
+          processor_payment_method_id: "pm_confirm_india",
+          stripe_fingerprint: "confirm_india_fingerprint",
+          visual: "**** **** **** 4242",
+          card_type: CardType::VISA,
+          card_country: Compliance::Countries::IND.alpha2,
+          expiry_month: 12,
+          expiry_year: 2030
+        )
+      end
+      let(:merchant_account) do
+        MerchantAccount.gumroad(StripeChargeProcessor.charge_processor_id) ||
+          create(
+            :merchant_account,
+            user: nil,
+            charge_processor_id: StripeChargeProcessor.charge_processor_id,
+            charge_processor_merchant_id: nil
+          )
+      end
+      let(:order) { create(:order) }
+      let(:charge) { create(:charge, order:, seller:, merchant_account:, stripe_setup_intent_id: "seti_confirm_india") }
+      let!(:purchases) do
+        [product_1, product_2].map do |product|
+          purchase = create(:purchase_in_progress,
+                            link: product,
+                            seller:,
+                            merchant_account:,
+                            credit_card: india_card,
+                            is_multi_buy: true,
+                            processor_setup_intent_id: "seti_confirm_india")
+          charge.purchases << purchase
+          order.purchases << purchase
+          purchase
+        end
+      end
+
+      before do
+        allow_any_instance_of(Purchase).to receive(:confirm_charge_intent!)
+        allow_any_instance_of(Purchase).to receive(:increment_sellers_balance!)
+        allow_any_instance_of(Purchase).to receive(:financial_transaction_validation)
+      end
+
+      it "creates one combined off-session charge for the seller group once the SetupIntent succeeded" do
+        setup_intent = instance_double(StripeSetupIntent, succeeded?: true)
+        expect(ChargeProcessor).to receive(:get_setup_intent).with(merchant_account, "seti_confirm_india").once.and_return(setup_intent)
+        charge_intent = StripeChargeIntent.new(
+          payment_intent: Stripe::PaymentIntent.construct_from(id: "pi_confirm_india", status: StripeIntentStatus::PROCESSING)
+        )
+        captured_kwargs = nil
+        create_service = instance_double(Charge::CreateService)
+        expect(Charge::CreateService).to receive(:new).once do |**kwargs|
+          captured_kwargs = kwargs
+          create_service
+        end
+        allow(create_service).to receive(:perform) do
+          charge.charge_intent = charge_intent
+          charge
+        end
+
+        responses, = Order::ConfirmService.new(order:, params: {}).perform
+
+        expect(captured_kwargs[:purchases]).to match_array(order.purchases.to_a)
+        expect(captured_kwargs[:off_session]).to eq(true)
+        expect(captured_kwargs[:setup_future_charges]).to eq(false)
+        expect(captured_kwargs[:mandate_options]).to be_nil
+        expect(captured_kwargs[:amount_cents]).to eq(order.purchases.sum(&:total_transaction_cents))
+        expect(captured_kwargs[:merchant_account]).to eq(merchant_account)
+        # Built via CreditCard#to_chargeable: a real StripeChargeableCreditCard must carry the
+        # confirmed SetupIntent into the charge, which is what resolves the e-mandate.
+        expect(captured_kwargs[:chargeable]).to be_a(Chargeable)
+        expect(captured_kwargs[:chargeable].stripe_setup_intent_id).to eq("seti_confirm_india")
+
+        purchases.each do |purchase|
+          expect(purchase.reload.processor_payment_intent.intent_id).to eq("pi_confirm_india")
+          expect(purchase.purchase_state).to eq("successful")
+        end
+        expect(india_card.reload.stripe_payment_intent_id).to eq("pi_confirm_india")
+        expect(responses.values).to all(include(success: true))
+      end
+
+      it "fails the group without charging when the SetupIntent did not succeed" do
+        setup_intent = instance_double(StripeSetupIntent, succeeded?: false)
+        allow(ChargeProcessor).to receive(:get_setup_intent).and_return(setup_intent)
+        expect(Charge::CreateService).not_to receive(:new)
+
+        responses, = Order::ConfirmService.new(order:, params: {}).perform
+
+        purchases.each do |purchase|
+          expect(purchase.reload.purchase_state).to eq("failed")
+        end
+        expect(responses.values).to all(
+          include(success: false, error_message: "We couldn't authorize your card for this payment. Please try again or use a different payment method.")
+        )
+      end
+
+      it "does not finalize a paid purchase whose group charge could not be created" do
+        setup_intent = instance_double(StripeSetupIntent, succeeded?: true)
+        allow(ChargeProcessor).to receive(:get_setup_intent).and_return(setup_intent)
+        create_service = instance_double(Charge::CreateService)
+        allow(Charge::CreateService).to receive(:new).and_return(create_service)
+        # A rescued processor outcome: Charge::CreateService returns the charge with no intent.
+        allow(create_service).to receive(:perform) do
+          charge.charge_intent = nil
+          charge
+        end
+
+        responses, = Order::ConfirmService.new(order:, params: {}).perform
+
+        purchases.each do |purchase|
+          expect(purchase.reload.purchase_state).to eq("failed")
+          expect(purchase.processor_payment_intent).to be_nil
+        end
+        expect(responses.values).to all(include(success: false))
+      end
+
+      it "does not charge when the browser reported a card authentication error" do
+        expect(ChargeProcessor).not_to receive(:get_setup_intent)
+        expect(Charge::CreateService).not_to receive(:new)
+
+        confirmation_params = {
+          stripe_error: {
+            code: "invalid_request_error",
+            message: "We are unable to authenticate your payment method."
+          }
+        }
+        responses, = Order::ConfirmService.new(order:, params: confirmation_params).perform
+
+        purchases.each do |purchase|
+          expect(purchase.reload.purchase_state).to eq("failed")
+        end
+        expect(responses.values).to all(include(success: false))
+      end
+    end
   end
 end

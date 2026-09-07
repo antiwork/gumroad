@@ -135,25 +135,48 @@ export const startOrderCreation = async (
       offerCodesForSCALineItems(requestData, response.line_items, activeOfferCodes),
       response.offer_codes,
     );
-    const lineItemRequiringSCA =
-      Object.values(response.line_items).find(
-        (lineItem): lineItem is OrderRequiresCardSetupResponse | OrderRequiresCardActionResponse =>
-          doesLineItemRequireSCA(lineItem),
-      ) ?? null;
-    if (lineItemRequiringSCA) {
-      const orderId = lineItemRequiringSCA.order.id;
+    const lineItemsRequiringSCA = Object.values(response.line_items).filter(
+      (lineItem): lineItem is OrderRequiresCardSetupResponse | OrderRequiresCardActionResponse =>
+        doesLineItemRequireSCA(lineItem),
+    );
+    const firstLineItemRequiringSCA = lineItemsRequiringSCA[0] ?? null;
+    if (firstLineItemRequiringSCA) {
+      const orderId = firstLineItemRequiringSCA.order.id;
       pendingOrderId = orderId;
-      const clientSecret = lineItemRequiringSCA.client_secret;
-      pendingProcessorIntentId = clientSecret.split("_secret")[0] ?? null;
-      const stripeConnectAccountId = lineItemRequiringSCA.order.stripe_connect_account_id;
-      const requiresCardAction = "requires_card_action" in lineItemRequiringSCA;
-      const orderConfirmResponse = await confirmOrder(
+      pendingProcessorIntentId = firstLineItemRequiringSCA.client_secret.split("_secret")[0] ?? null;
+      // A multi-seller cart pauses on one intent per seller group, each on its own Stripe
+      // account. Every one must be confirmed before finalizing the order, or the skipped
+      // groups' purchases finalize against an intent the buyer never authenticated.
+      const intentsToConfirm = [
+        ...new Map(lineItemsRequiringSCA.map((lineItem) => [lineItem.client_secret, lineItem])).values(),
+      ];
+      let stripeError: StripeError | undefined;
+      let anyIntentConfirmed = false;
+      for (const intentLineItem of intentsToConfirm) {
+        pendingProcessorIntentId = intentLineItem.client_secret.split("_secret")[0] ?? null;
+        const stripe = intentLineItem.order.stripe_connect_account_id
+          ? await getConnectedAccountStripeInstance(intentLineItem.order.stripe_connect_account_id)
+          : await getStripeInstance();
+        const stripeResult =
+          "requires_card_action" in intentLineItem
+            ? await stripe.confirmCardPayment(intentLineItem.client_secret)
+            : await stripe.confirmCardSetup(intentLineItem.client_secret);
+        if (stripeResult.error) {
+          stripeError = stripeResult.error;
+          break;
+        }
+        anyIntentConfirmed = true;
+      }
+      const orderConfirmResponse = await confirmOrderAfterAction({
         orderId,
-        clientSecret,
-        stripeConnectAccountId,
-        requiresCardAction,
-        retryOfferCodeCandidates(requestData, retryOfferCodes),
-      );
+        clientSecret: firstLineItemRequiringSCA.client_secret,
+        // A forwarded card-handling error fails every still-pending purchase server-side.
+        // Once any group's intent is confirmed, let the server resolve each group from its
+        // own intent instead, so a confirmed (possibly charged) group is not failed
+        // alongside the one the buyer could not authenticate.
+        stripeError: anyIntentConfirmed ? undefined : stripeError,
+        retryOfferCodes: retryOfferCodeCandidates(requestData, retryOfferCodes),
+      });
       // Key by uid, not permalink, which collides when the cart holds two variants of one product.
       // The legacy confirm endpoint (Order::ConfirmService) still keys its line items by
       // purchase id, which matches no cart uid — fall back to permalink matching for those
@@ -267,37 +290,6 @@ const doesLineItemRequireSCA = (
   lineItemResponse: LineItemResponse,
 ): lineItemResponse is OrderRequiresCardSetupResponse | OrderRequiresCardActionResponse =>
   lineItemResponse.success && ("requires_card_setup" in lineItemResponse || "requires_card_action" in lineItemResponse);
-
-// If we get a response that further user action is required for the order (i.e. SCA),
-// we need to trigger that action and confirm the order.
-const confirmOrder = async (
-  orderId: string,
-  clientSecret: string,
-  stripeConnectAccountId: string | null,
-  requiresCardAction: boolean,
-  retryOfferCodes: ReturnType<typeof retryOfferCodeCandidates>,
-): Promise<ConfirmOrderResponse> => {
-  let stripeError = undefined;
-
-  const stripe = stripeConnectAccountId
-    ? await getConnectedAccountStripeInstance(stripeConnectAccountId)
-    : await getStripeInstance();
-
-  if (requiresCardAction) {
-    const stripeResult = await stripe.confirmCardPayment(clientSecret);
-    stripeError = stripeResult.error;
-  } else {
-    const stripeResult = await stripe.confirmCardSetup(clientSecret);
-    stripeError = stripeResult.error;
-  }
-
-  return confirmOrderAfterAction({
-    orderId,
-    clientSecret,
-    stripeError,
-    retryOfferCodes,
-  });
-};
 
 // SCA enabled cards may require further user action
 // This endpoint is used to confirm the order after user has performed the required action

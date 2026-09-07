@@ -8,7 +8,8 @@ class StripeChargeableCreditCard
 
   attr_reader :fingerprint, :payment_method_id, :last4, :visual, :number_length,
               :expiry_month, :expiry_year, :zip_code, :card_type, :country,
-              :stripe_setup_intent_id, :stripe_payment_intent_id
+              :stripe_payment_intent_id
+  attr_accessor :stripe_setup_intent_id
 
   def initialize(merchant_account, reusable_token, payment_method_id, fingerprint,
                  stripe_setup_intent_id, stripe_payment_intent_id,
