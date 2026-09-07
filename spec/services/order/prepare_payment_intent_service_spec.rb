@@ -1611,6 +1611,33 @@ describe Order::PreparePaymentIntentService, :vcr do
           expect(purchase.purchase_presentment).to be_nil
         end
 
+        it "rejects a shipping snapshot that does not match the purchase" do
+          order, params = build_order
+          purchase = order.purchases.first
+          purchase.update!(displayed_price_cents: 15_00,
+                           displayed_price_currency_type: Currency::EUR,
+                           rate_converted_to_usd: BigDecimal("0.8"))
+          params[:payment_details_source] = PurchasePaymentFlow::PAYMENT_ELEMENT
+          params[:payment_element_mount_currency] = Currency::EUR
+          params[:direct_listed_amount_token] = Checkout::DirectListedAmountToken.issue(
+            allocations: [{
+              permalink: product.unique_permalink,
+              price_cents: 15_00,
+              tip_cents: 0,
+              tax_cents: 0,
+              shipping_cents: 5_00,
+              total_cents: 20_00,
+            }],
+            sellers: [seller],
+            currency: Currency::EUR
+          )
+
+          create_args, responses = perform_with_ideal_preview(order, params, confirmation_token: "ctoken_shipping_mismatch_method_forced")
+
+          expect(create_args).to be_nil
+          expect(responses["unique-id-0"][:error_code]).to eq(PurchaseErrorCode::BUYER_CURRENCY_QUOTE_INVALID)
+        end
+
         it "charges the server's tax on a method-forced allocation minted before the tax changed" do
           order, params = build_order
           purchase = order.purchases.first

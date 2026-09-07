@@ -7,10 +7,10 @@ class Order::PreparePaymentIntentService
 
   # The browser's resolved card country is more trustworthy than a client-supplied field.
   CARD_COUNTRY_SOURCE = "stripe"
-  # The direct-listed amount token fields the buyer actually agreed to. Tax and shipping are
-  # recomputed server-side at prepare and are deliberately not compared (see
-  # #direct_listed_allocations_match?).
-  BUYER_AGREED_ALLOCATION_FIELDS = %w[permalink price_cents tip_cents].freeze
+  # The direct-listed amount token fields compared at prepare: what the buyer agreed to (price,
+  # tip) plus the deterministic shipping rate. Tax is deliberately absent; see
+  # #direct_listed_allocations_match?.
+  DIRECT_LISTED_AMOUNT_COMPARED_FIELDS = %w[permalink price_cents tip_cents shipping_cents].freeze
   GENERIC_CHARGE_ERROR = "There is a temporary problem, please try again (your card was not charged)."
   # A Klarna amount-window rejection is deterministic — retrying Klarna on the same cart can
   # never succeed — so it must not reuse the retry-oriented generic message above. Tell the
@@ -742,9 +742,10 @@ class Order::PreparePaymentIntentService
 
     # Only a signed surcharge snapshot can prove what the buyer agreed to. The browser cannot
     # alter it to make a changed offer look current, and the snapshot never sets charge amounts.
-    # Only the buyer-agreed listed price and tip are compared: tax and shipping are the server's
-    # numbers, recomputed at prepare from the submitted address/VAT ID, so a delta there means
-    # the snapshot is stale, not that the buyer is paying a price they never saw.
+    # Tax is not compared: it is the server's own number, recomputed at prepare from the submitted
+    # address/VAT ID, and the same inputs can produce a different result seconds apart. Failing
+    # the charge on that delta loops the buyer through "price changed" until they give up, while
+    # the canonical USD lane has always charged the prepare-time tax.
     def method_forced_listed_allocations_match?(charge, currency)
       return true unless purchases_to_charge.all? { _1.link.price_currency_type.to_s.downcase == currency }
 
@@ -775,9 +776,10 @@ class Order::PreparePaymentIntentService
           "permalink" => allocation.purchase.link.unique_permalink,
           "price_cents" => allocation.presentment_price_cents,
           "tip_cents" => allocation.presentment_tip_cents,
+          "shipping_cents" => allocation.presentment_shipping_cents,
         }
       end
-      reported.map { _1.slice(*BUYER_AGREED_ALLOCATION_FIELDS) } == expected
+      reported.map { _1.slice(*DIRECT_LISTED_AMOUNT_COMPARED_FIELDS) } == expected
     end
 
     # Legacy fallback for clients that did not report their Element's mount currency. It
