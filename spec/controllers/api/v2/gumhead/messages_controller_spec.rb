@@ -150,6 +150,40 @@ describe Api::V2::Gumhead::MessagesController do
     end
   end
 
+  describe "flag-bit group gating (gumroad-private#2433)" do
+    # :gumhead is actor-enabled for @user in the shared before; drop that so
+    # coverage exercises only the flag-bit group path, not the stale actor gate.
+    before do
+      Feature.deactivate_user(:gumhead, @user)
+      Flipper.enable_group(:gumhead, :gumhead_beta)
+    end
+
+    after do
+      Flipper.disable_group(:gumhead, :gumhead_beta)
+      @user.update!(gumhead_enabled: false)
+    end
+
+    it "rejects a seller without the flag bit" do
+      post_messages
+
+      expect(response.status).to eq(403)
+      expect(JSON.parse(response.body)["error"]["type"]).to eq("permission_error")
+      expect(WebMock).not_to have_requested(:post, messages_url)
+    end
+
+    it "serves a seller with the flag bit through the group" do
+      @user.update!(gumhead_enabled: true)
+      stub_request(:post, messages_url)
+        .to_return(status: 200, body: anthropic_response.to_json, headers: { "Content-Type" => "application/json" })
+
+      post_messages
+
+      expect(response.status).to eq(200)
+      expect(JSON.parse(response.body)["content"].first["text"]).to eq("Hello!")
+      expect(GumheadUsageEvent.sole.user).to eq(@user)
+    end
+  end
+
   describe "request validation" do
     it "rejects a malformed JSON body with the gateway's error envelope" do
       post :create, body: "not json", as: :json
