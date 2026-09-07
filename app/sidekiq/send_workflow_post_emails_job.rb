@@ -10,8 +10,7 @@ class SendWorkflowPostEmailsJob
   FOLLOWER_LOOKUP_BATCH_SIZE = 1_000
   AFFILIATE_LOOKUP_BATCH_SIZE = 1_000
   IMMEDIATE_FANOUT_THRESHOLD = 2_000
-  DEFAULT_IMMEDIATE_ENQUEUE_PER_SECOND = 80
-  MAX_IMMEDIATE_SPREAD = 15.minutes
+  DEFAULT_IMMEDIATE_ENQUEUE_PER_SECOND = 20
 
   def perform(post_id, earliest_valid_time = nil, reschedule_on_stale = false, minimum_rule_version = nil, schedule_intent_token = nil, schedule_intent_fanout_token = nil)
     @schedule_intent_token = schedule_intent_token
@@ -309,7 +308,7 @@ class SendWorkflowPostEmailsJob
       now = @immediate_fanout_started_at || Time.current
       return natural_at if natural_at > now
 
-      offset = @immediate_fanout_index.to_f / effective_immediate_enqueue_per_second
+      offset = @immediate_fanout_index.to_f / immediate_enqueue_per_second
       @immediate_fanout_index += 1
       now + offset
     end
@@ -324,22 +323,11 @@ class SendWorkflowPostEmailsJob
       IMMEDIATE_FANOUT_THRESHOLD
     end
 
-    def effective_immediate_enqueue_per_second
-      [immediate_enqueue_per_second, @immediate_fanout_recipient_count.to_f / max_immediate_spread_seconds].max
-    end
-
     def immediate_enqueue_per_second
       per_second = ($redis.get(RedisKey.workflow_immediate_enqueue_per_second) || DEFAULT_IMMEDIATE_ENQUEUE_PER_SECOND).to_f
       per_second.positive? ? per_second : DEFAULT_IMMEDIATE_ENQUEUE_PER_SECOND
     rescue Redis::BaseError, RedisClient::Error
       DEFAULT_IMMEDIATE_ENQUEUE_PER_SECOND
-    end
-
-    def max_immediate_spread_seconds
-      spread_seconds = ($redis.get(RedisKey.workflow_immediate_fanout_max_spread_seconds) || MAX_IMMEDIATE_SPREAD).to_i
-      spread_seconds.positive? ? spread_seconds : MAX_IMMEDIATE_SPREAD.to_i
-    rescue Redis::BaseError, RedisClient::Error
-      MAX_IMMEDIATE_SPREAD.to_i
     end
 
     def claim_seller_fanout_lock
