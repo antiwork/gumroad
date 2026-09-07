@@ -4,7 +4,7 @@ class SendPostBlastEmailsJob
   include Sidekiq::Job
   include ActionView::Helpers::SanitizeHelper
   include PostBlastSending
-  include PrimaryDatabasePinning
+  include DatabaseRoleRouting
   # Deliberately no `lock: :until_executed`. The digest keys on the blast id, and every caller
   # creates a fresh blast row before enqueuing, so it never deduplicated anything — but a hard-killed
   # worker skips its release, and the held digest then drops every later `perform_async` for that

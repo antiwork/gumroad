@@ -24,7 +24,7 @@
 # are logged so support can prompt them to re-enter their payout details.
 module Onetime
   class CleanupWedgedStripeMerchantAccounts
-    include PrimaryDatabasePinning
+    include DatabaseRoleRouting
 
     BATCH_SIZE = 100
 

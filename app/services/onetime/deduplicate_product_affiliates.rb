@@ -18,7 +18,7 @@
 #   Onetime::DeduplicateProductAffiliates.process_commission_divergent(dry_run: false)
 module Onetime
   class DeduplicateProductAffiliates
-    include PrimaryDatabasePinning
+    include DatabaseRoleRouting
 
     CONTENT_COLUMNS = %w[affiliate_basis_points destination_url flags].freeze
     COMMISSION_COLUMNS = %w[affiliate_basis_points flags].freeze

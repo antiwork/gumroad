@@ -3,7 +3,7 @@
 # Chooses the database role for a block. On worker processes with
 # USE_DB_WORKER_REPLICAS these are the writing/reading roles; elsewhere there
 # are no replica roles and both helpers just yield.
-module PrimaryDatabasePinning
+module DatabaseRoleRouting
   private
     # Reads that must see freshly committed state.
     def with_primary_database(pinned = true, &block)

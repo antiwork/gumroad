@@ -5,7 +5,7 @@ class SendWorkflowInstallmentWorker
   class RuleNotCommittedError < StandardError; end
 
   include Sidekiq::Job
-  include PrimaryDatabasePinning
+  include DatabaseRoleRouting
   sidekiq_options retry: 5, queue: :low
 
   def perform(installment_id, version, purchase_id, follower_id, affiliate_user_id = nil, subscription_id = nil, reschedule_reference_time = nil)

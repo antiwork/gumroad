@@ -5,7 +5,7 @@ class SendWorkflowPostEmailsJob
   class RuleNotCommittedError < StandardError; end
 
   include Sidekiq::Job
-  include PrimaryDatabasePinning
+  include DatabaseRoleRouting
   sidekiq_options retry: 5, queue: :low
 
   FOLLOWER_LOOKUP_BATCH_SIZE = 1_000

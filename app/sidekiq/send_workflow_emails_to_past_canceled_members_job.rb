@@ -5,7 +5,7 @@ class SendWorkflowEmailsToPastCanceledMembersJob
   class RuleNotCommittedError < StandardError; end
 
   include Sidekiq::Job
-  include PrimaryDatabasePinning
+  include DatabaseRoleRouting
   sidekiq_options retry: 5, queue: :low
 
   def perform(installment_id, old_delayed_delivery_time = nil, cutoff_reference_time = nil, minimum_rule_version = nil, schedule_intent_token = nil, schedule_intent_fanout_token = nil)
