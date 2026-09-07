@@ -47,7 +47,7 @@ describe "Custom HTML background bridge wiring", type: :request do
       get "#{host}#{wrapper_path}"
 
       expect(response).to be_successful
-      expect(response.body).to include("html,body,iframe{background:#000000}")
+      expect(response.body).to include("html{background:#000000}")
     end
 
     it "does not interpolate a non-hex store theme into the wrapper style" do
@@ -58,7 +58,7 @@ describe "Custom HTML background bridge wiring", type: :request do
 
       expect(response).to be_successful
       expect(response.body).not_to include("display: none")
-      expect(response.body).not_to include("html,body,iframe{background:")
+      expect(response.body).not_to include("html{background:")
     end
 
     it "injects the listener into the trusted wrapper" do
