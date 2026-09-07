@@ -1638,7 +1638,7 @@ describe Order::PreparePaymentIntentService, :vcr do
           expect(responses["unique-id-0"][:error_code]).to eq(PurchaseErrorCode::BUYER_CURRENCY_QUOTE_INVALID)
         end
 
-        it "charges the server's tax on a method-forced allocation minted before the tax changed" do
+        it "refuses a method-forced allocation whose tax rose above the total the Element mounted with" do
           order, params = build_order
           purchase = order.purchases.first
           purchase.update!(displayed_price_cents: 15_00,
@@ -1661,11 +1661,42 @@ describe Order::PreparePaymentIntentService, :vcr do
             currency: Currency::EUR
           )
 
-          create_args, responses = perform_with_ideal_preview(order, params, confirmation_token: "ctoken_tax_moved_method_forced")
+          create_args, responses = perform_with_ideal_preview(order, params, confirmation_token: "ctoken_tax_rose_method_forced")
+
+          expect(create_args).to be_nil
+          expect(responses["unique-id-0"][:success]).to eq(false)
+          expect(responses["unique-id-0"][:error_code]).to eq(PurchaseErrorCode::BUYER_CURRENCY_QUOTE_INVALID)
+          expect(purchase.reload).to be_failed
+          expect(order.charges.last.charge_presentment).to be_nil
+        end
+
+        it "charges the lower prepare-time total on a method-forced allocation minted with a higher tax" do
+          order, params = build_order
+          purchase = order.purchases.first
+          purchase.update!(displayed_price_cents: 15_00,
+                           displayed_price_currency_type: Currency::EUR,
+                           rate_converted_to_usd: BigDecimal("0.8"))
+          params[:payment_details_source] = PurchasePaymentFlow::PAYMENT_ELEMENT
+          params[:payment_element_mount_currency] = Currency::EUR
+          params[:direct_listed_amount_token] = Checkout::DirectListedAmountToken.issue(
+            allocations: [{
+              permalink: product.unique_permalink,
+              price_cents: 15_00,
+              tip_cents: 0,
+              tax_cents: 1_00,
+              shipping_cents: 0,
+              total_cents: 16_00,
+            }],
+            sellers: [seller],
+            currency: Currency::EUR
+          )
+
+          create_args, responses = perform_with_ideal_preview(order, params, confirmation_token: "ctoken_tax_fell_method_forced")
 
           expect(responses["unique-id-0"][:success]).to eq(true)
           expect(create_args[:currency]).to eq(Currency::EUR)
-          expect(create_args[:amount_cents]).to eq(16_00)
+          expect(create_args[:amount_cents]).to eq(15_00)
+          expect(order.charges.last.charge_presentment).to have_attributes(presentment_currency: Currency::EUR, presentment_total_cents: 15_00)
         end
 
         it "prepares one forced-currency intent for a multi-item cart uniformly priced in the forced currency" do
@@ -2542,7 +2573,7 @@ describe Order::PreparePaymentIntentService, :vcr do
         expect(purchase.reload).to be_failed
       end
 
-      it "charges the server's tax when it differs from the tax the Element loaded with" do
+      it "refuses to confirm above the Element total when the tax rose after the token was minted" do
         order, params = build_order
         purchase = order.purchases.first
         # The token was minted when the surcharge request computed no tax; the purchase now
@@ -2567,11 +2598,40 @@ describe Order::PreparePaymentIntentService, :vcr do
 
         create_args, responses = perform_with_direct_listed_card(order, params)
 
+        expect(create_args).to be_nil
+        expect(responses["unique-id-0"][:success]).to eq(false)
+        expect(responses["unique-id-0"][:error_code]).to eq(PurchaseErrorCode::BUYER_CURRENCY_QUOTE_INVALID)
+        expect(purchase.reload).to be_failed
+        expect(order.charges.last.charge_presentment).to be_nil
+        expect(purchase.purchase_presentment).to be_nil
+      end
+
+      it "charges the lower prepare-time total when the token was minted with a higher tax" do
+        order, params = build_order
+        purchase = order.purchases.first
+        purchase.update!(displayed_price_cents: 15_00,
+                         displayed_price_currency_type: Currency::CAD,
+                         rate_converted_to_usd: BigDecimal("0.8"))
+        params[:direct_listed_amount_token] = Checkout::DirectListedAmountToken.issue(
+          allocations: [{
+            permalink: product.unique_permalink,
+            price_cents: 15_00,
+            tip_cents: 0,
+            tax_cents: 1_00,
+            shipping_cents: 0,
+            total_cents: 16_00,
+          }],
+          sellers: [seller],
+          currency: Currency::CAD
+        )
+
+        create_args, responses = perform_with_direct_listed_card(order, params)
+
         expect(responses["unique-id-0"][:success]).to eq(true)
         expect(create_args[:currency]).to eq(Currency::CAD)
-        expect(create_args[:amount_cents]).to eq(16_00)
+        expect(create_args[:amount_cents]).to eq(15_00)
         expect(purchase.reload.purchase_presentment)
-          .to have_attributes(presentment_price_cents: 15_00, presentment_gumroad_tax_cents: 1_00, presentment_total_cents: 16_00)
+          .to have_attributes(presentment_price_cents: 15_00, presentment_gumroad_tax_cents: 0, presentment_total_cents: 15_00)
       end
 
       it "preserves a token-less checkout opened before the snapshot deployed" do
