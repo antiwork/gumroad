@@ -388,7 +388,7 @@ describe UsersController, :vcr, type: :controller do
 
       html = controller.send(:profile_custom_html_wrapper_document, seller)
 
-      expect(html).to include("html,body,iframe{background:#0a0d12}")
+      expect(html).to include("html{background:#0a0d12}")
     end
   end
 
