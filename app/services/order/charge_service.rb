@@ -356,7 +356,7 @@ class Order::ChargeService
         setup_future_charges:,
         off_session:,
         statement_description:,
-        mandate_options: (setup_future_charges || india_off_session_mandate) ? mandate_options : nil,
+        mandate_options: setup_future_charges ? mandate_options : nil,
         params:,
       ).perform
 

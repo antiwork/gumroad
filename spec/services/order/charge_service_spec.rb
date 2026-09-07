@@ -1623,7 +1623,10 @@ describe Order::ChargeService, :vcr do
         mandate_options:
       )
       expect(captured_kwargs[:off_session]).to eq(true)
-      expect(captured_kwargs[:mandate_options]).to eq(mandate_options)
+      # No mandate_options on the charge: the processor resolves the mandate from the
+      # freshly-set stripe_setup_intent_id; sending both would skip that lookup for
+      # saved cards and confirm off-session without referencing the mandate.
+      expect(captured_kwargs[:mandate_options]).to be_nil
       expect(captured_kwargs[:setup_future_charges]).to eq(false)
       expect(purchase.reload.processor_setup_intent_id).to eq("seti_india")
       # The SetupIntent is scoped to this seller group's Stripe account; leaking it
