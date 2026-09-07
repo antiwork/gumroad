@@ -1,4 +1,4 @@
-development: &development
+default: &default
   adapter: mysql2
   encoding: utf8mb4
   collation: utf8mb4_unicode_ci
@@ -27,9 +27,46 @@ development: &development
     max_execution_time: <%= 5 * 60000 %> # 5 minutes
     sql_mode: 'NO_ENGINE_SUBSTITUTION'
 
+<%# development/test normally keep one plain pool. With USE_DB_WORKER_REPLICAS
+    they expand into the same primary + replica pair as the deployed
+    environments, both pointing at the local database, so the routing can be
+    exercised outside production — the flag used to abort boot here, which is
+    why Procfile.dev cannot set it.
+
+    Opt-in only, and not for the whole suite: Rails 7.2 pins just the
+    writing-role pool for transactional fixtures
+    (ActiveRecord::TestFixtures#setup_transactional_fixtures uses
+    connection_pool_list(:writing)), so reads served by the reading pool cannot
+    see uncommitted fixture rows. Assert on the role that served a statement,
+    not on the rows it returned. %>
+<% replicas_enabled = ENV["USE_DB_WORKER_REPLICAS"] == "true" %>
+<% test_database = ENV.fetch("TEST_DATABASE_NAME", "gumroad_test") %>
+<% if replicas_enabled %>
+development:
+  primary:
+    <<: *default
+    adapter: mysql2_proxy
+  primary_replica:
+    <<: *default
+    replica: true
+
 test:
-  <<: *development
-  database: <%= ENV.fetch("TEST_DATABASE_NAME", "gumroad_test") %>
+  primary:
+    <<: *default
+    adapter: mysql2_proxy
+    database: <%= test_database %>
+  primary_replica:
+    <<: *default
+    replica: true
+    database: <%= test_database %>
+<% else %>
+development:
+  <<: *default
+
+test:
+  <<: *default
+  database: <%= test_database %>
+<% end %>
 
 <%# Production Sidekiq/rpush/anycable set USE_DB_WORKER_REPLICAS=true (nomad).
     Makara used to SQL-route SELECTs to those replicas. Rails 7.2 cannot keep
@@ -46,15 +83,15 @@ test:
     as database.branch-app.yml, which points the replica at the primary's host
     for the same reason. %>
 <% replica_env = ->(prefix) { ENV["#{prefix}_HOST"].present? ? prefix : "DATABASE" } %>
-<% if ENV["USE_DB_WORKER_REPLICAS"] == "true" %>
+<% if replicas_enabled %>
 <% staging_replica = replica_env.call("DATABASE_REPLICA2") %>
 <% production_replica = replica_env.call("DATABASE_WORKER_REPLICA1") %>
 staging:
   primary:
-    <<: *development
+    <<: *default
     adapter: mysql2_proxy
   primary_replica:
-    <<: *development
+    <<: *default
     adapter: mysql2
     replica: true
     database: <%= ENV.fetch("#{staging_replica}_NAME") %>
@@ -64,10 +101,10 @@ staging:
 
 production:
   primary:
-    <<: *development
+    <<: *default
     adapter: mysql2_proxy
   primary_replica:
-    <<: *development
+    <<: *default
     adapter: mysql2
     replica: true
     database: <%= ENV.fetch("#{production_replica}_NAME") %>
@@ -76,7 +113,7 @@ production:
     host: <%= ENV.fetch("#{production_replica}_HOST") %>
 <% else %>
 staging: &staging
-  <<: *development
+  <<: *default
 
 production:
   <<: *staging

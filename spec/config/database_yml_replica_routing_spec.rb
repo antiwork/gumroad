@@ -39,6 +39,32 @@ describe "config/database.yml replica routing" do
     expect(production).not_to have_key("primary_replica")
   end
 
+  it "keeps development and test on one plain pool by default" do
+    ENV.delete("USE_DB_WORKER_REPLICAS")
+    config = parsed_config
+
+    %w[development test].each do |env|
+      expect(config.fetch(env)["adapter"]).to eq("mysql2")
+      expect(config.fetch(env)).not_to have_key("primary_replica")
+    end
+  end
+
+  # The flag used to abort boot outside staging/production, which is why the dev
+  # Procfiles cannot set it and why nothing but production exercises the routing.
+  it "expands development and test into the same role pair, on the local database" do
+    ENV["USE_DB_WORKER_REPLICAS"] = "true"
+    config = parsed_config
+
+    %w[development test].each do |env|
+      expect(config.fetch(env).fetch("primary").fetch("adapter")).to eq("mysql2_proxy")
+      replica = config.fetch(env).fetch("primary_replica")
+      expect(replica.fetch("adapter")).to eq("mysql2")
+      expect(replica.fetch("replica")).to eq(true)
+      expect(replica.fetch("host")).to eq(ENV.fetch("DATABASE_HOST"))
+      expect(replica.fetch("database")).to eq(config.fetch(env).fetch("primary").fetch("database"))
+    end
+  end
+
   it "registers mysql2_proxy writing and replica reading roles for production workers" do
     ENV["USE_DB_WORKER_REPLICAS"] = "true"
     ENV["DATABASE_WORKER_REPLICA1_NAME"] = "gumroad_replica"
