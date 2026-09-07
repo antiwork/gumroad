@@ -1,5 +1,11 @@
 FROM nginx:1.23.4
 
+# worker_connections is main-context only and consul-template renders just
+# conf.d/default.conf, so patch the pinned base conf. The stock 1024 per worker is
+# reachable when a traffic shift grows the load balancer's connection pool; the grep
+# fails the build if nginx restyles the line.
+RUN grep -qE '^[[:space:]]*worker_connections[[:space:]]+1024;' /etc/nginx/nginx.conf \
+  && sed -i -E 's/^([[:space:]]*worker_connections)[[:space:]]+1024;/\1  8192;/' /etc/nginx/nginx.conf
 
 COPY public /public
 COPY docker/nginx/nginx.conf /nginx.conf
