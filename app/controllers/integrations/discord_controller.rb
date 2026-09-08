@@ -112,6 +112,6 @@ class Integrations::DiscordController < ApplicationController
       return true if current_user.present? && purchase.purchaser == current_user
 
       token = params[:token]
-      token.present? && UrlRedirect.exists?(token:, purchase_id: purchase.id)
+      token.is_a?(String) && token.present? && UrlRedirect.exists?(token:, purchase_id: purchase.id)
     end
 end

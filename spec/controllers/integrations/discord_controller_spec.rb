@@ -247,6 +247,17 @@ describe Integrations::DiscordController do
       expect(response.parsed_body).to eq({ "success" => false })
     end
 
+    it "rejects a nested-hash token without raising" do
+      sign_out buyer
+
+      expect do
+        get :join_server, format: :json, params: { code: "test_code", purchase_id: purchase.external_id, token: { x: "y" } }
+      end.not_to change { PurchaseIntegration.count }
+
+      expect(response.status).to eq(200)
+      expect(response.parsed_body).to eq({ "success" => false })
+    end
+
     it "adds member to server for a variant purchase with an enabled integration and a valid code" do
       variant_category = create(:variant_category, link: product)
       variant = create(:variant, variant_category:, active_integrations: [integration])
@@ -490,6 +501,31 @@ describe Integrations::DiscordController do
 
       expect(response.status).to eq(200)
       expect(response.parsed_body).to eq({ "success" => true, "server_name" => "Gaming" })
+    end
+
+    it "rejects a signed-out user with a token for a different purchase" do
+      create(:purchase_integration, integration:, purchase:, discord_user_id: user_id)
+      other_purchase = create(:free_purchase, link: product, purchaser: create(:user))
+      redirect = create(:url_redirect, purchase: other_purchase)
+      sign_out buyer
+
+      expect do
+        get :leave_server, format: :json, params: { purchase_id: purchase.external_id, token: redirect.token }
+      end.not_to change { purchase.live_purchase_integrations.reload.count }
+
+      expect(response.parsed_body).to eq({ "success" => false })
+    end
+
+    it "rejects a nested-hash token without raising" do
+      create(:purchase_integration, integration:, purchase:, discord_user_id: user_id)
+      sign_out buyer
+
+      expect do
+        get :leave_server, format: :json, params: { purchase_id: purchase.external_id, token: { x: "y" } }
+      end.not_to change { purchase.live_purchase_integrations.reload.count }
+
+      expect(response.status).to eq(200)
+      expect(response.parsed_body).to eq({ "success" => false })
     end
 
     it "rejects a signed-in user leaving a purchase they do not own" do
