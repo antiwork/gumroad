@@ -25,18 +25,20 @@ class SocialScoreShadowEvaluationService
   def evaluate
     return nil unless held?
 
-    best = scored_verifications.max_by do |scored|
+    shared_identity_counts = user.social_connect_verifications.to_h { |verification| [verification.id, verification.shared_identity_user_ids.size] }
+    scored = scored_verifications(shared_identity_counts)
+    best = scored.max_by do |scored|
       [scored[:meets_threshold] ? 1 : 0, scored[:score].fdiv(scored[:release_threshold])]
     end
     score = best&.dig(:score) || 0
     # Historical identities remain abuse evidence even when disconnected or stale.
-    shared_identity = user.social_connect_verifications.any? { |verification| verification.shared_identity_user_ids.any? }
+    shared_identity = shared_identity_counts.values.any?(&:positive?)
 
     {
       hold_source:,
       unpaid_balance_cents:,
       score:,
-      would_have_released: scored_verifications.any? { _1[:meets_threshold] } && !shared_identity,
+      would_have_released: scored.any? { _1[:meets_threshold] } && !shared_identity,
       signals: best,
     }
   end
@@ -72,12 +74,12 @@ class SocialScoreShadowEvaluationService
       @_unpaid_balance_cents ||= user.unpaid_balance_cents
     end
 
-    def scored_verifications
+    def scored_verifications(shared_identity_counts)
       user.social_connect_verifications.filter_map do |verification|
         next unless verification.currently_linked?
         next if verification.last_verified_at.nil? || verification.last_verified_at < MAX_VERIFICATION_AGE.ago
 
-        shared_identity_user_count = verification.shared_identity_user_ids.size
+        shared_identity_user_count = shared_identity_counts.fetch(verification.id)
         components = score_components(verification)
 
         score = components.values.sum

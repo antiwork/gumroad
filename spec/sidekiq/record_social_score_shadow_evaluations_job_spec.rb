@@ -26,8 +26,9 @@ describe RecordSocialScoreShadowEvaluationsJob do
       held = create(:user, user_risk_state: "flagged_for_fraud")
       # Deliberately weak signals (young account, no audience) so the recorded verdict is a
       # would-not-release row — the factory default is strong enough to release.
-      create(:social_connect_verification, user: held, account_created_at: 2.months.ago,
-                                           follower_count: 3, post_count: 5, last_posted_at: nil)
+      verification = create(:social_connect_verification, user: held, account_created_at: 2.months.ago,
+                                                          follower_count: 3, post_count: 5, last_posted_at: nil)
+      held.update!(twitter_user_id: verification.uid)
       create(:balance, user: held, merchant_account: create(:merchant_account, user: held), amount_cents: 100_00)
 
       unheld = create(:user, user_risk_state: "compliant")

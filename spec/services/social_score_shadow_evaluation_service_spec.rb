@@ -153,6 +153,16 @@ describe SocialScoreShadowEvaluationService do
       expect(result[:unpaid_balance_cents]).to eq(50_00)
     end
 
+    it "reads each historical identity once per evaluation" do
+      strong_verification
+      create(:social_connect_verification, user:, platform: "youtube")
+      user.social_connect_verifications.reload.each do |verification|
+        expect(verification).to receive(:shared_identity_user_ids).once.and_call_original
+      end
+
+      expect(described_class.new(user).evaluate).to include(score: 85, would_have_released: true)
+    end
+
     it "marks would_have_released for a strong verification above the threshold" do
       strong_verification
 
