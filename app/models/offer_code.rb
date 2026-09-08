@@ -20,7 +20,7 @@ class OfferCode < ApplicationRecord
 
   stripped_fields :code
 
-  has_and_belongs_to_many :products, class_name: "Link", join_table: "offer_codes_products", association_foreign_key: "product_id", after_add: :note_applicability_change, after_remove: [:note_applicability_change, :note_removed_product, :reindex_removed_product]
+  has_and_belongs_to_many :products, class_name: "Link", join_table: "offer_codes_products", association_foreign_key: "product_id", after_add: [:note_applicability_change, :reindex_removed_product], after_remove: [:note_applicability_change, :note_removed_product, :reindex_removed_product]
   has_and_belongs_to_many :ownership_products, class_name: "Link", join_table: "offer_codes_ownership_products", association_foreign_key: "product_id"
   has_and_belongs_to_many :excluded_products, class_name: "Link", join_table: "offer_codes_excluded_products", association_foreign_key: "product_id", after_add: [:invalidate_excluded_product_cache, :note_applicability_change, :reindex_removed_product], after_remove: [:invalidate_excluded_product_cache, :note_applicability_change, :reindex_removed_product]
   belongs_to :user
@@ -615,17 +615,16 @@ class OfferCode < ApplicationRecord
       catalogue = universal? || universal_before_last_save
       seller_id = user_id
       seller_ids = [seller_id, user_id_before_last_save].compact.uniq
-      product_ids = destroyed? ? @reindex_product_ids : products.ids unless catalogue
-      # Targeted path indexes Link.where(id:), so unpublished excluded products stay fresh
-      # alongside the alive-only catalogue scan.
-      excluded_ids = catalogue ? (destroyed? ? Array(@reindex_excluded_product_ids) : excluded_products.ids) : []
+      # Targeted path uses Link.where(id:), covering unpublished rows the alive
+      # catalogue scan skips (exclusions and universal→product-specific picks).
+      targeted_ids = if destroyed?
+        Array(@reindex_product_ids) + Array(@reindex_excluded_product_ids)
+      else
+        products.ids + (catalogue ? excluded_products.ids : [])
+      end
       AfterCommitEverywhere.after_commit do
-        if catalogue
-          seller_ids.each { ReindexSellerOfferCodesJob.enqueue(_1) }
-          ReindexSellerOfferCodesJob.enqueue_products(seller_id, excluded_ids) if excluded_ids.any?
-        else
-          ReindexSellerOfferCodesJob.enqueue_products(seller_id, product_ids)
-        end
+        seller_ids.each { ReindexSellerOfferCodesJob.enqueue(_1) } if catalogue
+        ReindexSellerOfferCodesJob.enqueue_products(seller_id, targeted_ids) if targeted_ids.any?
       end
     end
 
@@ -635,11 +634,8 @@ class OfferCode < ApplicationRecord
     end
 
     def capture_reindex_product_ids
-      if universal?
-        @reindex_excluded_product_ids = excluded_products.ids
-      else
-        @reindex_product_ids = products.ids
-      end
+      @reindex_product_ids = products.ids
+      @reindex_excluded_product_ids = excluded_products.ids if universal?
     end
 
     def validate_not_used_as_default_discount

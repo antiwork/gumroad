@@ -1522,6 +1522,15 @@ describe OfferCode do
         expect($redis.zrange("offer_code_index:#{creator.id}:products", 0, -1)).to include(unpublished.id.to_s)
       end
 
+      it "targets unpublished products when a universal discount becomes product-specific" do
+        unpublished = create(:product, user: creator, purchase_disabled_at: Time.current)
+        universal_offer_code = create(:universal_offer_code, user: creator, code: "KEEP")
+        ReindexSellerOfferCodesJob.clear
+        universal_offer_code.update!(universal: false, products: [unpublished])
+        expect(ReindexSellerOfferCodesJob).to have_enqueued_sidekiq_job(creator.id)
+        expect($redis.zrange("offer_code_index:#{creator.id}:products", 0, -1)).to include(unpublished.id.to_s)
+      end
+
       it "reindexes associated products when offer code is updated" do
         ReindexSellerOfferCodesJob.clear
         offer_code.update!(amount_cents: 500)
