@@ -233,7 +233,7 @@ class Order::ConfirmService
         chargeable.prepare!
       end
 
-      charge = Charge::CreateService.new(
+      create_service = Charge::CreateService.new(
         order:,
         seller: reference_purchase.seller,
         merchant_account:,
@@ -251,12 +251,26 @@ class Order::ConfirmService
         # never ran; the resume charge must lock the same buyer-currency quote the checkout
         # displayed (Charge::CreateService fails closed if it expired).
         params: { buyer_currency_quote: params[:buyer_currency_quote].presence },
-      ).perform
+      )
+      charge = create_service.perform
 
       charge_intent = charge.charge_intent
-      # On a nil intent Charge::CreateService already added buyer-facing errors to the
-      # purchases, which fails them in the per-purchase confirms.
-      return if charge_intent.blank?
+      if charge_intent.blank?
+        # A connection loss after Stripe may have accepted the debit must stay pending: failing
+        # these purchases and telling the buyer the card was not charged would let them pay twice.
+        if create_service.processor_outcome_unknown
+          purchases.each do |purchase|
+            purchase.errors.clear
+            purchase.error_code = nil
+            purchase.stripe_error_code = nil
+          end
+          # client_confirmed routes payment_intent.succeeded / payment_failed webhooks into the
+          # async finalize rails if the lost response actually created a debit.
+          charge.update!(client_confirmed: true)
+        end
+        # Definitive nil-intent failures already carry buyer-facing errors for per-purchase confirms.
+        return
+      end
 
       if credit_card.requires_mandate?
         existing = credit_card.json_data.to_h

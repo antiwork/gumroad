@@ -6,6 +6,7 @@ class Charge::CreateService
 
   attr_accessor :order, :seller, :merchant_account, :chargeable, :purchases, :amount_cents, :gumroad_amount_cents,
                 :setup_future_charges, :off_session, :statement_description, :charge, :mandate_options, :params
+  attr_reader :processor_outcome_unknown
 
   def initialize(order:, seller:, merchant_account:, chargeable:,
                  purchases:, amount_cents:, gumroad_amount_cents:,

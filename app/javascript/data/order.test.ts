@@ -1806,6 +1806,80 @@ describe("startOrderCreation", () => {
     expect(result.recaptchaChallengeAvailable).toBe(false);
   });
 
+  it("resumes confirm_order before pending when setup succeeded but a later browser error aborts", async () => {
+    vi.stubGlobal("Routes", {
+      orders_path: () => "/orders",
+      confirm_order_path: (id: string) => `/orders/${id}/confirm`,
+    });
+    requestMock.mockReset();
+    getStripeInstanceMock.mockReset();
+    const stripe = typia.assert<Stripe>({});
+    stripe.confirmCardSetup = vi
+      .fn()
+      .mockResolvedValueOnce({ setupIntent: { id: "seti_a" } })
+      .mockRejectedValueOnce(new Error("stripe.js blew up"));
+    getStripeInstanceMock.mockResolvedValue(stripe);
+
+    const firstLine = requestData.lineItems.at(0);
+    if (!firstLine) throw new Error("Missing test line item");
+    const secondLine = { ...firstLine, uid: "product-b", permalink: "product-b" };
+    const twoSellerRequestData = { ...requestData, lineItems: [firstLine, secondLine] };
+
+    requestMock
+      .mockResolvedValueOnce(
+        jsonResponse({
+          success: true,
+          line_items: {
+            [firstLine.uid]: {
+              success: true,
+              requires_card_setup: true,
+              client_secret: "seti_a_secret_abc",
+              order: { id: "order-token", stripe_connect_account_id: null },
+            },
+            [secondLine.uid]: {
+              success: true,
+              requires_card_setup: true,
+              client_secret: "seti_b_secret_def",
+              order: { id: "order-token", stripe_connect_account_id: null },
+            },
+          },
+          can_buyer_sign_up: false,
+          offer_codes: [],
+        }),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({
+          success: true,
+          line_items: {
+            [firstLine.uid]: { success: true, processing: true, permalink: firstLine.permalink },
+            [secondLine.uid]: {
+              success: false,
+              error_message: "Still waiting.",
+              permalink: secondLine.permalink,
+              name: "Product B",
+              formatted_price: "$10",
+              error_code: "processing",
+              is_tax_mismatch: false,
+              card_country: "IN",
+              ip_country: "IN",
+              updated_product: null,
+            },
+          },
+          can_buyer_sign_up: false,
+          offer_codes: [],
+        }),
+      );
+
+    await expect(startOrderCreation(twoSellerRequestData, [])).rejects.toBeInstanceOf(PaymentConfirmedError);
+
+    // Create once, then the catch-path resume confirm_order — never empty the cart on setup alone.
+    expect(requestMock).toHaveBeenCalledTimes(2);
+    expect(requestMock.mock.calls[1]?.[0]).toMatchObject({
+      url: "/orders/order-token/confirm",
+      data: { stripe_error: undefined },
+    });
+  });
+
   it("stops the follow-on confirm loop after a failed authentication when another group already confirmed", async () => {
     vi.stubGlobal("Routes", {
       orders_path: () => "/orders",

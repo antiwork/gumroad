@@ -164,10 +164,15 @@ export const startOrderCreation = async (
 ): Promise<CartPurchaseResult> => {
   let pendingOrderId: string | null = null;
   let pendingProcessorIntentId: string | null = null;
+  let pendingClientSecret: string | null = null;
   // Once true, money may already be moving: confirmCardPayment captures immediately, and a
   // confirmed SetupIntent lets the confirm POST create the group's off-session charge. Any
   // later failure must then surface as a pending outcome, never a resubmittable cart.
   let anyIntentConfirmed = false;
+  // confirmCardPayment can capture immediately; SetupIntent confirmation alone does not charge
+  // until confirm_order runs. Track those separately for the catch pending guard.
+  let anyPaymentIntentConfirmed = false;
+  let confirmOrderPosted = false;
   // Permalinks whose group was charged synchronously with the debit scheduled — those lines
   // must never re-enter the cart, and any failure matched to them by permalink is ambiguous.
   const processingPermalinks = new Set<string>();
@@ -196,6 +201,7 @@ export const startOrderCreation = async (
     if (firstLineItemRequiringSCA) {
       const orderId = firstLineItemRequiringSCA.order.id;
       pendingOrderId = orderId;
+      pendingClientSecret = firstLineItemRequiringSCA.client_secret;
       pendingProcessorIntentId = firstLineItemRequiringSCA.client_secret.split("_secret")[0] ?? null;
       // A multi-seller cart pauses on one intent per seller group, each on its own Stripe
       // account. Every one must be confirmed before finalizing the order, or the skipped
@@ -205,19 +211,21 @@ export const startOrderCreation = async (
       ];
       let stripeError: StripeError | undefined;
       for (const intentLineItem of intentsToConfirm) {
+        pendingClientSecret = intentLineItem.client_secret;
         pendingProcessorIntentId = intentLineItem.client_secret.split("_secret")[0] ?? null;
         const stripe = intentLineItem.order.stripe_connect_account_id
           ? await getConnectedAccountStripeInstance(intentLineItem.order.stripe_connect_account_id)
           : await getStripeInstance();
-        const stripeResult =
-          "requires_card_action" in intentLineItem
-            ? await stripe.confirmCardPayment(intentLineItem.client_secret)
-            : await stripe.confirmCardSetup(intentLineItem.client_secret);
+        const requiresPaymentAction = "requires_card_action" in intentLineItem;
+        const stripeResult = requiresPaymentAction
+          ? await stripe.confirmCardPayment(intentLineItem.client_secret)
+          : await stripe.confirmCardSetup(intentLineItem.client_secret);
         if (stripeResult.error) {
           stripeError = stripeResult.error;
           break;
         }
         anyIntentConfirmed = true;
+        if (requiresPaymentAction) anyPaymentIntentConfirmed = true;
       }
       let orderConfirmResponse = await confirmOrderAfterAction({
         orderId,
@@ -232,6 +240,7 @@ export const startOrderCreation = async (
         // still needs the quote the checkout displayed to present in the buyer's currency.
         buyerCurrencyQuote: requestData.buyerCurrencyQuote,
       });
+      confirmOrderPosted = true;
       // The confirm response may return requires_card_setup/action for groups on other
       // Stripe accounts or a follow-on PI auth. Confirm those and POST confirm again.
       // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
@@ -246,19 +255,21 @@ export const startOrderCreation = async (
         ];
         let followOnError: StripeError | undefined;
         for (const intentLineItem of followOnToConfirm) {
+          pendingClientSecret = intentLineItem.client_secret;
           pendingProcessorIntentId = intentLineItem.client_secret.split("_secret")[0] ?? null;
           const stripe = intentLineItem.order.stripe_connect_account_id
             ? await getConnectedAccountStripeInstance(intentLineItem.order.stripe_connect_account_id)
             : await getStripeInstance();
-          const stripeResult =
-            "requires_card_action" in intentLineItem
-              ? await stripe.confirmCardPayment(intentLineItem.client_secret)
-              : await stripe.confirmCardSetup(intentLineItem.client_secret);
+          const requiresPaymentAction = "requires_card_action" in intentLineItem;
+          const stripeResult = requiresPaymentAction
+            ? await stripe.confirmCardPayment(intentLineItem.client_secret)
+            : await stripe.confirmCardSetup(intentLineItem.client_secret);
           if (stripeResult.error) {
             followOnError = stripeResult.error;
             break;
           }
           anyIntentConfirmed = true;
+          if (requiresPaymentAction) anyPaymentIntentConfirmed = true;
         }
         orderConfirmResponse = await confirmOrderAfterAction({
           orderId,
@@ -267,6 +278,7 @@ export const startOrderCreation = async (
           retryOfferCodes: retryOfferCodeCandidates(requestData, retryOfferCodes),
           buyerCurrencyQuote: requestData.buyerCurrencyQuote,
         });
+        confirmOrderPosted = true;
         // A failed follow-on auth still leaves requires_action on that group. Without stopping,
         // the confirm response requeues the same intent and this loop retries forever while
         // anyIntentConfirmed suppresses stripe_error.
@@ -340,10 +352,28 @@ export const startOrderCreation = async (
     // Treat parsing errors, timeout, etc as failed purchase, but print a log entry
     // eslint-disable-next-line no-console
     console.error("Error occurred processing order", error);
-    // A lost or unreadable confirm response after an intent was confirmed — or while a
-    // create-time debit is already processing — cannot rule out a created charge, so it
-    // must not re-enable resubmission.
-    if (anyIntentConfirmed || processingPermalinks.size > 0) throw new PaymentConfirmedError();
+    // A lost confirm response after charge creation, a captured PaymentIntent, or a
+    // create-time processing debit cannot rule out money movement. SetupIntent confirmation
+    // alone is not enough: resume via confirm_order first when we never posted it.
+    if (confirmOrderPosted || anyPaymentIntentConfirmed || processingPermalinks.size > 0) {
+      throw new PaymentConfirmedError();
+    }
+    if (anyIntentConfirmed && pendingOrderId && pendingClientSecret) {
+      try {
+        await confirmOrderAfterAction({
+          orderId: pendingOrderId,
+          clientSecret: pendingClientSecret,
+          stripeError: undefined,
+          retryOfferCodes: retryOfferCodeCandidates(requestData, retryOfferCodes),
+          buyerCurrencyQuote: requestData.buyerCurrencyQuote,
+        });
+      } catch (resumeError) {
+        if (resumeError instanceof PaymentConfirmedError) throw resumeError;
+        // eslint-disable-next-line no-console
+        console.error("Error resuming order after setup confirmation", resumeError);
+      }
+      throw new PaymentConfirmedError();
+    }
     if (pendingOrderId) {
       const unavailableOncePerCartIds = await reportClientConfirmError(
         pendingOrderId,

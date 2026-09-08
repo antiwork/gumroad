@@ -465,6 +465,10 @@ class Order::ChargeService
         mandate_purchases.each(&:mark_indian_card_mandate_registration!)
       end
 
+      # Only on-session setup_future_charges mints replacement mandate terms on the PI.
+      # India off-session groups keep mandate_options locally for marking but pass nil to
+      # CreateService so Stripe reuses the SetupIntent's mandate.
+      charge_mandate_options = setup_future_charges && !india_off_session_mandate ? mandate_options : nil
       charge = Charge::CreateService.new(
         order:,
         seller:,
@@ -479,7 +483,7 @@ class Order::ChargeService
         # An India off-session group resolves its mandate from the chargeable's SetupIntent;
         # sending mandate_options too would ask Stripe to mint different terms on an
         # off-session charge, which it rejects.
-        mandate_options: setup_future_charges && !india_off_session_mandate ? mandate_options : nil,
+        mandate_options: charge_mandate_options,
         params:,
       ).perform
 
@@ -488,7 +492,7 @@ class Order::ChargeService
       # mismatch) — Charge::CreateService returns the charge with no intent attached in that case.
       if charge_intent.present? && charge.credit_card&.requires_mandate?
         card_json_data = charge.credit_card.json_data.to_h
-        if mandate_options.present?
+        if charge_mandate_options.present?
           # This PaymentIntent registered new mandate terms. Drop this account's old SI so
           # renewals prefer the PI mandate; keep other accounts' SIs in the merchant-scoped map.
           card_json_data = charge.credit_card.json_data_without_setup_intent_for(merchant_account)
