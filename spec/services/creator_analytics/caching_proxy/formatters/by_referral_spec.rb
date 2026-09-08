@@ -85,8 +85,8 @@ describe CreatorAnalytics::CachingProxy::Formatters::ByReferral do
                 next
               end
               referrers = Array.new(rng.rand(0..3)) { |i| "ref-#{i}" }
-              memo[permalink] = referrers.each_with_object({}) do |referrer, refs|
-                refs[referrer] = rng.rand < 0.1 ? nil : Array.new(span) { rng.rand(0..5) }
+              memo[permalink] = referrers.index_with do |referrer|
+                rng.rand < 0.1 ? nil : Array.new(span) { rng.rand(0..5) }
               end
             end
           end
@@ -380,5 +380,4 @@ describe CreatorAnalytics::CachingProxy::Formatters::ByReferral do
 
     data
   end
-
 end
