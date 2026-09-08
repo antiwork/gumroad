@@ -735,10 +735,14 @@ class StripeChargeProcessor
   # reuse the same Stripe idempotency key and parameters.
   def self.perform_transfer_reversal_for_refund_fee(credit:, refund:, stripe_account_id:, transfer_id:, amount_cents:)
     if refund.present?
-      Credit.persist_refund_fee_debit_choice!(refund,
+      claimed = Credit.persist_refund_fee_debit_choice!(refund,
                   operation: FEE_DEBIT_OP_TRANSFER_REVERSAL,
                   transfer_id:,
                   amount_cents:)
+      unless claimed
+        # Another caller already persisted a different sticky route; resume that one.
+        return debit_stripe_account_for_refund_fee(credit:)
+      end
     end
     resume_transfer_reversal_for_refund_fee(credit:, refund:, stripe_account_id:,
                                             transfer_id:, amount_cents:)
@@ -804,9 +808,12 @@ class StripeChargeProcessor
     # different FX-converted amount on retry (Stripe rejects parameter changes).
     eur_amount_cents = refund&.refund_fee_eur_debit_cents.presence || usd_cents_to_currency(Currency::EUR, usd_amount_cents)
     if refund.present?
-      Credit.persist_refund_fee_debit_choice!(refund,
+      claimed = Credit.persist_refund_fee_debit_choice!(refund,
                   operation: FEE_DEBIT_OP_EUR_DEBIT,
                   amount_cents: eur_amount_cents)
+      unless claimed
+        return debit_stripe_account_for_refund_fee(credit:)
+      end
       if refund.refund_fee_eur_debit_cents.blank?
         ActiveRecord::Base.transaction(requires_new: true) do
           refund.update!(refund_fee_eur_debit_cents: eur_amount_cents)

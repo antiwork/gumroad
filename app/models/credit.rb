@@ -321,7 +321,14 @@ class Credit < ApplicationRecord
           # Debit helper returns nil once the success marker is set; still reconcile from the
           # persisted actual when a prior attempt booked only the FX estimate.
           actual_holding ||= refund.refund_fee_holding_debit_cents
-          reconcile_fee_retention_holding_amount!(existing_credit, actual_holding)
+          begin
+            reconcile_fee_retention_holding_amount!(existing_credit, actual_holding)
+          rescue StandardError => e
+            # Keep any Stripe success marker written in requires_new savepoints: re-raising
+            # would roll back this purchase.with_lock transaction and erase proof of debit.
+            Rails.logger.error("Failed to reconcile fee retention holding for refund #{refund.id}: #{e.class}: #{e.message}")
+            ErrorNotifier.notify(e, context: { refund_id: refund.id, credit_id: existing_credit.id })
+          end
         end
         return existing_credit
       end
@@ -539,17 +546,27 @@ class Credit < ApplicationRecord
 
   def self.persist_refund_fee_debit_choice!(refund, operation:, transfer_id: nil, amount_cents: nil)
     return if refund.blank?
-    already = refund.refund_fee_debit_operation == operation &&
-      (transfer_id.blank? || refund.refund_fee_debit_transfer_id == transfer_id) &&
-      (amount_cents.blank? || refund.refund_fee_debit_amount_cents.to_i == amount_cents.to_i)
-    return if already && refund.refund_fee_debit_submitted_at.present?
 
-    transaction(requires_new: true) do
-      refund.refund_fee_debit_operation = operation
-      refund.refund_fee_debit_transfer_id = transfer_id if transfer_id.present?
-      refund.refund_fee_debit_amount_cents = amount_cents if amount_cents.present?
-      refund.refund_fee_debit_submitted_at ||= Time.current.utc.iso8601
-      refund.save!
+    # Under the refund lock: if another caller already chose an operation, keep theirs so
+    # concurrent retries resume one sticky route instead of overwriting with a second debit.
+    refund.with_lock do
+      refund.reload
+      if refund.refund_fee_debit_operation.present? && refund.refund_fee_debit_operation != operation
+        return false
+      end
+      already = refund.refund_fee_debit_operation == operation &&
+        (transfer_id.blank? || refund.refund_fee_debit_transfer_id == transfer_id) &&
+        (amount_cents.blank? || refund.refund_fee_debit_amount_cents.to_i == amount_cents.to_i)
+      return true if already && refund.refund_fee_debit_submitted_at.present?
+
+      transaction(requires_new: true) do
+        refund.refund_fee_debit_operation = operation
+        refund.refund_fee_debit_transfer_id = transfer_id if transfer_id.present?
+        refund.refund_fee_debit_amount_cents = amount_cents if amount_cents.present?
+        refund.refund_fee_debit_submitted_at ||= Time.current.utc.iso8601
+        refund.save!
+      end
+      true
     end
   end
 
