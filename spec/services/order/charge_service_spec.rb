@@ -1824,6 +1824,150 @@ describe Order::ChargeService, :vcr do
       expect(FailAbandonedPurchaseWorker.jobs.size).to eq(0)
     end
 
+    it "binds the Connect payment method when reusing a stored setup intent on a Connect merchant" do
+      order = create(:order)
+      merchant_account = create(:merchant_account_stripe_connect, user: seller_1)
+      purchase = create(:purchase,
+                        link: product_1,
+                        seller: seller_1,
+                        merchant_account:,
+                        purchase_state: "in_progress",
+                        is_multi_buy: true,
+                        total_transaction_cents: 10_00)
+      charge = create(:charge, order:, seller: seller_1, merchant_account:)
+      charge.purchases << purchase
+      chargeable = instance_double(Chargeable, requires_mandate?: true, stripe_setup_intent_id: "seti_existing_connect")
+      allow(chargeable).to receive(:stripe_setup_intent_id=)
+      allow(chargeable).to receive(:use_connected_account_payment_method!)
+      allow(chargeable).to receive(:respond_to?).and_call_original
+      allow(chargeable).to receive(:respond_to?).with(:use_connected_account_payment_method!).and_return(true)
+      allow(chargeable).to receive(:respond_to?).with(:stripe_setup_intent_id=).and_return(true)
+      existing_si = instance_double(StripeSetupIntent,
+                                    id: "seti_existing_connect",
+                                    succeeded?: true,
+                                    requires_action?: false,
+                                    payment_method_id: "pm_on_connect",
+                                    present?: true)
+      allow(ChargeProcessor).to receive(:get_setup_intent).with(merchant_account, "seti_existing_connect").and_return(existing_si)
+      charge_intent = StripeChargeIntent.new(
+        payment_intent: Stripe::PaymentIntent.construct_from(id: "pi_connect", status: StripeIntentStatus::SUCCESS)
+      )
+      create_service = instance_double(Charge::CreateService)
+      allow(Charge::CreateService).to receive(:new).and_return(create_service)
+      allow(create_service).to receive(:perform) do
+        charge.charge_intent = charge_intent
+        charge
+      end
+      service = described_class.new(
+        order:,
+        params: { line_items: [{ uid: "connect-pm-test", permalink: product_1.unique_permalink }] }
+      )
+      allow(service).to receive(:mandate_options_for_stripe).and_return(
+        { payment_method_options: { card: { mandate_options: { amount: 10_00, currency: Currency::USD } } } }
+      )
+
+      service.send(:create_charge_for_seller_purchases, [purchase], chargeable, true, false)
+
+      expect(chargeable).to have_received(:use_connected_account_payment_method!).with("pm_on_connect")
+      expect(ChargeProcessor).not_to have_received(:setup_future_charges!)
+    end
+
+    it "re-registers a fresh setup intent when the stored one is canceled" do
+      order = create(:order)
+      merchant_account = create(:merchant_account_stripe_connect, user: seller_1)
+      purchase = create(:purchase,
+                        link: product_1,
+                        seller: seller_1,
+                        merchant_account:,
+                        purchase_state: "in_progress",
+                        is_multi_buy: true,
+                        total_transaction_cents: 10_00)
+      chargeable = instance_double(Chargeable, requires_mandate?: true, stripe_setup_intent_id: "seti_canceled")
+      allow(chargeable).to receive(:stripe_setup_intent_id=)
+      canceled_si = instance_double(StripeSetupIntent,
+                                    id: "seti_canceled",
+                                    succeeded?: false,
+                                    requires_action?: false,
+                                    present?: true)
+      allow(ChargeProcessor).to receive(:get_setup_intent).with(merchant_account, "seti_canceled").and_return(canceled_si)
+      fresh_si = SetupIntent.new
+      fresh_si.id = "seti_fresh"
+      allow(fresh_si).to receive_messages(succeeded?: true, requires_action?: false, present?: true)
+      allow(ChargeProcessor).to receive(:setup_future_charges!).and_return(fresh_si)
+      charge = instance_double(Charge, charge_intent: nil, credit_card: nil)
+      create_service = instance_double(Charge::CreateService, perform: charge)
+      allow(Charge::CreateService).to receive(:new).and_return(create_service)
+      service = described_class.new(order:, params: {})
+      allow(service).to receive(:mandate_options_for_stripe).and_return(
+        { payment_method_options: { card: { mandate_options: { amount: 10_00 } } } }
+      )
+
+      service.send(:create_charge_for_seller_purchases, [purchase], chargeable, true, false)
+
+      expect(chargeable).to have_received(:stripe_setup_intent_id=).with(nil)
+      expect(ChargeProcessor).to have_received(:setup_future_charges!)
+      expect(purchase.reload.processor_setup_intent_id).to eq("seti_fresh")
+    end
+
+    it "binds the Connect payment method when reusing a shared setup intent" do
+      seller_1.update!(check_merchant_account_is_linked: true)
+      connect_account = create(:merchant_account_stripe_connect, user: seller_1)
+      saved_card = CreditCard.create!(
+        charge_processor_id: StripeChargeProcessor.charge_processor_id,
+        stripe_customer_id: "cus_shared_connect",
+        processor_payment_method_id: "pm_shared_connect",
+        stripe_fingerprint: "shared_connect_fingerprint",
+        visual: "**** **** **** 4242",
+        card_type: CardType::VISA,
+        card_country: Compliance::Countries::IND.alpha2,
+        expiry_month: 12,
+        expiry_year: 2030
+      )
+      buyer = create(:user, credit_card: saved_card)
+      allow_any_instance_of(StripeChargeableCreditCard).to receive(:prepare_for_direct_charge)
+      shared_si = instance_double(
+        StripeSetupIntent,
+        id: "seti_connect_shared",
+        succeeded?: false,
+        requires_action?: true,
+        client_secret: "seti_connect_shared_secret_abc",
+        payment_method_id: "pm_on_connect_shared",
+        present?: true
+      )
+      allow(ChargeProcessor).to receive(:setup_future_charges!).and_return(shared_si)
+      expect(Charge::CreateService).not_to receive(:new)
+      connect_chargeables = []
+      allow_any_instance_of(StripeChargeableCreditCard).to receive(:use_connected_account_payment_method!) do |chargeable_instance, pm_id|
+        connect_chargeables << [chargeable_instance, pm_id]
+      end
+      params = {
+        line_items: [
+          {
+            uid: "seller1-connect",
+            permalink: product_1.unique_permalink,
+            perceived_price_cents: product_1.price_cents,
+            is_multi_buy: true,
+            quantity: 1
+          },
+          {
+            uid: "seller2-connect",
+            permalink: product_1.unique_permalink,
+            perceived_price_cents: product_1.price_cents,
+            is_multi_buy: true,
+            quantity: 1
+          }
+        ]
+      }.merge(common_order_params_without_payment)
+      # Two purchases from different sellers on the same Connect account
+      order, = Order::CreateService.new(params:, buyer:).perform
+
+      charge_responses = Order::ChargeService.new(order:, params:).perform
+
+      # The second group reuses the shared SI — its chargeable must be bound to the SI's PM.
+      # First call: register_india_mandate binds it. Second call: shared_si path binds it.
+      expect(connect_chargeables.map(&:last)).to all(eq("pm_on_connect_shared"))
+    end
+
     it "registers an independent India e-mandate setup intent per seller group in a two-seller cart" do
       seller_1.update!(check_merchant_account_is_linked: true)
       connect_account = create(:merchant_account_stripe_connect, user: seller_1)

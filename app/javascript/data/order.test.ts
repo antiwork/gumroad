@@ -1139,6 +1139,113 @@ describe("startOrderCreation", () => {
     await expect(startOrderCreation(requestData, [])).rejects.toBeInstanceOf(PaymentConfirmedError);
   });
 
+  it("does not forward stripe_error when a create-time processing group exists alongside a failed SCA", async () => {
+    // Seller A's group was charged synchronously (processing). Seller B's group requires SCA
+    // and the buyer fails auth. The stripe_error must not be forwarded because it would
+    // server-fail seller A's already-processing group.
+    vi.stubGlobal("Routes", {
+      orders_path: () => "/orders",
+      confirm_order_path: (id: string) => `/orders/${id}/confirm`,
+    });
+    requestMock.mockReset();
+    getStripeInstanceMock.mockReset();
+    const stripe = typia.assert<Stripe>({});
+    stripe.confirmCardSetup = vi.fn().mockResolvedValue({ error: { type: "card_error", message: "auth failed" } });
+    getStripeInstanceMock.mockResolvedValue(stripe);
+
+    const firstLine = requestData.lineItems.at(0);
+    if (!firstLine) throw new Error("Missing test line item");
+    const secondLine = { ...firstLine, uid: "product-b ", permalink: "product-b" };
+    const twoSellerRequestData = { ...requestData, lineItems: [firstLine, secondLine] };
+    requestMock
+      .mockResolvedValueOnce(
+        jsonResponse({
+          success: true,
+          line_items: {
+            [firstLine.uid]: { success: true, processing: true, permalink: firstLine.permalink },
+            [secondLine.uid]: {
+              success: true,
+              requires_card_setup: true,
+              client_secret: "seti_b_secret",
+              order: { id: "order-token", stripe_connect_account_id: null },
+            },
+          },
+          can_buyer_sign_up: false,
+          offer_codes: [],
+        }),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({
+          success: true,
+          line_items: {
+            [firstLine.uid]: { success: true, processing: true, permalink: firstLine.permalink },
+            [secondLine.uid]: {
+              success: false,
+              error_message: "Authentication failed.",
+              permalink: secondLine.permalink,
+              name: "Product B",
+              formatted_price: "$10",
+              error_code: "card_declined",
+              is_tax_mismatch: false,
+              card_country: "IN",
+              ip_country: "IN",
+              updated_product: null,
+            },
+          },
+          can_buyer_sign_up: false,
+          offer_codes: [],
+        }),
+      );
+
+    const error: unknown = await startOrderCreation(twoSellerRequestData, []).catch((e: unknown) => e);
+
+    if (!(error instanceof PaymentConfirmedError)) throw new Error("expected PaymentConfirmedError");
+    // The confirm POST must not carry the stripe_error — the processing group must not be failed.
+    expect(requestMock.mock.calls[1]?.[0]).toMatchObject({ data: { stripe_error: undefined } });
+    // The failed SCA line is retryable; the processing one is not.
+    expect(Object.keys(error.retryable?.lineItems ?? {})).toEqual([secondLine.uid]);
+  });
+
+  it("throws pending when a create-time processing group exists and the confirm request is lost", async () => {
+    // A processing group from create + a lost confirm response must not produce a resubmittable
+    // cart — the processing debit is already scheduled.
+    vi.stubGlobal("Routes", {
+      orders_path: () => "/orders",
+      confirm_order_path: (id: string) => `/orders/${id}/confirm`,
+      confirm_error_order_path: (id: string) => `/orders/${id}/confirm_error`,
+    });
+    requestMock.mockReset();
+    getStripeInstanceMock.mockReset();
+    const stripe = typia.assert<Stripe>({});
+    stripe.confirmCardSetup = vi.fn().mockResolvedValue({});
+    getStripeInstanceMock.mockResolvedValue(stripe);
+
+    const firstLine = requestData.lineItems.at(0);
+    if (!firstLine) throw new Error("Missing test line item");
+    const secondLine = { ...firstLine, uid: "product-b ", permalink: "product-b" };
+    const twoSellerRequestData = { ...requestData, lineItems: [firstLine, secondLine] };
+    requestMock
+      .mockResolvedValueOnce(
+        jsonResponse({
+          success: true,
+          line_items: {
+            [firstLine.uid]: { success: true, processing: true, permalink: firstLine.permalink },
+            [secondLine.uid]: {
+              success: true,
+              requires_card_setup: true,
+              client_secret: "seti_b_secret",
+              order: { id: "order-token", stripe_connect_account_id: null },
+            },
+          },
+          can_buyer_sign_up: false,
+          offer_codes: [],
+        }),
+      )
+      .mockRejectedValueOnce(new Error("network down"));
+
+    await expect(startOrderCreation(twoSellerRequestData, [])).rejects.toBeInstanceOf(PaymentConfirmedError);
+  });
+
   it("throws pending when order creation itself reports a synchronously scheduled debit", async () => {
     // A saved India card whose e-mandate needs no authentication pause is charged inside
     // #create, and the debit can already be `processing` in the create response. That line must

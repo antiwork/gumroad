@@ -285,7 +285,15 @@ class Order::ChargeService
   # must register its e-mandate here or Stripe rejects the charge as
   # payment_intent_mandate_invalid (gp#2437).
   def register_india_mandate_for_off_session_cart!(purchases, chargeable, merchant_account, mandate_options)
-    return if chargeable.stripe_setup_intent_id.present?
+    if chargeable.stripe_setup_intent_id.present?
+      existing_si = ChargeProcessor.get_setup_intent(merchant_account, chargeable.stripe_setup_intent_id)
+      if existing_si.present? && (existing_si.succeeded? || existing_si.requires_action?)
+        self.setup_intent = existing_si
+        bind_connect_payment_method!(chargeable, existing_si, merchant_account)
+        return
+      end
+      chargeable.stripe_setup_intent_id = nil
+    end
 
     self.setup_intent = ChargeProcessor.setup_future_charges!(merchant_account, chargeable, mandate_options:)
     return unless setup_intent.present?
@@ -310,6 +318,13 @@ class Order::ChargeService
         purchase.errors.add :base, "We couldn't authorize your card for this payment. Please try again or use a different payment method."
       end
     end
+  end
+
+  # When reusing a SetupIntent whose mandate is bound to a specific Connect PM, prepare!
+  # will have cloned a fresh PM that lacks the mandate. Point the chargeable at the SI's PM.
+  def bind_connect_payment_method!(chargeable, si, merchant_account)
+    return unless merchant_account.is_a_stripe_connect_account? && si.payment_method_id.present?
+    chargeable.use_connected_account_payment_method!(si.payment_method_id) if chargeable.respond_to?(:use_connected_account_payment_method!)
   end
 
   # Locks the buyer-currency quote for an India off-session group BEFORE its mandate is
@@ -404,6 +419,7 @@ class Order::ChargeService
           # Another seller group on the same Stripe account already registered this SI.
           self.setup_intent = shared_si
           chargeable.stripe_setup_intent_id = shared_si.id if chargeable.respond_to?(:stripe_setup_intent_id=)
+          bind_connect_payment_method!(chargeable, shared_si, merchant_account)
           purchases_to_charge.each do |purchase|
             purchase.update!(processor_setup_intent_id: shared_si.id)
             purchase.charge&.update!(stripe_setup_intent_id: shared_si.id)

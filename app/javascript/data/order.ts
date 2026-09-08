@@ -17,16 +17,16 @@ type OrderRequiresCardActionResponse = {
   success: true;
   requires_card_action: true;
   client_secret: string;
-  intent_id: string;
-  intent_type: "payment" | "setup";
+  intent_id?: string;
+  intent_type?: "payment" | "setup";
   order: { id: string; stripe_connect_account_id: string | null };
 };
 type OrderRequiresCardSetupResponse = {
   success: true;
   requires_card_setup: true;
   client_secret: string;
-  intent_id: string;
-  intent_type: "setup";
+  intent_id?: string;
+  intent_type?: "setup";
   order: { id: string; stripe_connect_account_id: string | null };
 };
 type ProcessingPurchaseResponse = { success: true; processing: true; permalink: string };
@@ -168,6 +168,9 @@ export const startOrderCreation = async (
   // confirmed SetupIntent lets the confirm POST create the group's off-session charge. Any
   // later failure must then surface as a pending outcome, never a resubmittable cart.
   let anyIntentConfirmed = false;
+  // Permalinks whose group was charged synchronously with the debit scheduled — those lines
+  // must never re-enter the cart, and any failure matched to them by permalink is ambiguous.
+  const processingPermalinks = new Set<string>();
   let retryOfferCodes = activeOfferCodes;
   try {
     const response = await createOrder(requestData);
@@ -177,9 +180,6 @@ export const startOrderCreation = async (
     // A line that failed at creation has no purchase, so the confirm response cannot mention
     // it; keep its create-time failure or it becomes indistinguishable from a processing line.
     const createFailures: CartPurchaseResult["lineItems"] = {};
-    // Permalinks whose group was charged synchronously with the debit scheduled — those lines
-    // must never re-enter the cart, and any failure matched to them by permalink is ambiguous.
-    const processingPermalinks = new Set<string>();
     for (const [uid, lineItem] of Object.entries(response.line_items)) {
       if (!lineItem.success) createFailures[uid] = lineItem;
       else if ("processing" in lineItem) processingPermalinks.add(lineItem.permalink);
@@ -223,10 +223,10 @@ export const startOrderCreation = async (
         orderId,
         clientSecret: firstLineItemRequiringSCA.client_secret,
         // A forwarded card-handling error fails every still-pending purchase server-side.
-        // Once any group's intent is confirmed, let the server resolve each group from its
-        // own intent instead, so a confirmed (possibly charged) group is not failed
-        // alongside the one the buyer could not authenticate.
-        stripeError: anyIntentConfirmed ? undefined : stripeError,
+        // Once any group's intent is confirmed OR a create-time debit is already processing,
+        // let the server resolve each group from its own intent instead, so a charged group
+        // is not failed alongside the one the buyer could not authenticate.
+        stripeError: anyIntentConfirmed || processingPermalinks.size > 0 ? undefined : stripeError,
         retryOfferCodes: retryOfferCodeCandidates(requestData, retryOfferCodes),
         // A mandate pause happens before the group's charge is created, so the resume charge
         // still needs the quote the checkout displayed to present in the buyer's currency.
@@ -263,7 +263,7 @@ export const startOrderCreation = async (
         orderConfirmResponse = await confirmOrderAfterAction({
           orderId,
           clientSecret: followOnToConfirm[0]?.client_secret ?? firstLineItemRequiringSCA.client_secret,
-          stripeError: anyIntentConfirmed ? undefined : followOnError,
+          stripeError: anyIntentConfirmed || processingPermalinks.size > 0 ? undefined : followOnError,
           retryOfferCodes: retryOfferCodeCandidates(requestData, retryOfferCodes),
           buyerCurrencyQuote: requestData.buyerCurrencyQuote,
         });
@@ -336,11 +336,10 @@ export const startOrderCreation = async (
     // Treat parsing errors, timeout, etc as failed purchase, but print a log entry
     // eslint-disable-next-line no-console
     console.error("Error occurred processing order", error);
-    // A lost or unreadable confirm response after an intent was confirmed cannot rule out a
-    // created charge, so it must not re-enable resubmission. (When nothing was confirmed the
-    // confirm POST forwards the stripeError and the server fails every purchase without
-    // charging — that stays retryable below.)
-    if (anyIntentConfirmed) throw new PaymentConfirmedError();
+    // A lost or unreadable confirm response after an intent was confirmed — or while a
+    // create-time debit is already processing — cannot rule out a created charge, so it
+    // must not re-enable resubmission.
+    if (anyIntentConfirmed || processingPermalinks.size > 0) throw new PaymentConfirmedError();
     if (pendingOrderId) {
       const unavailableOncePerCartIds = await reportClientConfirmError(
         pendingOrderId,
