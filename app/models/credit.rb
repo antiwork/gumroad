@@ -526,9 +526,8 @@ class Credit < ApplicationRecord
         operation: StripeChargeProcessor::FEE_DEBIT_OP_US_DEBIT,
         amount_cents: debit_amount_cents
       )
-      return debit_stripe_account_for_retained_fee(credit) unless claimed
-      # In-memory sticky fields from the claim we just won — do not reload.
-      return debit_stripe_account_for_retained_fee(credit) unless refund.refund_fee_debit_operation == StripeChargeProcessor::FEE_DEBIT_OP_US_DEBIT
+      # Resume only the US claim we hold in memory; do not reload or recurse.
+      return unless claimed && refund.refund_fee_debit_operation == StripeChargeProcessor::FEE_DEBIT_OP_US_DEBIT
 
       debit_amount_cents = refund.refund_fee_debit_amount_cents.presence || debit_amount_cents
       attempted_generation = refund.refund_fee_debit_generation.to_i
