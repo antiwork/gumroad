@@ -39,6 +39,23 @@ describe CreatorAnalytics::CachingProxy::Formatters::ByReferral do
       expect(Marshal.dump(days_data)).to eq(original)
     end
 
+    it "preserves zeros and empty products for missing cached types and nil referral values" do
+      days_data = [
+        { by_referral: { views: { "product" => { "direct" => [2], "empty" => nil }, "empty-product" => nil } } },
+        { by_referral: { sales: { "product" => { "direct" => [1] } } } }
+      ].map.with_index do |data, index|
+        data.merge(dates_and_months: D3.date_month_domain([@dates[index]])).with_indifferent_access
+      end
+
+      result = @service.merge_data_by_referral(days_data, @dates.first(2))
+
+      expect(result[:by_referral]).to eq(
+        views: { "product" => { "direct" => [2, 0], "empty" => [0, 0] }, "empty-product" => {} },
+        sales: { "product" => { "direct" => [0, 1] }, "empty-product" => {} },
+        totals: { "product" => {}, "empty-product" => {} }
+      )
+    end
+
     it "returns data merged by referral" do
       # notable: without `product` & `profile` and with an array for values for different days
       day_one = {

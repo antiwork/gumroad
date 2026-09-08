@@ -19,10 +19,10 @@ module CreatorAnalytics::CachingProxy::Formatters::ByReferral
     days_data.each do |day_data|
       days_count = day_data[:dates_and_months].size
       %i[views sales totals].each do |type|
-        day_data[:by_referral][type].each do |permalink, referrers|
-          referrers.each do |referrer, values|
+        (day_data[:by_referral][type] || {}).each do |permalink, referrers|
+          (referrers || {}).each do |referrer, values|
             series = data[:by_referral][type][permalink][referrer] ||= [0] * dates.size
-            series[total_day_index, days_count] = values
+            series[total_day_index, days_count] = values if values
           end
         end
       end
