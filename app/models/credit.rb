@@ -331,11 +331,15 @@ class Credit < ApplicationRecord
         # are real commits if this process dies mid-flight.
         actual_holding = debit_stripe_account_for_retained_fee(existing_credit)
         actual_holding ||= refund.reload.refund_fee_holding_debit_cents
-        begin
-          reconcile_fee_retention_holding_amount!(existing_credit, actual_holding)
-        rescue StandardError => e
-          Rails.logger.error("Failed to reconcile fee retention holding for refund #{refund.id}: #{e.class}: #{e.message}")
-          ErrorNotifier.notify(e, context: { refund_id: refund.id, credit_id: existing_credit.id })
+        if existing_credit.balance_transaction.blank?
+          finish_incomplete_fee_retention_ledger!(existing_credit, refund:, holding_net_cents: actual_holding)
+        else
+          begin
+            reconcile_fee_retention_holding_amount!(existing_credit, actual_holding)
+          rescue StandardError => e
+            Rails.logger.error("Failed to reconcile fee retention holding for refund #{refund.id}: #{e.class}: #{e.message}")
+            ErrorNotifier.notify(e, context: { refund_id: refund.id, credit_id: existing_credit.id })
+          end
         end
       end
       clear_refund_fee_retention_pending!(refund)
@@ -407,13 +411,18 @@ class Credit < ApplicationRecord
     # and in both those cases transactions are always in USD.
     # If purchase.processor_fee_cents is not present for some reason (rare case), we calculate the fee amount,
     # that is to be retained, using the fee percentage used in Purchase#calculate_fees.
-    credit.amount_cents = if refund.purchase.processor_fee_cents.present? && refund.purchase.processor_fee_cents_currency == "usd"
+    credit.amount_cents = if refund.refund_fee_retention_usd_cents.present?
+      -refund.refund_fee_retention_usd_cents.to_i.abs
+    elsif refund.purchase.processor_fee_cents.present? && refund.purchase.processor_fee_cents_currency == "usd"
       -(refund.purchase.processor_fee_cents * (refund.amount_cents.to_f / refund.purchase.price_cents)).round
     else
       -(refund.amount_cents * Purchase::PROCESSOR_FEE_PER_THOUSAND / 1000.0 + (Purchase::PROCESSOR_FIXED_FEE_CENTS * refund.amount_cents.to_f / refund.purchase.price_cents)).round
     end
     credit.merchant_account = refund.purchase.merchant_account
     credit.fee_retention_refund = refund
+    if refund.refund_fee_retention_usd_cents.blank?
+      refund.update!(refund_fee_retention_usd_cents: credit.amount_cents.abs)
+    end
 
     reversed_amount_cents_in_usd = credit.amount_cents
     # Prefer a persisted Stripe holding amount. For BGN ledgers, estimate via EUR and the
@@ -460,15 +469,17 @@ class Credit < ApplicationRecord
       existing_credit = where(id: existing_credit.id).lock.first if existing_credit
       if existing_credit.present?
         # Another concurrent attempt booked the credit (possibly with an FX estimate) while
-        # this attempt obtained the actual Stripe debit. Reconcile before returning.
-        begin
-          reconcile_fee_retention_holding_amount!(
-            existing_credit,
-            refund.refund_fee_holding_debit_cents.presence || net_amount_on_stripe_in_holding_currency
-          )
-        rescue StandardError => e
-          Rails.logger.error("Failed to reconcile concurrent fee retention for refund #{refund.id}: #{e.class}: #{e.message}")
-          ErrorNotifier.notify(e, context: { refund_id: refund.id, credit_id: existing_credit.id })
+        # this attempt obtained the actual Stripe debit. Finish or reconcile before returning.
+        holding = refund.refund_fee_holding_debit_cents.presence || net_amount_on_stripe_in_holding_currency
+        if existing_credit.balance_transaction.blank?
+          finish_incomplete_fee_retention_ledger!(existing_credit, refund:, holding_net_cents: holding)
+        else
+          begin
+            reconcile_fee_retention_holding_amount!(existing_credit, holding)
+          rescue StandardError => e
+            Rails.logger.error("Failed to reconcile concurrent fee retention for refund #{refund.id}: #{e.class}: #{e.message}")
+            ErrorNotifier.notify(e, context: { refund_id: refund.id, credit_id: existing_credit.id })
+          end
         end
         clear_refund_fee_retention_pending!(refund)
         return existing_credit
@@ -701,6 +712,62 @@ class Credit < ApplicationRecord
     end
   end
   private_class_method :persist_refund_fee_holding_on_credit!
+
+  # Completes a retention credit that was persisted without its BalanceTransaction (crash
+  # between save and ledger). Uses sticky USD + holding debit amounts when present.
+  def self.finish_incomplete_fee_retention_ledger!(credit, refund:, holding_net_cents: nil)
+    return credit if credit.blank? || credit.balance_transaction.present?
+
+    usd = credit.amount_cents
+    holding = if refund.refund_fee_holding_debit_cents.present?
+      -convert_fee_holding_cents(
+        refund.refund_fee_holding_debit_cents,
+        from_currency: refund.refund_fee_holding_debit_currency.presence || credit.merchant_account.currency,
+        to_currency: credit.merchant_account.currency
+      )
+    elsif holding_net_cents.present?
+      -holding_net_cents.to_i.abs
+    else
+      credit.usd_cents_to_currency(credit.merchant_account.currency, usd)
+    end
+
+    purchase = refund.purchase
+    purchase.with_lock do
+      refund.reload.lock!
+      return credit if refund.balance_reversed_on_failure
+      credit = where(id: credit.id).lock.first
+      return credit if credit.blank? || credit.balance_transaction.present?
+
+      transaction(requires_new: true) do
+        balance_transaction = BalanceTransaction.create!(
+          user: credit.user,
+          merchant_account: credit.merchant_account,
+          credit:,
+          issued_amount: BalanceTransaction::Amount.new(currency: Currency::USD, gross_cents: usd, net_cents: usd),
+          holding_amount: BalanceTransaction::Amount.new(
+            currency: credit.merchant_account.currency,
+            gross_cents: holding,
+            net_cents: holding
+          )
+        )
+        credit.balance = balance_transaction.balance
+        credit.save!
+
+        if credit.balance&.unpaid?
+          seller_refund_bts = refund.balance_transactions.where(user_id: refund.seller_id)
+          refund_still_unpaid = seller_refund_bts.none? ||
+            seller_refund_bts.joins(:balance).where(balances: { state: "unpaid" }).exists?
+          if refund_still_unpaid
+            refund.retained_fee_cents = credit.amount_cents.abs
+            refund.save!
+          end
+        end
+      end
+    end
+    credit
+  end
+  private_class_method :finish_incomplete_fee_retention_ledger!
+
 
   # Sticky recovery route before Stripe submit so a timed-out response cannot be retried as
   # a different operation. Refuse automatic resubmits after this window (under Stripe's 24h

@@ -115,6 +115,8 @@ class Refund < ApplicationRecord
   # UTC time the sticky fee-debit operation was first submitted to Stripe (ISO 8601).
   # Used to refuse automatic resubmits after Stripe's idempotency window.
   attr_json_data_accessor :refund_fee_debit_submitted_at
+  # Canonical USD cents retained for this refund; reused if ledger booking retries after debit.
+  attr_json_data_accessor :refund_fee_retention_usd_cents
   attr_json_data_accessor :retained_fee_cents
   attr_json_data_accessor :presentment_currency
   attr_json_data_accessor :presentment_amount_cents
