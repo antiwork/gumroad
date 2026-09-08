@@ -1,8 +1,8 @@
 # frozen_string_literal: true
 
 class Integrations::DiscordController < ApplicationController
-  # Gate join/leave on the signed-in purchaser or the purchase download token:
-  # the external id alone is public on reviews and must not authorize Discord membership.
+  # Gate join/leave on the signed-in purchaser or the purchase download token;
+  # the external id alone must not authorize Discord membership.
   before_action :authenticate_user!, except: [:oauth_redirect, :join_server, :leave_server]
 
   def server_info
@@ -101,9 +101,20 @@ class Integrations::DiscordController < ApplicationController
   private
     def discord_purchase_authorized?(purchase)
       return false if purchase.nil?
+      return false unless discord_purchase_currently_entitled?(purchase)
       return true if current_user.present? && purchase.purchaser == current_user
 
       token = params[:token]
       token.is_a?(String) && token.present? && UrlRedirect.exists?(token:, purchase_id: purchase.id)
+    end
+
+    # Mirrors the entitlement checks in UrlRedirectsController.
+    def discord_purchase_currently_entitled?(purchase)
+      return false if purchase.stripe_refunded
+      return false if purchase.chargeback_date.present? && !purchase.chargeback_reversed
+      return false if purchase.is_access_revoked
+      return false if purchase.subscription.present? && !purchase.subscription.grant_access_to_product?
+
+      true
     end
 end

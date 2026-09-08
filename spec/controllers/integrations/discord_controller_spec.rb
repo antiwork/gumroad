@@ -432,6 +432,63 @@ describe Integrations::DiscordController do
       expect(response.parsed_body).to eq({ "success" => false })
     end
 
+    context "when purchase entitlement is lost" do
+      it "rejects a signed-in purchaser with a refunded purchase" do
+        purchase.update!(stripe_refunded: true)
+
+        expect do
+          get :join_server, format: :json, params: { code: "test_code", purchase_id: purchase.external_id }
+        end.not_to change { PurchaseIntegration.count }
+
+        expect(response.parsed_body).to eq({ "success" => false })
+      end
+
+      it "rejects a download-token holder with a refunded purchase" do
+        purchase.update!(stripe_refunded: true)
+        redirect = create(:url_redirect, purchase:)
+        sign_out buyer
+
+        expect do
+          get :join_server, format: :json, params: { code: "test_code", purchase_id: purchase.external_id, token: redirect.token }
+        end.not_to change { PurchaseIntegration.count }
+
+        expect(response.parsed_body).to eq({ "success" => false })
+      end
+
+      it "rejects a signed-in purchaser with a chargebacked purchase" do
+        purchase.update!(chargeback_date: 1.day.ago)
+
+        expect do
+          get :join_server, format: :json, params: { code: "test_code", purchase_id: purchase.external_id }
+        end.not_to change { PurchaseIntegration.count }
+
+        expect(response.parsed_body).to eq({ "success" => false })
+      end
+
+      it "rejects a signed-in purchaser with access revoked" do
+        purchase.update!(is_access_revoked: true)
+
+        expect do
+          get :join_server, format: :json, params: { code: "test_code", purchase_id: purchase.external_id }
+        end.not_to change { PurchaseIntegration.count }
+
+        expect(response.parsed_body).to eq({ "success" => false })
+      end
+
+      it "rejects a signed-in purchaser with an inactive subscription" do
+        subscription = create(:subscription, link: product, user: buyer)
+        subscription.update!(cancelled_at: 1.day.ago)
+        product.update!(is_tiered_membership: true, block_access_after_membership_cancellation: true)
+        purchase.update!(subscription:)
+
+        expect do
+          get :join_server, format: :json, params: { code: "test_code", purchase_id: purchase.external_id }
+        end.not_to change { PurchaseIntegration.count }
+
+        expect(response.parsed_body).to eq({ "success" => false })
+      end
+    end
+
     it "fails if purchase_integration record creation fails" do
       WebMock.stub_request(:post, DISCORD_OAUTH_TOKEN_URL).
         with(body: oauth_request_body, headers: oauth_request_header).
@@ -550,6 +607,57 @@ describe Integrations::DiscordController do
 
       expect(response.status).to eq(200)
       expect(response.parsed_body).to eq({ "success" => true, "server_name" => "Gaming" })
+    end
+
+    context "when purchase entitlement is lost" do
+      it "rejects a signed-in purchaser with a refunded purchase" do
+        create(:purchase_integration, integration:, purchase:, discord_user_id: user_id)
+        purchase.update!(stripe_refunded: true)
+
+        expect do
+          get :leave_server, format: :json, params: { purchase_id: purchase.external_id }
+        end.not_to change { purchase.live_purchase_integrations.reload.count }
+
+        expect(response.parsed_body).to eq({ "success" => false })
+      end
+
+      it "rejects a download-token holder with a refunded purchase" do
+        create(:purchase_integration, integration:, purchase:, discord_user_id: user_id)
+        purchase.update!(stripe_refunded: true)
+        redirect = create(:url_redirect, purchase:)
+        sign_out buyer
+
+        expect do
+          get :leave_server, format: :json, params: { purchase_id: purchase.external_id, token: redirect.token }
+        end.not_to change { purchase.live_purchase_integrations.reload.count }
+
+        expect(response.parsed_body).to eq({ "success" => false })
+      end
+
+      it "rejects a signed-in purchaser with access revoked" do
+        create(:purchase_integration, integration:, purchase:, discord_user_id: user_id)
+        purchase.update!(is_access_revoked: true)
+
+        expect do
+          get :leave_server, format: :json, params: { purchase_id: purchase.external_id }
+        end.not_to change { purchase.live_purchase_integrations.reload.count }
+
+        expect(response.parsed_body).to eq({ "success" => false })
+      end
+
+      it "rejects a signed-in purchaser with an inactive subscription" do
+        create(:purchase_integration, integration:, purchase:, discord_user_id: user_id)
+        subscription = create(:subscription, link: product, user: buyer)
+        subscription.update!(cancelled_at: 1.day.ago)
+        product.update!(is_tiered_membership: true, block_access_after_membership_cancellation: true)
+        purchase.update!(subscription:)
+
+        expect do
+          get :leave_server, format: :json, params: { purchase_id: purchase.external_id }
+        end.not_to change { purchase.live_purchase_integrations.reload.count }
+
+        expect(response.parsed_body).to eq({ "success" => false })
+      end
     end
 
     it "fails if purchase_id is not passed" do
