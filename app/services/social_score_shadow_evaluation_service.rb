@@ -29,9 +29,8 @@ class SocialScoreShadowEvaluationService
       [scored[:meets_threshold] ? 1 : 0, scored[:score].fdiv(scored[:release_threshold])]
     end
     score = best&.dig(:score) || 0
-    # ANY shared identity vetoes, not just the best-scoring verification's —
-    # a fraudster's weakest linked account is still a link.
-    shared_identity = scored_verifications.any? { |scored| scored[:shared_identity_user_count].positive? }
+    # Historical identities remain abuse evidence even when disconnected or stale.
+    shared_identity = user.social_connect_verifications.any? { |verification| verification.shared_identity_user_ids.any? }
 
     {
       hold_source:,
@@ -75,6 +74,7 @@ class SocialScoreShadowEvaluationService
 
     def scored_verifications
       user.social_connect_verifications.filter_map do |verification|
+        next unless verification.currently_linked?
         next if verification.last_verified_at.nil? || verification.last_verified_at < MAX_VERIFICATION_AGE.ago
 
         shared_identity_user_count = verification.shared_identity_user_ids.size

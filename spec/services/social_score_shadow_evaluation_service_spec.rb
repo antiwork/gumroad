@@ -6,8 +6,7 @@ describe SocialScoreShadowEvaluationService do
   let(:user) { create(:user, user_risk_state: "flagged_for_fraud") }
 
   def strong_verification(owner = user)
-    create(
-      :social_connect_verification,
+    linked_verification(
       user: owner,
       account_created_at: 5.years.ago,
       follower_count: 5_000,
@@ -17,24 +16,96 @@ describe SocialScoreShadowEvaluationService do
     )
   end
 
+  def linked_verification(**attributes)
+    verification = create(:social_connect_verification, **attributes)
+    case verification.platform
+    when "twitter"
+      verification.user.update!(twitter_user_id: verification.uid)
+    when "youtube"
+      create(:user_youtube_identity, user: verification.user, channel_id: verification.uid)
+    when "instagram"
+      create(:user_instagram_identity, user: verification.user, instagram_user_id: verification.uid)
+    end
+    verification
+  end
+
   before do
     allow(user).to receive(:unpaid_balance_cents).and_return(50_00)
   end
 
   describe "#evaluate" do
+    %w[twitter youtube instagram].each do |platform|
+      it "scores a currently linked #{platform} identity" do
+        linked_verification(user:, platform:, account_created_at: platform == "instagram" ? nil : 5.years.ago)
+
+        result = described_class.new(user).evaluate
+
+        expect(result[:score]).to eq(platform == "instagram" ? 55 : 85)
+        expect(result[:would_have_released]).to be(true)
+      end
+
+      it "ignores a mismatched #{platform} verification UID" do
+        verification = linked_verification(user:, platform:)
+        verification.update!(uid: "old-identity")
+
+        expect(described_class.new(user).evaluate).to include(score: 0, would_have_released: false, signals: nil)
+      end
+
+      it "ignores a #{platform} verification without a live identity" do
+        create(:social_connect_verification, user:, platform:)
+
+        expect(described_class.new(user).evaluate).to include(score: 0, would_have_released: false, signals: nil)
+      end
+    end
+
+    it "ignores a retained strong Twitter verification after disconnect" do
+      strong_verification
+      user.update!(twitter_user_id: nil)
+
+      expect(described_class.new(user).evaluate).to include(score: 0, would_have_released: false, signals: nil)
+      expect(user.social_connect_verifications.count).to eq(1)
+    end
+
+    it "ignores unsupported platforms even with strong verified signals" do
+      create(:social_connect_verification, user:, platform: "tiktok")
+
+      expect(described_class.new(user).evaluate).to include(score: 0, would_have_released: false, signals: nil)
+    end
+
+    [1.day, 1.year, nil].each do |verification_age|
+      it "retains a disconnected non-best shared identity veto with verification age #{verification_age.inspect}" do
+        strong_verification
+        historical = create(:social_connect_verification, user:, platform: "youtube")
+        historical.update_columns(last_verified_at: verification_age&.ago)
+        create(:social_connect_verification, platform: "youtube", uid: historical.uid)
+
+        expect(described_class.new(user).evaluate).to include(score: 85, would_have_released: false)
+      end
+    end
+
+    it "returns nil for a deleted seller despite strong currently linked signals" do
+      strong_verification
+      user.update_columns(deleted_at: Time.current)
+
+      expect(described_class.new(user).evaluate).to be_nil
+    end
+
     it "returns nil when the user has no held payout" do
+      strong_verification
       user.update!(user_risk_state: "compliant")
 
       expect(described_class.new(user).evaluate).to be_nil
     end
 
     it "returns nil when the held balance is zero" do
+      strong_verification
       allow(user).to receive(:unpaid_balance_cents).and_return(0)
 
       expect(described_class.new(user).evaluate).to be_nil
     end
 
     it "returns nil for suspended users even when payouts are also paused internally" do
+      strong_verification
       # Suspended states are already outside REVIEWABLE_RISK_STATES; the pause is what would
       # otherwise classify this account as held, so it is what proves the suspended guard bites.
       user.update_columns(user_risk_state: "suspended_for_fraud")
@@ -104,8 +175,7 @@ describe SocialScoreShadowEvaluationService do
 
     it "does not release when a weaker, non-best verification carries the shared identity" do
       strong_verification
-      weak = create(
-        :social_connect_verification,
+      weak = linked_verification(
         user:,
         platform: "youtube",
         account_created_at: 1.month.ago,
@@ -123,8 +193,7 @@ describe SocialScoreShadowEvaluationService do
     end
 
     it "does not release on a young account even with a large following" do
-      create(
-        :social_connect_verification,
+      linked_verification(
         user:,
         account_created_at: 3.months.ago,
         follower_count: 100_000,
@@ -139,8 +208,7 @@ describe SocialScoreShadowEvaluationService do
     end
 
     it "prefers a threshold-passing Instagram score over a higher raw score that misses its own threshold" do
-      create(
-        :social_connect_verification,
+      linked_verification(
         user:,
         platform: "twitter",
         account_created_at: 3.months.ago,
@@ -148,8 +216,7 @@ describe SocialScoreShadowEvaluationService do
         post_count: 5_000,
         last_posted_at: 1.day.ago,
       )
-      create(
-        :social_connect_verification,
+      linked_verification(
         user:,
         platform: "instagram",
         account_created_at: nil,
@@ -166,8 +233,7 @@ describe SocialScoreShadowEvaluationService do
     end
 
     it "uses all available Instagram signals instead of requiring an unavailable account age" do
-      create(
-        :social_connect_verification,
+      linked_verification(
         user:,
         platform: "instagram",
         account_created_at: nil,
@@ -184,8 +250,7 @@ describe SocialScoreShadowEvaluationService do
     end
 
     it "does not release an Instagram account without every available signal" do
-      create(
-        :social_connect_verification,
+      linked_verification(
         user:,
         platform: "instagram",
         account_created_at: nil,

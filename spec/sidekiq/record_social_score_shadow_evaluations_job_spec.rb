@@ -55,8 +55,9 @@ describe RecordSocialScoreShadowEvaluationsJob do
 
     it "never mutates payout or risk state" do
       held = create(:user, user_risk_state: "flagged_for_fraud")
-      create(:social_connect_verification, user: held, account_created_at: 5.years.ago,
-                                           follower_count: 5_000, post_count: 1_000, last_posted_at: 1.week.ago)
+      verification = create(:social_connect_verification, user: held, account_created_at: 5.years.ago,
+                                                          follower_count: 5_000, post_count: 1_000, last_posted_at: 1.week.ago)
+      held.update!(twitter_user_id: verification.uid)
       create(:balance, user: held, merchant_account: create(:merchant_account, user: held), amount_cents: 100_00)
 
       described_class.new.perform(Date.current.to_s)
