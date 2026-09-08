@@ -578,7 +578,7 @@ export const DashboardPage = ({
                   />
                 ))}
               </div>
-              {social_connections?.length ? (
+              {!gettingStartedMinimized && social_connections?.length ? (
                 <Card>
                   <CardContent className="grid gap-3">
                     <h3>Connect a social account (optional)</h3>
