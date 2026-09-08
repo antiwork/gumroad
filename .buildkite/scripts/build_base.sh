@@ -10,7 +10,7 @@ logger() {
 source .buildkite/scripts/buildkit_cache.sh
 
 WEB_BASE_REPO=${ECR_REGISTRY}/gumroad/web_base
-RUBY_IMAGE=ruby:$(cat .ruby-version)-slim-bullseye
+RUBY_IMAGE=ruby:$(cat .ruby-version)-slim-bookworm
 
 # generate_tag_for_web_base.sh hashes `docker history` of the ruby base image,
 # so it must be present and current locally. The helper always pulls (cheap

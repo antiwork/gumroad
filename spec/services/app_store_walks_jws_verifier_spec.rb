@@ -93,7 +93,7 @@ describe AppStoreWalksJwsVerifier do
         cert.serial = 1
         cert.subject = OpenSSL::X509::Name.parse("/CN=test")
         cert.issuer = cert.subject
-        cert.public_key = OpenSSL::PKey::EC.new(key).tap { |k| k.private_key = nil }
+        cert.public_key = OpenSSL::PKey::EC.new(key.public_to_der)
         cert.not_before = Time.now - 60
         cert.not_after = Time.now + 3600
         cert.sign(key, OpenSSL::Digest.new("SHA256"))
@@ -116,7 +116,7 @@ describe AppStoreWalksJwsVerifier do
           c.serial = 1
           c.subject = OpenSSL::X509::Name.parse("/CN=test-leaf")
           c.issuer = c.subject
-          c.public_key = OpenSSL::PKey::EC.new(key).tap { |k| k.private_key = nil }
+          c.public_key = OpenSSL::PKey::EC.new(key.public_to_der)
           c.not_before = Time.now - 60
           c.not_after = Time.now + 3600
           c.sign(key, OpenSSL::Digest.new("SHA256"))

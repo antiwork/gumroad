@@ -567,11 +567,21 @@ class SettingsPresenter
         compliance_actions:,
         needs_id_upload:,
         gumroad_status:,
+        social_connections_for_review: (social_connections_for_review if is_under_review && !is_suspended),
         stripe_rejected:,
         stripe_rejected_balance_status:,
         stripe_rejected_formatted_balance:,
         stripe_rejected_payout_date:,
       }
+    end
+
+    def social_connections_for_review
+      return unless Pundit.policy!(pundit_user, [:settings, :profile]).manage_social_connections?
+
+      connections = [{ provider: "twitter", connected: seller.twitter_user_id.present? }]
+      connections << { provider: "youtube", connected: seller.youtube_identity.present? } if Feature.active?(:youtube_connect, seller)
+      connections << { provider: "instagram", connected: seller.instagram_identity.present? } if Feature.active?(:instagram_connect, seller)
+      connections
     end
 
     def user_details(user_compliance_info)

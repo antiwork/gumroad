@@ -381,6 +381,15 @@ describe UsersController, :vcr, type: :controller do
 
       expect(html).not_to include("<script>alert(1)</script>")
     end
+
+    it "paints the wrapper from the store theme before the iframe loads" do
+      seller.seller_profile.update!(background_color: "#0a0d12")
+      controller.instance_variable_set(:@is_user_custom_domain, true)
+
+      html = controller.send(:profile_custom_html_wrapper_document, seller)
+
+      expect(html).to include("html{background:#0a0d12}")
+    end
   end
 
   describe "when the custom_html_pages feature is disabled" do

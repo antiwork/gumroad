@@ -21,6 +21,67 @@ describe CreatorHomePresenter do
   end
 
   describe "#creator_home_props" do
+    describe "optional social connections" do
+      let(:pundit_user) { SellerContext.new(user: seller, seller:) }
+
+      before do
+        Feature.deactivate(:youtube_connect)
+        Feature.deactivate(:instagram_connect)
+      end
+
+      it "offers X without offering gated providers" do
+        expect(presenter.creator_home_props[:social_connections]).to eq([{ name: "X", connected: false }])
+      end
+
+      it "uses the current X link, not a handle or retained verification" do
+        seller.update!(twitter_handle: "example_creator")
+        seller.social_connect_verifications.create!(platform: "twitter", uid: "example-social-id", last_verified_at: Time.current)
+        expect(presenter.creator_home_props[:social_connections]).to eq([{ name: "X", connected: false }])
+
+        seller.update!(twitter_user_id: "example-social-id")
+        expect(presenter.creator_home_props[:social_connections]).to eq([{ name: "X", connected: true }])
+
+        seller.update!(twitter_user_id: nil)
+        expect(presenter.creator_home_props[:social_connections]).to eq([{ name: "X", connected: false }])
+      end
+
+      it "offers providers enabled for this seller, not another seller" do
+        Feature.activate_user(:youtube_connect, admin_for_seller)
+        expect(presenter.creator_home_props[:social_connections]).to eq([{ name: "X", connected: false }])
+
+        Feature.activate_user(:youtube_connect, seller)
+        Feature.activate_user(:instagram_connect, seller)
+        expect(presenter.creator_home_props[:social_connections]).to eq([
+                                                                          { name: "X", connected: false }, { name: "YouTube", connected: false }, { name: "Instagram", connected: false }
+                                                                        ])
+      end
+
+      it "shows current identities even when new connections are gated and removes disconnected ones" do
+        seller.create_youtube_identity!(channel_id: "example-channel")
+        seller.create_instagram_identity!(instagram_user_id: "example-instagram")
+        expect(presenter.creator_home_props[:social_connections]).to eq([
+                                                                          { name: "X", connected: false }, { name: "YouTube", connected: true }, { name: "Instagram", connected: true }
+                                                                        ])
+
+        seller.youtube_identity.destroy!
+        seller.instagram_identity.destroy!
+        seller.reload
+        expect(presenter.creator_home_props[:social_connections]).to eq([{ name: "X", connected: false }])
+      end
+
+      it "omits the prompt after checklist dismissal" do
+        seller.update!(has_dismissed_getting_started_checklist: true)
+        expect(presenter.creator_home_props).not_to have_key(:social_connections)
+      end
+
+      it "omits the prompt for team members, including admins who can see the checklist" do
+        [admin_for_seller, marketing_for_seller, support_for_seller].each do |member|
+          props = described_class.new(SellerContext.new(user: member, seller:)).creator_home_props
+          expect(props).not_to have_key(:social_connections)
+        end
+      end
+    end
+
     it "deduces creator name from payout info" do
       expect(presenter.creator_home_props[:name]).to match("")
 

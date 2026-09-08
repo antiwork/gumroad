@@ -42,7 +42,7 @@ export const MoreLikeThis = TiptapNode.create<{ productId: string }>({
   },
 });
 
-const MoreLikeThisNodeView = ({ editor, node, extension, selected }: NodeViewProps) => {
+const MoreLikeThisNodeView = ({ editor, node, extension, selected, getPos }: NodeViewProps) => {
   const [recommendedProducts, setRecommendedProducts] = React.useState<CardProduct[] | null>(null);
   const [isLoading, setIsLoading] = React.useState(true);
   const recommendationType = typia.assert<RecommendationType | undefined>(node.attrs.recommendationType);
@@ -78,6 +78,7 @@ const MoreLikeThisNodeView = ({ editor, node, extension, selected }: NodeViewPro
         {editor.isEditable ? (
           <NodeActionsMenu
             editor={editor}
+            getPos={getPos}
             actions={[
               {
                 item: () => (

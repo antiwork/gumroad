@@ -7,9 +7,9 @@ class Order::PreparePaymentIntentService
 
   # The browser's resolved card country is more trustworthy than a client-supplied field.
   CARD_COUNTRY_SOURCE = "stripe"
-  # The direct-listed amount token fields compared at prepare: what the buyer agreed to (price,
-  # tip) plus the deterministic shipping rate. Tax is deliberately absent; see
-  # #direct_listed_allocations_match?.
+  # The direct-listed amount token fields compared exactly at prepare: what the buyer agreed to
+  # (price, tip) plus the deterministic shipping rate. Tax is deliberately absent; only the total
+  # it feeds is checked, and only for increases. See #direct_listed_allocations_match?.
   DIRECT_LISTED_AMOUNT_COMPARED_FIELDS = %w[permalink price_cents tip_cents shipping_cents].freeze
   GENERIC_CHARGE_ERROR = "There is a temporary problem, please try again (your card was not charged)."
   # A Klarna amount-window rejection is deterministic — retrying Klarna on the same cart can
@@ -742,10 +742,9 @@ class Order::PreparePaymentIntentService
 
     # Only a signed surcharge snapshot can prove what the buyer agreed to. The browser cannot
     # alter it to make a changed offer look current, and the snapshot never sets charge amounts.
-    # Tax is not compared: it is the server's own number, recomputed at prepare from the submitted
-    # address/VAT ID, and the same inputs can produce a different result seconds apart. Failing
-    # the charge on that delta loops the buyer through "price changed" until they give up, while
-    # the canonical USD lane has always charged the prepare-time tax.
+    # Tax is the server's own number and the same inputs can produce a different result seconds
+    # apart, so it is not compared field-for-field: a lower prepare-time tax flows into the
+    # charge, while a higher one fails closed so the client refreshes the quote and remounts.
     def method_forced_listed_allocations_match?(charge, currency)
       return true unless purchases_to_charge.all? { _1.link.price_currency_type.to_s.downcase == currency }
 
@@ -779,7 +778,16 @@ class Order::PreparePaymentIntentService
           "shipping_cents" => allocation.presentment_shipping_cents,
         }
       end
-      reported.map { _1.slice(*DIRECT_LISTED_AMOUNT_COMPARED_FIELDS) } == expected
+      return false unless reported.map { _1.slice(*DIRECT_LISTED_AMOUNT_COMPARED_FIELDS) } == expected
+
+      # The token total is the amount the Element mounted with, so it is the most the buyer has
+      # reviewed. Never confirm above it; a lower prepare-time total is fine to charge.
+      reviewed_total_cents = reported.sum { _1["total_cents"] }
+      prepare_total_cents = actual_allocations.sum(&:presentment_total_cents)
+      if reviewed_total_cents != prepare_total_cents
+        Rails.logger.info("Direct-listed prepare total for order #{order.id} is #{prepare_total_cents} #{currency} cents against a reviewed #{reviewed_total_cents}")
+      end
+      prepare_total_cents <= reviewed_total_cents
     end
 
     # Legacy fallback for clients that did not report their Element's mount currency. It
