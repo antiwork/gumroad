@@ -278,7 +278,7 @@ describe ReindexSellerOfferCodesJob do
     processed = []
     allow(ProductOfferCodeIndexingService).to receive(:new).and_wrap_original do |original, batch|
       processed.concat(batch.map(&:id))
-      described_class.enqueue_products(seller.id, batch.map(&:id))
+      described_class.enqueue_products(seller.id, products.map(&:id))
       original.call(batch)
     end
     3.times { run_batch }
@@ -294,6 +294,17 @@ describe ReindexSellerOfferCodesJob do
     end
     expect { job.perform(seller.id) }.to raise_error(Redis::BaseError)
     expect($redis.get("#{key}:lock")).to be_nil
+  end
+
+  it "does not acknowledge work after losing its lease" do
+    create(:product, user: seller)
+    described_class.enqueue(seller.id)
+    allow_any_instance_of(ProductOfferCodeIndexingService).to receive(:perform) do
+      $redis.set("#{key}:lock", "replacement-worker", ex: 600)
+    end
+    expect { job.perform(seller.id) }.to raise_error(described_class::LockLost)
+    expect($redis.get("#{key}:version")).to eq("1")
+    expect($redis.get("#{key}:lock")).to eq("replacement-worker")
   end
 
   it "preserves an edit arriving during the final batch" do
