@@ -42,14 +42,7 @@ const ToastAlert = ({ initial }: { initial: AlertPayload | null }) => {
 
   useGlobalEventListener("message", (event: MessageEvent) => {
     if (event.origin !== window.location.origin) return;
-    if (
-      typeof event.data === "object" &&
-      event.data !== null &&
-      "type" in event.data &&
-      event.data.type === ALERT_KEY &&
-      "payload" in event.data &&
-      event.data.payload === null
-    ) {
+    if (typia.is<{ type: "alert"; payload: null }>(event.data)) {
       dismiss();
       return;
     }

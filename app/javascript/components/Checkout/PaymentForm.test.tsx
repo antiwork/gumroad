@@ -264,7 +264,7 @@ describe("PaymentForm validation-failure feedback", () => {
     expect(screen.getByRole("button", { name: "Pay" }).hasAttribute("disabled")).toBe(true);
   });
 
-    it("still offers Retry price update when remint is held without a warning string", () => {
+  it("still offers Retry price update when remint is held without a warning string", () => {
     const s = state();
     if (s.surcharges.type !== "loaded") throw new Error("Expected loaded surcharges");
     render(
@@ -282,11 +282,10 @@ describe("PaymentForm validation-failure feedback", () => {
     expect(screen.getByRole("status").textContent).toContain("review the updated total");
   });
 
-it("keeps the full FX warning sentence above Retry price update", () => {
+  it("keeps the full FX warning sentence above Retry price update", () => {
     const s = state();
     if (s.surcharges.type !== "loaded") throw new Error("Expected loaded surcharges");
-    const warning =
-      "The local-currency price changed or expired. Please review the updated total and try again.";
+    const warning = "The local-currency price changed or expired. Please review the updated total and try again.";
     render(
       <StatefulPaymentForm
         initial={{
@@ -300,11 +299,12 @@ it("keeps the full FX warning sentence above Retry price update", () => {
     );
     const status = screen.getByRole("status");
     const retry = screen.getByRole("button", { name: "Retry price update" });
-    expect(status.textContent).toContain(warning);
+    const statusText = String(status.textContent);
+    expect(statusText).toContain(warning);
     // Sentence completes before the retry control (own line / flex-col), matching mobile.
-    expect(status.textContent?.indexOf(warning)).toBeLessThan(status.textContent?.indexOf("Retry price update") ?? -1);
+    expect(statusText.indexOf(warning)).toBeLessThan(statusText.indexOf("Retry price update"));
     expect(retry.compareDocumentPosition(status) & Node.DOCUMENT_POSITION_CONTAINS).toBeTruthy();
-    expect(retry.parentElement?.className).toContain("flex-col");
+    expect(String(retry.parentElement?.className ?? "")).toContain("flex-col");
   });
 
   const failedState = (validationFailedCount: number) =>
