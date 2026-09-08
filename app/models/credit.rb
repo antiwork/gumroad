@@ -818,15 +818,7 @@ class Credit < ApplicationRecord
             applied = true
           end
         end
-        unless applied
-          if refund.present?
-            refund.update!(
-              refund_fee_holding_reconcile_pending: true,
-              fee_retention_retry_at: 15.minutes.from_now
-            )
-          end
-          next
-        end
+        raise ActiveRecord::RecordInvalid.new(balance) unless applied
       rescue ActiveRecord::RecordInvalid
         holding_currency = credit.merchant_account.currency.to_s.downcase
         adjusted_delta = convert_fee_holding_cents(
@@ -842,7 +834,7 @@ class Credit < ApplicationRecord
           currency: bt.issued_amount_currency,
           holding_currency:,
           state: "unpaid"
-        ).order(date: :asc).first
+        ).where.not(id: balance.id).order(date: :asc).first
         # Do not invent a zero-USD / negative-holding unpaid balance: payout validation
         # rejects that as DESTINATION_LEDGER_NEGATIVE. Leave unreconciled until an unpaid
         # balance exists to absorb the correction.
