@@ -61,7 +61,7 @@ class StripeChargeablePaymentMethod
       @payment_method_on_connect_account = payment_method
       @payment_method_id_on_connect_account = payment_method_id
       customer_id = payment_method.customer
-      @customer_id = customer_id.respond_to?(:id) ? customer_id.id : customer_id
+      @customer_id_on_connect_account = customer_id.respond_to?(:id) ? customer_id.id : customer_id
     end
     true
   end
@@ -142,7 +142,7 @@ class StripeChargeablePaymentMethod
 
   def stripe_charge_params
     if @merchant_account&.is_a_stripe_connect_account?
-      { payment_method: @payment_method_id_on_connect_account, customer: @customer_id }.compact
+      { payment_method: @payment_method_id_on_connect_account, customer: @customer_id_on_connect_account }.compact
     else
       { customer: @customer_id, payment_method: @payment_method_id }
     end
