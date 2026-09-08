@@ -11,31 +11,22 @@ module CreatorAnalytics::CachingProxy::Formatters::ByReferral
       day_data[:by_referral].values.map(&:keys)
     end.flatten.uniq
 
-    # Compile referrers by type and product
-    referrers = {}
     %i[views sales totals].each do |type|
-      referrers[type] ||= {}
-      permalinks.each do |permalink|
-        referrers[type][permalink] ||= []
-        days_data.each do |day_data|
-          referrers[type][permalink] += day_data.dig(:by_referral, type, permalink)&.keys || []
-        end
-        referrers[type][permalink].uniq!
-      end
+      permalinks.each { |permalink| data[:by_referral][type][permalink] = {} }
     end
 
-    permalinks.each do |permalink|
-      total_day_index = 0
-      days_data.each do |day_data|
-        %i[views sales totals].each do |type|
-          data[:by_referral][type][permalink] ||= {}
-          referrers[type][permalink].each do |referrer|
-            data[:by_referral][type][permalink][referrer] ||= [0] * dates.size
-            data[:by_referral][type][permalink][referrer][total_day_index .. (total_day_index + day_data[:dates_and_months].size - 1)] = (day_data.dig(:by_referral, type, permalink, referrer) || ([0] * day_data[:dates_and_months].size))
+    total_day_index = 0
+    days_data.each do |day_data|
+      days_count = day_data[:dates_and_months].size
+      %i[views sales totals].each do |type|
+        (day_data[:by_referral][type] || {}).each do |permalink, referrers|
+          (referrers || {}).each do |referrer, values|
+            series = data[:by_referral][type][permalink][referrer] ||= [0] * dates.size
+            series[total_day_index, days_count] = values if values
           end
         end
-        total_day_index += day_data[:dates_and_months].size
       end
+      total_day_index += days_count
     end
 
     data[:dates_and_months] = D3.date_month_domain(dates.first .. dates.last)
