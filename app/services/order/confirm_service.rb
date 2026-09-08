@@ -232,6 +232,13 @@ class Order::ConfirmService
       credit_card.update!(json_data: { "stripe_payment_intent_id" => charge_intent.id }) if credit_card.requires_mandate?
       return unless charge_intent.is_a?(StripeChargeIntent)
 
+      # The debit can outlive this request (India intents stay `processing` for up to 26h),
+      # and the buyer may never come back to retry the confirm. client_confirmed is what
+      # routes the intent's payment_intent.succeeded / payment_failed webhooks into the
+      # async finalize/fail rails (Purchase::ChargeEventsHandler); without it these
+      # purchases would sit in_progress forever.
+      charge.update!(client_confirmed: true)
+
       purchases.each do |purchase|
         purchase.create_processor_payment_intent!(intent_id: charge_intent.id)
       end

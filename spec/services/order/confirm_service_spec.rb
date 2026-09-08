@@ -308,6 +308,9 @@ describe Order::ConfirmService, :vcr do
           expect(responses[purchase.id]).to eq(success: true, processing: true, permalink: purchase.link.unique_permalink)
         end
         expect(india_card.reload.stripe_payment_intent_id).to eq("pi_confirm_india")
+        # The buyer may never retry the confirm; client_confirmed is what routes the intent's
+        # payment_intent.succeeded / payment_failed webhooks into the async finalize/fail rails.
+        expect(charge.reload.client_confirmed?).to be(true)
       end
 
       it "finalizes each purchase through FinalizeConfirmedChargeService when the charge succeeds synchronously" do
@@ -428,6 +431,9 @@ describe Order::ConfirmService, :vcr do
           expect(purchase.processor_payment_intent).to be_nil
         end
         expect(responses.values).to all(include(success: false))
+        # No intent exists for webhooks to resolve, so the charge must not be flagged for
+        # the async client-confirm finalize rails.
+        expect(charge.reload.client_confirmed?).to be(false)
       end
 
       it "does not charge when the browser reported a card authentication error" do

@@ -204,6 +204,9 @@ module Purchase::ChargeEventsHandler
     end
 
     def finalize_client_confirmed_charge!
-      Order::FinalizeConfirmedChargeService.new(order:).perform
+      # Scoped to this charge: a multi-seller order can hold several client-confirmed
+      # charges (one per seller group), each with its own intent, and finalizing another
+      # group's purchases from this event's intent would save the wrong charge's data.
+      Order::FinalizeConfirmedChargeService.new(order:, charge: self).perform
     end
 end
