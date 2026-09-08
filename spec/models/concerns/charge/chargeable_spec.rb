@@ -369,6 +369,24 @@ describe Charge::Chargeable do
       it "keeps the bundle purchase itself instead of dropping it" do
         expect(chargeable.unbundled_purchases).to eq([chargeable])
       end
+
+      it "keeps a test-successful parent for standalone and charge receipts" do
+        chargeable.update!(purchase_state: "test_successful")
+        charge = create(:charge, seller:, purchases: [chargeable])
+
+        expect(charge.successful_purchases).to include(chargeable)
+        expect(chargeable.product_purchases).to be_empty
+        expect(chargeable.unbundled_purchases).to eq([chargeable])
+        expect(charge.unbundled_purchases).to eq([chargeable])
+      end
+
+      it "does not invent a receipt item for a failed standalone bundle" do
+        chargeable.update!(purchase_state: "failed")
+
+        expect(chargeable.successful_purchases).to include(chargeable)
+        expect(chargeable.product_purchases).to be_empty
+        expect(chargeable.unbundled_purchases).to be_empty
+      end
     end
   end
 

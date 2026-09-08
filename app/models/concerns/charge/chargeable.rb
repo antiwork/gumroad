@@ -128,7 +128,7 @@ module Charge::Chargeable
     @_unbundled_purchases ||=
       successful_purchases.map do |purchase|
         if purchase.is_bundle_purchase?
-          purchase.product_purchases.presence || [purchase]
+          purchase.product_purchases.presence || (purchase.purchase_state.in?(Purchase::ALL_SUCCESS_STATES_INCLUDING_TEST) ? [purchase] : [])
         else
           [purchase]
         end
