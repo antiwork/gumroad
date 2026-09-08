@@ -98,6 +98,9 @@ class Refund < ApplicationRecord
   # Stripe transfer id and amount (in that transfer's currency) for a sticky transfer_reversal.
   attr_json_data_accessor :refund_fee_debit_transfer_id
   attr_json_data_accessor :refund_fee_debit_amount_cents
+  # Bumped when a definitive Stripe InvalidRequest clears the sticky choice so the next
+  # attempt can use a fresh idempotency key without colliding with the rejected one.
+  attr_json_data_accessor :refund_fee_debit_generation
   # EUR cents requested for the BGN-fallback platform debit; reused on retry so the
   # Stripe idempotency key always pairs with the same amount parameters.
   attr_json_data_accessor :refund_fee_eur_debit_cents

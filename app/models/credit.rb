@@ -593,6 +593,27 @@ class Credit < ApplicationRecord
   end
   private_class_method :clear_refund_fee_retention_pending!
 
+  # Stripe confirmed the sticky reversal did not happen (InvalidRequest). Drop the choice
+  # so a retry can pick another transfer; bump generation for a fresh idempotency key.
+  def self.release_sticky_refund_fee_debit_choice!(refund)
+    return if refund.blank?
+
+    refund.reload
+    refund.with_lock do
+      refund.reload
+      return if refund.debited_stripe_transfer.present? && refund.debited_stripe_transfer != FEE_DEBIT_PENDING_RETRY
+
+      transaction(requires_new: true) do
+        refund.refund_fee_debit_operation = nil
+        refund.refund_fee_debit_transfer_id = nil
+        refund.refund_fee_debit_amount_cents = nil
+        refund.refund_fee_debit_generation = refund.refund_fee_debit_generation.to_i + 1
+        refund.debited_stripe_transfer = nil if refund.debited_stripe_transfer == FEE_DEBIT_PENDING_RETRY
+        refund.save!
+      end
+    end
+  end
+
   def self.persist_refund_fee_holding_on_credit!(refund, holding_debit_cents, currency: nil)
     return if refund.blank? || holding_debit_cents.blank?
     currency = currency.to_s.downcase.presence
