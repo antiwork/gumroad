@@ -78,9 +78,10 @@ export type SurchargesResponse = {
     // from line_allocations.
     rate: number;
     subunit_to_unit: number;
-    // The soonest expiry among the cart's locked quotes. Nothing in the checkout reads this
-    // today; it is here so the response cannot overstate how long the quote is good for.
+    // The soonest expiry among the cart's locked quotes.
     expires_at: string;
+    // Client deadline derived from the response's server clock, not the device's wall-clock offset.
+    client_expires_at?: number;
     // The server-owned split of the locked presentment total across the request's product
     // lines, in request order, computed with the same largest-remainder rounding the charge
     // uses to persist purchase presentment rows. The checkout renders these amounts
@@ -103,6 +104,7 @@ export type SurchargesResponse = {
 };
 
 export const getSurcharges = async (data: GetSurchargesRequest, abortSignal?: AbortSignal) => {
+  const startedAt = Date.now();
   const response = await request({
     method: "POST",
     accept: "json",
@@ -111,5 +113,13 @@ export const getSurcharges = async (data: GetSurchargesRequest, abortSignal?: Ab
     data,
   });
   if (!response.ok) throw new ResponseError();
-  return typia.assert<SurchargesResponse>(await response.json());
+  const result = typia.assert<SurchargesResponse>(await response.json());
+  const serverTime = Date.parse(response.headers.get("Date") ?? "");
+  if (result.buyer_currency_quote && Number.isFinite(serverTime)) {
+    // Starting the lifetime at request start also deducts transit time. HTTP Date has
+    // whole-second precision, so reserve that second rather than extending the quote.
+    result.buyer_currency_quote.client_expires_at =
+      startedAt + Date.parse(result.buyer_currency_quote.expires_at) - serverTime - 1000;
+  }
+  return result;
 };

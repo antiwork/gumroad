@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import * as React from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -246,6 +246,23 @@ describe("PaymentForm validation-failure feedback", () => {
     Element.prototype.scrollIntoView = scrollIntoView;
   });
   afterEach(cleanup);
+
+  it("offers a working retry after price refresh fails without enabling payment", () => {
+    const s = state();
+    if (s.surcharges.type !== "loaded") throw new Error("Expected loaded surcharges");
+    const initial = {
+      ...s,
+      surcharges: { type: "error" } as const,
+      buyerCurrencyRemint: { previousCurrency: "cad", surcharges: s.surcharges.result },
+      warning: "Please review the updated total and try again.",
+    };
+    const harness: CheckoutHarness = { dispatch: vi.fn(), actions: [] };
+    render(<StatefulPaymentForm initial={initial} harness={harness} />);
+    fireEvent.click(screen.getByRole("button", { name: "Retry price update" }));
+    expect(harness.actions).toContainEqual({ type: "refresh-expired-buyer-currency-quote" });
+    expect(screen.queryByRole("button", { name: "Retry price update" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Pay" }).hasAttribute("disabled")).toBe(true);
+  });
 
   const failedState = (validationFailedCount: number) =>
     state({
