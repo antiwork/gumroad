@@ -4064,6 +4064,112 @@ describe StripeChargeProcessor, :vcr do
         expect(described_class.debit_stripe_account_for_refund_fee(credit:)).to eq(1330)
       end
     end
+
+    describe "BGN-settled transfers" do
+      # Stripe rejects reversals on transfers that settled in BGN ("Transfer reversals in
+      # BGN are no longer supported"), so such a transfer must never reach create_reversal.
+      # Only the EUR rate is stubbed: a BGN candidate has to be skipped before any rate lookup.
+      before do
+        allow(described_class).to receive(:get_rate).with("eur").and_return("0.92")
+
+        @bg_merchant_account = create(:merchant_account, charge_processor_merchant_id: "acct_1MdbgS4gcql7bLm", country: "BG", currency: "eur")
+      end
+
+      def create_internal_transfer_payments(*transfer_ids)
+        transfer_ids.each do |transfer_id|
+          create(:payment_completed, user: @bg_merchant_account.user,
+                                     stripe_connect_account_id: @bg_merchant_account.charge_processor_merchant_id,
+                                     stripe_internal_transfer_id: transfer_id)
+        end
+      end
+
+      def create_fee_credit
+        create(:credit, user: @bg_merchant_account.user, amount_cents: 1000, merchant_account_id: @bg_merchant_account.id, fee_retention_refund: create(:refund))
+      end
+
+      it "skips a BGN internal transfer with room and reverses the next eligible transfer" do
+        create_internal_transfer_payments("tr_bgn_1", "tr_eur_1")
+        credit = create_fee_credit
+
+        expect(Stripe::Transfer).to receive(:retrieve).with("tr_bgn_1").and_return(double(id: "tr_bgn_1", amount: 5000, amount_reversed: 0, currency: "bgn"))
+        expect(Stripe::Transfer).to receive(:retrieve).with("tr_eur_1").and_return(double(id: "tr_eur_1", amount: 2000, amount_reversed: 0, currency: "eur"))
+
+        transfer_reversal = double(id: "trr_eur_1", destination_payment_refund: "re_eur_1")
+        expect(Stripe::Transfer).not_to receive(:create_reversal).with("tr_bgn_1", anything)
+        expect(Stripe::Transfer).to receive(:create_reversal).with("tr_eur_1", { amount: 920 }).and_return(transfer_reversal)
+        expect(Stripe::Transfer).not_to receive(:create)
+        expect(Stripe::Refund).to receive(:retrieve)
+                                    .with("re_eur_1", hash_including(stripe_account: @bg_merchant_account.charge_processor_merchant_id))
+                                    .and_return(double(balance_transaction: "txn_eur_1"))
+        expect(Stripe::BalanceTransaction).to receive(:retrieve)
+                                                .with("txn_eur_1", hash_including(stripe_account: @bg_merchant_account.charge_processor_merchant_id))
+                                                .and_return(double(net: -920))
+
+        expect(described_class.debit_stripe_account_for_refund_fee(credit:)).to eq(920)
+        expect(credit.fee_retention_refund.reload.debited_stripe_transfer).to eq("trr_eur_1")
+      end
+
+      it "debits the account in EUR when every candidate transfer settled in BGN" do
+        create_internal_transfer_payments("tr_bgn_1")
+        credit = create_fee_credit
+
+        expect(Stripe::Transfer).to receive(:retrieve).with("tr_bgn_1").and_return(double(id: "tr_bgn_1", amount: 5000, amount_reversed: 0, currency: "bgn"))
+        expect(Stripe::Transfer).to receive(:list)
+                                      .with(hash_including(destination: @bg_merchant_account.charge_processor_merchant_id))
+                                      .and_return([double(id: "tr_bgn_old", amount: 5000, amount_reversed: 0, currency: "BGN")])
+        expect(Stripe::Transfer).not_to receive(:create_reversal)
+        # 1000 USD cents * 0.92 = 920 EUR cents, pulled from the connected account itself.
+        expect(Stripe::Transfer).to receive(:create)
+                                      .with({ amount: 920, currency: "eur", destination: STRIPE_PLATFORM_ACCOUNT_ID },
+                                            { stripe_account: @bg_merchant_account.charge_processor_merchant_id })
+                                      .and_return(double(id: "tr_eur_debit_1"))
+
+        expect(described_class.debit_stripe_account_for_refund_fee(credit:)).to eq(920)
+        expect(credit.fee_retention_refund.reload.debited_stripe_transfer).to eq("tr_eur_debit_1")
+      end
+
+      it "books the EUR debit in BGN at the fixed rate when the account's ledger is still held in BGN" do
+        @bg_merchant_account.update!(currency: "bgn")
+        create_internal_transfer_payments("tr_bgn_1")
+        credit = create_fee_credit
+
+        expect(Stripe::Transfer).to receive(:retrieve).with("tr_bgn_1").and_return(double(id: "tr_bgn_1", amount: 5000, amount_reversed: 0, currency: "bgn"))
+        expect(Stripe::Transfer).to receive(:list).and_return([])
+        expect(Stripe::Transfer).not_to receive(:create_reversal)
+        expect(Stripe::Transfer).to receive(:create)
+                                      .with(hash_including(amount: 920, currency: "eur"), anything)
+                                      .and_return(double(id: "tr_eur_debit_2"))
+
+        # 920 EUR cents * 1.95583 = 1799.36 BGN stotinki.
+        expect(described_class.debit_stripe_account_for_refund_fee(credit:)).to eq(1799)
+      end
+
+      it "does not debit the account when no transfer is eligible and none settled in BGN" do
+        create_internal_transfer_payments("tr_eur_small")
+        credit = create_fee_credit
+
+        expect(Stripe::Transfer).to receive(:retrieve).with("tr_eur_small").and_return(double(id: "tr_eur_small", amount: 500, amount_reversed: 0, currency: "eur"))
+        expect(Stripe::Transfer).to receive(:list).and_return([])
+        expect(Stripe::Transfer).not_to receive(:create_reversal)
+        expect(Stripe::Transfer).not_to receive(:create)
+
+        expect(described_class.debit_stripe_account_for_refund_fee(credit:)).to be_nil
+        expect(credit.fee_retention_refund.reload.debited_stripe_transfer).to be_nil
+      end
+
+      it "does not touch Stripe again once the refund already records a debit" do
+        create_internal_transfer_payments("tr_bgn_1")
+        credit = create_fee_credit
+        credit.fee_retention_refund.update!(debited_stripe_transfer: "tr_eur_debit_1")
+
+        expect(Stripe::Transfer).not_to receive(:retrieve)
+        expect(Stripe::Transfer).not_to receive(:list)
+        expect(Stripe::Transfer).not_to receive(:create_reversal)
+        expect(Stripe::Transfer).not_to receive(:create)
+
+        expect(described_class.debit_stripe_account_for_refund_fee(credit:)).to be_nil
+      end
+    end
   end
 
   describe ".debit_stripe_account_for_australia_backtaxes" do

@@ -289,6 +289,7 @@ class Purchase
     # purchase the block above always sets `canonical_gross_refund_cents` (or returns false), so
     # the fallback is unreachable there and a presentment amount can never be booked as canonical.
     funds_refunded = canonical_gross_refund_cents || flow_of_funds.issued_amount.cents.abs
+    refund = nil
     ActiveRecord::Base.transaction do
       # Failed-refund reversals lock the purchase before their refund and balance rows.
       # Use the same order here so a single-purchase refund cannot hold a balance while
@@ -341,7 +342,6 @@ class Purchase
       save!
       reverse_the_transfer_made_for_dispute_win! if chargedback? && chargeback_reversed
       reverse_excess_amount_from_stripe_transfer(refund:) if stripe_partially_refunded && vat_already_refunded
-      debit_processor_fee_from_merchant_account!(refund) unless is_refund_chargeback_fee_waived || chargedback_not_reversed?
       Credit.create_for_vat_exclusive_refund!(refund:) if (paypal_order_id.present? || merchant_account&.is_a_stripe_connect_account?) && !chargedback_not_reversed?
       subscription.original_purchase.update!(should_exclude_product_review: true) if subscription&.should_exclude_product_review_on_charge_reversal?
       send_refunded_notification_webhook
@@ -369,13 +369,17 @@ class Purchase
 
       true
     end.tap do |refunded|
-      # After commit: ChargeProcessor.refund! has already moved the money.
-      # A failed license write must not roll back stripe_refunded.
-      disable_attached_license_if_fully_refunded!(for_fraud: is_for_fraud) if refunded
+      next unless refunded
+
+      # After commit: ChargeProcessor.refund! has already moved the money. Neither a failed
+      # fee debit nor a failed license write may roll back the refund rows.
+      debit_processor_fee_from_merchant_account!(refund) unless is_refund_chargeback_fee_waived || chargedback_not_reversed?
+      disable_attached_license_if_fully_refunded!(for_fraud: is_for_fraud)
     end
   end
 
   def refund_partial_purchase!(gross_refund_amount_cents, refunding_user_id, processor_refund_id: nil)
+    refund = nil
     ActiveRecord::Base.transaction do
       # Same purchase-first lock order as refund_purchase!: take the purchase row
       # lock before touching refund or balance rows, so this path cannot hold a
@@ -406,7 +410,6 @@ class Purchase
       end
       save!
       Credit.create_for_vat_exclusive_refund!(refund:) if paypal_order_id.present? || merchant_account&.is_a_stripe_connect_account?
-      debit_processor_fee_from_merchant_account!(refund) unless is_refund_chargeback_fee_waived
       # refund can be nil here (build_partial_full_refund may return nothing). Pass the
       # refund's buyer-currency amount as plain values (not the Refund id): this enqueue
       # happens inside the transaction, so the mailer job could run before the Refund row
@@ -414,7 +417,10 @@ class Purchase
       CustomerMailer.partial_refund(email, link.id, id, gross_refund_amount_cents, formatted_refund_state, refund&.presentment_amount_cents, refund&.presentment_currency).deliver_later(queue: "critical")
       true
     end.tap do |refunded|
-      disable_attached_license_if_fully_refunded! if refunded
+      next unless refunded
+
+      debit_processor_fee_from_merchant_account!(refund) unless is_refund_chargeback_fee_waived
+      disable_attached_license_if_fully_refunded!
     end
   end
 
@@ -672,8 +678,26 @@ class Purchase
       Stripe::Transfer.create_reversal(transfer.id, { amount: amount_refundable_cents }) if transfer.present?
     end
 
+    # Runs after the refund transaction commits: the processor has already returned the
+    # money, so a failure here is reported and left for a retry rather than allowed to
+    # unwind the refund. Credit.create_for_refund_fee_retention! is idempotent, so calling
+    # it again for the same refund finishes whatever the first attempt did not.
     def debit_processor_fee_from_merchant_account!(refund)
+      return if refund.blank?
+
       Credit.create_for_refund_fee_retention!(refund:)
+    rescue StandardError => e
+      logger.error "Failed to retain the fee for refund #{refund.id} of purchase #{id}: #{e.class}: #{e.message}"
+      ErrorNotifier.notify(
+        "Failed to retain refund fee after refund",
+        context: {
+          purchase_id: id,
+          purchase_external_id: external_id,
+          refund_id: refund.id,
+          error_class: e.class.name,
+          error: e.message,
+        }
+      )
     end
 
     def insufficient_funds_refund_error_message

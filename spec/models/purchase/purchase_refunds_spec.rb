@@ -1814,6 +1814,69 @@ describe "PurchaseRefunds", :vcr do
       end
     end
 
+    context "when the fee debit fails after the processor refund succeeded" do
+      # By the time the fee is retained, the processor has already returned the buyer's
+      # money: the refund rows must stay committed and the fee has to be recoverable by
+      # re-running the retention, never by touching the buyer's refund again.
+      let(:stripe_error) { Stripe::InvalidRequestError.new("Transfer reversals in BGN are no longer supported", nil) }
+
+      def build_charge_refund(cents)
+        stripe_refund = double("stripe_refund", status: "succeeded", id: "re_fee_debit_failure")
+        charge_refund = ChargeRefund.new
+        charge_refund.charge_processor_id = StripeChargeProcessor.charge_processor_id
+        charge_refund.id = stripe_refund.id
+        charge_refund.flow_of_funds = FlowOfFunds.build_simple_flow_of_funds(Currency::USD, -cents)
+        charge_refund.instance_variable_set(:@refund, stripe_refund)
+        charge_refund
+      end
+
+      before do
+        @attempts = 0
+        allow(Credit).to receive(:create_for_refund_fee_retention!).and_wrap_original do |original, *args, **kwargs|
+          @attempts += 1
+          raise stripe_error if @attempts == 1
+
+          original.call(*args, **kwargs)
+        end
+        allow(ErrorNotifier).to receive(:notify)
+      end
+
+      it "keeps the full refund committed, reports the failure, and lets the fee retention be re-run" do
+        admin = create(:admin_user)
+        expect(ChargeProcessor).to receive(:refund!).and_return(build_charge_refund(@purchase.total_transaction_cents))
+
+        expect(@purchase.refund_and_save!(admin.id, reason: "Refund requested by the buyer")).to be(true)
+
+        @purchase.reload
+        refund = @purchase.refunds.sole
+        expect(@purchase.stripe_refunded).to be(true)
+        expect(refund.processor_refund_id).to eq("re_fee_debit_failure")
+        expect(refund.balance_transactions.where(user: @purchase.seller)).to exist
+        expect(Credit.where(fee_retention_refund: refund)).to be_empty
+        expect(ErrorNotifier).to have_received(:notify).with(
+          "Failed to retain refund fee after refund",
+          hash_including(context: hash_including(purchase_id: @purchase.id, refund_id: refund.id))
+        )
+
+        credit = Credit.create_for_refund_fee_retention!(refund:)
+
+        expect(credit.fee_retention_refund).to eq(refund)
+        expect(refund.reload.retained_fee_cents).to eq(credit.amount_cents.abs)
+        expect(@purchase.reload.refunds.count).to eq(1)
+        expect(@attempts).to eq(2)
+      end
+
+      it "keeps a partial refund committed when the fee debit fails" do
+        expect(@purchase.refund_partial_purchase!(@purchase.price_cents / 2, @refunding_user.id)).to be(true)
+
+        @purchase.reload
+        expect(@purchase.stripe_partially_refunded).to be(true)
+        expect(@purchase.refunds.count).to eq(1)
+        expect(Credit.where(fee_retention_refund: @purchase.refunds.sole)).to be_empty
+        expect(ErrorNotifier).to have_received(:notify).with("Failed to retain refund fee after refund", anything)
+      end
+    end
+
     describe "Low balance related sidekiq jobs" do
       before do
         @flow_of_funds = FlowOfFunds.build_simple_flow_of_funds(Currency::USD, @purchase.price_cents)

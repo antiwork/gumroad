@@ -33,6 +33,11 @@ class StripeChargeProcessor
   # https://docs.stripe.com/currencies#zero-decimal
   ZERO_DECIMAL_CURRENCIES = %w[bif clp djf gnf jpy kmf krw mga pyg rwf ugx vnd vuv xaf xof xpf].freeze
 
+  # Bulgaria's retired currency: Stripe still reports historical transfers in it but no
+  # longer accepts reversals in it. The conversion rate to the euro is fixed and irrevocable.
+  BGN = "bgn"
+  BGN_PER_EUR = BigDecimal("1.95583")
+
   # Currencies Stripe only accepts in amounts evenly divisible by 100 (e.g. NT$310.50 is
   # rejected); unrounded FX-quoted amounts cannot guarantee that.
   # https://docs.stripe.com/currencies#special-cases
@@ -640,6 +645,20 @@ class StripeChargeProcessor
     # raw USD figure in a foreign currency, debiting the creator the wrong amount.
     amount_to_reverse_for = ->(transfer) { usd_cents_to_currency(transfer.currency, usd_amount_cents) }
 
+    # Stripe rejects transfer reversals in BGN since Bulgaria adopted the euro, so a
+    # BGN-settled transfer can never be the one reversed here. Check the currency before
+    # the amount so no BGN rate lookup is made, and remember that one was seen: when
+    # nothing else is eligible the fee is recovered with a EUR debit instead (below).
+    bgn_transfer_seen = false
+    reversible = lambda do |transfer|
+      if transfer.currency.to_s.casecmp?(BGN)
+        bgn_transfer_seen = true
+        next false
+      end
+
+      transfer.amount - transfer.amount_reversed > amount_to_reverse_for.call(transfer)
+    end
+
     # First, try and reverse an internal transfer made from gumroad platform account
     # to the connect account, if possible.
     transfer_ids = credit.user.payments.completed
@@ -648,7 +667,7 @@ class StripeChargeProcessor
                          .pluck(:stripe_internal_transfer_id)
     transfer = transfer_ids.compact_blank.lazy
                            .filter_map { |tr_id| Stripe::Transfer.retrieve(tr_id) rescue nil }
-                           .find { |tr| tr.amount - tr.amount_reversed > amount_to_reverse_for.call(tr) }
+                           .find { |tr| reversible.call(tr) }
     if transfer.present?
       transfer_reversal = Stripe::Transfer.create_reversal(transfer.id, { amount: amount_to_reverse_for.call(transfer) })
       refund = credit.fee_retention_refund
@@ -665,9 +684,7 @@ class StripeChargeProcessor
     # Try and find a transfer older than 120 days. As disputes and refunds are not allowed after 120 days, it's safe to
     # reverse these transfers.
     transfers = Stripe::Transfer.list(destination: stripe_account_id, created: { 'lt': 120.days.ago.to_i }, limit: 100)
-    transfer = transfers.find do |tr|
-      tr.present? && (tr.amount - tr.amount_reversed > amount_to_reverse_for.call(tr))
-    end
+    transfer = transfers.find { |tr| tr.present? && reversible.call(tr) }
     if transfer.present?
       transfer_reversal = Stripe::Transfer.create_reversal(transfer.id, { amount: amount_to_reverse_for.call(transfer) })
       refund = credit.fee_retention_refund
@@ -677,7 +694,28 @@ class StripeChargeProcessor
 
       destination_balance_transaction = Stripe::BalanceTransaction.retrieve(destination_refund.balance_transaction,
                                                                             stripe_account: stripe_account_id)
-      destination_balance_transaction.net.abs
+      return destination_balance_transaction.net.abs
+    end
+
+    return unless bgn_transfer_seen
+
+    debit_stripe_account_in_eur_for_refund_fee(credit:, usd_amount_cents:)
+  end
+
+  # Recovery for accounts whose only reversible history settled in BGN: per Stripe's guidance
+  # for those accounts, debit them directly with a EUR transfer to the platform instead.
+  # Returns the debited amount in the merchant account's holding currency; a ledger still
+  # held in BGN (account not yet switched to EUR) gets the exact fixed-rate conversion.
+  def self.debit_stripe_account_in_eur_for_refund_fee(credit:, usd_amount_cents:)
+    eur_amount_cents = usd_cents_to_currency(Currency::EUR, usd_amount_cents)
+    transfer = Stripe::Transfer.create({ amount: eur_amount_cents, currency: Currency::EUR, destination: STRIPE_PLATFORM_ACCOUNT_ID },
+                                       { stripe_account: credit.merchant_account.charge_processor_merchant_id })
+    refund = credit.fee_retention_refund
+    refund.update!(debited_stripe_transfer: transfer.id) if refund.present?
+
+    case credit.merchant_account.currency.to_s.downcase
+    when Currency::EUR then eur_amount_cents
+    when BGN then (BigDecimal(eur_amount_cents) * BGN_PER_EUR).round
     end
   end
 

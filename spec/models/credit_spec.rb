@@ -424,6 +424,74 @@ describe Credit do
         Credit.create_for_refund_fee_retention!(refund:)
       end.not_to change { refund.purchase.seller.comments.count }
     end
+
+    # The retention runs after the refund has committed and the buyer has their money back,
+    # so a Stripe failure must leave a durable ledger entry and a retry that only finishes
+    # the Stripe side — never a second retention and never a second Stripe debit.
+    describe "when the Stripe debit fails for a Gumroad-controlled non-US account" do
+      let!(:merchant_account) { create(:merchant_account, user: creator, country: "AE") }
+      let(:stripe_error) { Stripe::InvalidRequestError.new("Transfer reversals in BGN are no longer supported", nil) }
+
+      before do
+        allow(ErrorNotifier).to receive(:notify)
+      end
+
+      it "books the retained fee locally, reports the failure, and leaves the Stripe debit for a retry" do
+        expect(StripeChargeProcessor).to receive(:debit_stripe_account_for_refund_fee).with(credit: an_instance_of(Credit)).and_raise(stripe_error)
+
+        credit = Credit.create_for_refund_fee_retention!(refund:)
+
+        expect(credit).to be_persisted
+        expect(credit.amount_cents).to eq(-33)
+        expect(credit.balance_transaction.issued_amount_net_cents).to eq(-33)
+        expect(credit.balance_transaction.holding_amount_net_cents).to eq(-33)
+        expect(refund.reload.retained_fee_cents).to eq(33)
+        expect(refund.debited_stripe_transfer).to be_nil
+        expect(creator.reload.unpaid_balance_cents).to eq(-33)
+        expect(ErrorNotifier).to have_received(:notify).with(stripe_error, hash_including(context: hash_including(refund_id: refund.id)))
+      end
+
+      it "retries only the Stripe debit when called again, and stops once the debit is recorded" do
+        attempts = 0
+        allow(StripeChargeProcessor).to receive(:debit_stripe_account_for_refund_fee) do |credit:|
+          attempts += 1
+          raise stripe_error if attempts == 1
+
+          credit.fee_retention_refund.update!(debited_stripe_transfer: "trr_retry")
+          33
+        end
+
+        credit = Credit.create_for_refund_fee_retention!(refund:)
+        expect(refund.reload.debited_stripe_transfer).to be_nil
+
+        expect do
+          expect(Credit.create_for_refund_fee_retention!(refund:)).to eq(credit)
+        end.not_to change { [Credit.count, BalanceTransaction.count, creator.reload.unpaid_balance_cents] }
+        expect(refund.reload.debited_stripe_transfer).to eq("trr_retry")
+
+        expect(Credit.create_for_refund_fee_retention!(refund:)).to eq(credit)
+        expect(attempts).to eq(2)
+      end
+    end
+
+    describe "when re-run for a Gumroad-controlled US account" do
+      let!(:merchant_account) { create(:merchant_account, user: creator, country: "US") }
+
+      it "records the debit transfer on the refund and does not debit Stripe a second time" do
+        allow(Stripe::Account).to receive(:retrieve).and_return(double(id: "acct_platform"))
+        expect(Stripe::Transfer).to receive(:create)
+                                      .with({ amount: 33, currency: "usd", destination: "acct_platform" }, { stripe_account: merchant_account.charge_processor_merchant_id })
+                                      .once
+                                      .and_return(double(id: "tr_us_fee_1"))
+
+        credit = Credit.create_for_refund_fee_retention!(refund:)
+        expect(refund.reload.debited_stripe_transfer).to eq("tr_us_fee_1")
+
+        expect do
+          expect(Credit.create_for_refund_fee_retention!(refund:)).to eq(credit)
+        end.not_to change { [Credit.count, creator.reload.unpaid_balance_cents] }
+      end
+    end
   end
 
   describe "create_for_balance_change_on_stripe_account!" do

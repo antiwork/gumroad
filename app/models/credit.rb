@@ -291,7 +291,17 @@ class Credit < ApplicationRecord
     credit
   end
 
+  # Idempotent: runs after the refund has committed (the processor has already returned the
+  # buyer's money), so it must be safe to call again when an earlier attempt failed part way.
+  # The ledger rows are booked in one transaction, so an existing retention credit means the
+  # only thing that can still be outstanding is the Stripe debit.
   def self.create_for_refund_fee_retention!(refund:)
+    existing_credit = where(fee_retention_refund: refund, failed_refund_id: nil).first
+    if existing_credit.present?
+      debit_stripe_account_for_retained_fee(existing_credit)
+      return existing_credit
+    end
+
     # We retain the payment processor fee (2.9% + 30c) and the Gumroad fee (10% + any discover fee) in case of refunds.
     # For Stripe Connect sales, the application fee includes the Gumroad fee, the VAT/sales tax,
     # and the affiliate credit. We debit connected accounts for the full application fee, so we add a positive credit
@@ -308,23 +318,26 @@ class Credit < ApplicationRecord
       credit.amount_cents = (application_fee_refundable_portion * (refund.amount_cents.to_f / purchase.price_cents)).round
       credit.merchant_account = MerchantAccount.gumroad(StripeChargeProcessor.charge_processor_id)
       credit.fee_retention_refund = refund
-      credit.save!
 
-      balance_transaction_amount = BalanceTransaction::Amount.new(
-        currency: Currency::USD,
-        gross_cents: credit.amount_cents,
-        net_cents: credit.amount_cents
-      )
-      balance_transaction = BalanceTransaction.create!(
-        user: credit.user,
-        merchant_account: credit.merchant_account,
-        credit:,
-        issued_amount: balance_transaction_amount,
-        holding_amount: balance_transaction_amount
-      )
+      transaction do
+        credit.save!
 
-      credit.balance = balance_transaction.balance
-      credit.save!
+        balance_transaction_amount = BalanceTransaction::Amount.new(
+          currency: Currency::USD,
+          gross_cents: credit.amount_cents,
+          net_cents: credit.amount_cents
+        )
+        balance_transaction = BalanceTransaction.create!(
+          user: credit.user,
+          merchant_account: credit.merchant_account,
+          credit:,
+          issued_amount: balance_transaction_amount,
+          holding_amount: balance_transaction_amount
+        )
+
+        credit.balance = balance_transaction.balance
+        credit.save!
+      end
 
       return credit
     end
@@ -344,51 +357,77 @@ class Credit < ApplicationRecord
     end
     credit.merchant_account = refund.purchase.merchant_account
     credit.fee_retention_refund = refund
-    credit.save!
-
-    refund.retained_fee_cents = credit.amount_cents.abs
-    refund.save!
 
     reversed_amount_cents_in_usd = credit.amount_cents
     reversed_amount_cents_in_holding_currency = credit.usd_cents_to_currency(credit.merchant_account.currency, credit.amount_cents)
 
-    # For Stripe sales that use a gumroad-managed custom connect account, we debit the Stripe account for the fee amount.
-    if credit.merchant_account.holder_of_funds == HolderOfFunds::STRIPE && credit.merchant_account.country == Compliance::Countries::USA.alpha2
-      # For gumroad-controlled Stripe accounts from the US, we can make new debit transfers.
-      # So we transfer the retained fee back to Gumroad's Stripe platform account.
-      Stripe::Transfer.create({ amount: credit.amount_cents.abs, currency: "usd", destination: Stripe::Account.retrieve.id, },
-                              { stripe_account: credit.merchant_account.charge_processor_merchant_id })
-    elsif credit.merchant_account.holder_of_funds == HolderOfFunds::STRIPE
-      # For non-US gumroad-controlled Stripe accounts, we cannot make debit transfers.
-      # So we try and reverse the retained fee amount from one of the old transfers made to that Stripe account.
-      net_amount_on_stripe_in_holding_currency = StripeChargeProcessor.debit_stripe_account_for_refund_fee(credit:)
-      reversed_amount_cents_in_holding_currency = -net_amount_on_stripe_in_holding_currency if net_amount_on_stripe_in_holding_currency.present?
+    # Debit Stripe before booking the ledger rows: the debit records its transfer id on the
+    # refund the moment it succeeds, so a retry after a failed ledger write skips Stripe
+    # instead of debiting the account twice.
+    net_amount_on_stripe_in_holding_currency = debit_stripe_account_for_retained_fee(credit)
+    reversed_amount_cents_in_holding_currency = -net_amount_on_stripe_in_holding_currency if net_amount_on_stripe_in_holding_currency.present?
+
+    transaction do
+      credit.save!
+
+      refund.retained_fee_cents = credit.amount_cents.abs
+      refund.save!
+
+      balance_transaction_amount = BalanceTransaction::Amount.new(
+        currency: Currency::USD,
+        gross_cents: reversed_amount_cents_in_usd,
+        net_cents: reversed_amount_cents_in_usd
+      )
+
+      balance_transaction_holding_amount = BalanceTransaction::Amount.new(
+        currency: credit.merchant_account.currency,
+        gross_cents: reversed_amount_cents_in_holding_currency,
+        net_cents: reversed_amount_cents_in_holding_currency
+      )
+
+      balance_transaction = BalanceTransaction.create!(
+        user: credit.user,
+        merchant_account: credit.merchant_account,
+        credit:,
+        issued_amount: balance_transaction_amount,
+        holding_amount: balance_transaction_holding_amount
+      )
+
+      credit.balance = balance_transaction.balance
+      credit.save!
     end
-
-    balance_transaction_amount = BalanceTransaction::Amount.new(
-      currency: Currency::USD,
-      gross_cents: reversed_amount_cents_in_usd,
-      net_cents: reversed_amount_cents_in_usd
-    )
-
-    balance_transaction_holding_amount = BalanceTransaction::Amount.new(
-      currency: credit.merchant_account.currency,
-      gross_cents: reversed_amount_cents_in_holding_currency,
-      net_cents: reversed_amount_cents_in_holding_currency
-    )
-
-    balance_transaction = BalanceTransaction.create!(
-      user: credit.user,
-      merchant_account: credit.merchant_account,
-      credit:,
-      issued_amount: balance_transaction_amount,
-      holding_amount: balance_transaction_holding_amount
-    )
-
-    credit.balance = balance_transaction.balance
-    credit.save!
     credit
   end
+
+  # For Stripe sales that use a gumroad-managed custom connect account, pull the retained fee
+  # out of that Stripe account. Best effort: the ledger is booked whether or not this
+  # succeeds, a failure is reported and left for a retry, and the transfer id recorded on
+  # the refund makes a second call a no-op. Returns the amount taken from the Stripe balance
+  # in the account's currency, or nil when the ledger has to fall back to the converted fee.
+  def self.debit_stripe_account_for_retained_fee(credit)
+    merchant_account = credit.merchant_account
+    refund = credit.fee_retention_refund
+    return unless merchant_account.holder_of_funds == HolderOfFunds::STRIPE
+    return if refund.debited_stripe_transfer.present?
+
+    if merchant_account.country == Compliance::Countries::USA.alpha2
+      # For gumroad-controlled Stripe accounts from the US, we can make new debit transfers.
+      # So we transfer the retained fee back to Gumroad's Stripe platform account.
+      transfer = Stripe::Transfer.create({ amount: credit.amount_cents.abs, currency: "usd", destination: Stripe::Account.retrieve.id, },
+                                         { stripe_account: merchant_account.charge_processor_merchant_id })
+      refund.update!(debited_stripe_transfer: transfer.id)
+      nil
+    else
+      # For non-US gumroad-controlled Stripe accounts, we cannot make debit transfers.
+      # So we try and reverse the retained fee amount from one of the old transfers made to that Stripe account.
+      StripeChargeProcessor.debit_stripe_account_for_refund_fee(credit:)
+    end
+  rescue StandardError => e
+    Rails.logger.error("Failed to debit Stripe account for the retained fee of refund #{refund.id}: #{e.class}: #{e.message}")
+    ErrorNotifier.notify(e, context: { refund_id: refund.id, purchase_id: refund.purchase_id, merchant_account_id: merchant_account.id })
+    nil
+  end
+  private_class_method :debit_stripe_account_for_retained_fee
 
   # Give back the fee that create_for_refund_fee_retention! retained, because the
   # refund it was retained for later FAILED (async bank-transfer refunds can be
