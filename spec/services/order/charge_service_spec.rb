@@ -1634,6 +1634,92 @@ describe Order::ChargeService, :vcr do
       expect(service.params).not_to have_key(:stripe_setup_intent_id)
     end
 
+    it "registers the India e-mandate in the quoted presentment currency, capped to cover the group's locked total" do
+      order = create(:order)
+      merchant_account = create(:merchant_account_stripe_connect, user: seller_1)
+      purchase = create(:purchase,
+                        link: product_1,
+                        seller: seller_1,
+                        merchant_account:,
+                        purchase_state: "in_progress",
+                        is_multi_buy: true,
+                        total_transaction_cents: 10_00)
+      chargeable = instance_double(Chargeable, requires_mandate?: true, stripe_setup_intent_id: nil)
+      allow(chargeable).to receive(:stripe_setup_intent_id=)
+      setup_intent = SetupIntent.new
+      setup_intent.id = "seti_india_quote"
+      allow(setup_intent).to receive_messages(succeeded?: false, requires_action?: true)
+      captured_mandate_options = nil
+      allow(ChargeProcessor).to receive(:setup_future_charges!) do |_account, _chargeable, mandate_options:|
+        captured_mandate_options = mandate_options
+        setup_intent
+      end
+      decision = Checkout::BuyerCurrencyEligibility::Decision.new(eligible: true, currency: Currency::INR, fallback_reason: nil, direct_listed_amount: nil)
+      allow(Checkout::BuyerCurrencyEligibility).to receive(:new)
+        .with(hash_including(setup_future_charges: false, off_session: true))
+        .and_return(instance_double(Checkout::BuyerCurrencyEligibility, decision:))
+      # 10_00 USD cents at this rate converts to 833_34 INR cents (ceil), below the quote's
+      # locked presentment total — the cap must be raised to cover the charge itself.
+      locked_quote = Checkout::BuyerCurrencyQuote::Result.new(
+        currency: Currency::INR,
+        fx_rate: BigDecimal("0.012"),
+        presentment_total_cents: 850_00
+      )
+      captured_verify_kwargs = nil
+      expect(Checkout::BuyerCurrencyQuote).to receive(:verify!) do |**kwargs|
+        captured_verify_kwargs = kwargs
+        locked_quote
+      end
+      service = described_class.new(order:, params: { buyer_currency_quote: "quote-token" })
+      allow(service).to receive(:mandate_options_for_stripe).and_return(
+        { payment_method_options: { card: { mandate_options: { amount: 10_00, currency: Currency::USD } } } }
+      )
+
+      service.send(:create_charge_for_seller_purchases, [purchase], chargeable, true, false)
+
+      # The mandate is held to this group's own totals — the same equality the resume
+      # charge's Charge::CreateService enforces when it locks the quote again.
+      expect(captured_verify_kwargs).to include(
+        token: "quote-token",
+        currency: Currency::INR,
+        canonical_total_cents: 10_00,
+        canonical_line_items: [{ permalink: product_1.unique_permalink, total_cents: 10_00 }]
+      )
+      mandate = captured_mandate_options.dig(:payment_method_options, :card, :mandate_options)
+      expect(mandate[:currency]).to eq(Currency::INR)
+      expect(mandate[:amount]).to eq(850_00)
+      expect(purchase.reload.processor_setup_intent_id).to eq("seti_india_quote")
+    end
+
+    it "fails the group closed without registering a mandate when the buyer currency quote is invalid" do
+      order = create(:order)
+      merchant_account = create(:merchant_account_stripe_connect, user: seller_1)
+      purchase = create(:purchase,
+                        link: product_1,
+                        seller: seller_1,
+                        merchant_account:,
+                        purchase_state: "in_progress",
+                        is_multi_buy: true,
+                        total_transaction_cents: 10_00)
+      chargeable = instance_double(Chargeable, requires_mandate?: true, stripe_setup_intent_id: nil)
+      decision = Checkout::BuyerCurrencyEligibility::Decision.new(eligible: true, currency: Currency::INR, fallback_reason: nil, direct_listed_amount: nil)
+      allow(Checkout::BuyerCurrencyEligibility).to receive(:new)
+        .and_return(instance_double(Checkout::BuyerCurrencyEligibility, decision:))
+      allow(Checkout::BuyerCurrencyQuote).to receive(:verify!)
+        .and_raise(Checkout::BuyerCurrencyQuote::InvalidToken, "total mismatch")
+      service = described_class.new(order:, params: { buyer_currency_quote: "quote-token" })
+      allow(service).to receive(:mandate_options_for_stripe).and_return(
+        { payment_method_options: { card: { mandate_options: { amount: 10_00, currency: Currency::USD } } } }
+      )
+
+      expect(ChargeProcessor).not_to receive(:setup_future_charges!)
+      expect(Charge::CreateService).not_to receive(:new)
+      service.send(:create_charge_for_seller_purchases, [purchase], chargeable, true, false)
+
+      expect(purchase.error_code).to eq(PurchaseErrorCode::BUYER_CURRENCY_QUOTE_INVALID)
+      expect(purchase.errors[:base]).to include(Charge::CreateService::BUYER_CURRENCY_QUOTE_INVALID_MESSAGE)
+    end
+
     it "fails the purchase with an actionable error when India e-mandate setup neither succeeds nor requires action" do
       order = create(:order)
       merchant_account = create(:merchant_account_stripe_connect, user: seller_1)

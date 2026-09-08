@@ -311,6 +311,72 @@ class Order::ChargeService
     end
   end
 
+  # Locks the buyer-currency quote for an India off-session group BEFORE its mandate is
+  # registered, holding the token to the same eligibility and per-charge equality checks
+  # Charge::CreateService enforces when the group is charged (possibly only after the buyer's
+  # 3DS, via Order::ConfirmService — hence setup_future_charges: false, off_session: true,
+  # matching that resume call). Fails closed (returns false) on an invalid token so the buyer
+  # is never asked to authenticate a mandate whose charge is already doomed; returns nil with
+  # no token, keeping the canonical USD mandate.
+  def locked_off_session_mandate_quote(purchases:, merchant_account:, chargeable:, amount_cents:)
+    quote_token = params[:buyer_currency_quote].presence
+    return if quote_token.blank?
+
+    seller = purchases.first.seller
+    decision = Checkout::BuyerCurrencyEligibility.new(
+      order:,
+      seller:,
+      merchant_account:,
+      chargeable:,
+      purchases:,
+      params:,
+      setup_future_charges: false,
+      off_session: true
+    ).decision
+    raise Checkout::BuyerCurrencyQuote::InvalidToken, "mandate-registration eligibility fallback (#{decision.fallback_reason})" unless decision.eligible?
+    raise Checkout::BuyerCurrencyQuote::InvalidToken, "direct-listed presentment with a quote token present" if decision.direct_listed_amount?
+    # Same gate as Charge::CreateService#mandate_options_in_charge_currency: a currency Stripe
+    # cannot register an India mandate in must not silently keep a USD mandate here, because
+    # the resume charge would still present in that currency and mismatch it.
+    unless StripeChargeProcessor.indian_card_mandate_currency_supported?(decision.currency)
+      raise Checkout::BuyerCurrencyQuote::InvalidToken, "unsupported India card mandate currency: #{decision.currency}"
+    end
+
+    Checkout::BuyerCurrencyQuote.verify!(
+      token: quote_token,
+      seller:,
+      merchant_account:,
+      currency: decision.currency,
+      canonical_total_cents: amount_cents,
+      canonical_line_items: purchases.filter_map do |purchase|
+        next if purchase.total_transaction_cents.zero?
+
+        { permalink: purchase.link.unique_permalink, total_cents: purchase.total_transaction_cents }
+      end,
+      later_charge_canonical_line_items: Purchase::FixLaterChargePresentmentService.canonical_line_items_for(purchases)
+    )
+  rescue Checkout::BuyerCurrencyQuote::InvalidToken => e
+    Rails.logger.info("Buyer currency mandate quote rejected for order #{order.id}: #{e.message}")
+    purchases.each do |purchase|
+      purchase.errors.add(:base, Charge::CreateService::BUYER_CURRENCY_QUOTE_INVALID_MESSAGE)
+      purchase.error_code = PurchaseErrorCode::BUYER_CURRENCY_QUOTE_INVALID
+    end
+    false
+  end
+
+  def off_session_mandate_options_in_quote_currency(mandate_options, locked_quote)
+    return mandate_options if locked_quote.blank?
+
+    converted = mandate_options_in_setup_currency(mandate_options, locked_quote)
+    inner = converted&.dig(:payment_method_options, :card, :mandate_options)
+    return converted if inner.blank? || inner[:currency] != locked_quote.currency
+
+    # The group's charge bills exactly the quote's locked presentment total; the cap's own
+    # conversion rounding must never leave it below that or Stripe declines the group's debit.
+    capped = inner.merge(amount: [inner[:amount], locked_quote.presentment_total_cents.to_i].max)
+    converted.deep_merge(payment_method_options: { card: { mandate_options: capped } })
+  end
+
   def create_charge_for_seller_purchases(purchases, chargeable, off_session, setup_future_charges)
     purchases_to_charge = purchases.reject do |purchase|
       purchase.is_free_trial_purchase? || purchase.is_preorder_authorization? || purchase.is_test_purchase? ||
@@ -336,6 +402,14 @@ class Order::ChargeService
         setup_mandate_options = mandate_options_for_stripe(purchases: (purchases_to_charge | mandate_purchases), with_currency: true)
         setup_mandate_cap = setup_mandate_options&.dig(:payment_method_options, :card, :mandate_options)
         setup_mandate_cap[:amount] = [setup_mandate_cap[:amount], amount_cents].max if setup_mandate_cap
+        if chargeable.stripe_setup_intent_id.blank?
+          # With a quote token the group's charge presents in the quoted currency, and Stripe
+          # requires the mandate registered on the SetupIntent to match the PaymentIntent's
+          # currency — a USD mandate would fail the resume charge after the buyer's 3DS.
+          locked_quote = locked_off_session_mandate_quote(purchases: purchases_to_charge, merchant_account:, chargeable:, amount_cents:)
+          return if locked_quote == false
+          setup_mandate_options = off_session_mandate_options_in_quote_currency(setup_mandate_options, locked_quote)
+        end
         register_india_mandate_for_off_session_cart!(purchases_to_charge, chargeable, merchant_account, setup_mandate_options)
         return if setup_intent&.requires_action? || purchases_to_charge.any? { |purchase| purchase.errors.present? }
       end
