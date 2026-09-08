@@ -4006,7 +4006,7 @@ describe StripeChargeProcessor, :vcr do
 
         # 1000 USD cents * 1.33 = 1330 CAD cents, not the raw USD figure.
         transfer_reversal = stub_reversal_follow_up_calls(transfer_reversal_id: "trr_1", net: -1330)
-        expect(Stripe::Transfer).to receive(:create_reversal).with("tr_cad_1", { amount: 1330 }).and_return(transfer_reversal)
+        expect(Stripe::Transfer).to receive(:create_reversal).with("tr_cad_1", { amount: 1330 }, hash_including(:idempotency_key)).and_return(transfer_reversal)
 
         expect(described_class.debit_stripe_account_for_refund_fee(credit:)).to eq(1330)
         expect(credit.fee_retention_refund.reload.debited_stripe_transfer).to eq("trr_1")
@@ -4029,7 +4029,7 @@ describe StripeChargeProcessor, :vcr do
         expect(Stripe::Transfer).to receive(:retrieve).with("tr_cad_big").and_return(big_transfer)
 
         transfer_reversal = stub_reversal_follow_up_calls(transfer_reversal_id: "trr_2", net: -1330)
-        expect(Stripe::Transfer).to receive(:create_reversal).with("tr_cad_big", { amount: 1330 }).and_return(transfer_reversal)
+        expect(Stripe::Transfer).to receive(:create_reversal).with("tr_cad_big", { amount: 1330 }, hash_including(:idempotency_key)).and_return(transfer_reversal)
 
         expect(described_class.debit_stripe_account_for_refund_fee(credit:)).to eq(1330)
       end
@@ -4043,7 +4043,7 @@ describe StripeChargeProcessor, :vcr do
                                       .and_return([old_transfer])
 
         transfer_reversal = stub_reversal_follow_up_calls(transfer_reversal_id: "trr_3", net: -1330)
-        expect(Stripe::Transfer).to receive(:create_reversal).with("tr_cad_old", { amount: 1330 }).and_return(transfer_reversal)
+        expect(Stripe::Transfer).to receive(:create_reversal).with("tr_cad_old", { amount: 1330 }, hash_including(:idempotency_key)).and_return(transfer_reversal)
 
         expect(described_class.debit_stripe_account_for_refund_fee(credit:)).to eq(1330)
         expect(credit.fee_retention_refund.reload.debited_stripe_transfer).to eq("trr_3")
@@ -4059,7 +4059,7 @@ describe StripeChargeProcessor, :vcr do
         expect(Stripe::Transfer).to receive(:retrieve).with("tr_usd_1").and_return(transfer)
 
         transfer_reversal = stub_reversal_follow_up_calls(transfer_reversal_id: "trr_4", net: -1330)
-        expect(Stripe::Transfer).to receive(:create_reversal).with("tr_usd_1", { amount: 1000 }).and_return(transfer_reversal)
+        expect(Stripe::Transfer).to receive(:create_reversal).with("tr_usd_1", { amount: 1000 }, hash_including(:idempotency_key)).and_return(transfer_reversal)
 
         expect(described_class.debit_stripe_account_for_refund_fee(credit:)).to eq(1330)
       end
@@ -4095,8 +4095,10 @@ describe StripeChargeProcessor, :vcr do
         expect(Stripe::Transfer).to receive(:retrieve).with("tr_eur_1").and_return(double(id: "tr_eur_1", amount: 2000, amount_reversed: 0, currency: "eur"))
 
         transfer_reversal = double(id: "trr_eur_1", destination_payment_refund: "re_eur_1")
-        expect(Stripe::Transfer).not_to receive(:create_reversal).with("tr_bgn_1", anything)
-        expect(Stripe::Transfer).to receive(:create_reversal).with("tr_eur_1", { amount: 920 }).and_return(transfer_reversal)
+        expect(Stripe::Transfer).not_to receive(:create_reversal).with("tr_bgn_1", anything, anything)
+        expect(Stripe::Transfer).to receive(:create_reversal)
+                                      .with("tr_eur_1", { amount: 920 }, hash_including(:idempotency_key))
+                                      .and_return(transfer_reversal)
         expect(Stripe::Transfer).not_to receive(:create)
         expect(Stripe::Refund).to receive(:retrieve)
                                     .with("re_eur_1", hash_including(stripe_account: @bg_merchant_account.charge_processor_merchant_id))

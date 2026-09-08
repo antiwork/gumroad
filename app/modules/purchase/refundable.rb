@@ -687,19 +687,16 @@ class Purchase
     def debit_processor_fee_from_merchant_account!(refund)
       return if refund.blank?
 
-      # Serialize against HandleFailedRefundService (same purchase → refund lock order).
-      # Only the eligibility check holds the locks: wrapping Stripe + ledger here would
-      # roll back debited_stripe_transfer when ledger creation failed after a successful
-      # Stripe debit, and a retry would debit the seller again.
-      fee_reversed = false
+      # Serialize against HandleFailedRefundService (same purchase → refund lock order)
+      # through local ledger booking. Debit markers are written in requires_new
+      # transactions, so a ledger failure here cannot erase proof Stripe already debited.
       transaction do
         reload.lock!
         refund.reload.lock!
-        fee_reversed = refund.balance_reversed_on_failure.present?
+        unless refund.balance_reversed_on_failure
+          Credit.create_for_refund_fee_retention!(refund:)
+        end
       end
-      return if fee_reversed
-
-      Credit.create_for_refund_fee_retention!(refund:)
     rescue StandardError => e
       logger.error "Failed to retain the fee for refund #{refund.id} of purchase #{id}: #{e.class}: #{e.message}"
       ErrorNotifier.notify(

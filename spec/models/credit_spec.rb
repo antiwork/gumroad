@@ -446,7 +446,7 @@ describe Credit do
         expect(credit.balance_transaction.issued_amount_net_cents).to eq(-33)
         expect(credit.balance_transaction.holding_amount_net_cents).to eq(-33)
         expect(refund.reload.retained_fee_cents).to eq(33)
-        expect(refund.debited_stripe_transfer).to be_nil
+        expect(refund.debited_stripe_transfer).to eq(Credit::FEE_DEBIT_PENDING_RETRY)
         expect(creator.reload.unpaid_balance_cents).to eq(-33)
         expect(ErrorNotifier).to have_received(:notify).with(stripe_error, hash_including(context: hash_including(refund_id: refund.id)))
       end
@@ -462,7 +462,7 @@ describe Credit do
         end
 
         credit = Credit.create_for_refund_fee_retention!(refund:)
-        expect(refund.reload.debited_stripe_transfer).to be_nil
+        expect(refund.reload.debited_stripe_transfer).to eq(Credit::FEE_DEBIT_PENDING_RETRY)
 
         expect do
           expect(Credit.create_for_refund_fee_retention!(refund:)).to eq(credit)
