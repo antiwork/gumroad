@@ -11,7 +11,9 @@ WEB_COMMAND ?= "/usr/local/bin/gosu app docker/web/server.sh"
 NEW_WEB_TAG ?= $(shell git rev-parse --short=12 HEAD)
 COMPOSE_PROJECT_NAME ?= web
 RUBY_VERSION := $(shell cat .ruby-version)
-WEB_BASE_DOCKERFILE_FROM ?= ruby:$(RUBY_VERSION)-slim-bullseye
+# Debian 12. An EOL Debian stops having its security metadata re-signed, which
+# breaks `apt-get update` in every image built on it -- bump before June 2028.
+WEB_BASE_DOCKERFILE_FROM ?= ruby:$(RUBY_VERSION)-slim-bookworm
 DOCKER_CMD ?= docker
 # Overridable so CI can swap in `docker buildx build --load` (BuildKit) while
 # local/fallback builds keep the classic builder. --compress lives here because

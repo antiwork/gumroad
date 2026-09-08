@@ -11,8 +11,7 @@ FROM ${WEB_BASE_DOCKERFILE_FROM}
 RUN mkdir -p /usr/share/man/man1
 
 # chrome
-RUN sed -i "s/bullseye main/bullseye main contrib non-free/" /etc/apt/sources.list \
-  && apt-get update -y -qq \
+RUN apt-get update -y -qq \
   && apt-get install -yq --no-install-recommends \
     ca-certificates \
     curl \
@@ -30,7 +29,7 @@ RUN sed -i "s/bullseye main/bullseye main contrib non-free/" /etc/apt/sources.li
     libtag1-dev \
     libxrender1 \
     locales \
-    netcat \
+    netcat-openbsd \
     pdftk \
     qpdf \
     screen \
