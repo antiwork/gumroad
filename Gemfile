@@ -141,6 +141,12 @@ gem "mysql2", ">= 0.5.6"
 # Pinned to 0.11.x: pre-1.0, and its SQL matchers decide primary vs. replica, so a
 # minor bump can silently re-route queries. spec/config/mysql2_proxy_semantics_spec.rb
 # asserts on its internals and would go quietly stale rather than fail.
+#
+# Do NOT widen this to the gem's own railtie. It pulls in Railties::RackMiddleware,
+# which unconditionally inserts a middleware that writes an `arpa_context` cookie on
+# every response — a Set-Cookie on product and marketing pages makes Cloudflare bypass
+# the edge cache (gp#1252). We do not need it: stickiness is per-thread here, and web
+# has no reading pool at all. Rakefile loads the gem's rake helper on its own.
 gem "active_record_proxy_adapters", "~> 0.11.1", require: "active_record_proxy_adapters/railties/mysql2"
 gem "nokogiri", "~> 1.19"
 gem "omniauth-apple", "~> 1.3"

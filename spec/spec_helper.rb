@@ -209,9 +209,8 @@ module ResilientFixtureTeardown
       clean = pools.map do |pool|
         pool.unpin_connection!
       rescue StandardError => e
-        # unpin_connection! rolls back and releases the pinned connection's lock
-        # itself; a failure here means the transaction state is unknown.
         Rails.logger.warn("[RSpec] fixture unpin failed: #{e.message}")
+        discard_pinned_connections(pool)
         false
       end
       invalidate_already_loaded_fixtures unless clean.all?
@@ -219,10 +218,30 @@ module ResilientFixtureTeardown
       teardown_shared_connection_pool
     else
       ActiveRecord::FixtureSet.reset_cache
+      invalidate_already_loaded_fixtures
     end
 
     ActiveRecord::Base.connection_handler.clear_active_connections!(:all)
   end
+
+  private
+    # unpin_connection! clears @pinned_connection *before* it rolls back, so a failure
+    # inside it leaves the connection pinned, thread-locked and never checked in — and
+    # the next example's pin_connection! finds it through the thread's lease and opens a
+    # transaction on top of the unknown state. Its transaction state is unrecoverable at
+    # this point, so throw the connection away and let the pool make a fresh one.
+    def discard_pinned_connections(pool)
+      pool.connections.each do |connection|
+        next unless connection.pinned
+
+        connection.pinned = false
+        connection.lock_thread = nil
+        pool.remove(connection)
+        connection.disconnect!
+      end
+    rescue StandardError => e
+      Rails.logger.warn("[RSpec] fixture connection discard failed: #{e.message}")
+    end
 end
 ActiveRecord::TestFixtures.prepend(ResilientFixtureTeardown) if BUILDING_ON_CI
 

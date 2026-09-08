@@ -67,6 +67,36 @@ describe WithMaxExecutionTime do
       expect(@timeout_role).to be_nil
     end
 
+    # Every caller of this — payouts, monthly-close reports, blasts, abandoned cart —
+    # predates replica routing. An unreachable replica must cost them the cap on a role
+    # that cannot serve a statement anyway, not the job.
+    it "runs the block with only the writing cap when the reading role cannot be reached" do
+      allow(described_class).to receive(:replica_roles_configured?).and_return(true)
+      writing_connection = double("writing connection")
+      allow(ApplicationRecord).to receive(:connected_to) do |role:, &block|
+        raise ActiveRecord::ConnectionNotEstablished, "replica is down" if role == :reading
+
+        block.call
+      end
+      allow(ApplicationRecord).to receive(:connection).and_return(writing_connection)
+      expect(writing_connection).to receive(:execute).with("select @@max_execution_time").and_return([[300_000]])
+      expect(writing_connection).to receive(:execute).with("set max_execution_time = 5000").ordered
+      expect(writing_connection).to receive(:execute).with("set max_execution_time = 300000").ordered
+
+      expect(described_class.timeout_queries(seconds: 5) { :ran }).to eq(:ran)
+    end
+
+    it "propagates an unreachable writing role" do
+      allow(described_class).to receive(:replica_roles_configured?).and_return(true)
+      allow(ApplicationRecord).to receive(:connected_to).and_raise(ActiveRecord::ConnectionNotEstablished)
+      ran = false
+
+      expect do
+        described_class.timeout_queries(seconds: 5) { ran = true }
+      end.to raise_error(ActiveRecord::ConnectionNotEstablished)
+      expect(ran).to eq(false)
+    end
+
     context "when restoring max_execution_time fails" do
       it "does not mask QueryTimeoutError from the caller" do
         connection = ActiveRecord::Base.connection

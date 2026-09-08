@@ -143,14 +143,20 @@ describe "config/database.yml replica routing" do
     expect(config.fetch("staging").fetch("primary_replica").fetch("host")).to eq(ENV.fetch("DATABASE_HOST"))
   end
 
-  it "ignores retired worker replica hosts in lag monitoring" do
+  # Lag monitoring must stay wider than what database.yml connects to: a host missing from
+  # REPLICAS_HOSTS is a host pt-osc will not throttle against (config/initializers/alterity.rb).
+  # Dropping worker replica 2 as a connection must not drop it from here.
+  it "monitors every configured replica host and never the primary" do
     constants = Rails.root.join("config/initializers/004_constants.rb").read
-    definition = constants[/REPLICAS_HOSTS = .*?(?=\n\n)/m]
+    definition = constants[/^REPLICAS_HOSTS = .*?^end\.[^\n]*$/m]
+    # Fail here rather than eval'ing nil if the initializer is ever reformatted.
+    expect(definition).to be_present, "could not extract REPLICAS_HOSTS from 004_constants.rb"
     hosts = {
       "DATABASE_HOST" => "primary.example",
+      "DATABASE_REPLICA1_HOST" => "primary.example",
+      "DATABASE_REPLICA2_HOST" => "staging.example",
       "DATABASE_WORKER_REPLICA1_HOST" => "worker.example",
-      "DATABASE_WORKER_REPLICA2_HOST" => "retired.example",
-      "DATABASE_REPLICA2_HOST" => "staging.example"
+      "DATABASE_WORKER_REPLICA2_HOST" => "worker-2.example"
     }
     allow(ENV).to receive(:[]).and_call_original
     hosts.each { |key, value| allow(ENV).to receive(:[]).with(key).and_return(value) }
@@ -158,8 +164,7 @@ describe "config/database.yml replica routing" do
     config = Module.new
     config.module_eval(definition)
 
-    expect(config.const_get(:REPLICAS_HOSTS)).to include("worker.example", "staging.example")
-    expect(config.const_get(:REPLICAS_HOSTS)).not_to include("retired.example", "primary.example")
+    expect(config.const_get(:REPLICAS_HOSTS)).to contain_exactly("staging.example", "worker.example", "worker-2.example")
   end
 
   it "keeps branch-app staging on mysql2 without the worker flag" do

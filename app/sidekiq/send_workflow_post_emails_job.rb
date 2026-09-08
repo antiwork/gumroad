@@ -214,6 +214,10 @@ class SendWorkflowPostEmailsJob
         fanout_token: @schedule_intent_fanout_token
       )
       renewed &&= @seller_fanout_lock.nil? || @seller_fanout_lock.renew
+      # No un-pin after these writes. Makara's stickiness lasted the whole job, so the
+      # renewal had to release or the rest of the fanout stayed on the primary; the
+      # proxy's only lasts proxy_delay (2s) out of each FANOUT_HEARTBEAT_INTERVAL (5
+      # minutes), which is not worth an explicit reading role.
       @next_fanout_heartbeat_at = now + WorkflowInstallmentScheduleIntent::FANOUT_HEARTBEAT_INTERVAL.to_f if renewed
       renewed
     end

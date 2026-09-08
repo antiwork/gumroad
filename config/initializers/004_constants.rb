@@ -88,8 +88,14 @@ FILE_REGEX = {
   word_document: /doc/i
 }.stringify_keys
 
-REPLICAS_HOSTS = (1.upto(3).map { |i| ENV["DATABASE_REPLICA#{i}_HOST"] } +
-                  [ENV["DATABASE_WORKER_REPLICA1_HOST"]]).keep_if(&:present?).uniq - [ENV["DATABASE_HOST"]]
+# Lag monitoring (ReplicaLagWatcher) and pt-osc's lag throttle (config/initializers/alterity.rb)
+# both read this, so it stays deliberately wider than what database.yml connects to. Dropping
+# DATABASE_WORKER_REPLICA2 as a *connection* costs no read capacity — it resolves to the same
+# instance as replica 1 — but a host missing from here is a host pt-osc will not wait for, and
+# over-inclusion is free: anything resolving to the primary is subtracted below.
+REPLICAS_HOSTS = 1.upto(3).flat_map do |i|
+  [ENV["DATABASE_REPLICA#{i}_HOST"], ENV["DATABASE_WORKER_REPLICA#{i}_HOST"]]
+end.keep_if(&:present?).uniq - [ENV["DATABASE_HOST"]]
 
 MAX_FILE_NAME_BYTESIZE = 255
 

@@ -13,7 +13,11 @@ class SendWorkflowEmailsToPastCanceledMembersJob
     @schedule_intent_fanout_token = schedule_intent_fanout_token
     rescheduling = old_delayed_delivery_time.present? && cutoff_reference_time.present?
     primary_pinned = minimum_rule_version.present? || schedule_intent_token.present? || schedule_intent_fanout_token.present? || rescheduling
-    installment, workflow, rule = with_primary_database(primary_pinned) do
+    # Assigned inside the block below rather than destructured out of it: the block
+    # closes over these, so a `return` from any of its guard clauses skips the
+    # assignment that a destructure would rely on.
+    installment = workflow = rule = nil
+    with_primary_database(primary_pinned) do
       return unless WorkflowInstallmentScheduleIntent.begin_fanout(
         intent_token: schedule_intent_token,
         fanout_token: schedule_intent_fanout_token
@@ -49,7 +53,6 @@ class SendWorkflowEmailsToPastCanceledMembersJob
       end
       raise RuleNotCommittedError if minimum_rule_version.present? && rule.version < minimum_rule_version
       cache_rule_version(rule)
-      [installment, workflow, rule]
     end
 
     # A reschedule must see cancellations committed alongside the new rule.
@@ -126,6 +129,10 @@ class SendWorkflowEmailsToPastCanceledMembersJob
       now = fanout_heartbeat_time
       return true if now < @next_fanout_heartbeat_at
 
+      # No un-pin after this write. Makara's stickiness lasted the whole job, so the
+      # renewal had to release or the rest of the fanout stayed on the primary; the
+      # proxy's only lasts proxy_delay (2s) out of each FANOUT_HEARTBEAT_INTERVAL (5
+      # minutes), which is not worth an explicit reading role.
       renewed = WorkflowInstallmentScheduleIntent.renew_fanout(
         intent_token: @schedule_intent_token,
         fanout_token: @schedule_intent_fanout_token

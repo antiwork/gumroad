@@ -31,14 +31,18 @@ default: &default
     they expand into the same primary + replica pair as the deployed
     environments, both pointing at the local database, so the routing can be
     exercised outside production — the flag used to abort boot here, which is
-    why Procfile.dev cannot set it.
+    why it had to come out of Procfile.dev.
 
-    Opt-in only, and not for the whole suite: Rails 7.2 pins just the
-    writing-role pool for transactional fixtures
-    (ActiveRecord::TestFixtures#setup_transactional_fixtures uses
-    connection_pool_list(:writing)), so reads served by the reading pool cannot
-    see uncommitted fixture rows. Assert on the role that served a statement,
-    not on the rows it returned. %>
+    Not opt-in for local Sidekiq: Procfile.dev/Procfile.debug set the flag on the
+    sidekiq process, so `foreman start` boots it on mysql2_proxy with two pools
+    against the one local database. The RSpec/Minitest suites leave it unset.
+
+    Assert on the role that served a statement, not on the rows it returned.
+    Not because the reading pool sees stale rows — Rails 7.2's
+    setup_transactional_fixtures calls setup_shared_connection_pool first, which
+    repoints every non-writing role's pool_config at the writing one, so both
+    roles share the fixture transaction's connection. That is exactly why row
+    assertions cannot tell you which role a query would have used in production. %>
 <% replicas_enabled = ENV["USE_DB_WORKER_REPLICAS"] == "true" %>
 <% test_database = ENV.fetch("TEST_DATABASE_NAME", "gumroad_test") %>
 <% if replicas_enabled %>

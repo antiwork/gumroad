@@ -69,7 +69,11 @@ describe SendWorkflowPostEmailsJob, :freeze_time do
 
         job.perform(@post.id, cutoff, false, @post_rule.version)
 
-        expect(phases).to include([:post, true], [:rule, true], [:audience, cutoff.present?], [:enqueue, false])
+        # Every recording for a phase, not just one: `include` would pass a pin that
+        # leaked into half the calls, which is the regression this guards.
+        expect(phases.group_by(&:first).transform_values { |pairs| pairs.map(&:last).uniq }).to eq(
+          post: [true], rule: [true], audience: [cutoff.present?], enqueue: [false]
+        )
       end
     end
 
