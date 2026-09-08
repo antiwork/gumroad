@@ -37,7 +37,7 @@ export const FileUpload = TiptapNode.create({
   },
 });
 
-const FileUploadNodeView = ({ editor, node }: NodeViewProps) => {
+const FileUploadNodeView = ({ editor, node, getPos }: NodeViewProps) => {
   if (!editor.isEditable) {
     return (
       <NodeViewWrapper>
@@ -49,7 +49,7 @@ const FileUploadNodeView = ({ editor, node }: NodeViewProps) => {
   return (
     <NodeActionsWrapper asChild>
       <NodeViewWrapper contentEditable={false} data-input-embed>
-        <NodeActionsMenu editor={editor} />
+        <NodeActionsMenu editor={editor} getPos={getPos} />
         <Placeholder>
           <Button color="primary">
             <ArrowUp pack="filled" className="size-5" />

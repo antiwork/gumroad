@@ -64,6 +64,7 @@ const FileEmbedGroupNodeView = ({
   config,
   extension,
   selected,
+  getPos,
 }: NodeViewProps & { config: FileGroupConfig }) => {
   const [expanded, setExpanded] = React.useState(false);
   const [downloading, setDownloading] = React.useState(false);
@@ -154,6 +155,7 @@ const FileEmbedGroupNodeView = ({
             {editor.isEditable ? (
               <NodeActionsMenu
                 editor={editor}
+                getPos={getPos}
                 actions={[
                   {
                     item: () => (

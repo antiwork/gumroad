@@ -85,7 +85,7 @@ buildkit_fallback_notice() {
 # image, so every agent must converge on the same upstream image or two agents
 # will compute different tags for identical source — and a `build_web` step can
 # then reference a web_base tag nobody pushed (hard build failure). Docker Hub
-# re-tags `*-slim-bullseye` on Debian security rebuilds, so a warm agent's
+# re-tags `*-slim-bookworm` on Debian security rebuilds, so a warm agent's
 # months-old local copy is NOT safe to trust. Always pull; when the local image
 # is already current this is a cheap manifest check, not a re-download. If the
 # pull fails (Hub outage / rate limit) fall back to a present local image

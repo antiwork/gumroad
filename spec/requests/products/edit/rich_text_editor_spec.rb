@@ -1144,6 +1144,38 @@ describe("Product Edit Rich Text Editor", type: :system, js: true) do
       end
     end
 
+    it "deletes the requested file after moving another file into a folder" do
+      target_file = create(:product_file, display_name: "File to delete", link: @product)
+      rich_content.update!(description: rich_content.description + [
+        { "type" => "fileEmbed", "attrs" => { "id" => target_file.external_id, "uid" => SecureRandom.uuid } }
+      ])
+      visit edit_link_path(@product) + "/content"
+
+      within find_embed(name: "First file").hover do
+        select_disclosure "Actions" do
+          click_on "Move to folder..."
+          click_on "Folder 1"
+        end
+      end
+      expect(page).to have_alert(text: 'Moved "First file" to "Folder 1".')
+
+      within find_embed(name: "File to delete").hover do
+        find_button("Actions").click(x: 4, y: 4, offset: :top_left)
+      end
+      page.document.click_on "Delete"
+      expect(page).to_not have_embed(name: "File to delete")
+      toggle_file_group "Folder 1"
+      within_file_group "Folder 1" do
+        expect(page).to have_embed(name: "First file")
+        expect(page).to have_embed(name: "Second file")
+        expect(page).to have_embed(name: "Third file")
+      end
+
+      save_change
+      expect(target_file.reload).to be_deleted
+      expect([file1, file2, file3].map { _1.reload.deleted? }).to eq([false, false, false])
+    end
+
     it "supports moving non-nested file embeds to existing folders" do
       visit edit_link_path(@product) + "/content"
 
