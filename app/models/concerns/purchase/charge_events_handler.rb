@@ -245,9 +245,18 @@ module Purchase::ChargeEventsHandler
         setup_intent = ChargeProcessor.get_setup_intent(purchase.merchant_account, setup_intent_id)
         next unless setup_intent&.succeeded?
 
-        # Do not let an older charge's delayed webhook overwrite a newer account mandate.
         existing_id = card.merchant_scoped_setup_intent_id_for(purchase.merchant_account)
-        next if existing_id.present? && existing_id.to_s != setup_intent_id.to_s
+        if existing_id.present? && existing_id.to_s != setup_intent_id.to_s
+          existing_si = ChargeProcessor.get_setup_intent(purchase.merchant_account, existing_id)
+          existing_amount = existing_si&.card_mandate_options&.[](:amount) ||
+                            existing_si&.card_mandate_options&.[]("amount") ||
+                            existing_si&.card_mandate_options&.try(:amount)
+          new_amount = setup_intent.card_mandate_options&.[](:amount) ||
+                       setup_intent.card_mandate_options&.[]("amount") ||
+                       setup_intent.card_mandate_options&.try(:amount)
+          # Keep a newer/higher mandate; still promote replacements that raise the cap.
+          next if existing_amount.present? && new_amount.present? && existing_amount.to_i >= new_amount.to_i
+        end
 
         card.store_stripe_setup_intent_id!(purchase.merchant_account, setup_intent_id)
       end
