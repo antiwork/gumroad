@@ -30,8 +30,14 @@ describe CurrencyHelper do
       expect(symbol_for(:gbp)).to eq "£"
     end
 
-    it "falls back to USD for unknown currency types" do
-      expect(symbol_for(:xyz)).to eq "$"
+    it "uses the registry symbol for historical currencies" do
+      expect(symbol_for(:dkk)).to eq "kr."
+      expect(symbol_for("dkk")).to eq "kr."
+      expect(symbol_for(:aud)).to eq "A$"
+    end
+
+    it "rejects invalid currencies instead of relabeling them as USD" do
+      expect { symbol_for(:xyz) }.to raise_error(Money::Currency::UnknownCurrency)
     end
   end
 
@@ -99,6 +105,7 @@ describe CurrencyHelper do
       expect(format_just_price_in_cents(799, "aud")).to eq("A$7.99")
       expect(format_just_price_in_cents(799, "gbp")).to eq("£7.99")
       expect(format_just_price_in_cents(799, "jpy")).to eq("¥799")
+      expect(format_just_price_in_cents(1250, "dkk")).to eq("12.50 kr.")
     end
   end
 

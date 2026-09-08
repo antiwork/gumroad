@@ -5,8 +5,11 @@ module MoneyFormatter
 
   def format(amount, currency_type, opts = {})
     amount ||= 0
-    # use the default symbol unless explicitly stated not to use one
-    opts[:symbol] = CURRENCY_CHOICES[currency_type][:symbol] unless opts[:symbol] == false
+    opts[:symbol] = symbol_for(currency_type) unless opts[:symbol] == false
     Money.new(amount, currency_type).format(opts)
+  end
+
+  def symbol_for(currency_type)
+    CURRENCY_CHOICES.dig(currency_type, :symbol) || Money::Currency.new(currency_type).symbol
   end
 end
