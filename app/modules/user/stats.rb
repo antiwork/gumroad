@@ -305,7 +305,7 @@ module User::Stats
   def credits_cents_for_balances(balance_ids)
     scope = credits
       .where(financing_paydown_purchase_id: nil)
-      .where("json_data->>'$.stripe_loan_paydown_id' IS NULL")
+      .where("credits.json_data->>'$.stripe_loan_paydown_id' IS NULL")
       .where(balance_id: balance_ids)
 
     ordinary = scope.where(fee_retention_refund_id: nil).sum("amount_cents")

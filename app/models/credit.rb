@@ -486,12 +486,13 @@ class Credit < ApplicationRecord
         credit.balance = balance_transaction.balance
         credit.save!
 
-        # Fold into refund fee columns when the refund's balance is still unpaid (same
-        # payout cohort, even across multiple unpaid balances). If the refund already
-        # left unpaid, leave retained_fee_cents unset so the later payout shows the credit.
+        # Fold into refund fee columns when the seller's refund balance is still unpaid
+        # (same payout cohort). Ignore affiliate BTs — an unpaid affiliate balance must
+        # not fold a fee that later lands on the seller's next payout.
         if credit.balance&.unpaid?
-          refund_still_unpaid = refund.balance_transactions.none? ||
-            refund.balance_transactions.joins(:balance).where(balances: { state: "unpaid" }).exists?
+          seller_refund_bts = refund.balance_transactions.where(user_id: refund.seller_id)
+          refund_still_unpaid = seller_refund_bts.none? ||
+            seller_refund_bts.joins(:balance).where(balances: { state: "unpaid" }).exists?
           if refund_still_unpaid
             refund.retained_fee_cents = credit.amount_cents.abs
             refund.save!
