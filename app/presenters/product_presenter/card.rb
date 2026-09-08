@@ -9,10 +9,10 @@ class ProductPresenter::Card
     :alive_prices, :product_review_stat, :default_offer_code, :skus,
     {
       tiers: :alive_prices,
-      user: [:avatar_attachment, :avatar_blob, :custom_domain],
+      user: [:custom_domain, { avatar_attachment: { blob: { variant_records: { image_attachment: :blob } } } }],
       variant_categories_alive: :alive_variants,
       thumbnail_alive: { file_attachment: { blob: { variant_records: { image_attachment: :blob } } } },
-      display_asset_previews: [:file_attachment, :file_blob],
+      display_asset_previews: { file_attachment: { blob: { variant_records: { image_attachment: :blob } } } },
       bundle_products: [:variant, { product: [{ variant_categories_alive: :alive_variants }, :tiers] }],
     }
   ]

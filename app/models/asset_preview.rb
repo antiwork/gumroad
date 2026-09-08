@@ -360,6 +360,7 @@ class AssetPreview < ApplicationRecord
 
       # Inline workers finish during enqueue. Re-read so this call and the
       # next one return the same URL.
+      file.blob.variant_records.reset if file.blob.variant_records.loaded?
       variant = retina_variant
       if variant && variant_processed?(variant)
         Rails.cache.fetch("attachment_#{file.id}_retina_url") { variant.url }
@@ -427,7 +428,12 @@ class AssetPreview < ApplicationRecord
     def variant_processed?(variant)
       return false unless ActiveStorage.track_variants
 
-      variant.blob.variant_records.exists?(variation_digest: variant.variation.digest)
+      records = variant.blob.variant_records
+      if records.loaded?
+        records.any? { |record| record.variation_digest == variant.variation.digest }
+      else
+        records.exists?(variation_digest: variant.variation.digest)
+      end
     end
     alias_method :resized_poster_exists?, :variant_processed?
 
