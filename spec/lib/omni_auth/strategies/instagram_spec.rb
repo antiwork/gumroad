@@ -57,27 +57,57 @@ describe OmniAuth::Strategies::Instagram do
     end
   end
 
-  describe "#build_access_token" do
-    it "uses the authorization redirect URI without callback query parameters" do
-      allow(strategy).to receive(:full_host).and_return("https://example.com")
-      allow(strategy).to receive(:instagram_connect_enabled?).and_return(true)
-      strategy.options.callback_path = "/users/auth/instagram/callback"
-      strategy.instance_variable_set(:@env, Rack::MockRequest.env_for("https://example.com/users/auth/instagram").merge("rack.session" => {}))
-
-      _, headers, = strategy.request_phase
-      redirect_uri = Rack::Utils.parse_query(URI(headers["Location"]).query).fetch("redirect_uri")
-      expect(redirect_uri).to eq("https://example.com/users/auth/instagram/callback")
-
-      callback_request = Rack::Request.new(Rack::MockRequest.env_for("#{redirect_uri}?code=authorization-code&state=oauth-state"))
-      allow(strategy).to receive(:request).and_return(callback_request)
-      token_request = stub_request(:post, "https://api.instagram.com/oauth/access_token")
+  describe "#callback_phase" do
+    let(:session) { {} }
+    let(:callback_strategy) { described_class.new(app, "app-id", "app-secret") }
+    let(:redirect_uri) { "https://example.com/users/auth/instagram/callback" }
+    let(:token_request) do
+      stub_request(:post, "https://api.instagram.com/oauth/access_token")
         .to_return(
           headers: { "Content-Type" => "application/json" },
           body: { access_token: "instagram-token", user_id: "123" }.to_json,
         )
+    end
 
-      expect(strategy.send(:build_access_token).token).to eq("instagram-token")
+    before do
+      [strategy, callback_strategy].each do |instance|
+        allow(instance).to receive(:full_host).and_return("https://example.com")
+        allow(instance).to receive(:instagram_connect_enabled?).and_return(true)
+        instance.options.callback_path = "/users/auth/instagram/callback"
+      end
+      strategy.instance_variable_set(:@env, Rack::MockRequest.env_for("https://example.com/users/auth/instagram").merge("rack.session" => session))
+      token_request
+    end
+
+    it "validates state and uses the authorization redirect URI without callback query parameters" do
+      _, headers, = strategy.request_phase
+      authorize_params = Rack::Utils.parse_query(URI(headers["Location"]).query)
+      expect(authorize_params.fetch("redirect_uri")).to eq(redirect_uri)
+      state = authorize_params.fetch("state")
+      expect(state).to be_present
+      expect(session["omniauth.state"]).to eq(state)
+
+      callback_env = Rack::MockRequest.env_for("#{redirect_uri}?#{Rack::Utils.build_query(code: "authorization-code", state:)}").merge("rack.session" => session)
+      callback_strategy.instance_variable_set(:@env, callback_env)
+
+      expect(callback_strategy.callback_phase.first).to eq(200)
+      expect(callback_env["omniauth.auth"].uid).to eq("123")
+      expect(session).not_to have_key("omniauth.state")
       expect(token_request.with(body: hash_including("code" => "authorization-code", "redirect_uri" => redirect_uri))).to have_been_requested.once
+    end
+
+    [nil, "mismatched-state"].each do |state|
+      it "rejects #{state.nil? ? 'missing' : 'mismatched'} state before token exchange" do
+        strategy.request_phase
+        callback_env = Rack::MockRequest.env_for("#{redirect_uri}?#{Rack::Utils.build_query(code: "authorization-code", state:)}").merge("rack.session" => session)
+        callback_strategy.instance_variable_set(:@env, callback_env)
+        allow(OmniAuth.config).to receive(:on_failure).and_return(->(_env) { [401, {}, []] })
+
+        expect(callback_strategy.callback_phase.first).to eq(401)
+        expect(callback_env["omniauth.error.type"]).to eq(:csrf_detected)
+        expect(callback_env).not_to have_key("omniauth.auth")
+        expect(token_request).not_to have_been_requested
+      end
     end
   end
 
