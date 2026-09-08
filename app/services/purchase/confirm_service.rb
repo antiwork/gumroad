@@ -34,6 +34,22 @@ class Purchase::ConfirmService < Purchase::BaseService
       CheckIndianCardMandateRegistrationJob.perform_async(purchase.id)
     end
 
+    # Free trials and preorder authorizations finalize from SetupIntent alone. When a sibling
+    # group's debit is already processing, the browser suppresses stripe_error so charged
+    # groups are not failed — resolve this group's own SetupIntent before marking success.
+    if (purchase.is_free_trial_purchase? || purchase.is_preorder_authorization?) &&
+       purchase.processor_setup_intent_id.present? &&
+       purchase.processor_payment_intent_id.blank?
+      setup_intent = ChargeProcessor.get_setup_intent(purchase.merchant_account, purchase.processor_setup_intent_id)
+      unless setup_intent&.succeeded?
+        purchase.stripe_error_code ||= "setup_intent_authentication_failed"
+        purchase.errors.add(:base, "We couldn't authorize your card for this payment. Please try again or use a different payment method.") if purchase.errors.empty?
+        error_message = purchase.errors.full_messages[0]
+        handle_purchase_failure
+        return error_message
+      end
+    end
+
     if purchase.is_preorder_authorization?
       mark_preorder_authorized
       return

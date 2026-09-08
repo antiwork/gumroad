@@ -367,8 +367,8 @@ class Order::ChargeService
     # prepare! attaches the SI's Connect PM to a connected Customer and includes that customer
     # on the subsequent charge params; use_connected alone leaves an unattached clone.
     chargeable.stripe_setup_intent_id = si.id if chargeable.respond_to?(:stripe_setup_intent_id=)
-    if chargeable.respond_to?(:prepare!)
-      chargeable.prepare!
+    if chargeable.respond_to?(:prepare_with_trusted_setup_intent!)
+      chargeable.prepare_with_trusted_setup_intent!
     elsif chargeable.respond_to?(:use_connected_account_payment_method!)
       chargeable.use_connected_account_payment_method!(si.payment_method_id)
     end

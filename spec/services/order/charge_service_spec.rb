@@ -1856,6 +1856,7 @@ describe Order::ChargeService, :vcr do
       allow(chargeable).to receive(:respond_to?).and_call_original
       allow(chargeable).to receive(:respond_to?).with(:use_connected_account_payment_method!).and_return(true)
       allow(chargeable).to receive(:respond_to?).with(:stripe_setup_intent_id=).and_return(true)
+      allow(chargeable).to receive(:respond_to?).with(:prepare_with_trusted_setup_intent!).and_return(false)
       existing_si = instance_double(StripeSetupIntent,
                                     id: "seti_existing_connect",
                                     succeeded?: true,
@@ -1906,6 +1907,7 @@ describe Order::ChargeService, :vcr do
       allow(chargeable).to receive(:respond_to?).and_call_original
       allow(chargeable).to receive(:respond_to?).with(:use_connected_account_payment_method!).and_return(true)
       allow(chargeable).to receive(:respond_to?).with(:stripe_setup_intent_id=).and_return(true)
+      allow(chargeable).to receive(:respond_to?).with(:prepare_with_trusted_setup_intent!).and_return(false)
       canceled_si = instance_double(StripeSetupIntent,
                                     id: "seti_canceled",
                                     succeeded?: false,

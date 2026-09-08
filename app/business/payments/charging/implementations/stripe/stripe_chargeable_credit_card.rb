@@ -44,19 +44,23 @@ class StripeChargeableCreditCard
       Stripe::PaymentMethod.list({ customer: @customer_id, type: "card" }).data[0].id
 
     if @merchant_account&.is_a_stripe_connect_account?
-      # Renewals and other saved-card charges call prepare! without the order-service binder.
-      # When this chargeable already carries a Connect SetupIntent, reuse that mandate's PM
-      # instead of cloning a mandate-less copy.
-      if bind_connected_setup_intent_payment_method!
-        true
-      else
+      unless @trusted_setup_intent_binding && bind_connected_setup_intent_payment_method!
         prepare_for_direct_charge
         update_card_details
-        true
       end
-    else
-      true
     end
+
+    true
+  end
+
+  # Order services call this only after proving SetupIntent ownership. prepare! itself must not
+  # bind a caller-supplied stripe_setup_intent_id, or a saved legacy scalar could steal another
+  # buyer's connected payment method on an ordinary single-seller purchase.
+  def prepare_with_trusted_setup_intent!
+    @trusted_setup_intent_binding = true
+    prepare!
+  ensure
+    @trusted_setup_intent_binding = false
   end
 
   def reusable_token!(_user)
@@ -103,6 +107,7 @@ class StripeChargeableCreditCard
   end
 
   def bind_connected_setup_intent_payment_method!
+    return false unless @trusted_setup_intent_binding
     return false if @stripe_setup_intent_id.blank? || !@merchant_account&.is_a_stripe_connect_account?
 
     begin

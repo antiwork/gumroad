@@ -183,6 +183,25 @@ class Order::ConfirmService
       end
     end
 
+
+    # Guest one-time India mandates pause without creating a CreditCard. Rebuild a Chargeable
+    # from the SetupIntent's payment method so the resume charge can still run.
+    def chargeable_for_setup_confirmed_resume(reference_purchase, credit_card, merchant_account, setup_intent)
+      return credit_card.to_chargeable(merchant_account:) if credit_card.present?
+
+      payment_method_id = setup_intent.payment_method_id
+      raise "Confirmed SetupIntent is missing a payment method" if payment_method_id.blank?
+
+      stripe_chargeable = StripeChargeablePaymentMethod.new(
+        payment_method_id,
+        customer_id: setup_intent.try(:customer_id),
+        stripe_setup_intent_id: setup_intent.id,
+        zip_code: reference_purchase.zip_code,
+        product_permalink: reference_purchase.link.unique_permalink
+      )
+      Chargeable.new([stripe_chargeable])
+    end
+
     def finalize_setup_charged_purchases!(purchases)
       reference_purchase = purchases.first
       charge_intent = ChargeProcessor.get_charge_intent(
@@ -203,7 +222,10 @@ class Order::ConfirmService
       merchant_account = reference_purchase.merchant_account
       credit_card = reference_purchase.credit_card
       setup_intent_id = reference_purchase.processor_setup_intent_id
-      setup_intent = credit_card.present? ? ChargeProcessor.get_setup_intent(merchant_account, setup_intent_id) : nil
+      # Guest / save_card=false India pauses still store processor_setup_intent_id on the
+      # purchase without a CreditCard row. Resume from that verified SetupIntent instead of
+      # requiring a saved-card record.
+      setup_intent = setup_intent_id.present? ? ChargeProcessor.get_setup_intent(merchant_account, setup_intent_id) : nil
 
       unless setup_intent&.succeeded?
         if setup_intent&.requires_action?
@@ -236,13 +258,17 @@ class Order::ConfirmService
         return
       end
 
-      chargeable = credit_card.to_chargeable(merchant_account:)
+      chargeable = chargeable_for_setup_confirmed_resume(reference_purchase, credit_card, merchant_account, setup_intent)
       # The card's json_data can hold another group's (or an older order's) intent; this
       # group's charge must reference the SetupIntent the buyer just confirmed for it.
-      # prepare! on Connect binds that SI's payment method and attaches it to a connected
+      # Trusted prepare on Connect binds that SI's payment method and attaches it to a connected
       # Customer before the first debit so renewals can reuse the mandate.
       chargeable.stripe_setup_intent_id = setup_intent_id if chargeable.respond_to?(:stripe_setup_intent_id=)
-      chargeable.prepare!
+      if chargeable.respond_to?(:prepare_with_trusted_setup_intent!)
+        chargeable.prepare_with_trusted_setup_intent!
+      else
+        chargeable.prepare!
+      end
 
       create_service = Charge::CreateService.new(
         order:,
@@ -288,7 +314,7 @@ class Order::ConfirmService
         return
       end
 
-      if credit_card.requires_mandate?
+      if credit_card&.requires_mandate?
         existing = credit_card.json_data.to_h
         ids = existing["stripe_setup_intent_ids"].is_a?(Hash) ? existing["stripe_setup_intent_ids"].dup : {}
         account_key = merchant_account.is_a_stripe_connect_account? ? merchant_account.charge_processor_merchant_id : "platform"

@@ -24,6 +24,15 @@ class Chargeable
     @chargeables.values.first.prepare!
   end
 
+  def prepare_with_trusted_setup_intent!
+    chargeable = @chargeables.values.first
+    if chargeable.respond_to?(:prepare_with_trusted_setup_intent!)
+      chargeable.prepare_with_trusted_setup_intent!
+    else
+      chargeable.prepare!
+    end
+  end
+
   def fingerprint
     @chargeables.values.first.fingerprint
   end
