@@ -37,7 +37,10 @@ describe SellerMobileAnalyticsService do
       expect(result[:revenue]).to eq 200
       expect(result[:purchases].sole[:price]).to eq "12.50 XYZ"
       expect(purchase.reload.formatted_display_price).to eq "12.50 XYZ"
-      expect(purchase.as_json[:currency_symbol]).to eq "XYZ"
+      json = purchase.as_json
+      expect(json[:currency_symbol]).to eq "XYZ"
+      expect(json[:amount_refundable_in_currency]).to eq purchase.amount_refundable_in_currency
+      expect(json[:amount_refundable_in_currency]).not_to include("$")
     end
 
     it "returns the proper purchase data for all time" do
