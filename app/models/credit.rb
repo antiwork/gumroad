@@ -828,23 +828,20 @@ class Credit < ApplicationRecord
         )
         adjusted_delta = delta if adjusted_delta.blank?
 
-        unpaid = Balance.where(
+        unpaid_balances = Balance.where(
           user: credit.user,
           merchant_account: credit.merchant_account,
           currency: bt.issued_amount_currency,
           holding_currency:,
           state: "unpaid"
-        ).where.not(id: balance.id).order(date: :asc).first
+        ).where.not(id: balance.id).order(date: :asc).to_a
         # Do not invent a zero-USD / negative-holding unpaid balance: payout validation
         # rejects that as DESTINATION_LEDGER_NEGATIVE. Leave unreconciled until an unpaid
         # balance exists to absorb the correction.
-        if unpaid.blank?
+        if unpaid_balances.blank?
           Rails.logger.error(
             "Skipping fee retention holding reconcile for refund #{refund&.id}: "             "original balance immutable and no unpaid #{holding_currency} balance"
           )
-          # Keep retry eligibility until an unpaid balance can absorb the correction —
-          # without this marker the debit is done and retention_pending is clear, so the
-          # recurring job would never revisit the outstanding holding delta.
           if refund.present?
             refund.update!(
               refund_fee_holding_reconcile_pending: true,
@@ -855,21 +852,22 @@ class Credit < ApplicationRecord
         end
 
         absorbed = false
-        unpaid.with_lock do
-          projected_holding = unpaid.holding_amount_cents + adjusted_delta
-          # Same DESTINATION_LEDGER_NEGATIVE shape payout validation rejects: negative holding
-          # with a non-negative USD ledger. Keep reconcile pending instead of finalizing that.
-          if projected_holding.negative? && !unpaid.amount_cents.negative?
-            Rails.logger.error(
-              "Skipping fee retention holding reconcile for refund #{refund&.id}: "               "unpaid balance #{unpaid.id} cannot absorb holding delta #{adjusted_delta}"
-            )
-          else
+        unpaid_balances.each do |unpaid|
+          unpaid.with_lock do
+            projected_holding = unpaid.holding_amount_cents + adjusted_delta
+            # Same DESTINATION_LEDGER_NEGATIVE shape payout validation rejects.
+            next if projected_holding.negative? && !unpaid.amount_cents.negative?
+
             unpaid.increment(:holding_amount_cents, adjusted_delta)
             unpaid.save!
             absorbed = true
           end
+          break if absorbed
         end
         unless absorbed
+          Rails.logger.error(
+            "Skipping fee retention holding reconcile for refund #{refund&.id}: "             "no unpaid #{holding_currency} balance can absorb holding delta #{adjusted_delta}"
+          )
           if refund.present?
             refund.update!(
               refund_fee_holding_reconcile_pending: true,
