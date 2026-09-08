@@ -319,7 +319,9 @@ class Credit < ApplicationRecord
         # re-debit. New failures record FEE_DEBIT_PENDING_RETRY so retries still run.
         us_legacy_complete = existing_credit.merchant_account&.country == Compliance::Countries::USA.alpha2 &&
           refund.debited_stripe_transfer.blank? &&
-          existing_credit.balance_id.present?
+          existing_credit.balance_id.present? &&
+          refund.refund_fee_debit_generation.to_i.zero? &&
+          refund.refund_fee_debit_submitted_at.blank?
       end
     end
 
@@ -622,8 +624,9 @@ class Credit < ApplicationRecord
         refund.refund_fee_debit_operation = nil
         refund.refund_fee_debit_transfer_id = nil
         refund.refund_fee_debit_amount_cents = nil
+        refund.refund_fee_debit_submitted_at = nil
         refund.refund_fee_debit_generation = refund.refund_fee_debit_generation.to_i + 1
-        refund.debited_stripe_transfer = nil if refund.debited_stripe_transfer == FEE_DEBIT_PENDING_RETRY
+        refund.debited_stripe_transfer = FEE_DEBIT_PENDING_RETRY
         refund.save!
       end
     end
