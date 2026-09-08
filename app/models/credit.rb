@@ -462,8 +462,12 @@ class Credit < ApplicationRecord
       transaction(requires_new: true) do
         credit.save!
 
-        refund.retained_fee_cents = credit.amount_cents.abs
-        refund.save!
+        # Only attribute retained_fee_cents when this credit landed on an unpaid balance.
+        # Delayed retention after payout must not rewrite the paid payout's refund export.
+        if credit.balance&.unpaid?
+          refund.retained_fee_cents = credit.amount_cents.abs
+          refund.save!
+        end
 
         balance_transaction_amount = BalanceTransaction::Amount.new(
           currency: Currency::USD,
