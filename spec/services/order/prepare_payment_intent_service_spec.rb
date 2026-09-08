@@ -1996,7 +1996,7 @@ describe Order::PreparePaymentIntentService, :vcr do
         end
 
         # Losing ideal_payments after an EUR mount makes the resolver infer USD. The reported EUR
-        # remains chargeable: presentment gates on the launch flag, not the capability snapshot.
+        # remains chargeable through the direct-listed or uniform-cart checks, not the capability snapshot.
         it "creates the EUR intent when the browser reports a EUR-mounted element" do
           expect(StripeFxQuote).not_to receive(:create)
           connect_account.update!(stripe_capabilities_snapshot: {
