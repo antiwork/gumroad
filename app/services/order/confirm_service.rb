@@ -122,16 +122,6 @@ class Order::ConfirmService
               # (client_confirmed without a stored PI). Failing the purchase could lose a
               # payment that is still going to capture. Report processing and let webhooks finish it.
               setup_charge_results[purchase.id] = :pending unless setup_charge_results.key?(purchase.id)
-            elsif pending.include?(purchase) && purchase.charge.present?
-              # CreateService may have accepted the debit before a later Stripe error (e.g. rate
-              # limit while loading the charge). Keep unsettled rather than inviting a second charge.
-              purchase.errors.clear
-              purchase.error_code = nil
-              purchase.stripe_error_code = nil
-              purchase.update!(stripe_status: StripeIntentStatus::PROCESSING) if purchase.stripe_status.blank?
-              purchase.charge.update!(client_confirmed: true)
-              setup_charge_results[purchase.id] = :pending
-              ReconcileClientConfirmedChargeJob.perform_in(30.seconds, purchase.charge.id)
             elsif purchase.errors.empty?
               purchase.errors.add(:base, "There is a temporary problem, please try again (your card was not charged).")
             end
@@ -341,7 +331,28 @@ class Order::ConfirmService
           setup_confirmed_resume: true
         },
       )
-      charge = create_service.perform
+      begin
+        charge = create_service.perform
+      rescue => e
+        # Stripe may have accepted the debit before a later error (e.g. rate limit loading the
+        # Charge). Only mark uncertain after CreateService was entered.
+        Rails.logger.error("Error in setup-confirmed Charge::CreateService for order #{order.id}: #{e.class} => #{e.message}")
+        ErrorNotifier.notify(e, order_id: order.id)
+        reference_charge = reference_purchase.charge
+        if reference_charge.present?
+          purchases.each do |purchase|
+            purchase.errors.clear
+            purchase.error_code = nil
+            purchase.stripe_error_code = nil
+            purchase.update!(stripe_status: StripeIntentStatus::PROCESSING) if purchase.stripe_status.blank?
+            setup_charge_results[purchase.id] = :pending
+          end
+          reference_charge.update!(client_confirmed: true)
+          ReconcileClientConfirmedChargeJob.perform_in(30.seconds, reference_charge.id)
+          return
+        end
+        raise
+      end
 
       charge_intent = charge.charge_intent
       if charge_intent.blank?
@@ -370,11 +381,9 @@ class Order::ConfirmService
         existing = credit_card.json_data.to_h
         ids = existing["stripe_setup_intent_ids"].is_a?(Hash) ? existing["stripe_setup_intent_ids"].dup : {}
         account_key = merchant_account.is_a_stripe_connect_account? ? merchant_account.charge_processor_merchant_id : "platform"
-        # Migrate a legacy scalar SI into the merchant-scoped map before writing the PI, so
-        # renewals still resolve this account's SetupIntent for Connect PM binding.
-        if ids[account_key].blank?
-          ids[account_key] = setup_intent_id.presence || existing["stripe_setup_intent_id"]
-        end
+        # Persist the confirmed SetupIntent for this account (replacing an insufficient prior
+        # mandate) and migrate any legacy scalar so renewals resolve Connect PM binding.
+        ids[account_key] = setup_intent_id.presence || ids[account_key].presence || existing["stripe_setup_intent_id"]
         ids.compact!
         next_data = existing.merge("stripe_payment_intent_id" => charge_intent.id)
         next_data["stripe_setup_intent_ids"] = ids if ids.present?
