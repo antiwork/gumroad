@@ -1817,7 +1817,29 @@ describe Order::ChargeService, :vcr do
       charge.purchases << purchase
       # The saved card's e-mandate already exists, so there is no SetupIntent pause and the
       # group's off-session charge runs synchronously inside ChargeService.
-      chargeable = instance_double(Chargeable, requires_mandate?: true, stripe_setup_intent_id: "seti_existing_india")
+      chargeable = instance_double(
+        Chargeable,
+        requires_mandate?: true,
+        stripe_setup_intent_id: "seti_existing_india",
+        payment_method_id: "pm_existing_india"
+      )
+      allow(chargeable).to receive(:stripe_setup_intent_id=)
+      allow(chargeable).to receive(:use_connected_account_payment_method!)
+      allow(chargeable).to receive(:respond_to?) do |method_name, *_|
+        %i[use_connected_account_payment_method! stripe_setup_intent_id= payment_method_id].include?(method_name.to_sym)
+      end
+      existing_si = instance_double(
+        StripeSetupIntent,
+        id: "seti_existing_india",
+        succeeded?: true,
+        requires_action?: false,
+        payment_method_id: "pm_existing_india",
+        customer_id: nil,
+        present?: true,
+        mandate: "mandate_existing_india",
+        card_mandate_options: { amount: 10_00, currency: "usd" }
+      )
+      allow(ChargeProcessor).to receive(:get_setup_intent).with(merchant_account, "seti_existing_india").and_return(existing_si)
       charge_intent = StripeChargeIntent.new(
         payment_intent: Stripe::PaymentIntent.construct_from(id: "pi_india_processing", status: StripeIntentStatus::PROCESSING)
       )
@@ -1881,16 +1903,18 @@ describe Order::ChargeService, :vcr do
       chargeable = instance_double(Chargeable, requires_mandate?: true, stripe_setup_intent_id: "seti_existing_connect")
       allow(chargeable).to receive(:stripe_setup_intent_id=)
       allow(chargeable).to receive(:use_connected_account_payment_method!)
-      allow(chargeable).to receive(:respond_to?).and_call_original
-      allow(chargeable).to receive(:respond_to?).with(:use_connected_account_payment_method!).and_return(true)
-      allow(chargeable).to receive(:respond_to?).with(:stripe_setup_intent_id=).and_return(true)
-      allow(chargeable).to receive(:respond_to?).with(:prepare_with_trusted_setup_intent!).and_return(false)
+      allow(chargeable).to receive(:respond_to?) do |method_name, *_|
+        %i[use_connected_account_payment_method! stripe_setup_intent_id= payment_method_id].include?(method_name.to_sym)
+      end
       existing_si = instance_double(StripeSetupIntent,
                                     id: "seti_existing_connect",
                                     succeeded?: true,
                                     requires_action?: false,
                                     payment_method_id: "pm_on_connect",
-                                    present?: true)
+                                    customer_id: nil,
+                                    present?: true,
+                                    mandate: "mandate_existing_connect",
+                                    card_mandate_options: { amount: 10_00, currency: "usd" })
       allow(ChargeProcessor).to receive(:get_setup_intent).with(merchant_account, "seti_existing_connect").and_return(existing_si)
       charge_intent = StripeChargeIntent.new(
         payment_intent: Stripe::PaymentIntent.construct_from(id: "pi_connect", status: StripeIntentStatus::SUCCESS)
@@ -1932,15 +1956,18 @@ describe Order::ChargeService, :vcr do
       allow(chargeable).to receive(:stripe_setup_intent_id) { stored_si_id }
       allow(chargeable).to receive(:stripe_setup_intent_id=) { |value| stored_si_id = value }
       allow(chargeable).to receive(:use_connected_account_payment_method!)
-      allow(chargeable).to receive(:respond_to?).and_call_original
-      allow(chargeable).to receive(:respond_to?).with(:use_connected_account_payment_method!).and_return(true)
-      allow(chargeable).to receive(:respond_to?).with(:stripe_setup_intent_id=).and_return(true)
-      allow(chargeable).to receive(:respond_to?).with(:prepare_with_trusted_setup_intent!).and_return(false)
+      allow(chargeable).to receive(:respond_to?) do |method_name, *_|
+        %i[use_connected_account_payment_method! stripe_setup_intent_id= payment_method_id].include?(method_name.to_sym)
+      end
       canceled_si = instance_double(StripeSetupIntent,
                                     id: "seti_canceled",
                                     succeeded?: false,
                                     requires_action?: false,
-                                    present?: true)
+                                    payment_method_id: nil,
+                                    customer_id: nil,
+                                    present?: true,
+                                    mandate: nil,
+                                    card_mandate_options: nil)
       allow(ChargeProcessor).to receive(:get_setup_intent).with(merchant_account, "seti_canceled").and_return(canceled_si)
       fresh_si = instance_double(StripeSetupIntent, id: "seti_fresh", payment_method_id: "pm_fresh", customer_id: nil, mandate: "mandate_fresh", card_mandate_options: { amount: 10_00, currency: "usd" }, succeeded?: true, requires_action?: false)
       allow(fresh_si).to receive_messages(succeeded?: true, requires_action?: false, present?: true, payment_method_id: "pm_fresh_connect")
@@ -1974,7 +2001,10 @@ describe Order::ChargeService, :vcr do
 
     it "binds the Connect payment method when reusing a shared setup intent" do
       seller_1.update!(check_merchant_account_is_linked: true)
-      create(:merchant_account_stripe_connect, user: seller_1)
+      seller_2.update!(check_merchant_account_is_linked: true)
+      # Same Stripe Connect account id so account_setup_intents shares one SI across sellers.
+      create(:merchant_account_stripe_connect, user: seller_1, charge_processor_merchant_id: "acct_shared_connect")
+      create(:merchant_account_stripe_connect, user: seller_2, charge_processor_merchant_id: "acct_shared_connect")
       saved_card = CreditCard.create!(
         charge_processor_id: StripeChargeProcessor.charge_processor_id,
         stripe_customer_id: "cus_shared_connect",
@@ -1995,13 +2025,21 @@ describe Order::ChargeService, :vcr do
         requires_action?: true,
         client_secret: "seti_connect_shared_secret_abc",
         payment_method_id: "pm_on_connect_shared",
-        present?: true
+        customer_id: nil,
+        present?: true,
+        mandate: nil,
+        card_mandate_options: nil
       )
       allow(ChargeProcessor).to receive(:setup_future_charges!).and_return(shared_si)
       expect(Charge::CreateService).not_to receive(:new)
       connect_chargeables = []
       allow_any_instance_of(StripeChargeableCreditCard).to receive(:use_connected_account_payment_method!) do |chargeable_instance, pm_id|
         connect_chargeables << [chargeable_instance, pm_id]
+      end
+      # bind_connect prefers prepare_with_trusted_setup_intent!; route it through the Connect PM stub
+      # so this example does not hit Stripe::SetupIntent.retrieve.
+      allow_any_instance_of(StripeChargeableCreditCard).to receive(:prepare_with_trusted_setup_intent!) do |instance|
+        instance.use_connected_account_payment_method!("pm_on_connect_shared")
       end
       params = {
         line_items: [
@@ -2014,8 +2052,8 @@ describe Order::ChargeService, :vcr do
           },
           {
             uid: "seller2-connect",
-            permalink: product_1.unique_permalink,
-            perceived_price_cents: product_1.price_cents,
+            permalink: product_3.unique_permalink,
+            perceived_price_cents: product_3.price_cents,
             is_multi_buy: true,
             quantity: 1
           }
@@ -2029,6 +2067,7 @@ describe Order::ChargeService, :vcr do
       # The second group reuses the shared SI — its chargeable must be bound to the SI's PM.
       # First call: register_india_mandate binds it. Second call: shared_si path binds it.
       expect(connect_chargeables.map(&:last)).to all(eq("pm_on_connect_shared"))
+      expect(connect_chargeables.size).to be >= 2
     end
 
     it "registers an independent India e-mandate setup intent per seller group in a two-seller cart" do
@@ -2054,6 +2093,8 @@ describe Order::ChargeService, :vcr do
       )
       buyer = create(:user, credit_card: saved_card)
       allow_any_instance_of(StripeChargeableCreditCard).to receive(:prepare_for_direct_charge)
+      # Avoid Stripe::SetupIntent.retrieve inside bind_connect's prepare_with_trusted path.
+      allow_any_instance_of(StripeChargeableCreditCard).to receive(:prepare_with_trusted_setup_intent!)
       chargeables_by_account = {}
       mandate_caps_by_account = {}
       allow(ChargeProcessor).to receive(:setup_future_charges!) do |account, group_chargeable, mandate_options:|
@@ -2065,7 +2106,12 @@ describe Order::ChargeService, :vcr do
           id: "seti_#{key}",
           succeeded?: false,
           requires_action?: true,
-          client_secret: "seti_#{key}_secret_abc"
+          client_secret: "seti_#{key}_secret_abc",
+          payment_method_id: (key == :connect ? "pm_two_seller_connect" : nil),
+          customer_id: nil,
+          present?: true,
+          mandate: nil,
+          card_mandate_options: nil
         )
       end
       expect(Charge::CreateService).not_to receive(:new)
@@ -2157,7 +2203,11 @@ describe Order::ChargeService, :vcr do
         succeeded?: false,
         requires_action?: true,
         client_secret: "seti_platform_shared_secret_abc",
-        present?: true
+        payment_method_id: nil,
+        customer_id: nil,
+        present?: true,
+        mandate: nil,
+        card_mandate_options: nil
       )
       allow(ChargeProcessor).to receive(:setup_future_charges!) do |_account, _chargeable, mandate_options:|
         setup_calls << mandate_options
@@ -2854,7 +2904,7 @@ describe Order::ChargeService, :vcr do
       purchase_b = order.purchases.find_by(link: product_b)
 
       service = Order::ChargeService.new(order:, params:)
-      requires_action_intent = double("charge_intent", requires_action?: true, succeeded?: false, client_secret: "cs_test_xxx", id: "pi_test_xxx")
+      requires_action_intent = double("charge_intent", requires_action?: true, succeeded?: false, processing?: false, client_secret: "cs_test_xxx", id: "pi_test_xxx")
 
       call_count = 0
       allow(service).to receive(:create_charge_for_seller_purchases) do |purchases, *|
@@ -2899,6 +2949,7 @@ describe Order::ChargeService, :vcr do
         "charge_intent",
         succeeded?: true,
         requires_action?: false,
+        processing?: false,
         id: "pi_test_xxx",
         charge: double("charge", id: "ch_test", fee: 30, fee_currency: "usd")
       )
@@ -2975,7 +3026,7 @@ describe Order::ChargeService, :vcr do
         is_mobile: false,
       }
       service = Order::ChargeService.new(order:, params:)
-      service.charge_intent = double("charge_intent", succeeded?: true, requires_action?: false)
+      service.charge_intent = double("charge_intent", succeeded?: true, requires_action?: false, processing?: false)
 
       balance_transaction_count = purchase.balance_transactions.count
       expect { service.ensure_all_purchases_processed([purchase]) }.to change { ActivateIntegrationsWorker.jobs.size }.by(1)
@@ -3016,7 +3067,7 @@ describe Order::ChargeService, :vcr do
         is_mobile: false,
       }
       service = Order::ChargeService.new(order:, params:)
-      service.charge_intent = double("charge_intent", succeeded?: true, requires_action?: false)
+      service.charge_intent = double("charge_intent", succeeded?: true, requires_action?: false, processing?: false)
 
       expect do
         expect { service.ensure_all_purchases_processed([purchase]) }.to change { ActivateIntegrationsWorker.jobs.size }.by(1)
@@ -3059,7 +3110,7 @@ describe Order::ChargeService, :vcr do
         is_mobile: false,
       }
       service = Order::ChargeService.new(order:, params:)
-      service.charge_intent = double("charge_intent", succeeded?: true, requires_action?: false)
+      service.charge_intent = double("charge_intent", succeeded?: true, requires_action?: false, processing?: false)
       allow_any_instance_of(BalanceTransaction).to receive(:update_balance!).and_raise(ActiveRecord::LockWaitTimeout.new("Lock wait timeout exceeded"))
 
       expect { service.ensure_all_purchases_processed([purchase]) }.not_to raise_error
@@ -3100,7 +3151,7 @@ describe Order::ChargeService, :vcr do
         is_mobile: false,
       }
       service = Order::ChargeService.new(order:, params:)
-      service.charge_intent = double("charge_intent", succeeded?: true, requires_action?: false)
+      service.charge_intent = double("charge_intent", succeeded?: true, requires_action?: false, processing?: false)
       allow_any_instance_of(BalanceTransaction).to receive(:update_balance!).and_raise(ActiveRecord::RecordInvalid.new(Balance.new))
 
       expect { service.ensure_all_purchases_processed([purchase]) }.not_to raise_error
@@ -3145,7 +3196,7 @@ describe Order::ChargeService, :vcr do
         is_mobile: false,
       }
       service = Order::ChargeService.new(order:, params:)
-      service.charge_intent = double("charge_intent", succeeded?: true, requires_action?: false)
+      service.charge_intent = double("charge_intent", succeeded?: true, requires_action?: false, processing?: false)
       allow(purchase).to receive(:handle_recommended_purchase).and_raise(ActiveRecord::StatementInvalid.new("RecommendedPurchaseInfo failed"))
 
       expect { service.ensure_all_purchases_processed([purchase]) }.not_to raise_error
@@ -3190,7 +3241,7 @@ describe Order::ChargeService, :vcr do
         is_mobile: false,
       }
       service = Order::ChargeService.new(order:, params:)
-      service.charge_intent = double("charge_intent", succeeded?: true, requires_action?: false)
+      service.charge_intent = double("charge_intent", succeeded?: true, requires_action?: false, processing?: false)
       allow_any_instance_of(User).to receive(:save_gumroad_day_timezone).and_raise(ActiveRecord::RecordInvalid.new(seller))
 
       expect { service.ensure_all_purchases_processed([purchase]) }.not_to raise_error
@@ -3237,7 +3288,7 @@ describe Order::ChargeService, :vcr do
         is_mobile: false,
       }
       service = Order::ChargeService.new(order:, params:)
-      service.charge_intent = double("charge_intent", succeeded?: true, requires_action?: false)
+      service.charge_intent = double("charge_intent", succeeded?: true, requires_action?: false, processing?: false)
 
       expect { service.ensure_all_purchases_processed([purchase]) }.not_to change { purchase.balance_transactions.where(user: affiliate_user).count }
 
@@ -3264,7 +3315,7 @@ describe Order::ChargeService, :vcr do
         is_mobile: false,
       }
       service = Order::ChargeService.new(order:, params:)
-      service.charge_intent = double("charge_intent", succeeded?: true, requires_action?: false)
+      service.charge_intent = double("charge_intent", succeeded?: true, requires_action?: false, processing?: false)
       purchase.errors.add(:base, "The purchase was not charged")
 
       expect(Purchase::MarkSuccessfulService).not_to receive(:new).with(purchase)

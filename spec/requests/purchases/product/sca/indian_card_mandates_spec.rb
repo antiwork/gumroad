@@ -113,8 +113,9 @@ describe("Successful purchases from a product page with SCA and mandate creation
     expect(purchase.not_charged?).to be true
     expect(purchase.stripe_transaction_id).not_to be_present
     expect(purchase.processor_setup_intent_id).to be_present
-    expect(purchase.credit_card.stripe_setup_intent_id).to be_present
-    expect(Stripe::SetupIntent.retrieve(purchase.credit_card.stripe_setup_intent_id).mandate).to be_present
+    setup_intent_id = purchase.credit_card.stripe_setup_intent_id_for(purchase.merchant_account)
+    expect(setup_intent_id).to be_present
+    expect(Stripe::SetupIntent.retrieve(setup_intent_id).mandate).to be_present
   end
 
   it "allows making a pre-order purchase and creates a mandate on Stripe for future off-session charges" do
@@ -132,8 +133,9 @@ describe("Successful purchases from a product page with SCA and mandate creation
     expect(purchase.preorder_authorization_successful?).to be true
     expect(purchase.stripe_transaction_id).not_to be_present
     expect(purchase.processor_setup_intent_id).to be_present
-    expect(purchase.credit_card.stripe_setup_intent_id).to be_present
-    expect(Stripe::SetupIntent.retrieve(purchase.credit_card.stripe_setup_intent_id).mandate).to be_present
+    setup_intent_id = purchase.credit_card.stripe_setup_intent_id_for(purchase.merchant_account)
+    expect(setup_intent_id).to be_present
+    expect(Stripe::SetupIntent.retrieve(setup_intent_id).mandate).to be_present
   end
 
   context "via stripe connect" do
