@@ -73,6 +73,7 @@ type ProfilePageProps = {
   editable_profile: ProfileEditorProps;
   profile_version: string;
   custom_html_pages_enabled: boolean;
+  twitter_connected: boolean;
   youtube_connect_enabled: boolean;
   youtube_connected: boolean;
   youtube_handle: string | null;
@@ -92,6 +93,7 @@ export default function SettingsPage() {
     editable_profile,
     profile_version,
     custom_html_pages_enabled,
+    twitter_connected,
     youtube_connect_enabled,
     youtube_connected,
     youtube_handle,
@@ -520,22 +522,30 @@ export default function SettingsPage() {
               {loggedInUser?.policies.settings_profile.manage_social_connections ? (
                 <Fieldset>
                   <FieldsetTitle>Social links</FieldsetTitle>
-                  {creatorProfile.twitter_handle ? (
+                  {twitter_connected ? (
                     <Button type="button" color="twitter" onClick={handleUnlinkTwitter}>
                       <TwitterX pack="brands" className="size-5" />
-                      Disconnect {creatorProfile.twitter_handle} from X
+                      Disconnect {creatorProfile.twitter_handle ? `${creatorProfile.twitter_handle} from X` : "X"}
                     </Button>
                   ) : (
-                    <SocialAuthButton
-                      provider="twitter"
-                      href={Routes.user_twitter_omniauth_authorize_path({
-                        state: "link_twitter_account",
-                        x_auth_access_type: "read",
-                      })}
-                    >
-                      <TwitterX pack="brands" className="size-5" />
-                      Connect to X
-                    </SocialAuthButton>
+                    <>
+                      {creatorProfile.twitter_handle ? (
+                        <Button type="button" color="twitter" onClick={handleUnlinkTwitter}>
+                          <TwitterX pack="brands" className="size-5" />
+                          Disconnect {creatorProfile.twitter_handle} from X
+                        </Button>
+                      ) : null}
+                      <SocialAuthButton
+                        provider="twitter"
+                        href={Routes.user_twitter_omniauth_authorize_path({
+                          state: "link_twitter_account",
+                          x_auth_access_type: "read",
+                        })}
+                      >
+                        <TwitterX pack="brands" className="size-5" />
+                        Connect to X
+                      </SocialAuthButton>
+                    </>
                   )}
                   {youtube_connected ? (
                     <Button type="button" color="youtube" onClick={handleUnlinkYoutube}>
