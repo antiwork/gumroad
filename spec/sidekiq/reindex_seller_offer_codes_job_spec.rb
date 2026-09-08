@@ -207,6 +207,45 @@ describe ReindexSellerOfferCodesJob do
     expect($redis.hkeys("#{key}:products")).to eq([products.last.id.to_s])
   end
 
+  it "advances the catalogue despite a targeted edit before every execution" do
+    products = create_list(:product, 3, user: seller)
+    described_class.enqueue(seller.id)
+    6.times do
+      described_class.enqueue_products(seller.id, [products.last.id])
+      run_batch
+    end
+    expect($redis.get("#{key}:version")).to be_nil
+  end
+
+  it "paces retries after a slow partial indexing failure" do
+    create(:product, user: seller)
+    described_class.enqueue(seller.id)
+    calls = 0
+    allow_any_instance_of(ProductOfferCodeIndexingService).to receive(:perform) do
+      calls += 1
+      travel 10.seconds
+      raise "partial failure"
+    end
+    expect { job.perform(seller.id) }.to raise_error("partial failure")
+    job.perform(seller.id)
+    expect(calls).to eq(1)
+    expect($redis.get("#{key}:version")).to eq("1")
+  end
+
+  it "does not reuse product IDs from a rolled-back destruction" do
+    products = create_list(:product, 2, user: seller)
+    code = create(:offer_code, user: seller, products: [products.first])
+    run_batch
+    OfferCode.transaction(requires_new: true) do
+      code.destroy!
+      raise ActiveRecord::Rollback
+    end
+    code.reload.update!(products: [products.last])
+    expect($redis.hkeys("#{key}:products")).to include(products.last.id.to_s)
+    3.times { run_batch }
+    expect(products.last.__elasticsearch__.client.get(index: Link.index_name, id: products.last.id).dig("_source", "offer_codes")).to include(code.code)
+  end
+
   it "preserves an edit arriving during the final batch" do
     create(:product, user: seller)
     described_class.enqueue(seller.id)

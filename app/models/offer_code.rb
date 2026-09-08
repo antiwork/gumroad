@@ -615,7 +615,7 @@ class OfferCode < ApplicationRecord
       catalogue = universal? || universal_before_last_save
       seller_id = user_id
       seller_ids = [seller_id, user_id_before_last_save].compact.uniq
-      product_ids = @reindex_product_ids || products.ids unless catalogue
+      product_ids = destroyed? ? @reindex_product_ids : products.ids unless catalogue
       AfterCommitEverywhere.after_commit do
         if catalogue
           seller_ids.each { ReindexSellerOfferCodesJob.enqueue(_1) }

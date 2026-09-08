@@ -16,7 +16,7 @@ describe("Black Friday 2025", js: true, type: :system) do
       Feature.activate(:offer_codes_search)
 
       product = create(:product, :recommendable, user: @creator, price_cents: 1000)
-      offer_code = create(:offer_code, user: @creator, code: "BLACKFRIDAY2025", amount_percentage: 25, products: [product])
+      offer_code = Sidekiq::Testing.fake! { create(:offer_code, user: @creator, code: "BLACKFRIDAY2025", amount_percentage: 25, products: [product]) }
       create_list(:purchase, 5, link: product, offer_code:, price_cents: 750)
 
       # Stub the stats service to return the expected values
@@ -102,7 +102,7 @@ describe("Black Friday 2025", js: true, type: :system) do
       expect(page).not_to have_product_card(text: "Black Friday Special Product")
 
       # Create the BLACKFRIDAY2025 offer code and associate it with the product
-      blackfriday_offer_code = create(:offer_code, user: @creator, code: "BLACKFRIDAY2025", amount_percentage: 25)
+      blackfriday_offer_code = Sidekiq::Testing.fake! { create(:offer_code, user: @creator, code: "BLACKFRIDAY2025", amount_percentage: 25) }
       product.offer_codes << blackfriday_offer_code
 
       # Create some purchases to make the product potentially appear as featured

@@ -37,10 +37,13 @@ class ReindexSellerOfferCodesJob
       end
 
       pending_ids = $redis.hscan_each("#{key}:products", count: BATCH_SIZE).take(BATCH_SIZE).map(&:first)
-      if pending_ids.any?
+      catalogue_pending = $redis.exists?("#{key}:version")
+      if pending_ids.any? && (!catalogue_pending || $redis.get("#{key}:last_batch") != "targeted")
         versions = $redis.hmget("#{key}:products", *pending_ids)
         $redis.set("#{key}:cooldown", (Time.current + INTERVAL).to_f, ex: INTERVAL.to_i)
         ActiveRecord::Base.connection.stick_to_primary!
+        attempted = true
+        $redis.set("#{key}:last_batch", "targeted")
         ProductOfferCodeIndexingService.new(Link.where(id: pending_ids).to_a).perform
         self.class.perform_in(INTERVAL, seller_id)
         pending_ids.zip(versions).each do |product_id, version|
@@ -58,6 +61,8 @@ class ReindexSellerOfferCodesJob
       cursor, scan_version = $redis.mget("#{key}:cursor", "#{key}:scan_version")
       scan_version ||= version
       products = Link.where(user_id: seller_id).where("id > ?", cursor.to_i).order(:id).limit(BATCH_SIZE).to_a
+      attempted = true
+      $redis.set("#{key}:last_batch", "catalogue")
       ProductOfferCodeIndexingService.new(products).perform
 
       # Schedule before advancing: a failed push retries this batch, never skips it.
@@ -76,6 +81,7 @@ class ReindexSellerOfferCodesJob
         $redis.eval("if redis.call('GET', KEYS[1]) == ARGV[1] then return redis.call('DEL', KEYS[1]) end", keys: ["#{key}:version"], argv: [scan_version])
       end
     ensure
+      $redis.set("#{key}:cooldown", (Time.current + INTERVAL).to_f, ex: INTERVAL.to_i) if attempted
       $redis.eval("if redis.call('GET', KEYS[1]) == ARGV[1] then return redis.call('DEL', KEYS[1]) end", keys: ["#{key}:lock"], argv: [token])
     end
   end
