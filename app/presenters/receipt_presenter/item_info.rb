@@ -115,8 +115,10 @@ class ReceiptPresenter::ItemInfo
     end
 
     # Empty-member bundles still render on the receipt (see Chargeable#unbundled_purchases).
-    # Hide View content only when the download page would also be empty: no live members and
-    # no files/rich content on the parent itself (converted products can keep both).
+    # Hide View content when there are no live members and the parent has no files/rich
+    # content of its own. Do not call Purchase.product_installments here: that path is too
+    # expensive for receipt render. Posts-only download pages stay reachable from the
+    # library row for signed-in buyers.
     def empty_member_bundle_without_content?
       return false unless purchase.is_bundle_purchase?
       return false if purchase.product_purchases.exists?
