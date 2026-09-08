@@ -12,8 +12,13 @@ class ThumbnailsController < Sellers::BaseController
 
     thumbnail = @product.thumbnail || @product.build_thumbnail
 
-    if permitted_params[:signed_blob_id].present?
-      thumbnail.file.attach(permitted_params[:signed_blob_id])
+    signed_blob_id = permitted_params[:signed_blob_id]
+    if signed_blob_id.present?
+      unless signed_blob_id.is_a?(String) && (blob = ActiveStorage::Blob.find_signed(signed_blob_id))
+        return render(json: { success: false, error: "Invalid signed_blob_id." }, status: :bad_request)
+      end
+
+      thumbnail.file.attach(blob)
       Timeout.timeout(30) { thumbnail.file.analyze }
       thumbnail.unsplash_url = nil
     end
