@@ -90,9 +90,6 @@ class Order::ConfirmService
       return if CardParamsHelper.check_for_errors(params).present?
 
       order.purchases.group_by { |purchase| purchase.charge&.id }.each_value do |seller_purchases|
-        seller_purchases.select { |purchase| uncertain_setup_charge_pending?(purchase) }.each do |purchase|
-          setup_charge_results[purchase.id] = :pending
-        end
         pending = seller_purchases.select { |purchase| awaiting_charge_after_setup?(purchase) }
         charged = seller_purchases.select { |purchase| charged_after_setup_awaiting_finalization?(purchase) }
         next if pending.none? && charged.none?
@@ -130,24 +127,11 @@ class Order::ConfirmService
         purchase.charge.present? &&
         purchase.processor_setup_intent_id.present? &&
         purchase.processor_payment_intent.blank? &&
-        # A prior resume already attempted the charge and lost the processor response
-        # (client_confirmed, no PI yet). Do not create a second PaymentIntent.
-        !purchase.charge.client_confirmed? &&
         purchase.stripe_transaction_id.blank? &&
         !purchase.free_purchase? &&
         !purchase.is_test_purchase? &&
         !purchase.is_free_trial_purchase? &&
         !purchase.is_preorder_authorization?
-    end
-
-    def uncertain_setup_charge_pending?(purchase)
-      purchase.in_progress? &&
-        purchase.errors.empty? &&
-        purchase.charge.present? &&
-        purchase.charge.client_confirmed? &&
-        purchase.processor_setup_intent_id.present? &&
-        purchase.processor_payment_intent.blank? &&
-        purchase.stripe_transaction_id.blank?
     end
 
     # A purchase whose group's off-session charge already exists (created by this path, or
@@ -182,10 +166,9 @@ class Order::ConfirmService
         if reference_purchase.processor_payment_intent.present?
           # A concurrently retried confirm charged this group while we waited for the lock.
           finalize_setup_charged_purchases!(purchases)
-        elsif reference_purchase.charge&.client_confirmed?
-          # A concurrent confirm already attempted the debit and lost the response.
-          purchases.each { |purchase| setup_charge_results[purchase.id] = :pending }
         else
+          # Includes uncertain client_confirmed retries: CreateService uses setup_confirmed_resume
+          # idempotency so Stripe returns the first PaymentIntent instead of minting a second.
           charge_setup_confirmed_purchases_locked!(purchases)
         end
       end
@@ -243,15 +226,10 @@ class Order::ConfirmService
       chargeable = credit_card.to_chargeable(merchant_account:)
       # The card's json_data can hold another group's (or an older order's) intent; this
       # group's charge must reference the SetupIntent the buyer just confirmed for it.
+      # prepare! on Connect binds that SI's payment method and attaches it to a connected
+      # Customer before the first debit so renewals can reuse the mandate.
       chargeable.stripe_setup_intent_id = setup_intent_id if chargeable.respond_to?(:stripe_setup_intent_id=)
-      if merchant_account.is_a_stripe_connect_account? && setup_intent.payment_method_id.present?
-        # Stripe binds the confirmed e-mandate to the exact payment method the SetupIntent was
-        # confirmed with — the clone already on the connected account. prepare! would clone a
-        # fresh copy, which Stripe treats as a different, mandate-less method off-session.
-        chargeable.use_connected_account_payment_method!(setup_intent.payment_method_id)
-      else
-        chargeable.prepare!
-      end
+      chargeable.prepare!
 
       create_service = Charge::CreateService.new(
         order:,

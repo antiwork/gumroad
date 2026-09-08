@@ -335,7 +335,14 @@ class Order::ChargeService
   # will have cloned a fresh PM that lacks the mandate. Point the chargeable at the SI's PM.
   def bind_connect_payment_method!(chargeable, si, merchant_account)
     return unless merchant_account.is_a_stripe_connect_account? && si.payment_method_id.present?
-    chargeable.use_connected_account_payment_method!(si.payment_method_id) if chargeable.respond_to?(:use_connected_account_payment_method!)
+    # prepare! attaches the SI's Connect PM to a connected Customer and includes that customer
+    # on the subsequent charge params; use_connected alone leaves an unattached clone.
+    chargeable.stripe_setup_intent_id = si.id if chargeable.respond_to?(:stripe_setup_intent_id=)
+    if chargeable.respond_to?(:prepare!)
+      chargeable.prepare!
+    elsif chargeable.respond_to?(:use_connected_account_payment_method!)
+      chargeable.use_connected_account_payment_method!(si.payment_method_id)
+    end
   end
 
   # Locks the buyer-currency quote for an India off-session group BEFORE its mandate is

@@ -290,7 +290,7 @@ describe Order::ConfirmService, :vcr do
         expect(captured_kwargs[:mandate_options]).to be_nil
         # The pause happened before the group's original charge, so the resume charge is the
         # first (and only) one that can lock the checkout's buyer-currency quote.
-        expect(captured_kwargs[:params]).to eq(buyer_currency_quote: "quote-token")
+        expect(captured_kwargs[:params]).to eq(buyer_currency_quote: "quote-token", setup_confirmed_resume: true)
         expect(captured_kwargs[:amount_cents]).to eq(order.purchases.sum(&:total_transaction_cents))
         expect(captured_kwargs[:merchant_account]).to eq(merchant_account)
         # Built via CreditCard#to_chargeable: a real StripeChargeableCreditCard must carry the

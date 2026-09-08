@@ -372,7 +372,23 @@ export const startOrderCreation = async (
             recoveryProcessing.add(lineItem.permalink);
             continue;
           }
-          if (doesLineItemRequireSCA(lineItem)) continue;
+          if (doesLineItemRequireSCA(lineItem)) {
+            // Still needs authentication — keep the line retryable instead of dropping it.
+            const cartLine = requestData.lineItems.find((item) => item.uid === uid);
+            recoveryConfirmItems[uid] = {
+              success: false,
+              error_message: "Authentication required.",
+              permalink: cartLine?.permalink ?? "",
+              name: "",
+              formatted_price: "",
+              error_code: "requires_authentication",
+              is_tax_mismatch: false,
+              card_country: null,
+              ip_country: null,
+              updated_product: null,
+            };
+            continue;
+          }
           recoveryConfirmItems[uid] = lineItem;
         }
         const recoveryConfirmResults = Object.values(recoveryConfirmItems);

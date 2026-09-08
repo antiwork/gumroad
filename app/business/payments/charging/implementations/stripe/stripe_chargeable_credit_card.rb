@@ -65,7 +65,9 @@ class StripeChargeableCreditCard
 
   def stripe_charge_params
     if @merchant_account&.is_a_stripe_connect_account?
-      { payment_method: @payment_method_id_on_connect_account }
+      params = { payment_method: @payment_method_id_on_connect_account }
+      params[:customer] = @customer_id_on_connect_account if @customer_id_on_connect_account.present?
+      params
     else
       { customer: @customer_id, payment_method: @payment_method_id }
     end
@@ -121,6 +123,9 @@ class StripeChargeableCreditCard
           customer = Stripe::Customer.create({}, stripe_account)
           payment_method = Stripe::PaymentMethod.attach(payment_method_id, { customer: customer.id }, stripe_account)
         end
+        customer_id = payment_method.customer
+        customer_id = customer_id.id if customer_id.respond_to?(:id)
+        @customer_id_on_connect_account = customer_id
 
         use_connected_account_payment_method!(payment_method_id)
         @payment_method_on_connect_account = payment_method
