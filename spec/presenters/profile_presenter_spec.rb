@@ -330,6 +330,7 @@ describe ProfilePresenter do
           seller_fonts_css_source: SellerProfile.seller_fonts_css_source,
           email_confirmation: nil,
           custom_html_pages_enabled: false,
+          twitter_connected: false,
           youtube_connect_enabled: false,
           youtube_connected: false,
           youtube_handle: nil,

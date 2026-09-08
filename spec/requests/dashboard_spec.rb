@@ -91,11 +91,17 @@ describe "Dashboard", js: true, type: :system do
       seller.update!(twitter_user_id: "example-social-id")
       visit dashboard_path
       expect(page).to have_text("X: Connected")
+      click_on "Manage social connections"
+      click_on "Disconnect X"
+      expect(page).to have_button("Connect to X")
+      expect(seller.reload.twitter_user_id).to be_nil
+      visit dashboard_path
+      expect(page).to have_text("X: Available to connect")
       expect(page).to have_link("Manage social connections")
       click_on "Minimize getting started"
       expect(page).not_to have_text("Connect a social account (optional)")
       click_on "Expand getting started"
-      expect(page).to have_text("X: Connected")
+      expect(page).to have_text("X: Available to connect")
 
       click_on "Dismiss getting started"
       click_on "Yes, hide it"
