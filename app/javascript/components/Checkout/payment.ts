@@ -506,6 +506,7 @@ type PublicAction =
   // The recomputed payment configuration for the edited cart, from a partial reload of the
   // checkout page's props.
   | { type: "update-checkout-payment"; checkoutPayment: CheckoutPaymentConfig }
+  | { type: "refresh-expired-buyer-currency-quote"; beforeSubmit?: boolean }
   | { type: "cancel" };
 
 type Action =
@@ -1263,6 +1264,7 @@ function resumeRefusedSubmitIfReady(state: State) {
   // pipeline already moved on under its own steam and does not need restarting.
   if (state.status.type !== "input") return;
 
+  if (refreshExpiredBuyerCurrencyQuote(state)) return;
   state.resumeSubmitAfterCheckoutPayment = false;
   // A resumed submit is not a free pass: it re-runs the same field validation a fresh submit does,
   // so an incomplete form lands back on "input" with the offending fields flagged.
@@ -1271,9 +1273,54 @@ function resumeRefusedSubmitIfReady(state: State) {
   state.status = resumeErrors.size ? { type: "input", errors: resumeErrors } : { type: "validating" };
 }
 
+export const BUYER_CURRENCY_QUOTE_REFRESH_MESSAGE =
+  "The local-currency price changed or expired. Please review the updated total and try again.";
+
+export function hasExpiredBuyerCurrencyQuote(state: State) {
+  if (
+    state.surcharges.type !== "loaded" ||
+    getConfiguredDirectListedCurrency(state) ||
+    isRecurringUpiPaymentConfig(state.checkoutPayment) ||
+    !canDisplayBuyerCurrencyQuote(state)
+  )
+    return false;
+  const display = getCheckoutBuyerCurrencyDisplay(state.surcharges.result, {
+    cartPermalinks: state.products.map((product) => product.permalink),
+    willSaveCard: state.willSaveCard,
+    paymentMethod: state.paymentMethod,
+  });
+  const expiresAt = state.surcharges.result.buyer_currency_quote?.expires_at;
+  return display !== null && !(Date.parse(expiresAt ?? "") > Date.now());
+}
+
+function refreshExpiredBuyerCurrencyQuote(state: State) {
+  if (!hasExpiredBuyerCurrencyQuote(state) || state.surcharges.type !== "loaded") return false;
+  // Keep the reviewed currency visible while the existing fenced surcharge request replaces it.
+  // Never resume this attempt: even an unchanged total needs a fresh buyer submit.
+  state.buyerCurrencyRemint = {
+    surcharges: state.surcharges.result,
+    previousCurrency: loadedBuyerCurrency(state),
+  };
+  state.surcharges = { type: "pending" };
+  state.resumeSubmitAfterCheckoutPayment = false;
+  state.status = { type: "input", errors: new Set() };
+  state.warning = BUYER_CURRENCY_QUOTE_REFRESH_MESSAGE;
+  return true;
+}
+
 // Exported so checkout state transitions can be unit-tested without rendering the checkout.
 export const reduceCheckoutState = produce((state: State, action: Action) => {
+  if (
+    state.status.type !== "finished" &&
+    ["offer", "validate", "start-payment", "set-payment-method", "set-recaptcha-response"].includes(action.type) &&
+    refreshExpiredBuyerCurrencyQuote(state)
+  )
+    return;
   switch (action.type) {
+    case "refresh-expired-buyer-currency-quote":
+      if (state.status.type !== "input" && !action.beforeSubmit) return;
+      refreshExpiredBuyerCurrencyQuote(state);
+      return;
     case "set-value":
       if (
         ("country" in action && action.country !== state.country) ||
@@ -1856,6 +1903,19 @@ export function createReducer(initial: {
     // a request that was already superseded.
     if (state.surcharges.type === "error") showAlert("Sorry, something went wrong. Please try again.", "error");
   }, [state.surcharges]);
+
+  React.useEffect(() => {
+    const refreshOnReturn = () => {
+      if (document.visibilityState === "visible" && state.status.type === "input")
+        dispatch({ type: "refresh-expired-buyer-currency-quote" });
+    };
+    document.addEventListener("visibilitychange", refreshOnReturn);
+    window.addEventListener("focus", refreshOnReturn);
+    return () => {
+      document.removeEventListener("visibilitychange", refreshOnReturn);
+      window.removeEventListener("focus", refreshOnReturn);
+    };
+  }, [state.status.type]);
 
   return reducer;
 }

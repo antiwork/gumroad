@@ -149,6 +149,46 @@ describe("createReducer surcharge refetches", () => {
   const renderCheckout = (overrides: Partial<Parameters<typeof createReducer>[0]> = {}) =>
     renderHook(() => createReducer({ ...initialArgs, ...overrides }));
 
+  it.each(["focus", "visibilitychange"])(
+    "refreshes once on %s after a backgrounded tab expires, without resuming payment",
+    async (event) => {
+      const requests = stubSurchargeRequests();
+      const { result } = renderCheckout();
+      const expired = {
+        ...quote("expired"),
+        expires_at: new Date(Date.now() + 1000).toISOString(),
+        line_allocations: [
+          { permalink: "abc", price_cents: 1400, tip_cents: 0, tax_cents: 0, shipping_cents: 0, total_cents: 1400 },
+        ],
+      };
+      await act(() => vi.advanceTimersByTimeAsync(300));
+      await act(async () => requests[0]?.resolve(surchargesResponse({ buyer_currency_quote: expired })));
+      // Move wall time without running a timer: suspended tabs need no background polling.
+      vi.setSystemTime(Date.now() + 2000);
+      act(() => (event === "focus" ? window : document).dispatchEvent(new Event(event)));
+      expect(result.current[0].surcharges.type).toBe("pending");
+      expect(result.current[0].status.type).toBe("input");
+      expect(result.current[0].warning).toContain("review the updated total");
+      act(() => window.dispatchEvent(new Event("focus")));
+      await act(() => vi.advanceTimersByTimeAsync(300));
+      expect(requests).toHaveLength(2);
+      const fresh = {
+        ...expired,
+        token: "fresh",
+        expires_at: "2999-01-01T00:00:00Z",
+        presentment_total_cents: 1500,
+        line_allocations: [
+          { permalink: "abc", price_cents: 1500, tip_cents: 0, tax_cents: 0, shipping_cents: 0, total_cents: 1500 },
+        ],
+      };
+      await act(async () => requests[1]?.resolve(surchargesResponse({ buyer_currency_quote: fresh })));
+      expect(result.current[0].status.type).toBe("input");
+      expect(result.current[0].resumeSubmitAfterCheckoutPayment).toBe(false);
+      await act(() => vi.advanceTimersByTimeAsync(60000));
+      expect(requests).toHaveLength(2);
+    },
+  );
+
   it("passes an abort signal to getSurcharges and aborts it when a newer change invalidates", async () => {
     const requests = stubSurchargeRequests();
     const { result } = renderCheckout();

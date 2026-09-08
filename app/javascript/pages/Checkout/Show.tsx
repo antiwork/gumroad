@@ -57,6 +57,8 @@ import {
 import { CrossSellModal } from "$app/components/Checkout/CrossSellModal";
 import { computeInitialCheckout, type InitialCheckout } from "$app/components/Checkout/initialCheckout";
 import {
+  BUYER_CURRENCY_QUOTE_REFRESH_MESSAGE,
+  hasExpiredBuyerCurrencyQuote,
   canDisplayBuyerCurrencyQuote,
   canUseStripePaymentElement,
   canUseStripePaymentElementClientConfirm,
@@ -124,8 +126,6 @@ type CheckoutIndexPageProps = {
 };
 
 const BUYER_CURRENCY_QUOTE_INVALID_ERROR_CODE = "buyer_currency_quote_invalid";
-const BUYER_CURRENCY_QUOTE_INVALID_MESSAGE =
-  "The local-currency price changed or expired. Please review the updated total and try again.";
 const DUPLICATE_PURCHASE_CONFIRMATION_REQUIRED_ERROR_CODE = "duplicate_purchase_confirmation_required";
 
 function getCartItemUid(item: CartItem) {
@@ -534,6 +534,12 @@ const CheckoutIndexPage = () => {
           ),
         );
       }
+      // Analytics and CAPTCHA may outlive the quote even when Pay started with a fresh one.
+      // Stop before either order endpoint; refreshing must not reuse this payment authorization.
+      if (hasExpiredBuyerCurrencyQuote(state)) {
+        dispatch({ type: "refresh-expired-buyer-currency-quote", beforeSubmit: true });
+        return;
+      }
       const requestData = {
         email: state.email,
         fullName: state.fullName,
@@ -699,7 +705,7 @@ const CheckoutIndexPage = () => {
             !result.success && "error_code" in result && result.error_code === BUYER_CURRENCY_QUOTE_INVALID_ERROR_CODE,
         )
       ) {
-        showAlert(BUYER_CURRENCY_QUOTE_INVALID_MESSAGE, "warning");
+        showAlert(BUYER_CURRENCY_QUOTE_REFRESH_MESSAGE, "warning");
         dispatch({ type: "cancel" });
         const refreshedCart = withRefreshedOfferCodes(getLatestCart(), result.offerCodes);
         cartForm.setData({ cart: refreshedCart });
