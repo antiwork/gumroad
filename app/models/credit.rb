@@ -296,7 +296,9 @@ class Credit < ApplicationRecord
   # The ledger rows are booked in one transaction, so an existing retention credit means the
   # only thing that can still be outstanding is the Stripe debit.
   def self.create_for_refund_fee_retention!(refund:)
-    existing_credit = where(fee_retention_refund: refund, failed_refund_id: nil).first
+    # Scope by user_id so MySQL can use index_credits_on_user_id_and_created_at_and_id
+    # (there is no index on fee_retention_refund_id alone).
+    existing_credit = where(user_id: refund.purchase.seller_id, fee_retention_refund: refund, failed_refund_id: nil).first
     if existing_credit.present?
       # Pre-patch US retention completed Stripe transfers without recording
       # debited_stripe_transfer. Blank marker + ledger means legacy-complete — do not
@@ -306,6 +308,9 @@ class Credit < ApplicationRecord
         existing_credit.balance_id.present?
       unless us_legacy_complete
         actual_holding = debit_stripe_account_for_retained_fee(existing_credit)
+        # Debit helper returns nil once the success marker is set; still reconcile from the
+        # persisted actual when a prior attempt booked only the FX estimate.
+        actual_holding ||= refund.refund_fee_holding_debit_cents
         reconcile_fee_retention_holding_amount!(existing_credit, actual_holding)
       end
       return existing_credit
@@ -430,7 +435,9 @@ class Credit < ApplicationRecord
     merchant_account = credit.merchant_account
     refund = credit.fee_retention_refund
     return unless merchant_account.holder_of_funds == HolderOfFunds::STRIPE
-    return if refund.debited_stripe_transfer.present? && !fee_debit_pending_retry?(refund)
+    if refund.debited_stripe_transfer.present? && !fee_debit_pending_retry?(refund)
+      return refund.refund_fee_holding_debit_cents.presence&.to_i
+    end
 
     if merchant_account.country == Compliance::Countries::USA.alpha2
       # For gumroad-controlled Stripe accounts from the US, we can make new debit transfers.
@@ -441,8 +448,9 @@ class Credit < ApplicationRecord
       transfer_options[:idempotency_key] = "refund_fee_us_debit_#{refund.external_id}" if refund.id.present?
       transfer = Stripe::Transfer.create({ amount: credit.amount_cents.abs, currency: "usd", destination: Stripe::Account.retrieve.id, },
                                          transfer_options)
-      record_fee_debit_marker!(refund, transfer.id, holding_debit_cents: credit.amount_cents.abs)
-      nil
+      record_fee_debit_marker!(refund, transfer.id)
+      persist_refund_fee_holding_on_credit!(refund, credit.amount_cents.abs)
+      credit.amount_cents.abs
     else
       # For non-US gumroad-controlled Stripe accounts, we cannot make debit transfers.
       # So we try and reverse the retained fee amount from one of the old transfers made to that Stripe account.
@@ -467,14 +475,22 @@ class Credit < ApplicationRecord
   # enclosing transaction must commit that transaction even when later ledger work fails
   # (see Purchase#debit_processor_fee_from_merchant_account!), otherwise the savepoint is
   # rolled back and a retry can debit Stripe again after the idempotency window.
-  def self.record_fee_debit_marker!(refund, marker, holding_debit_cents: nil)
+  def self.record_fee_debit_marker!(refund, marker)
     transaction(requires_new: true) do
-      refund.debited_stripe_transfer = marker
-      refund.refund_fee_holding_debit_cents = holding_debit_cents if holding_debit_cents.present?
-      refund.save!
+      refund.update!(debited_stripe_transfer: marker)
     end
   end
   private_class_method :record_fee_debit_marker!
+
+  def self.persist_refund_fee_holding_on_credit!(refund, holding_debit_cents)
+    return if refund.blank? || holding_debit_cents.blank?
+    return if refund.refund_fee_holding_debit_cents.to_i == holding_debit_cents.to_i
+
+    transaction(requires_new: true) do
+      refund.update!(refund_fee_holding_debit_cents: holding_debit_cents.to_i)
+    end
+  end
+  private_class_method :persist_refund_fee_holding_on_credit!
 
   # Persist the chosen Stripe recovery route before submit so a timed-out response cannot
   # be retried as a different operation (e.g. transfer reversal → EUR debit).

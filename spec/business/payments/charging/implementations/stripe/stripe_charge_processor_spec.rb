@@ -4172,6 +4172,28 @@ describe StripeChargeProcessor, :vcr do
         expect(described_class.debit_stripe_account_for_refund_fee(credit:)).to be_nil
       end
 
+      it "records the reversal id even when follow-up Stripe balance lookups fail" do
+        create_internal_transfer_payments("tr_eur_1")
+        credit = create_fee_credit
+        refund = credit.fee_retention_refund
+
+        expect(Stripe::Transfer).to receive(:retrieve).with("tr_eur_1").and_return(double(id: "tr_eur_1", amount: 2000, amount_reversed: 0, currency: "eur"))
+        transfer_reversal = double(id: "trr_eur_followup", destination_payment_refund: "re_eur_followup")
+        expect(Stripe::Transfer).to receive(:create_reversal)
+                                      .with("tr_eur_1", { amount: 920 }, hash_including(:idempotency_key))
+                                      .and_return(transfer_reversal)
+        expect(Stripe::Refund).to receive(:retrieve)
+                                    .with("re_eur_followup", hash_including(stripe_account: @bg_merchant_account.charge_processor_merchant_id))
+                                    .and_raise(Stripe::APIConnectionError.new("timeout"))
+
+        expect do
+          described_class.debit_stripe_account_for_refund_fee(credit:)
+        end.to raise_error(Stripe::APIConnectionError)
+
+        expect(refund.reload.debited_stripe_transfer).to eq("trr_eur_followup")
+        expect(refund.refund_fee_debit_operation).to eq(described_class::FEE_DEBIT_OP_TRANSFER_REVERSAL)
+      end
+
       it "persists the chosen transfer reversal before submit and resumes it after pending_retry" do
         create_internal_transfer_payments("tr_eur_1")
         credit = create_fee_credit

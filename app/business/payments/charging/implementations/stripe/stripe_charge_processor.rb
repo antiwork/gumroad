@@ -635,7 +635,11 @@ class StripeChargeProcessor
     return unless credit.merchant_account.holder_of_funds == HolderOfFunds::STRIPE
     return if credit.merchant_account.country == Compliance::Countries::USA.alpha2
     refund = credit.fee_retention_refund
-    return if refund&.debited_stripe_transfer.present? && refund.debited_stripe_transfer != Credit::FEE_DEBIT_PENDING_RETRY
+    if refund&.debited_stripe_transfer.present? && refund.debited_stripe_transfer != Credit::FEE_DEBIT_PENDING_RETRY
+      # Debit already succeeded; return any persisted holding amount so retries can still
+      # reconcile the ledger estimate without submitting another Stripe operation.
+      return refund.refund_fee_holding_debit_cents.presence&.to_i
+    end
 
     stripe_account_id = credit.merchant_account.charge_processor_merchant_id
     usd_amount_cents = credit.amount_cents.abs
@@ -729,13 +733,17 @@ class StripeChargeProcessor
     reversal_opts = {}
     reversal_opts[:idempotency_key] = "refund_fee_reversal_#{refund.external_id}" if refund&.id.present?
     transfer_reversal = Stripe::Transfer.create_reversal(transfer_id, { amount: amount_cents.to_i }, reversal_opts)
+    # Persist the reversal id before follow-up retrieves. If those lookups fail, pending_retry
+    # must not erase proof the creator was already debited (idempotency keys expire).
+    record_refund_fee_debit_marker!(refund, transfer_reversal.id) if refund.present?
+
     destination_refund = Stripe::Refund.retrieve(transfer_reversal.destination_payment_refund,
                                                  stripe_account: stripe_account_id)
 
     destination_balance_transaction = Stripe::BalanceTransaction.retrieve(destination_refund.balance_transaction,
                                                                           stripe_account: stripe_account_id)
     holding_abs = destination_balance_transaction.net.abs
-    record_refund_fee_debit_marker!(refund, transfer_reversal.id, holding_debit_cents: holding_abs) if refund.present?
+    persist_refund_fee_holding_debit!(refund, holding_abs) if refund.present?
     holding_abs
   end
   private_class_method :resume_transfer_reversal_for_refund_fee
@@ -763,23 +771,32 @@ class StripeChargeProcessor
     transfer_options[:idempotency_key] = "refund_fee_eur_debit_#{refund.external_id}" if refund&.id.present?
     transfer = Stripe::Transfer.create({ amount: eur_amount_cents, currency: Currency::EUR, destination: STRIPE_PLATFORM_ACCOUNT_ID },
                                        transfer_options)
+    record_refund_fee_debit_marker!(refund, transfer.id) if refund.present?
 
     holding_abs = case credit.merchant_account.currency.to_s.downcase
                   when Currency::EUR then eur_amount_cents
                   when BGN then (BigDecimal(eur_amount_cents) * BGN_PER_EUR).round
                   end
-    record_refund_fee_debit_marker!(refund, transfer.id, holding_debit_cents: holding_abs) if refund.present?
+    persist_refund_fee_holding_debit!(refund, holding_abs) if refund.present? && holding_abs.present?
     holding_abs
   end
 
-  def self.record_refund_fee_debit_marker!(refund, marker, holding_debit_cents: nil)
+  def self.record_refund_fee_debit_marker!(refund, marker)
     ActiveRecord::Base.transaction(requires_new: true) do
-      refund.debited_stripe_transfer = marker
-      refund.refund_fee_holding_debit_cents = holding_debit_cents if holding_debit_cents.present?
-      refund.save!
+      refund.update!(debited_stripe_transfer: marker)
     end
   end
   private_class_method :record_refund_fee_debit_marker!
+
+  def self.persist_refund_fee_holding_debit!(refund, holding_debit_cents)
+    return if refund.blank? || holding_debit_cents.blank?
+    return if refund.refund_fee_holding_debit_cents.to_i == holding_debit_cents.to_i
+
+    ActiveRecord::Base.transaction(requires_new: true) do
+      refund.update!(refund_fee_holding_debit_cents: holding_debit_cents.to_i)
+    end
+  end
+  private_class_method :persist_refund_fee_holding_debit!
 
   def self.debit_stripe_account_for_australia_backtaxes(credit:)
     return unless credit.present?
