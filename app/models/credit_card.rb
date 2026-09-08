@@ -230,10 +230,13 @@ class CreditCard < ApplicationRecord
 
   def store_stripe_setup_intent_id!(merchant_account, id)
     key = merchant_account_key(merchant_account)
-    existing = json_data.to_h
-    ids = existing["stripe_setup_intent_ids"].is_a?(Hash) ? existing["stripe_setup_intent_ids"].dup : {}
-    ids[key] = id
-    update!(json_data: existing.merge("stripe_setup_intent_ids" => ids))
+    with_lock do
+      reload
+      existing = json_data.to_h
+      ids = existing["stripe_setup_intent_ids"].is_a?(Hash) ? existing["stripe_setup_intent_ids"].dup : {}
+      ids[key] = id
+      update!(json_data: existing.merge("stripe_setup_intent_ids" => ids))
+    end
   end
 
   # Drop this merchant account's SetupIntent entry (and the legacy scalar when it was the

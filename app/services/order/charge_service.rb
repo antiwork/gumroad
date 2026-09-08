@@ -287,7 +287,8 @@ class Order::ChargeService
   def register_india_mandate_for_off_session_cart!(purchases, chargeable, merchant_account, mandate_options)
     if chargeable.stripe_setup_intent_id.present?
       existing_si = ChargeProcessor.get_setup_intent(merchant_account, chargeable.stripe_setup_intent_id)
-      if existing_si.present? && (existing_si.succeeded? || existing_si.requires_action?)
+      if existing_si.present? && (existing_si.succeeded? || existing_si.requires_action?) &&
+         setup_intent_belongs_to_chargeable?(existing_si, chargeable, purchases, merchant_account)
         self.setup_intent = existing_si
         bind_connect_payment_method!(chargeable, existing_si, merchant_account)
         # Resume/confirm keys off processor_setup_intent_id on this cart's purchases. A reused
@@ -335,6 +336,29 @@ class Order::ChargeService
 
   # When reusing a SetupIntent whose mandate is bound to a specific Connect PM, prepare!
   # will have cloned a fresh PM that lacks the mandate. Point the chargeable at the SI's PM.
+  # Reused SetupIntents must belong to this chargeable's customer/payment method. Otherwise a
+  # caller could supply another buyer's SI id and receive that intent's client_secret.
+  def setup_intent_belongs_to_chargeable?(setup_intent, chargeable, purchases, merchant_account)
+    setup_intent_id = setup_intent.try(:id) || chargeable.try(:stripe_setup_intent_id)
+    # Merchant-scoped map entries we previously stored on this card are trusted.
+    card = purchases.filter_map { |purchase| purchase.credit_card }.first
+    if card&.requires_mandate? && setup_intent_id.present? &&
+       card.stripe_setup_intent_id_for(merchant_account).to_s == setup_intent_id.to_s
+      return true
+    end
+
+    si_customer = setup_intent.try(:customer_id)
+    si_pm = setup_intent.try(:payment_method_id)
+    chargeable_customer = chargeable.respond_to?(:stripe_charge_params) ? chargeable.stripe_charge_params[:customer] : nil
+    chargeable_customer ||= chargeable.try(:customer_id)
+    chargeable_pm = chargeable.try(:payment_method_id)
+
+    return true if si_customer.present? && chargeable_customer.present? && si_customer.to_s == chargeable_customer.to_s
+    return true if si_pm.present? && chargeable_pm.present? && si_pm.to_s == chargeable_pm.to_s
+    # Refuse reuse when we cannot prove ownership — never return another buyer's client_secret.
+    false
+  end
+
   def bind_connect_payment_method!(chargeable, si, merchant_account)
     return unless merchant_account.is_a_stripe_connect_account? && si.payment_method_id.present?
     # prepare! attaches the SI's Connect PM to a connected Customer and includes that customer
@@ -456,7 +480,8 @@ class Order::ChargeService
           # an INR checkout.
           if chargeable.stripe_setup_intent_id.present?
             existing_si = ChargeProcessor.get_setup_intent(merchant_account, chargeable.stripe_setup_intent_id)
-            unless existing_si.present? && (existing_si.succeeded? || existing_si.requires_action?)
+            unless existing_si.present? && (existing_si.succeeded? || existing_si.requires_action?) &&
+                   setup_intent_belongs_to_chargeable?(existing_si, chargeable, purchases_to_charge, merchant_account)
               chargeable.stripe_setup_intent_id = nil
             end
           end

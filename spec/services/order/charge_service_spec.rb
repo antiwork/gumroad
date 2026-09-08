@@ -1827,10 +1827,23 @@ describe Order::ChargeService, :vcr do
     it "binds the Connect payment method when reusing a stored setup intent on a Connect merchant" do
       order = create(:order)
       merchant_account = create(:merchant_account_stripe_connect, user: seller_1)
+      saved_card = CreditCard.create!(
+        charge_processor_id: StripeChargeProcessor.charge_processor_id,
+        stripe_customer_id: "cus_existing_connect",
+        processor_payment_method_id: "pm_platform_existing",
+        stripe_fingerprint: "existing_connect_fp",
+        visual: "**** **** **** 4242",
+        card_type: CardType::VISA,
+        card_country: Compliance::Countries::IND.alpha2,
+        expiry_month: 12,
+        expiry_year: 2030,
+        json_data: { "stripe_setup_intent_ids" => { merchant_account.charge_processor_merchant_id => "seti_existing_connect" } }
+      )
       purchase = create(:purchase,
                         link: product_1,
                         seller: seller_1,
                         merchant_account:,
+                        credit_card: saved_card,
                         purchase_state: "in_progress",
                         is_multi_buy: true,
                         total_transaction_cents: 10_00)

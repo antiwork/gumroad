@@ -85,11 +85,20 @@ class Order::ConfirmService
     # group's single combined off-session charge and finalize its purchases from the created
     # intent; without it they would be marked successful with no money moved.
     def charge_seller_groups_awaiting_setup_confirmation!
-      # A browser-reported Stripe error means the buyer failed authentication; the
-      # per-purchase confirms fail everything via check_for_card_handling_error.
-      return if CardParamsHelper.check_for_errors(params).present?
+      browser_stripe_error = CardParamsHelper.check_for_errors(params).present?
 
       order.purchases.group_by { |purchase| purchase.charge&.id }.each_value do |seller_purchases|
+        # Even with a browser-reported stripe_error, already-submitted debits must still be
+        # reconciled — failing them would leave money moving without fulfillment.
+        if browser_stripe_error
+          charged = seller_purchases.select { |purchase| charged_after_setup_awaiting_finalization?(purchase) }
+          uncertain = seller_purchases.select do |purchase|
+            purchase.in_progress? && purchase.charge&.client_confirmed? && purchase.processor_payment_intent.blank?
+          end
+          finalize_setup_charged_purchases!(charged) if charged.any?
+          uncertain.each { |purchase| setup_charge_results[purchase.id] = :pending }
+          next
+        end
         pending = seller_purchases.select { |purchase| awaiting_charge_after_setup?(purchase) }
         charged = seller_purchases.select { |purchase| charged_after_setup_awaiting_finalization?(purchase) }
         next if pending.none? && charged.none?
@@ -273,6 +282,7 @@ class Order::ConfirmService
             setup_charge_results[purchase.id] = :pending
           end
           charge.update!(client_confirmed: true)
+          ReconcileClientConfirmedChargeJob.perform_in(30.seconds, charge.id)
         end
         # Definitive nil-intent failures already carry buyer-facing errors for per-purchase confirms.
         return
