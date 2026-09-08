@@ -494,10 +494,14 @@ export const startOrderCreation = async (
         if (resumeError instanceof PaymentConfirmedError) throw resumeError;
         // eslint-disable-next-line no-console
         console.error("Error resuming order after setup confirmation", resumeError);
-        throw new PaymentConfirmedError();
+        // SetupIntent confirmation alone does not move money. Only promise processing when a
+        // debit is already scheduled or a PaymentIntent was confirmed.
+        if (anyPaymentIntentConfirmed || processingPermalinks.size > 0) {
+          throw new PaymentConfirmedError();
+        }
       }
     }
-    if (confirmOrderPosted || anyPaymentIntentConfirmed || processingPermalinks.size > 0) {
+    if (anyPaymentIntentConfirmed || processingPermalinks.size > 0) {
       throw new PaymentConfirmedError();
     }
     if (pendingOrderId) {
