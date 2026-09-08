@@ -11,10 +11,10 @@ class Purchase::ConfirmService < Purchase::BaseService
   end
 
   def perform
-    # Free purchases included in the order are already marked successful
-    # as they are not dependent on the SCA response. We can safely return no-error response
-    # for any purchase that is already successful.
-    return if purchase.successful?
+    # Free purchases, free trials (not_charged), and authorized preorders are already done
+    # before a follow-on confirm POST. Treat all completed checkout states as idempotent so a
+    # later sibling authentication round does not convert them into retryable failures.
+    return if purchase.successful? || purchase.not_charged? || purchase.preorder_authorization_successful?
 
     # In the purchase has changed its state and is no longer in_progress, we can't confirm it.
     # Example 1: the time to complete SCA has expired and we have marked this purchase as failed in the background.
