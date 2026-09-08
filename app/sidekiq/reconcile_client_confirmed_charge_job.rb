@@ -29,7 +29,27 @@ class ReconcileClientConfirmedChargeJob
     return if charge.purchases.none?(&:in_progress?)
 
     delay = RETRY_DELAYS[attempt]
-    self.class.perform_in(delay, charge_id, attempt + 1) if delay
+    if delay
+      self.class.perform_in(delay, charge_id, attempt + 1)
+      return
+    end
+
+    # Exhausted the India processing window with no recoverable PaymentIntent: clear settling
+    # markers so payment_settling does not block the buyer forever, and fail uncharged rows.
+    return if charge.stripe_payment_intent_id.present?
+
+    ErrorNotifier.notify(
+      "ReconcileClientConfirmedChargeJob exhausted without finding a PaymentIntent",
+      charge_id: charge.id
+    )
+    charge.update!(client_confirmed: false)
+    charge.purchases.select(&:in_progress?).each do |purchase|
+      next if purchase.processor_payment_intent.present?
+
+      purchase.update!(stripe_status: nil) if purchase.stripe_status.present?
+      purchase.errors.add(:base, "There is a temporary problem, please try again (your card was not charged).") if purchase.errors.empty?
+      Purchase::MarkFailedService.new(purchase).perform
+    end
   end
 
   private

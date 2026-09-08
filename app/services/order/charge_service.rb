@@ -288,7 +288,8 @@ class Order::ChargeService
     if chargeable.stripe_setup_intent_id.present?
       existing_si = ChargeProcessor.get_setup_intent(merchant_account, chargeable.stripe_setup_intent_id)
       if existing_si.present? && (existing_si.succeeded? || existing_si.requires_action?) &&
-         setup_intent_belongs_to_chargeable?(existing_si, chargeable, purchases, merchant_account)
+         setup_intent_belongs_to_chargeable?(existing_si, chargeable, purchases, merchant_account) &&
+         setup_intent_covers_mandate_options?(existing_si, mandate_options)
         self.setup_intent = existing_si
         bind_connect_payment_method!(chargeable, existing_si, merchant_account)
         # Resume/confirm keys off processor_setup_intent_id on this cart's purchases. A reused
@@ -359,6 +360,34 @@ class Order::ChargeService
 
     return true if si_customer.present? && chargeable_customer.present? && si_customer.to_s == chargeable_customer.to_s
     return true if si_pm.present? && chargeable_pm.present? && si_pm.to_s == chargeable_pm.to_s
+    false
+  end
+
+  # A stored SetupIntent is only reusable when its mandate still covers this charge's cap and
+  # currency. Otherwise Stripe rejects the off-session debit and the buyer sees a dead end.
+  def setup_intent_covers_mandate_options?(setup_intent, mandate_options)
+    needed = mandate_options&.dig(:payment_method_options, :card, :mandate_options)
+    return true if needed.blank?
+
+    needed_amount = needed[:amount] || needed["amount"]
+    needed_currency = (needed[:currency] || needed["currency"]).to_s.downcase.presence
+    return true if needed_amount.blank?
+
+    registered = setup_intent.try(:card_mandate_options)
+    if registered.present?
+      registered_amount = registered[:amount] || registered["amount"] || registered.try(:amount)
+      registered_currency = (registered[:currency] || registered["currency"] || registered.try(:currency)).to_s.downcase.presence
+      return false if registered_amount.present? && registered_amount.to_i < needed_amount.to_i
+      return false if needed_currency.present? && registered_currency.present? && registered_currency != needed_currency
+      return true
+    end
+
+    mandate_id = setup_intent.try(:mandate)
+    return false if mandate_id.blank?
+
+    true
+  rescue StandardError => e
+    Rails.logger.info("SetupIntent mandate coverage check failed: #{e.class} => #{e.message}")
     false
   end
 
@@ -484,7 +513,8 @@ class Order::ChargeService
           if chargeable.stripe_setup_intent_id.present?
             existing_si = ChargeProcessor.get_setup_intent(merchant_account, chargeable.stripe_setup_intent_id)
             unless existing_si.present? && (existing_si.succeeded? || existing_si.requires_action?) &&
-                   setup_intent_belongs_to_chargeable?(existing_si, chargeable, purchases_to_charge, merchant_account)
+                   setup_intent_belongs_to_chargeable?(existing_si, chargeable, purchases_to_charge, merchant_account) &&
+                   setup_intent_covers_mandate_options?(existing_si, setup_mandate_options)
               chargeable.stripe_setup_intent_id = nil
             end
           end
@@ -609,7 +639,17 @@ class Order::ChargeService
           # Check back later to see if the purchase has been completed. If not, transition to a failed state.
           FailAbandonedPurchaseWorker.perform_in(ChargeProcessor::TIME_TO_COMPLETE_SCA, purchase.id)
         elsif charge_intent&.processing?
-          Rails.logger.info("Leaving purchase #{purchase.id} in_progress while charge intent #{charge_intent.id} is processing")
+          if purchase.is_free_trial_purchase? || purchase.is_preorder_authorization?
+            # Paid sibling debit can stay processing for hours; setup-only lines must not wait
+            # on that settlement when their SetupIntent already succeeded (or none was needed).
+            if setup_intent.blank? || setup_intent.succeeded?
+              mark_setup_future_charges_successful(purchase)
+            else
+              FailAbandonedPurchaseWorker.perform_in(ChargeProcessor::TIME_TO_COMPLETE_SCA, purchase.id)
+            end
+          else
+            Rails.logger.info("Leaving purchase #{purchase.id} in_progress while charge intent #{charge_intent.id} is processing")
+          end
         elsif purchase_waiting_for_flow_of_funds?(purchase) && purchase_has_charge_data?(purchase)
           Rails.logger.info("Leaving purchase #{purchase.id} in_progress because charge #{charge_intent.charge.id} is missing flow of funds")
         elsif charge_intent&.succeeded? && purchase_has_charge_data?(purchase)
