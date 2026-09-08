@@ -10,7 +10,8 @@ const getSurcharges = vi.hoisted(() => vi.fn());
 vi.mock("$app/data/customer_surcharge", () => ({ getSurcharges }));
 
 const showAlert = vi.hoisted(() => vi.fn());
-vi.mock("$app/components/server-components/Alert", () => ({ showAlert }));
+const dismissAlert = vi.hoisted(() => vi.fn());
+vi.mock("$app/components/server-components/Alert", () => ({ showAlert, dismissAlert }));
 
 // payment.ts reads Routes.checkout_path() on mount to decide whether to rewrite the URL.
 vi.stubGlobal("Routes", { checkout_path: () => "/checkout" });
@@ -146,6 +147,25 @@ describe("createReducer surcharge refetches", () => {
     },
   };
 
+  // Real FX checkout lane. Default createReducer checkoutPayment is card_element (Manage), which
+  // deliberately does not intercept expired quotes.
+  const buyerCurrencyPresentmentCheckoutPayment: CheckoutPaymentConfig = {
+    integration: "payment_element",
+    fallback_reason: null,
+    disable_wallets: true,
+    request_apple_pay_merchant_tokens: false,
+    payment_element_wallets: false,
+    flat_payment_methods: true,
+    elements_options: {
+      stripe_elements_mode: "payment",
+      currency: "usd",
+      buyer_currency_presentment: true,
+      payment_method_types: ["card"],
+      payment_method_creation: "manual",
+      stripe_link_enabled: true,
+    },
+  };
+
   const renderCheckout = (overrides: Partial<Parameters<typeof createReducer>[0]> = {}) =>
     renderHook(() => createReducer({ ...initialArgs, ...overrides }));
 
@@ -153,7 +173,7 @@ describe("createReducer surcharge refetches", () => {
     "refreshes once on %s after a backgrounded tab expires, without resuming payment",
     async (event) => {
       const requests = stubSurchargeRequests();
-      const { result } = renderCheckout();
+      const { result } = renderCheckout({ checkoutPayment: buyerCurrencyPresentmentCheckoutPayment });
       const expired = {
         ...quote("expired"),
         expires_at: new Date(Date.now() + 1000).toISOString(),
@@ -191,7 +211,7 @@ describe("createReducer surcharge refetches", () => {
 
   it("retries a failed expiry refresh only on buyer action and still requires re-review", async () => {
     const requests = stubSurchargeRequests();
-    const { result } = renderCheckout();
+    const { result } = renderCheckout({ checkoutPayment: buyerCurrencyPresentmentCheckoutPayment });
     const expired = {
       ...quote("expired"),
       expires_at: "2000-01-01T00:00:00Z",
@@ -203,12 +223,20 @@ describe("createReducer surcharge refetches", () => {
     await act(async () => requests[0]?.resolve(surchargesResponse({ buyer_currency_quote: expired })));
     act(() => result.current[1]({ type: "validate" }));
     await act(() => vi.advanceTimersByTimeAsync(300));
+    showAlert.mockClear();
+    dismissAlert.mockClear();
     const { ResponseError } = await import("$app/utils/request");
     await act(async () => requests[1]?.reject(new ResponseError()));
     expect(result.current[0].surcharges.type).toBe("error");
+    expect(result.current[0].buyerCurrencyRemint).not.toBeNull();
+    expect(result.current[0].warning).toContain("review the updated total");
+    // TasteLint: yellow warning + Retry alone — no generic "Sorry, something went wrong" toast.
+    expect(showAlert).not.toHaveBeenCalled();
     await act(() => vi.advanceTimersByTimeAsync(60000));
     expect(requests).toHaveLength(2);
     act(() => result.current[1]({ type: "refresh-expired-buyer-currency-quote" }));
+    expect(dismissAlert).toHaveBeenCalled();
+    dismissAlert.mockClear();
     await act(() => vi.advanceTimersByTimeAsync(300));
     expect(requests).toHaveLength(3);
     await act(async () =>
@@ -221,6 +249,8 @@ describe("createReducer surcharge refetches", () => {
     expect(result.current[0].status.type).toBe("input");
     expect(result.current[0].resumeSubmitAfterCheckoutPayment).toBe(false);
     expect(result.current[0].surcharges.type).toBe("loaded");
+    // Dismiss runs when Retry starts (error → pending), not on every successful quote load.
+    expect(dismissAlert).not.toHaveBeenCalled();
   });
 
   it("passes an abort signal to getSurcharges and aborts it when a newer change invalidates", async () => {

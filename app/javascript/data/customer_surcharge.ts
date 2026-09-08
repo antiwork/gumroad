@@ -120,6 +120,11 @@ export const getSurcharges = async (data: GetSurchargesRequest, abortSignal?: Ab
     // whole-second precision, so reserve that second rather than extending the quote.
     result.buyer_currency_quote.client_expires_at =
       startedAt + Date.parse(result.buyer_currency_quote.expires_at) - serverTime - 1000;
+  } else if (result.buyer_currency_quote) {
+    // No trusted server clock. Do not derive expiry from the device clock — a clock that is
+    // ≥1h fast would treat every fresh quote as expired and loop local-currency checkout.
+    // Leave the quote non-expiring client-side; the server still refuses a truly expired token.
+    result.buyer_currency_quote.client_expires_at = Number.MAX_SAFE_INTEGER;
   }
   return result;
 };

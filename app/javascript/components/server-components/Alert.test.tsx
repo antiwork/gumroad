@@ -1,9 +1,9 @@
 // @vitest-environment happy-dom
-import { cleanup, render } from "@testing-library/react";
+import { act, cleanup, render } from "@testing-library/react";
 import * as React from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import ToastAlert, { DISMISS_DELAY_MS } from "$app/components/server-components/Alert";
+import ToastAlert, { DISMISS_DELAY_MS, dismissAlert } from "$app/components/server-components/Alert";
 
 afterEach(() => {
   cleanup();
@@ -40,5 +40,27 @@ describe("ToastAlert", () => {
     // Other libraries may schedule timers; assert none of ours is the 5-second dismiss.
     const dismissTimers = setTimeoutSpy.mock.calls.filter(([, delay]) => delay === DISMISS_DELAY_MS);
     expect(dismissTimers).toHaveLength(0);
+  });
+
+  it("posts a null payload when dismissAlert is called", () => {
+    const spy = vi.spyOn(window, "postMessage");
+    dismissAlert();
+    expect(spy).toHaveBeenCalledWith({ type: "alert", payload: null }, window.location.origin);
+  });
+
+  it("hides an on-screen toast when a null alert payload arrives", () => {
+    const { getByTestId } = render(
+      <ToastAlert initial={{ message: "Sorry, something went wrong. Please try again.", status: "danger" }} />,
+    );
+    expect(getByTestId("toast-alert").className).toContain("visible");
+    act(() => {
+      window.dispatchEvent(
+        new MessageEvent("message", {
+          data: { type: "alert", payload: null },
+          origin: window.location.origin,
+        }),
+      );
+    });
+    expect(getByTestId("toast-alert").className).toContain("invisible");
   });
 });

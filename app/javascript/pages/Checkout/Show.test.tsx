@@ -35,7 +35,7 @@ vi.mock("$app/components/Checkout/CrossSellModal", () => ({ CrossSellModal: () =
 vi.mock("$app/components/Checkout/UpsellModal", () => ({ UpsellModal: () => null }));
 vi.mock("$app/components/Modal", () => ({ Modal: () => null }));
 vi.mock("$app/components/Product/ConfigurationSelector", () => ({ computeOptionPrice: vi.fn() }));
-vi.mock("$app/components/server-components/Alert", () => ({ showAlert: vi.fn() }));
+vi.mock("$app/components/server-components/Alert", () => ({ showAlert: vi.fn(), dismissAlert: vi.fn() }));
 vi.mock("@inertiajs/react", () => ({
   Head: () => null,
   router: { reload: vi.fn(), replace: vi.fn() },

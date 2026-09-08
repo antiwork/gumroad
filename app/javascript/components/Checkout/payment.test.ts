@@ -355,6 +355,122 @@ describe("expired buyer-currency quote submission", () => {
     expect(reduceCheckoutState(s, { type: "set-recaptcha-response", recaptchaResponse: "late" })).toBe(s);
   });
 
+  it("preserves status.errors when refreshing an expired quote", () => {
+    const expired = {
+      ...quotedState(buyerCurrencyClientConfirmConfig),
+      status: { type: "input" as const, errors: new Set(["zipCode", "email"]) },
+    };
+    const refreshed = reduceCheckoutState(expired, { type: "validate" });
+    expect(refreshed.status.type).toBe("input");
+    if (refreshed.status.type === "input") {
+      expect(refreshed.status.errors).toEqual(new Set(["zipCode", "email"]));
+    }
+  });
+
+  it("forces status back to input on every beforeSubmit abort path", () => {
+    const base = quotedState(buyerCurrencyClientConfirmConfig);
+    if (base.surcharges.type !== "loaded") throw new Error("expected loaded");
+
+    const refreshed = reduceCheckoutState(
+      { ...base, status: { type: "finished", paymentMethod: { type: "saved" } } },
+      { type: "refresh-expired-buyer-currency-quote", beforeSubmit: true },
+    );
+    expect(refreshed.status.type).toBe("input");
+    expect(refreshed.surcharges.type).toBe("pending");
+
+    const aborted = reduceCheckoutState(
+      {
+        ...base,
+        status: { type: "finished", paymentMethod: { type: "saved" } },
+        surcharges: { type: "pending" },
+        buyerCurrencyRemint: { surcharges: base.surcharges.result, previousCurrency: "cad" },
+      },
+      { type: "refresh-expired-buyer-currency-quote", beforeSubmit: true },
+    );
+    expect(aborted.status.type).toBe("input");
+
+    const retried = reduceCheckoutState(
+      {
+        ...base,
+        status: { type: "finished", paymentMethod: { type: "saved" } },
+        surcharges: { type: "error" },
+        buyerCurrencyRemint: { surcharges: base.surcharges.result, previousCurrency: "cad" },
+        warning: "The local-currency price changed or expired. Please review the updated total and try again.",
+      },
+      { type: "refresh-expired-buyer-currency-quote", beforeSubmit: true },
+    );
+    expect(retried.status.type).toBe("input");
+    expect(retried.surcharges.type).toBe("pending");
+  });
+
+  it("does not intercept expired quotes on Subscriptions/Manage (not_checkout CardElement)", () => {
+    const manage = quotedState({
+      ...cardElementConfig,
+      fallback_reason: "not_checkout",
+    });
+    const next = reduceCheckoutState(manage, { type: "offer" });
+    expect(next.status.type).toBe("offering");
+    expect(next.surcharges.type).toBe("loaded");
+    expect(next.warning ?? null).toBeNull();
+  });
+
+  it("still refreshes expired quotes on ordinary CardElement checkout", () => {
+    const checkout = quotedState(cardElementConfig);
+    const next = reduceCheckoutState(checkout, { type: "offer" });
+    expect(next.status.type).toBe("input");
+    expect(next.surcharges.type).toBe("pending");
+    expect(next.warning).toContain("review the updated total");
+  });
+
+  it("clears the FX review warning after the buyer pays again or edits the cart", () => {
+    const expired = quotedState(buyerCurrencyClientConfirmConfig);
+    const reviewing = reduceCheckoutState(expired, { type: "validate" });
+    expect(reviewing.warning).toContain("review the updated total");
+    const loading = reduceCheckoutState(reviewing, {
+      type: "set-value",
+      surcharges: { type: "loading", requestId: 1, abort: vi.fn() },
+    });
+    const fresh = quotedState(buyerCurrencyClientConfirmConfig, "2999-01-01T00:00:00Z");
+    if (fresh.surcharges.type !== "loaded") throw new Error("expected loaded");
+    const ready = reduceCheckoutState(loading, {
+      type: "surcharges-fetch-succeeded",
+      requestId: 1,
+      result: fresh.surcharges.result,
+    });
+    expect(ready.warning).toContain("review the updated total");
+    const paying = reduceCheckoutState(ready, { type: "offer" });
+    expect(paying.status.type).toBe("offering");
+    expect(paying.warning).toBeNull();
+
+    const reviewingAgain = reduceCheckoutState(expired, { type: "validate" });
+    const edited = reduceCheckoutState(reviewingAgain, {
+      type: "set-value",
+      country: "CA",
+      state: "ON",
+    });
+    expect(edited.warning).toBeNull();
+    expect(edited.buyerCurrencyRemint).toBeNull();
+  });
+
+  it("keeps Retry reachable if a tip edit during review then fails to refresh", () => {
+    const expired = quotedState(buyerCurrencyClientConfirmConfig);
+    const reviewing = reduceCheckoutState(expired, { type: "validate" });
+    const tipped = reduceCheckoutState(reviewing, {
+      type: "set-value",
+      tip: { type: "fixed", amount: 100 },
+    });
+    expect(tipped.warning).toContain("review the updated total");
+    expect(tipped.buyerCurrencyRemint).not.toBeNull();
+    const loading = reduceCheckoutState(tipped, {
+      type: "set-value",
+      surcharges: { type: "loading", requestId: 7, abort: vi.fn() },
+    });
+    const failed = reduceCheckoutState(loading, { type: "surcharges-fetch-failed", requestId: 7 });
+    expect(failed.surcharges.type).toBe("error");
+    expect(failed.buyerCurrencyRemint).not.toBeNull();
+    expect(failed.warning).toContain("review the updated total");
+  });
+
   it("refreshes at the expiry boundary and refuses malformed expiry", () => {
     vi.spyOn(Date, "now").mockReturnValue(Date.parse("2026-09-08T12:00:00Z"));
     try {

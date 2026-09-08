@@ -23,7 +23,7 @@ import {
   isRecurringUpiPaymentConfig,
 } from "$app/components/Checkout/buyerCurrencyDisplay";
 import { Creator } from "$app/components/Checkout/cartState";
-import { showAlert } from "$app/components/server-components/Alert";
+import { dismissAlert, showAlert } from "$app/components/server-components/Alert";
 import { useDebouncedCallback } from "$app/components/useDebouncedCallback";
 import { useOriginalLocation } from "$app/components/useOriginalLocation";
 import { useRunOnce } from "$app/components/useRunOnce";
@@ -1277,7 +1277,13 @@ export const BUYER_CURRENCY_QUOTE_REFRESH_MESSAGE =
   "The local-currency price changed or expired. Please review the updated total and try again.";
 
 export function hasExpiredBuyerCurrencyQuote(state: State) {
+  // Subscriptions/Manage uses CardElement with fallback_reason "not_checkout" and never submits
+  // the FX token. Intercepting Pay there would only refetch and overwrite the subscription-change
+  // warning. Ordinary CardElement checkouts can still receive and submit FX quotes, so they keep
+  // the pre-submit / tab-return refresh.
   if (
+    (state.checkoutPayment.integration === "card_element" &&
+      state.checkoutPayment.fallback_reason === "not_checkout") ||
     state.surcharges.type !== "loaded" ||
     getConfiguredDirectListedCurrency(state) ||
     isRecurringUpiPaymentConfig(state.checkoutPayment) ||
@@ -1304,7 +1310,11 @@ function refreshExpiredBuyerCurrencyQuote(state: State) {
   };
   state.surcharges = { type: "pending" };
   state.resumeSubmitAfterCheckoutPayment = false;
-  state.status = { type: "input", errors: new Set() };
+  // Preserve on-screen validation highlights the way neighboring stale-total refusals do.
+  state.status = {
+    type: "input",
+    errors: state.status.type === "input" ? state.status.errors : new Set(),
+  };
   state.warning = BUYER_CURRENCY_QUOTE_REFRESH_MESSAGE;
   return true;
 }
@@ -1318,15 +1328,24 @@ export const reduceCheckoutState = produce((state: State, action: Action) => {
   )
     return;
   switch (action.type) {
-    case "refresh-expired-buyer-currency-quote":
+    case "refresh-expired-buyer-currency-quote": {
       if (state.status.type !== "input" && !action.beforeSubmit) return;
+      const inputErrors = state.status.type === "input" ? state.status.errors : new Set<string>();
       if (state.surcharges.type === "error" && state.buyerCurrencyRemint) {
         state.surcharges = { type: "pending" };
         state.resumeSubmitAfterCheckoutPayment = false;
+        // beforeSubmit aborts pay() without submitting; always release the Pay spinner.
+        if (action.beforeSubmit) state.status = { type: "input", errors: inputErrors };
         return;
       }
-      refreshExpiredBuyerCurrencyQuote(state);
+      if (!refreshExpiredBuyerCurrencyQuote(state) && action.beforeSubmit) {
+        // Quote may no longer be loaded-and-expired (e.g. mid-analytics remint). pay() already
+        // returned; force input so isProcessing cannot strand the buyer on a dead spinner.
+        state.status = { type: "input", errors: inputErrors };
+        state.resumeSubmitAfterCheckoutPayment = false;
+      }
       return;
+    }
     case "set-value":
       if (
         ("country" in action && action.country !== state.country) ||
@@ -1399,6 +1418,7 @@ export const reduceCheckoutState = produce((state: State, action: Action) => {
           // The refusal was about the cart being replaced here, so it no longer describes
           // anything. The next response says whether the new cart can be quoted in that currency.
           state.unavailableBuyerCurrency = null;
+          if (state.warning === BUYER_CURRENCY_QUOTE_REFRESH_MESSAGE) state.warning = null;
         }
         if (state.surcharges.type === "loading") state.surcharges.abort();
         state.surcharges = { type: "pending" };
@@ -1521,6 +1541,9 @@ export const reduceCheckoutState = produce((state: State, action: Action) => {
       const errors = validatePaymentMethodIndependentFields(state);
       if (errors.size) state.validationFailedCount += 1;
       state.status = errors.size ? { type: "input", errors } : { type: "offering" };
+      // Buyer reviewed the refreshed total and is paying again — drop the FX review banner.
+      if (state.status.type === "offering" && state.warning === BUYER_CURRENCY_QUOTE_REFRESH_MESSAGE)
+        state.warning = null;
       break;
     }
     case "validate": {
@@ -1569,6 +1592,8 @@ export const reduceCheckoutState = produce((state: State, action: Action) => {
       const errors = validatePaymentMethodIndependentFields(state);
       if (errors.size) state.validationFailedCount += 1;
       state.status = errors.size ? { type: "input", errors } : { type: "validating" };
+      if (state.status.type === "validating" && state.warning === BUYER_CURRENCY_QUOTE_REFRESH_MESSAGE)
+        state.warning = null;
       break;
     }
     case "start-payment":
@@ -1631,6 +1656,7 @@ export const reduceCheckoutState = produce((state: State, action: Action) => {
       state.products = action.products;
       state.buyerCurrencyRemint = null;
       state.unavailableBuyerCurrency = null;
+      if (state.warning === BUYER_CURRENCY_QUOTE_REFRESH_MESSAGE) state.warning = null;
       if (state.surcharges.type === "loading") state.surcharges.abort();
       state.surcharges = action.surcharges ? { type: "loaded", result: action.surcharges } : { type: "pending" };
       // Accepting a cross-sell updates the products mid-pipeline on purpose, and it always
@@ -1902,13 +1928,28 @@ export function createReducer(initial: {
     }),
     300,
   );
+  const previousSurchargesType = React.useRef(state.surcharges.type);
   React.useEffect(() => {
+    const previousType = previousSurchargesType.current;
+    previousSurchargesType.current = state.surcharges.type;
     if (state.surcharges.type === "pending") updateSurcharges();
     // The reducer flips surcharges to "error" only when the current fetch fails (stale
     // failures are dropped there), so surfacing the alert on that transition can't fire for
     // a request that was already superseded.
-    if (state.surcharges.type === "error") showAlert("Sorry, something went wrong. Please try again.", "error");
-  }, [state.surcharges]);
+    // Failed FX quote refresh already shows the yellow review warning + Retry; a generic toast
+    // would cover mobile totals and linger to contradict CA$ totals / enabled Pay after retry.
+    const failedFxQuoteRefresh =
+      state.buyerCurrencyRemint != null && state.warning === BUYER_CURRENCY_QUOTE_REFRESH_MESSAGE;
+    if (state.surcharges.type === "error" && !failedFxQuoteRefresh) {
+      showAlert("Sorry, something went wrong. Please try again.", "error");
+    }
+    // Only dismiss when leaving an errored surcharge state. A successful first expiry refresh
+    // must not hide unrelated checkout toasts (e.g. a rejected discount code).
+    if (previousType === "error" && state.surcharges.type === "pending" && failedFxQuoteRefresh) {
+      dismissAlert();
+    }
+    if (previousType === "error" && state.surcharges.type === "loaded") dismissAlert();
+  }, [state.surcharges, state.buyerCurrencyRemint]);
 
   React.useEffect(() => {
     const refreshOnReturn = () => {
