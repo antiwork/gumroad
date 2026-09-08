@@ -57,6 +57,50 @@ class ThumbnailsControllerTest < ActionController::TestCase
     assert_equal({ "success" => false, "error" => "Invalid thumbnail parameter. Expected signed_blob_id." }, response.parsed_body)
   end
 
+  [123, 1.5, true, "123", "invalid-signature"].each do |signed_blob_id|
+    test "POST create rejects malformed signed blob ID #{signed_blob_id.inspect} without changing the thumbnail" do
+      @product.update!(thumbnail: create_thumbnail)
+      thumbnail = @product.thumbnail
+      thumbnail.mark_deleted!
+      original_attributes = thumbnail.reload.attributes
+      original_blob = thumbnail.file.blob
+
+      assert_no_difference [-> { Thumbnail.count }, -> { ActiveStorage::Attachment.count }, -> { ActiveStorage::Blob.count }] do
+        post :create, params: { link_id: @product.unique_permalink, thumbnail: { signed_blob_id: } }, as: :json
+      end
+
+      assert_response :bad_request
+      assert_equal({ "success" => false, "error" => "Invalid signed_blob_id." }, response.parsed_body)
+      assert_equal original_attributes, thumbnail.reload.attributes
+      assert_equal original_blob, thumbnail.file.blob
+    end
+  end
+
+  test "POST create rejects an expired signed blob ID without creating a thumbnail" do
+    signed_blob_id = image_blob.signed_id(expires_in: -1.minute)
+
+    assert_no_difference -> { Thumbnail.count } do
+      post :create, params: { link_id: @product.unique_permalink, thumbnail: { signed_blob_id: } }, as: :json
+    end
+
+    assert_response :bad_request
+    assert_equal false, response.parsed_body["success"]
+    assert_nil @product.reload.thumbnail
+  end
+
+  [nil, "", " ", false].each do |signed_blob_id|
+    test "POST create preserves the existing thumbnail for blank signed blob ID #{signed_blob_id.inspect}" do
+      @product.update!(thumbnail: create_thumbnail)
+      original_blob = @product.thumbnail.file.blob
+
+      post :create, params: { link_id: @product.unique_permalink, thumbnail: { signed_blob_id: } }, as: :json
+
+      assert_response :ok
+      assert_equal true, response.parsed_body["success"]
+      assert_equal original_blob, @product.reload.thumbnail.file.blob
+    end
+  end
+
   test "POST create fails for a thumbnail that is not square" do
     assert_nil @product.thumbnail
     invalid_blob = ActiveStorage::Blob.create_and_upload!(
