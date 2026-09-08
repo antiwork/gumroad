@@ -762,7 +762,13 @@ class StripeChargeProcessor
 
     destination_balance_transaction = Stripe::BalanceTransaction.retrieve(destination_refund.balance_transaction,
                                                                           stripe_account: stripe_account_id)
-    holding_abs = destination_balance_transaction.net.abs
+    # Stripe reports the destination balance currency, which can differ from
+    # merchant_account.currency (e.g. EUR proceeds while the ledger is still BGN).
+    holding_abs = holding_amount_in_merchant_currency(
+      destination_balance_transaction.net.abs,
+      from_currency: destination_balance_transaction.currency,
+      merchant_currency: credit.merchant_account.currency
+    )
     if refund.present?
       persist_refund_fee_holding_debit!(
         refund,
@@ -773,6 +779,20 @@ class StripeChargeProcessor
     holding_abs
   end
   private_class_method :resume_transfer_reversal_for_refund_fee
+
+  def self.holding_amount_in_merchant_currency(amount_cents, from_currency:, merchant_currency:)
+    from_currency = from_currency.to_s.downcase
+    merchant_currency = merchant_currency.to_s.downcase
+    return amount_cents.to_i if from_currency == merchant_currency
+
+    if [from_currency, merchant_currency].sort == [BGN, Currency::EUR].sort
+      return from_currency == Currency::EUR ? (BigDecimal(amount_cents) * BGN_PER_EUR).round : (BigDecimal(amount_cents) / BGN_PER_EUR).round
+    end
+
+    usd = get_usd_cents(from_currency, amount_cents)
+    usd_cents_to_currency(merchant_currency, usd)
+  end
+  private_class_method :holding_amount_in_merchant_currency
 
   # Recovery for accounts whose only reversible history settled in BGN: per Stripe's guidance
   # for those accounts, debit them directly with a EUR transfer to the platform instead.
@@ -821,8 +841,13 @@ class StripeChargeProcessor
       transfer_reversal = Stripe::Transfer.retrieve(transfer_id).reversals.retrieve(reversal_id)
       destination_refund = Stripe::Refund.retrieve(transfer_reversal.destination_payment_refund,
                                                    stripe_account: stripe_account_id)
-      holding_abs = Stripe::BalanceTransaction.retrieve(destination_refund.balance_transaction,
-                                                        stripe_account: stripe_account_id).net.abs
+      destination_balance_transaction = Stripe::BalanceTransaction.retrieve(destination_refund.balance_transaction,
+                                                                            stripe_account: stripe_account_id)
+      holding_abs = holding_amount_in_merchant_currency(
+        destination_balance_transaction.net.abs,
+        from_currency: destination_balance_transaction.currency,
+        merchant_currency: credit.merchant_account.currency
+      )
       persist_refund_fee_holding_debit!(refund, holding_abs, currency: credit.merchant_account.currency)
       holding_abs
     when FEE_DEBIT_OP_EUR_DEBIT

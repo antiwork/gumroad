@@ -296,9 +296,17 @@ class Credit < ApplicationRecord
   # The ledger rows are booked in one transaction, so an existing retention credit means the
   # only thing that can still be outstanding is the Stripe debit.
   def self.create_for_refund_fee_retention!(refund:)
+    purchase = refund.purchase
+    # Same purchase → refund lock order as HandleFailedRefundService / the Purchase wrapper.
+    # Refuse to retain (or re-retain) a fee after the refund's balance was reversed on failure.
+    purchase.with_lock do
+      refund.lock!
+      return if refund.balance_reversed_on_failure
+    end
+
     # Scope by user_id so MySQL can use index_credits_on_user_id_and_created_at_and_id
     # (there is no index on fee_retention_refund_id alone).
-    existing_credit = where(user_id: refund.purchase.seller_id, fee_retention_refund: refund, failed_refund_id: nil).first
+    existing_credit = where(user_id: purchase.seller_id, fee_retention_refund: refund, failed_refund_id: nil).first
     if existing_credit.present?
       # Pre-patch US retention completed Stripe transfers without recording
       # debited_stripe_transfer. Blank marker + ledger means legacy-complete — do not
@@ -383,7 +391,12 @@ class Credit < ApplicationRecord
     # instead of debiting the account twice.
     net_amount_on_stripe_in_holding_currency = debit_stripe_account_for_retained_fee(credit)
     if refund.refund_fee_holding_debit_cents.present?
-      reversed_amount_cents_in_holding_currency = -refund.refund_fee_holding_debit_cents.to_i
+      holding_abs = convert_fee_holding_cents(
+        refund.refund_fee_holding_debit_cents,
+        from_currency: refund.refund_fee_holding_debit_currency.presence || credit.merchant_account.currency,
+        to_currency: credit.merchant_account.currency
+      )
+      reversed_amount_cents_in_holding_currency = -holding_abs if holding_abs.present?
     elsif net_amount_on_stripe_in_holding_currency.present?
       reversed_amount_cents_in_holding_currency = -net_amount_on_stripe_in_holding_currency
     end
@@ -552,7 +565,14 @@ class Credit < ApplicationRecord
     return if refund&.refund_fee_holding_reconciled_cents.to_i == actual_in_bt_currency
 
     target = -actual_in_bt_currency
-    delta = target - bt.holding_amount_net_cents
+    previously_reconciled = refund&.refund_fee_holding_reconciled_cents
+    delta = if previously_reconciled.present?
+      # Adjust from the last applied amount, not the immutable BT estimate, so FX churn
+      # cannot re-apply the full estimate delta.
+      (-actual_in_bt_currency) - (-previously_reconciled.to_i)
+    else
+      target - bt.holding_amount_net_cents
+    end
 
     if delta.zero?
       transaction(requires_new: true) do
@@ -609,31 +629,21 @@ class Credit < ApplicationRecord
   end
   private_class_method :reconcile_fee_retention_holding_amount!
 
-  # Convert a fee debit's holding amount into the currency of the original retention
-  # BalanceTransaction. BGN↔EUR uses Stripe's fixed rate; other pairs go through USD rates.
+  # Convert a fee debit's holding amount into another currency. BGN↔EUR uses Stripe's fixed
+  # rate; other pairs go through CurrencyHelper so zero-decimal currencies stay correct.
   def self.convert_fee_holding_cents(amount_cents, from_currency:, to_currency:)
     from_currency = from_currency.to_s.downcase
     to_currency = to_currency.to_s.downcase
     return amount_cents.to_i if from_currency == to_currency
 
-    amount = BigDecimal(amount_cents.to_i)
+    amount = amount_cents.to_i
     bgn = StripeChargeProcessor::BGN
     if [from_currency, to_currency].sort == [bgn, Currency::EUR].sort
-      return from_currency == Currency::EUR ? (amount * StripeChargeProcessor::BGN_PER_EUR).round : (amount / StripeChargeProcessor::BGN_PER_EUR).round
+      return from_currency == Currency::EUR ? (BigDecimal(amount) * StripeChargeProcessor::BGN_PER_EUR).round : (BigDecimal(amount) / StripeChargeProcessor::BGN_PER_EUR).round
     end
 
-    usd = if from_currency == Currency::USD
-      amount
-    else
-      rate = BigDecimal(StripeChargeProcessor.get_rate(from_currency).to_s)
-      return if rate.zero?
-      amount / rate
-    end
-    return usd.round if to_currency == Currency::USD
-
-    rate = BigDecimal(StripeChargeProcessor.get_rate(to_currency).to_s)
-    return if rate.zero?
-    (usd * rate).round
+    usd = StripeChargeProcessor.get_usd_cents(from_currency, amount)
+    StripeChargeProcessor.usd_cents_to_currency(to_currency, usd)
   end
   private_class_method :convert_fee_holding_cents
 
