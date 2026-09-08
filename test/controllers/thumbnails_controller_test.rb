@@ -88,8 +88,8 @@ class ThumbnailsControllerTest < ActionController::TestCase
     assert_nil @product.reload.thumbnail
   end
 
-  [nil, "", " ", false].each do |signed_blob_id|
-    test "POST create preserves the existing thumbnail for blank signed blob ID #{signed_blob_id.inspect}" do
+  [nil, "", " ", false, ["invalid"], { value: "invalid" }].each do |signed_blob_id|
+    test "POST create preserves the existing thumbnail for blank or filtered signed blob ID #{signed_blob_id.inspect}" do
       @product.update!(thumbnail: create_thumbnail)
       original_blob = @product.thumbnail.file.blob
 
@@ -98,6 +98,23 @@ class ThumbnailsControllerTest < ActionController::TestCase
       assert_response :ok
       assert_equal true, response.parsed_body["success"]
       assert_equal original_blob, @product.reload.thumbnail.file.blob
+    end
+  end
+
+  test "POST create preserves the thumbnail when signed blob ID is omitted" do
+    @product.update!(thumbnail: create_thumbnail)
+    original_blob = @product.thumbnail.file.blob
+
+    post :create, params: { link_id: @product.unique_permalink, thumbnail: { ignored: "value" } }, as: :json
+
+    assert_response :ok
+    assert_equal true, response.parsed_body["success"]
+    assert_equal original_blob, @product.reload.thumbnail.file.blob
+  end
+
+  test "POST create still requires a nonempty thumbnail parameter" do
+    assert_raises ActionController::ParameterMissing do
+      post :create, params: { link_id: @product.unique_permalink, thumbnail: {} }, as: :json
     end
   end
 
