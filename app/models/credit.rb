@@ -455,6 +455,7 @@ class Credit < ApplicationRecord
           Rails.logger.error("Failed to reconcile concurrent fee retention for refund #{refund.id}: #{e.class}: #{e.message}")
           ErrorNotifier.notify(e, context: { refund_id: refund.id, credit_id: existing_credit.id })
         end
+        clear_refund_fee_retention_pending!(refund)
         return existing_credit
       end
 
@@ -485,11 +486,15 @@ class Credit < ApplicationRecord
         credit.balance = balance_transaction.balance
         credit.save!
 
-        # Attribute retained fee only after balance is linked — unpaid balances need the
-        # cents for payout/reporting; paid balances already settled without this marker.
+        # Fold into refund fee columns only when the credit lands on the same unpaid
+        # balance as the refund. Cross-payout retention leaves retained_fee_cents unset so
+        # the later payout export can show the debit credit instead of mis-attributing it.
         if credit.balance&.unpaid?
-          refund.retained_fee_cents = credit.amount_cents.abs
-          refund.save!
+          refund_balance_ids = refund.balance_transactions.map(&:balance_id)
+          if refund_balance_ids.blank? || refund_balance_ids.include?(credit.balance_id)
+            refund.retained_fee_cents = credit.amount_cents.abs
+            refund.save!
+          end
         end
       end
     end
@@ -601,7 +606,10 @@ class Credit < ApplicationRecord
       return if refund.debited_stripe_transfer == FEE_DEBIT_PENDING_RETRY
 
       transaction(requires_new: true) do
-        refund.update!(debited_stripe_transfer: FEE_DEBIT_PENDING_RETRY)
+        refund.update!(
+          debited_stripe_transfer: FEE_DEBIT_PENDING_RETRY,
+          fee_retention_retry_at: 1.minute.from_now
+        )
       end
     end
     RetryRefundFeeRetentionJob.perform_in(1.minute, refund.id) if refund.id.present?
@@ -611,7 +619,8 @@ class Credit < ApplicationRecord
   def self.clear_refund_fee_retention_pending!(refund)
     return if refund.blank?
     refund.reload
-    return unless refund.refund_fee_retention_pending
+    return unless refund.refund_fee_retention_pending || refund.fee_retention_retry_at.present? ||
+      refund.refund_fee_holding_reconcile_pending
     # Keep the flag while Stripe debit or holding reconciliation is still outstanding so
     # the recurring job can finish finish_holding_lookup / reconcile after a crash.
     return if fee_debit_pending_retry?(refund)
@@ -619,12 +628,24 @@ class Credit < ApplicationRecord
       return if refund.refund_fee_holding_debit_cents.blank?
       return if refund.refund_fee_holding_reconciled_cents.blank?
     end
+    return if refund.refund_fee_holding_reconcile_pending
 
     transaction(requires_new: true) do
-      refund.update!(refund_fee_retention_pending: false)
+      refund.update!(
+        refund_fee_retention_pending: false,
+        fee_retention_retry_at: nil,
+        refund_fee_holding_reconcile_pending: false
+      )
     end
   end
   private_class_method :clear_refund_fee_retention_pending!
+
+  # Enqueue-eligible marker for the indexed recurring retry scan.
+  def self.schedule_fee_retention_retry!(refund, run_at: Time.current)
+    return if refund.blank?
+    refund.update!(fee_retention_retry_at: run_at)
+  end
+  private_class_method :schedule_fee_retention_retry!
 
   # Stripe confirmed the sticky reversal did not happen (InvalidRequest). Drop the choice
   # so a retry can pick another transfer; bump generation for a fresh idempotency key.
@@ -756,7 +777,8 @@ class Credit < ApplicationRecord
         refund.update!(
           refund_fee_holding_debit_cents: actual,
           refund_fee_holding_debit_currency: actual_currency,
-          refund_fee_holding_reconciled_cents: actual_in_bt_currency
+          refund_fee_holding_reconciled_cents: actual_in_bt_currency,
+          refund_fee_holding_reconcile_pending: false
         ) if refund.present?
         next
       end
@@ -792,6 +814,15 @@ class Credit < ApplicationRecord
           Rails.logger.error(
             "Skipping fee retention holding reconcile for refund #{refund&.id}: "             "original balance immutable and no unpaid #{holding_currency} balance"
           )
+          # Keep retry eligibility until an unpaid balance can absorb the correction —
+          # without this marker the debit is done and retention_pending is clear, so the
+          # recurring job would never revisit the outstanding holding delta.
+          if refund.present?
+            refund.update!(
+              refund_fee_holding_reconcile_pending: true,
+              fee_retention_retry_at: 15.minutes.from_now
+            )
+          end
           next
         end
 
@@ -804,7 +835,8 @@ class Credit < ApplicationRecord
       refund.update!(
         refund_fee_holding_debit_cents: actual,
         refund_fee_holding_debit_currency: actual_currency,
-        refund_fee_holding_reconciled_cents: actual_in_bt_currency
+        refund_fee_holding_reconciled_cents: actual_in_bt_currency,
+        refund_fee_holding_reconcile_pending: false
       ) if refund.present?
     end
   end

@@ -85,16 +85,16 @@ class Exports::Payouts::Base
         end
 
         Credit.where(balance: bal).find_each do |credit|
-          # Fee-retention debits are normally folded into the refund rows' fee columns
-          # (via retained_fee_cents), so the negative credit row is skipped to avoid
-          # double-counting. When the refund FAILED and was reversed, its refund rows
-          # are excluded above — show the retention debit and its give-back explicitly
-          # instead, so the pair is visible and nets to zero.
+          # Fee-retention debits on the same payout as the refund are folded into the
+          # refund rows' fee columns via retained_fee_cents; skip those credit rows to
+          # avoid double-counting. Cross-payout retention leaves retained_fee_cents blank
+          # so this later balance can show the debit. Reversed failures always show both.
           retention_refund = credit.fee_retention_refund
           reversed_failure = retention_refund.present? &&
             retention_refund.terminally_failed? &&
             retention_refund.balance_reversed_on_failure.present?
-          next if retention_refund.present? && credit.amount_cents <= 0 && !reversed_failure
+          folded_into_refund = retention_refund&.retained_fee_cents.present?
+          next if retention_refund.present? && credit.amount_cents <= 0 && !reversed_failure && folded_into_refund
 
           credit_type = if reversed_failure
             credit.failed_refund_id.present? ? "Failed Refund Fee Returned" : "Failed Refund Fee Retained"

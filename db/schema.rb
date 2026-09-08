@@ -2226,7 +2226,9 @@ ActiveRecord::Schema[7.1].define(version: 2026_12_11_125458) do
     t.integer "fee_cents"
     t.bigint "flags", default: 0, null: false
     t.bigint "seller_id"
+    t.datetime "fee_retention_retry_at", precision: nil
     t.index ["created_at"], name: "index_refunds_on_created_at"
+    t.index ["fee_retention_retry_at"], name: "index_refunds_on_fee_retention_retry_at"
     t.index ["link_id"], name: "index_refunds_on_link_id"
     t.index ["processor_refund_id"], name: "index_refunds_on_processor_refund_id"
     t.index ["purchase_id"], name: "index_refunds_on_purchase_id"

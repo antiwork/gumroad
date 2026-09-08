@@ -335,6 +335,7 @@ class Purchase
       self.is_refund_chargeback_fee_waived = !charged_using_gumroad_merchant_account? || is_for_fraud
       unless is_refund_chargeback_fee_waived || chargedback_not_reversed?
         refund.refund_fee_retention_pending = true
+        refund.fee_retention_retry_at = Time.current
       end
       refunds << refund
       mark_giftee_purchase_as_refunded(is_partially_refunded: self.stripe_partially_refunded?) if is_gift_sender_purchase
@@ -419,6 +420,7 @@ class Purchase
         refund.processor_refund_id = processor_refund_id
         unless is_refund_chargeback_fee_waived
           refund.refund_fee_retention_pending = true
+          refund.fee_retention_retry_at = Time.current
         end
         refunds << refund
       end

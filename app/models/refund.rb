@@ -83,14 +83,15 @@ class Refund < ApplicationRecord
   # death between refund commit and after_commit fee retention.
   attr_json_data_accessor :refund_fee_retention_pending
 
-  # Fee retention still outstanding (set when the refund commits; cleared when retention finishes)
-  # or Stripe debit left in pending_retry. Retry jobs revisit these within the idempotency window.
+  # Indexed queue for outstanding fee retention / debit / holding-reconcile work.
+  # fee_retention_retry_at is set while work remains and cleared when finished — the
+  # recurring job selects on this column so MySQL does not scan refund JSON history.
   scope :pending_fee_debit_retry, -> {
-    where(
-      "refunds.json_data->>'$.debited_stripe_transfer' = ? OR COALESCE(refunds.json_data->>'$.refund_fee_retention_pending', 'false') = 'true'",
-      Credit::FEE_DEBIT_PENDING_RETRY
-    )
+    where.not(fee_retention_retry_at: nil)
   }
+
+  # True while holding-amount reconcile could not land (immutable balance, no unpaid).
+  attr_json_data_accessor :refund_fee_holding_reconcile_pending
 
   # Sticky recovery route chosen before the Stripe submit (transfer_reversal / eur_debit /
   # us_debit). Retries must resume this route instead of selecting a new one.
