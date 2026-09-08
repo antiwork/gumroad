@@ -306,6 +306,52 @@ describe ReindexSellerOfferCodesJob do
     expect($redis.get("#{key}:lock")).to eq("replacement-worker")
   end
 
+
+  it "does not advance the catalogue cursor on an unclassified Elasticsearch failure" do
+    products = create_list(:product, 3, user: seller, price_cents: 1000)
+    described_class.enqueue(seller.id)
+    allow(ProductOfferCodeIndexingService).to receive(:new).and_wrap_original do |original, batch|
+      service = original.call(batch)
+      allow(service).to receive(:perform).and_wrap_original do |perform_original, &block|
+        batch.each do |product|
+          allow(product.__elasticsearch__).to receive(:update_document_attributes).and_raise(
+            Elasticsearch::Transport::Transport::Errors::Unauthorized, "[401] security_exception"
+          )
+        end
+        perform_original.call(&block)
+      end
+      service
+    end
+    expect(ErrorNotifier).to receive(:notify).with(
+      an_instance_of(Elasticsearch::Transport::Transport::Errors::Unauthorized),
+      product_id: products.first.id,
+      user_id: seller.id
+    )
+    expect { job.perform(seller.id) }.to raise_error(Elasticsearch::Transport::Transport::Errors::Unauthorized, /401/)
+    expect($redis.get("#{key}:cursor")).to be_nil
+    expect($redis.get("#{key}:version")).to eq("1")
+  end
+
+  it "does not clear targeted product IDs on an unclassified Elasticsearch failure" do
+    products = create_list(:product, 2, user: seller)
+    described_class.enqueue_products(seller.id, products.map(&:id))
+    allow(ProductOfferCodeIndexingService).to receive(:new).and_wrap_original do |original, batch|
+      service = original.call(batch)
+      allow(service).to receive(:perform).and_wrap_original do |perform_original, &block|
+        batch.each do |product|
+          allow(product.__elasticsearch__).to receive(:update_document_attributes).and_raise(
+            Elasticsearch::Transport::Transport::Errors::Unauthorized, "[401] security_exception"
+          )
+        end
+        perform_original.call(&block)
+      end
+      service
+    end
+    expect(ErrorNotifier).to receive(:notify)
+    expect { job.perform(seller.id) }.to raise_error(Elasticsearch::Transport::Transport::Errors::Unauthorized, /401/)
+    expect($redis.zrange("#{key}:products", 0, -1)).to match_array(products.map { _1.id.to_s })
+  end
+
   it "advances the cursor when one product in a batch fails to index" do
     products = create_list(:product, 3, user: seller, price_cents: 1000)
     create(:universal_offer_code, user: seller, code: "KEEP")
