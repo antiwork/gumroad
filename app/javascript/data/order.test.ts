@@ -1097,9 +1097,9 @@ describe("startOrderCreation", () => {
     expect(retryable?.offerCodes).toEqual([{ code: "SAVE", products: { [secondLine.permalink]: fixedDiscount(100) } }]);
   });
 
-  it("keeps the cart retryable when setup confirmation succeeds but confirm_order never reaches Rails", async () => {
-    // SetupIntent confirmation alone does not create a PaymentIntent. If both confirm POSTs
-    // fail before Rails, promising processing would empty the cart with no debit to resume.
+  it("throws pending when confirm_order is lost after SetupIntent confirmation", async () => {
+    // The confirm POST may have created the off-session charge before the response was lost —
+    // treat that as non-resubmittable.
     vi.stubGlobal("Routes", {
       orders_path: () => "/orders",
       confirm_order_path: (id: string) => `/orders/${id}/confirm`,
@@ -1134,12 +1134,9 @@ describe("startOrderCreation", () => {
           offer_codes: [],
         }),
       )
-      .mockRejectedValueOnce(new Error("network down"))
-      .mockRejectedValueOnce(new Error("network down again"));
+      .mockRejectedValueOnce(new Error("network down"));
 
-    const result = await startOrderCreation(requestData, []);
-    expect(result.lineItems[lineItem.uid]).toMatchObject({ success: false });
-    expect(requestMock).toHaveBeenCalledTimes(4);
+    await expect(startOrderCreation(requestData, [])).rejects.toBeInstanceOf(PaymentConfirmedError);
   });
 
   it("does not forward stripe_error when a create-time processing group exists alongside a failed SCA", async () => {

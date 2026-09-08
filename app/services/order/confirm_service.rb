@@ -153,8 +153,7 @@ class Order::ConfirmService
       purchase.in_progress? &&
         purchase.errors.empty? &&
         (purchase.processor_setup_intent_id.present? || purchase.stripe_status == StripeIntentStatus::PROCESSING) &&
-        purchase.processor_payment_intent.present? &&
-        purchase.stripe_transaction_id.blank? &&
+        (purchase.processor_payment_intent.present? || purchase.stripe_transaction_id.present?) &&
         !purchase.free_purchase? &&
         !purchase.is_test_purchase? &&
         !purchase.is_free_trial_purchase? &&

@@ -235,6 +235,7 @@ export const startOrderCreation = async (
         if (requiresPaymentAction) anyPaymentIntentConfirmed = true;
         else pendingSetupNeedsConfirmPost = true;
       }
+      confirmOrderPosted = true;
       let orderConfirmResponse = await confirmOrderAfterAction({
         orderId,
         clientSecret: firstLineItemRequiringSCA.client_secret,
@@ -248,7 +249,6 @@ export const startOrderCreation = async (
         // still needs the quote the checkout displayed to present in the buyer's currency.
         buyerCurrencyQuote: requestData.buyerCurrencyQuote,
       });
-      confirmOrderPosted = true;
       pendingSetupNeedsConfirmPost = false;
       // The confirm response may return requires_card_setup/action for groups on other
       // Stripe accounts or a follow-on PI auth. Confirm those and POST confirm again.
@@ -282,6 +282,7 @@ export const startOrderCreation = async (
           if (requiresPaymentAction) anyPaymentIntentConfirmed = true;
           else pendingSetupNeedsConfirmPost = true;
         }
+        confirmOrderPosted = true;
         orderConfirmResponse = await confirmOrderAfterAction({
           orderId,
           clientSecret: followOnToConfirm[0]?.client_secret ?? firstLineItemRequiringSCA.client_secret,
@@ -289,7 +290,6 @@ export const startOrderCreation = async (
           retryOfferCodes: retryOfferCodeCandidates(requestData, retryOfferCodes),
           buyerCurrencyQuote: requestData.buyerCurrencyQuote,
         });
-        confirmOrderPosted = true;
         pendingSetupNeedsConfirmPost = false;
         // A failed follow-on auth still leaves requires_action on that group. Without stopping,
         // the confirm response requeues the same intent and this loop retries forever while
@@ -303,6 +303,7 @@ export const startOrderCreation = async (
       // A processing sibling must not leave an uncharged setup group in_progress forever: cancel
       // it so the buyer can retry that line without colliding with not_double_charged.
       if (leftoverScaAfterConfirm.length > 0 && (processingPermalinks.size > 0 || anyIntentConfirmed)) {
+        confirmOrderPosted = true;
         orderConfirmResponse = await confirmOrderAfterAction({
           orderId,
           clientSecret:
@@ -317,7 +318,6 @@ export const startOrderCreation = async (
           retryOfferCodes: retryOfferCodeCandidates(requestData, retryOfferCodes),
           buyerCurrencyQuote: requestData.buyerCurrencyQuote,
         });
-        confirmOrderPosted = true;
       }
       const confirmLineItems: Record<LineItemUid, ConfirmedPurchaseResponse | PurchaseErrorResponse> = {};
       // A processing line item means its group's charge is created and the debit scheduled —
@@ -408,6 +408,7 @@ export const startOrderCreation = async (
     // confirmed — so confirmed setups still create their charges before the pending outcome.
     if (pendingSetupNeedsConfirmPost && pendingOrderId && pendingClientSecret) {
       try {
+        confirmOrderPosted = true;
         const recoveryResponse = await confirmOrderAfterAction({
           orderId: pendingOrderId,
           clientSecret: pendingClientSecret,
@@ -494,14 +495,15 @@ export const startOrderCreation = async (
         if (resumeError instanceof PaymentConfirmedError) throw resumeError;
         // eslint-disable-next-line no-console
         console.error("Error resuming order after setup confirmation", resumeError);
-        // SetupIntent confirmation alone does not move money. Only promise processing when a
-        // debit is already scheduled or a PaymentIntent was confirmed.
-        if (anyPaymentIntentConfirmed || processingPermalinks.size > 0) {
+        // A confirm POST may have created the off-session debit before the response was lost.
+        if (confirmOrderPosted || anyPaymentIntentConfirmed || processingPermalinks.size > 0) {
           throw new PaymentConfirmedError();
         }
       }
     }
-    if (anyPaymentIntentConfirmed || processingPermalinks.size > 0) {
+    // confirmOrderPosted means a charge-creating confirm request was attempted; treat as
+    // non-resubmittable until reconciliation proves otherwise.
+    if (confirmOrderPosted || anyPaymentIntentConfirmed || processingPermalinks.size > 0) {
       throw new PaymentConfirmedError();
     }
     if (pendingOrderId) {
