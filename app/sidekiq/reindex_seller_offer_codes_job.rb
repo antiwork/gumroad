@@ -80,7 +80,9 @@ class ReindexSellerOfferCodesJob
       ActiveRecord::Base.connection.stick_to_primary!
       cursor, scan_version = $redis.mget("#{key}:cursor", "#{key}:scan_version")
       scan_version ||= version
-      products = Link.alive.where(user_id: seller_id).where("id > ?", cursor.to_i).order(:id).limit(BATCH_SIZE).to_a
+      # Include unpublished/banned rows: offer_codes can go stale while a product is
+      # inactive, and republication does not otherwise refresh them.
+      products = Link.visible.where(user_id: seller_id).where("id > ?", cursor.to_i).order(:id).limit(BATCH_SIZE).to_a
       attempted = true
       $redis.set("#{key}:last_batch", "catalogue")
       ProductOfferCodeIndexingService.new(products).perform(&renew_lock)

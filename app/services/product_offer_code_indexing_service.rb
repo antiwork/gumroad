@@ -2,10 +2,15 @@
 
 class ProductOfferCodeIndexingService
   # Transient transport statuses and unclassified/seller-wide failures keep the
-  # seller scan pinned for Sidekiq retry. Only permanent per-product errors
-  # (HTTP 400) are reported and skipped so the cursor can advance.
+  # seller scan pinned for Sidekiq retry. Only known permanent document-level
+  # rejections are reported and skipped so the cursor can advance.
   # 429 arrives as a generic ServerError in elasticsearch-transport 7.x.
   RETRYABLE_STATUS_CODES = [408, 409, 429, 500, 502, 503, 504].freeze
+  DOCUMENT_LEVEL_400_MARKERS = %w[
+    mapper_parsing_exception
+    document_parsing_exception
+    parsing_exception
+  ].freeze
 
   def initialize(products)
     @products = products
@@ -59,13 +64,16 @@ class ProductOfferCodeIndexingService
       raise if retryable_indexing_error?(error)
 
       ErrorNotifier.notify(error, product_id: product.id, user_id: product.user_id)
-      # Only permanent document-level failures (e.g. 400 bad mapping) may be skipped.
-      # Seller-wide / unclassified errors must preserve pending work.
+      # Skip only known document-level 400s. Index-wide 400s (e.g. index_closed)
+      # must preserve pending work.
       raise unless permanent_document_indexing_error?(error)
     end
 
     def permanent_document_indexing_error?(error)
-      elasticsearch_status_code(error) == 400
+      return false unless elasticsearch_status_code(error) == 400
+
+      message = error.message.to_s
+      DOCUMENT_LEVEL_400_MARKERS.any? { message.include?(_1) }
     end
 
     def retryable_indexing_error?(error)

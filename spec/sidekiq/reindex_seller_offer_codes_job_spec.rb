@@ -205,6 +205,15 @@ describe ReindexSellerOfferCodesJob do
     end
   end
 
+  it "indexes unpublished catalogue rows so offer codes stay fresh across republication" do
+    unpublished = create(:product, user: seller, purchase_disabled_at: Time.current, price_cents: 1000)
+    create(:universal_offer_code, user: seller, code: "KEEP")
+    described_class.enqueue(seller.id)
+    expect(ProductOfferCodeIndexingService).to receive(:new).with([unpublished]).and_call_original
+    run_batch
+    expect(unpublished.__elasticsearch__.client.get(index: Link.index_name, id: unpublished.id).dig("_source", "offer_codes")).to include("KEEP")
+  end
+
   it "skips deleted catalogue rows without consuming batch capacity" do
     deleted = create_list(:product, 3, user: seller)
     deleted.each { _1.update_columns(deleted_at: Time.current) }

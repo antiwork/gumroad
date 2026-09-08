@@ -110,6 +110,17 @@ describe ProductOfferCodeIndexingService do
   end
 
 
+  it "re-raises index-wide HTTP 400 failures after notifying so pending work stays pinned" do
+    allow(usd.__elasticsearch__).to receive(:update_document_attributes)
+      .and_raise(Elasticsearch::Transport::Transport::Errors::BadRequest, "[400] index_closed_exception")
+    expect(ErrorNotifier).to receive(:notify).with(
+      an_instance_of(Elasticsearch::Transport::Transport::Errors::BadRequest),
+      product_id: usd.id,
+      user_id: seller.id
+    )
+    expect { described_class.new([usd, eur]).perform }.to raise_error(Elasticsearch::Transport::Transport::Errors::BadRequest, /index_closed/)
+  end
+
   it "re-raises unclassified Elasticsearch failures after notifying so pending work stays pinned" do
     allow(usd.__elasticsearch__).to receive(:update_document_attributes)
       .and_raise(Elasticsearch::Transport::Transport::Errors::Unauthorized, "[401] security_exception")
