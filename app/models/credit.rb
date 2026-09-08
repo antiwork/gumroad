@@ -547,17 +547,17 @@ class Credit < ApplicationRecord
   def self.persist_refund_fee_debit_choice!(refund, operation:, transfer_id: nil, amount_cents: nil)
     return if refund.blank?
 
-    # Under the refund lock: if another caller already chose an operation, keep theirs so
-    # concurrent retries resume one sticky route instead of overwriting with a second debit.
+    # reload before with_lock: a json_data accessor on NULL dirties the record, and Rails
+    # lock!s before yielding — the inner reload would never run.
+    refund.reload
+    # Under the refund lock: the first complete choice is immutable. Concurrent callers
+    # either resume that same operation or bail so debit_stripe_account_for_refund_fee can
+    # resume the persisted route.
     refund.with_lock do
       refund.reload
-      if refund.refund_fee_debit_operation.present? && refund.refund_fee_debit_operation != operation
-        return false
+      if refund.refund_fee_debit_operation.present?
+        return refund.refund_fee_debit_operation == operation
       end
-      already = refund.refund_fee_debit_operation == operation &&
-        (transfer_id.blank? || refund.refund_fee_debit_transfer_id == transfer_id) &&
-        (amount_cents.blank? || refund.refund_fee_debit_amount_cents.to_i == amount_cents.to_i)
-      return true if already && refund.refund_fee_debit_submitted_at.present?
 
       transaction(requires_new: true) do
         refund.refund_fee_debit_operation = operation

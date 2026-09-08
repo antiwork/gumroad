@@ -744,8 +744,8 @@ class StripeChargeProcessor
         return debit_stripe_account_for_refund_fee(credit:)
       end
     end
-    resume_transfer_reversal_for_refund_fee(credit:, refund:, stripe_account_id:,
-                                            transfer_id:, amount_cents:)
+    # Always resume from the persisted sticky fields (immutable once claimed).
+    resume_transfer_reversal_for_refund_fee(credit:, refund:, stripe_account_id:)
   end
   private_class_method :perform_transfer_reversal_for_refund_fee
 
