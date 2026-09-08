@@ -4,40 +4,34 @@ require "spec_helper"
 
 describe RetryPendingRefundFeeDebitsJob do
   describe "#perform" do
-    it "retries refunds marked pending_retry" do
+    it "enqueues per-refund retries for pending_retry refunds inside the window" do
       pending = create(:refund)
       pending.update!(debited_stripe_transfer: Credit::FEE_DEBIT_PENDING_RETRY)
       other = create(:refund)
       other.update!(debited_stripe_transfer: "tr_done")
 
-      expect(Credit).to receive(:create_for_refund_fee_retention!).with(refund: pending)
-      expect(Credit).not_to receive(:create_for_refund_fee_retention!).with(refund: other)
-
       described_class.new.perform
+
+      expect(RetryRefundFeeRetentionJob).to have_enqueued_sidekiq_job(pending.id)
+      expect(RetryRefundFeeRetentionJob).not_to have_enqueued_sidekiq_job(other.id)
     end
 
-    it "retries refunds with fee retention still pending" do
+    it "enqueues refunds with fee retention still pending" do
       pending = create(:refund)
       pending.update!(refund_fee_retention_pending: true)
 
-      expect(Credit).to receive(:create_for_refund_fee_retention!).with(refund: pending)
-
       described_class.new.perform
+
+      expect(RetryRefundFeeRetentionJob).to have_enqueued_sidekiq_job(pending.id)
     end
 
-    it "continues when one refund raises" do
-      first = create(:refund)
-      first.update!(debited_stripe_transfer: Credit::FEE_DEBIT_PENDING_RETRY)
-      second = create(:refund)
-      second.update!(debited_stripe_transfer: Credit::FEE_DEBIT_PENDING_RETRY)
-      allow(Credit).to receive(:create_for_refund_fee_retention!).with(refund: first).and_raise(Stripe::StripeError, "boom")
-      allow(Credit).to receive(:create_for_refund_fee_retention!).with(refund: second)
-      allow(ErrorNotifier).to receive(:notify)
+    it "skips refunds older than the idempotency window" do
+      stale = create(:refund, created_at: (Credit::FEE_DEBIT_IDEMPOTENCY_WINDOW + 1.hour).ago)
+      stale.update!(debited_stripe_transfer: Credit::FEE_DEBIT_PENDING_RETRY)
 
       described_class.new.perform
 
-      expect(Credit).to have_received(:create_for_refund_fee_retention!).with(refund: second)
-      expect(ErrorNotifier).to have_received(:notify).with(instance_of(Stripe::StripeError), hash_including(context: hash_including(refund_id: first.id)))
+      expect(RetryRefundFeeRetentionJob).not_to have_enqueued_sidekiq_job(stale.id)
     end
   end
 end

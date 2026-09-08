@@ -762,12 +762,12 @@ class StripeChargeProcessor
     return if transfer_id.blank? || amount_cents.blank?
 
     reversal_opts = {}
+    attempted_generation = refund&.refund_fee_debit_generation.to_i
     if refund&.id.present?
-      generation = refund.refund_fee_debit_generation.to_i
-      reversal_opts[:idempotency_key] = if generation.zero?
+      reversal_opts[:idempotency_key] = if attempted_generation.zero?
         "refund_fee_reversal_#{refund.external_id}"
       else
-        "refund_fee_reversal_#{refund.external_id}_g#{generation}"
+        "refund_fee_reversal_#{refund.external_id}_g#{attempted_generation}"
       end
     end
     begin
@@ -775,7 +775,9 @@ class StripeChargeProcessor
     rescue Stripe::InvalidRequestError
       # Stripe confirmed no reversal was created (e.g. depleted transfer). Release the sticky
       # choice so a retry can select another eligible transfer; keep sticky on timeouts.
-      Credit.release_sticky_refund_fee_debit_choice!(refund) if refund.present?
+      if refund.present?
+        Credit.release_sticky_refund_fee_debit_choice!(refund, generation: attempted_generation)
+      end
       raise
     end
     # Persist the reversal id before follow-up retrieves. If those lookups fail, pending_retry

@@ -311,7 +311,8 @@ class Credit < ApplicationRecord
       # Scope by user_id so MySQL can use index_credits_on_user_id_and_created_at_and_id
       # (there is no index on fee_retention_refund_id alone). Lock the row so concurrent
       # retries serialize on the same retention credit.
-      existing_credit = where(user_id: purchase.seller_id, fee_retention_refund: refund, failed_refund_id: nil).lock.first
+      existing_credit = where(user_id: purchase.seller_id, fee_retention_refund: refund, failed_refund_id: nil).first
+      existing_credit = where(id: existing_credit.id).lock.first if existing_credit
       if existing_credit.present?
         # Pre-patch US retention completed Stripe transfers without recording
         # debited_stripe_transfer. Blank marker + ledger means legacy-complete — do not
@@ -428,7 +429,8 @@ class Credit < ApplicationRecord
         clear_refund_fee_retention_pending!(refund)
         return
       end
-      existing_credit = where(user_id: purchase.seller_id, fee_retention_refund: refund, failed_refund_id: nil).lock.first
+      existing_credit = where(user_id: purchase.seller_id, fee_retention_refund: refund, failed_refund_id: nil).first
+      existing_credit = where(id: existing_credit.id).lock.first if existing_credit
       if existing_credit.present?
         # Another concurrent attempt booked the credit (possibly with an FX estimate) while
         # this attempt obtained the actual Stripe debit. Reconcile before returning.
@@ -595,13 +597,14 @@ class Credit < ApplicationRecord
 
   # Stripe confirmed the sticky reversal did not happen (InvalidRequest). Drop the choice
   # so a retry can pick another transfer; bump generation for a fresh idempotency key.
-  def self.release_sticky_refund_fee_debit_choice!(refund)
+  def self.release_sticky_refund_fee_debit_choice!(refund, generation:)
     return if refund.blank?
 
     refund.reload
     refund.with_lock do
       refund.reload
       return if refund.debited_stripe_transfer.present? && refund.debited_stripe_transfer != FEE_DEBIT_PENDING_RETRY
+      return if refund.refund_fee_debit_generation.to_i != generation.to_i
 
       transaction(requires_new: true) do
         refund.refund_fee_debit_operation = nil
