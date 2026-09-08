@@ -1289,8 +1289,9 @@ export function hasExpiredBuyerCurrencyQuote(state: State) {
     willSaveCard: state.willSaveCard,
     paymentMethod: state.paymentMethod,
   });
-  const expiresAt = state.surcharges.result.buyer_currency_quote?.expires_at;
-  return display !== null && !(Date.parse(expiresAt ?? "") > Date.now());
+  const quote = state.surcharges.result.buyer_currency_quote;
+  const expiresAt = quote?.client_expires_at ?? Date.parse(quote?.expires_at ?? "");
+  return display !== null && !(expiresAt > Date.now());
 }
 
 function refreshExpiredBuyerCurrencyQuote(state: State) {
@@ -1319,6 +1320,11 @@ export const reduceCheckoutState = produce((state: State, action: Action) => {
   switch (action.type) {
     case "refresh-expired-buyer-currency-quote":
       if (state.status.type !== "input" && !action.beforeSubmit) return;
+      if (state.surcharges.type === "error" && state.buyerCurrencyRemint) {
+        state.surcharges = { type: "pending" };
+        state.resumeSubmitAfterCheckoutPayment = false;
+        return;
+      }
       refreshExpiredBuyerCurrencyQuote(state);
       return;
     case "set-value":

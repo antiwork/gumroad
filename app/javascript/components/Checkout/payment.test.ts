@@ -327,6 +327,34 @@ describe("expired buyer-currency quote submission", () => {
     }
   });
 
+  it("drops late credentials and CAPTCHA after expiry refresh without reusing their authorization", () => {
+    const expired = quotedState(buyerCurrencyClientConfirmConfig);
+    const paymentMethod = { type: "saved" } as const;
+    for (const s of [
+      { ...expired, status: { type: "starting" } as const },
+      { ...expired, status: { type: "captcha", paymentMethod } as const },
+    ]) {
+      const action =
+        s.status.type === "starting"
+          ? ({ type: "set-payment-method", paymentMethod } as const)
+          : ({ type: "set-recaptcha-response", recaptchaResponse: "late" } as const);
+      const refreshed = reduceCheckoutState(s, action);
+      expect(refreshed.status.type).toBe("input");
+      expect(refreshed.surcharges.type).toBe("pending");
+      expect(reduceCheckoutState(refreshed, action).status.type).toBe("input");
+    }
+  });
+
+  it("does not release an in-flight order on a queued tab-focus action", () => {
+    const s = {
+      ...quotedState(buyerCurrencyClientConfirmConfig),
+      status: { type: "finished", paymentMethod: { type: "saved" } } as const,
+    };
+    expect(reduceCheckoutState(s, { type: "refresh-expired-buyer-currency-quote" })).toBe(s);
+    expect(reduceCheckoutState(s, { type: "set-payment-method", paymentMethod: { type: "saved" } })).toBe(s);
+    expect(reduceCheckoutState(s, { type: "set-recaptcha-response", recaptchaResponse: "late" })).toBe(s);
+  });
+
   it("refreshes at the expiry boundary and refuses malformed expiry", () => {
     vi.spyOn(Date, "now").mockReturnValue(Date.parse("2026-09-08T12:00:00Z"));
     try {

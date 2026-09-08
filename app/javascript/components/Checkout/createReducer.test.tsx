@@ -189,6 +189,40 @@ describe("createReducer surcharge refetches", () => {
     },
   );
 
+  it("retries a failed expiry refresh only on buyer action and still requires re-review", async () => {
+    const requests = stubSurchargeRequests();
+    const { result } = renderCheckout();
+    const expired = {
+      ...quote("expired"),
+      expires_at: "2000-01-01T00:00:00Z",
+      line_allocations: [
+        { permalink: "abc", price_cents: 1400, tip_cents: 0, tax_cents: 0, shipping_cents: 0, total_cents: 1400 },
+      ],
+    };
+    await act(() => vi.advanceTimersByTimeAsync(300));
+    await act(async () => requests[0]?.resolve(surchargesResponse({ buyer_currency_quote: expired })));
+    act(() => result.current[1]({ type: "validate" }));
+    await act(() => vi.advanceTimersByTimeAsync(300));
+    const { ResponseError } = await import("$app/utils/request");
+    await act(async () => requests[1]?.reject(new ResponseError()));
+    expect(result.current[0].surcharges.type).toBe("error");
+    await act(() => vi.advanceTimersByTimeAsync(60000));
+    expect(requests).toHaveLength(2);
+    act(() => result.current[1]({ type: "refresh-expired-buyer-currency-quote" }));
+    await act(() => vi.advanceTimersByTimeAsync(300));
+    expect(requests).toHaveLength(3);
+    await act(async () =>
+      requests[2]?.resolve(
+        surchargesResponse({
+          buyer_currency_quote: { ...expired, token: "fresh", expires_at: "2999-01-01T00:00:00Z" },
+        }),
+      ),
+    );
+    expect(result.current[0].status.type).toBe("input");
+    expect(result.current[0].resumeSubmitAfterCheckoutPayment).toBe(false);
+    expect(result.current[0].surcharges.type).toBe("loaded");
+  });
+
   it("passes an abort signal to getSurcharges and aborts it when a newer change invalidates", async () => {
     const requests = stubSurchargeRequests();
     const { result } = renderCheckout();

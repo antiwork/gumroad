@@ -125,11 +125,12 @@ const config = (client: boolean): CheckoutPaymentConfig => {
     payment_element_wallets: false,
     flat_payment_methods: true,
   };
+  const paymentMethodTypes: ["card"] = ["card"];
   const options = {
     stripe_elements_mode: "payment" as const,
     currency: "usd" as const,
     buyer_currency_presentment: true,
-    payment_method_types: ["card"],
+    payment_method_types: paymentMethodTypes,
     stripe_link_enabled: false,
   };
   return client

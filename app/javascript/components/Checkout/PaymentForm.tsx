@@ -580,6 +580,11 @@ const CustomerDetails = ({ className }: { className?: string }) => {
           <div className={className}>
             <Alert role="status" variant="warning" className="grow">
               {state.warning}
+              {state.surcharges.type === "error" && state.buyerCurrencyRemint ? (
+                <Button onClick={() => dispatch({ type: "refresh-expired-buyer-currency-quote" })}>
+                  Retry price update
+                </Button>
+              ) : null}
             </Alert>
           </div>
         </Card>
