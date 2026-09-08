@@ -57,7 +57,7 @@ export type Review = {
   rating: number;
   message: string | null;
   rater: { name: string; avatar_url: string };
-  // Present only when the viewer is the product's seller; it authorizes review responses.
+  // Present only when the viewer is the product's seller or the review's buyer.
   purchase_id: string | null;
   created_at: string;
   is_new: boolean;

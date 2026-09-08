@@ -9,9 +9,13 @@ class ProductReviewPresenter
     @product_review = product_review
   end
 
-  # `purchase_id` (the purchase's external id) unlocks seller-only actions elsewhere
-  # (review responses) and doubles as a possession token in older flows, so it is only
-  # included for the product's own seller — never in the public product-page payload.
+  # purchase_id authorizes review responses for the creator and is the buyer's own
+  # possession token; never expose it on anonymous/public payloads.
+  def viewer_may_see_purchase_id?(viewer:, seller:)
+    seller == product_review.link.user ||
+      (viewer.present? && product_review.purchase.purchaser == viewer)
+  end
+
   def product_review_props(include_purchase_id: false)
     purchase = product_review.purchase
     purchaser = purchase.purchaser
