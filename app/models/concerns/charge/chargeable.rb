@@ -127,7 +127,11 @@ module Charge::Chargeable
   def unbundled_purchases
     @_unbundled_purchases ||=
       successful_purchases.map do |purchase|
-        purchase.is_bundle_purchase? ? purchase.product_purchases : [purchase]
+        if purchase.is_bundle_purchase?
+          purchase.product_purchases.presence || [purchase]
+        else
+          [purchase]
+        end
       end.flatten
   end
 
