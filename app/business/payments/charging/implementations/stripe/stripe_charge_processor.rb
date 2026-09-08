@@ -635,18 +635,34 @@ class StripeChargeProcessor
     return unless credit.merchant_account.holder_of_funds == HolderOfFunds::STRIPE
     return if credit.merchant_account.country == Compliance::Countries::USA.alpha2
     refund = credit.fee_retention_refund
-    if refund&.debited_stripe_transfer.present? && refund.debited_stripe_transfer != Credit::FEE_DEBIT_PENDING_RETRY
-      # Debit already succeeded; return any persisted holding amount so retries can still
-      # reconcile the ledger estimate without submitting another Stripe operation.
-      return refund.refund_fee_holding_debit_cents.presence&.to_i
-    end
-
     stripe_account_id = credit.merchant_account.charge_processor_merchant_id
     usd_amount_cents = credit.amount_cents.abs
 
+    if refund&.debited_stripe_transfer.present? && refund.debited_stripe_transfer != Credit::FEE_DEBIT_PENDING_RETRY
+      # Debit already succeeded. Prefer the persisted holding amount; if follow-up Stripe
+      # lookups failed earlier, finish those retrieves without submitting another debit.
+      return refund.refund_fee_holding_debit_cents.presence&.to_i ||
+        finish_holding_lookup_for_recorded_fee_debit(credit:, refund:, stripe_account_id:)
+    end
+
     # A prior attempt may have submitted to Stripe and timed out after recording pending_retry.
     # Resume that same operation — never re-select a different recovery route (reversal vs EUR),
-    # which would use a different idempotency key and double-debit.
+    # which would use a different idempotency key and double-debit. After Stripe's idempotency
+    # window, refuse automatic resubmit rather than risk a second debit.
+    if refund.present? && refund.debited_stripe_transfer == Credit::FEE_DEBIT_PENDING_RETRY &&
+        Credit.fee_debit_idempotency_window_expired?(refund)
+      Rails.logger.error("Refusing automatic fee debit resubmit for refund #{refund.id}: Stripe idempotency window elapsed")
+      ErrorNotifier.notify(
+        "Refund fee debit pending_retry outside Stripe idempotency window",
+        context: {
+          refund_id: refund.id,
+          purchase_id: refund.purchase_id,
+          operation: refund.refund_fee_debit_operation
+        }
+      )
+      return refund.refund_fee_holding_debit_cents.presence&.to_i
+    end
+
     case refund&.refund_fee_debit_operation
     when FEE_DEBIT_OP_TRANSFER_REVERSAL
       return resume_transfer_reversal_for_refund_fee(credit:, refund:, stripe_account_id:)
@@ -780,6 +796,43 @@ class StripeChargeProcessor
     persist_refund_fee_holding_debit!(refund, holding_abs) if refund.present? && holding_abs.present?
     holding_abs
   end
+
+  # Marker is already set but the destination balance-transaction retrieve failed earlier.
+  # Finish that lookup so holding reconcile can run; never create another debit.
+  def self.finish_holding_lookup_for_recorded_fee_debit(credit:, refund:, stripe_account_id:)
+    case refund.refund_fee_debit_operation
+    when FEE_DEBIT_OP_TRANSFER_REVERSAL
+      transfer_id = refund.refund_fee_debit_transfer_id
+      reversal_id = refund.debited_stripe_transfer
+      return if transfer_id.blank? || reversal_id.blank?
+
+      transfer_reversal = Stripe::Transfer.retrieve(transfer_id).reversals.retrieve(reversal_id)
+      destination_refund = Stripe::Refund.retrieve(transfer_reversal.destination_payment_refund,
+                                                   stripe_account: stripe_account_id)
+      holding_abs = Stripe::BalanceTransaction.retrieve(destination_refund.balance_transaction,
+                                                        stripe_account: stripe_account_id).net.abs
+      persist_refund_fee_holding_debit!(refund, holding_abs)
+      holding_abs
+    when FEE_DEBIT_OP_EUR_DEBIT
+      eur_amount_cents = refund.refund_fee_eur_debit_cents
+      return if eur_amount_cents.blank?
+
+      holding_abs = case credit.merchant_account.currency.to_s.downcase
+                    when Currency::EUR then eur_amount_cents.to_i
+                    when BGN then (BigDecimal(eur_amount_cents) * BGN_PER_EUR).round
+                    end
+      persist_refund_fee_holding_debit!(refund, holding_abs) if holding_abs.present?
+      holding_abs
+    when FEE_DEBIT_OP_US_DEBIT
+      holding_abs = credit.amount_cents.abs
+      persist_refund_fee_holding_debit!(refund, holding_abs)
+      holding_abs
+    end
+  rescue StandardError => e
+    Rails.logger.error("Failed to finish fee debit holding lookup for refund #{refund.id}: #{e.class}: #{e.message}")
+    nil
+  end
+  private_class_method :finish_holding_lookup_for_recorded_fee_debit
 
   def self.record_refund_fee_debit_marker!(refund, marker)
     ActiveRecord::Base.transaction(requires_new: true) do

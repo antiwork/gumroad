@@ -559,7 +559,13 @@ describe Credit do
         expect(Credit.create_for_refund_fee_retention!(refund:)).to eq(credit)
         expect(attempts).to eq(2)
         expect(refund.reload.refund_fee_holding_debit_cents).to eq(1400)
-        expect(credit.balance.reload.holding_amount_cents).to eq(balance_before + (-1400 - estimated))
+        expect(refund.refund_fee_holding_reconciled_cents).to eq(1400)
+        expected_holding = balance_before + (-1400 - estimated)
+        expect(credit.balance.reload.holding_amount_cents).to eq(expected_holding)
+
+        # A further retry must not subtract the estimate delta again.
+        expect(Credit.create_for_refund_fee_retention!(refund:)).to eq(credit)
+        expect(credit.balance.reload.holding_amount_cents).to eq(expected_holding)
       end
     end
   end

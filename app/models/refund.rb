@@ -90,6 +90,12 @@ class Refund < ApplicationRecord
   attr_json_data_accessor :refund_fee_eur_debit_cents
   # Holding-currency cents actually taken from Stripe for this fee debit, when known.
   attr_json_data_accessor :refund_fee_holding_debit_cents
+  # Holding cents already applied to balances.holding_amount_cents for this fee debit;
+  # keeps reconcile_fee_retention_holding_amount! from subtracting the same delta twice.
+  attr_json_data_accessor :refund_fee_holding_reconciled_cents
+  # UTC time the sticky fee-debit operation was first submitted to Stripe (ISO 8601).
+  # Used to refuse automatic resubmits after Stripe's idempotency window.
+  attr_json_data_accessor :refund_fee_debit_submitted_at
   attr_json_data_accessor :retained_fee_cents
   attr_json_data_accessor :presentment_currency
   attr_json_data_accessor :presentment_amount_cents
