@@ -687,31 +687,33 @@ class Purchase
     def debit_processor_fee_from_merchant_account!(refund)
       return if refund.blank?
 
-      # Serialize against HandleFailedRefundService (same purchase → refund lock order)
-      # through local ledger booking. Nested requires_new marker writes are only savepoints,
-      # so a ledger failure must be handled inside this transaction: re-raising would roll
-      # back the enclosing txn and erase proof Stripe already debited. Swallowing lets this
-      # txn commit and keeps the marker for an idempotent retry.
+      # Serialize eligibility against HandleFailedRefundService (same purchase → refund
+      # lock order), then release before Stripe. Sticky debit choices and success markers
+      # must be real commits — nested requires_new is only a savepoint while this
+      # transaction is open, and a crash after Stripe accepts a debit would otherwise
+      # lose that proof.
+      fee_reversed = false
       transaction do
         reload.lock!
         refund.reload.lock!
-        next if refund.balance_reversed_on_failure
+        fee_reversed = refund.balance_reversed_on_failure.present?
+      end
+      return if fee_reversed
 
-        begin
-          Credit.create_for_refund_fee_retention!(refund:)
-        rescue StandardError => e
-          logger.error "Failed to retain the fee for refund #{refund.id} of purchase #{id}: #{e.class}: #{e.message}"
-          ErrorNotifier.notify(
-            "Failed to retain refund fee after refund",
-            context: {
-              purchase_id: id,
-              purchase_external_id: external_id,
-              refund_id: refund.id,
-              error_class: e.class.name,
-              error: e.message,
-            }
-          )
-        end
+      begin
+        Credit.create_for_refund_fee_retention!(refund:)
+      rescue StandardError => e
+        logger.error "Failed to retain the fee for refund #{refund.id} of purchase #{id}: #{e.class}: #{e.message}"
+        ErrorNotifier.notify(
+          "Failed to retain refund fee after refund",
+          context: {
+            purchase_id: id,
+            purchase_external_id: external_id,
+            refund_id: refund.id,
+            error_class: e.class.name,
+            error: e.message,
+          }
+        )
       end
     end
 

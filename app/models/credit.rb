@@ -301,6 +301,8 @@ class Credit < ApplicationRecord
     # Refuse to retain (or re-retain) a fee after the refund's balance was reversed on failure.
     # reload before lock!: callers may have read a json_data accessor on a NULL column,
     # which dirties the in-memory record and makes lock! raise.
+    existing_credit = nil
+    us_legacy_complete = false
     purchase.with_lock do
       refund.reload.lock!
       return if refund.balance_reversed_on_failure
@@ -316,22 +318,23 @@ class Credit < ApplicationRecord
         us_legacy_complete = existing_credit.merchant_account&.country == Compliance::Countries::USA.alpha2 &&
           refund.debited_stripe_transfer.blank? &&
           existing_credit.balance_id.present?
-        unless us_legacy_complete
-          actual_holding = debit_stripe_account_for_retained_fee(existing_credit)
-          # Debit helper returns nil once the success marker is set; still reconcile from the
-          # persisted actual when a prior attempt booked only the FX estimate.
-          actual_holding ||= refund.refund_fee_holding_debit_cents
-          begin
-            reconcile_fee_retention_holding_amount!(existing_credit, actual_holding)
-          rescue StandardError => e
-            # Keep any Stripe success marker written in requires_new savepoints: re-raising
-            # would roll back this purchase.with_lock transaction and erase proof of debit.
-            Rails.logger.error("Failed to reconcile fee retention holding for refund #{refund.id}: #{e.class}: #{e.message}")
-            ErrorNotifier.notify(e, context: { refund_id: refund.id, credit_id: existing_credit.id })
-          end
-        end
-        return existing_credit
       end
+    end
+
+    if existing_credit.present?
+      unless us_legacy_complete
+        # Stripe + durable markers run outside the lock transaction so requires_new writes
+        # are real commits if this process dies mid-flight.
+        actual_holding = debit_stripe_account_for_retained_fee(existing_credit)
+        actual_holding ||= refund.reload.refund_fee_holding_debit_cents
+        begin
+          reconcile_fee_retention_holding_amount!(existing_credit, actual_holding)
+        rescue StandardError => e
+          Rails.logger.error("Failed to reconcile fee retention holding for refund #{refund.id}: #{e.class}: #{e.message}")
+          ErrorNotifier.notify(e, context: { refund_id: refund.id, credit_id: existing_credit.id })
+        end
+      end
+      return existing_credit
     end
 
     # We retain the payment processor fee (2.9% + 30c) and the Gumroad fee (10% + any discover fee) in case of refunds.
