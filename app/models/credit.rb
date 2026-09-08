@@ -303,7 +303,10 @@ class Credit < ApplicationRecord
     us_legacy_complete = false
     purchase.with_lock do
       refund.reload.lock!
-      return if refund.balance_reversed_on_failure
+      if refund.balance_reversed_on_failure
+        clear_refund_fee_retention_pending!(refund)
+        return
+      end
 
       # Scope by user_id so MySQL can use index_credits_on_user_id_and_created_at_and_id
       # (there is no index on fee_retention_refund_id alone). Lock the row so concurrent
@@ -332,6 +335,7 @@ class Credit < ApplicationRecord
           ErrorNotifier.notify(e, context: { refund_id: refund.id, credit_id: existing_credit.id })
         end
       end
+      clear_refund_fee_retention_pending!(refund)
       return existing_credit
     end
 
@@ -344,7 +348,10 @@ class Credit < ApplicationRecord
     unless refund.purchase.charged_using_gumroad_merchant_account?
       purchase = refund.purchase
       application_fee_refundable_portion = purchase.gumroad_tax_cents + purchase.affiliate_credit_cents
-      return if application_fee_refundable_portion.zero?
+      if application_fee_refundable_portion.zero?
+        clear_refund_fee_retention_pending!(refund)
+        return
+      end
 
       credit = new
       credit.user = purchase.seller
@@ -375,6 +382,7 @@ class Credit < ApplicationRecord
         credit.save!
       end
 
+      clear_refund_fee_retention_pending!(refund)
       return credit
     end
 
@@ -416,7 +424,10 @@ class Credit < ApplicationRecord
     # landed while the debit ran without holding the rows.
     purchase.with_lock do
       refund.reload.lock!
-      return if refund.balance_reversed_on_failure
+      if refund.balance_reversed_on_failure
+        clear_refund_fee_retention_pending!(refund)
+        return
+      end
       existing_credit = where(user_id: purchase.seller_id, fee_retention_refund: refund, failed_refund_id: nil).lock.first
       if existing_credit.present?
         # Another concurrent attempt booked the credit (possibly with an FX estimate) while
@@ -464,6 +475,7 @@ class Credit < ApplicationRecord
         credit.save!
       end
     end
+    clear_refund_fee_retention_pending!(refund)
     credit
   end
 
@@ -514,9 +526,14 @@ class Credit < ApplicationRecord
       StripeChargeProcessor.debit_stripe_account_for_refund_fee(credit:)
     end
   rescue StandardError => e
-    # Persist a retryable sentinel so US failures are not mistaken for legacy-complete
-    # blank-marker retentions on the next attempt.
-    record_pending_fee_debit_retry!(refund)
+    # pending_retry for blank-marker failures. If the debit already succeeded and only a
+    # follow-up holding lookup failed, keep the success marker and schedule a retry.
+    refund&.reload
+    if refund.present? && refund.debited_stripe_transfer.present? && !fee_debit_pending_retry?(refund)
+      RetryRefundFeeRetentionJob.perform_in(1.minute, refund.id) if refund.id.present?
+    else
+      record_pending_fee_debit_retry!(refund)
+    end
     Rails.logger.error("Failed to debit Stripe account for the retained fee of refund #{refund.id}: #{e.class}: #{e.message}")
     ErrorNotifier.notify(e, context: { refund_id: refund.id, purchase_id: refund.purchase_id, merchant_account_id: merchant_account.id })
     nil
@@ -555,6 +572,17 @@ class Credit < ApplicationRecord
     RetryRefundFeeRetentionJob.perform_in(1.minute, refund.id) if refund.id.present?
   end
   private_class_method :record_pending_fee_debit_retry!
+
+  def self.clear_refund_fee_retention_pending!(refund)
+    return if refund.blank?
+    refund.reload
+    return unless refund.refund_fee_retention_pending
+
+    transaction(requires_new: true) do
+      refund.update!(refund_fee_retention_pending: false)
+    end
+  end
+  private_class_method :clear_refund_fee_retention_pending!
 
   def self.persist_refund_fee_holding_on_credit!(refund, holding_debit_cents, currency: nil)
     return if refund.blank? || holding_debit_cents.blank?

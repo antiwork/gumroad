@@ -120,11 +120,18 @@ describe Charge, :vcr do
   end
 
   describe "#refund_and_save!" do
+    def stub_purchase_lock(*purchases)
+      purchases.each do |purchase|
+        allow(purchase).to receive(:with_lock).and_yield
+      end
+    end
+
     it "attempts every purchase refund even when one purchase fails" do
       charge = create(:charge)
       failed_errors = instance_double(ActiveModel::Errors, full_messages: ["First refund failed"])
       failed_purchase = instance_double(Purchase, id: 1, refund_and_save!: false, errors: failed_errors)
       successful_purchase = instance_double(Purchase, id: 2, refund_and_save!: true)
+      stub_purchase_lock(failed_purchase, successful_purchase)
       allow(charge).to receive(:successful_purchases).and_return([failed_purchase, successful_purchase])
 
       expect(charge.refund_and_save!(123, reason: "Refund requested by the buyer")).to be(false)
@@ -139,6 +146,7 @@ describe Charge, :vcr do
       first = instance_double(Purchase, id: 1, refund_and_save!: true)
       second_errors = instance_double(ActiveModel::Errors, full_messages: [])
       second = instance_double(Purchase, id: 2, errors: second_errors)
+      stub_purchase_lock(first, second)
       allow(second).to receive(:refund_and_save!).and_raise(RuntimeError, "processor unavailable")
       allow(charge).to receive(:successful_purchases).and_return([first, second])
 

@@ -16,6 +16,15 @@ describe RetryPendingRefundFeeDebitsJob do
       described_class.new.perform
     end
 
+    it "retries refunds with fee retention still pending" do
+      pending = create(:refund)
+      pending.update!(refund_fee_retention_pending: true)
+
+      expect(Credit).to receive(:create_for_refund_fee_retention!).with(refund: pending)
+
+      described_class.new.perform
+    end
+
     it "continues when one refund raises" do
       first = create(:refund)
       first.update!(debited_stripe_transfer: Credit::FEE_DEBIT_PENDING_RETRY)

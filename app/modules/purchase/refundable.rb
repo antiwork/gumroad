@@ -334,6 +334,9 @@ class Purchase
       refund.note = note if note.present?
       refunds << refund
       self.is_refund_chargeback_fee_waived = !charged_using_gumroad_merchant_account? || is_for_fraud
+      unless is_refund_chargeback_fee_waived || chargedback_not_reversed?
+        refund.refund_fee_retention_pending = true
+      end
       mark_giftee_purchase_as_refunded(is_partially_refunded: self.stripe_partially_refunded?) if is_gift_sender_purchase
       subscription.cancel_immediately_if_pending_cancellation! if subscription.present?
       decrement_balance_for_refund_or_chargeback!(flow_of_funds, refund:) unless chargedback_not_reversed?
@@ -414,6 +417,9 @@ class Purchase
 
       if refund.present?
         refund.processor_refund_id = processor_refund_id
+        unless is_refund_chargeback_fee_waived
+          refund.refund_fee_retention_pending = true
+        end
         refunds << refund
       end
       save!

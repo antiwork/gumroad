@@ -188,13 +188,14 @@ class Charge < ApplicationRecord
   end
 
   def refund_and_save!(refunding_user_id, reason: nil)
-    # No wrapping transaction: each purchase.refund_and_save! commits its own local refund
-    # before the next starts. A later purchase failure must not erase an earlier
-    # processor-successful refund (and its fee markers) via outer rollback (#7549).
-    # Per-purchase lock order (purchase then balance) still holds inside each call.
+    # One purchase at a time: with_lock serializes concurrent charge refunds on the same
+    # purchase (eligibility is checked before Stripe), then commits before the next starts
+    # so a later failure cannot erase an earlier processor-successful refund (#7549).
     refunded_all_purchases = true
     successful_purchases.sort_by(&:id).each do |purchase|
-      refunded = purchase.refund_and_save!(refunding_user_id, reason:)
+      refunded = purchase.with_lock do
+        purchase.refund_and_save!(refunding_user_id, reason:)
+      end
       unless refunded
         copy_refund_errors_from(purchase)
         refunded_all_purchases = false
