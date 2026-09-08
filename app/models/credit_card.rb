@@ -236,6 +236,25 @@ class CreditCard < ApplicationRecord
     update!(json_data: existing.merge("stripe_setup_intent_ids" => ids))
   end
 
+  # Drop this merchant account's SetupIntent entry (and the legacy scalar when it was the
+  # only source) so get_mandate_id_from_chargeable prefers a PaymentIntent that just
+  # registered replacement mandate terms for this account.
+  def json_data_without_setup_intent_for(merchant_account)
+    existing = json_data.to_h
+    key = merchant_account_key(merchant_account)
+    ids = existing["stripe_setup_intent_ids"].is_a?(Hash) ? existing["stripe_setup_intent_ids"].dup : {}
+    ids.delete(key)
+    ids.delete(key.to_sym)
+    next_data = existing.dup
+    if ids.empty?
+      next_data.delete("stripe_setup_intent_ids")
+      next_data.delete("stripe_setup_intent_id")
+    else
+      next_data["stripe_setup_intent_ids"] = ids
+    end
+    next_data
+  end
+
   def stripe_payment_intent_id
     json_data && json_data.deep_symbolize_keys[:stripe_payment_intent_id]
   end

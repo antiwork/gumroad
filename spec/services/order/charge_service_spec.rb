@@ -1836,6 +1836,7 @@ describe Order::ChargeService, :vcr do
                         total_transaction_cents: 10_00)
       charge = create(:charge, order:, seller: seller_1, merchant_account:)
       charge.purchases << purchase
+      purchase.update!(charge:)
       chargeable = instance_double(Chargeable, requires_mandate?: true, stripe_setup_intent_id: "seti_existing_connect")
       allow(chargeable).to receive(:stripe_setup_intent_id=)
       allow(chargeable).to receive(:use_connected_account_payment_method!)
@@ -1870,6 +1871,8 @@ describe Order::ChargeService, :vcr do
 
       expect(chargeable).to have_received(:use_connected_account_payment_method!).with("pm_on_connect")
       expect(ChargeProcessor).not_to have_received(:setup_future_charges!)
+      expect(purchase.reload.processor_setup_intent_id).to eq("seti_existing_connect")
+      expect(charge.reload.stripe_setup_intent_id).to eq("seti_existing_connect")
     end
 
     it "re-registers a fresh setup intent when the stored one is canceled" do
@@ -1882,8 +1885,14 @@ describe Order::ChargeService, :vcr do
                         purchase_state: "in_progress",
                         is_multi_buy: true,
                         total_transaction_cents: 10_00)
-      chargeable = instance_double(Chargeable, requires_mandate?: true, stripe_setup_intent_id: "seti_canceled")
-      allow(chargeable).to receive(:stripe_setup_intent_id=)
+      stored_si_id = "seti_canceled"
+      chargeable = instance_double(Chargeable, requires_mandate?: true)
+      allow(chargeable).to receive(:stripe_setup_intent_id) { stored_si_id }
+      allow(chargeable).to receive(:stripe_setup_intent_id=) { |value| stored_si_id = value }
+      allow(chargeable).to receive(:use_connected_account_payment_method!)
+      allow(chargeable).to receive(:respond_to?).and_call_original
+      allow(chargeable).to receive(:respond_to?).with(:use_connected_account_payment_method!).and_return(true)
+      allow(chargeable).to receive(:respond_to?).with(:stripe_setup_intent_id=).and_return(true)
       canceled_si = instance_double(StripeSetupIntent,
                                     id: "seti_canceled",
                                     succeeded?: false,
@@ -1892,21 +1901,33 @@ describe Order::ChargeService, :vcr do
       allow(ChargeProcessor).to receive(:get_setup_intent).with(merchant_account, "seti_canceled").and_return(canceled_si)
       fresh_si = SetupIntent.new
       fresh_si.id = "seti_fresh"
-      allow(fresh_si).to receive_messages(succeeded?: true, requires_action?: false, present?: true)
-      allow(ChargeProcessor).to receive(:setup_future_charges!).and_return(fresh_si)
+      allow(fresh_si).to receive_messages(succeeded?: true, requires_action?: false, present?: true, payment_method_id: "pm_fresh_connect")
+      captured_mandate = nil
+      allow(ChargeProcessor).to receive(:setup_future_charges!) do |_account, _chargeable, mandate_options:|
+        captured_mandate = mandate_options
+        fresh_si
+      end
       charge = instance_double(Charge, charge_intent: nil, credit_card: nil)
       create_service = instance_double(Charge::CreateService, perform: charge)
       allow(Charge::CreateService).to receive(:new).and_return(create_service)
-      service = described_class.new(order:, params: {})
-      allow(service).to receive(:mandate_options_for_stripe).and_return(
-        { payment_method_options: { card: { mandate_options: { amount: 10_00 } } } }
+      locked_quote = Checkout::BuyerCurrencyQuote::Result.new(
+        currency: Currency::INR,
+        fx_rate: BigDecimal("0.012"),
+        presentment_total_cents: 850_00
       )
+      service = described_class.new(order:, params: { buyer_currency_quote: "quote-token" })
+      allow(service).to receive(:mandate_options_for_stripe).and_return(
+        { payment_method_options: { card: { mandate_options: { amount: 10_00, currency: Currency::USD } } } }
+      )
+      allow(service).to receive(:locked_off_session_mandate_quote).and_return(locked_quote)
 
       service.send(:create_charge_for_seller_purchases, [purchase], chargeable, true, false)
 
       expect(chargeable).to have_received(:stripe_setup_intent_id=).with(nil)
       expect(ChargeProcessor).to have_received(:setup_future_charges!)
       expect(purchase.reload.processor_setup_intent_id).to eq("seti_fresh")
+      expect(chargeable).to have_received(:use_connected_account_payment_method!).with("pm_fresh_connect")
+      expect(captured_mandate.dig(:payment_method_options, :card, :mandate_options, :currency)).to eq(Currency::INR)
     end
 
     it "binds the Connect payment method when reusing a shared setup intent" do

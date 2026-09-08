@@ -267,6 +267,10 @@ export const startOrderCreation = async (
           retryOfferCodes: retryOfferCodeCandidates(requestData, retryOfferCodes),
           buyerCurrencyQuote: requestData.buyerCurrencyQuote,
         });
+        // A failed follow-on auth still leaves requires_action on that group. Without stopping,
+        // the confirm response requeues the same intent and this loop retries forever while
+        // anyIntentConfirmed suppresses stripe_error.
+        if (followOnError) break;
       }
       const confirmLineItems: Record<LineItemUid, ConfirmedPurchaseResponse | PurchaseErrorResponse> = {};
       // A processing line item means its group's charge is created and the debit scheduled —

@@ -1806,6 +1806,81 @@ describe("startOrderCreation", () => {
     expect(result.recaptchaChallengeAvailable).toBe(false);
   });
 
+  it("stops the follow-on confirm loop after a failed authentication when another group already confirmed", async () => {
+    vi.stubGlobal("Routes", {
+      orders_path: () => "/orders",
+      confirm_order_path: (id: string) => `/orders/${id}/confirm`,
+    });
+    requestMock.mockReset();
+    getStripeInstanceMock.mockReset();
+    const stripe = typia.assert<Stripe>({});
+    stripe.confirmCardSetup = vi
+      .fn()
+      .mockResolvedValueOnce({ setupIntent: { id: "seti_a" } })
+      .mockResolvedValueOnce({ error: { type: "card_error", message: "auth failed" } });
+    getStripeInstanceMock.mockResolvedValue(stripe);
+
+    const firstLine = requestData.lineItems.at(0);
+    if (!firstLine) throw new Error("Missing test line item");
+    const secondLine = { ...firstLine, uid: "product-b", permalink: "product-b" };
+    const twoSellerRequestData = { ...requestData, lineItems: [firstLine, secondLine] };
+
+    requestMock
+      .mockResolvedValueOnce(
+        jsonResponse({
+          success: true,
+          line_items: {
+            [firstLine.uid]: {
+              success: true,
+              requires_card_setup: true,
+              client_secret: "seti_a_secret",
+              order: { id: "order-token", stripe_connect_account_id: null },
+            },
+          },
+          can_buyer_sign_up: false,
+          offer_codes: [],
+        }),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({
+          success: true,
+          line_items: {
+            [firstLine.uid]: { success: true, processing: true, permalink: firstLine.permalink },
+            [secondLine.uid]: {
+              success: true,
+              requires_card_setup: true,
+              client_secret: "seti_b_secret",
+              order: { id: "order-token", stripe_connect_account_id: null },
+            },
+          },
+          can_buyer_sign_up: false,
+          offer_codes: [],
+        }),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({
+          success: true,
+          line_items: {
+            [firstLine.uid]: { success: true, processing: true, permalink: firstLine.permalink },
+            [secondLine.uid]: {
+              success: true,
+              requires_card_setup: true,
+              client_secret: "seti_b_secret",
+              order: { id: "order-token", stripe_connect_account_id: null },
+            },
+          },
+          can_buyer_sign_up: false,
+          offer_codes: [],
+        }),
+      );
+
+    await expect(startOrderCreation(twoSellerRequestData, [])).rejects.toBeInstanceOf(PaymentConfirmedError);
+
+    // Create + first confirm + one follow-on confirm. A tight loop would keep POSTing confirm.
+    expect(requestMock).toHaveBeenCalledTimes(3);
+    expect(stripe.confirmCardSetup).toHaveBeenCalledTimes(2);
+  });
+
   it("sends the challenge-fallback marker when resubmitting with a challenge token", async () => {
     requestMock.mockResolvedValueOnce(jsonResponse({ success: false, error_message: "Try again." }));
 

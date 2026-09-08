@@ -5041,8 +5041,12 @@ class Purchase < ApplicationRecord
         end
         save!
         if credit_card&.requires_mandate? && mandate_options.present?
-          existing = credit_card.json_data.to_h
-          credit_card.update!(json_data: { "stripe_setup_intent_ids" => existing["stripe_setup_intent_ids"], "stripe_payment_intent_id" => charge_intent.id }.compact)
+          # New on-session mandate terms live on this PaymentIntent. Clear this account's
+          # prior SI so renewals do not keep preferring an inactive authorization.
+          credit_card.update!(
+            json_data: credit_card.json_data_without_setup_intent_for(merchant_account)
+                                   .merge("stripe_payment_intent_id" => charge_intent.id)
+          )
         end
 
         charge_intent

@@ -290,6 +290,14 @@ class Order::ChargeService
       if existing_si.present? && (existing_si.succeeded? || existing_si.requires_action?)
         self.setup_intent = existing_si
         bind_connect_payment_method!(chargeable, existing_si, merchant_account)
+        # Resume/confirm keys off processor_setup_intent_id on this cart's purchases. A reused
+        # pending SI from an earlier abandoned checkout must still be linked here or ConfirmService
+        # cannot find the waiting group after the buyer authenticates.
+        purchases.each do |purchase|
+          purchase.update!(processor_setup_intent_id: existing_si.id)
+          purchase.charge&.update!(stripe_setup_intent_id: existing_si.id)
+          purchase.mark_indian_card_mandate_registration! if purchase.credit_card&.requires_mandate?
+        end
         return
       end
       chargeable.stripe_setup_intent_id = nil
@@ -298,6 +306,9 @@ class Order::ChargeService
     self.setup_intent = ChargeProcessor.setup_future_charges!(merchant_account, chargeable, mandate_options:)
     return unless setup_intent.present?
 
+    # setup_future_charges! may clone another Connect PM inside prepare!; bind to the SI's PM
+    # so a synchronous success charges the same method the mandate was registered on.
+    bind_connect_payment_method!(chargeable, setup_intent, merchant_account)
     chargeable.stripe_setup_intent_id = setup_intent.id if chargeable.respond_to?(:stripe_setup_intent_id=)
 
     purchases.each do |purchase|
@@ -431,6 +442,15 @@ class Order::ChargeService
           setup_mandate_cap = setup_mandate_options&.dig(:payment_method_options, :card, :mandate_options)
           max_group_charge = max_group_charge_for_account(account_key)
           setup_mandate_cap[:amount] = [setup_mandate_cap[:amount], max_group_charge].max if setup_mandate_cap
+          # Clear unusable stored SIs before the quote-conversion guard. Otherwise a canceled
+          # ID keeps us on the USD path and register_india_mandate recreates a USD mandate for
+          # an INR checkout.
+          if chargeable.stripe_setup_intent_id.present?
+            existing_si = ChargeProcessor.get_setup_intent(merchant_account, chargeable.stripe_setup_intent_id)
+            unless existing_si.present? && (existing_si.succeeded? || existing_si.requires_action?)
+              chargeable.stripe_setup_intent_id = nil
+            end
+          end
           if chargeable.stripe_setup_intent_id.blank?
             locked_quote = locked_off_session_mandate_quote(purchases: purchases_to_charge, merchant_account:, chargeable:, amount_cents:)
             return if locked_quote == false
@@ -469,7 +489,9 @@ class Order::ChargeService
       if charge_intent.present? && charge.credit_card&.requires_mandate?
         card_json_data = charge.credit_card.json_data.to_h
         if mandate_options.present?
-          card_json_data = { "stripe_setup_intent_ids" => card_json_data["stripe_setup_intent_ids"] }.compact
+          # This PaymentIntent registered new mandate terms. Drop this account's old SI so
+          # renewals prefer the PI mandate; keep other accounts' SIs in the merchant-scoped map.
+          card_json_data = charge.credit_card.json_data_without_setup_intent_for(merchant_account)
         end
         charge.credit_card.update!(
           json_data: card_json_data.merge("stripe_payment_intent_id" => charge_intent.id)
