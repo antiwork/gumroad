@@ -2195,8 +2195,9 @@ describe Order::ChargeService, :vcr do
       expect(charge_responses["seller2-line"][:intent_id]).to eq("seti_platform_shared")
       expect(FailAbandonedPurchaseWorker.jobs.size).to eq(2)
 
-      # The card stores the SI in its merchant-scoped map.
-      expect(saved_card.reload.stripe_setup_intent_id_for(platform_account)).to eq("seti_platform_shared")
+      # Pending SetupIntents stay on the purchases until confirmation succeeds; the saved card
+      # map is only updated after success so renewals keep their prior mandate.
+      expect(saved_card.reload.stripe_setup_intent_id_for(platform_account)).to be_nil
     end
 
     it "does not read a missing payment intent when a mandate card's processor outcome is already handled" do

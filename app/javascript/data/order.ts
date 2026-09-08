@@ -235,7 +235,8 @@ export const startOrderCreation = async (
         if (requiresPaymentAction) anyPaymentIntentConfirmed = true;
         else pendingSetupNeedsConfirmPost = true;
       }
-      confirmOrderPosted = true;
+      const firstConfirmMayHaveCharged = anyIntentConfirmed || processingPermalinks.size > 0 || !stripeError;
+      if (firstConfirmMayHaveCharged) confirmOrderPosted = true;
       let orderConfirmResponse = await confirmOrderAfterAction({
         orderId,
         clientSecret: firstLineItemRequiringSCA.client_secret,
@@ -406,7 +407,7 @@ export const startOrderCreation = async (
     // SetupIntent confirmation alone is not enough: resume via confirm_order first when we
     // never posted it — even if another group is already processing or a PaymentIntent was
     // confirmed — so confirmed setups still create their charges before the pending outcome.
-    if (pendingSetupNeedsConfirmPost && pendingOrderId && pendingClientSecret) {
+    if ((pendingSetupNeedsConfirmPost || anyPaymentIntentConfirmed) && pendingOrderId && pendingClientSecret) {
       try {
         confirmOrderPosted = true;
         const recoveryResponse = await confirmOrderAfterAction({
