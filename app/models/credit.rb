@@ -695,15 +695,15 @@ class Credit < ApplicationRecord
           holding_currency:,
           state: "unpaid"
         ).order(date: :asc).first
-        unpaid ||= Balance.create!(
-          user: credit.user,
-          merchant_account: credit.merchant_account,
-          currency: bt.issued_amount_currency,
-          holding_currency:,
-          date: credit.created_at.to_date,
-          amount_cents: 0,
-          holding_amount_cents: 0
-        )
+        # Do not invent a zero-USD / negative-holding unpaid balance: payout validation
+        # rejects that as DESTINATION_LEDGER_NEGATIVE. Leave unreconciled until an unpaid
+        # balance exists to absorb the correction.
+        if unpaid.blank?
+          Rails.logger.error(
+            "Skipping fee retention holding reconcile for refund #{refund&.id}: "             "original balance immutable and no unpaid #{holding_currency} balance"
+          )
+          next
+        end
 
         unpaid.with_lock do
           unpaid.increment(:holding_amount_cents, adjusted_delta)
