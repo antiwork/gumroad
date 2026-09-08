@@ -1,11 +1,8 @@
 # frozen_string_literal: true
 
 class Integrations::DiscordController < ApplicationController
-  # join_server and leave_server gate on the signed-in purchaser OR possession of
-  # the purchase's download token: the external id alone is public (echoed on product
-  # reviews), so it must not grant Discord membership control. The token is the same
-  # per-purchase secret the download page is gated on, so guest purchasers with an
-  # account-free checkout still work.
+  # Gate join/leave on the signed-in purchaser or the purchase download token:
+  # the external id alone is public on reviews and must not authorize Discord membership.
   before_action :authenticate_user!, except: [:oauth_redirect, :join_server, :leave_server]
 
   def server_info
@@ -102,11 +99,6 @@ class Integrations::DiscordController < ApplicationController
   end
 
   private
-    # The purchase's external id is public (echoed on product reviews), so an id alone
-    # must not grant control of its Discord membership. Accept either the signed-in
-    # purchaser or possession of the purchase's download token — the same per-purchase
-    # secret the download page already gates on, which keeps account-free guest
-    # purchasers working without shipping the id-only bypass.
     def discord_purchase_authorized?(purchase)
       return false if purchase.nil?
       return true if current_user.present? && purchase.purchaser == current_user
