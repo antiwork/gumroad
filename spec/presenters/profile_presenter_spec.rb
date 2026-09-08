@@ -62,6 +62,14 @@ describe ProfilePresenter do
       expect(described_class.new(pundit_user:, seller:).profile_settings_props(request:)[:youtube_connected]).to eq(true)
     end
 
+    it "reports X connected from the current link rather than a manually entered handle" do
+      seller.update!(twitter_handle: "example_creator")
+      expect(described_class.new(pundit_user:, seller:).profile_settings_props(request:)[:twitter_connected]).to eq(false)
+
+      seller.update!(twitter_user_id: "example-social-id")
+      expect(described_class.new(pundit_user:, seller:).profile_settings_props(request:)[:twitter_connected]).to eq(true)
+    end
+
     it "reports Instagram connected from the live identity, not a dormant verification row" do
       create(:social_connect_verification, user: seller, platform: "instagram", uid: "17841400000000000", handle: "oldhandle")
       seller.reload
@@ -322,6 +330,7 @@ describe ProfilePresenter do
           seller_fonts_css_source: SellerProfile.seller_fonts_css_source,
           email_confirmation: nil,
           custom_html_pages_enabled: false,
+          twitter_connected: false,
           youtube_connect_enabled: false,
           youtube_connected: false,
           youtube_handle: nil,
