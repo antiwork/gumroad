@@ -17,12 +17,16 @@ type OrderRequiresCardActionResponse = {
   success: true;
   requires_card_action: true;
   client_secret: string;
+  intent_id: string;
+  intent_type: "payment" | "setup";
   order: { id: string; stripe_connect_account_id: string | null };
 };
 type OrderRequiresCardSetupResponse = {
   success: true;
   requires_card_setup: true;
   client_secret: string;
+  intent_id: string;
+  intent_type: "setup";
   order: { id: string; stripe_connect_account_id: string | null };
 };
 type ProcessingPurchaseResponse = { success: true; processing: true; permalink: string };
@@ -49,7 +53,14 @@ type OrderSuccessResponse = {
 // throws and a scheduled debit is misreported as a resubmittable failure.
 type ConfirmOrderResponse = {
   success: true;
-  line_items: Record<LineItemUid, ConfirmedPurchaseResponse | PurchaseErrorResponse | ProcessingPurchaseResponse>;
+  line_items: Record<
+    LineItemUid,
+    | ConfirmedPurchaseResponse
+    | PurchaseErrorResponse
+    | ProcessingPurchaseResponse
+    | OrderRequiresCardSetupResponse
+    | OrderRequiresCardActionResponse
+  >;
   can_buyer_sign_up: boolean;
   offer_codes: OfferCodes;
 };
@@ -208,7 +219,7 @@ export const startOrderCreation = async (
         }
         anyIntentConfirmed = true;
       }
-      const orderConfirmResponse = await confirmOrderAfterAction({
+      let orderConfirmResponse = await confirmOrderAfterAction({
         orderId,
         clientSecret: firstLineItemRequiringSCA.client_secret,
         // A forwarded card-handling error fails every still-pending purchase server-side.
@@ -221,6 +232,42 @@ export const startOrderCreation = async (
         // still needs the quote the checkout displayed to present in the buyer's currency.
         buyerCurrencyQuote: requestData.buyerCurrencyQuote,
       });
+      // The confirm response may return requires_card_setup/action for groups on other
+      // Stripe accounts or a follow-on PI auth. Confirm those and POST confirm again.
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
+      while (true) {
+        const followOnIntents = Object.values(orderConfirmResponse.line_items).filter(doesLineItemRequireSCA);
+        if (followOnIntents.length === 0) break;
+        for (const [, lineItem] of Object.entries(orderConfirmResponse.line_items)) {
+          if ("processing" in lineItem && lineItem.success) processingPermalinks.add(lineItem.permalink);
+        }
+        const followOnToConfirm = [
+          ...new Map(followOnIntents.map((item) => [item.client_secret, item] as const)).values(),
+        ];
+        let followOnError: StripeError | undefined;
+        for (const intentLineItem of followOnToConfirm) {
+          pendingProcessorIntentId = intentLineItem.client_secret.split("_secret")[0] ?? null;
+          const stripe = intentLineItem.order.stripe_connect_account_id
+            ? await getConnectedAccountStripeInstance(intentLineItem.order.stripe_connect_account_id)
+            : await getStripeInstance();
+          const stripeResult =
+            "requires_card_action" in intentLineItem
+              ? await stripe.confirmCardPayment(intentLineItem.client_secret)
+              : await stripe.confirmCardSetup(intentLineItem.client_secret);
+          if (stripeResult.error) {
+            followOnError = stripeResult.error;
+            break;
+          }
+          anyIntentConfirmed = true;
+        }
+        orderConfirmResponse = await confirmOrderAfterAction({
+          orderId,
+          clientSecret: followOnToConfirm[0]?.client_secret ?? firstLineItemRequiringSCA.client_secret,
+          stripeError: anyIntentConfirmed ? undefined : followOnError,
+          retryOfferCodes: retryOfferCodeCandidates(requestData, retryOfferCodes),
+          buyerCurrencyQuote: requestData.buyerCurrencyQuote,
+        });
+      }
       const confirmLineItems: Record<LineItemUid, ConfirmedPurchaseResponse | PurchaseErrorResponse> = {};
       // A processing line item means its group's charge is created and the debit scheduled —
       // it must leave the cart (resubmitting risks a second charge), so it is excluded here
@@ -232,6 +279,7 @@ export const startOrderCreation = async (
           processingPermalinks.add(lineItem.permalink);
           continue;
         }
+        if (doesLineItemRequireSCA(lineItem)) continue;
         confirmLineItems[uid] = lineItem;
       }
       // Key by uid, not permalink, which collides when the cart holds two variants of one product.

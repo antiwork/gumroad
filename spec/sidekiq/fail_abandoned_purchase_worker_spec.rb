@@ -474,6 +474,28 @@ describe FailAbandonedPurchaseWorker, :vcr do
         end
       end
 
+      context "when a shared SetupIntent is still needed by a sibling purchase" do
+        let(:product) { create(:product) }
+        let(:sibling_product) { create(:product, user: create(:user)) }
+        let(:purchase) do
+          create(:purchase_in_progress, link: product, processor_setup_intent_id: "seti_shared")
+        end
+        let!(:sibling) do
+          create(:purchase_in_progress, link: sibling_product, processor_setup_intent_id: "seti_shared")
+        end
+
+        before { travel ChargeProcessor::TIME_TO_COMPLETE_SCA }
+
+        it "reschedules instead of cancelling when the sibling is still within the SCA window" do
+          sibling.update_column(:created_at, 1.minute.ago)
+
+          described_class.new.perform(purchase.id)
+
+          expect(purchase.reload.purchase_state).to eq("in_progress")
+          expect(FailAbandonedPurchaseWorker).to have_enqueued_sidekiq_job(purchase.id)
+        end
+      end
+
       context "when purchase has no processor_payment_intent_id or processor_setup_intent_id" do
         let!(:purchase) { create(:purchase_in_progress) }
 

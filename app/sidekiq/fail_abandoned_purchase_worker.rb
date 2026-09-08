@@ -36,6 +36,10 @@ class FailAbandonedPurchaseWorker
         else
           Stripe::SetupIntent.retrieve(purchase.processor_setup_intent_id)
         end
+        if setup_intent.status != StripeIntentStatus::PROCESSING && shared_setup_intent_still_needed?
+          FailAbandonedPurchaseWorker.perform_in(ChargeProcessor::TIME_TO_COMPLETE_SCA, purchase.id)
+          return
+        end
         cancel_setup_intent unless setup_intent.status == StripeIntentStatus::PROCESSING
       else
         raise "Expected purchase #{purchase.id} to have either a processor_payment_intent_id or processor_setup_intent_id present"
@@ -85,6 +89,13 @@ class FailAbandonedPurchaseWorker
       # A client-confirm charge that succeeded but was never finalized (browser disappeared) stays
       # in_progress here; the Phase 2 PaymentIntent webhook is the source of truth that finalizes it.
       raise unless charge_intent&.succeeded? || charge_intent&.canceled?
+    end
+
+    def shared_setup_intent_still_needed?
+      siblings = Purchase.where(processor_setup_intent_id: purchase.processor_setup_intent_id)
+                         .where.not(id: purchase.id)
+                         .where(purchase_state: "in_progress")
+      siblings.any? { |p| p.created_at + ChargeProcessor::TIME_TO_COMPLETE_SCA > Time.current }
     end
 
     def cancel_setup_intent

@@ -30,6 +30,10 @@ class Order::ConfirmService
             purchase_responses[purchase.id] = { success: true, processing: true, permalink: purchase.link.unique_permalink }
             next
           end
+          if result.is_a?(Hash) && result[:awaiting_setup]
+            purchase_responses[purchase.id] = result[:awaiting_setup]
+            next
+          end
           result
         else
           Purchase::ConfirmService.new(purchase:, params:).perform
@@ -190,6 +194,25 @@ class Order::ConfirmService
       setup_intent = credit_card.present? ? ChargeProcessor.get_setup_intent(merchant_account, setup_intent_id) : nil
 
       unless setup_intent&.succeeded?
+        if setup_intent&.requires_action?
+          # SI on another Stripe account — the buyer hasn't confirmed it yet. Leave these
+          # purchases in_progress and tell the frontend to confirmCardSetup on this account.
+          connect_acct = merchant_account&.is_a_stripe_connect_account? ? merchant_account.charge_processor_merchant_id : nil
+          response = {
+            success: true,
+            requires_card_setup: true,
+            client_secret: setup_intent.client_secret,
+            intent_id: setup_intent_id,
+            intent_type: "setup",
+            order: {
+              id: order.secure_external_id(scope: "confirm", expires_at: 1.hour.from_now),
+              stripe_connect_account_id: connect_acct
+            }
+          }
+          purchases.each { |p| setup_charge_results[p.id] = { awaiting_setup: response } }
+          return
+        end
+
         purchases.each do |purchase|
           purchase.error_code = PurchaseErrorCode::INDIA_CARD_MANDATE_MISSING
           purchase.errors.add(:base, "We couldn't authorize your card for this payment. Please try again or use a different payment method.")
@@ -235,9 +258,10 @@ class Order::ConfirmService
       # purchases, which fails them in the per-purchase confirms.
       return if charge_intent.blank?
 
-      # Renewals resolve the e-mandate from the last charge on the card; keep only this
-      # charge's intent so a stale SetupIntent from another account cannot shadow it.
-      credit_card.update!(json_data: { "stripe_payment_intent_id" => charge_intent.id }) if credit_card.requires_mandate?
+      if credit_card.requires_mandate?
+        existing = credit_card.json_data.to_h
+        credit_card.update!(json_data: { "stripe_setup_intent_ids" => existing["stripe_setup_intent_ids"], "stripe_payment_intent_id" => charge_intent.id }.compact)
+      end
       return unless charge_intent.is_a?(StripeChargeIntent)
 
       # The debit can outlive this request (India intents stay `processing` for up to 26h),

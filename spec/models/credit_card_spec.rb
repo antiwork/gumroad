@@ -157,6 +157,67 @@ describe CreditCard do
     end
   end
 
+  describe "#stripe_setup_intent_id_for" do
+    let(:card) do
+      CreditCard.create!(
+        charge_processor_id: StripeChargeProcessor.charge_processor_id,
+        stripe_customer_id: "cus_map_test",
+        processor_payment_method_id: "pm_map_test",
+        stripe_fingerprint: "map_test_fp",
+        visual: "**** **** **** 4242",
+        card_type: CardType::VISA,
+        card_country: Compliance::Countries::IND.alpha2,
+        expiry_month: 12,
+        expiry_year: 2030,
+        json_data: { "stripe_setup_intent_ids" => { "acct_connect" => "seti_connect", "platform" => "seti_platform" } }
+      )
+    end
+
+    it "returns the SI for a Connect merchant account" do
+      connect = instance_double(MerchantAccount, is_a_stripe_connect_account?: true, charge_processor_merchant_id: "acct_connect")
+      expect(card.stripe_setup_intent_id_for(connect)).to eq("seti_connect")
+    end
+
+    it "returns the SI for a platform merchant account" do
+      platform = instance_double(MerchantAccount, is_a_stripe_connect_account?: false)
+      expect(card.stripe_setup_intent_id_for(platform)).to eq("seti_platform")
+    end
+
+    it "falls back to the legacy scalar when no map exists" do
+      card.update!(json_data: { "stripe_setup_intent_id" => "seti_legacy" })
+      platform = instance_double(MerchantAccount, is_a_stripe_connect_account?: false)
+      expect(card.stripe_setup_intent_id_for(platform)).to eq("seti_legacy")
+    end
+  end
+
+  describe "#store_stripe_setup_intent_id!" do
+    let(:card) do
+      CreditCard.create!(
+        charge_processor_id: StripeChargeProcessor.charge_processor_id,
+        stripe_customer_id: "cus_store_test",
+        processor_payment_method_id: "pm_store_test",
+        stripe_fingerprint: "store_test_fp",
+        visual: "**** **** **** 4242",
+        card_type: CardType::VISA,
+        card_country: Compliance::Countries::IND.alpha2,
+        expiry_month: 12,
+        expiry_year: 2030
+      )
+    end
+
+    it "stores SI IDs without overwriting other accounts" do
+      connect = instance_double(MerchantAccount, is_a_stripe_connect_account?: true, charge_processor_merchant_id: "acct_1")
+      platform = instance_double(MerchantAccount, is_a_stripe_connect_account?: false)
+
+      card.store_stripe_setup_intent_id!(connect, "seti_connect_1")
+      card.store_stripe_setup_intent_id!(platform, "seti_platform_1")
+      card.reload
+
+      expect(card.stripe_setup_intent_id_for(connect)).to eq("seti_connect_1")
+      expect(card.stripe_setup_intent_id_for(platform)).to eq("seti_platform_1")
+    end
+  end
+
   describe ".create_from_client_confirmed_intent!" do
     let(:payment_intent) do
       Stripe::PaymentIntent.construct_from(

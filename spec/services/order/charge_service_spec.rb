@@ -1922,6 +1922,83 @@ describe Order::ChargeService, :vcr do
       expect(FailAbandonedPurchaseWorker.jobs.size).to eq(2)
     end
 
+    it "shares one setup intent across same-account sellers in a two-seller platform cart" do
+      platform_account = MerchantAccount.gumroad(StripeChargeProcessor.charge_processor_id) ||
+        create(
+          :merchant_account,
+          user: nil,
+          charge_processor_id: StripeChargeProcessor.charge_processor_id,
+          charge_processor_merchant_id: nil
+        )
+      saved_card = CreditCard.create!(
+        charge_processor_id: StripeChargeProcessor.charge_processor_id,
+        stripe_customer_id: "cus_shared_si",
+        processor_payment_method_id: "pm_shared_si",
+        stripe_fingerprint: "shared_si_fingerprint",
+        visual: "**** **** **** 4242",
+        card_type: CardType::VISA,
+        card_country: Compliance::Countries::IND.alpha2,
+        expiry_month: 12,
+        expiry_year: 2030
+      )
+      buyer = create(:user, credit_card: saved_card)
+      allow_any_instance_of(StripeChargeableCreditCard).to receive(:prepare_for_direct_charge)
+      setup_calls = []
+      shared_si = instance_double(
+        StripeSetupIntent,
+        id: "seti_platform_shared",
+        succeeded?: false,
+        requires_action?: true,
+        client_secret: "seti_platform_shared_secret_abc",
+        present?: true
+      )
+      allow(ChargeProcessor).to receive(:setup_future_charges!) do |_account, _chargeable, mandate_options:|
+        setup_calls << mandate_options
+        shared_si
+      end
+      expect(Charge::CreateService).not_to receive(:new)
+      params = {
+        line_items: [
+          {
+            uid: "seller1-line",
+            permalink: product_1.unique_permalink,
+            perceived_price_cents: product_1.price_cents,
+            is_multi_buy: true,
+            quantity: 1
+          },
+          {
+            uid: "seller2-line",
+            permalink: product_3.unique_permalink,
+            perceived_price_cents: product_3.price_cents,
+            is_multi_buy: true,
+            quantity: 1
+          }
+        ]
+      }.merge(common_order_params_without_payment)
+      order, = Order::CreateService.new(params:, buyer:).perform
+
+      charge_responses = Order::ChargeService.new(order:, params:).perform
+
+      # Only one SetupIntent.create call — the second seller group reuses the first's SI.
+      expect(setup_calls.size).to eq(1)
+      seller1_purchase = order.reload.purchases.find { _1.seller_id == seller_1.id }
+      seller2_purchase = order.purchases.find { _1.seller_id == seller_2.id }
+      expect(seller1_purchase.merchant_account).to eq(platform_account)
+      expect(seller2_purchase.merchant_account).to eq(platform_account)
+      expect(seller1_purchase.processor_setup_intent_id).to eq("seti_platform_shared")
+      expect(seller2_purchase.processor_setup_intent_id).to eq("seti_platform_shared")
+
+      # Both line items share the same client_secret — one browser confirm covers both groups.
+      expect(charge_responses["seller1-line"][:client_secret]).to eq("seti_platform_shared_secret_abc")
+      expect(charge_responses["seller2-line"][:client_secret]).to eq("seti_platform_shared_secret_abc")
+      expect(charge_responses["seller1-line"][:intent_id]).to eq("seti_platform_shared")
+      expect(charge_responses["seller2-line"][:intent_id]).to eq("seti_platform_shared")
+      expect(FailAbandonedPurchaseWorker.jobs.size).to eq(2)
+
+      # The card stores the SI in its merchant-scoped map.
+      expect(saved_card.reload.stripe_setup_intent_id_for(platform_account)).to eq("seti_platform_shared")
+    end
+
     it "does not read a missing payment intent when a mandate card's processor outcome is already handled" do
       order = create(:order)
       merchant_account = create(:merchant_account_stripe_connect, user: seller_1)

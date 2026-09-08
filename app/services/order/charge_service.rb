@@ -4,12 +4,13 @@ class Order::ChargeService
   include Events, Order::ResponseHelpers
   include CurrencyHelper
 
-  attr_accessor :order, :params, :charge_intent, :setup_intent, :charge_responses
+  attr_accessor :order, :params, :charge_intent, :setup_intent, :charge_responses, :account_setup_intents
 
   def initialize(order:, params:)
     @order = order
     @params = params
     @charge_responses = {}
+    @account_setup_intents = {}
   end
 
   def perform
@@ -162,7 +163,7 @@ class Order::ChargeService
           purchase.update!(processor_setup_intent_id: setup_intent.id)
           purchase.charge.update!(stripe_setup_intent_id: setup_intent.id)
           if !card_already_saved && purchase.credit_card&.requires_mandate?
-            purchase.credit_card.update!(json_data: { stripe_setup_intent_id: setup_intent.id })
+            purchase.credit_card.store_stripe_setup_intent_id!(merchant_account, setup_intent.id)
           end
 
           if setup_intent.succeeded?
@@ -289,11 +290,6 @@ class Order::ChargeService
     self.setup_intent = ChargeProcessor.setup_future_charges!(merchant_account, chargeable, mandate_options:)
     return unless setup_intent.present?
 
-    # Mutate only this seller group's chargeable — the SetupIntent lives on this
-    # group's Stripe account. Writing it into the shared `params` or into the saved
-    # card's json_data would leak it into the chargeables rebuilt for later seller
-    # groups, whose charges settle on other accounts. Purchase#processor_setup_intent_id
-    # is the durable, group-scoped record.
     chargeable.stripe_setup_intent_id = setup_intent.id if chargeable.respond_to?(:stripe_setup_intent_id=)
 
     purchases.each do |purchase|
@@ -301,6 +297,11 @@ class Order::ChargeService
       purchase.charge&.update!(stripe_setup_intent_id: setup_intent.id)
       purchase.mark_indian_card_mandate_registration! if purchase.credit_card&.requires_mandate?
     end
+
+    # Store in the merchant-scoped map so later groups on the same account find it via
+    # to_chargeable, and renewals resolve the right SI per account.
+    credit_card = purchases.first&.credit_card
+    credit_card&.store_stripe_setup_intent_id!(merchant_account, setup_intent.id) if credit_card&.requires_mandate?
 
     if !setup_intent.requires_action? && !setup_intent.succeeded?
       purchases.each do |purchase|
@@ -396,21 +397,32 @@ class Order::ChargeService
       mandate_options = mandate_options_for_stripe(purchases: mandate_purchases) if mandate_purchases.present?
       india_off_session_mandate = off_session && chargeable&.requires_mandate? && merchant_account.stripe_charge_processor?
       if india_off_session_mandate
-        # A SetupIntent has no amount, so Stripe requires the mandate currency here, and the
-        # combined charge below references this mandate immediately — the cap must clear the
-        # group's total today as well as the largest single renewal later.
-        setup_mandate_options = mandate_options_for_stripe(purchases: (purchases_to_charge | mandate_purchases), with_currency: true)
-        setup_mandate_cap = setup_mandate_options&.dig(:payment_method_options, :card, :mandate_options)
-        setup_mandate_cap[:amount] = [setup_mandate_cap[:amount], amount_cents].max if setup_mandate_cap
-        if chargeable.stripe_setup_intent_id.blank?
-          # With a quote token the group's charge presents in the quoted currency, and Stripe
-          # requires the mandate registered on the SetupIntent to match the PaymentIntent's
-          # currency — a USD mandate would fail the resume charge after the buyer's 3DS.
-          locked_quote = locked_off_session_mandate_quote(purchases: purchases_to_charge, merchant_account:, chargeable:, amount_cents:)
-          return if locked_quote == false
-          setup_mandate_options = off_session_mandate_options_in_quote_currency(setup_mandate_options, locked_quote)
+        account_key = stripe_account_key_for_merchant(merchant_account)
+        shared_si = account_setup_intents[account_key]
+
+        if shared_si
+          # Another seller group on the same Stripe account already registered this SI.
+          self.setup_intent = shared_si
+          chargeable.stripe_setup_intent_id = shared_si.id if chargeable.respond_to?(:stripe_setup_intent_id=)
+          purchases_to_charge.each do |purchase|
+            purchase.update!(processor_setup_intent_id: shared_si.id)
+            purchase.charge&.update!(stripe_setup_intent_id: shared_si.id)
+            purchase.mark_indian_card_mandate_registration! if purchase.credit_card&.requires_mandate?
+          end
+        else
+          # First group on this account: size the mandate cap to cover all same-account groups.
+          setup_mandate_options = combined_account_mandate_options(account_key, purchases_to_charge, mandate_purchases)
+          setup_mandate_cap = setup_mandate_options&.dig(:payment_method_options, :card, :mandate_options)
+          max_group_charge = max_group_charge_for_account(account_key)
+          setup_mandate_cap[:amount] = [setup_mandate_cap[:amount], max_group_charge].max if setup_mandate_cap
+          if chargeable.stripe_setup_intent_id.blank?
+            locked_quote = locked_off_session_mandate_quote(purchases: purchases_to_charge, merchant_account:, chargeable:, amount_cents:)
+            return if locked_quote == false
+            setup_mandate_options = off_session_mandate_options_in_quote_currency(setup_mandate_options, locked_quote)
+          end
+          register_india_mandate_for_off_session_cart!(purchases_to_charge, chargeable, merchant_account, setup_mandate_options)
+          account_setup_intents[account_key] = setup_intent if setup_intent.present?
         end
-        register_india_mandate_for_off_session_cart!(purchases_to_charge, chargeable, merchant_account, setup_mandate_options)
         return if setup_intent&.requires_action? || purchases_to_charge.any? { |purchase| purchase.errors.present? }
       end
       if setup_future_charges && mandate_options.present? && chargeable&.requires_mandate?
@@ -439,7 +451,10 @@ class Order::ChargeService
       # charge_intent is nil when the processor call was rescued (e.g. a quote/settlement
       # mismatch) — Charge::CreateService returns the charge with no intent attached in that case.
       if charge_intent.present? && charge.credit_card&.requires_mandate?
-        card_json_data = mandate_options.present? ? {} : charge.credit_card.json_data.to_h
+        card_json_data = charge.credit_card.json_data.to_h
+        if mandate_options.present?
+          card_json_data = { "stripe_setup_intent_ids" => card_json_data["stripe_setup_intent_ids"] }.compact
+        end
         charge.credit_card.update!(
           json_data: card_json_data.merge("stripe_payment_intent_id" => charge_intent.id)
         )
@@ -532,6 +547,8 @@ class Order::ChargeService
           success: true,
           requires_card_action: true,
           client_secret: charge_intent.client_secret,
+          intent_id: charge_intent.id,
+          intent_type: "payment",
           order: {
             id: order.secure_external_id(scope: "confirm", expires_at: 1.hour.from_now),
             stripe_connect_account_id: stripe_connect_account_id_for(purchase)
@@ -542,6 +559,8 @@ class Order::ChargeService
           success: true,
           requires_card_setup: true,
           client_secret: setup_intent.client_secret,
+          intent_id: setup_intent.id,
+          intent_type: "setup",
           order: {
             id: order.secure_external_id(scope: "confirm", expires_at: 1.hour.from_now),
             stripe_connect_account_id: stripe_connect_account_id_for(purchase)
@@ -618,6 +637,35 @@ class Order::ChargeService
 
     seller_balance_transaction.update_balance! if seller_balance_transaction.balance_id.blank?
     purchase.update!(purchase_success_balance: seller_balance_transaction.balance)
+  end
+
+  def stripe_account_key_for_merchant(merchant_account)
+    merchant_account&.is_a_stripe_connect_account? ? merchant_account.charge_processor_merchant_id : "platform"
+  end
+
+  # Collect all in-progress non-free purchases on the same Stripe account for combined mandate sizing.
+  def combined_account_mandate_options(account_key, local_purchases_to_charge, local_mandate_purchases)
+    all_account_purchases = order.purchases.select do |p|
+      p.in_progress? && p.errors.empty? &&
+        !p.is_free_trial_purchase? && !p.is_preorder_authorization? && !p.is_test_purchase? &&
+        stripe_account_key_for_merchant(p.merchant_account) == account_key
+    end
+    all_account_mandate = order.purchases.select do |p|
+      p.in_progress? && p.errors.empty? &&
+        stripe_account_key_for_merchant(p.merchant_account) == account_key &&
+        (p.is_original_subscription_purchase? || p.is_preorder_authorization? || p.is_upgrade_purchase?)
+    end
+    mandate_options_for_stripe(purchases: (all_account_purchases | all_account_mandate), with_currency: true)
+  end
+
+  def max_group_charge_for_account(account_key)
+    order.purchases
+      .select { |p| p.in_progress? && p.errors.empty? && stripe_account_key_for_merchant(p.merchant_account) == account_key }
+      .reject { |p| p.is_free_trial_purchase? || p.is_preorder_authorization? || p.is_test_purchase? }
+      .group_by(&:seller_id)
+      .values
+      .map { |group| group.sum(&:total_transaction_cents) }
+      .max || 0
   end
 
   # The India e-mandate registered with this charge caps every future off-session charge made

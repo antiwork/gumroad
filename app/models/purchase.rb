@@ -4850,7 +4850,7 @@ class Purchase < ApplicationRecord
         return unless setup_intent.present?
 
         self.processor_setup_intent_id = setup_intent.id
-        credit_card.update!(json_data: { stripe_setup_intent_id: setup_intent.id }) if credit_card&.requires_mandate?
+        credit_card.store_stripe_setup_intent_id!(merchant_account, setup_intent.id) if credit_card&.requires_mandate?
         save!
 
         unless setup_intent.succeeded? || setup_intent.requires_action?
@@ -5040,7 +5040,10 @@ class Purchase < ApplicationRecord
           end
         end
         save!
-        credit_card.update!(json_data: { stripe_payment_intent_id: charge_intent.id }) if credit_card&.requires_mandate? && mandate_options.present?
+        if credit_card&.requires_mandate? && mandate_options.present?
+          existing = credit_card.json_data.to_h
+          credit_card.update!(json_data: { "stripe_setup_intent_ids" => existing["stripe_setup_intent_ids"], "stripe_payment_intent_id" => charge_intent.id }.compact)
+        end
 
         charge_intent
       end

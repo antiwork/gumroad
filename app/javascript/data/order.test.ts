@@ -254,7 +254,12 @@ describe("startOrderCreation", () => {
             "product-a ": {
               success: true,
               requires_card_action: true,
+
               client_secret: "pi_secret",
+
+              intent_id: "pi",
+
+              intent_type: "payment",
               order: { id: "order-token", stripe_connect_account_id: null },
             },
             "product-b ": {
@@ -343,7 +348,12 @@ describe("startOrderCreation", () => {
             [lineItem.uid]: {
               success: true,
               requires_card_action: true,
+
               client_secret: "pi_secret",
+
+              intent_id: "pi",
+
+              intent_type: "payment",
               order: { id: "order-token", stripe_connect_account_id: null },
             },
           },
@@ -378,7 +388,12 @@ describe("startOrderCreation", () => {
             [lineItem.uid]: {
               success: true,
               requires_card_action: true,
+
               client_secret: "pi_secret",
+
+              intent_id: "pi",
+
+              intent_type: "payment",
               order: { id: "order-token", stripe_connect_account_id: null },
             },
           },
@@ -415,7 +430,12 @@ describe("startOrderCreation", () => {
             [lineItem.uid]: {
               success: true,
               requires_card_action: true,
+
               client_secret: "pi_secret",
+
+              intent_id: "pi",
+
+              intent_type: "payment",
               order: { id: "order-token", stripe_connect_account_id: null },
             },
           },
@@ -473,13 +493,23 @@ describe("startOrderCreation", () => {
             [firstLine.uid]: {
               success: true,
               requires_card_action: true,
+
               client_secret: "pi_secret",
+
+              intent_id: "pi",
+
+              intent_type: "payment",
               order: { id: "order-token", stripe_connect_account_id: null },
             },
             [secondLine.uid]: {
               success: true,
               requires_card_action: true,
+
               client_secret: "pi_secret",
+
+              intent_id: "pi",
+
+              intent_type: "payment",
               order: { id: "order-token", stripe_connect_account_id: null },
             },
           },
@@ -536,13 +566,23 @@ describe("startOrderCreation", () => {
             [firstLine.uid]: {
               success: true,
               requires_card_setup: true,
+
               client_secret: "seti_connect_secret",
+
+              intent_id: "seti_connect",
+
+              intent_type: "setup",
               order: { id: "order-token", stripe_connect_account_id: "acct_connect" },
             },
             [secondLine.uid]: {
               success: true,
               requires_card_action: true,
+
               client_secret: "pi_platform_secret",
+
+              intent_id: "pi_platform",
+
+              intent_type: "payment",
               order: { id: "order-token", stripe_connect_account_id: null },
             },
           },
@@ -601,13 +641,23 @@ describe("startOrderCreation", () => {
             [firstLine.uid]: {
               success: true,
               requires_card_setup: true,
+
               client_secret: "seti_group_1_secret",
+
+              intent_id: "seti_group_1",
+
+              intent_type: "setup",
               order: { id: "order-token", stripe_connect_account_id: null },
             },
             [secondLine.uid]: {
               success: true,
               requires_card_action: true,
+
               client_secret: "pi_group_2_secret",
+
+              intent_id: "pi_group_2",
+
+              intent_type: "payment",
               order: { id: "order-token", stripe_connect_account_id: null },
             },
           },
@@ -656,7 +706,12 @@ describe("startOrderCreation", () => {
             [firstLine.uid]: {
               success: true,
               requires_card_action: true,
+
               client_secret: "pi_secret",
+
+              intent_id: "pi",
+
+              intent_type: "payment",
               order: { id: "order-token", stripe_connect_account_id: null },
             },
           },
@@ -717,7 +772,12 @@ describe("startOrderCreation", () => {
             [lineItem.uid]: {
               success: true,
               requires_card_setup: true,
+
               client_secret: "seti_secret",
+
+              intent_id: "seti",
+
+              intent_type: "setup",
               order: { id: "order-token", stripe_connect_account_id: null },
             },
           },
@@ -763,7 +823,12 @@ describe("startOrderCreation", () => {
             [lineItem.uid]: {
               success: true,
               requires_card_setup: true,
+
               client_secret: "seti_secret",
+
+              intent_id: "seti",
+
+              intent_type: "setup",
               order: { id: "order-token", stripe_connect_account_id: null },
             },
           },
@@ -812,13 +877,23 @@ describe("startOrderCreation", () => {
             [firstLine.uid]: {
               success: true,
               requires_card_setup: true,
+
               client_secret: "seti_secret",
+
+              intent_id: "seti",
+
+              intent_type: "setup",
               order: { id: "order-token", stripe_connect_account_id: null },
             },
             [secondLine.uid]: {
               success: true,
               requires_card_setup: true,
+
               client_secret: "seti_secret",
+
+              intent_id: "seti",
+
+              intent_type: "setup",
               order: { id: "order-token", stripe_connect_account_id: null },
             },
           },
@@ -896,7 +971,12 @@ describe("startOrderCreation", () => {
     const scaLineItem = {
       success: true,
       requires_card_setup: true,
+
       client_secret: "seti_secret",
+
+      intent_id: "seti",
+
+      intent_type: "setup",
       order: { id: "order-token", stripe_connect_account_id: null },
     };
     requestMock
@@ -963,7 +1043,12 @@ describe("startOrderCreation", () => {
             [firstLine.uid]: {
               success: true,
               requires_card_setup: true,
+
               client_secret: "seti_secret",
+
+              intent_id: "seti",
+
+              intent_type: "setup",
               order: { id: "order-token", stripe_connect_account_id: null },
             },
             [secondLine.uid]: {
@@ -1036,7 +1121,12 @@ describe("startOrderCreation", () => {
             [lineItem.uid]: {
               success: true,
               requires_card_setup: true,
+
               client_secret: "seti_secret",
+
+              intent_id: "seti",
+
+              intent_type: "setup",
               order: { id: "order-token", stripe_connect_account_id: null },
             },
           },

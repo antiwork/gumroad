@@ -442,7 +442,7 @@ describe Order::ConfirmService, :vcr do
       end
 
       it "fails the group without charging when the SetupIntent did not succeed" do
-        setup_intent = instance_double(StripeSetupIntent, succeeded?: false)
+        setup_intent = instance_double(StripeSetupIntent, succeeded?: false, requires_action?: false)
         allow(ChargeProcessor).to receive(:get_setup_intent).and_return(setup_intent)
         expect(Charge::CreateService).not_to receive(:new)
 
@@ -454,6 +454,30 @@ describe Order::ConfirmService, :vcr do
         expect(responses.values).to all(
           include(success: false, error_message: "We couldn't authorize your card for this payment. Please try again or use a different payment method.")
         )
+      end
+
+      it "returns requires_card_setup for groups whose SetupIntent still requires action" do
+        still_pending = instance_double(
+          StripeSetupIntent,
+          succeeded?: false,
+          requires_action?: true,
+          client_secret: "seti_confirm_india_secret_abc"
+        )
+        allow(ChargeProcessor).to receive(:get_setup_intent).and_return(still_pending)
+        expect(Charge::CreateService).not_to receive(:new)
+
+        responses, = Order::ConfirmService.new(order:, params: {}).perform
+
+        purchases.each do |purchase|
+          expect(purchase.reload.purchase_state).to eq("in_progress")
+          expect(responses[purchase.id]).to include(
+            success: true,
+            requires_card_setup: true,
+            client_secret: "seti_confirm_india_secret_abc",
+            intent_id: "seti_confirm_india",
+            intent_type: "setup"
+          )
+        end
       end
 
       it "does not finalize a paid purchase whose group charge could not be created" do

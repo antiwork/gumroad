@@ -183,7 +183,7 @@ class CreditCard < ApplicationRecord
       reusable_tokens,
       processor_payment_method_id,
       stripe_fingerprint,
-      stripe_setup_intent_id,
+      stripe_setup_intent_id_for(merchant_account),
       stripe_payment_intent_id,
       ChargeableVisual.is_cc_visual(visual) ? ChargeableVisual.get_card_last4(visual) : nil,
       visual.gsub(/\s/, "").length,
@@ -212,11 +212,36 @@ class CreditCard < ApplicationRecord
     payment_method_type == Checkout::PaymentMethodResolver::UPI_PAYMENT_METHOD_TYPE
   end
 
+  # Legacy scalar reader — kept for backward compat with cards that predate the merchant-scoped map.
   def stripe_setup_intent_id
     json_data && json_data.deep_symbolize_keys[:stripe_setup_intent_id]
+  end
+
+  def stripe_setup_intent_id_for(merchant_account)
+    return nil if json_data.blank?
+    data = json_data.deep_symbolize_keys
+    ids = data[:stripe_setup_intent_ids]
+    if ids.is_a?(Hash)
+      key = merchant_account_key(merchant_account)
+      return ids[key.to_sym] || ids[key.to_s]
+    end
+    data[:stripe_setup_intent_id]
+  end
+
+  def store_stripe_setup_intent_id!(merchant_account, id)
+    key = merchant_account_key(merchant_account)
+    existing = json_data.to_h
+    ids = existing["stripe_setup_intent_ids"].is_a?(Hash) ? existing["stripe_setup_intent_ids"].dup : {}
+    ids[key] = id
+    update!(json_data: existing.merge("stripe_setup_intent_ids" => ids))
   end
 
   def stripe_payment_intent_id
     json_data && json_data.deep_symbolize_keys[:stripe_payment_intent_id]
   end
+
+  private
+    def merchant_account_key(merchant_account)
+      merchant_account&.is_a_stripe_connect_account? ? merchant_account.charge_processor_merchant_id : "platform"
+    end
 end
