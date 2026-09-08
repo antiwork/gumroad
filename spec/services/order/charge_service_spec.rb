@@ -1935,7 +1935,6 @@ describe Order::ChargeService, :vcr do
                                     present?: true)
       allow(ChargeProcessor).to receive(:get_setup_intent).with(merchant_account, "seti_canceled").and_return(canceled_si)
       fresh_si = instance_double(StripeSetupIntent, id: "seti_fresh", payment_method_id: "pm_fresh", customer_id: nil, mandate: "mandate_fresh", card_mandate_options: { amount: 10_00, currency: "usd" }, succeeded?: true, requires_action?: false)
-      fresh_si.id = "seti_fresh"
       allow(fresh_si).to receive_messages(succeeded?: true, requires_action?: false, present?: true, payment_method_id: "pm_fresh_connect")
       captured_mandate = nil
       allow(ChargeProcessor).to receive(:setup_future_charges!) do |_account, _chargeable, mandate_options:|

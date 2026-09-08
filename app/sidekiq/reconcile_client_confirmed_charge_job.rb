@@ -20,6 +20,7 @@ class ReconcileClientConfirmedChargeJob
     return if charge.purchases.none?(&:in_progress?)
 
     recovery = recover_missing_payment_intent!(charge)
+    promote_confirmed_setup_intents!(charge)
 
     charge.purchases.select(&:in_progress?).each do |purchase|
       Purchase::SyncStatusWithChargeProcessorService.new(purchase).perform
@@ -79,8 +80,13 @@ class ReconcileClientConfirmedChargeJob
 
         in_progress_purchase.create_processor_payment_intent!(intent_id: payment_intent_id)
       end
-      # Promote a confirmed SetupIntent onto the saved card so renewals keep the mandate that
-      # authorized this recovered debit (create-time may have deferred that write until success).
+      :recovered
+    rescue StandardError => e
+      ErrorNotifier.notify(e, charge_id: charge.id)
+      :lookup_failed
+    end
+
+    def promote_confirmed_setup_intents!(charge)
       charge.purchases.each do |purchase|
         card = purchase.credit_card
         setup_intent_id = purchase.processor_setup_intent_id
@@ -89,10 +95,8 @@ class ReconcileClientConfirmedChargeJob
         setup_intent = ChargeProcessor.get_setup_intent(purchase.merchant_account, setup_intent_id)
         card.store_stripe_setup_intent_id!(purchase.merchant_account, setup_intent_id) if setup_intent&.succeeded?
       end
-      :recovered
     rescue StandardError => e
       ErrorNotifier.notify(e, charge_id: charge.id)
-      :lookup_failed
     end
 
     def payment_intent_id_from_stripe_charge(stripe_charge)
