@@ -19,6 +19,7 @@ type OrderRequiresCardActionResponse = {
   client_secret: string;
   intent_id?: string;
   intent_type?: "payment" | "setup";
+  permalink?: string;
   order: { id: string; stripe_connect_account_id: string | null };
 };
 type OrderRequiresCardSetupResponse = {
@@ -27,6 +28,7 @@ type OrderRequiresCardSetupResponse = {
   client_secret: string;
   intent_id?: string;
   intent_type?: "setup";
+  permalink?: string;
   order: { id: string; stripe_connect_account_id: string | null };
 };
 type ProcessingPurchaseResponse = { success: true; processing: true; permalink: string };
@@ -373,20 +375,22 @@ export const startOrderCreation = async (
             continue;
           }
           if (doesLineItemRequireSCA(lineItem)) {
-            // Still needs authentication — keep the line retryable instead of dropping it.
-            const cartLine = requestData.lineItems.find((item) => item.uid === uid);
-            recoveryConfirmItems[uid] = {
-              success: false,
-              error_message: "Authentication required.",
-              permalink: cartLine?.permalink ?? "",
-              name: "",
-              formatted_price: "",
-              error_code: "requires_authentication",
-              is_tax_mismatch: false,
-              card_country: null,
-              ip_country: null,
-              updated_product: null,
-            };
+            // ConfirmService keys by purchase id; keep SCA lines for permalink matching below.
+            const permalink = lineItem.permalink;
+            if (permalink) {
+              recoveryConfirmItems[uid] = {
+                success: false,
+                error_message: "Authentication required.",
+                permalink,
+                name: "",
+                formatted_price: "",
+                error_code: "requires_authentication",
+                is_tax_mismatch: false,
+                card_country: null,
+                ip_country: null,
+                updated_product: null,
+              };
+            }
             continue;
           }
           recoveryConfirmItems[uid] = lineItem;

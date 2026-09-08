@@ -298,6 +298,8 @@ class Order::ChargeService
           purchase.charge&.update!(stripe_setup_intent_id: existing_si.id)
           purchase.mark_indian_card_mandate_registration! if purchase.credit_card&.requires_mandate?
         end
+        credit_card = purchases.first&.credit_card
+        credit_card&.store_stripe_setup_intent_id!(merchant_account, existing_si.id) if credit_card&.requires_mandate?
         return
       end
       chargeable.stripe_setup_intent_id = nil
@@ -598,6 +600,7 @@ class Order::ChargeService
           client_secret: charge_intent.client_secret,
           intent_id: charge_intent.id,
           intent_type: "payment",
+          permalink: purchase.link.unique_permalink,
           order: {
             id: order.secure_external_id(scope: "confirm", expires_at: 1.hour.from_now),
             stripe_connect_account_id: stripe_connect_account_id_for(purchase)
@@ -610,6 +613,7 @@ class Order::ChargeService
           client_secret: setup_intent.client_secret,
           intent_id: setup_intent.id,
           intent_type: "setup",
+          permalink: purchase.link.unique_permalink,
           order: {
             id: order.secure_external_id(scope: "confirm", expires_at: 1.hour.from_now),
             stripe_connect_account_id: stripe_connect_account_id_for(purchase)

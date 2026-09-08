@@ -212,7 +212,11 @@ class Order::ConfirmService
               stripe_connect_account_id: connect_acct
             }
           }
-          purchases.each { |p| setup_charge_results[p.id] = { awaiting_setup: response } }
+          purchases.each do |purchase|
+            setup_charge_results[purchase.id] = {
+              awaiting_setup: response.merge(permalink: purchase.link.unique_permalink)
+            }
+          end
           return
         end
 
@@ -259,17 +263,15 @@ class Order::ConfirmService
       if charge_intent.blank?
         # A connection loss after Stripe may have accepted the debit must stay pending: failing
         # these purchases and telling the buyer the card was not charged would let them pay twice.
-        if create_service.processor_outcome_unknown
+        # Same if a prior uncertain attempt already set client_confirmed and this retry cannot
+        # create (e.g. expired quote) — do not let Purchase::ConfirmService mark them failed.
+        if create_service.processor_outcome_unknown || charge.client_confirmed?
           purchases.each do |purchase|
             purchase.errors.clear
             purchase.error_code = nil
             purchase.stripe_error_code = nil
-            # Skip Purchase::ConfirmService's setup-only failure path; keep these pending for
-            # webhook / sync recovery if Stripe accepted the debit before the response was lost.
             setup_charge_results[purchase.id] = :pending
           end
-          # client_confirmed routes payment_intent.succeeded / payment_failed webhooks into the
-          # async finalize rails if the lost response actually created a debit.
           charge.update!(client_confirmed: true)
         end
         # Definitive nil-intent failures already carry buyer-facing errors for per-purchase confirms.
@@ -278,7 +280,17 @@ class Order::ConfirmService
 
       if credit_card.requires_mandate?
         existing = credit_card.json_data.to_h
-        credit_card.update!(json_data: { "stripe_setup_intent_ids" => existing["stripe_setup_intent_ids"], "stripe_payment_intent_id" => charge_intent.id }.compact)
+        ids = existing["stripe_setup_intent_ids"].is_a?(Hash) ? existing["stripe_setup_intent_ids"].dup : {}
+        account_key = merchant_account.is_a_stripe_connect_account? ? merchant_account.charge_processor_merchant_id : "platform"
+        # Migrate a legacy scalar SI into the merchant-scoped map before writing the PI, so
+        # renewals still resolve this account's SetupIntent for Connect PM binding.
+        if ids[account_key].blank?
+          ids[account_key] = setup_intent_id.presence || existing["stripe_setup_intent_id"]
+        end
+        ids.compact!
+        next_data = existing.merge("stripe_payment_intent_id" => charge_intent.id)
+        next_data["stripe_setup_intent_ids"] = ids if ids.present?
+        credit_card.update!(json_data: next_data.compact)
       end
       return unless charge_intent.is_a?(StripeChargeIntent)
 
