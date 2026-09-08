@@ -25,10 +25,10 @@ class ProductReviewsController < ApplicationController
 
     render json: {
       pagination: PagyPresenter.new(pagination).props,
-      reviews: reviews.map { |review|
+      reviews: reviews.map do |review|
         presenter = ProductReviewPresenter.new(review)
         presenter.product_review_props(include_purchase_id: presenter.viewer_may_see_purchase_id?(viewer: logged_in_user, seller: current_seller))
-      }
+      end
     }
   end
 
