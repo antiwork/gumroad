@@ -270,11 +270,11 @@ describe Purchase::HandleFailedRefundService, "concurrency" do
     expect(@purchase.amount_refundable_cents).to eq(1400)
   end
 
-  # Combined-charge version of the lock-cycle scenario. A charge refund updates every
-  # purchase in the charge plus the shared seller balance inside one transaction; before
-  # the id-ordered lock pre-pass in Charge#refund_and_save! its acquisition order was
-  # purchase₁ → balance → purchase₂, so a sibling failed-refund reversal holding
-  # purchase₂ and waiting for the balance completed a deadlock cycle.
+  # Combined-charge version of the lock-cycle scenario. Charge#refund_and_save! now
+  # commits each purchase under its own with_lock before starting the next, so it never
+  # holds the shared balance while waiting for a later purchase row. A sibling reversal
+  # can lock purchase₂ while the charge refund is still on purchase₁, and both finish
+  # without a deadlock once the balance lock is free.
   it "does not create a lock cycle between a combined-charge refund and a sibling reversal" do
     purchase_two = create(:purchase_with_balance,
                           link: @product,
@@ -319,20 +319,18 @@ describe Purchase::HandleFailedRefundService, "concurrency" do
 
     payout_has_balance_lock = Queue.new
     release_payout = Queue.new
-    charge_refund_locked_purchases = Queue.new
+    charge_refund_locked_first_purchase = Queue.new
     reversal_worker_started = Queue.new
     reversal_has_purchase_lock = Queue.new
 
-    locked_by_charge_refund = []
     allow_any_instance_of(Purchase).to receive(:lock!).and_wrap_original do |method, *args|
       result = method.call(*args)
       purchase_id = method.receiver.id
       case Thread.current[:refund_concurrency_role]
       when :charge_refund
-        locked_by_charge_refund << purchase_id
-        # Fires once the charge refund holds BOTH purchase rows; with the up-front
-        # id-ordered pre-pass this happens before any balance work.
-        charge_refund_locked_purchases << true if (locked_by_charge_refund.uniq - [@purchase.id, purchase_two.id]).empty? && locked_by_charge_refund.uniq.size == 2
+        # Per-purchase commits: signal as soon as purchase₁ is locked (charge is then
+        # blocked on the payout-held balance, before purchase₂ is touched).
+        charge_refund_locked_first_purchase << true if purchase_id == @purchase.id
       when :reversal
         reversal_has_purchase_lock << true if purchase_id == purchase_two.id
       end
@@ -341,7 +339,7 @@ describe Purchase::HandleFailedRefundService, "concurrency" do
 
     shared_balance_id = Balance.where(user: @seller).order(:id).last.id
     threads = []
-    reversal_overtook_charge_refund = nil
+    reversal_locked_purchase_two_while_charge_in_flight = nil
     begin
       threads << start_worker(:payout) do
         Balance.find(shared_balance_id).with_lock do
@@ -354,24 +352,23 @@ describe Purchase::HandleFailedRefundService, "concurrency" do
       threads << start_worker(:charge_refund) do
         raise "Charge refund failed" unless Charge.find(charge.id).refund_and_save!(@seller.id)
       end
-      # The charge refund must be holding both purchase rows (and therefore blocked
-      # on the payout-held balance) before the sibling reversal starts.
-      wait_for(charge_refund_locked_purchases)
+      # Charge refund holds purchase₁ and is blocked on the payout-held balance.
+      wait_for(charge_refund_locked_first_purchase)
 
       threads << start_worker(:reversal) do
         reversal_worker_started << true
         described_class.new(refund: Refund.find(failed_refund.id)).perform
       end
       wait_for(reversal_worker_started)
-      reversal_overtook_charge_refund = received_within?(reversal_has_purchase_lock)
+      # purchase₂ is free while the charge refund is still on purchase₁, so the
+      # reversal can take it without waiting — and without forming a deadlock.
+      reversal_locked_purchase_two_while_charge_in_flight = received_within?(reversal_has_purchase_lock)
     ensure
       release_payout << true
       join_workers(*threads)
     end
 
-    # The reversal queued behind the charge refund's purchase lock instead of
-    # slipping between the per-purchase refunds and closing the deadlock cycle.
-    expect(reversal_overtook_charge_refund).to eq(false)
+    expect(reversal_locked_purchase_two_while_charge_in_flight).to eq(true)
 
     failed_transactions = BalanceTransaction.where(refund_id: failed_refund.id)
     expect(failed_transactions.count).to eq(2)
