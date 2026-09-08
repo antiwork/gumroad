@@ -10,8 +10,7 @@ module CurrencyHelper
   end
 
   def symbol_for(type = :usd)
-    currency = CURRENCY_CHOICES[type.to_sym] || CURRENCY_CHOICES[:usd]
-    currency[:symbol]
+    MoneyFormatter.symbol_for(type)
   end
 
   def min_price_for(type = :usd)
