@@ -846,14 +846,44 @@ const CheckoutIndexPage = () => {
           window.location.href = e.returnUrl;
           return;
         }
+        const retryable = e.retryable;
         showAlert(
-          "Your payment is being processed — check your email for your receipt. Please do not pay again.",
+          retryable
+            ? "Part of your payment is being processed — check your email for its receipt. The items that couldn't be charged are still in your cart to try again."
+            : "Your payment is being processed — check your email for your receipt. Please do not pay again.",
           "warning",
         );
         // Same stale-save hazard as the success path above: a pre-purchase save still pending
         // would re-fill the cart this line just emptied.
         debouncedSaveCartState.cancel();
-        cartForm.setData((prev) => ({ cart: { ...prev.cart, items: [] } }));
+        // Failed sibling seller groups were never charged, so their lines stay in the cart;
+        // every processing/success line leaves it so it cannot be resubmitted.
+        cartForm.setData((prev) => ({
+          cart: {
+            ...prev.cart,
+            items: retryable
+              ? prev.cart.items.flatMap((item) => {
+                  const lineItem = retryable.lineItems[getCartItemUid(item)];
+                  return lineItem && !lineItem.success
+                    ? {
+                        ...item,
+                        ...lineItem.updated_product,
+                        quantity: lineItem.updated_product?.quantity || item.quantity,
+                        accepted_offer: null,
+                      }
+                    : [];
+                })
+              : [],
+            ...(retryable
+              ? {
+                  discountCodes: retryable.offerCodes.map((discountCode) => ({
+                    ...discountCode,
+                    fromUrl: prev.cart.discountCodes.find(({ code }) => code === discountCode.code)?.fromUrl ?? false,
+                  })),
+                }
+              : {}),
+          },
+        }));
         dispatch({ type: "cancel" });
         return;
       }

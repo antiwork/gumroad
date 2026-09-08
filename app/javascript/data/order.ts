@@ -185,10 +185,15 @@ export const startOrderCreation = async (
         buyerCurrencyQuote: requestData.buyerCurrencyQuote,
       });
       const confirmLineItems: Record<LineItemUid, ConfirmedPurchaseResponse | PurchaseErrorResponse> = {};
+      // A processing line item means its group's charge is created and the debit scheduled —
+      // it must leave the cart (resubmitting risks a second charge), so it is excluded here
+      // and its cart line gets no result entry.
+      let anyLineProcessing = false;
       for (const [uid, lineItem] of Object.entries(orderConfirmResponse.line_items)) {
-        // A processing line item means the charge is created and its debit scheduled — surface
-        // a pending outcome; a resubmittable failure here risks a second charge.
-        if ("processing" in lineItem) throw new PaymentConfirmedError();
+        if ("processing" in lineItem) {
+          anyLineProcessing = true;
+          continue;
+        }
         confirmLineItems[uid] = lineItem;
       }
       // Key by uid, not permalink, which collides when the cart holds two variants of one product.
@@ -204,6 +209,28 @@ export const startOrderCreation = async (
         if (resultItem) lineItems[lineItem.uid] = resultItem;
         return lineItems;
       }, {});
+      if (anyLineProcessing) {
+        // Another seller group's debit is scheduled, so this must surface as a pending outcome
+        // rather than a resubmittable cart. But a sibling group that FAILED (auth or charge)
+        // was never charged: its lines stay retryable, so hand them (with the offer codes the
+        // server recovered for them) to the consumer instead of emptying the whole cart.
+        const failedLineItems = Object.fromEntries(
+          Object.entries(lineItems).filter(([, lineItem]) => !lineItem.success),
+        );
+        if (Object.keys(failedLineItems).length === 0) throw new PaymentConfirmedError();
+        // Only genuinely failed lines keep their offer codes; a line with no result entry is
+        // processing and must not have its discount restored for a purchase that will settle.
+        const failureByUid = Object.fromEntries(
+          requestData.lineItems.map((lineItem) => {
+            const resultItem = lineItems[lineItem.uid];
+            return [lineItem.uid, { success: !(resultItem && !resultItem.success) }];
+          }),
+        );
+        throw new PaymentConfirmedError(null, {
+          lineItems: failedLineItems,
+          offerCodes: offerCodesForFailedLineItems(requestData, failureByUid, orderConfirmResponse.offer_codes),
+        });
+      }
       const result = {
         lineItems,
         canBuyerSignUp: response.can_buyer_sign_up,
@@ -369,7 +396,13 @@ type FinalizeOrderResponse = {
 // consumer must surface a "processing" message and must NOT drop the buyer back into a
 // resubmittable cart — retrying would create a second charge.
 export class PaymentConfirmedError extends Error {
-  constructor(readonly returnUrl: string | null = null) {
+  constructor(
+    readonly returnUrl: string | null = null,
+    // Set when a multi-seller confirm left some groups processing while others failed without
+    // being charged: the consumer keeps exactly these failed lines (and their recovered offer
+    // codes) in the cart, and drops every processing/success line.
+    readonly retryable: { lineItems: CartPurchaseResult["lineItems"]; offerCodes: OfferCodes } | null = null,
+  ) {
     super();
   }
 }

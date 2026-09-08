@@ -780,7 +780,97 @@ describe("startOrderCreation", () => {
         }),
       );
 
-    await expect(startOrderCreation(requestData, [])).rejects.toBeInstanceOf(PaymentConfirmedError);
+    const error: unknown = await startOrderCreation(requestData, []).catch((e: unknown) => e);
+    if (!(error instanceof PaymentConfirmedError)) throw new Error("expected PaymentConfirmedError");
+    // Nothing failed, so nothing is retryable: the consumer empties the whole cart.
+    expect(error.retryable).toBeNull();
+  });
+
+  it("keeps failed sibling lines retryable when another seller group's debit is processing", async () => {
+    // In a multi-seller cart one group's debit can be scheduled (processing) while another
+    // group failed auth/charge and was never charged. The processing line must leave the cart,
+    // but the failed line (and its recovered offer code) must stay retryable.
+    vi.stubGlobal("Routes", {
+      orders_path: () => "/orders",
+      confirm_order_path: (id: string) => `/orders/${id}/confirm`,
+    });
+    requestMock.mockReset();
+    getStripeInstanceMock.mockReset();
+    const stripe = typia.assert<Stripe>({});
+    stripe.confirmCardSetup = vi.fn().mockResolvedValue({});
+    getStripeInstanceMock.mockResolvedValue(stripe);
+
+    const firstLine = requestData.lineItems.at(0);
+    if (!firstLine) throw new Error("Missing test line item");
+    const secondLine = { ...firstLine, uid: "product-b ", permalink: "product-b" };
+    const twoSellerRequestData = { ...requestData, lineItems: [firstLine, secondLine] };
+    requestMock
+      .mockResolvedValueOnce(
+        jsonResponse({
+          success: true,
+          line_items: {
+            [firstLine.uid]: {
+              success: true,
+              requires_card_setup: true,
+              client_secret: "seti_secret",
+              order: { id: "order-token", stripe_connect_account_id: null },
+            },
+            [secondLine.uid]: {
+              success: true,
+              requires_card_setup: true,
+              client_secret: "seti_secret",
+              order: { id: "order-token", stripe_connect_account_id: null },
+            },
+          },
+          can_buyer_sign_up: false,
+          offer_codes: [],
+        }),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({
+          success: true,
+          line_items: {
+            [firstLine.uid]: { success: true, processing: true, permalink: firstLine.permalink },
+            [secondLine.uid]: {
+              success: false,
+              error_message: "Your card was declined.",
+              permalink: secondLine.permalink,
+              name: "Product B",
+              formatted_price: "$10",
+              error_code: "card_declined",
+              is_tax_mismatch: false,
+              card_country: "IN",
+              ip_country: "IN",
+              updated_product: null,
+            },
+          },
+          can_buyer_sign_up: false,
+          offer_codes: [
+            {
+              code: "SAVE",
+              products: {
+                [firstLine.permalink]: fixedDiscount(100),
+                [secondLine.permalink]: fixedDiscount(100),
+              },
+            },
+          ],
+        }),
+      );
+
+    const error: unknown = await startOrderCreation(twoSellerRequestData, []).catch((e: unknown) => e);
+
+    if (!(error instanceof PaymentConfirmedError)) throw new Error("expected PaymentConfirmedError");
+    const retryable = error.retryable;
+    expect(retryable).not.toBeNull();
+    // Only the failed line: the processing line must not be resubmittable.
+    expect(Object.keys(retryable?.lineItems ?? {})).toEqual([secondLine.uid]);
+    expect(retryable?.lineItems[secondLine.uid]).toMatchObject({
+      success: false,
+      error_message: "Your card was declined.",
+    });
+    // The offer code is recovered only for the failed line — never for the processing one,
+    // whose discounted purchase is going to settle.
+    expect(retryable?.offerCodes).toEqual([{ code: "SAVE", products: { [secondLine.permalink]: fixedDiscount(100) } }]);
   });
 });
 

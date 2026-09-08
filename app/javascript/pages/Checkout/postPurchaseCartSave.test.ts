@@ -14,10 +14,11 @@ describe("post-purchase cart save cancellation", () => {
 
     const resets = [
       ...source.matchAll(
-        /cartForm\.setData\(\(prev\) => \(\{\s*\n?\s*cart: \{\s*\n?\s*\.\.\.prev\.cart,\s*\n?\s*items: (?:failedItems|\[\])/gu,
+        /cartForm\.setData\(\(prev\) => \(\{\s*\n?\s*cart: \{\s*\n?\s*\.\.\.prev\.cart,\s*\n?\s*items: (?:failedItems|\[\]|retryable)/gu,
       ),
     ];
-    // The success path (items: failedItems) and the PaymentConfirmedError path (items: []).
+    // The success path (items: failedItems) and the PaymentConfirmedError path
+    // (items: retryable ? <failed lines> : []).
     expect(resets.length).toBeGreaterThanOrEqual(2);
 
     // Requiring the reset to be the very next statement (only whitespace/comments between) is what
