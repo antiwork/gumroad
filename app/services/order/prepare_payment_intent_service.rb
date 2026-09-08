@@ -602,7 +602,7 @@ class Order::PreparePaymentIntentService
       # total than the Element mounted.
       unless method_forced_listed_allocations_match?(charge, forced_currency)
         @direct_listed_amount_mismatch = true
-        Rails.logger.info("Direct-listed client-confirm amount changed before prepare for order #{order.id}; refusing the stale Payment Element amount")
+        Rails.logger.info("Direct-listed client-confirm amount changed before prepare for order #{order.id}; refusing the stale Payment Element amount; reason=#{@direct_listed_amount_rejection_reason}")
         return nil
       end
 
@@ -713,7 +713,7 @@ class Order::PreparePaymentIntentService
 
       unless direct_listed_allocations_match?(direct_listed_presentment.allocations, decision.currency)
         @direct_listed_amount_mismatch = true
-        Rails.logger.info("Direct-listed client-confirm amount changed before prepare for order #{order.id}; refusing the stale Payment Element amount")
+        Rails.logger.info("Direct-listed client-confirm amount changed before prepare for order #{order.id}; refusing the stale Payment Element amount; reason=#{@direct_listed_amount_rejection_reason}")
         return nil
       end
       presentment = direct_listed_presentment.perform
@@ -758,6 +758,7 @@ class Order::PreparePaymentIntentService
     end
 
     def direct_listed_allocations_match?(actual_allocations, currency)
+      @direct_listed_amount_rejection_reason = nil
       # A checkout tab opened before this snapshot shipped cannot send the token. Preserve the
       # pre-deploy server-computed behavior for those in-flight tabs; any client that sends a
       # token must still pass the exact comparison below.
@@ -767,8 +768,11 @@ class Order::PreparePaymentIntentService
         params[:direct_listed_amount_token],
         sellers: purchases_to_charge.map(&:seller),
         currency:
-      )
-      return false unless reported&.length == actual_allocations.length
+      ) { @direct_listed_amount_rejection_reason = _1 }
+      unless reported&.length == actual_allocations.length
+        @direct_listed_amount_rejection_reason ||= :allocation_count_mismatch
+        return false
+      end
 
       expected = actual_allocations.map do |allocation|
         {
@@ -778,7 +782,10 @@ class Order::PreparePaymentIntentService
           "shipping_cents" => allocation.presentment_shipping_cents,
         }
       end
-      return false unless reported.map { _1.slice(*DIRECT_LISTED_AMOUNT_COMPARED_FIELDS) } == expected
+      unless reported.map { _1.slice(*DIRECT_LISTED_AMOUNT_COMPARED_FIELDS) } == expected
+        @direct_listed_amount_rejection_reason = :component_mismatch
+        return false
+      end
 
       # The token total is the amount the Element mounted with, so it is the most the buyer has
       # reviewed. Never confirm above it; a lower prepare-time total is fine to charge.
@@ -787,7 +794,9 @@ class Order::PreparePaymentIntentService
       if reviewed_total_cents != prepare_total_cents
         Rails.logger.info("Direct-listed prepare total for order #{order.id} is #{prepare_total_cents} #{currency} cents against a reviewed #{reviewed_total_cents}")
       end
-      prepare_total_cents <= reviewed_total_cents
+      matches = prepare_total_cents <= reviewed_total_cents
+      @direct_listed_amount_rejection_reason = :above_reviewed_total unless matches
+      matches
     end
 
     # Legacy fallback for clients that did not report their Element's mount currency. It
