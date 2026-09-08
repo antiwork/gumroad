@@ -8,11 +8,26 @@ class SocialConnectVerification < ApplicationRecord
   validates :platform, presence: true, inclusion: { in: PLATFORMS }
   validates :uid, presence: true
   validates :last_verified_at, presence: true
-  validates :platform, uniqueness: { scope: :user_id }
+  # Superseded rows are kept as veto evidence, so only the live row per platform is unique.
+  validates :platform, uniqueness: { scope: :user_id, conditions: -> { current } }, unless: :superseded?
+
+  scope :current, -> { where(superseded_at: nil) }
+
+  def superseded?
+    superseded_at.present?
+  end
+
+  def supersede!
+    return if superseded?
+
+    update!(superseded_at: Time.current)
+  end
 
   # Unlinking clears the user's twitter columns but keeps the verification row as evidence,
   # so the row alone cannot tell a reviewer whether the connection is still live.
   def currently_linked?
+    return false if superseded?
+
     case platform
     when "twitter"
       user.twitter_user_id.present? && user.twitter_user_id.to_s == uid.to_s
@@ -39,17 +54,14 @@ class SocialConnectVerification < ApplicationRecord
     uid = raw_info["id"].to_s
     return if uid.blank? || raw_info["errors"].present?
 
-    verification = find_or_initialize_by(user:, platform: "twitter")
-    verification.update!(
-      uid:,
+    record!(
+      user, "twitter", uid,
       handle: raw_info["screen_name"],
       account_created_at: parse_twitter_time(raw_info["created_at"]),
       follower_count: raw_info["followers_count"],
       post_count: raw_info["statuses_count"],
       last_posted_at: parse_twitter_time(raw_info.dig("status", "created_at")),
-      last_verified_at: Time.current,
     )
-    verification
   end
 
   # YouTube Data API channel payload from YoutubeChannelFetcher.
@@ -57,17 +69,14 @@ class SocialConnectVerification < ApplicationRecord
     uid = channel["id"].to_s
     return if uid.blank?
 
-    verification = find_or_initialize_by(user:, platform: "youtube")
-    verification.update!(
-      uid:,
+    record!(
+      user, "youtube", uid,
       handle: channel["handle"],
       account_created_at: parse_iso8601(channel["published_at"]),
       follower_count: channel["subscriber_count"].presence&.to_i,
       post_count: channel["video_count"].presence&.to_i,
       last_posted_at: channel["last_posted_at"].is_a?(Time) ? channel["last_posted_at"] : parse_iso8601(channel["last_posted_at"]),
-      last_verified_at: Time.current,
     )
-    verification
   end
 
   def self.record_from_instagram!(user, profile)
@@ -77,18 +86,41 @@ class SocialConnectVerification < ApplicationRecord
     uid = (profile["token_user_id"].presence || profile["user_id"].presence || profile["id"]).to_s
     return if uid.blank?
 
-    verification = find_or_initialize_by(user:, platform: "instagram")
-    verification.update!(
-      uid:,
+    record!(
+      user, "instagram", uid,
       handle: profile["username"],
       account_created_at: nil,
       follower_count: profile["followers_count"].presence&.to_i,
       post_count: profile["media_count"].presence&.to_i,
       last_posted_at: parse_iso8601(profile["last_posted_at"]),
-      last_verified_at: Time.current,
     )
-    verification
   end
+
+  # Re-verifying the same identity refreshes it in place. Connecting a
+  # different identity supersedes the live row instead of overwriting its uid,
+  # so the old identity keeps vouching (or vetoing) across accounts. After a
+  # soft-supersede with no current row (e.g. Meta deauthorize), reconnecting
+  # revives the matching prior row so the unique [user, platform, uid] index
+  # is not tripped.
+  def self.record!(user, platform, uid, **attributes)
+    transaction do
+      # SELECT FOR UPDATE on a fresh row — callers (e.g. query_twitter) often
+      # pass a dirty User, and User#with_lock raises before yielding on those.
+      # Serializes concurrent OAuth callbacks now that [user_id, platform] is
+      # no longer uniquely constrained to one current row.
+      User.lock.find(user.id)
+      verification = current.find_or_initialize_by(user:, platform:)
+      if verification.persisted? && verification.uid != uid
+        verification.supersede!
+        verification = find_or_initialize_by(user:, platform:, uid:)
+      elsif !verification.persisted?
+        verification = find_or_initialize_by(user:, platform:, uid:)
+      end
+      verification.update!(uid:, superseded_at: nil, last_verified_at: Time.current, **attributes)
+      verification
+    end
+  end
+  private_class_method :record!
 
   def self.parse_twitter_time(value)
     return if value.blank?

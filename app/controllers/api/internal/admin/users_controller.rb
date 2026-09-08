@@ -136,7 +136,7 @@ class Api::Internal::Admin::UsersController < Api::Internal::Admin::BaseControll
     return unless user
 
     render json: internal_admin_user_success_payload(user, {
-                                                       social_connections: user.social_connect_verifications.order(:platform).map { serialize_social_connect_verification(_1) },
+                                                       social_connections: user.social_connect_verifications.order(:platform, Arel.sql("superseded_at IS NOT NULL"), last_verified_at: :desc).map { serialize_social_connect_verification(_1) },
                                                        latest_shadow_evaluation: serialize_latest_social_shadow_evaluation(user),
                                                      })
   end
@@ -1037,6 +1037,7 @@ class Api::Internal::Admin::UsersController < Api::Internal::Admin::BaseControll
         post_count: verification.post_count,
         last_posted_at: verification.last_posted_at&.iso8601,
         last_verified_at: verification.last_verified_at.iso8601,
+        superseded_at: verification.superseded_at&.iso8601,
         shared_identity_user_count: verification.shared_identity_user_ids.size,
       }
     end

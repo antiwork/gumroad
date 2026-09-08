@@ -15,7 +15,7 @@ describe InstagramCallbacksController do
   end
 
   describe "POST deauthorize" do
-    it "deletes stored Instagram data for every matching Gumroad account" do
+    it "unlinks the live identity but keeps the verification as superseded evidence for every matching Gumroad account" do
       first = create(:social_connect_verification, platform: "instagram", uid: instagram_user_id)
       second = create(:social_connect_verification, platform: "instagram", uid: instagram_user_id)
       other = create(:social_connect_verification, platform: "instagram")
@@ -25,10 +25,20 @@ describe InstagramCallbacksController do
       post :deauthorize, params: { signed_request: "signed-request" }
 
       expect(response).to have_http_status(:ok)
-      expect(SocialConnectVerification.where(id: [first.id, second.id])).to be_empty
-      expect(SocialConnectVerification.exists?(other.id)).to be(true)
+      expect(first.reload).to have_attributes(uid: instagram_user_id, superseded_at: be_present, currently_linked?: false)
+      expect(second.reload.superseded_at).to be_present
+      expect(other.reload.superseded_at).to be_nil
+      expect(first.shared_identity_user_ids).to eq([second.user_id])
       expect(UserInstagramIdentity.exists?(first_identity.id)).to be(false)
       expect(UserInstagramIdentity.exists?(other_identity.id)).to be(true)
+    end
+
+    it "leaves an already superseded verification's timestamp alone" do
+      verification = create(:social_connect_verification, platform: "instagram", uid: instagram_user_id, superseded_at: 3.days.ago)
+
+      expect do
+        post :deauthorize, params: { signed_request: "signed-request" }
+      end.not_to change { verification.reload.superseded_at }
     end
 
     it "rejects an invalid signed request" do
@@ -41,14 +51,16 @@ describe InstagramCallbacksController do
   end
 
   describe "POST data_deletion" do
-    it "deletes the data and returns a status URL with a confirmation code" do
+    it "hard-deletes the verification and identity and returns a status URL with a confirmation code" do
       verification = create(:social_connect_verification, platform: "instagram", uid: instagram_user_id)
+      identity = create(:user_instagram_identity, user: verification.user, instagram_user_id: instagram_user_id)
       allow(signed_request).to receive(:confirmation_code).with(instagram_user_id).and_return("a" * 48)
 
       post :data_deletion, params: { signed_request: "signed-request" }
 
       expect(response).to have_http_status(:ok)
       expect(SocialConnectVerification.exists?(verification.id)).to be(false)
+      expect(UserInstagramIdentity.exists?(identity.id)).to be(false)
       expect(response.parsed_body["url"]).to end_with("/instagram/data_deletion/#{'a' * 48}")
       expect(response.parsed_body["confirmation_code"]).to eq("a" * 48)
     end
