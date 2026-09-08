@@ -45,7 +45,7 @@ export const Posts = TiptapNode.create({
   },
 });
 
-const PostsNodeView = ({ editor, selected }: NodeViewProps) => {
+const PostsNodeView = ({ editor, selected, getPos }: NodeViewProps) => {
   const postsData = usePosts();
   const { productPermalink, isLoading, hasMorePosts, fetchMorePosts, total } = postsData;
   const posts = postsData.posts ?? [];
@@ -62,7 +62,7 @@ const PostsNodeView = ({ editor, selected }: NodeViewProps) => {
     <NodeViewWrapper>
       <NodeActionsWrapper selected={selected} isEditable={editor.isEditable} asChild>
         <Row className="embed">
-          {editor.isEditable ? <NodeActionsMenu editor={editor} /> : null}
+          {editor.isEditable ? <NodeActionsMenu editor={editor} getPos={getPos} /> : null}
           <RowContent className="content cursor-pointer all-unset" asChild>
             <button
               onClick={(e) => {

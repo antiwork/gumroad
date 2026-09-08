@@ -47,9 +47,11 @@ export const NodeActionsWrapper = ({
 
 export const NodeActionsMenu = ({
   editor,
+  getPos,
   actions,
 }: {
   editor: Editor;
+  getPos: () => number | undefined;
   actions?: { item: () => React.ReactNode; menu: (close: () => void) => React.ReactNode }[];
 }) => {
   const [open, setOpen] = React.useState(false);
@@ -57,7 +59,18 @@ export const NodeActionsMenu = ({
   const selected = React.useContext(SelectedContext);
 
   return (
-    <Popover open={open} onOpenChange={setOpen}>
+    <Popover
+      open={open}
+      onOpenChange={(open) => {
+        if (open) {
+          const pos = getPos();
+          if (pos === undefined) return;
+          // Button events in node views do not update ProseMirror's selection.
+          editor.commands.setNodeSelection(pos);
+        }
+        setOpen(open);
+      }}
+    >
       <div
         data-actions-menu
         className={classNames(
