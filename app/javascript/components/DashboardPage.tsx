@@ -69,6 +69,7 @@ export type DashboardPageProps = {
     used_cli?: boolean;
   };
   getting_started_dismissed: boolean;
+  social_connections?: { name: string; connected: boolean }[];
   sales: ProductRow[];
   balances: {
     balance: string;
@@ -319,6 +320,7 @@ const GETTING_STARTED_MINIMIZED_KEY = "dashboardGettingStartedMinimized";
 export const DashboardPage = ({
   getting_started_stats,
   getting_started_dismissed,
+  social_connections,
   sales,
   activity_items,
   balances,
@@ -576,6 +578,29 @@ export const DashboardPage = ({
                   />
                 ))}
               </div>
+              {social_connections?.length ? (
+                <Card>
+                  <CardContent className="grid gap-3">
+                    <h3>Connect a social account (optional)</h3>
+                    <p>
+                      Your verified social history can provide context during account review. Connecting is optional and
+                      does not replace identity verification or guarantee approval or a payout date.
+                    </p>
+                    <ul className="flex flex-wrap gap-x-6 gap-y-2">
+                      {social_connections.map(({ name, connected }) => (
+                        <li key={name}>
+                          {name}: {connected ? "Connected" : "Available to connect"}
+                        </li>
+                      ))}
+                    </ul>
+                    <div>
+                      <NavigationButton href={Routes.settings_profile_path()}>
+                        Manage social connections
+                      </NavigationButton>
+                    </div>
+                  </CardContent>
+                </Card>
+              ) : null}
               <Modal
                 open={showDismissConfirmation}
                 onClose={() => setShowDismissConfirmation(false)}

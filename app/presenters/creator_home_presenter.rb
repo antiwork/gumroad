@@ -122,10 +122,25 @@ class CreatorHomePresenter
       show_1099_download_notice:,
       tax_center_enabled:,
       **gumhead_props,
+      **social_connection_props,
     }
   end
 
   private
+    def social_connection_props
+      return {} if seller.has_dismissed_getting_started_checklist?
+      return {} unless Pundit.policy!(pundit_user, [:settings, :profile]).manage_social_connections?
+
+      connections = [{ name: "X", connected: seller.twitter_user_id.present? }]
+      if seller.youtube_identity.present? || Feature.active?(:youtube_connect, seller)
+        connections << { name: "YouTube", connected: seller.youtube_identity.present? }
+      end
+      if seller.instagram_identity.present? || Feature.active?(:instagram_connect, seller)
+        connections << { name: "Instagram", connected: seller.instagram_identity.present? }
+      end
+      { social_connections: connections }
+    end
+
     def gumhead_props
       return {} unless Feature.active?(GUMHEAD_FEATURE, seller)
       return {} if seller.has_dismissed_gumhead_promo?
