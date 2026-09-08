@@ -72,7 +72,6 @@ describe ProductOfferCodeIndexingService do
     ActiveSupport::Notifications.subscribed(subscriber, "sql.active_record") do
       products.each { _1.reload.build_search_update(["offer_codes"]) }
     end
-    before_queries = statements.size
     before_universal = statements.grep(/NOT EXISTS/).size
     statements.clear
     ActiveSupport::Notifications.subscribed(subscriber, "sql.active_record") do
@@ -81,6 +80,32 @@ describe ProductOfferCodeIndexingService do
     expect(before_universal).to eq(products.size)
     expect(statements.size).to eq(3)
     expect(statements.grep(/NOT EXISTS/)).to be_empty
-    puts "offer-code batch: products=#{products.size}, SELECTs_before=#{before_queries}, SELECTs_after=#{statements.size}, universal_lookups_before=#{before_universal}, universal_lookups_after=0"
+  end
+
+  it "reports a single product failure and keeps indexing the rest of the batch" do
+    products = [usd, eur]
+    create(:universal_offer_code, user: seller, code: "KEEP", currency_type: nil, amount_cents: nil, amount_percentage: 10)
+    allow(usd.__elasticsearch__).to receive(:update_document_attributes).and_raise(Elasticsearch::Transport::Transport::Errors::BadRequest, "mapper_parsing_exception")
+    expect(ErrorNotifier).to receive(:notify).with(
+      an_instance_of(Elasticsearch::Transport::Transport::Errors::BadRequest),
+      product_id: usd.id,
+      user_id: seller.id
+    )
+    expect { described_class.new(products).perform }.not_to raise_error
+    expect(indexed_codes(eur)).to eq(["KEEP"])
+  end
+
+  it "reports a missing-document fallback failure without stopping later products" do
+    products = [usd, eur]
+    create(:universal_offer_code, user: seller, code: "KEEP", currency_type: nil, amount_cents: nil, amount_percentage: 10)
+    usd.__elasticsearch__.delete_document
+    allow(usd.__elasticsearch__).to receive(:index_document).and_raise(Faraday::TimeoutError)
+    expect(ErrorNotifier).to receive(:notify).with(
+      an_instance_of(Faraday::TimeoutError),
+      product_id: usd.id,
+      user_id: seller.id
+    )
+    expect { described_class.new(products).perform }.not_to raise_error
+    expect(indexed_codes(eur)).to eq(["KEEP"])
   end
 end

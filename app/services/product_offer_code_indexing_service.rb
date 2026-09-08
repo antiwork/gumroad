@@ -27,15 +27,32 @@ class ProductOfferCodeIndexingService
         codes << [code.id, code.code, code.created_at]
       end
       values = codes.sort_by(&:last).last(Link::MAX_OFFER_CODES_IN_INDEX).map { _1[1] }
+      yield if block_given?
+      index_offer_codes(product, values) { yield if block_given? }
+    end
+  end
+
+  private
+    def index_offer_codes(product, values)
       begin
-        yield if block_given?
         product.__elasticsearch__.update_document_attributes("offer_codes" => values)
       rescue Elasticsearch::Transport::Transport::Errors::NotFound => error
         raise unless error.message.include?("document_missing_exception")
 
         yield if block_given?
-        product.__elasticsearch__.index_document unless product.deleted?
+        begin
+          product.__elasticsearch__.index_document unless product.deleted?
+        rescue => error
+          report_indexing_failure(product, error)
+        end
+      rescue => error
+        report_indexing_failure(product, error)
       end
     end
-  end
+
+    def report_indexing_failure(product, error)
+      raise if error.is_a?(Elasticsearch::Transport::Transport::Errors::NotFound) && error.message.include?("index_not_found")
+
+      ErrorNotifier.notify(error, product_id: product.id, user_id: product.user_id)
+    end
 end

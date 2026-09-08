@@ -128,7 +128,6 @@ describe ReindexSellerOfferCodesJob do
     [products.first, products.last].each do |product|
       expect(product.__elasticsearch__.client.get(index: Link.index_name, id: product.id).dig("_source", "offer_codes")).to eq(["SAVE9"])
     end
-    puts "large catalogue: products=#{products.size}, saves=10, indexed=#{batches.sum}, batches=#{batches.size}, max_batch=#{batches.max}, catchup_batch=25"
   end
 
   it "serializes competing worker executions using the shared Redis semaphore" do
@@ -305,6 +304,36 @@ describe ReindexSellerOfferCodesJob do
     expect { job.perform(seller.id) }.to raise_error(described_class::LockLost)
     expect($redis.get("#{key}:version")).to eq("1")
     expect($redis.get("#{key}:lock")).to eq("replacement-worker")
+  end
+
+  it "advances the cursor when one product in a batch fails to index" do
+    products = create_list(:product, 3, user: seller, price_cents: 1000)
+    create(:universal_offer_code, user: seller, code: "KEEP")
+    described_class.enqueue(seller.id)
+    allow(ProductOfferCodeIndexingService).to receive(:new).and_wrap_original do |original, batch|
+      service = original.call(batch)
+      allow(service).to receive(:perform).and_wrap_original do |perform_original, &block|
+        batch.each do |product|
+          next unless product.id == products.first.id
+          allow(product.__elasticsearch__).to receive(:update_document_attributes).and_raise(
+            Elasticsearch::Transport::Transport::Errors::BadRequest, "mapper_parsing_exception"
+          )
+        end
+        perform_original.call(&block)
+      end
+      service
+    end
+    expect(ErrorNotifier).to receive(:notify).with(
+      an_instance_of(Elasticsearch::Transport::Transport::Errors::BadRequest),
+      product_id: products.first.id,
+      user_id: seller.id
+    )
+    run_batch
+    expect($redis.get("#{key}:cursor")).to eq(products.second.id.to_s)
+    expect(products.second.__elasticsearch__.client.get(index: Link.index_name, id: products.second.id).dig("_source", "offer_codes")).to include("KEEP")
+    2.times { run_batch }
+    expect(products.third.__elasticsearch__.client.get(index: Link.index_name, id: products.third.id).dig("_source", "offer_codes")).to include("KEEP")
+    expect($redis.get("#{key}:version")).to be_nil
   end
 
   it "preserves an edit arriving during the final batch" do
