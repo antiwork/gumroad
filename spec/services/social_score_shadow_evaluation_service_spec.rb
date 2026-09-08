@@ -66,6 +66,35 @@ describe SocialScoreShadowEvaluationService do
       expect(user.social_connect_verifications.count).to eq(1)
     end
 
+    it "keeps the shared identity veto after the seller reconnects Twitter to a different account" do
+      raw_info = JSON.parse(File.read("#{Rails.root}/spec/support/fixtures/twitter_omniauth.json"))["extra"]["raw_info"]
+      strong_signals = {
+        "created_at" => 5.years.ago.strftime("%a %b %d %H:%M:%S %z %Y"),
+        "followers_count" => 5_000,
+        "statuses_count" => 1_000,
+        "status" => { "created_at" => 1.week.ago.strftime("%a %b %d %H:%M:%S %z %Y") },
+      }
+      SocialConnectVerification.record_from_twitter!(user, raw_info.merge(strong_signals))
+      create(:social_connect_verification, platform: "twitter", uid: raw_info["id"].to_s)
+
+      SocialConnectVerification.record_from_twitter!(user, raw_info.merge(strong_signals, "id" => 999, "screen_name" => "fresh"))
+      user.update!(twitter_user_id: "999")
+
+      result = described_class.new(user).evaluate
+
+      expect(result[:score]).to eq(85)
+      expect(result[:signals]).to include(platform: "twitter", handle: "fresh", shared_identity_user_count: 0)
+      expect(result[:would_have_released]).to be(false)
+    end
+
+    it "scores only the live identity, not a superseded one whose uid still matches" do
+      superseded = strong_verification
+      superseded.update!(superseded_at: 1.hour.ago)
+      create(:social_connect_verification, user:, platform: "twitter", uid: "fresh", account_created_at: 1.month.ago, follower_count: 0, post_count: 0, last_posted_at: nil)
+
+      expect(described_class.new(user).evaluate).to include(score: 0, would_have_released: false, signals: nil)
+    end
+
     it "ignores unsupported platforms even with strong verified signals" do
       create(:social_connect_verification, user:, platform: "tiktok")
 
