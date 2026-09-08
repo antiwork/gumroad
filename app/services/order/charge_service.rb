@@ -340,11 +340,15 @@ class Order::ChargeService
   # caller could supply another buyer's SI id and receive that intent's client_secret.
   def setup_intent_belongs_to_chargeable?(setup_intent, chargeable, purchases, merchant_account)
     setup_intent_id = setup_intent.try(:id) || chargeable.try(:stripe_setup_intent_id)
-    # Merchant-scoped map entries we previously stored on this card are trusted.
+    # Only the merchant-scoped map is trusted. The legacy scalar can be copied from checkout
+    # params into CreditCard.create, so it must not authorize reuse by itself.
     card = purchases.filter_map { |purchase| purchase.credit_card }.first
-    if card&.requires_mandate? && setup_intent_id.present? &&
-       card.stripe_setup_intent_id_for(merchant_account).to_s == setup_intent_id.to_s
-      return true
+    if card&.requires_mandate? && setup_intent_id.present?
+      ids = card.json_data.to_h["stripe_setup_intent_ids"]
+      account_key = merchant_account.is_a_stripe_connect_account? ? merchant_account.charge_processor_merchant_id : "platform"
+      if ids.is_a?(Hash) && ids[account_key].to_s == setup_intent_id.to_s
+        return true
+      end
     end
 
     si_customer = setup_intent.try(:customer_id)
@@ -355,7 +359,6 @@ class Order::ChargeService
 
     return true if si_customer.present? && chargeable_customer.present? && si_customer.to_s == chargeable_customer.to_s
     return true if si_pm.present? && chargeable_pm.present? && si_pm.to_s == chargeable_pm.to_s
-    # Refuse reuse when we cannot prove ownership — never return another buyer's client_secret.
     false
   end
 

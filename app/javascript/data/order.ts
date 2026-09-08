@@ -175,6 +175,8 @@ export const startOrderCreation = async (
   // until confirm_order runs. Track those separately for the catch pending guard.
   let anyPaymentIntentConfirmed = false;
   let confirmOrderPosted = false;
+  // True after a SetupIntent confirm succeeds until confirm_order has been posted for it.
+  let pendingSetupNeedsConfirmPost = false;
   // Permalinks whose group was charged synchronously with the debit scheduled — those lines
   // must never re-enter the cart, and any failure matched to them by permalink is ambiguous.
   const processingPermalinks = new Set<string>();
@@ -229,6 +231,7 @@ export const startOrderCreation = async (
         }
         anyIntentConfirmed = true;
         if (requiresPaymentAction) anyPaymentIntentConfirmed = true;
+        else pendingSetupNeedsConfirmPost = true;
       }
       let orderConfirmResponse = await confirmOrderAfterAction({
         orderId,
@@ -244,6 +247,7 @@ export const startOrderCreation = async (
         buyerCurrencyQuote: requestData.buyerCurrencyQuote,
       });
       confirmOrderPosted = true;
+      pendingSetupNeedsConfirmPost = false;
       // The confirm response may return requires_card_setup/action for groups on other
       // Stripe accounts or a follow-on PI auth. Confirm those and POST confirm again.
       // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
@@ -273,6 +277,7 @@ export const startOrderCreation = async (
           }
           anyIntentConfirmed = true;
           if (requiresPaymentAction) anyPaymentIntentConfirmed = true;
+          else pendingSetupNeedsConfirmPost = true;
         }
         orderConfirmResponse = await confirmOrderAfterAction({
           orderId,
@@ -282,6 +287,7 @@ export const startOrderCreation = async (
           buyerCurrencyQuote: requestData.buyerCurrencyQuote,
         });
         confirmOrderPosted = true;
+        pendingSetupNeedsConfirmPost = false;
         // A failed follow-on auth still leaves requires_action on that group. Without stopping,
         // the confirm response requeues the same intent and this loop retries forever while
         // anyIntentConfirmed suppresses stripe_error.
@@ -376,7 +382,7 @@ export const startOrderCreation = async (
     // SetupIntent confirmation alone is not enough: resume via confirm_order first when we
     // never posted it — even if another group is already processing or a PaymentIntent was
     // confirmed — so confirmed setups still create their charges before the pending outcome.
-    if (anyIntentConfirmed && pendingOrderId && pendingClientSecret && !confirmOrderPosted) {
+    if (pendingSetupNeedsConfirmPost && pendingOrderId && pendingClientSecret) {
       try {
         const recoveryResponse = await confirmOrderAfterAction({
           orderId: pendingOrderId,

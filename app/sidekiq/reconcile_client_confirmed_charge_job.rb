@@ -1,8 +1,9 @@
 # frozen_string_literal: true
 
-# Retries SetupIntent-confirmed India charges whose create response was lost (client_confirmed
-# without a stored PaymentIntent). Uses Charge::CreateService's setup_confirmed_resume
-# idempotency key so Stripe returns the original PaymentIntent when it already exists.
+# Recovers SetupIntent-confirmed India charges whose create response was lost
+# (client_confirmed without a stored PaymentIntent). Syncs each in-progress purchase so
+# ChargeProcessor can search Stripe by transfer_group and finalize — does not create a new
+# PaymentIntent with different presentment params.
 class ReconcileClientConfirmedChargeJob
   include Sidekiq::Job
   sidekiq_options retry: 5, queue: :default, lock: :until_executed
@@ -13,14 +14,14 @@ class ReconcileClientConfirmedChargeJob
     charge = Charge.find_by(id: charge_id)
     return if charge.blank?
     return unless charge.client_confirmed?
-    return if charge.stripe_payment_intent_id.present?
     return if charge.purchases.none?(&:in_progress?)
 
-    order = charge.order
-    Order::ConfirmService.new(order:, params: {}).perform
+    charge.purchases.select(&:in_progress?).each do |purchase|
+      Purchase::SyncStatusWithChargeProcessorService.new(purchase).perform
+    end
 
     charge.reload
-    return if charge.stripe_payment_intent_id.present? || charge.purchases.none?(&:in_progress?)
+    return if charge.purchases.none?(&:in_progress?)
 
     delay = RETRY_DELAYS[attempt]
     self.class.perform_in(delay, charge_id, attempt + 1) if delay
