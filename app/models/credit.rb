@@ -515,12 +515,24 @@ class Credit < ApplicationRecord
         amount_cents: debit_amount_cents
       )
       debit_amount_cents = refund.reload.refund_fee_debit_amount_cents.presence || debit_amount_cents
+      attempted_generation = refund.refund_fee_debit_generation.to_i
       transfer_options = { stripe_account: merchant_account.charge_processor_merchant_id }
-      transfer_options[:idempotency_key] = "refund_fee_us_debit_#{refund.external_id}" if refund.id.present?
-      transfer = Stripe::Transfer.create(
-        { amount: debit_amount_cents.to_i, currency: "usd", destination: Stripe::Account.retrieve.id },
-        transfer_options
-      )
+      if refund.id.present?
+        transfer_options[:idempotency_key] = if attempted_generation.zero?
+          "refund_fee_us_debit_#{refund.external_id}"
+        else
+          "refund_fee_us_debit_#{refund.external_id}_g#{attempted_generation}"
+        end
+      end
+      begin
+        transfer = Stripe::Transfer.create(
+          { amount: debit_amount_cents.to_i, currency: "usd", destination: Stripe::Account.retrieve.id },
+          transfer_options
+        )
+      rescue Stripe::InvalidRequestError
+        release_sticky_refund_fee_debit_choice!(refund, generation: attempted_generation)
+        raise
+      end
       record_fee_debit_marker!(refund, transfer.id)
       persist_refund_fee_holding_on_credit!(refund, debit_amount_cents.to_i, currency: Currency::USD)
       debit_amount_cents.to_i

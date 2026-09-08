@@ -856,11 +856,23 @@ class StripeChargeProcessor
       eur_amount_cents = proposed_eur_amount_cents
     end
     transfer_options = { stripe_account: credit.merchant_account.charge_processor_merchant_id }
-    transfer_options[:idempotency_key] = "refund_fee_eur_debit_#{refund.external_id}" if refund&.id.present?
-    transfer = Stripe::Transfer.create(
-      { amount: eur_amount_cents.to_i, currency: Currency::EUR, destination: STRIPE_PLATFORM_ACCOUNT_ID },
-      transfer_options
-    )
+    attempted_generation = refund&.refund_fee_debit_generation.to_i
+    if refund&.id.present?
+      transfer_options[:idempotency_key] = if attempted_generation.zero?
+        "refund_fee_eur_debit_#{refund.external_id}"
+      else
+        "refund_fee_eur_debit_#{refund.external_id}_g#{attempted_generation}"
+      end
+    end
+    begin
+      transfer = Stripe::Transfer.create(
+        { amount: eur_amount_cents.to_i, currency: Currency::EUR, destination: STRIPE_PLATFORM_ACCOUNT_ID },
+        transfer_options
+      )
+    rescue Stripe::InvalidRequestError
+      Credit.release_sticky_refund_fee_debit_choice!(refund, generation: attempted_generation) if refund.present?
+      raise
+    end
     record_refund_fee_debit_marker!(refund, transfer.id) if refund.present?
 
     holding_abs = case credit.merchant_account.currency.to_s.downcase
