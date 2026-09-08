@@ -36,8 +36,21 @@ describe CurrencyHelper do
       expect(symbol_for(:aud)).to eq "A$"
     end
 
-    it "rejects invalid currencies instead of relabeling them as USD" do
-      expect { symbol_for(:xyz) }.to raise_error(Money::Currency::UnknownCurrency)
+    it "soft-fails invalid currencies with the ISO code instead of relabeling them as USD" do
+      expect(Rails.logger).to receive(:warn).with(/unknown currency :xyz/)
+      symbol = symbol_for(:xyz)
+      expect(symbol).to eq("XYZ")
+      expect(symbol).not_to eq("$")
+    end
+
+    it "honors uppercase pricing-choice keys" do
+      expect(symbol_for("AUD")).to eq "A$"
+    end
+
+    it "soft-fails blank currencies without raising" do
+      expect(Rails.logger).to receive(:warn).with(/unknown currency/).twice
+      expect(symbol_for(nil)).to eq ""
+      expect(symbol_for("")).to eq ""
     end
   end
 

@@ -25,6 +25,21 @@ describe SellerMobileAnalyticsService do
       expect(purchase.price_cents).to eq 200
     end
 
+    it "soft-fails unknown purchase currencies in all-time sales instead of 500ing the list" do
+      purchase = create(:purchase, link: @product, price_cents: 200, created_at: 2.years.ago)
+      purchase.update_columns(displayed_price_currency_type: "xyz", displayed_price_cents: 1250)
+      index_model_records(Purchase)
+
+      expect(Rails.logger).to receive(:warn).with(/unknown currency/).at_least(:once)
+      result = described_class.new(@user, range: "all", fields: [:purchases, :sales_count]).process
+
+      expect(result[:sales_count]).to eq 1
+      expect(result[:revenue]).to eq 200
+      expect(result[:purchases].sole[:price]).to eq "12.50 XYZ"
+      expect(purchase.reload.formatted_display_price).to eq "12.50 XYZ"
+      expect(purchase.as_json[:currency_symbol]).to eq "XYZ"
+    end
+
     it "returns the proper purchase data for all time" do
       valid_purchases = []
       travel_to(1.year.ago) do

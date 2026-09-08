@@ -13,9 +13,17 @@ describe MoneyFormatter do
       expect(MoneyFormatter.format(1250, :dkk, symbol: true)).to eq "12.50 kr."
     end
 
-    it "does not relabel an invalid currency as USD" do
-      expect { MoneyFormatter.format(1250, :xyz) }.to raise_error(Money::Currency::UnknownCurrency)
-      expect { MoneyFormatter.format(1250, :xyz, symbol: false) }.to raise_error(Money::Currency::UnknownCurrency)
+    it "soft-fails unknown currencies with the ISO code instead of relabeling them as USD" do
+      expect(Rails.logger).to receive(:warn).with(/unknown currency :xyz/).at_least(:once)
+      expect(MoneyFormatter.format(1250, :xyz)).to eq "12.50 XYZ"
+      expect(MoneyFormatter.format(1250, :xyz, symbol: false)).to eq "12.50"
+      expect(MoneyFormatter.format(1250, :xyz)).not_to include("$")
+    end
+
+    it "soft-fails blank currencies without raising" do
+      expect(Rails.logger).to receive(:warn).with(/unknown currency/).at_least(:once)
+      expect(MoneyFormatter.format(1250, nil)).to eq "12.50"
+      expect(MoneyFormatter.format(1250, "")).to eq "12.50"
     end
 
     describe "usd" do
@@ -38,6 +46,34 @@ describe MoneyFormatter do
       it "returns the correct currency symbol" do
         expect(MoneyFormatter.format(400, :aud)).to eq "A$4.00"
       end
+
+      it "honors uppercase pricing-choice keys" do
+        expect(MoneyFormatter.format(400, "AUD")).to eq "A$4.00"
+      end
+    end
+  end
+
+  describe "#symbol_for" do
+    it "uses the pricing override before the registry" do
+      expect(MoneyFormatter.symbol_for(:aud)).to eq "A$"
+      expect(MoneyFormatter.symbol_for("AUD")).to eq "A$"
+    end
+
+    it "uses the registry symbol for historical currencies" do
+      expect(MoneyFormatter.symbol_for(:dkk)).to eq "kr."
+    end
+
+    it "soft-fails unknown currencies with the ISO code instead of relabeling them as USD" do
+      expect(Rails.logger).to receive(:warn).with(/unknown currency :xyz/)
+      symbol = MoneyFormatter.symbol_for(:xyz)
+      expect(symbol).to eq("XYZ")
+      expect(symbol).not_to eq("$")
+    end
+
+    it "soft-fails blank currencies with an empty string" do
+      expect(Rails.logger).to receive(:warn).with(/unknown currency/).twice
+      expect(MoneyFormatter.symbol_for(nil)).to eq ""
+      expect(MoneyFormatter.symbol_for("")).to eq ""
     end
   end
 end
