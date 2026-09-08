@@ -1404,32 +1404,32 @@ describe OfferCode do
 
     describe "after_save callback" do
       it "waits for the enclosing transaction before indexing a removed product" do
-        SendToElasticsearchWorker.clear
+        ReindexSellerOfferCodesJob.clear
 
         OfferCode.transaction(requires_new: true) do
           OfferCode.transaction(requires_new: true) do
             offer_code.update!(products: [product2])
           end
-          expect(SendToElasticsearchWorker.jobs.size).to eq(0)
+          expect(ReindexSellerOfferCodesJob.jobs.size).to eq(0)
         end
 
-        expect(SendToElasticsearchWorker).to have_enqueued_sidekiq_job(product1.id, "update", ["offer_codes"])
+        expect(ReindexSellerOfferCodesJob).to have_enqueued_sidekiq_job(creator.id)
       end
 
       it "does not index a removal rolled back with its transaction" do
-        SendToElasticsearchWorker.clear
+        ReindexSellerOfferCodesJob.clear
 
         OfferCode.transaction(requires_new: true) do
           offer_code.update!(products: [product2])
           raise ActiveRecord::Rollback
         end
 
-        expect(SendToElasticsearchWorker.jobs.size).to eq(0)
+        expect(ReindexSellerOfferCodesJob.jobs.size).to eq(0)
         expect(offer_code.reload.products).to contain_exactly(product1, product2)
       end
 
       it "does not index a removal rolled back to a savepoint" do
-        SendToElasticsearchWorker.clear
+        ReindexSellerOfferCodesJob.clear
 
         OfferCode.transaction(requires_new: true) do
           OfferCode.transaction(requires_new: true) do
@@ -1438,117 +1438,98 @@ describe OfferCode do
           end
         end
 
-        expect(SendToElasticsearchWorker.jobs.size).to eq(0)
+        expect(ReindexSellerOfferCodesJob.jobs.size).to eq(0)
         expect(offer_code.reload.products).to contain_exactly(product1, product2)
       end
 
       it "indexes a successful retry after a failed removal update" do
-        SendToElasticsearchWorker.clear
+        ReindexSellerOfferCodesJob.clear
 
         expect(offer_code.update(products: [product2], amount_cents: -1)).to be(false)
-        expect(SendToElasticsearchWorker.jobs.size).to eq(0)
+        expect(ReindexSellerOfferCodesJob.jobs.size).to eq(0)
         expect(offer_code.reload.products).to contain_exactly(product1, product2)
 
         offer_code.update!(products: [product2])
 
-        expect(SendToElasticsearchWorker).to have_enqueued_sidekiq_job(product1.id, "update", ["offer_codes"])
+        expect(ReindexSellerOfferCodesJob).to have_enqueued_sidekiq_job(creator.id)
       end
 
       it "does not index an old universal scope when its change rolls back" do
         universal_offer_code = create(:universal_offer_code, user: creator)
-        SendToElasticsearchWorker.clear
+        ReindexSellerOfferCodesJob.clear
 
         OfferCode.transaction(requires_new: true) do
           universal_offer_code.update!(universal: false, products: [product2])
           raise ActiveRecord::Rollback
         end
 
-        expect(SendToElasticsearchWorker.jobs.size).to eq(0)
+        expect(ReindexSellerOfferCodesJob.jobs.size).to eq(0)
         expect(universal_offer_code.reload).to be_universal
       end
 
       it "reindexes formerly eligible products when a universal code becomes product-specific" do
         universal_offer_code = create(:universal_offer_code, user: creator)
-        SendToElasticsearchWorker.clear
+        ReindexSellerOfferCodesJob.clear
 
         universal_offer_code.update!(universal: false, products: [product2])
 
         expect(product1.reload.product_and_universal_offer_codes).not_to include(universal_offer_code)
-        expect(SendToElasticsearchWorker).to have_enqueued_sidekiq_job(product1.id, "update", ["offer_codes"])
+        expect(ReindexSellerOfferCodesJob).to have_enqueued_sidekiq_job(creator.id)
       end
 
       it "reindexes the old currency's products when a universal discount changes currency" do
         universal_offer_code = create(:universal_offer_code, user: creator, currency_type: "usd")
         create(:product, user: creator, price_currency_type: "eur")
-        SendToElasticsearchWorker.clear
+        ReindexSellerOfferCodesJob.clear
 
         universal_offer_code.update!(currency_type: "eur")
 
         expect(product1.reload.product_and_universal_offer_codes).not_to include(universal_offer_code)
-        expect(SendToElasticsearchWorker).to have_enqueued_sidekiq_job(product1.id, "update", ["offer_codes"])
+        expect(ReindexSellerOfferCodesJob).to have_enqueued_sidekiq_job(creator.id)
       end
 
-      it "enqueues the previous universal catalog in bounded batches" do
+      it "does not enumerate the catalogue in the indexing callback" do
         universal_offer_code = create(:universal_offer_code, user: creator)
-        SendToElasticsearchWorker.clear
-        stub_const("OfferCode::PRODUCT_REINDEX_BATCH_SIZE", 1)
-
-        batch_sizes = []
-        allow(SendToElasticsearchWorker).to receive(:perform_bulk) do |args, **|
-          batch_sizes << args.size
-        end
-
-        universal_offer_code.update!(universal: false, products: [product2])
-
-        expect(batch_sizes.max).to eq(1)
-        expect(batch_sizes.sum).to be >= 2
+        ReindexSellerOfferCodesJob.clear
+        expect(universal_offer_code).not_to receive(:applicable_products)
+        universal_offer_code.send(:reindex_associated_products)
+        expect(ReindexSellerOfferCodesJob).to have_enqueued_sidekiq_job(creator.id)
       end
 
       it "reindexes products removed from a product-specific offer code" do
-        SendToElasticsearchWorker.clear
+        ReindexSellerOfferCodesJob.clear
 
         offer_code.update!(products: [product2])
 
         expect(product1.reload.product_and_universal_offer_codes).not_to include(offer_code)
-        expect(SendToElasticsearchWorker).to have_enqueued_sidekiq_job(product1.id, "update", ["offer_codes"])
-        expect(SendToElasticsearchWorker).to have_enqueued_sidekiq_job(product2.id, "update", ["offer_codes"])
+        expect(ReindexSellerOfferCodesJob).to have_enqueued_sidekiq_job(creator.id)
       end
 
       it "reindexes products when they are excluded from a universal offer code" do
         universal_offer_code = create(:universal_offer_code, user: creator)
-
-        expect(SendToElasticsearchWorker).to have_enqueued_sidekiq_job(product1.id, "update", ["offer_codes"])
-        expect(SendToElasticsearchWorker).to have_enqueued_sidekiq_job(product2.id, "update", ["offer_codes"])
+        ReindexSellerOfferCodesJob.clear
         universal_offer_code.update!(excluded_products: [product1])
+        expect(ReindexSellerOfferCodesJob).to have_enqueued_sidekiq_job(creator.id)
       end
 
       it "reindexes associated products when offer code is updated" do
-        expect(SendToElasticsearchWorker).to have_enqueued_sidekiq_job(product1.id, "update", ["offer_codes"])
-        expect(SendToElasticsearchWorker).to have_enqueued_sidekiq_job(product2.id, "update", ["offer_codes"])
-
-        offer_code.update(amount_cents: 500)
+        ReindexSellerOfferCodesJob.clear
+        offer_code.update!(amount_cents: 500)
+        expect(ReindexSellerOfferCodesJob).to have_enqueued_sidekiq_job(creator.id)
       end
 
       it "reindexes associated products when offer code code is changed" do
-        expect(SendToElasticsearchWorker).to have_enqueued_sidekiq_job(product1.id, "update", ["offer_codes"])
-        expect(SendToElasticsearchWorker).to have_enqueued_sidekiq_job(product2.id, "update", ["offer_codes"])
-
-        offer_code.update(code: "NEWYEAR2025")
+        ReindexSellerOfferCodesJob.clear
+        offer_code.update!(code: "NEWYEAR2025")
+        expect(ReindexSellerOfferCodesJob).to have_enqueued_sidekiq_job(creator.id)
       end
     end
 
     describe "after_destroy callback" do
-      let(:products_to_reindex) { [product1, product2] }
-
-      before do
-        allow(Link).to receive(:where).with(id: products_to_reindex.map(&:id)).and_return(products_to_reindex)
-      end
-
       it "reindexes associated products when offer code is destroyed" do
-        expect(SendToElasticsearchWorker).to have_enqueued_sidekiq_job(product1.id, "update", ["offer_codes"])
-        expect(SendToElasticsearchWorker).to have_enqueued_sidekiq_job(product2.id, "update", ["offer_codes"])
-
-        offer_code.destroy
+        ReindexSellerOfferCodesJob.clear
+        offer_code.destroy!
+        expect(ReindexSellerOfferCodesJob).to have_enqueued_sidekiq_job(creator.id)
       end
     end
 
@@ -1560,8 +1541,7 @@ describe OfferCode do
       end
 
       it "only reindexes products that exist" do
-        expect(SendToElasticsearchWorker).to have_enqueued_sidekiq_job(product1.id, "update", ["offer_codes"])
-        expect(SendToElasticsearchWorker).to have_enqueued_sidekiq_job(product2.id, "update", ["offer_codes"])
+        expect(ReindexSellerOfferCodesJob).to have_enqueued_sidekiq_job(creator.id)
 
         offer_code.send(:reindex_associated_products)
       end

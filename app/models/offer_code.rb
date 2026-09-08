@@ -34,7 +34,6 @@ class OfferCode < ApplicationRecord
   MAX_OWNERSHIP_DURATION_TIERS = 10
   # Enough for the seller to recognise the products without an unbounded message.
   NAMED_DEFAULT_DISCOUNT_PRODUCTS = 3
-  PRODUCT_REINDEX_BATCH_SIZE = 1_000
 
   # Regex modified from https://stackoverflow.com/a/26900132
   validates :code, presence: true, format: { with: /\A[A-Za-zÀ-ÖØ-öø-ÿ0-9\-_]*\z/, message: "can only contain numbers, letters, dashes, and underscores." }, unless: -> { is_cancellation_discount? || upsell.present? }
@@ -53,11 +52,9 @@ class OfferCode < ApplicationRecord
   after_save :invalidate_product_cache
   after_save :reindex_associated_products
   after_save :note_column_applicability_changes
-  before_update :reindex_previous_universal_products
   after_commit :repair_detached_default_discounts, if: -> { @applicability_changed }
   after_rollback :forget_applicability_changes
-  before_destroy :capture_associated_product_ids
-  after_destroy :reindex_captured_products
+  after_destroy :reindex_associated_products
 
   validates_uniqueness_of :code, scope: %i[user_id deleted_at], if: :universal?, unless: :deleted?, message: "must be unique."
   validate :code_validation, unless: lambda { |offer_code| offer_code.deleted? || offer_code.universal? || offer_code.upsell.present? }
@@ -613,51 +610,18 @@ class OfferCode < ApplicationRecord
       end
     end
 
-    def reindex_associated_products(products_to_reindex: applicable_products + excluded_products)
-      # A universal code's applicable set is every alive product, so running the
-      # per-product index updates inline after_commit blows the request timeout
-      # for large catalogs. Enqueue them as background jobs after the row commits.
+    def reindex_associated_products
+      # A seller-wide pass includes former currencies, exclusions and detached products
+      # without materializing the catalogue in the save/destroy transaction.
+      seller_ids = [user_id, user_id_before_last_save].compact.uniq
       AfterCommitEverywhere.after_commit do
-        enqueue_offer_code_document_updates(products_to_reindex)
+        seller_ids.each { ReindexSellerOfferCodesJob.enqueue(_1) }
       end
-    end
-
-    def enqueue_offer_code_document_updates(products_to_reindex)
-      if products_to_reindex.is_a?(ActiveRecord::Relation)
-        products_to_reindex.in_batches(of: PRODUCT_REINDEX_BATCH_SIZE) do |batch|
-          enqueue_offer_code_document_ids(batch.ids)
-        end
-      else
-        enqueue_offer_code_document_ids(Array(products_to_reindex).map(&:id))
-      end
-    end
-
-    def enqueue_offer_code_document_ids(product_ids)
-      return if product_ids.empty?
-
-      SendToElasticsearchWorker.perform_bulk(
-        product_ids.map { |product_id| [product_id, "update", ["offer_codes"]] }
-      )
     end
 
     def reindex_removed_product(product)
-      reindex_associated_products(products_to_reindex: [product])
-    end
-
-    def reindex_previous_universal_products
-      return unless universal_in_database && (will_save_change_to_universal? || will_save_change_to_currency_type?)
-
-      products = Link.alive.where(user_id: user_id_in_database)
-      products = products.where(price_currency_type: currency_type_in_database) if currency_type_in_database.present?
-      reindex_associated_products(products_to_reindex: products)
-    end
-
-    def capture_associated_product_ids
-      @product_ids_to_reindex = applicable_products.ids
-    end
-
-    def reindex_captured_products
-      reindex_associated_products(products_to_reindex: Link.where(id: @product_ids_to_reindex)) if @product_ids_to_reindex.present?
+      seller_id = product.user_id
+      AfterCommitEverywhere.after_commit { ReindexSellerOfferCodesJob.enqueue(seller_id) }
     end
 
     def validate_not_used_as_default_discount
