@@ -44,11 +44,19 @@ class StripeChargeableCreditCard
       Stripe::PaymentMethod.list({ customer: @customer_id, type: "card" }).data[0].id
 
     if @merchant_account&.is_a_stripe_connect_account?
-      prepare_for_direct_charge
-      update_card_details
+      # Renewals and other saved-card charges call prepare! without the order-service binder.
+      # When this chargeable already carries a Connect SetupIntent, reuse that mandate's PM
+      # instead of cloning a mandate-less copy.
+      if bind_connected_setup_intent_payment_method!
+        true
+      else
+        prepare_for_direct_charge
+        update_card_details
+        true
+      end
+    else
+      true
     end
-
-    true
   end
 
   def reusable_token!(_user)
@@ -90,6 +98,28 @@ class StripeChargeableCreditCard
   # method, so cloning again via #prepare_for_direct_charge would drop the mandate.
   def use_connected_account_payment_method!(payment_method_id)
     @payment_method_id_on_connect_account = payment_method_id
+  end
+
+  def bind_connected_setup_intent_payment_method!
+    return false if @stripe_setup_intent_id.blank? || !@merchant_account&.is_a_stripe_connect_account?
+
+    with_stripe_error_handler do
+      setup_intent = Stripe::SetupIntent.retrieve(
+        @stripe_setup_intent_id,
+        { stripe_account: @merchant_account.charge_processor_merchant_id }
+      )
+      payment_method_id = setup_intent.payment_method
+      payment_method_id = payment_method_id.id if payment_method_id.respond_to?(:id)
+      return false if payment_method_id.blank?
+
+      use_connected_account_payment_method!(payment_method_id)
+      @payment_method_on_connect_account = Stripe::PaymentMethod.retrieve(
+        payment_method_id,
+        { stripe_account: @merchant_account.charge_processor_merchant_id }
+      )
+      update_card_details
+      true
+    end
   end
 
   def update_card_details

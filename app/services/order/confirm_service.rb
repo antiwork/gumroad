@@ -90,6 +90,9 @@ class Order::ConfirmService
       return if CardParamsHelper.check_for_errors(params).present?
 
       order.purchases.group_by { |purchase| purchase.charge&.id }.each_value do |seller_purchases|
+        seller_purchases.select { |purchase| uncertain_setup_charge_pending?(purchase) }.each do |purchase|
+          setup_charge_results[purchase.id] = :pending
+        end
         pending = seller_purchases.select { |purchase| awaiting_charge_after_setup?(purchase) }
         charged = seller_purchases.select { |purchase| charged_after_setup_awaiting_finalization?(purchase) }
         next if pending.none? && charged.none?
@@ -127,11 +130,24 @@ class Order::ConfirmService
         purchase.charge.present? &&
         purchase.processor_setup_intent_id.present? &&
         purchase.processor_payment_intent.blank? &&
+        # A prior resume already attempted the charge and lost the processor response
+        # (client_confirmed, no PI yet). Do not create a second PaymentIntent.
+        !purchase.charge.client_confirmed? &&
         purchase.stripe_transaction_id.blank? &&
         !purchase.free_purchase? &&
         !purchase.is_test_purchase? &&
         !purchase.is_free_trial_purchase? &&
         !purchase.is_preorder_authorization?
+    end
+
+    def uncertain_setup_charge_pending?(purchase)
+      purchase.in_progress? &&
+        purchase.errors.empty? &&
+        purchase.charge.present? &&
+        purchase.charge.client_confirmed? &&
+        purchase.processor_setup_intent_id.present? &&
+        purchase.processor_payment_intent.blank? &&
+        purchase.stripe_transaction_id.blank?
     end
 
     # A purchase whose group's off-session charge already exists (created by this path, or

@@ -176,6 +176,8 @@ export const startOrderCreation = async (
   // Permalinks whose group was charged synchronously with the debit scheduled — those lines
   // must never re-enter the cart, and any failure matched to them by permalink is ambiguous.
   const processingPermalinks = new Set<string>();
+  // Hoisted so the catch-path recovery confirm can keep create-time failures retryable.
+  const createFailures: CartPurchaseResult["lineItems"] = {};
   let retryOfferCodes = activeOfferCodes;
   try {
     const response = await createOrder(requestData);
@@ -184,7 +186,6 @@ export const startOrderCreation = async (
     }
     // A line that failed at creation has no purchase, so the confirm response cannot mention
     // it; keep its create-time failure or it becomes indistinguishable from a processing line.
-    const createFailures: CartPurchaseResult["lineItems"] = {};
     for (const [uid, lineItem] of Object.entries(response.line_items)) {
       if (!lineItem.success) createFailures[uid] = lineItem;
       else if ("processing" in lineItem) processingPermalinks.add(lineItem.permalink);
@@ -381,6 +382,7 @@ export const startOrderCreation = async (
         const recoveryLineItems = requestData.lineItems.reduce<CartPurchaseResult["lineItems"]>((items, lineItem) => {
           const resultItem =
             recoveryConfirmItems[lineItem.uid] ??
+            createFailures[lineItem.uid] ??
             recoveryConfirmResults.find((item) => item.permalink === lineItem.permalink);
           if (resultItem) items[lineItem.uid] = resultItem;
           return items;
@@ -389,7 +391,7 @@ export const startOrderCreation = async (
           requestData.lineItems.flatMap((lineItem) => {
             const resultItem = recoveryLineItems[lineItem.uid];
             if (!resultItem || resultItem.success) return [];
-            const explicit = recoveryConfirmItems[lineItem.uid];
+            const explicit = recoveryConfirmItems[lineItem.uid] ?? createFailures[lineItem.uid];
             if (!explicit && recoveryProcessing.has(lineItem.permalink)) return [];
             return [[lineItem.uid, resultItem] as const];
           }),

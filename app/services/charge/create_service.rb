@@ -481,8 +481,14 @@ class Charge::CreateService
   # not retry their card at all. Duplicate intents are recoverable; a locked-out buyer is not.
   def payment_intent_idempotency_key(presentment_args)
     stripe_fx_quote_id = presentment_args[:stripe_fx_quote_id]
-    return if stripe_fx_quote_id.blank?
+    return "buyer-currency-charge-#{charge.external_id}-#{stripe_fx_quote_id}" if stripe_fx_quote_id.present?
 
-    "buyer-currency-charge-#{charge.external_id}-#{stripe_fx_quote_id}"
+    # Only after an uncertain prior attempt (client_confirmed without a stored PI). A blanket
+    # off-session key would replay declines for 24h on the same charge row and lock the buyer out.
+    if charge.client_confirmed? && off_session && !setup_future_charges
+      return "setup-confirmed-charge-#{charge.external_id}"
+    end
+
+    nil
   end
 end
