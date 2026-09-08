@@ -1,6 +1,8 @@
 # frozen_string_literal: true
 
 class Integrations::DiscordController < ApplicationController
+  # Gate join/leave on the signed-in purchaser or the purchase download token;
+  # the external id alone must not authorize Discord membership.
   before_action :authenticate_user!, except: [:oauth_redirect, :join_server, :leave_server]
 
   def server_info
@@ -23,7 +25,11 @@ class Integrations::DiscordController < ApplicationController
   end
 
   def join_server
+    # Fail fast on an unowned purchase before spending a Discord OAuth exchange.
     return render json: { success: false } if params[:code].blank? || params[:purchase_id].blank?
+
+    purchase = Purchase.find_by_external_id(params[:purchase_id])
+    return render json: { success: false } unless discord_purchase_authorized?(purchase)
 
     discord_api = DiscordApi.new
     oauth_response = discord_api.oauth_token(params[:code], oauth_redirect_integrations_discord_index_url(host: DOMAIN, protocol: PROTOCOL))
@@ -36,7 +42,6 @@ class Integrations::DiscordController < ApplicationController
       user_response = discord_api.identify(access_token)
       user = JSON.parse(user_response)
 
-      purchase = Purchase.find_by_external_id(params[:purchase_id])
       integration = purchase.find_enabled_integration(Integration::DISCORD)
       return render json: { success: false } if integration.nil?
 
@@ -58,6 +63,8 @@ class Integrations::DiscordController < ApplicationController
     return render json: { success: false } if params[:purchase_id].blank?
 
     purchase = Purchase.find_by_external_id(params[:purchase_id])
+    return render json: { success: false } unless discord_purchase_authorized?(purchase)
+
     integration = purchase.find_integration_by_name(Integration::DISCORD)
     discord_user_id = DiscordIntegration.discord_user_id_for(purchase)
     return render json: { success: false } if integration.nil? || discord_user_id.blank?
@@ -90,4 +97,24 @@ class Integrations::DiscordController < ApplicationController
 
     render inline: "", layout: "application", status: params.key?(:code) ? :ok : :bad_request
   end
+
+  private
+    def discord_purchase_authorized?(purchase)
+      return false if purchase.nil?
+      return false unless discord_purchase_currently_entitled?(purchase)
+      return true if current_user.present? && purchase.purchaser == current_user
+
+      token = params[:token]
+      token.is_a?(String) && token.present? && UrlRedirect.exists?(token:, purchase_id: purchase.id)
+    end
+
+    # Mirrors the entitlement checks in UrlRedirectsController.
+    def discord_purchase_currently_entitled?(purchase)
+      return false if purchase.stripe_refunded
+      return false if purchase.chargeback_date.present? && !purchase.chargeback_reversed
+      return false if purchase.is_access_revoked
+      return false if purchase.subscription.present? && !purchase.subscription.grant_access_to_product?
+
+      true
+    end
 end

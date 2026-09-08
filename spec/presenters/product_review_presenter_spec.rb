@@ -16,7 +16,7 @@ describe ProductReviewPresenter do
             name: "Anonymous"
           },
           rating: product_review.rating,
-          purchase_id: product_review.purchase.external_id,
+          purchase_id: nil,
           created_at: product_review.created_at.iso8601,
           is_new: true,
           response: nil,
@@ -25,6 +25,46 @@ describe ProductReviewPresenter do
       )
     end
 
+    it "omits the purchase external id by default" do
+      expect(described_class.new(product_review).product_review_props[:purchase_id]).to be_nil
+    end
+
+    it "includes the purchase external id when explicitly requested" do
+      expect(described_class.new(product_review).product_review_props(include_purchase_id: true)[:purchase_id])
+        .to eq(product_review.purchase.external_id)
+    end
+  end
+
+  describe "#viewer_may_see_purchase_id?" do
+    let(:seller) { product_review.link.user }
+    let(:buyer) { create(:user) }
+    let(:other_user) { create(:user) }
+
+    before { product_review.purchase.update!(purchaser: buyer) }
+
+    it "returns true for the product seller" do
+      expect(described_class.new(product_review).viewer_may_see_purchase_id?(viewer: nil, seller: seller)).to be true
+    end
+
+    it "returns true for the review's buyer" do
+      expect(described_class.new(product_review).viewer_may_see_purchase_id?(viewer: buyer, seller: nil)).to be true
+    end
+
+    it "returns false for a different logged-in user" do
+      expect(described_class.new(product_review).viewer_may_see_purchase_id?(viewer: other_user, seller: nil)).to be false
+    end
+
+    it "returns false when no viewer and no matching seller" do
+      expect(described_class.new(product_review).viewer_may_see_purchase_id?(viewer: nil, seller: nil)).to be false
+    end
+
+    it "returns false for a guest purchase with no purchaser" do
+      product_review.purchase.update!(purchaser: nil)
+      expect(described_class.new(product_review).viewer_may_see_purchase_id?(viewer: other_user, seller: nil)).to be false
+    end
+  end
+
+  describe "#product_review_props" do
     context "product review is more than a month old" do
       before { product_review.update!(created_at: 2.months.ago) }
 
