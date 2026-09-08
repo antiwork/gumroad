@@ -210,10 +210,24 @@ module Purchase::ChargeEventsHandler
       # An uncertain resume may have set client_confirmed without storing the PI id; recover
       # it from the webhook so FinalizeConfirmedChargeService can retrieve the intent.
       if is_a?(Charge) && stripe_payment_intent_id.blank? && event&.processor_payment_intent_id.present?
-        update!(stripe_payment_intent_id: event.processor_payment_intent_id)
-        purchases.each do |purchase|
-          next if purchase.processor_payment_intent.present?
-          purchase.create_processor_payment_intent!(intent_id: event.processor_payment_intent_id)
+        # Retrieve on this charge's Stripe account and require our transfer_group before saving.
+        # A crafted webhook can point transfer_group at another CH- id; never trust the event id alone.
+        begin
+          stripe_opts = if merchant_account&.is_a_stripe_connect_account?
+            { stripe_account: merchant_account.charge_processor_merchant_id }
+          else
+            {}
+          end
+          stripe_intent = Stripe::PaymentIntent.retrieve(event.processor_payment_intent_id, stripe_opts)
+          if stripe_intent.present? && stripe_intent.transfer_group.to_s == id_with_prefix
+            update!(stripe_payment_intent_id: event.processor_payment_intent_id)
+            purchases.each do |purchase|
+              next if purchase.processor_payment_intent.present?
+              purchase.create_processor_payment_intent!(intent_id: event.processor_payment_intent_id)
+            end
+          end
+        rescue Stripe::StripeError => e
+          Rails.logger.info("Skipping unverified PaymentIntent recovery for charge #{id}: #{e.message}")
         end
       end
       Order::FinalizeConfirmedChargeService.new(order:, charge: self).perform

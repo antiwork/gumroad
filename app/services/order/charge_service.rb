@@ -507,9 +507,12 @@ class Order::ChargeService
           setup_mandate_cap = setup_mandate_options&.dig(:payment_method_options, :card, :mandate_options)
           max_group_charge = max_group_charge_for_account(account_key)
           setup_mandate_cap[:amount] = [setup_mandate_cap[:amount], max_group_charge].max if setup_mandate_cap
-          # Clear unusable stored SIs before the quote-conversion guard. Otherwise a canceled
-          # ID keeps us on the USD path and register_india_mandate recreates a USD mandate for
-          # an INR checkout.
+          # Convert to the buyer-currency quote before mandate coverage checks so a valid INR
+          # SetupIntent is not rejected against canonical USD terms (and a USD mandate is not
+          # accepted for an INR charge).
+          locked_quote = locked_off_session_mandate_quote(purchases: purchases_to_charge, merchant_account:, chargeable:, amount_cents:)
+          return if locked_quote == false
+          setup_mandate_options = off_session_mandate_options_in_quote_currency(setup_mandate_options, locked_quote)
           if chargeable.stripe_setup_intent_id.present?
             existing_si = ChargeProcessor.get_setup_intent(merchant_account, chargeable.stripe_setup_intent_id)
             unless existing_si.present? && (existing_si.succeeded? || existing_si.requires_action?) &&
@@ -517,11 +520,6 @@ class Order::ChargeService
                    setup_intent_covers_mandate_options?(existing_si, setup_mandate_options)
               chargeable.stripe_setup_intent_id = nil
             end
-          end
-          if chargeable.stripe_setup_intent_id.blank?
-            locked_quote = locked_off_session_mandate_quote(purchases: purchases_to_charge, merchant_account:, chargeable:, amount_cents:)
-            return if locked_quote == false
-            setup_mandate_options = off_session_mandate_options_in_quote_currency(setup_mandate_options, locked_quote)
           end
           register_india_mandate_for_off_session_cart!(purchases_to_charge, chargeable, merchant_account, setup_mandate_options)
           account_setup_intents[account_key] = setup_intent if setup_intent.present?
