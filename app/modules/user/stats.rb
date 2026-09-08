@@ -303,12 +303,18 @@ module User::Stats
   end
 
   def credits_cents_for_balances(balance_ids)
-    credits
+    scope = credits
       .where(financing_paydown_purchase_id: nil)
       .where("json_data->>'$.stripe_loan_paydown_id' IS NULL")
-      .where(fee_retention_refund_id: nil)
       .where(balance_id: balance_ids)
+
+    ordinary = scope.where(fee_retention_refund_id: nil).sum("amount_cents")
+    # Separately booked fee retention (not folded into refund.retained_fee_cents).
+    separate_retention = scope.where.not(fee_retention_refund_id: nil)
+      .joins("INNER JOIN refunds ON refunds.id = credits.fee_retention_refund_id")
+      .where("COALESCE(refunds.json_data->'$.retained_fee_cents', 0) = 0")
       .sum("amount_cents")
+    ordinary + separate_retention
   end
 
   def loan_repayment_cents_for_balances(balance_ids)

@@ -156,7 +156,12 @@ class Payment < ApplicationRecord
   end
 
   def credit_amount_cents
-    credits.where(fee_retention_refund_id: nil).sum("amount_cents")
+    ordinary = credits.where(fee_retention_refund_id: nil).sum("amount_cents")
+    separate_retention = credits.where.not(fee_retention_refund_id: nil)
+      .joins("INNER JOIN refunds ON refunds.id = credits.fee_retention_refund_id")
+      .where("COALESCE(refunds.json_data->'$.retained_fee_cents', 0) = 0")
+      .sum("amount_cents")
+    ordinary + separate_retention
   end
 
   def send_deposit_email

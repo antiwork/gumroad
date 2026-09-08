@@ -486,12 +486,13 @@ class Credit < ApplicationRecord
         credit.balance = balance_transaction.balance
         credit.save!
 
-        # Fold into refund fee columns only when the credit lands on the same unpaid
-        # balance as the refund. Cross-payout retention leaves retained_fee_cents unset so
-        # the later payout export can show the debit credit instead of mis-attributing it.
+        # Fold into refund fee columns when the refund's balance is still unpaid (same
+        # payout cohort, even across multiple unpaid balances). If the refund already
+        # left unpaid, leave retained_fee_cents unset so the later payout shows the credit.
         if credit.balance&.unpaid?
-          refund_balance_ids = refund.balance_transactions.map(&:balance_id)
-          if refund_balance_ids.blank? || refund_balance_ids.include?(credit.balance_id)
+          refund_still_unpaid = refund.balance_transactions.none? ||
+            refund.balance_transactions.joins(:balance).where(balances: { state: "unpaid" }).exists?
+          if refund_still_unpaid
             refund.retained_fee_cents = credit.amount_cents.abs
             refund.save!
           end
