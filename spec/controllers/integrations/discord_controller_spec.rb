@@ -476,9 +476,8 @@ describe Integrations::DiscordController do
       end
 
       it "rejects a signed-in purchaser with an inactive subscription" do
-        subscription = create(:subscription, link: product, user: buyer)
-        subscription.update!(cancelled_at: 1.day.ago)
-        product.update!(is_tiered_membership: true, block_access_after_membership_cancellation: true)
+        subscription = create(:subscription, link: product, user: buyer, failed_at: Time.current)
+        product.update_attribute(:block_access_after_membership_cancellation, true)
         purchase.update!(subscription:)
 
         expect do
@@ -647,9 +646,8 @@ describe Integrations::DiscordController do
 
       it "rejects a signed-in purchaser with an inactive subscription" do
         create(:purchase_integration, integration:, purchase:, discord_user_id: user_id)
-        subscription = create(:subscription, link: product, user: buyer)
-        subscription.update!(cancelled_at: 1.day.ago)
-        product.update!(is_tiered_membership: true, block_access_after_membership_cancellation: true)
+        subscription = create(:subscription, link: product, user: buyer, failed_at: Time.current)
+        product.update_attribute(:block_access_after_membership_cancellation, true)
         purchase.update!(subscription:)
 
         expect do
