@@ -352,6 +352,12 @@ describe Order::ConfirmService, :vcr do
         purchases.each { |purchase| purchase.update!(merchant_account: connect_account) }
         setup_intent = instance_double(StripeSetupIntent, succeeded?: true, payment_method_id: "pm_on_connect_account")
         expect(ChargeProcessor).to receive(:get_setup_intent).with(connect_account, "seti_confirm_india").once.and_return(setup_intent)
+        allow(Stripe::SetupIntent).to receive(:retrieve).and_return(
+          Stripe::SetupIntent.construct_from(id: "seti_confirm_india", payment_method: "pm_on_connect_account")
+        )
+        allow(Stripe::PaymentMethod).to receive(:retrieve).and_return(
+          Stripe::PaymentMethod.construct_from(id: "pm_on_connect_account", customer: "cus_on_connect")
+        )
         # The mandate is bound to the payment method the SetupIntent was confirmed with; a
         # fresh clone would be a different, mandate-less method.
         expect(Stripe::PaymentMethod).not_to receive(:create)
@@ -372,7 +378,7 @@ describe Order::ConfirmService, :vcr do
         responses, = Order::ConfirmService.new(order:, params: {}).perform
 
         stripe_chargeable = captured_kwargs[:chargeable].get_chargeable_for(StripeChargeProcessor.charge_processor_id)
-        expect(stripe_chargeable.stripe_charge_params).to eq(payment_method: "pm_on_connect_account")
+        expect(stripe_chargeable.stripe_charge_params).to eq(payment_method: "pm_on_connect_account", customer: "cus_on_connect")
         purchases.each do |purchase|
           expect(responses[purchase.id]).to eq(success: true, processing: true, permalink: purchase.link.unique_permalink)
         end

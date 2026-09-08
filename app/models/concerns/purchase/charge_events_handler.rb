@@ -243,7 +243,13 @@ module Purchase::ChargeEventsHandler
         next if card.blank? || setup_intent_id.blank? || !card.requires_mandate?
 
         setup_intent = ChargeProcessor.get_setup_intent(purchase.merchant_account, setup_intent_id)
-        card.store_stripe_setup_intent_id!(purchase.merchant_account, setup_intent_id) if setup_intent&.succeeded?
+        next unless setup_intent&.succeeded?
+
+        # Do not let an older charge's delayed webhook overwrite a newer account mandate.
+        existing_id = card.merchant_scoped_setup_intent_id_for(purchase.merchant_account)
+        next if existing_id.present? && existing_id.to_s != setup_intent_id.to_s
+
+        card.store_stripe_setup_intent_id!(purchase.merchant_account, setup_intent_id)
       end
     rescue StandardError => e
       ErrorNotifier.notify(e, charge_id: try(:id))
