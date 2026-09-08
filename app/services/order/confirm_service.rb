@@ -182,7 +182,6 @@ class Order::ConfirmService
       end
     end
 
-
     # Guest one-time India mandates pause without creating a CreditCard. Rebuild a Chargeable
     # from the SetupIntent's payment method so the resume charge can still run. Prefer
     # StripeChargeableCreditCard so Connect trusted-prepare can bind the SI's PM without cloning.

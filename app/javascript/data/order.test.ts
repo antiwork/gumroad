@@ -1975,7 +1975,8 @@ describe("startOrderCreation", () => {
       (error: unknown) => error,
     );
     expect(processingError).toBeInstanceOf(PaymentConfirmedError);
-    expect((processingError as PaymentConfirmedError).retryable?.lineItems[secondLine.uid]).toMatchObject({
+    if (!(processingError instanceof PaymentConfirmedError)) throw new Error("expected PaymentConfirmedError");
+    expect(processingError.retryable?.lineItems[secondLine.uid]).toMatchObject({
       success: false,
     });
 

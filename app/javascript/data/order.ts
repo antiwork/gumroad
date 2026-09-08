@@ -305,17 +305,15 @@ export const startOrderCreation = async (
       // it so the buyer can retry that line without colliding with not_double_charged.
       if (leftoverScaAfterConfirm.length > 0 && (processingPermalinks.size > 0 || anyIntentConfirmed)) {
         confirmOrderPosted = true;
+        const leftoverAuthError: StripeError = {
+          type: "validation_error",
+          message: "Authentication required.",
+          code: "authentication_required",
+        };
         orderConfirmResponse = await confirmOrderAfterAction({
           orderId,
-          clientSecret:
-            leftoverScaAfterConfirm[0]?.client_secret ?? firstLineItemRequiringSCA.client_secret,
-          stripeError:
-            lastAuthError ??
-            ({
-              type: "validation_error",
-              message: "Authentication required.",
-              code: "authentication_required",
-            } as StripeError),
+          clientSecret: leftoverScaAfterConfirm[0]?.client_secret ?? firstLineItemRequiringSCA.client_secret,
+          stripeError: lastAuthError ?? leftoverAuthError,
           retryOfferCodes: retryOfferCodeCandidates(requestData, retryOfferCodes),
           buyerCurrencyQuote: requestData.buyerCurrencyQuote,
         });
@@ -424,16 +422,15 @@ export const startOrderCreation = async (
         }
         const recoveryLeftoverSca = Object.values(recoveryResponseMutable.line_items).filter(doesLineItemRequireSCA);
         if (recoveryLeftoverSca.length > 0 && (recoveryProcessingProbe.size > 0 || anyIntentConfirmed)) {
+          const recoveryLeftoverAuthError: StripeError = {
+            type: "validation_error",
+            message: "Authentication required.",
+            code: "authentication_required",
+          };
           recoveryResponseMutable = await confirmOrderAfterAction({
             orderId: pendingOrderId,
             clientSecret: recoveryLeftoverSca[0]?.client_secret ?? pendingClientSecret,
-            stripeError:
-              lastAuthError ??
-              ({
-                type: "validation_error",
-                message: "Authentication required.",
-                code: "authentication_required",
-              } as StripeError),
+            stripeError: lastAuthError ?? recoveryLeftoverAuthError,
             retryOfferCodes: retryOfferCodeCandidates(requestData, retryOfferCodes),
             buyerCurrencyQuote: requestData.buyerCurrencyQuote,
           });

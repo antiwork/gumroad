@@ -91,6 +91,9 @@ class FailAbandonedPurchaseWorker
       raise unless charge_intent&.succeeded? || charge_intent&.canceled?
     end
 
+    # Only siblings still inside their own SCA window should block cancel. Older
+    # in_progress siblings are abandoned too; cancel_setup_intent fails them together
+    # with this purchase so they cannot stay stuck after the shared intent is canceled.
     def shared_setup_intent_still_needed?
       Purchase.where(processor_setup_intent_id: purchase.processor_setup_intent_id)
               .where.not(id: purchase.id)
@@ -99,17 +102,48 @@ class FailAbandonedPurchaseWorker
               .exists?
     end
 
+    # Cancelling a shared SetupIntent must fail every in_progress purchase that still
+    # points at it. Otherwise a newer sibling's worker can cancel the intent while an
+    # older sibling (past its own SCA window, so excluded from shared_setup_intent_still_needed?)
+    # stays in_progress forever when it later sees the already-canceled intent.
     def cancel_setup_intent
-      purchase.cancel_setup_intent!
+      ChargeProcessor.cancel_setup_intent!(purchase.merchant_account, purchase.processor_setup_intent_id)
+      fail_in_progress_purchases_sharing_setup_intent!
     rescue ChargeProcessorError
       setup_intent = ChargeProcessor.get_setup_intent(purchase.merchant_account, purchase.processor_setup_intent_id)
 
       # Ignore the error if:
-      # - setup intent succeeded (user completed SCA in the meanwhile)
-      # - setup intent has been cancelled (by a parallel purchase)
-      # In both these cases the purchase will transition to a successful or failed state.
+      # - setup intent succeeded (user completed SCA in the meanwhile) — confirm will finish it
+      # - setup intent has been cancelled (by a parallel purchase / sibling worker)
       #
       # Raise all other (unexpected) errors.
       raise unless setup_intent&.succeeded? || setup_intent&.canceled?
+
+      # A parallel cancel may have left this purchase (and shared-SI siblings) in_progress.
+      fail_in_progress_purchases_sharing_setup_intent! if setup_intent&.canceled?
+    end
+
+    def fail_in_progress_purchases_sharing_setup_intent!
+      setup_intent_id = purchase.processor_setup_intent_id
+      return if setup_intent_id.blank?
+
+      # Prefer the order association (indexed via order_purchases) so we do not scan the
+      # unindexed processor_setup_intent_id column across the whole purchases table.
+      # Always include this purchase itself so a delayed/retried job cannot cancel the
+      # SetupIntent and then age-filter the target out of cleanup.
+      siblings = if (order = purchase.order)
+        order.purchases.where(processor_setup_intent_id: setup_intent_id, purchase_state: "in_progress")
+      else
+        Purchase.where(processor_setup_intent_id: setup_intent_id, purchase_state: "in_progress")
+                .where("id = ? OR created_at > ?", purchase.id, (ChargeProcessor::TIME_TO_COMPLETE_SCA * 2).ago)
+      end
+
+      siblings.find_each do |sibling|
+        sibling.with_lock do
+          next unless sibling.in_progress?
+
+          Purchase::MarkFailedService.new(sibling).perform
+        end
+      end
     end
 end
