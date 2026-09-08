@@ -132,6 +132,40 @@ describe ProductPresenter::Card do
         queries
       end
 
+      %i[thumbnail cover avatar].each do |source|
+        it "does not query persisted #{source} variants while rendering cards" do
+          products = Array.new(2) do
+            seller = create(:user)
+            product = create(:product, user: seller)
+            case source
+            when :thumbnail
+              create(:thumbnail, product:).thumbnail_variant
+            when :cover
+              create(:asset_preview, link: product).generate_retina_variant!
+            when :avatar
+              seller.avatar.attach(io: File.open(Rails.root.join("spec/support/fixtures/smilie.png")), filename: "smilie.png", content_type: "image/png")
+              seller.avatar_variant
+            end
+            product
+          end
+          expected = products.map do |product|
+            described_class.new(product: product.reload).for_web(compute_description: false, compute_inventory: false)
+          end
+          Rails.cache.clear
+          loaded = Link.where(id: products.map(&:id)).order(:id).includes(*ProductPresenter::ASSOCIATIONS_FOR_CARD).to_a
+          cards = nil
+          queries = capture_queries do
+            ActiveRecord::Base.uncached do
+              cards = loaded.map { |product| described_class.new(product:).for_web(compute_description: false, compute_inventory: false) }
+            end
+          end
+
+          expect(cards).to eq(expected)
+          expect(cards.all? { |card| (source == :avatar ? card.dig(:seller, :avatar_url) : card[:thumbnail_url]).present? }).to eq(true)
+          expect(queries.grep(/FROM `active_storage_/)).to be_empty
+        end
+      end
+
       it "does not issue per-row queries for preloaded associations" do
         # Mix of product shapes: digital, physical (skus), variant categories,
         # rentable. Each exercises a different ASSOCIATIONS branch.
