@@ -135,8 +135,11 @@ class Api::Internal::Admin::UsersController < Api::Internal::Admin::BaseControll
     user = find_internal_admin_user_for_read_or_render(include_deleted: true)
     return unless user
 
+    verifications = user.social_connect_verifications.order(:platform, Arel.sql("superseded_at IS NOT NULL"), last_verified_at: :desc).to_a
+    shared_identity_user_counts = shared_identity_user_counts_for(user, verifications)
+
     render json: internal_admin_user_success_payload(user, {
-                                                       social_connections: user.social_connect_verifications.order(:platform, Arel.sql("superseded_at IS NOT NULL"), last_verified_at: :desc).map { serialize_social_connect_verification(_1) },
+                                                       social_connections: verifications.map { serialize_social_connect_verification(_1, shared_identity_user_count: shared_identity_user_counts[[_1.platform, _1.uid]] || 0) },
                                                        latest_shadow_evaluation: serialize_latest_social_shadow_evaluation(user),
                                                      })
   end
@@ -1026,7 +1029,23 @@ class Api::Internal::Admin::UsersController < Api::Internal::Admin::BaseControll
       }
     end
 
-    def serialize_social_connect_verification(verification)
+    # Counts other accounts sharing each (platform, uid) in one query so retained
+    # superseded history does not add a query per row.
+    def shared_identity_user_counts_for(user, verifications)
+      return {} if verifications.empty?
+
+      pairs = verifications.map { |verification| [verification.platform, verification.uid] }.uniq
+      connection = SocialConnectVerification.connection
+      tuple_list = pairs.map { |platform, uid| "(#{connection.quote(platform)}, #{connection.quote(uid)})" }.join(", ")
+
+      SocialConnectVerification
+        .where.not(user_id: user.id)
+        .where("(platform, uid) IN (#{tuple_list})")
+        .group(:platform, :uid)
+        .count
+    end
+
+    def serialize_social_connect_verification(verification, shared_identity_user_count:)
       {
         platform: verification.platform,
         uid: verification.uid,
@@ -1038,7 +1057,7 @@ class Api::Internal::Admin::UsersController < Api::Internal::Admin::BaseControll
         last_posted_at: verification.last_posted_at&.iso8601,
         last_verified_at: verification.last_verified_at.iso8601,
         superseded_at: verification.superseded_at&.iso8601,
-        shared_identity_user_count: verification.shared_identity_user_ids.size,
+        shared_identity_user_count:,
       }
     end
 

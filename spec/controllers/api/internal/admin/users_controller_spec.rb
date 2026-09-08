@@ -2168,6 +2168,9 @@ describe Api::Internal::Admin::UsersController do
       create(:social_connect_verification, user:, platform: "twitter", uid: "new-uid", last_verified_at: 2.days.ago)
       create(:social_connect_verification, platform: "twitter", uid: "old-uid")
 
+      # Batched lookup — do not call the per-row shared_identity_user_ids helper.
+      expect_any_instance_of(SocialConnectVerification).not_to receive(:shared_identity_user_ids)
+
       get :social_connections, params: { email: user.email }
 
       expect(response).to have_http_status(:ok)

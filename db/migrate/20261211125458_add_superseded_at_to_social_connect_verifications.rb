@@ -4,7 +4,7 @@
 # after it; the time component is the real UTC authoring time, so parallel
 # branches do not collide on a shared hand-picked value.
 class AddSupersededAtToSocialConnectVerifications < ActiveRecord::Migration[7.1]
-  def change
+  def up
     change_table :social_connect_verifications, bulk: true do |t|
       t.datetime :superseded_at
 
@@ -15,5 +15,10 @@ class AddSupersededAtToSocialConnectVerifications < ActiveRecord::Migration[7.1]
       t.index [:user_id, :platform]
       t.index [:user_id, :platform, :uid], unique: true, name: "index_scv_on_user_id_platform_and_uid"
     end
+  end
+
+  # Restoring unique [user_id, platform] would fail once superseded history exists.
+  def down
+    raise ActiveRecord::IrreversibleMigration
   end
 end
