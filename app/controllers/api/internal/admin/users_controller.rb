@@ -137,6 +137,7 @@ class Api::Internal::Admin::UsersController < Api::Internal::Admin::BaseControll
 
     render json: internal_admin_user_success_payload(user, {
                                                        social_connections: user.social_connect_verifications.order(:platform).map { serialize_social_connect_verification(_1) },
+                                                       latest_shadow_evaluation: serialize_latest_social_shadow_evaluation(user),
                                                      })
   end
 
@@ -1005,6 +1006,23 @@ class Api::Internal::Admin::UsersController < Api::Internal::Admin::BaseControll
         reason: credit.reason,
         crediting_user_id: credit.crediting_user&.external_id,
         created_at: credit.created_at.iso8601
+      }
+    end
+
+    def serialize_latest_social_shadow_evaluation(user)
+      evaluation = SocialScoreShadowEvaluation.where(user_id: user.id).order(evaluated_on: :desc, id: :desc).first
+      return nil unless evaluation
+
+      {
+        mode: "historical_shadow",
+        notice: "Stored shadow evidence only; not current eligibility or payout authorization.",
+        evaluated_on: evaluation.evaluated_on.iso8601,
+        recorded_at: evaluation.created_at.iso8601,
+        score: evaluation.score,
+        unpaid_balance_cents: evaluation.unpaid_balance_cents,
+        would_have_released: evaluation.would_have_released,
+        hold_source: evaluation.hold_source,
+        signals: evaluation.signals,
       }
     end
 
