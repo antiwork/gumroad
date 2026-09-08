@@ -8,7 +8,7 @@ class ReindexSellerOfferCodesJob
   INTERVAL = 5.seconds
 
   sidekiq_retries_exhausted do |message, _error|
-    perform_in(1.hour, message.fetch("args").first)
+    ReindexSellerOfferCodesRecoveryJob.perform_in(1.hour, message.fetch("args").first)
   end
 
   def self.enqueue(seller_id)
@@ -19,14 +19,17 @@ class ReindexSellerOfferCodesJob
   def self.enqueue_products(seller_id, product_ids)
     return if product_ids.empty?
 
-    $redis.hset("offer_code_index:#{seller_id}:products", product_ids.index_with { SecureRandom.hex(16) })
+    $redis.eval(<<~LUA, keys: ["offer_code_index:#{seller_id}:products", "offer_code_index:#{seller_id}:sequence"], argv: product_ids)
+      local version = redis.call('INCR', KEYS[2])
+      for _, id in ipairs(ARGV) do redis.call('ZADD', KEYS[1], version, id) end
+    LUA
     perform_async(seller_id)
   end
 
   def perform(seller_id)
     key = "offer_code_index:#{seller_id}"
     token = SecureRandom.hex(16)
-    unless $redis.set("#{key}:lock", token, nx: true, ex: 1.hour.to_i)
+    unless $redis.set("#{key}:lock", token, nx: true, ex: 10.minutes.to_i)
       self.class.perform_in(INTERVAL, seller_id)
       return
     end
@@ -36,18 +39,18 @@ class ReindexSellerOfferCodesJob
         return
       end
 
-      pending_ids = $redis.hscan_each("#{key}:products", count: BATCH_SIZE).take(BATCH_SIZE).map(&:first)
+      pending = $redis.zrange("#{key}:products", 0, BATCH_SIZE - 1, with_scores: true)
+      pending_ids = pending.map(&:first)
       catalogue_pending = $redis.exists?("#{key}:version")
       if pending_ids.any? && (!catalogue_pending || $redis.get("#{key}:last_batch") != "targeted")
-        versions = $redis.hmget("#{key}:products", *pending_ids)
         $redis.set("#{key}:cooldown", (Time.current + INTERVAL).to_f, ex: INTERVAL.to_i)
         ActiveRecord::Base.connection.stick_to_primary!
         attempted = true
         $redis.set("#{key}:last_batch", "targeted")
         ProductOfferCodeIndexingService.new(Link.where(id: pending_ids).to_a).perform
         self.class.perform_in(INTERVAL, seller_id)
-        pending_ids.zip(versions).each do |product_id, version|
-          $redis.eval("if redis.call('HGET', KEYS[1], ARGV[1]) == ARGV[2] then return redis.call('HDEL', KEYS[1], ARGV[1]) end", keys: ["#{key}:products"], argv: [product_id, version])
+        pending.each do |product_id, version|
+          $redis.eval("if tonumber(redis.call('ZSCORE', KEYS[1], ARGV[1])) == tonumber(ARGV[2]) then return redis.call('ZREM', KEYS[1], ARGV[1]) end", keys: ["#{key}:products"], argv: [product_id, version])
         end
         $redis.set("#{key}:cooldown", (Time.current + INTERVAL).to_f, ex: INTERVAL.to_i)
         return
@@ -60,7 +63,7 @@ class ReindexSellerOfferCodesJob
       ActiveRecord::Base.connection.stick_to_primary!
       cursor, scan_version = $redis.mget("#{key}:cursor", "#{key}:scan_version")
       scan_version ||= version
-      products = Link.where(user_id: seller_id).where("id > ?", cursor.to_i).order(:id).limit(BATCH_SIZE).to_a
+      products = Link.alive.where(user_id: seller_id).where("id > ?", cursor.to_i).order(:id).limit(BATCH_SIZE).to_a
       attempted = true
       $redis.set("#{key}:last_batch", "catalogue")
       ProductOfferCodeIndexingService.new(products).perform

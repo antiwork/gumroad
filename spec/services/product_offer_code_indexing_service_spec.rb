@@ -30,8 +30,18 @@ describe ProductOfferCodeIndexingService do
     usd.__elasticsearch__.delete_document
     expect { described_class.new(products).perform }.not_to raise_error
     expect(indexed_codes(eur)).to eq([])
+    expect(indexed_codes(usd)).to eq([])
     allow(eur.__elasticsearch__).to receive(:update_document_attributes).and_raise(Elasticsearch::Transport::Transport::Errors::NotFound, "index_not_found_exception")
     expect { described_class.new([eur]).perform }.to raise_error(Elasticsearch::Transport::Transport::Errors::NotFound, /index_not_found/)
+  end
+
+  it "raises without creating or acknowledging an absent index" do
+    product = usd
+    original_name = Link.index_name
+    allow(Link).to receive(:index_name).and_return("missing-offer-code-index-#{SecureRandom.hex(8)}")
+    expect { described_class.new([product]).perform }.to raise_error(Elasticsearch::Transport::Transport::Errors::NotFound, /index_not_found/)
+    expect(Link.__elasticsearch__.client.indices.exists?(index: Link.index_name)).to be(false)
+    expect(Link.__elasticsearch__.client.indices.exists?(index: original_name)).to be(true)
   end
 
   it "preserves the cap and creation ordering" do

@@ -8,6 +8,8 @@ class ProductOfferCodeIndexingService
   def perform
     return if @products.empty?
 
+    raise Elasticsearch::Transport::Transport::Errors::NotFound, "index_not_found_exception" unless Link.__elasticsearch__.client.indices.exists?(index: Link.index_name)
+
     product_ids = @products.map(&:id)
     universal_codes = OfferCode.alive.universal.where(user_id: @products.map(&:user_id).uniq).to_a.group_by(&:user_id)
     product_codes = OfferCode.alive.joins(:products).where(links: { id: product_ids })
@@ -28,8 +30,9 @@ class ProductOfferCodeIndexingService
       begin
         product.__elasticsearch__.update_document_attributes("offer_codes" => values)
       rescue Elasticsearch::Transport::Transport::Errors::NotFound => error
-        # A deleted search document must not strand the rest of the catalogue.
         raise unless error.message.include?("document_missing_exception")
+
+        product.__elasticsearch__.index_document unless product.deleted?
       end
     end
   end

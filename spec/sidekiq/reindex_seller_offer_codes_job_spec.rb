@@ -186,8 +186,28 @@ describe ReindexSellerOfferCodesJob do
     described_class.enqueue(seller.id)
     described_class.clear
     described_class.sidekiq_retries_exhausted_block.call({ "args" => [seller.id] }, RuntimeError.new)
-    expect(described_class).to have_enqueued_sidekiq_job(seller.id).at(1.hour.from_now)
+    expect(ReindexSellerOfferCodesRecoveryJob).to have_enqueued_sidekiq_job(seller.id).at(1.hour.from_now)
     expect($redis.get("#{key}:version")).to eq("1")
+  end
+
+  it "schedules exhaustion recovery even while the failed job holds its unique lock" do
+    SidekiqUniqueJobs.use_config(enabled: true) do
+      described_class.enqueue(seller.id)
+      described_class.clear
+      described_class.sidekiq_retries_exhausted_block.call({ "args" => [seller.id] }, RuntimeError.new)
+      expect(ReindexSellerOfferCodesRecoveryJob.jobs.size).to eq(1)
+      expect(ReindexSellerOfferCodesRecoveryJob.jobs.first["lock"]).to be_nil
+    end
+  end
+
+  it "skips deleted catalogue rows without consuming batch capacity" do
+    deleted = create_list(:product, 3, user: seller)
+    deleted.each { _1.update_columns(deleted_at: Time.current) }
+    active = create(:product, user: seller)
+    described_class.enqueue(seller.id)
+    expect(ProductOfferCodeIndexingService).to receive(:new).with([active]).and_call_original
+    run_batch
+    expect($redis.get("#{key}:version")).to be_nil
   end
 
   it "updates only targeted products and preserves an in-flight targeted edit" do
@@ -204,7 +224,7 @@ describe ReindexSellerOfferCodesJob do
     described_class.enqueue_products(seller.id, [products.last.id])
     allow_any_instance_of(ProductOfferCodeIndexingService).to receive(:perform) { code.update!(code: "AFTER") }
     run_batch
-    expect($redis.hkeys("#{key}:products")).to eq([products.last.id.to_s])
+    expect($redis.zrange("#{key}:products", 0, -1)).to eq([products.last.id.to_s])
   end
 
   it "advances the catalogue despite a targeted edit before every execution" do
@@ -241,9 +261,22 @@ describe ReindexSellerOfferCodesJob do
       raise ActiveRecord::Rollback
     end
     code.reload.update!(products: [products.last])
-    expect($redis.hkeys("#{key}:products")).to include(products.last.id.to_s)
+    expect($redis.zrange("#{key}:products", 0, -1)).to include(products.last.id.to_s)
     3.times { run_batch }
     expect(products.last.__elasticsearch__.client.get(index: Link.index_name, id: products.last.id).dig("_source", "offer_codes")).to include(code.code)
+  end
+
+  it "moves hot targeted products behind older pending work" do
+    products = create_list(:product, 5, user: seller)
+    described_class.enqueue_products(seller.id, products.map(&:id))
+    processed = []
+    allow(ProductOfferCodeIndexingService).to receive(:new).and_wrap_original do |original, batch|
+      processed.concat(batch.map(&:id))
+      described_class.enqueue_products(seller.id, batch.map(&:id))
+      original.call(batch)
+    end
+    3.times { run_batch }
+    expect(processed.uniq).to match_array(products.map(&:id))
   end
 
   it "preserves an edit arriving during the final batch" do
