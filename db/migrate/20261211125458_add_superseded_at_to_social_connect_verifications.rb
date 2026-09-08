@@ -1,8 +1,7 @@
 # frozen_string_literal: true
 
-# Main already records a future schema version, so this timestamp must sort
-# after it; the time component is the real UTC authoring time, so parallel
-# branches do not collide on a shared hand-picked value.
+# Timestamp sorts after main's future schema version; real UTC authoring time
+# so parallel branches do not collide on a hand-picked value.
 class AddSupersededAtToSocialConnectVerifications < ActiveRecord::Migration[7.1]
   def up
     change_table :social_connect_verifications, bulk: true do |t|

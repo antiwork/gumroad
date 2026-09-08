@@ -96,18 +96,13 @@ class SocialConnectVerification < ApplicationRecord
     )
   end
 
-  # Re-verifying the same identity refreshes it in place. Connecting a
-  # different identity supersedes the live row instead of overwriting its uid,
-  # so the old identity keeps vouching (or vetoing) across accounts. After a
-  # soft-supersede with no current row (e.g. Meta deauthorize), reconnecting
-  # revives the matching prior row so the unique [user, platform, uid] index
-  # is not tripped.
+  # Same identity refreshes in place; a different one supersedes so the old
+  # uid keeps vetoing. After soft-supersede, reconnect revives the matching
+  # prior row to avoid unique [user, platform, uid].
   def self.record!(user, platform, uid, **attributes)
     transaction do
-      # SELECT FOR UPDATE on a fresh row — callers (e.g. query_twitter) often
-      # pass a dirty User, and User#with_lock raises before yielding on those.
-      # Serializes concurrent OAuth callbacks now that [user_id, platform] is
-      # no longer uniquely constrained to one current row.
+      # Lock a fresh User: callers often pass a dirty User (with_lock raises),
+      # and [user_id, platform] is no longer uniquely one current row.
       User.lock.find(user.id)
       verification = current.find_or_initialize_by(user:, platform:)
       if verification.persisted? && verification.uid != uid
