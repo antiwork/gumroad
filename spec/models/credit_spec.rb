@@ -502,8 +502,14 @@ describe Credit do
                                       .and_return(double(id: "tr_us_fee_legacy"))
 
         credit = Credit.create_for_refund_fee_retention!(refund:)
-        # Simulate pre-patch US success: ledger complete, marker never recorded.
-        refund.update!(debited_stripe_transfer: nil)
+        # Simulate pre-patch US success: ledger complete, no debit marker or retry metadata.
+        refund.update!(
+          debited_stripe_transfer: nil,
+          refund_fee_debit_operation: nil,
+          refund_fee_debit_amount_cents: nil,
+          refund_fee_debit_submitted_at: nil,
+          refund_fee_debit_generation: nil
+        )
         expect(credit.reload.balance_id).to be_present
 
         expect(Stripe::Transfer).not_to receive(:create)

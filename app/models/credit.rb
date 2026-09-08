@@ -356,33 +356,43 @@ class Credit < ApplicationRecord
         return
       end
 
-      credit = new
-      credit.user = purchase.seller
-      credit.amount_cents = (application_fee_refundable_portion * (refund.amount_cents.to_f / purchase.price_cents)).round
-      credit.merchant_account = MerchantAccount.gumroad(StripeChargeProcessor.charge_processor_id)
-      credit.fee_retention_refund = refund
+      credit = nil
+      purchase.with_lock do
+        refund.reload.lock!
+        return if refund.balance_reversed_on_failure
 
-      # requires_new: callers (Charge#refund_and_save!, processor webhook with_lock) may
-      # still hold an open transaction. A nested join would let an outer rescue commit a
-      # half-written credit if balance creation failed after credit.save!.
-      transaction(requires_new: true) do
-        credit.save!
+        existing = where(user_id: purchase.seller_id, fee_retention_refund: refund, failed_refund_id: nil).first
+        if existing
+          clear_refund_fee_retention_pending!(refund)
+          return existing
+        end
 
-        balance_transaction_amount = BalanceTransaction::Amount.new(
-          currency: Currency::USD,
-          gross_cents: credit.amount_cents,
-          net_cents: credit.amount_cents
-        )
-        balance_transaction = BalanceTransaction.create!(
-          user: credit.user,
-          merchant_account: credit.merchant_account,
-          credit:,
-          issued_amount: balance_transaction_amount,
-          holding_amount: balance_transaction_amount
-        )
+        credit = new
+        credit.user = purchase.seller
+        credit.amount_cents = (application_fee_refundable_portion * (refund.amount_cents.to_f / purchase.price_cents)).round
+        credit.merchant_account = MerchantAccount.gumroad(StripeChargeProcessor.charge_processor_id)
+        credit.fee_retention_refund = refund
 
-        credit.balance = balance_transaction.balance
-        credit.save!
+        # requires_new: isolate ledger writes from any outer txn held by the caller.
+        transaction(requires_new: true) do
+          credit.save!
+
+          balance_transaction_amount = BalanceTransaction::Amount.new(
+            currency: Currency::USD,
+            gross_cents: credit.amount_cents,
+            net_cents: credit.amount_cents
+          )
+          balance_transaction = BalanceTransaction.create!(
+            user: credit.user,
+            merchant_account: credit.merchant_account,
+            credit:,
+            issued_amount: balance_transaction_amount,
+            holding_amount: balance_transaction_amount
+          )
+
+          credit.balance = balance_transaction.balance
+          credit.save!
+        end
       end
 
       clear_refund_fee_retention_pending!(refund)
