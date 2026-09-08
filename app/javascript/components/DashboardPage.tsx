@@ -583,8 +583,8 @@ export const DashboardPage = ({
                   <CardContent className="grid gap-3">
                     <h3>Connect a social account (optional)</h3>
                     <p>
-                      Your verified social history can provide context during account review. Connecting does not replace
-                      identity verification or guarantee approval or a payout date.
+                      Your verified social history can provide context during account review. Connecting does not
+                      replace identity verification or guarantee approval or a payout date.
                     </p>
                     <ul className="flex flex-wrap gap-x-6 gap-y-2">
                       {social_connections.map(({ name, connected }) => (
@@ -594,9 +594,7 @@ export const DashboardPage = ({
                       ))}
                     </ul>
                     <div>
-                      <NavigationButton href={Routes.profile_path()}>
-                        Manage social connections
-                      </NavigationButton>
+                      <NavigationButton href={Routes.profile_path()}>Manage social connections</NavigationButton>
                     </div>
                   </CardContent>
                 </Card>
