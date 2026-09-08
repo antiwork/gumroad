@@ -1,18 +1,10 @@
 # frozen_string_literal: true
 
 class ProductOfferCodeIndexingService
-  # Failures that should keep the seller scan pinned so Sidekiq can retry the
-  # same batch. Permanent per-product errors are reported and skipped instead.
-  RETRYABLE_ERRORS = [
-    Faraday::TimeoutError,
-    Faraday::ConnectionFailed,
-    Elasticsearch::Transport::Transport::Errors::RequestTimeout,
-    Elasticsearch::Transport::Transport::Errors::Conflict,
-    Elasticsearch::Transport::Transport::Errors::InternalServerError,
-    Elasticsearch::Transport::Transport::Errors::BadGateway,
-    Elasticsearch::Transport::Transport::Errors::ServiceUnavailable,
-    Elasticsearch::Transport::Transport::Errors::GatewayTimeout
-  ].freeze
+  # Transient transport statuses should keep the seller scan pinned for Sidekiq
+  # retry. Permanent per-product errors (e.g. 400) are reported and skipped.
+  # 429 arrives as a generic ServerError in elasticsearch-transport 7.x.
+  RETRYABLE_STATUS_CODES = [408, 409, 429, 500, 502, 503, 504].freeze
 
   def initialize(products)
     @products = products
@@ -65,8 +57,18 @@ class ProductOfferCodeIndexingService
 
     def report_indexing_failure(product, error)
       raise if error.is_a?(Elasticsearch::Transport::Transport::Errors::NotFound) && error.message.include?("index_not_found")
-      raise if RETRYABLE_ERRORS.any? { error.is_a?(_1) }
+      raise if retryable_indexing_error?(error)
 
       ErrorNotifier.notify(error, product_id: product.id, user_id: product.user_id)
+    end
+
+    def retryable_indexing_error?(error)
+      return true if error.is_a?(Faraday::TimeoutError) || error.is_a?(Faraday::ConnectionFailed)
+
+      status = Elasticsearch::Transport::Transport::ERRORS.key(error.class)
+      if status.nil? && error.is_a?(Elasticsearch::Transport::Transport::ServerError)
+        status = Integer(Regexp.last_match(1), 10) if error.message =~ /\A\[(\d{3})\]/
+      end
+      RETRYABLE_STATUS_CODES.include?(status)
     end
 end

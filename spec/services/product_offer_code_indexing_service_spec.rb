@@ -114,4 +114,11 @@ describe ProductOfferCodeIndexingService do
     expect(ErrorNotifier).not_to receive(:notify)
     expect { described_class.new([usd, eur]).perform }.to raise_error(Faraday::TimeoutError)
   end
+
+  it "re-raises Elasticsearch 429 throttling delivered as a generic ServerError" do
+    allow(usd.__elasticsearch__).to receive(:update_document_attributes)
+      .and_raise(Elasticsearch::Transport::Transport::ServerError, "[429] es_rejected_execution_exception")
+    expect(ErrorNotifier).not_to receive(:notify)
+    expect { described_class.new([usd, eur]).perform }.to raise_error(Elasticsearch::Transport::Transport::ServerError, /429/)
+  end
 end
