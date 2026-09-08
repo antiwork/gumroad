@@ -521,12 +521,16 @@ class Credit < ApplicationRecord
         return refund.refund_fee_holding_debit_cents.presence&.to_i
       end
       debit_amount_cents = refund.refund_fee_debit_amount_cents.presence || credit.amount_cents.abs
-      persist_refund_fee_debit_choice!(
+      claimed = persist_refund_fee_debit_choice!(
         refund,
         operation: StripeChargeProcessor::FEE_DEBIT_OP_US_DEBIT,
         amount_cents: debit_amount_cents
       )
-      debit_amount_cents = refund.reload.refund_fee_debit_amount_cents.presence || debit_amount_cents
+      return debit_stripe_account_for_retained_fee(credit) unless claimed
+      # In-memory sticky fields from the claim we just won — do not reload.
+      return debit_stripe_account_for_retained_fee(credit) unless refund.refund_fee_debit_operation == StripeChargeProcessor::FEE_DEBIT_OP_US_DEBIT
+
+      debit_amount_cents = refund.refund_fee_debit_amount_cents.presence || debit_amount_cents
       attempted_generation = refund.refund_fee_debit_generation.to_i
       transfer_options = { stripe_account: merchant_account.charge_processor_merchant_id }
       if refund.id.present?
