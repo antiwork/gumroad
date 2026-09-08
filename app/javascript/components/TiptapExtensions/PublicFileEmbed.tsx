@@ -23,7 +23,7 @@ import { Input } from "$app/components/ui/Input";
 import { Label } from "$app/components/ui/Label";
 import { Row, RowActions, RowContent, RowDetails } from "$app/components/ui/Rows";
 
-const NodeView = ({ editor, node }: NodeViewProps) => {
+const NodeView = ({ editor, node, getPos }: NodeViewProps) => {
   const uid = React.useId();
   const { files, updateFile, cancelUpload } = usePublicFilesSettings();
   const id = String(node.attrs.id);
@@ -43,7 +43,7 @@ const NodeView = ({ editor, node }: NodeViewProps) => {
     <NodeViewWrapper contentEditable={false}>
       <NodeActionsWrapper selected={selected} isEditable={editor.isEditable} asChild>
         <Row className="embed">
-          {editor.isEditable ? <NodeActionsMenu editor={editor} /> : null}
+          {editor.isEditable ? <NodeActionsMenu editor={editor} getPos={getPos} /> : null}
           <RowContent className="content">
             <FileRowContent
               extension={file.extension}

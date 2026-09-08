@@ -43,7 +43,7 @@ export const LicenseKey = TiptapNode.create({
   },
 });
 
-const LicenseKeyNodeView = ({ editor, selected }: NodeViewProps) => {
+const LicenseKeyNodeView = ({ editor, selected, getPos }: NodeViewProps) => {
   const { licenseKey, isMultiSeatLicense, seats, onIsMultiSeatLicenseChange, productId } = useLicense();
   const uid = React.useId();
 
@@ -51,7 +51,7 @@ const LicenseKeyNodeView = ({ editor, selected }: NodeViewProps) => {
     <NodeViewWrapper>
       <NodeActionsWrapper selected={selected} isEditable={editor.isEditable} asChild>
         <Row className="embed">
-          {editor.isEditable ? <NodeActionsMenu editor={editor} /> : null}
+          {editor.isEditable ? <NodeActionsMenu editor={editor} getPos={getPos} /> : null}
           <RowContent className="content" contentEditable={false}>
             <Key pack="filled" className="type-icon size-5" />
             <div>
