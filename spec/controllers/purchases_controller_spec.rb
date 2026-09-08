@@ -1791,7 +1791,8 @@ describe PurchasesController, :vcr do
 
           expect(response).to be_successful
           expect(response.body).to include("Receipt sample bundle")
-          expect(response.body).to include("View content")
+          # No live members to open, so hide View content rather than link to an empty download page.
+          expect(response.body).not_to include("View content")
         end
 
         it "does not reveal the bundle when the email does not match" do

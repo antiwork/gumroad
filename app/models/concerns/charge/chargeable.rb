@@ -126,13 +126,18 @@ module Charge::Chargeable
 
   def unbundled_purchases
     @_unbundled_purchases ||=
-      successful_purchases.map do |purchase|
-        if purchase.is_bundle_purchase?
-          purchase.product_purchases.presence || (purchase.purchase_state.in?(Purchase::ALL_SUCCESS_STATES_INCLUDING_TEST) ? [purchase] : [])
-        else
+      successful_purchases.flat_map do |purchase|
+        if !purchase.is_bundle_purchase?
           [purchase]
+        elsif purchase.product_purchases.present?
+          purchase.product_purchases
+        elsif purchase.purchase_state.in?(Purchase::ALL_SUCCESS_STATES_INCLUDING_TEST)
+          # Memberless successful bundles still need a receipt line (library does the same).
+          [purchase]
+        else
+          []
         end
-      end.flatten
+      end
   end
 
   # Used by ReceiptPresenter to render a different title for recurring subscription

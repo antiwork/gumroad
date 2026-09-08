@@ -110,7 +110,10 @@ class ReceiptPresenter::ItemInfo
       !purchase.is_gift_sender_purchase &&
       !purchase.is_preorder_authorization &&
       (purchase.url_redirect.present? || purchase.is_commission_completion_purchase?) &&
-      purchase.link.native_type != Link::NATIVE_TYPE_COFFEE
+      purchase.link.native_type != Link::NATIVE_TYPE_COFFEE &&
+      # Empty-member bundles still render on the receipt (see Chargeable#unbundled_purchases),
+      # but their download page has nothing to open. Hide the CTA rather than send buyers there.
+      !(purchase.is_bundle_purchase? && purchase.product_purchases.empty?)
     end
 
     def license_key
