@@ -230,6 +230,22 @@ module Purchase::ChargeEventsHandler
           Rails.logger.info("Skipping unverified PaymentIntent recovery for charge #{id}: #{e.message}")
         end
       end
+      promote_confirmed_setup_intents_for_client_confirmed_charge!
       Order::FinalizeConfirmedChargeService.new(order:, charge: self).perform
+    end
+
+    def promote_confirmed_setup_intents_for_client_confirmed_charge!
+      return unless is_a?(Charge)
+
+      purchases.each do |purchase|
+        card = purchase.credit_card
+        setup_intent_id = purchase.processor_setup_intent_id
+        next if card.blank? || setup_intent_id.blank? || !card.requires_mandate?
+
+        setup_intent = ChargeProcessor.get_setup_intent(purchase.merchant_account, setup_intent_id)
+        card.store_stripe_setup_intent_id!(purchase.merchant_account, setup_intent_id) if setup_intent&.succeeded?
+      end
+    rescue StandardError => e
+      ErrorNotifier.notify(e, charge_id: try(:id))
     end
 end
