@@ -1,6 +1,19 @@
 # frozen_string_literal: true
 
 class ProductOfferCodeIndexingService
+  # Failures that should keep the seller scan pinned so Sidekiq can retry the
+  # same batch. Permanent per-product errors are reported and skipped instead.
+  RETRYABLE_ERRORS = [
+    Faraday::TimeoutError,
+    Faraday::ConnectionFailed,
+    Elasticsearch::Transport::Transport::Errors::RequestTimeout,
+    Elasticsearch::Transport::Transport::Errors::Conflict,
+    Elasticsearch::Transport::Transport::Errors::InternalServerError,
+    Elasticsearch::Transport::Transport::Errors::BadGateway,
+    Elasticsearch::Transport::Transport::Errors::ServiceUnavailable,
+    Elasticsearch::Transport::Transport::Errors::GatewayTimeout
+  ].freeze
+
   def initialize(products)
     @products = products
   end
@@ -52,6 +65,7 @@ class ProductOfferCodeIndexingService
 
     def report_indexing_failure(product, error)
       raise if error.is_a?(Elasticsearch::Transport::Transport::Errors::NotFound) && error.message.include?("index_not_found")
+      raise if RETRYABLE_ERRORS.any? { error.is_a?(_1) }
 
       ErrorNotifier.notify(error, product_id: product.id, user_id: product.user_id)
     end

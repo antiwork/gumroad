@@ -95,17 +95,23 @@ describe ProductOfferCodeIndexingService do
     expect(indexed_codes(eur)).to eq(["KEEP"])
   end
 
-  it "reports a missing-document fallback failure without stopping later products" do
+  it "reports a missing-document fallback permanent failure without stopping later products" do
     products = [usd, eur]
     create(:universal_offer_code, user: seller, code: "KEEP", currency_type: nil, amount_cents: nil, amount_percentage: 10)
     usd.__elasticsearch__.delete_document
-    allow(usd.__elasticsearch__).to receive(:index_document).and_raise(Faraday::TimeoutError)
+    allow(usd.__elasticsearch__).to receive(:index_document).and_raise(Elasticsearch::Transport::Transport::Errors::BadRequest, "mapper_parsing_exception")
     expect(ErrorNotifier).to receive(:notify).with(
-      an_instance_of(Faraday::TimeoutError),
+      an_instance_of(Elasticsearch::Transport::Transport::Errors::BadRequest),
       product_id: usd.id,
       user_id: seller.id
     )
     expect { described_class.new(products).perform }.not_to raise_error
     expect(indexed_codes(eur)).to eq(["KEEP"])
+  end
+
+  it "re-raises retryable transport failures so the seller scan stays pinned" do
+    allow(usd.__elasticsearch__).to receive(:update_document_attributes).and_raise(Faraday::TimeoutError)
+    expect(ErrorNotifier).not_to receive(:notify)
+    expect { described_class.new([usd, eur]).perform }.to raise_error(Faraday::TimeoutError)
   end
 end
