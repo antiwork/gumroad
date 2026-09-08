@@ -416,7 +416,22 @@ class Credit < ApplicationRecord
     credit.fee_retention_refund = refund
 
     reversed_amount_cents_in_usd = credit.amount_cents
-    reversed_amount_cents_in_holding_currency = credit.usd_cents_to_currency(credit.merchant_account.currency, credit.amount_cents)
+    # Prefer a persisted Stripe holding amount. For BGN ledgers, estimate via EUR and the
+    # fixed BGN_PER_EUR rate — never get_rate("bgn"), which is often missing and aborts retries.
+    reversed_amount_cents_in_holding_currency = if refund.refund_fee_holding_debit_cents.present?
+      holding_abs = convert_fee_holding_cents(
+        refund.refund_fee_holding_debit_cents,
+        from_currency: refund.refund_fee_holding_debit_currency.presence || credit.merchant_account.currency,
+        to_currency: credit.merchant_account.currency
+      )
+      holding_abs.present? ? -holding_abs : nil
+    elsif credit.merchant_account.currency.to_s.casecmp?(StripeChargeProcessor::BGN)
+      eur_abs = StripeChargeProcessor.usd_cents_to_currency(Currency::EUR, credit.amount_cents.abs)
+      bgn_abs = (BigDecimal(eur_abs) * StripeChargeProcessor::BGN_PER_EUR).round
+      -bgn_abs
+    else
+      credit.usd_cents_to_currency(credit.merchant_account.currency, credit.amount_cents)
+    end
 
     # Debit Stripe before booking the ledger rows: the debit records its transfer id on the
     # refund the moment it succeeds, so a retry after a failed ledger write skips Stripe
@@ -828,9 +843,29 @@ class Credit < ApplicationRecord
           next
         end
 
+        absorbed = false
         unpaid.with_lock do
-          unpaid.increment(:holding_amount_cents, adjusted_delta)
-          unpaid.save!
+          projected_holding = unpaid.holding_amount_cents + adjusted_delta
+          # Same DESTINATION_LEDGER_NEGATIVE shape payout validation rejects: negative holding
+          # with a non-negative USD ledger. Keep reconcile pending instead of finalizing that.
+          if projected_holding.negative? && !unpaid.amount_cents.negative?
+            Rails.logger.error(
+              "Skipping fee retention holding reconcile for refund #{refund&.id}: "               "unpaid balance #{unpaid.id} cannot absorb holding delta #{adjusted_delta}"
+            )
+          else
+            unpaid.increment(:holding_amount_cents, adjusted_delta)
+            unpaid.save!
+            absorbed = true
+          end
+        end
+        unless absorbed
+          if refund.present?
+            refund.update!(
+              refund_fee_holding_reconcile_pending: true,
+              fee_retention_retry_at: 15.minutes.from_now
+            )
+          end
+          next
         end
       end
 
