@@ -503,7 +503,7 @@ class Credit < ApplicationRecord
   rescue StandardError => e
     # Persist a retryable sentinel so US failures are not mistaken for legacy-complete
     # blank-marker retentions on the next attempt.
-    record_fee_debit_marker!(refund, FEE_DEBIT_PENDING_RETRY) if refund.present? && refund.debited_stripe_transfer.blank?
+    record_pending_fee_debit_retry!(refund)
     Rails.logger.error("Failed to debit Stripe account for the retained fee of refund #{refund.id}: #{e.class}: #{e.message}")
     ErrorNotifier.notify(e, context: { refund_id: refund.id, purchase_id: refund.purchase_id, merchant_account_id: merchant_account.id })
     nil
@@ -525,6 +525,24 @@ class Credit < ApplicationRecord
     end
   end
   private_class_method :record_fee_debit_marker!
+
+  # pending_retry must not overwrite a success marker another concurrent attempt just
+  # committed. Reload under the refund lock before the blank-to-pending transition.
+  def self.record_pending_fee_debit_retry!(refund)
+    return if refund.blank?
+
+    refund.reload
+    refund.with_lock do
+      refund.reload
+      return if refund.debited_stripe_transfer.present? && refund.debited_stripe_transfer != FEE_DEBIT_PENDING_RETRY
+      return if refund.debited_stripe_transfer == FEE_DEBIT_PENDING_RETRY
+
+      transaction(requires_new: true) do
+        refund.update!(debited_stripe_transfer: FEE_DEBIT_PENDING_RETRY)
+      end
+    end
+  end
+  private_class_method :record_pending_fee_debit_retry!
 
   def self.persist_refund_fee_holding_on_credit!(refund, holding_debit_cents, currency: nil)
     return if refund.blank? || holding_debit_cents.blank?

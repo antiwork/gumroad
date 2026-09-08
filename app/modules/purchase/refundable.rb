@@ -687,11 +687,12 @@ class Purchase
     def debit_processor_fee_from_merchant_account!(refund)
       return if refund.blank?
 
-      # Serialize eligibility against HandleFailedRefundService (same purchase → refund
-      # lock order), then release before Stripe. Sticky debit choices and success markers
-      # must be real commits — nested requires_new is only a savepoint while this
-      # transaction is open, and a crash after Stripe accepts a debit would otherwise
-      # lose that proof.
+      # Intentionally after the refund transaction has committed: fee retention must never
+      # roll back a processor-successful buyer refund (private issue 2460). Serialize
+      # eligibility against HandleFailedRefundService (same purchase → refund lock order),
+      # then release before Stripe so sticky debit choices and success markers are real
+      # commits rather than savepoints. A crash here leaves a committed refund and a
+      # retryable fee; that is the accepted recovery model, not a missing atomic intent.
       fee_reversed = false
       transaction do
         reload.lock!
