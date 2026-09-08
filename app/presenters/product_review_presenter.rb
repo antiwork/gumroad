@@ -9,8 +9,6 @@ class ProductReviewPresenter
     @product_review = product_review
   end
 
-  # purchase_id authorizes review responses for the creator and is the buyer's own
-  # possession token; never expose it on anonymous/public payloads.
   def viewer_may_see_purchase_id?(viewer:, seller:)
     seller == product_review.link.user ||
       (viewer.present? && product_review.purchase.purchaser == viewer)

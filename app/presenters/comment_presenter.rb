@@ -20,7 +20,6 @@ class CommentPresenter
       author_id: author&.external_id,
       author_name: author&.display_name || comment.author_name.presence,
       author_avatar_url: author&.avatar_url || ActionController::Base.helpers.image_url("gumroad-default-avatar-5.png"),
-      # Never serialize comment.purchase — public post payloads must not leak purchase external ids.
       purchase_id: nil,
       content: {
         original: comment.content,
