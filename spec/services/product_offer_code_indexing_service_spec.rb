@@ -25,6 +25,15 @@ describe ProductOfferCodeIndexingService do
     end
   end
 
+  it "continues past a missing document but raises on a missing index" do
+    products = [usd, eur]
+    usd.__elasticsearch__.delete_document
+    expect { described_class.new(products).perform }.not_to raise_error
+    expect(indexed_codes(eur)).to eq([])
+    allow(eur.__elasticsearch__).to receive(:update_document_attributes).and_raise(Elasticsearch::Transport::Transport::Errors::NotFound, "index_not_found_exception")
+    expect { described_class.new([eur]).perform }.to raise_error(Elasticsearch::Transport::Transport::Errors::NotFound, /index_not_found/)
+  end
+
   it "preserves the cap and creation ordering" do
     stub_const("Product::Searchable::MAX_OFFER_CODES_IN_INDEX", 2)
     3.times { |i| create(:universal_offer_code, user: seller, code: "CODE#{i}", created_at: i.days.ago) }
@@ -38,10 +47,17 @@ describe ProductOfferCodeIndexingService do
     statements = []
     subscriber = ->(*args) { statements << args.last[:sql] if args.last[:sql].match?(/SELECT.*offer_codes/i) }
     ActiveSupport::Notifications.subscribed(subscriber, "sql.active_record") do
+      products.each { _1.reload.build_search_update(["offer_codes"]) }
+    end
+    before_queries = statements.size
+    before_universal = statements.grep(/NOT EXISTS/).size
+    statements.clear
+    ActiveSupport::Notifications.subscribed(subscriber, "sql.active_record") do
       described_class.new(products).perform
     end
+    expect(before_universal).to eq(products.size)
     expect(statements.size).to eq(3)
     expect(statements.grep(/NOT EXISTS/)).to be_empty
-    puts "offer-code batch: products=#{products.size}, offer-code SELECTs=#{statements.size}, per-product universal lookups=0"
+    puts "offer-code batch: products=#{products.size}, SELECTs_before=#{before_queries}, SELECTs_after=#{statements.size}, universal_lookups_before=#{before_universal}, universal_lookups_after=0"
   end
 end

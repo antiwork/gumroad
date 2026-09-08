@@ -71,13 +71,140 @@ describe ReindexSellerOfferCodesJob do
   it "does no work while another process holds the seller semaphore" do
     create(:product, user: seller)
     described_class.enqueue(seller.id)
-    semaphore = Suo::Client::Redis.new("#{key}:lock", client: $redis)
-    semaphore.lock do
-      expect(ProductOfferCodeIndexingService).not_to receive(:new)
-      job.perform(seller.id)
-    end
+    $redis.set("#{key}:lock", "another-worker", ex: 3600)
+    expect(ProductOfferCodeIndexingService).not_to receive(:new)
+    job.perform(seller.id)
+    expect($redis.get("#{key}:lock")).to eq("another-worker")
     expect(described_class.jobs.any? { _1["at"].present? }).to be(true)
     expect($redis.get("#{key}:version")).to eq("1")
+  end
+
+  it "updates old and new applicability after currency changes, exclusions, detachment and destruction" do
+    products = [create(:product, user: seller, price_cents: 1000), create(:product, user: seller, price_currency_type: "eur", price_cents: 1000)]
+    code = create(:universal_offer_code, user: seller, code: "DISCOUNT")
+    verify = lambda do
+      4.times { run_batch }
+      products.each do |product|
+        actual = product.__elasticsearch__.client.get(index: Link.index_name, id: product.id).dig("_source", "offer_codes")
+        expect(actual).to eq(product.reload.build_search_update(["offer_codes"])["offer_codes"])
+      end
+    end
+    verify.call
+    code.update!(currency_type: "eur")
+    verify.call
+    code.update!(excluded_products: [products.last])
+    verify.call
+    code.update!(excluded_products: [])
+    verify.call
+    code.update!(universal: false, products: [products.last])
+    verify.call
+    code.update!(products: [products.first], currency_type: "usd")
+    verify.call
+    code.destroy!
+    verify.call
+  end
+
+  it "coalesces repeated saves of a large catalogue without a catch-up burst" do
+    stub_const("ReindexSellerOfferCodesJob::BATCH_SIZE", 25)
+    products = create_list(:product, 1001, user: seller, price_cents: 1000)
+    code = create(:universal_offer_code, user: seller, code: "INITIAL")
+    SidekiqUniqueJobs.use_config(enabled: true) do
+      10.times { |i| code.update!(code: "SAVE#{i}") }
+      expect(described_class.jobs.count { _1["args"] == [seller.id] }).to be <= 2
+    end
+    batches = []
+    allow(ProductOfferCodeIndexingService).to receive(:new).and_wrap_original do |original, batch|
+      batches << batch.size
+      original.call(batch)
+    end
+    job.perform(seller.id)
+    20.times { job.perform(seller.id) }
+    expect(batches).to eq([25])
+    travel described_class::INTERVAL
+    41.times { run_batch }
+    expect(batches.sum).to eq(products.size)
+    expect(batches.max).to eq(25)
+    expect($redis.get("#{key}:version")).to be_nil
+    [products.first, products.last].each do |product|
+      expect(product.__elasticsearch__.client.get(index: Link.index_name, id: product.id).dig("_source", "offer_codes")).to eq(["SAVE9"])
+    end
+    puts "large catalogue: products=#{products.size}, saves=10, indexed=#{batches.sum}, batches=#{batches.size}, max_batch=#{batches.max}, catchup_batch=25"
+  end
+
+  it "serializes competing worker executions using the shared Redis semaphore" do
+    create(:product, user: seller)
+    described_class.enqueue(seller.id)
+    entered = Queue.new
+    finish = Queue.new
+    calls = Queue.new
+    allow_any_instance_of(ProductOfferCodeIndexingService).to receive(:perform) do
+      calls << true
+      entered << true
+      finish.pop
+    end
+    first = Thread.new { ActiveRecord::Base.connection_pool.with_connection { described_class.new.perform(seller.id) } }
+    entered.pop
+    second = Thread.new { described_class.new.perform(seller.id) }
+    second.value
+    expect(calls.size).to eq(1)
+  ensure
+    finish << true if finish
+    first&.value
+  end
+
+  it "admits only one simultaneous first acquisition of a missing lock" do
+    seller_id = seller.id
+    described_class.enqueue(seller_id)
+    ready = Queue.new
+    start = Queue.new
+    entered = Queue.new
+    finish = Queue.new
+    calls = Queue.new
+    allow_any_instance_of(ProductOfferCodeIndexingService).to receive(:perform) do
+      calls << true
+      entered << true
+      finish.pop
+    end
+    workers = 2.times.map do
+      Thread.new do
+        ready << true
+        start.pop
+        ActiveRecord::Base.connection_pool.with_connection { described_class.new.perform(seller_id) }
+      end
+    end
+    2.times { ready.pop }
+    2.times { start << true }
+    Timeout.timeout(5) { entered.pop }
+    Timeout.timeout(5) { Thread.pass until workers.any? { !_1.alive? } }
+    expect(calls.size).to eq(1)
+  ensure
+    2.times { finish << true } if finish
+    workers&.each(&:value)
+  end
+
+  it "resumes preserved work after retry exhaustion without a tight retry loop" do
+    described_class.enqueue(seller.id)
+    described_class.clear
+    described_class.sidekiq_retries_exhausted_block.call({ "args" => [seller.id] }, RuntimeError.new)
+    expect(described_class).to have_enqueued_sidekiq_job(seller.id).at(1.hour.from_now)
+    expect($redis.get("#{key}:version")).to eq("1")
+  end
+
+  it "updates only targeted products and preserves an in-flight targeted edit" do
+    products = create_list(:product, 3, user: seller)
+    code = create(:offer_code, user: seller, products: [products.last], code: "BEFORE")
+    processed = []
+    allow(ProductOfferCodeIndexingService).to receive(:new).and_wrap_original do |original, batch|
+      processed.concat(batch.map(&:id))
+      original.call(batch)
+    end
+    run_batch
+    expect(processed).to eq([products.last.id])
+    expect($redis.get("#{key}:version")).to be_nil
+    described_class.enqueue_products(seller.id, [products.last.id])
+    allow_any_instance_of(ProductOfferCodeIndexingService).to receive(:perform) { code.update!(code: "AFTER") }
+    run_batch
+    expect($redis.hkeys("#{key}:products")).to eq([products.last.id.to_s])
   end
 
   it "preserves an edit arriving during the final batch" do

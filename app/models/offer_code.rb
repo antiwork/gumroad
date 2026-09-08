@@ -54,6 +54,7 @@ class OfferCode < ApplicationRecord
   after_save :note_column_applicability_changes
   after_commit :repair_detached_default_discounts, if: -> { @applicability_changed }
   after_rollback :forget_applicability_changes
+  before_destroy :capture_reindex_product_ids
   after_destroy :reindex_associated_products
 
   validates_uniqueness_of :code, scope: %i[user_id deleted_at], if: :universal?, unless: :deleted?, message: "must be unique."
@@ -611,17 +612,26 @@ class OfferCode < ApplicationRecord
     end
 
     def reindex_associated_products
-      # A seller-wide pass includes former currencies, exclusions and detached products
-      # without materializing the catalogue in the save/destroy transaction.
-      seller_ids = [user_id, user_id_before_last_save].compact.uniq
+      catalogue = universal? || universal_before_last_save
+      seller_id = user_id
+      seller_ids = [seller_id, user_id_before_last_save].compact.uniq
+      product_ids = @reindex_product_ids || products.ids unless catalogue
       AfterCommitEverywhere.after_commit do
-        seller_ids.each { ReindexSellerOfferCodesJob.enqueue(_1) }
+        if catalogue
+          seller_ids.each { ReindexSellerOfferCodesJob.enqueue(_1) }
+        else
+          ReindexSellerOfferCodesJob.enqueue_products(seller_id, product_ids)
+        end
       end
     end
 
     def reindex_removed_product(product)
-      seller_id = product.user_id
-      AfterCommitEverywhere.after_commit { ReindexSellerOfferCodesJob.enqueue(seller_id) }
+      seller_id, product_id = product.user_id, product.id
+      AfterCommitEverywhere.after_commit { ReindexSellerOfferCodesJob.enqueue_products(seller_id, [product_id]) }
+    end
+
+    def capture_reindex_product_ids
+      @reindex_product_ids = products.ids unless universal?
     end
 
     def validate_not_used_as_default_discount
