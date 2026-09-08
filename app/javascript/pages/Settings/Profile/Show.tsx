@@ -528,16 +528,24 @@ export default function SettingsPage() {
                       Disconnect {creatorProfile.twitter_handle ? `${creatorProfile.twitter_handle} from X` : "X"}
                     </Button>
                   ) : (
-                    <SocialAuthButton
-                      provider="twitter"
-                      href={Routes.user_twitter_omniauth_authorize_path({
-                        state: "link_twitter_account",
-                        x_auth_access_type: "read",
-                      })}
-                    >
-                      <TwitterX pack="brands" className="size-5" />
-                      Connect to X
-                    </SocialAuthButton>
+                    <>
+                      {creatorProfile.twitter_handle ? (
+                        <Button type="button" color="twitter" onClick={handleUnlinkTwitter}>
+                          <TwitterX pack="brands" className="size-5" />
+                          Disconnect {creatorProfile.twitter_handle} from X
+                        </Button>
+                      ) : null}
+                      <SocialAuthButton
+                        provider="twitter"
+                        href={Routes.user_twitter_omniauth_authorize_path({
+                          state: "link_twitter_account",
+                          x_auth_access_type: "read",
+                        })}
+                      >
+                        <TwitterX pack="brands" className="size-5" />
+                        Connect to X
+                      </SocialAuthButton>
+                    </>
                   )}
                   {youtube_connected ? (
                     <Button type="button" color="youtube" onClick={handleUnlinkYoutube}>

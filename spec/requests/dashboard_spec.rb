@@ -84,7 +84,12 @@ describe "Dashboard", js: true, type: :system do
       expect(page).to have_current_path(profile_path)
       expect(page).to have_text("Social links")
       expect(page).to have_button("Connect to X")
+      expect(page).to have_button("Disconnect example_creator from X")
+
+      click_on "Disconnect example_creator from X"
       expect(page).not_to have_button("Disconnect example_creator from X")
+      expect(page).to have_button("Connect to X")
+      expect(seller.reload.twitter_handle).to be_nil
     end
 
     it "shows a connected account without making social connections required for checklist completion" do

@@ -52,6 +52,22 @@ describe ConnectionsController do
 
       expect(response.body).to eq({ success: false, error_message: "Failed to unlink Twitter" }.to_json)
     end
+
+    context "with handle only (no twitter_user_id)" do
+      before do
+        seller.update!(twitter_user_id: nil)
+      end
+
+      it "clears the stale handle" do
+        expect(seller.twitter_handle).to eq("gumroad")
+
+        post :unlink_twitter
+
+        seller.reload
+        expect(seller.twitter_handle).to be_nil
+        expect(response.body).to eq({ success: true }.to_json)
+      end
+    end
   end
 
   describe "POST unlink_youtube" do
