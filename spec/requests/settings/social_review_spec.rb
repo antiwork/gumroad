@@ -19,7 +19,7 @@ describe "Optional social connections during account review", type: :system, js:
     expect(page).to have_button("Connect to X")
     expect(page).not_to have_button("Connect to YouTube")
     expect(page).not_to have_button("Connect to Instagram")
-    expect(page).to have_text("Your review can continue without connecting.")
+    expect(page).to have_text("does not replace identity verification or guarantee approval or a payout date")
     within_section "Account status", section_element: :section do
       expect(page).to have_link("contact support", href: help_center_root_path)
     end

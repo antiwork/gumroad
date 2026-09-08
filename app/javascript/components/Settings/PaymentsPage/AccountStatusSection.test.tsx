@@ -41,7 +41,9 @@ describe("optional review connections", () => {
   it("keeps the ordinary review and verification paths without requiring a connection", () => {
     render(<AccountStatusSection accountStatus={status} payoutsPausedBy={null} />);
     expect(screen.getByText("Add social connections (optional)")).toBeTruthy();
-    expect(screen.getByText(/Your review can continue without connecting/u)).toBeTruthy();
+    expect(
+      screen.getByText(/share your social account history as additional context for your account review/u),
+    ).toBeTruthy();
     expect(
       screen.getByText(/does not replace identity verification or guarantee approval or a payout date/u),
     ).toBeTruthy();
@@ -78,7 +80,7 @@ describe("optional review connections", () => {
             { provider: "instagram", connected: false },
           ],
         }}
-        payoutsPausedBy="system"
+        payoutsPausedBy={null}
       />,
     );
     expect(screen.getByText("X connected")).toBeTruthy();
@@ -91,6 +93,13 @@ describe("optional review connections", () => {
     const instagramForm = submit.mock.instances[1];
     if (!(instagramForm instanceof HTMLFormElement)) throw new Error("Missing Instagram form");
     expect(instagramForm.getAttribute("action")).toBe("/users/auth/instagram");
+  });
+
+  it("hides the review notice and social prompt while the system payout pause alert is showing", () => {
+    render(<AccountStatusSection accountStatus={status} payoutsPausedBy="system" />);
+    expect(screen.getByText(/Your payouts have been paused for a security review/u)).toBeTruthy();
+    expect(screen.queryByText(status.gumroad_status ?? "")).toBeNull();
+    expect(screen.queryByText("Add social connections (optional)")).toBeNull();
   });
 
   it("does not render a prompt or social forms when the server excludes the seller", () => {

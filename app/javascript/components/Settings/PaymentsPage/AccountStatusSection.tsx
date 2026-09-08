@@ -84,6 +84,9 @@ export default function AccountStatusSection({
 
   const showPayoutPausedAlert = !accountStatus.is_suspended && payoutPausedReason;
 
+  const showReviewNotice =
+    Boolean(accountStatus.gumroad_status) && (!showPayoutPausedAlert || payoutsPausedBy !== "system");
+
   return (
     <section aria-labelledby="account-status-heading" className="flex flex-col gap-4 p-4 md:p-8">
       <h2 id="account-status-heading" className="sr-only">
@@ -168,20 +171,19 @@ export default function AccountStatusSection({
         </Alert>
       ) : null}
 
-      {accountStatus.gumroad_status && (!showPayoutPausedAlert || payoutsPausedBy !== "system") ? (
+      {showReviewNotice ? (
         <Alert role="status" variant="warning">
           {accountStatus.gumroad_status}
           <SupportLink />
         </Alert>
       ) : null}
-      {accountStatus.social_connections_for_review ? (
+      {showReviewNotice && accountStatus.social_connections_for_review ? (
         <Alert role="status" variant="info">
           <div className="flex flex-col gap-3">
             <h3 className="font-bold">Add social connections (optional)</h3>
             <p>
-              You can share your social account history as additional context for your account review. Your review can
-              continue without connecting. This does not replace identity verification or guarantee approval or a payout
-              date.
+              You can share your social account history as additional context for your account review. This does not
+              replace identity verification or guarantee approval or a payout date.
             </p>
             <div className="flex flex-wrap items-center gap-2">
               {accountStatus.social_connections_for_review.map(({ provider, connected }) =>
