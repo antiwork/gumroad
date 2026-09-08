@@ -39,20 +39,18 @@ class ProductOfferCodeIndexingService
 
   private
     def index_offer_codes(product, values)
-      begin
-        product.__elasticsearch__.update_document_attributes("offer_codes" => values)
-      rescue Elasticsearch::Transport::Transport::Errors::NotFound => error
-        raise unless error.message.include?("document_missing_exception")
+      product.__elasticsearch__.update_document_attributes("offer_codes" => values)
+    rescue Elasticsearch::Transport::Transport::Errors::NotFound => error
+      raise unless error.message.include?("document_missing_exception")
 
-        yield if block_given?
-        begin
-          product.__elasticsearch__.index_document unless product.deleted?
-        rescue => error
-          report_indexing_failure(product, error)
-        end
+      yield if block_given?
+      begin
+        product.__elasticsearch__.index_document unless product.deleted?
       rescue => error
         report_indexing_failure(product, error)
       end
+    rescue => error
+      report_indexing_failure(product, error)
     end
 
     def report_indexing_failure(product, error)
