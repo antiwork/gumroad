@@ -729,6 +729,7 @@ describe SettingsPresenter do
           compliance_actions: [],
           needs_id_upload: false,
           gumroad_status: nil,
+          social_connections_for_review: nil,
           stripe_rejected: false,
           stripe_rejected_balance_status: nil,
           stripe_rejected_formatted_balance: nil,
@@ -1370,6 +1371,7 @@ describe SettingsPresenter do
                                                                          compliance_actions: [{ message: "Complete pending verification requirements via Stripe", href: "/settings/payments/remediation" }],
                                                                          needs_id_upload: true,
                                                                          gumroad_status: "Your account is under review and payouts are on hold until it's resolved.",
+                                                                         social_connections_for_review: [{ provider: "twitter", connected: false }],
                                                                        ),
                                                                      }))
       end
@@ -1404,6 +1406,7 @@ describe SettingsPresenter do
                                                                          compliance_actions: [{ message: "Complete pending verification requirements via Stripe", href: "/settings/payments/remediation" }],
                                                                          needs_id_upload: true,
                                                                          gumroad_status: "Your account is under review and payouts are on hold until it's resolved.",
+                                                                         social_connections_for_review: [{ provider: "twitter", connected: false }],
                                                                        ),
                                                                      }))
       end

@@ -160,6 +160,7 @@ const pageProps = (userOverrides: Partial<User> = {}, complianceOverrides: Parti
     compliance_actions: [],
     needs_id_upload: false,
     gumroad_status: null,
+    social_connections_for_review: null,
     stripe_rejected: false,
     stripe_rejected_balance_status: null,
     stripe_rejected_formatted_balance: null,
