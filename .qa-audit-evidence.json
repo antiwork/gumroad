@@ -1,0 +1,43 @@
+{
+  "head": "2fc42670bb6521f58faa7614adff5cd8138f3523",
+  "runs": {
+    "state-red3": [
+      "3 examples, 1 failure"
+    ],
+    "state-green": [
+      "3 examples, 0 failures"
+    ],
+    "controller-red": [
+      "4 examples, 2 failures"
+    ],
+    "recovered-green": [
+      "4 examples, 0 failures"
+    ],
+    "suite": [
+      "128 examples, 0 failures"
+    ],
+    "mailer-controls": [
+      "16 examples, 0 failures"
+    ],
+    "capture-final": [
+      "1 example, 0 failures"
+    ]
+  },
+  "request_evidence": {
+    "head": "2fc42670bb6521f58faa7614adff5cd8138f3523",
+    "before_status": 500,
+    "after_status": 200,
+    "wrong_email_status": 302,
+    "fixture": "synthetic test-successful empty bundle with charge",
+    "delivery": false
+  },
+  "panel": {
+    "findings": [],
+    "overall_correctness": "patch is correct",
+    "overall_explanation": "Panel review complete. claude model=claude-fable-5: 0 finding(s), codex model=gpt-6-astra thinking=high: 0 finding(s).",
+    "overall_confidence": 0.93
+  },
+  "visual_audit": "Final full-page desktop/mobile and video frame inspected with vision. Synthetic Sample Creator creator@example.com; no real PII, stacks or infra. Caption moved into flow to avoid obscuring invoice. Light/dark preferences produce identical email styling; body states this. Seven GitHub attachments verified HTTP200 (six PNG and MP4).",
+  "scope": "No schema, auth or money movement changes. Keep high risk human review and no automerge.",
+  "pr_body": "## What\nPreserve successful empty bundle parents in receipt expansion, shared by Purchase and Charge. Ref antiwork/gumroad-private#2461.\n\n## Why\nAn empty bundle expands to no receipt items: the standalone receipt subject crashes and grouped receipts omit the bundle. Fall back to the parent only for `ALL_SUCCESS_STATES_INCLUDING_TEST`; standalone `successful_purchases` does not filter state. Populated bundles still expand to their children. No controller authorization, charge selection or money movement changes.\n\n## Before/After\nReal Rails receipt request, synthetic test-successful purchase with a Charge and zero bundle members: before HTTP 500; after HTTP 200 with the parent item and View content. Wrong email remains HTTP 302 without rendering the receipt. No email sent and no production data used.\n\nCaptured at `2fc42670bb6521f58faa7614adff5cd8138f3523`; before substitutes the original expansion method from the base commit. Desktop and mobile were captured under both light/dark preferences; the email template has no dark variant and renders identically under those preferences.\n\n## Test Results\n- [x] State restriction: unconditional fallback gives 3 examples, 1 failure (failed standalone); fixed gives 3 examples, 0 failures.\n- [x] Real controller + grouped mailer regression: original expansion gives 4 examples, 2 failures (nil.link_name and missing parent item); fixed gives 4 examples, 0 failures. Wrong/missing-email controls pass in both.\n- [x] Full GET receipt authorization context, chargeable, subject, presenter and receipt-job suites: 128 examples, 0 failures.\n- [x] Populated bundle, grouped receipt and multi-item paid mailer controls: 16 examples, 0 failures. Mixed grouped receipt asserts the exact purchased-item list, not recommendations.\n- [x] Ruby lint clean; original commit retained.\n- [x] Astra + Fable panel: no findings at current head.\n- [ ] Separate final QA audit.\n- [ ] Full CI (`run-all-specs`); draft while pending.\n\nPremerge review: clean @ 2fc42670bb6521f58faa7614adff5cd8138f3523\n\n## QA\n1. Create a bundle with its live member records removed, then a test purchase with an order and charge; run `create_artifacts_and_send_receipt!`. Verify the charge's successful collection contains the parent and `product_purchases` is empty.\n2. Open its receipt with the matching email: the parent bundle and View content must render. Wrong or missing email must redirect to email confirmation without rendering the mailer.\n3. Confirm populated bundles still show their member purchases, mixed grouped receipts show only successful purchased items, and a failed standalone empty bundle has no `unbundled_purchases`.\n\nGumclaw owns this draft. High risk: Gianfranco reviews when all gates pass; no automerge. Private tracker remains open until production deployment is verified.\n\n---\nAI disclosure: OpenAI GPT-6 Astra recovered the existing draft and added success-state/authorization coverage; reviewed by GPT-6 Astra and Claude Fable 5. Prompt: preserve the existing commit, restrict the empty-bundle fallback to successful states, prove receipt authorization and populated/paid controls, render synthetic evidence, and complete panel/QA/CI without automerge.\n\n![Before desktop: real receipt HTTP 500](https://github.com/user-attachments/assets/f58d17d9-0b6a-4721-9468-e885c273553a)\n\n![After desktop: successful empty bundle parent](https://github.com/user-attachments/assets/5518d819-1719-4458-8ce0-ea2e24b16534)\n\n![Before mobile: real receipt HTTP 500](https://github.com/user-attachments/assets/703afae9-1c80-4fbb-94ca-112615cdff14)\n\n![After mobile: successful empty bundle parent](https://github.com/user-attachments/assets/955688fe-71bd-4efc-89da-84f4eb7077d2)\n\n![Desktop dark preference: email retains light styling](https://github.com/user-attachments/assets/74281075-1445-4afa-93c7-1ce8ca1718b0)\n\n![Mobile dark preference: email retains light styling](https://github.com/user-attachments/assets/c4118c28-52a7-4602-827c-9d788f9ee156)\n\nhttps://github.com/user-attachments/assets/d245d14f-0623-4f60-b90c-92c1e2ecc1da"
+}
