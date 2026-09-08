@@ -151,6 +151,11 @@ class Order::ConfirmService
     def charge_setup_confirmed_purchases!(purchases)
       reference_purchase = purchases.first
       reference_purchase.with_lock do
+        # with_lock reloads only the reference: when a concurrent confirm charged or finalized
+        # this group while we waited, the sibling rows changed too, and the perform loop would
+        # otherwise feed stale in_progress copies to Purchase::ConfirmService, whose setup-only
+        # guard fails purchases whose money already moved.
+        (purchases - [reference_purchase]).each(&:reload)
         next unless reference_purchase.in_progress?
 
         if reference_purchase.processor_payment_intent.present?

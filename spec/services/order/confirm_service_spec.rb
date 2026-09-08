@@ -421,6 +421,26 @@ describe Order::ConfirmService, :vcr do
         end
       end
 
+      it "reloads the whole group when a concurrent confirm finalized it before the lock was acquired" do
+        # The loaded group is stale: another request charged and finalized these purchases
+        # between load and lock. Without reloading the siblings, Purchase::ConfirmService's
+        # setup-only guard fails purchases whose money already moved.
+        order.purchases.load
+        purchases.each do |purchase|
+          Purchase.find(purchase.id).update_columns(purchase_state: "successful", stripe_transaction_id: "ch_confirm_india")
+        end
+        expect(ChargeProcessor).not_to receive(:get_setup_intent)
+        expect(ChargeProcessor).not_to receive(:get_charge_intent)
+        expect(Charge::CreateService).not_to receive(:new)
+
+        responses, = Order::ConfirmService.new(order:, params: {}).perform
+
+        purchases.each do |purchase|
+          expect(purchase.reload.purchase_state).to eq("successful")
+          expect(responses[purchase.id]).to eq(purchase.purchase_response)
+        end
+      end
+
       it "fails the group without charging when the SetupIntent did not succeed" do
         setup_intent = instance_double(StripeSetupIntent, succeeded?: false)
         allow(ChargeProcessor).to receive(:get_setup_intent).and_return(setup_intent)
