@@ -183,6 +183,7 @@ export const startOrderCreation = async (
   // Hoisted so the catch-path recovery confirm can keep create-time failures retryable.
   const createFailures: CartPurchaseResult["lineItems"] = {};
   let retryOfferCodes = activeOfferCodes;
+  let lastAuthError: StripeError | undefined;
   try {
     const response = await createOrder(requestData);
     if (!response.success) {
@@ -227,6 +228,7 @@ export const startOrderCreation = async (
           : await stripe.confirmCardSetup(intentLineItem.client_secret);
         if (stripeResult.error) {
           stripeError = stripeResult.error;
+          lastAuthError = stripeResult.error;
           break;
         }
         anyIntentConfirmed = true;
@@ -273,6 +275,7 @@ export const startOrderCreation = async (
             : await stripe.confirmCardSetup(intentLineItem.client_secret);
           if (stripeResult.error) {
             followOnError = stripeResult.error;
+            lastAuthError = stripeResult.error;
             break;
           }
           anyIntentConfirmed = true;
@@ -293,6 +296,29 @@ export const startOrderCreation = async (
         // anyIntentConfirmed suppresses stripe_error.
         if (followOnError) break;
       }
+      for (const [, lineItem] of Object.entries(orderConfirmResponse.line_items)) {
+        if ("processing" in lineItem && lineItem.success) processingPermalinks.add(lineItem.permalink);
+      }
+      const leftoverScaAfterConfirm = Object.values(orderConfirmResponse.line_items).filter(doesLineItemRequireSCA);
+      // A processing sibling must not leave an uncharged setup group in_progress forever: cancel
+      // it so the buyer can retry that line without colliding with not_double_charged.
+      if (leftoverScaAfterConfirm.length > 0 && processingPermalinks.size > 0) {
+        orderConfirmResponse = await confirmOrderAfterAction({
+          orderId,
+          clientSecret:
+            leftoverScaAfterConfirm[0]?.client_secret ?? firstLineItemRequiringSCA.client_secret,
+          stripeError:
+            lastAuthError ??
+            ({
+              type: "validation_error",
+              message: "Authentication required.",
+              code: "authentication_required",
+            } as StripeError),
+          retryOfferCodes: retryOfferCodeCandidates(requestData, retryOfferCodes),
+          buyerCurrencyQuote: requestData.buyerCurrencyQuote,
+        });
+        confirmOrderPosted = true;
+      }
       const confirmLineItems: Record<LineItemUid, ConfirmedPurchaseResponse | PurchaseErrorResponse> = {};
       // A processing line item means its group's charge is created and the debit scheduled —
       // it must leave the cart (resubmitting risks a second charge), so it is excluded here
@@ -305,9 +331,20 @@ export const startOrderCreation = async (
           continue;
         }
         if (doesLineItemRequireSCA(lineItem)) {
-          // Sibling debit already scheduled: do not convert leftover setup into a retryable
-          // failure. A fresh checkout hits not_double_charged while this purchase stays
-          // in_progress and keeps inventory/discounts reserved. Leave it on the existing order.
+          if (lineItem.permalink) {
+            confirmLineItems[uid] = {
+              success: false,
+              error_message: "Authentication required.",
+              permalink: lineItem.permalink,
+              name: "",
+              formatted_price: "",
+              error_code: "requires_authentication",
+              is_tax_mismatch: false,
+              card_country: null,
+              ip_country: null,
+              updated_product: null,
+            };
+          }
           continue;
         }
         confirmLineItems[uid] = lineItem;
@@ -378,16 +415,51 @@ export const startOrderCreation = async (
           retryOfferCodes: retryOfferCodeCandidates(requestData, retryOfferCodes),
           buyerCurrencyQuote: requestData.buyerCurrencyQuote,
         });
+        let recoveryResponseMutable = recoveryResponse;
+        const recoveryProcessingProbe = new Set<string>();
+        for (const lineItem of Object.values(recoveryResponseMutable.line_items)) {
+          if ("processing" in lineItem) recoveryProcessingProbe.add(lineItem.permalink);
+        }
+        const recoveryLeftoverSca = Object.values(recoveryResponseMutable.line_items).filter(doesLineItemRequireSCA);
+        if (recoveryLeftoverSca.length > 0 && recoveryProcessingProbe.size > 0) {
+          recoveryResponseMutable = await confirmOrderAfterAction({
+            orderId: pendingOrderId,
+            clientSecret: recoveryLeftoverSca[0]?.client_secret ?? pendingClientSecret,
+            stripeError:
+              lastAuthError ??
+              ({
+                type: "validation_error",
+                message: "Authentication required.",
+                code: "authentication_required",
+              } as StripeError),
+            retryOfferCodes: retryOfferCodeCandidates(requestData, retryOfferCodes),
+            buyerCurrencyQuote: requestData.buyerCurrencyQuote,
+          });
+        }
+        const recoveryResponseFinal = recoveryResponseMutable;
         const recoveryProcessing = new Set<string>();
         const recoveryConfirmItems: Record<LineItemUid, ConfirmedPurchaseResponse | PurchaseErrorResponse> = {};
-        for (const [uid, lineItem] of Object.entries(recoveryResponse.line_items)) {
+        for (const [uid, lineItem] of Object.entries(recoveryResponseFinal.line_items)) {
           if ("processing" in lineItem) {
             recoveryProcessing.add(lineItem.permalink);
             continue;
           }
           if (doesLineItemRequireSCA(lineItem)) {
-            // Same as the happy path: leftover setup must stay on this order when another
-            // group's debit is already processing.
+            const permalink = lineItem.permalink;
+            if (permalink) {
+              recoveryConfirmItems[uid] = {
+                success: false,
+                error_message: "Authentication required.",
+                permalink,
+                name: "",
+                formatted_price: "",
+                error_code: "requires_authentication",
+                is_tax_mismatch: false,
+                card_country: null,
+                ip_country: null,
+                updated_product: null,
+              };
+            }
             continue;
           }
           recoveryConfirmItems[uid] = lineItem;
@@ -411,12 +483,12 @@ export const startOrderCreation = async (
           }),
         );
         if (recoveryProcessing.size > 0) {
-          throwPaymentProcessingOutcome(requestData, retryableLineItems, recoveryResponse.offer_codes);
+          throwPaymentProcessingOutcome(requestData, retryableLineItems, recoveryResponseFinal.offer_codes);
         }
         return ensureValidCartResult(requestData, {
           lineItems: recoveryLineItems,
           canBuyerSignUp: false,
-          offerCodes: offerCodesForFailedLineItems(requestData, recoveryLineItems, recoveryResponse.offer_codes),
+          offerCodes: offerCodesForFailedLineItems(requestData, recoveryLineItems, recoveryResponseFinal.offer_codes),
         });
       } catch (resumeError) {
         if (resumeError instanceof PaymentConfirmedError) throw resumeError;

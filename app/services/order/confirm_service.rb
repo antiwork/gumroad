@@ -291,6 +291,7 @@ class Order::ConfirmService
           purchase.errors.clear
           purchase.error_code = nil
           purchase.stripe_error_code = nil
+          purchase.update!(stripe_status: StripeIntentStatus::PROCESSING) if purchase.stripe_status.blank?
           setup_charge_results[purchase.id] = :pending
         end
         ReconcileClientConfirmedChargeJob.perform_in(30.seconds, existing_charge.id)
@@ -344,6 +345,9 @@ class Order::ConfirmService
             purchase.errors.clear
             purchase.error_code = nil
             purchase.stripe_error_code = nil
+            # payment_settling requires a non-null stripe_status; without it another cart can
+            # double-charge once the short duplicate window expires while reconciliation lags.
+            purchase.update!(stripe_status: StripeIntentStatus::PROCESSING) if purchase.stripe_status.blank?
             setup_charge_results[purchase.id] = :pending
           end
           charge.update!(client_confirmed: true)

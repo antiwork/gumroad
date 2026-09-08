@@ -1946,12 +1946,41 @@ describe("startOrderCreation", () => {
           can_buyer_sign_up: false,
           offer_codes: [],
         }),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({
+          success: true,
+          line_items: {
+            [firstLine.uid]: { success: true, processing: true, permalink: firstLine.permalink },
+            [secondLine.uid]: {
+              success: false,
+              error_message: "Authentication required.",
+              permalink: secondLine.permalink,
+              name: "",
+              formatted_price: "",
+              error_code: "requires_authentication",
+              is_tax_mismatch: false,
+              card_country: null,
+              ip_country: null,
+              updated_product: null,
+            },
+          },
+          can_buyer_sign_up: false,
+          offer_codes: [],
+        }),
       );
 
-    await expect(startOrderCreation(twoSellerRequestData, [])).rejects.toBeInstanceOf(PaymentConfirmedError);
+    const processingError = await startOrderCreation(twoSellerRequestData, []).then(
+      () => null,
+      (error: unknown) => error,
+    );
+    expect(processingError).toBeInstanceOf(PaymentConfirmedError);
+    expect((processingError as PaymentConfirmedError).retryable?.lineItems[secondLine.uid]).toMatchObject({
+      success: false,
+    });
 
-    // Create + first confirm + one follow-on confirm. A tight loop would keep POSTing confirm.
-    expect(requestMock).toHaveBeenCalledTimes(3);
+    // Create + first confirm + follow-on confirm + cancel leftover setup so B is retryable.
+    expect(requestMock).toHaveBeenCalledTimes(4);
     expect(stripe.confirmCardSetup).toHaveBeenCalledTimes(2);
   });
 

@@ -75,11 +75,18 @@ class ReconcileClientConfirmedChargeJob
         {}
       end
       created_gte = [charge.created_at.to_i - 120, 0].max
-      intents = Stripe::PaymentIntent.list(
-        { created: { gte: created_gte }, limit: 100 },
-        stripe_opts
-      )
-      match = intents.data.find { |intent| intent.transfer_group.to_s == transfer_group.to_s }
-      match&.id
+      list_params = { created: { gte: created_gte }, limit: 100 }
+      intents = Stripe::PaymentIntent.list(list_params, stripe_opts)
+      loop do
+        match = intents.data.find { |intent| intent.transfer_group.to_s == transfer_group.to_s }
+        return match.id if match.present?
+        break unless intents.respond_to?(:has_more) && intents.has_more && intents.data.present?
+
+        intents = Stripe::PaymentIntent.list(
+          list_params.merge(starting_after: intents.data.last.id),
+          stripe_opts
+        )
+      end
+      nil
     end
 end
