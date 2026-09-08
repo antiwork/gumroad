@@ -111,6 +111,38 @@ describe "config/database.yml replica routing" do
     expect(replica.fetch("username")).to eq(ENV.fetch("DATABASE_USERNAME"))
   end
 
+  # Half a group used to raise KeyError on the NAME fetch. One ERB pass renders
+  # every environment, so this aborted boot even for processes that never read
+  # the environment holding the incomplete group.
+  %w[NAME USERNAME HOST].each do |only_key|
+    it "falls back to the primary when only DATABASE_REPLICA2_#{only_key} is set" do
+      ENV["USE_DB_WORKER_REPLICAS"] = "true"
+      %w[NAME USERNAME PASSWORD HOST].each { |key| ENV.delete("DATABASE_REPLICA2_#{key}") }
+      ENV["DATABASE_REPLICA2_#{only_key}"] = "partial-staging"
+
+      replica = parsed_config.fetch("staging").fetch("primary_replica")
+
+      expect(replica.fetch("host")).to eq(ENV.fetch("DATABASE_HOST"))
+      expect(replica.fetch("database")).to eq(ENV.fetch("DATABASE_NAME"))
+      expect(replica.fetch("username")).to eq(ENV.fetch("DATABASE_USERNAME"))
+    end
+  end
+
+  it "keeps a complete replica group when another environment's group is incomplete" do
+    ENV["USE_DB_WORKER_REPLICAS"] = "true"
+    ENV["DATABASE_WORKER_REPLICA1_NAME"] = "gumroad_replica"
+    ENV["DATABASE_WORKER_REPLICA1_USERNAME"] = "replica_user"
+    ENV["DATABASE_WORKER_REPLICA1_PASSWORD"] = "replica_pass"
+    ENV["DATABASE_WORKER_REPLICA1_HOST"] = "worker-replica-1.example"
+    %w[NAME USERNAME PASSWORD].each { |key| ENV.delete("DATABASE_REPLICA2_#{key}") }
+    ENV["DATABASE_REPLICA2_HOST"] = "partial-staging.example"
+
+    config = parsed_config
+
+    expect(config.fetch("production").fetch("primary_replica").fetch("host")).to eq("worker-replica-1.example")
+    expect(config.fetch("staging").fetch("primary_replica").fetch("host")).to eq(ENV.fetch("DATABASE_HOST"))
+  end
+
   it "ignores retired worker replica hosts in lag monitoring" do
     constants = Rails.root.join("config/initializers/004_constants.rb").read
     definition = constants[/REPLICAS_HOSTS = .*?(?=\n\n)/m]

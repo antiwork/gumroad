@@ -236,7 +236,7 @@ class BalanceTransaction < ApplicationRecord
   # Creates a balance if one does not already exists.
   # Returns the balance found or created.
   def find_or_create_balance
-    # Working around Octopus choosing the slave db for all selects, even the ones with "FOR UPDATE"
+    # Find-then-create against a lagging replica mints a duplicate Balance for the day.
     ApplicationRecord.connected_to(role: :writing) do
       unpaid_balances = Balance.where(
         user:,

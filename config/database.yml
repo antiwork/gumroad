@@ -82,7 +82,19 @@ test:
     of per group would pair a replica host with primary credentials. Same shape
     as database.branch-app.yml, which points the replica at the primary's host
     for the same reason. %>
-<% replica_env = ->(prefix) { ENV["#{prefix}_HOST"].present? ? prefix : "DATABASE" } %>
+<%# A group is present only if all of it is. One ERB pass renders every
+    environment, so keying the fallback on HOST alone let a half-provisioned
+    staging group abort production worker boot on the NAME fetch below. Warn
+    rather than fall back silently — losing read offloading with no signal is
+    its own failure. PASSWORD is excluded: blank is legitimate. %>
+<% replica_env = lambda do |prefix|
+     keys = %w[NAME USERNAME HOST]
+     present = keys.select { |key| ENV["#{prefix}_#{key}"].present? }
+     next prefix if present.size == keys.size
+
+     warn("[database.yml] Ignoring #{prefix}: missing #{(keys - present).join(", ")}. Reads will use the primary.") if present.any?
+     "DATABASE"
+   end %>
 <% if replicas_enabled %>
 <% staging_replica = replica_env.call("DATABASE_REPLICA2") %>
 <% production_replica = replica_env.call("DATABASE_WORKER_REPLICA1") %>
