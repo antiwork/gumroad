@@ -1160,7 +1160,7 @@ describe("Product Edit Rich Text Editor", type: :system, js: true) do
       expect(page).to have_alert(text: 'Moved "First file" to "Folder 1".')
 
       within find_embed(name: "File to delete").hover do
-        find_button("Actions").click(x: 2, y: 2)
+        find_button("Actions").click(x: 4, y: 4, offset: :top_left)
       end
       page.document.click_on "Delete"
       expect(page).to_not have_embed(name: "File to delete")
