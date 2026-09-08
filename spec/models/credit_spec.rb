@@ -297,6 +297,26 @@ describe Credit do
     let!(:purchase) { create(:purchase, succeeded_at: 3.days.ago, link: create(:product, user: creator), merchant_account:) }
     let!(:refund) { create(:refund, purchase:, fee_cents: 100) }
 
+    context "when Stripe fee collection fails" do
+      let!(:merchant_account) { create(:merchant_account, user: creator, country: "BG", currency: "usd") }
+
+      it "keeps the credit and balance debit when Stripe fee collection fails" do
+        error = Stripe::InvalidRequestError.new("Account debit is not permitted", nil)
+        expect(StripeChargeProcessor).to receive(:debit_stripe_account_for_refund_fee).and_raise(error)
+        expect(ErrorNotifier).to receive(:notify).with(error, context: { refund_id: refund.id, purchase_id: purchase.id })
+
+        credit = Credit.create_for_refund_fee_retention!(refund:)
+
+        expect(credit.reload.amount_cents).to eq(-33)
+        expect(credit.balance_transaction.issued_amount_net_cents).to eq(-33)
+        expect(credit.balance_transaction.holding_amount_net_cents).to eq(-33)
+        expect(credit.balance).to eq(credit.balance_transaction.balance)
+        expect(creator.reload.unpaid_balance_cents).to eq(-33)
+        expect(refund.reload.fee_retention_pending).to be(true)
+        expect(refund.retained_fee_cents).to eq(33)
+      end
+    end
+
     it "assigns the refund as fee_retention_refund" do
       expect(Stripe::Transfer).to receive(:create).and_call_original
       credit = Credit.create_for_refund_fee_retention!(refund:)
