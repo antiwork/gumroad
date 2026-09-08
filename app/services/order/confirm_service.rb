@@ -263,6 +263,9 @@ class Order::ConfirmService
             purchase.errors.clear
             purchase.error_code = nil
             purchase.stripe_error_code = nil
+            # Skip Purchase::ConfirmService's setup-only failure path; keep these pending for
+            # webhook / sync recovery if Stripe accepted the debit before the response was lost.
+            setup_charge_results[purchase.id] = :pending
           end
           # client_confirmed routes payment_intent.succeeded / payment_failed webhooks into the
           # async finalize rails if the lost response actually created a debit.

@@ -360,19 +360,54 @@ export const startOrderCreation = async (
     }
     if (anyIntentConfirmed && pendingOrderId && pendingClientSecret) {
       try {
-        await confirmOrderAfterAction({
+        const recoveryResponse = await confirmOrderAfterAction({
           orderId: pendingOrderId,
           clientSecret: pendingClientSecret,
           stripeError: undefined,
           retryOfferCodes: retryOfferCodeCandidates(requestData, retryOfferCodes),
           buyerCurrencyQuote: requestData.buyerCurrencyQuote,
         });
+        const recoveryProcessing = new Set<string>();
+        const recoveryConfirmItems: Record<LineItemUid, ConfirmedPurchaseResponse | PurchaseErrorResponse> = {};
+        for (const [uid, lineItem] of Object.entries(recoveryResponse.line_items)) {
+          if ("processing" in lineItem) {
+            recoveryProcessing.add(lineItem.permalink);
+            continue;
+          }
+          if (doesLineItemRequireSCA(lineItem)) continue;
+          recoveryConfirmItems[uid] = lineItem;
+        }
+        const recoveryConfirmResults = Object.values(recoveryConfirmItems);
+        const recoveryLineItems = requestData.lineItems.reduce<CartPurchaseResult["lineItems"]>((items, lineItem) => {
+          const resultItem =
+            recoveryConfirmItems[lineItem.uid] ??
+            recoveryConfirmResults.find((item) => item.permalink === lineItem.permalink);
+          if (resultItem) items[lineItem.uid] = resultItem;
+          return items;
+        }, {});
+        const retryableLineItems = Object.fromEntries(
+          requestData.lineItems.flatMap((lineItem) => {
+            const resultItem = recoveryLineItems[lineItem.uid];
+            if (!resultItem || resultItem.success) return [];
+            const explicit = recoveryConfirmItems[lineItem.uid];
+            if (!explicit && recoveryProcessing.has(lineItem.permalink)) return [];
+            return [[lineItem.uid, resultItem] as const];
+          }),
+        );
+        if (recoveryProcessing.size > 0) {
+          throwPaymentProcessingOutcome(requestData, retryableLineItems, recoveryResponse.offer_codes);
+        }
+        return ensureValidCartResult(requestData, {
+          lineItems: recoveryLineItems,
+          canBuyerSignUp: false,
+          offerCodes: offerCodesForFailedLineItems(requestData, recoveryLineItems, recoveryResponse.offer_codes),
+        });
       } catch (resumeError) {
         if (resumeError instanceof PaymentConfirmedError) throw resumeError;
         // eslint-disable-next-line no-console
         console.error("Error resuming order after setup confirmation", resumeError);
+        throw new PaymentConfirmedError();
       }
-      throw new PaymentConfirmedError();
     }
     if (pendingOrderId) {
       const unavailableOncePerCartIds = await reportClientConfirmError(

@@ -92,10 +92,11 @@ class FailAbandonedPurchaseWorker
     end
 
     def shared_setup_intent_still_needed?
-      siblings = Purchase.where(processor_setup_intent_id: purchase.processor_setup_intent_id)
-                         .where.not(id: purchase.id)
-                         .where(purchase_state: "in_progress")
-      siblings.any? { |p| p.created_at + ChargeProcessor::TIME_TO_COMPLETE_SCA > Time.current }
+      Purchase.where(processor_setup_intent_id: purchase.processor_setup_intent_id)
+              .where.not(id: purchase.id)
+              .where(purchase_state: "in_progress")
+              .where("created_at > ?", ChargeProcessor::TIME_TO_COMPLETE_SCA.ago)
+              .exists?
     end
 
     def cancel_setup_intent
