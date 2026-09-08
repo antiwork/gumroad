@@ -483,9 +483,10 @@ class Charge::CreateService
     stripe_fx_quote_id = presentment_args[:stripe_fx_quote_id]
     return "buyer-currency-charge-#{charge.external_id}-#{stripe_fx_quote_id}" if stripe_fx_quote_id.present?
 
-    # Only after an uncertain prior attempt (client_confirmed without a stored PI). A blanket
-    # off-session key would replay declines for 24h on the same charge row and lock the buyer out.
-    if charge.client_confirmed? && off_session && !setup_future_charges
+    # ConfirmService resume charges always key by charge id so a lost first response and a
+    # concurrent retry share one Stripe PaymentIntent. Ordinary create-time off-session
+    # charges omit this flag so a declined card can be retried on the same charge row.
+    if params[:setup_confirmed_resume] && off_session && !setup_future_charges
       return "setup-confirmed-charge-#{charge.external_id}"
     end
 

@@ -353,13 +353,10 @@ export const startOrderCreation = async (
     // Treat parsing errors, timeout, etc as failed purchase, but print a log entry
     // eslint-disable-next-line no-console
     console.error("Error occurred processing order", error);
-    // A lost confirm response after charge creation, a captured PaymentIntent, or a
-    // create-time processing debit cannot rule out money movement. SetupIntent confirmation
-    // alone is not enough: resume via confirm_order first when we never posted it.
-    if (confirmOrderPosted || anyPaymentIntentConfirmed || processingPermalinks.size > 0) {
-      throw new PaymentConfirmedError();
-    }
-    if (anyIntentConfirmed && pendingOrderId && pendingClientSecret) {
+    // SetupIntent confirmation alone is not enough: resume via confirm_order first when we
+    // never posted it — even if another group is already processing or a PaymentIntent was
+    // confirmed — so confirmed setups still create their charges before the pending outcome.
+    if (anyIntentConfirmed && pendingOrderId && pendingClientSecret && !confirmOrderPosted) {
       try {
         const recoveryResponse = await confirmOrderAfterAction({
           orderId: pendingOrderId,
@@ -410,6 +407,9 @@ export const startOrderCreation = async (
         console.error("Error resuming order after setup confirmation", resumeError);
         throw new PaymentConfirmedError();
       }
+    }
+    if (confirmOrderPosted || anyPaymentIntentConfirmed || processingPermalinks.size > 0) {
+      throw new PaymentConfirmedError();
     }
     if (pendingOrderId) {
       const unavailableOncePerCartIds = await reportClientConfirmError(

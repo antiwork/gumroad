@@ -103,22 +103,33 @@ class StripeChargeableCreditCard
   def bind_connected_setup_intent_payment_method!
     return false if @stripe_setup_intent_id.blank? || !@merchant_account&.is_a_stripe_connect_account?
 
-    with_stripe_error_handler do
-      setup_intent = Stripe::SetupIntent.retrieve(
-        @stripe_setup_intent_id,
-        { stripe_account: @merchant_account.charge_processor_merchant_id }
-      )
-      payment_method_id = setup_intent.payment_method
-      payment_method_id = payment_method_id.id if payment_method_id.respond_to?(:id)
-      return false if payment_method_id.blank?
+    begin
+      with_stripe_error_handler do
+        setup_intent = Stripe::SetupIntent.retrieve(
+          @stripe_setup_intent_id,
+          { stripe_account: @merchant_account.charge_processor_merchant_id }
+        )
+        payment_method_id = setup_intent.payment_method
+        payment_method_id = payment_method_id.id if payment_method_id.respond_to?(:id)
+        return false if payment_method_id.blank?
 
-      use_connected_account_payment_method!(payment_method_id)
-      @payment_method_on_connect_account = Stripe::PaymentMethod.retrieve(
-        payment_method_id,
-        { stripe_account: @merchant_account.charge_processor_merchant_id }
-      )
-      update_card_details
-      true
+        stripe_account = { stripe_account: @merchant_account.charge_processor_merchant_id }
+        payment_method = Stripe::PaymentMethod.retrieve(payment_method_id, stripe_account)
+        # Unattached Connect clones are consumed by the first charge. Attach to a Customer on
+        # this connected account so renewals can reuse the mandate's payment method.
+        if payment_method.customer.blank?
+          customer = Stripe::Customer.create({}, stripe_account)
+          payment_method = Stripe::PaymentMethod.attach(payment_method_id, { customer: customer.id }, stripe_account)
+        end
+
+        use_connected_account_payment_method!(payment_method_id)
+        @payment_method_on_connect_account = payment_method
+        update_card_details
+        true
+      end
+    rescue ChargeProcessorInvalidRequestError
+      # Legacy scalar SI IDs may belong to another Stripe account; fall through to a fresh clone.
+      false
     end
   end
 

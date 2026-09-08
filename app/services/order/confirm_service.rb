@@ -176,11 +176,15 @@ class Order::ConfirmService
         # otherwise feed stale in_progress copies to Purchase::ConfirmService, whose setup-only
         # guard fails purchases whose money already moved.
         (purchases - [reference_purchase]).each(&:reload)
+        reference_purchase.charge&.reload
         next unless reference_purchase.in_progress?
 
         if reference_purchase.processor_payment_intent.present?
           # A concurrently retried confirm charged this group while we waited for the lock.
           finalize_setup_charged_purchases!(purchases)
+        elsif reference_purchase.charge&.client_confirmed?
+          # A concurrent confirm already attempted the debit and lost the response.
+          purchases.each { |purchase| setup_charge_results[purchase.id] = :pending }
         else
           charge_setup_confirmed_purchases_locked!(purchases)
         end
@@ -266,7 +270,10 @@ class Order::ConfirmService
         # The SetupIntent pause happened before the group's original charge, so presentment
         # never ran; the resume charge must lock the same buyer-currency quote the checkout
         # displayed (Charge::CreateService fails closed if it expired).
-        params: { buyer_currency_quote: params[:buyer_currency_quote].presence },
+        params: {
+          buyer_currency_quote: params[:buyer_currency_quote].presence,
+          setup_confirmed_resume: true
+        },
       )
       charge = create_service.perform
 

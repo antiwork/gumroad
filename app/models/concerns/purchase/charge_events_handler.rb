@@ -117,7 +117,7 @@ module Purchase::ChargeEventsHandler
   def handle_event_succeeded!(event)
     handle_event_informational!(event)
 
-    return finalize_client_confirmed_charge! if event.type == ChargeEvent::TYPE_PAYMENT_INTENT_SUCCEEDED && client_confirmed_charge?
+    return finalize_client_confirmed_charge!(event) if event.type == ChargeEvent::TYPE_PAYMENT_INTENT_SUCCEEDED && client_confirmed_charge?
 
     charged_purchases.each do |purchase|
       next unless purchase.in_progress? && purchase.is_an_async_off_session_charge_in_india?
@@ -203,10 +203,19 @@ module Purchase::ChargeEventsHandler
       is_a?(Charge) && client_confirmed?
     end
 
-    def finalize_client_confirmed_charge!
+    def finalize_client_confirmed_charge!(event = nil)
       # Scoped to this charge: a multi-seller order can hold several client-confirmed
       # charges (one per seller group), each with its own intent, and finalizing another
       # group's purchases from this event's intent would save the wrong charge's data.
+      # An uncertain resume may have set client_confirmed without storing the PI id; recover
+      # it from the webhook so FinalizeConfirmedChargeService can retrieve the intent.
+      if is_a?(Charge) && stripe_payment_intent_id.blank? && event&.processor_payment_intent_id.present?
+        update!(stripe_payment_intent_id: event.processor_payment_intent_id)
+        purchases.each do |purchase|
+          next if purchase.processor_payment_intent.present?
+          purchase.create_processor_payment_intent!(intent_id: event.processor_payment_intent_id)
+        end
+      end
       Order::FinalizeConfirmedChargeService.new(order:, charge: self).perform
     end
 end
