@@ -649,15 +649,19 @@ class StripeChargeProcessor
     # Resume that same operation — never re-select a different recovery route (reversal vs EUR),
     # which would use a different idempotency key and double-debit. After Stripe's idempotency
     # window, refuse automatic resubmit rather than risk a second debit.
-    if refund.present? && refund.debited_stripe_transfer == Credit::FEE_DEBIT_PENDING_RETRY &&
+    if refund.present? &&
+        refund.refund_fee_debit_operation.present? &&
+        (refund.debited_stripe_transfer.blank? || refund.debited_stripe_transfer == Credit::FEE_DEBIT_PENDING_RETRY) &&
         Credit.fee_debit_idempotency_window_expired?(refund)
       Rails.logger.error("Refusing automatic fee debit resubmit for refund #{refund.id}: Stripe idempotency window elapsed")
       ErrorNotifier.notify(
-        "Refund fee debit pending_retry outside Stripe idempotency window",
+        "Refund fee debit outside Stripe idempotency window",
         context: {
           refund_id: refund.id,
           purchase_id: refund.purchase_id,
-          operation: refund.refund_fee_debit_operation
+          operation: refund.refund_fee_debit_operation,
+          submitted_at: refund.refund_fee_debit_submitted_at,
+          debited_stripe_transfer: refund.debited_stripe_transfer
         }
       )
       return refund.refund_fee_holding_debit_cents.presence&.to_i
@@ -832,8 +836,6 @@ class StripeChargeProcessor
     Rails.logger.error("Failed to finish fee debit holding lookup for refund #{refund.id}: #{e.class}: #{e.message}")
     nil
   end
-  private_class_method :finish_holding_lookup_for_recorded_fee_debit
-
   def self.record_refund_fee_debit_marker!(refund, marker)
     ActiveRecord::Base.transaction(requires_new: true) do
       refund.update!(debited_stripe_transfer: marker)

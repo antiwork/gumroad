@@ -436,18 +436,19 @@ class Credit < ApplicationRecord
     refund = credit.fee_retention_refund
     return unless merchant_account.holder_of_funds == HolderOfFunds::STRIPE
     if refund.debited_stripe_transfer.present? && !fee_debit_pending_retry?(refund)
-      return refund.refund_fee_holding_debit_cents.presence&.to_i
+      return refund.refund_fee_holding_debit_cents.presence&.to_i ||
+        StripeChargeProcessor.finish_holding_lookup_for_recorded_fee_debit(
+          credit:,
+          refund:,
+          stripe_account_id: merchant_account.charge_processor_merchant_id
+        )
     end
 
     if merchant_account.country == Compliance::Countries::USA.alpha2
       # For gumroad-controlled Stripe accounts from the US, we can make new debit transfers.
       # So we transfer the retained fee back to Gumroad's Stripe platform account.
-      if fee_debit_pending_retry?(refund) && fee_debit_idempotency_window_expired?(refund)
-        Rails.logger.error("Refusing automatic US fee debit resubmit for refund #{refund.id}: Stripe idempotency window elapsed")
-        ErrorNotifier.notify(
-          "Refund fee debit pending_retry outside Stripe idempotency window",
-          context: { refund_id: refund.id, purchase_id: refund.purchase_id, operation: StripeChargeProcessor::FEE_DEBIT_OP_US_DEBIT }
-        )
+      if fee_debit_submitted_without_success_marker?(refund) && fee_debit_idempotency_window_expired?(refund)
+        refuse_expired_fee_debit_resubmit!(refund, StripeChargeProcessor::FEE_DEBIT_OP_US_DEBIT)
         return refund.refund_fee_holding_debit_cents.presence&.to_i
       end
       persist_refund_fee_debit_choice!(refund, operation: StripeChargeProcessor::FEE_DEBIT_OP_US_DEBIT,
@@ -548,51 +549,49 @@ class Credit < ApplicationRecord
     end
 
     if delta.zero?
-      mark_fee_retention_holding_reconciled!(refund, actual)
+      transaction(requires_new: true) do
+        refund.update!(
+          refund_fee_holding_debit_cents: actual,
+          refund_fee_holding_reconciled_cents: actual
+        ) if refund.present?
+      end
       return
     end
 
     balance = credit.balance || bt.balance
     return if balance.blank?
 
-    begin
-      balance.with_lock do
-        balance.increment(:holding_amount_cents, delta)
-        balance.save!
-      end
-    rescue ActiveRecord::RecordInvalid
-      # Original retention balance may already be processing/paid. Book the correction
-      # onto an unpaid balance for the same merchant account when possible.
-      unpaid = Balance.where(
-        user: credit.user,
-        merchant_account: credit.merchant_account,
-        currency: bt.issued_amount_currency,
-        holding_currency: bt.holding_amount_currency,
-        state: "unpaid"
-      ).order(date: :asc).first
-      raise if unpaid.blank?
-
-      unpaid.with_lock do
-        unpaid.increment(:holding_amount_cents, delta)
-        unpaid.save!
-      end
-    end
-
-    mark_fee_retention_holding_reconciled!(refund, actual)
-  end
-  private_class_method :reconcile_fee_retention_holding_amount!
-
-  def self.mark_fee_retention_holding_reconciled!(refund, actual)
-    return if refund.blank?
-
+    # Keep the balance correction and reconciliation marker in one savepoint so a failed
+    # marker write cannot leave a committed delta that the next retry would apply again.
     transaction(requires_new: true) do
+      begin
+        balance.with_lock do
+          balance.increment(:holding_amount_cents, delta)
+          balance.save!
+        end
+      rescue ActiveRecord::RecordInvalid
+        unpaid = Balance.where(
+          user: credit.user,
+          merchant_account: credit.merchant_account,
+          currency: bt.issued_amount_currency,
+          holding_currency: bt.holding_amount_currency,
+          state: "unpaid"
+        ).order(date: :asc).first
+        raise if unpaid.blank?
+
+        unpaid.with_lock do
+          unpaid.increment(:holding_amount_cents, delta)
+          unpaid.save!
+        end
+      end
+
       refund.update!(
         refund_fee_holding_debit_cents: actual,
         refund_fee_holding_reconciled_cents: actual
-      )
+      ) if refund.present?
     end
   end
-  private_class_method :mark_fee_retention_holding_reconciled!
+  private_class_method :reconcile_fee_retention_holding_amount!
 
   def self.fee_debit_idempotency_window_expired?(refund)
     raw = refund&.refund_fee_debit_submitted_at
@@ -603,6 +602,32 @@ class Credit < ApplicationRecord
   rescue ArgumentError, TypeError
     false
   end
+
+  # Sticky choice was written (and usually submitted) but no durable success transfer id yet.
+  # pending_retry is one such state; a crash before the rescue leaves a blank marker too.
+  def self.fee_debit_submitted_without_success_marker?(refund)
+    return false if refund.blank?
+    return false if refund.refund_fee_debit_operation.blank?
+    return false if refund.debited_stripe_transfer.present? && !fee_debit_pending_retry?(refund)
+
+    true
+  end
+  private_class_method :fee_debit_submitted_without_success_marker?
+
+  def self.refuse_expired_fee_debit_resubmit!(refund, operation)
+    Rails.logger.error("Refusing automatic fee debit resubmit for refund #{refund.id}: Stripe idempotency window elapsed")
+    ErrorNotifier.notify(
+      "Refund fee debit outside Stripe idempotency window",
+      context: {
+        refund_id: refund.id,
+        purchase_id: refund.purchase_id,
+        operation:,
+        submitted_at: refund.refund_fee_debit_submitted_at,
+        debited_stripe_transfer: refund.debited_stripe_transfer
+      }
+    )
+  end
+  private_class_method :refuse_expired_fee_debit_resubmit!
 
   # Give back the fee that create_for_refund_fee_retention! retained, because the
   # refund it was retained for later FAILED (async bank-transfer refunds can be
