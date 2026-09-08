@@ -10,6 +10,23 @@ class SocialConnectVerification < ApplicationRecord
   validates :last_verified_at, presence: true
   validates :platform, uniqueness: { scope: :user_id }
 
+  # Unlinking clears the user's twitter columns but keeps the verification row as evidence,
+  # so the row alone cannot tell a reviewer whether the connection is still live.
+  def currently_linked?
+    case platform
+    when "twitter"
+      user.twitter_user_id.present? && user.twitter_user_id.to_s == uid.to_s
+    when "youtube"
+      channel_id = user.youtube_identity&.channel_id
+      channel_id.present? && channel_id.to_s == uid.to_s
+    when "instagram"
+      instagram_user_id = user.instagram_identity&.instagram_user_id
+      instagram_user_id.present? && instagram_user_id.to_s == uid.to_s
+    else
+      false
+    end
+  end
+
   # Other Gumroad accounts vouched for by the same social identity — the
   # dedupe signal risk reviewers check (same precedent as bank/card fingerprints).
   def shared_identity_user_ids

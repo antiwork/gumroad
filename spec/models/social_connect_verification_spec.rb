@@ -3,6 +3,52 @@
 require "spec_helper"
 
 describe SocialConnectVerification do
+  describe "#currently_linked?" do
+    %w[twitter youtube instagram].each do |platform|
+      it "requires the matching current #{platform} UID" do
+        user = create(:user)
+        verification = create(:social_connect_verification, user:, platform:, uid: "123")
+        expect(verification.currently_linked?).to be(false)
+
+        case platform
+        when "twitter"
+          user.update!(twitter_user_id: "123")
+        when "youtube"
+          create(:user_youtube_identity, user:, channel_id: "123")
+        when "instagram"
+          create(:user_instagram_identity, user:, instagram_user_id: "123")
+        end
+        verification.reload
+        expect(verification.currently_linked?).to be(true)
+
+        verification.uid = "456"
+        expect(verification.currently_linked?).to be(false)
+        verification.uid = nil
+        expect(verification.currently_linked?).to be(false)
+        verification.uid = "123"
+
+        case platform
+        when "twitter"
+          verification.user.update!(twitter_user_id: "")
+        when "youtube"
+          verification.user.youtube_identity.update_columns(channel_id: "")
+        when "instagram"
+          verification.user.instagram_identity.update_columns(instagram_user_id: "")
+        end
+        expect(verification.currently_linked?).to be(false)
+        verification.uid = ""
+        expect(verification.currently_linked?).to be(false)
+      end
+    end
+
+    it "does not consider an unsupported platform linked" do
+      verification = create(:social_connect_verification, platform: "tiktok")
+      verification.user.update!(twitter_user_id: verification.uid)
+
+      expect(verification.currently_linked?).to be(false)
+    end
+  end
+
   describe "validations" do
     it "requires a supported platform" do
       verification = build(:social_connect_verification, platform: "myspace")
