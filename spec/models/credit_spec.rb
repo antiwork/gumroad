@@ -508,6 +508,26 @@ describe Credit do
         expect(Stripe::Transfer).not_to receive(:create)
         expect(Credit.create_for_refund_fee_retention!(refund:)).to eq(credit)
       end
+
+      it "retries a US debit that failed after booking the local ledger" do
+        allow(Stripe::Account).to receive(:retrieve).and_return(double(id: "acct_platform"))
+        allow(ErrorNotifier).to receive(:notify)
+        attempts = 0
+        allow(Stripe::Transfer).to receive(:create) do
+          attempts += 1
+          raise Stripe::APIConnectionError, "timeout" if attempts == 1
+
+          double(id: "tr_us_fee_retry")
+        end
+
+        credit = Credit.create_for_refund_fee_retention!(refund:)
+        expect(refund.reload.debited_stripe_transfer).to eq(Credit::FEE_DEBIT_PENDING_RETRY)
+        expect(credit).to be_persisted
+
+        expect(Credit.create_for_refund_fee_retention!(refund:)).to eq(credit)
+        expect(refund.reload.debited_stripe_transfer).to eq("tr_us_fee_retry")
+        expect(attempts).to eq(2)
+      end
     end
   end
 

@@ -299,9 +299,8 @@ class Credit < ApplicationRecord
     existing_credit = where(fee_retention_refund: refund, failed_refund_id: nil).first
     if existing_credit.present?
       # Pre-patch US retention completed Stripe transfers without recording
-      # debited_stripe_transfer. Re-debiting those would charge the seller twice.
-      # Skip the Stripe call for US credits that already have a ledger and no marker;
-      # non-US retries still finish an outstanding debit.
+      # debited_stripe_transfer. Blank marker + ledger means legacy-complete — do not
+      # re-debit. New failures record FEE_DEBIT_PENDING_RETRY so retries still run.
       us_legacy_complete = existing_credit.merchant_account&.country == Compliance::Countries::USA.alpha2 &&
         refund.debited_stripe_transfer.blank? &&
         existing_credit.balance_id.present?
@@ -410,6 +409,11 @@ class Credit < ApplicationRecord
     credit
   end
 
+  # Sentinel written when a Stripe fee debit fails after we already intend to book the
+  # local ledger. Distinguishes a retryable new failure from a pre-patch US retention
+  # that completed without recording debited_stripe_transfer.
+  FEE_DEBIT_PENDING_RETRY = "pending_retry"
+
   # For Stripe sales that use a gumroad-managed custom connect account, pull the retained fee
   # out of that Stripe account. Best effort: the ledger is booked whether or not this
   # succeeds, a failure is reported and left for a retry, and the transfer id recorded on
@@ -419,7 +423,7 @@ class Credit < ApplicationRecord
     merchant_account = credit.merchant_account
     refund = credit.fee_retention_refund
     return unless merchant_account.holder_of_funds == HolderOfFunds::STRIPE
-    return if refund.debited_stripe_transfer.present?
+    return if refund.debited_stripe_transfer.present? && !fee_debit_pending_retry?(refund)
 
     if merchant_account.country == Compliance::Countries::USA.alpha2
       # For gumroad-controlled Stripe accounts from the US, we can make new debit transfers.
@@ -428,7 +432,7 @@ class Credit < ApplicationRecord
       transfer_options[:idempotency_key] = "refund_fee_us_debit_#{refund.external_id}" if refund.id.present?
       transfer = Stripe::Transfer.create({ amount: credit.amount_cents.abs, currency: "usd", destination: Stripe::Account.retrieve.id, },
                                          transfer_options)
-      refund.update!(debited_stripe_transfer: transfer.id)
+      record_fee_debit_marker!(refund, transfer.id)
       nil
     else
       # For non-US gumroad-controlled Stripe accounts, we cannot make debit transfers.
@@ -436,11 +440,29 @@ class Credit < ApplicationRecord
       StripeChargeProcessor.debit_stripe_account_for_refund_fee(credit:)
     end
   rescue StandardError => e
+    # Persist a retryable sentinel so US failures are not mistaken for legacy-complete
+    # blank-marker retentions on the next attempt.
+    record_fee_debit_marker!(refund, FEE_DEBIT_PENDING_RETRY) if refund.present? && refund.debited_stripe_transfer.blank?
     Rails.logger.error("Failed to debit Stripe account for the retained fee of refund #{refund.id}: #{e.class}: #{e.message}")
     ErrorNotifier.notify(e, context: { refund_id: refund.id, purchase_id: refund.purchase_id, merchant_account_id: merchant_account.id })
     nil
   end
   private_class_method :debit_stripe_account_for_retained_fee
+
+  def self.fee_debit_pending_retry?(refund)
+    refund.debited_stripe_transfer == FEE_DEBIT_PENDING_RETRY
+  end
+  private_class_method :fee_debit_pending_retry?
+
+  # Commit the debit marker in its own transaction so a later ledger failure (or an
+  # enclosing retention transaction rollback) cannot erase proof that Stripe already
+  # took the money.
+  def self.record_fee_debit_marker!(refund, marker)
+    transaction(requires_new: true) do
+      refund.update!(debited_stripe_transfer: marker)
+    end
+  end
+  private_class_method :record_fee_debit_marker!
 
   # Give back the fee that create_for_refund_fee_retention! retained, because the
   # refund it was retained for later FAILED (async bank-transfer refunds can be

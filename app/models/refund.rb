@@ -79,6 +79,9 @@ class Refund < ApplicationRecord
   attr_json_data_accessor :note
   attr_json_data_accessor :business_vat_id
   attr_json_data_accessor :debited_stripe_transfer
+  # EUR cents requested for the BGN-fallback platform debit; reused on retry so the
+  # Stripe idempotency key always pairs with the same amount parameters.
+  attr_json_data_accessor :refund_fee_eur_debit_cents
   attr_json_data_accessor :retained_fee_cents
   attr_json_data_accessor :presentment_currency
   attr_json_data_accessor :presentment_amount_cents

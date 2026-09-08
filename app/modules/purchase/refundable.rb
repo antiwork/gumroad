@@ -688,16 +688,18 @@ class Purchase
       return if refund.blank?
 
       # Serialize against HandleFailedRefundService (same purchase → refund lock order).
-      # A failure webhook can reverse the refund between this method's outer commit and
-      # the fee booking; re-check under the locks so we never retain a fee for a reversed
-      # failure.
+      # Only the eligibility check holds the locks: wrapping Stripe + ledger here would
+      # roll back debited_stripe_transfer when ledger creation failed after a successful
+      # Stripe debit, and a retry would debit the seller again.
+      fee_reversed = false
       transaction do
         reload.lock!
         refund.reload.lock!
-        unless refund.balance_reversed_on_failure
-          Credit.create_for_refund_fee_retention!(refund:)
-        end
+        fee_reversed = refund.balance_reversed_on_failure.present?
       end
+      return if fee_reversed
+
+      Credit.create_for_refund_fee_retention!(refund:)
     rescue StandardError => e
       logger.error "Failed to retain the fee for refund #{refund.id} of purchase #{id}: #{e.class}: #{e.message}"
       ErrorNotifier.notify(

@@ -4126,7 +4126,9 @@ describe StripeChargeProcessor, :vcr do
                                       .and_return(double(id: "tr_eur_debit_1"))
 
         expect(described_class.debit_stripe_account_for_refund_fee(credit:)).to eq(920)
-        expect(credit.fee_retention_refund.reload.debited_stripe_transfer).to eq("tr_eur_debit_1")
+        refund = credit.fee_retention_refund.reload
+        expect(refund.debited_stripe_transfer).to eq("tr_eur_debit_1")
+        expect(refund.refund_fee_eur_debit_cents).to eq(920)
       end
 
       it "books the EUR debit in BGN at the fixed rate when the account's ledger is still held in BGN" do
