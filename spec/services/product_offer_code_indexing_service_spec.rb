@@ -44,6 +44,19 @@ describe ProductOfferCodeIndexingService do
     expect(Link.__elasticsearch__.client.indices.exists?(index: original_name)).to be(true)
   end
 
+  it "matches the existing capped value when timestamps tie across both sources" do
+    freeze_time
+    product = usd
+    create(:offer_code, user: seller, products: [product], code: "SPECIFIC1")
+    create(:universal_offer_code, user: seller, code: "UNIVERSAL1")
+    create(:offer_code, user: seller, products: [product], code: "SPECIFIC2")
+    create(:universal_offer_code, user: seller, code: "UNIVERSAL2")
+    stub_const("Product::Searchable::MAX_OFFER_CODES_IN_INDEX", 2)
+    expected = product.reload.build_search_update(["offer_codes"])["offer_codes"]
+    described_class.new([product]).perform
+    expect(indexed_codes(product)).to eq(expected)
+  end
+
   it "preserves the cap and creation ordering" do
     stub_const("Product::Searchable::MAX_OFFER_CODES_IN_INDEX", 2)
     3.times { |i| create(:universal_offer_code, user: seller, code: "CODE#{i}", created_at: i.days.ago) }

@@ -193,8 +193,14 @@ describe ReindexSellerOfferCodesJob do
   it "schedules exhaustion recovery even while the failed job holds its unique lock" do
     SidekiqUniqueJobs.use_config(enabled: true) do
       described_class.enqueue(seller.id)
+      message = described_class.jobs.first
       described_class.clear
-      described_class.sidekiq_retries_exhausted_block.call({ "args" => [seller.id] }, RuntimeError.new)
+      middleware = SidekiqUniqueJobs::Middleware::Server.new
+      expect do
+        middleware.call(described_class.new, message, "low") { raise "index unavailable" }
+      end.to raise_error("index unavailable")
+      expect(described_class.perform_async(seller.id)).to be_nil
+      described_class.sidekiq_retries_exhausted_block.call(message, RuntimeError.new)
       expect(ReindexSellerOfferCodesRecoveryJob.jobs.size).to eq(1)
       expect(ReindexSellerOfferCodesRecoveryJob.jobs.first["lock"]).to be_nil
     end
@@ -277,6 +283,17 @@ describe ReindexSellerOfferCodesJob do
     end
     3.times { run_batch }
     expect(processed.uniq).to match_array(products.map(&:id))
+  end
+
+  it "releases its lock when the final cooldown write fails" do
+    create(:product, user: seller)
+    described_class.enqueue(seller.id)
+    allow($redis).to receive(:set).and_call_original
+    allow_any_instance_of(ProductOfferCodeIndexingService).to receive(:perform) do
+      allow($redis).to receive(:set).with("#{key}:cooldown", anything, ex: anything).and_raise(Redis::BaseError, "unavailable")
+    end
+    expect { job.perform(seller.id) }.to raise_error(Redis::BaseError)
+    expect($redis.get("#{key}:lock")).to be_nil
   end
 
   it "preserves an edit arriving during the final batch" do
