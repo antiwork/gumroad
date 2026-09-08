@@ -20,6 +20,9 @@ class StripeChargeableCreditCard
     @payment_method_id = payment_method_id
     @fingerprint = fingerprint
     @stripe_setup_intent_id = stripe_setup_intent_id
+    # IDs supplied at construction (merchant-scoped map via CreditCard#to_chargeable) may bind on
+    # Connect prepare!. IDs assigned later via the accessor require prepare_with_trusted_setup_intent!.
+    @construction_setup_intent_id = stripe_setup_intent_id
     @stripe_payment_intent_id = stripe_payment_intent_id
     @last4 = last4
     @number_length = number_length
@@ -44,7 +47,7 @@ class StripeChargeableCreditCard
       Stripe::PaymentMethod.list({ customer: @customer_id, type: "card" }).data[0].id
 
     if @merchant_account&.is_a_stripe_connect_account?
-      unless @trusted_setup_intent_binding && bind_connected_setup_intent_payment_method!
+      unless trusted_setup_intent_for_binding? && bind_connected_setup_intent_payment_method!
         prepare_for_direct_charge
         update_card_details
       end
@@ -106,8 +109,15 @@ class StripeChargeableCreditCard
     @payment_method_id_on_connect_account = payment_method_id
   end
 
+  def trusted_setup_intent_for_binding?
+    return true if @trusted_setup_intent_binding
+    @construction_setup_intent_id.present? &&
+      @stripe_setup_intent_id.present? &&
+      @stripe_setup_intent_id.to_s == @construction_setup_intent_id.to_s
+  end
+
   def bind_connected_setup_intent_payment_method!
-    return false unless @trusted_setup_intent_binding
+    return false unless trusted_setup_intent_for_binding?
     return false if @stripe_setup_intent_id.blank? || !@merchant_account&.is_a_stripe_connect_account?
 
     begin

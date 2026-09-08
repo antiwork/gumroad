@@ -63,7 +63,7 @@ class Charge::CreateService
     # confirmed the presentment PaymentIntent at Stripe; keep the snapshots so support
     # recovery (Purchase::SyncStatusWithChargeProcessorService) retains the presentment
     # context it needs to book canonical seller/affiliate balances.
-    clear_buyer_currency_presentments if charge_intent.blank? && !@processor_outcome_unknown
+    clear_buyer_currency_presentments if charge_intent.blank? && !@processor_outcome_unknown && !charge.client_confirmed?
 
     if charge_intent.present?
       charge.charge_intent = charge_intent

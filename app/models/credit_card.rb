@@ -183,7 +183,9 @@ class CreditCard < ApplicationRecord
       reusable_tokens,
       processor_payment_method_id,
       stripe_fingerprint,
-      stripe_setup_intent_id_for(merchant_account),
+      # Only the merchant-scoped map is trusted for Connect mandate PM binding on renewals.
+      # The legacy scalar can come from checkout params and must not authorize prepare! binding.
+      merchant_scoped_setup_intent_id_for(merchant_account),
       stripe_payment_intent_id,
       ChargeableVisual.is_cc_visual(visual) ? ChargeableVisual.get_card_last4(visual) : nil,
       visual.gsub(/\s/, "").length,
@@ -226,6 +228,17 @@ class CreditCard < ApplicationRecord
       return ids[key.to_sym] || ids[key.to_s]
     end
     data[:stripe_setup_intent_id]
+  end
+
+  def merchant_scoped_setup_intent_id_for(merchant_account)
+    return nil if json_data.blank?
+
+    data = json_data.deep_symbolize_keys
+    ids = data[:stripe_setup_intent_ids]
+    return nil unless ids.is_a?(Hash)
+
+    key = merchant_account_key(merchant_account)
+    ids[key.to_sym] || ids[key.to_s]
   end
 
   def store_stripe_setup_intent_id!(merchant_account, id)

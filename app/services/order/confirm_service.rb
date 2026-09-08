@@ -185,19 +185,43 @@ class Order::ConfirmService
 
 
     # Guest one-time India mandates pause without creating a CreditCard. Rebuild a Chargeable
-    # from the SetupIntent's payment method so the resume charge can still run.
+    # from the SetupIntent's payment method so the resume charge can still run. Prefer
+    # StripeChargeableCreditCard so Connect trusted-prepare can bind the SI's PM without cloning.
     def chargeable_for_setup_confirmed_resume(reference_purchase, credit_card, merchant_account, setup_intent)
       return credit_card.to_chargeable(merchant_account:) if credit_card.present?
 
       payment_method_id = setup_intent.payment_method_id
       raise "Confirmed SetupIntent is missing a payment method" if payment_method_id.blank?
 
-      stripe_chargeable = StripeChargeablePaymentMethod.new(
+      stripe_account = if merchant_account&.is_a_stripe_connect_account?
+        { stripe_account: merchant_account.charge_processor_merchant_id }
+      else
+        {}
+      end
+      payment_method = Stripe::PaymentMethod.retrieve(payment_method_id, stripe_account)
+      card = payment_method.try(:card)
+      customer_id = setup_intent.try(:customer_id).presence || payment_method.try(:customer)
+      customer_id = customer_id.id if customer_id.respond_to?(:id)
+      last4 = card.try(:last4)
+      card_type = StripeCardType.to_new_card_type(card.try(:brand)) if card.try(:brand).present?
+      number_length = ChargeableVisual.get_card_length_from_card_type(card_type) if card_type.present?
+      visual = ChargeableVisual.build_visual(last4, number_length) if last4.present? && number_length.present?
+
+      stripe_chargeable = StripeChargeableCreditCard.new(
+        merchant_account,
+        customer_id,
         payment_method_id,
-        customer_id: setup_intent.try(:customer_id),
-        stripe_setup_intent_id: setup_intent.id,
-        zip_code: reference_purchase.zip_code,
-        product_permalink: reference_purchase.link.unique_permalink
+        card.try(:fingerprint),
+        setup_intent.id,
+        nil,
+        last4,
+        number_length,
+        visual,
+        card.try(:exp_month),
+        card.try(:exp_year),
+        card_type,
+        card.try(:country),
+        reference_purchase.zip_code
       )
       Chargeable.new([stripe_chargeable])
     end
@@ -255,6 +279,21 @@ class Order::ConfirmService
           purchase.error_code = PurchaseErrorCode::INDIA_CARD_MANDATE_MISSING
           purchase.errors.add(:base, "We couldn't authorize your card for this payment. Please try again or use a different payment method.")
         end
+        return
+      end
+
+      existing_charge = reference_purchase.charge
+      if existing_charge&.client_confirmed?
+        # A prior uncertain resume already submitted (or may have submitted) a debit. Replaying
+        # CreateService can reject an expired quote and clear presentment snapshots needed to
+        # book a delayed success — reconcile the existing charge instead.
+        purchases.each do |purchase|
+          purchase.errors.clear
+          purchase.error_code = nil
+          purchase.stripe_error_code = nil
+          setup_charge_results[purchase.id] = :pending
+        end
+        ReconcileClientConfirmedChargeJob.perform_in(30.seconds, existing_charge.id)
         return
       end
 
