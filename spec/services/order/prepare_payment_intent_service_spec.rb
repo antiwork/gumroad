@@ -1516,14 +1516,8 @@ describe Order::PreparePaymentIntentService, :vcr do
           expect(create_args[:payment_method_types]).not_to include("cashapp", "us_bank_account")
         end
 
-        # A destination-charge seller (Gumroad-managed Stripe Custom account) with the
-        # destination-charge ramp flag off. Charge::MethodForcedPresentment returns nil here,
-        # and on THIS lane nil is not the card path's quiet canonical-USD fallback: the buyer
-        # already confirmed on a forced-currency element, so #client_confirm_presentment_required?
-        # turns the nil into a clean synchronous failure with no PaymentIntent and no Stripe
-        # quote call. Pinned because the alternative — creating a USD intent — would produce an
-        # intent the EUR ConfirmationToken can never confirm, leaving the purchase in_progress
-        # until the abandonment worker.
+        # With the destination ramp off, MethodForcedPresentment returns nil. Fail synchronously:
+        # a USD fallback cannot confirm the EUR token and strands the purchase until abandonment.
         context "with a destination-charge seller and the destination ramp flag off" do
           let(:seller) { create(:user, disable_buyer_local_currency: false) }
           let!(:connect_account) { create(:merchant_account, user: seller, currency: Currency::USD) }
@@ -1961,15 +1955,9 @@ describe Order::PreparePaymentIntentService, :vcr do
           expect(order.purchases.first.reload).to be_failed
         end
 
-        # gumroad-private#1382, the dominant shape (54 of 57 affected orders). The checkout page
-        # computes the element's currency when it renders and this service recomputes it when the
-        # buyer pays, so a cart that becomes uniformly EUR-priced mid-session (or a seller whose
-        # local-method flag turns on in between) leaves the element mounted in dollars while
-        # prepare would independently conclude euros. The buyer's ConfirmationToken was minted on
-        # the dollar element, so a EUR intent is one Stripe can never confirm it against: it
-        # rejected the confirm in the browser with "The provided currency (eur) does not match the
-        # expected currency (usd)", leaving no charge and no payment_failed webhook. The browser's
-        # report is the authority — build the dollar intent it can actually pay.
+        # Cart or launch-flag changes after mount can make prepare infer EUR for a USD token.
+        # Honor the reported mount currency: Stripe rejects a mismatch in the browser without
+        # a charge or payment_failed webhook (gumroad-private#1382).
         it "creates the canonical USD intent when the browser reports a USD-mounted element on this EUR cart" do
           expect(StripeFxQuote).not_to receive(:create)
 
@@ -2007,14 +1995,8 @@ describe Order::PreparePaymentIntentService, :vcr do
           Feature.deactivate_user(:checkout_local_method_ideal, seller)
         end
 
-        # The other direction of the same divergence, and the remaining 1 of the 57 orders: the
-        # element mounted in euros while the pay-time recomputation concluded dollars. Staged the
-        # way that really happens — the connected account's capability snapshot lost
-        # ideal_payments after the element mounted, so the resolver no longer offers a euro-forcing
-        # method and the old server-side inference gave up. Before this change that made the euro
-        # token fail closed; now we honor the report and build the euro intent it can confirm,
-        # because the presentment machinery gates on the seller's launch flag rather than on the
-        # capability snapshot the drift touched.
+        # Losing ideal_payments after an EUR mount makes the resolver infer USD. The reported EUR
+        # remains chargeable: presentment gates on the launch flag, not the capability snapshot.
         it "creates the EUR intent when the browser reports a EUR-mounted element" do
           expect(StripeFxQuote).not_to receive(:create)
           connect_account.update!(stripe_capabilities_snapshot: {
