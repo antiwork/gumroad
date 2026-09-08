@@ -763,7 +763,13 @@ class StripeChargeProcessor
     destination_balance_transaction = Stripe::BalanceTransaction.retrieve(destination_refund.balance_transaction,
                                                                           stripe_account: stripe_account_id)
     holding_abs = destination_balance_transaction.net.abs
-    persist_refund_fee_holding_debit!(refund, holding_abs) if refund.present?
+    if refund.present?
+      persist_refund_fee_holding_debit!(
+        refund,
+        holding_abs,
+        currency: credit.merchant_account.currency
+      )
+    end
     holding_abs
   end
   private_class_method :resume_transfer_reversal_for_refund_fee
@@ -797,7 +803,9 @@ class StripeChargeProcessor
                   when Currency::EUR then eur_amount_cents
                   when BGN then (BigDecimal(eur_amount_cents) * BGN_PER_EUR).round
                   end
-    persist_refund_fee_holding_debit!(refund, holding_abs) if refund.present? && holding_abs.present?
+    if refund.present? && holding_abs.present?
+      persist_refund_fee_holding_debit!(refund, holding_abs, currency: credit.merchant_account.currency)
+    end
     holding_abs
   end
 
@@ -815,7 +823,7 @@ class StripeChargeProcessor
                                                    stripe_account: stripe_account_id)
       holding_abs = Stripe::BalanceTransaction.retrieve(destination_refund.balance_transaction,
                                                         stripe_account: stripe_account_id).net.abs
-      persist_refund_fee_holding_debit!(refund, holding_abs)
+      persist_refund_fee_holding_debit!(refund, holding_abs, currency: credit.merchant_account.currency)
       holding_abs
     when FEE_DEBIT_OP_EUR_DEBIT
       eur_amount_cents = refund.refund_fee_eur_debit_cents
@@ -825,11 +833,11 @@ class StripeChargeProcessor
                     when Currency::EUR then eur_amount_cents.to_i
                     when BGN then (BigDecimal(eur_amount_cents) * BGN_PER_EUR).round
                     end
-      persist_refund_fee_holding_debit!(refund, holding_abs) if holding_abs.present?
+      persist_refund_fee_holding_debit!(refund, holding_abs, currency: credit.merchant_account.currency) if holding_abs.present?
       holding_abs
     when FEE_DEBIT_OP_US_DEBIT
       holding_abs = credit.amount_cents.abs
-      persist_refund_fee_holding_debit!(refund, holding_abs)
+      persist_refund_fee_holding_debit!(refund, holding_abs, currency: Currency::USD)
       holding_abs
     end
   rescue StandardError => e
@@ -843,12 +851,16 @@ class StripeChargeProcessor
   end
   private_class_method :record_refund_fee_debit_marker!
 
-  def self.persist_refund_fee_holding_debit!(refund, holding_debit_cents)
+  def self.persist_refund_fee_holding_debit!(refund, holding_debit_cents, currency: nil)
     return if refund.blank? || holding_debit_cents.blank?
-    return if refund.refund_fee_holding_debit_cents.to_i == holding_debit_cents.to_i
+    currency = currency.to_s.downcase.presence
+    return if refund.refund_fee_holding_debit_cents.to_i == holding_debit_cents.to_i &&
+      (currency.blank? || refund.refund_fee_holding_debit_currency.to_s.casecmp?(currency))
 
     ActiveRecord::Base.transaction(requires_new: true) do
-      refund.update!(refund_fee_holding_debit_cents: holding_debit_cents.to_i)
+      attrs = { refund_fee_holding_debit_cents: holding_debit_cents.to_i }
+      attrs[:refund_fee_holding_debit_currency] = currency if currency.present?
+      refund.update!(attrs)
     end
   end
   private_class_method :persist_refund_fee_holding_debit!

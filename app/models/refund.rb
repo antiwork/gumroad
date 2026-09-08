@@ -90,6 +90,8 @@ class Refund < ApplicationRecord
   attr_json_data_accessor :refund_fee_eur_debit_cents
   # Holding-currency cents actually taken from Stripe for this fee debit, when known.
   attr_json_data_accessor :refund_fee_holding_debit_cents
+  # Currency of refund_fee_holding_debit_cents (merchant account currency at debit time).
+  attr_json_data_accessor :refund_fee_holding_debit_currency
   # Holding cents already applied to balances.holding_amount_cents for this fee debit;
   # keeps reconcile_fee_retention_holding_amount! from subtracting the same delta twice.
   attr_json_data_accessor :refund_fee_holding_reconciled_cents

@@ -458,7 +458,7 @@ class Credit < ApplicationRecord
       transfer = Stripe::Transfer.create({ amount: credit.amount_cents.abs, currency: "usd", destination: Stripe::Account.retrieve.id, },
                                          transfer_options)
       record_fee_debit_marker!(refund, transfer.id)
-      persist_refund_fee_holding_on_credit!(refund, credit.amount_cents.abs)
+      persist_refund_fee_holding_on_credit!(refund, credit.amount_cents.abs, currency: Currency::USD)
       credit.amount_cents.abs
     else
       # For non-US gumroad-controlled Stripe accounts, we cannot make debit transfers.
@@ -491,12 +491,16 @@ class Credit < ApplicationRecord
   end
   private_class_method :record_fee_debit_marker!
 
-  def self.persist_refund_fee_holding_on_credit!(refund, holding_debit_cents)
+  def self.persist_refund_fee_holding_on_credit!(refund, holding_debit_cents, currency: nil)
     return if refund.blank? || holding_debit_cents.blank?
-    return if refund.refund_fee_holding_debit_cents.to_i == holding_debit_cents.to_i
+    currency = currency.to_s.downcase.presence
+    return if refund.refund_fee_holding_debit_cents.to_i == holding_debit_cents.to_i &&
+      (currency.blank? || refund.refund_fee_holding_debit_currency.to_s.casecmp?(currency))
 
     transaction(requires_new: true) do
-      refund.update!(refund_fee_holding_debit_cents: holding_debit_cents.to_i)
+      attrs = { refund_fee_holding_debit_cents: holding_debit_cents.to_i }
+      attrs[:refund_fee_holding_debit_currency] = currency if currency.present?
+      refund.update!(attrs)
     end
   end
   private_class_method :persist_refund_fee_holding_on_credit!
@@ -533,26 +537,29 @@ class Credit < ApplicationRecord
 
     actual = actual_holding_abs_cents.to_i.abs
     refund = credit.fee_retention_refund
-    # Idempotent: once this actual has been applied, do not subtract the BT-estimate
-    # delta again on later retries.
-    return if refund&.refund_fee_holding_reconciled_cents.to_i == actual
-
-    target = -actual
     bt = credit.balance_transaction
     return if bt.blank?
 
+    actual_currency = (refund&.refund_fee_holding_debit_currency.presence || credit.merchant_account.currency).to_s.downcase
+    actual_in_bt_currency = convert_fee_holding_cents(
+      actual,
+      from_currency: actual_currency,
+      to_currency: bt.holding_amount_currency.to_s.downcase
+    )
+    return if actual_in_bt_currency.blank?
+
+    # Idempotent against the BT-currency amount we applied.
+    return if refund&.refund_fee_holding_reconciled_cents.to_i == actual_in_bt_currency
+
+    target = -actual_in_bt_currency
     delta = target - bt.holding_amount_net_cents
-    if refund.present? && refund.refund_fee_holding_debit_cents.to_i != actual
-      transaction(requires_new: true) do
-        refund.update!(refund_fee_holding_debit_cents: actual)
-      end
-    end
 
     if delta.zero?
       transaction(requires_new: true) do
         refund.update!(
           refund_fee_holding_debit_cents: actual,
-          refund_fee_holding_reconciled_cents: actual
+          refund_fee_holding_debit_currency: actual_currency,
+          refund_fee_holding_reconciled_cents: actual_in_bt_currency
         ) if refund.present?
       end
       return
@@ -577,7 +584,15 @@ class Credit < ApplicationRecord
           holding_currency: bt.holding_amount_currency,
           state: "unpaid"
         ).order(date: :asc).first
-        raise if unpaid.blank?
+        unpaid ||= Balance.create!(
+          user: credit.user,
+          merchant_account: credit.merchant_account,
+          currency: bt.issued_amount_currency,
+          holding_currency: bt.holding_amount_currency,
+          date: credit.created_at.to_date,
+          amount_cents: 0,
+          holding_amount_cents: 0
+        )
 
         unpaid.with_lock do
           unpaid.increment(:holding_amount_cents, delta)
@@ -587,11 +602,40 @@ class Credit < ApplicationRecord
 
       refund.update!(
         refund_fee_holding_debit_cents: actual,
-        refund_fee_holding_reconciled_cents: actual
+        refund_fee_holding_debit_currency: actual_currency,
+        refund_fee_holding_reconciled_cents: actual_in_bt_currency
       ) if refund.present?
     end
   end
   private_class_method :reconcile_fee_retention_holding_amount!
+
+  # Convert a fee debit's holding amount into the currency of the original retention
+  # BalanceTransaction. BGN↔EUR uses Stripe's fixed rate; other pairs go through USD rates.
+  def self.convert_fee_holding_cents(amount_cents, from_currency:, to_currency:)
+    from_currency = from_currency.to_s.downcase
+    to_currency = to_currency.to_s.downcase
+    return amount_cents.to_i if from_currency == to_currency
+
+    amount = BigDecimal(amount_cents.to_i)
+    bgn = StripeChargeProcessor::BGN
+    if [from_currency, to_currency].sort == [bgn, Currency::EUR].sort
+      return from_currency == Currency::EUR ? (amount * StripeChargeProcessor::BGN_PER_EUR).round : (amount / StripeChargeProcessor::BGN_PER_EUR).round
+    end
+
+    usd = if from_currency == Currency::USD
+      amount
+    else
+      rate = BigDecimal(StripeChargeProcessor.get_rate(from_currency).to_s)
+      return if rate.zero?
+      amount / rate
+    end
+    return usd.round if to_currency == Currency::USD
+
+    rate = BigDecimal(StripeChargeProcessor.get_rate(to_currency).to_s)
+    return if rate.zero?
+    (usd * rate).round
+  end
+  private_class_method :convert_fee_holding_cents
 
   def self.fee_debit_idempotency_window_expired?(refund)
     raw = refund&.refund_fee_debit_submitted_at
