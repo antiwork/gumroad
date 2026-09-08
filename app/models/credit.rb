@@ -506,20 +506,22 @@ class Credit < ApplicationRecord
         refuse_expired_fee_debit_resubmit!(refund, StripeChargeProcessor::FEE_DEBIT_OP_US_DEBIT)
         return refund.refund_fee_holding_debit_cents.presence&.to_i
       end
+      debit_amount_cents = refund.refund_fee_debit_amount_cents.presence || credit.amount_cents.abs
       persist_refund_fee_debit_choice!(
         refund,
         operation: StripeChargeProcessor::FEE_DEBIT_OP_US_DEBIT,
-        amount_cents: credit.amount_cents.abs
+        amount_cents: debit_amount_cents
       )
+      debit_amount_cents = refund.reload.refund_fee_debit_amount_cents.presence || debit_amount_cents
       transfer_options = { stripe_account: merchant_account.charge_processor_merchant_id }
       transfer_options[:idempotency_key] = "refund_fee_us_debit_#{refund.external_id}" if refund.id.present?
       transfer = Stripe::Transfer.create(
-        { amount: credit.amount_cents.abs, currency: "usd", destination: Stripe::Account.retrieve.id },
+        { amount: debit_amount_cents.to_i, currency: "usd", destination: Stripe::Account.retrieve.id },
         transfer_options
       )
       record_fee_debit_marker!(refund, transfer.id)
-      persist_refund_fee_holding_on_credit!(refund, credit.amount_cents.abs, currency: Currency::USD)
-      credit.amount_cents.abs
+      persist_refund_fee_holding_on_credit!(refund, debit_amount_cents.to_i, currency: Currency::USD)
+      debit_amount_cents.to_i
     else
       # For non-US gumroad-controlled Stripe accounts, we cannot make debit transfers.
       # So we try and reverse the retained fee amount from one of the old transfers made to that Stripe account.
@@ -580,8 +582,9 @@ class Credit < ApplicationRecord
     # Keep the flag while Stripe debit or holding reconciliation is still outstanding so
     # the recurring job can finish finish_holding_lookup / reconcile after a crash.
     return if fee_debit_pending_retry?(refund)
-    if refund.debited_stripe_transfer.present? && refund.refund_fee_holding_debit_cents.blank?
-      return
+    if refund.debited_stripe_transfer.present?
+      return if refund.refund_fee_holding_debit_cents.blank?
+      return if refund.refund_fee_holding_reconciled_cents.blank?
     end
 
     transaction(requires_new: true) do
