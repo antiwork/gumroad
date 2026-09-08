@@ -1,14 +1,17 @@
 # frozen_string_literal: true
 
 # Recovers SetupIntent-confirmed India charges whose create response was lost
-# (client_confirmed without a stored PaymentIntent). Searches Stripe by transfer_group to
-# persist the PaymentIntent id, then syncs — does not create a new PaymentIntent with
-# different presentment params.
+# (client_confirmed without a stored PaymentIntent). Searches Stripe Charges and
+# PaymentIntents by transfer_group, then syncs — does not create a new PaymentIntent.
 class ReconcileClientConfirmedChargeJob
   include Sidekiq::Job
   sidekiq_options retry: 5, queue: :default, lock: :until_executed
 
-  RETRY_DELAYS = [30.seconds, 1.minute, 5.minutes, 15.minutes, 1.hour].freeze
+  # India processing debits can take up to ~26h before a Charge object exists.
+  RETRY_DELAYS = [
+    30.seconds, 1.minute, 5.minutes, 15.minutes, 1.hour,
+    3.hours, 6.hours, 12.hours, 24.hours
+  ].freeze
 
   def perform(charge_id, attempt = 0)
     charge = Charge.find_by(id: charge_id)
@@ -30,19 +33,16 @@ class ReconcileClientConfirmedChargeJob
   end
 
   private
-    # Order::FinalizeConfirmedChargeService returns processing when stripe_payment_intent_id is
-    # blank and never searches Stripe. Recover the intent from the charge's transfer_group first.
     def recover_missing_payment_intent!(charge)
       return if charge.stripe_payment_intent_id.present?
 
       purchase = charge.purchases.find(&:in_progress?) || charge.purchases.first
       return if purchase.blank? || purchase.charge_processor_id.blank?
 
-      stripe_charge = ChargeProcessor.search_charge(
-        charge_processor_id: purchase.charge_processor_id,
-        purchase:
+      payment_intent_id = payment_intent_id_from_stripe_charge(
+        ChargeProcessor.search_charge(charge_processor_id: purchase.charge_processor_id, purchase:)
       )
-      payment_intent_id = payment_intent_id_from_stripe_charge(stripe_charge)
+      payment_intent_id ||= search_payment_intent_id_by_transfer_group(charge, purchase)
       return if payment_intent_id.blank?
 
       charge.update!(stripe_payment_intent_id: payment_intent_id)
@@ -65,5 +65,21 @@ class ReconcileClientConfirmedChargeJob
       end
       payment_intent = payment_intent.id if payment_intent.respond_to?(:id)
       payment_intent.presence
+    end
+
+    def search_payment_intent_id_by_transfer_group(charge, purchase)
+      transfer_group = charge.id_with_prefix
+      stripe_opts = if purchase.charged_using_stripe_connect_account?
+        { stripe_account: purchase.merchant_account.charge_processor_merchant_id }
+      else
+        {}
+      end
+      created_gte = [charge.created_at.to_i - 120, 0].max
+      intents = Stripe::PaymentIntent.list(
+        { created: { gte: created_gte }, limit: 100 },
+        stripe_opts
+      )
+      match = intents.data.find { |intent| intent.transfer_group.to_s == transfer_group.to_s }
+      match&.id
     end
 end

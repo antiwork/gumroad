@@ -20,9 +20,9 @@ class StripeChargeableCreditCard
     @payment_method_id = payment_method_id
     @fingerprint = fingerprint
     @stripe_setup_intent_id = stripe_setup_intent_id
-    # IDs supplied at construction (merchant-scoped map via CreditCard#to_chargeable) may bind on
-    # Connect prepare!. IDs assigned later via the accessor require prepare_with_trusted_setup_intent!.
-    @construction_setup_intent_id = stripe_setup_intent_id
+    # Construction SI is only trusted for Connect PM binding after CreditCard marks a
+    # merchant-scoped map entry. Legacy scalar IDs remain available for mandate lookup.
+    @construction_setup_intent_id = nil
     @stripe_payment_intent_id = stripe_payment_intent_id
     @last4 = last4
     @number_length = number_length
@@ -59,6 +59,10 @@ class StripeChargeableCreditCard
   # Order services call this only after proving SetupIntent ownership. prepare! itself must not
   # bind a caller-supplied stripe_setup_intent_id, or a saved legacy scalar could steal another
   # buyer's connected payment method on an ordinary single-seller purchase.
+  def trust_construction_setup_intent!
+    @construction_setup_intent_id = @stripe_setup_intent_id
+  end
+
   def prepare_with_trusted_setup_intent!
     @trusted_setup_intent_binding = true
     prepare!

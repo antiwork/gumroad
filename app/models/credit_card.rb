@@ -179,13 +179,12 @@ class CreditCard < ApplicationRecord
       BraintreeChargeProcessor.charge_processor_id => braintree_customer_id,
       PaypalChargeProcessor.charge_processor_id => paypal_billing_agreement_id
     }
-    ChargeProcessor.get_chargeable_for_data(
+    chargeable = ChargeProcessor.get_chargeable_for_data(
       reusable_tokens,
       processor_payment_method_id,
       stripe_fingerprint,
-      # Only the merchant-scoped map is trusted for Connect mandate PM binding on renewals.
-      # The legacy scalar can come from checkout params and must not authorize prepare! binding.
-      merchant_scoped_setup_intent_id_for(merchant_account),
+      # Keep legacy scalar for mandate lookup; map entries alone authorize Connect PM binding.
+      stripe_setup_intent_id_for(merchant_account),
       stripe_payment_intent_id,
       ChargeableVisual.is_cc_visual(visual) ? ChargeableVisual.get_card_last4(visual) : nil,
       visual.gsub(/\s/, "").length,
@@ -196,6 +195,15 @@ class CreditCard < ApplicationRecord
       card_country,
       merchant_account:
     )
+    scoped_setup_intent_id = merchant_scoped_setup_intent_id_for(merchant_account)
+    if scoped_setup_intent_id.present?
+      stripe_chargeable = chargeable.get_chargeable_for(StripeChargeProcessor.charge_processor_id)
+      if stripe_chargeable.respond_to?(:trust_construction_setup_intent!) &&
+         stripe_chargeable.stripe_setup_intent_id.to_s == scoped_setup_intent_id.to_s
+        stripe_chargeable.trust_construction_setup_intent!
+      end
+    end
+    chargeable
   end
 
   def last_four_digits

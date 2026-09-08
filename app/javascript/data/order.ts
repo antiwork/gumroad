@@ -305,22 +305,9 @@ export const startOrderCreation = async (
           continue;
         }
         if (doesLineItemRequireSCA(lineItem)) {
-          // Still requires authentication after a partial confirm — keep uncharged lines
-          // retryable instead of dropping them when a sibling group is already processing.
-          if (lineItem.permalink) {
-            confirmLineItems[uid] = {
-              success: false,
-              error_message: "Authentication required.",
-              permalink: lineItem.permalink,
-              name: "",
-              formatted_price: "",
-              error_code: "requires_authentication",
-              is_tax_mismatch: false,
-              card_country: null,
-              ip_country: null,
-              updated_product: null,
-            };
-          }
+          // Sibling debit already scheduled: do not convert leftover setup into a retryable
+          // failure. A fresh checkout hits not_double_charged while this purchase stays
+          // in_progress and keeps inventory/discounts reserved. Leave it on the existing order.
           continue;
         }
         confirmLineItems[uid] = lineItem;
@@ -399,22 +386,8 @@ export const startOrderCreation = async (
             continue;
           }
           if (doesLineItemRequireSCA(lineItem)) {
-            // ConfirmService keys by purchase id; keep SCA lines for permalink matching below.
-            const permalink = lineItem.permalink;
-            if (permalink) {
-              recoveryConfirmItems[uid] = {
-                success: false,
-                error_message: "Authentication required.",
-                permalink,
-                name: "",
-                formatted_price: "",
-                error_code: "requires_authentication",
-                is_tax_mismatch: false,
-                card_country: null,
-                ip_country: null,
-                updated_product: null,
-              };
-            }
+            // Same as the happy path: leftover setup must stay on this order when another
+            // group's debit is already processing.
             continue;
           }
           recoveryConfirmItems[uid] = lineItem;
