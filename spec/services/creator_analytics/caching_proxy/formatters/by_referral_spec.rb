@@ -11,6 +11,34 @@ describe CreatorAnalytics::CachingProxy::Formatters::ByReferral do
   end
 
   describe "#merge_data_by_referral" do
+    it "fills sparse referral series without allocating for every absent day and referrer" do
+      dates = (Date.new(2021, 1, 1) .. Date.new(2021, 12, 31)).to_a
+      days_data = dates.each_with_index.map do |date, index|
+        {
+          dates_and_months: D3.date_month_domain([date]),
+          by_referral: %i[views sales totals].index_with do
+            { "product" => { "source-#{index % 20}.example.com" => [index + 1] } }
+          end
+        }.with_indifferent_access
+      end
+      original = Marshal.dump(days_data)
+      @service.merge_data_by_referral(days_data, dates)
+
+      allocated_before = GC.stat(:total_allocated_objects)
+      result = @service.merge_data_by_referral(days_data, dates)
+      allocations = GC.stat(:total_allocated_objects) - allocated_before
+
+      expect(allocations).to be < 100_000
+      %i[views sales totals].each do |type|
+        expect(result[:by_referral][type]["product"]).to eq(
+          20.times.to_h do |referrer|
+            ["source-#{referrer}.example.com", dates.each_index.map { |index| index % 20 == referrer ? index + 1 : 0 }]
+          end
+        )
+      end
+      expect(Marshal.dump(days_data)).to eq(original)
+    end
+
     it "returns data merged by referral" do
       # notable: without `product` & `profile` and with an array for values for different days
       day_one = {
