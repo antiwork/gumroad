@@ -624,6 +624,10 @@ class StripeChargeProcessor
     raise ChargeProcessorUnavailableError.new("Stripe error while refunding a charge: #{e.message}", original_error: e)
   end
 
+  FEE_DEBIT_OP_TRANSFER_REVERSAL = "transfer_reversal"
+  FEE_DEBIT_OP_EUR_DEBIT = "eur_debit"
+  FEE_DEBIT_OP_US_DEBIT = "us_debit"
+
   def self.debit_stripe_account_for_refund_fee(credit:)
     return unless credit.present?
     return if credit.amount_cents == 0
@@ -635,6 +639,16 @@ class StripeChargeProcessor
 
     stripe_account_id = credit.merchant_account.charge_processor_merchant_id
     usd_amount_cents = credit.amount_cents.abs
+
+    # A prior attempt may have submitted to Stripe and timed out after recording pending_retry.
+    # Resume that same operation — never re-select a different recovery route (reversal vs EUR),
+    # which would use a different idempotency key and double-debit.
+    case refund&.refund_fee_debit_operation
+    when FEE_DEBIT_OP_TRANSFER_REVERSAL
+      return resume_transfer_reversal_for_refund_fee(credit:, refund:, stripe_account_id:)
+    when FEE_DEBIT_OP_EUR_DEBIT
+      return debit_stripe_account_in_eur_for_refund_fee(credit:, usd_amount_cents:)
+    end
 
     # The fee being recovered (credit.amount_cents) is always in USD cents, but Stripe
     # transfer reversals are denominated in the transfer's own currency. Internal payout
@@ -670,16 +684,10 @@ class StripeChargeProcessor
                            .filter_map { |tr_id| Stripe::Transfer.retrieve(tr_id) rescue nil }
                            .find { |tr| reversible.call(tr) }
     if transfer.present?
-      reversal_opts = {}
-      reversal_opts[:idempotency_key] = "refund_fee_reversal_#{refund.external_id}" if refund&.id.present?
-      transfer_reversal = Stripe::Transfer.create_reversal(transfer.id, { amount: amount_to_reverse_for.call(transfer) }, reversal_opts)
-      record_refund_fee_debit_marker!(refund, transfer_reversal.id) if refund.present?
-      destination_refund = Stripe::Refund.retrieve(transfer_reversal.destination_payment_refund,
-                                                   stripe_account: stripe_account_id)
-
-      destination_balance_transaction = Stripe::BalanceTransaction.retrieve(destination_refund.balance_transaction,
-                                                                            stripe_account: stripe_account_id)
-      return destination_balance_transaction.net.abs
+      return perform_transfer_reversal_for_refund_fee(
+        credit:, refund:, stripe_account_id:,
+        transfer_id: transfer.id, amount_cents: amount_to_reverse_for.call(transfer)
+      )
     end
 
     # If no eligible internal transfer was available, reverse a transfer associated with an old purchase.
@@ -688,22 +696,49 @@ class StripeChargeProcessor
     transfers = Stripe::Transfer.list(destination: stripe_account_id, created: { 'lt': 120.days.ago.to_i }, limit: 100)
     transfer = transfers.find { |tr| tr.present? && reversible.call(tr) }
     if transfer.present?
-      reversal_opts = {}
-      reversal_opts[:idempotency_key] = "refund_fee_reversal_#{refund.external_id}" if refund&.id.present?
-      transfer_reversal = Stripe::Transfer.create_reversal(transfer.id, { amount: amount_to_reverse_for.call(transfer) }, reversal_opts)
-      record_refund_fee_debit_marker!(refund, transfer_reversal.id) if refund.present?
-      destination_refund = Stripe::Refund.retrieve(transfer_reversal.destination_payment_refund,
-                                                   stripe_account: stripe_account_id)
-
-      destination_balance_transaction = Stripe::BalanceTransaction.retrieve(destination_refund.balance_transaction,
-                                                                            stripe_account: stripe_account_id)
-      return destination_balance_transaction.net.abs
+      return perform_transfer_reversal_for_refund_fee(
+        credit:, refund:, stripe_account_id:,
+        transfer_id: transfer.id, amount_cents: amount_to_reverse_for.call(transfer)
+      )
     end
 
     return unless bgn_transfer_seen
 
     debit_stripe_account_in_eur_for_refund_fee(credit:, usd_amount_cents:)
   end
+
+  # Persist the chosen transfer + amount, then reverse. Retries with the same sticky choice
+  # reuse the same Stripe idempotency key and parameters.
+  def self.perform_transfer_reversal_for_refund_fee(credit:, refund:, stripe_account_id:, transfer_id:, amount_cents:)
+    if refund.present?
+      Credit.persist_refund_fee_debit_choice!(refund,
+                  operation: FEE_DEBIT_OP_TRANSFER_REVERSAL,
+                  transfer_id:,
+                  amount_cents:)
+    end
+    resume_transfer_reversal_for_refund_fee(credit:, refund:, stripe_account_id:,
+                                            transfer_id:, amount_cents:)
+  end
+  private_class_method :perform_transfer_reversal_for_refund_fee
+
+  def self.resume_transfer_reversal_for_refund_fee(credit:, refund:, stripe_account_id:, transfer_id: nil, amount_cents: nil)
+    transfer_id = transfer_id.presence || refund&.refund_fee_debit_transfer_id
+    amount_cents = amount_cents.presence || refund&.refund_fee_debit_amount_cents
+    return if transfer_id.blank? || amount_cents.blank?
+
+    reversal_opts = {}
+    reversal_opts[:idempotency_key] = "refund_fee_reversal_#{refund.external_id}" if refund&.id.present?
+    transfer_reversal = Stripe::Transfer.create_reversal(transfer_id, { amount: amount_cents.to_i }, reversal_opts)
+    destination_refund = Stripe::Refund.retrieve(transfer_reversal.destination_payment_refund,
+                                                 stripe_account: stripe_account_id)
+
+    destination_balance_transaction = Stripe::BalanceTransaction.retrieve(destination_refund.balance_transaction,
+                                                                          stripe_account: stripe_account_id)
+    holding_abs = destination_balance_transaction.net.abs
+    record_refund_fee_debit_marker!(refund, transfer_reversal.id, holding_debit_cents: holding_abs) if refund.present?
+    holding_abs
+  end
+  private_class_method :resume_transfer_reversal_for_refund_fee
 
   # Recovery for accounts whose only reversible history settled in BGN: per Stripe's guidance
   # for those accounts, debit them directly with a EUR transfer to the platform instead.
@@ -714,26 +749,34 @@ class StripeChargeProcessor
     # Reuse the first requested EUR amount so a stable idempotency key never pairs with a
     # different FX-converted amount on retry (Stripe rejects parameter changes).
     eur_amount_cents = refund&.refund_fee_eur_debit_cents.presence || usd_cents_to_currency(Currency::EUR, usd_amount_cents)
-    if refund.present? && refund.refund_fee_eur_debit_cents.blank?
-      ActiveRecord::Base.transaction(requires_new: true) do
-        refund.update!(refund_fee_eur_debit_cents: eur_amount_cents)
+    if refund.present?
+      Credit.persist_refund_fee_debit_choice!(refund,
+                  operation: FEE_DEBIT_OP_EUR_DEBIT,
+                  amount_cents: eur_amount_cents)
+      if refund.refund_fee_eur_debit_cents.blank?
+        ActiveRecord::Base.transaction(requires_new: true) do
+          refund.update!(refund_fee_eur_debit_cents: eur_amount_cents)
+        end
       end
     end
     transfer_options = { stripe_account: credit.merchant_account.charge_processor_merchant_id }
     transfer_options[:idempotency_key] = "refund_fee_eur_debit_#{refund.external_id}" if refund&.id.present?
     transfer = Stripe::Transfer.create({ amount: eur_amount_cents, currency: Currency::EUR, destination: STRIPE_PLATFORM_ACCOUNT_ID },
                                        transfer_options)
-    record_refund_fee_debit_marker!(refund, transfer.id) if refund.present?
 
-    case credit.merchant_account.currency.to_s.downcase
-    when Currency::EUR then eur_amount_cents
-    when BGN then (BigDecimal(eur_amount_cents) * BGN_PER_EUR).round
-    end
+    holding_abs = case credit.merchant_account.currency.to_s.downcase
+                  when Currency::EUR then eur_amount_cents
+                  when BGN then (BigDecimal(eur_amount_cents) * BGN_PER_EUR).round
+                  end
+    record_refund_fee_debit_marker!(refund, transfer.id, holding_debit_cents: holding_abs) if refund.present?
+    holding_abs
   end
 
-  def self.record_refund_fee_debit_marker!(refund, marker)
+  def self.record_refund_fee_debit_marker!(refund, marker, holding_debit_cents: nil)
     ActiveRecord::Base.transaction(requires_new: true) do
-      refund.update!(debited_stripe_transfer: marker)
+      refund.debited_stripe_transfer = marker
+      refund.refund_fee_holding_debit_cents = holding_debit_cents if holding_debit_cents.present?
+      refund.save!
     end
   end
   private_class_method :record_refund_fee_debit_marker!

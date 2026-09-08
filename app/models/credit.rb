@@ -304,7 +304,10 @@ class Credit < ApplicationRecord
       us_legacy_complete = existing_credit.merchant_account&.country == Compliance::Countries::USA.alpha2 &&
         refund.debited_stripe_transfer.blank? &&
         existing_credit.balance_id.present?
-      debit_stripe_account_for_retained_fee(existing_credit) unless us_legacy_complete
+      unless us_legacy_complete
+        actual_holding = debit_stripe_account_for_retained_fee(existing_credit)
+        reconcile_fee_retention_holding_amount!(existing_credit, actual_holding)
+      end
       return existing_credit
     end
 
@@ -374,7 +377,11 @@ class Credit < ApplicationRecord
     # refund the moment it succeeds, so a retry after a failed ledger write skips Stripe
     # instead of debiting the account twice.
     net_amount_on_stripe_in_holding_currency = debit_stripe_account_for_retained_fee(credit)
-    reversed_amount_cents_in_holding_currency = -net_amount_on_stripe_in_holding_currency if net_amount_on_stripe_in_holding_currency.present?
+    if refund.refund_fee_holding_debit_cents.present?
+      reversed_amount_cents_in_holding_currency = -refund.refund_fee_holding_debit_cents.to_i
+    elsif net_amount_on_stripe_in_holding_currency.present?
+      reversed_amount_cents_in_holding_currency = -net_amount_on_stripe_in_holding_currency
+    end
 
     # requires_new: see Connect branch above — isolate ledger writes from any outer txn.
     transaction(requires_new: true) do
@@ -428,11 +435,13 @@ class Credit < ApplicationRecord
     if merchant_account.country == Compliance::Countries::USA.alpha2
       # For gumroad-controlled Stripe accounts from the US, we can make new debit transfers.
       # So we transfer the retained fee back to Gumroad's Stripe platform account.
+      persist_refund_fee_debit_choice!(refund, operation: StripeChargeProcessor::FEE_DEBIT_OP_US_DEBIT,
+                                              amount_cents: credit.amount_cents.abs)
       transfer_options = { stripe_account: merchant_account.charge_processor_merchant_id }
       transfer_options[:idempotency_key] = "refund_fee_us_debit_#{refund.external_id}" if refund.id.present?
       transfer = Stripe::Transfer.create({ amount: credit.amount_cents.abs, currency: "usd", destination: Stripe::Account.retrieve.id, },
                                          transfer_options)
-      record_fee_debit_marker!(refund, transfer.id)
+      record_fee_debit_marker!(refund, transfer.id, holding_debit_cents: credit.amount_cents.abs)
       nil
     else
       # For non-US gumroad-controlled Stripe accounts, we cannot make debit transfers.
@@ -454,15 +463,64 @@ class Credit < ApplicationRecord
   end
   private_class_method :fee_debit_pending_retry?
 
-  # Commit the debit marker in its own transaction so a later ledger failure (or an
-  # enclosing retention transaction rollback) cannot erase proof that Stripe already
-  # took the money.
-  def self.record_fee_debit_marker!(refund, marker)
+  # Write the debit marker in a requires_new savepoint. Callers that wrap retention in an
+  # enclosing transaction must commit that transaction even when later ledger work fails
+  # (see Purchase#debit_processor_fee_from_merchant_account!), otherwise the savepoint is
+  # rolled back and a retry can debit Stripe again after the idempotency window.
+  def self.record_fee_debit_marker!(refund, marker, holding_debit_cents: nil)
     transaction(requires_new: true) do
-      refund.update!(debited_stripe_transfer: marker)
+      refund.debited_stripe_transfer = marker
+      refund.refund_fee_holding_debit_cents = holding_debit_cents if holding_debit_cents.present?
+      refund.save!
     end
   end
   private_class_method :record_fee_debit_marker!
+
+  # Persist the chosen Stripe recovery route before submit so a timed-out response cannot
+  # be retried as a different operation (e.g. transfer reversal → EUR debit).
+  def self.persist_refund_fee_debit_choice!(refund, operation:, transfer_id: nil, amount_cents: nil)
+    return if refund.blank?
+    return if refund.refund_fee_debit_operation == operation &&
+      (transfer_id.blank? || refund.refund_fee_debit_transfer_id == transfer_id) &&
+      (amount_cents.blank? || refund.refund_fee_debit_amount_cents.to_i == amount_cents.to_i)
+
+    transaction(requires_new: true) do
+      refund.refund_fee_debit_operation = operation
+      refund.refund_fee_debit_transfer_id = transfer_id if transfer_id.present?
+      refund.refund_fee_debit_amount_cents = amount_cents if amount_cents.present?
+      refund.save!
+    end
+  end
+
+  # When the first Stripe attempt fails, the ledger books an estimated holding amount. A
+  # later successful retry returns the actual Stripe debit; adjust the unpaid balance's
+  # holding total so payout math matches Stripe. The immutable BalanceTransaction row keeps
+  # its original estimate; refund_fee_holding_debit_cents records the actual.
+  def self.reconcile_fee_retention_holding_amount!(credit, actual_holding_abs_cents)
+    return if credit.blank? || actual_holding_abs_cents.blank?
+
+    target = -actual_holding_abs_cents.to_i.abs
+    bt = credit.balance_transaction
+    return if bt.blank?
+
+    delta = target - bt.holding_amount_net_cents
+    refund = credit.fee_retention_refund
+    if refund.present? && refund.refund_fee_holding_debit_cents.to_i != actual_holding_abs_cents.to_i.abs
+      transaction(requires_new: true) do
+        refund.update!(refund_fee_holding_debit_cents: actual_holding_abs_cents.to_i.abs)
+      end
+    end
+    return if delta.zero?
+
+    balance = credit.balance || bt.balance
+    return if balance.blank?
+
+    balance.with_lock do
+      balance.increment(:holding_amount_cents, delta)
+      balance.save!
+    end
+  end
+  private_class_method :reconcile_fee_retention_holding_amount!
 
   # Give back the fee that create_for_refund_fee_retention! retained, because the
   # refund it was retained for later FAILED (async bank-transfer refunds can be

@@ -1875,6 +1875,28 @@ describe "PurchaseRefunds", :vcr do
         expect(Credit.where(fee_retention_refund: @purchase.refunds.sole)).to be_empty
         expect(ErrorNotifier).to have_received(:notify).with("Failed to retain refund fee after refund", anything)
       end
+
+      it "keeps a Stripe debit marker when ledger booking fails under the retention locks" do
+        admin = create(:admin_user)
+        expect(ChargeProcessor).to receive(:refund!).and_return(build_charge_refund(@purchase.total_transaction_cents))
+
+        allow(Credit).to receive(:create_for_refund_fee_retention!).and_wrap_original do |_original, refund:|
+          # Mimic Stripe success + marker write inside the enclosing retention transaction,
+          # then a ledger failure. The purchase helper must commit so the marker survives.
+          refund.update!(debited_stripe_transfer: "trr_marker_survives")
+          raise ActiveRecord::RecordInvalid, Credit.new
+        end
+
+        expect(@purchase.refund_and_save!(admin.id, reason: "Refund requested by the buyer")).to be(true)
+
+        refund = @purchase.reload.refunds.sole
+        expect(refund.debited_stripe_transfer).to eq("trr_marker_survives")
+        expect(Credit.where(fee_retention_refund: refund)).to be_empty
+        expect(ErrorNotifier).to have_received(:notify).with(
+          "Failed to retain refund fee after refund",
+          hash_including(context: hash_including(refund_id: refund.id))
+        )
+      end
     end
 
     describe "Low balance related sidekiq jobs" do

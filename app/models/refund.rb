@@ -79,9 +79,17 @@ class Refund < ApplicationRecord
   attr_json_data_accessor :note
   attr_json_data_accessor :business_vat_id
   attr_json_data_accessor :debited_stripe_transfer
+  # Sticky recovery route chosen before the Stripe submit (transfer_reversal / eur_debit /
+  # us_debit). Retries must resume this route instead of selecting a new one.
+  attr_json_data_accessor :refund_fee_debit_operation
+  # Stripe transfer id and amount (in that transfer's currency) for a sticky transfer_reversal.
+  attr_json_data_accessor :refund_fee_debit_transfer_id
+  attr_json_data_accessor :refund_fee_debit_amount_cents
   # EUR cents requested for the BGN-fallback platform debit; reused on retry so the
   # Stripe idempotency key always pairs with the same amount parameters.
   attr_json_data_accessor :refund_fee_eur_debit_cents
+  # Holding-currency cents actually taken from Stripe for this fee debit, when known.
+  attr_json_data_accessor :refund_fee_holding_debit_cents
   attr_json_data_accessor :retained_fee_cents
   attr_json_data_accessor :presentment_currency
   attr_json_data_accessor :presentment_amount_cents

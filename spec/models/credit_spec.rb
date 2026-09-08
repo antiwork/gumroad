@@ -529,6 +529,39 @@ describe Credit do
         expect(attempts).to eq(2)
       end
     end
+
+    describe "when a successful non-US debit retry returns a different holding amount" do
+      let!(:merchant_account) { create(:merchant_account, user: creator, country: "CA", currency: "cad") }
+
+      before do
+        allow(ErrorNotifier).to receive(:notify)
+        allow(StripeChargeProcessor).to receive(:get_rate).with("cad").and_return("1.33")
+      end
+
+      it "adjusts the unpaid balance holding total to the actual Stripe debit" do
+        attempts = 0
+        allow(StripeChargeProcessor).to receive(:debit_stripe_account_for_refund_fee) do |credit:|
+          attempts += 1
+          if attempts == 1
+            raise Stripe::APIConnectionError, "timeout"
+          end
+
+          credit.fee_retention_refund.update!(debited_stripe_transfer: "trr_holding")
+          1400
+        end
+
+        credit = Credit.create_for_refund_fee_retention!(refund:)
+        expect(refund.reload.debited_stripe_transfer).to eq(Credit::FEE_DEBIT_PENDING_RETRY)
+        estimated = credit.balance_transaction.holding_amount_net_cents
+        expect(estimated).to be < 0
+
+        balance_before = credit.balance.holding_amount_cents
+        expect(Credit.create_for_refund_fee_retention!(refund:)).to eq(credit)
+        expect(attempts).to eq(2)
+        expect(refund.reload.refund_fee_holding_debit_cents).to eq(1400)
+        expect(credit.balance.reload.holding_amount_cents).to eq(balance_before + (-1400 - estimated))
+      end
+    end
   end
 
   describe "create_for_balance_change_on_stripe_account!" do

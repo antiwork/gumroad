@@ -3954,16 +3954,12 @@ describe StripeChargeProcessor, :vcr do
 
       credit = create(:credit, user: @merchant_account.user, amount_cents: 1000, merchant_account_id: @merchant_account.id, fee_retention_refund: create(:refund))
 
-      expect_any_instance_of(Refund).to receive(:update!).with({ debited_stripe_transfer: anything })
-
       described_class.debit_stripe_account_for_refund_fee(credit:)
     end
 
     it "reverses the earliest sale transfer if no internal transfer is present" do
       travel_to(Time.zone.local(2023, 10, 6)) do
         credit = create(:credit, amount_cents: 1000, merchant_account_id: @merchant_account.id, fee_retention_refund: create(:refund))
-
-        expect_any_instance_of(Refund).to receive(:update!).with({ debited_stripe_transfer: anything })
 
         described_class.debit_stripe_account_for_refund_fee(credit:)
       end
@@ -4174,6 +4170,48 @@ describe StripeChargeProcessor, :vcr do
         expect(Stripe::Transfer).not_to receive(:create)
 
         expect(described_class.debit_stripe_account_for_refund_fee(credit:)).to be_nil
+      end
+
+      it "persists the chosen transfer reversal before submit and resumes it after pending_retry" do
+        create_internal_transfer_payments("tr_eur_1")
+        credit = create_fee_credit
+        refund = credit.fee_retention_refund
+
+        expect(Stripe::Transfer).to receive(:retrieve).with("tr_eur_1").and_return(double(id: "tr_eur_1", amount: 2000, amount_reversed: 0, currency: "eur"))
+        expect(Stripe::Transfer).to receive(:create_reversal)
+                                      .with("tr_eur_1", { amount: 920 }, hash_including(idempotency_key: "refund_fee_reversal_#{refund.external_id}"))
+                                      .and_raise(Stripe::APIConnectionError.new("timeout"))
+
+        expect do
+          described_class.debit_stripe_account_for_refund_fee(credit:)
+        end.to raise_error(Stripe::APIConnectionError)
+
+        refund.reload
+        expect(refund.refund_fee_debit_operation).to eq(described_class::FEE_DEBIT_OP_TRANSFER_REVERSAL)
+        expect(refund.refund_fee_debit_transfer_id).to eq("tr_eur_1")
+        expect(refund.refund_fee_debit_amount_cents).to eq(920)
+
+        # Simulate the Credit rescue marker written after a timed-out Stripe call.
+        refund.update!(debited_stripe_transfer: Credit::FEE_DEBIT_PENDING_RETRY)
+
+        # A re-selection would now skip the depleted transfer and fall through to EUR.
+        # Sticky resume must reverse the same transfer instead.
+        expect(Stripe::Transfer).not_to receive(:retrieve)
+        expect(Stripe::Transfer).not_to receive(:list)
+        expect(Stripe::Transfer).not_to receive(:create)
+        transfer_reversal = double(id: "trr_eur_resume", destination_payment_refund: "re_eur_resume")
+        expect(Stripe::Transfer).to receive(:create_reversal)
+                                      .with("tr_eur_1", { amount: 920 }, hash_including(idempotency_key: "refund_fee_reversal_#{refund.external_id}"))
+                                      .and_return(transfer_reversal)
+        expect(Stripe::Refund).to receive(:retrieve)
+                                    .with("re_eur_resume", hash_including(stripe_account: @bg_merchant_account.charge_processor_merchant_id))
+                                    .and_return(double(balance_transaction: "txn_eur_resume"))
+        expect(Stripe::BalanceTransaction).to receive(:retrieve)
+                                                .with("txn_eur_resume", hash_including(stripe_account: @bg_merchant_account.charge_processor_merchant_id))
+                                                .and_return(double(net: -920))
+
+        expect(described_class.debit_stripe_account_for_refund_fee(credit:)).to eq(920)
+        expect(refund.reload.debited_stripe_transfer).to eq("trr_eur_resume")
       end
     end
   end

@@ -688,27 +688,31 @@ class Purchase
       return if refund.blank?
 
       # Serialize against HandleFailedRefundService (same purchase → refund lock order)
-      # through local ledger booking. Debit markers are written in requires_new
-      # transactions, so a ledger failure here cannot erase proof Stripe already debited.
+      # through local ledger booking. Nested requires_new marker writes are only savepoints,
+      # so a ledger failure must be handled inside this transaction: re-raising would roll
+      # back the enclosing txn and erase proof Stripe already debited. Swallowing lets this
+      # txn commit and keeps the marker for an idempotent retry.
       transaction do
         reload.lock!
         refund.reload.lock!
-        unless refund.balance_reversed_on_failure
+        next if refund.balance_reversed_on_failure
+
+        begin
           Credit.create_for_refund_fee_retention!(refund:)
+        rescue StandardError => e
+          logger.error "Failed to retain the fee for refund #{refund.id} of purchase #{id}: #{e.class}: #{e.message}"
+          ErrorNotifier.notify(
+            "Failed to retain refund fee after refund",
+            context: {
+              purchase_id: id,
+              purchase_external_id: external_id,
+              refund_id: refund.id,
+              error_class: e.class.name,
+              error: e.message,
+            }
+          )
         end
       end
-    rescue StandardError => e
-      logger.error "Failed to retain the fee for refund #{refund.id} of purchase #{id}: #{e.class}: #{e.message}"
-      ErrorNotifier.notify(
-        "Failed to retain refund fee after refund",
-        context: {
-          purchase_id: id,
-          purchase_external_id: external_id,
-          refund_id: refund.id,
-          error_class: e.class.name,
-          error: e.message,
-        }
-      )
     end
 
     def insufficient_funds_refund_error_message
