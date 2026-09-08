@@ -301,7 +301,11 @@ class Order::ChargeService
           purchase.mark_indian_card_mandate_registration! if purchase.credit_card&.requires_mandate?
         end
         credit_card = purchases.first&.credit_card
-        credit_card&.store_stripe_setup_intent_id!(merchant_account, existing_si.id) if credit_card&.requires_mandate?
+        # Only promote to the saved card once the SetupIntent has succeeded; a pending/canceled
+        # replacement must not replace the mandate renewals still depend on.
+        if credit_card&.requires_mandate? && existing_si.succeeded?
+          credit_card.store_stripe_setup_intent_id!(merchant_account, existing_si.id)
+        end
         return
       end
       chargeable.stripe_setup_intent_id = nil
@@ -324,7 +328,9 @@ class Order::ChargeService
     # Store in the merchant-scoped map so later groups on the same account find it via
     # to_chargeable, and renewals resolve the right SI per account.
     credit_card = purchases.first&.credit_card
-    credit_card&.store_stripe_setup_intent_id!(merchant_account, setup_intent.id) if credit_card&.requires_mandate?
+    if credit_card&.requires_mandate? && setup_intent.succeeded?
+      credit_card.store_stripe_setup_intent_id!(merchant_account, setup_intent.id)
+    end
 
     if !setup_intent.requires_action? && !setup_intent.succeeded?
       purchases.each do |purchase|

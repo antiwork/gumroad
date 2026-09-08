@@ -122,6 +122,16 @@ class Order::ConfirmService
               # (client_confirmed without a stored PI). Failing the purchase could lose a
               # payment that is still going to capture. Report processing and let webhooks finish it.
               setup_charge_results[purchase.id] = :pending unless setup_charge_results.key?(purchase.id)
+            elsif pending.include?(purchase) && purchase.charge.present?
+              # CreateService may have accepted the debit before a later Stripe error (e.g. rate
+              # limit while loading the charge). Keep unsettled rather than inviting a second charge.
+              purchase.errors.clear
+              purchase.error_code = nil
+              purchase.stripe_error_code = nil
+              purchase.update!(stripe_status: StripeIntentStatus::PROCESSING) if purchase.stripe_status.blank?
+              purchase.charge.update!(client_confirmed: true)
+              setup_charge_results[purchase.id] = :pending
+              ReconcileClientConfirmedChargeJob.perform_in(30.seconds, purchase.charge.id)
             elsif purchase.errors.empty?
               purchase.errors.add(:base, "There is a temporary problem, please try again (your card was not charged).")
             end

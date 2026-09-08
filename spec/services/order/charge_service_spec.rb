@@ -1600,9 +1600,14 @@ describe Order::ChargeService, :vcr do
                         total_transaction_cents: 10_00)
       chargeable = instance_double(Chargeable, requires_mandate?: true, stripe_setup_intent_id: nil)
       allow(chargeable).to receive(:stripe_setup_intent_id=)
-      setup_intent = SetupIntent.new
-      setup_intent.id = "seti_india"
-      allow(setup_intent).to receive_messages(succeeded?: true, requires_action?: false)
+      setup_intent = instance_double(StripeSetupIntent,
+                                    id: "seti_india",
+                                    payment_method_id: "pm_seti_india",
+                                    customer_id: nil,
+                                    mandate: "mandate_seti_india",
+                                    card_mandate_options: { amount: 10_00, currency: "usd" },
+                                    succeeded?: true,
+                                    requires_action?: false)
       allow(ChargeProcessor).to receive(:setup_future_charges!).and_return(setup_intent)
       charge = instance_double(Charge, charge_intent: nil, credit_card: nil)
       create_service = instance_double(Charge::CreateService, perform: charge)
@@ -1646,9 +1651,14 @@ describe Order::ChargeService, :vcr do
                         total_transaction_cents: 10_00)
       chargeable = instance_double(Chargeable, requires_mandate?: true, stripe_setup_intent_id: nil)
       allow(chargeable).to receive(:stripe_setup_intent_id=)
-      setup_intent = SetupIntent.new
-      setup_intent.id = "seti_india_quote"
-      allow(setup_intent).to receive_messages(succeeded?: false, requires_action?: true)
+      setup_intent = instance_double(StripeSetupIntent,
+                                    id: "seti_india_quote",
+                                    payment_method_id: "pm_seti_india_quote",
+                                    customer_id: nil,
+                                    mandate: "mandate_seti_india_quote",
+                                    card_mandate_options: { amount: 10_00, currency: "usd" },
+                                    succeeded?: false,
+                                    requires_action?: true)
       captured_mandate_options = nil
       allow(ChargeProcessor).to receive(:setup_future_charges!) do |_account, _chargeable, mandate_options:|
         captured_mandate_options = mandate_options
@@ -1732,9 +1742,14 @@ describe Order::ChargeService, :vcr do
                         total_transaction_cents: 10_00)
       chargeable = instance_double(Chargeable, requires_mandate?: true, stripe_setup_intent_id: nil)
       allow(chargeable).to receive(:stripe_setup_intent_id=)
-      setup_intent = SetupIntent.new
-      setup_intent.id = "seti_india_failed"
-      allow(setup_intent).to receive_messages(succeeded?: false, requires_action?: false)
+      setup_intent = instance_double(StripeSetupIntent,
+                                    id: "seti_india_failed",
+                                    payment_method_id: "pm_seti_india_failed",
+                                    customer_id: nil,
+                                    mandate: "mandate_seti_india_failed",
+                                    card_mandate_options: { amount: 10_00, currency: "usd" },
+                                    succeeded?: false,
+                                    requires_action?: false)
       allow(ChargeProcessor).to receive(:setup_future_charges!).and_return(setup_intent)
       service = described_class.new(order:, params: {})
       allow(service).to receive(:mandate_options_for_stripe).and_return(
@@ -1760,9 +1775,14 @@ describe Order::ChargeService, :vcr do
                         total_transaction_cents: 10_00)
       chargeable = instance_double(Chargeable, requires_mandate?: true, stripe_setup_intent_id: nil)
       allow(chargeable).to receive(:stripe_setup_intent_id=)
-      setup_intent = SetupIntent.new
-      setup_intent.id = "seti_india_sca"
-      allow(setup_intent).to receive_messages(succeeded?: false, requires_action?: true)
+      setup_intent = instance_double(StripeSetupIntent,
+                                    id: "seti_india_sca",
+                                    payment_method_id: "pm_seti_india_sca",
+                                    customer_id: nil,
+                                    mandate: "mandate_seti_india_sca",
+                                    card_mandate_options: { amount: 10_00, currency: "usd" },
+                                    succeeded?: false,
+                                    requires_action?: true)
       allow(ChargeProcessor).to receive(:setup_future_charges!).and_return(setup_intent)
       service = described_class.new(order:, params: {})
       allow(service).to receive(:mandate_options_for_stripe).and_return(
@@ -1914,7 +1934,7 @@ describe Order::ChargeService, :vcr do
                                     requires_action?: false,
                                     present?: true)
       allow(ChargeProcessor).to receive(:get_setup_intent).with(merchant_account, "seti_canceled").and_return(canceled_si)
-      fresh_si = SetupIntent.new
+      fresh_si = instance_double(StripeSetupIntent, id: "seti_fresh", payment_method_id: "pm_fresh", customer_id: nil, mandate: "mandate_fresh", card_mandate_options: { amount: 10_00, currency: "usd" }, succeeded?: true, requires_action?: false)
       fresh_si.id = "seti_fresh"
       allow(fresh_si).to receive_messages(succeeded?: true, requires_action?: false, present?: true, payment_method_id: "pm_fresh_connect")
       captured_mandate = nil
@@ -2237,8 +2257,14 @@ describe Order::ChargeService, :vcr do
         zip_code: "H2X 1Y4"
       )
       allow(CardParamsHelper).to receive(:build_chargeable).and_return(preorder_chargeable)
-      setup_intent = SetupIntent.new
-      setup_intent.id = "seti_presentment"
+      setup_intent = instance_double(StripeSetupIntent,
+                                    id: "seti_presentment",
+                                    payment_method_id: "pm_presentment",
+                                    customer_id: nil,
+                                    mandate: "mandate_presentment",
+                                    card_mandate_options: { amount: 10_00, currency: "usd" },
+                                    succeeded?: true,
+                                    requires_action?: false)
       allow(ChargeProcessor).to receive(:setup_future_charges!).and_return(setup_intent)
 
       preorder_product = create(:product, user: seller_1, price_cents: 10_00, is_in_preorder_state: true)
