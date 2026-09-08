@@ -17,7 +17,13 @@ worker_timeout 3600 if ENV.fetch("RAILS_ENV", "development") == "development"
 
 # Specifies the `port` that Puma will listen on to receive requests, default is 3000.
 #
-port ENV.fetch("PORT") { 3000 }
+# Spelled as `bind` rather than `port` only because the backlog has to ride on the query
+# string -- the `port` DSL builds a bare tcp:// URI, so it always takes Puma's default
+# backlog of 1024. That queue is shared by every worker and drained by workers * threads
+# request slots, so a burst of slow requests fills it in seconds; past that the kernel
+# drops SYNs and nginx reports a connect timeout. 4096 matches the listen backlog nginx
+# uses out front, and somaxconn clamps both to the same ceiling.
+bind "tcp://0.0.0.0:#{ENV.fetch("PORT") { 3000 }}?backlog=4096"
 
 # Specifies the `environment` that Puma will run in.
 #

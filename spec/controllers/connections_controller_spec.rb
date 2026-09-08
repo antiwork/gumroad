@@ -36,6 +36,9 @@ describe ConnectionsController do
 
     it "keeps the social connect verification row while clearing the live twitter identity" do
       verification = create(:social_connect_verification, user: seller, platform: "twitter", uid: "123", handle: "gumroad")
+      seller.update!(user_risk_state: "flagged_for_fraud")
+      allow(seller).to receive(:unpaid_balance_cents).and_return(5000)
+      expect(SocialScoreShadowEvaluationService.new(seller).evaluate).to include(score: 85, would_have_released: true)
 
       post :unlink_twitter
 
@@ -43,6 +46,7 @@ describe ConnectionsController do
       expect(seller.reload.twitter_user_id).to be_nil
       expect(SocialConnectVerification.exists?(id: verification.id)).to be(true)
       expect(verification.reload.uid).to eq("123")
+      expect(SocialScoreShadowEvaluationService.new(seller).evaluate).to include(score: 0, would_have_released: false)
     end
 
     it "responds with an error message if the unlink fails" do
