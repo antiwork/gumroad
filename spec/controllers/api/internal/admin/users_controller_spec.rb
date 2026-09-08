@@ -2223,6 +2223,7 @@ describe Api::Internal::Admin::UsersController do
                                                                        "evaluated_on" => "2026-09-02",
                                                                        "recorded_at" => "2026-09-03T12:00:00Z",
                                                                        "score" => 70,
+                                                                       "unpaid_balance_cents" => latest.unpaid_balance_cents,
                                                                        "would_have_released" => true,
                                                                        "hold_source" => latest.hold_source,
                                                                        "signals" => latest.signals,

@@ -1019,6 +1019,7 @@ class Api::Internal::Admin::UsersController < Api::Internal::Admin::BaseControll
         evaluated_on: evaluation.evaluated_on.iso8601,
         recorded_at: evaluation.created_at.iso8601,
         score: evaluation.score,
+        unpaid_balance_cents: evaluation.unpaid_balance_cents,
         would_have_released: evaluation.would_have_released,
         hold_source: evaluation.hold_source,
         signals: evaluation.signals,
