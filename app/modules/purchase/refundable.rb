@@ -290,12 +290,11 @@ class Purchase
     # the fallback is unreachable there and a presentment amount can never be booked as canonical.
     funds_refunded = canonical_gross_refund_cents || flow_of_funds.issued_amount.cents.abs
     refund = nil
-    ActiveRecord::Base.transaction do
+    refunded_locally = ActiveRecord::Base.transaction do
       # Failed-refund reversals lock the purchase before their refund and balance rows.
       # Use the same order here so a single-purchase refund cannot hold a balance while
-      # waiting for a purchase row that a reversal already holds. (Combined-charge
-      # refunds take all their purchase locks up front in id order — see
-      # Charge#refund_and_save! — so they follow the same purchase-first order.)
+      # waiting for a purchase row that a reversal already holds. Combined-charge refunds
+      # process purchases in id order without one wrapping transaction (#7549).
       # reload first: reading any json_data-backed attribute on a row whose json_data
       # column is NULL dirties the record in memory, and lock! raises on dirty records.
       # Reloading discards that phantom change; lock! reloads again under FOR UPDATE.
@@ -368,27 +367,34 @@ class Purchase
       end
 
       true
-    end.tap do |refunded|
-      next unless refunded
-
-      # After this method's transaction returns: ChargeProcessor.refund! has already moved
-      # the money. Fee ledger writes use requires_new so an outer Charge/webhook transaction
-      # cannot commit a half-written credit if retention fails mid-way. Neither a failed fee
-      # debit nor a failed license write may roll back the refund rows.
-      debit_processor_fee_from_merchant_account!(refund) unless is_refund_chargeback_fee_waived || chargedback_not_reversed?
-      disable_attached_license_if_fully_refunded!(for_fraud: is_for_fraud)
     end
+
+    # Fee retention / license disable wait for the outermost commit. `.tap` still runs under
+    # Charge#refund_and_save! or webhook with_lock, where requires_new markers are savepoints
+    # an outer rollback can erase after Stripe already moved money.
+    if refunded_locally
+      refund_id = refund.id
+      should_debit_fee = !is_refund_chargeback_fee_waived && !chargedback_not_reversed?
+      for_fraud = is_for_fraud
+      after_commit do
+        refund_record = Refund.find_by(id: refund_id)
+        next if refund_record.blank?
+
+        debit_processor_fee_from_merchant_account!(refund_record) if should_debit_fee
+        disable_attached_license_if_fully_refunded!(for_fraud: for_fraud)
+      end
+    end
+
+    refunded_locally
   end
 
   def refund_partial_purchase!(gross_refund_amount_cents, refunding_user_id, processor_refund_id: nil)
     refund = nil
-    ActiveRecord::Base.transaction do
-      # Same purchase-first lock order as refund_purchase!: take the purchase row
-      # lock before touching refund or balance rows, so this path cannot hold a
-      # balance while a failed-refund reversal holds the purchase. reload first
-      # because reading a json_data-backed attribute on a row whose json_data is
-      # NULL dirties the record, and lock! raises on dirty records. Read the
-      # partial-refund flag only after the lock so it reflects committed state.
+    refunded_locally = ActiveRecord::Base.transaction do
+      # Same purchase-first lock order as refund_purchase!: purchase before refund/
+      # balance so this path cannot hold a balance while a failed-refund reversal
+      # holds the purchase. reload before lock! (NULL json_data dirties the record).
+      # Read the partial-refund flag only after the lock so it reflects committed state.
       reload.lock!
       partially_refunded_previously = self.stripe_partially_refunded
       if (gross_amount_refunded_cents + gross_refund_amount_cents) >= total_transaction_cents
@@ -418,12 +424,19 @@ class Purchase
       # is committed/visible and would miss it.
       CustomerMailer.partial_refund(email, link.id, id, gross_refund_amount_cents, formatted_refund_state, refund&.presentment_amount_cents, refund&.presentment_currency).deliver_later(queue: "critical")
       true
-    end.tap do |refunded|
-      next unless refunded
-
-      debit_processor_fee_from_merchant_account!(refund) unless is_refund_chargeback_fee_waived
-      disable_attached_license_if_fully_refunded!
     end
+
+    if refunded_locally
+      refund_id = refund&.id
+      should_debit_fee = !is_refund_chargeback_fee_waived
+      after_commit do
+        refund_record = refund_id.present? ? Refund.find_by(id: refund_id) : nil
+        debit_processor_fee_from_merchant_account!(refund_record) if should_debit_fee && refund_record.present?
+        disable_attached_license_if_fully_refunded!
+      end
+    end
+
+    refunded_locally
   end
 
   def refund_gumroad_taxes!(refunding_user_id:, note: nil, business_vat_id: nil)
@@ -680,19 +693,12 @@ class Purchase
       Stripe::Transfer.create_reversal(transfer.id, { amount: amount_refundable_cents }) if transfer.present?
     end
 
-    # Runs after the refund transaction commits: the processor has already returned the
-    # money, so a failure here is reported and left for a retry rather than allowed to
-    # unwind the refund. Credit.create_for_refund_fee_retention! is idempotent, so calling
-    # it again for the same refund finishes whatever the first attempt did not.
+    # After-commit only: never let fee retention unwind a processor-successful refund.
+    # Idempotent: re-running finishes an outstanding Stripe debit. Serialize eligibility
+    # against HandleFailedRefundService, then release before Stripe so markers are commits.
     def debit_processor_fee_from_merchant_account!(refund)
       return if refund.blank?
 
-      # Intentionally after the refund transaction has committed: fee retention must never
-      # roll back a processor-successful buyer refund (private issue 2460). Serialize
-      # eligibility against HandleFailedRefundService (same purchase → refund lock order),
-      # then release before Stripe so sticky debit choices and success markers are real
-      # commits rather than savepoints. A crash here leaves a committed refund and a
-      # retryable fee; that is the accepted recovery model, not a missing atomic intent.
       fee_reversed = false
       transaction do
         reload.lock!
@@ -715,6 +721,7 @@ class Purchase
             error: e.message,
           }
         )
+        RetryRefundFeeRetentionJob.perform_in(1.minute, refund.id) if refund.id.present?
       end
     end
 

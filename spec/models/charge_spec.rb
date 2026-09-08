@@ -125,13 +125,6 @@ describe Charge, :vcr do
       failed_errors = instance_double(ActiveModel::Errors, full_messages: ["First refund failed"])
       failed_purchase = instance_double(Purchase, id: 1, refund_and_save!: false, errors: failed_errors)
       successful_purchase = instance_double(Purchase, id: 2, refund_and_save!: true)
-      # The id-ordered lock pre-pass reloads and row-locks each purchase before any
-      # refund work; stub it out here — the concurrency guarantees are proven by
-      # real-thread coverage in handle_failed_refund_service_concurrency_spec.rb.
-      [failed_purchase, successful_purchase].each do |purchase|
-        allow(purchase).to receive(:reload).and_return(purchase)
-        allow(purchase).to receive(:lock!).and_return(purchase)
-      end
       allow(charge).to receive(:successful_purchases).and_return([failed_purchase, successful_purchase])
 
       expect(charge.refund_and_save!(123, reason: "Refund requested by the buyer")).to be(false)
@@ -139,6 +132,18 @@ describe Charge, :vcr do
       expect(failed_purchase).to have_received(:refund_and_save!).with(123, reason: "Refund requested by the buyer")
       expect(successful_purchase).to have_received(:refund_and_save!).with(123, reason: "Refund requested by the buyer")
       expect(charge.errors[:base]).to include("First refund failed")
+    end
+
+    it "keeps an earlier purchase refund when a later purchase raises" do
+      charge = create(:charge)
+      first = instance_double(Purchase, id: 1, refund_and_save!: true)
+      second_errors = instance_double(ActiveModel::Errors, full_messages: [])
+      second = instance_double(Purchase, id: 2, errors: second_errors)
+      allow(second).to receive(:refund_and_save!).and_raise(RuntimeError, "processor unavailable")
+      allow(charge).to receive(:successful_purchases).and_return([first, second])
+
+      expect { charge.refund_and_save!(123, reason: "Refund requested by the buyer") }.to raise_error(RuntimeError, "processor unavailable")
+      expect(first).to have_received(:refund_and_save!).with(123, reason: "Refund requested by the buyer")
     end
   end
 

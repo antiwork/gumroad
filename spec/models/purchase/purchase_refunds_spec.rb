@@ -1897,6 +1897,33 @@ describe "PurchaseRefunds", :vcr do
           hash_including(context: hash_including(refund_id: refund.id))
         )
       end
+
+      it "runs fee retention only after the enclosing transaction commits" do
+        admin = create(:admin_user)
+        expect(ChargeProcessor).to receive(:refund!).and_return(build_charge_refund(@purchase.total_transaction_cents))
+        allow(Credit).to receive(:create_for_refund_fee_retention!).and_return(nil)
+
+        ActiveRecord::Base.transaction do
+          expect(@purchase.refund_and_save!(admin.id, reason: "Refund requested by the buyer")).to be(true)
+          expect(Credit).not_to have_received(:create_for_refund_fee_retention!)
+        end
+
+        expect(Credit).to have_received(:create_for_refund_fee_retention!)
+        expect(@purchase.reload.refunds).to be_present
+      end
+
+      it "does not debit the fee when the enclosing transaction rolls back" do
+        admin = create(:admin_user)
+        expect(ChargeProcessor).to receive(:refund!).and_return(build_charge_refund(@purchase.total_transaction_cents))
+        allow(Credit).to receive(:create_for_refund_fee_retention!)
+
+        ActiveRecord::Base.transaction do
+          expect(@purchase.refund_and_save!(admin.id, reason: "Refund requested by the buyer")).to be(true)
+          raise ActiveRecord::Rollback
+        end
+
+        expect(Credit).not_to have_received(:create_for_refund_fee_retention!)
+      end
     end
 
     describe "Low balance related sidekiq jobs" do

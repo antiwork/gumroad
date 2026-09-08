@@ -291,10 +291,8 @@ class Credit < ApplicationRecord
     credit
   end
 
-  # Idempotent: runs after the refund has committed (the processor has already returned the
-  # buyer's money), so it must be safe to call again when an earlier attempt failed part way.
-  # The ledger rows are booked in one transaction, so an existing retention credit means the
-  # only thing that can still be outstanding is the Stripe debit.
+  # Idempotent after the processor refund: safe to re-run when an earlier attempt failed part
+  # way. An existing retention credit means only the Stripe debit can still be outstanding.
   def self.create_for_refund_fee_retention!(refund:)
     purchase = refund.purchase
     # Same purchase → refund lock order as HandleFailedRefundService / the Purchase wrapper.
@@ -469,16 +467,13 @@ class Credit < ApplicationRecord
     credit
   end
 
-  # Sentinel written when a Stripe fee debit fails after we already intend to book the
-  # local ledger. Distinguishes a retryable new failure from a pre-patch US retention
-  # that completed without recording debited_stripe_transfer.
+  # Retryable Stripe fee-debit failure. Distinguishes new failures from pre-patch US
+  # retentions that completed without recording debited_stripe_transfer.
   FEE_DEBIT_PENDING_RETRY = "pending_retry"
 
-  # For Stripe sales that use a gumroad-managed custom connect account, pull the retained fee
-  # out of that Stripe account. Best effort: the ledger is booked whether or not this
-  # succeeds, a failure is reported and left for a retry, and the transfer id recorded on
-  # the refund makes a second call a no-op. Returns the amount taken from the Stripe balance
-  # in the account's currency, or nil when the ledger has to fall back to the converted fee.
+  # Best-effort Stripe debit of the retained fee from a gumroad-managed Connect account.
+  # Records the transfer id for idempotency; failures become pending_retry for the job.
+  # Returns holding-currency cents taken, or nil when the ledger falls back to the estimate.
   def self.debit_stripe_account_for_retained_fee(credit)
     merchant_account = credit.merchant_account
     refund = credit.fee_retention_refund
@@ -499,12 +494,17 @@ class Credit < ApplicationRecord
         refuse_expired_fee_debit_resubmit!(refund, StripeChargeProcessor::FEE_DEBIT_OP_US_DEBIT)
         return refund.refund_fee_holding_debit_cents.presence&.to_i
       end
-      persist_refund_fee_debit_choice!(refund, operation: StripeChargeProcessor::FEE_DEBIT_OP_US_DEBIT,
-                                              amount_cents: credit.amount_cents.abs)
+      persist_refund_fee_debit_choice!(
+        refund,
+        operation: StripeChargeProcessor::FEE_DEBIT_OP_US_DEBIT,
+        amount_cents: credit.amount_cents.abs
+      )
       transfer_options = { stripe_account: merchant_account.charge_processor_merchant_id }
       transfer_options[:idempotency_key] = "refund_fee_us_debit_#{refund.external_id}" if refund.id.present?
-      transfer = Stripe::Transfer.create({ amount: credit.amount_cents.abs, currency: "usd", destination: Stripe::Account.retrieve.id, },
-                                         transfer_options)
+      transfer = Stripe::Transfer.create(
+        { amount: credit.amount_cents.abs, currency: "usd", destination: Stripe::Account.retrieve.id },
+        transfer_options
+      )
       record_fee_debit_marker!(refund, transfer.id)
       persist_refund_fee_holding_on_credit!(refund, credit.amount_cents.abs, currency: Currency::USD)
       credit.amount_cents.abs
@@ -528,10 +528,8 @@ class Credit < ApplicationRecord
   end
   private_class_method :fee_debit_pending_retry?
 
-  # Write the debit marker in a requires_new savepoint. Callers that wrap retention in an
-  # enclosing transaction must commit that transaction even when later ledger work fails
-  # (see Purchase#debit_processor_fee_from_merchant_account!), otherwise the savepoint is
-  # rolled back and a retry can debit Stripe again after the idempotency window.
+  # requires_new so the marker can commit even if later ledger work fails inside an
+  # enclosing retention transaction (otherwise a retry can debit Stripe twice).
   def self.record_fee_debit_marker!(refund, marker)
     transaction(requires_new: true) do
       refund.update!(debited_stripe_transfer: marker)
@@ -554,6 +552,7 @@ class Credit < ApplicationRecord
         refund.update!(debited_stripe_transfer: FEE_DEBIT_PENDING_RETRY)
       end
     end
+    RetryRefundFeeRetentionJob.perform_in(1.minute, refund.id) if refund.id.present?
   end
   private_class_method :record_pending_fee_debit_retry!
 
@@ -571,11 +570,9 @@ class Credit < ApplicationRecord
   end
   private_class_method :persist_refund_fee_holding_on_credit!
 
-  # Persist the chosen Stripe recovery route before submit so a timed-out response cannot
-  # be retried as a different operation (e.g. transfer reversal → EUR debit).
-  # Stripe documents a 24-hour idempotency key retention window. Refuse automatic
-  # resubmits after this slightly shorter window so a timed-out fee debit cannot be
-  # posted twice once Stripe has forgotten the original key.
+  # Sticky recovery route before Stripe submit so a timed-out response cannot be retried as
+  # a different operation. Refuse automatic resubmits after this window (under Stripe's 24h
+  # idempotency retention) so a forgotten key cannot double-post a timed-out debit.
   FEE_DEBIT_IDEMPOTENCY_WINDOW = 23.hours
 
   def self.persist_refund_fee_debit_choice!(refund, operation:, transfer_id: nil, amount_cents: nil)

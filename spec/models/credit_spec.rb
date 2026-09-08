@@ -449,6 +449,7 @@ describe Credit do
         expect(refund.debited_stripe_transfer).to eq(Credit::FEE_DEBIT_PENDING_RETRY)
         expect(creator.reload.unpaid_balance_cents).to eq(-33)
         expect(ErrorNotifier).to have_received(:notify).with(stripe_error, hash_including(context: hash_including(refund_id: refund.id)))
+        expect(RetryRefundFeeRetentionJob).to have_enqueued_sidekiq_job(refund.id).in(1.minute)
       end
 
       it "retries only the Stripe debit when called again, and stops once the debit is recorded" do

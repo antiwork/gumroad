@@ -79,6 +79,12 @@ class Refund < ApplicationRecord
   attr_json_data_accessor :note
   attr_json_data_accessor :business_vat_id
   attr_json_data_accessor :debited_stripe_transfer
+
+  # Stripe fee debit failed transiently; retry jobs revisit these within the idempotency window.
+  scope :pending_fee_debit_retry, -> {
+    where("refunds.json_data->>'$.debited_stripe_transfer' = ?", Credit::FEE_DEBIT_PENDING_RETRY)
+  }
+
   # Sticky recovery route chosen before the Stripe submit (transfer_reversal / eur_debit /
   # us_debit). Retries must resume this route instead of selecting a new one.
   attr_json_data_accessor :refund_fee_debit_operation

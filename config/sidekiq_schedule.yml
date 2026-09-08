@@ -14,6 +14,10 @@ dispatch_pending_failed_refund_exceptions:
   cron: "* * * * *" # Every minute
   class: DispatchPendingFailedRefundExceptionsJob
   description: Re-enqueues notifications for durable failed-refund exception records
+retry_pending_refund_fee_debits:
+  cron: "*/15 * * * *" # Every 15 minutes, inside the 23h Stripe fee-debit idempotency window
+  class: RetryPendingRefundFeeDebitsJob
+  description: Retries Stripe refund fee debits left in pending_retry after transient failures
 update_purchase_healthcheck_threshold:
   cron: "* * * * *" # Every minute — the threshold carries a 1h TTL, so the healthcheck fails closed if this stalls
   class: UpdatePurchaseHealthcheckThresholdJob
