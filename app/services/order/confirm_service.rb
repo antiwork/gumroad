@@ -377,34 +377,54 @@ class Order::ConfirmService
         return
       end
 
-      if credit_card&.requires_mandate?
-        existing = credit_card.json_data.to_h
-        ids = existing["stripe_setup_intent_ids"].is_a?(Hash) ? existing["stripe_setup_intent_ids"].dup : {}
-        account_key = merchant_account.is_a_stripe_connect_account? ? merchant_account.charge_processor_merchant_id : "platform"
-        # Persist the confirmed SetupIntent for this account (replacing an insufficient prior
-        # mandate) and migrate any legacy scalar so renewals resolve Connect PM binding.
-        ids[account_key] = setup_intent_id.presence || ids[account_key].presence || existing["stripe_setup_intent_id"]
-        ids.compact!
-        next_data = existing.merge("stripe_payment_intent_id" => charge_intent.id)
-        next_data["stripe_setup_intent_ids"] = ids if ids.present?
-        credit_card.update!(json_data: next_data.compact)
-      end
-      return unless charge_intent.is_a?(StripeChargeIntent)
+      begin
+        if credit_card&.requires_mandate?
+          account_key = merchant_account.is_a_stripe_connect_account? ? merchant_account.charge_processor_merchant_id : "platform"
+          credit_card.with_lock do
+            credit_card.reload
+            existing = credit_card.json_data.to_h
+            ids = existing["stripe_setup_intent_ids"].is_a?(Hash) ? existing["stripe_setup_intent_ids"].dup : {}
+            # Persist the confirmed SetupIntent for this account (replacing an insufficient prior
+            # mandate) and migrate any legacy scalar so renewals resolve Connect PM binding.
+            ids[account_key] = setup_intent_id.presence || ids[account_key].presence || existing["stripe_setup_intent_id"]
+            ids.compact!
+            next_data = existing.merge("stripe_payment_intent_id" => charge_intent.id)
+            next_data["stripe_setup_intent_ids"] = ids if ids.present?
+            credit_card.update!(json_data: next_data.compact)
+          end
+        end
 
-      # The debit can outlive this request (India intents stay `processing` for up to 26h),
-      # and the buyer may never come back to retry the confirm. client_confirmed is what
-      # routes the intent's payment_intent.succeeded / payment_failed webhooks into the
-      # async finalize/fail rails (Purchase::ChargeEventsHandler); without it these
-      # purchases would sit in_progress forever.
-      charge.update!(client_confirmed: true)
+        return unless charge_intent.is_a?(StripeChargeIntent)
 
-      purchases.each do |purchase|
-        purchase.create_processor_payment_intent!(intent_id: charge_intent.id)
+        # The debit can outlive this request (India intents stay `processing` for up to 26h),
+        # and the buyer may never come back to retry the confirm. client_confirmed is what
+        # routes the intent's payment_intent.succeeded / payment_failed webhooks into the
+        # async finalize/fail rails (Purchase::ChargeEventsHandler); without it these
+        # purchases would sit in_progress forever.
+        charge.update!(client_confirmed: true)
+
+        purchases.each do |purchase|
+          purchase.create_processor_payment_intent!(intent_id: charge_intent.id)
+        end
+        # Finalize from the intent we just created instead of leaving these purchases to
+        # Purchase::ConfirmService: its confirm_charge_intent! re-confirms any non-succeeded
+        # intent, and Stripe rejects that for a `processing` one (India debits stay processing
+        # for up to 26h with the debit already scheduled).
+        finalize_charged_purchases(purchases, charge_intent)
+      rescue => e
+        # Local persistence failed after Stripe already accepted the debit. Persist recovery
+        # markers outside the rolled-back work so webhooks/reconcile can finish fulfillment.
+        Rails.logger.error("Error persisting setup-confirmed charge for order #{order.id}: #{e.class} => #{e.message}")
+        ErrorNotifier.notify(e, order_id: order.id, charge_id: charge.id)
+        charge.reload
+        charge.update!(client_confirmed: true, stripe_payment_intent_id: charge.stripe_payment_intent_id.presence || charge_intent.id)
+        purchases.each do |purchase|
+          purchase.reload
+          purchase.update!(stripe_status: StripeIntentStatus::PROCESSING) if purchase.stripe_status.blank?
+          purchase.create_processor_payment_intent!(intent_id: charge_intent.id) if purchase.processor_payment_intent.blank?
+          setup_charge_results[purchase.id] = :pending
+        end
+        ReconcileClientConfirmedChargeJob.perform_in(30.seconds, charge.id)
       end
-      # Finalize from the intent we just created instead of leaving these purchases to
-      # Purchase::ConfirmService: its confirm_charge_intent! re-confirms any non-succeeded
-      # intent, and Stripe rejects that for a `processing` one (India debits stay processing
-      # for up to 26h with the debit already scheduled).
-      finalize_charged_purchases(purchases, charge_intent)
     end
 end

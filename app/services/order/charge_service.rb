@@ -530,6 +530,16 @@ class Order::ChargeService
           register_india_mandate_for_off_session_cart!(purchases_to_charge, chargeable, merchant_account, setup_mandate_options)
           account_setup_intents[account_key] = setup_intent if setup_intent.present?
         end
+        # Setup-only siblings in this seller group share the same mandate SI for later confirm
+        # validation, even though they are excluded from the debit.
+        if setup_intent.present?
+          (mandate_purchases - purchases_to_charge).each do |purchase|
+            next unless purchase.in_progress? && purchase.errors.empty?
+            purchase.update!(processor_setup_intent_id: setup_intent.id)
+            purchase.charge&.update!(stripe_setup_intent_id: setup_intent.id)
+            purchase.mark_indian_card_mandate_registration! if purchase.credit_card&.requires_mandate?
+          end
+        end
         return if setup_intent&.requires_action? || purchases_to_charge.any? { |purchase| purchase.errors.present? }
       end
       if setup_future_charges && mandate_options.present? && chargeable&.requires_mandate?
