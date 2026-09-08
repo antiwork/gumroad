@@ -1510,6 +1510,16 @@ describe OfferCode do
         ReindexSellerOfferCodesJob.clear
         universal_offer_code.update!(excluded_products: [product1])
         expect(ReindexSellerOfferCodesJob).to have_enqueued_sidekiq_job(creator.id)
+        expect($redis.zrange("offer_code_index:#{creator.id}:products", 0, -1)).to include(product1.id.to_s)
+      end
+
+      it "targets unpublished excluded products so republication does not keep a stale discount" do
+        unpublished = create(:product, user: creator, purchase_disabled_at: Time.current)
+        universal_offer_code = create(:universal_offer_code, user: creator, code: "KEEP")
+        ReindexSellerOfferCodesJob.clear
+        universal_offer_code.update!(excluded_products: [unpublished])
+        expect(ReindexSellerOfferCodesJob).to have_enqueued_sidekiq_job(creator.id)
+        expect($redis.zrange("offer_code_index:#{creator.id}:products", 0, -1)).to include(unpublished.id.to_s)
       end
 
       it "reindexes associated products when offer code is updated" do

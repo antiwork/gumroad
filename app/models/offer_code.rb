@@ -22,7 +22,7 @@ class OfferCode < ApplicationRecord
 
   has_and_belongs_to_many :products, class_name: "Link", join_table: "offer_codes_products", association_foreign_key: "product_id", after_add: :note_applicability_change, after_remove: [:note_applicability_change, :note_removed_product, :reindex_removed_product]
   has_and_belongs_to_many :ownership_products, class_name: "Link", join_table: "offer_codes_ownership_products", association_foreign_key: "product_id"
-  has_and_belongs_to_many :excluded_products, class_name: "Link", join_table: "offer_codes_excluded_products", association_foreign_key: "product_id", after_add: [:invalidate_excluded_product_cache, :note_applicability_change], after_remove: [:invalidate_excluded_product_cache, :note_applicability_change]
+  has_and_belongs_to_many :excluded_products, class_name: "Link", join_table: "offer_codes_excluded_products", association_foreign_key: "product_id", after_add: [:invalidate_excluded_product_cache, :note_applicability_change, :reindex_removed_product], after_remove: [:invalidate_excluded_product_cache, :note_applicability_change, :reindex_removed_product]
   belongs_to :user
   has_many :purchases
   has_many :purchases_that_count_towards_offer_code_uses, -> { counts_towards_offer_code_uses }, class_name: "Purchase"
@@ -616,9 +616,13 @@ class OfferCode < ApplicationRecord
       seller_id = user_id
       seller_ids = [seller_id, user_id_before_last_save].compact.uniq
       product_ids = destroyed? ? @reindex_product_ids : products.ids unless catalogue
+      # Targeted path indexes Link.where(id:), so unpublished excluded products stay fresh
+      # alongside the alive-only catalogue scan.
+      excluded_ids = catalogue ? (destroyed? ? Array(@reindex_excluded_product_ids) : excluded_products.ids) : []
       AfterCommitEverywhere.after_commit do
         if catalogue
           seller_ids.each { ReindexSellerOfferCodesJob.enqueue(_1) }
+          ReindexSellerOfferCodesJob.enqueue_products(seller_id, excluded_ids) if excluded_ids.any?
         else
           ReindexSellerOfferCodesJob.enqueue_products(seller_id, product_ids)
         end
@@ -631,7 +635,11 @@ class OfferCode < ApplicationRecord
     end
 
     def capture_reindex_product_ids
-      @reindex_product_ids = products.ids unless universal?
+      if universal?
+        @reindex_excluded_product_ids = excluded_products.ids
+      else
+        @reindex_product_ids = products.ids
+      end
     end
 
     def validate_not_used_as_default_discount

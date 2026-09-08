@@ -307,6 +307,17 @@ describe ReindexSellerOfferCodesJob do
   end
 
 
+
+  it "indexes an unpublished excluded product through the targeted queue" do
+    unpublished = create(:product, user: seller, purchase_disabled_at: Time.current, price_cents: 1000)
+    code = create(:universal_offer_code, user: seller, code: "KEEP")
+    ProductOfferCodeIndexingService.new([unpublished]).perform
+    expect(unpublished.__elasticsearch__.client.get(index: Link.index_name, id: unpublished.id).dig("_source", "offer_codes")).to include("KEEP")
+    code.update!(excluded_products: [unpublished])
+    3.times { run_batch }
+    expect(unpublished.__elasticsearch__.client.get(index: Link.index_name, id: unpublished.id).dig("_source", "offer_codes")).not_to include("KEEP")
+  end
+
   it "does not advance the catalogue cursor on an unclassified Elasticsearch failure" do
     products = create_list(:product, 3, user: seller, price_cents: 1000)
     described_class.enqueue(seller.id)
