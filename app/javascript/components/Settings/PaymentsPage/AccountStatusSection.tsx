@@ -1,6 +1,9 @@
 import * as React from "react";
 
+import { SocialAuthButton } from "$app/components/SocialAuthButton";
 import { Alert } from "$app/components/ui/Alert";
+
+const SOCIAL_PROVIDER_NAMES = { twitter: "X", youtube: "YouTube", instagram: "Instagram" };
 
 const SupportLink = () => (
   <>
@@ -31,6 +34,7 @@ export type AccountStatus = {
   compliance_actions: ComplianceAction[];
   needs_id_upload: boolean;
   gumroad_status: string | null;
+  social_connections_for_review: { provider: "twitter" | "youtube" | "instagram"; connected: boolean }[] | null;
   stripe_rejected: boolean;
   stripe_rejected_balance_status: "stripe_hold" | "auto_payout" | "too_small" | "held" | null;
   stripe_rejected_formatted_balance: string | null;
@@ -168,6 +172,45 @@ export default function AccountStatusSection({
         <Alert role="status" variant="warning">
           {accountStatus.gumroad_status}
           <SupportLink />
+        </Alert>
+      ) : null}
+      {accountStatus.social_connections_for_review ? (
+        <Alert role="status" variant="info">
+          <div className="flex flex-col gap-3">
+            <h3 className="font-bold">Add social connections (optional)</h3>
+            <p>
+              You can share your social account history as additional context for your account review. Your review can
+              continue without connecting. This does not replace identity verification or guarantee approval or a payout
+              date.
+            </p>
+            <div className="flex flex-wrap items-center gap-2">
+              {accountStatus.social_connections_for_review.map(({ provider, connected }) =>
+                connected ? (
+                  <span key={provider}>{SOCIAL_PROVIDER_NAMES[provider]} connected</span>
+                ) : (
+                  <SocialAuthButton
+                    key={provider}
+                    provider={provider}
+                    href={
+                      provider === "twitter"
+                        ? Routes.user_twitter_omniauth_authorize_path({
+                            state: "link_twitter_account",
+                            x_auth_access_type: "read",
+                          })
+                        : provider === "youtube"
+                          ? Routes.user_youtube_omniauth_authorize_path()
+                          : Routes.user_instagram_omniauth_authorize_path()
+                    }
+                  >
+                    Connect to {SOCIAL_PROVIDER_NAMES[provider]}
+                  </SocialAuthButton>
+                ),
+              )}
+            </div>
+            <p className="text-sm">
+              Connecting opens your profile afterward. You can return to Payments in Settings at any time.
+            </p>
+          </div>
         </Alert>
       ) : null}
     </section>
