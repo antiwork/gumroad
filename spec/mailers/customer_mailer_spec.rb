@@ -1480,6 +1480,24 @@ describe CustomerMailer do
       CustomerMailer.grouped_receipt([purchase.id], recommendations: false).body.decoded
     end
 
+    it "renders a test-successful empty bundle alongside paid receipts without failed items" do
+      bundle = create(:product, :bundle, name: "Receipt sample bundle", user: seller)
+      bundle.bundle_products.each(&:mark_deleted!)
+      test_purchase = create(:test_purchase, link: bundle, email: "buyer@example.com")
+      order = create(:order, purchases: [test_purchase])
+      create(:charge, order:, purchases: [test_purchase], seller:)
+      test_purchase.create_artifacts_and_send_receipt!
+      failed_purchase = create(:failed_purchase, link: create(:product, name: "Failed receipt item", user: seller))
+      failed_order = create(:order, purchases: [failed_purchase])
+      create(:charge, order: failed_order, purchases: [failed_purchase], seller:)
+
+      mail = CustomerMailer.grouped_receipt(purchases.map(&:id) + [test_purchase.id, failed_purchase.id])
+      body = mail.body.decoded
+
+      receipt_items = Nokogiri::HTML(body).css(".item .product-checkout-cell h4").map(&:text).map(&:strip)
+      expect(receipt_items).to contain_exactly("Receipt sample bundle", product.name, product.name)
+    end
+
     it "skips failed purchases whose charge has no successful purchases" do
       failed_purchase = create(:failed_purchase, link: product, seller:)
       charge = create(:charge, seller:)
