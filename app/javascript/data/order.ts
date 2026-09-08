@@ -302,7 +302,7 @@ export const startOrderCreation = async (
       const leftoverScaAfterConfirm = Object.values(orderConfirmResponse.line_items).filter(doesLineItemRequireSCA);
       // A processing sibling must not leave an uncharged setup group in_progress forever: cancel
       // it so the buyer can retry that line without colliding with not_double_charged.
-      if (leftoverScaAfterConfirm.length > 0 && processingPermalinks.size > 0) {
+      if (leftoverScaAfterConfirm.length > 0 && (processingPermalinks.size > 0 || anyIntentConfirmed)) {
         orderConfirmResponse = await confirmOrderAfterAction({
           orderId,
           clientSecret:
@@ -421,7 +421,7 @@ export const startOrderCreation = async (
           if ("processing" in lineItem) recoveryProcessingProbe.add(lineItem.permalink);
         }
         const recoveryLeftoverSca = Object.values(recoveryResponseMutable.line_items).filter(doesLineItemRequireSCA);
-        if (recoveryLeftoverSca.length > 0 && recoveryProcessingProbe.size > 0) {
+        if (recoveryLeftoverSca.length > 0 && (recoveryProcessingProbe.size > 0 || anyIntentConfirmed)) {
           recoveryResponseMutable = await confirmOrderAfterAction({
             orderId: pendingOrderId,
             clientSecret: recoveryLeftoverSca[0]?.client_secret ?? pendingClientSecret,

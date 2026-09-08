@@ -19,7 +19,7 @@ class ReconcileClientConfirmedChargeJob
     return unless charge.client_confirmed?
     return if charge.purchases.none?(&:in_progress?)
 
-    recover_missing_payment_intent!(charge)
+    recovery = recover_missing_payment_intent!(charge)
 
     charge.purchases.select(&:in_progress?).each do |purchase|
       Purchase::SyncStatusWithChargeProcessorService.new(purchase).perform
@@ -36,7 +36,15 @@ class ReconcileClientConfirmedChargeJob
 
     # Exhausted the India processing window with no recoverable PaymentIntent: clear settling
     # markers so payment_settling does not block the buyer forever, and fail uncharged rows.
+    # Never release while Stripe lookups themselves failed — that could drop a captured payment.
     return if charge.stripe_payment_intent_id.present?
+    if recovery == :lookup_failed
+      ErrorNotifier.notify(
+        "ReconcileClientConfirmedChargeJob exhausted after Stripe lookup failures; leaving purchases pending",
+        charge_id: charge.id
+      )
+      return
+    end
 
     ErrorNotifier.notify(
       "ReconcileClientConfirmedChargeJob exhausted without finding a PaymentIntent",
@@ -54,16 +62,16 @@ class ReconcileClientConfirmedChargeJob
 
   private
     def recover_missing_payment_intent!(charge)
-      return if charge.stripe_payment_intent_id.present?
+      return :already_present if charge.stripe_payment_intent_id.present?
 
       purchase = charge.purchases.find(&:in_progress?) || charge.purchases.first
-      return if purchase.blank? || purchase.charge_processor_id.blank?
+      return :no_purchase if purchase.blank? || purchase.charge_processor_id.blank?
 
       payment_intent_id = payment_intent_id_from_stripe_charge(
         ChargeProcessor.search_charge(charge_processor_id: purchase.charge_processor_id, purchase:)
       )
       payment_intent_id ||= search_payment_intent_id_by_transfer_group(charge, purchase)
-      return if payment_intent_id.blank?
+      return :not_found if payment_intent_id.blank?
 
       charge.update!(stripe_payment_intent_id: payment_intent_id)
       charge.purchases.select(&:in_progress?).each do |in_progress_purchase|
@@ -71,8 +79,10 @@ class ReconcileClientConfirmedChargeJob
 
         in_progress_purchase.create_processor_payment_intent!(intent_id: payment_intent_id)
       end
+      :recovered
     rescue StandardError => e
       ErrorNotifier.notify(e, charge_id: charge.id)
+      :lookup_failed
     end
 
     def payment_intent_id_from_stripe_charge(stripe_charge)
