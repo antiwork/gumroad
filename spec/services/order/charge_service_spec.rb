@@ -1775,6 +1775,55 @@ describe Order::ChargeService, :vcr do
       expect(purchase.processor_setup_intent_id).to eq("seti_india_sca")
     end
 
+    it "keeps the group in progress and defers to webhooks when the immediate off-session debit is processing" do
+      order = create(:order)
+      merchant_account = create(:merchant_account_stripe_connect, user: seller_1)
+      purchase = create(:purchase,
+                        link: product_1,
+                        seller: seller_1,
+                        merchant_account:,
+                        purchase_state: "in_progress",
+                        is_multi_buy: true,
+                        total_transaction_cents: 10_00)
+      charge = create(:charge, order:, seller: seller_1, merchant_account:)
+      charge.purchases << purchase
+      # The saved card's e-mandate already exists, so there is no SetupIntent pause and the
+      # group's off-session charge runs synchronously inside ChargeService.
+      chargeable = instance_double(Chargeable, requires_mandate?: true, stripe_setup_intent_id: "seti_existing_india")
+      charge_intent = StripeChargeIntent.new(
+        payment_intent: Stripe::PaymentIntent.construct_from(id: "pi_india_processing", status: StripeIntentStatus::PROCESSING)
+      )
+      create_service = instance_double(Charge::CreateService)
+      allow(Charge::CreateService).to receive(:new).and_return(create_service)
+      allow(create_service).to receive(:perform) do
+        charge.charge_intent = charge_intent
+        charge
+      end
+      service = described_class.new(
+        order:,
+        params: { line_items: [{ uid: "india-line-item", permalink: product_1.unique_permalink }] }
+      )
+      allow(service).to receive(:mandate_options_for_stripe).and_return(
+        { payment_method_options: { card: { mandate_options: { amount: 10_00, currency: Currency::USD } } } }
+      )
+
+      service.send(:create_charge_for_seller_purchases, [purchase], chargeable, true, false)
+      service.send(:ensure_all_purchases_processed, [purchase])
+
+      # The debit is scheduled at Stripe (up to 26h for India cards): the purchase must not be
+      # failed or marked successful until the payment_intent webhooks resolve it.
+      expect(purchase.reload.purchase_state).to eq("in_progress")
+      expect(purchase.stripe_status).to eq(StripeIntentStatus::PROCESSING)
+      expect(purchase.processor_payment_intent.intent_id).to eq("pi_india_processing")
+      # The buyer gets no retry prompt here, so client_confirmed is what routes the intent's
+      # payment_intent.succeeded / payment_failed webhooks into the async finalize/fail rails.
+      expect(charge.reload.client_confirmed?).to be(true)
+      expect(service.charge_responses["india-line-item"]).to eq(
+        success: true, processing: true, permalink: product_1.unique_permalink
+      )
+      expect(FailAbandonedPurchaseWorker.jobs.size).to eq(0)
+    end
+
     it "registers an independent India e-mandate setup intent per seller group in a two-seller cart" do
       seller_1.update!(check_merchant_account_is_linked: true)
       connect_account = create(:merchant_account_stripe_connect, user: seller_1)

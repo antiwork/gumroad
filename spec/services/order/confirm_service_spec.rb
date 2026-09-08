@@ -398,6 +398,29 @@ describe Order::ConfirmService, :vcr do
         end
       end
 
+      it "finalizes an immediately-charged processing group with no SetupIntent pause from a retrieved intent" do
+        # A saved-mandate card is charged synchronously inside Order::ChargeService, which
+        # records the intent and stripe_status but never sets processor_setup_intent_id. A later
+        # confirm on the same order must not hand these purchases to Purchase::ConfirmService,
+        # which would re-confirm the processing intent Stripe already scheduled the debit for.
+        purchases.each do |purchase|
+          purchase.create_processor_payment_intent!(intent_id: "pi_confirm_india")
+          purchase.update!(processor_setup_intent_id: nil, stripe_status: StripeIntentStatus::PROCESSING)
+        end
+        charge_intent = StripeChargeIntent.new(
+          payment_intent: Stripe::PaymentIntent.construct_from(id: "pi_confirm_india", status: StripeIntentStatus::PROCESSING)
+        )
+        expect(ChargeProcessor).to receive(:get_charge_intent).with(merchant_account, "pi_confirm_india").once.and_return(charge_intent)
+        expect(Charge::CreateService).not_to receive(:new)
+
+        responses, = Order::ConfirmService.new(order:, params: {}).perform
+
+        purchases.each do |purchase|
+          expect(purchase.reload.purchase_state).to eq("in_progress")
+          expect(responses[purchase.id]).to eq(success: true, processing: true, permalink: purchase.link.unique_permalink)
+        end
+      end
+
       it "fails the group without charging when the SetupIntent did not succeed" do
         setup_intent = instance_double(StripeSetupIntent, succeeded?: false)
         allow(ChargeProcessor).to receive(:get_setup_intent).and_return(setup_intent)

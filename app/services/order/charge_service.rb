@@ -469,6 +469,17 @@ class Order::ChargeService
         purchases_to_charge.each do |purchase|
           save_processor_payment_intent!(purchase, charge_intent.id)
         end
+      elsif charge_intent&.processing?
+        # An India off-session debit stays `processing` at Stripe for up to 26h with the debit
+        # already scheduled — a failure here would invite a resubmit and a second charge. Same
+        # rails as Order::ConfirmService's resume charge: leave the purchases in_progress and
+        # let client_confirmed route the intent's payment_intent webhooks into the async
+        # finalize/fail handlers.
+        charge.update!(client_confirmed: true)
+        purchases_to_charge.each do |purchase|
+          save_processor_payment_intent!(purchase, charge_intent.id)
+          purchase.update!(stripe_status: StripeIntentStatus::PROCESSING)
+        end
       else
         purchases.each do |purchase|
           next unless purchase.in_progress? && purchase.errors.empty?
@@ -503,6 +514,8 @@ class Order::ChargeService
         elsif charge_intent&.requires_action? || setup_intent&.requires_action?
           # Check back later to see if the purchase has been completed. If not, transition to a failed state.
           FailAbandonedPurchaseWorker.perform_in(ChargeProcessor::TIME_TO_COMPLETE_SCA, purchase.id)
+        elsif charge_intent&.processing?
+          Rails.logger.info("Leaving purchase #{purchase.id} in_progress while charge intent #{charge_intent.id} is processing")
         elsif purchase_waiting_for_flow_of_funds?(purchase) && purchase_has_charge_data?(purchase)
           Rails.logger.info("Leaving purchase #{purchase.id} in_progress because charge #{charge_intent.charge.id} is missing flow of funds")
         elsif charge_intent&.succeeded? && purchase_has_charge_data?(purchase)
@@ -534,6 +547,10 @@ class Order::ChargeService
             stripe_connect_account_id: stripe_connect_account_id_for(purchase)
           }
         }
+      elsif charge_intent&.processing? && purchase.in_progress?
+        # Same shape as Order::FinalizeConfirmedChargeService#response_for: the debit is
+        # scheduled, so the buyer must see a pending outcome, never a resubmittable failure.
+        charge_responses[line_item_uid] ||= { success: true, processing: true, permalink: purchase.link.unique_permalink }
       elsif purchase_waiting_for_flow_of_funds?(purchase) && purchase_has_charge_data?(purchase)
         charge_responses[line_item_uid] ||= purchase_pending_processor_settlement_response(purchase)
       else

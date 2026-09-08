@@ -130,13 +130,16 @@ class Order::ConfirmService
         !purchase.is_preorder_authorization?
     end
 
-    # A purchase this path already charged (this request or an earlier one) that is still
+    # A purchase whose group's off-session charge already exists (created by this path, or
+    # synchronously by Order::ChargeService when the card's mandate needed no pause — those
+    # rows carry stripe_status `processing` but no SetupIntent id) and that is still
     # in_progress — typically because the intent is `processing`. It must be finalized from a
-    # retrieved intent, never re-confirmed.
+    # retrieved intent, never re-confirmed: Stripe rejects confirming a processing intent
+    # whose debit is already scheduled, which would fail a purchase that is going to capture.
     def charged_after_setup_awaiting_finalization?(purchase)
       purchase.in_progress? &&
         purchase.errors.empty? &&
-        purchase.processor_setup_intent_id.present? &&
+        (purchase.processor_setup_intent_id.present? || purchase.stripe_status == StripeIntentStatus::PROCESSING) &&
         purchase.processor_payment_intent.present? &&
         purchase.stripe_transaction_id.blank? &&
         !purchase.free_purchase? &&
