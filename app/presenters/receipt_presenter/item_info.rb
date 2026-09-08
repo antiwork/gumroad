@@ -111,9 +111,20 @@ class ReceiptPresenter::ItemInfo
       !purchase.is_preorder_authorization &&
       (purchase.url_redirect.present? || purchase.is_commission_completion_purchase?) &&
       purchase.link.native_type != Link::NATIVE_TYPE_COFFEE &&
-      # Empty-member bundles still render on the receipt (see Chargeable#unbundled_purchases),
-      # but their download page has nothing to open. Hide the CTA rather than send buyers there.
-      !(purchase.is_bundle_purchase? && purchase.product_purchases.empty?)
+      !empty_member_bundle_without_content?
+    end
+
+    # Empty-member bundles still render on the receipt (see Chargeable#unbundled_purchases).
+    # Hide View content only when the download page would also be empty: no live members and
+    # no files/rich content on the parent itself (converted products can keep both).
+    def empty_member_bundle_without_content?
+      return false unless purchase.is_bundle_purchase?
+      return false if purchase.product_purchases.exists?
+
+      redirect = purchase.url_redirect
+      return true if redirect.blank?
+
+      redirect.alive_product_files.none? && redirect.rich_content_json.blank?
     end
 
     def license_key
