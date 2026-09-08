@@ -577,6 +577,12 @@ class Credit < ApplicationRecord
     return if refund.blank?
     refund.reload
     return unless refund.refund_fee_retention_pending
+    # Keep the flag while Stripe debit or holding reconciliation is still outstanding so
+    # the recurring job can finish finish_holding_lookup / reconcile after a crash.
+    return if fee_debit_pending_retry?(refund)
+    if refund.debited_stripe_transfer.present? && refund.refund_fee_holding_debit_cents.blank?
+      return
+    end
 
     transaction(requires_new: true) do
       refund.update!(refund_fee_retention_pending: false)

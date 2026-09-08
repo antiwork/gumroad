@@ -332,11 +332,11 @@ class Purchase
       # Free-text explanation of why the refund happened (e.g. "Buyer was charged twice").
       # Shown to the creator in the notification email when a team member issued the refund.
       refund.note = note if note.present?
-      refunds << refund
       self.is_refund_chargeback_fee_waived = !charged_using_gumroad_merchant_account? || is_for_fraud
       unless is_refund_chargeback_fee_waived || chargedback_not_reversed?
         refund.refund_fee_retention_pending = true
       end
+      refunds << refund
       mark_giftee_purchase_as_refunded(is_partially_refunded: self.stripe_partially_refunded?) if is_gift_sender_purchase
       subscription.cancel_immediately_if_pending_cancellation! if subscription.present?
       decrement_balance_for_refund_or_chargeback!(flow_of_funds, refund:) unless chargedback_not_reversed?
