@@ -482,17 +482,29 @@ describe Payment do
   end
 
   describe "#credit_amount_cents" do
-    it "does not include credits created for refund fee retention" do
+    it "does not include fee-retention credits folded into retained_fee_cents" do
       creator = create(:user)
       balance = create(:balance, user: creator)
       purchase = create(:purchase, succeeded_at: 10.days.ago, link: create(:product, user: creator))
       refund = create(:refund, purchase:, fee_cents: 100)
+      refund.update!(retained_fee_cents: 100)
       credit = create(:credit, user: creator, amount_cents: -100, fee_retention_refund: refund, balance:)
       payment = create(:payment, balances: [balance])
 
       expect(credit.fee_retention_refund).to eq(refund)
       expect(credit.balance).to eq(balance)
       expect(payment.credit_amount_cents).to eq(0)
+    end
+
+    it "includes separately booked fee-retention credits without retained_fee_cents" do
+      creator = create(:user)
+      balance = create(:balance, user: creator)
+      purchase = create(:purchase, succeeded_at: 10.days.ago, link: create(:product, user: creator))
+      refund = create(:refund, purchase:, fee_cents: 100)
+      create(:credit, user: creator, amount_cents: -100, fee_retention_refund: refund, balance:)
+      payment = create(:payment, balances: [balance])
+
+      expect(payment.credit_amount_cents).to eq(-100)
     end
   end
 

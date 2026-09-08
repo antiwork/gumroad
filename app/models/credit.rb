@@ -530,6 +530,7 @@ class Credit < ApplicationRecord
     merchant_account = credit.merchant_account
     refund = credit.fee_retention_refund
     return unless merchant_account.holder_of_funds == HolderOfFunds::STRIPE
+    return 0 if credit.amount_cents.to_i.zero?
     if refund.debited_stripe_transfer.present? && !fee_debit_pending_retry?(refund)
       return refund.refund_fee_holding_debit_cents.presence&.to_i ||
         StripeChargeProcessor.finish_holding_lookup_for_recorded_fee_debit(
@@ -804,9 +805,27 @@ class Credit < ApplicationRecord
       return if balance.blank?
 
       begin
+        applied = false
         balance.with_lock do
-          balance.increment(:holding_amount_cents, delta)
-          balance.save!
+          projected_holding = balance.holding_amount_cents + delta
+          if projected_holding.negative? && !balance.amount_cents.negative?
+            Rails.logger.error(
+              "Skipping fee retention holding reconcile for refund #{refund&.id}: "               "balance #{balance.id} cannot absorb holding delta #{delta}"
+            )
+          else
+            balance.increment(:holding_amount_cents, delta)
+            balance.save!
+            applied = true
+          end
+        end
+        unless applied
+          if refund.present?
+            refund.update!(
+              refund_fee_holding_reconcile_pending: true,
+              fee_retention_retry_at: 15.minutes.from_now
+            )
+          end
+          next
         end
       rescue ActiveRecord::RecordInvalid
         holding_currency = credit.merchant_account.currency.to_s.downcase
