@@ -371,8 +371,10 @@ class Purchase
     end.tap do |refunded|
       next unless refunded
 
-      # After commit: ChargeProcessor.refund! has already moved the money. Neither a failed
-      # fee debit nor a failed license write may roll back the refund rows.
+      # After this method's transaction returns: ChargeProcessor.refund! has already moved
+      # the money. Fee ledger writes use requires_new so an outer Charge/webhook transaction
+      # cannot commit a half-written credit if retention fails mid-way. Neither a failed fee
+      # debit nor a failed license write may roll back the refund rows.
       debit_processor_fee_from_merchant_account!(refund) unless is_refund_chargeback_fee_waived || chargedback_not_reversed?
       disable_attached_license_if_fully_refunded!(for_fraud: is_for_fraud)
     end
@@ -685,7 +687,17 @@ class Purchase
     def debit_processor_fee_from_merchant_account!(refund)
       return if refund.blank?
 
-      Credit.create_for_refund_fee_retention!(refund:)
+      # Serialize against HandleFailedRefundService (same purchase → refund lock order).
+      # A failure webhook can reverse the refund between this method's outer commit and
+      # the fee booking; re-check under the locks so we never retain a fee for a reversed
+      # failure.
+      transaction do
+        reload.lock!
+        refund.reload.lock!
+        unless refund.balance_reversed_on_failure
+          Credit.create_for_refund_fee_retention!(refund:)
+        end
+      end
     rescue StandardError => e
       logger.error "Failed to retain the fee for refund #{refund.id} of purchase #{id}: #{e.class}: #{e.message}"
       ErrorNotifier.notify(

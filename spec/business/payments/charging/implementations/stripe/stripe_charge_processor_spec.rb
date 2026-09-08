@@ -4121,7 +4121,8 @@ describe StripeChargeProcessor, :vcr do
         # 1000 USD cents * 0.92 = 920 EUR cents, pulled from the connected account itself.
         expect(Stripe::Transfer).to receive(:create)
                                       .with({ amount: 920, currency: "eur", destination: STRIPE_PLATFORM_ACCOUNT_ID },
-                                            { stripe_account: @bg_merchant_account.charge_processor_merchant_id })
+                                            hash_including(stripe_account: @bg_merchant_account.charge_processor_merchant_id,
+                                                           idempotency_key: "refund_fee_eur_debit_#{credit.fee_retention_refund.external_id}"))
                                       .and_return(double(id: "tr_eur_debit_1"))
 
         expect(described_class.debit_stripe_account_for_refund_fee(credit:)).to eq(920)
@@ -4137,7 +4138,8 @@ describe StripeChargeProcessor, :vcr do
         expect(Stripe::Transfer).to receive(:list).and_return([])
         expect(Stripe::Transfer).not_to receive(:create_reversal)
         expect(Stripe::Transfer).to receive(:create)
-                                      .with(hash_including(amount: 920, currency: "eur"), anything)
+                                      .with(hash_including(amount: 920, currency: "eur"),
+                                            hash_including(idempotency_key: a_string_starting_with("refund_fee_eur_debit_")))
                                       .and_return(double(id: "tr_eur_debit_2"))
 
         # 920 EUR cents * 1.95583 = 1799.36 BGN stotinki.

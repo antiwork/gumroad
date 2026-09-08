@@ -707,10 +707,14 @@ class StripeChargeProcessor
   # Returns the debited amount in the merchant account's holding currency; a ledger still
   # held in BGN (account not yet switched to EUR) gets the exact fixed-rate conversion.
   def self.debit_stripe_account_in_eur_for_refund_fee(credit:, usd_amount_cents:)
-    eur_amount_cents = usd_cents_to_currency(Currency::EUR, usd_amount_cents)
-    transfer = Stripe::Transfer.create({ amount: eur_amount_cents, currency: Currency::EUR, destination: STRIPE_PLATFORM_ACCOUNT_ID },
-                                       { stripe_account: credit.merchant_account.charge_processor_merchant_id })
     refund = credit.fee_retention_refund
+    eur_amount_cents = usd_cents_to_currency(Currency::EUR, usd_amount_cents)
+    # Stable per-refund key: if Stripe accepts the transfer but we lose the response
+    # before recording debited_stripe_transfer, a retry must not create a second debit.
+    transfer_options = { stripe_account: credit.merchant_account.charge_processor_merchant_id }
+    transfer_options[:idempotency_key] = "refund_fee_eur_debit_#{refund.external_id}" if refund&.id.present?
+    transfer = Stripe::Transfer.create({ amount: eur_amount_cents, currency: Currency::EUR, destination: STRIPE_PLATFORM_ACCOUNT_ID },
+                                       transfer_options)
     refund.update!(debited_stripe_transfer: transfer.id) if refund.present?
 
     case credit.merchant_account.currency.to_s.downcase

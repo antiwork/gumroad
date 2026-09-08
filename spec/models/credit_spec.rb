@@ -480,7 +480,9 @@ describe Credit do
       it "records the debit transfer on the refund and does not debit Stripe a second time" do
         allow(Stripe::Account).to receive(:retrieve).and_return(double(id: "acct_platform"))
         expect(Stripe::Transfer).to receive(:create)
-                                      .with({ amount: 33, currency: "usd", destination: "acct_platform" }, { stripe_account: merchant_account.charge_processor_merchant_id })
+                                      .with({ amount: 33, currency: "usd", destination: "acct_platform" },
+                                            hash_including(stripe_account: merchant_account.charge_processor_merchant_id,
+                                                           idempotency_key: "refund_fee_us_debit_#{refund.external_id}"))
                                       .once
                                       .and_return(double(id: "tr_us_fee_1"))
 
@@ -490,6 +492,21 @@ describe Credit do
         expect do
           expect(Credit.create_for_refund_fee_retention!(refund:)).to eq(credit)
         end.not_to change { [Credit.count, creator.reload.unpaid_balance_cents] }
+      end
+
+      it "does not re-debit a legacy US retention that completed without a debit marker" do
+        allow(Stripe::Account).to receive(:retrieve).and_return(double(id: "acct_platform"))
+        expect(Stripe::Transfer).to receive(:create)
+                                      .once
+                                      .and_return(double(id: "tr_us_fee_legacy"))
+
+        credit = Credit.create_for_refund_fee_retention!(refund:)
+        # Simulate pre-patch US success: ledger complete, marker never recorded.
+        refund.update!(debited_stripe_transfer: nil)
+        expect(credit.reload.balance_id).to be_present
+
+        expect(Stripe::Transfer).not_to receive(:create)
+        expect(Credit.create_for_refund_fee_retention!(refund:)).to eq(credit)
       end
     end
   end

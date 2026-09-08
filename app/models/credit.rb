@@ -298,7 +298,14 @@ class Credit < ApplicationRecord
   def self.create_for_refund_fee_retention!(refund:)
     existing_credit = where(fee_retention_refund: refund, failed_refund_id: nil).first
     if existing_credit.present?
-      debit_stripe_account_for_retained_fee(existing_credit)
+      # Pre-patch US retention completed Stripe transfers without recording
+      # debited_stripe_transfer. Re-debiting those would charge the seller twice.
+      # Skip the Stripe call for US credits that already have a ledger and no marker;
+      # non-US retries still finish an outstanding debit.
+      us_legacy_complete = existing_credit.merchant_account&.country == Compliance::Countries::USA.alpha2 &&
+        refund.debited_stripe_transfer.blank? &&
+        existing_credit.balance_id.present?
+      debit_stripe_account_for_retained_fee(existing_credit) unless us_legacy_complete
       return existing_credit
     end
 
@@ -319,7 +326,10 @@ class Credit < ApplicationRecord
       credit.merchant_account = MerchantAccount.gumroad(StripeChargeProcessor.charge_processor_id)
       credit.fee_retention_refund = refund
 
-      transaction do
+      # requires_new: callers (Charge#refund_and_save!, processor webhook with_lock) may
+      # still hold an open transaction. A nested join would let an outer rescue commit a
+      # half-written credit if balance creation failed after credit.save!.
+      transaction(requires_new: true) do
         credit.save!
 
         balance_transaction_amount = BalanceTransaction::Amount.new(
@@ -367,7 +377,8 @@ class Credit < ApplicationRecord
     net_amount_on_stripe_in_holding_currency = debit_stripe_account_for_retained_fee(credit)
     reversed_amount_cents_in_holding_currency = -net_amount_on_stripe_in_holding_currency if net_amount_on_stripe_in_holding_currency.present?
 
-    transaction do
+    # requires_new: see Connect branch above — isolate ledger writes from any outer txn.
+    transaction(requires_new: true) do
       credit.save!
 
       refund.retained_fee_cents = credit.amount_cents.abs
@@ -413,8 +424,10 @@ class Credit < ApplicationRecord
     if merchant_account.country == Compliance::Countries::USA.alpha2
       # For gumroad-controlled Stripe accounts from the US, we can make new debit transfers.
       # So we transfer the retained fee back to Gumroad's Stripe platform account.
+      transfer_options = { stripe_account: merchant_account.charge_processor_merchant_id }
+      transfer_options[:idempotency_key] = "refund_fee_us_debit_#{refund.external_id}" if refund.id.present?
       transfer = Stripe::Transfer.create({ amount: credit.amount_cents.abs, currency: "usd", destination: Stripe::Account.retrieve.id, },
-                                         { stripe_account: merchant_account.charge_processor_merchant_id })
+                                         transfer_options)
       refund.update!(debited_stripe_transfer: transfer.id)
       nil
     else
