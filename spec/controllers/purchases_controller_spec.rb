@@ -1771,6 +1771,48 @@ describe PurchasesController, :vcr do
         end
       end
 
+      context "when a test purchase is an empty bundle" do
+        let(:product) { create(:product, :bundle, name: "Receipt sample bundle") }
+        let(:purchase) { create(:test_purchase, link: product, email: "buyer@example.com") }
+
+        before do
+          product.bundle_products.each(&:mark_deleted!)
+          order = create(:order, purchases: [purchase])
+          create(:charge, order:, purchases: [purchase], seller: purchase.seller)
+          purchase.create_artifacts_and_send_receipt!
+        end
+
+        it "renders the purchased bundle instead of dropping the only receipt item" do
+          expect(purchase.reload.purchase_state).to eq("test_successful")
+          expect(purchase.charge.successful_purchases).to include(purchase)
+          expect(purchase.product_purchases).to be_empty
+
+          get :receipt, params: { id: purchase.external_id, email: purchase.email }
+
+          expect(response).to be_successful
+          expect(response.body).to include("Receipt sample bundle")
+          # No live members to open, so hide View content rather than link to an empty download page.
+          expect(response.body).not_to include("View content")
+        end
+
+        it "does not reveal the bundle when the email does not match" do
+          expect(CustomerMailer).not_to receive(:receipt)
+
+          get :receipt, params: { id: purchase.external_id, email: "wrong@example.com" }
+
+          expect(response).to redirect_to(confirm_receipt_email_purchase_path(purchase.external_id))
+          expect(response.body).not_to include("Receipt sample bundle")
+        end
+
+        it "requires email verification when no email is provided" do
+          expect(CustomerMailer).not_to receive(:receipt)
+
+          get :receipt, params: { id: purchase.external_id }
+
+          expect(response).to redirect_to(confirm_receipt_email_purchase_path(purchase.external_id))
+        end
+      end
+
       context "when the order has no successful purchases" do
         # A charge-backed purchase promotes the receipt's chargeable to its Order;
         # when that Order has no successful purchase, the orderable has no email and

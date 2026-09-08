@@ -9,6 +9,24 @@ describe ReceiptPresenter::MailSubject, :vcr do
   let(:mail_subject) { described_class.build(chargeable) }
 
   describe ".build" do
+    describe "with a memberless bundle purchase" do
+      let(:product_one) do
+        create(:product, :bundle, name: "Memberless Bundle").tap do |bundle|
+          bundle.bundle_products.each(&:mark_deleted!)
+        end
+      end
+      let(:purchase_one) { create(:purchase, link: product_one) }
+      let(:chargeable) { purchase_one }
+
+      before do
+        purchase_one.create_artifacts_and_send_receipt!
+      end
+
+      it "renders the bundle itself instead of crashing on an empty collection" do
+        expect(mail_subject).to eq("You bought Memberless Bundle!")
+      end
+    end
+
     describe "with one purchase" do
       RSpec.shared_examples "one purchase mail subject" do
         it "returns expected subject" do
