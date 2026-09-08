@@ -420,7 +420,20 @@ class Credit < ApplicationRecord
       refund.reload.lock!
       return if refund.balance_reversed_on_failure
       existing_credit = where(user_id: purchase.seller_id, fee_retention_refund: refund, failed_refund_id: nil).lock.first
-      return existing_credit if existing_credit.present?
+      if existing_credit.present?
+        # Another concurrent attempt booked the credit (possibly with an FX estimate) while
+        # this attempt obtained the actual Stripe debit. Reconcile before returning.
+        begin
+          reconcile_fee_retention_holding_amount!(
+            existing_credit,
+            refund.refund_fee_holding_debit_cents.presence || net_amount_on_stripe_in_holding_currency
+          )
+        rescue StandardError => e
+          Rails.logger.error("Failed to reconcile concurrent fee retention for refund #{refund.id}: #{e.class}: #{e.message}")
+          ErrorNotifier.notify(e, context: { refund_id: refund.id, credit_id: existing_credit.id })
+        end
+        return existing_credit
+      end
 
       # requires_new: see Connect branch above — isolate ledger writes from any outer txn.
       transaction(requires_new: true) do

@@ -811,23 +811,29 @@ class StripeChargeProcessor
     refund = credit.fee_retention_refund
     # Reuse the first requested EUR amount so a stable idempotency key never pairs with a
     # different FX-converted amount on retry (Stripe rejects parameter changes).
-    eur_amount_cents = refund&.refund_fee_eur_debit_cents.presence || usd_cents_to_currency(Currency::EUR, usd_amount_cents)
+    proposed_eur_amount_cents = refund&.refund_fee_eur_debit_cents.presence || usd_cents_to_currency(Currency::EUR, usd_amount_cents)
     if refund.present?
       claimed = Credit.persist_refund_fee_debit_choice!(refund,
                   operation: FEE_DEBIT_OP_EUR_DEBIT,
-                  amount_cents: eur_amount_cents)
+                  amount_cents: proposed_eur_amount_cents)
       unless claimed
         return debit_stripe_account_for_refund_fee(credit:)
       end
+      # Immutable amount selected under the refund lock (also mirrored on eur_debit_cents).
+      eur_amount_cents = refund.reload.refund_fee_debit_amount_cents.presence ||
+        refund.refund_fee_eur_debit_cents.presence ||
+        proposed_eur_amount_cents
       if refund.refund_fee_eur_debit_cents.blank?
         ActiveRecord::Base.transaction(requires_new: true) do
           refund.update!(refund_fee_eur_debit_cents: eur_amount_cents)
         end
       end
+    else
+      eur_amount_cents = proposed_eur_amount_cents
     end
     transfer_options = { stripe_account: credit.merchant_account.charge_processor_merchant_id }
     transfer_options[:idempotency_key] = "refund_fee_eur_debit_#{refund.external_id}" if refund&.id.present?
-    transfer = Stripe::Transfer.create({ amount: eur_amount_cents, currency: Currency::EUR, destination: STRIPE_PLATFORM_ACCOUNT_ID },
+    transfer = Stripe::Transfer.create({ amount: eur_amount_cents.to_i, currency: Currency::EUR, destination: STRIPE_PLATFORM_ACCOUNT_ID },
                                        transfer_options)
     record_refund_fee_debit_marker!(refund, transfer.id) if refund.present?
 
