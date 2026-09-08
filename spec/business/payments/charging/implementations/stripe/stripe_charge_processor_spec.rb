@@ -3987,7 +3987,7 @@ describe StripeChargeProcessor, :vcr do
                                     .and_return(destination_refund)
         expect(Stripe::BalanceTransaction).to receive(:retrieve)
                                                 .with("txn_1", hash_including(stripe_account: @cad_merchant_account.charge_processor_merchant_id))
-                                                .and_return(double(net:))
+                                                .and_return(double(net:, currency: "cad"))
         transfer_reversal
       end
 
@@ -4101,7 +4101,7 @@ describe StripeChargeProcessor, :vcr do
                                     .and_return(double(balance_transaction: "txn_eur_1"))
         expect(Stripe::BalanceTransaction).to receive(:retrieve)
                                                 .with("txn_eur_1", hash_including(stripe_account: @bg_merchant_account.charge_processor_merchant_id))
-                                                .and_return(double(net: -920))
+                                                .and_return(double(net: -920, currency: "eur"))
 
         expect(described_class.debit_stripe_account_for_refund_fee(credit:)).to eq(920)
         expect(credit.fee_retention_refund.reload.debited_stripe_transfer).to eq("trr_eur_1")
@@ -4230,7 +4230,7 @@ describe StripeChargeProcessor, :vcr do
                                     .and_return(double(balance_transaction: "txn_eur_resume"))
         expect(Stripe::BalanceTransaction).to receive(:retrieve)
                                                 .with("txn_eur_resume", hash_including(stripe_account: @bg_merchant_account.charge_processor_merchant_id))
-                                                .and_return(double(net: -920))
+                                                .and_return(double(net: -920, currency: "eur"))
 
         expect(described_class.debit_stripe_account_for_refund_fee(credit:)).to eq(920)
         expect(refund.reload.debited_stripe_transfer).to eq("trr_eur_resume")

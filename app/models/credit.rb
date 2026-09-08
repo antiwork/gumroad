@@ -299,8 +299,10 @@ class Credit < ApplicationRecord
     purchase = refund.purchase
     # Same purchase → refund lock order as HandleFailedRefundService / the Purchase wrapper.
     # Refuse to retain (or re-retain) a fee after the refund's balance was reversed on failure.
+    # reload before lock!: callers may have read a json_data accessor on a NULL column,
+    # which dirties the in-memory record and makes lock! raise.
     purchase.with_lock do
-      refund.lock!
+      refund.reload.lock!
       return if refund.balance_reversed_on_failure
     end
 
@@ -561,36 +563,54 @@ class Credit < ApplicationRecord
     )
     return if actual_in_bt_currency.blank?
 
-    # Idempotent against the BT-currency amount we applied.
-    return if refund&.refund_fee_holding_reconciled_cents.to_i == actual_in_bt_currency
+    apply_fee_retention_holding_reconcile!(
+      credit:,
+      refund:,
+      bt:,
+      actual:,
+      actual_currency:,
+      actual_in_bt_currency:
+    )
+  end
+  private_class_method :reconcile_fee_retention_holding_amount!
 
-    target = -actual_in_bt_currency
-    previously_reconciled = refund&.refund_fee_holding_reconciled_cents
-    delta = if previously_reconciled.present?
-      # Adjust from the last applied amount, not the immutable BT estimate, so FX churn
-      # cannot re-apply the full estimate delta.
-      (-actual_in_bt_currency) - (-previously_reconciled.to_i)
-    else
-      target - bt.holding_amount_net_cents
+  def self.apply_fee_retention_holding_reconcile!(credit:, refund:, bt:, actual:, actual_currency:, actual_in_bt_currency:)
+    # Serialize marker read/write with the balance correction so concurrent retries cannot
+    # both apply the same delta after both observing an unreconciled refund.
+    lock_refund = ->(&block) do
+      if refund.present?
+        refund.with_lock do
+          refund.reload
+          block.call
+        end
+      else
+        block.call
+      end
     end
 
-    if delta.zero?
-      transaction(requires_new: true) do
+    lock_refund.call do
+      return if refund&.refund_fee_holding_reconciled_cents.to_i == actual_in_bt_currency
+
+      target = -actual_in_bt_currency
+      previously_reconciled = refund&.refund_fee_holding_reconciled_cents
+      delta = if previously_reconciled.present?
+        (-actual_in_bt_currency) - (-previously_reconciled.to_i)
+      else
+        target - bt.holding_amount_net_cents
+      end
+
+      if delta.zero?
         refund.update!(
           refund_fee_holding_debit_cents: actual,
           refund_fee_holding_debit_currency: actual_currency,
           refund_fee_holding_reconciled_cents: actual_in_bt_currency
         ) if refund.present?
+        next
       end
-      return
-    end
 
-    balance = credit.balance || bt.balance
-    return if balance.blank?
+      balance = credit.balance || bt.balance
+      return if balance.blank?
 
-    # Keep the balance correction and reconciliation marker in one savepoint so a failed
-    # marker write cannot leave a committed delta that the next retry would apply again.
-    transaction(requires_new: true) do
       begin
         balance.with_lock do
           balance.increment(:holding_amount_cents, delta)
@@ -627,7 +647,7 @@ class Credit < ApplicationRecord
       ) if refund.present?
     end
   end
-  private_class_method :reconcile_fee_retention_holding_amount!
+  private_class_method :apply_fee_retention_holding_reconcile!
 
   # Convert a fee debit's holding amount into another currency. BGN↔EUR uses Stripe's fixed
   # rate; other pairs go through CurrencyHelper so zero-decimal currencies stay correct.
