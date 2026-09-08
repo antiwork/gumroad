@@ -25,11 +25,17 @@ type OrderRequiresCardSetupResponse = {
   client_secret: string;
   order: { id: string; stripe_connect_account_id: string | null };
 };
+type ProcessingPurchaseResponse = { success: true; processing: true; permalink: string };
+// #create can return a `processing` line item when a seller group's off-session charge runs
+// synchronously (an India e-mandate that needed no authentication pause) and its debit is
+// scheduled — the union must accept that shape or typia.assert throws and the scheduled debit
+// is misreported as a resubmittable failure.
 type LineItemResponse =
   | PurchaseErrorResponse
   | ConfirmedPurchaseResponse
   | OrderRequiresCardActionResponse
-  | OrderRequiresCardSetupResponse;
+  | OrderRequiresCardSetupResponse
+  | ProcessingPurchaseResponse;
 
 type OrderSuccessResponse = {
   success: true;
@@ -110,6 +116,24 @@ const offerCodesForSCALineItems = (
   return offerCodesForPermalinks(offerCodes, pendingPermalinks);
 };
 
+// Some line's charge is created with its debit scheduled, so the order is not resubmittable:
+// throws the pending outcome, keeping only the given unambiguously-failed (never-charged) lines
+// — and only their offer codes — retryable.
+const throwPaymentProcessingOutcome = (
+  requestData: StartCartPurchaseRequestPayload,
+  retryableLineItems: CartPurchaseResult["lineItems"],
+  offerCodes: OfferCodes,
+): never => {
+  if (Object.keys(retryableLineItems).length === 0) throw new PaymentConfirmedError();
+  const failureByUid = Object.fromEntries(
+    requestData.lineItems.map((lineItem) => [lineItem.uid, { success: !(lineItem.uid in retryableLineItems) }]),
+  );
+  throw new PaymentConfirmedError(null, {
+    lineItems: retryableLineItems,
+    offerCodes: offerCodesForFailedLineItems(requestData, failureByUid, offerCodes),
+  });
+};
+
 const retryOfferCodeCandidates = (requestData: StartCartPurchaseRequestPayload, offerCodes: OfferCodes) =>
   offerCodes.map((offerCode) => ({
     code: offerCode.code,
@@ -129,11 +153,25 @@ export const startOrderCreation = async (
 ): Promise<CartPurchaseResult> => {
   let pendingOrderId: string | null = null;
   let pendingProcessorIntentId: string | null = null;
+  // Once true, money may already be moving: confirmCardPayment captures immediately, and a
+  // confirmed SetupIntent lets the confirm POST create the group's off-session charge. Any
+  // later failure must then surface as a pending outcome, never a resubmittable cart.
+  let anyIntentConfirmed = false;
   let retryOfferCodes = activeOfferCodes;
   try {
     const response = await createOrder(requestData);
     if (!response.success) {
       return translateOrderFailureResponseIntoLineItemFailures(requestData, response, activeOfferCodes);
+    }
+    // A line that failed at creation has no purchase, so the confirm response cannot mention
+    // it; keep its create-time failure or it becomes indistinguishable from a processing line.
+    const createFailures: CartPurchaseResult["lineItems"] = {};
+    // Permalinks whose group was charged synchronously with the debit scheduled — those lines
+    // must never re-enter the cart, and any failure matched to them by permalink is ambiguous.
+    const processingPermalinks = new Set<string>();
+    for (const [uid, lineItem] of Object.entries(response.line_items)) {
+      if (!lineItem.success) createFailures[uid] = lineItem;
+      else if ("processing" in lineItem) processingPermalinks.add(lineItem.permalink);
     }
     retryOfferCodes = mergeOfferCodes(
       offerCodesForSCALineItems(requestData, response.line_items, activeOfferCodes),
@@ -155,7 +193,6 @@ export const startOrderCreation = async (
         ...new Map(lineItemsRequiringSCA.map((lineItem) => [lineItem.client_secret, lineItem])).values(),
       ];
       let stripeError: StripeError | undefined;
-      let anyIntentConfirmed = false;
       for (const intentLineItem of intentsToConfirm) {
         pendingProcessorIntentId = intentLineItem.client_secret.split("_secret")[0] ?? null;
         const stripe = intentLineItem.order.stripe_connect_account_id
@@ -188,10 +225,11 @@ export const startOrderCreation = async (
       // A processing line item means its group's charge is created and the debit scheduled —
       // it must leave the cart (resubmitting risks a second charge), so it is excluded here
       // and its cart line gets no result entry.
-      let anyLineProcessing = false;
+      let anyLineProcessing = processingPermalinks.size > 0;
       for (const [uid, lineItem] of Object.entries(orderConfirmResponse.line_items)) {
         if ("processing" in lineItem) {
           anyLineProcessing = true;
+          processingPermalinks.add(lineItem.permalink);
           continue;
         }
         confirmLineItems[uid] = lineItem;
@@ -205,31 +243,30 @@ export const startOrderCreation = async (
       const lineItems = requestData.lineItems.reduce<CartPurchaseResult["lineItems"]>((lineItems, lineItem) => {
         const resultItem =
           confirmLineItems[lineItem.uid] ??
+          createFailures[lineItem.uid] ??
           confirmLineItemResults.find((item) => item.permalink === lineItem.permalink);
         if (resultItem) lineItems[lineItem.uid] = resultItem;
         return lineItems;
       }, {});
       if (anyLineProcessing) {
-        // Another seller group's debit is scheduled, so this must surface as a pending outcome
+        // A seller group's debit is scheduled, so this must surface as a pending outcome
         // rather than a resubmittable cart. But a sibling group that FAILED (auth or charge)
         // was never charged: its lines stay retryable, so hand them (with the offer codes the
         // server recovered for them) to the consumer instead of emptying the whole cart.
-        const failedLineItems = Object.fromEntries(
-          Object.entries(lineItems).filter(([, lineItem]) => !lineItem.success),
-        );
-        if (Object.keys(failedLineItems).length === 0) throw new PaymentConfirmedError();
-        // Only genuinely failed lines keep their offer codes; a line with no result entry is
-        // processing and must not have its discount restored for a purchase that will settle.
-        const failureByUid = Object.fromEntries(
-          requestData.lineItems.map((lineItem) => {
+        // Only unambiguous failures qualify: an explicit uid-keyed result, or a permalink no
+        // processing line shares — a permalink-fallback failure on a processing permalink can
+        // belong to a sibling variant of the same product, and resubmitting the processing
+        // line would risk a second charge.
+        const retryableLineItems = Object.fromEntries(
+          requestData.lineItems.flatMap((lineItem) => {
             const resultItem = lineItems[lineItem.uid];
-            return [lineItem.uid, { success: !(resultItem && !resultItem.success) }];
+            if (!resultItem || resultItem.success) return [];
+            const explicit = confirmLineItems[lineItem.uid] ?? createFailures[lineItem.uid];
+            if (!explicit && processingPermalinks.has(lineItem.permalink)) return [];
+            return [[lineItem.uid, resultItem] as const];
           }),
         );
-        throw new PaymentConfirmedError(null, {
-          lineItems: failedLineItems,
-          offerCodes: offerCodesForFailedLineItems(requestData, failureByUid, orderConfirmResponse.offer_codes),
-        });
+        throwPaymentProcessingOutcome(requestData, retryableLineItems, orderConfirmResponse.offer_codes);
       }
       const result = {
         lineItems,
@@ -237,6 +274,11 @@ export const startOrderCreation = async (
         offerCodes: offerCodesForFailedLineItems(requestData, lineItems, orderConfirmResponse.offer_codes),
       };
       return ensureValidCartResult(requestData, result);
+    }
+    if (processingPermalinks.size > 0) {
+      // No SCA pause, but a group's off-session debit is already scheduled: same pending
+      // outcome as a processing confirm; only lines that failed at creation stay retryable.
+      throwPaymentProcessingOutcome(requestData, createFailures, response.offer_codes);
     }
     return translateOrderSuccessIntoLineItemSuccess(response);
   } catch (error) {
@@ -246,6 +288,11 @@ export const startOrderCreation = async (
     // Treat parsing errors, timeout, etc as failed purchase, but print a log entry
     // eslint-disable-next-line no-console
     console.error("Error occurred processing order", error);
+    // A lost or unreadable confirm response after an intent was confirmed cannot rule out a
+    // created charge, so it must not re-enable resubmission. (When nothing was confirmed the
+    // confirm POST forwards the stripeError and the server fails every purchase without
+    // charging — that stays retryable below.)
+    if (anyIntentConfirmed) throw new PaymentConfirmedError();
     if (pendingOrderId) {
       const unavailableOncePerCartIds = await reportClientConfirmError(
         pendingOrderId,
@@ -319,10 +366,12 @@ const createOrder = async (payload: StartCartPurchaseRequestPayload) => {
 };
 
 const translateOrderSuccessIntoLineItemSuccess = (response: OrderSuccessResponse): CartPurchaseResult => ({
+  // Processing lines never reach this (the caller throws PaymentConfirmedError first), but map
+  // them to failure rather than letting a scheduled debit masquerade as a receipt-worthy success.
   lineItems: Object.entries(response.line_items).reduce<CartPurchaseResult["lineItems"]>(
     (responseLineItems, [uid, lineItem]) => ({
       ...responseLineItems,
-      [uid]: doesLineItemRequireSCA(lineItem) ? { success: false } : lineItem,
+      [uid]: doesLineItemRequireSCA(lineItem) || "processing" in lineItem ? { success: false } : lineItem,
     }),
     {},
   ),
@@ -371,7 +420,6 @@ type OrderRequiresPaymentConfirmationResponse = {
   client_secret: string;
   order: { id: string; stripe_connect_account_id: string | null };
 };
-type ProcessingPurchaseResponse = { success: true; processing: true; permalink: string };
 type PrepareOrderResponse = {
   success: true;
   line_items: Record<

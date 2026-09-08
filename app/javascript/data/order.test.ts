@@ -872,6 +872,224 @@ describe("startOrderCreation", () => {
     // whose discounted purchase is going to settle.
     expect(retryable?.offerCodes).toEqual([{ code: "SAVE", products: { [secondLine.permalink]: fixedDiscount(100) } }]);
   });
+
+  it("never resubmits a variant line whose permalink also has a processing sibling", async () => {
+    // The legacy confirm endpoint keys results by purchase id, so failures are matched back to
+    // cart lines by permalink. Two variants of one product share a permalink: when one is
+    // processing (debit scheduled) and the other failed, the failure cannot be attributed to a
+    // line unambiguously, so neither may re-enter the cart — resubmitting the processing line
+    // would risk a second charge.
+    vi.stubGlobal("Routes", {
+      orders_path: () => "/orders",
+      confirm_order_path: (id: string) => `/orders/${id}/confirm`,
+    });
+    requestMock.mockReset();
+    getStripeInstanceMock.mockReset();
+    const stripe = typia.assert<Stripe>({});
+    stripe.confirmCardSetup = vi.fn().mockResolvedValue({});
+    getStripeInstanceMock.mockResolvedValue(stripe);
+
+    const firstLine = requestData.lineItems.at(0);
+    if (!firstLine) throw new Error("Missing test line item");
+    const secondLine = { ...firstLine, uid: "variant-b ", variants: ["variant-b-id"] };
+    const twoVariantRequestData = { ...requestData, lineItems: [firstLine, secondLine] };
+    const scaLineItem = {
+      success: true,
+      requires_card_setup: true,
+      client_secret: "seti_secret",
+      order: { id: "order-token", stripe_connect_account_id: null },
+    };
+    requestMock
+      .mockResolvedValueOnce(
+        jsonResponse({
+          success: true,
+          line_items: { [firstLine.uid]: scaLineItem, [secondLine.uid]: scaLineItem },
+          can_buyer_sign_up: false,
+          offer_codes: [],
+        }),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({
+          success: true,
+          line_items: {
+            "101": { success: true, processing: true, permalink: firstLine.permalink },
+            "102": {
+              success: false,
+              permalink: firstLine.permalink,
+              error_message: "Your card was declined.",
+              name: null,
+              formatted_price: "$10",
+              error_code: "card_declined",
+              is_tax_mismatch: false,
+              card_country: null,
+              ip_country: null,
+              updated_product: null,
+            },
+          },
+          can_buyer_sign_up: false,
+          offer_codes: [],
+        }),
+      );
+
+    const error: unknown = await startOrderCreation(twoVariantRequestData, []).catch((e: unknown) => e);
+
+    if (!(error instanceof PaymentConfirmedError)) throw new Error("expected PaymentConfirmedError");
+    expect(error.retryable).toBeNull();
+  });
+
+  it("keeps a line that failed at creation retryable when another group's debit is processing", async () => {
+    // A line that failed at creation has no purchase, so the confirm response never mentions
+    // it. Its create-time failure must survive the merge — otherwise it is indistinguishable
+    // from a processing line and silently vanishes from the cart despite never being charged.
+    vi.stubGlobal("Routes", {
+      orders_path: () => "/orders",
+      confirm_order_path: (id: string) => `/orders/${id}/confirm`,
+    });
+    requestMock.mockReset();
+    getStripeInstanceMock.mockReset();
+    const stripe = typia.assert<Stripe>({});
+    stripe.confirmCardSetup = vi.fn().mockResolvedValue({});
+    getStripeInstanceMock.mockResolvedValue(stripe);
+
+    const firstLine = requestData.lineItems.at(0);
+    if (!firstLine) throw new Error("Missing test line item");
+    const secondLine = { ...firstLine, uid: "product-b ", permalink: "product-b" };
+    const mixedRequestData = { ...requestData, lineItems: [firstLine, secondLine] };
+    requestMock
+      .mockResolvedValueOnce(
+        jsonResponse({
+          success: true,
+          line_items: {
+            [firstLine.uid]: {
+              success: true,
+              requires_card_setup: true,
+              client_secret: "seti_secret",
+              order: { id: "order-token", stripe_connect_account_id: null },
+            },
+            [secondLine.uid]: {
+              success: false,
+              permalink: secondLine.permalink,
+              error_message: "Sold out, please try again later.",
+              name: null,
+              formatted_price: "$10",
+              error_code: null,
+              is_tax_mismatch: false,
+              card_country: null,
+              ip_country: null,
+              updated_product: null,
+            },
+          },
+          can_buyer_sign_up: false,
+          offer_codes: [],
+        }),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({
+          success: true,
+          line_items: { "101": { success: true, processing: true, permalink: firstLine.permalink } },
+          can_buyer_sign_up: false,
+          offer_codes: [
+            {
+              code: "SAVE",
+              products: {
+                [firstLine.permalink]: fixedDiscount(100),
+                [secondLine.permalink]: fixedDiscount(100),
+              },
+            },
+          ],
+        }),
+      );
+
+    const error: unknown = await startOrderCreation(mixedRequestData, []).catch((e: unknown) => e);
+
+    if (!(error instanceof PaymentConfirmedError)) throw new Error("expected PaymentConfirmedError");
+    const retryable = error.retryable;
+    expect(Object.keys(retryable?.lineItems ?? {})).toEqual([secondLine.uid]);
+    expect(retryable?.lineItems[secondLine.uid]).toMatchObject({
+      success: false,
+      error_message: "Sold out, please try again later.",
+    });
+    expect(retryable?.offerCodes).toEqual([{ code: "SAVE", products: { [secondLine.permalink]: fixedDiscount(100) } }]);
+  });
+
+  it("throws pending instead of a resubmittable failure when the confirm request is lost after an intent was confirmed", async () => {
+    // Once a SetupIntent is confirmed, the confirm POST may have created the group's
+    // off-session charge before the response was lost — resubmitting could charge twice.
+    vi.stubGlobal("Routes", {
+      orders_path: () => "/orders",
+      confirm_order_path: (id: string) => `/orders/${id}/confirm`,
+      confirm_error_order_path: (id: string) => `/orders/${id}/confirm_error`,
+    });
+    requestMock.mockReset();
+    getStripeInstanceMock.mockReset();
+    const stripe = typia.assert<Stripe>({});
+    stripe.confirmCardSetup = vi.fn().mockResolvedValue({});
+    getStripeInstanceMock.mockResolvedValue(stripe);
+
+    const lineItem = requestData.lineItems.at(0);
+    if (!lineItem) throw new Error("Missing test line item");
+    requestMock
+      .mockResolvedValueOnce(
+        jsonResponse({
+          success: true,
+          line_items: {
+            [lineItem.uid]: {
+              success: true,
+              requires_card_setup: true,
+              client_secret: "seti_secret",
+              order: { id: "order-token", stripe_connect_account_id: null },
+            },
+          },
+          can_buyer_sign_up: false,
+          offer_codes: [],
+        }),
+      )
+      .mockRejectedValueOnce(new Error("network down"));
+
+    await expect(startOrderCreation(requestData, [])).rejects.toBeInstanceOf(PaymentConfirmedError);
+  });
+
+  it("throws pending when order creation itself reports a synchronously scheduled debit", async () => {
+    // A saved India card whose e-mandate needs no authentication pause is charged inside
+    // #create, and the debit can already be `processing` in the create response. That line must
+    // leave the cart; a sibling that failed at creation was never charged and stays retryable.
+    vi.stubGlobal("Routes", { orders_path: () => "/orders" });
+    requestMock.mockReset();
+
+    const firstLine = requestData.lineItems.at(0);
+    if (!firstLine) throw new Error("Missing test line item");
+    const secondLine = { ...firstLine, uid: "product-b ", permalink: "product-b" };
+    const mixedRequestData = { ...requestData, lineItems: [firstLine, secondLine] };
+    requestMock.mockResolvedValueOnce(
+      jsonResponse({
+        success: true,
+        line_items: {
+          [firstLine.uid]: { success: true, processing: true, permalink: firstLine.permalink },
+          [secondLine.uid]: {
+            success: false,
+            permalink: secondLine.permalink,
+            error_message: "Your card was declined.",
+            name: null,
+            formatted_price: "$10",
+            error_code: "card_declined",
+            is_tax_mismatch: false,
+            card_country: null,
+            ip_country: null,
+            updated_product: null,
+          },
+        },
+        can_buyer_sign_up: false,
+        offer_codes: [],
+      }),
+    );
+
+    const error: unknown = await startOrderCreation(mixedRequestData, []).catch((e: unknown) => e);
+
+    if (!(error instanceof PaymentConfirmedError)) throw new Error("expected PaymentConfirmedError");
+    expect(Object.keys(error.retryable?.lineItems ?? {})).toEqual([secondLine.uid]);
+    // One request only: nothing required SCA, so no confirm POST follows.
+    expect(requestMock).toHaveBeenCalledTimes(1);
+  });
 });
 
 describe("startClientConfirmOrderCreation", () => {
