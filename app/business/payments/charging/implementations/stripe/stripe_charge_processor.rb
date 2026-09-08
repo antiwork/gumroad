@@ -624,8 +624,12 @@ class StripeChargeProcessor
     return if credit.amount_cents == 0
     return unless credit.merchant_account&.charge_processor_merchant_id.present?
     return unless credit.merchant_account.holder_of_funds == HolderOfFunds::STRIPE
-    return if credit.merchant_account.country == Compliance::Countries::USA.alpha2
-    return if credit.fee_retention_refund&.debited_stripe_transfer.present?
+    refund = credit.fee_retention_refund
+    return if refund.blank? || refund.debited_stripe_transfer.present?
+    if credit.merchant_account.country == Compliance::Countries::USA.alpha2
+      return debit_refund_fee_from_account(credit:) if refund.fee_retention_pending
+      return
+    end
 
     stripe_account_id = credit.merchant_account.charge_processor_merchant_id
     usd_amount_cents = credit.amount_cents.abs
@@ -649,36 +653,50 @@ class StripeChargeProcessor
     transfer = transfer_ids.compact_blank.lazy
                            .filter_map { |tr_id| Stripe::Transfer.retrieve(tr_id) rescue nil }
                            .find { |tr| tr.amount - tr.amount_reversed > amount_to_reverse_for.call(tr) }
-    if transfer.present?
+    unless transfer
+      transfers = Stripe::Transfer.list(destination: stripe_account_id, created: { 'lt': 120.days.ago.to_i }, limit: 100)
+      transfer = transfers.find do |tr|
+        tr.present? && tr.amount - tr.amount_reversed > amount_to_reverse_for.call(tr)
+      end
+    end
+    return unless transfer
+
+    begin
       transfer_reversal = Stripe::Transfer.create_reversal(transfer.id, { amount: amount_to_reverse_for.call(transfer) })
-      refund = credit.fee_retention_refund
-      refund.update!(debited_stripe_transfer: transfer_reversal.id) if refund.present?
-      destination_refund = Stripe::Refund.retrieve(transfer_reversal.destination_payment_refund,
-                                                   stripe_account: stripe_account_id)
+    rescue Stripe::InvalidRequestError => error
+      raise unless error.message.match?(/no longer supported/i)
 
-      destination_balance_transaction = Stripe::BalanceTransaction.retrieve(destination_refund.balance_transaction,
-                                                                            stripe_account: stripe_account_id)
-      return destination_balance_transaction.net.abs
+      return debit_refund_fee_from_account(credit:)
     end
+    refund.debited_stripe_transfer = transfer_reversal.id
+    refund.save!
+    destination_refund = Stripe::Refund.retrieve(transfer_reversal.destination_payment_refund,
+                                                 stripe_account: stripe_account_id)
+    destination_balance_transaction = Stripe::BalanceTransaction.retrieve(destination_refund.balance_transaction,
+                                                                          stripe_account: stripe_account_id)
+    refund.fee_retention_collected_cents = destination_balance_transaction.net.abs
+    refund.save!
+    refund.fee_retention_collected_cents
+  end
 
-    # If no eligible internal transfer was available, reverse a transfer associated with an old purchase.
-    # Try and find a transfer older than 120 days. As disputes and refunds are not allowed after 120 days, it's safe to
-    # reverse these transfers.
-    transfers = Stripe::Transfer.list(destination: stripe_account_id, created: { 'lt': 120.days.ago.to_i }, limit: 100)
-    transfer = transfers.find do |tr|
-      tr.present? && (tr.amount - tr.amount_reversed > amount_to_reverse_for.call(tr))
-    end
-    if transfer.present?
-      transfer_reversal = Stripe::Transfer.create_reversal(transfer.id, { amount: amount_to_reverse_for.call(transfer) })
-      refund = credit.fee_retention_refund
-      refund.update!(debited_stripe_transfer: transfer_reversal.id) if refund.present?
-      destination_refund = Stripe::Refund.retrieve(transfer_reversal.destination_payment_refund,
-                                                   stripe_account: stripe_account_id)
+  def self.debit_refund_fee_from_account(credit:)
+    refund = credit.fee_retention_refund
+    return if refund.debited_stripe_transfer.present?
 
-      destination_balance_transaction = Stripe::BalanceTransaction.retrieve(destination_refund.balance_transaction,
-                                                                            stripe_account: stripe_account_id)
-      destination_balance_transaction.net.abs
-    end
+    merchant_account = credit.merchant_account
+    stripe_account_id = merchant_account.charge_processor_merchant_id
+    transfer_group = "refund_fee_retention_#{refund.id}"
+    # The lookup survives Stripe's idempotency-key expiry if the debit was never recorded locally.
+    transfer = Stripe::Transfer.list({ transfer_group:, limit: 1 }, { stripe_account: stripe_account_id }).first
+    transfer ||= Stripe::Transfer.create({ amount: usd_cents_to_currency(merchant_account.currency, credit.amount_cents.abs),
+                                           currency: merchant_account.currency,
+                                           destination: STRIPE_PLATFORM_ACCOUNT_ID,
+                                           transfer_group:, metadata: { refund_id: refund.id } },
+                                         { stripe_account: stripe_account_id, idempotency_key: transfer_group })
+    refund.debited_stripe_transfer = transfer.id
+    refund.fee_retention_collected_cents = transfer.amount
+    refund.save!
+    transfer.amount
   end
 
   def self.debit_stripe_account_for_australia_backtaxes(credit:)

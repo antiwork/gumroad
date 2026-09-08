@@ -80,6 +80,10 @@ class Refund < ApplicationRecord
   attr_json_data_accessor :business_vat_id
   attr_json_data_accessor :debited_stripe_transfer
   attr_json_data_accessor :retained_fee_cents
+  attr_json_data_accessor :fee_retention_pending
+  attr_json_data_accessor :fee_retention_error
+  attr_json_data_accessor :fee_retention_collected_cents
+
   attr_json_data_accessor :presentment_currency
   attr_json_data_accessor :presentment_amount_cents
   attr_json_data_accessor :presentment_price_cents
@@ -103,6 +107,62 @@ class Refund < ApplicationRecord
   # the original refund event stays booked to its own day untouched, because ledger
   # days must regenerate bit-identical.
   attr_json_data_accessor :balance_reversed_on_failure_at
+
+  FEE_RETENTION_ERRORS = [Stripe::InvalidRequestError, Stripe::APIError, Stripe::APIConnectionError,
+                          Stripe::AuthenticationError, Stripe::PermissionError, Stripe::RateLimitError,
+                          Stripe::IdempotencyError].freeze
+
+  scope :pending_fee_retention, -> { where("refunds.json_data->>'$.fee_retention_pending' = 'true'") }
+
+  def retain_fee
+    yield
+  rescue *FEE_RETENTION_ERRORS => error
+    record_fee_retention_failure!(error)
+    nil
+  end
+
+  def record_fee_retention_failure!(error)
+    self.fee_retention_pending = true
+    self.fee_retention_error = { class: error.class.name, message: error.message }
+    save!
+    ErrorNotifier.notify(error, context: { refund_id: id, purchase_id: purchase_id })
+  end
+
+  def recover_pending_fee_retention!
+    pending = purchase.with_lock { reload.fee_retention_pending && effective? }
+    return unless pending
+
+    credit = Credit.find_by(fee_retention_refund: self, failed_refund_id: nil)
+    unless credit
+      message = "Pending refund fee retention has no Credit"
+      Rails.logger.error("#{message} (refund_id=#{id})")
+      ErrorNotifier.notify(message, context: { refund_id: id, purchase_id: purchase_id })
+      return
+    end
+
+    credit.fee_retention_refund = self
+    retain_fee { StripeChargeProcessor.debit_stripe_account_for_refund_fee(credit:) }
+
+    purchase.with_lock do
+      reload.lock!
+      next unless fee_retention_pending && effective?
+      next unless debited_stripe_transfer.present? || credit.amount_cents.zero? || credit.merchant_account.holder_of_funds != HolderOfFunds::STRIPE
+
+      if fee_retention_collected_cents.present?
+        holding_cents = BalanceTransaction.where(credit:).sum(:holding_amount_net_cents)
+        adjustment_cents = -fee_retention_collected_cents - holding_cents
+        unless adjustment_cents.zero?
+          BalanceTransaction.create!(user: credit.user, merchant_account: credit.merchant_account, credit:,
+                                     issued_amount: BalanceTransaction::Amount.new(currency: Currency::USD, gross_cents: 0, net_cents: 0),
+                                     holding_amount: BalanceTransaction::Amount.new(currency: credit.merchant_account.currency,
+                                                                                    gross_cents: adjustment_cents, net_cents: adjustment_cents))
+        end
+      end
+      self.fee_retention_pending = false
+      self.fee_retention_error = nil
+      save!
+    end
+  end
 
   # In-memory mirror of the .effective scope, for callers working with preloaded
   # refunds. Keep the two in sync.

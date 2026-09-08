@@ -1,3 +1,8 @@
+recover_pending_refund_fee_retention:
+  cron: "0 * * * *"
+  class: RecoverPendingRefundFeeRetentionJob
+  description: Retries fee collection without issuing another customer refund
+
 # Every minute
 dispatch_pending_workflow_installment_schedule_intents:
   cron: "* * * * *" # Every minute

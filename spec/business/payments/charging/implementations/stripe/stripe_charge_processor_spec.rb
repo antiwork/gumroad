@@ -3954,7 +3954,7 @@ describe StripeChargeProcessor, :vcr do
 
       credit = create(:credit, user: @merchant_account.user, amount_cents: 1000, merchant_account_id: @merchant_account.id, fee_retention_refund: create(:refund))
 
-      expect_any_instance_of(Refund).to receive(:update!).with({ debited_stripe_transfer: anything })
+      expect_any_instance_of(Refund).to receive(:debited_stripe_transfer=).with(anything).and_call_original
 
       described_class.debit_stripe_account_for_refund_fee(credit:)
     end
@@ -3963,9 +3963,79 @@ describe StripeChargeProcessor, :vcr do
       travel_to(Time.zone.local(2023, 10, 6)) do
         credit = create(:credit, amount_cents: 1000, merchant_account_id: @merchant_account.id, fee_retention_refund: create(:refund))
 
-        expect_any_instance_of(Refund).to receive(:update!).with({ debited_stripe_transfer: anything })
+        expect_any_instance_of(Refund).to receive(:debited_stripe_transfer=).with(anything).and_call_original
 
         described_class.debit_stripe_account_for_refund_fee(credit:)
+      end
+    end
+
+    describe "account debit recovery" do
+      let(:merchant_account) { create(:merchant_account, country: "BG", currency: "eur", charge_processor_merchant_id: "acct_fee_recovery") }
+      let(:refund) { create(:refund) }
+      let(:credit) { create(:credit, user: merchant_account.user, merchant_account:, amount_cents: -1000, fee_retention_refund: refund) }
+      let(:transfer) { double(id: "tr_fee_candidate", amount: 5000, amount_reversed: 0, currency: "usd") }
+      let(:transfer_group) { "refund_fee_retention_#{refund.id}" }
+
+      before do
+        allow(described_class).to receive(:get_rate).with("eur").and_return("0.90")
+        create(:payment_completed, user: merchant_account.user,
+                                   stripe_connect_account_id: merchant_account.charge_processor_merchant_id,
+                                   stripe_internal_transfer_id: transfer.id)
+        allow(Stripe::Transfer).to receive(:retrieve).with(transfer.id).and_return(transfer)
+        allow(Stripe::Transfer).to receive(:create_reversal)
+          .with(transfer.id, { amount: 1000 })
+          .and_raise(Stripe::InvalidRequestError.new("Transfer reversals in BGN are no longer supported. Please create account debits in eur", nil))
+      end
+
+      it "falls back in the current currency without probing settlement and does not collect twice" do
+        expect(Stripe::Charge).not_to receive(:retrieve)
+        expect(Stripe::Account).not_to receive(:retrieve)
+        expect(Stripe::Transfer).to receive(:list)
+          .with({ transfer_group:, limit: 1 }, { stripe_account: "acct_fee_recovery" }).and_return([])
+        expect(Stripe::Transfer).to receive(:create)
+          .with({ amount: 900, currency: "eur", destination: STRIPE_PLATFORM_ACCOUNT_ID,
+                  transfer_group:, metadata: { refund_id: refund.id } },
+                { stripe_account: "acct_fee_recovery", idempotency_key: transfer_group })
+          .and_return(double(id: "tr_fee_debit", amount: 900))
+
+        expect(described_class.debit_stripe_account_for_refund_fee(credit:)).to eq(900)
+        expect(refund.reload.debited_stripe_transfer).to eq("tr_fee_debit")
+        expect(refund.fee_retention_collected_cents).to eq(900)
+        expect(described_class.debit_stripe_account_for_refund_fee(credit:)).to be_nil
+      end
+
+      it "adopts an unrecorded debit after the idempotency window has expired" do
+        refund.update!(created_at: 3.days.ago)
+        expect(Stripe::Transfer).to receive(:list)
+          .with({ transfer_group:, limit: 1 }, { stripe_account: "acct_fee_recovery" })
+          .and_return([double(id: "tr_existing_fee_debit", amount: 850)])
+        expect(Stripe::Transfer).not_to receive(:create)
+
+        expect(described_class.debit_stripe_account_for_refund_fee(credit:)).to eq(850)
+        expect(refund.reload.debited_stripe_transfer).to eq("tr_existing_fee_debit")
+        expect(refund.fee_retention_collected_cents).to eq(850)
+      end
+
+      it "does not fall back for unrelated invalid requests" do
+        expect(Stripe::Transfer).to receive(:create_reversal)
+          .and_raise(Stripe::InvalidRequestError.new("Insufficient balance", nil))
+        expect(Stripe::Transfer).not_to receive(:list)
+        expect(Stripe::Transfer).not_to receive(:create)
+
+        expect { described_class.debit_stripe_account_for_refund_fee(credit:) }.to raise_error(Stripe::InvalidRequestError, "Insufficient balance")
+      end
+
+      it "skips missing historical transfers before attempting a reversal" do
+        create(:payment_completed, user: merchant_account.user, created_at: 1.day.ago,
+                                   stripe_connect_account_id: merchant_account.charge_processor_merchant_id,
+                                   stripe_internal_transfer_id: "tr_missing_fee_candidate")
+        expect(Stripe::Transfer).to receive(:retrieve).with("tr_missing_fee_candidate")
+          .and_raise(Stripe::InvalidRequestError.new("No such transfer", nil))
+        expect(Stripe::Transfer).to receive(:list)
+          .with({ transfer_group:, limit: 1 }, { stripe_account: "acct_fee_recovery" })
+          .and_return([double(id: "tr_existing_fee_debit", amount: 900)])
+
+        expect(described_class.debit_stripe_account_for_refund_fee(credit:)).to eq(900)
       end
     end
 
