@@ -225,13 +225,13 @@ jobs:
           logger() {
             echo -e "${GREEN}$(date '+%Y/%m/%d %H:%M:%S') build.sh: $1${NC}"
           }
-          logger "pulling ruby:$(cat .ruby-version)-slim-bullseye"
-          docker pull --quiet ruby:$(cat .ruby-version)-slim-bullseye
-          WEB_BASE_SHA=$(WEB_BASE_DOCKERFILE_FROM=ruby:$(cat .ruby-version)-slim-bullseye docker/base/generate_tag_for_web_base.sh)
+          logger "pulling ruby:$(cat .ruby-version)-slim-bookworm"
+          docker pull --quiet ruby:$(cat .ruby-version)-slim-bookworm
+          WEB_BASE_SHA=$(WEB_BASE_DOCKERFILE_FROM=ruby:$(cat .ruby-version)-slim-bookworm docker/base/generate_tag_for_web_base.sh)
           if ! docker manifest inspect $WEB_BASE_REPO:$WEB_BASE_SHA > /dev/null 2>&1; then
             logger "Building $WEB_BASE_REPO:$WEB_BASE_SHA"
             NEW_BASE_REPO=$WEB_BASE_REPO \
-              WEB_BASE_DOCKERFILE_FROM=ruby:$(cat .ruby-version)-slim-bullseye \
+              WEB_BASE_DOCKERFILE_FROM=ruby:$(cat .ruby-version)-slim-bookworm \
               BUNDLE_GEMS__CONTRIBSYS__COM=${{ secrets.BUNDLE_GEMS__CONTRIBSYS__COM }} \
               make build_base
 
@@ -258,7 +258,7 @@ jobs:
         run: |
           set -e
           # Resolve the base test SHA (used as a hash input).
-          WEB_BASE_TEST_SHA=$(WEB_BASE_DOCKERFILE_FROM=ruby:$(cat .ruby-version)-slim-bullseye docker/base/generate_tag_for_web_base_test.sh)
+          WEB_BASE_TEST_SHA=$(WEB_BASE_DOCKERFILE_FROM=ruby:$(cat .ruby-version)-slim-bookworm docker/base/generate_tag_for_web_base_test.sh)
           TAG=test-$(BASE_TEST_SHA=$WEB_BASE_TEST_SHA docker/base/generate_tag_for_test_image.sh)
           echo "tag=$TAG" >> $GITHUB_OUTPUT
           echo "Computed test image tag: $TAG"
@@ -288,8 +288,8 @@ jobs:
           logger() {
             echo -e "${GREEN}$(date '+%Y/%m/%d %H:%M:%S') build.sh: $1${NC}"
           }
-          docker pull --quiet ruby:$(cat .ruby-version)-slim-bullseye
-          WEB_BASE_TEST_SHA=$(WEB_BASE_DOCKERFILE_FROM=ruby:$(cat .ruby-version)-slim-bullseye docker/base/generate_tag_for_web_base_test.sh)
+          docker pull --quiet ruby:$(cat .ruby-version)-slim-bookworm
+          WEB_BASE_TEST_SHA=$(WEB_BASE_DOCKERFILE_FROM=ruby:$(cat .ruby-version)-slim-bookworm docker/base/generate_tag_for_web_base_test.sh)
 
           # Check if both images already exist (content-addressed cache hit).
           BASE_TEST_EXISTS=false
@@ -304,7 +304,7 @@ jobs:
             if [ "$BASE_TEST_EXISTS" = "false" ]; then
               logger "building $WEB_BASE_TEST_REPO:$WEB_BASE_TEST_SHA"
               NEW_BASE_REPO=$WEB_BASE_REPO NEW_WEB_BASE_TEST_REPO=$WEB_BASE_TEST_REPO \
-                WEB_BASE_DOCKERFILE_FROM=ruby:$(cat .ruby-version)-slim-bullseye \
+                WEB_BASE_DOCKERFILE_FROM=ruby:$(cat .ruby-version)-slim-bookworm \
                 make build_base_test
               logger "pushing $WEB_BASE_TEST_REPO:$WEB_BASE_TEST_SHA"
               for i in {1..3}; do
@@ -320,7 +320,7 @@ jobs:
             # sticky-disk-backed BuildKit builder that persists the layer cache
             # across runs automatically — no explicit --cache-from/--cache-to needed.
             logger "building $WEB_REPO:$TEST_IMAGE_TAG"
-            WEB_BASE_SHA=$(WEB_BASE_DOCKERFILE_FROM=ruby:$(cat .ruby-version)-slim-bullseye docker/base/generate_tag_for_web_base.sh)
+            WEB_BASE_SHA=$(WEB_BASE_DOCKERFILE_FROM=ruby:$(cat .ruby-version)-slim-bookworm docker/base/generate_tag_for_web_base.sh)
             # Pull the FROM images that the multi-stage Dockerfile needs.
             docker pull --quiet $WEB_BASE_REPO:$WEB_BASE_SHA &
             docker pull --quiet $WEB_BASE_TEST_REPO:$WEB_BASE_TEST_SHA &
