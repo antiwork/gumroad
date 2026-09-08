@@ -304,26 +304,27 @@ class Credit < ApplicationRecord
     purchase.with_lock do
       refund.reload.lock!
       return if refund.balance_reversed_on_failure
-    end
 
-    # Scope by user_id so MySQL can use index_credits_on_user_id_and_created_at_and_id
-    # (there is no index on fee_retention_refund_id alone).
-    existing_credit = where(user_id: purchase.seller_id, fee_retention_refund: refund, failed_refund_id: nil).first
-    if existing_credit.present?
-      # Pre-patch US retention completed Stripe transfers without recording
-      # debited_stripe_transfer. Blank marker + ledger means legacy-complete — do not
-      # re-debit. New failures record FEE_DEBIT_PENDING_RETRY so retries still run.
-      us_legacy_complete = existing_credit.merchant_account&.country == Compliance::Countries::USA.alpha2 &&
-        refund.debited_stripe_transfer.blank? &&
-        existing_credit.balance_id.present?
-      unless us_legacy_complete
-        actual_holding = debit_stripe_account_for_retained_fee(existing_credit)
-        # Debit helper returns nil once the success marker is set; still reconcile from the
-        # persisted actual when a prior attempt booked only the FX estimate.
-        actual_holding ||= refund.refund_fee_holding_debit_cents
-        reconcile_fee_retention_holding_amount!(existing_credit, actual_holding)
+      # Scope by user_id so MySQL can use index_credits_on_user_id_and_created_at_and_id
+      # (there is no index on fee_retention_refund_id alone). Lock the row so concurrent
+      # retries serialize on the same retention credit.
+      existing_credit = where(user_id: purchase.seller_id, fee_retention_refund: refund, failed_refund_id: nil).lock.first
+      if existing_credit.present?
+        # Pre-patch US retention completed Stripe transfers without recording
+        # debited_stripe_transfer. Blank marker + ledger means legacy-complete — do not
+        # re-debit. New failures record FEE_DEBIT_PENDING_RETRY so retries still run.
+        us_legacy_complete = existing_credit.merchant_account&.country == Compliance::Countries::USA.alpha2 &&
+          refund.debited_stripe_transfer.blank? &&
+          existing_credit.balance_id.present?
+        unless us_legacy_complete
+          actual_holding = debit_stripe_account_for_retained_fee(existing_credit)
+          # Debit helper returns nil once the success marker is set; still reconcile from the
+          # persisted actual when a prior attempt booked only the FX estimate.
+          actual_holding ||= refund.refund_fee_holding_debit_cents
+          reconcile_fee_retention_holding_amount!(existing_credit, actual_holding)
+        end
+        return existing_credit
       end
-      return existing_credit
     end
 
     # We retain the payment processor fee (2.9% + 30c) and the Gumroad fee (10% + any discover fee) in case of refunds.
@@ -403,35 +404,44 @@ class Credit < ApplicationRecord
       reversed_amount_cents_in_holding_currency = -net_amount_on_stripe_in_holding_currency
     end
 
-    # requires_new: see Connect branch above — isolate ledger writes from any outer txn.
-    transaction(requires_new: true) do
-      credit.save!
+    # Re-take locks after Stripe: a failed-refund reversal or concurrent retention may have
+    # landed while the debit ran without holding the rows.
+    purchase.with_lock do
+      refund.reload.lock!
+      return if refund.balance_reversed_on_failure
+      existing_credit = where(user_id: purchase.seller_id, fee_retention_refund: refund, failed_refund_id: nil).lock.first
+      return existing_credit if existing_credit.present?
 
-      refund.retained_fee_cents = credit.amount_cents.abs
-      refund.save!
+      # requires_new: see Connect branch above — isolate ledger writes from any outer txn.
+      transaction(requires_new: true) do
+        credit.save!
 
-      balance_transaction_amount = BalanceTransaction::Amount.new(
-        currency: Currency::USD,
-        gross_cents: reversed_amount_cents_in_usd,
-        net_cents: reversed_amount_cents_in_usd
-      )
+        refund.retained_fee_cents = credit.amount_cents.abs
+        refund.save!
 
-      balance_transaction_holding_amount = BalanceTransaction::Amount.new(
-        currency: credit.merchant_account.currency,
-        gross_cents: reversed_amount_cents_in_holding_currency,
-        net_cents: reversed_amount_cents_in_holding_currency
-      )
+        balance_transaction_amount = BalanceTransaction::Amount.new(
+          currency: Currency::USD,
+          gross_cents: reversed_amount_cents_in_usd,
+          net_cents: reversed_amount_cents_in_usd
+        )
 
-      balance_transaction = BalanceTransaction.create!(
-        user: credit.user,
-        merchant_account: credit.merchant_account,
-        credit:,
-        issued_amount: balance_transaction_amount,
-        holding_amount: balance_transaction_holding_amount
-      )
+        balance_transaction_holding_amount = BalanceTransaction::Amount.new(
+          currency: credit.merchant_account.currency,
+          gross_cents: reversed_amount_cents_in_holding_currency,
+          net_cents: reversed_amount_cents_in_holding_currency
+        )
 
-      credit.balance = balance_transaction.balance
-      credit.save!
+        balance_transaction = BalanceTransaction.create!(
+          user: credit.user,
+          merchant_account: credit.merchant_account,
+          credit:,
+          issued_amount: balance_transaction_amount,
+          holding_amount: balance_transaction_holding_amount
+        )
+
+        credit.balance = balance_transaction.balance
+        credit.save!
+      end
     end
     credit
   end
@@ -581,10 +591,12 @@ class Credit < ApplicationRecord
       if refund.present?
         refund.with_lock do
           refund.reload
-          block.call
+          # Isolate from an enclosing retention transaction so a later marker failure
+          # cannot commit the balance delta without its reconciliation marker.
+          transaction(requires_new: true) { block.call }
         end
       else
-        block.call
+        transaction(requires_new: true) { block.call }
       end
     end
 
@@ -617,25 +629,33 @@ class Credit < ApplicationRecord
           balance.save!
         end
       rescue ActiveRecord::RecordInvalid
+        holding_currency = credit.merchant_account.currency.to_s.downcase
+        adjusted_delta = convert_fee_holding_cents(
+          delta,
+          from_currency: bt.holding_amount_currency,
+          to_currency: holding_currency
+        )
+        adjusted_delta = delta if adjusted_delta.blank?
+
         unpaid = Balance.where(
           user: credit.user,
           merchant_account: credit.merchant_account,
           currency: bt.issued_amount_currency,
-          holding_currency: bt.holding_amount_currency,
+          holding_currency:,
           state: "unpaid"
         ).order(date: :asc).first
         unpaid ||= Balance.create!(
           user: credit.user,
           merchant_account: credit.merchant_account,
           currency: bt.issued_amount_currency,
-          holding_currency: bt.holding_amount_currency,
+          holding_currency:,
           date: credit.created_at.to_date,
           amount_cents: 0,
           holding_amount_cents: 0
         )
 
         unpaid.with_lock do
-          unpaid.increment(:holding_amount_cents, delta)
+          unpaid.increment(:holding_amount_cents, adjusted_delta)
           unpaid.save!
         end
       end
