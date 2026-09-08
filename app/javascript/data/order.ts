@@ -298,7 +298,25 @@ export const startOrderCreation = async (
           processingPermalinks.add(lineItem.permalink);
           continue;
         }
-        if (doesLineItemRequireSCA(lineItem)) continue;
+        if (doesLineItemRequireSCA(lineItem)) {
+          // Still requires authentication after a partial confirm — keep uncharged lines
+          // retryable instead of dropping them when a sibling group is already processing.
+          if (lineItem.permalink) {
+            confirmLineItems[uid] = {
+              success: false,
+              error_message: "Authentication required.",
+              permalink: lineItem.permalink,
+              name: "",
+              formatted_price: "",
+              error_code: "requires_authentication",
+              is_tax_mismatch: false,
+              card_country: null,
+              ip_country: null,
+              updated_product: null,
+            };
+          }
+          continue;
+        }
         confirmLineItems[uid] = lineItem;
       }
       // Key by uid, not permalink, which collides when the cart holds two variants of one product.

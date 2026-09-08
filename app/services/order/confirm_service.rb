@@ -108,10 +108,10 @@ class Order::ConfirmService
           Rails.logger.error("Error charging confirmed setup intent for order #{order.id}: #{e.class} => #{e.message}")
           ErrorNotifier.notify(e, order_id: order.id)
           (pending + charged).each do |purchase|
-            if purchase.processor_payment_intent.present?
-              # The charge exists, so its debit may already be scheduled; failing the purchase
-              # (or letting Purchase::ConfirmService re-confirm the intent) could lose a payment
-              # that is still going to capture. Report processing and let webhooks finish it.
+            if purchase.processor_payment_intent.present? || purchase.charge&.client_confirmed?
+              # The charge exists, or a prior uncertain attempt already submitted a debit
+              # (client_confirmed without a stored PI). Failing the purchase could lose a
+              # payment that is still going to capture. Report processing and let webhooks finish it.
               setup_charge_results[purchase.id] = :pending unless setup_charge_results.key?(purchase.id)
             elsif purchase.errors.empty?
               purchase.errors.add(:base, "There is a temporary problem, please try again (your card was not charged).")
