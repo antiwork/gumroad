@@ -843,10 +843,14 @@ class StripeChargeProcessor
       unless claimed
         return debit_stripe_account_for_refund_fee(credit:)
       end
-      # Immutable amount selected under the refund lock (also mirrored on eur_debit_cents).
-      eur_amount_cents = refund.reload.refund_fee_debit_amount_cents.presence ||
+      # Use in-memory sticky fields from the claim we just won. Do not reload: a concurrent
+      # InvalidRequest release can replace them with another generation/operation.
+      return debit_stripe_account_for_refund_fee(credit:) unless refund.refund_fee_debit_operation == FEE_DEBIT_OP_EUR_DEBIT
+
+      eur_amount_cents = refund.refund_fee_debit_amount_cents.presence ||
         refund.refund_fee_eur_debit_cents.presence ||
         proposed_eur_amount_cents
+      attempted_generation = refund.refund_fee_debit_generation.to_i
       if refund.refund_fee_eur_debit_cents.blank?
         ActiveRecord::Base.transaction(requires_new: true) do
           refund.update!(refund_fee_eur_debit_cents: eur_amount_cents)
@@ -854,9 +858,9 @@ class StripeChargeProcessor
       end
     else
       eur_amount_cents = proposed_eur_amount_cents
+      attempted_generation = 0
     end
     transfer_options = { stripe_account: credit.merchant_account.charge_processor_merchant_id }
-    attempted_generation = refund&.refund_fee_debit_generation.to_i
     if refund&.id.present?
       transfer_options[:idempotency_key] = if attempted_generation.zero?
         "refund_fee_eur_debit_#{refund.external_id}"
