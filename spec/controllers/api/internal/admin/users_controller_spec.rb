@@ -2126,6 +2126,7 @@ describe Api::Internal::Admin::UsersController do
       expect(response.parsed_body).to eq({
         success: true,
         user_id: user.external_id,
+        latest_shadow_evaluation: nil,
         social_connections: [
           {
             platform: "twitter",
@@ -2201,13 +2202,54 @@ describe Api::Internal::Admin::UsersController do
       expect(response.parsed_body["social_connections"].sole).to include("uid" => "17841400000000000", "currently_linked" => false)
     end
 
+    it "returns only the latest dated shadow evidence without evaluating or changing the seller" do
+      user = create(:user, email: "seller@example.com")
+      verification = create(:social_connect_verification, user:)
+      latest = create(:social_score_shadow_evaluation, user:, evaluated_on: Date.new(2026, 9, 2),
+                                                       created_at: Time.utc(2026, 9, 3, 12), score: 70, would_have_released: true,
+                                                       signals: { "platform" => "twitter", "components" => { "followers" => 25 } })
+      create(:social_score_shadow_evaluation, user:, evaluated_on: Date.new(2026, 9, 1), created_at: latest.created_at)
+      create(:social_score_shadow_evaluation, evaluated_on: Date.new(2026, 9, 4), score: 85)
+      original_attributes = user.attributes
+      original_evaluations = SocialScoreShadowEvaluation.order(:id).map(&:attributes)
+      expect(SocialScoreShadowEvaluationService).not_to receive(:new)
+
+      get :social_connections, params: { email: user.email }
+
+      expect(response).to have_http_status(:ok)
+      expect(response.parsed_body["latest_shadow_evaluation"]).to eq({
+                                                                       "mode" => "historical_shadow",
+                                                                       "notice" => "Stored shadow evidence only; not current eligibility or payout authorization.",
+                                                                       "evaluated_on" => "2026-09-02",
+                                                                       "recorded_at" => "2026-09-03T12:00:00Z",
+                                                                       "score" => 70,
+                                                                       "unpaid_balance_cents" => latest.unpaid_balance_cents,
+                                                                       "would_have_released" => true,
+                                                                       "hold_source" => latest.hold_source,
+                                                                       "signals" => latest.signals,
+                                                                     })
+      expect(response.parsed_body["social_connections"].sole["uid"]).to eq(verification.uid)
+      expect(user.reload.attributes).to eq(original_attributes)
+      expect(SocialScoreShadowEvaluation.order(:id).map(&:attributes)).to eq(original_evaluations)
+    end
+
+    it "returns null without creating an evaluation when only another seller has evidence" do
+      user = create(:user, email: "seller@example.com")
+      create(:social_score_shadow_evaluation)
+      expect(SocialScoreShadowEvaluationService).not_to receive(:new)
+
+      expect { get :social_connections, params: { email: user.email } }.not_to change(SocialScoreShadowEvaluation, :count)
+
+      expect(response.parsed_body).to include("latest_shadow_evaluation" => nil, "social_connections" => [])
+    end
+
     it "returns an empty list for a user with no connections" do
       user = create(:user, email: "seller@example.com")
 
       get :social_connections, params: { email: user.email }
 
       expect(response).to have_http_status(:ok)
-      expect(response.parsed_body).to eq({ success: true, user_id: user.external_id, social_connections: [] }.as_json)
+      expect(response.parsed_body).to eq({ success: true, user_id: user.external_id, social_connections: [], latest_shadow_evaluation: nil }.as_json)
     end
 
     it "returns not found when the user does not exist" do

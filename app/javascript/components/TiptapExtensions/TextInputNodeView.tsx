@@ -8,7 +8,7 @@ import { Fieldset } from "$app/components/ui/Fieldset";
 import { Input } from "$app/components/ui/Input";
 import { Textarea } from "$app/components/ui/Textarea";
 
-export const TextInputNodeView = ({ editor, node, updateAttributes }: NodeViewProps) => {
+export const TextInputNodeView = ({ editor, node, updateAttributes, getPos }: NodeViewProps) => {
   const label = typia.assert<string | null>(node.attrs.label);
   const type = typia.assert<"shortAnswer" | "longAnswer">(node.type.name);
   const customFieldId = typia.assert<string | null>(node.attrs.id);
@@ -23,7 +23,7 @@ export const TextInputNodeView = ({ editor, node, updateAttributes }: NodeViewPr
       {editor.isEditable ? (
         <NodeActionsWrapper asChild>
           <Fieldset>
-            <NodeActionsMenu editor={editor} />
+            <NodeActionsMenu editor={editor} getPos={getPos} />
 
             <fieldset className="m-0 min-w-0 flex-1 border-0 p-0">
               <Input
