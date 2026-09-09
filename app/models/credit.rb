@@ -356,19 +356,13 @@ class Credit < ApplicationRecord
       refund.fee_retention_pending = credit.amount_cents != 0
       refund.save!
       # Keep the credit and its balance transaction together even if Stripe rejects collection.
+      # US and non-US both go through debit_stripe_account_for_refund_fee so a lost
+      # Stripe response is discoverable by the same transfer_group / reversal identity.
       net_amount_on_stripe_in_holding_currency = refund.retain_fee do
-        if credit.merchant_account.country == Compliance::Countries::USA.alpha2
-          transfer = Stripe::Transfer.create({ amount: credit.amount_cents.abs, currency: "usd", destination: Stripe::Account.retrieve.id },
-                                             { stripe_account: credit.merchant_account.charge_processor_merchant_id })
-          refund.debited_stripe_transfer = transfer.id
-          refund.save!
-          credit.amount_cents.abs
-        else
-          StripeChargeProcessor.debit_stripe_account_for_refund_fee(credit:)
-        end
+        StripeChargeProcessor.debit_stripe_account_for_refund_fee(credit:)
       end
       reversed_amount_cents_in_holding_currency = -net_amount_on_stripe_in_holding_currency if net_amount_on_stripe_in_holding_currency.present?
-      if refund.debited_stripe_transfer.present?
+      if refund.debited_stripe_transfer.present? && refund.fee_retention_collected_cents.present?
         refund.fee_retention_pending = false
         refund.fee_retention_error = nil
         refund.save!
