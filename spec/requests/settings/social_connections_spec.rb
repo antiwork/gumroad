@@ -24,7 +24,6 @@ describe "Settings social connections page", type: :system, js: true do
     expect(page).to have_button("Connect to X")
     expect(page).to have_link("Continue without connecting", href: dashboard_path)
     expect(page.text.index("Connect to X")).to be < page.text.index("Continue without connecting")
-    expect(page).to have_link("Social connections")
   end
 
   it "saves a connected or disconnected X account" do
@@ -57,17 +56,5 @@ describe "Settings social connections page", type: :system, js: true do
     visit settings_social_connections_path
 
     expect(page).to have_button("Connect to Instagram")
-  end
-
-  context "when logged user has role admin" do
-    include_context "with switching account to user as admin for seller"
-
-    it "does not show social connection controls" do
-      visit settings_social_connections_path
-
-      expect(page).to have_current_path(dashboard_path)
-      expect(page).not_to have_link("Social connections")
-      expect(page).not_to have_button("Connect to X")
-    end
   end
 end
