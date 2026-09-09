@@ -1,10 +1,9 @@
 # frozen_string_literal: true
 
 class ProductOfferCodeIndexingService
-  # Transient transport statuses and unclassified/seller-wide failures keep the
-  # seller scan pinned for Sidekiq retry. Only known permanent document-level
-  # rejections are reported and skipped so the cursor can advance.
-  # 429 arrives as a generic ServerError in elasticsearch-transport 7.x.
+  # Transient and unclassified failures keep the seller scan pinned for retry;
+  # only permanent document-level rejections are skipped. In transport 7.x,
+  # HTTP 429 arrives as a generic ServerError.
   RETRYABLE_STATUS_CODES = [408, 409, 429, 500, 502, 503, 504].freeze
   # Bare parsing_exception is also used for malformed requests / batch-wide
   # failures; only document-specific subtypes may be skipped.
