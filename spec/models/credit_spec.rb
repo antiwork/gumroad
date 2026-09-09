@@ -298,16 +298,15 @@ describe Credit do
     let!(:refund) { create(:refund, purchase:, fee_cents: 100) }
 
     before do
-      allow(StripeChargeProcessor).to receive(:debit_stripe_account_for_refund_fee).and_return(33)
+      # Collection runs after the refund transaction commits (Purchase#debit_processor_fee_from_merchant_account!).
+      expect(StripeChargeProcessor).not_to receive(:debit_stripe_account_for_refund_fee)
     end
 
-    context "when Stripe fee collection fails" do
+    context "for Stripe-held funds" do
       let!(:merchant_account) { create(:merchant_account, user: creator, country: "BG", currency: "usd") }
 
-      it "keeps the credit and balance debit when Stripe fee collection fails" do
-        error = Stripe::InvalidRequestError.new("Account debit is not permitted", nil)
-        expect(StripeChargeProcessor).to receive(:debit_stripe_account_for_refund_fee).and_raise(error)
-        expect(ErrorNotifier).to receive(:notify).with(error, context: { refund_id: refund.id, purchase_id: purchase.id })
+      it "books the credit and balance debit and leaves the Stripe collection pending" do
+        expect(ErrorNotifier).not_to receive(:notify)
 
         credit = Credit.create_for_refund_fee_retention!(refund:)
 
@@ -329,24 +328,15 @@ describe Credit do
     context "US Gumroad-managed account" do
       let!(:merchant_account) { create(:merchant_account, user: creator, country: "US", currency: "usd") }
 
-      it "collects the retained fee via a grouped Stripe account debit" do
-        allow(StripeChargeProcessor).to receive(:debit_stripe_account_for_refund_fee).and_call_original
-        transfer_group = "refund_fee_retention_#{refund.id}"
-        expect(Stripe::Transfer).to receive(:list)
-          .with({ transfer_group:, limit: 1 }, { stripe_account: merchant_account.charge_processor_merchant_id })
-          .and_return([])
-        expect(Stripe::Transfer).to receive(:create)
-          .with({ amount: 33, currency: "usd", destination: STRIPE_PLATFORM_ACCOUNT_ID,
-                  transfer_group:, metadata: { refund_id: refund.id } },
-                { stripe_account: merchant_account.charge_processor_merchant_id, idempotency_key: transfer_group })
-          .and_return(double(id: "tr_us_fee", amount: 33))
+      it "marks the fee pending without debiting the Stripe account" do
+        expect(Stripe::Transfer).not_to receive(:create)
 
         credit = Credit.create_for_refund_fee_retention!(refund:)
 
         expect(credit.amount_cents).to eq(-33)
-        expect(refund.reload.debited_stripe_transfer).to eq("tr_us_fee")
-        expect(refund.fee_retention_collected_cents).to eq(33)
-        expect(refund.fee_retention_pending).not_to eq(true)
+        expect(refund.reload.debited_stripe_transfer).to be_nil
+        expect(refund.fee_retention_pending).to be(true)
+        expect(refund.fee_retention_recoverable).to be(true)
       end
     end
 
@@ -388,8 +378,7 @@ describe Credit do
           oldest_balance = create(:balance, user: creator, merchant_account: non_us_stripe_account, amount_cents: 1000, holding_currency: "aud", date: purchase.succeeded_at.to_date - 2.days)
           create(:balance, user: creator, merchant_account: non_us_stripe_account, amount_cents: 2000,
                            holding_currency: "aud", date: purchase.succeeded_at.to_date)
-          allow(StripeChargeProcessor).to receive(:debit_stripe_account_for_refund_fee).and_call_original
-          expect(Stripe::Transfer).to receive(:create_reversal).and_call_original
+          expect(Stripe::Transfer).not_to receive(:create_reversal)
           expect(creator.unpaid_balance_cents).to eq(3000)
 
           credit = Credit.create_for_refund_fee_retention!(refund:)
@@ -398,7 +387,8 @@ describe Credit do
           expect(credit.balance).to eq(oldest_balance)
           expect(credit.balance.merchant_account).to eq(non_us_stripe_account)
           expect(credit.balance_transaction.issued_amount_net_cents).to eq(-33)
-          expect(credit.balance_transaction.holding_amount_net_cents).to eq(-52)
+          # FX estimate from lib/currency/backup_rates.json; recovery books the delta to the collected amount.
+          expect(credit.balance_transaction.holding_amount_net_cents).to eq(-32)
           expect(creator.reload.unpaid_balance_cents).to eq(2967) # 3000 - 33
         end
       end

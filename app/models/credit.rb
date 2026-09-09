@@ -353,21 +353,11 @@ class Credit < ApplicationRecord
     reversed_amount_cents_in_holding_currency = credit.usd_cents_to_currency(credit.merchant_account.currency, credit.amount_cents)
 
     if credit.merchant_account.holder_of_funds == HolderOfFunds::STRIPE
-      stripe_fee_collection_required = credit.amount_cents != 0
-      refund.fee_retention_pending = stripe_fee_collection_required
+      # No Stripe call here: the caller's transaction commits first. The holding amount below
+      # is the FX estimate; Refund#recover_pending_fee_retention! books the delta to what
+      # Stripe collected.
+      refund.fee_retention_pending = credit.amount_cents != 0
       refund.save!
-      if stripe_fee_collection_required
-        # Keep the credit and its balance transaction together even if Stripe rejects collection.
-        net_amount_on_stripe_in_holding_currency = refund.retain_fee do
-          StripeChargeProcessor.debit_stripe_account_for_refund_fee(credit:)
-        end
-        reversed_amount_cents_in_holding_currency = -net_amount_on_stripe_in_holding_currency if net_amount_on_stripe_in_holding_currency.present?
-        if refund.debited_stripe_transfer.present? && refund.fee_retention_collected_cents.present?
-          refund.fee_retention_pending = false
-          refund.fee_retention_error = nil
-          refund.save!
-        end
-      end
     end
 
     balance_transaction_amount = BalanceTransaction::Amount.new(
