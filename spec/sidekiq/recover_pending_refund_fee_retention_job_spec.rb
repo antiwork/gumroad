@@ -125,6 +125,11 @@ RSpec.describe RecoverPendingRefundFeeRetentionJob, :vcr do
     expect(BalanceTransaction.where(credit:).sum(:holding_amount_net_cents)).to eq(-900)
   end
 
+  it "selects pending recoveries through the indexed recoverable column" do
+    expect(Refund.pending_fee_retention.to_sql).to include("fee_retention_recoverable")
+    expect(refund.reload.fee_retention_recoverable).to be(true)
+  end
+
   it "does not recover fees for a reversed failed refund" do
     refund.status = "failed"
     refund.balance_reversed_on_failure = true

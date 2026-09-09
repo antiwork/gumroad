@@ -24,6 +24,7 @@ class Refund < ApplicationRecord
 
   before_validation :assign_product, on: :create
   before_validation :assign_seller, on: :create
+  before_save :sync_fee_retention_recoverable
   validates_uniqueness_of :processor_refund_id, scope: :link_id, allow_blank: true
 
   # Refund selection for the tax report jobs' refund leg: refunds that get reported as their
@@ -113,7 +114,7 @@ class Refund < ApplicationRecord
                           Stripe::AuthenticationError, Stripe::PermissionError, Stripe::RateLimitError,
                           Stripe::IdempotencyError].freeze
 
-  scope :pending_fee_retention, -> { where("refunds.json_data->>'$.fee_retention_pending' = 'true'") }
+  scope :pending_fee_retention, -> { where(fee_retention_recoverable: true) }
 
   def retain_fee
     yield
@@ -194,6 +195,10 @@ class Refund < ApplicationRecord
   end
 
   private
+    def sync_fee_retention_recoverable
+      self.fee_retention_recoverable = fee_retention_pending == true
+    end
+
     def assign_product
       self.link_id = purchase.link_id
     end
