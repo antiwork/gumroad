@@ -75,6 +75,7 @@ class Api::Internal::Admin::PayoutsController < Api::Internal::Admin::BaseContro
           content: "Payouts resumed."
         )
       end
+      SocialConnectFunnel.record_hold_released!(@user, surface: "payouts_resume")
 
       render json: {
         success: true,

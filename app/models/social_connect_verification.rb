@@ -112,6 +112,7 @@ class SocialConnectVerification < ApplicationRecord
         verification = find_or_initialize_by(user:, platform:, uid:)
       end
       verification.update!(uid:, superseded_at: nil, last_verified_at: Time.current, **attributes)
+      SocialConnectFunnel.record!(user:, stage: "connected", provider: platform, surface: "omniauth")
       verification
     end
   end

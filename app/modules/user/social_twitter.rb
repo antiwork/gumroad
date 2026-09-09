@@ -71,6 +71,7 @@ module User::SocialTwitter
         rescue StandardError => e
           # Verification metadata feeds risk reviews; it must never break signup/link.
           Rails.logger.error("SocialConnectVerification twitter record failed for user #{user.id}: #{e.message}")
+          SocialConnectFunnel.record!(user:, stage: "failed", provider: "twitter", surface: "omniauth", extra: e.class.name)
         end
       end
 
