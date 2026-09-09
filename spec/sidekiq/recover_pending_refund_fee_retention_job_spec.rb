@@ -78,6 +78,18 @@ RSpec.describe RecoverPendingRefundFeeRetentionJob, :vcr do
     expect { described_class.new.perform }.not_to change(Credit, :count)
 
     expect(refund.reload.fee_retention_pending).to be(true)
+    expect(refund.fee_retention_attempts).to eq(1)
+  end
+
+  it "counts an attempt when recovery raises unexpectedly" do
+    error = RuntimeError.new("bookkeeping")
+    expect(StripeChargeProcessor).to receive(:debit_stripe_account_for_refund_fee).and_raise(error)
+    expect(ErrorNotifier).to receive(:notify).with(error, context: { refund_id: refund.id, purchase_id: purchase.id })
+
+    described_class.new.perform
+
+    expect(refund.reload.fee_retention_pending).to be(true)
+    expect(refund.fee_retention_attempts).to eq(1)
   end
 
   it "keeps rejected recoveries pending and reports the error" do

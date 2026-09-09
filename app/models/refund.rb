@@ -137,61 +137,20 @@ class Refund < ApplicationRecord
     ErrorNotifier.notify(error, context: { refund_id: id, purchase_id: purchase_id })
   end
 
+  # Every run that ends without a collection counts as one attempt, including runs
+  # that find no Credit or raise; otherwise a persistent failure keeps the refund in
+  # the job's candidate set and notifies every hour forever.
   def recover_pending_fee_retention!
     pending = purchase.with_lock { reload.fee_retention_pending }
     return unless pending
 
-    credit = Credit.find_by(fee_retention_refund: self, failed_refund_id: nil)
-    unless credit
-      message = "Pending refund fee retention has no Credit"
-      Rails.logger.error("#{message} (refund_id=#{id})")
-      ErrorNotifier.notify(message, context: { refund_id: id, purchase_id: purchase_id })
-      return
-    end
-
-    # Gate on terminally_failed?, not effective?: Stripe-held failures are never
-    # balance-reversed, so effective? stays true and would collect a fee for a refund
-    # the buyer never received. Existing pins and grouped debits are still adopted.
-    credit.fee_retention_refund = self
-    lookup_failed = false
-    retain_fee do
-      StripeChargeProcessor.debit_stripe_account_for_refund_fee(credit:, collect: !terminally_failed?)
-    rescue *FEE_RETENTION_ERRORS
-      lookup_failed = true
+    collected = begin
+      collect_pending_fee_retention!
+    rescue StandardError
+      count_fee_retention_attempt!
       raise
     end
-
-    attempts_exhausted = false
-    purchase.with_lock do
-      reload.lock!
-      next unless fee_retention_pending
-      collection_recorded = debited_stripe_transfer.present? && fee_retention_collected_cents.present?
-      no_stripe_collection = credit.amount_cents.zero? || credit.merchant_account.holder_of_funds != HolderOfFunds::STRIPE
-      terminal_without_collection = terminally_failed? && debited_stripe_transfer.blank? && !lookup_failed
-      unless collection_recorded || no_stripe_collection || terminal_without_collection
-        attempts_exhausted = record_fee_retention_attempt!
-        next
-      end
-
-      if fee_retention_collected_cents.present?
-        holding_cents = BalanceTransaction.where(credit:).sum(:holding_amount_net_cents)
-        adjustment_cents = -fee_retention_collected_cents - holding_cents
-        unless adjustment_cents.zero?
-          BalanceTransaction.create!(user: credit.user, merchant_account: credit.merchant_account, credit:,
-                                     issued_amount: BalanceTransaction::Amount.new(currency: Currency::USD, gross_cents: 0, net_cents: 0),
-                                     holding_amount: BalanceTransaction::Amount.new(currency: credit.merchant_account.currency,
-                                                                                    gross_cents: adjustment_cents, net_cents: adjustment_cents))
-        end
-      end
-      self.fee_retention_pending = false
-      self.fee_retention_error = nil
-      save!
-    end
-    return unless attempts_exhausted
-
-    message = "Refund fee retention stopped retrying after #{MAX_FEE_RETENTION_ATTEMPTS} attempts"
-    Rails.logger.error("#{message} (refund_id=#{id})")
-    ErrorNotifier.notify(message, context: { refund_id: id, purchase_id:, fee_retention_error: })
+    count_fee_retention_attempt! unless collected
   end
 
   def fee_retention_attempts_exhausted?
@@ -229,11 +188,68 @@ class Refund < ApplicationRecord
       self.fee_retention_recoverable = fee_retention_pending == true && !fee_retention_attempts_exhausted?
     end
 
-    # True only on the attempt that reaches the cap, so the caller reports it once.
-    def record_fee_retention_attempt!
-      self.fee_retention_attempts = fee_retention_attempts.to_i + 1
-      save!
-      fee_retention_attempts == MAX_FEE_RETENTION_ATTEMPTS
+    # True when the fee is collected or nothing is left to collect; false when this
+    # run counts as a failed attempt.
+    def collect_pending_fee_retention!
+      credit = Credit.find_by(fee_retention_refund: self, failed_refund_id: nil)
+      unless credit
+        message = "Pending refund fee retention has no Credit"
+        Rails.logger.error("#{message} (refund_id=#{id})")
+        ErrorNotifier.notify(message, context: { refund_id: id, purchase_id: })
+        return false
+      end
+
+      # Gate on terminally_failed?, not effective?: Stripe-held failures are never
+      # balance-reversed, so effective? stays true and would collect a fee for a refund
+      # the buyer never received. Existing pins and grouped debits are still adopted.
+      credit.fee_retention_refund = self
+      lookup_failed = false
+      retain_fee do
+        StripeChargeProcessor.debit_stripe_account_for_refund_fee(credit:, collect: !terminally_failed?)
+      rescue *FEE_RETENTION_ERRORS
+        lookup_failed = true
+        raise
+      end
+
+      purchase.with_lock do
+        reload.lock!
+        next true unless fee_retention_pending
+        collection_recorded = debited_stripe_transfer.present? && fee_retention_collected_cents.present?
+        no_stripe_collection = credit.amount_cents.zero? || credit.merchant_account.holder_of_funds != HolderOfFunds::STRIPE
+        terminal_without_collection = terminally_failed? && debited_stripe_transfer.blank? && !lookup_failed
+        next false unless collection_recorded || no_stripe_collection || terminal_without_collection
+
+        if fee_retention_collected_cents.present?
+          holding_cents = BalanceTransaction.where(credit:).sum(:holding_amount_net_cents)
+          adjustment_cents = -fee_retention_collected_cents - holding_cents
+          unless adjustment_cents.zero?
+            BalanceTransaction.create!(user: credit.user, merchant_account: credit.merchant_account, credit:,
+                                       issued_amount: BalanceTransaction::Amount.new(currency: Currency::USD, gross_cents: 0, net_cents: 0),
+                                       holding_amount: BalanceTransaction::Amount.new(currency: credit.merchant_account.currency,
+                                                                                      gross_cents: adjustment_cents, net_cents: adjustment_cents))
+          end
+        end
+        self.fee_retention_pending = false
+        self.fee_retention_error = nil
+        save!
+        true
+      end
+    end
+
+    # Reports once, on the attempt that reaches the cap.
+    def count_fee_retention_attempt!
+      exhausted = purchase.with_lock do
+        reload.lock!
+        next false unless fee_retention_pending
+        self.fee_retention_attempts = fee_retention_attempts.to_i + 1
+        save!
+        fee_retention_attempts == MAX_FEE_RETENTION_ATTEMPTS
+      end
+      return unless exhausted
+
+      message = "Refund fee retention stopped retrying after #{MAX_FEE_RETENTION_ATTEMPTS} attempts"
+      Rails.logger.error("#{message} (refund_id=#{id})")
+      ErrorNotifier.notify(message, context: { refund_id: id, purchase_id:, fee_retention_error: })
     end
 
     def assign_product
