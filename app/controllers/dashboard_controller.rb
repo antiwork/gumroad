@@ -9,6 +9,7 @@ class DashboardController < Sellers::BaseController
 
   def index
     authorize :dashboard
+    session.delete(:social_connect_return)
 
     if current_seller.suspended_for_tos_violation?
       redirect_to products_url

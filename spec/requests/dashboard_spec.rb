@@ -81,7 +81,7 @@ describe "Dashboard", js: true, type: :system do
       expect(page).not_to have_text("YouTube: Available to connect")
       expect(page).not_to have_text("Instagram: Available to connect")
       click_on "Manage social connections"
-      expect(page).to have_current_path(profile_path)
+      expect(page).to have_current_path(profile_path(social_connect_origin: "onboarding"))
       expect(page).to have_text("Social links")
       expect(page).to have_button("Connect to X")
       expect(page).to have_button("Disconnect example_creator from X")

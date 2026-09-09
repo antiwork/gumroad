@@ -69,6 +69,7 @@ const FONT_DESCRIPTIONS: Record<string, string> = {
 };
 
 type ProfilePageProps = {
+  social_connect_return?: string | null;
   profile_settings: ProfileSettingsForm;
   editable_profile: ProfileEditorProps;
   profile_version: string;
@@ -89,6 +90,7 @@ type ProfilePageProps = {
 export default function SettingsPage() {
   const {
     creator_profile,
+    social_connect_return,
     profile_settings,
     editable_profile,
     profile_version,
@@ -522,6 +524,7 @@ export default function SettingsPage() {
               {loggedInUser?.policies.settings_profile.manage_social_connections ? (
                 <Fieldset>
                   <FieldsetTitle>Social links</FieldsetTitle>
+                  {social_connect_return ? <p>After connecting, you’ll return to Getting started.</p> : null}
                   {twitter_connected ? (
                     <Button type="button" color="twitter" onClick={handleUnlinkTwitter}>
                       <TwitterX pack="brands" className="size-5" />
@@ -538,6 +541,7 @@ export default function SettingsPage() {
                       <SocialAuthButton
                         provider="twitter"
                         href={Routes.user_twitter_omniauth_authorize_path({
+                          social_connect_return,
                           state: "link_twitter_account",
                           x_auth_access_type: "read",
                         })}
@@ -553,7 +557,10 @@ export default function SettingsPage() {
                       Disconnect {youtube_handle ? `${youtube_handle} from YouTube` : "YouTube"}
                     </Button>
                   ) : youtube_connect_enabled ? (
-                    <SocialAuthButton provider="youtube" href={Routes.user_youtube_omniauth_authorize_path()}>
+                    <SocialAuthButton
+                      provider="youtube"
+                      href={Routes.user_youtube_omniauth_authorize_path({ social_connect_return })}
+                    >
                       <Youtube pack="brands" className="size-5" />
                       Connect to YouTube
                     </SocialAuthButton>
@@ -564,10 +571,18 @@ export default function SettingsPage() {
                       Disconnect {instagram_handle ? `${instagram_handle} from Instagram` : "Instagram"}
                     </Button>
                   ) : instagram_connect_enabled ? (
-                    <SocialAuthButton provider="instagram" href={Routes.user_instagram_omniauth_authorize_path()}>
+                    <SocialAuthButton
+                      provider="instagram"
+                      href={Routes.user_instagram_omniauth_authorize_path({ social_connect_return })}
+                    >
                       <Instagram pack="brands" className="size-5" />
                       Connect to Instagram
                     </SocialAuthButton>
+                  ) : null}
+                  {social_connect_return ? (
+                    <Link href={Routes.dashboard_path()} className="underline">
+                      Continue without connecting
+                    </Link>
                   ) : null}
                 </Fieldset>
               ) : null}

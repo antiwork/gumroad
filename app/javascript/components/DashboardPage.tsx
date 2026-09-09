@@ -594,7 +594,9 @@ export const DashboardPage = ({
                       ))}
                     </ul>
                     <div>
-                      <NavigationButton href={Routes.profile_path()}>Manage social connections</NavigationButton>
+                      <NavigationButton href={Routes.profile_path({ social_connect_origin: "onboarding" })}>
+                        Manage social connections
+                      </NavigationButton>
                     </div>
                   </CardContent>
                 </Card>
