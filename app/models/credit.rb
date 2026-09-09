@@ -352,17 +352,22 @@ class Credit < ApplicationRecord
     reversed_amount_cents_in_usd = credit.amount_cents
     reversed_amount_cents_in_holding_currency = credit.usd_cents_to_currency(credit.merchant_account.currency, credit.amount_cents)
 
-    # For Stripe sales that use a gumroad-managed custom connect account, we debit the Stripe account for the fee amount.
-    if credit.merchant_account.holder_of_funds == HolderOfFunds::STRIPE && credit.merchant_account.country == Compliance::Countries::USA.alpha2
-      # For gumroad-controlled Stripe accounts from the US, we can make new debit transfers.
-      # So we transfer the retained fee back to Gumroad's Stripe platform account.
-      Stripe::Transfer.create({ amount: credit.amount_cents.abs, currency: "usd", destination: Stripe::Account.retrieve.id, },
-                              { stripe_account: credit.merchant_account.charge_processor_merchant_id })
-    elsif credit.merchant_account.holder_of_funds == HolderOfFunds::STRIPE
-      # For non-US gumroad-controlled Stripe accounts, we cannot make debit transfers.
-      # So we try and reverse the retained fee amount from one of the old transfers made to that Stripe account.
-      net_amount_on_stripe_in_holding_currency = StripeChargeProcessor.debit_stripe_account_for_refund_fee(credit:)
-      reversed_amount_cents_in_holding_currency = -net_amount_on_stripe_in_holding_currency if net_amount_on_stripe_in_holding_currency.present?
+    if credit.merchant_account.holder_of_funds == HolderOfFunds::STRIPE
+      stripe_fee_collection_required = credit.amount_cents != 0
+      refund.fee_retention_pending = stripe_fee_collection_required
+      refund.save!
+      if stripe_fee_collection_required
+        # Keep the credit and its balance transaction together even if Stripe rejects collection.
+        net_amount_on_stripe_in_holding_currency = refund.retain_fee do
+          StripeChargeProcessor.debit_stripe_account_for_refund_fee(credit:)
+        end
+        reversed_amount_cents_in_holding_currency = -net_amount_on_stripe_in_holding_currency if net_amount_on_stripe_in_holding_currency.present?
+        if refund.debited_stripe_transfer.present? && refund.fee_retention_collected_cents.present?
+          refund.fee_retention_pending = false
+          refund.fee_retention_error = nil
+          refund.save!
+        end
+      end
     end
 
     balance_transaction_amount = BalanceTransaction::Amount.new(

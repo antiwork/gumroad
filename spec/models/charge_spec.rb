@@ -120,6 +120,33 @@ describe Charge, :vcr do
   end
 
   describe "#refund_and_save!" do
+    it "commits every purchase refund when fee retention fails inside the outer transaction" do
+      seller = create(:user)
+      purchases = Array.new(2) { create(:purchase, seller:, link: create(:product, user: seller), stripe_transaction_id: "ch_combined_refund") }
+      charge = create(:charge, seller:, purchases:)
+      create(:balance, user: seller, amount_cents: 10_000)
+      error = Stripe::InvalidRequestError.new("Transfer reversals are no longer supported", nil)
+      allow_any_instance_of(Purchase).to receive(:debit_processor_fee_from_merchant_account!).and_raise(error)
+      expect(ErrorNotifier).to receive(:notify).with(error, context: hash_including(:refund_id, :purchase_id)).twice
+      purchases.each do |purchase|
+        flow_of_funds = FlowOfFunds.build_simple_flow_of_funds(Currency::USD, -purchase.total_transaction_cents)
+        expect(ChargeProcessor).to receive(:refund!).with(anything, "ch_combined_refund", hash_including(purchase:))
+          .and_return(double(id: "re_fee_#{purchase.id}", refund: nil, flow_of_funds:))
+      end
+
+      expect { expect(charge.refund_and_save!(seller.id)).to be(true) }.to change(Refund, :count).by(2)
+
+      purchases.each do |purchase|
+        refund = purchase.reload.refunds.sole
+        expect(purchase.stripe_refunded).to be(true)
+        expect(purchase.amount_refundable_cents).to eq(0)
+        expect(refund.fee_retention_pending).to be(true)
+        expect(refund.balance_transactions.where(user_id: seller.id).count).to eq(1)
+      end
+      expect(charge.refund_and_save!(seller.id)).to be(false)
+      expect(charge.purchases.sum { |purchase| purchase.refunds.count }).to eq(2)
+    end
+
     it "attempts every purchase refund even when one purchase fails" do
       charge = create(:charge)
       failed_errors = instance_double(ActiveModel::Errors, full_messages: ["First refund failed"])
