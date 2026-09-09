@@ -115,4 +115,19 @@ RSpec.describe RecoverPendingRefundFeeRetentionJob, :vcr do
 
     expect(refund.reload.fee_retention_pending).to be(true)
   end
+
+  it "isolates an unhandled recovery error so later refunds still run" do
+    other_purchase = create(:purchase, merchant_account:, seller: merchant_account.user, link: create(:product, user: merchant_account.user))
+    other_refund = create(:refund, purchase: other_purchase, fee_retention_pending: true)
+    seen = []
+    allow_any_instance_of(Refund).to receive(:recover_pending_fee_retention!) do |instance|
+      seen << instance.id
+      raise RuntimeError, "bookkeeping" if instance.id == refund.id
+    end
+    expect(ErrorNotifier).to receive(:notify).with(instance_of(RuntimeError), hash_including(context: hash_including(refund_id: refund.id)))
+
+    expect { described_class.new.perform }.not_to raise_error
+
+    expect(seen).to include(refund.id, other_refund.id)
+  end
 end
