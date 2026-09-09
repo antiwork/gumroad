@@ -5,10 +5,8 @@ class RecoverPendingRefundFeeRetentionJob
 
   sidekiq_options retry: 5, queue: :low, lock: :until_executed
 
-  # Hourly cron. Worst case is one Stripe collection per pending row; keep the
-  # declared attempt under interval − RecurringLockTtl::SAFETY_MARGIN so a
-  # stranded digest cannot mute the next fire. Candidates come from the indexed
-  # refunds.fee_retention_recoverable column.
+  # Hourly cron: keep max_attempt under the interval minus RecurringLockTtl::SAFETY_MARGIN
+  # so a stranded lock digest cannot mute the next fire.
   include RecurringLockTtl
   recurring_lock_ttl max_attempt: 45.minutes
 

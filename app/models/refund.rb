@@ -142,11 +142,9 @@ class Refund < ApplicationRecord
       return
     end
 
-    # Failed or canceled refunds must not start a new collection: the buyer never got
-    # the money, and on Stripe-held accounts HandleFailedRefundService leaves them
-    # to the exception queue instead of reversing the balance, so effective? stays
-    # true. They still look up a pinned reversal or grouped debit so a lost Stripe
-    # response is not abandoned.
+    # Gate on terminally_failed?, not effective?: Stripe-held failures are never
+    # balance-reversed, so effective? stays true and would collect a fee for a refund
+    # the buyer never received. Existing pins and grouped debits are still adopted.
     credit.fee_retention_refund = self
     lookup_failed = false
     retain_fee do
