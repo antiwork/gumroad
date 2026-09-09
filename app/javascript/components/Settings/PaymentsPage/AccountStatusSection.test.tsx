@@ -37,13 +37,9 @@ afterEach(() => {
 describe("optional review connections", () => {
   it("keeps the ordinary review and verification paths without requiring a connection", () => {
     render(<AccountStatusSection accountStatus={status} payoutsPausedBy={null} />);
-    expect(screen.getByText("Add social connections (optional)")).toBeTruthy();
-    expect(
-      screen.getByText(/share your social account history as additional context for your account review/u),
-    ).toBeTruthy();
-    expect(
-      screen.getByText(/does not replace identity verification or guarantee approval or a payout date/u),
-    ).toBeTruthy();
+    expect(screen.getByText("Connect a social account (optional)")).toBeTruthy();
+    expect(screen.getByText(/a connected social account gives us more to go on/u)).toBeTruthy();
+    expect(screen.getByText(/does not guarantee approval or a payout date/u)).toBeTruthy();
     expect(screen.getByRole("link", { name: "Complete verification" }).getAttribute("href")).toBe(
       "/settings/payments/remediation",
     );
@@ -54,8 +50,8 @@ describe("optional review connections", () => {
 
   it("links to the Social connections settings page instead of starting OAuth on Payments", () => {
     render(<AccountStatusSection accountStatus={status} payoutsPausedBy={null} />);
-    expect(screen.getByText("X available to connect")).toBeTruthy();
-    expect(screen.getByRole("link", { name: "Manage social connections" }).getAttribute("href")).toBe(
+    expect(screen.queryByText(/Connected:/u)).toBeNull();
+    expect(screen.getByRole("link", { name: "Connect an account" }).getAttribute("href")).toBe(
       "/settings/social_connections",
     );
     expect(screen.queryByRole("button", { name: "Connect to X" })).toBeNull();
@@ -75,11 +71,10 @@ describe("optional review connections", () => {
         payoutsPausedBy={null}
       />,
     );
-    expect(screen.getByText("X connected")).toBeTruthy();
-    expect(screen.getByText("YouTube available to connect")).toBeTruthy();
-    expect(screen.getByText("Instagram available to connect")).toBeTruthy();
+    expect(screen.getByText("Connected: X")).toBeTruthy();
+    expect(screen.queryByText(/YouTube/u)).toBeNull();
     expect(screen.queryByRole("button", { name: "Connect to X" })).toBeNull();
-    expect(screen.getByRole("link", { name: "Manage social connections" }).getAttribute("href")).toBe(
+    expect(screen.getByRole("link", { name: "Manage connections" }).getAttribute("href")).toBe(
       "/settings/social_connections",
     );
   });
@@ -88,7 +83,7 @@ describe("optional review connections", () => {
     render(<AccountStatusSection accountStatus={status} payoutsPausedBy="system" />);
     expect(screen.getByText(/Your payouts have been paused for a security review/u)).toBeTruthy();
     expect(screen.queryByText(status.gumroad_status ?? "")).toBeNull();
-    expect(screen.queryByText("Add social connections (optional)")).toBeNull();
+    expect(screen.queryByText("Connect a social account (optional)")).toBeNull();
   });
 
   it("does not render a prompt when the server excludes the seller", () => {
@@ -98,8 +93,8 @@ describe("optional review connections", () => {
         payoutsPausedBy="stripe"
       />,
     );
-    expect(screen.queryByText("Add social connections (optional)")).toBeNull();
-    expect(screen.queryByRole("link", { name: "Manage social connections" })).toBeNull();
+    expect(screen.queryByText("Connect a social account (optional)")).toBeNull();
+    expect(screen.queryByRole("link", { name: "Connect an account" })).toBeNull();
     expect(screen.getByRole("link", { name: "Complete verification" })).toBeTruthy();
   });
 });
