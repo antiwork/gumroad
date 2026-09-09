@@ -143,10 +143,16 @@ gem "mysql2", ">= 0.5.6"
 # asserts on its internals and would go quietly stale rather than fail.
 #
 # Do NOT widen this to the gem's own railtie. It pulls in Railties::RackMiddleware,
-# which unconditionally inserts a middleware that writes an `arpa_context` cookie on
-# every response — a Set-Cookie on product and marketing pages makes Cloudflare bypass
-# the edge cache (gp#1252). We do not need it: stickiness is per-thread here, and web
-# has no reading pool at all. Rakefile loads the gem's rake helper on its own.
+# which unconditionally inserts a middleware that round-trips the stickiness window
+# through an `arpa_context` cookie, and that cookie is *read back as trusted input*:
+# Middleware::COOKIE_READER JSON-parses whatever the client sent into Context, whose
+# timestamps decide primary vs. replica. A far-future value forces every read in the
+# request onto the primary (a cheap lever for loading the primary at will); a 0 forces
+# reads onto the replica even immediately after that request's own write, defeating
+# read-your-own-write. It is also set without `secure` or `same_site`, and a Set-Cookie
+# on product and marketing pages makes Cloudflare bypass the edge cache (gp#1252).
+# We need none of it: stickiness is per-thread here and web has no reading pool at all.
+# Rakefile loads the gem's rake helper on its own.
 gem "active_record_proxy_adapters", "~> 0.11.1", require: "active_record_proxy_adapters/railties/mysql2"
 gem "nokogiri", "~> 1.19"
 gem "omniauth-apple", "~> 1.3"
