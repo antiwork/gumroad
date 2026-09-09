@@ -294,7 +294,7 @@ class Purchase
       # Failed-refund reversals lock the purchase before their refund and balance rows.
       # Use the same order here so a single-purchase refund cannot hold a balance while
       # waiting for a purchase row that a reversal already holds. Combined-charge refunds
-      # process purchases in id order without one wrapping transaction (#7549).
+      # commit per purchase and pre-lock remaining purchases in id order (#7549).
       # reload first: reading any json_data-backed attribute on a row whose json_data
       # column is NULL dirties the record in memory, and lock! raises on dirty records.
       # Reloading discards that phantom change; lock! reloads again under FOR UPDATE.

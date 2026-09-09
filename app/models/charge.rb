@@ -188,12 +188,17 @@ class Charge < ApplicationRecord
   end
 
   def refund_and_save!(refunding_user_id, reason: nil)
-    # One purchase at a time: with_lock serializes concurrent charge refunds on the same
-    # purchase (eligibility is checked before Stripe), then commits before the next starts
-    # so a later failure cannot erase an earlier processor-successful refund (#7549).
+    # Each purchase commits on its own so a later Stripe/local failure cannot erase an
+    # earlier processor-successful refund (#7549). Within that per-purchase transaction,
+    # lock this purchase and every later one in id order before Stripe or balance work.
+    # Otherwise purchase₁ → balance while a sibling failed-refund reversal holds purchase₂
+    # and waits for the same balance completes a deadlock cycle (the old wrapping-txn
+    # pre-pass prevented that; per-purchase with_lock alone does not).
     refunded_all_purchases = true
-    successful_purchases.sort_by(&:id).each do |purchase|
-      refunded = purchase.with_lock do
+    purchases = successful_purchases.sort_by(&:id)
+    purchases.each_with_index do |purchase, index|
+      refunded = transaction do
+        purchases[index..].each { _1.reload(lock: true) }
         purchase.refund_and_save!(refunding_user_id, reason:)
       end
       unless refunded
@@ -332,9 +337,11 @@ class Charge < ApplicationRecord
     # purchase balance work in one transaction (tax refunds, fraud block). Without
     # this, purchase₁ → balance → purchase₂ can deadlock with HandleFailedRefundService.
     # Callers must iterate THESE locked instances (not re-query) under REPEATABLE READ.
-    # reload before lock!: NULL json_data dirties the record and lock! raises on dirty.
+    # reload(lock: true): locking read first so later nonlocking refund sums do not keep
+    # a snapshot taken by a plain reload before the row lock was held. Also clears a
+    # dirty in-memory json_data touch that would make a separate lock! raise.
     def lock_successful_purchases_in_id_order!
-      successful_purchases.sort_by(&:id).each { _1.reload.lock! }
+      successful_purchases.sort_by(&:id).each { _1.reload(lock: true) }
     end
 
     def copy_refund_errors_from(purchase)

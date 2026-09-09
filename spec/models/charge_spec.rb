@@ -122,7 +122,8 @@ describe Charge, :vcr do
   describe "#refund_and_save!" do
     def stub_purchase_lock(*purchases)
       purchases.each do |purchase|
-        allow(purchase).to receive(:with_lock).and_yield
+        allow(purchase).to receive(:reload).and_return(purchase)
+        allow(purchase).to receive(:lock!).and_return(purchase)
       end
     end
 
