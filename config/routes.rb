@@ -38,6 +38,10 @@ Rails.application.routes.draw do
   # forwards here instead of serving the static file directly.
   get "/favicon.ico" => "favicons#show", as: :favicon
 
+  # Unconstrained by host: robots.txt is per-origin, so a storefront host that
+  # 404s here is telling crawlers it has no rules at all (gumroad-private#2488).
+  get "/robots.:format" => "robots#index"
+
   use_doorkeeper do
     controllers applications: "oauth/applications"
     controllers authorized_applications: "oauth/authorized_applications"
@@ -568,9 +572,6 @@ Rails.application.routes.draw do
     post "/notion/oauth2/token(.:format)" => "oauth/tokens#create"
     post "/notion/unfurl" => "api/v2/notion_unfurl_urls#create"
     delete "/notion/unfurl" => "api/v2/notion_unfurl_urls#destroy"
-
-    # /robots.txt
-    get "/robots.:format" => "robots#index"
 
     # /llms.txt — AI-assistant discoverability (https://llmstxt.org)
     get "/llms.:format" => "llms#index"
