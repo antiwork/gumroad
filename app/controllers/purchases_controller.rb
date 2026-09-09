@@ -36,21 +36,22 @@ class PurchasesController < ApplicationController
   before_action :hide_layouts, only: %i[subscribe unsubscribe receipt confirm_receipt_email]
   before_action :set_noindex_header, only: [:receipt, :confirm_receipt_email]
 
+  # #confirm reads back the purchase the buyer's own checkout request just created.
+  around_action :use_primary_database, only: :confirm
+
   def confirm
-    ApplicationRecord.connected_to(role: :writing) do
-      @purchase = Purchase.find_by_secure_external_id(params[:id], scope: "confirm")
-      e404 unless @purchase
+    @purchase = Purchase.find_by_secure_external_id(params[:id], scope: "confirm")
+    e404 unless @purchase
 
-      error = Purchase::ConfirmService.new(purchase: @purchase, params:).perform
+    error = Purchase::ConfirmService.new(purchase: @purchase, params:).perform
 
-      if error
-        render_error(error, purchase: @purchase)
-      else
-        create_purchase_event(@purchase)
-        handle_recommended_purchase(@purchase) if @purchase.was_product_recommended
+    if error
+      render_error(error, purchase: @purchase)
+    else
+      create_purchase_event(@purchase)
+      handle_recommended_purchase(@purchase) if @purchase.was_product_recommended
 
-        render_create_success(@purchase)
-      end
+      render_create_success(@purchase)
     end
   end
 

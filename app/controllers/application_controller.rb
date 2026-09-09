@@ -267,6 +267,13 @@ class ApplicationController < ActionController::Base
       render(xml: { success: false, error: "Not found" }.to_xml(root: "response"), status: :not_found)
     end
 
+    # Endpoints that read back a record the same buyer's previous request just created cannot
+    # tolerate replica lag. Wired as an around_action so the before_actions declared after it
+    # are covered too — declare it below any filter that should stay on the replica.
+    def use_primary_database(&block)
+      ApplicationRecord.connected_to(role: :writing, &block)
+    end
+
     def invalidate_session_if_necessary
       return if self.class.name == "LoginsController"
       return unless request.env["warden"].authenticated?

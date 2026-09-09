@@ -19,6 +19,17 @@ describe "primary pin boundaries" do
     end
   end
 
+  # LinksController wires #show's pin as an around_action declared BELOW the product and seller
+  # lookups, so those keep reading the replica and only the action body is pinned — the boundary
+  # the old in-action `stick_to_primary!` drew. Declaration order is the whole contract here:
+  # moving the line up silently puts the entire product page on the primary.
+  it "declares the product page's primary pin after #show's product lookups" do
+    filters = LinksController._process_action_callbacks.map(&:filter)
+
+    expect(filters).to include(:use_primary_database, :prepare_product_page)
+    expect(filters.index(:use_primary_database)).to be > filters.index(:prepare_product_page)
+  end
+
   [true, false].each do |dry_run|
     it "#{dry_run ? "releases" : "pins"} merchant cleanup discovery" do
       service = Onetime::CleanupWedgedStripeMerchantAccounts.new

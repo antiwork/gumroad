@@ -53,10 +53,13 @@ class ReindexSellerOfferCodesJob
       catalogue_pending = $redis.exists?("#{key}:version")
       if pending_ids.any? && (!catalogue_pending || $redis.get("#{key}:last_batch") != "targeted")
         $redis.set("#{key}:cooldown", (Time.current + INTERVAL).to_f, ex: INTERVAL.to_i)
-        ActiveRecord::Base.connection.stick_to_primary!
         attempted = true
         $redis.set("#{key}:last_batch", "targeted")
-        ProductOfferCodeIndexingService.new(Link.where(id: pending_ids).to_a).perform(&renew_lock)
+        # The enqueue follows the offer-code or product write that just committed, so the product
+        # load and the service's own OfferCode queries both have to see it.
+        ApplicationRecord.connected_to(role: :writing) do
+          ProductOfferCodeIndexingService.new(Link.where(id: pending_ids).to_a).perform(&renew_lock)
+        end
         renew_lock.call
         self.class.perform_in(INTERVAL, seller_id)
         pending.each do |product_id, version|
@@ -77,15 +80,18 @@ class ReindexSellerOfferCodesJob
       return unless version
 
       $redis.set("#{key}:cooldown", (Time.current + INTERVAL).to_f, ex: INTERVAL.to_i)
-      ActiveRecord::Base.connection.stick_to_primary!
       cursor, scan_version = $redis.mget("#{key}:cursor", "#{key}:scan_version")
       scan_version ||= version
       # Include unpublished/banned rows: offer_codes can go stale while a product is
       # inactive, and republication does not otherwise refresh them.
-      products = Link.visible.where(user_id: seller_id).where("id > ?", cursor.to_i).order(:id).limit(BATCH_SIZE).to_a
+      products = ApplicationRecord.connected_to(role: :writing) do
+        Link.visible.where(user_id: seller_id).where("id > ?", cursor.to_i).order(:id).limit(BATCH_SIZE).to_a
+      end
       attempted = true
       $redis.set("#{key}:last_batch", "catalogue")
-      ProductOfferCodeIndexingService.new(products).perform(&renew_lock)
+      # Same reason as the targeted branch: the scan above and the service's OfferCode queries
+      # must see the write that enqueued this run.
+      ApplicationRecord.connected_to(role: :writing) { ProductOfferCodeIndexingService.new(products).perform(&renew_lock) }
       renew_lock.call
 
       # Schedule before advancing: a failed push retries this batch, never skips it.

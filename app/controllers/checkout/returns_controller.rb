@@ -7,27 +7,28 @@ class Checkout::ReturnsController < ApplicationController
 
   before_action :set_noindex_header
 
+  # Stripe sends the buyer back here immediately after `orders#prepare` created the order.
+  around_action :use_primary_database, only: :show
+
   def show
-    ApplicationRecord.connected_to(role: :writing) do
-      order = Order.find_by_secure_external_id(params[:id], scope: "confirm")
-      e404 unless order
+    order = Order.find_by_secure_external_id(params[:id], scope: "confirm")
+    e404 unless order
 
-      charge = order.charges.find { _1.stripe_payment_intent_id.present? }
-      e404 unless charge && ActiveSupport::SecurityUtils.secure_compare(charge.stripe_payment_intent_id, params[:payment_intent].to_s)
+    charge = order.charges.find { _1.stripe_payment_intent_id.present? }
+    e404 unless charge && ActiveSupport::SecurityUtils.secure_compare(charge.stripe_payment_intent_id, params[:payment_intent].to_s)
 
-      responses, charge_intent = finalize_client_confirmed_order(order)
-      results = responses.values
+    responses, charge_intent = finalize_client_confirmed_order(order)
+    results = responses.values
 
-      if results.any? && results.all? { _1[:success] && !_1[:processing] }
-        redirect_to success_redirect_url(order), allow_other_host: true
-      elsif results.any? { _1[:processing] } || charge_intent&.succeeded?
-        set_meta_tag(title: "Processing your payment")
-        render inertia: "Checkout/Returns/Pending"
-      else
-        restore_cart(order)
-        flash[:alert] = failure_message(responses)
-        redirect_to checkout_path
-      end
+    if results.any? && results.all? { _1[:success] && !_1[:processing] }
+      redirect_to success_redirect_url(order), allow_other_host: true
+    elsif results.any? { _1[:processing] } || charge_intent&.succeeded?
+      set_meta_tag(title: "Processing your payment")
+      render inertia: "Checkout/Returns/Pending"
+    else
+      restore_cart(order)
+      flash[:alert] = failure_message(responses)
+      redirect_to checkout_path
     end
   end
 

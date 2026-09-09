@@ -11,6 +11,11 @@ class OrdersController < ApplicationController
   before_action :validate_order_request, only: [:create, :prepare]
   before_action :fetch_affiliates, only: [:create, :prepare]
 
+  # Each of these reads back an order a previous request from the same buyer just created —
+  # `prepare` for the client-confirm actions, `create` for #confirm — so a lagging replica can
+  # miss it entirely.
+  around_action :use_primary_database, only: %i[confirm finalize confirm_error]
+
   def create
     order_params = build_order_params
 
@@ -33,22 +38,20 @@ class OrdersController < ApplicationController
   end
 
   def confirm
-    ApplicationRecord.connected_to(role: :writing) do
-      order = Order.find_by_secure_external_id(params[:id], scope: "confirm")
-      e404 unless order
+    order = Order.find_by_secure_external_id(params[:id], scope: "confirm")
+    e404 unless order
 
-      confirm_responses, offer_codes = Order::ConfirmService.new(order:, params:).perform
+    confirm_responses, offer_codes = Order::ConfirmService.new(order:, params:).perform
 
-      confirm_responses.each do |purchase_id, response|
-        next unless response[:success]
+    confirm_responses.each do |purchase_id, response|
+      next unless response[:success]
 
-        purchase = Purchase.find(purchase_id)
-        create_purchase_event_and_recommendation_info(purchase)
-      end
-      order.send_charge_receipts
-
-      render json: { success: true, line_items: confirm_responses, offer_codes:, can_buyer_sign_up: }
+      purchase = Purchase.find(purchase_id)
+      create_purchase_event_and_recommendation_info(purchase)
     end
+    order.send_charge_receipts
+
+    render json: { success: true, line_items: confirm_responses, offer_codes:, can_buyer_sign_up: }
   end
 
   # Starts client-confirm Payment Element checkout by returning an unconfirmed PaymentIntent.
@@ -91,17 +94,15 @@ class OrdersController < ApplicationController
 
   # Finalizes a client-confirm PaymentIntent without re-charging.
   def finalize
-    ApplicationRecord.connected_to(role: :writing) do
-      order = Order.find_by_secure_external_id(params[:id], scope: "confirm")
-      e404 unless order
+    order = Order.find_by_secure_external_id(params[:id], scope: "confirm")
+    e404 unless order
 
-      finalize_responses, _, offer_codes = finalize_client_confirmed_order(
-        order,
-        retry_offer_codes: params[:retry_offer_codes]
-      )
+    finalize_responses, _, offer_codes = finalize_client_confirmed_order(
+      order,
+      retry_offer_codes: params[:retry_offer_codes]
+    )
 
-      render json: { success: true, line_items: finalize_responses, offer_codes:, can_buyer_sign_up: }
-    end
+    render json: { success: true, line_items: finalize_responses, offer_codes:, can_buyer_sign_up: }
   end
 
   # Records browser-only Stripe confirmation failures and releases attempts that Stripe still
@@ -111,46 +112,43 @@ class OrdersController < ApplicationController
   CONFIRM_ERROR_CLEANUP_LIMIT_WINDOW = 5.minutes
 
   def confirm_error
-    # `prepare` just created this order, so the replica can be behind when Stripe returns an error.
-    ApplicationRecord.connected_to(role: :writing) do
-      order = Order.find_by_secure_external_id(params[:id], scope: "confirm")
-      e404 unless order
+    order = Order.find_by_secure_external_id(params[:id], scope: "confirm")
+    e404 unless order
 
-      error_details = {
-        order_id: order.id,
-        stage: params[:stage].to_s.first(50),
-        payment_method_type: params[:payment_method_type].to_s.first(50),
-        selected_payment_method_type: params[:selected_payment_method_type].to_s.first(50),
-        stripe_error_type: params[:stripe_error_type].to_s.first(100),
-        stripe_error_code: params[:stripe_error_code].to_s.first(100),
-        stripe_error_message: params[:stripe_error_message].to_s.first(500),
-      }
-      Rails.logger.error("Client-confirm browser error for order #{order.id}: #{error_details.inspect}")
+    error_details = {
+      order_id: order.id,
+      stage: params[:stage].to_s.first(50),
+      payment_method_type: params[:payment_method_type].to_s.first(50),
+      selected_payment_method_type: params[:selected_payment_method_type].to_s.first(50),
+      stripe_error_type: params[:stripe_error_type].to_s.first(100),
+      stripe_error_code: params[:stripe_error_code].to_s.first(100),
+      stripe_error_message: params[:stripe_error_message].to_s.first(500),
+    }
+    Rails.logger.error("Client-confirm browser error for order #{order.id}: #{error_details.inspect}")
 
-      # A fixed message keeps every report in one Sentry issue (the Stripe code lives in the
-      # event context, not the title), and the per-order counter caps how many events a single
-      # order token can emit — payload size caps alone don't bound the NUMBER of events, so a
-      # scripted caller replaying a valid token could otherwise flood Sentry. The log line
-      # above stays unconditional so full forensics are always in the logs.
-      #
-      # Splitting the issue per method would read better but must not key on this
-      # attacker-controlled param; a bounded split is tracked in gumroad-private#1514.
-      if confirm_error_reportable?(error_details) && confirm_error_notify_allowed?(order)
-        ErrorNotifier.notify("Client-confirm browser error", **error_details)
-      end
-
-      cleanup_succeeded = release_failed_client_confirmation(
-        order,
-        processor_intent_id: params[:processor_intent_id].to_s.first(100).presence
-      )
-      unavailable_once_per_cart_ids = unavailable_once_per_cart_offer_code_ids(order)
-
-      render json: {
-        success: true,
-        reservations_released: cleanup_succeeded && unavailable_once_per_cart_ids.empty?,
-        unavailable_once_per_cart_ids:,
-      }
+    # A fixed message keeps every report in one Sentry issue (the Stripe code lives in the
+    # event context, not the title), and the per-order counter caps how many events a single
+    # order token can emit — payload size caps alone don't bound the NUMBER of events, so a
+    # scripted caller replaying a valid token could otherwise flood Sentry. The log line
+    # above stays unconditional so full forensics are always in the logs.
+    #
+    # Splitting the issue per method would read better but must not key on this
+    # attacker-controlled param; a bounded split is tracked in gumroad-private#1514.
+    if confirm_error_reportable?(error_details) && confirm_error_notify_allowed?(order)
+      ErrorNotifier.notify("Client-confirm browser error", **error_details)
     end
+
+    cleanup_succeeded = release_failed_client_confirmation(
+      order,
+      processor_intent_id: params[:processor_intent_id].to_s.first(100).presence
+    )
+    unavailable_once_per_cart_ids = unavailable_once_per_cart_offer_code_ids(order)
+
+    render json: {
+      success: true,
+      reservations_released: cleanup_succeeded && unavailable_once_per_cart_ids.empty?,
+      unavailable_once_per_cart_ids:,
+    }
   end
 
   private
