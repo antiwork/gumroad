@@ -329,15 +329,24 @@ describe Credit do
     context "US Gumroad-managed account" do
       let!(:merchant_account) { create(:merchant_account, user: creator, country: "US", currency: "usd") }
 
-      it "does not queue Stripe collection" do
+      it "collects the retained fee via a grouped Stripe account debit" do
         allow(StripeChargeProcessor).to receive(:debit_stripe_account_for_refund_fee).and_call_original
-        expect(Stripe::Transfer).not_to receive(:list)
-        expect(Stripe::Transfer).not_to receive(:create)
+        transfer_group = "refund_fee_retention_#{refund.id}"
+        expect(Stripe::Transfer).to receive(:list)
+          .with({ transfer_group:, limit: 1 }, { stripe_account: merchant_account.charge_processor_merchant_id })
+          .and_return([])
+        expect(Stripe::Transfer).to receive(:create)
+          .with({ amount: 33, currency: "usd", destination: STRIPE_PLATFORM_ACCOUNT_ID,
+                  transfer_group:, metadata: { refund_id: refund.id } },
+                { stripe_account: merchant_account.charge_processor_merchant_id, idempotency_key: transfer_group })
+          .and_return(double(id: "tr_us_fee", amount: 33))
 
         credit = Credit.create_for_refund_fee_retention!(refund:)
 
         expect(credit.amount_cents).to eq(-33)
-        expect(refund.reload.fee_retention_pending).not_to eq(true)
+        expect(refund.reload.debited_stripe_transfer).to eq("tr_us_fee")
+        expect(refund.fee_retention_collected_cents).to eq(33)
+        expect(refund.fee_retention_pending).not_to eq(true)
       end
     end
 

@@ -3943,17 +3943,26 @@ describe StripeChargeProcessor, :vcr do
       @merchant_account = create(:merchant_account, charge_processor_merchant_id: "acct_1MdawPS4gcql7bLm", country: "AE")
     end
 
-    it "does not collect via account debit for US accounts" do
+    it "collects via account debit for US accounts without searching for a reversal" do
       merchant_account = create(:merchant_account, country: "US", currency: "usd", charge_processor_merchant_id: "acct_us_fee")
       refund = create(:refund)
       refund.fee_retention_pending = true
       refund.save!
       credit = create(:credit, user: merchant_account.user, amount_cents: -1000, merchant_account:, fee_retention_refund: refund)
+      transfer_group = "refund_fee_retention_#{refund.id}"
 
-      expect(Stripe::Transfer).not_to receive(:list)
-      expect(Stripe::Transfer).not_to receive(:create)
+      expect(Stripe::Transfer).not_to receive(:create_reversal)
+      expect(Stripe::Transfer).to receive(:list)
+        .with({ transfer_group:, limit: 1 }, { stripe_account: "acct_us_fee" }).and_return([])
+      expect(Stripe::Transfer).to receive(:create)
+        .with({ amount: 1000, currency: "usd", destination: STRIPE_PLATFORM_ACCOUNT_ID,
+                transfer_group:, metadata: { refund_id: refund.id } },
+              { stripe_account: "acct_us_fee", idempotency_key: transfer_group })
+        .and_return(double(id: "tr_us_fee_debit", amount: 1000))
 
-      expect(described_class.debit_stripe_account_for_refund_fee(credit:)).to be_nil
+      expect(described_class.debit_stripe_account_for_refund_fee(credit:)).to eq(1000)
+      expect(refund.reload.debited_stripe_transfer).to eq("tr_us_fee_debit")
+      expect(refund.fee_retention_collected_cents).to eq(1000)
     end
 
     it "reverses an internal transfer made to the stripe connect account if present" do
