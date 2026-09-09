@@ -917,7 +917,7 @@ class Purchase < ApplicationRecord
     .not_is_archived_original_subscription_purchase
     .not_rental_expired
     .order(id: :desc)
-    .includes(:preorder, :purchaser, :seller, :subscription, :link, url_redirect: { purchase: { link: [:user, :thumbnail_alive, { display_asset_previews: [:file_attachment, :file_blob] }] } })
+    .includes(:preorder, :purchaser, :seller, :subscription, :link, url_redirect: { purchase: { link: [:user, :thumbnail_alive, { display_asset_previews: { file_attachment: { blob: { variant_records: { image_attachment: :blob } } } } }] } })
   }
   scope :for_library, lambda {
     all_success_states

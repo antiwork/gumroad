@@ -3,7 +3,7 @@
 class Api::V2::LinksController < Api::V2::BaseController
   BASE_PRODUCT_ASSOCIATIONS = [
     :preorder_link, :tags, :taxonomy,
-    { display_asset_previews: [:file_attachment, :file_blob] },
+    { display_asset_previews: { file_attachment: { blob: { variant_records: { image_attachment: :blob } } } } },
     { bundle_products: [:product, :variant] },
   ].freeze
 

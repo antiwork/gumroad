@@ -132,6 +132,8 @@ describe ProductPresenter::Card do
         queries
       end
 
+      # Thumbnail already passed before the cover/avatar preload landed; it stays as a
+      # guard so nobody trims the shared preload graph.
       %i[thumbnail cover avatar].each do |source|
         it "does not query persisted #{source} variants while rendering cards" do
           products = Array.new(2) do

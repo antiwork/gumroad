@@ -358,9 +358,9 @@ class AssetPreview < ApplicationRecord
 
       enqueue_retina_variant_process
 
-      # Inline workers finish during enqueue. Re-read so this call and the
-      # next one return the same URL.
-      file.blob.variant_records.reset if file.blob.variant_records.loaded?
+      # Inline workers finish during enqueue. Drop the preloaded variant rows and
+      # re-read so this call and the next one return the same URL.
+      file.blob.variant_records.reset
       variant = retina_variant
       if variant && variant_processed?(variant)
         Rails.cache.fetch("attachment_#{file.id}_retina_url") { variant.url }
