@@ -38,8 +38,6 @@ Rails.application.routes.draw do
   # forwards here instead of serving the static file directly.
   get "/favicon.ico" => "favicons#show", as: :favicon
 
-  # Unconstrained by host: robots.txt is per-origin, so a storefront host that
-  # 404s here is telling crawlers it has no rules at all (gumroad-private#2488).
   get "/robots.:format" => "robots#index"
 
   use_doorkeeper do

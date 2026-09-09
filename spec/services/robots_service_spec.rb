@@ -54,8 +54,6 @@ describe RobotsService do
         ]
       end
 
-      # Crawlers obey only the most specific group that names them, so a bingbot
-      # group that omitted the wildcard Disallows would open /purchases/ to Bing.
       it "repeats every wildcard disallow inside the bingbot group" do
         rules = described_class.new(storefront_host: true).user_agent_rules
         bingbot_group = rules[0...rules.index("")]

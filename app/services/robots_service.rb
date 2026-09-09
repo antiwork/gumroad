@@ -10,18 +10,12 @@ class RobotsService
   DISALLOWED_PATHS = ["/purchases/"].freeze
   private_constant :DISALLOWED_PATHS
 
-  # Bing honours Crawl-delay (Google ignores it) and reads robots.txt per host.
-  # Storefronts are thousands of hosts, so a Bing sweep that is polite on each
-  # one still lands on the origin all at once — gumroad-private#2488. Our own
-  # domain is a single host with a sitemap, so it keeps full crawl speed.
   STOREFRONT_BINGBOT_CRAWL_DELAY_SECONDS = 10
 
   def initialize(storefront_host: false)
     @storefront_host = storefront_host
   end
 
-  # Sitemaps are declared once, on our own domain. Repeating them on every
-  # storefront host only makes crawlers refetch the same files per host.
   def sitemap_configs
     return [] if storefront_host?
 
@@ -36,8 +30,6 @@ class RobotsService
   # product decision. AI-assistant discoverability is the point (see /llms.txt).
   def user_agent_rules
     rules = []
-    # A crawler obeys only the most specific group that names it and ignores
-    # the wildcard group entirely, so this group has to repeat the Disallows.
     rules += ["User-agent: bingbot", "Crawl-delay: #{STOREFRONT_BINGBOT_CRAWL_DELAY_SECONDS}", *disallow_rules, ""] if storefront_host?
     rules + ["User-agent: *", *disallow_rules]
   end

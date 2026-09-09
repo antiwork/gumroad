@@ -2,8 +2,6 @@
 
 require "spec_helper"
 
-# Host-dependent behavior (storefront crawl delay, cacheability) lives in
-# spec/requests/robots_txt_spec.rb; this covers the controller's wiring.
 describe RobotsController do
   render_views
 

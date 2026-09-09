@@ -2,10 +2,6 @@
 
 require "spec_helper"
 
-# robots.txt is per-origin, so every storefront host needs its own copy — a 404
-# there tells crawlers the host has no rules at all. Storefronts additionally
-# carry a bingbot Crawl-delay, because Bing fans a single sweep out across
-# thousands of them at once (gumroad-private#2488).
 describe "robots.txt", type: :request do
   let(:sitemap_config) { "Sitemap: https://test-public-files.gumroad.com/products/sitemap.xml" }
   let(:crawl_delay) { "Crawl-delay: #{RobotsService::STOREFRONT_BINGBOT_CRAWL_DELAY_SECONDS}" }
@@ -70,8 +66,6 @@ describe "robots.txt", type: :request do
     end
   end
 
-  # A Set-Cookie header stops Cloudflare caching the response, which is what put
-  # every crawler hit on the origin.
   describe "shared cacheability" do
     [true, false].each do |storefront|
       it "responds with no cookies and a public Cache-Control#{storefront ? " on a storefront host" : ""}" do
