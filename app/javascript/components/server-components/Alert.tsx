@@ -42,10 +42,6 @@ const ToastAlert = ({ initial }: { initial: AlertPayload | null }) => {
 
   useGlobalEventListener("message", (event: MessageEvent) => {
     if (event.origin !== window.location.origin) return;
-    if (typia.is<{ type: "alert"; payload: null }>(event.data)) {
-      dismiss();
-      return;
-    }
     if (typia.is<{ type: "alert"; payload: AlertPayload }>(event.data)) {
       const newAlert = event.data.payload;
       setAlert(newAlert);
@@ -115,12 +111,6 @@ export const showAlert = (
     },
     window.location.origin,
   );
-};
-
-// Immediate hide for callers that replaced the condition the toast described (e.g. a failed
-// surcharge refresh that then succeeded). Without this, a 5s linger can contradict the new UI.
-export const dismissAlert = () => {
-  window.postMessage({ type: ALERT_KEY, payload: null }, window.location.origin);
 };
 
 export default ToastAlert;

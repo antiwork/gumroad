@@ -23,7 +23,7 @@ import {
   isRecurringUpiPaymentConfig,
 } from "$app/components/Checkout/buyerCurrencyDisplay";
 import { Creator } from "$app/components/Checkout/cartState";
-import { dismissAlert, showAlert } from "$app/components/server-components/Alert";
+import { showAlert } from "$app/components/server-components/Alert";
 import { useDebouncedCallback } from "$app/components/useDebouncedCallback";
 import { useOriginalLocation } from "$app/components/useOriginalLocation";
 import { useRunOnce } from "$app/components/useRunOnce";
@@ -1928,10 +1928,7 @@ export function createReducer(initial: {
     }),
     300,
   );
-  const previousSurchargesType = React.useRef(state.surcharges.type);
   React.useEffect(() => {
-    const previousType = previousSurchargesType.current;
-    previousSurchargesType.current = state.surcharges.type;
     if (state.surcharges.type === "pending") updateSurcharges();
     // The reducer flips surcharges to "error" only when the current fetch fails (stale
     // failures are dropped there), so surfacing the alert on that transition can't fire for
@@ -1943,12 +1940,7 @@ export function createReducer(initial: {
     if (state.surcharges.type === "error" && !failedFxQuoteRefresh) {
       showAlert("Sorry, something went wrong. Please try again.", "error");
     }
-    // Only dismiss when leaving an errored surcharge state. A successful first expiry refresh
-    // must not hide unrelated checkout toasts (e.g. a rejected discount code).
-    if (previousType === "error" && state.surcharges.type === "pending" && failedFxQuoteRefresh) {
-      dismissAlert();
-    }
-    if (previousType === "error" && state.surcharges.type === "loaded") dismissAlert();
+    // FX failures have an inline warning, so recovery must leave unrelated global alerts alone.
   }, [state.surcharges, state.buyerCurrencyRemint]);
 
   React.useEffect(() => {
