@@ -2225,8 +2225,8 @@ ActiveRecord::Schema[7.1].define(version: 2026_12_12_090000) do
     t.string "processor_refund_id", limit: 191
     t.integer "fee_cents"
     t.bigint "flags", default: 0, null: false
-    t.boolean "fee_retention_recoverable", default: false, null: false
     t.bigint "seller_id"
+    t.boolean "fee_retention_recoverable", default: false, null: false
     t.index ["created_at"], name: "index_refunds_on_created_at"
     t.index ["fee_retention_recoverable"], name: "index_refunds_on_fee_retention_recoverable"
     t.index ["link_id"], name: "index_refunds_on_link_id"

@@ -142,12 +142,15 @@ class Refund < ApplicationRecord
       return
     end
 
-    # Ineffective refunds must not start a new collection. They still look up a
-    # pinned reversal or grouped debit so a lost Stripe response is not abandoned.
+    # Failed or canceled refunds must not start a new collection: the buyer never got
+    # the money, and on Stripe-held accounts HandleFailedRefundService leaves them
+    # to the exception queue instead of reversing the balance, so effective? stays
+    # true. They still look up a pinned reversal or grouped debit so a lost Stripe
+    # response is not abandoned.
     credit.fee_retention_refund = self
     lookup_failed = false
     retain_fee do
-      StripeChargeProcessor.debit_stripe_account_for_refund_fee(credit:, collect: effective?)
+      StripeChargeProcessor.debit_stripe_account_for_refund_fee(credit:, collect: !terminally_failed?)
     rescue *FEE_RETENTION_ERRORS
       lookup_failed = true
       raise
@@ -158,7 +161,7 @@ class Refund < ApplicationRecord
       next unless fee_retention_pending
       collection_recorded = debited_stripe_transfer.present? && fee_retention_collected_cents.present?
       no_stripe_collection = credit.amount_cents.zero? || credit.merchant_account.holder_of_funds != HolderOfFunds::STRIPE
-      terminal_without_collection = !effective? && debited_stripe_transfer.blank? && !lookup_failed
+      terminal_without_collection = terminally_failed? && debited_stripe_transfer.blank? && !lookup_failed
       next unless collection_recorded || no_stripe_collection || terminal_without_collection
 
       if fee_retention_collected_cents.present?

@@ -143,6 +143,30 @@ RSpec.describe RecoverPendingRefundFeeRetentionJob, :vcr do
     expect(refund.debited_stripe_transfer).to be_nil
   end
 
+  it "does not collect for a failed Stripe-held refund whose balance was never reversed" do
+    refund.status = "failed"
+    refund.save!
+    expect(Stripe::Transfer).not_to receive(:create)
+    expect(Stripe::Transfer).not_to receive(:create_reversal)
+
+    expect { described_class.new.perform }.not_to change(BalanceTransaction, :count)
+
+    expect(refund.reload.fee_retention_pending).to be_falsey
+    expect(refund.debited_stripe_transfer).to be_nil
+  end
+
+  it "does not collect for a canceled Stripe-held refund whose balance was never reversed" do
+    refund.status = "canceled"
+    refund.save!
+    expect(Stripe::Transfer).not_to receive(:create)
+    expect(Stripe::Transfer).not_to receive(:create_reversal)
+
+    expect { described_class.new.perform }.not_to change(BalanceTransaction, :count)
+
+    expect(refund.reload.fee_retention_pending).to be_falsey
+    expect(refund.debited_stripe_transfer).to be_nil
+  end
+
   it "keeps an ineffective refund pending when settlement lookup fails" do
     refund.status = "failed"
     refund.balance_reversed_on_failure = true
