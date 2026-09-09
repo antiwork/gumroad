@@ -85,6 +85,7 @@ vi.mock("$app/components/Checkout", () => ({
             : "Updating"}
         </output>
         <p>{state.warning}</p>
+        <p aria-label="buyer currency">{state.buyerCurrency}</p>
       </>
     );
   },
@@ -203,6 +204,7 @@ afterEach(() => {
   cleanup();
   vi.useRealTimers();
   vi.resetAllMocks();
+  document.cookie = "gumroad_buyer_currency=; path=/; max-age=0";
 });
 
 describe.each([false, true])("checkout expired quote (client-confirm=%s)", (client) => {
@@ -364,4 +366,35 @@ describe.each([false, true])("checkout expired listed amount token (method-force
     expect(mocks.clientOrder).not.toHaveBeenCalled();
     expect(screen.getByText("1600")).toBeTruthy();
   });
+});
+
+it("keeps a method-forced listed currency when a matching preference is persisted", async () => {
+  document.cookie = "gumroad_buyer_currency=eur; path=/";
+  mocks.props.checkout_payment = listedConfig(true);
+  const offered = [
+    { code: "usd", label: "$ (US Dollars)" },
+    { code: "eur", label: "€ (Euros)" },
+  ];
+  mocks.surcharges
+    .mockResolvedValueOnce({ ...listed("2026-09-08T12:00:01Z"), available_buyer_currencies: offered })
+    .mockResolvedValue({
+      ...listed("2999-01-01T00:00:00Z", 1600),
+      available_buyer_currencies: offered,
+    });
+  render(<CheckoutPage />);
+  await act(() => vi.advanceTimersByTimeAsync(400));
+  expect(screen.getByLabelText("buyer currency").textContent).toBe("eur");
+  vi.setSystemTime(new Date("2026-09-08T12:00:02Z"));
+  fireEvent.click(screen.getByRole("button", { name: "Pay" }));
+  await act(() => vi.advanceTimersByTimeAsync(400));
+  expect(mocks.surcharges).toHaveBeenCalledTimes(2);
+  expect(screen.getByLabelText("buyer currency").textContent).toBe("eur");
+  expect(screen.getByText("1600")).toBeTruthy();
+  expect(screen.getByText(/Please review the updated total/u)).toBeTruthy();
+  expect(mocks.clientOrder).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole("button", { name: "Pay" }));
+  await act(() => vi.advanceTimersByTimeAsync(0));
+  expect(mocks.clientOrder).toHaveBeenCalledOnce();
+  expect(mocks.clientOrder.mock.calls[0]?.[0].directListedAmountToken).toBe("listed-1600");
+  expect(screen.getByLabelText("buyer currency").textContent).toBe("eur");
 });

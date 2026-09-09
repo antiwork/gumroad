@@ -568,6 +568,38 @@ describe("expired direct-listed amount token submission", () => {
     expect(reduceCheckoutState(serverConfirm, { type: "validate" }).status.type).toBe("validating");
   });
 
+  it("keeps a method-forced listed currency when a matching preference is persisted", () => {
+    const expired = listedState(methodForcedEurConfig);
+    expired.buyerCurrency = "eur";
+    const refused = reduceCheckoutState(expired, { type: "validate" });
+    const loading = reduceCheckoutState(refused, {
+      type: "set-value",
+      surcharges: { type: "loading", requestId: 1, abort: vi.fn() },
+    });
+    const fresh = listedState(methodForcedEurConfig, "2999-01-01T00:00:00Z");
+    if (fresh.surcharges.type !== "loaded") throw new Error("Expected loaded");
+    const refreshed = reduceCheckoutState(loading, {
+      type: "surcharges-fetch-succeeded",
+      requestId: 1,
+      result: {
+        ...fresh.surcharges.result,
+        buyer_currency_quote: null,
+        direct_listed_amount_token: "fresh-listed-token",
+        available_buyer_currencies: [
+          { code: "usd", label: "$ (US Dollars)" },
+          { code: "eur", label: "€ (Euros)" },
+        ],
+      },
+    });
+    expect(refreshed.buyerCurrency).toBe("eur");
+    expect(refreshed.unavailableBuyerCurrency).toBeNull();
+    expect(refreshed.surcharges.type).toBe("loaded");
+    expect(getLoadedDirectListedAmountToken(refreshed)).toBe("fresh-listed-token");
+    expect(refreshed.status.type).toBe("input");
+    expect(refreshed.resumeSubmitAfterCheckoutPayment).toBe(false);
+    expect(reduceCheckoutState(refreshed, { type: "validate" }).status.type).toBe("validating");
+  });
+
   it("refreshes at the listed-token expiry boundary and refuses malformed expiry", () => {
     vi.spyOn(Date, "now").mockReturnValue(Date.parse("2026-09-08T12:00:00Z"));
     try {

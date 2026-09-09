@@ -340,6 +340,9 @@ export type State = {
     // total change the snapshot exists to prevent. Display only; pay and disable gates keep
     // reading live `usingSavedCard`.
     previousUsingSavedCard?: boolean;
+    // Listed-amount token refresh, not an FX pick. Those responses have no
+    // buyer_currency_quote even when the required currency is kept.
+    listedTokenRefresh?: boolean;
   } | null;
   // A currency the buyer chose that the server then came back without. The summary names it, so a
   // total that reverts to another currency says why instead of changing under the buyer.
@@ -1327,6 +1330,7 @@ function refreshExpiredLocalCurrencyToken(state: State) {
   state.buyerCurrencyRemint = {
     surcharges: state.surcharges.result,
     previousCurrency: loadedBuyerCurrency(state),
+    listedTokenRefresh: hasExpiredDirectListedAmountToken(state),
   };
   state.surcharges = { type: "pending" };
   state.resumeSubmitAfterCheckoutPayment = false;
@@ -1755,6 +1759,7 @@ export const reduceCheckoutState = produce((state: State, action: Action) => {
         if (
           remint &&
           !remint.surfaceSwitch &&
+          !remint.listedTokenRefresh &&
           state.buyerCurrency != null &&
           !honorsBuyerCurrency(state, action.result, state.buyerCurrency)
         ) {
