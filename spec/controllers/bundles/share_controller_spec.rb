@@ -24,6 +24,7 @@ describe Bundles::ShareController, inertia: true do
         expect(inertia.props[:currency_type]).to eq(bundle.price_currency_type)
         expect(inertia.props[:bundle][:name]).to eq(bundle.name)
         expect(inertia.props[:bundle][:products]).to be_an(Array)
+        expect(inertia.props[:bundle][:hide_bundle_product_reviews]).to eq(false)
         expect(inertia.props[:taxonomies]).to be_an(Array)
         expect(inertia.props[:profile_sections]).to be_an(Array)
       end
