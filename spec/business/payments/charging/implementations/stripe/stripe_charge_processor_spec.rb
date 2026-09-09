@@ -4145,7 +4145,9 @@ describe StripeChargeProcessor, :vcr do
         transfer = double(id: "tr_cad_1", amount: 2000, amount_reversed: 1330, currency: "cad")
         existing = double(id: "trr_existing", destination_payment_refund: "re_1", metadata: { "refund_id" => refund.id.to_s })
         expect(Stripe::Transfer).to receive(:retrieve).with("tr_cad_1").and_return(transfer)
-        expect(Stripe::Transfer).to receive(:list_reversals).with("tr_cad_1", { limit: 100 }).and_return([existing])
+        reversals = double("reversal_list")
+        expect(reversals).to receive(:auto_paging_each).and_yield(existing)
+        expect(Stripe::Transfer).to receive(:list_reversals).with("tr_cad_1", { limit: 100 }).and_return(reversals)
         expect(Stripe::Transfer).not_to receive(:create_reversal)
         stub_reversal_follow_up_calls(transfer_reversal_id: "trr_existing", net: -1330)
 
