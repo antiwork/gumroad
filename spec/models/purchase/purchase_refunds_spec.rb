@@ -1772,28 +1772,72 @@ describe "PurchaseRefunds", :vcr do
       @refunding_user = create(:user)
     end
 
-    it "commits the refund and reports a pending fee when fee retention fails" do
-      error = Stripe::InvalidRequestError.new("Transfer reversals are no longer supported", nil)
-      flow_of_funds = FlowOfFunds.build_simple_flow_of_funds(Currency::USD, -@purchase.total_transaction_cents)
-      expect(@purchase).to receive(:debit_processor_fee_from_merchant_account!).and_raise(error)
-      expect(ErrorNotifier).to receive(:notify).with(error, context: hash_including(purchase_id: @purchase.id))
-      expect(@purchase).to receive(:decrement_balance_for_refund_or_chargeback!).once.and_call_original
-      expect(CustomerMailer).to receive(:refund).with(@purchase.email, @purchase.link_id, @purchase.id).and_call_original
+    describe "fee retention for Stripe-held funds" do
+      let(:seller) { create(:user) }
+      let(:merchant_account) { create(:merchant_account, user: seller, country: "BG", currency: "usd") }
+      let(:purchase) { create(:purchase, seller:, merchant_account:, link: create(:product, user: seller)) }
+      let(:flow_of_funds) { FlowOfFunds.build_simple_flow_of_funds(Currency::USD, -purchase.total_transaction_cents) }
 
-      expect do
-        expect(@purchase.refund_purchase!(flow_of_funds, @refunding_user.id)).to be(true)
-      end.to change(Refund, :count).by(1)
+      it "collects the retained fee from Stripe only after the refund transaction commits" do
+        transaction_depth = ApplicationRecord.connection.open_transactions
+        expect(StripeChargeProcessor).to receive(:debit_stripe_account_for_refund_fee).once do |credit:, **|
+          expect(ApplicationRecord.connection.open_transactions).to eq(transaction_depth)
+          refund = credit.fee_retention_refund
+          expect(refund.reload.fee_retention_pending).to be(true)
+          refund.update!(debited_stripe_transfer: "tr_after_commit", fee_retention_collected_cents: 30)
+          30
+        end
 
-      refund = @purchase.reload.refunds.sole
-      expect(@purchase.stripe_refunded).to be(true)
-      expect(@purchase.stripe_partially_refunded).to be(false)
-      expect(@purchase.amount_refundable_cents).to eq(0)
-      expect(refund.balance_transactions.where(user_id: @purchase.seller_id).count).to eq(1)
-      expect(refund.fee_retention_pending).to be(true)
-      expect(refund.fee_retention_error).to eq("class" => error.class.name, "message" => error.message)
-      expect(ChargeProcessor).not_to receive(:refund!)
-      expect(@purchase.refund_and_save!(@refunding_user.id)).to be_nil
-      expect(@purchase.refunds.count).to eq(1)
+        expect(purchase.refund_purchase!(flow_of_funds, @refunding_user.id)).to be(true)
+
+        refund = purchase.reload.refunds.sole
+        expect(refund.fee_retention_pending).to be_falsey
+        expect(refund.fee_retention_recoverable).to be(false)
+        expect(refund.debited_stripe_transfer).to eq("tr_after_commit")
+        credit = Credit.find_by(fee_retention_refund: refund)
+        expect(credit.amount_cents).to eq(-33)
+        expect(BalanceTransaction.where(credit:).sum(:issued_amount_net_cents)).to eq(-33)
+        expect(BalanceTransaction.where(credit:).sum(:holding_amount_net_cents)).to eq(-30)
+      end
+
+      it "commits the refund and reports a pending fee when Stripe rejects the collection" do
+        error = Stripe::InvalidRequestError.new("Account debit is not permitted", nil)
+        expect(StripeChargeProcessor).to receive(:debit_stripe_account_for_refund_fee).and_raise(error)
+        expect(ErrorNotifier).to receive(:notify).with(error, context: hash_including(purchase_id: purchase.id))
+        expect(CustomerMailer).to receive(:refund).with(purchase.email, purchase.link_id, purchase.id).and_call_original
+
+        expect do
+          expect(purchase.refund_purchase!(flow_of_funds, @refunding_user.id)).to be(true)
+        end.to change(Refund, :count).by(1)
+
+        refund = purchase.reload.refunds.sole
+        expect(purchase.stripe_refunded).to be(true)
+        expect(purchase.amount_refundable_cents).to eq(0)
+        expect(refund.balance_transactions.where(user_id: seller.id).count).to eq(1)
+        expect(Credit.where(fee_retention_refund: refund).count).to eq(1)
+        expect(refund.fee_retention_pending).to be(true)
+        expect(refund.fee_retention_attempts).to eq(1)
+        expect(refund.fee_retention_error).to eq("class" => error.class.name, "message" => error.message)
+        expect(ChargeProcessor).not_to receive(:refund!)
+        expect(purchase.refund_and_save!(@refunding_user.id)).to be_nil
+        expect(purchase.refunds.count).to eq(1)
+      end
+
+      it "keeps the refund and its pending marker when collection fails unexpectedly" do
+        error = RuntimeError.new("connection reset")
+        expect(StripeChargeProcessor).to receive(:debit_stripe_account_for_refund_fee).and_raise(error)
+        expect(ErrorNotifier).to receive(:notify).with(error, context: { refund_id: kind_of(Integer), purchase_id: purchase.id })
+
+        expect do
+          expect(purchase.refund_purchase!(flow_of_funds, @refunding_user.id)).to be(true)
+        end.to change(Refund, :count).by(1)
+
+        refund = purchase.reload.refunds.sole
+        expect(purchase.stripe_refunded).to be(true)
+        expect(refund.fee_retention_pending).to be(true)
+        expect(refund.fee_retention_recoverable).to be(true)
+        expect(Credit.where(fee_retention_refund: refund).count).to eq(1)
+      end
     end
 
     it "does not swallow refund bookkeeping failures" do

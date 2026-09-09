@@ -9,7 +9,7 @@ afterEach(cleanup);
 
 describe("Button brand colors", () => {
   // The YouTube connect and disconnect buttons sit directly beside the X buttons in
-  // Settings > Profile > Social links, so both rows have to read as the same control. Comparing
+  // Settings > Social connections, so both rows have to read as the same control. Comparing
   // against the X button, instead of only asserting bg-black, is what catches a switch back to a
   // provider brand fill such as Google's blue.
   it("fills the YouTube button like the X button", () => {

@@ -14,6 +14,7 @@ class SettingsPresenter
     billing
     authorized_applications
     password
+    social_connections
     third_party_analytics
     advanced
   ).freeze
@@ -30,7 +31,7 @@ class SettingsPresenter
       case page
       when "main", "payments", "password", "third_party_analytics", "advanced"
         Pundit.policy!(pundit_user, [:settings, page.to_sym, seller]).show?
-      when "billing"
+      when "billing", "social_connections"
         Pundit.policy!(pundit_user, [:settings, page.to_sym]).show?
       when "team"
         Pundit.policy!(pundit_user, [:settings, :team, seller]).show?
@@ -173,6 +174,19 @@ class SettingsPresenter
           code: third_party_analytic.analytics_code,
         }
       end
+    }
+  end
+
+  def social_connections_props
+    {
+      twitter_connected: seller.twitter_user_id.present?,
+      twitter_handle: seller.twitter_handle,
+      youtube_connect_enabled: Feature.active?(:youtube_connect, seller),
+      youtube_connected: seller.youtube_identity.present?,
+      youtube_handle: seller.youtube_identity&.handle,
+      instagram_connect_enabled: Feature.active?(:instagram_connect, seller),
+      instagram_connected: seller.instagram_identity.present?,
+      instagram_handle: seller.instagram_identity&.handle,
     }
   end
 

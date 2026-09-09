@@ -52,38 +52,12 @@ describe ProfilePresenter do
     end
 
 
-    it "includes the YouTube channel id on the public profile and the handle only on settings props" do
+    it "includes the YouTube channel id on the public profile without the handle" do
       create(:user_youtube_identity, user: seller, channel_id: "UC123", handle: "googledevelopers")
       seller.reload
 
       expect(described_class.new(pundit_user: SellerContext.logged_out, seller:).creator_profile).not_to have_key(:youtube_handle)
       expect(described_class.new(pundit_user: SellerContext.logged_out, seller:).creator_profile[:youtube_channel_id]).to eq("UC123")
-      expect(described_class.new(pundit_user:, seller:).profile_settings_props(request:)[:youtube_handle]).to eq("googledevelopers")
-      expect(described_class.new(pundit_user:, seller:).profile_settings_props(request:)[:youtube_connected]).to eq(true)
-    end
-
-    it "reports X connected from the current link rather than a manually entered handle" do
-      seller.update!(twitter_handle: "example_creator")
-      expect(described_class.new(pundit_user:, seller:).profile_settings_props(request:)[:twitter_connected]).to eq(false)
-
-      seller.update!(twitter_user_id: "example-social-id")
-      expect(described_class.new(pundit_user:, seller:).profile_settings_props(request:)[:twitter_connected]).to eq(true)
-    end
-
-    it "reports Instagram connected from the live identity, not a dormant verification row" do
-      create(:social_connect_verification, user: seller, platform: "instagram", uid: "17841400000000000", handle: "oldhandle")
-      seller.reload
-
-      props = described_class.new(pundit_user:, seller:).profile_settings_props(request:)
-      expect(props[:instagram_connected]).to eq(false)
-      expect(props[:instagram_handle]).to be_nil
-
-      create(:user_instagram_identity, user: seller, instagram_user_id: "17841400000000000", handle: "gumroad")
-      seller.reload
-
-      props = described_class.new(pundit_user:, seller:).profile_settings_props(request:)
-      expect(props[:instagram_connected]).to eq(true)
-      expect(props[:instagram_handle]).to eq("gumroad")
     end
 
     it "includes hide_follow_form when the seller has turned it on" do
@@ -330,13 +304,6 @@ describe ProfilePresenter do
           seller_fonts_css_source: SellerProfile.seller_fonts_css_source,
           email_confirmation: nil,
           custom_html_pages_enabled: false,
-          twitter_connected: false,
-          youtube_connect_enabled: false,
-          youtube_connected: false,
-          youtube_handle: nil,
-          instagram_connect_enabled: false,
-          instagram_connected: false,
-          instagram_handle: nil,
           has_custom_landing_page: false,
           username: seller.username,
           # seller_analytics is only added to the public profile_props — the settings

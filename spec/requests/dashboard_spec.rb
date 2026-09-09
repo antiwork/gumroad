@@ -70,7 +70,7 @@ describe "Dashboard", js: true, type: :system do
   end
 
   describe "Getting started" do
-    it "offers optional social connections and opens the existing settings controls" do
+    it "offers optional social connections and opens the Social connections settings page" do
       Feature.deactivate(:youtube_connect)
       Feature.deactivate(:instagram_connect)
       seller.update!(twitter_handle: "example_creator")
@@ -81,15 +81,10 @@ describe "Dashboard", js: true, type: :system do
       expect(page).not_to have_text("YouTube: Available to connect")
       expect(page).not_to have_text("Instagram: Available to connect")
       click_on "Manage social connections"
-      expect(page).to have_current_path(profile_path)
-      expect(page).to have_text("Social links")
+      expect(page).to have_current_path(settings_social_connections_path(social_connect_origin: "onboarding"))
+      expect(page).to have_text("Social connections")
       expect(page).to have_button("Connect to X")
-      expect(page).to have_button("Disconnect example_creator from X")
-
-      click_on "Disconnect example_creator from X"
-      expect(page).not_to have_button("Disconnect example_creator from X")
-      expect(page).to have_button("Connect to X")
-      expect(seller.reload.twitter_handle).to be_nil
+      expect(page).not_to have_button("Disconnect @example_creator from X")
     end
 
     it "shows a connected account without making social connections required for checklist completion" do

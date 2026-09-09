@@ -7,7 +7,18 @@ class RobotsService
   SITEMAPS_CACHE_KEY = "sitemap_configs"
   private_constant :SITEMAPS_CACHE_KEY
 
+  DISALLOWED_PATHS = ["/purchases/"].freeze
+  private_constant :DISALLOWED_PATHS
+
+  STOREFRONT_BINGBOT_CRAWL_DELAY_SECONDS = 10
+
+  def initialize(storefront_host: false)
+    @storefront_host = storefront_host
+  end
+
   def sitemap_configs
+    return [] if storefront_host?
+
     cache_fetch(SITEMAPS_CACHE_KEY, ex: SITEMAPS_CACHE_EXPIRY) do
       generate_sitemap_configs
     end
@@ -15,13 +26,12 @@ class RobotsService
 
   # Policy: AI crawlers (GPTBot, ClaudeBot, Claude-Web, PerplexityBot,
   # Google-Extended, CCBot, …) are intentionally ALLOWED — the wildcard rule is
-  # the only one we serve, so don't add per-bot Disallow groups without a
+  # the only one we serve them, so don't add per-bot Disallow groups without a
   # product decision. AI-assistant discoverability is the point (see /llms.txt).
   def user_agent_rules
-    [
-      "User-agent: *",
-      "Disallow: /purchases/"
-    ]
+    rules = []
+    rules += ["User-agent: bingbot", "Crawl-delay: #{STOREFRONT_BINGBOT_CRAWL_DELAY_SECONDS}", *disallow_rules, ""] if storefront_host?
+    rules + ["User-agent: *", *disallow_rules]
   end
 
   def expire_sitemap_configs_cache
@@ -29,6 +39,13 @@ class RobotsService
   end
 
   private
+    attr_reader :storefront_host
+    alias storefront_host? storefront_host
+
+    def disallow_rules
+      DISALLOWED_PATHS.map { |path| "Disallow: #{path}" }
+    end
+
     def cache_fetch(cache_key, ex: nil)
       data = redis_namespace.get(cache_key)
       return JSON.parse(data) if data.present?
