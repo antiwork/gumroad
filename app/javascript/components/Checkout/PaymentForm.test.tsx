@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import * as React from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -84,7 +84,7 @@ vi.mock("$app/components/useRecaptcha", () => ({
   RecaptchaUnavailableError: class extends Error {},
   RecaptchaCancelledError: class extends Error {},
 }));
-vi.mock("$app/components/server-components/Alert", () => ({ showAlert: vi.fn() }));
+vi.mock("$app/components/server-components/Alert", () => ({ showAlert: vi.fn(), dismissAlert: vi.fn() }));
 
 const cardElementConfig: CheckoutPaymentConfig = {
   integration: "card_element",
@@ -246,6 +246,66 @@ describe("PaymentForm validation-failure feedback", () => {
     Element.prototype.scrollIntoView = scrollIntoView;
   });
   afterEach(cleanup);
+
+  it("offers a working retry after price refresh fails without enabling payment", () => {
+    const s = state();
+    if (s.surcharges.type !== "loaded") throw new Error("Expected loaded surcharges");
+    const initial = {
+      ...s,
+      surcharges: { type: "error" } as const,
+      buyerCurrencyRemint: { previousCurrency: "cad", surcharges: s.surcharges.result },
+      warning: "Please review the updated total and try again.",
+    };
+    const harness: CheckoutHarness = { dispatch: vi.fn(), actions: [] };
+    render(<StatefulPaymentForm initial={initial} harness={harness} />);
+    fireEvent.click(screen.getByRole("button", { name: "Retry price update" }));
+    expect(harness.actions).toContainEqual({ type: "refresh-expired-buyer-currency-quote" });
+    expect(screen.queryByRole("button", { name: "Retry price update" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Pay" }).hasAttribute("disabled")).toBe(true);
+  });
+
+  it("still offers Retry price update when remint is held without a warning string", () => {
+    const s = state();
+    if (s.surcharges.type !== "loaded") throw new Error("Expected loaded surcharges");
+    render(
+      <StatefulPaymentForm
+        initial={{
+          ...s,
+          surcharges: { type: "error" },
+          buyerCurrencyRemint: { previousCurrency: "cad", surcharges: s.surcharges.result },
+          warning: null,
+        }}
+        harness={{ dispatch: vi.fn(), actions: [] }}
+      />,
+    );
+    expect(screen.getByRole("button", { name: "Retry price update" })).toBeTruthy();
+    expect(screen.getByRole("status").textContent).toContain("review the updated total");
+  });
+
+  it("keeps the full FX warning sentence above Retry price update", () => {
+    const s = state();
+    if (s.surcharges.type !== "loaded") throw new Error("Expected loaded surcharges");
+    const warning = "The local-currency price changed or expired. Please review the updated total and try again.";
+    render(
+      <StatefulPaymentForm
+        initial={{
+          ...s,
+          surcharges: { type: "error" },
+          buyerCurrencyRemint: { previousCurrency: "cad", surcharges: s.surcharges.result },
+          warning,
+        }}
+        harness={{ dispatch: vi.fn(), actions: [] }}
+      />,
+    );
+    const status = screen.getByRole("status");
+    const retry = screen.getByRole("button", { name: "Retry price update" });
+    const statusText = String(status.textContent);
+    expect(statusText).toContain(warning);
+    // Sentence completes before the retry control (own line / flex-col), matching mobile.
+    expect(statusText.indexOf(warning)).toBeLessThan(statusText.indexOf("Retry price update"));
+    expect(retry.compareDocumentPosition(status) & Node.DOCUMENT_POSITION_CONTAINS).toBeTruthy();
+    expect(String(retry.parentElement?.className ?? "")).toContain("flex-col");
+  });
 
   const failedState = (validationFailedCount: number) =>
     state({

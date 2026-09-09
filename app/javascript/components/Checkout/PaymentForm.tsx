@@ -65,6 +65,7 @@ import {
   requiresPayment,
   requiresReusablePaymentMethod,
   shouldSuppressClientConfirmWallets,
+  BUYER_CURRENCY_QUOTE_REFRESH_MESSAGE,
   usePayLabel,
   useState,
 } from "$app/components/Checkout/payment";
@@ -575,11 +576,18 @@ const CustomerDetails = ({ className }: { className?: string }) => {
           </div>
         </Card>
       ) : null}
-      {state.warning ? (
+      {state.warning || (state.surcharges.type === "error" && state.buyerCurrencyRemint) ? (
         <Card>
           <div className={className}>
             <Alert role="status" variant="warning" className="grow">
-              {state.warning}
+              <div className="flex flex-col items-start gap-2">
+                <span>{state.warning ?? BUYER_CURRENCY_QUOTE_REFRESH_MESSAGE}</span>
+                {state.surcharges.type === "error" && state.buyerCurrencyRemint ? (
+                  <Button onClick={() => dispatch({ type: "refresh-expired-buyer-currency-quote" })}>
+                    Retry price update
+                  </Button>
+                ) : null}
+              </div>
             </Alert>
           </div>
         </Card>
