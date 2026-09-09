@@ -1900,7 +1900,12 @@ describe Order::ChargeService, :vcr do
       charge = create(:charge, order:, seller: seller_1, merchant_account:)
       charge.purchases << purchase
       purchase.update!(charge:)
-      chargeable = instance_double(Chargeable, requires_mandate?: true, stripe_setup_intent_id: "seti_existing_connect")
+      chargeable = instance_double(
+        Chargeable,
+        requires_mandate?: true,
+        stripe_setup_intent_id: "seti_existing_connect",
+        fingerprint: "existing_connect_fp"
+      )
       allow(chargeable).to receive(:stripe_setup_intent_id=)
       allow(chargeable).to receive(:use_connected_account_payment_method!)
       allow(chargeable).to receive(:respond_to?) do |method_name, *_|
@@ -1916,8 +1921,26 @@ describe Order::ChargeService, :vcr do
                                     mandate: "mandate_existing_connect",
                                     card_mandate_options: { amount: 10_00, currency: "usd" })
       allow(ChargeProcessor).to receive(:get_setup_intent).with(merchant_account, "seti_existing_connect").and_return(existing_si)
+      allow(ChargeProcessor).to receive(:setup_future_charges!)
+      processor_charge = BaseProcessorCharge.new
+      processor_charge.charge_processor_id = StripeChargeProcessor.charge_processor_id
+      processor_charge.id = "ch_connect"
+      processor_charge.refunded = false
+      processor_charge.fee = 59
+      processor_charge.fee_currency = Currency::USD
+      processor_charge.card_fingerprint = "existing_connect_fp"
+      processor_charge.card_expiry_month = 12
+      processor_charge.card_expiry_year = 2030
+      processor_charge.zip_check_result = "pass"
+      stripe_charge_processor = instance_double(StripeChargeProcessor)
+      allow(StripeChargeProcessor).to receive(:new).and_return(stripe_charge_processor)
+      allow(stripe_charge_processor).to receive(:get_charge).with(processor_charge.id, merchant_account: nil).and_return(processor_charge)
       charge_intent = StripeChargeIntent.new(
-        payment_intent: Stripe::PaymentIntent.construct_from(id: "pi_connect", status: StripeIntentStatus::SUCCESS)
+        payment_intent: Stripe::PaymentIntent.construct_from(
+          id: "pi_connect",
+          status: StripeIntentStatus::SUCCESS,
+          latest_charge: processor_charge.id
+        )
       )
       create_service = instance_double(Charge::CreateService)
       allow(Charge::CreateService).to receive(:new).and_return(create_service)
