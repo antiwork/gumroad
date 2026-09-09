@@ -1,5 +1,5 @@
-import { Instagram, TwitterX, Youtube } from "@boxicons/react";
-import { Link, router, usePage } from "@inertiajs/react";
+import { CheckCircle, Instagram, TwitterX, Youtube } from "@boxicons/react";
+import { router, usePage } from "@inertiajs/react";
 import * as React from "react";
 import typia from "typia";
 
@@ -8,12 +8,13 @@ import { SettingPage } from "$app/parsers/settings";
 import { asyncVoid } from "$app/utils/promise";
 import { assertResponseError } from "$app/utils/request";
 
-import { Button } from "$app/components/Button";
+import { BrandName, Button } from "$app/components/Button";
 import { showAlert } from "$app/components/server-components/Alert";
 import { Layout as SettingsLayout } from "$app/components/Settings/Layout";
 import { SocialAuthButton } from "$app/components/SocialAuthButton";
-import { Fieldset, FieldsetDescription } from "$app/components/ui/Fieldset";
+import { FieldsetDescription } from "$app/components/ui/Fieldset";
 import { FormSection } from "$app/components/ui/FormSection";
+import { Row, RowActions, RowContent, Rows } from "$app/components/ui/Rows";
 
 type SocialConnectionsPageProps = {
   settings_pages: SettingPage[];
@@ -28,9 +29,21 @@ type SocialConnectionsPageProps = {
   instagram_handle: string | null;
 };
 
-const disconnectLabel = (handle: string | null, provider: string) => {
+type Provider = {
+  key: BrandName;
+  name: string;
+  Icon: typeof TwitterX;
+  connected: boolean;
+  handle: string | null;
+  // X only: a hand-typed handle that predates OAuth. Still public, so it stays removable.
+  legacyHandle?: string | null;
+  connectHref: string;
+  disconnect: () => void;
+};
+
+const formatHandle = (handle: string | null) => {
   const name = handle?.replace(/^@/u, "");
-  return name ? `Disconnect @${name} from ${provider}` : `Disconnect ${provider}`;
+  return name ? `@${name}` : null;
 };
 
 export default function SocialConnectionsPage() {
@@ -47,35 +60,59 @@ export default function SocialConnectionsPage() {
     instagram_handle,
   } = typia.assert<SocialConnectionsPageProps>(usePage().props);
 
-  const handleUnlinkTwitter = asyncVoid(async () => {
-    try {
-      await unlinkTwitter();
-      router.reload();
-    } catch (e) {
-      assertResponseError(e);
-      showAlert(e.message, "error");
-    }
-  });
+  const disconnect = (unlink: () => Promise<unknown>) =>
+    asyncVoid(async () => {
+      try {
+        await unlink();
+        router.reload();
+      } catch (e) {
+        assertResponseError(e);
+        showAlert(e.message, "error");
+      }
+    });
 
-  const handleUnlinkYoutube = asyncVoid(async () => {
-    try {
-      await unlinkYoutube();
-      router.reload();
-    } catch (e) {
-      assertResponseError(e);
-      showAlert(e.message, "error");
-    }
-  });
-
-  const handleUnlinkInstagram = asyncVoid(async () => {
-    try {
-      await unlinkInstagram();
-      router.reload();
-    } catch (e) {
-      assertResponseError(e);
-      showAlert(e.message, "error");
-    }
-  });
+  const providers: Provider[] = [
+    {
+      key: "twitter",
+      name: "X",
+      Icon: TwitterX,
+      connected: twitter_connected,
+      handle: twitter_connected ? twitter_handle : null,
+      legacyHandle: twitter_connected ? null : twitter_handle,
+      connectHref: Routes.user_twitter_omniauth_authorize_path({
+        social_connect_return,
+        state: "link_twitter_account",
+        x_auth_access_type: "read",
+      }),
+      disconnect: disconnect(unlinkTwitter),
+    },
+    ...(youtube_connect_enabled || youtube_connected
+      ? [
+          {
+            key: "youtube" as const,
+            name: "YouTube",
+            Icon: Youtube,
+            connected: youtube_connected,
+            handle: youtube_handle,
+            connectHref: Routes.user_youtube_omniauth_authorize_path({ social_connect_return }),
+            disconnect: disconnect(unlinkYoutube),
+          },
+        ]
+      : []),
+    ...(instagram_connect_enabled || instagram_connected
+      ? [
+          {
+            key: "instagram" as const,
+            name: "Instagram",
+            Icon: Instagram,
+            connected: instagram_connected,
+            handle: instagram_handle,
+            connectHref: Routes.user_instagram_omniauth_authorize_path({ social_connect_return }),
+            disconnect: disconnect(unlinkInstagram),
+          },
+        ]
+      : []),
+  ];
 
   return (
     <SettingsLayout currentPage="social_connections" pages={settings_pages}>
@@ -84,73 +121,63 @@ export default function SocialConnectionsPage() {
           <>
             <h2>Social connections</h2>
             <FieldsetDescription>
-              Connecting is optional and helps verify your account. It never posts for you.
+              Connecting a social account is optional. It gives us extra context when we review your account. We only
+              read your public profile, and we never post for you.
             </FieldsetDescription>
           </>
         }
       >
-        {social_connect_return ? <p>After connecting, you’ll return to Getting started.</p> : null}
-        <Fieldset>
-          {twitter_connected ? (
-            <Button type="button" color="twitter" onClick={handleUnlinkTwitter}>
-              <TwitterX pack="brands" className="size-5" />
-              {disconnectLabel(twitter_handle, "X")}
-            </Button>
-          ) : (
-            <SocialAuthButton
-              provider="twitter"
-              href={Routes.user_twitter_omniauth_authorize_path({
-                social_connect_return,
-                state: "link_twitter_account",
-                x_auth_access_type: "read",
-              })}
-            >
-              <TwitterX pack="brands" className="size-5" />
-              Connect to X
-            </SocialAuthButton>
-          )}
-        </Fieldset>
-        {youtube_connected ? (
-          <Fieldset>
-            <Button type="button" color="youtube" onClick={handleUnlinkYoutube}>
-              <Youtube pack="brands" className="size-5" />
-              {disconnectLabel(youtube_handle, "YouTube")}
-            </Button>
-          </Fieldset>
-        ) : youtube_connect_enabled ? (
-          <Fieldset>
-            <SocialAuthButton
-              provider="youtube"
-              href={Routes.user_youtube_omniauth_authorize_path({ social_connect_return })}
-            >
-              <Youtube pack="brands" className="size-5" />
-              Connect to YouTube
-            </SocialAuthButton>
-          </Fieldset>
-        ) : null}
-        {instagram_connected ? (
-          <Fieldset>
-            <Button type="button" color="instagram" onClick={handleUnlinkInstagram}>
-              <Instagram pack="brands" className="size-5" />
-              {disconnectLabel(instagram_handle, "Instagram")}
-            </Button>
-          </Fieldset>
-        ) : instagram_connect_enabled ? (
-          <Fieldset>
-            <SocialAuthButton
-              provider="instagram"
-              href={Routes.user_instagram_omniauth_authorize_path({ social_connect_return })}
-            >
-              <Instagram pack="brands" className="size-5" />
-              Connect to Instagram
-            </SocialAuthButton>
-          </Fieldset>
-        ) : null}
-        {social_connect_return ? (
-          <Link href={Routes.dashboard_path()} className="underline">
-            Continue without connecting
-          </Link>
-        ) : null}
+        <Rows role="list">
+          {providers.map(({ key, name, Icon, connected, handle, legacyHandle, connectHref, disconnect }) => {
+            const displayHandle = formatHandle(handle);
+            const displayLegacyHandle = formatHandle(legacyHandle ?? null);
+            const accountLabel = displayHandle ? `${displayHandle} from ${name}` : name;
+            return (
+              <Row key={key} role="listitem" className="grid-cols-[1fr_auto]">
+                <RowContent className="items-start gap-3">
+                  <Icon pack="brands" className="mt-0.5 size-5 shrink-0" />
+                  <div className="grid gap-1">
+                    <div className="font-bold">{name}</div>
+                    {connected ? (
+                      <FieldsetDescription className="flex items-center gap-1">
+                        {displayHandle ?? "Connected"}
+                        <CheckCircle pack="filled" className="size-4 text-success" aria-label="Connected" />
+                      </FieldsetDescription>
+                    ) : displayLegacyHandle ? (
+                      <FieldsetDescription>
+                        {displayLegacyHandle} was added by hand and is not verified.
+                      </FieldsetDescription>
+                    ) : (
+                      <FieldsetDescription>Not connected</FieldsetDescription>
+                    )}
+                  </div>
+                </RowContent>
+                <RowActions>
+                  {connected ? (
+                    <Button type="button" aria-label={`Disconnect ${accountLabel}`} onClick={disconnect}>
+                      Disconnect
+                    </Button>
+                  ) : (
+                    <>
+                      {displayLegacyHandle ? (
+                        <Button
+                          type="button"
+                          aria-label={`Remove ${displayLegacyHandle} from ${name}`}
+                          onClick={disconnect}
+                        >
+                          Remove
+                        </Button>
+                      ) : null}
+                      <SocialAuthButton provider={key} href={connectHref} aria-label={`Connect to ${name}`}>
+                        Connect
+                      </SocialAuthButton>
+                    </>
+                  )}
+                </RowActions>
+              </Row>
+            );
+          })}
+        </Rows>
       </FormSection>
     </SettingsLayout>
   );

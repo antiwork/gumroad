@@ -211,7 +211,7 @@ class User::OmniauthCallbacksController < Devise::OmniauthCallbacksController
       flash[:alert] = "Couldn't connect #{provider_name}. Please try again."
       redirect_to(logged_in_user.present? ? social_connect_destination : login_path)
     elsif connect_provider == "twitter" && request.env.dig("omniauth.params", REQ_PARAM_STATE) == "link_twitter_account" && logged_in_user.present?
-      flash[:alert] = @return_to_onboarding ? "Couldn't connect X. You can continue without connecting." : "Couldn't connect X. Please try again."
+      flash[:alert] = "Couldn't connect X. Please try again."
       redirect_to social_connect_destination
     elsif params[:error_description].present?
       redirect_to settings_payments_path, notice: params[:error_description]
