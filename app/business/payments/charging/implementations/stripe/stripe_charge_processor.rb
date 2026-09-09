@@ -644,18 +644,19 @@ class StripeChargeProcessor
     # raw USD figure in a foreign currency, debiting the creator the wrong amount.
     amount_to_reverse_for = ->(transfer) { usd_cents_to_currency(transfer.currency, usd_amount_cents) }
 
-    already_pinned = refund.fee_retention_source_transfer.present?
+    already_pinned_id = refund.fee_retention_source_transfer
     transfer_reversal = nil
     transfer = nil
-    if already_pinned
-      transfer = Stripe::Transfer.retrieve(refund.fee_retention_source_transfer) rescue nil
-      return unless transfer
-
-      transfer_reversal = existing_refund_fee_reversal(transfer.id, refund.id)
-      unless transfer_reversal || transfer.amount - transfer.amount_reversed > amount_to_reverse_for.call(transfer)
-        return
+    if already_pinned_id.present?
+      transfer = Stripe::Transfer.retrieve(already_pinned_id) rescue nil
+      if transfer
+        transfer_reversal = existing_refund_fee_reversal(transfer.id, refund.id)
+        unless transfer_reversal || transfer.amount - transfer.amount_reversed > amount_to_reverse_for.call(transfer)
+          transfer = nil
+        end
       end
-    else
+    end
+    unless transfer
       # First, try and reverse an internal transfer made from gumroad platform account
       # to the connect account, if possible.
       transfer_ids = credit.user.payments.completed
@@ -674,6 +675,7 @@ class StripeChargeProcessor
     end
     return unless transfer
 
+    reuse_legacy_reversal_key = refund.fee_retention_source_transfer == transfer.id
     if refund.fee_retention_source_transfer != transfer.id
       refund.fee_retention_source_transfer = transfer.id
       refund.save!
@@ -683,7 +685,7 @@ class StripeChargeProcessor
       transfer_reversal ||= Stripe::Transfer.create_reversal(
         transfer.id,
         { amount: amount_to_reverse_for.call(transfer), metadata: { refund_id: refund.id.to_s } },
-        { idempotency_key: refund_fee_retention_reversal_key(refund) }
+        { idempotency_key: refund_fee_retention_reversal_key(refund, transfer_id: transfer.id, legacy: reuse_legacy_reversal_key) }
       )
     rescue Stripe::InvalidRequestError => error
       raise unless error.message.match?(/no longer supported/i)
@@ -719,8 +721,11 @@ class StripeChargeProcessor
     "refund_fee_retention_#{refund.id}"
   end
 
-  def self.refund_fee_retention_reversal_key(refund)
-    "refund_fee_retention_reversal_#{refund.id}"
+  def self.refund_fee_retention_reversal_key(refund, transfer_id: nil, legacy: false)
+    base = "refund_fee_retention_reversal_#{refund.id}"
+    return base if legacy || transfer_id.blank?
+
+    "#{base}_#{transfer_id}"
   end
 
   def self.existing_refund_fee_reversal(transfer_id, refund_id)

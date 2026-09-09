@@ -4156,6 +4156,32 @@ describe StripeChargeProcessor, :vcr do
         expect(described_class.debit_stripe_account_for_refund_fee(credit:)).to eq(1330)
       end
 
+      it "searches another transfer when the pinned source has no reversal and no remaining capacity" do
+        refund = create(:refund)
+        refund.fee_retention_source_transfer = "tr_cad_exhausted"
+        refund.save!
+        credit = create(:credit, user: @cad_merchant_account.user, amount_cents: 1000, merchant_account_id: @cad_merchant_account.id, fee_retention_refund: refund)
+        create(:payment_completed, user: @cad_merchant_account.user,
+                                   stripe_connect_account_id: @cad_merchant_account.charge_processor_merchant_id,
+                                   stripe_internal_transfer_id: "tr_cad_next")
+        exhausted = double(id: "tr_cad_exhausted", amount: 1330, amount_reversed: 1330, currency: "cad")
+        next_transfer = double(id: "tr_cad_next", amount: 2000, amount_reversed: 0, currency: "cad")
+        expect(Stripe::Transfer).to receive(:retrieve).with("tr_cad_exhausted").and_return(exhausted)
+        empty_reversals = double("reversal_list")
+        expect(empty_reversals).to receive(:auto_paging_each)
+        expect(Stripe::Transfer).to receive(:list_reversals).with("tr_cad_exhausted", { limit: 100 }).and_return(empty_reversals)
+        expect(Stripe::Transfer).to receive(:retrieve).with("tr_cad_next").and_return(next_transfer)
+        transfer_reversal = stub_reversal_follow_up_calls(transfer_reversal_id: "trr_next", net: -1330)
+        expect(Stripe::Transfer).to receive(:create_reversal)
+          .with("tr_cad_next", hash_including(amount: 1330),
+                hash_including(idempotency_key: "refund_fee_retention_reversal_#{refund.id}_tr_cad_next"))
+          .and_return(transfer_reversal)
+
+        expect(described_class.debit_stripe_account_for_refund_fee(credit:)).to eq(1330)
+        expect(refund.reload.fee_retention_source_transfer).to eq("tr_cad_next")
+        expect(refund.debited_stripe_transfer).to eq("trr_next")
+      end
+
       it "adopts an existing reversal for the pinned source transfer instead of reversing again" do
         refund = create(:refund)
         refund.fee_retention_source_transfer = "tr_cad_1"

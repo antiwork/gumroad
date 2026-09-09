@@ -7,8 +7,8 @@ class RecoverPendingRefundFeeRetentionJob
 
   # Hourly cron. Worst case is one Stripe collection per pending row; keep the
   # declared attempt under interval − RecurringLockTtl::SAFETY_MARGIN so a
-  # stranded digest cannot mute the next fire. Unindexed pending_fee_retention
-  # remains a separate queue-schema issue.
+  # stranded digest cannot mute the next fire. Candidates come from the indexed
+  # refunds.fee_retention_recoverable column.
   include RecurringLockTtl
   recurring_lock_ttl max_attempt: 45.minutes
 
