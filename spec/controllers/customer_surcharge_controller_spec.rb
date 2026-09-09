@@ -322,6 +322,7 @@ describe CustomerSurchargeController, :vcr do
           currency: Currency::CAD
         )
       ).to eq(allocations)
+      expect(Time.iso8601(response.parsed_body.fetch("direct_listed_amount_token_expires_at"))).to be_within(2.seconds).of(Checkout::DirectListedAmountToken::TTL.from_now)
     end
 
     it "returns method-forced allocations without the listed-card ramp" do
@@ -511,6 +512,7 @@ describe CustomerSurchargeController, :vcr do
 
       expect(response.parsed_body.fetch("direct_listed_line_allocations")).to be_nil
       expect(response.parsed_body.fetch("direct_listed_amount_token")).to be_nil
+      expect(response.parsed_body.fetch("direct_listed_amount_token_expires_at")).to be_nil
     end
 
     it "does not advertise the listed currency for a saved-card checkout" do

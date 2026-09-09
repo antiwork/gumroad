@@ -60,6 +60,10 @@ export type SurchargesResponse = {
   direct_listed_line_allocations?: DirectListedLineAllocation[] | null | undefined;
   // Signed proof of the exact direct-listed split that mounted the Payment Element.
   direct_listed_amount_token?: string | null | undefined;
+  // Absolute expiry of that token. Optional for rolling deploy with servers that omit it.
+  direct_listed_amount_token_expires_at?: string | null | undefined;
+  // Client deadline derived from the response's server clock, not the device's wall-clock offset.
+  direct_listed_amount_token_client_expires_at?: number;
   buyer_currency_quote: {
     token: string;
     currency: CurrencyCode;
@@ -115,16 +119,31 @@ export const getSurcharges = async (data: GetSurchargesRequest, abortSignal?: Ab
   if (!response.ok) throw new ResponseError();
   const result = typia.assert<SurchargesResponse>(await response.json());
   const serverTime = Date.parse(response.headers.get("Date") ?? "");
-  if (result.buyer_currency_quote && Number.isFinite(serverTime)) {
-    // Starting the lifetime at request start also deducts transit time. HTTP Date has
-    // whole-second precision, so reserve that second rather than extending the quote.
-    result.buyer_currency_quote.client_expires_at =
-      startedAt + Date.parse(result.buyer_currency_quote.expires_at) - serverTime - 1000;
-  } else if (result.buyer_currency_quote) {
-    // No trusted server clock. Do not derive expiry from the device clock — a clock that is
-    // ≥1h fast would treat every fresh quote as expired and loop local-currency checkout.
-    // Leave the quote non-expiring client-side; the server still refuses a truly expired token.
-    result.buyer_currency_quote.client_expires_at = Number.MAX_SAFE_INTEGER;
+  if (result.buyer_currency_quote) {
+    result.buyer_currency_quote.client_expires_at = clientExpiresAt(
+      result.buyer_currency_quote.expires_at,
+      startedAt,
+      serverTime,
+    );
+  }
+  if (result.direct_listed_amount_token) {
+    // A rolling-deploy response can still omit expires_at. Do not treat that as already expired.
+    result.direct_listed_amount_token_client_expires_at =
+      result.direct_listed_amount_token_expires_at == null
+        ? Number.MAX_SAFE_INTEGER
+        : clientExpiresAt(result.direct_listed_amount_token_expires_at, startedAt, serverTime);
   }
   return result;
 };
+
+function clientExpiresAt(expiresAt: string, startedAt: number, serverTime: number) {
+  if (!Number.isFinite(serverTime)) {
+    // No trusted server clock. Do not derive expiry from the device clock — a clock that is
+    // ≥1h fast would treat every fresh token as expired and loop local-currency checkout.
+    // Leave it non-expiring client-side; the server still refuses a truly expired token.
+    return Number.MAX_SAFE_INTEGER;
+  }
+  // Starting the lifetime at request start also deducts transit time. HTTP Date has
+  // whole-second precision, so reserve that second rather than extending the token.
+  return startedAt + Date.parse(expiresAt) - serverTime - 1000;
+}

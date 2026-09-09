@@ -1264,7 +1264,7 @@ function resumeRefusedSubmitIfReady(state: State) {
   // pipeline already moved on under its own steam and does not need restarting.
   if (state.status.type !== "input") return;
 
-  if (refreshExpiredBuyerCurrencyQuote(state)) return;
+  if (refreshExpiredLocalCurrencyToken(state)) return;
   state.resumeSubmitAfterCheckoutPayment = false;
   // A resumed submit is not a free pass: it re-runs the same field validation a fresh submit does,
   // so an incomplete form lands back on "input" with the offending fields flagged.
@@ -1300,8 +1300,28 @@ export function hasExpiredBuyerCurrencyQuote(state: State) {
   return display !== null && !(expiresAt > Date.now());
 }
 
+export function hasExpiredDirectListedAmountToken(state: State) {
+  // Only the checkout that would submit this token. Server-confirm FX never sends it.
+  if (!getLoadedDirectListedAmountToken(state) || state.surcharges.type !== "loaded") return false;
+  const result = state.surcharges.result;
+  const expiresAt =
+    result.direct_listed_amount_token_client_expires_at ??
+    (result.direct_listed_amount_token_expires_at == null
+      ? Number.MAX_SAFE_INTEGER
+      : Date.parse(result.direct_listed_amount_token_expires_at));
+  return !(expiresAt > Date.now());
+}
+
 function refreshExpiredBuyerCurrencyQuote(state: State) {
-  if (!hasExpiredBuyerCurrencyQuote(state) || state.surcharges.type !== "loaded") return false;
+  return refreshExpiredLocalCurrencyToken(state);
+}
+
+function refreshExpiredLocalCurrencyToken(state: State) {
+  if (
+    state.surcharges.type !== "loaded" ||
+    (!hasExpiredBuyerCurrencyQuote(state) && !hasExpiredDirectListedAmountToken(state))
+  )
+    return false;
   // Keep the reviewed currency visible while the existing fenced surcharge request replaces it.
   // Never resume this attempt: even an unchanged total needs a fresh buyer submit.
   state.buyerCurrencyRemint = {

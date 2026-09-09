@@ -251,6 +251,41 @@ describe("createReducer surcharge refetches", () => {
     expect(dismissAlert).not.toHaveBeenCalled();
   });
 
+  const listedToken = (expiresAt: string, amount = 1500) => ({
+    direct_listed_amount_token: `listed-${amount}`,
+    direct_listed_amount_token_expires_at: expiresAt,
+    direct_listed_line_allocations: [
+      { permalink: "abc", price_cents: amount, tip_cents: 0, tax_cents: 0, shipping_cents: 0, total_cents: amount },
+    ],
+  });
+
+  it.each(["focus", "visibilitychange"])(
+    "refreshes an expired listed amount token once on %s without resuming payment",
+    async (event) => {
+      const requests = stubSurchargeRequests();
+      const { result } = renderCheckout({ checkoutPayment: directListedCheckoutPayment });
+      await act(() => vi.advanceTimersByTimeAsync(300));
+      await act(async () =>
+        requests[0]?.resolve(
+          surchargesResponse(listedToken(new Date(Date.now() + 1000).toISOString())),
+        ),
+      );
+      vi.setSystemTime(Date.now() + 2000);
+      act(() => (event === "focus" ? window : document).dispatchEvent(new Event(event)));
+      expect(result.current[0].surcharges.type).toBe("pending");
+      expect(result.current[0].status.type).toBe("input");
+      expect(result.current[0].warning).toContain("review the updated total");
+      act(() => window.dispatchEvent(new Event("focus")));
+      await act(() => vi.advanceTimersByTimeAsync(300));
+      expect(requests).toHaveLength(2);
+      await act(async () => requests[1]?.resolve(surchargesResponse(listedToken("2999-01-01T00:00:00Z", 1600))));
+      expect(result.current[0].status.type).toBe("input");
+      expect(result.current[0].resumeSubmitAfterCheckoutPayment).toBe(false);
+      await act(() => vi.advanceTimersByTimeAsync(60000));
+      expect(requests).toHaveLength(2);
+    },
+  );
+
   it("does not dismiss unrelated alerts when refreshed cart data replaces a surcharge error", async () => {
     const requests = stubSurchargeRequests();
     const { result } = renderCheckout();
