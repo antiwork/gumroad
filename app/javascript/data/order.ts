@@ -32,10 +32,8 @@ type OrderRequiresCardSetupResponse = {
   order: { id: string; stripe_connect_account_id: string | null };
 };
 type ProcessingPurchaseResponse = { success: true; processing: true; permalink: string };
-// #create can return a `processing` line item when a seller group's off-session charge runs
-// synchronously (an India e-mandate that needed no authentication pause) and its debit is
-// scheduled — the union must accept that shape or typia.assert throws and the scheduled debit
-// is misreported as a resubmittable failure.
+// #create may return `processing` when an India off-session debit is scheduled without an auth
+// pause — include it in the union or typia.assert misreports a scheduled debit as failure.
 type LineItemResponse =
   | PurchaseErrorResponse
   | ConfirmedPurchaseResponse
@@ -49,10 +47,8 @@ type OrderSuccessResponse = {
   can_buyer_sign_up: boolean;
   offer_codes: OfferCodes;
 };
-// #confirm can return a `processing` line item when the group's off-session charge settles
-// asynchronously (India e-mandate debits stay `processing` at Stripe for hours after the
-// SetupIntent is confirmed), so the union must accept that shape — otherwise typia.assert
-// throws and a scheduled debit is misreported as a resubmittable failure.
+// #confirm may return `processing` for India e-mandate debits that stay processing for hours —
+// include it in the union or typia.assert misreports a scheduled debit as failure.
 type ConfirmOrderResponse = {
   success: true;
   line_items: Record<
@@ -240,10 +236,8 @@ export const startOrderCreation = async (
       let orderConfirmResponse = await confirmOrderAfterAction({
         orderId,
         clientSecret: firstLineItemRequiringSCA.client_secret,
-        // A forwarded card-handling error fails every still-pending purchase server-side.
-        // Once any group's intent is confirmed OR a create-time debit is already processing,
-        // let the server resolve each group from its own intent instead, so a charged group
-        // is not failed alongside the one the buyer could not authenticate.
+        // Forwarded stripe_error fails every still-pending purchase. Once any intent is
+        // confirmed or a create-time debit is processing, resolve each group from its own intent.
         stripeError: anyIntentConfirmed || processingPermalinks.size > 0 ? undefined : stripeError,
         retryOfferCodes: retryOfferCodeCandidates(requestData, retryOfferCodes),
         // A mandate pause happens before the group's charge is created, so the resume charge
@@ -348,11 +342,8 @@ export const startOrderCreation = async (
         }
         confirmLineItems[uid] = lineItem;
       }
-      // Key by uid, not permalink, which collides when the cart holds two variants of one product.
-      // The legacy confirm endpoint (Order::ConfirmService) still keys its line items by
-      // purchase id, which matches no cart uid — fall back to permalink matching for those
-      // responses, or every SCA outcome (including its error_message) is silently dropped and
-      // the buyer sees the generic "Sorry, something went wrong." copy.
+      // Key by uid, not permalink (variants collide). Legacy ConfirmService keys by purchase
+      // id — fall back to permalink matching or SCA outcomes (and error_message) are dropped.
       const confirmLineItemResults = Object.values(confirmLineItems);
       const lineItems = requestData.lineItems.reduce<CartPurchaseResult["lineItems"]>((lineItems, lineItem) => {
         const resultItem =
@@ -363,14 +354,9 @@ export const startOrderCreation = async (
         return lineItems;
       }, {});
       if (anyLineProcessing) {
-        // A seller group's debit is scheduled, so this must surface as a pending outcome
-        // rather than a resubmittable cart. But a sibling group that FAILED (auth or charge)
-        // was never charged: its lines stay retryable, so hand them (with the offer codes the
-        // server recovered for them) to the consumer instead of emptying the whole cart.
-        // Only unambiguous failures qualify: an explicit uid-keyed result, or a permalink no
-        // processing line shares — a permalink-fallback failure on a processing permalink can
-        // belong to a sibling variant of the same product, and resubmitting the processing
-        // line would risk a second charge.
+        // Debit scheduled → pending outcome, not a resubmittable cart. Sibling failures that
+        // never charged stay retryable (uid-keyed, or permalink not shared with a processing
+        // line); permalink-fallback on a processing permalink can be a sibling variant.
         const retryableLineItems = Object.fromEntries(
           requestData.lineItems.flatMap((lineItem) => {
             const resultItem = lineItems[lineItem.uid];
@@ -650,10 +636,8 @@ type FinalizeOrderResponse = {
   offer_codes: OfferCodes;
 };
 
-// Thrown once stripe.confirmPayment has captured the card but the order could not be finalized
-// in-page (finalize kept failing, or the intent is still processing). The charge is real, so the
-// consumer must surface a "processing" message and must NOT drop the buyer back into a
-// resubmittable cart — retrying would create a second charge.
+// Thrown once confirmPayment captured the card but in-page finalize failed or is still
+// processing. Charge is real — surface processing; never re-open a resubmittable cart.
 export class PaymentConfirmedError extends Error {
   constructor(
     readonly returnUrl: string | null = null,
@@ -738,10 +722,8 @@ export const startClientConfirmOrderCreation = async (
       );
     }
 
-    // The card is captured from here on, so any later failure must surface as a distinct
-    // "processing" outcome, never a resubmittable failure (which would risk a second charge).
-    // The return page resolves a captured payment to its durable outcome (receipt, pending, or
-    // failed-with-restored-cart), so every post-capture error carries its URL.
+    // Card is captured from here — later failures must be processing, never resubmittable.
+    // Return page resolves durable outcome, so every post-capture error carries its URL.
     confirmedReturnUrl = `${Routes.checkout_return_url(order.id)}?payment_intent=${encodeURIComponent(
       clientSecret.split("_secret")[0] ?? "",
     )}`;

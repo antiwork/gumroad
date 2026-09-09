@@ -341,10 +341,8 @@ class Order::ChargeService
     end
   end
 
-  # When reusing a SetupIntent whose mandate is bound to a specific Connect PM, prepare!
-  # will have cloned a fresh PM that lacks the mandate. Point the chargeable at the SI's PM.
-  # Reused SetupIntents must belong to this chargeable's customer/payment method. Otherwise a
-  # caller could supply another buyer's SI id and receive that intent's client_secret.
+  # Reused SetupIntents must belong to this chargeable's customer/PM — else another buyer's
+  # client_secret can leak. A Connect-bound mandate's prepare! also clones a PM lacking it.
   def setup_intent_belongs_to_chargeable?(setup_intent, chargeable, purchases, merchant_account)
     setup_intent_id = setup_intent.try(:id) || chargeable.try(:stripe_setup_intent_id)
     # Only the merchant-scoped map is trusted. The legacy scalar can be copied from checkout
@@ -409,13 +407,9 @@ class Order::ChargeService
     end
   end
 
-  # Locks the buyer-currency quote for an India off-session group BEFORE its mandate is
-  # registered, holding the token to the same eligibility and per-charge equality checks
-  # Charge::CreateService enforces when the group is charged (possibly only after the buyer's
-  # 3DS, via Order::ConfirmService — hence setup_future_charges: false, off_session: true,
-  # matching that resume call). Fails closed (returns false) on an invalid token so the buyer
-  # is never asked to authenticate a mandate whose charge is already doomed; returns nil with
-  # no token, keeping the canonical USD mandate.
+  # Lock the buyer-currency quote before mandate registration with the same checks
+  # Charge::CreateService uses at charge time (incl. post-3DS resume). Fail closed on an
+  # invalid token; nil/no token keeps the canonical USD mandate.
   def locked_off_session_mandate_quote(purchases:, merchant_account:, chargeable:, amount_cents:)
     quote_token = params[:buyer_currency_quote].presence
     return if quote_token.blank?
@@ -608,11 +602,8 @@ class Order::ChargeService
           save_processor_payment_intent!(purchase, charge_intent.id)
         end
       elsif charge_intent&.processing?
-        # An India off-session debit stays `processing` at Stripe for up to 26h with the debit
-        # already scheduled — a failure here would invite a resubmit and a second charge. Same
-        # rails as Order::ConfirmService's resume charge: leave the purchases in_progress and
-        # let client_confirmed route the intent's payment_intent webhooks into the async
-        # finalize/fail handlers.
+        # India off-session debit stays `processing` up to 26h with debit scheduled — failing
+        # invites a second charge. Leave in_progress; client_confirmed routes webhooks async.
         charge.update!(client_confirmed: true)
         purchases_to_charge.each do |purchase|
           save_processor_payment_intent!(purchase, charge_intent.id)

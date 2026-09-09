@@ -6,10 +6,8 @@ class Order::FinalizeConfirmedChargeService
 
   attr_reader :charge_intent, :offer_codes
 
-  # `charge` narrows the finalize to one seller group's charge: webhook events arrive per
-  # intent, and a multi-seller order can hold several client-confirmed charges, each of which
-  # must only ever be finalized against its own intent. Without it (the AJAX/return-page
-  # callers) the order's single intent-bearing charge is used and every purchase is finalized.
+  # `charge` scopes finalize to one seller group's intent (multi-seller orders hold several).
+  # Without it (AJAX/return-page), use the order's single intent-bearing charge for all.
   def initialize(order:, charge: nil, charge_intent: nil, retry_offer_codes: nil)
     @order = order
     @charge = charge

@@ -204,11 +204,9 @@ module Purchase::ChargeEventsHandler
     end
 
     def finalize_client_confirmed_charge!(event = nil)
-      # Scoped to this charge: a multi-seller order can hold several client-confirmed
-      # charges (one per seller group), each with its own intent, and finalizing another
-      # group's purchases from this event's intent would save the wrong charge's data.
-      # An uncertain resume may have set client_confirmed without storing the PI id; recover
-      # it from the webhook so FinalizeConfirmedChargeService can retrieve the intent.
+      # Scoped to this charge: multi-seller orders hold several client-confirmed charges, and
+      # finalizing another group from this event would save the wrong charge data. Recover a
+      # missing PI id from the webhook when an uncertain resume set client_confirmed only.
       if is_a?(Charge) && stripe_payment_intent_id.blank? && event&.processor_payment_intent_id.present?
         # Retrieve on this charge's Stripe account and require our transfer_group before saving.
         # A crafted webhook can point transfer_group at another CH- id; never trust the event id alone.

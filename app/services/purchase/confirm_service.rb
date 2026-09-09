@@ -58,10 +58,8 @@ class Purchase::ConfirmService < Purchase::BaseService
       return
     end
 
-    # A paid purchase that reaches confirmation with only a SetupIntent was never charged
-    # (gp#2437): finalizing it would send receipts and book seller balances with no money
-    # moved. Order::ConfirmService creates the group's off-session charge before confirming;
-    # if that didn't happen, refuse to finalize rather than mark it paid.
+    # Paid purchase with only a SetupIntent was never charged (gp#2437): finalizing would
+    # book balances with no money moved. Refuse unless ConfirmService already created the charge.
     if purchase.processor_setup_intent_id.present? &&
        purchase.processor_payment_intent_id.blank? &&
        purchase.stripe_transaction_id.blank? &&

@@ -949,11 +949,9 @@ describe("startOrderCreation", () => {
   });
 
   it("never resubmits a variant line whose permalink also has a processing sibling", async () => {
-    // The legacy confirm endpoint keys results by purchase id, so failures are matched back to
-    // cart lines by permalink. Two variants of one product share a permalink: when one is
-    // processing (debit scheduled) and the other failed, the failure cannot be attributed to a
-    // line unambiguously, so neither may re-enter the cart — resubmitting the processing line
-    // would risk a second charge.
+    // Legacy confirm keys by purchase id, so failures match cart lines by permalink. Two
+    // variants share a permalink: if one is processing and the other failed, neither may
+    // re-enter — else resubmitting the processing line risks a double charge.
     vi.stubGlobal("Routes", {
       orders_path: () => "/orders",
       confirm_order_path: (id: string) => `/orders/${id}/confirm`,

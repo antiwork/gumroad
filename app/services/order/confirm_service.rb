@@ -77,9 +77,8 @@ class Order::ConfirmService
       @setup_charge_results ||= {}
     end
 
-    # India multi-seller carts pause at a SetupIntent with no PaymentIntent yet; after the
-    # buyer confirms, create each group's combined off-session charge or fulfillment marks
-    # success with no money moved.
+    # India multi-seller carts pause at a SetupIntent with no PaymentIntent; after confirm,
+    # create each group's off-session charge or fulfillment marks success with no money moved.
     def charge_seller_groups_awaiting_setup_confirmation!
       browser_stripe_error = CardParamsHelper.check_for_errors(params).present?
 
@@ -103,10 +102,8 @@ class Order::ConfirmService
           if pending.any?
             charge_setup_confirmed_purchases!(pending)
           else
-            # A retried confirm: the group's off-session charge already exists, and India debits
-            # stay `processing` inside Stripe's 26h window. Purchase::ConfirmService would
-            # re-confirm the intent, which Stripe rejects for a processing intent whose debit is
-            # already scheduled — finalize from a retrieve-only intent instead.
+            # Retried confirm: group's charge exists and India stays `processing` (~26h).
+            # ConfirmService would re-confirm, which Stripe rejects — finalize from retrieve only.
             finalize_setup_charged_purchases!(charged)
           end
         rescue => e
@@ -139,12 +136,9 @@ class Order::ConfirmService
         !purchase.is_preorder_authorization?
     end
 
-    # A purchase whose group's off-session charge already exists (created by this path, or
-    # synchronously by Order::ChargeService when the card's mandate needed no pause — those
-    # rows carry stripe_status `processing` but no SetupIntent id) and that is still
-    # in_progress — typically because the intent is `processing`. It must be finalized from a
-    # retrieved intent, never re-confirmed: Stripe rejects confirming a processing intent
-    # whose debit is already scheduled, which would fail a purchase that is going to capture.
+    # Group already has an off-session charge (this path, or ChargeService with no mandate
+    # pause — stripe_status `processing`, no SetupIntent) and is still in_progress. Finalize
+    # from retrieve only: Stripe rejects confirming a processing intent already scheduled.
     def charged_after_setup_awaiting_finalization?(purchase)
       purchase.in_progress? &&
         purchase.errors.empty? &&
@@ -159,10 +153,8 @@ class Order::ConfirmService
     def charge_setup_confirmed_purchases!(purchases)
       reference_purchase = purchases.first
       reference_purchase.with_lock do
-        # with_lock reloads only the reference: when a concurrent confirm charged or finalized
-        # this group while we waited, the sibling rows changed too, and the perform loop would
-        # otherwise feed stale in_progress copies to Purchase::ConfirmService, whose setup-only
-        # guard fails purchases whose money already moved.
+        # with_lock reloads only the reference; siblings may have charged/finalized while we
+        # waited. Without reloading them, ConfirmService's setup-only guard fails paid rows.
         (purchases - [reference_purchase]).each(&:reload)
         reference_purchase.charge&.reload
         next unless reference_purchase.in_progress?
@@ -300,10 +292,8 @@ class Order::ConfirmService
       end
 
       chargeable = chargeable_for_setup_confirmed_resume(reference_purchase, credit_card, merchant_account, setup_intent)
-      # The card's json_data can hold another group's (or an older order's) intent; this
-      # group's charge must reference the SetupIntent the buyer just confirmed for it.
-      # Trusted prepare on Connect binds that SI's payment method and attaches it to a connected
-      # Customer before the first debit so renewals can reuse the mandate.
+      # Card json_data can hold another group's intent; bind this group's confirmed SetupIntent.
+      # Trusted prepare on Connect attaches that SI's PM to a connected Customer for renewals.
       chargeable.stripe_setup_intent_id = setup_intent_id if chargeable.respond_to?(:stripe_setup_intent_id=)
       if chargeable.respond_to?(:prepare_with_trusted_setup_intent!)
         chargeable.prepare_with_trusted_setup_intent!
@@ -358,10 +348,8 @@ class Order::ConfirmService
 
       charge_intent = charge.charge_intent
       if charge_intent.blank?
-        # A connection loss after Stripe may have accepted the debit must stay pending: failing
-        # these purchases and telling the buyer the card was not charged would let them pay twice.
-        # Same if a prior uncertain attempt already set client_confirmed and this retry cannot
-        # create (e.g. expired quote) — do not let Purchase::ConfirmService mark them failed.
+        # Stay pending if Stripe may have accepted the debit (connection loss) or a prior
+        # uncertain attempt set client_confirmed and this retry cannot create — avoid double pay.
         if create_service.processor_outcome_unknown || charge.client_confirmed?
           purchases.each do |purchase|
             purchase.errors.clear
@@ -398,20 +386,15 @@ class Order::ConfirmService
 
         return unless charge_intent.is_a?(StripeChargeIntent)
 
-        # The debit can outlive this request (India intents stay `processing` for up to 26h),
-        # and the buyer may never come back to retry the confirm. client_confirmed is what
-        # routes the intent's payment_intent.succeeded / payment_failed webhooks into the
-        # async finalize/fail rails (Purchase::ChargeEventsHandler); without it these
-        # purchases would sit in_progress forever.
+        # Debit can outlive this request (India `processing` up to 26h). client_confirmed
+        # routes payment_intent webhooks into ChargeEventsHandler; without it, sits forever.
         charge.update!(client_confirmed: true)
 
         purchases.each do |purchase|
           purchase.create_processor_payment_intent!(intent_id: charge_intent.id)
         end
-        # Finalize from the intent we just created instead of leaving these purchases to
-        # Purchase::ConfirmService: its confirm_charge_intent! re-confirms any non-succeeded
-        # intent, and Stripe rejects that for a `processing` one (India debits stay processing
-        # for up to 26h with the debit already scheduled).
+        # Finalize here: ConfirmService#confirm_charge_intent! re-confirms non-succeeded
+        # intents, which Stripe rejects while India stays `processing` with debit scheduled.
         finalize_charged_purchases(purchases, charge_intent)
       rescue => e
         # Local persistence failed after Stripe already accepted the debit. Persist recovery

@@ -102,21 +102,16 @@ class FailAbandonedPurchaseWorker
               .exists?
     end
 
-    # Cancelling a shared SetupIntent must fail every in_progress purchase that still
-    # points at it. Otherwise a newer sibling's worker can cancel the intent while an
-    # older sibling (past its own SCA window, so excluded from shared_setup_intent_still_needed?)
-    # stays in_progress forever when it later sees the already-canceled intent.
+    # Cancelling a shared SetupIntent must fail every in_progress purchase still pointing at
+    # it, or a sibling past its SCA window stays stuck after seeing the canceled intent.
     def cancel_setup_intent
       ChargeProcessor.cancel_setup_intent!(purchase.merchant_account, purchase.processor_setup_intent_id)
       fail_in_progress_purchases_sharing_setup_intent!
     rescue ChargeProcessorError
       setup_intent = ChargeProcessor.get_setup_intent(purchase.merchant_account, purchase.processor_setup_intent_id)
 
-      # Ignore the error if:
-      # - setup intent succeeded (user completed SCA in the meanwhile) — confirm will finish it
-      # - setup intent has been cancelled (by a parallel purchase / sibling worker)
-      #
-      # Raise all other (unexpected) errors.
+      # Ignore succeeded (confirm will finish) or already-canceled intents (parallel sibling);
+      # re-raise unexpected errors.
       raise unless setup_intent&.succeeded? || setup_intent&.canceled?
 
       # A parallel cancel may have left this purchase (and shared-SI siblings) in_progress.
@@ -127,10 +122,8 @@ class FailAbandonedPurchaseWorker
       setup_intent_id = purchase.processor_setup_intent_id
       return if setup_intent_id.blank?
 
-      # Prefer the order association (indexed via order_purchases) so we do not scan the
-      # unindexed processor_setup_intent_id column across the whole purchases table.
-      # Always include this purchase itself so a delayed/retried job cannot cancel the
-      # SetupIntent and then age-filter the target out of cleanup.
+      # Prefer order association (indexed) over scanning unindexed processor_setup_intent_id.
+      # Always include this purchase so a delayed job cannot cancel the SI then age-filter it out.
       siblings = if (order = purchase.order)
         order.purchases.where(processor_setup_intent_id: setup_intent_id, purchase_state: "in_progress")
       else
