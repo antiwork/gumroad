@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, render, screen, within } from "@testing-library/react";
 import * as React from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -171,9 +171,10 @@ describe("product page bundle mobile layout", () => {
       expect.arrayContaining(["max-w-1/2", "shrink-0", "flex-row", "items-start"]),
     );
 
-    expect(bundleLink.querySelector("h4")?.className.split(" ")).toEqual(expect.arrayContaining(["break-words"]));
+    // wrap-break-word is overflow-wrap: break-word; break-words is deprecated in Tailwind v4.1.
+    expect(bundleLink.querySelector("h4")?.className.split(" ")).toEqual(expect.arrayContaining(["wrap-break-word"]));
     expect(screen.getByRole("heading", { name: product.name }).className.split(" ")).toEqual(
-      expect.arrayContaining(["break-words"]),
+      expect.arrayContaining(["wrap-break-word"]),
     );
 
     const priceTag = document.querySelector("[itemprop='price']");
@@ -186,7 +187,7 @@ describe("product page bundle mobile layout", () => {
     expect(cta.className.split(" ")).toEqual(expect.arrayContaining(["whitespace-nowrap", "shrink-0"]));
   });
 
-  it("lets the sticky CTA bar wrap instead of squeezing price and CTA", () => {
+  it("stacks the sticky CTA bar price above the CTA on narrow screens", () => {
     class FakeIntersectionObserver {
       observe() {}
       unobserve() {}
@@ -217,14 +218,20 @@ describe("product page bundle mobile layout", () => {
 
     const bar = screen.getByRole("region", { name: "Product information bar" });
     const inner = bar.querySelector(".max-w-product-page");
-    expect(inner?.className.split(" ")).toEqual(expect.arrayContaining(["max-sm:flex-wrap"]));
+    const innerClasses = inner?.className.split(" ");
+    expect(innerClasses).toEqual(expect.arrayContaining(["flex", "max-sm:flex-col", "max-sm:items-stretch"]));
+    expect(innerClasses).not.toContain("max-sm:flex-wrap");
     expect(bar.querySelector("[itemprop='price']")?.className.split(" ")).toEqual(
       expect.arrayContaining(["whitespace-nowrap"]),
     );
-    const ctaWrap = bar.querySelector(".shrink-0.items-center");
-    expect(ctaWrap?.className.split(" ")).toEqual(expect.arrayContaining(["shrink-0"]));
-    expect(screen.getAllByRole("link", { name: "I want this!" })[0]?.className.split(" ")).toEqual(
-      expect.arrayContaining(["whitespace-nowrap", "shrink-0"]),
+    const cta = within(bar).getByRole("link", { name: "I want this!" });
+    expect(cta.className.split(" ")).toEqual(expect.arrayContaining(["whitespace-nowrap", "shrink-0"]));
+    const ctaWrap = cta.parentElement;
+    expect(ctaWrap?.className.split(" ")).toEqual(
+      expect.arrayContaining(["shrink-0", "max-sm:flex-col", "max-sm:items-stretch"]),
     );
+    // Price wrapper precedes the CTA wrapper, so a column puts the price on top.
+    expect(inner?.firstElementChild?.getAttribute("itemprop")).toBe("offers");
+    expect(inner?.lastElementChild).toBe(ctaWrap);
   });
 });

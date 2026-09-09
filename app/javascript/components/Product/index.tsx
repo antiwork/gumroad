@@ -427,8 +427,10 @@ export const Product = ({
           {/* dir="auto" lets an RTL product name (Hebrew, Arabic) render right-to-left
               instead of inheriting the document's LTR base direction, which misplaces
               neutral characters like quotes and digits (gumroad-private#1259; same
-              rationale as the description fix in #6138). */}
-          <h1 itemProp="name" dir="auto" className="break-words">
+              rationale as the description fix in #6138).
+              wrap-break-word overrides the inherited global overflow-wrap: anywhere, which
+              splits titles mid-word in narrow in-app browsers. */}
+          <h1 itemProp="name" dir="auto" className="wrap-break-word">
             {product.name}
           </h1>
         </header>
@@ -525,7 +527,7 @@ export const Product = ({
                     <CartItemMain className="min-h-16 min-w-2/5 sm:h-28">
                       <CartItemTitle asChild>
                         <a href={bundleProduct.url}>
-                          <h4 className="font-bold break-words">{bundleProduct.name}</h4>
+                          <h4 className="font-bold wrap-break-word">{bundleProduct.name}</h4>
                         </a>
                       </CartItemTitle>
                       {bundleProduct.ratings ? (
