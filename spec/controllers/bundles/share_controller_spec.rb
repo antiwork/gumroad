@@ -72,12 +72,14 @@ describe Bundles::ShareController, inertia: true do
           taxonomy_id: taxonomy.id,
           tags: ["tag1", "tag2"],
           display_product_reviews: false,
+          hide_bundle_product_reviews: true,
           is_adult: true
         }
         bundle.reload
       end.to change { bundle.taxonomy_id }.from(nil).to(taxonomy.id)
       .and change { bundle.tags.pluck(:name) }.from([]).to(["tag1", "tag2"])
       .and change { bundle.display_product_reviews }.from(true).to(false)
+      .and change { bundle.hide_bundle_product_reviews }.from(false).to(true)
       .and change { bundle.is_adult }.from(false).to(true)
 
       expect(response).to redirect_to(edit_bundle_share_path(bundle.external_id))

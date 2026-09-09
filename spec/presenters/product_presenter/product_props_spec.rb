@@ -569,6 +569,21 @@ describe ProductPresenter::ProductProps do
         expect(card[:ratings]).to eq(count: 1, average: 5.0)
       end
 
+      it "hides per-product ratings on the bundle page without changing the child's own page" do
+        first_bundled_product = bundle.bundle_products.in_order.first.product
+        create(:product_review, purchase: create(:purchase, link: first_bundled_product), rating: 5)
+        bundle.update!(hide_bundle_product_reviews: true)
+        bundle.reload
+        first_bundled_product.reload
+
+        bundle_card = described_class.new(product: bundle).props(seller_custom_domain_url: nil, request:, pundit_user: nil)[:product][:bundle_products].find { _1[:id] == first_bundled_product.external_id }
+        expect(bundle_card[:ratings]).to be_nil
+
+        child_ratings = described_class.new(product: first_bundled_product).props(seller_custom_domain_url: nil, request:, pundit_user: nil)[:product][:ratings]
+        expect(child_ratings[:count]).to eq(1)
+        expect(child_ratings[:average]).to eq(5.0)
+      end
+
       it "does not issue per-row queries for bundle product card associations" do
         3.times do |i|
           extra = create(:product, user: seller)
