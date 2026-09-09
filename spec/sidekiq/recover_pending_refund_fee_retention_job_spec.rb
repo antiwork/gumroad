@@ -104,6 +104,27 @@ RSpec.describe RecoverPendingRefundFeeRetentionJob, :vcr do
     expect(BalanceTransaction.where(credit:).sum(:holding_amount_net_cents)).to eq(-900)
   end
 
+  it "resumes settlement when a reversal id exists without collected cents" do
+    refund.debited_stripe_transfer = "trr_1"
+    refund.fee_retention_source_transfer = "tr_recovery_candidate"
+    refund.save!
+    transfer_reversal = double(id: "trr_1", destination_payment_refund: "re_1")
+    expect(Stripe::Transfer).to receive(:retrieve_reversal).with("tr_recovery_candidate", "trr_1").and_return(transfer_reversal)
+    expect(Stripe::Refund).to receive(:retrieve)
+      .with("re_1", hash_including(stripe_account: merchant_account.charge_processor_merchant_id))
+      .and_return(double(balance_transaction: "txn_1"))
+    expect(Stripe::BalanceTransaction).to receive(:retrieve)
+      .with("txn_1", hash_including(stripe_account: merchant_account.charge_processor_merchant_id))
+      .and_return(double(net: -900))
+    expect(Stripe::Transfer).not_to receive(:create)
+
+    described_class.new.perform
+
+    expect(refund.reload.fee_retention_pending).to be_falsey
+    expect(refund.fee_retention_collected_cents).to eq(900)
+    expect(BalanceTransaction.where(credit:).sum(:holding_amount_net_cents)).to eq(-900)
+  end
+
   it "does not recover fees for a reversed failed refund" do
     refund.status = "failed"
     refund.balance_reversed_on_failure = true

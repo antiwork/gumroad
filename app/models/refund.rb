@@ -83,6 +83,7 @@ class Refund < ApplicationRecord
   attr_json_data_accessor :fee_retention_pending
   attr_json_data_accessor :fee_retention_error
   attr_json_data_accessor :fee_retention_collected_cents
+  attr_json_data_accessor :fee_retention_source_transfer
 
   attr_json_data_accessor :presentment_currency
   attr_json_data_accessor :presentment_amount_cents
@@ -146,7 +147,9 @@ class Refund < ApplicationRecord
     purchase.with_lock do
       reload.lock!
       next unless fee_retention_pending && effective?
-      next unless debited_stripe_transfer.present? || credit.amount_cents.zero? || credit.merchant_account.holder_of_funds != HolderOfFunds::STRIPE
+      collection_recorded = debited_stripe_transfer.present? && fee_retention_collected_cents.present?
+      no_stripe_collection = credit.amount_cents.zero? || credit.merchant_account.holder_of_funds != HolderOfFunds::STRIPE
+      next unless collection_recorded || no_stripe_collection
 
       if fee_retention_collected_cents.present?
         holding_cents = BalanceTransaction.where(credit:).sum(:holding_amount_net_cents)

@@ -3983,7 +3983,7 @@ describe StripeChargeProcessor, :vcr do
                                    stripe_internal_transfer_id: transfer.id)
         allow(Stripe::Transfer).to receive(:retrieve).with(transfer.id).and_return(transfer)
         allow(Stripe::Transfer).to receive(:create_reversal)
-          .with(transfer.id, { amount: 1000 })
+          .with(transfer.id, hash_including(amount: 1000), hash_including(:idempotency_key))
           .and_raise(Stripe::InvalidRequestError.new("Transfer reversals in BGN are no longer supported. Please create account debits in eur", nil))
       end
 
@@ -4001,7 +4001,7 @@ describe StripeChargeProcessor, :vcr do
         expect(described_class.debit_stripe_account_for_refund_fee(credit:)).to eq(900)
         expect(refund.reload.debited_stripe_transfer).to eq("tr_fee_debit")
         expect(refund.fee_retention_collected_cents).to eq(900)
-        expect(described_class.debit_stripe_account_for_refund_fee(credit:)).to be_nil
+        expect(described_class.debit_stripe_account_for_refund_fee(credit:)).to eq(900)
       end
 
       it "adopts an unrecorded debit after the idempotency window has expired" do
@@ -4076,7 +4076,7 @@ describe StripeChargeProcessor, :vcr do
 
         # 1000 USD cents * 1.33 = 1330 CAD cents, not the raw USD figure.
         transfer_reversal = stub_reversal_follow_up_calls(transfer_reversal_id: "trr_1", net: -1330)
-        expect(Stripe::Transfer).to receive(:create_reversal).with("tr_cad_1", { amount: 1330 }).and_return(transfer_reversal)
+        expect(Stripe::Transfer).to receive(:create_reversal).with("tr_cad_1", hash_including(amount: 1330), hash_including(:idempotency_key)).and_return(transfer_reversal)
 
         expect(described_class.debit_stripe_account_for_refund_fee(credit:)).to eq(1330)
         expect(credit.fee_retention_refund.reload.debited_stripe_transfer).to eq("trr_1")
@@ -4099,7 +4099,7 @@ describe StripeChargeProcessor, :vcr do
         expect(Stripe::Transfer).to receive(:retrieve).with("tr_cad_big").and_return(big_transfer)
 
         transfer_reversal = stub_reversal_follow_up_calls(transfer_reversal_id: "trr_2", net: -1330)
-        expect(Stripe::Transfer).to receive(:create_reversal).with("tr_cad_big", { amount: 1330 }).and_return(transfer_reversal)
+        expect(Stripe::Transfer).to receive(:create_reversal).with("tr_cad_big", hash_including(amount: 1330), hash_including(:idempotency_key)).and_return(transfer_reversal)
 
         expect(described_class.debit_stripe_account_for_refund_fee(credit:)).to eq(1330)
       end
@@ -4113,7 +4113,7 @@ describe StripeChargeProcessor, :vcr do
                                       .and_return([old_transfer])
 
         transfer_reversal = stub_reversal_follow_up_calls(transfer_reversal_id: "trr_3", net: -1330)
-        expect(Stripe::Transfer).to receive(:create_reversal).with("tr_cad_old", { amount: 1330 }).and_return(transfer_reversal)
+        expect(Stripe::Transfer).to receive(:create_reversal).with("tr_cad_old", hash_including(amount: 1330), hash_including(:idempotency_key)).and_return(transfer_reversal)
 
         expect(described_class.debit_stripe_account_for_refund_fee(credit:)).to eq(1330)
         expect(credit.fee_retention_refund.reload.debited_stripe_transfer).to eq("trr_3")
@@ -4129,9 +4129,43 @@ describe StripeChargeProcessor, :vcr do
         expect(Stripe::Transfer).to receive(:retrieve).with("tr_usd_1").and_return(transfer)
 
         transfer_reversal = stub_reversal_follow_up_calls(transfer_reversal_id: "trr_4", net: -1330)
-        expect(Stripe::Transfer).to receive(:create_reversal).with("tr_usd_1", { amount: 1000 }).and_return(transfer_reversal)
+        expect(Stripe::Transfer).to receive(:create_reversal).with("tr_usd_1", hash_including(amount: 1000), hash_including(:idempotency_key)).and_return(transfer_reversal)
 
         expect(described_class.debit_stripe_account_for_refund_fee(credit:)).to eq(1330)
+      end
+
+      it "adopts an existing reversal for the pinned source transfer instead of reversing again" do
+        refund = create(:refund)
+        refund.fee_retention_source_transfer = "tr_cad_1"
+        refund.save!
+        credit = create(:credit, user: @cad_merchant_account.user, amount_cents: 1000, merchant_account_id: @cad_merchant_account.id, fee_retention_refund: refund)
+        create(:payment_completed, user: @cad_merchant_account.user,
+                                   stripe_connect_account_id: @cad_merchant_account.charge_processor_merchant_id,
+                                   stripe_internal_transfer_id: "tr_other")
+        transfer = double(id: "tr_cad_1", amount: 2000, amount_reversed: 1330, currency: "cad")
+        existing = double(id: "trr_existing", destination_payment_refund: "re_1", metadata: { "refund_id" => refund.id.to_s })
+        expect(Stripe::Transfer).to receive(:retrieve).with("tr_cad_1").and_return(transfer)
+        expect(Stripe::Transfer).to receive(:list_reversals).with("tr_cad_1", { limit: 100 }).and_return([existing])
+        expect(Stripe::Transfer).not_to receive(:create_reversal)
+        stub_reversal_follow_up_calls(transfer_reversal_id: "trr_existing", net: -1330)
+
+        expect(described_class.debit_stripe_account_for_refund_fee(credit:)).to eq(1330)
+        expect(refund.reload.debited_stripe_transfer).to eq("trr_existing")
+      end
+
+      it "resumes settlement lookup when a reversal id exists without collected cents" do
+        refund = create(:refund)
+        refund.fee_retention_source_transfer = "tr_cad_1"
+        refund.debited_stripe_transfer = "trr_1"
+        refund.save!
+        credit = create(:credit, user: @cad_merchant_account.user, amount_cents: 1000, merchant_account_id: @cad_merchant_account.id, fee_retention_refund: refund)
+        transfer_reversal = double(id: "trr_1", destination_payment_refund: "re_1")
+        expect(Stripe::Transfer).to receive(:retrieve_reversal).with("tr_cad_1", "trr_1").and_return(transfer_reversal)
+        expect(Stripe::Transfer).not_to receive(:create_reversal)
+        stub_reversal_follow_up_calls(transfer_reversal_id: "trr_1", net: -1330)
+
+        expect(described_class.debit_stripe_account_for_refund_fee(credit:)).to eq(1330)
+        expect(refund.reload.fee_retention_collected_cents).to eq(1330)
       end
     end
   end

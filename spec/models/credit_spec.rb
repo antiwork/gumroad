@@ -297,6 +297,10 @@ describe Credit do
     let!(:purchase) { create(:purchase, succeeded_at: 3.days.ago, link: create(:product, user: creator), merchant_account:) }
     let!(:refund) { create(:refund, purchase:, fee_cents: 100) }
 
+    before do
+      allow(StripeChargeProcessor).to receive(:debit_stripe_account_for_refund_fee).and_return(33)
+    end
+
     context "when Stripe fee collection fails" do
       let!(:merchant_account) { create(:merchant_account, user: creator, country: "BG", currency: "usd") }
 
@@ -318,13 +322,11 @@ describe Credit do
     end
 
     it "assigns the refund as fee_retention_refund" do
-      expect(Stripe::Transfer).to receive(:create).and_call_original
       credit = Credit.create_for_refund_fee_retention!(refund:)
       expect(credit.fee_retention_refund).to eq(refund)
     end
 
     it "updates the unpaid_balance_cents for the seller" do
-      expect(Stripe::Transfer).to receive(:create).and_call_original
       expect(creator.unpaid_balance_cents).to eq(0)
 
       credit = Credit.create_for_refund_fee_retention!(refund:)
@@ -334,7 +336,6 @@ describe Credit do
     end
 
     it "creates a balance record after credit" do
-      expect(Stripe::Transfer).to receive(:create).and_call_original
       credit = Credit.create_for_refund_fee_retention!(refund:)
       expect(credit.balance).to eq(Balance.last)
     end
@@ -342,7 +343,6 @@ describe Credit do
     it "applies the credit to the oldest unpaid balance and not the unpaid balance from purchase date" do
       oldest_balance = create(:balance, user: creator, amount_cents: 1000, merchant_account:, date: purchase.succeeded_at.to_date - 2.days)
       create(:balance, user: creator, amount_cents: 2000, merchant_account:, date: purchase.succeeded_at.to_date)
-      expect(Stripe::Transfer).to receive(:create).and_call_original
       expect(creator.unpaid_balance_cents).to eq(3000)
 
       credit = Credit.create_for_refund_fee_retention!(refund:)
@@ -364,6 +364,7 @@ describe Credit do
           oldest_balance = create(:balance, user: creator, merchant_account: non_us_stripe_account, amount_cents: 1000, holding_currency: "aud", date: purchase.succeeded_at.to_date - 2.days)
           create(:balance, user: creator, merchant_account: non_us_stripe_account, amount_cents: 2000,
                            holding_currency: "aud", date: purchase.succeeded_at.to_date)
+          allow(StripeChargeProcessor).to receive(:debit_stripe_account_for_refund_fee).and_call_original
           expect(Stripe::Transfer).to receive(:create_reversal).and_call_original
           expect(creator.unpaid_balance_cents).to eq(3000)
 
