@@ -81,6 +81,22 @@ RSpec.describe RecoverPendingRefundFeeRetentionJob, :vcr do
     expect(refund.fee_retention_attempts).to eq(1)
   end
 
+  it "does not count attempts once Stripe recorded the collection" do
+    refund.debited_stripe_transfer = "trr_1"
+    refund.fee_retention_source_transfer = "tr_recovery_candidate"
+    refund.fee_retention_attempts = Refund::MAX_FEE_RETENTION_ATTEMPTS - 1
+    refund.save!
+    error = Stripe::APIConnectionError.new("timeout")
+    expect(Stripe::Transfer).to receive(:retrieve_reversal).with("tr_recovery_candidate", "trr_1").and_raise(error)
+    expect(ErrorNotifier).to receive(:notify).with(error, context: { refund_id: refund.id, purchase_id: purchase.id })
+
+    described_class.new.perform
+
+    expect(refund.reload.fee_retention_pending).to be(true)
+    expect(refund.fee_retention_recoverable).to be(true)
+    expect(refund.fee_retention_attempts).to eq(Refund::MAX_FEE_RETENTION_ATTEMPTS - 1)
+  end
+
   it "counts an attempt when recovery raises unexpectedly" do
     error = RuntimeError.new("bookkeeping")
     expect(StripeChargeProcessor).to receive(:debit_stripe_account_for_refund_fee).and_raise(error)

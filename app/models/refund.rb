@@ -115,10 +115,9 @@ class Refund < ApplicationRecord
                           Stripe::AuthenticationError, Stripe::PermissionError, Stripe::RateLimitError,
                           Stripe::IdempotencyError].freeze
 
-  # One week of hourly RecoverPendingRefundFeeRetentionJob runs: a Stripe-held account
-  # with no reversible transfer yet receives its next payout transfer inside this window.
-  # At the cap the row stays fee_retention_pending for visibility but leaves the job's
-  # candidate set (fee_retention_recoverable).
+  # One week of hourly runs: a Stripe-held account with no reversible transfer yet gets its
+  # next payout transfer inside this window. At the cap the row keeps fee_retention_pending
+  # for visibility but leaves fee_retention_recoverable.
   MAX_FEE_RETENTION_ATTEMPTS = 168
 
   scope :pending_fee_retention, -> { where(fee_retention_recoverable: true) }
@@ -236,11 +235,14 @@ class Refund < ApplicationRecord
       end
     end
 
-    # Reports once, on the attempt that reaches the cap.
+    # Reports once, on the attempt that reaches the cap. A recorded Stripe collection never
+    # counts: the money already moved, so the settlement lookup must keep retrying until
+    # the ledger is reconciled.
     def count_fee_retention_attempt!
       exhausted = purchase.with_lock do
         reload.lock!
         next false unless fee_retention_pending
+        next false if debited_stripe_transfer.present?
         self.fee_retention_attempts = fee_retention_attempts.to_i + 1
         save!
         fee_retention_attempts == MAX_FEE_RETENTION_ATTEMPTS

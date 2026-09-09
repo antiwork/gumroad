@@ -672,11 +672,9 @@ class Purchase
       Stripe::Transfer.create_reversal(transfer.id, { amount: amount_refundable_cents }) if transfer.present?
     end
 
-    # Books the retention credit inside the caller's transaction and collects from Stripe
-    # only after the OUTERMOST commit: Charge#refund_and_save! wraps several purchase
-    # refunds in one transaction, and a process death mid-collection must not roll back a
-    # refund Stripe already paid. The pending marker commits with the refund, so the hourly
-    # RecoverPendingRefundFeeRetentionJob finishes whatever this block does not.
+    # Stripe collection waits for the OUTERMOST commit: Charge#refund_and_save! wraps several
+    # purchase refunds in one transaction, and a crash mid-collection must not roll back a
+    # refund Stripe already paid. The committed pending marker lets the hourly job finish it.
     def debit_processor_fee_from_merchant_account!(refund)
       Credit.create_for_refund_fee_retention!(refund:)
       return unless refund.fee_retention_pending
