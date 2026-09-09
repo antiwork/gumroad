@@ -167,6 +167,13 @@ describe "User profile settings page", type: :system, js: true do
       expect(page).to have_button("Connect to Instagram")
     end
 
+    it "shows Connect to TikTok when the tiktok_connect flag is on" do
+      Feature.activate_user(:tiktok_connect, @user)
+      visit profile_path
+
+      expect(page).to have_button("Connect to TikTok")
+    end
+
     context "when logged user has role admin" do
       include_context "with switching account to user as admin for seller" do
         let(:seller) { @user }

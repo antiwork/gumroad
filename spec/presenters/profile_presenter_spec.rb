@@ -86,6 +86,22 @@ describe ProfilePresenter do
       expect(props[:instagram_handle]).to eq("gumroad")
     end
 
+    it "reports TikTok connected from the live identity, not a dormant verification row" do
+      create(:social_connect_verification, user: seller, platform: "tiktok", uid: "open-123", handle: "oldhandle")
+      seller.reload
+
+      props = described_class.new(pundit_user:, seller:).profile_settings_props(request:)
+      expect(props[:tiktok_connected]).to eq(false)
+      expect(props[:tiktok_handle]).to be_nil
+
+      create(:user_tiktok_identity, user: seller, tiktok_open_id: "open-123", handle: "gumroad")
+      seller.reload
+
+      props = described_class.new(pundit_user:, seller:).profile_settings_props(request:)
+      expect(props[:tiktok_connected]).to eq(true)
+      expect(props[:tiktok_handle]).to eq("gumroad")
+    end
+
     it "includes hide_follow_form when the seller has turned it on" do
       seller.update!(hide_follow_form: true)
 
@@ -337,6 +353,9 @@ describe ProfilePresenter do
           instagram_connect_enabled: false,
           instagram_connected: false,
           instagram_handle: nil,
+          tiktok_connect_enabled: false,
+          tiktok_connected: false,
+          tiktok_handle: nil,
           has_custom_landing_page: false,
           username: seller.username,
           # seller_analytics is only added to the public profile_props — the settings

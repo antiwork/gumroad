@@ -37,6 +37,9 @@ class SocialConnectVerification < ApplicationRecord
     when "instagram"
       instagram_user_id = user.instagram_identity&.instagram_user_id
       instagram_user_id.present? && instagram_user_id.to_s == uid.to_s
+    when "tiktok"
+      tiktok_open_id = user.tiktok_identity&.tiktok_open_id
+      tiktok_open_id.present? && tiktok_open_id.to_s == uid.to_s
     else
       false
     end
@@ -79,6 +82,20 @@ class SocialConnectVerification < ApplicationRecord
     )
   end
 
+  def self.record_from_tiktok!(user, profile)
+    uid = profile["open_id"].to_s
+    return if uid.blank?
+
+    record!(
+      user, "tiktok", uid,
+      handle: tiktok_handle(profile),
+      account_created_at: nil,
+      follower_count: int_or_unknown(profile["follower_count"]),
+      post_count: int_or_unknown(profile["video_count"]),
+      last_posted_at: nil,
+    )
+  end
+
   def self.record_from_instagram!(user, profile)
     # Meta's deauthorize/data-deletion signed_request carries the app-scoped
     # (token) user id, so that must be the canonical uid or those callbacks
@@ -116,6 +133,22 @@ class SocialConnectVerification < ApplicationRecord
     end
   end
   private_class_method :record!
+
+  def self.tiktok_handle(profile)
+    profile["username"].presence ||
+      profile["profile_web_link"].to_s[%r{@([^/?#]+)}, 1].presence ||
+      profile["display_name"].presence
+  end
+  private_class_method :tiktok_handle
+
+  def self.int_or_unknown(value)
+    return if value.nil? || (value.is_a?(String) && value.strip.empty?)
+
+    Integer(value)
+  rescue ArgumentError, TypeError
+    nil
+  end
+  private_class_method :int_or_unknown
 
   def self.parse_twitter_time(value)
     return if value.blank?

@@ -4,7 +4,7 @@ require "spec_helper"
 
 describe SocialConnectVerification do
   describe "#currently_linked?" do
-    %w[twitter youtube instagram].each do |platform|
+    %w[twitter youtube instagram tiktok].each do |platform|
       it "requires the matching current #{platform} UID" do
         user = create(:user)
         verification = create(:social_connect_verification, user:, platform:, uid: "123")
@@ -17,6 +17,8 @@ describe SocialConnectVerification do
           create(:user_youtube_identity, user:, channel_id: "123")
         when "instagram"
           create(:user_instagram_identity, user:, instagram_user_id: "123")
+        when "tiktok"
+          create(:user_tiktok_identity, user:, tiktok_open_id: "123")
         end
         verification.reload
         expect(verification.currently_linked?).to be(true)
@@ -34,6 +36,8 @@ describe SocialConnectVerification do
           verification.user.youtube_identity.update_columns(channel_id: "")
         when "instagram"
           verification.user.instagram_identity.update_columns(instagram_user_id: "")
+        when "tiktok"
+          verification.user.tiktok_identity.update_columns(tiktok_open_id: "")
         end
         expect(verification.currently_linked?).to be(false)
         verification.uid = ""
@@ -48,9 +52,9 @@ describe SocialConnectVerification do
       expect(verification.currently_linked?).to be(false)
     end
 
-    it "does not consider an unsupported platform linked" do
-      verification = create(:social_connect_verification, platform: "tiktok")
-      verification.user.update!(twitter_user_id: verification.uid)
+    it "does not consider an unknown platform linked" do
+      verification = build(:social_connect_verification, platform: "myspace")
+      allow(verification).to receive(:platform).and_return("myspace")
 
       expect(verification.currently_linked?).to be(false)
     end
@@ -291,6 +295,61 @@ describe SocialConnectVerification do
     it "records nothing when the user id is missing" do
       expect do
         described_class.record_from_instagram!(user, profile.except("user_id"))
+      end.not_to change { described_class.count }
+    end
+  end
+
+  describe ".record_from_tiktok!" do
+    let(:user) { create(:user) }
+    let(:profile) do
+      {
+        "open_id" => "open-123",
+        "username" => "gumroad",
+        "display_name" => "Gumroad",
+        "profile_web_link" => "https://www.tiktok.com/@gumroad",
+        "follower_count" => 250_000,
+        "video_count" => 1_200,
+      }
+    end
+
+    it "stores verified metadata and leaves TikTok-unsupported dates unknown" do
+      verification = described_class.record_from_tiktok!(user, profile)
+
+      expect(verification.reload).to have_attributes(
+        platform: "tiktok",
+        uid: "open-123",
+        handle: "gumroad",
+        account_created_at: nil,
+        follower_count: 250_000,
+        post_count: 1_200,
+        last_posted_at: nil,
+      )
+    end
+
+    it "stores missing counts as unknown rather than zero" do
+      verification = described_class.record_from_tiktok!(user, profile.merge("follower_count" => nil, "video_count" => ""))
+
+      expect(verification.reload).to have_attributes(follower_count: nil, post_count: nil)
+    end
+
+    it "keeps a real zero count" do
+      verification = described_class.record_from_tiktok!(user, profile.merge("follower_count" => 0, "video_count" => 0))
+
+      expect(verification.reload).to have_attributes(follower_count: 0, post_count: 0)
+    end
+
+    it "falls back to the profile link handle then display name" do
+      without_username = described_class.record_from_tiktok!(user, profile.except("username"))
+      expect(without_username.handle).to eq("gumroad")
+
+      without_username.supersede!
+      display_only = described_class.record_from_tiktok!(user, profile.except("username", "profile_web_link"))
+      expect(display_only.handle).to eq("Gumroad")
+    end
+
+    it "records nothing when open_id is missing" do
+      expect do
+        described_class.record_from_tiktok!(user, profile.except("open_id"))
       end.not_to change { described_class.count }
     end
   end

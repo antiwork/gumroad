@@ -25,6 +25,8 @@ describe SocialScoreShadowEvaluationService do
       create(:user_youtube_identity, user: verification.user, channel_id: verification.uid)
     when "instagram"
       create(:user_instagram_identity, user: verification.user, instagram_user_id: verification.uid)
+    when "tiktok"
+      create(:user_tiktok_identity, user: verification.user, tiktok_open_id: verification.uid)
     end
     verification
   end
@@ -95,9 +97,19 @@ describe SocialScoreShadowEvaluationService do
       expect(described_class.new(user).evaluate).to include(score: 0, would_have_released: false, signals: nil)
     end
 
-    it "ignores unsupported platforms even with strong verified signals" do
-      create(:social_connect_verification, user:, platform: "tiktok")
+    it "does not score a currently linked TikTok identity" do
+      verification = create(
+        :social_connect_verification,
+        user:,
+        platform: "tiktok",
+        account_created_at: 5.years.ago,
+        follower_count: 5_000,
+        post_count: 1_000,
+        last_posted_at: 1.week.ago,
+      )
+      create(:user_tiktok_identity, user:, tiktok_open_id: verification.uid)
 
+      expect(verification.reload.currently_linked?).to be(true)
       expect(described_class.new(user).evaluate).to include(score: 0, would_have_released: false, signals: nil)
     end
 

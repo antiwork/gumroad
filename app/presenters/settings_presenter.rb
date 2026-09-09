@@ -581,6 +581,7 @@ class SettingsPresenter
       connections = [{ provider: "twitter", connected: seller.twitter_user_id.present? }]
       connections << { provider: "youtube", connected: seller.youtube_identity.present? } if Feature.active?(:youtube_connect, seller)
       connections << { provider: "instagram", connected: seller.instagram_identity.present? } if Feature.active?(:instagram_connect, seller)
+      connections << { provider: "tiktok", connected: seller.tiktok_identity.present? } if Feature.active?(:tiktok_connect, seller)
       connections
     end
 

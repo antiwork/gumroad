@@ -626,6 +626,7 @@ Rails.application.routes.draw do
     end
 
     post "/instagram/deauthorize", to: "instagram_callbacks#deauthorize", as: :instagram_deauthorize
+    post "/tiktok/deauthorize", to: "tiktok_callbacks#deauthorize", as: :tiktok_deauthorize
     post "/instagram/data_deletion", to: "instagram_callbacks#data_deletion", as: :instagram_data_deletion
     get "/instagram/data_deletion/:confirmation_code", to: "instagram_callbacks#data_deletion_status", as: :instagram_data_deletion_status
 
@@ -707,6 +708,7 @@ Rails.application.routes.draw do
           post :unlink_twitter
           post :unlink_youtube
           post :unlink_instagram
+          post :unlink_tiktok
         end
       end
     end

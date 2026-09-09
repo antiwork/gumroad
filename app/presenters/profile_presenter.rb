@@ -88,6 +88,9 @@ class ProfilePresenter
         instagram_connect_enabled: Feature.active?(:instagram_connect, seller),
         instagram_connected: seller.instagram_identity.present?,
         instagram_handle: seller.instagram_identity&.handle,
+        tiktok_connect_enabled: Feature.active?(:tiktok_connect, seller),
+        tiktok_connected: seller.tiktok_identity.present?,
+        tiktok_handle: seller.tiktok_identity&.handle,
         has_custom_landing_page: seller.has_custom_landing_page?,
         username: seller.username,
       }

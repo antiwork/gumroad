@@ -132,3 +132,13 @@ export const unlinkInstagram = async () => {
   const json = typia.assert<{ success: false; error_message: string } | { success: true }>(await response.json());
   if (!json.success) throw new ResponseError(json.error_message);
 };
+
+export const unlinkTiktok = async () => {
+  const response = await request({
+    method: "POST",
+    url: "/settings/connections/unlink_tiktok",
+    accept: "json",
+  });
+  const json = typia.assert<{ success: false; error_message: string } | { success: true }>(await response.json());
+  if (!json.success) throw new ResponseError(json.error_message);
+};

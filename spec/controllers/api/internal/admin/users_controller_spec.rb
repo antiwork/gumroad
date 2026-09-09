@@ -2222,6 +2222,22 @@ describe Api::Internal::Admin::UsersController do
       expect(response.parsed_body["social_connections"].sole).to include("uid" => "17841400000000000", "currently_linked" => false)
     end
 
+    it "reports currently_linked from the user's live TikTok identity" do
+      user = create(:user, email: "seller@example.com")
+      create(:user_tiktok_identity, user:, tiktok_open_id: "open-123")
+      create(:social_connect_verification, user:, platform: "tiktok", uid: "open-123", handle: "gumroad")
+
+      get :social_connections, params: { email: user.email }
+
+      expect(response.parsed_body["social_connections"].sole).to include("uid" => "open-123", "currently_linked" => true)
+
+      user.tiktok_identity.destroy!
+
+      get :social_connections, params: { email: user.email }
+
+      expect(response.parsed_body["social_connections"].sole).to include("uid" => "open-123", "currently_linked" => false)
+    end
+
     it "returns only the latest dated shadow evidence without evaluating or changing the seller" do
       user = create(:user, email: "seller@example.com")
       verification = create(:social_connect_verification, user:)

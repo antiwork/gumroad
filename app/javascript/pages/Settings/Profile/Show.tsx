@@ -1,4 +1,4 @@
-import { FontFamily, Instagram, TwitterX, Youtube } from "@boxicons/react";
+import { FontFamily, Instagram, Tiktok, TwitterX, Youtube } from "@boxicons/react";
 import { Link, router, usePage } from "@inertiajs/react";
 import { isEqual } from "lodash-es";
 import * as React from "react";
@@ -7,6 +7,7 @@ import typia from "typia";
 import {
   updateProfileSettings as saveProfileSettings,
   unlinkInstagram,
+  unlinkTiktok,
   unlinkTwitter,
   unlinkYoutube,
 } from "$app/data/profile_settings";
@@ -80,6 +81,9 @@ type ProfilePageProps = {
   instagram_connect_enabled: boolean;
   instagram_connected: boolean;
   instagram_handle: string | null;
+  tiktok_connect_enabled: boolean;
+  tiktok_connected: boolean;
+  tiktok_handle: string | null;
   has_custom_landing_page: boolean;
   seller_fonts_css_source: string;
   username: string;
@@ -100,6 +104,9 @@ export default function SettingsPage() {
     instagram_connect_enabled,
     instagram_connected,
     instagram_handle,
+    tiktok_connect_enabled,
+    tiktok_connected,
+    tiktok_handle,
     has_custom_landing_page,
     seller_fonts_css_source,
     username,
@@ -297,6 +304,16 @@ export default function SettingsPage() {
   const handleUnlinkInstagram = asyncVoid(async () => {
     try {
       await unlinkInstagram();
+      router.reload();
+    } catch (e) {
+      assertResponseError(e);
+      showAlert(e.message, "error");
+    }
+  });
+
+  const handleUnlinkTiktok = asyncVoid(async () => {
+    try {
+      await unlinkTiktok();
       router.reload();
     } catch (e) {
       assertResponseError(e);
@@ -567,6 +584,17 @@ export default function SettingsPage() {
                     <SocialAuthButton provider="instagram" href={Routes.user_instagram_omniauth_authorize_path()}>
                       <Instagram pack="brands" className="size-5" />
                       Connect to Instagram
+                    </SocialAuthButton>
+                  ) : null}
+                  {tiktok_connected ? (
+                    <Button type="button" color="tiktok" onClick={handleUnlinkTiktok}>
+                      <Tiktok pack="brands" className="size-5" />
+                      Disconnect {tiktok_handle ? `${tiktok_handle} from TikTok` : "TikTok"}
+                    </Button>
+                  ) : tiktok_connect_enabled ? (
+                    <SocialAuthButton provider="tiktok" href="/users/auth/tiktok">
+                      <Tiktok pack="brands" className="size-5" />
+                      Connect to TikTok
                     </SocialAuthButton>
                   ) : null}
                 </Fieldset>

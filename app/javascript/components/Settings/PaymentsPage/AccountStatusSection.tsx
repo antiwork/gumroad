@@ -3,7 +3,7 @@ import * as React from "react";
 import { SocialAuthButton } from "$app/components/SocialAuthButton";
 import { Alert } from "$app/components/ui/Alert";
 
-const SOCIAL_PROVIDER_NAMES = { twitter: "X", youtube: "YouTube", instagram: "Instagram" };
+const SOCIAL_PROVIDER_NAMES = { twitter: "X", youtube: "YouTube", instagram: "Instagram", tiktok: "TikTok" };
 
 const SupportLink = () => (
   <>
@@ -34,7 +34,9 @@ export type AccountStatus = {
   compliance_actions: ComplianceAction[];
   needs_id_upload: boolean;
   gumroad_status: string | null;
-  social_connections_for_review: { provider: "twitter" | "youtube" | "instagram"; connected: boolean }[] | null;
+  social_connections_for_review:
+    | { provider: "twitter" | "youtube" | "instagram" | "tiktok"; connected: boolean }[]
+    | null;
   stripe_rejected: boolean;
   stripe_rejected_balance_status: "stripe_hold" | "auto_payout" | "too_small" | "held" | null;
   stripe_rejected_formatted_balance: string | null;
@@ -201,7 +203,9 @@ export default function AccountStatusSection({
                           })
                         : provider === "youtube"
                           ? Routes.user_youtube_omniauth_authorize_path()
-                          : Routes.user_instagram_omniauth_authorize_path()
+                          : provider === "tiktok"
+                            ? "/users/auth/tiktok"
+                            : Routes.user_instagram_omniauth_authorize_path()
                     }
                   >
                     Connect to {SOCIAL_PROVIDER_NAMES[provider]}

@@ -78,6 +78,7 @@ describe("optional review connections", () => {
             { provider: "twitter", connected: true },
             { provider: "youtube", connected: false },
             { provider: "instagram", connected: false },
+            { provider: "tiktok", connected: false },
           ],
         }}
         payoutsPausedBy={null}
@@ -93,6 +94,10 @@ describe("optional review connections", () => {
     const instagramForm = submit.mock.instances[1];
     if (!(instagramForm instanceof HTMLFormElement)) throw new Error("Missing Instagram form");
     expect(instagramForm.getAttribute("action")).toBe("/users/auth/instagram");
+    fireEvent.click(screen.getByRole("button", { name: "Connect to TikTok" }));
+    const tiktokForm = submit.mock.instances[2];
+    if (!(tiktokForm instanceof HTMLFormElement)) throw new Error("Missing TikTok form");
+    expect(tiktokForm.getAttribute("action")).toBe("/users/auth/tiktok");
   });
 
   it("hides the review notice and social prompt while the system payout pause alert is showing", () => {
