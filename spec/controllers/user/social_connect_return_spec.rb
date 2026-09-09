@@ -50,36 +50,36 @@ describe User::OmniauthCallbacksController do
     expect(seller.reload.instagram_identity.instagram_user_id).to eq("example-id")
   end
 
-  it "preserves the Profile default without a session intent" do
+  it "preserves the Social connections default without a session intent" do
     session.delete(:social_connect_return)
     post :youtube
-    expect(response).to redirect_to profile_path
+    expect(response).to redirect_to settings_social_connections_path
   end
 
   it "does not accept an arbitrary URL as the return token" do
     request.env["omniauth.params"]["social_connect_return"] = "https://example.org/redirect"
     post :youtube
-    expect(response).to redirect_to profile_path
+    expect(response).to redirect_to settings_social_connections_path
     expect(session[:social_connect_return]).to be_nil
   end
 
   it "ignores callback query parameters instead of trusting them as saved request params" do
     request.env["omniauth.params"] = {}
     post :youtube, params: { social_connect_return: token }
-    expect(response).to redirect_to profile_path
+    expect(response).to redirect_to settings_social_connections_path
   end
 
   it "rejects an intent belonging to another user" do
     session[:social_connect_return]["user_id"] = create(:user).id
     post :youtube
-    expect(response).to redirect_to profile_path
+    expect(response).to redirect_to settings_social_connections_path
     expect(session[:social_connect_return]).to be_nil
   end
 
   it "rejects an expired intent" do
     session[:social_connect_return]["created_at"] = 16.minutes.ago.to_i
     post :youtube
-    expect(response).to redirect_to profile_path
+    expect(response).to redirect_to settings_social_connections_path
     expect(session[:social_connect_return]).to be_nil
   end
 
@@ -88,7 +88,7 @@ describe User::OmniauthCallbacksController do
     create(:team_membership, user: seller, seller: other, role: TeamMembership::ROLE_ADMIN)
     cookies.encrypted[:current_seller_id] = other.id
     post :youtube
-    expect(response).to redirect_to profile_path
+    expect(response).to redirect_to settings_social_connections_path
   end
 
   it "does not consume intent on an unrelated OAuth failure" do

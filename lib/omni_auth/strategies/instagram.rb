@@ -69,7 +69,7 @@ module OmniAuth
         end
 
         def flag_off_redirect
-          instagram_connect_actor.present? ? "/profile" : "/login"
+          instagram_connect_actor.present? ? "/settings/social_connections" : "/login"
         end
     end
   end

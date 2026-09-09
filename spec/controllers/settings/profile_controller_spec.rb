@@ -16,41 +16,6 @@ describe Settings::ProfileController, :vcr, type: :controller, inertia: true do
   end
 
   describe "GET show" do
-    it "issues a session-bound return token only for the owner entering from onboarding" do
-      sign_in seller
-      get :show, params: { social_connect_origin: "onboarding" }
-      expect(inertia.props[:social_connect_return]).to be_present
-      expect(session[:social_connect_return]).to include("token" => inertia.props[:social_connect_return], "user_id" => seller.id)
-    end
-
-    it "preserves pending intent on an onboarding reload without extending its expiry" do
-      sign_in seller
-      get :show, params: { social_connect_origin: "onboarding" }
-      context = session[:social_connect_return].dup
-      travel 5.minutes do
-        get :show, params: { social_connect_origin: "onboarding" }
-      end
-      expect(session[:social_connect_return]).to eq(context)
-      expect(inertia.props[:social_connect_return]).to eq(context["token"])
-    end
-
-    it "does not issue return intent for team members" do
-      get :show, params: { social_connect_origin: "onboarding" }
-      expect(inertia.props[:social_connect_return]).to be_nil
-      expect(session[:social_connect_return]).to be_nil
-    end
-
-    it "rejects arbitrary origins and clears abandoned intent on a normal Profile visit" do
-      sign_in seller
-      session[:social_connect_return] = { "token" => "abandoned" }
-      get :show, params: { social_connect_origin: "https://example.org" }
-      expect(inertia.props[:social_connect_return]).to be_nil
-      expect(session[:social_connect_return]).to be_nil
-      get :show, params: { social_connect_origin: "onboarding" }
-      get :show
-      expect(session[:social_connect_return]).to be_nil
-    end
-
     it "returns successful response with Inertia page data" do
       get :show
 

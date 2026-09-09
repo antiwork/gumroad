@@ -237,7 +237,7 @@ class User::OmniauthCallbacksController < Devise::OmniauthCallbacksController
     end
 
     def social_connect_destination
-      @return_to_onboarding ? dashboard_path : profile_path
+      @return_to_onboarding ? dashboard_path : settings_social_connections_path
     end
 
     def hide_layouts

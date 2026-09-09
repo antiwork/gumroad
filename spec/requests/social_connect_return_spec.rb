@@ -19,10 +19,10 @@ describe "Onboarding social connection return", js: true, type: :system do
     OmniAuth.config.mock_auth.delete(:instagram)
   end
 
-  it "lets the seller skip connecting and clears the Profile continuation" do
+  it "lets the seller skip connecting and clears the continuation" do
     visit dashboard_path
     click_on "Manage social connections"
-    expect(page).to have_current_path(profile_path(social_connect_origin: "onboarding"))
+    expect(page).to have_current_path(settings_social_connections_path(social_connect_origin: "onboarding"))
     expect(page).to have_button("Connect to X")
     expect(page).to have_link("Continue without connecting", href: dashboard_path)
     connect_index = page.text.index("Connect to X")
@@ -31,7 +31,7 @@ describe "Onboarding social connection return", js: true, type: :system do
     click_on "Continue without connecting"
     expect(page).to have_current_path(dashboard_path)
     expect(page).to have_text("X: Available to connect")
-    visit profile_path
+    visit settings_social_connections_path
     expect(page).not_to have_link("Continue without connecting")
   end
 
@@ -63,7 +63,7 @@ describe "Onboarding social connection return", js: true, type: :system do
       expect(page).to have_text("Couldn't connect")
       expect(seller.reload.youtube_identity).to be_nil
       expect(seller.instagram_identity).to be_nil
-      visit profile_path
+      visit settings_social_connections_path
       expect(page).not_to have_link("Continue without connecting")
     end
   end

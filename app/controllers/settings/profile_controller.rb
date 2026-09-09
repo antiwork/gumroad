@@ -6,15 +6,13 @@ class Settings::ProfileController < Settings::BaseController
   STALE_PROFILE_MESSAGE = "Your profile was changed somewhere else. Please reload the page and try again."
   private_constant :STALE_PROFILE_MESSAGE
 
-  include SocialConnectReturn
-
   before_action :authorize
 
   def show
     set_meta_tag(title: "Profile settings")
     profile_presenter = ProfilePresenter.new(pundit_user:, seller: current_seller)
 
-    render inertia: "Settings/Profile/Show", props: profile_presenter.profile_settings_props(request:).merge(social_connect_return: prepare_social_connect_return)
+    render inertia: "Settings/Profile/Show", props: profile_presenter.profile_settings_props(request:)
   end
 
   def update
