@@ -1,6 +1,5 @@
 import * as React from "react";
 
-import { SocialAuthButton } from "$app/components/SocialAuthButton";
 import { Alert } from "$app/components/ui/Alert";
 
 const SOCIAL_PROVIDER_NAMES = { twitter: "X", youtube: "YouTube", instagram: "Instagram" };
@@ -190,27 +189,14 @@ export default function AccountStatusSection({
                 connected ? (
                   <span key={provider}>{SOCIAL_PROVIDER_NAMES[provider]} connected</span>
                 ) : (
-                  <SocialAuthButton
-                    key={provider}
-                    provider={provider}
-                    href={
-                      provider === "twitter"
-                        ? Routes.user_twitter_omniauth_authorize_path({
-                            state: "link_twitter_account",
-                            x_auth_access_type: "read",
-                          })
-                        : provider === "youtube"
-                          ? Routes.user_youtube_omniauth_authorize_path()
-                          : Routes.user_instagram_omniauth_authorize_path()
-                    }
-                  >
-                    Connect to {SOCIAL_PROVIDER_NAMES[provider]}
-                  </SocialAuthButton>
+                  <span key={provider}>{SOCIAL_PROVIDER_NAMES[provider]} available to connect</span>
                 ),
               )}
             </div>
-            <p className="text-sm">
-              Connecting opens your profile afterward. You can return to Payments in Settings at any time.
+            <p>
+              <a href={Routes.settings_social_connections_path()} className="underline">
+                Manage social connections
+              </a>
             </p>
           </div>
         </Alert>

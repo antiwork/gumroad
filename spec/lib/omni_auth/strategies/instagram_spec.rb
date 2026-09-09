@@ -38,13 +38,13 @@ describe OmniAuth::Strategies::Instagram do
   end
 
   describe "#request_phase" do
-    it "redirects to profile when the flag is off for a signed-in user" do
+    it "redirects to Social connections when the flag is off for a signed-in user" do
       assign_env(create(:user))
 
       status, headers, = strategy.request_phase
 
       expect(status).to eq(302)
-      expect(headers["Location"]).to eq("/profile")
+      expect(headers["Location"]).to eq("/settings/social_connections")
     end
 
     it "redirects to login when the flag is off and no user is signed in" do
