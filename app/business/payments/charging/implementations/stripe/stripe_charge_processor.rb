@@ -728,11 +728,22 @@ class StripeChargeProcessor
     return unless transfer_id.present? && refund_id.present?
 
     expected = refund_id.to_s
-    Stripe::Transfer.list_reversals(transfer_id, { limit: 100 }).find do |reversal|
+    reversals = Stripe::Transfer.list_reversals(transfer_id, { limit: 100 })
+    each_refund_fee_reversal(reversals) do |reversal|
       metadata = reversal.try(:metadata)
       next if metadata.blank?
+      next unless metadata[:refund_id].to_s == expected || metadata["refund_id"].to_s == expected
 
-      metadata[:refund_id].to_s == expected || metadata["refund_id"].to_s == expected
+      return reversal
+    end
+    nil
+  end
+
+  def self.each_refund_fee_reversal(reversals, &block)
+    if reversals.respond_to?(:auto_paging_each)
+      reversals.auto_paging_each(&block)
+    else
+      Array(reversals).each(&block)
     end
   end
 
