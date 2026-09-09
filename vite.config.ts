@@ -48,6 +48,12 @@ function sanitizeChunkName(name: string) {
 }
 
 function manualChunks(id: string) {
+  // Vite's dynamic-import helper is pulled in by every chunk that lazy-loads, so whichever chunk
+  // rollup parks it in becomes a static dependency of all of them. Left unpinned it landed in
+  // vendor-pdf, giving all 117 Inertia entries a static edge to a 171KB chunk almost none of them
+  // use. Pin it to the vendor chunk every page already loads.
+  if (id.includes("vite/preload-helper")) return "vendor";
+
   if (!id.includes("node_modules")) return;
 
   // Rich-text editor (Tiptap + ProseMirror) — self-contained, ~97KB gzip

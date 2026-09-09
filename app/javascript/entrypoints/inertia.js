@@ -137,8 +137,11 @@ function assignLayout(page) {
   return page;
 }
 
-const pages = import.meta.glob("../pages/**/*.tsx");
-const jsxPages = import.meta.glob("../pages/**/*.jsx");
+// The negative pattern is load-bearing: colocated `*.test.tsx` files match `**/*.tsx`, and a glob
+// entry is a real module in the graph, so their vitest/chai/@testing-library imports were being
+// hoisted into the shared vendor chunk that every page — including buyer product pages — loads.
+const pages = import.meta.glob(["../pages/**/*.tsx", "!../pages/**/*.test.tsx"]);
+const jsxPages = import.meta.glob(["../pages/**/*.jsx", "!../pages/**/*.test.jsx"]);
 
 async function resolvePageComponent(name) {
   const tsxPath = `../pages/${name}.tsx`;
