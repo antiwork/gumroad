@@ -142,11 +142,15 @@ class Refund < ApplicationRecord
       return
     end
 
-    # Ineffective refunds must not start a new collection, but a debit already
-    # recorded on Stripe still needs settlement lookup before we clear pending.
-    if effective? || debited_stripe_transfer.present?
-      credit.fee_retention_refund = self
-      retain_fee { StripeChargeProcessor.debit_stripe_account_for_refund_fee(credit:) }
+    # Ineffective refunds must not start a new collection. They still look up a
+    # pinned reversal or grouped debit so a lost Stripe response is not abandoned.
+    credit.fee_retention_refund = self
+    lookup_failed = false
+    retain_fee do
+      StripeChargeProcessor.debit_stripe_account_for_refund_fee(credit:, collect: effective?)
+    rescue *FEE_RETENTION_ERRORS
+      lookup_failed = true
+      raise
     end
 
     purchase.with_lock do
@@ -154,7 +158,8 @@ class Refund < ApplicationRecord
       next unless fee_retention_pending
       collection_recorded = debited_stripe_transfer.present? && fee_retention_collected_cents.present?
       no_stripe_collection = credit.amount_cents.zero? || credit.merchant_account.holder_of_funds != HolderOfFunds::STRIPE
-      next unless collection_recorded || no_stripe_collection || !effective?
+      terminal_without_collection = !effective? && debited_stripe_transfer.blank? && !lookup_failed
+      next unless collection_recorded || no_stripe_collection || terminal_without_collection
 
       if fee_retention_collected_cents.present?
         holding_cents = BalanceTransaction.where(credit:).sum(:holding_amount_net_cents)

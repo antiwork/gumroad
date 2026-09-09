@@ -619,7 +619,7 @@ class StripeChargeProcessor
     raise ChargeProcessorUnavailableError.new("Stripe error while refunding a charge: #{e.message}", original_error: e)
   end
 
-  def self.debit_stripe_account_for_refund_fee(credit:)
+  def self.debit_stripe_account_for_refund_fee(credit:, collect: true)
     return unless credit.present?
     return if credit.amount_cents == 0
     return unless credit.merchant_account&.charge_processor_merchant_id.present?
@@ -627,6 +627,7 @@ class StripeChargeProcessor
     refund = credit.fee_retention_refund
     return if refund.blank?
     return recorded_refund_fee_collection(credit:) if refund.debited_stripe_transfer.present?
+    return adopt_existing_refund_fee_collection(credit:) unless collect
     # US Gumroad-managed accounts cannot reverse payout transfers; collect with the same
     # grouped account debit used when a non-US reversal is no longer supported.
     return debit_refund_fee_from_account(credit:) if credit.merchant_account.country == Compliance::Countries::USA.alpha2
@@ -734,6 +735,28 @@ class StripeChargeProcessor
 
   def self.refund_fee_retention_reversal_key(refund, transfer_id)
     "refund_fee_retention_reversal_#{refund.id}_#{transfer_id}"
+  end
+
+  def self.adopt_existing_refund_fee_collection(credit:)
+    refund = credit.fee_retention_refund
+    return recorded_refund_fee_collection(credit:) if refund.debited_stripe_transfer.present?
+
+    stripe_account_id = credit.merchant_account.charge_processor_merchant_id
+    grouped_debit = existing_refund_fee_grouped_debit(refund, stripe_account_id)
+    return adopt_refund_fee_grouped_debit!(refund, grouped_debit) if grouped_debit
+
+    pin = refund.fee_retention_source_transfer
+    return if pin.blank?
+
+    # Fail closed on retrieve errors: a lost successful reversal on this pin
+    # must be looked up, not treated as "no collection".
+    transfer = Stripe::Transfer.retrieve(pin)
+    transfer_reversal = existing_refund_fee_reversal(transfer.id, refund.id)
+    return if transfer_reversal.blank?
+
+    refund.debited_stripe_transfer = transfer_reversal.id
+    refund.save!
+    record_reversal_collected_cents!(refund, transfer_reversal, stripe_account_id)
   end
 
   def self.existing_refund_fee_grouped_debit(refund, stripe_account_id)

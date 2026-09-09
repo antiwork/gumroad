@@ -4262,6 +4262,29 @@ describe StripeChargeProcessor, :vcr do
         expect(described_class.debit_stripe_account_for_refund_fee(credit:)).to eq(1330)
         expect(refund.reload.fee_retention_collected_cents).to eq(1330)
       end
+
+      it "looks up existing collections without creating when collect is false" do
+        refund = create(:refund)
+        refund.fee_retention_source_transfer = "tr_cad_1"
+        refund.save!
+        credit = create(:credit, user: @cad_merchant_account.user, amount_cents: 1000, merchant_account_id: @cad_merchant_account.id, fee_retention_refund: refund)
+        transfer = double(id: "tr_cad_1", amount: 2000, amount_reversed: 1330, currency: "cad")
+        existing = double(id: "trr_existing", destination_payment_refund: "re_1", metadata: { "refund_id" => refund.id.to_s })
+        expect(Stripe::Transfer).to receive(:list)
+          .with({ transfer_group: "refund_fee_retention_#{refund.id}", limit: 1 },
+                { stripe_account: @cad_merchant_account.charge_processor_merchant_id })
+          .and_return([])
+        expect(Stripe::Transfer).to receive(:retrieve).with("tr_cad_1").and_return(transfer)
+        reversals = double("reversal_list")
+        expect(reversals).to receive(:auto_paging_each).and_yield(existing)
+        expect(Stripe::Transfer).to receive(:list_reversals).with("tr_cad_1", { limit: 100 }).and_return(reversals)
+        expect(Stripe::Transfer).not_to receive(:create)
+        expect(Stripe::Transfer).not_to receive(:create_reversal)
+        stub_reversal_follow_up_calls(transfer_reversal_id: "trr_existing", net: -1330)
+
+        expect(described_class.debit_stripe_account_for_refund_fee(credit:, collect: false)).to eq(1330)
+        expect(refund.reload.debited_stripe_transfer).to eq("trr_existing")
+      end
     end
   end
 

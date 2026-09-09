@@ -143,6 +143,43 @@ RSpec.describe RecoverPendingRefundFeeRetentionJob, :vcr do
     expect(refund.debited_stripe_transfer).to be_nil
   end
 
+  it "keeps an ineffective refund pending when settlement lookup fails" do
+    refund.status = "failed"
+    refund.balance_reversed_on_failure = true
+    refund.debited_stripe_transfer = "trr_1"
+    refund.fee_retention_source_transfer = "tr_recovery_candidate"
+    refund.save!
+    error = Stripe::APIConnectionError.new("timeout")
+    expect(Stripe::Transfer).to receive(:retrieve_reversal).with("tr_recovery_candidate", "trr_1").and_raise(error)
+    expect(Stripe::Transfer).not_to receive(:create)
+    expect(Stripe::Transfer).not_to receive(:create_reversal)
+    expect(ErrorNotifier).to receive(:notify).with(error, context: { refund_id: refund.id, purchase_id: purchase.id })
+
+    described_class.new.perform
+
+    expect(refund.reload.fee_retention_pending).to be(true)
+    expect(refund.fee_retention_error["message"]).to eq(error.message)
+    expect(refund.debited_stripe_transfer).to eq("trr_1")
+    expect(refund.fee_retention_collected_cents).to be_nil
+  end
+
+  it "adopts an unrecorded debit for an ineffective refund without collecting again" do
+    refund.status = "failed"
+    refund.balance_reversed_on_failure = true
+    refund.save!
+    expect(Stripe::Transfer).to receive(:list)
+      .with({ transfer_group:, limit: 1 }, { stripe_account: merchant_account.charge_processor_merchant_id })
+      .and_return([double(id: "tr_existing_fee", amount: 850)])
+    expect(Stripe::Transfer).not_to receive(:create)
+    expect(Stripe::Transfer).not_to receive(:create_reversal)
+
+    described_class.new.perform
+
+    expect(refund.reload.fee_retention_pending).to be_falsey
+    expect(refund.debited_stripe_transfer).to eq("tr_existing_fee")
+    expect(BalanceTransaction.where(credit:).sum(:holding_amount_net_cents)).to eq(-850)
+  end
+
   it "isolates an unhandled recovery error so later refunds still run" do
     other_purchase = create(:purchase, merchant_account:, seller: merchant_account.user, link: create(:product, user: merchant_account.user))
     other_refund = create(:refund, purchase: other_purchase, fee_retention_pending: true)
