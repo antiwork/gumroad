@@ -326,6 +326,21 @@ describe Credit do
       expect(credit.fee_retention_refund).to eq(refund)
     end
 
+    context "US Gumroad-managed account" do
+      let!(:merchant_account) { create(:merchant_account, user: creator, country: "US", currency: "usd") }
+
+      it "does not queue Stripe collection" do
+        allow(StripeChargeProcessor).to receive(:debit_stripe_account_for_refund_fee).and_call_original
+        expect(Stripe::Transfer).not_to receive(:list)
+        expect(Stripe::Transfer).not_to receive(:create)
+
+        credit = Credit.create_for_refund_fee_retention!(refund:)
+
+        expect(credit.amount_cents).to eq(-33)
+        expect(refund.reload.fee_retention_pending).not_to eq(true)
+      end
+    end
+
     it "updates the unpaid_balance_cents for the seller" do
       expect(creator.unpaid_balance_cents).to eq(0)
 

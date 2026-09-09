@@ -353,19 +353,21 @@ class Credit < ApplicationRecord
     reversed_amount_cents_in_holding_currency = credit.usd_cents_to_currency(credit.merchant_account.currency, credit.amount_cents)
 
     if credit.merchant_account.holder_of_funds == HolderOfFunds::STRIPE
-      refund.fee_retention_pending = credit.amount_cents != 0
+      stripe_fee_collection_required = credit.amount_cents != 0 &&
+        credit.merchant_account.country != Compliance::Countries::USA.alpha2
+      refund.fee_retention_pending = stripe_fee_collection_required
       refund.save!
-      # Keep the credit and its balance transaction together even if Stripe rejects collection.
-      # US and non-US both go through debit_stripe_account_for_refund_fee so a lost
-      # Stripe response is discoverable by the same transfer_group / reversal identity.
-      net_amount_on_stripe_in_holding_currency = refund.retain_fee do
-        StripeChargeProcessor.debit_stripe_account_for_refund_fee(credit:)
-      end
-      reversed_amount_cents_in_holding_currency = -net_amount_on_stripe_in_holding_currency if net_amount_on_stripe_in_holding_currency.present?
-      if refund.debited_stripe_transfer.present? && refund.fee_retention_collected_cents.present?
-        refund.fee_retention_pending = false
-        refund.fee_retention_error = nil
-        refund.save!
+      if stripe_fee_collection_required
+        # Keep the credit and its balance transaction together even if Stripe rejects collection.
+        net_amount_on_stripe_in_holding_currency = refund.retain_fee do
+          StripeChargeProcessor.debit_stripe_account_for_refund_fee(credit:)
+        end
+        reversed_amount_cents_in_holding_currency = -net_amount_on_stripe_in_holding_currency if net_amount_on_stripe_in_holding_currency.present?
+        if refund.debited_stripe_transfer.present? && refund.fee_retention_collected_cents.present?
+          refund.fee_retention_pending = false
+          refund.fee_retention_error = nil
+          refund.save!
+        end
       end
     end
 

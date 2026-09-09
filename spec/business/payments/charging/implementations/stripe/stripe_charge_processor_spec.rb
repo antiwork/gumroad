@@ -3943,6 +3943,19 @@ describe StripeChargeProcessor, :vcr do
       @merchant_account = create(:merchant_account, charge_processor_merchant_id: "acct_1MdawPS4gcql7bLm", country: "AE")
     end
 
+    it "does not collect via account debit for US accounts" do
+      merchant_account = create(:merchant_account, country: "US", currency: "usd", charge_processor_merchant_id: "acct_us_fee")
+      refund = create(:refund)
+      refund.fee_retention_pending = true
+      refund.save!
+      credit = create(:credit, user: merchant_account.user, amount_cents: -1000, merchant_account:, fee_retention_refund: refund)
+
+      expect(Stripe::Transfer).not_to receive(:list)
+      expect(Stripe::Transfer).not_to receive(:create)
+
+      expect(described_class.debit_stripe_account_for_refund_fee(credit:)).to be_nil
+    end
+
     it "reverses an internal transfer made to the stripe connect account if present" do
       create(:payment_completed, user: @merchant_account.user,
                                  stripe_connect_account_id: @merchant_account.charge_processor_merchant_id,

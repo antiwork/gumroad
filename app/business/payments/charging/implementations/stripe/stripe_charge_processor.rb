@@ -627,10 +627,8 @@ class StripeChargeProcessor
     refund = credit.fee_retention_refund
     return if refund.blank?
     return recorded_refund_fee_collection(credit:) if refund.debited_stripe_transfer.present?
-    if credit.merchant_account.country == Compliance::Countries::USA.alpha2
-      return debit_refund_fee_from_account(credit:) if refund.fee_retention_pending
-      return
-    end
+    # US Gumroad-managed accounts keep fee retention on the ledger; Stripe has no matching reversal.
+    return if credit.merchant_account.country == Compliance::Countries::USA.alpha2
 
     stripe_account_id = credit.merchant_account.charge_processor_merchant_id
     usd_amount_cents = credit.amount_cents.abs
