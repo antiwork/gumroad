@@ -53,9 +53,9 @@ class SocialConnectFunnelReport
       @_events ||= Event.where(event_name: SocialConnectFunnel::STAGES.map { SocialConnectFunnel.event_name(_1) })
                         .where("events.created_at >= ?", @since)
                         .pluck(:user_id, :event_name, :parent_referrer, :view_url, :created_at)
-                        .map { |user_id, event_name, provider, surface, created_at|
+                        .map do |user_id, event_name, provider, surface, created_at|
                           { user_id:, event_name:, provider:, surface:, created_at: }
-                        }
+                        end
     end
 
     def stage_name(stage)
@@ -73,39 +73,60 @@ class SocialConnectFunnelReport
       rows.group_by { [_1[:user_id], _1[:provider]] }.transform_values { |group| group.min_by { _1[:created_at] } }
     end
 
+    def grouped_by_user_provider(rows)
+      rows.group_by { [_1[:user_id], _1[:provider]] }
+    end
+
+    def later_event?(grouped, earlier)
+      (grouped[[earlier[:user_id], earlier[:provider]]] || []).any? { _1[:created_at] >= earlier[:created_at] }
+    end
+
+    def first_later(rows, at:)
+      rows.select { _1[:created_at] >= at }.min_by { _1[:created_at] }
+    end
+
     def provider_metrics(provider)
-      offered = first_by_user_provider(for_stage("offered", provider:))
-      attempted = first_by_user_provider(for_stage("attempted", provider:))
-      connected = first_by_user_provider(for_stage("connected", provider:))
-      failed = first_by_user_provider(for_stage("failed", provider:))
-      skipped = offered.keys - attempted.keys
-      attempted_without_connect = attempted.keys - connected.keys
+      offered_rows = for_stage("offered", provider:)
+      attempted_rows = for_stage("attempted", provider:)
+      connected_rows = for_stage("connected", provider:)
+      failed_rows = for_stage("failed", provider:)
+      offered = first_by_user_provider(offered_rows)
+      attempted = first_by_user_provider(attempted_rows)
+      connected = first_by_user_provider(connected_rows)
+      failed = first_by_user_provider(failed_rows)
+      attempted_by_key = grouped_by_user_provider(attempted_rows)
+      connected_by_key = grouped_by_user_provider(connected_rows)
+      skipped = offered.values.count { |offer| !later_event?(attempted_by_key, offer) }
+      attempted_without_connect = attempted.values.count { |attempt| !later_event?(connected_by_key, attempt) }
 
       {
         offered: offered.size,
         attempted: attempted.size,
         connected: connected.size,
         failed: failed.size,
-        skipped_unattempted: skipped.size,
-        abandonment_rate: rate(skipped.size, offered.size),
-        failure_rate: rate(attempted_without_connect.size, attempted.size),
+        skipped_unattempted: skipped,
+        abandonment_rate: rate(skipped, offered.size),
+        failure_rate: rate(attempted_without_connect, attempted.size),
       }
     end
 
     def held_timing_metrics
       held_offers = for_stage("offered").select { _1[:surface] == HELD_SURFACE }
       first_offer = held_offers.group_by { _1[:user_id] }.transform_values { |group| group.min_by { _1[:created_at] } }
-      connected_ids = for_stage("connected").to_set { _1[:user_id] }
-      reviews = for_stage("reviewed").group_by { _1[:user_id] }.transform_values { |group| group.min_by { _1[:created_at] } }
-      payouts = first_completed_payouts_at(first_offer.keys)
+      connected_by_user = for_stage("connected").group_by { _1[:user_id] }
+      reviews_by_user = for_stage("reviewed").group_by { _1[:user_id] }
+      payouts = first_completed_payouts_after(first_offer)
+      connected_ids = first_offer.each_with_object(Set.new) do |(user_id, offer), set|
+        set << user_id if first_later(connected_by_user[user_id] || [], at: offer[:created_at])
+      end
 
       {
-        connected: timing_bucket(first_offer, reviews, payouts, connected: true, connected_ids:),
-        unconnected: timing_bucket(first_offer, reviews, payouts, connected: false, connected_ids:),
+        connected: timing_bucket(first_offer, reviews_by_user, payouts, connected: true, connected_ids:),
+        unconnected: timing_bucket(first_offer, reviews_by_user, payouts, connected: false, connected_ids:),
       }
     end
 
-    def timing_bucket(first_offer, reviews, payouts, connected:, connected_ids:)
+    def timing_bucket(first_offer, reviews_by_user, payouts, connected:, connected_ids:)
       users = first_offer.select { |user_id, _| connected_ids.include?(user_id) == connected }
       review_hours = []
       payout_hours = []
@@ -113,14 +134,14 @@ class SocialConnectFunnelReport
       still_unpaid = 0
 
       users.each do |user_id, offer|
-        review = reviews[user_id]
+        review = first_later(reviews_by_user[user_id] || [], at: offer[:created_at])
         if review
           review_hours << hours_between(offer[:created_at], review[:created_at])
         else
           still_unreviewed += 1
         end
         payout_at = payouts[user_id]
-        if payout_at && payout_at >= offer[:created_at]
+        if payout_at
           payout_hours << hours_between(offer[:created_at], payout_at)
         else
           still_unpaid += 1
@@ -136,31 +157,57 @@ class SocialConnectFunnelReport
       }
     end
 
-    def first_completed_payouts_at(user_ids)
+    def first_completed_payouts_after(offers_by_user)
+      user_ids = offers_by_user.keys
       return {} if user_ids.empty?
 
+      earliest_offer_at = offers_by_user.values.map { _1[:created_at] }.min
       Payment.where(user_id: user_ids, state: Payment::COMPLETED)
-             .group(:user_id)
-             .minimum(:created_at)
+             .where("payments.created_at >= ?", earliest_offer_at)
+             .pluck(:user_id, :created_at)
+             .each_with_object({}) do |(user_id, created_at), hash|
+               offer_at = offers_by_user.dig(user_id, :created_at)
+               next if offer_at.blank? || created_at < offer_at
+
+               current = hash[user_id]
+               hash[user_id] = created_at if current.nil? || created_at < current
+             end
     end
 
     def adverse_outcomes
-      connected_ids = for_stage("connected").map { _1[:user_id] }.uniq
-      connected_at = for_stage("connected").group_by { _1[:user_id] }.transform_values { |group| group.min_by { _1[:created_at] }[:created_at] }
+      connected_rows = for_stage("connected")
+      connected_at = connected_rows.group_by { _1[:user_id] }.transform_values { |group| group.min_by { _1[:created_at] }[:created_at] }
+      connected_ids = connected_at.keys
       return { connected_users: 0, later_suspensions: 0, later_chargeback_sellers: 0 } if connected_ids.empty?
-
-      suspended = User.where(id: connected_ids, user_risk_state: %w[suspended_for_fraud suspended_for_tos_violation]).count
-      chargeback_seller_ids = Purchase.chargedback.where(seller_id: connected_ids).distinct.pluck(:seller_id)
-      later_chargebacks = chargeback_seller_ids.count do |seller_id|
-        earliest = Purchase.chargedback.where(seller_id:).minimum(:chargeback_date)
-        earliest.present? && earliest >= connected_at[seller_id]
-      end
 
       {
         connected_users: connected_ids.size,
-        later_suspensions: suspended,
-        later_chargeback_sellers: later_chargebacks,
+        later_suspensions: later_event_user_count(connected_at, later_suspension_times(connected_ids)),
+        later_chargeback_sellers: later_event_user_count(connected_at, later_chargeback_times(connected_ids, connected_at.values.min)),
       }
+    end
+
+    def later_suspension_times(connected_ids)
+      Comment.where(
+        commentable_type: "User",
+        commentable_id: connected_ids,
+        comment_type: Comment::COMMENT_TYPE_SUSPENDED
+      ).pluck(:commentable_id, :created_at)
+    end
+
+    def later_chargeback_times(connected_ids, earliest_connected_at)
+      Purchase.chargedback.where(seller_id: connected_ids)
+              .where("purchases.chargeback_date >= ?", earliest_connected_at)
+              .pluck(:seller_id, :chargeback_date)
+    end
+
+    def later_event_user_count(connected_at, rows)
+      rows.each_with_object(Set.new) do |(user_id, at), set|
+        next if at.blank?
+
+        connected = connected_at[user_id]
+        set << user_id if connected.present? && at >= connected
+      end.size
     end
 
     def hours_between(from, to)
