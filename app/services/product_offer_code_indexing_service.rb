@@ -6,10 +6,11 @@ class ProductOfferCodeIndexingService
   # rejections are reported and skipped so the cursor can advance.
   # 429 arrives as a generic ServerError in elasticsearch-transport 7.x.
   RETRYABLE_STATUS_CODES = [408, 409, 429, 500, 502, 503, 504].freeze
+  # Bare parsing_exception is also used for malformed requests / batch-wide
+  # failures; only document-specific subtypes may be skipped.
   DOCUMENT_LEVEL_400_MARKERS = %w[
     mapper_parsing_exception
     document_parsing_exception
-    parsing_exception
   ].freeze
 
   def initialize(products)
