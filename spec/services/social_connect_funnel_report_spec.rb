@@ -7,9 +7,9 @@ describe SocialConnectFunnelReport do
   let(:skipped_seller) { create(:user) }
 
   def record(user, stage, provider, surface, at:)
-    travel_to(at) do
-      SocialConnectFunnel.record!(user:, stage:, provider:, surface:)
-    end
+    event = SocialConnectFunnel.record!(user:, stage:, provider:, surface:)
+    event.update_column(:created_at, at)
+    event
   end
 
   it "reports failure rate, abandonment, and held timing without coercing missing intervals to zero" do
