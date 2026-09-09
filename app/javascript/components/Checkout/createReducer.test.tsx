@@ -235,8 +235,7 @@ describe("createReducer surcharge refetches", () => {
     await act(() => vi.advanceTimersByTimeAsync(60000));
     expect(requests).toHaveLength(2);
     act(() => result.current[1]({ type: "refresh-expired-buyer-currency-quote" }));
-    expect(dismissAlert).toHaveBeenCalled();
-    dismissAlert.mockClear();
+    expect(dismissAlert).not.toHaveBeenCalled();
     await act(() => vi.advanceTimersByTimeAsync(300));
     expect(requests).toHaveLength(3);
     await act(async () =>
@@ -249,7 +248,26 @@ describe("createReducer surcharge refetches", () => {
     expect(result.current[0].status.type).toBe("input");
     expect(result.current[0].resumeSubmitAfterCheckoutPayment).toBe(false);
     expect(result.current[0].surcharges.type).toBe("loaded");
-    // Dismiss runs when Retry starts (error → pending), not on every successful quote load.
+    expect(dismissAlert).not.toHaveBeenCalled();
+  });
+
+  it("does not dismiss unrelated alerts when refreshed cart data replaces a surcharge error", async () => {
+    const requests = stubSurchargeRequests();
+    const { result } = renderCheckout();
+    await act(() => vi.advanceTimersByTimeAsync(300));
+    const { ResponseError } = await import("$app/utils/request");
+    await act(async () => requests[0]?.reject(new ResponseError()));
+    expect(result.current[0].surcharges.type).toBe("error");
+    expect(showAlert).toHaveBeenCalledWith("Sorry, something went wrong. Please try again.", "error");
+    showAlert("This discount code is invalid.", "error");
+    act(() =>
+      result.current[1]({
+        type: "update-products",
+        products: result.current[0].products,
+        surcharges: surchargesResponse(),
+      }),
+    );
+    expect(result.current[0].surcharges.type).toBe("loaded");
     expect(dismissAlert).not.toHaveBeenCalled();
   });
 
