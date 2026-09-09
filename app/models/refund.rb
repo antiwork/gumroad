@@ -85,6 +85,7 @@ class Refund < ApplicationRecord
   attr_json_data_accessor :fee_retention_error
   attr_json_data_accessor :fee_retention_collected_cents
   attr_json_data_accessor :fee_retention_source_transfer
+  attr_json_data_accessor :fee_retention_attempts
 
   attr_json_data_accessor :presentment_currency
   attr_json_data_accessor :presentment_amount_cents
@@ -113,6 +114,12 @@ class Refund < ApplicationRecord
   FEE_RETENTION_ERRORS = [Stripe::InvalidRequestError, Stripe::APIError, Stripe::APIConnectionError,
                           Stripe::AuthenticationError, Stripe::PermissionError, Stripe::RateLimitError,
                           Stripe::IdempotencyError].freeze
+
+  # One week of hourly RecoverPendingRefundFeeRetentionJob runs: a Stripe-held account
+  # with no reversible transfer yet receives its next payout transfer inside this window.
+  # At the cap the row stays fee_retention_pending for visibility but leaves the job's
+  # candidate set (fee_retention_recoverable).
+  MAX_FEE_RETENTION_ATTEMPTS = 168
 
   scope :pending_fee_retention, -> { where(fee_retention_recoverable: true) }
 
@@ -154,13 +161,17 @@ class Refund < ApplicationRecord
       raise
     end
 
+    attempts_exhausted = false
     purchase.with_lock do
       reload.lock!
       next unless fee_retention_pending
       collection_recorded = debited_stripe_transfer.present? && fee_retention_collected_cents.present?
       no_stripe_collection = credit.amount_cents.zero? || credit.merchant_account.holder_of_funds != HolderOfFunds::STRIPE
       terminal_without_collection = terminally_failed? && debited_stripe_transfer.blank? && !lookup_failed
-      next unless collection_recorded || no_stripe_collection || terminal_without_collection
+      unless collection_recorded || no_stripe_collection || terminal_without_collection
+        attempts_exhausted = record_fee_retention_attempt!
+        next
+      end
 
       if fee_retention_collected_cents.present?
         holding_cents = BalanceTransaction.where(credit:).sum(:holding_amount_net_cents)
@@ -176,6 +187,15 @@ class Refund < ApplicationRecord
       self.fee_retention_error = nil
       save!
     end
+    return unless attempts_exhausted
+
+    message = "Refund fee retention stopped retrying after #{MAX_FEE_RETENTION_ATTEMPTS} attempts"
+    Rails.logger.error("#{message} (refund_id=#{id})")
+    ErrorNotifier.notify(message, context: { refund_id: id, purchase_id:, fee_retention_error: })
+  end
+
+  def fee_retention_attempts_exhausted?
+    fee_retention_attempts.to_i >= MAX_FEE_RETENTION_ATTEMPTS
   end
 
   # In-memory mirror of the .effective scope, for callers working with preloaded
@@ -206,7 +226,14 @@ class Refund < ApplicationRecord
 
   private
     def sync_fee_retention_recoverable
-      self.fee_retention_recoverable = fee_retention_pending == true
+      self.fee_retention_recoverable = fee_retention_pending == true && !fee_retention_attempts_exhausted?
+    end
+
+    # True only on the attempt that reaches the cap, so the caller reports it once.
+    def record_fee_retention_attempt!
+      self.fee_retention_attempts = fee_retention_attempts.to_i + 1
+      save!
+      fee_retention_attempts == MAX_FEE_RETENTION_ATTEMPTS
     end
 
     def assign_product

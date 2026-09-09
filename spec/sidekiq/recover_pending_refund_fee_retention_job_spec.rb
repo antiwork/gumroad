@@ -88,7 +88,43 @@ RSpec.describe RecoverPendingRefundFeeRetentionJob, :vcr do
     expect { described_class.new.perform }.not_to change(BalanceTransaction, :count)
 
     expect(refund.reload.fee_retention_pending).to be(true)
+    expect(refund.fee_retention_recoverable).to be(true)
+    expect(refund.fee_retention_attempts).to eq(1)
     expect(refund.fee_retention_error["message"]).to eq(error.message)
+  end
+
+  it "counts an attempt when Stripe has no transfer to collect from" do
+    allow(Stripe::Transfer).to receive(:retrieve).with("tr_recovery_candidate")
+      .and_return(double(id: "tr_recovery_candidate", amount: 5000, amount_reversed: 5000, currency: "usd"))
+    allow(Stripe::Transfer).to receive(:list)
+      .with(hash_including(destination: merchant_account.charge_processor_merchant_id)).and_return([])
+    expect(Stripe::Transfer).not_to receive(:create)
+    expect(ErrorNotifier).not_to receive(:notify)
+
+    expect { described_class.new.perform }.not_to change(BalanceTransaction, :count)
+
+    expect(refund.reload.fee_retention_pending).to be(true)
+    expect(refund.fee_retention_recoverable).to be(true)
+    expect(refund.fee_retention_attempts).to eq(1)
+  end
+
+  it "stops retrying at the attempt cap, reports once, and keeps the pending marker" do
+    refund.update!(fee_retention_attempts: Refund::MAX_FEE_RETENTION_ATTEMPTS - 1)
+    error = Stripe::InvalidRequestError.new("Account debit is not permitted", nil)
+    expect(Stripe::Transfer).to receive(:create).once.and_raise(error)
+    expect(ErrorNotifier).to receive(:notify).with(error, context: { refund_id: refund.id, purchase_id: purchase.id }).once
+    expect(ErrorNotifier).to receive(:notify)
+      .with("Refund fee retention stopped retrying after #{Refund::MAX_FEE_RETENTION_ATTEMPTS} attempts",
+            context: hash_including(refund_id: refund.id, purchase_id: purchase.id)).once
+
+    described_class.new.perform
+    described_class.new.perform
+
+    refund.reload
+    expect(refund.fee_retention_attempts).to eq(Refund::MAX_FEE_RETENTION_ATTEMPTS)
+    expect(refund.fee_retention_pending).to be(true)
+    expect(refund.fee_retention_recoverable).to be(false)
+    expect(Refund.pending_fee_retention).not_to include(refund)
   end
 
   it "clears a pending marker when the debit was already recorded" do
