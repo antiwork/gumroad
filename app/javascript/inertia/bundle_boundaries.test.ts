@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+
 import { manualChunks } from "../../../config/vite/manual-chunks";
 
 // No visible failure if these regress — the app still works, just ships extra bytes.
@@ -9,8 +10,8 @@ describe("Inertia page bundle boundaries", () => {
     expect(globs).not.toHaveLength(0);
     for (const args of globs) expect(args).toMatch(/!\.\.\/pages\/\*\*\/\*\.test\./u);
 
-    const included = Object.keys(import.meta.glob(["../pages/**/*.tsx", "!../pages/**/*.test.tsx"])) as string[];
-    const unfiltered = Object.keys(import.meta.glob("../pages/**/*.tsx")) as string[];
+    const included = Object.keys(import.meta.glob(["../pages/**/*.tsx", "!../pages/**/*.test.tsx"])).map(String);
+    const unfiltered = Object.keys(import.meta.glob("../pages/**/*.tsx")).map(String);
     expect(unfiltered.some((key) => key.endsWith(".test.tsx"))).toBe(true);
     expect(included.some((key) => key.includes(".test."))).toBe(false);
   });
