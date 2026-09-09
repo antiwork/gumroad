@@ -746,5 +746,17 @@ describe User::OmniauthCallbacksController do
       expect(response).to redirect_to settings_social_connections_path
       expect(flash[:alert]).to eq "Couldn't connect Instagram. Please try again."
     end
+
+    it "returns a cancelled X connection from Settings to Social connections" do
+      user = create(:user)
+      allow(controller).to receive(:logged_in_user).and_return(user)
+      request.env["omniauth.error.strategy"] = instance_double(OmniAuth::Strategies::Twitter, name: "twitter")
+      request.env["omniauth.params"] = { "state" => "link_twitter_account" }
+
+      get :failure, params: { error: "access_denied" }
+
+      expect(response).to redirect_to settings_social_connections_path
+      expect(flash[:alert]).to eq "Couldn't connect X. Please try again."
+    end
   end
 end
