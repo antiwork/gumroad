@@ -2138,6 +2138,7 @@ describe Api::Internal::Admin::UsersController do
             post_count: verification.post_count,
             last_posted_at: verification.last_posted_at.iso8601,
             last_verified_at: verification.last_verified_at.iso8601,
+            superseded_at: nil,
             shared_identity_user_count: 1
           }
         ]
@@ -2159,6 +2160,25 @@ describe Api::Internal::Admin::UsersController do
 
       expect(response).to have_http_status(:ok)
       expect(response.parsed_body["social_connections"].sole).to include("uid" => "12345", "currently_linked" => false)
+    end
+
+    it "lists a superseded twitter identity after the current one, still counting its shared identity" do
+      user = create(:user, email: "seller@example.com", twitter_user_id: "new-uid")
+      superseded = create(:social_connect_verification, user:, platform: "twitter", uid: "old-uid", superseded_at: 1.day.ago, last_verified_at: 1.hour.ago)
+      create(:social_connect_verification, user:, platform: "twitter", uid: "new-uid", last_verified_at: 2.days.ago)
+      create(:social_connect_verification, platform: "twitter", uid: "old-uid")
+
+      # Batched lookup — do not call the per-row shared_identity_user_ids helper.
+      expect_any_instance_of(SocialConnectVerification).not_to receive(:shared_identity_user_ids)
+
+      get :social_connections, params: { email: user.email }
+
+      expect(response).to have_http_status(:ok)
+      connections = response.parsed_body["social_connections"].map { _1.slice("uid", "currently_linked", "superseded_at", "shared_identity_user_count") }
+      expect(connections).to eq([
+                                  { "uid" => "new-uid", "currently_linked" => true, "superseded_at" => nil, "shared_identity_user_count" => 0 },
+                                  { "uid" => "old-uid", "currently_linked" => false, "superseded_at" => superseded.superseded_at.iso8601, "shared_identity_user_count" => 1 },
+                                ])
     end
 
     it "reports currently_linked false when the user is linked to a different twitter account than the one verified" do

@@ -7,7 +7,7 @@ class InstagramCallbacksController < ApplicationController
     user_id = signed_request_user_id
     return head :bad_request if user_id.blank?
 
-    delete_instagram_data(user_id)
+    unlink_instagram_identity(user_id)
     head :ok
   end
 
@@ -40,6 +40,14 @@ class InstagramCallbacksController < ApplicationController
       @_signed_request ||= InstagramSignedRequest.new
     end
 
+    # Deauthorize only ends the live link; the verified identity stays as
+    # shared-identity veto evidence, like an in-app disconnect.
+    def unlink_instagram_identity(user_id)
+      SocialConnectVerification.current.where(platform: "instagram", uid: user_id).update_all(superseded_at: Time.current)
+      UserInstagramIdentity.where(instagram_user_id: user_id).delete_all
+    end
+
+    # Meta's data-deletion request means erase, not retain.
     def delete_instagram_data(user_id)
       SocialConnectVerification.where(platform: "instagram", uid: user_id).delete_all
       UserInstagramIdentity.where(instagram_user_id: user_id).delete_all

@@ -354,6 +354,40 @@ describe Charge::Chargeable do
         expect(chargeable.unbundled_purchases.second.link).to eq(bundled_product_two.product)
       end
     end
+
+    context "when the bundle purchase has no live member purchases" do
+      let(:product) do
+        create(:product, :bundle, name: "Memberless Bundle", user: seller).tap do |bundle|
+          bundle.bundle_products.each(&:mark_deleted!)
+        end
+      end
+
+      before do
+        chargeable.create_artifacts_and_send_receipt!
+      end
+
+      it "keeps the bundle purchase itself instead of dropping it" do
+        expect(chargeable.unbundled_purchases).to eq([chargeable])
+      end
+
+      it "keeps a test-successful parent for standalone and charge receipts" do
+        chargeable.update!(purchase_state: "test_successful")
+        charge = create(:charge, seller:, purchases: [chargeable])
+
+        expect(charge.successful_purchases).to include(chargeable)
+        expect(chargeable.product_purchases).to be_empty
+        expect(chargeable.unbundled_purchases).to eq([chargeable])
+        expect(charge.unbundled_purchases).to eq([chargeable])
+      end
+
+      it "does not invent a receipt item for a failed standalone bundle" do
+        chargeable.update!(purchase_state: "failed")
+
+        expect(chargeable.successful_purchases).to include(chargeable)
+        expect(chargeable.product_purchases).to be_empty
+        expect(chargeable.unbundled_purchases).to be_empty
+      end
+    end
   end
 
   describe "#is_recurring_subscription_charge" do

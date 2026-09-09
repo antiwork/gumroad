@@ -2137,7 +2137,7 @@ class LinksController < ApplicationController
             #{structured_data_tag}
             <meta name="csrf-token" content="#{ERB::Util.h(form_authenticity_token)}">
             #{custom_html_analytics_head(product)}
-            <style>html,body{margin:0;padding:0;height:100%;overflow:hidden}iframe{display:block;width:100%;height:100%;border:0}.seo-summary{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}</style>
+            <style>html,body{margin:0;padding:0;height:100%;overflow:hidden}iframe{display:block;width:100%;height:100%;border:0}.seo-summary{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}#{custom_html_wrapper_theme_background_css(product.user)}</style>
           </head>
           <body>
             <div class="seo-summary">

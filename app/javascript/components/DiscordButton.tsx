@@ -11,11 +11,13 @@ import { showAlert } from "$app/components/server-components/Alert";
 
 export const DiscordButton = ({
   purchaseId,
+  token,
   connected,
   redirectSettings,
   customState,
 }: {
   purchaseId: string;
+  token?: string | null;
   connected: boolean;
   redirectSettings?: { host: string; protocol: string };
   customState?: string;
@@ -39,7 +41,7 @@ export const DiscordButton = ({
     startOauthRedirectChecker({
       oauthPopup,
       onSuccess: async (code) => {
-        const response = await joinServer(code, purchaseId);
+        const response = await joinServer(code, purchaseId, token);
         if (response.ok) {
           showAlert(`You've been added to the Discord server #${response.serverName}!`, "success");
           setDiscordConnected(true);
@@ -60,7 +62,7 @@ export const DiscordButton = ({
     if (!discordConnected) return;
     setLoading(true);
 
-    const response = await leaveServer(purchaseId);
+    const response = await leaveServer(purchaseId, token);
     if (response.ok) {
       showAlert(`You've left the Discord server #${response.serverName}.`, "success");
       setDiscordConnected(false);

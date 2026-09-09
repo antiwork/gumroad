@@ -124,6 +124,16 @@ describe CommentPresenter do
       end
     end
 
+    context "when comment is associated with a purchase" do
+      let(:purchase) { create(:purchase, link: product) }
+      let(:comment) { create(:comment, commentable: product_post, author: commenter, purchase:) }
+      let(:pundit_user) { SellerContext.new(user: commenter, seller: commenter) }
+
+      it "does not expose the purchase external id" do
+        expect(presenter.comment_component_props[:purchase_id]).to be_nil
+      end
+    end
+
     context "when comment author has an avatar picture" do
       let(:commenter) { create(:user, :with_avatar) }
       let(:pundit_user) { SellerContext.new(user: commenter, seller: commenter) }

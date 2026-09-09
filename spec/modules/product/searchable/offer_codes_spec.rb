@@ -50,10 +50,11 @@ describe "Product::Searchable - Offer codes filtering" do
     it "stops matching a product removed from the discount" do
       args = Link.search_options(offer_code: @offer_code.code)
       expect(Link.__elasticsearch__.search(args).records.to_a).to include(@product_with_offer)
-      SendToElasticsearchWorker.clear
+      ReindexSellerOfferCodesJob.clear
 
       @offer_code.reload.update!(products: [])
-      SendToElasticsearchWorker.drain
+      expect(ReindexSellerOfferCodesJob).to have_enqueued_sidekiq_job(@creator.id)
+      ReindexSellerOfferCodesJob.new.perform(@creator.id)
 
       expect(@product_with_offer.reload.product_and_universal_offer_codes).not_to include(@offer_code)
       expect(Link.__elasticsearch__.search(args).records.to_a).not_to include(@product_with_offer)

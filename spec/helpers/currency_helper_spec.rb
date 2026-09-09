@@ -30,8 +30,27 @@ describe CurrencyHelper do
       expect(symbol_for(:gbp)).to eq "£"
     end
 
-    it "falls back to USD for unknown currency types" do
-      expect(symbol_for(:xyz)).to eq "$"
+    it "uses the registry symbol for historical currencies" do
+      expect(symbol_for(:dkk)).to eq "kr."
+      expect(symbol_for("dkk")).to eq "kr."
+      expect(symbol_for(:aud)).to eq "A$"
+    end
+
+    it "soft-fails invalid currencies with the ISO code instead of relabeling them as USD" do
+      expect(Rails.logger).to receive(:warn).with(/unknown currency :xyz/)
+      symbol = symbol_for(:xyz)
+      expect(symbol).to eq("XYZ")
+      expect(symbol).not_to eq("$")
+    end
+
+    it "honors uppercase pricing-choice keys" do
+      expect(symbol_for("AUD")).to eq "A$"
+    end
+
+    it "soft-fails blank currencies without raising" do
+      expect(Rails.logger).to receive(:warn).with(/unknown currency/).twice
+      expect(symbol_for(nil)).to eq ""
+      expect(symbol_for("")).to eq ""
     end
   end
 
@@ -99,6 +118,7 @@ describe CurrencyHelper do
       expect(format_just_price_in_cents(799, "aud")).to eq("A$7.99")
       expect(format_just_price_in_cents(799, "gbp")).to eq("£7.99")
       expect(format_just_price_in_cents(799, "jpy")).to eq("¥799")
+      expect(format_just_price_in_cents(1250, "dkk")).to eq("12.50 kr.")
     end
   end
 

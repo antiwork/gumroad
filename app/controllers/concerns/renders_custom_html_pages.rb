@@ -774,6 +774,16 @@ module RendersCustomHtmlPages
       HTML
     end
 
+    # The iframe paints after the wrapper, so this is the first color the visitor
+    # sees. Paint html only so the bridge's documentElement inline style can
+    # overwrite it; body/iframe rules would sit above that.
+    def custom_html_wrapper_theme_background_css(seller)
+      color = seller&.seller_profile&.background_color
+      return "" unless HexColorValidator.safe_for_css?(color)
+
+      "html{background:#{color}}"
+    end
+
     # Resolve the untrusted report in this document before painting the wrapper
     # and theme-color. A detached probe would accept unresolved var()/keywords;
     # backgroundColor cannot fetch a URL.

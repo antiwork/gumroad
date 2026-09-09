@@ -28,11 +28,22 @@ class Checkout::DirectListedAmountToken
       return nil if token.blank?
 
       payload = verifier.verified(token.to_s, purpose: PURPOSE)
-      return nil unless payload.is_a?(Hash)
-      return nil unless payload["sellers"] == seller_ids(sellers)
-      return nil unless payload["currency"] == currency.to_s.downcase
+      unless payload.is_a?(Hash)
+        yield :invalid_or_expired_token if block_given?
+        return nil
+      end
+      unless payload["sellers"] == seller_ids(sellers)
+        yield :seller_mismatch if block_given?
+        return nil
+      end
+      unless payload["currency"] == currency.to_s.downcase
+        yield :currency_mismatch if block_given?
+        return nil
+      end
 
-      normalize_allocations(payload["allocations"])
+      allocations = normalize_allocations(payload["allocations"])
+      yield :invalid_allocations if allocations.nil? && block_given?
+      allocations
     end
 
     private
