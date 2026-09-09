@@ -91,6 +91,10 @@ module User::Risk
     save!
   end
 
+  def record_social_connect_hold_released
+    SocialConnectFunnel.record_hold_released!(self, surface: "mark_compliant")
+  end
+
   def disable_refunds!
     self.refunds_disabled = true
     save!

@@ -734,6 +734,12 @@ describe User::OmniauthCallbacksController do
 
       expect(response).to redirect_to settings_social_connections_path
       expect(flash[:alert]).to eq "Couldn't connect YouTube. Please try again."
+      expect(Event.last).to have_attributes(
+        event_name: "social_connect_failed",
+        parent_referrer: "youtube",
+        referrer: "access_denied",
+        user_id: user.id,
+      )
     end
 
     it "redirects Instagram OAuth failures to profile" do
@@ -745,6 +751,16 @@ describe User::OmniauthCallbacksController do
 
       expect(response).to redirect_to settings_social_connections_path
       expect(flash[:alert]).to eq "Couldn't connect Instagram. Please try again."
+    end
+
+    it "sanitizes user-controlled OAuth error strings before writing Event.referrer" do
+      user = create(:user)
+      allow(controller).to receive(:logged_in_user).and_return(user)
+      request.env["omniauth.error.strategy"] = instance_double(OmniAuth::Strategies::Youtube, name: "youtube")
+
+      get :failure, params: { error: "access_denied<script>alert(1)</script>/../../../etc/passwd" }
+
+      expect(Event.last.referrer).to eq("access_deniedscriptalert1script......etcpasswd")
     end
 
     it "returns a cancelled X connection from Settings to Social connections" do

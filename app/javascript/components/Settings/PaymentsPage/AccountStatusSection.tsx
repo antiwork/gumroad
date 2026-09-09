@@ -85,6 +85,9 @@ export default function AccountStatusSection({
 
   const showReviewNotice =
     Boolean(accountStatus.gumroad_status) && (!showPayoutPausedAlert || payoutsPausedBy !== "system");
+  const connectedProviderNames = (accountStatus.social_connections_for_review ?? [])
+    .filter((c) => c.connected)
+    .map((c) => SOCIAL_PROVIDER_NAMES[c.provider]);
 
   return (
     <section aria-labelledby="account-status-heading" className="flex flex-col gap-4 p-4 md:p-8">
@@ -179,23 +182,16 @@ export default function AccountStatusSection({
       {showReviewNotice && accountStatus.social_connections_for_review ? (
         <Alert role="status" variant="info">
           <div className="flex flex-col gap-3">
-            <h3 className="font-bold">Add social connections (optional)</h3>
+            <h3 className="font-bold">Connect a social account (optional)</h3>
             <p>
-              You can share your social account history as additional context for your account review. This does not
-              replace identity verification or guarantee approval or a payout date.
+              While we review your account, a connected social account gives us more to go on. It is not identity
+              verification, and it does not guarantee approval or a payout date. We only read your public profile and
+              never post for you.
             </p>
-            <div className="flex flex-wrap items-center gap-2">
-              {accountStatus.social_connections_for_review.map(({ provider, connected }) =>
-                connected ? (
-                  <span key={provider}>{SOCIAL_PROVIDER_NAMES[provider]} connected</span>
-                ) : (
-                  <span key={provider}>{SOCIAL_PROVIDER_NAMES[provider]} available to connect</span>
-                ),
-              )}
-            </div>
+            {connectedProviderNames.length ? <p>Connected: {connectedProviderNames.join(", ")}</p> : null}
             <p>
               <a href={Routes.settings_social_connections_path()} className="underline">
-                Manage social connections
+                {connectedProviderNames.length ? "Manage connections" : "Connect an account"}
               </a>
             </p>
           </div>
