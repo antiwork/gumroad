@@ -971,6 +971,11 @@ module RendersCustomHtmlPages
     # primary rather than a possibly-lagging replica. Wired as an around_action in
     # each controller (the product and profile embed actions both need it) so the
     # before_actions declared after it are covered too.
+    #
+    # Not collapsed into ApplicationController#use_primary_database despite the identical body:
+    # LinksController declares both, at opposite ends of its filter chain, and ActiveSupport
+    # drops the earlier of two same-kind callbacks sharing a Symbol filter — so a single name
+    # would silently unpin the landing endpoints.
     def use_primary_for_landing_iframe(&block)
       ApplicationRecord.connected_to(role: :writing, &block)
     end
