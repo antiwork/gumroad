@@ -24,6 +24,7 @@ module OmniAuth
       def authorize_params
         super.tap do |params|
           params[:client_key] = options.client_id
+          params[:response_type] = "code"
           params.delete(:client_id)
         end
       end

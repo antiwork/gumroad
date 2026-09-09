@@ -84,6 +84,7 @@ describe OmniAuth::Strategies::Tiktok do
       authorize_params = Rack::Utils.parse_query(URI(headers["Location"]).query)
       expect(authorize_params.fetch("client_key")).to eq("client-key")
       expect(authorize_params).not_to have_key("client_id")
+      expect(authorize_params.fetch("response_type")).to eq("code")
       expect(authorize_params.fetch("scope")).to eq("user.info.basic,user.info.profile,user.info.stats")
       expect(authorize_params.fetch("redirect_uri")).to eq(redirect_uri)
       state = authorize_params.fetch("state")
