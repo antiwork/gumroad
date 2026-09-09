@@ -18,6 +18,7 @@ describe SocialConnectFunnelReport do
       record(connected_seller, "attempted", "twitter", "omniauth", at: 9.hours.ago)
       record(connected_seller, "connected", "twitter", "omniauth", at: 8.hours.ago)
       record(connected_seller, "reviewed", "twitter", "admin_social_connections", at: 4.hours.ago)
+      record(connected_seller, "hold_released", "twitter", "mark_compliant", at: 3.hours.ago)
       record(skipped_seller, "offered", "twitter", "account_review", at: 10.hours.ago)
 
       create(:payment_completed, user: connected_seller, created_at: 2.hours.ago)
@@ -34,10 +35,13 @@ describe SocialConnectFunnelReport do
       held = data[:held_sellers]
       expect(held[:connected][:n]).to eq(1)
       expect(held[:connected][:time_to_review_hours][:p50]).to eq(6.0)
+      expect(held[:connected][:time_to_hold_released_hours][:p50]).to eq(7.0)
       expect(held[:connected][:time_to_first_payout_hours][:p50]).to eq(8.0)
+      expect(held[:connected][:still_held]).to eq(0)
       expect(held[:unconnected][:n]).to eq(1)
       expect(held[:unconnected][:time_to_review_hours]).to be_nil
       expect(held[:unconnected][:still_unreviewed]).to eq(1)
+      expect(held[:unconnected][:still_held]).to eq(1)
       expect(held[:unconnected][:still_unpaid]).to eq(1)
     end
   end

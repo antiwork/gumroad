@@ -79,27 +79,55 @@ class SocialConnectFunnel
     def record_reviewed!(user:, verifications:)
       return if user.blank?
 
+      # Pre-offer admin GETs must not permanently consume "reviewed"; only
+      # record after an offer, and allow another row after a later offer.
+      last_offer_at = Event.where(user_id: user.id, event_name: event_name("offered")).maximum(:created_at)
+      return if last_offer_at.blank?
+
       linked = Array(verifications).filter_map { |verification| verification.platform if verification.currently_linked? }.uniq
-      if linked.empty?
-        record!(user:, stage: "reviewed", provider: "none", surface: "admin_social_connections", once: true)
-      else
-        linked.each do |provider|
-          record!(user:, stage: "reviewed", provider:, surface: "admin_social_connections", once: true)
-        end
+      providers = linked.empty? ? %w[none] : linked
+      providers.each do |provider|
+        already = Event.where(
+          user_id: user.id,
+          event_name: event_name("reviewed"),
+          parent_referrer: provider,
+          view_url: "admin_social_connections",
+        ).where("created_at >= ?", last_offer_at).exists?
+        next if already
+
+        record!(user:, stage: "reviewed", provider:, surface: "admin_social_connections")
       end
+    rescue StandardError => e
+      Rails.logger.error("SocialConnectFunnel reviewed failed for user #{user&.id}: #{e.class}: #{e.message}")
+      nil
     end
 
     def record_hold_released!(user, surface:)
       return if user.blank?
 
+      # Lifetime once breaks post-offer timing when a pre-offer compliant
+      # transition already consumed the row; re-allow after a later offer.
+      last_offer_at = Event.where(user_id: user.id, event_name: event_name("offered")).maximum(:created_at)
       linked = user.social_connect_verifications.current.filter_map { |verification| verification.platform if verification.currently_linked? }.uniq
-      if linked.empty?
-        record!(user:, stage: "hold_released", provider: "none", surface:, once: true)
-      else
-        linked.each do |provider|
-          record!(user:, stage: "hold_released", provider:, surface:, once: true)
+      providers = linked.empty? ? %w[none] : linked
+      providers.each do |provider|
+        scope = Event.where(
+          user_id: user.id,
+          event_name: event_name("hold_released"),
+          parent_referrer: provider,
+          view_url: surface,
+        )
+        if last_offer_at.present?
+          next if scope.where("created_at >= ?", last_offer_at).exists?
+        elsif scope.exists?
+          next
         end
+
+        record!(user:, stage: "hold_released", provider:, surface:)
       end
+    rescue StandardError => e
+      Rails.logger.error("SocialConnectFunnel hold_released failed for user #{user&.id}: #{e.class}: #{e.message}")
+      nil
     end
 
     private

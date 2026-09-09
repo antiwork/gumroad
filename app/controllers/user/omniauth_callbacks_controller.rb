@@ -210,7 +210,7 @@ class User::OmniauthCallbacksController < Devise::OmniauthCallbacksController
     connect_provider = request.env["omniauth.error.strategy"]&.name.to_s
     twitter_link_failure = connect_provider == "twitter" && SocialConnectFunnel::TWITTER_LINK_STATES.include?(params[REQ_PARAM_STATE].to_s)
     if %w[youtube instagram].include?(connect_provider) || twitter_link_failure
-      extra = params[:error].presence || request.env["omniauth.error.type"].to_s.presence
+      extra = sanitize_oauth_error_param(params[:error].presence || request.env["omniauth.error.type"].to_s.presence)
       SocialConnectFunnel.record!(user: logged_in_user, stage: "failed", provider: connect_provider, surface: "omniauth", extra:)
     end
     if %w[youtube instagram].include?(connect_provider)
@@ -232,6 +232,12 @@ class User::OmniauthCallbacksController < Devise::OmniauthCallbacksController
   end
 
   private
+    def sanitize_oauth_error_param(value)
+      return if value.blank?
+
+      value.to_s.downcase.gsub(/[^a-z0-9._-]/, "").presence&.truncate(64, omission: "")
+    end
+
     def hide_layouts
       @hide_layouts = true
     end

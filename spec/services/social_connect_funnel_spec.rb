@@ -110,10 +110,70 @@ describe SocialConnectFunnel do
   end
 
   describe ".record_reviewed!" do
-    it "records provider none when the seller has no live connection" do
+    it "records provider none when the seller has no live connection after an offer" do
+      described_class.record!(user:, stage: "offered", provider: "twitter", surface: "account_review")
       described_class.record_reviewed!(user:, verifications: [])
 
       expect(Event.last).to have_attributes(event_name: "social_connect_reviewed", parent_referrer: "none")
+    end
+
+    it "does not record reviewed before any offer" do
+      described_class.record_reviewed!(user:, verifications: [])
+
+      expect(Event.where(event_name: "social_connect_reviewed")).to be_empty
+    end
+
+    it "allows another reviewed after a later offer so pre-offer views do not stick forever" do
+      described_class.record!(user:, stage: "offered", provider: "twitter", surface: "account_review")
+      described_class.record_reviewed!(user:, verifications: [])
+      first_reviewed = Event.where(event_name: "social_connect_reviewed", user_id: user.id).sole
+      first_reviewed.update_column(:created_at, 2.hours.ago)
+
+      described_class.record!(user:, stage: "offered", provider: "youtube", surface: "account_review")
+      described_class.record_reviewed!(user:, verifications: [])
+
+      expect(Event.where(event_name: "social_connect_reviewed", user_id: user.id).count).to eq(2)
+    end
+  end
+
+  describe ".record_hold_released!" do
+    it "writes an Event-only hold_released row without mutating risk or payout state" do
+      expect do
+        described_class.record_hold_released!(user, surface: "mark_compliant")
+      end.to change { Event.where(event_name: "social_connect_hold_released", user_id: user.id).count }.by(1)
+
+      expect(Event.last).to have_attributes(
+        event_name: "social_connect_hold_released",
+        parent_referrer: "none",
+        view_url: "mark_compliant",
+      )
+      expect(user.reload.user_risk_state).to eq("not_reviewed")
+    end
+
+    it "records once per provider for a surface when no offer exists" do
+      user.update!(twitter_user_id: "123")
+      create(:social_connect_verification, user:, platform: "twitter", uid: "123")
+
+      2.times { described_class.record_hold_released!(user, surface: "payouts_resume") }
+
+      expect(Event.where(event_name: "social_connect_hold_released", user_id: user.id).count).to eq(1)
+      expect(Event.last.parent_referrer).to eq("twitter")
+    end
+
+    it "allows another hold_released after a later offer" do
+      described_class.record_hold_released!(user, surface: "mark_compliant")
+      Event.where(event_name: "social_connect_hold_released", user_id: user.id).sole.update_column(:created_at, 3.hours.ago)
+      described_class.record!(user:, stage: "offered", provider: "twitter", surface: "account_review")
+
+      expect do
+        described_class.record_hold_released!(user, surface: "mark_compliant")
+      end.to change { Event.where(event_name: "social_connect_hold_released", user_id: user.id).count }.by(1)
+    end
+
+    it "swallows Event lookup failures so mark_compliant cannot 500" do
+      allow(Event).to receive(:where).and_raise(ActiveRecord::StatementInvalid, "boom")
+
+      expect { described_class.record_hold_released!(user, surface: "mark_compliant") }.not_to raise_error
     end
   end
 end

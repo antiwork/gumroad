@@ -13,7 +13,7 @@ class SocialConnectFunnelReport
     {
       since: @since.iso8601,
       generated_at: Time.current.iso8601,
-      note: "Skipped/unconnected rows are counted, not coerced to zero durations. No auto-release threshold is computed.",
+      note: "Skipped/unconnected rows are counted, not coerced to zero durations. hold_released comes from mark_compliant / payouts#resume Event hooks only. No auto-release threshold is computed.",
       per_provider: PROVIDERS.index_with { |provider| provider_metrics(provider) },
       held_sellers: held_timing_metrics,
       adverse_outcomes: adverse_outcomes,
@@ -37,9 +37,10 @@ class SocialConnectFunnelReport
     end
     held = data[:held_sellers]
     lines << "Held sellers (account_review offers):"
-    lines << "  connected: n=#{held[:connected][:n]} time_to_review_hours=#{fmt_hours(held[:connected][:time_to_review_hours])} time_to_first_payout_hours=#{fmt_hours(held[:connected][:time_to_first_payout_hours])}"
-    lines << "  unconnected: n=#{held[:unconnected][:n]} time_to_review_hours=#{fmt_hours(held[:unconnected][:time_to_review_hours])} time_to_first_payout_hours=#{fmt_hours(held[:unconnected][:time_to_first_payout_hours])}"
+    lines << "  connected: n=#{held[:connected][:n]} time_to_review_hours=#{fmt_hours(held[:connected][:time_to_review_hours])} time_to_hold_released_hours=#{fmt_hours(held[:connected][:time_to_hold_released_hours])} time_to_first_payout_hours=#{fmt_hours(held[:connected][:time_to_first_payout_hours])}"
+    lines << "  unconnected: n=#{held[:unconnected][:n]} time_to_review_hours=#{fmt_hours(held[:unconnected][:time_to_review_hours])} time_to_hold_released_hours=#{fmt_hours(held[:unconnected][:time_to_hold_released_hours])} time_to_first_payout_hours=#{fmt_hours(held[:unconnected][:time_to_first_payout_hours])}"
     lines << "  still_unreviewed connected=#{held[:connected][:still_unreviewed]} unconnected=#{held[:unconnected][:still_unreviewed]}"
+    lines << "  still_held connected=#{held[:connected][:still_held]} unconnected=#{held[:unconnected][:still_held]}"
     lines << "  still_unpaid connected=#{held[:connected][:still_unpaid]} unconnected=#{held[:unconnected][:still_unpaid]}"
     lines << ""
     adverse = data[:adverse_outcomes]
@@ -115,22 +116,25 @@ class SocialConnectFunnelReport
       first_offer = held_offers.group_by { _1[:user_id] }.transform_values { |group| group.min_by { _1[:created_at] } }
       connected_by_user = for_stage("connected").group_by { _1[:user_id] }
       reviews_by_user = for_stage("reviewed").group_by { _1[:user_id] }
+      hold_releases_by_user = for_stage("hold_released").group_by { _1[:user_id] }
       payouts = first_completed_payouts_after(first_offer)
       connected_ids = first_offer.each_with_object(Set.new) do |(user_id, offer), set|
         set << user_id if first_later(connected_by_user[user_id] || [], at: offer[:created_at])
       end
 
       {
-        connected: timing_bucket(first_offer, reviews_by_user, payouts, connected: true, connected_ids:),
-        unconnected: timing_bucket(first_offer, reviews_by_user, payouts, connected: false, connected_ids:),
+        connected: timing_bucket(first_offer, reviews_by_user, hold_releases_by_user, payouts, connected: true, connected_ids:),
+        unconnected: timing_bucket(first_offer, reviews_by_user, hold_releases_by_user, payouts, connected: false, connected_ids:),
       }
     end
 
-    def timing_bucket(first_offer, reviews_by_user, payouts, connected:, connected_ids:)
+    def timing_bucket(first_offer, reviews_by_user, hold_releases_by_user, payouts, connected:, connected_ids:)
       users = first_offer.select { |user_id, _| connected_ids.include?(user_id) == connected }
       review_hours = []
+      hold_hours = []
       payout_hours = []
       still_unreviewed = 0
+      still_held = 0
       still_unpaid = 0
 
       users.each do |user_id, offer|
@@ -139,6 +143,12 @@ class SocialConnectFunnelReport
           review_hours << hours_between(offer[:created_at], review[:created_at])
         else
           still_unreviewed += 1
+        end
+        hold_release = first_later(hold_releases_by_user[user_id] || [], at: offer[:created_at])
+        if hold_release
+          hold_hours << hours_between(offer[:created_at], hold_release[:created_at])
+        else
+          still_held += 1
         end
         payout_at = payouts[user_id]
         if payout_at
@@ -151,8 +161,10 @@ class SocialConnectFunnelReport
       {
         n: users.size,
         time_to_review_hours: summarize_hours(review_hours),
+        time_to_hold_released_hours: summarize_hours(hold_hours),
         time_to_first_payout_hours: summarize_hours(payout_hours),
         still_unreviewed:,
+        still_held:,
         still_unpaid:,
       }
     end
