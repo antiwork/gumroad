@@ -866,29 +866,12 @@ class StripeChargeProcessor
 
     stripe_balance_amount = stripe_available_object.amount + stripe_pending_object.amount
 
-    # NOTE on currencies: stripe_balance_amount is denominated in the merchant account's own
-    # currency (stripe_currency), while owed_amount_cents_usd is USD. The US branch below
-    # compares them directly WITHOUT conversion, which is only correct because a US account's
-    # currency here is guaranteed to be "usd":
-    #   * Only Gumroad-controlled custom Stripe accounts reach this point — the
-    #     holder_of_funds == HolderOfFunds::STRIPE guard above excludes creator-owned Stripe
-    #     Connect accounts (see StripeChargeProcessor.holder_of_funds).
-    #   * Those accounts get their currency at creation from Country#payout_currency, which
-    #     for the US resolves (via Country#default_currency) to USD
-    #     (StripeMerchantAccountManager.create_account).
-    #   * Afterwards, currency is only ever rewritten together with country from the same
-    #     Stripe account object (StripeMerchantAccountManager's account.updated handling),
-    #     and Stripe only pays out US accounts in USD, so country == "US" implies
-    #     default_currency == "usd".
-    # If any of that stops holding, the US branch must convert the owed amount like the
-    # else branch does (usd_cents_to_currency) before comparing — otherwise it would compare
-    # cents across two different currencies and could debit the wrong amount.
+    # US branch compares stripe_balance_amount (account currency) to owed_amount_cents_usd
+    # with no conversion. Safe only while Gumroad-held US accounts are USD
+    # (Country#payout_currency + Stripe US payouts). If that breaks, convert like the else branch.
     if credit.merchant_account.country == Compliance::Countries::USA.alpha2
-      # Avoid debiting the customer's bank account if they haven't accumulated enough balance in their Gumroad-controlled Stripe account.
       return unless stripe_balance_amount > owed_amount_cents_usd
 
-      # For US Gumroad-controlled Stripe accounts, we can make new debit transfers.
-      # So we transfer the taxes owed amount from the creator's Gumroad-controlled Stripe account to Gumroad's Stripe account.
       transfer = Stripe::Transfer.create({ amount: owed_amount_cents_usd, currency: "usd", destination: STRIPE_PLATFORM_ACCOUNT_ID, },
                                          { stripe_account: stripe_account_id })
 
@@ -904,32 +887,19 @@ class StripeChargeProcessor
         backtax_agreement.update!(collected: true)
       end
     else
-      # For non-US Gumroad-controlled Stripe accounts, we cannot make new debit transfers.
-      # So we look to reverse historical transfers made from Gumroad's Stripe account to the creator's Gumroad-controlled Stripe account.
-      # We look to reverse enough transfers to cover the total amount owed.
-      #
-      # The historical transfers could have been executed in usd, or the Stripe account's currency, depending on when they were executed.
-      # The below algorithm will accumulate transfers of the same currency type — enough to cover the amount owed — and reverse them at the end.
-      # All transfers to be reversed will have the same currency type, to avoid inaccuracies due to currency conversion.
+      # Non-US Gumroad-held accounts cannot open a new debit transfer. Reverse historical
+      # transfers of one currency (USD or the account currency — they mixed over time) until
+      # the owed amount is covered.
 
-      # Determine the owed amount in the Stripe account's currency.
-      # Then, avoid debiting the customer's bank account if they haven't accumulated enough balance in their Gumroad-controlled Stripe account.
       owed_amount_in_currency = usd_cents_to_currency(stripe_currency, owed_amount_cents_usd)
       return unless stripe_balance_amount > owed_amount_in_currency
 
-      # Determine the stripe balance amount in usd.
-      # stripe_balance_amount was summed from the balance entries whose currency is the
-      # merchant account's own currency (stripe_currency) a few lines above, so it has to be
-      # converted from that currency — passing "usd" here would return the local-currency
-      # figure unchanged and treat, say, 84,000 rupees as 84,000 US cents.
-      # Reduce that amount by 5%, as a buffer for possible currency conversion inaccuracies.
-      # Then, avoid debiting the customer's bank account if they haven't accumulated enough balance in their Gumroad-controlled Stripe account.
+      # stripe_balance_amount is in stripe_currency. Passing "usd" to get_usd_cents would
+      # treat e.g. 84,000 INR as 84,000 US cents. 5% haircut for FX slack.
       stripe_balance_amount_cents_usd = get_usd_cents(stripe_currency, stripe_balance_amount)
       stripe_balance_amount_cents_usd_reduced_by_five_percent = (stripe_balance_amount_cents_usd - (5.0 / 100) * stripe_balance_amount_cents_usd).round
       return unless stripe_balance_amount_cents_usd_reduced_by_five_percent > owed_amount_cents_usd
 
-      # Each of the `transfers` values below will be an Array of two-element Arrays, like: [["tr_123", 100], ["tr_456", 200], ...]
-      # These two-element Arrays represent the transfer ID, and the amount to reverse.
       data = {
         usd: {
           owed: owed_amount_cents_usd,
@@ -943,8 +913,6 @@ class StripeChargeProcessor
         }
       }
 
-      # First, look for internal transfers made from Gumroad's Stripe account
-      # to the creator's Gumroad-controlled Stripe account.
       transfer_ids = credit.user.payments.completed
                            .where(stripe_connect_account_id: stripe_account_id)
                            .order(:created_at)
@@ -958,9 +926,7 @@ class StripeChargeProcessor
 
       starting_after = nil
       until data.values.any? { |value| value[:sum_of_transfer_amounts] >= value[:owed] }
-        # Next, look for transfers associated with an old purchase.
-        # Look for transfers older than 120 days.
-        # Disputes and refunds are not allowed after 120 days, so it's safe to reverse such transfers.
+        # Transfers older than 120 days: Stripe no longer allows disputes/refunds, so reversing is safe.
         transfers = Stripe::Transfer.list(destination: stripe_account_id, created: { 'lt': 120.days.ago.to_i }, limit: 100, starting_after:)
         break unless transfers.count > 0
 
@@ -973,8 +939,7 @@ class StripeChargeProcessor
       end
 
       reversal_currency, reversal_data = data.find { |_, value| value[:sum_of_transfer_amounts] >= value[:owed] }
-      # Only perform transfers if we can transfer the total amount owed, in full.
-      # Avoid making a batch of transfers that would only cover the partial amount owed.
+      # Reverse only if one currency bucket covers the owed amount in full.
       return unless reversal_currency.present? && reversal_data.present?
 
       reversal_currency = reversal_currency.to_s
@@ -1028,14 +993,9 @@ class StripeChargeProcessor
         customer_communication: create_dispute_evidence_stripe_file(dispute_evidence.customer_communication_file),
       }
 
-      # A dispute accepts evidence once (gumroad-private#1612) and FightDisputeJob has five Sidekiq
-      # retries, so a network failure on a call that actually landed would otherwise spend the
-      # submission a second time. The key must be IMMUTABLE for that to work: anything derived from
-      # the payload or from `updated_at` changes between attempts — the payload because
-      # create_dispute_evidence_stripe_file re-uploads and returns a fresh Stripe file id on every
-      # call, `updated_at` because the seller writes their statement into the same row. One evidence
-      # row is one permitted submission (the job returns early once the row is resolved), so the
-      # row's own identity is the whole key.
+      # Dispute accepts evidence once (gumroad-private#1612); FightDisputeJob retries 5 times.
+      # Key must be immutable: payload file ids change on re-upload, updated_at changes when
+      # the seller edits the statement. One row = one submission = row identity.
       idempotency_key = "dispute_evidence_#{dispute_evidence.external_id}"
 
       Stripe::Dispute.update(charge.dispute, { evidence: }, { idempotency_key: })
@@ -1126,13 +1086,8 @@ class StripeChargeProcessor
       event.extras = {
         charge_processor_dispute_id: stripe_dispute["id"],
         reason: stripe_dispute["reason"].presence,
-        # Carried so the missing-chargeable alert in Purchase::ChargeEventsHandler can tell a
-        # dispute on a connected account's own (non-Gumroad) charge apart from a dispute on a
-        # Gumroad charge. The refund event builder below has set this since #5420; disputes
-        # were left out, which kept Sentry GUMROAD-2 firing ~58/day for sellers' own disputes.
-        # The helper filters out Gumroad's own platform account id — storing it here would
-        # make the handler treat a genuine platform dispute miss as seller-owned and stay
-        # quiet (same reasoning as the refund builder below).
+        # Lets ChargeEventsHandler ignore seller-owned non-Gumroad disputes. Never store the
+        # platform id — see connected_account_id_for_event.
         stripe_connect_account_id: connected_account_id_for_event(stripe_event)
       }
 
@@ -1180,11 +1135,9 @@ class StripeChargeProcessor
         end
       end
     elsif stripe_event["type"] == "charge.refund.updated" || HANDLED_REFUND_EVENTS.include?(stripe_event["type"])
-      # Stripe deprecated charge.refund.updated in favor of the refund.* family. Both event
-      # shapes carry a Refund object as data.object, so one builder covers old and new
-      # subscriptions. The webhook endpoint should subscribe to refund.updated +
-      # refund.failed only (see HANDLED_REFUND_EVENTS for why refund.created must stay out);
-      # charge.refund.updated is kept for endpoints that still deliver it.
+      # charge.refund.updated and refund.* both carry a Refund object. Subscribe to
+      # refund.updated + refund.failed only (see HANDLED_REFUND_EVENTS); keep
+      # charge.refund.updated for old endpoints.
       event = ChargeEvent.new
       event.charge_processor_id = charge_processor_id
       event.charge_event_id = stripe_event["id"]
@@ -1198,26 +1151,13 @@ class StripeChargeProcessor
         refunded_amount_cents: stripe_event["data"]["object"]["amount"],
         refund_reason: stripe_event["data"]["object"]["reason"],
         refund_failure_reason: stripe_event["data"]["object"]["failure_reason"],
-        # Present only on events delivered via the Connect webhook endpoint: the connected
-        # account the refund belongs to ("user_id" is the same field on older API versions).
-        # Connected accounts send refund events for all of the seller's Stripe activity,
-        # including non-Gumroad sales, so the event handler uses this to silently ignore —
-        # rather than alert on — refunds that match no Gumroad charge. Gumroad's own platform
-        # account id must not be stored here: StripeEventHandler routes events whose account
-        # IS the platform through the Gumroad path, where every refund belongs to a Gumroad
-        # charge and a miss must alert. Storing the platform id would make the handler treat
-        # such a miss as seller-owned activity and suppress the alert.
+        # Connect-endpoint only. Ignore seller-owned non-Gumroad refunds; never store the
+        # platform id — see connected_account_id_for_event.
         stripe_connect_account_id: connected_account_id_for_event(stripe_event),
       }
-      # A refund that fails after Stripe accepted it (asynchronous bank-transfer refunds —
-      # iDEAL, Bancontact, ACH — can be returned by the buyer's bank days later) needs its
-      # own handling: the money came back to our Stripe balance and the buyer was NOT made
-      # whole, so the canonical refund/balance records must be unwound. The same applies
-      # to a "canceled" refund — Stripe documents canceling a pending refund as a terminal
-      # outcome that returns the money to the platform balance, and it arrives only as a
-      # refund.updated carrying that status (there is no refund.canceled event type).
-      # refund.updated can also carry the failed status (e.g. when the failure and a
-      # metadata update coalesce), so route on the status, not only on the event name.
+      # Async bank-transfer refunds (iDEAL, Bancontact, ACH) can fail days later; money is
+      # back on our balance and the buyer was not made whole — unwind. Same for "canceled"
+      # (arrives as refund.updated; no refund.canceled). Route on status, not only event name.
       event.type = if stripe_event["type"] == "refund.failed" ||
                       Refund::TERMINAL_FAILURE_STATUSES.include?(stripe_event["data"]["object"]["status"])
         ChargeEvent::TYPE_REFUND_FAILED
@@ -1227,10 +1167,7 @@ class StripeChargeProcessor
     elsif stripe_event["type"].start_with?("charge.")
       raise "Stripe Event #{stripe_event['id']} does not contain a 'charge' object." if stripe_event["data"]["object"]["object"] != "charge"
 
-      # Charge events that have the twitter_username field set have been created on stripe by Twitter, and we do not
-      # know about the purchase when the initial success event (charge.succeeded) is communicated to us about them.
-      # Ignore them because of this. Note: We will receive a charge.captured event when the charge is captured and
-      # we will know about the purchase at that point.
+      # Twitter-created charges: we don't know the purchase until charge.captured.
       return if stripe_event["type"] == "charge.succeeded" && stripe_event["data"]["object"]["metadata"]["twitter_username"].present?
 
       raise "Stripe Event #{stripe_event['id']} has no charge id." if stripe_event["data"]["object"]["id"].nil?
@@ -1263,18 +1200,11 @@ class StripeChargeProcessor
       event.created_at = DateTime.strptime(stripe_event["created"].to_s, "%s")
       event.comment = stripe_event["type"]
       event.type = ChargeEvent::TYPE_PAYMENT_INTENT_FAILED
-      # Payment methods that fail asynchronously (Cash App Pay, Link, ACH Direct Debit) never raise
-      # a Stripe::CardError at confirm time — the only place their decline reason exists is this
-      # webhook's last_payment_error. Carry it on the event so the purchase-failure transition can
-      # persist it to purchases.stripe_error_code the same way the synchronous confirm path does.
-      # Without this, failed async purchases have no error code in the database, which blinds
-      # failure monitoring and support tooling even though the money flow is correct.
+      # Async declines (Cash App, Link, ACH) never raise at confirm; last_payment_error is
+      # the only decline reason. Without it, stripe_error_code stays blank.
       last_payment_error = stripe_event["data"]["object"]["last_payment_error"]
       if last_payment_error.present?
         error_code = error_code_from_last_payment_error(last_payment_error)
-        # Merge rather than assign so any extras set earlier for this event (none today, but
-        # handle_event_informational! reads other keys like fee_cents) are never silently dropped,
-        # and skip entirely when Stripe sent an error object with no usable code.
         event.extras = (event.extras || {}).merge("stripe_error_code" => error_code) if error_code.present?
       end
     elsif PAYMENT_INTENT_LIFECYCLE_EVENTS.include?(stripe_event["type"])
@@ -1301,16 +1231,8 @@ class StripeChargeProcessor
     ProcessedStripeEvent.record!(stripe_event["id"], event_type: stripe_event["type"]) if event && PAYMENT_INTENT_LIFECYCLE_EVENTS.include?(stripe_event["type"])
   end
 
-  # Builds a Gumroad error code from a failed PaymentIntent's `last_payment_error`, mirroring the
-  # shape the synchronous confirm path produces (see StripeErrorHandler#get_card_error_details):
-  # Stripe's error `code`, with the more specific `decline_code` appended when one is present.
-  # Examples:
-  # | Stripe's error code             | Stripe's decline code | Gumroad's error code                              |
-  # | :------------------------------ | :-------------------- | :------------------------------------------------ |
-  # | card_declined                   | generic_decline       | card_declined_generic_decline                      |
-  # | payment_method_provider_decline | insufficient_funds    | payment_method_provider_decline_insufficient_funds |
-  # | incorrect_cvc                   |                       | incorrect_cvc                                      |
-  # Falls back to the error `type` (e.g. "card_error") when Stripe sends no code at all.
+  # Mirror StripeErrorHandler#get_card_error_details: Stripe `code`, plus `decline_code`
+  # when present. Falls back to `type` when Stripe sends no code.
   def self.error_code_from_last_payment_error(last_payment_error)
     error_code = last_payment_error["code"].presence || last_payment_error["type"]
     return if error_code.blank?
@@ -1320,14 +1242,8 @@ class StripeChargeProcessor
     error_code
   end
 
-  # Returns the connected Stripe account id a webhook event was delivered for, or nil when the
-  # event actually belongs to Gumroad's own platform account. StripeEventHandler treats an
-  # account id equal to STRIPE_PLATFORM_ACCOUNT_ID the same as no account id at all (both are
-  # routed through the Gumroad path), so the event's extras must mirror that: only a
-  # genuinely connected account id means "this refund or dispute could be the seller's own
-  # non-Gumroad Stripe activity". Storing the platform id here would make the
-  # missing-chargeable alert in Purchase::ChargeEventsHandler wrongly suppress platform
-  # refund/dispute failures.
+  # Connected account id, or nil for Gumroad's platform. Storing the platform id would
+  # suppress missing-chargeable alerts on genuine platform refund/dispute misses.
   def self.connected_account_id_for_event(stripe_event)
     account_id = stripe_event["user_id"].presence || stripe_event["account"].presence
     return if account_id.blank? || account_id == STRIPE_PLATFORM_ACCOUNT_ID
