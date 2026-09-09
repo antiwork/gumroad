@@ -139,7 +139,8 @@ RSpec.describe RecoverPendingRefundFeeRetentionJob, :vcr do
 
     described_class.new.perform
 
-    expect(refund.reload.fee_retention_pending).to be(true)
+    expect(refund.reload.fee_retention_pending).to be_falsey
+    expect(refund.debited_stripe_transfer).to be_nil
   end
 
   it "isolates an unhandled recovery error so later refunds still run" do

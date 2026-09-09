@@ -645,6 +645,7 @@ class StripeChargeProcessor
     amount_to_reverse_for = ->(transfer) { usd_cents_to_currency(transfer.currency, usd_amount_cents) }
 
     already_pinned_id = refund.fee_retention_source_transfer
+    observed_pin = already_pinned_id
     transfer_reversal = nil
     transfer = nil
     if already_pinned_id.present?
@@ -678,9 +679,17 @@ class StripeChargeProcessor
     end
     return unless transfer
 
-    if refund.fee_retention_source_transfer != transfer.id
-      refund.fee_retention_source_transfer = transfer.id
-      refund.save!
+    refund.with_lock do
+      refund.reload
+      return recorded_refund_fee_collection(credit:) if refund.debited_stripe_transfer.present?
+      current_pin = refund.fee_retention_source_transfer
+      if current_pin.present? && current_pin != observed_pin
+        return
+      end
+      if current_pin != transfer.id
+        refund.fee_retention_source_transfer = transfer.id
+        refund.save!
+      end
     end
 
     begin
