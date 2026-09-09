@@ -40,7 +40,10 @@ class Purchase::ConfirmService < Purchase::BaseService
     if (purchase.is_free_trial_purchase? || purchase.is_preorder_authorization?) &&
        purchase.processor_setup_intent_id.present? &&
        purchase.processor_payment_intent_id.blank?
-      setup_intent = ChargeProcessor.get_setup_intent(purchase.merchant_account, purchase.processor_setup_intent_id)
+      # get_setup_intent needs a Stripe merchant_account; without one, fail closed below.
+      setup_intent = if purchase.merchant_account.present?
+        ChargeProcessor.get_setup_intent(purchase.merchant_account, purchase.processor_setup_intent_id)
+      end
       unless setup_intent&.succeeded?
         purchase.stripe_error_code ||= "setup_intent_authentication_failed"
         purchase.errors.add(:base, "We couldn't authorize your card for this payment. Please try again or use a different payment method.") if purchase.errors.empty?

@@ -74,8 +74,10 @@ describe Purchase::ConfirmService, :vcr do
         charge_processor_id: StripeChargeProcessor.charge_processor_id,
         card_country: "IN"
       )
+      # :purchase stamps a fake stripe_transaction_id; clear it so the unfunded SI-only guard fires.
       purchase = create(:purchase_in_progress, credit_card: indian_card,
-                                               processor_setup_intent_id: "seti_unfunded_confirm")
+                                               processor_setup_intent_id: "seti_unfunded_confirm",
+                                               stripe_transaction_id: nil)
 
       error_message = Purchase::ConfirmService.new(purchase:, params: {}).perform
 
@@ -86,6 +88,10 @@ describe Purchase::ConfirmService, :vcr do
     it "still finalizes a free trial purchase registered on a setup intent" do
       purchase = create(:free_trial_membership_purchase, purchase_state: "in_progress",
                                                          processor_setup_intent_id: "seti_free_trial_confirm")
+      # Factory merchant_account can be nil; confirm needs one to resolve the SetupIntent.
+      purchase.update!(merchant_account: create(:merchant_account, user: purchase.seller))
+      allow(ChargeProcessor).to receive(:get_setup_intent)
+        .and_return(instance_double(StripeSetupIntent, succeeded?: true))
       service = Purchase::ConfirmService.new(purchase:, params: {})
       allow(service).to receive(:handle_purchase_success)
 
