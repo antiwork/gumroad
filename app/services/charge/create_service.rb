@@ -6,6 +6,7 @@ class Charge::CreateService
 
   attr_accessor :order, :seller, :merchant_account, :chargeable, :purchases, :amount_cents, :gumroad_amount_cents,
                 :setup_future_charges, :off_session, :statement_description, :charge, :mandate_options, :params
+  attr_reader :processor_outcome_unknown
 
   def initialize(order:, seller:, merchant_account:, chargeable:,
                  purchases:, amount_cents:, gumroad_amount_cents:,
@@ -62,7 +63,7 @@ class Charge::CreateService
     # confirmed the presentment PaymentIntent at Stripe; keep the snapshots so support
     # recovery (Purchase::SyncStatusWithChargeProcessorService) retains the presentment
     # context it needs to book canonical seller/affiliate balances.
-    clear_buyer_currency_presentments if charge_intent.blank? && !@processor_outcome_unknown
+    clear_buyer_currency_presentments if charge_intent.blank? && !@processor_outcome_unknown && !charge.client_confirmed?
 
     if charge_intent.present?
       charge.charge_intent = charge_intent
@@ -480,8 +481,15 @@ class Charge::CreateService
   # not retry their card at all. Duplicate intents are recoverable; a locked-out buyer is not.
   def payment_intent_idempotency_key(presentment_args)
     stripe_fx_quote_id = presentment_args[:stripe_fx_quote_id]
-    return if stripe_fx_quote_id.blank?
+    return "buyer-currency-charge-#{charge.external_id}-#{stripe_fx_quote_id}" if stripe_fx_quote_id.present?
 
-    "buyer-currency-charge-#{charge.external_id}-#{stripe_fx_quote_id}"
+    # ConfirmService resume charges always key by charge id so a lost first response and a
+    # concurrent retry share one Stripe PaymentIntent. Ordinary create-time off-session
+    # charges omit this flag so a declined card can be retried on the same charge row.
+    if params[:setup_confirmed_resume] && off_session && !setup_future_charges
+      return "setup-confirmed-charge-#{charge.external_id}"
+    end
+
+    nil
   end
 end

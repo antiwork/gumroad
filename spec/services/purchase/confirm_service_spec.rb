@@ -60,6 +60,48 @@ describe Purchase::ConfirmService, :vcr do
     end
   end
 
+  context "when a paid purchase reaches confirmation with only a setup intent" do
+    # gp#2437: a multi-seller India cart used to finalize such purchases as paid with no
+    # PaymentIntent — receipt and balance booked, no money moved.
+    it "refuses to finalize and fails the purchase instead" do
+      indian_card = CreditCard.create!(
+        card_type: CardType::VISA,
+        visual: "**** **** **** 4242",
+        stripe_fingerprint: "unfunded_confirm_fp",
+        stripe_customer_id: "cus_unfunded_confirm",
+        expiry_month: 12,
+        expiry_year: 5.years.from_now.year,
+        charge_processor_id: StripeChargeProcessor.charge_processor_id,
+        card_country: "IN"
+      )
+      # :purchase stamps a fake stripe_transaction_id; clear it so the unfunded SI-only guard fires.
+      purchase = create(:purchase_in_progress, credit_card: indian_card,
+                                               processor_setup_intent_id: "seti_unfunded_confirm",
+                                               stripe_transaction_id: nil)
+
+      error_message = Purchase::ConfirmService.new(purchase:, params: {}).perform
+
+      expect(error_message).to eq("There is a temporary problem, please try again (your card was not charged).")
+      expect(purchase.reload.purchase_state).to eq("failed")
+    end
+
+    it "still finalizes a free trial purchase registered on a setup intent" do
+      purchase = create(:free_trial_membership_purchase, purchase_state: "in_progress",
+                                                         processor_setup_intent_id: "seti_free_trial_confirm")
+      # Factory merchant_account can be nil; confirm needs one to resolve the SetupIntent.
+      purchase.update!(merchant_account: create(:merchant_account, user: purchase.seller))
+      allow(ChargeProcessor).to receive(:get_setup_intent)
+        .and_return(instance_double(StripeSetupIntent, succeeded?: true))
+      service = Purchase::ConfirmService.new(purchase:, params: {})
+      allow(service).to receive(:handle_purchase_success)
+
+      error_message = service.perform
+
+      expect(error_message).to be_nil
+      expect(service).to have_received(:handle_purchase_success)
+    end
+  end
+
   context "when purchase has been marked as failed" do
     # Sometimes we mark a purchase failed before the confirmation request comes from the UI,
     # if time to complete SCA expired or a parallel purchase has been made.

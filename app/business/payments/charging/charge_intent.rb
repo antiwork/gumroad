@@ -18,6 +18,10 @@ class ChargeIntent
     true
   end
 
+  def processing?
+    false
+  end
+
   def canceled?
     false
   end

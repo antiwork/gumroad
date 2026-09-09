@@ -139,7 +139,7 @@ describe Purchase::SyncStatusWithChargeProcessorService, :vcr do
     charge.purchases << purchase
     finalizer = instance_double(Order::FinalizeConfirmedChargeService, charge_intent: nil)
 
-    expect(Order::FinalizeConfirmedChargeService).to receive(:new).with(order:).and_return(finalizer)
+    expect(Order::FinalizeConfirmedChargeService).to receive(:new).with(order:, charge:).and_return(finalizer)
     expect(finalizer).to receive(:perform) { purchase.update!(purchase_state: "successful") }
     expect(ChargeProcessor).not_to receive(:get_or_search_charge)
     expect(purchase).to receive(:with_lock).and_call_original
@@ -359,7 +359,7 @@ describe Purchase::SyncStatusWithChargeProcessorService, :vcr do
     purchase = create(:purchase_in_progress, link: @product)
     charge.purchases << purchase
     finalizer = instance_double(Order::FinalizeConfirmedChargeService, charge_intent: nil)
-    allow(Order::FinalizeConfirmedChargeService).to receive(:new).with(order:).and_return(finalizer)
+    allow(Order::FinalizeConfirmedChargeService).to receive(:new).with(order:, charge:).and_return(finalizer)
     allow(finalizer).to receive(:perform).and_raise(ChargeProcessorUnavailableError, "Stripe unavailable")
     allow(ErrorNotifier).to receive(:notify)
 
@@ -386,7 +386,7 @@ describe Purchase::SyncStatusWithChargeProcessorService, :vcr do
       .with(charge.merchant_account, charge.stripe_payment_intent_id)
       .and_return(charge_intent)
     allow(Order::FinalizeConfirmedChargeService).to receive(:new)
-      .with(order:, charge_intent:)
+      .with(order:, charge:, charge_intent:)
       .and_return(finalizer)
     allow(finalizer).to receive(:perform)
 

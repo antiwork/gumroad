@@ -5,7 +5,8 @@ class StripeChargeablePaymentMethod
 
   attr_accessor :validated_stripe_mandate_id
 
-  attr_reader :payment_method_id, :stripe_setup_intent_id, :stripe_payment_intent_id
+  attr_reader :payment_method_id, :stripe_payment_intent_id
+  attr_accessor :stripe_setup_intent_id
 
   def initialize(payment_method_id, customer_id: nil,
                  stripe_setup_intent_id: nil,
@@ -37,6 +38,31 @@ class StripeChargeablePaymentMethod
 
     prepare_for_direct_charge if @merchant_account&.is_a_stripe_connect_account?
 
+    true
+  end
+
+  # Order services call this after ownership-checked SetupIntent reuse. On Connect, bind the
+  # SI's payment method (and attach it to a Customer) instead of cloning a mandate-less copy.
+  def prepare_with_trusted_setup_intent!
+    return prepare! unless @merchant_account&.is_a_stripe_connect_account? && @stripe_setup_intent_id.present?
+
+    with_stripe_error_handler do
+      stripe_account = { stripe_account: @merchant_account.charge_processor_merchant_id }
+      setup_intent = Stripe::SetupIntent.retrieve(@stripe_setup_intent_id, stripe_account)
+      payment_method_id = setup_intent.payment_method
+      payment_method_id = payment_method_id.id if payment_method_id.respond_to?(:id)
+      return prepare! if payment_method_id.blank?
+
+      payment_method = Stripe::PaymentMethod.retrieve(payment_method_id, stripe_account)
+      if payment_method.customer.blank?
+        customer = Stripe::Customer.create({}, stripe_account)
+        payment_method = Stripe::PaymentMethod.attach(payment_method_id, { customer: customer.id }, stripe_account)
+      end
+      @payment_method_on_connect_account = payment_method
+      @payment_method_id_on_connect_account = payment_method_id
+      customer_id = payment_method.customer
+      @customer_id_on_connect_account = customer_id.respond_to?(:id) ? customer_id.id : customer_id
+    end
     true
   end
 
@@ -116,7 +142,7 @@ class StripeChargeablePaymentMethod
 
   def stripe_charge_params
     if @merchant_account&.is_a_stripe_connect_account?
-      { payment_method: @payment_method_id_on_connect_account }
+      { payment_method: @payment_method_id_on_connect_account, customer: @customer_id_on_connect_account }.compact
     else
       { customer: @customer_id, payment_method: @payment_method_id }
     end

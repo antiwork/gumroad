@@ -1256,6 +1256,10 @@ describe PurchasesController, :vcr do
           before do
             preorder = preorder_product.build_preorder(purchase)
             preorder.save!
+            # process! already created a SetupIntent; ConfirmService re-resolves it before
+            # marking authorization successful. Stub so this controller example does not hit Stripe.
+            allow(ChargeProcessor).to receive(:get_setup_intent)
+              .and_return(instance_double(StripeSetupIntent, succeeded?: true))
           end
 
           it "marks pre-order authorized" do

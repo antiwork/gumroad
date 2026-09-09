@@ -11,10 +11,10 @@ class Purchase::ConfirmService < Purchase::BaseService
   end
 
   def perform
-    # Free purchases included in the order are already marked successful
-    # as they are not dependent on the SCA response. We can safely return no-error response
-    # for any purchase that is already successful.
-    return if purchase.successful?
+    # Free purchases, free trials (not_charged), and authorized preorders are already done
+    # before a follow-on confirm POST. Treat all completed checkout states as idempotent so a
+    # later sibling authentication round does not convert them into retryable failures.
+    return if purchase.successful? || purchase.not_charged? || purchase.preorder_authorization_successful?
 
     # In the purchase has changed its state and is no longer in_progress, we can't confirm it.
     # Example 1: the time to complete SCA has expired and we have marked this purchase as failed in the background.
@@ -34,9 +34,40 @@ class Purchase::ConfirmService < Purchase::BaseService
       CheckIndianCardMandateRegistrationJob.perform_async(purchase.id)
     end
 
+    # Free trials and preorder authorizations finalize from SetupIntent alone. When a sibling
+    # group's debit is already processing, the browser suppresses stripe_error so charged
+    # groups are not failed — resolve this group's own SetupIntent before marking success.
+    if (purchase.is_free_trial_purchase? || purchase.is_preorder_authorization?) &&
+       purchase.processor_setup_intent_id.present? &&
+       purchase.processor_payment_intent_id.blank?
+      # get_setup_intent needs a Stripe merchant_account; without one, fail closed below.
+      setup_intent = if purchase.merchant_account.present?
+        ChargeProcessor.get_setup_intent(purchase.merchant_account, purchase.processor_setup_intent_id)
+      end
+      unless setup_intent&.succeeded?
+        purchase.stripe_error_code ||= "setup_intent_authentication_failed"
+        purchase.errors.add(:base, "We couldn't authorize your card for this payment. Please try again or use a different payment method.") if purchase.errors.empty?
+        error_message = purchase.errors.full_messages[0]
+        handle_purchase_failure
+        return error_message
+      end
+    end
+
     if purchase.is_preorder_authorization?
       mark_preorder_authorized
       return
+    end
+
+    # Paid purchase with only a SetupIntent was never charged (gp#2437): finalizing would
+    # book balances with no money moved. Refuse unless ConfirmService already created the charge.
+    if purchase.processor_setup_intent_id.present? &&
+       purchase.processor_payment_intent_id.blank? &&
+       purchase.stripe_transaction_id.blank? &&
+       !purchase.free_purchase? && !purchase.is_free_trial_purchase? && !purchase.is_test_purchase?
+      purchase.errors.add(:base, "There is a temporary problem, please try again (your card was not charged).") if purchase.errors.empty?
+      error_message = purchase.errors.full_messages[0]
+      handle_purchase_failure
+      return error_message
     end
 
     purchase.confirm_charge_intent!
