@@ -290,7 +290,7 @@ const CtaBar = ({
     >
       <div
         ref={ref}
-        className="mx-auto flex max-w-product-page items-center justify-between gap-2 p-4 lg:gap-4 lg:px-8"
+        className="mx-auto flex max-w-product-page items-center justify-between gap-2 p-4 max-sm:flex-wrap lg:gap-4 lg:px-8"
         style={{
           transition: "var(--transition-duration)",
           marginTop: visible || !isDesktop ? undefined : -height,
@@ -326,7 +326,7 @@ const CtaBar = ({
         {product.ratings != null && product.ratings.count > 0 ? (
           <RatingsSummary className="hidden lg:flex" ratings={product.ratings} />
         ) : null}
-        <div className="flex items-center gap-2">
+        <div className="flex shrink-0 items-center gap-2">
           <CtaButton
             product={product}
             purchase={purchase}

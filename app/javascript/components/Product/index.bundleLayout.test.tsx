@@ -156,8 +156,14 @@ describe("product page bundle mobile layout", () => {
     expect(bundleLink.closest("section")?.className.split(" ")).toEqual(expect.arrayContaining(["min-w-2/5"]));
 
     const bundlePrice = bundleItem.querySelector(".current-price");
+    expect(bundlePrice?.className.split(" ")).toEqual(expect.arrayContaining(["current-price", "whitespace-nowrap"]));
     expect(bundlePrice?.closest("section")?.className.split(" ")).toEqual(
-      expect.arrayContaining(["max-w-1/2", "flex-row", "items-start"]),
+      expect.arrayContaining(["max-w-1/2", "shrink-0", "flex-row", "items-start"]),
+    );
+
+    expect(bundleLink.querySelector("h4")?.className.split(" ")).toEqual(expect.arrayContaining(["break-words"]));
+    expect(screen.getByRole("heading", { name: product.name }).className.split(" ")).toEqual(
+      expect.arrayContaining(["break-words"]),
     );
   });
 });
