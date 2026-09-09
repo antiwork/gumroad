@@ -24,9 +24,7 @@ class Order::ConfirmService
         if setup_charge_results.key?(purchase.id)
           result = setup_charge_results[purchase.id]
           if result == :pending
-            # Same shape as Order::FinalizeConfirmedChargeService#response_for: the debit is
-            # scheduled (India intents stay `processing` for hours), so the buyer must see a
-            # pending outcome, never a resubmittable failure.
+            # Match FinalizeConfirmedChargeService: India debits stay processing for hours.
             purchase_responses[purchase.id] = { success: true, processing: true, permalink: purchase.link.unique_permalink }
             next
           end
@@ -79,11 +77,9 @@ class Order::ConfirmService
       @setup_charge_results ||= {}
     end
 
-    # A multi-seller cart with an India e-mandate pauses at a SetupIntent needing 3DS
-    # (Order::ChargeService#register_india_mandate_for_off_session_cart!) — no PaymentIntent
-    # exists yet for those seller groups. Now that the buyer has confirmed, create each
-    # group's single combined off-session charge and finalize its purchases from the created
-    # intent; without it they would be marked successful with no money moved.
+    # India multi-seller carts pause at a SetupIntent with no PaymentIntent yet; after the
+    # buyer confirms, create each group's combined off-session charge or fulfillment marks
+    # success with no money moved.
     def charge_seller_groups_awaiting_setup_confirmation!
       browser_stripe_error = CardParamsHelper.check_for_errors(params).present?
 
@@ -226,9 +222,16 @@ class Order::ConfirmService
 
     def finalize_setup_charged_purchases!(purchases)
       reference_purchase = purchases.first
+      intent_id = reference_purchase.processor_payment_intent&.intent_id
+      # stripe_transaction_id alone (no stored PI) means money may already have moved;
+      # cannot retrieve. Leave pending for webhooks/reconcile rather than NoMethodError.
+      if intent_id.blank?
+        purchases.each { |purchase| setup_charge_results[purchase.id] = :pending }
+        return
+      end
       charge_intent = ChargeProcessor.get_charge_intent(
         reference_purchase.merchant_account,
-        reference_purchase.processor_payment_intent.intent_id
+        intent_id
       )
       finalize_charged_purchases(purchases, charge_intent)
     end

@@ -242,13 +242,16 @@ describe Order::ConfirmService, :vcr do
       let(:charge) { create(:charge, order:, seller:, merchant_account:, stripe_setup_intent_id: "seti_confirm_india") }
       let!(:purchases) do
         [product_1, product_2].map do |product|
+          # :purchase stamps a fake stripe_transaction_id; clear it so the group is
+          # awaiting_charge_after_setup? (not misclassified as already charged).
           purchase = create(:purchase_in_progress,
                             link: product,
                             seller:,
                             merchant_account:,
                             credit_card: india_card,
                             is_multi_buy: true,
-                            processor_setup_intent_id: "seti_confirm_india")
+                            processor_setup_intent_id: "seti_confirm_india",
+                            stripe_transaction_id: nil)
           charge.purchases << purchase
           order.purchases << purchase
           purchase
