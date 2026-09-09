@@ -120,31 +120,39 @@ describe Charge, :vcr do
   end
 
   describe "#refund_and_save!" do
-    it "commits every purchase refund when fee retention fails inside the outer transaction" do
+    it "collects each purchase's retained fee only after the outer transaction commits" do
       seller = create(:user)
-      purchases = Array.new(2) { create(:purchase, seller:, link: create(:product, user: seller), stripe_transaction_id: "ch_combined_refund") }
+      merchant_account = create(:merchant_account, user: seller, country: "BG", currency: "usd")
+      purchases = Array.new(2) do
+        create(:purchase, seller:, merchant_account:, link: create(:product, user: seller), stripe_transaction_id: "ch_combined_refund")
+      end
       charge = create(:charge, seller:, purchases:)
       create(:balance, user: seller, amount_cents: 10_000)
-      error = Stripe::InvalidRequestError.new("Transfer reversals are no longer supported", nil)
-      allow_any_instance_of(Purchase).to receive(:debit_processor_fee_from_merchant_account!).and_raise(error)
-      expect(ErrorNotifier).to receive(:notify).with(error, context: hash_including(:refund_id, :purchase_id)).twice
       purchases.each do |purchase|
         flow_of_funds = FlowOfFunds.build_simple_flow_of_funds(Currency::USD, -purchase.total_transaction_cents)
         expect(ChargeProcessor).to receive(:refund!).with(anything, "ch_combined_refund", hash_including(purchase:))
           .and_return(double(id: "re_fee_#{purchase.id}", refund: nil, flow_of_funds:))
       end
+      transaction_depth = ApplicationRecord.connection.open_transactions
+      collected_for = []
+      expect(StripeChargeProcessor).to receive(:debit_stripe_account_for_refund_fee).twice do |credit:, **|
+        expect(ApplicationRecord.connection.open_transactions).to eq(transaction_depth)
+        refund = credit.fee_retention_refund
+        collected_for << refund.purchase_id
+        refund.update!(debited_stripe_transfer: "tr_fee_#{refund.id}", fee_retention_collected_cents: credit.amount_cents.abs)
+        credit.amount_cents.abs
+      end
 
       expect { expect(charge.refund_and_save!(seller.id)).to be(true) }.to change(Refund, :count).by(2)
 
+      expect(collected_for).to match_array(purchases.map(&:id))
       purchases.each do |purchase|
         refund = purchase.reload.refunds.sole
         expect(purchase.stripe_refunded).to be(true)
-        expect(purchase.amount_refundable_cents).to eq(0)
-        expect(refund.fee_retention_pending).to be(true)
-        expect(refund.balance_transactions.where(user_id: seller.id).count).to eq(1)
+        expect(refund.fee_retention_pending).to be_falsey
+        expect(refund.fee_retention_recoverable).to be(false)
+        expect(refund.debited_stripe_transfer).to eq("tr_fee_#{refund.id}")
       end
-      expect(charge.refund_and_save!(seller.id)).to be(false)
-      expect(charge.purchases.sum { |purchase| purchase.refunds.count }).to eq(2)
     end
 
     it "attempts every purchase refund even when one purchase fails" do

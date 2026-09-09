@@ -341,11 +341,7 @@ class Purchase
       save!
       reverse_the_transfer_made_for_dispute_win! if chargedback? && chargeback_reversed
       reverse_excess_amount_from_stripe_transfer(refund:) if stripe_partially_refunded && vat_already_refunded
-      # A fee collection failure must not undo a refund already accepted by the processor,
-      # including when Charge#refund_and_save! owns the outer transaction.
-      unless is_refund_chargeback_fee_waived || chargedback_not_reversed?
-        refund.retain_fee { debit_processor_fee_from_merchant_account!(refund) }
-      end
+      debit_processor_fee_from_merchant_account!(refund) unless is_refund_chargeback_fee_waived || chargedback_not_reversed?
       Credit.create_for_vat_exclusive_refund!(refund:) if (paypal_order_id.present? || merchant_account&.is_a_stripe_connect_account?) && !chargedback_not_reversed?
       subscription.original_purchase.update!(should_exclude_product_review: true) if subscription&.should_exclude_product_review_on_charge_reversal?
       send_refunded_notification_webhook
@@ -681,8 +677,21 @@ class Purchase
       Stripe::Transfer.create_reversal(transfer.id, { amount: amount_refundable_cents }) if transfer.present?
     end
 
+    # Stripe collection waits for the OUTERMOST commit: Charge#refund_and_save! wraps several
+    # purchase refunds in one transaction, and a crash mid-collection must not roll back a
+    # refund Stripe already paid. The committed pending marker lets the hourly job finish it.
     def debit_processor_fee_from_merchant_account!(refund)
       Credit.create_for_refund_fee_retention!(refund:)
+      return unless refund.fee_retention_pending
+
+      refund_id = refund.id
+      purchase_id = id
+      AfterCommitEverywhere.after_commit do
+        Refund.find(refund_id).recover_pending_fee_retention!
+      rescue StandardError => e
+        Rails.logger.error("Refund fee collection after commit failed (refund_id=#{refund_id}): #{e.class}: #{e.message}")
+        ErrorNotifier.notify(e, context: { refund_id:, purchase_id: })
+      end
     end
 
     def insufficient_funds_refund_error_message
