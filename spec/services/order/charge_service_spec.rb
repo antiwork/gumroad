@@ -1934,13 +1934,14 @@ describe Order::ChargeService, :vcr do
       processor_charge.zip_check_result = "pass"
       stripe_charge_processor = instance_double(StripeChargeProcessor)
       allow(StripeChargeProcessor).to receive(:new).and_return(stripe_charge_processor)
-      allow(stripe_charge_processor).to receive(:get_charge).with(processor_charge.id, merchant_account: nil).and_return(processor_charge)
+      allow(stripe_charge_processor).to receive(:get_charge).with(processor_charge.id, merchant_account:).and_return(processor_charge)
       charge_intent = StripeChargeIntent.new(
         payment_intent: Stripe::PaymentIntent.construct_from(
           id: "pi_connect",
           status: StripeIntentStatus::SUCCESS,
           latest_charge: processor_charge.id
-        )
+        ),
+        merchant_account:
       )
       create_service = instance_double(Charge::CreateService)
       allow(Charge::CreateService).to receive(:new).and_return(create_service)

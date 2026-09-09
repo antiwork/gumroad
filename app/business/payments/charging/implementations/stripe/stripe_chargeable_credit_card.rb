@@ -56,9 +56,8 @@ class StripeChargeableCreditCard
     true
   end
 
-  # Order services call this only after proving SetupIntent ownership. prepare! itself must not
-  # bind a caller-supplied stripe_setup_intent_id, or a saved legacy scalar could steal another
-  # buyer's connected payment method on an ordinary single-seller purchase.
+  # Only after ownership proof: prepare! must not bind a caller-supplied SI id (legacy scalar
+  # could steal another buyer's Connect PM on a normal purchase).
   def trust_construction_setup_intent!
     @construction_setup_intent_id = @stripe_setup_intent_id
   end
