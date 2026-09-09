@@ -163,9 +163,8 @@ export const startOrderCreation = async (
   let pendingOrderId: string | null = null;
   let pendingProcessorIntentId: string | null = null;
   let pendingClientSecret: string | null = null;
-  // Once true, money may already be moving: confirmCardPayment captures immediately, and a
-  // confirmed SetupIntent lets the confirm POST create the group's off-session charge. Any
-  // later failure must then surface as a pending outcome, never a resubmittable cart.
+  // Once true, money may already be moving (card capture or SI→confirm charge). Later
+  // failures must be pending, never a resubmittable cart.
   let anyIntentConfirmed = false;
   // confirmCardPayment can capture immediately; SetupIntent confirmation alone does not charge
   // until confirm_order runs. Track those separately for the catch pending guard.
