@@ -7,6 +7,7 @@ import AutoImport from "unplugin-auto-import/vite";
 import { defineConfig } from "vite";
 import RubyPlugin from "vite-plugin-ruby";
 
+import { manualChunks } from "./config/vite/manual-chunks";
 import { staleModuleGuard } from "./config/vite/stale-module-guard";
 
 const rootPath = path.dirname(fileURLToPath(import.meta.url));
@@ -45,55 +46,6 @@ const BLOCKABLE_NAME_PATTERNS = [/google_analytics/u, /google-analytics/u, /goog
 
 function sanitizeChunkName(name: string) {
   return BLOCKABLE_NAME_PATTERNS.some((pattern) => pattern.test(name)) ? "third_party_tracking" : name;
-}
-
-function manualChunks(id: string) {
-  // Vite's dynamic-import helper is pulled in by every chunk that lazy-loads, so whichever chunk
-  // rollup parks it in becomes a static dependency of all of them. Left unpinned it landed in
-  // vendor-pdf, giving all 117 Inertia entries a static edge to a 171KB chunk almost none of them
-  // use. Pin it to the vendor chunk every page already loads.
-  if (id.includes("vite/preload-helper")) return "vendor";
-
-  if (!id.includes("node_modules")) return;
-
-  // Rich-text editor (Tiptap + ProseMirror) — self-contained, ~97KB gzip
-  if (id.includes("/@tiptap/") || id.includes("/prosemirror-")) {
-    return "vendor-editor";
-  }
-
-  // Charts (Recharts + D3) — self-contained, ~82KB gzip
-  if (id.includes("/recharts/") || id.includes("/d3-") || id.includes("/recharts-scale/") || id.includes("/victory-")) {
-    return "vendor-charts";
-  }
-
-  // Braintree / PayPal — self-contained, ~41KB gzip
-  if (id.includes("/braintree-web/") || id.includes("/@paypal/")) {
-    return "vendor-payments";
-  }
-
-  // EPUB reader — loaded only from the buyer's EPUB read page
-  if (
-    id.includes("/epubjs/") ||
-    id.includes("/jszip/") ||
-    id.includes("/localforage/") ||
-    id.includes("/@xmldom/xmldom/") ||
-    id.includes("/event-emitter/") ||
-    id.includes("/marks-pane/") ||
-    id.includes("/path-webpack/")
-  ) {
-    return "vendor-epub";
-  }
-
-  // PDF.js worker — huge (2.3MB), loaded lazily on demand
-  if (id.includes("/pdfjs-dist/")) {
-    return "vendor-pdf";
-  }
-
-  // Everything else from node_modules → single vendor chunk.
-  // This includes React, Inertia, Radix, Stripe, date-fns, lodash, etc.
-  // Keeping them together avoids circular chunk warnings from the deep
-  // cross-imports between React and its ecosystem packages.
-  return "vendor";
 }
 
 export default defineConfig(({ mode }) => ({
