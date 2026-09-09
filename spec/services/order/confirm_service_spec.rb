@@ -492,10 +492,20 @@ describe Order::ConfirmService, :vcr do
       it "does not finalize a paid purchase whose group charge could not be created" do
         setup_intent = instance_double(StripeSetupIntent, succeeded?: true)
         allow(ChargeProcessor).to receive(:get_setup_intent).and_return(setup_intent)
-        create_service = instance_double(Charge::CreateService)
-        allow(Charge::CreateService).to receive(:new).and_return(create_service)
-        # A rescued processor outcome: Charge::CreateService returns the charge with no intent.
+        # A definitive rescued outcome (Stripe rejected the request as malformed): no intent was
+        # created, so Charge::CreateService leaves processor_outcome_unknown false and returns the
+        # charge with buyer-facing errors on each purchase.
+        create_service = instance_double(Charge::CreateService, processor_outcome_unknown: false)
+        charged_purchases = nil
+        allow(Charge::CreateService).to receive(:new) do |**kwargs|
+          charged_purchases = kwargs[:purchases]
+          create_service
+        end
         allow(create_service).to receive(:perform) do
+          charged_purchases.each do |purchase|
+            purchase.errors.add(:base, "There is a temporary problem, please try again (your card was not charged).")
+            purchase.error_code = PurchaseErrorCode::PROCESSOR_INVALID_REQUEST
+          end
           charge.charge_intent = nil
           charge
         end

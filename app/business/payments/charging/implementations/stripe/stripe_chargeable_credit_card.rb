@@ -158,7 +158,9 @@ class StripeChargeableCreditCard
   end
 
   def update_card_details
-    card = @payment_method_on_connect_account&.card
+    # Stripe objects raise NoMethodError for absent attributes, and a non-card payment method
+    # (e.g. an India UPI mandate) has no `card` at all.
+    card = @payment_method_on_connect_account.try(:card)
     return unless card.present?
 
     @fingerprint = card[:fingerprint].presence
