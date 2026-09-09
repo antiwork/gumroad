@@ -12,12 +12,13 @@ class Bundle::UpdateShareService
   end
 
   def perform
-    @bundle.assign_attributes(
+    attributes = {
       taxonomy_id: @taxonomy_id,
       display_product_reviews: @display_product_reviews,
-      hide_bundle_product_reviews: @hide_bundle_product_reviews,
       is_adult: @is_adult
-    )
+    }
+    attributes[:hide_bundle_product_reviews] = @hide_bundle_product_reviews unless @hide_bundle_product_reviews.nil?
+    @bundle.assign_attributes(attributes)
 
     @bundle.save_tags!(@tags || [])
     @bundle.show_in_sections!(@section_ids || [])
