@@ -648,12 +648,15 @@ class StripeChargeProcessor
     transfer_reversal = nil
     transfer = nil
     if already_pinned_id.present?
-      transfer = Stripe::Transfer.retrieve(already_pinned_id) rescue nil
-      if transfer
-        transfer_reversal = existing_refund_fee_reversal(transfer.id, refund.id)
-        unless transfer_reversal || transfer.amount - transfer.amount_reversed > amount_to_reverse_for.call(transfer)
-          transfer = nil
-        end
+      # Fail closed on retrieve errors: a lost successful reversal must be looked
+      # up on this pin, not skipped for a second collection on another transfer.
+      transfer = Stripe::Transfer.retrieve(already_pinned_id)
+      transfer_reversal = existing_refund_fee_reversal(transfer.id, refund.id)
+      unless transfer_reversal || transfer.amount - transfer.amount_reversed > amount_to_reverse_for.call(transfer)
+        grouped_debit = existing_refund_fee_grouped_debit(refund, stripe_account_id)
+        return adopt_refund_fee_grouped_debit!(refund, grouped_debit) if grouped_debit
+
+        transfer = nil
       end
     end
     unless transfer
@@ -675,7 +678,6 @@ class StripeChargeProcessor
     end
     return unless transfer
 
-    reuse_legacy_reversal_key = refund.fee_retention_source_transfer == transfer.id
     if refund.fee_retention_source_transfer != transfer.id
       refund.fee_retention_source_transfer = transfer.id
       refund.save!
@@ -685,7 +687,7 @@ class StripeChargeProcessor
       transfer_reversal ||= Stripe::Transfer.create_reversal(
         transfer.id,
         { amount: amount_to_reverse_for.call(transfer), metadata: { refund_id: refund.id.to_s } },
-        { idempotency_key: refund_fee_retention_reversal_key(refund, transfer_id: transfer.id, legacy: reuse_legacy_reversal_key) }
+        { idempotency_key: refund_fee_retention_reversal_key(refund, transfer.id) }
       )
     rescue Stripe::InvalidRequestError => error
       raise unless error.message.match?(/no longer supported/i)
@@ -721,11 +723,22 @@ class StripeChargeProcessor
     "refund_fee_retention_#{refund.id}"
   end
 
-  def self.refund_fee_retention_reversal_key(refund, transfer_id: nil, legacy: false)
-    base = "refund_fee_retention_reversal_#{refund.id}"
-    return base if legacy || transfer_id.blank?
+  def self.refund_fee_retention_reversal_key(refund, transfer_id)
+    "refund_fee_retention_reversal_#{refund.id}_#{transfer_id}"
+  end
 
-    "#{base}_#{transfer_id}"
+  def self.existing_refund_fee_grouped_debit(refund, stripe_account_id)
+    Stripe::Transfer.list(
+      { transfer_group: refund_fee_retention_transfer_group(refund), limit: 1 },
+      { stripe_account: stripe_account_id }
+    ).first
+  end
+
+  def self.adopt_refund_fee_grouped_debit!(refund, transfer)
+    refund.debited_stripe_transfer = transfer.id
+    refund.fee_retention_collected_cents = transfer.amount
+    refund.save!
+    transfer.amount
   end
 
   def self.existing_refund_fee_reversal(transfer_id, refund_id)

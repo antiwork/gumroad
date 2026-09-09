@@ -4170,6 +4170,10 @@ describe StripeChargeProcessor, :vcr do
         empty_reversals = double("reversal_list")
         expect(empty_reversals).to receive(:auto_paging_each)
         expect(Stripe::Transfer).to receive(:list_reversals).with("tr_cad_exhausted", { limit: 100 }).and_return(empty_reversals)
+        expect(Stripe::Transfer).to receive(:list)
+          .with({ transfer_group: "refund_fee_retention_#{refund.id}", limit: 1 },
+                { stripe_account: @cad_merchant_account.charge_processor_merchant_id })
+          .and_return([])
         expect(Stripe::Transfer).to receive(:retrieve).with("tr_cad_next").and_return(next_transfer)
         transfer_reversal = stub_reversal_follow_up_calls(transfer_reversal_id: "trr_next", net: -1330)
         expect(Stripe::Transfer).to receive(:create_reversal)
@@ -4180,6 +4184,47 @@ describe StripeChargeProcessor, :vcr do
         expect(described_class.debit_stripe_account_for_refund_fee(credit:)).to eq(1330)
         expect(refund.reload.fee_retention_source_transfer).to eq("tr_cad_next")
         expect(refund.debited_stripe_transfer).to eq("trr_next")
+      end
+
+      it "does not search another transfer when the pinned source cannot be retrieved" do
+        refund = create(:refund)
+        refund.fee_retention_source_transfer = "tr_cad_1"
+        refund.save!
+        credit = create(:credit, user: @cad_merchant_account.user, amount_cents: 1000, merchant_account_id: @cad_merchant_account.id, fee_retention_refund: refund)
+        create(:payment_completed, user: @cad_merchant_account.user,
+                                   stripe_connect_account_id: @cad_merchant_account.charge_processor_merchant_id,
+                                   stripe_internal_transfer_id: "tr_cad_next")
+        expect(Stripe::Transfer).to receive(:retrieve).with("tr_cad_1")
+          .and_raise(Stripe::APIConnectionError.new("timeout"))
+        expect(Stripe::Transfer).not_to receive(:create_reversal)
+        expect(Stripe::Transfer).not_to receive(:list)
+
+        expect do
+          described_class.debit_stripe_account_for_refund_fee(credit:)
+        end.to raise_error(Stripe::APIConnectionError)
+        expect(refund.reload.fee_retention_source_transfer).to eq("tr_cad_1")
+        expect(refund.debited_stripe_transfer).to be_nil
+      end
+
+      it "adopts an existing grouped debit when the pinned source has no remaining capacity" do
+        refund = create(:refund)
+        refund.fee_retention_source_transfer = "tr_cad_exhausted"
+        refund.save!
+        credit = create(:credit, user: @cad_merchant_account.user, amount_cents: 1000, merchant_account_id: @cad_merchant_account.id, fee_retention_refund: refund)
+        exhausted = double(id: "tr_cad_exhausted", amount: 1330, amount_reversed: 1330, currency: "cad")
+        expect(Stripe::Transfer).to receive(:retrieve).with("tr_cad_exhausted").and_return(exhausted)
+        empty_reversals = double("reversal_list")
+        expect(empty_reversals).to receive(:auto_paging_each)
+        expect(Stripe::Transfer).to receive(:list_reversals).with("tr_cad_exhausted", { limit: 100 }).and_return(empty_reversals)
+        expect(Stripe::Transfer).to receive(:list)
+          .with({ transfer_group: "refund_fee_retention_#{refund.id}", limit: 1 },
+                { stripe_account: @cad_merchant_account.charge_processor_merchant_id })
+          .and_return([double(id: "tr_grouped_debit", amount: 900)])
+        expect(Stripe::Transfer).not_to receive(:create_reversal)
+
+        expect(described_class.debit_stripe_account_for_refund_fee(credit:)).to eq(900)
+        expect(refund.reload.debited_stripe_transfer).to eq("tr_grouped_debit")
+        expect(refund.fee_retention_collected_cents).to eq(900)
       end
 
       it "adopts an existing reversal for the pinned source transfer instead of reversing again" do
