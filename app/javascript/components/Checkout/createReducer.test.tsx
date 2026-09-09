@@ -10,7 +10,8 @@ const getSurcharges = vi.hoisted(() => vi.fn());
 vi.mock("$app/data/customer_surcharge", () => ({ getSurcharges }));
 
 const showAlert = vi.hoisted(() => vi.fn());
-vi.mock("$app/components/server-components/Alert", () => ({ showAlert }));
+const dismissAlert = vi.hoisted(() => vi.fn());
+vi.mock("$app/components/server-components/Alert", () => ({ showAlert, dismissAlert }));
 
 // payment.ts reads Routes.checkout_path() on mount to decide whether to rewrite the URL.
 vi.stubGlobal("Routes", { checkout_path: () => "/checkout" });
@@ -146,8 +147,129 @@ describe("createReducer surcharge refetches", () => {
     },
   };
 
+  // Real FX checkout lane. Default createReducer checkoutPayment is card_element (Manage), which
+  // deliberately does not intercept expired quotes.
+  const buyerCurrencyPresentmentCheckoutPayment: CheckoutPaymentConfig = {
+    integration: "payment_element",
+    fallback_reason: null,
+    disable_wallets: true,
+    request_apple_pay_merchant_tokens: false,
+    payment_element_wallets: false,
+    flat_payment_methods: true,
+    elements_options: {
+      stripe_elements_mode: "payment",
+      currency: "usd",
+      buyer_currency_presentment: true,
+      payment_method_types: ["card"],
+      payment_method_creation: "manual",
+      stripe_link_enabled: true,
+    },
+  };
+
   const renderCheckout = (overrides: Partial<Parameters<typeof createReducer>[0]> = {}) =>
     renderHook(() => createReducer({ ...initialArgs, ...overrides }));
+
+  it.each(["focus", "visibilitychange"])(
+    "refreshes once on %s after a backgrounded tab expires, without resuming payment",
+    async (event) => {
+      const requests = stubSurchargeRequests();
+      const { result } = renderCheckout({ checkoutPayment: buyerCurrencyPresentmentCheckoutPayment });
+      const expired = {
+        ...quote("expired"),
+        expires_at: new Date(Date.now() + 1000).toISOString(),
+        line_allocations: [
+          { permalink: "abc", price_cents: 1400, tip_cents: 0, tax_cents: 0, shipping_cents: 0, total_cents: 1400 },
+        ],
+      };
+      await act(() => vi.advanceTimersByTimeAsync(300));
+      await act(async () => requests[0]?.resolve(surchargesResponse({ buyer_currency_quote: expired })));
+      // Move wall time without running a timer: suspended tabs need no background polling.
+      vi.setSystemTime(Date.now() + 2000);
+      act(() => (event === "focus" ? window : document).dispatchEvent(new Event(event)));
+      expect(result.current[0].surcharges.type).toBe("pending");
+      expect(result.current[0].status.type).toBe("input");
+      expect(result.current[0].warning).toContain("review the updated total");
+      act(() => window.dispatchEvent(new Event("focus")));
+      await act(() => vi.advanceTimersByTimeAsync(300));
+      expect(requests).toHaveLength(2);
+      const fresh = {
+        ...expired,
+        token: "fresh",
+        expires_at: "2999-01-01T00:00:00Z",
+        presentment_total_cents: 1500,
+        line_allocations: [
+          { permalink: "abc", price_cents: 1500, tip_cents: 0, tax_cents: 0, shipping_cents: 0, total_cents: 1500 },
+        ],
+      };
+      await act(async () => requests[1]?.resolve(surchargesResponse({ buyer_currency_quote: fresh })));
+      expect(result.current[0].status.type).toBe("input");
+      expect(result.current[0].resumeSubmitAfterCheckoutPayment).toBe(false);
+      await act(() => vi.advanceTimersByTimeAsync(60000));
+      expect(requests).toHaveLength(2);
+    },
+  );
+
+  it("retries a failed expiry refresh only on buyer action and still requires re-review", async () => {
+    const requests = stubSurchargeRequests();
+    const { result } = renderCheckout({ checkoutPayment: buyerCurrencyPresentmentCheckoutPayment });
+    const expired = {
+      ...quote("expired"),
+      expires_at: "2000-01-01T00:00:00Z",
+      line_allocations: [
+        { permalink: "abc", price_cents: 1400, tip_cents: 0, tax_cents: 0, shipping_cents: 0, total_cents: 1400 },
+      ],
+    };
+    await act(() => vi.advanceTimersByTimeAsync(300));
+    await act(async () => requests[0]?.resolve(surchargesResponse({ buyer_currency_quote: expired })));
+    act(() => result.current[1]({ type: "validate" }));
+    await act(() => vi.advanceTimersByTimeAsync(300));
+    showAlert.mockClear();
+    dismissAlert.mockClear();
+    const { ResponseError } = await import("$app/utils/request");
+    await act(async () => requests[1]?.reject(new ResponseError()));
+    expect(result.current[0].surcharges.type).toBe("error");
+    expect(result.current[0].buyerCurrencyRemint).not.toBeNull();
+    expect(result.current[0].warning).toContain("review the updated total");
+    // TasteLint: yellow warning + Retry alone — no generic "Sorry, something went wrong" toast.
+    expect(showAlert).not.toHaveBeenCalled();
+    await act(() => vi.advanceTimersByTimeAsync(60000));
+    expect(requests).toHaveLength(2);
+    act(() => result.current[1]({ type: "refresh-expired-buyer-currency-quote" }));
+    expect(dismissAlert).not.toHaveBeenCalled();
+    await act(() => vi.advanceTimersByTimeAsync(300));
+    expect(requests).toHaveLength(3);
+    await act(async () =>
+      requests[2]?.resolve(
+        surchargesResponse({
+          buyer_currency_quote: { ...expired, token: "fresh", expires_at: "2999-01-01T00:00:00Z" },
+        }),
+      ),
+    );
+    expect(result.current[0].status.type).toBe("input");
+    expect(result.current[0].resumeSubmitAfterCheckoutPayment).toBe(false);
+    expect(result.current[0].surcharges.type).toBe("loaded");
+    expect(dismissAlert).not.toHaveBeenCalled();
+  });
+
+  it("does not dismiss unrelated alerts when refreshed cart data replaces a surcharge error", async () => {
+    const requests = stubSurchargeRequests();
+    const { result } = renderCheckout();
+    await act(() => vi.advanceTimersByTimeAsync(300));
+    const { ResponseError } = await import("$app/utils/request");
+    await act(async () => requests[0]?.reject(new ResponseError()));
+    expect(result.current[0].surcharges.type).toBe("error");
+    expect(showAlert).toHaveBeenCalledWith("Sorry, something went wrong. Please try again.", "error");
+    showAlert("This discount code is invalid.", "error");
+    act(() =>
+      result.current[1]({
+        type: "update-products",
+        products: result.current[0].products,
+        surcharges: surchargesResponse(),
+      }),
+    );
+    expect(result.current[0].surcharges.type).toBe("loaded");
+    expect(dismissAlert).not.toHaveBeenCalled();
+  });
 
   it("passes an abort signal to getSurcharges and aborts it when a newer change invalidates", async () => {
     const requests = stubSurchargeRequests();

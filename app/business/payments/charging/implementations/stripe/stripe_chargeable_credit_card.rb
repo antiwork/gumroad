@@ -8,7 +8,8 @@ class StripeChargeableCreditCard
 
   attr_reader :fingerprint, :payment_method_id, :last4, :visual, :number_length,
               :expiry_month, :expiry_year, :zip_code, :card_type, :country,
-              :stripe_setup_intent_id, :stripe_payment_intent_id
+              :stripe_payment_intent_id
+  attr_accessor :stripe_setup_intent_id
 
   def initialize(merchant_account, reusable_token, payment_method_id, fingerprint,
                  stripe_setup_intent_id, stripe_payment_intent_id,
@@ -19,6 +20,9 @@ class StripeChargeableCreditCard
     @payment_method_id = payment_method_id
     @fingerprint = fingerprint
     @stripe_setup_intent_id = stripe_setup_intent_id
+    # Construction SI is only trusted for Connect PM binding after CreditCard marks a
+    # merchant-scoped map entry. Legacy scalar IDs remain available for mandate lookup.
+    @construction_setup_intent_id = nil
     @stripe_payment_intent_id = stripe_payment_intent_id
     @last4 = last4
     @number_length = number_length
@@ -43,11 +47,26 @@ class StripeChargeableCreditCard
       Stripe::PaymentMethod.list({ customer: @customer_id, type: "card" }).data[0].id
 
     if @merchant_account&.is_a_stripe_connect_account?
-      prepare_for_direct_charge
-      update_card_details
+      unless trusted_setup_intent_for_binding? && bind_connected_setup_intent_payment_method!
+        prepare_for_direct_charge
+        update_card_details
+      end
     end
 
     true
+  end
+
+  # Only after ownership proof: prepare! must not bind a caller-supplied SI id (legacy scalar
+  # could steal another buyer's Connect PM on a normal purchase).
+  def trust_construction_setup_intent!
+    @construction_setup_intent_id = @stripe_setup_intent_id
+  end
+
+  def prepare_with_trusted_setup_intent!
+    @trusted_setup_intent_binding = true
+    prepare!
+  ensure
+    @trusted_setup_intent_binding = false
   end
 
   def reusable_token!(_user)
@@ -56,7 +75,9 @@ class StripeChargeableCreditCard
 
   def stripe_charge_params
     if @merchant_account&.is_a_stripe_connect_account?
-      { payment_method: @payment_method_id_on_connect_account }
+      params = { payment_method: @payment_method_id_on_connect_account }
+      params[:customer] = @customer_id_on_connect_account if @customer_id_on_connect_account.present?
+      params
     else
       { customer: @customer_id, payment_method: @payment_method_id }
     end
@@ -84,8 +105,61 @@ class StripeChargeableCreditCard
     end
   end
 
+  # Charge with a payment method that already lives on the connected account — e.g. the clone a
+  # confirmed SetupIntent registered its e-mandate on. Stripe binds mandates to the exact payment
+  # method, so cloning again via #prepare_for_direct_charge would drop the mandate.
+  def use_connected_account_payment_method!(payment_method_id)
+    @payment_method_id_on_connect_account = payment_method_id
+  end
+
+  def trusted_setup_intent_for_binding?
+    return true if @trusted_setup_intent_binding
+    @construction_setup_intent_id.present? &&
+      @stripe_setup_intent_id.present? &&
+      @stripe_setup_intent_id.to_s == @construction_setup_intent_id.to_s
+  end
+
+  def bind_connected_setup_intent_payment_method!
+    return false unless trusted_setup_intent_for_binding?
+    return false if @stripe_setup_intent_id.blank? || !@merchant_account&.is_a_stripe_connect_account?
+
+    begin
+      with_stripe_error_handler do
+        setup_intent = Stripe::SetupIntent.retrieve(
+          @stripe_setup_intent_id,
+          { stripe_account: @merchant_account.charge_processor_merchant_id }
+        )
+        payment_method_id = setup_intent.payment_method
+        payment_method_id = payment_method_id.id if payment_method_id.respond_to?(:id)
+        return false if payment_method_id.blank?
+
+        stripe_account = { stripe_account: @merchant_account.charge_processor_merchant_id }
+        payment_method = Stripe::PaymentMethod.retrieve(payment_method_id, stripe_account)
+        # Unattached Connect clones are consumed by the first charge. Attach to a Customer on
+        # this connected account so renewals can reuse the mandate's payment method.
+        if payment_method.customer.blank?
+          customer = Stripe::Customer.create({}, stripe_account)
+          payment_method = Stripe::PaymentMethod.attach(payment_method_id, { customer: customer.id }, stripe_account)
+        end
+        customer_id = payment_method.customer
+        customer_id = customer_id.id if customer_id.respond_to?(:id)
+        @customer_id_on_connect_account = customer_id
+
+        use_connected_account_payment_method!(payment_method_id)
+        @payment_method_on_connect_account = payment_method
+        update_card_details
+        true
+      end
+    rescue ChargeProcessorInvalidRequestError
+      # Legacy scalar SI IDs may belong to another Stripe account; fall through to a fresh clone.
+      false
+    end
+  end
+
   def update_card_details
-    card = @payment_method_on_connect_account&.card
+    # Stripe objects raise NoMethodError for absent attributes, and a non-card payment method
+    # (e.g. an India UPI mandate) has no `card` at all.
+    card = @payment_method_on_connect_account.try(:card)
     return unless card.present?
 
     @fingerprint = card[:fingerprint].presence

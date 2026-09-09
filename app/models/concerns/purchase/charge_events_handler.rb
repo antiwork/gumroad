@@ -117,7 +117,7 @@ module Purchase::ChargeEventsHandler
   def handle_event_succeeded!(event)
     handle_event_informational!(event)
 
-    return finalize_client_confirmed_charge! if event.type == ChargeEvent::TYPE_PAYMENT_INTENT_SUCCEEDED && client_confirmed_charge?
+    return finalize_client_confirmed_charge!(event) if event.type == ChargeEvent::TYPE_PAYMENT_INTENT_SUCCEEDED && client_confirmed_charge?
 
     charged_purchases.each do |purchase|
       next unless purchase.in_progress? && purchase.is_an_async_off_session_charge_in_india?
@@ -203,7 +203,62 @@ module Purchase::ChargeEventsHandler
       is_a?(Charge) && client_confirmed?
     end
 
-    def finalize_client_confirmed_charge!
-      Order::FinalizeConfirmedChargeService.new(order:).perform
+    def finalize_client_confirmed_charge!(event = nil)
+      # Scoped to this charge: multi-seller orders hold several client-confirmed charges, and
+      # finalizing another group from this event would save the wrong charge data. Recover a
+      # missing PI id from the webhook when an uncertain resume set client_confirmed only.
+      if is_a?(Charge) && stripe_payment_intent_id.blank? && event&.processor_payment_intent_id.present?
+        # Retrieve on this charge's Stripe account and require our transfer_group before saving.
+        # A crafted webhook can point transfer_group at another CH- id; never trust the event id alone.
+        begin
+          stripe_opts = if merchant_account&.is_a_stripe_connect_account?
+            { stripe_account: merchant_account.charge_processor_merchant_id }
+          else
+            {}
+          end
+          stripe_intent = Stripe::PaymentIntent.retrieve(event.processor_payment_intent_id, stripe_opts)
+          if stripe_intent.present? && stripe_intent.transfer_group.to_s == id_with_prefix
+            update!(stripe_payment_intent_id: event.processor_payment_intent_id)
+            purchases.each do |purchase|
+              next if purchase.processor_payment_intent.present?
+              purchase.create_processor_payment_intent!(intent_id: event.processor_payment_intent_id)
+            end
+          end
+        rescue Stripe::StripeError => e
+          Rails.logger.info("Skipping unverified PaymentIntent recovery for charge #{id}: #{e.message}")
+        end
+      end
+      promote_confirmed_setup_intents_for_client_confirmed_charge!
+      Order::FinalizeConfirmedChargeService.new(order:, charge: self).perform
+    end
+
+    def promote_confirmed_setup_intents_for_client_confirmed_charge!
+      return unless is_a?(Charge)
+
+      purchases.each do |purchase|
+        card = purchase.credit_card
+        setup_intent_id = purchase.processor_setup_intent_id
+        next if card.blank? || setup_intent_id.blank? || !card.requires_mandate?
+
+        setup_intent = ChargeProcessor.get_setup_intent(purchase.merchant_account, setup_intent_id)
+        next unless setup_intent&.succeeded?
+
+        existing_id = card.merchant_scoped_setup_intent_id_for(purchase.merchant_account)
+        if existing_id.present? && existing_id.to_s != setup_intent_id.to_s
+          existing_si = ChargeProcessor.get_setup_intent(purchase.merchant_account, existing_id)
+          existing_amount = existing_si&.card_mandate_options&.[](:amount) ||
+                            existing_si&.card_mandate_options&.[]("amount") ||
+                            existing_si&.card_mandate_options&.try(:amount)
+          new_amount = setup_intent.card_mandate_options&.[](:amount) ||
+                       setup_intent.card_mandate_options&.[]("amount") ||
+                       setup_intent.card_mandate_options&.try(:amount)
+          # Keep a newer/higher mandate; still promote replacements that raise the cap.
+          next if existing_amount.present? && new_amount.present? && existing_amount.to_i >= new_amount.to_i
+        end
+
+        card.store_stripe_setup_intent_id!(purchase.merchant_account, setup_intent_id)
+      end
+    rescue StandardError => e
+      ErrorNotifier.notify(e, charge_id: try(:id))
     end
 end

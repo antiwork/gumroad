@@ -57,9 +57,9 @@ describe FailAbandonedPurchaseWorker, :vcr do
             ChargeProcessor.cancel_setup_intent!(purchase.merchant_account, purchase.processor_setup_intent_id)
           end
 
-          it "handles the error gracefully and does not change the purchase state" do
+          it "marks the abandoned purchase failed after the intent is already canceled" do
             described_class.new.perform(purchase.id)
-            expect(purchase.reload.purchase_state).to eq("in_progress")
+            expect(purchase.reload.purchase_state).to eq("preorder_authorization_failed")
           end
         end
 
@@ -471,6 +471,51 @@ describe FailAbandonedPurchaseWorker, :vcr do
           described_class.new.perform(purchase.id)
 
           expect(FailAbandonedPurchaseWorker).to have_enqueued_sidekiq_job(purchase.id)
+        end
+      end
+
+      context "when a shared SetupIntent is still needed by a sibling purchase" do
+        let(:product) { create(:product) }
+        let(:sibling_product) { create(:product, user: create(:user)) }
+        let(:order) { create(:order) }
+        let(:purchase) do
+          create(:purchase_in_progress, link: product, processor_setup_intent_id: "seti_shared")
+        end
+        let!(:sibling) do
+          create(:purchase_in_progress, link: sibling_product, processor_setup_intent_id: "seti_shared")
+        end
+
+        before do
+          order.purchases << purchase
+          order.purchases << sibling
+          travel ChargeProcessor::TIME_TO_COMPLETE_SCA
+          allow(Stripe::SetupIntent).to receive(:retrieve).and_return(
+            Stripe::SetupIntent.construct_from(id: "seti_shared", status: "requires_action")
+          )
+        end
+
+        it "reschedules instead of cancelling when the sibling is still within the SCA window" do
+          sibling.update_column(:created_at, 1.minute.ago)
+
+          described_class.new.perform(purchase.id)
+
+          expect(purchase.reload.purchase_state).to eq("in_progress")
+          expect(FailAbandonedPurchaseWorker).to have_enqueued_sidekiq_job(purchase.id)
+        end
+
+        it "cancels the shared SetupIntent and fails older abandoned siblings past their SCA window" do
+          # Newer purchase's worker runs after its own window; older sibling is past the age
+          # filter so it no longer blocks cancel, but must still be failed with this purchase.
+          sibling.update_column(:created_at, ChargeProcessor::TIME_TO_COMPLETE_SCA.ago - 1.minute)
+          purchase.update_column(:created_at, ChargeProcessor::TIME_TO_COMPLETE_SCA.ago)
+
+          allow(ChargeProcessor).to receive(:cancel_setup_intent!)
+
+          described_class.new.perform(purchase.id)
+
+          expect(ChargeProcessor).to have_received(:cancel_setup_intent!)
+          expect(purchase.reload.purchase_state).to eq("failed")
+          expect(sibling.reload.purchase_state).to eq("failed")
         end
       end
 

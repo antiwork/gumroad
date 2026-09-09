@@ -36,6 +36,10 @@ class FailAbandonedPurchaseWorker
         else
           Stripe::SetupIntent.retrieve(purchase.processor_setup_intent_id)
         end
+        if setup_intent.status != StripeIntentStatus::PROCESSING && shared_setup_intent_still_needed?
+          FailAbandonedPurchaseWorker.perform_in(ChargeProcessor::TIME_TO_COMPLETE_SCA, purchase.id)
+          return
+        end
         cancel_setup_intent unless setup_intent.status == StripeIntentStatus::PROCESSING
       else
         raise "Expected purchase #{purchase.id} to have either a processor_payment_intent_id or processor_setup_intent_id present"
@@ -87,17 +91,52 @@ class FailAbandonedPurchaseWorker
       raise unless charge_intent&.succeeded? || charge_intent&.canceled?
     end
 
+    # Only siblings still inside their own SCA window should block cancel. Older
+    # in_progress siblings are abandoned too; cancel_setup_intent fails them together
+    # with this purchase so they cannot stay stuck after the shared intent is canceled.
+    def shared_setup_intent_still_needed?
+      Purchase.where(processor_setup_intent_id: purchase.processor_setup_intent_id)
+              .where.not(id: purchase.id)
+              .where(purchase_state: "in_progress")
+              .where("created_at > ?", ChargeProcessor::TIME_TO_COMPLETE_SCA.ago)
+              .exists?
+    end
+
+    # Cancelling a shared SetupIntent must fail every in_progress purchase still pointing at
+    # it, or a sibling past its SCA window stays stuck after seeing the canceled intent.
     def cancel_setup_intent
-      purchase.cancel_setup_intent!
+      ChargeProcessor.cancel_setup_intent!(purchase.merchant_account, purchase.processor_setup_intent_id)
+      fail_in_progress_purchases_sharing_setup_intent!
     rescue ChargeProcessorError
       setup_intent = ChargeProcessor.get_setup_intent(purchase.merchant_account, purchase.processor_setup_intent_id)
 
-      # Ignore the error if:
-      # - setup intent succeeded (user completed SCA in the meanwhile)
-      # - setup intent has been cancelled (by a parallel purchase)
-      # In both these cases the purchase will transition to a successful or failed state.
-      #
-      # Raise all other (unexpected) errors.
+      # Ignore succeeded (confirm will finish) or already-canceled intents (parallel sibling);
+      # re-raise unexpected errors.
       raise unless setup_intent&.succeeded? || setup_intent&.canceled?
+
+      # A parallel cancel may have left this purchase (and shared-SI siblings) in_progress.
+      fail_in_progress_purchases_sharing_setup_intent! if setup_intent&.canceled?
+    end
+
+    def fail_in_progress_purchases_sharing_setup_intent!
+      setup_intent_id = purchase.processor_setup_intent_id
+      return if setup_intent_id.blank?
+
+      # Prefer order association (indexed) over scanning unindexed processor_setup_intent_id.
+      # Always include this purchase so a delayed job cannot cancel the SI then age-filter it out.
+      siblings = if (order = purchase.order)
+        order.purchases.where(processor_setup_intent_id: setup_intent_id, purchase_state: "in_progress")
+      else
+        Purchase.where(processor_setup_intent_id: setup_intent_id, purchase_state: "in_progress")
+                .where("id = ? OR created_at > ?", purchase.id, (ChargeProcessor::TIME_TO_COMPLETE_SCA * 2).ago)
+      end
+
+      siblings.find_each do |sibling|
+        sibling.with_lock do
+          next unless sibling.in_progress?
+
+          Purchase::MarkFailedService.new(sibling).perform
+        end
+      end
     end
 end

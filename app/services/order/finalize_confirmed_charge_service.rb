@@ -6,8 +6,11 @@ class Order::FinalizeConfirmedChargeService
 
   attr_reader :charge_intent, :offer_codes
 
-  def initialize(order:, charge_intent: nil, retry_offer_codes: nil)
+  # `charge` scopes finalize to one seller group's intent (multi-seller orders hold several).
+  # Without it (AJAX/return-page), use the order's single intent-bearing charge for all.
+  def initialize(order:, charge: nil, charge_intent: nil, retry_offer_codes: nil)
     @order = order
+    @charge = charge
     @charge_intent = charge_intent
     @responses = {}
     @offer_codes = []
@@ -15,8 +18,8 @@ class Order::FinalizeConfirmedChargeService
   end
 
   def perform
-    charge = order.charges.find { _1.stripe_payment_intent_id.present? }
-    if charge.nil?
+    charge = @charge || order.charges.find { _1.stripe_payment_intent_id.present? }
+    if charge.nil? || charge.stripe_payment_intent_id.blank?
       # Never return empty success after the browser confirmed a payment: the client maps empty line
       # items to resubmittable failures, risking a second charge. Report processing instead.
       Rails.logger.error("Finalize found no client-confirm charge for order #{order.id}")
@@ -26,7 +29,8 @@ class Order::FinalizeConfirmedChargeService
     @charge_intent ||= ChargeProcessor.get_charge_intent(charge.merchant_account, charge.stripe_payment_intent_id)
 
     failed_purchases = []
-    order.purchases.each do |purchase|
+    purchases_to_finalize = @charge.present? ? charge.purchases : order.purchases
+    purchases_to_finalize.each do |purchase|
       result = Purchase::FinalizeConfirmedChargeService.new(purchase:, charge_intent:).perform
       failed_purchases << purchase if result.present? && result != :pending
       responses[cart_item_uid(purchase)] = response_for(purchase, result)

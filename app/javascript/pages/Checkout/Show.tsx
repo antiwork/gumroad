@@ -57,6 +57,8 @@ import {
 import { CrossSellModal } from "$app/components/Checkout/CrossSellModal";
 import { computeInitialCheckout, type InitialCheckout } from "$app/components/Checkout/initialCheckout";
 import {
+  BUYER_CURRENCY_QUOTE_REFRESH_MESSAGE,
+  hasExpiredBuyerCurrencyQuote,
   canDisplayBuyerCurrencyQuote,
   canUseStripePaymentElement,
   canUseStripePaymentElementClientConfirm,
@@ -124,8 +126,6 @@ type CheckoutIndexPageProps = {
 };
 
 const BUYER_CURRENCY_QUOTE_INVALID_ERROR_CODE = "buyer_currency_quote_invalid";
-const BUYER_CURRENCY_QUOTE_INVALID_MESSAGE =
-  "The local-currency price changed or expired. Please review the updated total and try again.";
 const DUPLICATE_PURCHASE_CONFIRMATION_REQUIRED_ERROR_CODE = "duplicate_purchase_confirmation_required";
 
 function getCartItemUid(item: CartItem) {
@@ -534,6 +534,12 @@ const CheckoutIndexPage = () => {
           ),
         );
       }
+      // Analytics and CAPTCHA may outlive the quote even when Pay started with a fresh one.
+      // Stop before either order endpoint; refreshing must not reuse this payment authorization.
+      if (hasExpiredBuyerCurrencyQuote(state)) {
+        dispatch({ type: "refresh-expired-buyer-currency-quote", beforeSubmit: true });
+        return;
+      }
       const requestData = {
         email: state.email,
         fullName: state.fullName,
@@ -699,7 +705,7 @@ const CheckoutIndexPage = () => {
             !result.success && "error_code" in result && result.error_code === BUYER_CURRENCY_QUOTE_INVALID_ERROR_CODE,
         )
       ) {
-        showAlert(BUYER_CURRENCY_QUOTE_INVALID_MESSAGE, "warning");
+        showAlert(BUYER_CURRENCY_QUOTE_REFRESH_MESSAGE, "warning");
         dispatch({ type: "cancel" });
         const refreshedCart = withRefreshedOfferCodes(getLatestCart(), result.offerCodes);
         cartForm.setData({ cart: refreshedCart });
@@ -846,14 +852,44 @@ const CheckoutIndexPage = () => {
           window.location.href = e.returnUrl;
           return;
         }
+        const retryable = e.retryable;
         showAlert(
-          "Your payment is being processed — check your email for your receipt. Please do not pay again.",
+          retryable
+            ? "Part of your payment is being processed — check your email for its receipt. The items that couldn't be charged are still in your cart to try again."
+            : "Your payment is being processed — check your email for your receipt. Please do not pay again.",
           "warning",
         );
         // Same stale-save hazard as the success path above: a pre-purchase save still pending
         // would re-fill the cart this line just emptied.
         debouncedSaveCartState.cancel();
-        cartForm.setData((prev) => ({ cart: { ...prev.cart, items: [] } }));
+        // Failed sibling seller groups were never charged, so their lines stay in the cart;
+        // every processing/success line leaves it so it cannot be resubmitted.
+        cartForm.setData((prev) => ({
+          cart: {
+            ...prev.cart,
+            items: retryable
+              ? prev.cart.items.flatMap((item) => {
+                  const lineItem = retryable.lineItems[getCartItemUid(item)];
+                  return lineItem && !lineItem.success
+                    ? {
+                        ...item,
+                        ...lineItem.updated_product,
+                        quantity: lineItem.updated_product?.quantity || item.quantity,
+                        accepted_offer: null,
+                      }
+                    : [];
+                })
+              : [],
+            ...(retryable
+              ? {
+                  discountCodes: retryable.offerCodes.map((discountCode) => ({
+                    ...discountCode,
+                    fromUrl: prev.cart.discountCodes.find(({ code }) => code === discountCode.code)?.fromUrl ?? false,
+                  })),
+                }
+              : {}),
+          },
+        }));
         dispatch({ type: "cancel" });
         return;
       }

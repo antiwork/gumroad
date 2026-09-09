@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.1].define(version: 2026_12_11_125458) do
+ActiveRecord::Schema[7.1].define(version: 2026_12_12_090000) do
   create_table "active_storage_attachments", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
     t.string "name", limit: 191, null: false
     t.string "record_type", limit: 191, null: false
@@ -2226,7 +2226,9 @@ ActiveRecord::Schema[7.1].define(version: 2026_12_11_125458) do
     t.integer "fee_cents"
     t.bigint "flags", default: 0, null: false
     t.bigint "seller_id"
+    t.boolean "fee_retention_recoverable", default: false, null: false
     t.index ["created_at"], name: "index_refunds_on_created_at"
+    t.index ["fee_retention_recoverable"], name: "index_refunds_on_fee_retention_recoverable"
     t.index ["link_id"], name: "index_refunds_on_link_id"
     t.index ["processor_refund_id"], name: "index_refunds_on_processor_refund_id"
     t.index ["purchase_id"], name: "index_refunds_on_purchase_id"

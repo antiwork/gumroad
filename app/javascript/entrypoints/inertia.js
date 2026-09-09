@@ -137,8 +137,9 @@ function assignLayout(page) {
   return page;
 }
 
-const pages = import.meta.glob("../pages/**/*.tsx");
-const jsxPages = import.meta.glob("../pages/**/*.jsx");
+// `**/*.tsx` matches colocated tests; a glob entry is a real module, not a tree-shakeable hint.
+const pages = import.meta.glob(["../pages/**/*.tsx", "!../pages/**/*.test.tsx"]);
+const jsxPages = import.meta.glob(["../pages/**/*.jsx", "!../pages/**/*.test.jsx"]);
 
 async function resolvePageComponent(name) {
   const tsxPath = `../pages/${name}.tsx`;

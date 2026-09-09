@@ -919,7 +919,7 @@ class Purchase < ApplicationRecord
     .not_is_archived_original_subscription_purchase
     .not_rental_expired
     .order(id: :desc)
-    .includes(:preorder, :purchaser, :seller, :subscription, :link, url_redirect: { purchase: { link: [:user, :thumbnail_alive, { display_asset_previews: [:file_attachment, :file_blob] }] } })
+    .includes(:preorder, :purchaser, :seller, :subscription, :link, url_redirect: { purchase: { link: [:user, :thumbnail_alive, { display_asset_previews: { file_attachment: { blob: { variant_records: { image_attachment: :blob } } } } }] } })
   }
   scope :for_library, lambda {
     all_success_states
@@ -4854,7 +4854,7 @@ class Purchase < ApplicationRecord
         return unless setup_intent.present?
 
         self.processor_setup_intent_id = setup_intent.id
-        credit_card.update!(json_data: { stripe_setup_intent_id: setup_intent.id }) if credit_card&.requires_mandate?
+        credit_card.store_stripe_setup_intent_id!(merchant_account, setup_intent.id) if credit_card&.requires_mandate?
         save!
 
         unless setup_intent.succeeded? || setup_intent.requires_action?
@@ -5044,7 +5044,14 @@ class Purchase < ApplicationRecord
           end
         end
         save!
-        credit_card.update!(json_data: { stripe_payment_intent_id: charge_intent.id }) if credit_card&.requires_mandate? && mandate_options.present?
+        if credit_card&.requires_mandate? && mandate_options.present?
+          # New on-session mandate terms live on this PaymentIntent. Clear this account's
+          # prior SI so renewals do not keep preferring an inactive authorization.
+          credit_card.update!(
+            json_data: credit_card.json_data_without_setup_intent_for(merchant_account)
+                                   .merge("stripe_payment_intent_id" => charge_intent.id)
+          )
+        end
 
         charge_intent
       end

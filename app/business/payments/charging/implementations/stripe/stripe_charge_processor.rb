@@ -619,13 +619,18 @@ class StripeChargeProcessor
     raise ChargeProcessorUnavailableError.new("Stripe error while refunding a charge: #{e.message}", original_error: e)
   end
 
-  def self.debit_stripe_account_for_refund_fee(credit:)
+  def self.debit_stripe_account_for_refund_fee(credit:, collect: true)
     return unless credit.present?
     return if credit.amount_cents == 0
     return unless credit.merchant_account&.charge_processor_merchant_id.present?
     return unless credit.merchant_account.holder_of_funds == HolderOfFunds::STRIPE
-    return if credit.merchant_account.country == Compliance::Countries::USA.alpha2
-    return if credit.fee_retention_refund&.debited_stripe_transfer.present?
+    refund = credit.fee_retention_refund
+    return if refund.blank?
+    return recorded_refund_fee_collection(credit:) if refund.debited_stripe_transfer.present?
+    return adopt_existing_refund_fee_collection(credit:) unless collect
+    # US Gumroad-managed accounts cannot reverse payout transfers; collect with the same
+    # grouped account debit used when a non-US reversal is no longer supported.
+    return debit_refund_fee_from_account(credit:) if credit.merchant_account.country == Compliance::Countries::USA.alpha2
 
     stripe_account_id = credit.merchant_account.charge_processor_merchant_id
     usd_amount_cents = credit.amount_cents.abs
@@ -640,45 +645,181 @@ class StripeChargeProcessor
     # raw USD figure in a foreign currency, debiting the creator the wrong amount.
     amount_to_reverse_for = ->(transfer) { usd_cents_to_currency(transfer.currency, usd_amount_cents) }
 
-    # First, try and reverse an internal transfer made from gumroad platform account
-    # to the connect account, if possible.
-    transfer_ids = credit.user.payments.completed
-                         .where(stripe_connect_account_id: stripe_account_id)
-                         .order(:created_at)
-                         .pluck(:stripe_internal_transfer_id)
-    transfer = transfer_ids.compact_blank.lazy
-                           .filter_map { |tr_id| Stripe::Transfer.retrieve(tr_id) rescue nil }
-                           .find { |tr| tr.amount - tr.amount_reversed > amount_to_reverse_for.call(tr) }
-    if transfer.present?
-      transfer_reversal = Stripe::Transfer.create_reversal(transfer.id, { amount: amount_to_reverse_for.call(transfer) })
-      refund = credit.fee_retention_refund
-      refund.update!(debited_stripe_transfer: transfer_reversal.id) if refund.present?
-      destination_refund = Stripe::Refund.retrieve(transfer_reversal.destination_payment_refund,
-                                                   stripe_account: stripe_account_id)
+    already_pinned_id = refund.fee_retention_source_transfer
+    observed_pin = already_pinned_id
+    transfer_reversal = nil
+    transfer = nil
+    if already_pinned_id.present?
+      # Fail closed on retrieve errors: a lost successful reversal must be looked
+      # up on this pin, not skipped for a second collection on another transfer.
+      transfer = Stripe::Transfer.retrieve(already_pinned_id)
+      transfer_reversal = existing_refund_fee_reversal(transfer.id, refund.id)
+      unless transfer_reversal || transfer.amount - transfer.amount_reversed > amount_to_reverse_for.call(transfer)
+        grouped_debit = existing_refund_fee_grouped_debit(refund, stripe_account_id)
+        return adopt_refund_fee_grouped_debit!(refund, grouped_debit) if grouped_debit
 
-      destination_balance_transaction = Stripe::BalanceTransaction.retrieve(destination_refund.balance_transaction,
-                                                                            stripe_account: stripe_account_id)
-      return destination_balance_transaction.net.abs
+        transfer = nil
+      end
+    end
+    unless transfer
+      # First, try and reverse an internal transfer made from gumroad platform account
+      # to the connect account, if possible.
+      transfer_ids = credit.user.payments.completed
+                           .where(stripe_connect_account_id: stripe_account_id)
+                           .order(:created_at)
+                           .pluck(:stripe_internal_transfer_id)
+      transfer = transfer_ids.compact_blank.lazy
+                             .filter_map { |tr_id| Stripe::Transfer.retrieve(tr_id) rescue nil }
+                             .find { |tr| tr.amount - tr.amount_reversed > amount_to_reverse_for.call(tr) }
+      unless transfer
+        transfers = Stripe::Transfer.list(destination: stripe_account_id, created: { 'lt': 120.days.ago.to_i }, limit: 100)
+        transfer = transfers.find do |tr|
+          tr.present? && tr.amount - tr.amount_reversed > amount_to_reverse_for.call(tr)
+        end
+      end
+    end
+    return unless transfer
+
+    refund.with_lock do
+      refund.reload
+      return recorded_refund_fee_collection(credit:) if refund.debited_stripe_transfer.present?
+      current_pin = refund.fee_retention_source_transfer
+      if current_pin.present? && current_pin != observed_pin
+        return
+      end
+      if current_pin != transfer.id
+        refund.fee_retention_source_transfer = transfer.id
+        refund.save!
+      end
     end
 
-    # If no eligible internal transfer was available, reverse a transfer associated with an old purchase.
-    # Try and find a transfer older than 120 days. As disputes and refunds are not allowed after 120 days, it's safe to
-    # reverse these transfers.
-    transfers = Stripe::Transfer.list(destination: stripe_account_id, created: { 'lt': 120.days.ago.to_i }, limit: 100)
-    transfer = transfers.find do |tr|
-      tr.present? && (tr.amount - tr.amount_reversed > amount_to_reverse_for.call(tr))
-    end
-    if transfer.present?
-      transfer_reversal = Stripe::Transfer.create_reversal(transfer.id, { amount: amount_to_reverse_for.call(transfer) })
-      refund = credit.fee_retention_refund
-      refund.update!(debited_stripe_transfer: transfer_reversal.id) if refund.present?
-      destination_refund = Stripe::Refund.retrieve(transfer_reversal.destination_payment_refund,
-                                                   stripe_account: stripe_account_id)
+    begin
+      transfer_reversal ||= Stripe::Transfer.create_reversal(
+        transfer.id,
+        { amount: amount_to_reverse_for.call(transfer), metadata: { refund_id: refund.id.to_s } },
+        { idempotency_key: refund_fee_retention_reversal_key(refund, transfer.id) }
+      )
+    rescue Stripe::InvalidRequestError => error
+      raise unless error.message.match?(/no longer supported/i)
 
-      destination_balance_transaction = Stripe::BalanceTransaction.retrieve(destination_refund.balance_transaction,
-                                                                            stripe_account: stripe_account_id)
-      destination_balance_transaction.net.abs
+      return debit_refund_fee_from_account(credit:)
     end
+    refund.debited_stripe_transfer = transfer_reversal.id
+    refund.save!
+    record_reversal_collected_cents!(refund, transfer_reversal, stripe_account_id)
+  end
+
+  def self.debit_refund_fee_from_account(credit:)
+    refund = credit.fee_retention_refund
+    return recorded_refund_fee_collection(credit:) if refund.debited_stripe_transfer.present?
+
+    merchant_account = credit.merchant_account
+    stripe_account_id = merchant_account.charge_processor_merchant_id
+    transfer_group = refund_fee_retention_transfer_group(refund)
+    # The lookup survives Stripe's idempotency-key expiry if the debit was never recorded locally.
+    transfer = Stripe::Transfer.list({ transfer_group:, limit: 1 }, { stripe_account: stripe_account_id }).first
+    transfer ||= Stripe::Transfer.create({ amount: usd_cents_to_currency(merchant_account.currency, credit.amount_cents.abs),
+                                           currency: merchant_account.currency,
+                                           destination: STRIPE_PLATFORM_ACCOUNT_ID,
+                                           transfer_group:, metadata: { refund_id: refund.id } },
+                                         { stripe_account: stripe_account_id, idempotency_key: transfer_group })
+    refund.debited_stripe_transfer = transfer.id
+    refund.fee_retention_collected_cents = transfer.amount
+    refund.save!
+    transfer.amount
+  end
+
+  def self.refund_fee_retention_transfer_group(refund)
+    "refund_fee_retention_#{refund.id}"
+  end
+
+  def self.refund_fee_retention_reversal_key(refund, transfer_id)
+    "refund_fee_retention_reversal_#{refund.id}_#{transfer_id}"
+  end
+
+  def self.adopt_existing_refund_fee_collection(credit:)
+    refund = credit.fee_retention_refund
+    return recorded_refund_fee_collection(credit:) if refund.debited_stripe_transfer.present?
+
+    stripe_account_id = credit.merchant_account.charge_processor_merchant_id
+    grouped_debit = existing_refund_fee_grouped_debit(refund, stripe_account_id)
+    return adopt_refund_fee_grouped_debit!(refund, grouped_debit) if grouped_debit
+
+    pin = refund.fee_retention_source_transfer
+    return if pin.blank?
+
+    # Fail closed on retrieve errors: a lost successful reversal on this pin
+    # must be looked up, not treated as "no collection".
+    transfer = Stripe::Transfer.retrieve(pin)
+    transfer_reversal = existing_refund_fee_reversal(transfer.id, refund.id)
+    return if transfer_reversal.blank?
+
+    refund.debited_stripe_transfer = transfer_reversal.id
+    refund.save!
+    record_reversal_collected_cents!(refund, transfer_reversal, stripe_account_id)
+  end
+
+  def self.existing_refund_fee_grouped_debit(refund, stripe_account_id)
+    Stripe::Transfer.list(
+      { transfer_group: refund_fee_retention_transfer_group(refund), limit: 1 },
+      { stripe_account: stripe_account_id }
+    ).first
+  end
+
+  def self.adopt_refund_fee_grouped_debit!(refund, transfer)
+    refund.debited_stripe_transfer = transfer.id
+    refund.fee_retention_collected_cents = transfer.amount
+    refund.save!
+    transfer.amount
+  end
+
+  def self.existing_refund_fee_reversal(transfer_id, refund_id)
+    return unless transfer_id.present? && refund_id.present?
+
+    expected = refund_id.to_s
+    reversals = Stripe::Transfer.list_reversals(transfer_id, { limit: 100 })
+    each_refund_fee_reversal(reversals) do |reversal|
+      metadata = reversal.try(:metadata)
+      next if metadata.blank?
+      next unless metadata[:refund_id].to_s == expected || metadata["refund_id"].to_s == expected
+
+      return reversal
+    end
+    nil
+  end
+
+  def self.each_refund_fee_reversal(reversals, &block)
+    if reversals.respond_to?(:auto_paging_each)
+      reversals.auto_paging_each(&block)
+    else
+      Array(reversals).each(&block)
+    end
+  end
+
+  def self.recorded_refund_fee_collection(credit:)
+    refund = credit.fee_retention_refund
+    return refund.fee_retention_collected_cents if refund.fee_retention_collected_cents.present?
+
+    stripe_account_id = credit.merchant_account.charge_processor_merchant_id
+    if refund.fee_retention_source_transfer.present?
+      transfer_reversal = Stripe::Transfer.retrieve_reversal(refund.fee_retention_source_transfer, refund.debited_stripe_transfer)
+      record_reversal_collected_cents!(refund, transfer_reversal, stripe_account_id)
+    else
+      transfer = Stripe::Transfer.retrieve(refund.debited_stripe_transfer, { stripe_account: stripe_account_id })
+      refund.fee_retention_collected_cents = transfer.amount
+      refund.save!
+      transfer.amount
+    end
+  end
+
+  def self.record_reversal_collected_cents!(refund, transfer_reversal, stripe_account_id)
+    destination_refund = Stripe::Refund.retrieve(transfer_reversal.destination_payment_refund,
+                                                 stripe_account: stripe_account_id)
+    destination_balance_transaction = Stripe::BalanceTransaction.retrieve(destination_refund.balance_transaction,
+                                                                          stripe_account: stripe_account_id)
+    refund.fee_retention_collected_cents = destination_balance_transaction.net.abs
+    refund.save!
+    refund.fee_retention_collected_cents
   end
 
   def self.debit_stripe_account_for_australia_backtaxes(credit:)

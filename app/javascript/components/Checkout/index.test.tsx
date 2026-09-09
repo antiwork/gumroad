@@ -14,7 +14,7 @@ vi.stubGlobal("Routes", new Proxy({}, { get: () => () => "#" }));
 // Subtrees that talk to Stripe/network or need browser APIs irrelevant to the amounts
 // being asserted.
 vi.mock("$app/components/Checkout/PaymentForm", () => ({ PaymentForm: () => null }));
-vi.mock("$app/components/server-components/Alert", () => ({ showAlert: vi.fn() }));
+vi.mock("$app/components/server-components/Alert", () => ({ showAlert: vi.fn(), dismissAlert: vi.fn() }));
 // Pulls in vendor analytics scripts ($vendor/facebook_pixel) that vitest cannot resolve.
 vi.mock("$app/utils/user_analytics", () => ({ trackUserProductAction: vi.fn(), startTrackingForSeller: vi.fn() }));
 // Needs the logged-in-user context (for lazy loading), irrelevant to the amounts asserted.

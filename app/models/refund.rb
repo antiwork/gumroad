@@ -24,6 +24,7 @@ class Refund < ApplicationRecord
 
   before_validation :assign_product, on: :create
   before_validation :assign_seller, on: :create
+  before_save :sync_fee_retention_recoverable
   validates_uniqueness_of :processor_refund_id, scope: :link_id, allow_blank: true
 
   # Refund selection for the tax report jobs' refund leg: refunds that get reported as their
@@ -80,6 +81,11 @@ class Refund < ApplicationRecord
   attr_json_data_accessor :business_vat_id
   attr_json_data_accessor :debited_stripe_transfer
   attr_json_data_accessor :retained_fee_cents
+  attr_json_data_accessor :fee_retention_pending
+  attr_json_data_accessor :fee_retention_error
+  attr_json_data_accessor :fee_retention_collected_cents
+  attr_json_data_accessor :fee_retention_source_transfer
+
   attr_json_data_accessor :presentment_currency
   attr_json_data_accessor :presentment_amount_cents
   attr_json_data_accessor :presentment_price_cents
@@ -103,6 +109,74 @@ class Refund < ApplicationRecord
   # the original refund event stays booked to its own day untouched, because ledger
   # days must regenerate bit-identical.
   attr_json_data_accessor :balance_reversed_on_failure_at
+
+  FEE_RETENTION_ERRORS = [Stripe::InvalidRequestError, Stripe::APIError, Stripe::APIConnectionError,
+                          Stripe::AuthenticationError, Stripe::PermissionError, Stripe::RateLimitError,
+                          Stripe::IdempotencyError].freeze
+
+  scope :pending_fee_retention, -> { where(fee_retention_recoverable: true) }
+
+  def retain_fee
+    yield
+  rescue *FEE_RETENTION_ERRORS => error
+    record_fee_retention_failure!(error)
+    nil
+  end
+
+  def record_fee_retention_failure!(error)
+    self.fee_retention_pending = true
+    self.fee_retention_error = { class: error.class.name, message: error.message }
+    save!
+    ErrorNotifier.notify(error, context: { refund_id: id, purchase_id: purchase_id })
+  end
+
+  def recover_pending_fee_retention!
+    pending = purchase.with_lock { reload.fee_retention_pending }
+    return unless pending
+
+    credit = Credit.find_by(fee_retention_refund: self, failed_refund_id: nil)
+    unless credit
+      message = "Pending refund fee retention has no Credit"
+      Rails.logger.error("#{message} (refund_id=#{id})")
+      ErrorNotifier.notify(message, context: { refund_id: id, purchase_id: purchase_id })
+      return
+    end
+
+    # Gate on terminally_failed?, not effective?: Stripe-held failures are never
+    # balance-reversed, so effective? stays true and would collect a fee for a refund
+    # the buyer never received. Existing pins and grouped debits are still adopted.
+    credit.fee_retention_refund = self
+    lookup_failed = false
+    retain_fee do
+      StripeChargeProcessor.debit_stripe_account_for_refund_fee(credit:, collect: !terminally_failed?)
+    rescue *FEE_RETENTION_ERRORS
+      lookup_failed = true
+      raise
+    end
+
+    purchase.with_lock do
+      reload.lock!
+      next unless fee_retention_pending
+      collection_recorded = debited_stripe_transfer.present? && fee_retention_collected_cents.present?
+      no_stripe_collection = credit.amount_cents.zero? || credit.merchant_account.holder_of_funds != HolderOfFunds::STRIPE
+      terminal_without_collection = terminally_failed? && debited_stripe_transfer.blank? && !lookup_failed
+      next unless collection_recorded || no_stripe_collection || terminal_without_collection
+
+      if fee_retention_collected_cents.present?
+        holding_cents = BalanceTransaction.where(credit:).sum(:holding_amount_net_cents)
+        adjustment_cents = -fee_retention_collected_cents - holding_cents
+        unless adjustment_cents.zero?
+          BalanceTransaction.create!(user: credit.user, merchant_account: credit.merchant_account, credit:,
+                                     issued_amount: BalanceTransaction::Amount.new(currency: Currency::USD, gross_cents: 0, net_cents: 0),
+                                     holding_amount: BalanceTransaction::Amount.new(currency: credit.merchant_account.currency,
+                                                                                    gross_cents: adjustment_cents, net_cents: adjustment_cents))
+        end
+      end
+      self.fee_retention_pending = false
+      self.fee_retention_error = nil
+      save!
+    end
+  end
 
   # In-memory mirror of the .effective scope, for callers working with preloaded
   # refunds. Keep the two in sync.
@@ -131,6 +205,10 @@ class Refund < ApplicationRecord
   end
 
   private
+    def sync_fee_retention_recoverable
+      self.fee_retention_recoverable = fee_retention_pending == true
+    end
+
     def assign_product
       self.link_id = purchase.link_id
     end

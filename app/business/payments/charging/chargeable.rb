@@ -24,6 +24,15 @@ class Chargeable
     @chargeables.values.first.prepare!
   end
 
+  def prepare_with_trusted_setup_intent!
+    chargeable = @chargeables.values.first
+    if chargeable.respond_to?(:prepare_with_trusted_setup_intent!)
+      chargeable.prepare_with_trusted_setup_intent!
+    else
+      chargeable.prepare!
+    end
+  end
+
   def fingerprint
     @chargeables.values.first.fingerprint
   end
@@ -73,9 +82,19 @@ class Chargeable
     chargeable.respond_to?(:stripe_setup_intent_id) ? chargeable.stripe_setup_intent_id : nil
   end
 
+  def stripe_setup_intent_id=(id)
+    chargeable = @chargeables.values.first
+    chargeable.stripe_setup_intent_id = id if chargeable.respond_to?(:stripe_setup_intent_id=)
+  end
+
   def stripe_payment_intent_id
     chargeable = @chargeables.values.first
     chargeable.respond_to?(:stripe_payment_intent_id) ? chargeable.stripe_payment_intent_id : nil
+  end
+
+  def use_connected_account_payment_method!(payment_method_id)
+    chargeable = @chargeables.values.first
+    chargeable.use_connected_account_payment_method!(payment_method_id) if chargeable.respond_to?(:use_connected_account_payment_method!)
   end
 
   def reusable_token_for!(charge_processor_id, user)

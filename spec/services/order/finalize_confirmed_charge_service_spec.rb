@@ -131,6 +131,37 @@ describe Order::FinalizeConfirmedChargeService, :vcr do
     end
   end
 
+  context "when scoped to one seller group's charge" do
+    it "finalizes only that charge's purchases against that charge's own intent" do
+      # A multi-seller order holds one client-confirmed charge per seller group; a webhook
+      # for one group's intent must never finalize another group's purchases against it.
+      order = instance_double(Order, id: 1)
+      merchant_account = instance_double(MerchantAccount)
+      other_group_charge = instance_double(Charge, stripe_payment_intent_id: "pi_other_group")
+      other_group_purchase = instance_double(Purchase)
+      product = instance_double(Link, unique_permalink: "scoped")
+      purchase = instance_double(Purchase, link: product, variant_attributes: [])
+      charge = instance_double(Charge, stripe_payment_intent_id: "pi_this_group", merchant_account:, purchases: [purchase])
+      processing_intent = instance_double(StripeChargeIntent)
+      purchase_finalizer = instance_double(Purchase::FinalizeConfirmedChargeService, perform: :pending)
+      allow(order).to receive_messages(
+        charges: [other_group_charge, charge],
+        purchases: [other_group_purchase, purchase],
+        send_charge_receipts: nil
+      )
+      expect(ChargeProcessor).to receive(:get_charge_intent).with(merchant_account, "pi_this_group").and_return(processing_intent)
+      expect(Purchase::FinalizeConfirmedChargeService).to receive(:new)
+        .once
+        .with(purchase:, charge_intent: processing_intent)
+        .and_return(purchase_finalizer)
+
+      responses = described_class.new(order:, charge:).perform
+
+      expect(responses.keys).to eq([cart_uid(purchase)])
+      expect(responses[cart_uid(purchase)][:processing]).to be(true)
+    end
+  end
+
   context "when no charge with a payment intent exists" do
     it "reports every purchase as processing rather than an empty resubmittable success" do
       params = { line_items: [line_item] }.merge(common_params)

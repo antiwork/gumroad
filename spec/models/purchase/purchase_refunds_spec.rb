@@ -1772,6 +1772,41 @@ describe "PurchaseRefunds", :vcr do
       @refunding_user = create(:user)
     end
 
+    it "commits the refund and reports a pending fee when fee retention fails" do
+      error = Stripe::InvalidRequestError.new("Transfer reversals are no longer supported", nil)
+      flow_of_funds = FlowOfFunds.build_simple_flow_of_funds(Currency::USD, -@purchase.total_transaction_cents)
+      expect(@purchase).to receive(:debit_processor_fee_from_merchant_account!).and_raise(error)
+      expect(ErrorNotifier).to receive(:notify).with(error, context: hash_including(purchase_id: @purchase.id))
+      expect(@purchase).to receive(:decrement_balance_for_refund_or_chargeback!).once.and_call_original
+      expect(CustomerMailer).to receive(:refund).with(@purchase.email, @purchase.link_id, @purchase.id).and_call_original
+
+      expect do
+        expect(@purchase.refund_purchase!(flow_of_funds, @refunding_user.id)).to be(true)
+      end.to change(Refund, :count).by(1)
+
+      refund = @purchase.reload.refunds.sole
+      expect(@purchase.stripe_refunded).to be(true)
+      expect(@purchase.stripe_partially_refunded).to be(false)
+      expect(@purchase.amount_refundable_cents).to eq(0)
+      expect(refund.balance_transactions.where(user_id: @purchase.seller_id).count).to eq(1)
+      expect(refund.fee_retention_pending).to be(true)
+      expect(refund.fee_retention_error).to eq("class" => error.class.name, "message" => error.message)
+      expect(ChargeProcessor).not_to receive(:refund!)
+      expect(@purchase.refund_and_save!(@refunding_user.id)).to be_nil
+      expect(@purchase.refunds.count).to eq(1)
+    end
+
+    it "does not swallow refund bookkeeping failures" do
+      flow_of_funds = FlowOfFunds.build_simple_flow_of_funds(Currency::USD, -@purchase.total_transaction_cents)
+      expect(@purchase).to receive(:decrement_balance_for_refund_or_chargeback!).and_raise(ActiveRecord::RecordInvalid)
+      expect(ErrorNotifier).not_to receive(:notify)
+
+      expect do
+        @purchase.refund_purchase!(flow_of_funds, @refunding_user.id)
+      end.to raise_error(ActiveRecord::RecordInvalid)
+      expect(@purchase.reload.refunds).to be_empty
+    end
+
     it "enqueues a UpdateSellerRefundEligibilityJob" do
       flow_of_funds = FlowOfFunds.build_simple_flow_of_funds(Currency::USD, @purchase.price_cents)
       expect do
