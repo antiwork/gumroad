@@ -1,11 +1,21 @@
 // @vitest-environment happy-dom
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, render, screen, within } from "@testing-library/react";
 import * as React from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { Product, type Product as ProductData } from "$app/components/Product";
 import type { PriceSelection } from "$app/components/Product/ConfigurationSelector";
+import { Layout } from "$app/components/Product/Layout";
 
+vi.stubGlobal("SSR", false);
+vi.stubGlobal("Routes", {
+  checkout_url: () => "https://example.com/checkout",
+  edit_link_url: () => "https://example.com/edit",
+});
+
+vi.mock("$app/utils/classNames", () => ({
+  classNames: (...xs: unknown[]) => xs.filter((x): x is string => typeof x === "string" && x.length > 0).join(" "),
+}));
 vi.mock("$app/data/user_action_event", () => ({ trackUserProductAction: vi.fn() }));
 vi.mock("$app/data/view_event", () => ({ incrementProductViews: vi.fn() }));
 vi.mock("$app/utils/user_analytics", () => ({
@@ -20,11 +30,8 @@ vi.mock("$app/components/useOriginalLocation", () => ({
   useOriginalLocation: () => "https://example.com/products/bundle",
 }));
 vi.mock("$app/components/useRunOnce", () => ({ useRunOnce: vi.fn() }));
-vi.mock("$app/components/Product/CtaButton", () => {
-  const CtaButton = React.forwardRef<HTMLAnchorElement>(() => null);
-  CtaButton.displayName = "CtaButton";
-  return { CtaButton };
-});
+vi.mock("$app/components/DomainSettings", () => ({ useAppDomain: () => "example.com" }));
+vi.mock("$app/components/useIsAboveBreakpoint", () => ({ useIsAboveBreakpoint: () => false }));
 vi.mock("$app/components/Product/ConfigurationSelector", () => {
   const ConfigurationSelector = React.forwardRef(() => null);
   ConfigurationSelector.displayName = "ConfigurationSelector";
@@ -38,6 +45,9 @@ vi.mock("$app/components/Product/ConfigurationSelector", () => {
       isPWYW: false,
       maxQuantity: null,
       selectedOption: null,
+      hasRentOption: false,
+      hasMultipleRecurrences: false,
+      hasConfigurableQuantity: false,
     }),
     buyerLocalPriceCentsForSelection: (priceCents?: number) => priceCents,
     buyerLocalContextFor: (product: ProductData) => ({
@@ -156,8 +166,72 @@ describe("product page bundle mobile layout", () => {
     expect(bundleLink.closest("section")?.className.split(" ")).toEqual(expect.arrayContaining(["min-w-2/5"]));
 
     const bundlePrice = bundleItem.querySelector(".current-price");
+    expect(bundlePrice?.className.split(" ")).toEqual(expect.arrayContaining(["current-price", "whitespace-nowrap"]));
     expect(bundlePrice?.closest("section")?.className.split(" ")).toEqual(
-      expect.arrayContaining(["max-w-1/2", "flex-row", "items-start"]),
+      expect.arrayContaining(["max-w-1/2", "shrink-0", "flex-row", "items-start"]),
     );
+
+    // wrap-break-word is overflow-wrap: break-word; break-words is deprecated in Tailwind v4.1.
+    expect(bundleLink.querySelector("h4")?.className.split(" ")).toEqual(expect.arrayContaining(["wrap-break-word"]));
+    expect(screen.getByRole("heading", { name: product.name }).className.split(" ")).toEqual(
+      expect.arrayContaining(["wrap-break-word"]),
+    );
+
+    const priceTag = document.querySelector("[itemprop='price']");
+    expect(priceTag?.className.split(" ")).toEqual(expect.arrayContaining(["whitespace-nowrap"]));
+    expect(priceTag?.closest("[itemprop='offers']")?.className.split(" ")).toEqual(
+      expect.arrayContaining(["flex", "shrink-0"]),
+    );
+
+    const cta = screen.getByRole("link", { name: "I want this!" });
+    expect(cta.className.split(" ")).toEqual(expect.arrayContaining(["whitespace-nowrap", "shrink-0"]));
+  });
+
+  it("stacks the sticky CTA bar price above the CTA on narrow screens", () => {
+    class FakeIntersectionObserver {
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+    }
+    vi.stubGlobal("IntersectionObserver", FakeIntersectionObserver);
+
+    render(
+      <Layout
+        product={product}
+        purchase={null}
+        discount_code={null}
+        wishlists={[]}
+        main_section_index={0}
+        sections={[]}
+        creator_profile={{
+          external_id: "seller",
+          name: "Measure Twice Digital",
+          avatar_url: "https://example.com/avatar.png",
+          twitter_handle: null,
+          subdomain: null,
+          is_verified: false,
+          can_edit: false,
+        }}
+        currency_code="usd"
+      />,
+    );
+
+    const bar = screen.getByRole("region", { name: "Product information bar" });
+    const inner = bar.querySelector(".max-w-product-page");
+    const innerClasses = inner?.className.split(" ");
+    expect(innerClasses).toEqual(expect.arrayContaining(["flex", "max-sm:flex-col", "max-sm:items-stretch"]));
+    expect(innerClasses).not.toContain("max-sm:flex-wrap");
+    expect(bar.querySelector("[itemprop='price']")?.className.split(" ")).toEqual(
+      expect.arrayContaining(["whitespace-nowrap"]),
+    );
+    const cta = within(bar).getByRole("link", { name: "I want this!" });
+    expect(cta.className.split(" ")).toEqual(expect.arrayContaining(["whitespace-nowrap", "shrink-0"]));
+    const ctaWrap = cta.parentElement;
+    expect(ctaWrap?.className.split(" ")).toEqual(
+      expect.arrayContaining(["shrink-0", "max-sm:flex-col", "max-sm:items-stretch"]),
+    );
+    // Price wrapper precedes the CTA wrapper, so a column puts the price on top.
+    expect(inner?.firstElementChild?.getAttribute("itemprop")).toBe("offers");
+    expect(inner?.lastElementChild).toBe(ctaWrap);
   });
 });

@@ -26,6 +26,10 @@ module OmniAuth
       info { {} }
       extra { { "raw_info" => access_token.params } }
 
+      def callback_url
+        full_host + callback_path
+      end
+
       def request_phase
         return redirect(flag_off_redirect) unless instagram_connect_enabled?
 

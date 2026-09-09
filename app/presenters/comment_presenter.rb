@@ -20,7 +20,7 @@ class CommentPresenter
       author_id: author&.external_id,
       author_name: author&.display_name || comment.author_name.presence,
       author_avatar_url: author&.avatar_url || ActionController::Base.helpers.image_url("gumroad-default-avatar-5.png"),
-      purchase_id: comment.purchase&.external_id,
+      purchase_id: nil,
       content: {
         original: comment.content,
         formatted: Rinku.auto_link(CGI.escapeHTML(comment.content), :all, %(target="_blank" rel="noopener noreferrer nofollow")),

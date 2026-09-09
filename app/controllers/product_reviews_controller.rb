@@ -16,7 +16,7 @@ class ProductReviewsController < ApplicationController
       product.product_reviews
         .alive
         .visible_on_product_page
-        .includes(:response, approved_video: :video_file, purchase: :purchaser)
+        .includes(:response, approved_video: :video_file, purchase: :purchaser, link: :user)
         .order(rating: :desc, created_at: :desc, id: :desc),
       page: [permitted_params[:page].to_i, 1].max,
       limit: PER_PAGE,
@@ -25,7 +25,10 @@ class ProductReviewsController < ApplicationController
 
     render json: {
       pagination: PagyPresenter.new(pagination).props,
-      reviews: reviews.map { ProductReviewPresenter.new(_1).product_review_props }
+      reviews: reviews.map do |review|
+        presenter = ProductReviewPresenter.new(review)
+        presenter.product_review_props(include_purchase_id: presenter.viewer_may_see_purchase_id?(viewer: logged_in_user, seller: current_seller))
+      end
     }
   end
 
@@ -36,8 +39,9 @@ class ProductReviewsController < ApplicationController
       .includes(:response, purchase: :purchaser, link: :user)
       .find_by_external_id!(permitted_params[:id])
 
+    presenter = ProductReviewPresenter.new(review)
     render json: {
-      review: ProductReviewPresenter.new(review).product_review_props
+      review: presenter.product_review_props(include_purchase_id: presenter.viewer_may_see_purchase_id?(viewer: logged_in_user, seller: current_seller))
     }
   end
 

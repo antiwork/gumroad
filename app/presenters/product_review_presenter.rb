@@ -9,7 +9,12 @@ class ProductReviewPresenter
     @product_review = product_review
   end
 
-  def product_review_props
+  def viewer_may_see_purchase_id?(viewer:, seller:)
+    seller == product_review.link.user ||
+      (viewer.present? && product_review.purchase.purchaser == viewer)
+  end
+
+  def product_review_props(include_purchase_id: false)
     purchase = product_review.purchase
     purchaser = purchase.purchaser
     {
@@ -20,7 +25,7 @@ class ProductReviewPresenter
         avatar_url: purchase.rater_uses_account_identity? ? purchaser.avatar_url : ActionController::Base.helpers.image_url("gumroad-default-avatar-5.png"),
         name: purchase.rater_name,
       },
-      purchase_id: purchase.external_id,
+      purchase_id: include_purchase_id ? purchase.external_id : nil,
       # `is_new` only says whether the review is recent. The timestamp itself is what a creator
       # building their own product page needs to sort reviews or print "reviewed on ...", so it is
       # returned alongside it rather than being derived away.

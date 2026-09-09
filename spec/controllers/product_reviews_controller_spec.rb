@@ -280,6 +280,46 @@ describe ProductReviewsController do
       expect(response.parsed_body["reviews"]).to eq([])
       expect(response.parsed_body["pagination"]).to include("pages" => 2, "page" => 99)
     end
+
+    it "omits purchase external ids from the public payload" do
+      get :index, params: { product_id: product.external_id }
+
+      expect(response.parsed_body["reviews"].map { _1["purchase_id"] }).to all(be_nil)
+    end
+
+    it "includes purchase external ids for the product's seller" do
+      sign_in product.user
+      get :index, params: { product_id: product.external_id }
+
+      expect(response.parsed_body["reviews"].map { _1["purchase_id"] })
+        .to eq(reviews.reverse.first(2).map { _1.purchase.external_id })
+    end
+
+    it "includes purchase external id only for the buyer's own review" do
+      buyer = create(:user)
+      # rating-desc page 1 is the two highest ratings; reviews.last (rating 3) is on it
+      own = reviews.last
+      own.purchase.update!(purchaser: buyer)
+      sign_in buyer
+      get :index, params: { product_id: product.external_id }
+
+      returned = response.parsed_body["reviews"]
+      own_review = returned.find { _1["id"] == own.external_id }
+      other_reviews = returned.reject { _1["id"] == own.external_id }
+
+      expect(own_review["purchase_id"]).to eq(own.purchase.external_id)
+      expect(other_reviews.map { _1["purchase_id"] }).to all(be_nil)
+    end
+
+    it "does not expose purchase external id for another buyer" do
+      buyer = create(:user)
+      other_buyer = create(:user)
+      reviews.last.purchase.update!(purchaser: buyer)
+      sign_in other_buyer
+      get :index, params: { product_id: product.external_id }
+
+      expect(response.parsed_body["reviews"].map { _1["purchase_id"] }).to all(be_nil)
+    end
   end
 
   describe "#show" do
@@ -352,9 +392,31 @@ describe ProductReviewsController do
       get :show, params: { id: review.external_id }
 
       expect(response).to be_successful
-      expect(response.parsed_body["review"].deep_symbolize_keys).to eq(
-        ProductReviewPresenter.new(review).product_review_props
-      )
+      expect(response.parsed_body["review"]["purchase_id"]).to be_nil
+    end
+
+    it "includes purchase external id for the product's seller" do
+      sign_in product.user
+      get :show, params: { id: review.external_id }
+
+      expect(response.parsed_body["review"]["purchase_id"]).to eq(review.purchase.external_id)
+    end
+
+    it "includes purchase external id for the review's buyer" do
+      buyer = create(:user)
+      review.purchase.update!(purchaser: buyer)
+      sign_in buyer
+      get :show, params: { id: review.external_id }
+
+      expect(response.parsed_body["review"]["purchase_id"]).to eq(review.purchase.external_id)
+    end
+
+    it "does not expose purchase external id for another buyer" do
+      other_buyer = create(:user)
+      sign_in other_buyer
+      get :show, params: { id: review.external_id }
+
+      expect(response.parsed_body["review"]["purchase_id"]).to be_nil
     end
   end
 end

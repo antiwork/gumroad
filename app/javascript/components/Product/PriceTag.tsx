@@ -67,10 +67,10 @@ export const PriceTag = ({
   const borderClasses = "border-r-transparent border-[calc(0.5lh+--spacing(1))] border-l-1";
 
   return (
-    <div itemScope itemProp="offers" itemType="https://schema.org/Offer" className="flex items-center">
+    <div itemScope itemProp="offers" itemType="https://schema.org/Offer" className="flex shrink-0 items-center">
       <div className="relative grid grid-flow-col border border-r-0 border-border">
         <div
-          className="bg-accent-with-text px-2 py-1 text-accent-foreground"
+          className="bg-accent-with-text px-2 py-1 whitespace-nowrap text-accent-foreground"
           itemProp="price"
           content={formatPriceCentsWithoutCurrencySymbolAndComma(currencyCode, price)}
         >

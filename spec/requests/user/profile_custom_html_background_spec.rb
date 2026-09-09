@@ -244,6 +244,10 @@ describe "Profile custom HTML page background bridge", type: :system, js: true d
       canvas = wrapper_canvas_for("dark")
       expect_wrapper_background(canvas)
       expect(theme_color).to eq(canvas)
+      # Body/iframe stylesheet backgrounds would cover the bridge's html inline
+      # color. Pin that they stay unpainted so the backplate is what visitors see.
+      expect(page.evaluate_script("getComputedStyle(document.body).backgroundColor")).to eq("rgba(0, 0, 0, 0)")
+      expect(page.evaluate_script("getComputedStyle(document.getElementById('gumroad-landing-frame')).backgroundColor")).to eq("rgba(0, 0, 0, 0)")
     end
   end
 

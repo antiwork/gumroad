@@ -159,6 +159,39 @@ describe ReceiptPresenter::ItemInfo do
               expect(props[:show_download_button]).to eq(false)
             end
           end
+
+          context "when the purchase is an empty-member bundle" do
+            let(:product) { create(:product, :bundle, user: seller) }
+            let(:purchase) do
+              create(
+                :purchase,
+                link: product,
+                seller:,
+                merchant_account:,
+                price_cents: 1_499,
+                is_bundle_purchase: true
+              )
+            end
+
+            before do
+              product.bundle_products.each(&:mark_deleted!)
+              purchase.create_url_redirect!
+            end
+
+            it "returns false when the parent also has nothing to open" do
+              expect(purchase.product_purchases).to be_empty
+              expect(props[:show_download_button]).to eq(false)
+            end
+
+            context "when the parent still has its own files" do
+              before { create(:product_file, link: product) }
+
+              it "returns true" do
+                expect(purchase.product_purchases).to be_empty
+                expect(props[:show_download_button]).to eq(true)
+              end
+            end
+          end
         end
       end
     end

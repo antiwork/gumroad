@@ -41,6 +41,13 @@ describe SocialConnectVerification do
       end
     end
 
+    it "does not consider a superseded row linked even when its uid still matches the live identity" do
+      verification = create(:social_connect_verification, platform: "twitter", uid: "123", superseded_at: 1.day.ago)
+      verification.user.update!(twitter_user_id: "123")
+
+      expect(verification.currently_linked?).to be(false)
+    end
+
     it "does not consider an unsupported platform linked" do
       verification = create(:social_connect_verification, platform: "tiktok")
       verification.user.update!(twitter_user_id: verification.uid)
@@ -56,11 +63,21 @@ describe SocialConnectVerification do
       expect(verification.errors[:platform]).to be_present
     end
 
-    it "allows one record per platform per user" do
+    it "allows one current record per platform per user" do
       user = create(:user)
       create(:social_connect_verification, user:, platform: "twitter", uid: "1")
       duplicate = build(:social_connect_verification, user:, platform: "twitter", uid: "2")
       expect(duplicate).not_to be_valid
+    end
+
+    it "allows superseded records alongside the current one for the same platform" do
+      user = create(:user)
+      create(:social_connect_verification, user:, platform: "twitter", uid: "1", superseded_at: 2.days.ago)
+      current = create(:social_connect_verification, user:, platform: "twitter", uid: "2")
+      later_superseded = build(:social_connect_verification, user:, platform: "twitter", uid: "3", superseded_at: 1.day.ago)
+
+      expect(current).to be_valid
+      expect(later_superseded).to be_valid
     end
 
     it "allows the same social identity across different users" do
@@ -71,6 +88,18 @@ describe SocialConnectVerification do
     end
   end
 
+  describe "#supersede!" do
+    it "stamps superseded_at once and leaves an existing stamp alone" do
+      verification = create(:social_connect_verification)
+
+      verification.supersede!
+      expect(verification.superseded_at).to be_present
+      expect(described_class.current).not_to include(verification)
+
+      expect { verification.supersede! }.not_to change { verification.reload.superseded_at }
+    end
+  end
+
   describe "#shared_identity_user_ids" do
     it "returns other users vouched for by the same social identity" do
       shared = create(:social_connect_verification, platform: "twitter", uid: "shared")
@@ -78,6 +107,14 @@ describe SocialConnectVerification do
       create(:social_connect_verification, platform: "twitter", uid: "different")
 
       expect(shared.shared_identity_user_ids).to eq([other.user_id])
+    end
+
+    it "counts superseded identities in both directions" do
+      superseded = create(:social_connect_verification, platform: "twitter", uid: "shared", superseded_at: 1.day.ago)
+      current = create(:social_connect_verification, platform: "twitter", uid: "shared")
+
+      expect(superseded.shared_identity_user_ids).to eq([current.user_id])
+      expect(current.shared_identity_user_ids).to eq([superseded.user_id])
     end
   end
 
@@ -106,6 +143,43 @@ describe SocialConnectVerification do
         described_class.record_from_twitter!(user, raw_info.merge("followers_count" => 500))
       end.not_to change { described_class.count }
       expect(user.social_connect_verifications.sole.follower_count).to eq(500)
+    end
+
+    it "supersedes the previous identity when a different account is connected" do
+      original = described_class.record_from_twitter!(user, raw_info)
+
+      expect do
+        described_class.record_from_twitter!(user, raw_info.merge("id" => 999, "screen_name" => "fresh"))
+      end.to change { described_class.count }.by(1)
+
+      expect(original.reload).to have_attributes(uid: "279418691", handle: "squidarth", superseded_at: be_present)
+      expect(user.social_connect_verifications.current.sole).to have_attributes(uid: "999", handle: "fresh")
+    end
+
+    it "revives a previously verified identity instead of duplicating it" do
+      original = described_class.record_from_twitter!(user, raw_info)
+      replacement = described_class.record_from_twitter!(user, raw_info.merge("id" => 999))
+
+      expect do
+        described_class.record_from_twitter!(user, raw_info.merge("followers_count" => 500))
+      end.not_to change { described_class.count }
+
+      expect(original.reload).to have_attributes(superseded_at: nil, follower_count: 500)
+      expect(replacement.reload.superseded_at).to be_present
+      expect(user.social_connect_verifications.current.sole).to eq(original)
+    end
+
+    it "revives a soft-superseded identity when no current row remains" do
+      original = described_class.record_from_twitter!(user, raw_info)
+      original.supersede!
+      expect(described_class.current.where(user:, platform: "twitter")).to be_empty
+
+      expect do
+        described_class.record_from_twitter!(user, raw_info.merge("followers_count" => 600))
+      end.not_to change { described_class.count }
+
+      expect(original.reload).to have_attributes(superseded_at: nil, follower_count: 600, uid: "279418691")
+      expect(user.social_connect_verifications.current.sole).to eq(original)
     end
 
     it "records nothing when the payload carries errors" do
@@ -153,6 +227,17 @@ describe SocialConnectVerification do
       expect(verification.last_posted_at).to eq(Time.iso8601("2026-08-01T12:00:00Z"))
     end
 
+    it "supersedes the previous channel when a different one is connected" do
+      original = described_class.record_from_youtube!(user, channel)
+
+      expect do
+        described_class.record_from_youtube!(user, channel.merge("id" => "UCother"))
+      end.to change { described_class.count }.by(1)
+
+      expect(original.reload).to have_attributes(uid: "UC_x5XG1OV2P6uZZ5FSM9Ttw", superseded_at: be_present)
+      expect(user.social_connect_verifications.current.sole.uid).to eq("UCother")
+    end
+
     it "records nothing when the channel id is missing" do
       expect do
         described_class.record_from_youtube!(user, channel.merge("id" => ""))
@@ -190,6 +275,17 @@ describe SocialConnectVerification do
       verification = described_class.record_from_instagram!(user, profile.merge("token_user_id" => "998877"))
 
       expect(verification.reload.uid).to eq("998877")
+    end
+
+    it "supersedes the previous account when a different one is connected" do
+      original = described_class.record_from_instagram!(user, profile)
+
+      expect do
+        described_class.record_from_instagram!(user, profile.merge("user_id" => "998877"))
+      end.to change { described_class.count }.by(1)
+
+      expect(original.reload).to have_attributes(uid: "17841400000000000", superseded_at: be_present)
+      expect(user.social_connect_verifications.current.sole.uid).to eq("998877")
     end
 
     it "records nothing when the user id is missing" do
