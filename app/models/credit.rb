@@ -353,8 +353,7 @@ class Credit < ApplicationRecord
     reversed_amount_cents_in_holding_currency = credit.usd_cents_to_currency(credit.merchant_account.currency, credit.amount_cents)
 
     if credit.merchant_account.holder_of_funds == HolderOfFunds::STRIPE
-      stripe_fee_collection_required = credit.amount_cents != 0 &&
-        credit.merchant_account.country != Compliance::Countries::USA.alpha2
+      stripe_fee_collection_required = credit.amount_cents != 0
       refund.fee_retention_pending = stripe_fee_collection_required
       refund.save!
       if stripe_fee_collection_required
