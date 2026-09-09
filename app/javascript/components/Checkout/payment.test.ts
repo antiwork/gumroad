@@ -572,9 +572,9 @@ describe("expired direct-listed amount token submission", () => {
     vi.spyOn(Date, "now").mockReturnValue(Date.parse("2026-09-08T12:00:00Z"));
     try {
       for (const expiry of ["2026-09-08T12:00:00Z", "invalid"]) {
-        expect(reduceCheckoutState(listedState(directListedCardConfig, expiry), { type: "validate" }).surcharges.type).toBe(
-          "pending",
-        );
+        expect(
+          reduceCheckoutState(listedState(directListedCardConfig, expiry), { type: "validate" }).surcharges.type,
+        ).toBe("pending");
       }
     } finally {
       vi.restoreAllMocks();

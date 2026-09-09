@@ -266,9 +266,7 @@ describe("createReducer surcharge refetches", () => {
       const { result } = renderCheckout({ checkoutPayment: directListedCheckoutPayment });
       await act(() => vi.advanceTimersByTimeAsync(300));
       await act(async () =>
-        requests[0]?.resolve(
-          surchargesResponse(listedToken(new Date(Date.now() + 1000).toISOString())),
-        ),
+        requests[0]?.resolve(surchargesResponse(listedToken(new Date(Date.now() + 1000).toISOString()))),
       );
       vi.setSystemTime(Date.now() + 2000);
       act(() => (event === "focus" ? window : document).dispatchEvent(new Event(event)));
