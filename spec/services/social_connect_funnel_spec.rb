@@ -36,9 +36,9 @@ describe SocialConnectFunnel do
     it "swallows write failures so connect paths cannot 500" do
       allow(Event).to receive(:create!).and_raise(ActiveRecord::StatementInvalid, "boom")
 
-      expect {
+      expect do
         described_class.record!(user:, stage: "connected", provider: "twitter", surface: "omniauth")
-      }.not_to raise_error
+      end.not_to raise_error
     end
   end
 

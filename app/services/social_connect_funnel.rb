@@ -79,7 +79,7 @@ class SocialConnectFunnel
     def record_reviewed!(user:, verifications:)
       return if user.blank?
 
-      linked = Array(verifications).select { |verification| verification.currently_linked? }.map(&:platform).uniq
+      linked = Array(verifications).filter_map { |verification| verification.platform if verification.currently_linked? }.uniq
       if linked.empty?
         record!(user:, stage: "reviewed", provider: "none", surface: "admin_social_connections", once: true)
       else
@@ -92,7 +92,7 @@ class SocialConnectFunnel
     def record_hold_released!(user, surface:)
       return if user.blank?
 
-      linked = user.social_connect_verifications.current.select(&:currently_linked?).map(&:platform).uniq
+      linked = user.social_connect_verifications.current.filter_map { |verification| verification.platform if verification.currently_linked? }.uniq
       if linked.empty?
         record!(user:, stage: "hold_released", provider: "none", surface:, once: true)
       else
