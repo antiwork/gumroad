@@ -63,7 +63,7 @@ vi.mock("$app/components/Checkout", () => ({
                   selectedMethodType: "card",
                   cardCountry: "US",
                   walletType: null,
-                  mountCurrency: "cad",
+                  mountCurrency: state.checkoutPayment.elements_options.currency,
                   methodListToken: null,
                 }
               : { type: "saved" },
@@ -80,10 +80,12 @@ vi.mock("$app/components/Checkout", () => ({
         </button>
         <output>
           {state.surcharges.type === "loaded"
-            ? state.surcharges.result.buyer_currency_quote?.presentment_total_cents
+            ? (state.surcharges.result.direct_listed_line_allocations?.[0]?.total_cents ??
+              state.surcharges.result.buyer_currency_quote?.presentment_total_cents)
             : "Updating"}
         </output>
         <p>{state.warning}</p>
+        <p aria-label="buyer currency">{state.buyerCurrency}</p>
       </>
     );
   },
@@ -202,6 +204,7 @@ afterEach(() => {
   cleanup();
   vi.useRealTimers();
   vi.resetAllMocks();
+  document.cookie = "gumroad_buyer_currency=; path=/; max-age=0";
 });
 
 describe.each([false, true])("checkout expired quote (client-confirm=%s)", (client) => {
@@ -252,4 +255,146 @@ describe.each([false, true])("checkout expired quote (client-confirm=%s)", (clie
     expect(screen.getByText("1500")).toBeTruthy();
     expect(screen.getByRole("button", { name: "Pay" }).hasAttribute("disabled")).toBe(false);
   });
+});
+
+const listed = (expiresAt: string, amount = 1500): SurchargesResponse => ({
+  vat_id_valid: false,
+  has_vat_id_input: false,
+  shipping_rate_cents: 0,
+  tax_cents: 0,
+  tax_included_cents: 0,
+  subtotal: 1000,
+  buyer_currency_quote: null,
+  direct_listed_amount_token: `listed-${amount}`,
+  direct_listed_amount_token_expires_at: expiresAt,
+  direct_listed_line_allocations: [
+    {
+      permalink: "test-product",
+      price_cents: amount,
+      tip_cents: 0,
+      tax_cents: 0,
+      shipping_cents: 0,
+      total_cents: amount,
+    },
+  ],
+});
+
+const listedConfig = (forced: boolean): CheckoutPaymentConfig => ({
+  fallback_reason: null,
+  disable_wallets: true,
+  request_apple_pay_merchant_tokens: false,
+  payment_element_wallets: false,
+  flat_payment_methods: true,
+  integration: "payment_element_client_confirm",
+  recurring_upi_registration: false,
+  elements_options: {
+    stripe_elements_mode: "payment",
+    currency: "eur",
+    buyer_currency_presentment: false,
+    presentment_amount_cents: 1500,
+    listed_currency_display: { currency: "eur", subunit_to_unit: 100 },
+    payment_method_types: forced ? ["card", "ideal"] : ["card"],
+    payment_method_list_token: null,
+    stripe_link_enabled: false,
+    stripe_connect_account_id: null,
+    direct_listed_card: !forced,
+  },
+});
+
+describe.each([false, true])("checkout expired listed amount token (method-forced=%s)", (forced) => {
+  it("refreshes before order creation and only submits after another Pay click", async () => {
+    mocks.props.checkout_payment = listedConfig(forced);
+    mocks.surcharges
+      .mockResolvedValueOnce(listed("2026-09-08T12:00:01Z"))
+      .mockResolvedValue(listed("2999-01-01T00:00:00Z", 1600));
+    render(<CheckoutPage />);
+    await act(() => vi.advanceTimersByTimeAsync(400));
+    expect(screen.getByText("1500")).toBeTruthy();
+    vi.setSystemTime(new Date("2026-09-08T12:00:02Z"));
+    fireEvent.click(screen.getByRole("button", { name: "Pay" }));
+    await act(() => vi.advanceTimersByTimeAsync(400));
+    expect(mocks.order).not.toHaveBeenCalled();
+    expect(mocks.clientOrder).not.toHaveBeenCalled();
+    expect(screen.getByText("1600")).toBeTruthy();
+    expect(screen.getByText(/Please review the updated total/u)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Pay" }));
+    await act(() => vi.advanceTimersByTimeAsync(0));
+    expect(mocks.clientOrder).toHaveBeenCalledOnce();
+    expect(mocks.clientOrder.mock.calls[0]?.[0].directListedAmountToken).toBe("listed-1600");
+    expect(mocks.order).not.toHaveBeenCalled();
+  });
+
+  it("still requires another Pay click when the refreshed listed total is unchanged", async () => {
+    mocks.props.checkout_payment = listedConfig(forced);
+    mocks.surcharges
+      .mockResolvedValueOnce(listed("2026-09-08T12:00:01Z"))
+      .mockResolvedValue({ ...listed("2999-01-01T00:00:00Z"), direct_listed_amount_token: "listed-fresh" });
+    render(<CheckoutPage />);
+    await act(() => vi.advanceTimersByTimeAsync(400));
+    vi.setSystemTime(new Date("2026-09-08T12:00:02Z"));
+    fireEvent.click(screen.getByRole("button", { name: "Pay" }));
+    await act(() => vi.advanceTimersByTimeAsync(400));
+    expect(mocks.clientOrder).not.toHaveBeenCalled();
+    expect(screen.getByText(/Please review the updated total/u)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Pay" }));
+    await act(() => vi.advanceTimersByTimeAsync(0));
+    expect(mocks.clientOrder).toHaveBeenCalledOnce();
+    expect(mocks.clientOrder.mock.calls[0]?.[0].directListedAmountToken).toBe("listed-fresh");
+  });
+
+  it("rechecks listed-token expiry after awaited analytics before either order consumer", async () => {
+    mocks.props.checkout_payment = listedConfig(forced);
+    mocks.surcharges
+      .mockResolvedValueOnce(listed("2026-09-08T12:00:01Z"))
+      .mockResolvedValue(listed("2999-01-01T00:00:00Z", 1600));
+    let finishAnalytics: (() => void) | undefined;
+    mocks.analytics.mockImplementation(
+      () =>
+        new Promise<void>((resolve) => {
+          finishAnalytics = resolve;
+        }),
+    );
+    render(<CheckoutPage />);
+    await act(() => vi.advanceTimersByTimeAsync(400));
+    fireEvent.click(screen.getByRole("button", { name: "Pay" }));
+    await act(() => vi.advanceTimersByTimeAsync(0));
+    expect(finishAnalytics).toBeTypeOf("function");
+    vi.setSystemTime(new Date("2026-09-08T12:00:02Z"));
+    await act(async () => finishAnalytics?.());
+    await act(() => vi.advanceTimersByTimeAsync(400));
+    expect(mocks.order).not.toHaveBeenCalled();
+    expect(mocks.clientOrder).not.toHaveBeenCalled();
+    expect(screen.getByText("1600")).toBeTruthy();
+  });
+});
+
+it("keeps a method-forced listed currency when a matching preference is persisted", async () => {
+  document.cookie = "gumroad_buyer_currency=eur; path=/";
+  mocks.props.checkout_payment = listedConfig(true);
+  const offered = [
+    { code: "usd", label: "$ (US Dollars)" },
+    { code: "eur", label: "€ (Euros)" },
+  ];
+  mocks.surcharges
+    .mockResolvedValueOnce({ ...listed("2026-09-08T12:00:01Z"), available_buyer_currencies: offered })
+    .mockResolvedValue({
+      ...listed("2999-01-01T00:00:00Z", 1600),
+      available_buyer_currencies: offered,
+    });
+  render(<CheckoutPage />);
+  await act(() => vi.advanceTimersByTimeAsync(400));
+  expect(screen.getByLabelText("buyer currency").textContent).toBe("eur");
+  vi.setSystemTime(new Date("2026-09-08T12:00:02Z"));
+  fireEvent.click(screen.getByRole("button", { name: "Pay" }));
+  await act(() => vi.advanceTimersByTimeAsync(400));
+  expect(mocks.surcharges).toHaveBeenCalledTimes(2);
+  expect(screen.getByLabelText("buyer currency").textContent).toBe("eur");
+  expect(screen.getByText("1600")).toBeTruthy();
+  expect(screen.getByText(/Please review the updated total/u)).toBeTruthy();
+  expect(mocks.clientOrder).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole("button", { name: "Pay" }));
+  await act(() => vi.advanceTimersByTimeAsync(0));
+  expect(mocks.clientOrder).toHaveBeenCalledOnce();
+  expect(mocks.clientOrder.mock.calls[0]?.[0].directListedAmountToken).toBe("listed-1600");
+  expect(screen.getByLabelText("buyer currency").textContent).toBe("eur");
 });

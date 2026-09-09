@@ -486,6 +486,134 @@ describe("expired buyer-currency quote submission", () => {
   });
 });
 
+describe("expired direct-listed amount token submission", () => {
+  const listedState = (checkoutPayment: CheckoutPaymentConfig, expiresAt = "2000-01-01T00:00:00Z") => {
+    const s = state({ checkoutPayment });
+    if (s.surcharges.type !== "loaded") throw new Error("Expected loaded surcharges");
+    s.surcharges.result.direct_listed_amount_token = "expired-listed-token";
+    s.surcharges.result.direct_listed_amount_token_expires_at = expiresAt;
+    s.surcharges.result.direct_listed_line_allocations = [
+      { permalink: "product-a", price_cents: 1500, tip_cents: 0, tax_cents: 0, shipping_cents: 0, total_cents: 1500 },
+    ];
+    return s;
+  };
+
+  it.each([directListedCardConfig, methodForcedEurConfig])(
+    "requires a new submit after refreshing an expired listed token on $elements_options.currency",
+    (config) => {
+      for (const type of ["offer", "validate", "start-payment"] as const) {
+        const expired = listedState(config);
+        const refused = reduceCheckoutState(expired, { type });
+        expect(refused.status.type).toBe("input");
+        expect(refused.surcharges.type).toBe("pending");
+        expect(refused.resumeSubmitAfterCheckoutPayment).toBe(false);
+        expect(refused.warning).toContain("review the updated total");
+        const loading = reduceCheckoutState(refused, {
+          type: "set-value",
+          surcharges: { type: "loading", requestId: 1, abort: vi.fn() },
+        });
+        const fresh = listedState(config, "2999-01-01T00:00:00Z");
+        if (fresh.surcharges.type !== "loaded") throw new Error("Expected loaded");
+        const result = {
+          ...fresh.surcharges.result,
+          direct_listed_amount_token: "fresh-listed-token",
+          direct_listed_line_allocations: [
+            {
+              permalink: "product-a",
+              price_cents: 1600,
+              tip_cents: 0,
+              tax_cents: 0,
+              shipping_cents: 0,
+              total_cents: 1600,
+            },
+          ],
+        };
+        const refreshed = reduceCheckoutState(loading, { type: "surcharges-fetch-succeeded", requestId: 1, result });
+        expect(refreshed.status.type).toBe("input");
+        expect(getLoadedDirectListedAmountToken(refreshed)).toBe("fresh-listed-token");
+        expect(reduceCheckoutState(refreshed, { type: "validate" }).status.type).toBe("validating");
+      }
+    },
+  );
+
+  it("does not silently confirm an unchanged total after refresh", () => {
+    const expired = listedState(directListedCardConfig);
+    const refused = reduceCheckoutState(expired, { type: "validate" });
+    const loading = reduceCheckoutState(refused, {
+      type: "set-value",
+      surcharges: { type: "loading", requestId: 1, abort: vi.fn() },
+    });
+    const sameTotal = listedState(directListedCardConfig, "2999-01-01T00:00:00Z");
+    if (sameTotal.surcharges.type !== "loaded") throw new Error("Expected loaded");
+    const refreshed = reduceCheckoutState(loading, {
+      type: "surcharges-fetch-succeeded",
+      requestId: 1,
+      result: { ...sameTotal.surcharges.result, direct_listed_amount_token: "fresh-same-total" },
+    });
+    expect(refreshed.status.type).toBe("input");
+    expect(refreshed.resumeSubmitAfterCheckoutPayment).toBe(false);
+    expect(refreshed.warning).toContain("review the updated total");
+    expect(reduceCheckoutState(refreshed, { type: "validate" }).status.type).toBe("validating");
+  });
+
+  it("does not intercept a still-fresh listed token", () => {
+    const fresh = listedState(directListedCardConfig, "2999-01-01T00:00:00Z");
+    expect(reduceCheckoutState(fresh, { type: "offer" }).status.type).toBe("offering");
+    expect(reduceCheckoutState(fresh, { type: "offer" }).surcharges.type).toBe("loaded");
+  });
+
+  it("does not intercept a listed token on server-confirm Payment Element", () => {
+    const serverConfirm = listedState(paymentElementConfig);
+    expect(getLoadedDirectListedAmountToken(serverConfirm)).toBeNull();
+    expect(reduceCheckoutState(serverConfirm, { type: "validate" }).status.type).toBe("validating");
+  });
+
+  it("keeps a method-forced listed currency when a matching preference is persisted", () => {
+    const expired = listedState(methodForcedEurConfig);
+    expired.buyerCurrency = "eur";
+    const refused = reduceCheckoutState(expired, { type: "validate" });
+    const loading = reduceCheckoutState(refused, {
+      type: "set-value",
+      surcharges: { type: "loading", requestId: 1, abort: vi.fn() },
+    });
+    const fresh = listedState(methodForcedEurConfig, "2999-01-01T00:00:00Z");
+    if (fresh.surcharges.type !== "loaded") throw new Error("Expected loaded");
+    const refreshed = reduceCheckoutState(loading, {
+      type: "surcharges-fetch-succeeded",
+      requestId: 1,
+      result: {
+        ...fresh.surcharges.result,
+        buyer_currency_quote: null,
+        direct_listed_amount_token: "fresh-listed-token",
+        available_buyer_currencies: [
+          { code: "usd", label: "$ (US Dollars)" },
+          { code: "eur", label: "€ (Euros)" },
+        ],
+      },
+    });
+    expect(refreshed.buyerCurrency).toBe("eur");
+    expect(refreshed.unavailableBuyerCurrency).toBeNull();
+    expect(refreshed.surcharges.type).toBe("loaded");
+    expect(getLoadedDirectListedAmountToken(refreshed)).toBe("fresh-listed-token");
+    expect(refreshed.status.type).toBe("input");
+    expect(refreshed.resumeSubmitAfterCheckoutPayment).toBe(false);
+    expect(reduceCheckoutState(refreshed, { type: "validate" }).status.type).toBe("validating");
+  });
+
+  it("refreshes at the listed-token expiry boundary and refuses malformed expiry", () => {
+    vi.spyOn(Date, "now").mockReturnValue(Date.parse("2026-09-08T12:00:00Z"));
+    try {
+      for (const expiry of ["2026-09-08T12:00:00Z", "invalid"]) {
+        expect(
+          reduceCheckoutState(listedState(directListedCardConfig, expiry), { type: "validate" }).surcharges.type,
+        ).toBe("pending");
+      }
+    } finally {
+      vi.restoreAllMocks();
+    }
+  });
+});
+
 describe("canUseStripePaymentElement", () => {
   it("allows a flagged positive one-off card checkout without a saved card", () => {
     expect(canUseStripePaymentElement(state())).toBe(true);

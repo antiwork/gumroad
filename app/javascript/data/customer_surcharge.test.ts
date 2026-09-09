@@ -44,6 +44,52 @@ describe("quote expiry clock", () => {
     expect(result.buyer_currency_quote?.token).toBe("quote");
   });
 
+  it.each([-3600000, 3600000])(
+    "uses the server Date for a direct-listed amount token when the buyer clock is offset by %s ms",
+    async (skew) => {
+      vi.useFakeTimers();
+      const serverNow = Date.parse("2026-09-08T12:00:00Z");
+      vi.setSystemTime(serverNow + skew);
+      const payload: SurchargesResponse = {
+        vat_id_valid: false,
+        has_vat_id_input: false,
+        shipping_rate_cents: 0,
+        tax_cents: 0,
+        tax_included_cents: 0,
+        subtotal: 1000,
+        buyer_currency_quote: null,
+        direct_listed_amount_token: "listed-token",
+        direct_listed_amount_token_expires_at: "2026-09-08T12:05:00Z",
+      };
+      request.mockImplementation(async () => {
+        vi.setSystemTime(Date.now() + 2000);
+        return new Response(JSON.stringify(payload), { headers: { Date: "Tue, 08 Sep 2026 12:00:00 GMT" } });
+      });
+      const result = await getSurcharges({ products: [], country: "US" });
+      expect(result.direct_listed_amount_token_client_expires_at).toBe(serverNow + skew + 299000);
+      expect((result.direct_listed_amount_token_client_expires_at ?? 0) - Date.now()).toBe(297000);
+      expect(result.direct_listed_amount_token).toBe("listed-token");
+    },
+  );
+
+  it("does not expire a listed token against the device clock when expires_at or Date is missing", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(Date.parse("2026-09-08T14:00:00Z"));
+    const payload: SurchargesResponse = {
+      vat_id_valid: false,
+      has_vat_id_input: false,
+      shipping_rate_cents: 0,
+      tax_cents: 0,
+      tax_included_cents: 0,
+      subtotal: 1000,
+      buyer_currency_quote: null,
+      direct_listed_amount_token: "listed-token",
+    };
+    request.mockResolvedValue(new Response(JSON.stringify(payload), { headers: {} }));
+    const result = await getSurcharges({ products: [], country: "US" });
+    expect(result.direct_listed_amount_token_client_expires_at).toBe(Number.MAX_SAFE_INTEGER);
+  });
+
   it("does not expire quotes against the device clock when the Date header is missing", async () => {
     vi.useFakeTimers();
     const serverNow = Date.parse("2026-09-08T12:00:00Z");

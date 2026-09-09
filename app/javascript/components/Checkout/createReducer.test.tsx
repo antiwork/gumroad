@@ -251,6 +251,87 @@ describe("createReducer surcharge refetches", () => {
     expect(dismissAlert).not.toHaveBeenCalled();
   });
 
+  const listedToken = (expiresAt: string, amount = 1500) => ({
+    direct_listed_amount_token: `listed-${amount}`,
+    direct_listed_amount_token_expires_at: expiresAt,
+    direct_listed_line_allocations: [
+      { permalink: "abc", price_cents: amount, tip_cents: 0, tax_cents: 0, shipping_cents: 0, total_cents: amount },
+    ],
+  });
+
+  it.each(["focus", "visibilitychange"])(
+    "refreshes an expired listed amount token once on %s without resuming payment",
+    async (event) => {
+      const requests = stubSurchargeRequests();
+      const { result } = renderCheckout({ checkoutPayment: directListedCheckoutPayment });
+      await act(() => vi.advanceTimersByTimeAsync(300));
+      await act(async () =>
+        requests[0]?.resolve(surchargesResponse(listedToken(new Date(Date.now() + 1000).toISOString()))),
+      );
+      vi.setSystemTime(Date.now() + 2000);
+      act(() => (event === "focus" ? window : document).dispatchEvent(new Event(event)));
+      expect(result.current[0].surcharges.type).toBe("pending");
+      expect(result.current[0].status.type).toBe("input");
+      expect(result.current[0].warning).toContain("review the updated total");
+      act(() => window.dispatchEvent(new Event("focus")));
+      await act(() => vi.advanceTimersByTimeAsync(300));
+      expect(requests).toHaveLength(2);
+      await act(async () => requests[1]?.resolve(surchargesResponse(listedToken("2999-01-01T00:00:00Z", 1600))));
+      expect(result.current[0].status.type).toBe("input");
+      expect(result.current[0].resumeSubmitAfterCheckoutPayment).toBe(false);
+      await act(() => vi.advanceTimersByTimeAsync(60000));
+      expect(requests).toHaveLength(2);
+    },
+  );
+
+  it("keeps a method-forced listed currency when a matching preference is persisted", async () => {
+    document.cookie = "gumroad_buyer_currency=eur; path=/";
+    const requests = stubSurchargeRequests();
+    const { result } = renderCheckout({
+      checkoutPayment: methodForcedCheckoutPayment,
+      address: { street: null, city: null, zip: "10001" },
+      products: initialArgs.products.map((product) => ({ ...product, listedChargePriceCents: 1_000 })),
+    });
+    const offered = [
+      { code: "usd", label: "$ (US Dollars)" },
+      { code: "eur", label: "€ (Euros)" },
+    ];
+    await act(() => vi.advanceTimersByTimeAsync(300));
+    await act(async () =>
+      requests[0]?.resolve(
+        surchargesResponse({
+          ...listedToken(new Date(Date.now() + 1000).toISOString()),
+          available_buyer_currencies: offered,
+        }),
+      ),
+    );
+    expect(result.current[0].buyerCurrency).toBe("eur");
+    vi.setSystemTime(Date.now() + 2000);
+    act(() => result.current[1]({ type: "validate" }));
+    expect(result.current[0].surcharges.type).toBe("pending");
+    await act(() => vi.advanceTimersByTimeAsync(300));
+    expect(requests).toHaveLength(2);
+    await act(async () =>
+      requests[1]?.resolve(
+        surchargesResponse({
+          ...listedToken("2999-01-01T00:00:00Z", 1600),
+          available_buyer_currencies: offered,
+        }),
+      ),
+    );
+    expect(result.current[0].buyerCurrency).toBe("eur");
+    expect(result.current[0].unavailableBuyerCurrency).toBeNull();
+    expect(result.current[0].surcharges.type).toBe("loaded");
+    expect(
+      result.current[0].surcharges.type === "loaded" && result.current[0].surcharges.result.direct_listed_amount_token,
+    ).toBe("listed-1600");
+    expect(result.current[0].status.type).toBe("input");
+    expect(result.current[0].resumeSubmitAfterCheckoutPayment).toBe(false);
+    expect(requests).toHaveLength(2);
+    act(() => result.current[1]({ type: "validate" }));
+    expect(result.current[0].status.type).toBe("validating");
+  });
+
   it("does not dismiss unrelated alerts when refreshed cart data replaces a surcharge error", async () => {
     const requests = stubSurchargeRequests();
     const { result } = renderCheckout();
