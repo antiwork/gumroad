@@ -29,7 +29,27 @@ require_relative "../lib/utilities/global_config"
 module Gumroad
   class Application < Rails::Application
     # Initialize configuration defaults for originally generated Rails version.
-    config.load_defaults 7.0
+    config.load_defaults 7.2
+    # Audit duplicate-instance purchase callbacks before changing the recipient.
+    config.active_record.run_commit_callbacks_on_first_saved_instances_in_transaction = true
+    # Verify SQL log consumers before switching to SQLCommenter.
+    config.active_record.query_log_tags_format = :legacy
+    # Audit required associations without database foreign keys before skipping parent checks.
+    config.active_record.belongs_to_required_validates_foreign_key = true
+    # Prove purchase inventory/email callback ordering before reversing it.
+    config.active_record.run_after_transaction_callbacks_in_order_defined = false
+    # Compare seller HTML rendering before adopting the HTML5 sanitizer.
+    config.action_view.sanitizer_vendor = Rails::HTML4::Sanitizer
+    # Audit Active Job callers before changing transaction enqueue timing.
+    config.active_job.enqueue_after_transaction_commit = :never
+    # Verify thumbnail delivery before serving WebP variants without conversion.
+    config.active_storage.web_image_content_types = %w[image/png image/jpeg image/gif]
+    # Reconcile existing future-dated migrations before enabling timestamp validation.
+    config.active_record.validate_migration_timestamps = false
+    # Audit manual requires before removing autoload paths from $LOAD_PATH.
+    config.add_autoload_paths_to_load_path = true
+    # Measure canary RSS before enabling YJIT on memory-limited workers.
+    config.yjit = false
     config.active_support.cache_format_version = 7.1
     config.active_storage.variant_processor = :mini_magick
 
