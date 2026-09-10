@@ -30,6 +30,8 @@ class SendPostBlastEmailsJob
     Rails.logger.info("[#{self.class.name}] blast_id=#{@blast.id} post_id=#{@post.id}")
     return unless @post.alive? && @post.published? && @post.send_emails? && @blast.completed_at.nil?
 
+    # Captured before the stamp: a first-run crash and a late resume both arrive without a snapshot.
+    @resume_without_snapshot = @blast.started_at.present?
     @blast.update!(started_at: Time.current) if @blast.started_at.nil?
 
     # A retry that finds a live partition re-enqueues its stored chunks as-is; loading and
@@ -86,6 +88,9 @@ class SendPostBlastEmailsJob
     # seller's audience. Once it is gone, `load_audience_members` rebuilds from MySQL.
     AUDIENCE_SNAPSHOT_TTL = AlertOnStalledPostEmailBlastsJob::LOOKBACK
 
+    # A resume older than this, or one that already owes recipients, cannot be a first-run crash.
+    AUDIENCE_SNAPSHOT_GRACE = 1.day
+
     # How many snapshotted member ids to revalidate per statement. Small on purpose:
     # MySQL's range optimizer silently drops the PK plan once an `IN (...)` list blows
     # its memory budget, and looks the rows up through (seller_id, email) instead —
@@ -98,13 +103,11 @@ class SendPostBlastEmailsJob
     # Redis list/set writes only — no SQL — so this can stay large.
     REDIS_WRITE_SLICE_SIZE = 10_000
 
-    # Audience filter params whose eligibility `AudienceMember.filter(as_of:)` cannot rewind:
-    # each reads state outside the dated purchase, follow or affiliation, or the absence of
-    # one. Edits to a relationship that already existed before the send (a variant swap on
-    # an old purchase, a pending follow confirmed later) are accepted: the member was already
-    # the seller's, and the send is late by days, not to a stranger.
+    # Filter params `AudienceMember.filter(as_of:)` cannot rewind: each reads state outside the
+    # dated purchase, follow or affiliation (a live counter, a variant swap, a refund, an added
+    # product affiliation), or the absence of one.
     UNREBUILDABLE_FILTER_KEYS = %i[
-      minimum_license_uses active_customers_only not_bought_product_ids not_bought_variant_ids affiliate_product_ids
+      minimum_license_uses active_customers_only bought_variant_ids not_bought_product_ids not_bought_variant_ids affiliate_product_ids
     ].freeze
 
     # Blasts above this many recipients are split into slice jobs. Small blasts send
@@ -204,34 +207,21 @@ class SendPostBlastEmailsJob
       snapshotted_ids = $redis.lrange(snapshot_key, 0, -1)
 
       if snapshotted_ids.empty?
-        # Fully delivered (`fully_delivered?`) with the snapshot gone: every recipient the
-        # original attempt picked is already with the ESP, and this resume exists only to
-        # stamp `completed_at`. Hand back nothing — `perform` completes the blast on an
-        # empty audience without paying for the scan.
+        # Fully delivered: nothing left to send, so skip the scan and let `perform` stamp it.
         pending = $redis.get(RedisKey.blast_pending_recipients(@blast.id))
         return [] if pending.present? && pending.to_i <= 0
 
-        # A non-opener resend dedupes only through its per-blast sent set; the SentPostEmail
-        # rows belong to the original send. Once that set is gone as well, nothing records who
-        # already received the resend, and a rebuild would mail them a second time.
-        if @blast.to_non_openers? && @blast.first_email_delivered_at.present? && !$redis.exists?(RedisKey.blast_sent_emails(@blast.id))
-          raise "missing audience snapshot and sent set for non-opener resend #{@blast.id}; refusing to rebuild"
+        if stale_resume?(pending)
+          # The per-blast sent set is a resend's only dedupe; SentPostEmail rows belong to the original send.
+          if @blast.to_non_openers? && !$redis.exists?(RedisKey.blast_sent_emails(@blast.id))
+            raise "missing audience snapshot and sent set for non-opener resend #{@blast.id}; refusing to rebuild"
+          end
+          if @filters.values_at(*UNREBUILDABLE_FILTER_KEYS).any?(&:present?)
+            raise "missing audience snapshot for blast #{@blast.id}; its filter's eligibility cannot be rebuilt"
+          end
         end
 
-        # Some filters read state no timestamp can rewind: a live license-use count, a
-        # subscription that was cancelled and then resumed, a refund that lifts a not-bought
-        # exclusion, a product affiliation added later under the affiliate's original date.
-        # Once something was delivered, a rebuild would admit people who qualified after the
-        # send, so those blasts keep failing closed.
-        if @blast.first_email_delivered_at.present? && @filters.values_at(*UNREBUILDABLE_FILTER_KEYS).any?(&:present?)
-          raise "missing audience snapshot for blast #{@blast.id}; its filter's eligibility cannot be rebuilt"
-        end
-
-        # The snapshot is a fast path, not the source of truth. Bounding the filter to
-        # `started_at` recovers the audience as it stood when the send began, so a resume
-        # days later (snapshot expired or evicted) cannot reach people who joined or became
-        # eligible after the original send (gumroad-private#2520). On a first run
-        # `started_at` was stamped moments ago and the bound changes nothing.
+        # Bounded to `started_at`: a resume days later must not reach people who joined after the send.
         members = WithMaxExecutionTime.timeout_queries(seconds: audience_load_timeout_seconds) do
           AudienceMember.filter(seller_id: @post.seller_id, params: @filters, with_ids: true, as_of: @blast.started_at)
             .select(:id, :email, :purchase_id, :follower_id, :affiliate_id).to_a
@@ -243,6 +233,13 @@ class SendPostBlastEmailsJob
         $redis.expire(snapshot_key, AUDIENCE_SNAPSHOT_TTL.to_i)
         revalidate_snapshotted_members(snapshotted_ids.map(&:to_i))
       end
+    end
+
+    # A first-run crash may still rebuild the live audience; a resume that delivered, owes
+    # recipients, or is past the grace window has an original audience the rebuild must respect.
+    def stale_resume?(pending)
+      @resume_without_snapshot &&
+        (@blast.first_email_delivered_at.present? || (pending.present? && pending.to_i.positive?) || @blast.started_at < AUDIENCE_SNAPSHOT_GRACE.ago)
     end
 
     # Existence of the audience_members row is not enough: a customer who also

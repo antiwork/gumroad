@@ -639,6 +639,30 @@ describe SendPostBlastEmailsJob, :freeze_time do
       expect_sent_count 0
     end
 
+    it "treats a resume past the grace window as stale even before the first delivery" do
+      post = basic_post_with_audience
+      allow_any_instance_of(Installment).to receive(:audience_members_filter_params).and_return({ minimum_license_uses: 1 })
+      blast = create(:blast, :just_requested, post:)
+      blast.update!(started_at: 2.days.ago)
+
+      expect do
+        described_class.new.perform(blast.id)
+      end.to raise_error(RuntimeError, /filter's eligibility cannot be rebuilt/)
+
+      expect_sent_count 0
+    end
+
+    it "lets a first-run crash inside the grace window rebuild even for an unrebuildable filter" do
+      post = basic_post_with_audience
+      allow_any_instance_of(Installment).to receive(:audience_members_filter_params).and_return({ minimum_license_uses: 1 })
+      blast = create(:blast, :just_requested, post:)
+      blast.update!(started_at: 1.hour.ago)
+
+      described_class.new.perform(blast.id)
+
+      expect(blast.reload.completed_at).to be_present
+    end
+
     it "completes without a live rebuild when a resume with no snapshot owes no more recipients" do
       post = basic_post_with_audience
       blast = create(:blast, :just_requested, post:)
