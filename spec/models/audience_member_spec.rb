@@ -110,6 +110,7 @@ RSpec.describe AudienceMember, :freeze_time do
       # An old follower row that picked up its first purchase after as_of: the row predates
       # the bound, the purchase that would qualify it does not.
       late_buyer = create_member(follower: { "created_at" => 3.days.ago.iso8601 }, purchases: [{ "product_id" => 1, "created_at" => 1.hour.ago.iso8601 }])
+      create(:active_follower, user: seller, email: late_buyer.email, confirmed_at: 3.days.ago)
       [early_buyer, late_buyer].each { _1.update_column(:created_at, 4.days.ago) }
 
       expect(described_class.filter(seller_id:, params: { bought_product_ids: [1] }, with_ids: true, as_of: 1.day.ago).order(:id).to_a).to eq([early_buyer])
@@ -119,14 +120,27 @@ RSpec.describe AudienceMember, :freeze_time do
 
     it "bounds the follow and the qualifying purchase separately for follower blasts" do
       # Purchase predicates keep only purchase rows, on which the follower timestamp is NULL.
-      old_follower_old_buyer = create_member(follower: { "created_at" => 3.days.ago.iso8601 }, purchases: [{ "product_id" => 1, "price_cents" => 200, "created_at" => 3.days.ago.iso8601 }])
-      create_member(follower: { "created_at" => 1.hour.ago.iso8601 }, purchases: [{ "product_id" => 1, "price_cents" => 200, "created_at" => 3.days.ago.iso8601 }])
-      old_follower_new_buyer = create_member(follower: { "created_at" => 3.days.ago.iso8601 }, purchases: [{ "product_id" => 1, "price_cents" => 200, "created_at" => 1.hour.ago.iso8601 }])
+      old_follower_old_buyer = create_member(follower: {}, purchases: [{ "product_id" => 1, "price_cents" => 200, "created_at" => 3.days.ago.iso8601 }])
+      new_follower_old_buyer = create_member(follower: {}, purchases: [{ "product_id" => 1, "price_cents" => 200, "created_at" => 3.days.ago.iso8601 }])
+      old_follower_new_buyer = create_member(follower: {}, purchases: [{ "product_id" => 1, "price_cents" => 200, "created_at" => 1.hour.ago.iso8601 }])
+      create(:active_follower, user: seller, email: old_follower_old_buyer.email, confirmed_at: 3.days.ago)
+      create(:active_follower, user: seller, email: new_follower_old_buyer.email, confirmed_at: 1.hour.ago)
+      create(:active_follower, user: seller, email: old_follower_new_buyer.email, confirmed_at: 3.days.ago)
       described_class.where(seller_id:).update_all(created_at: 4.days.ago)
 
       expect(described_class.filter(seller_id:, params: { type: "follower", paid_more_than_cents: 100 }, with_ids: true, as_of: 1.day.ago).order(:id).to_a).to eq([old_follower_old_buyer])
       expect(described_class.filter(seller_id:, params: { type: "follower", bought_product_ids: [1] }, with_ids: true, as_of: 1.day.ago).order(:id).to_a).to eq([old_follower_old_buyer])
       expect(described_class.filter(seller_id:, params: { type: "follower" }, with_ids: true, as_of: 1.day.ago).order(:id).to_a).to eq([old_follower_old_buyer, old_follower_new_buyer])
+    end
+
+    it "bounds follower eligibility by confirmation, not by the follow date" do
+      confirmed_late = create_member(follower: { "created_at" => 3.days.ago.iso8601 })
+      confirmed_early = create_member(follower: { "created_at" => 3.days.ago.iso8601 })
+      create(:active_follower, user: seller, email: confirmed_late.email, created_at: 3.days.ago, confirmed_at: 1.hour.ago)
+      create(:active_follower, user: seller, email: confirmed_early.email, created_at: 3.days.ago, confirmed_at: 2.days.ago)
+      described_class.where(seller_id:).update_all(created_at: 4.days.ago)
+
+      expect(described_class.filter(seller_id:, params: { type: "follower" }, with_ids: true, as_of: 1.day.ago).order(:id).to_a).to eq([confirmed_early])
     end
 
     it "bounds the qualifying purchase for affiliate blasts with a purchase filter" do
