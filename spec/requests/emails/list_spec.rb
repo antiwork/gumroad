@@ -129,7 +129,8 @@ describe("Email List", :js, :sidekiq_inline, :elasticsearch_wait_for_refresh, ty
 
         within_modal "Email 1 (sent)" do
           expect(page).to have_text("Status Incomplete", normalize_ws: true)
-          expect(page).to have_text("6,798 people got this email. 16,212 people have not received it yet. We are retrying automatically.")
+          expect(page).to have_text("16,212 people have not received it yet. We are retrying automatically.")
+          expect(page).not_to have_text("6,798 people got this email")
         end
       ensure
         $redis.del(RedisKey.blast_pending_recipients(blast.id)) if blast
