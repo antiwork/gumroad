@@ -168,7 +168,12 @@ export default function SocialConnectionsPage() {
                           Remove
                         </Button>
                       ) : null}
-                      <SocialAuthButton provider={key} href={connectHref} aria-label={`Connect to ${name}`}>
+                      <SocialAuthButton
+                        provider={key}
+                        href={connectHref}
+                        color="primary"
+                        aria-label={`Connect to ${name}`}
+                      >
                         Connect
                       </SocialAuthButton>
                     </>
