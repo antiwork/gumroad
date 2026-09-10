@@ -5061,13 +5061,14 @@ class LinksControllerShowTest < ActionController::TestCase
   end
 
   test "application.rb default_headers omit X-Download-Options and snapshot onto ActionDispatch::Response" do
-    # ActionController::TestCase does not run ActionDispatch middleware, so
-    # response.headers never includes config.action_dispatch.default_headers.
-    # rails/rails#58145 is the config hash snapshotted at initialize!.
+    # SecureHeaders::Railtie deletes the headers it owns from this hash in-place
+    # when ActionController loads, including after the Rails 8.0.5+ snapshot
+    # (rails/rails#58145). X-Frame-Options is OPT_OUT; nosniff is set by
+    # SecureHeaders middleware, not this hash.
     headers = Rails.application.config.action_dispatch.default_headers
     assert_nil headers["X-Download-Options"]
-    assert_equal "SAMEORIGIN", headers["X-Frame-Options"]
-    assert_equal "nosniff", headers["X-Content-Type-Options"]
+    assert_nil headers["X-Frame-Options"]
+    assert_nil headers["X-Content-Type-Options"]
     assert_equal headers, ActionDispatch::Response.default_headers
   end
 
