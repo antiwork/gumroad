@@ -645,7 +645,8 @@ describe Payment do
         expect(payment.errors[:base]).to include("Connection refused")
         expect(payment.user.reload.payouts_paused_internally?).to be(true)
         expect(payment.user.payouts_paused_by).to eq(User::PAYOUT_PAUSE_SOURCE_SYSTEM)
-        expect(ErrorNotifier).to have_received(:notify)
+        expect(ErrorNotifier).to have_received(:notify).once
+        expect(payment.instance_variable_get(:@payout_reversal_failure_notified)).to be(true)
       end
 
       it "still pauses payouts end to end when the failure email's real save raises" do

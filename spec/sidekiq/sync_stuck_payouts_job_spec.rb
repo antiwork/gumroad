@@ -259,6 +259,71 @@ describe SyncStuckPayoutsJob do
         described_class.new.perform(PayoutProcessorType::STRIPE)
       end
 
+      it "logs a Stripe reverse failure once without a second rejected-sync Sentry alert" do
+        payment = create(:payment, processor: PayoutProcessorType::STRIPE, state: "processing",
+                                   stripe_transfer_id: "po_rev_dup", stripe_connect_account_id: "acct_rev_dup",
+                                   stripe_internal_transfer_id: "tr_rev_dup", created_at: 5.days.ago)
+        payment.update!(arrival_date: 1.day.ago.to_i)
+
+        stripe_payout = { "status" => "failed", "failure_code" => "account_closed" }
+        allow(Stripe::Payout).to receive(:retrieve)
+          .with("po_rev_dup", { stripe_account: "acct_rev_dup" }).and_return(stripe_payout)
+        allow(StripePayoutProcessor).to receive(:reverse_internal_transfer!)
+          .and_raise(Stripe::APIConnectionError.new("Connection refused"))
+        allow_any_instance_of(Payment).to receive(:send_payout_failure_email)
+        allow(Rails.logger).to receive(:error)
+        allow(ErrorNotifier).to receive(:notify)
+
+        described_class.new.perform(PayoutProcessorType::STRIPE)
+
+        expect(ErrorNotifier).to have_received(:notify).once
+        expect(ErrorNotifier).not_to have_received(:notify).with(/rejected:/)
+        expect(Rails.logger).to have_received(:error).with(/rejected:.*Connection refused/)
+        expect(payment.user.reload.payouts_paused_internally?).to be(true)
+      end
+
+      it "still notifies rejected sync when Stripe errors without a prior reverse alert" do
+        payment = create(:payment, processor: PayoutProcessorType::STRIPE, state: "processing",
+                                   stripe_transfer_id: "po_plain_err", stripe_connect_account_id: "acct_plain_err",
+                                   created_at: 5.days.ago)
+
+        allow(Stripe::Payout).to receive(:retrieve).and_raise(Stripe::StripeError.new("API error"))
+        allow(Rails.logger).to receive(:error)
+        allow(ErrorNotifier).to receive(:notify)
+
+        described_class.new.perform(PayoutProcessorType::STRIPE)
+
+        expect(ErrorNotifier).to have_received(:notify).with(/rejected:.*API error/).once
+        expect(payment.reload.state).to eq("processing")
+      end
+
+      it "notifies once when hold setup fails after a reverse failure (still visible)" do
+        payment = create(:payment, processor: PayoutProcessorType::STRIPE, state: "processing",
+                                   stripe_transfer_id: "po_hold_fail", stripe_connect_account_id: "acct_hold_fail",
+                                   stripe_internal_transfer_id: "tr_hold_fail", created_at: 5.days.ago)
+        payment.update!(arrival_date: 1.day.ago.to_i)
+
+        stripe_payout = { "status" => "failed", "failure_code" => "account_closed" }
+        allow(Stripe::Payout).to receive(:retrieve)
+          .with("po_hold_fail", { stripe_account: "acct_hold_fail" }).and_return(stripe_payout)
+        allow(StripePayoutProcessor).to receive(:reverse_internal_transfer!)
+          .and_raise(Stripe::APIConnectionError.new("Connection refused"))
+        allow(StripePayoutProcessor).to receive(:hold_payouts_for_unaccounted_money!)
+          .and_raise(ActiveRecord::Deadlocked.new("Deadlock found when trying to get lock"))
+        allow_any_instance_of(Payment).to receive(:send_payout_failure_email)
+        allow(Rails.logger).to receive(:error)
+        allow(ErrorNotifier).to receive(:notify)
+
+        described_class.new.perform(PayoutProcessorType::STRIPE)
+
+        expect(ErrorNotifier).to have_received(:notify).once
+        expect(ErrorNotifier).to have_received(:notify).with(
+          an_instance_of(ActiveRecord::Deadlocked),
+          hash_including(hold_setup_failed: true, reverse_error: "Connection refused")
+        )
+        expect(ErrorNotifier).not_to have_received(:notify).with(/rejected:/)
+      end
+
       it "processes all stuck payouts even if any of them raises an error" do
         create(:payment, processor: PayoutProcessorType::STRIPE, state: "processing",
                          stripe_transfer_id: "po_err1", stripe_connect_account_id: "acct_err1",
