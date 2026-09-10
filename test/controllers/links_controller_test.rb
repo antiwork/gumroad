@@ -5060,6 +5060,20 @@ class LinksControllerShowTest < ActionController::TestCase
     assert page["props"]["product"].present?
   end
 
+  test "GET show with embed param omits X-Frame-Options so third-party iframes can render" do
+    link = create_product(user: @user)
+    get :show, params: { id: link.to_param, embed: "true" }
+    assert_response :success
+    assert_nil response.headers["X-Frame-Options"]
+  end
+
+  test "GET show with overlay param omits X-Frame-Options so third-party iframes can render" do
+    link = create_product(user: @user)
+    get :show, params: { id: link.to_param, overlay: "true" }
+    assert_response :success
+    assert_nil response.headers["X-Frame-Options"]
+  end
+
   test "GET show renders Products/Iframe/Show with product props for overlay param" do
     link = create_product(user: @user)
     @request.headers["X-Inertia"] = "true"
