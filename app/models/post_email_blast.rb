@@ -31,10 +31,8 @@ class PostEmailBlast < ApplicationRecord
     recipient_filter == RECIPIENT_FILTER_UNOPENED
   end
 
-  # Seller-facing state of this send. "sent" also covers a blast whose every recipient reached
-  # the ESP and only lacks the completion stamp (a zero pending count, see
-  # SendPostBlastEmailsJob.fully_delivered?). "incomplete" means idle past the stall threshold
-  # with recipients unaccounted for.
+  # Seller-facing state of this send. A zero pending count reads as "sent": every recipient
+  # reached the ESP and only the completion stamp is missing (SendPostBlastEmailsJob.fully_delivered?).
   def delivery_status
     return "sent" if completed_at.present?
     return "sent" if remaining_recipient_count&.<=(0)
