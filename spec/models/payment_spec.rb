@@ -478,6 +478,13 @@ describe Payment do
 
         expect(payment.humanized_failure_reason).to eq(nil)
       end
+
+      it "returns the reason alone when it has no PAYPAL_MASS_PAY description" do
+        payment = create(:payment_failed, processor: "PAYPAL",
+                                          failure_reason: Payment::FailureReason::TRANSACTION_NOT_FOUND)
+
+        expect(payment.humanized_failure_reason).to eq(Payment::FailureReason::TRANSACTION_NOT_FOUND)
+      end
     end
   end
 
@@ -839,6 +846,18 @@ describe Payment do
         expect do
           payment.send(:sync_with_paypal)
         end.not_to change { payment.reload.state }
+      end
+
+      it "does not mark the payment failed when TransactionSearch raises (failed ACK)" do
+        payment = create(:payment, processor_fee_cents: 10, txn_id: nil, correlation_id: nil)
+
+        expect(PaypalPayoutProcessor).to(
+          receive(:search_payment_on_paypal).and_raise(RuntimeError, 'PayPal TransactionSearch failed (ACK="Failure")'))
+
+        expect do
+          payment.send(:sync_with_paypal)
+        end.not_to change { payment.reload.state }
+        expect(payment.errors.full_messages.join).to include("PayPal TransactionSearch failed")
       end
     end
 
@@ -1255,6 +1274,17 @@ describe Payment do
       (Payment::MAX_CONSECUTIVE_FAILED_PAYOUTS - 1).times { failed_payout }
 
       failed_payout_with_reason(Payment::FailureReason::PROCESSOR_UNAVAILABLE)
+
+      expect(user.reload.payouts_paused?).to be(false)
+      expect(user.comments.with_type_on_probation).to be_empty
+    end
+
+    it "does not count a PayPal payout that sync marked Transaction not found" do
+      (Payment::MAX_CONSECUTIVE_FAILED_PAYOUTS - 1).times { failed_payout }
+
+      payment = create(:payment, user:, processor: PayoutProcessorType::PAYPAL, payment_address: "seller@example.com",
+                                 state: "processing", correlation_id: nil)
+      payment.mark_failed!(Payment::FailureReason::TRANSACTION_NOT_FOUND)
 
       expect(user.reload.payouts_paused?).to be(false)
       expect(user.comments.with_type_on_probation).to be_empty

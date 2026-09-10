@@ -260,7 +260,10 @@ class Payment < ApplicationRecord
 
   def humanized_failure_reason
     if processor == PayoutProcessorType::PAYPAL
-      failure_reason.present? ? "#{failure_reason}: #{PAYPAL_MASS_PAY[failure_reason]}" : nil
+      return nil if failure_reason.blank?
+
+      description = PAYPAL_MASS_PAY[failure_reason]
+      description.present? ? "#{failure_reason}: #{description}" : failure_reason
     else
       failure_reason
     end

@@ -457,6 +457,10 @@ class PaypalPayoutProcessor
     payments.each do |payment|
       payment.error_message = "#{error.class}: #{error.message}".truncate(1000)
       payment.mark_failed!(Payment::FailureReason::PROCESSOR_UNAVAILABLE)
+    rescue => e
+      # One bad row must not leave the rest of the slice stuck in processing.
+      Rails.logger.error("PayPal payouts: could not mark payment #{payment.id} processor_unavailable (#{e.class}: #{e.message})")
+      ErrorNotifier.notify(e)
     end
   end
 
@@ -624,6 +628,12 @@ class PaypalPayoutProcessor
     end
 
     response = Rack::Utils.parse_nested_query(paypal_response.parsed_response)
+
+    # Fail closed: a non-Success ACK with no L_STATUS* looks identical to "not found", and treating
+    # that as not-found marks the payout failed so the next batch can pay the same money twice.
+    unless %w[Success SuccessWithWarning].include?(response["ACK"])
+      raise "PayPal TransactionSearch failed (ACK=#{response["ACK"].inspect})"
+    end
 
     if response["L_STATUS0"].present? && response["L_STATUS1"].present? && response["L_STATUS2"].blank? &&
       transaction_id.in?([response["L_TRANSACTIONID0"], response["L_TRANSACTIONID1"]]) &&

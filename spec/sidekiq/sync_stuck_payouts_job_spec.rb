@@ -275,6 +275,22 @@ describe SyncStuckPayoutsJob do
 
         expect(Rails.logger).to have_received(:error).with(/rejected:.*API error/).exactly(2).times
       end
+
+      it "does not re-notify when sync left errors on an already-terminal payout" do
+        payment = create(:payment, processor: PayoutProcessorType::STRIPE, state: "processing",
+                                   stripe_transfer_id: "po_dup", stripe_connect_account_id: "acct_dup",
+                                   created_at: 5.days.ago)
+        allow(ErrorNotifier).to receive(:notify)
+        allow_any_instance_of(Payment).to receive(:sync_with_payout_processor) do |p|
+          p.update!(state: "failed", failure_reason: "account_closed")
+          p.errors.add(:base, "reverse failed")
+        end
+
+        described_class.new.perform(PayoutProcessorType::STRIPE)
+
+        expect(ErrorNotifier).not_to have_received(:notify)
+        expect(payment.reload.state).to eq("failed")
+      end
     end
   end
 end

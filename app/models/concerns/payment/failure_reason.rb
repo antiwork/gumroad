@@ -28,7 +28,7 @@ module Payment::FailureReason
   # details. They must not count toward MAX_CONSECUTIVE_FAILED_PAYOUTS, and they get no
   # STRIPE_FAILURE_SOLUTIONS entry, because there is nothing for the seller to fix.
   TRANSIENT_REASONS = [PROCESSOR_RATE_LIMITED, PROCESSOR_UNAVAILABLE, UNREVERSED_INTERNAL_TRANSFER,
-                       PAYOUT_OUTCOME_UNKNOWN].freeze
+                       PAYOUT_OUTCOME_UNKNOWN, TRANSACTION_NOT_FOUND].freeze
 
   # Failures where money may ALREADY have left Gumroad and we cannot tell from our own records:
   #   UNREVERSED_INTERNAL_TRANSFER — funds are on the seller's connected account because the

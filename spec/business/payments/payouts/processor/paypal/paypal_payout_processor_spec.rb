@@ -1404,6 +1404,38 @@ describe PaypalPayoutProcessor do
     end
   end
 
+  describe "#search_payment_on_paypal ACK handling" do
+    it "raises when TransactionSearch ACK is not Success or SuccessWithWarning" do
+      allow(HTTParty).to receive(:post).and_return(
+        instance_double(HTTParty::Response, parsed_response: "ACK=Failure&CORRELATIONID=c51c5e0cecbce")
+      )
+
+      expect do
+        described_class.search_payment_on_paypal(
+          amount_cents: 1000,
+          payment_address: "seller@example.com",
+          start_date: 1.day.ago,
+          end_date: Time.current
+        )
+      end.to raise_error(RuntimeError, /PayPal TransactionSearch failed \(ACK="Failure"\)/)
+    end
+
+    it "returns nil when ACK is Success but no transactions are returned" do
+      allow(HTTParty).to receive(:post).and_return(
+        instance_double(HTTParty::Response, parsed_response: "ACK=Success&CORRELATIONID=c51c5e0cecbce")
+      )
+
+      expect(
+        described_class.search_payment_on_paypal(
+          amount_cents: 1000,
+          payment_address: "seller@example.com",
+          start_date: 1.day.ago,
+          end_date: Time.current
+        )
+      ).to be_nil
+    end
+  end
+
   describe ".perform_payments" do
     let(:payment) { create(:payment, correlation_id: nil) }
 
@@ -1425,6 +1457,20 @@ describe PaypalPayoutProcessor do
       expect { described_class.perform_payments([payment]) }.to raise_error(Net::ReadTimeout)
       expect(payment.reload.state).to eq("processing")
       expect(payment.failure_reason).to be_nil
+    end
+
+    it "still marks the rest of the slice processor_unavailable when one mark_failed! raises" do
+      payment_ok = create(:payment, correlation_id: nil)
+      payment_bad = create(:payment, correlation_id: nil)
+      allow(ErrorNotifier).to receive(:notify)
+      allow(HTTParty).to receive(:post).and_raise(Socket::ResolutionError)
+      allow(payment_bad).to receive(:mark_failed!).and_raise(RuntimeError, "mark_failed boom")
+
+      described_class.perform_payments([payment_bad, payment_ok])
+
+      expect(payment_ok.reload.state).to eq("failed")
+      expect(payment_ok.failure_reason).to eq(Payment::FailureReason::PROCESSOR_UNAVAILABLE)
+      expect(payment_bad.reload.state).to eq("processing")
     end
   end
 
