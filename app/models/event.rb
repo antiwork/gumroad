@@ -17,9 +17,15 @@ class Event < ApplicationRecord
     post_view
     product_refund_policy_fine_print_view
     purchase
+    refund
     service_charge
     settlement_declined
-    refund
+    social_connect_attempted
+    social_connect_connected
+    social_connect_failed
+    social_connect_hold_released
+    social_connect_offered
+    social_connect_reviewed
   ]
   PERMITTED_NAMES.each do |name|
     const_set("NAME_#{name.upcase}", name)

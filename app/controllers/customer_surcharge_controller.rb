@@ -147,6 +147,10 @@ class CustomerSurchargeController < ApplicationController
       sellers: sellers_for_direct_listed_amount_token(charge_allocations, quote_line_items),
       currency: direct_listed_allocation_currency
     )
+    # Client-side expiry uses this timestamp with the response Date, the same clock-skew
+    # calibration as buyer_currency_quote.expires_at. The signed token still expires on TTL.
+    direct_listed_amount_token_expires_at =
+      direct_listed_amount_token.present? ? Checkout::DirectListedAmountToken::TTL.from_now.utc.iso8601 : nil
 
     render json: {
       vat_id_valid:,
@@ -160,6 +164,7 @@ class CustomerSurchargeController < ApplicationController
       charge_canonical_total_cents: all_lines_quotable ? quote_line_items.sum(&:charge_canonical_total_cents) : nil,
       direct_listed_line_allocations:,
       direct_listed_amount_token:,
+      direct_listed_amount_token_expires_at:,
       buyer_currency_quote: quote_props,
       detected_buyer_currency:,
       available_buyer_currencies: available

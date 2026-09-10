@@ -139,6 +139,15 @@ describe SocialConnectVerification do
       expect(verification.account_created_at).to eq(DateTime.parse("2011-04-09 06:50:16 UTC"))
       expect(verification.last_posted_at).to eq(DateTime.parse("2013-03-06 23:21:06 UTC"))
       expect(verification.last_verified_at).to be_present
+      expect(Event.where(event_name: "social_connect_connected", user_id: user.id).count).to eq(1)
+    end
+
+    it "skips funnel connected when record_funnel_connected is false" do
+      expect do
+        described_class.record_from_twitter!(user, raw_info, record_funnel_connected: false)
+      end.not_to change { Event.where(event_name: "social_connect_connected").count }
+
+      expect(user.social_connect_verifications.current.sole.uid).to eq("279418691")
     end
 
     it "updates the existing record on re-verify instead of creating a second one" do

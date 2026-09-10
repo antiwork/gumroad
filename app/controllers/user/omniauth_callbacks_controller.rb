@@ -2,6 +2,9 @@
 
 class User::OmniauthCallbacksController < Devise::OmniauthCallbacksController
   include PageMeta::Base
+  include SocialConnectReturn
+
+  before_action :set_social_connect_destination
 
   skip_before_action :verify_authenticity_token, only: [:apple]
 
@@ -134,7 +137,7 @@ class User::OmniauthCallbacksController < Devise::OmniauthCallbacksController
 
     unless Feature.active?(:youtube_connect, logged_in_user)
       flash[:alert] = "YouTube connect is not available."
-      return redirect_to profile_path
+      return redirect_to social_connect_destination
     end
 
     begin
@@ -146,8 +149,9 @@ class User::OmniauthCallbacksController < Devise::OmniauthCallbacksController
     end
 
     if channel.blank?
+      SocialConnectFunnel.record!(user: logged_in_user, stage: "failed", provider: "youtube", surface: "omniauth", extra: "no_channel")
       flash[:alert] = "Couldn't read a YouTube channel for that Google account."
-      return redirect_to profile_path
+      return redirect_to social_connect_destination
     end
 
     begin
@@ -156,11 +160,12 @@ class User::OmniauthCallbacksController < Devise::OmniauthCallbacksController
       identity.update!(channel_id: channel["id"], handle: channel["handle"])
     rescue StandardError => e
       Rails.logger.error("SocialConnectVerification youtube record failed for user #{logged_in_user.id}: #{e.class}")
+      SocialConnectFunnel.record!(user: logged_in_user, stage: "failed", provider: "youtube", surface: "omniauth", extra: e.class.name)
       flash[:alert] = "Couldn't save your YouTube connection. Please try again."
-      return redirect_to profile_path
+      return redirect_to social_connect_destination
     end
 
-    redirect_to profile_path
+    redirect_to social_connect_destination
   end
 
   def instagram
@@ -171,29 +176,32 @@ class User::OmniauthCallbacksController < Devise::OmniauthCallbacksController
 
     unless Feature.active?(:instagram_connect, logged_in_user)
       flash[:alert] = "Instagram connect is not available."
-      return redirect_to profile_path
+      return redirect_to social_connect_destination
     end
 
     token = request.env.dig("omniauth.auth", "credentials", "token")
     token_user_id = request.env.dig("omniauth.auth", "uid")
     profile = InstagramProfileFetcher.new(token).fetch
     if profile.blank?
+      SocialConnectFunnel.record!(user: logged_in_user, stage: "failed", provider: "instagram", surface: "omniauth", extra: "no_profile")
       flash[:alert] = "Couldn't read an Instagram professional account."
-      return redirect_to profile_path
+      return redirect_to social_connect_destination
     end
 
     verification = SocialConnectVerification.record_from_instagram!(logged_in_user, profile.merge("token_user_id" => token_user_id))
     if verification.blank?
+      SocialConnectFunnel.record!(user: logged_in_user, stage: "failed", provider: "instagram", surface: "omniauth", extra: "blank_verification")
       flash[:alert] = "Couldn't save your Instagram connection. Please try again."
-      return redirect_to profile_path
+      return redirect_to social_connect_destination
     end
     identity = logged_in_user.instagram_identity || logged_in_user.build_instagram_identity
     identity.update!(instagram_user_id: verification.uid, handle: verification.handle)
-    redirect_to profile_path
+    redirect_to social_connect_destination
   rescue StandardError => e
     Rails.logger.error("Instagram connect failed for user #{logged_in_user.id}: #{e.class}")
+    SocialConnectFunnel.record!(user: logged_in_user, stage: "failed", provider: "instagram", surface: "omniauth", extra: e.class.name)
     flash[:alert] = "Couldn't save your Instagram connection. Please try again."
-    redirect_to profile_path
+    redirect_to social_connect_destination
   end
 
   def tiktok
@@ -204,28 +212,31 @@ class User::OmniauthCallbacksController < Devise::OmniauthCallbacksController
 
     unless Feature.active?(:tiktok_connect, logged_in_user)
       flash[:alert] = "TikTok connect is not available."
-      return redirect_to profile_path
+      return redirect_to social_connect_destination
     end
 
     token = request.env.dig("omniauth.auth", "credentials", "token")
     profile = TiktokProfileFetcher.new(token).fetch
     if profile.blank?
+      SocialConnectFunnel.record!(user: logged_in_user, stage: "failed", provider: "tiktok", surface: "omniauth", extra: "no_profile")
       flash[:alert] = "Couldn't read a TikTok account."
-      return redirect_to profile_path
+      return redirect_to social_connect_destination
     end
 
     verification = SocialConnectVerification.record_from_tiktok!(logged_in_user, profile)
     if verification.blank?
+      SocialConnectFunnel.record!(user: logged_in_user, stage: "failed", provider: "tiktok", surface: "omniauth", extra: "blank_verification")
       flash[:alert] = "Couldn't save your TikTok connection. Please try again."
-      return redirect_to profile_path
+      return redirect_to social_connect_destination
     end
     identity = logged_in_user.tiktok_identity || logged_in_user.build_tiktok_identity
     identity.update!(tiktok_open_id: verification.uid, handle: verification.handle)
-    redirect_to profile_path
+    redirect_to social_connect_destination
   rescue StandardError => e
     Rails.logger.error("TikTok connect failed for user #{logged_in_user.id}: #{e.class}")
+    SocialConnectFunnel.record!(user: logged_in_user, stage: "failed", provider: "tiktok", surface: "omniauth", extra: e.class.name)
     flash[:alert] = "Couldn't save your TikTok connection. Please try again."
-    redirect_to profile_path
+    redirect_to social_connect_destination
   end
 
   def apple
@@ -235,10 +246,18 @@ class User::OmniauthCallbacksController < Devise::OmniauthCallbacksController
 
   def failure
     connect_provider = request.env["omniauth.error.strategy"]&.name.to_s
+    twitter_link_failure = connect_provider == "twitter" && SocialConnectFunnel::TWITTER_LINK_STATES.include?(params[REQ_PARAM_STATE].to_s)
+    if %w[youtube instagram tiktok].include?(connect_provider) || twitter_link_failure
+      extra = sanitize_oauth_error_param(params[:error].presence || request.env["omniauth.error.type"].to_s.presence)
+      SocialConnectFunnel.record!(user: logged_in_user, stage: "failed", provider: connect_provider, surface: "omniauth", extra:)
+    end
     if %w[youtube instagram tiktok].include?(connect_provider)
       provider_name = { "youtube" => "YouTube", "instagram" => "Instagram", "tiktok" => "TikTok" }.fetch(connect_provider)
       flash[:alert] = "Couldn't connect #{provider_name}. Please try again."
-      redirect_to(logged_in_user.present? ? profile_path : login_path)
+      redirect_to(logged_in_user.present? ? social_connect_destination : login_path)
+    elsif connect_provider == "twitter" && request.env.dig("omniauth.params", REQ_PARAM_STATE) == "link_twitter_account" && logged_in_user.present?
+      flash[:alert] = "Couldn't connect X. Please try again."
+      redirect_to social_connect_destination
     elsif params[:error_description].present?
       redirect_to settings_payments_path, notice: params[:error_description]
     elsif params[REQ_PARAM_STATE] != :async_link_twitter_account.to_s
@@ -254,6 +273,24 @@ class User::OmniauthCallbacksController < Devise::OmniauthCallbacksController
   end
 
   private
+    def sanitize_oauth_error_param(value)
+      return if value.blank?
+
+      value.to_s.downcase.gsub(/[^a-z0-9._-]/, "").presence&.truncate(64, omission: "")
+    end
+
+    def set_social_connect_destination
+      provider = action_name == "failure" ? request.env["omniauth.error.strategy"]&.name.to_s : action_name
+      connecting = %w[youtube instagram].include?(provider) ||
+        (provider == "twitter" && request.env.dig("omniauth.params", REQ_PARAM_STATE) == "link_twitter_account")
+      @return_to_onboarding = connecting && consume_social_connect_return
+      session.delete(:social_connect_return) unless connecting || action_name == "failure"
+    end
+
+    def social_connect_destination
+      @return_to_onboarding ? dashboard_path : settings_social_connections_path
+    end
+
     def hide_layouts
       @hide_layouts = true
     end
@@ -308,6 +345,6 @@ class User::OmniauthCallbacksController < Devise::OmniauthCallbacksController
 
     def post_link_account
       logged_in_user.save
-      redirect_to profile_path
+      redirect_to social_connect_destination
     end
 end

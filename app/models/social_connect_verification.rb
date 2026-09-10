@@ -53,12 +53,13 @@ class SocialConnectVerification < ApplicationRecord
 
   # Twitter's OAuth 1.0a raw_info payload, from both the signup and the
   # link-account callback paths.
-  def self.record_from_twitter!(user, raw_info)
+  def self.record_from_twitter!(user, raw_info, record_funnel_connected: true)
     uid = raw_info["id"].to_s
     return if uid.blank? || raw_info["errors"].present?
 
     record!(
       user, "twitter", uid,
+      record_funnel_connected:,
       handle: raw_info["screen_name"],
       account_created_at: parse_twitter_time(raw_info["created_at"]),
       follower_count: raw_info["followers_count"],
@@ -116,7 +117,7 @@ class SocialConnectVerification < ApplicationRecord
   # Same identity refreshes in place; a different one supersedes so the old
   # uid keeps vetoing. After soft-supersede, reconnect revives the matching
   # prior row to avoid unique [user, platform, uid].
-  def self.record!(user, platform, uid, **attributes)
+  def self.record!(user, platform, uid, record_funnel_connected: true, **attributes)
     transaction do
       # Lock a fresh User: callers often pass a dirty User (with_lock raises),
       # and [user_id, platform] is no longer uniquely one current row.
@@ -129,6 +130,10 @@ class SocialConnectVerification < ApplicationRecord
         verification = find_or_initialize_by(user:, platform:, uid:)
       end
       verification.update!(uid:, superseded_at: nil, last_verified_at: Time.current, **attributes)
+      # Login/signup reuses record!; only link-account callers count as connected.
+      if record_funnel_connected
+        SocialConnectFunnel.record!(user:, stage: "connected", provider: platform, surface: "omniauth")
+      end
       verification
     end
   end

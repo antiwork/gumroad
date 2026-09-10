@@ -613,7 +613,7 @@ describe User::OmniauthCallbacksController do
 
       post :youtube
 
-      expect(response).to redirect_to profile_path
+      expect(response).to redirect_to settings_social_connections_path
       identity = user.reload.youtube_identity
       expect(identity.channel_id).to eq("UC_x5XG1OV2P6uZZ5FSM9Ttw")
       expect(identity.handle).to eq("googledevelopers")
@@ -647,7 +647,7 @@ describe User::OmniauthCallbacksController do
       expect(YoutubeChannelFetcher).not_to have_received(:new)
       expect(user.reload.youtube_identity).to be_nil
       expect(flash[:alert]).to eq "YouTube connect is not available."
-      expect(response).to redirect_to profile_path
+      expect(response).to redirect_to settings_social_connections_path
     end
 
     it "does not 500 when the channel fetch raises" do
@@ -659,7 +659,7 @@ describe User::OmniauthCallbacksController do
 
       post :youtube
 
-      expect(response).to redirect_to profile_path
+      expect(response).to redirect_to settings_social_connections_path
       expect(flash[:alert]).to eq "Couldn't read a YouTube channel for that Google account."
       expect(user.reload.youtube_identity).to be_nil
     end
@@ -693,7 +693,7 @@ describe User::OmniauthCallbacksController do
 
       post :instagram
 
-      expect(response).to redirect_to profile_path
+      expect(response).to redirect_to settings_social_connections_path
       identity = user.reload.instagram_identity
       expect(identity.instagram_user_id).to eq("17841400000000000")
       expect(identity.handle).to eq("gumroad")
@@ -720,7 +720,7 @@ describe User::OmniauthCallbacksController do
       expect(user.social_connect_verifications.find_by(platform: "instagram")).to be_nil
       expect(user.reload.instagram_identity).to be_nil
       expect(flash[:alert]).to eq "Instagram connect is not available."
-      expect(response).to redirect_to profile_path
+      expect(response).to redirect_to settings_social_connections_path
     end
   end
 
@@ -751,7 +751,7 @@ describe User::OmniauthCallbacksController do
 
       post :tiktok
 
-      expect(response).to redirect_to profile_path
+      expect(response).to redirect_to settings_social_connections_path
       identity = user.reload.tiktok_identity
       expect(identity.tiktok_open_id).to eq("open-123")
       expect(identity.handle).to eq("gumroad")
@@ -780,7 +780,7 @@ describe User::OmniauthCallbacksController do
       expect(user.social_connect_verifications.find_by(platform: "tiktok")).to be_nil
       expect(user.reload.tiktok_identity).to be_nil
       expect(flash[:alert]).to eq "TikTok connect is not available."
-      expect(response).to redirect_to profile_path
+      expect(response).to redirect_to settings_social_connections_path
     end
   end
 
@@ -792,8 +792,14 @@ describe User::OmniauthCallbacksController do
 
       get :failure, params: { error: "access_denied" }
 
-      expect(response).to redirect_to profile_path
+      expect(response).to redirect_to settings_social_connections_path
       expect(flash[:alert]).to eq "Couldn't connect YouTube. Please try again."
+      expect(Event.last).to have_attributes(
+        event_name: "social_connect_failed",
+        parent_referrer: "youtube",
+        referrer: "access_denied",
+        user_id: user.id,
+      )
     end
 
     it "redirects Instagram OAuth failures to profile" do
@@ -803,19 +809,41 @@ describe User::OmniauthCallbacksController do
 
       get :failure, params: { error: "access_denied" }
 
-      expect(response).to redirect_to profile_path
+      expect(response).to redirect_to settings_social_connections_path
       expect(flash[:alert]).to eq "Couldn't connect Instagram. Please try again."
     end
 
-    it "redirects TikTok OAuth failures to profile" do
+    it "redirects TikTok OAuth failures to Social connections" do
       user = create(:user)
       allow(controller).to receive(:logged_in_user).and_return(user)
       request.env["omniauth.error.strategy"] = instance_double(OmniAuth::Strategies::Tiktok, name: "tiktok")
 
       get :failure, params: { error: "access_denied" }
 
-      expect(response).to redirect_to profile_path
+      expect(response).to redirect_to settings_social_connections_path
       expect(flash[:alert]).to eq "Couldn't connect TikTok. Please try again."
+    end
+
+    it "sanitizes user-controlled OAuth error strings before writing Event.referrer" do
+      user = create(:user)
+      allow(controller).to receive(:logged_in_user).and_return(user)
+      request.env["omniauth.error.strategy"] = instance_double(OmniAuth::Strategies::Youtube, name: "youtube")
+
+      get :failure, params: { error: "access_denied<script>alert(1)</script>/../../../etc/passwd" }
+
+      expect(Event.last.referrer).to eq("access_deniedscriptalert1script......etcpasswd")
+    end
+
+    it "returns a cancelled X connection from Settings to Social connections" do
+      user = create(:user)
+      allow(controller).to receive(:logged_in_user).and_return(user)
+      request.env["omniauth.error.strategy"] = instance_double(OmniAuth::Strategies::Twitter, name: "twitter")
+      request.env["omniauth.params"] = { "state" => "link_twitter_account" }
+
+      get :failure, params: { error: "access_denied" }
+
+      expect(response).to redirect_to settings_social_connections_path
+      expect(flash[:alert]).to eq "Couldn't connect X. Please try again."
     end
   end
 end

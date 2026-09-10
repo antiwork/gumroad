@@ -717,6 +717,7 @@ Rails.application.routes.draw do
         post :resend_confirmation_email
       end
       resource :password, only: %i[show update], controller: "password"
+      resource :social_connections, only: :show, controller: "social_connections"
       resource :totp, only: %i[create destroy], controller: "totp" do
         post :confirm
         post :regenerate_recovery_codes
