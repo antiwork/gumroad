@@ -30,6 +30,17 @@ module Gumroad
   class Application < Rails::Application
     # Initialize configuration defaults for originally generated Rails version.
     config.load_defaults 7.2
+    # Owner: gumclaw; set here, not in an initializer. Rails 8.0.5+/8.1.2+ snapshot
+    # ActionDispatch::Response.default_headers during initialize! (rails/rails#58145),
+    # so replacing the hash in config/initializers is ignored. This is the 7.1 set
+    # without X-Download-Options.
+    config.action_dispatch.default_headers = {
+      "X-Frame-Options" => "SAMEORIGIN",
+      "X-XSS-Protection" => "0",
+      "X-Content-Type-Options" => "nosniff",
+      "X-Permitted-Cross-Domain-Policies" => "none",
+      "Referrer-Policy" => "strict-origin-when-cross-origin"
+    }
     # Owner: gumclaw; audit duplicate-instance purchase callbacks before changing the recipient.
     config.active_record.run_commit_callbacks_on_first_saved_instances_in_transaction = true
     # Owner: ershad; verify SQL log consumers before switching to SQLCommenter.
