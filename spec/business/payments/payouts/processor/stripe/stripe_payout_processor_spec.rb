@@ -87,5 +87,34 @@ describe StripePayoutProcessor do
         hash_including(hold_setup_failed: true, reverse_error: "boom")
       )
     end
+
+    it "raises a hold-setup failure even when the reversal error is suppressed" do
+      payment = create(:payment, processor: PayoutProcessorType::STRIPE,
+                                 stripe_internal_transfer_id: "tr_hold_reraise_false")
+      allow(described_class).to receive(:reverse_internal_transfer!).and_raise(Stripe::APIConnectionError.new("boom"))
+      allow(described_class).to receive(:hold_payouts_for_unaccounted_money!)
+        .and_raise(ActiveRecord::Deadlocked.new("Deadlock found when trying to get lock"))
+      allow(ErrorNotifier).to receive(:notify)
+
+      expect do
+        described_class.reverse_internal_transfer_or_hold_payouts!(payment, "account_closed")
+      end.to raise_error(ActiveRecord::Deadlocked)
+
+      expect(ErrorNotifier).to have_received(:notify).once
+    end
+
+    it "does not raise a reversal failure when reraise is false and the hold succeeds" do
+      payment = create(:payment, processor: PayoutProcessorType::STRIPE,
+                                 stripe_internal_transfer_id: "tr_hold_ok")
+      allow(described_class).to receive(:reverse_internal_transfer!).and_raise(Stripe::APIConnectionError.new("boom"))
+      allow(described_class).to receive(:hold_payouts_for_unaccounted_money!)
+      allow(ErrorNotifier).to receive(:notify)
+
+      expect do
+        described_class.reverse_internal_transfer_or_hold_payouts!(payment, "account_closed")
+      end.not_to raise_error
+
+      expect(ErrorNotifier).to have_received(:notify).once
+    end
   end
 end

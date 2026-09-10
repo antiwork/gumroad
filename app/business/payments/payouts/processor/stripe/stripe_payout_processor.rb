@@ -578,7 +578,10 @@ class StripePayoutProcessor
       action_required:
     )
     payment.instance_variable_set(:@payout_reversal_failure_notified, true)
-    raise hold_error if hold_error && reraise
+    # reraise: false only swallows the reversal, and only because the hold already paused the
+    # seller. A failed hold must still raise: mark_failed! returned the balances to unpaid, and
+    # the next scheduled batch does not read failure_reason.
+    raise hold_error if hold_error
     raise if reraise
   end
 
