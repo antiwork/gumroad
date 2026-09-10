@@ -18,8 +18,7 @@ class RepairOrderChargeOutcomesJob
   RECENT_WINDOW = 3.days
 
   # Shared per-run budget for BOTH passes. Without this, a burst of failures makes the fresh pass
-  # pluck and reconcile every candidate in the window — Greptile reproduced 2,001 fresh candidates
-  # reconciled in one invocation with no cap at all.
+  # pluck and reconcile every candidate in the window.
   MAX_BACKLOG_SCANNED = 2_000
 
   # WHERE id IN (...) against purchases/order_purchases flips off the range plan past ~2k ids.
@@ -47,15 +46,9 @@ class RepairOrderChargeOutcomesJob
   end
 
   private
-    # Walk checkout-failed purchases by PRIMARY id from a Redis high-water mark. A created_at
-    # window on purchases would restart at the oldest row every hour; under volume that never
-    # reaches fresh failures within MAX_FAILED_ORDER_BATCHES. id > mark stays selective and
-    # advances toward the head; once caught up, each run only sees new failures.
-    #
-    # Fully-failed / already-flagged purchases never grow `ids`, so the candidate cap cannot stop
-    # this walk. Cap pages the same way the backlog does. A purchase whose id the mark has already
-    # passed and that only later becomes checkout-failed is repaired by the backlog lap once its
-    # order leaves RECENT_WINDOW — same trade-off as dropping the unindexed updated_at scan.
+    # PRIMARY-id walk from a Redis mark. A created_at window restarts at the oldest row each hour
+    # and never reaches the head within MAX_FAILED_ORDER_BATCHES. Fully-failed purchases never grow
+    # `ids`, so this walk is page-capped like the backlog.
     def recent_candidate_ids
       since = RECENT_WINDOW.ago
       after_id = recent_mark_start
@@ -64,7 +57,7 @@ class RepairOrderChargeOutcomesJob
       if ids.empty? && exhausted && after_id.positive?
         save_recent_mark(0)
         after_id = recent_mark_start
-        ids, scan_to, exhausted = recent_page(after_id, since:)
+        ids, scan_to, _exhausted = recent_page(after_id, since:)
       end
 
       # Caller persists scan_to after repairs. Returning after_id lets it distinguish a no-op scan.
@@ -171,8 +164,7 @@ class RepairOrderChargeOutcomesJob
     end
 
     # Failed purchases are the rare side and sit on (purchase_state, created_at). Sibling and
-    # flag checks are separate PK lookups so MySQL never rebuilds the old DISTINCT double-join
-    # (primary EXPLAIN: type=ALL, 116M orders).
+    # flag checks are separate PK lookups, not a DISTINCT double-join.
     def order_ids_with_checkout_failed(after_id:, ceiling:, limit:)
       rel = OrderPurchase.joins(:purchase)
                          .merge(Purchase.checkout_failed)

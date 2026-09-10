@@ -49,8 +49,7 @@ describe RepairOrderChargeOutcomesJob do
     expect(order.reload).to be_partially_successful
   end
 
-  # nyomanjyotisa reproduced this at 120 days: a preorder has no maximum release date, so any
-  # old-side horizon permanently excludes whatever settles after it. The walk now has none.
+  # Preorders have no maximum release date, so the walk has no old-side horizon.
   it "flags an order that settled beyond every settlement horizon" do
     order = settle_with_lost_enqueue(create(:order))
     order.update_column(:created_at, 120.days.ago)
@@ -101,10 +100,7 @@ describe RepairOrderChargeOutcomesJob do
     described_class.new.perform
   end
 
-  # Greptile (P1): an order all of whose purchases are already checkout-failed (both hard-declined,
-  # no successful sibling ever) can never satisfy `record_charge_outcome!`'s succeeded-and-failed
-  # check, so it can never leave the candidate set. A persistent pile of these would resurface every
-  # run and crowd out real repairable orders and the whole shared budget.
+  # All-failed orders can never become partial, so they must not consume the shared budget.
   it "excludes an order whose purchases are all checkout-failed, since it can never become partial" do
     order = create(:order)
     one = create(:purchase_in_progress, link: product_1, seller: seller_1)
@@ -123,9 +119,6 @@ describe RepairOrderChargeOutcomesJob do
     expect(real.reload).to be_partially_successful
   end
 
-  # Greptile (P1): the fresh pass had no cap and reconciled every candidate created in the last
-  # three days in one invocation — a burst of failures could make this hourly low-priority job
-  # perform an unbounded number of primary reads and writes. Both passes now share one budget.
   it "caps the fresh pass at the shared per-run budget rather than reconciling every candidate" do
     stub_const("#{described_class}::MAX_BACKLOG_SCANNED", 1)
     first = settle_with_lost_enqueue(create(:order))
@@ -138,19 +131,12 @@ describe RepairOrderChargeOutcomesJob do
     expect(second.reload).to be_partially_successful
   end
 
-  # Greptile (P1): the backlog cursor advances before the repair runs, so a process exiting between
-  # `save_cursor` and the actual write can leave a low-id order permanently below the cursor — the
-  # wrap that would revisit it only fires once a page comes back empty, which never happens while
-  # newer old-side failures keep arriving above the cursor. Fixing this needs the lap's upper bound
-  # pinned at lap start: once the cursor passes THAT ceiling the page is empty regardless of what
-  # arrived after, so the wrap (and the revisit) is guaranteed rather than starvable.
+  # Pin the lap upper bound at start so the wrap cannot starve while newer failures arrive.
   it "still repairs a stale order left below the cursor, even as new old-side failures keep arriving above it" do
     stale = settle_with_lost_enqueue(create(:order))
     stale.update_column(:created_at, 30.days.ago)
     stub_const("#{described_class}::MAX_BACKLOG_SCANNED", 1)
 
-    # Mirrors the crash Greptile reproduced: the cursor and lap ceiling already advanced past
-    # `stale`, but its repair itself never landed.
     $redis.set(RedisKey.order_charge_outcome_repair_cursor, stale.id)
     $redis.set(RedisKey.order_charge_outcome_repair_lap_ceiling, stale.id)
     expect(stale.reload).not_to be_partially_successful
@@ -191,9 +177,6 @@ describe RepairOrderChargeOutcomesJob do
     expect(combined).to be_empty
   end
 
-  # An unindexed updated_at scan would abort the 2-minute cap. A new order
-  # whose failed purchase predates RECENT_WINDOW is repaired once the order
-  # itself is old enough for the backlog pass.
   it "repairs via backlog an old order whose failed purchase predates the freshness window" do
     order = create(:order)
     succeeded = create(:purchase_in_progress, link: product_1, seller: seller_1)
@@ -209,8 +192,6 @@ describe RepairOrderChargeOutcomesJob do
     expect(order.reload).to be_partially_successful
   end
 
-  # Greptile (P1): a full failed-order scan budget of non-qualifying rows used to
-  # discard the scan cursor, so the next hour rescanned the same stretch.
   it "advances the backlog cursor across a sparse stretch of non-qualifying failed orders" do
     stub_const("#{described_class}::MAX_FAILED_ORDER_BATCHES", 1)
     stub_const("#{described_class}::FAILED_ORDER_ID_BATCH", 1)
@@ -237,8 +218,6 @@ describe RepairOrderChargeOutcomesJob do
     expect(real.reload).to be_partially_successful
   end
 
-  # One qualifying row used to pin the cursor at ids.last, so the rest of a
-  # fully-filtered 40-page window was walked again next hour.
   it "advances the backlog cursor to the last scanned failed order when a candidate sits in an otherwise sparse window" do
     stub_const("#{described_class}::MAX_FAILED_ORDER_BATCHES", 2)
     stub_const("#{described_class}::FAILED_ORDER_ID_BATCH", 1)
@@ -341,8 +320,6 @@ describe RepairOrderChargeOutcomesJob do
     expect(newest.reload).to be_partially_successful
   end
 
-  # A lost lap-ceiling key mid-lap used to leave the page unbounded above, so
-  # new failed rows kept every page non-empty and the wrap never fired.
   it "recomputes a missing lap ceiling mid-lap so the backlog walk can still wrap" do
     older = settle_with_lost_enqueue(create(:order))
     newer = settle_with_lost_enqueue(create(:order))
