@@ -5,6 +5,9 @@ class TiktokCallbacksController < ApplicationController
 
   def deauthorize
     payload = webhook.parse(request.raw_post, signature_header)
+    return head :bad_request if payload.blank?
+    return head :ok unless payload["event"] == "authorization.removed"
+
     open_id = webhook.open_id(payload)
     return head :bad_request if open_id.blank?
 

@@ -66,7 +66,7 @@ module OmniAuth
         end
 
         def tiktok_connect_enabled?
-          Feature.active?(:tiktok_connect, tiktok_connect_actor)
+          TIKTOK_CLIENT_KEY.present? && Feature.active?(:tiktok_connect, tiktok_connect_actor)
         end
 
         def tiktok_connect_actor

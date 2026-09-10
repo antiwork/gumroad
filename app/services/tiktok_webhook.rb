@@ -32,7 +32,9 @@ class TiktokWebhook
   def open_id(payload)
     return if payload.blank?
 
-    payload["user_openid"].presence || payload.dig("content", "open_id").presence || payload.dig("user", "open_id").presence
+    # TikTok documents user_openid. content can be a JSON string on the wire,
+    # so dig("content", ...) would TypeError; do not fall back to undocumented shapes.
+    payload["user_openid"].presence
   end
 
   private

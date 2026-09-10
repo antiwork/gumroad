@@ -12,8 +12,21 @@ describe OmniAuth::Strategies::Tiktok do
   end
 
   describe "#tiktok_connect_enabled?" do
+    before do
+      stub_const("TIKTOK_CLIENT_KEY", "client-key")
+    end
+
     it "is false when the flag is off" do
       assign_env(create(:user))
+
+      expect(strategy.send(:tiktok_connect_enabled?)).to eq(false)
+    end
+
+    it "is false when the client key is blank even if the flag is on" do
+      stub_const("TIKTOK_CLIENT_KEY", "")
+      user = create(:user)
+      Feature.activate_user(:tiktok_connect, user)
+      assign_env(user)
 
       expect(strategy.send(:tiktok_connect_enabled?)).to eq(false)
     end
