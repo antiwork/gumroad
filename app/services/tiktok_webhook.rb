@@ -1,9 +1,8 @@
 # frozen_string_literal: true
 
 class TiktokWebhook
-  # TikTok signs `t=<unix>,s=<hex>` over "#{timestamp}.#{raw_body}". Replay
-  # window is not documented; 5 minutes matches common webhook practice and
-  # Hookdeck's Login Kit sample. Each retry is expected to carry a fresh `t`.
+  # TikTok signs `t=<unix>,s=<hex>` over "#{timestamp}.#{raw_body}".
+  # The replay window is undocumented; retries should carry a fresh timestamp.
   MAX_TIMESTAMP_AGE = 5.minutes
 
   def initialize(client_secret = TIKTOK_CLIENT_SECRET)
