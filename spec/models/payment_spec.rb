@@ -823,7 +823,7 @@ describe Payment do
 
         expect do
           payment.mark_failed!(Payment::FailureReason::CANNOT_PAY)
-        end.to raise_error(ActiveRecord::RecordInvalid, /Correlation can't be blank/)
+        end.to raise_error(StateMachines::InvalidTransition, /Correlation can't be blank/)
         expect(payment.reload.state).to eq("processing")
       end
 

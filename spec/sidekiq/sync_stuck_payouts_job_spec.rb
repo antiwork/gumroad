@@ -268,10 +268,12 @@ describe SyncStuckPayoutsJob do
                          created_at: 5.days.ago)
 
         allow(Stripe::Payout).to receive(:retrieve).and_raise(Stripe::StripeError.new("API error"))
-
-        expect(Rails.logger).to receive(:error).with(/Error syncing Stripe payout/).exactly(2).times
+        allow(Rails.logger).to receive(:error)
+        allow(ErrorNotifier).to receive(:notify)
 
         described_class.new.perform(PayoutProcessorType::STRIPE)
+
+        expect(Rails.logger).to have_received(:error).with(/rejected:.*API error/).exactly(2).times
       end
     end
   end
