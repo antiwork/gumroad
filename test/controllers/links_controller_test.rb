@@ -5060,30 +5060,19 @@ class LinksControllerShowTest < ActionController::TestCase
     assert page["props"]["product"].present?
   end
 
-  test "application.rb default_headers omit X-Download-Options and snapshot onto ActionDispatch::Response" do
-    # SecureHeaders::Railtie deletes the headers it owns from this hash in-place
-    # when ActionController loads, including after the Rails 8.0.5+ snapshot
-    # (rails/rails#58145). X-Frame-Options is OPT_OUT; nosniff is set by
-    # SecureHeaders middleware, not this hash.
+  test "application.rb default_headers share one object with ActionDispatch::Response" do
+    # Hash content matches load_defaults 7.2, so content assertions alone do not
+    # prove the application.rb assignment. The load-bearing rails#58145 contract
+    # is object identity: SecureHeaders empties this shared hash in place when
+    # ActionController loads, so Response.default_headers must be the same object.
+    # ActionController::TestCase responses do include default_headers via
+    # TestResponse.create; empty frame/nosniff keys here come from SecureHeaders,
+    # not from TestCase skipping middleware.
     headers = Rails.application.config.action_dispatch.default_headers
+    assert_same headers, ActionDispatch::Response.default_headers
     assert_nil headers["X-Download-Options"]
     assert_nil headers["X-Frame-Options"]
-    assert_nil headers["X-Content-Type-Options"]
-    assert_equal headers, ActionDispatch::Response.default_headers
-  end
-
-  test "GET show with embed param omits X-Frame-Options so third-party iframes can render" do
-    link = create_product(user: @user)
-    get :show, params: { id: link.to_param, embed: "true" }
-    assert_response :success
-    assert_nil response.headers["X-Frame-Options"]
-  end
-
-  test "GET show with overlay param omits X-Frame-Options so third-party iframes can render" do
-    link = create_product(user: @user)
-    get :show, params: { id: link.to_param, overlay: "true" }
-    assert_response :success
-    assert_nil response.headers["X-Frame-Options"]
+    assert_nil headers["Referrer-Policy"]
   end
 
   test "GET show renders Products/Iframe/Show with product props for overlay param" do

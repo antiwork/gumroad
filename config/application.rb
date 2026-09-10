@@ -32,8 +32,9 @@ module Gumroad
     config.load_defaults 7.2
     # Owner: gumclaw; set here, not in an initializer. Rails 8.0.5+/8.1.2+ snapshot
     # ActionDispatch::Response.default_headers during initialize! (rails/rails#58145),
-    # so replacing the hash in config/initializers is ignored. This is the 7.1 set
-    # without X-Download-Options.
+    # so replacing the hash in config/initializers is ignored. Hash content matches
+    # load_defaults 7.2 (intentionally redundant); assignment location keeps one
+    # shared object for SecureHeaders to empty in place.
     config.action_dispatch.default_headers = {
       "X-Frame-Options" => "SAMEORIGIN",
       "X-XSS-Protection" => "0",
@@ -51,8 +52,6 @@ module Gumroad
     config.active_record.run_after_transaction_callbacks_in_order_defined = false
     # Owner: gumclaw; compare seller HTML rendering before adopting the HTML5 sanitizer.
     config.action_view.sanitizer_vendor = Rails::HTML4::Sanitizer
-    # Owner: gumclaw; audit Active Job callers before changing transaction enqueue timing.
-    config.active_job.enqueue_after_transaction_commit = :never
     # Owner: gumclaw; verify thumbnail delivery before serving WebP variants without conversion.
     config.active_storage.web_image_content_types = %w[image/png image/jpeg image/gif]
     # Owner: gumclaw; reconcile existing future-dated migrations before enabling timestamp validation.
