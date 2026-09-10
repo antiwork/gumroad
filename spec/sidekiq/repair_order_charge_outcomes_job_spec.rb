@@ -229,4 +229,57 @@ describe RepairOrderChargeOutcomesJob do
     described_class.new.perform
     expect(real.reload).to be_partially_successful
   end
+
+  # One qualifying row used to pin the cursor at ids.last, so the rest of a
+  # fully-filtered 40-page window was walked again next hour.
+  it "advances the backlog cursor to the last scanned failed order when a candidate sits in an otherwise sparse window" do
+    stub_const("#{described_class}::MAX_FAILED_ORDER_BATCHES", 2)
+    stub_const("#{described_class}::FAILED_ORDER_ID_BATCH", 1)
+    stub_const("#{described_class}::MAX_BACKLOG_SCANNED", 10)
+
+    real = settle_with_lost_enqueue(create(:order))
+    real.update_column(:created_at, 30.days.ago)
+
+    blocker = create(:order)
+    one = create(:purchase_in_progress, link: product_1, seller: seller_1)
+    two = create(:purchase_in_progress, link: product_2, seller: seller_2)
+    blocker.purchases << one << two
+    one.update_columns(purchase_state: "failed")
+    two.update_columns(purchase_state: "failed")
+    blocker.update_column(:created_at, 30.days.ago)
+    RecordOrderChargeOutcomeJob.jobs.clear
+
+    described_class.new.perform
+    expect(real.reload).to be_partially_successful
+    expect(blocker.reload).not_to be_partially_successful
+    expect($redis.get(RedisKey.order_charge_outcome_repair_cursor).to_i).to eq(blocker.id)
+  end
+
+  # Fully-failed recent purchases never grow the candidate cap, so without a
+  # page bound the recent pass can consume the whole run before backlog.
+  it "stops the recent failed-purchase scan at the failed-order batch cap" do
+    stub_const("#{described_class}::MAX_FAILED_ORDER_BATCHES", 1)
+    stub_const("#{described_class}::FAILED_ORDER_ID_BATCH", 1)
+
+    3.times do
+      order = create(:order)
+      one = create(:purchase_in_progress, link: product_1, seller: seller_1)
+      two = create(:purchase_in_progress, link: product_2, seller: seller_2)
+      order.purchases << one << two
+      one.update_columns(purchase_state: "failed")
+      two.update_columns(purchase_state: "failed")
+      RecordOrderChargeOutcomeJob.jobs.clear
+    end
+
+    job = described_class.new
+    calls = 0
+    allow(job).to receive(:order_ids_for_purchases).and_wrap_original do |method, *args|
+      calls += 1
+      method.call(*args)
+    end
+
+    job.perform
+
+    expect(calls).to eq(1)
+  end
 end

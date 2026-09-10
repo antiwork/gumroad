@@ -45,17 +45,23 @@ class RepairOrderChargeOutcomesJob
   private
     def recent_candidate_ids
       ids = []
+      batches = 0
       since = RECENT_WINDOW.ago
       # created_at covers lost-enqueue at checkout. updated_at covers an older purchase that
       # fails later (SCA/restart attached to a new order). orders.created_at is unindexed, so
       # the recent cohort cannot be keyed off the order timestamp without a 116M-row scan.
+      #
+      # Fully-failed / already-flagged purchases never grow `ids`, so the candidate cap
+      # cannot stop this walk. Cap pages the same way the backlog does or a sparse recent
+      # cohort never reaches backlog repair.
       [Purchase.checkout_failed.where(created_at: since..),
        Purchase.checkout_failed.where(updated_at: since..)].each do |rel|
         rel.in_batches(of: FAILED_ORDER_ID_BATCH) do |batch|
           ids.concat(filter_candidates(order_ids_for_purchases(batch.pluck(:id)), created_at: since..))
-          break if ids.size >= MAX_BACKLOG_SCANNED
+          batches += 1
+          break if ids.size >= MAX_BACKLOG_SCANNED || batches >= MAX_FAILED_ORDER_BATCHES
         end
-        break if ids.size >= MAX_BACKLOG_SCANNED
+        break if ids.size >= MAX_BACKLOG_SCANNED || batches >= MAX_FAILED_ORDER_BATCHES
       end
       ids.uniq.sort.first(MAX_BACKLOG_SCANNED)
     end
@@ -74,11 +80,12 @@ class RepairOrderChargeOutcomesJob
         ids, scan_to, exhausted = backlog_page(0, ceiling, remaining_budget)
       end
 
+      # Truncated pages must resume at ids.last or we skip remaining candidates.
+      # Otherwise scan_to is already fully filtered. An empty exhausted wrap must
+      # keep cursor 0 so the next lap can see a newly-stranded order.
       if ids.any?
-        save_cursor(ids.last)
+        save_cursor(ids.size < remaining_budget ? [ids.last, scan_to].max : ids.last)
       elsif !exhausted && scan_to > after_id
-        # 40 failed-order pages with no qualifying candidate used to discard scan_to, so the
-        # next hour rescanned the same stretch and starved everything past it.
         save_cursor(scan_to)
       end
       ids
