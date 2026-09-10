@@ -60,6 +60,12 @@ export type PublishedInstallment = SavedInstallment & {
     open_count: number | null;
     open_rate: number | null;
   }[];
+  delivery: {
+    status: "sent" | "sending" | "waiting" | "incomplete";
+    delivered_count: number;
+    remaining_count: number | null;
+    scheduled_for: string | null;
+  } | null;
 };
 
 export type ScheduledInstallment = SavedInstallment & {

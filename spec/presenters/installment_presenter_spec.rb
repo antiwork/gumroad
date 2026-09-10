@@ -231,6 +231,69 @@ describe InstallmentPresenter do
       end
     end
 
+    context "delivery state of the latest regular send" do
+      it "is nil when the post was never blasted" do
+        expect(described_class.new(seller:, installment:).props[:delivery]).to be_nil
+      end
+
+      it "is sent once the blast completed" do
+        create(:blast, post: installment, completed_at: 5.minutes.ago, delivery_count: 1500)
+
+        expect(described_class.new(seller:, installment:).props[:delivery]).to eq(
+          { status: "sent", delivered_count: 1500, remaining_count: nil, scheduled_for: nil }
+        )
+      end
+
+      it "is sent when every recipient was handed off and only the completion stamp is missing" do
+        blast = create(:blast, post: installment, requested_at: 2.days.ago, last_email_delivered_at: 2.days.ago, completed_at: nil, delivery_count: 1500)
+        $redis.set(RedisKey.blast_pending_recipients(blast.id), 0)
+
+        expect(described_class.new(seller:, installment:).props[:delivery]).to include(status: "sent", remaining_count: nil)
+      ensure
+        $redis.del(RedisKey.blast_pending_recipients(blast.id)) if blast
+      end
+
+      it "is sending while the last email is inside the stall threshold, with the remaining count when known" do
+        blast = create(:blast, post: installment, requested_at: 1.hour.ago, last_email_delivered_at: 10.minutes.ago, completed_at: nil, delivery_count: 6_798)
+        $redis.set(RedisKey.blast_pending_recipients(blast.id), 16_212)
+
+        expect(described_class.new(seller:, installment:).props[:delivery]).to eq(
+          { status: "sending", delivered_count: 6_798, remaining_count: 16_212, scheduled_for: nil }
+        )
+      ensure
+        $redis.del(RedisKey.blast_pending_recipients(blast.id)) if blast
+      end
+
+      it "is incomplete once an unfinished blast has been idle past the stall threshold" do
+        create(:blast, post: installment, requested_at: 2.days.ago, started_at: 2.days.ago, first_email_delivered_at: 2.days.ago,
+                       last_email_delivered_at: 2.days.ago, completed_at: nil, delivery_count: 6_798)
+
+        expect(described_class.new(seller:, installment:).props[:delivery]).to eq(
+          { status: "incomplete", delivered_count: 6_798, remaining_count: nil, scheduled_for: nil }
+        )
+      end
+
+      it "is waiting while the blast is deferred by the daily large-blast quota" do
+        blast = create(:blast, :just_requested, post: installment)
+        blast.update!(started_at: Time.current)
+        run_at = 5.hours.from_now.change(usec: 0)
+        $redis.set(RedisKey.blast_quota_deferred_until(blast.id), run_at.utc.iso8601)
+
+        expect(described_class.new(seller:, installment:).props[:delivery]).to eq(
+          { status: "waiting", delivered_count: 0, remaining_count: nil, scheduled_for: run_at }
+        )
+      ensure
+        $redis.del(RedisKey.blast_quota_deferred_until(blast.id)) if blast
+      end
+
+      it "describes the latest regular blast, not a later non-opener resend" do
+        create(:blast, post: installment, requested_at: 2.days.ago, completed_at: 2.days.ago, delivery_count: 900)
+        create(:blast, post: installment, recipient_filter: "unopened", requested_at: 1.hour.ago, completed_at: nil, delivery_count: 0)
+
+        expect(described_class.new(seller:, installment:).props[:delivery]).to include(status: "sent", delivered_count: 900)
+      end
+    end
+
     context "when the installment has non-opener resends" do
       it "returns each unopened blast in non_opener_resends ordered by requested_at" do
         older = create(:blast, post: installment, recipient_filter: "unopened", requested_at: 2.days.ago, started_at: 2.days.ago, completed_at: 2.days.ago, delivery_count: 5)
