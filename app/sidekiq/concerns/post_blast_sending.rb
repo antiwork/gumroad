@@ -13,8 +13,10 @@ module PostBlastSending
   # unlike the audience snapshot, it is tiny and is the only evidence for late safe resumes.
   PENDING_RECIPIENTS_TTL = AlertOnStalledPostEmailBlastsJob::LOOKBACK
 
-  # How long a sent-in-this-blast marker survives for a non-opener resend's dedupe.
-  BLAST_DEDUPE_TTL = 7.days
+  # How long a sent-in-this-blast marker survives for a non-opener resend's dedupe. Kept for
+  # the full scan window: it is the only record of who already received the resend, so a
+  # late resume with no audience snapshot refuses to run once it is gone.
+  BLAST_DEDUPE_TTL = AlertOnStalledPostEmailBlastsJob::LOOKBACK
 
   # How long the per-chunk completion set survives. Long enough that the last children of a
   # multi-hour blast can finish and stamp `completed_at`; an abandoned shell just expires and

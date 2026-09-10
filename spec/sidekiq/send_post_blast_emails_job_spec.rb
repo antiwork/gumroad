@@ -436,6 +436,45 @@ describe SendPostBlastEmailsJob, :freeze_time do
       expect(SentPostEmail.where(post:).count).to eq(3)
     end
 
+    it "refuses to rebuild a partially delivered resend once its sent set is gone" do
+      blast = create(:blast, :just_requested, post:, recipient_filter: "unopened")
+      # An earlier attempt delivered some of the resend; with both the snapshot and the
+      # per-blast sent set gone, nothing says who those were.
+      blast.update!(started_at: Time.current, first_email_delivered_at: Time.current)
+
+      expect do
+        described_class.new.perform(blast.id)
+      end.to raise_error(RuntimeError, /sent set for non-opener resend #{blast.id}/)
+
+      expect_sent_count 0
+      expect(blast.reload.completed_at).to be_nil
+    end
+
+    it "rebuilds a partially delivered resend while its sent set survives, skipping who already got it" do
+      blast = create(:blast, :just_requested, post:, recipient_filter: "unopened")
+      blast.update!(started_at: Time.current, first_email_delivered_at: Time.current)
+      $redis.sadd(RedisKey.blast_sent_emails(blast.id), delivered_sale.email)
+
+      described_class.new.perform(blast.id)
+
+      expect_sent_count 1
+      expect(PostSendgridApi.mails[sent_sale.email]).to be_present
+      expect(blast.reload.completed_at).to be_present
+    ensure
+      $redis.del(RedisKey.blast_sent_emails(blast.id)) if blast
+    end
+
+    it "keeps the per-blast sent set for the stalled-blast scan window" do
+      blast = create(:blast, :just_requested, post:, recipient_filter: "unopened")
+
+      described_class.new.perform(blast.id)
+
+      expect_sent_count 2
+      expect($redis.ttl(RedisKey.blast_sent_emails(blast.id))).to be_between(13.days.to_i, AlertOnStalledPostEmailBlastsJob::LOOKBACK.to_i).inclusive
+    ensure
+      $redis.del(RedisKey.blast_sent_emails(blast.id)) if blast
+    end
+
     it "resolves the unopened-recipient emails under the raised statement execution cap" do
       blast = create(:blast, :just_requested, post:, recipient_filter: "unopened")
 
@@ -560,71 +599,68 @@ describe SendPostBlastEmailsJob, :freeze_time do
       expect(blast.reload.completed_at).to be_present
     end
 
-    it "does not rebuild the live audience when a late resume finds no snapshot" do
-      post = basic_post_with_audience
+    it "rebuilds the audience as it stood at started_at when a late resume finds no snapshot" do
+      post = create(:audience_post, :published, seller: @seller)
+      original_follower = create(:active_follower, user: @seller, created_at: 13.days.ago)
+      AudienceMember.find_by!(seller_id: post.seller_id, email: original_follower.email).update_column(:created_at, 13.days.ago)
       blast = create(:blast, :just_requested, post:)
-      blast.update!(started_at: 2.days.ago)
-      create(:active_follower, user: @seller)
+      # Twelve days in, well past any snapshot TTL, with recipients still owed from the
+      # first attempt — the shape of gumroad-private#2520.
+      blast.update!(started_at: 12.days.ago)
+      $redis.set(RedisKey.blast_pending_recipients(blast.id), 1)
+      later_joiner = create(:active_follower, user: @seller)
 
-      unrestricted = false
-      allow(AudienceMember).to receive(:filter).and_wrap_original do |original, **kwargs|
-        unrestricted = true unless kwargs.key?(:ids)
-        original.call(**kwargs)
-      end
-
-      expect do
-        described_class.new.perform(blast.id)
-      end.to raise_error(RuntimeError, /missing audience snapshot for blast #{blast.id}/)
-
-      expect(unrestricted).to eq(false)
-      expect_sent_count 0
-      expect(blast.reload.completed_at).to be_nil
-    end
-
-    it "rebuilds the audience when a resume finds no snapshot inside the grace window" do
-      post = basic_post_with_audience
-      blast = create(:blast, :just_requested, post:)
-      blast.update!(started_at: 1.hour.ago)
-      create(:active_follower, user: @seller)
-
-      unrestricted = false
-      allow(AudienceMember).to receive(:filter).and_wrap_original do |original, **kwargs|
-        unrestricted = true unless kwargs.key?(:ids)
-        original.call(**kwargs)
-      end
+      expect(AudienceMember).to receive(:filter).with(hash_including(as_of: blast.started_at)).and_call_original
 
       described_class.new.perform(blast.id)
 
-      expect(unrestricted).to eq(true)
-      expect_sent_count 2
+      expect_sent_count 1
+      expect_sent_email(original_follower.email)
+      expect(PostSendgridApi.mails).not_to have_key(later_joiner.email)
       expect(blast.reload.completed_at).to be_present
+    ensure
+      $redis.del(RedisKey.blast_pending_recipients(blast.id)) if blast
     end
 
-    it "refuses a resume with no snapshot inside the grace window when recipients are still pending" do
+    it "refuses a late rebuild when the filter reads state no timestamp can rewind" do
       post = basic_post_with_audience
-      blast = create(:blast, :just_requested, post:)
-      blast.update!(started_at: 1.hour.ago)
-      pending_key = RedisKey.blast_pending_recipients(blast.id)
-      # An earlier attempt already published its recipient count, so it had a snapshot:
-      # the missing one is lost Redis state, not a first-run crash.
-      $redis.set(pending_key, 1)
-      create(:active_follower, user: @seller)
+      described_class::UNREBUILDABLE_FILTER_KEYS.each do |key|
+        allow_any_instance_of(Installment).to receive(:audience_members_filter_params).and_return({ key => [1] })
+        blast = create(:blast, :just_requested, post:)
+        blast.update!(started_at: Time.current, first_email_delivered_at: Time.current)
 
-      unrestricted = false
-      allow(AudienceMember).to receive(:filter).and_wrap_original do |original, **kwargs|
-        unrestricted = true unless kwargs.key?(:ids)
-        original.call(**kwargs)
+        expect do
+          described_class.new.perform(blast.id)
+        end.to raise_error(RuntimeError, /filter's eligibility cannot be rebuilt/)
+
+        expect(blast.reload.completed_at).to be_nil
       end
+
+      expect_sent_count 0
+    end
+
+    it "treats a resume past the grace window as stale even before the first delivery" do
+      post = basic_post_with_audience
+      allow_any_instance_of(Installment).to receive(:audience_members_filter_params).and_return({ minimum_license_uses: 1 })
+      blast = create(:blast, :just_requested, post:)
+      blast.update!(started_at: 2.days.ago)
 
       expect do
         described_class.new.perform(blast.id)
-      end.to raise_error(RuntimeError, /missing audience snapshot for blast #{blast.id}/)
+      end.to raise_error(RuntimeError, /filter's eligibility cannot be rebuilt/)
 
-      expect(unrestricted).to eq(false)
       expect_sent_count 0
-      expect(blast.reload.completed_at).to be_nil
-    ensure
-      $redis.del(pending_key) if pending_key
+    end
+
+    it "lets a first-run crash inside the grace window rebuild even for an unrebuildable filter" do
+      post = basic_post_with_audience
+      allow_any_instance_of(Installment).to receive(:audience_members_filter_params).and_return({ minimum_license_uses: 1 })
+      blast = create(:blast, :just_requested, post:)
+      blast.update!(started_at: 1.hour.ago)
+
+      described_class.new.perform(blast.id)
+
+      expect(blast.reload.completed_at).to be_present
     end
 
     it "completes without a live rebuild when a resume with no snapshot owes no more recipients" do
