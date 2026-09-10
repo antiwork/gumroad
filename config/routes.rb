@@ -529,8 +529,8 @@ Rails.application.routes.draw do
     get "/careers", to: redirect("/gumclaw")
     get "/careers/:slug", to: redirect("/gumclaw")
     get "/jobs", to: redirect("/gumclaw")
+    get "/features.md", to: "home#features_md", format: false
     get "/features", to: "home#features"
-    get "/features.md", to: "home#features_md"
     get "/pricing", to: "home#pricing"
     get "/terms", to: "home#terms"
     get "/prohibited", to: "home#prohibited"
@@ -752,9 +752,12 @@ Rails.application.routes.draw do
       end
       resource :team, only: %i[show], controller: "team"
       namespace :team do
+        # HTML accept URL. Nested format: nil under format: true requires :format on Rails 8.1.
+        resources :invitations, only: [] do
+          get :accept, on: :member
+        end
         scope format: true, constraints: { format: :json } do
           resources :invitations, only: %i[create update destroy] do
-            get :accept, on: :member, format: nil
             put :resend_invitation, on: :member
             put :restore, on: :member
           end
