@@ -129,7 +129,8 @@ describe("Email List", :js, :sidekiq_inline, :elasticsearch_wait_for_refresh, ty
 
         within_modal "Email 1 (sent)" do
           expect(page).to have_text("Status Incomplete", normalize_ws: true)
-          expect(page).to have_text("6,798 people got this email. 16,212 people have not received it yet. We are retrying automatically.")
+          expect(page).to have_text("16,212 people have not received it yet. We are retrying automatically.")
+          expect(page).not_to have_text("6,798 people got this email")
           # One path at a time: while the monitor retries, the seller is not offered a second sender.
           expect(page).not_to have_button("Send to the rest")
         end
@@ -151,7 +152,7 @@ describe("Email List", :js, :sidekiq_inline, :elasticsearch_wait_for_refresh, ty
         end
 
         within_modal "Email 1 (sent)" do
-          expect(page).to have_text("6,798 people got this email. 16,212 people have not received it yet.")
+          expect(page).to have_text("16,212 people have not received it yet.")
           click_on "Send to the rest"
         end
 

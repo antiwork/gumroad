@@ -86,11 +86,10 @@ export default function EmailsPublished() {
             })}, when your daily limit for large emails resets.`
           : "Sends when your daily limit for large emails resets.";
       case "incomplete": {
+        // The Emailed row above already carries the delivered count; lead with what is new.
         const missing =
           delivery.remaining_count !== null ? `${people(delivery.remaining_count)} have` : "Some people have";
-        return `${people(delivery.delivered_count)} got this email. ${missing} not received it yet.${
-          delivery.retrying ? " We are retrying automatically." : ""
-        }`;
+        return `${missing} not received it yet.${delivery.retrying ? " We are retrying automatically." : ""}`;
       }
     }
   };
