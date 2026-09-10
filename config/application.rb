@@ -29,7 +29,10 @@ require_relative "../lib/utilities/global_config"
 module Gumroad
   class Application < Rails::Application
     # Initialize configuration defaults for originally generated Rails version.
-    config.load_defaults 8.0
+    config.load_defaults 8.1
+    # Owner: gumclaw; keep Rails 8.1 action_on_path_relative_redirect = :raise.
+    # Do not pin this back to :log — it is a security check. Full redirect
+    # coverage remains a CI gate.
     # Owner: gumclaw; set here, not in an initializer. Rails 8.0.5+/8.1.2+ snapshot
     # ActionDispatch::Response.default_headers during initialize! (rails/rails#58145),
     # so replacing the hash in config/initializers is ignored. This is the 7.1 set
@@ -41,6 +44,16 @@ module Gumroad
       "X-Permitted-Cross-Domain-Policies" => "none",
       "Referrer-Policy" => "strict-origin-when-cross-origin"
     }
+    # Owner: gumclaw; audit embedded JSON consumers before removing response escaping.
+    config.action_controller.escape_json_responses = true
+    # Owner: gumclaw; verify older embedded JavaScript consumers before emitting literal separators.
+    config.active_support.escape_js_separators_in_json = true
+    # Owner: gumclaw; audit keyless query models before raising on implicit finder order.
+    config.active_record.raise_on_missing_required_finder_order_columns = false
+    # Owner: gumclaw; compare template cache dependencies before switching the render parser.
+    config.action_view.render_tracker = :regex
+    # Owner: gumclaw; check form/autofill behavior before changing hidden-field markup.
+    config.action_view.remove_hidden_field_autocomplete = false
     # Owner: gumclaw; audit scheduled times across DST before preserving named zones.
     config.active_support.to_time_preserves_timezone = :offset
     # Owner: gumclaw; verify conditional download responses before changing ETag precedence.
