@@ -38,11 +38,10 @@ describe TiktokWebhook do
     expect(described_class.new("").parse(body, signature_for(body))).to be_nil
   end
 
-
   it "reads open_id only from user_openid" do
     expect(webhook.open_id("user_openid" => "open-123")).to eq("open-123")
-    expect(webhook.open_id("content" => {"open_id" => "open-123"})).to be_nil
-    expect(webhook.open_id("user" => {"open_id" => "open-123"})).to be_nil
+    expect(webhook.open_id("content" => { "open_id" => "open-123" })).to be_nil
+    expect(webhook.open_id("user" => { "open_id" => "open-123" })).to be_nil
   end
 
   it "returns nil for string content without TypeError when user_openid is missing" do

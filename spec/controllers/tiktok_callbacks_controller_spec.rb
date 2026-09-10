@@ -43,7 +43,6 @@ describe TiktokCallbacksController do
       expect(UserTiktokIdentity.exists?(identity.id)).to be(true)
     end
 
-
     it "returns 400 when a signed payload has string content and no user_openid" do
       secret = "tiktok-client-secret"
       stub_const("TIKTOK_CLIENT_SECRET", secret)
@@ -55,9 +54,9 @@ describe TiktokCallbacksController do
       digest = OpenSSL::HMAC.hexdigest("SHA256", secret, "#{timestamp}.#{body}")
       request.headers["TikTok-Signature"] = "t=#{timestamp},s=#{digest}"
 
-      expect {
+      expect do
         post :deauthorize, body:, as: :json
-      }.not_to raise_error
+      end.not_to raise_error
       expect(response).to have_http_status(:bad_request)
     end
 
