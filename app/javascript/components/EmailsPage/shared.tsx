@@ -232,10 +232,7 @@ export const SendToRemainingButton = ({
 
   return (
     <>
-      <Button onClick={() => setConfirming(true)}>
-        <Envelope pack="filled" className="size-5" />
-        Send to the rest
-      </Button>
+      <Button onClick={() => setConfirming(true)}>Send to the rest</Button>
       {confirming ? (
         <Modal
           open
