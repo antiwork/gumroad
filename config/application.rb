@@ -29,7 +29,11 @@ require_relative "../lib/utilities/global_config"
 module Gumroad
   class Application < Rails::Application
     # Initialize configuration defaults for originally generated Rails version.
-    config.load_defaults 7.0
+    config.load_defaults 7.2
+    # Owner: gumclaw; audit manual requires before removing autoload paths from $LOAD_PATH.
+    config.add_autoload_paths_to_load_path = true
+    # Owner: ershad; measure canary RSS before enabling YJIT on memory-limited workers.
+    config.yjit = false
     config.active_support.cache_format_version = 7.1
     config.active_storage.variant_processor = :mini_magick
 
