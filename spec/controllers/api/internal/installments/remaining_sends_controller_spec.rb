@@ -38,6 +38,19 @@ describe Api::Internal::Installments::RemainingSendsController do
       expect($redis.ttl(RedisKey.stalled_blast_auto_resumed(blast.id))).to be_between(1, AlertOnStalledPostEmailBlastsJob::STALL_THRESHOLD.to_i).inclusive
     end
 
+    it "refuses while the monitor will retry on its own" do
+      Feature.activate(:auto_resume_stalled_post_blasts)
+      $redis.set(RedisKey.blast_pending_recipients(blast.id), 16_212)
+
+      post :create, params: { id: installment.external_id }
+
+      expect(response).to have_http_status(:unprocessable_entity)
+      expect(response.parsed_body["error"]).to eq("We are retrying this automatically.")
+      expect(SendPostBlastEmailsJob.jobs.size).to eq(0)
+    ensure
+      Feature.deactivate(:auto_resume_stalled_post_blasts)
+    end
+
     it "refuses when the latest send is not incomplete" do
       blast.update!(completed_at: 1.day.ago)
 
@@ -48,7 +61,7 @@ describe Api::Internal::Installments::RemainingSendsController do
       expect(SendPostBlastEmailsJob.jobs.size).to eq(0)
     end
 
-    it "refuses while a sender is still busy, queued or retrying" do
+    it "refuses while a sender is still busy, queued or retrying, and gives the marker back" do
       allow(AlertOnStalledPostEmailBlastsJob).to receive(:sender_visible?).with(blast.id).and_return(true)
 
       post :create, params: { id: installment.external_id }
@@ -56,6 +69,19 @@ describe Api::Internal::Installments::RemainingSendsController do
       expect(response).to have_http_status(:unprocessable_entity)
       expect(response.parsed_body["error"]).to eq("This email is already sending. Check back in a few hours.")
       expect(SendPostBlastEmailsJob.jobs.size).to eq(0)
+      expect($redis.exists?(RedisKey.stalled_blast_auto_resumed(blast.id))).to eq(false)
+    end
+
+    it "holds the marker while it scans for a live sender, so the monitor cannot start one meanwhile" do
+      allow(AlertOnStalledPostEmailBlastsJob).to receive(:sender_visible?) do
+        expect($redis.get(RedisKey.stalled_blast_auto_resumed(blast.id))).to eq("seller:#{seller.id}")
+        false
+      end
+
+      post :create, params: { id: installment.external_id }
+
+      expect(response).to be_successful
+      expect(SendPostBlastEmailsJob).to have_enqueued_sidekiq_job(blast.id)
     end
 
     it "refuses a second start inside the stall window, whoever started the first" do

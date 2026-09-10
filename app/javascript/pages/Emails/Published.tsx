@@ -310,7 +310,7 @@ export default function EmailsPublished() {
                 <EmailSheetActions
                   installment={selectedInstallment}
                   remainingSend={
-                    selectedInstallment.delivery?.status === "incomplete"
+                    selectedInstallment.delivery?.status === "incomplete" && !selectedInstallment.delivery.retrying
                       ? { count: selectedInstallment.delivery.remaining_count }
                       : null
                   }

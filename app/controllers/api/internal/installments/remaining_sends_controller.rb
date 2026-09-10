@@ -15,13 +15,22 @@ class Api::Internal::Installments::RemainingSendsController < Api::Internal::Bas
     unless blast&.delivery_status == "incomplete"
       return render json: { success: false, error: "This email is not waiting on any recipients." }, status: :unprocessable_entity
     end
-    if AlertOnStalledPostEmailBlastsJob.sender_visible?(blast.id)
-      return render json: { success: false, error: "This email is already sending. Check back in a few hours." }, status: :unprocessable_entity
+    # One path at a time: while the monitor will retry on its own, the page shows that and no button.
+    if AlertOnStalledPostEmailBlastsJob.auto_resume_eligible?(blast)
+      return render json: { success: false, error: "We are retrying this automatically." }, status: :unprocessable_entity
     end
-    # The monitor's own once-per-window marker, so the seller and the monitor cannot both enqueue.
+
+    # Claim the monitor's once-per-window marker BEFORE looking for a live sender: the monitor
+    # claims the same marker before it enqueues, so holding it first means nothing else can
+    # start a sender while the Sidekiq scans run.
     marker = RedisKey.stalled_blast_auto_resumed(blast.id)
-    unless $redis.set(marker, "seller:#{current_seller.id}", nx: true, ex: AlertOnStalledPostEmailBlastsJob::STALL_THRESHOLD.to_i)
+    claim = "seller:#{current_seller.id}"
+    unless $redis.set(marker, claim, nx: true, ex: AlertOnStalledPostEmailBlastsJob::STALL_THRESHOLD.to_i)
       return render json: { success: false, error: "A send was started recently. Check back in a few hours." }, status: :unprocessable_entity
+    end
+    if AlertOnStalledPostEmailBlastsJob.sender_visible?(blast.id)
+      $redis.eval(RELEASE_CLAIM_IF_HELD, keys: [marker], argv: [claim])
+      return render json: { success: false, error: "This email is already sending. Check back in a few hours." }, status: :unprocessable_entity
     end
 
     SendPostBlastEmailsJob.perform_async(blast.id)
@@ -29,6 +38,13 @@ class Api::Internal::Installments::RemainingSendsController < Api::Internal::Bas
   end
 
   private
+    RELEASE_CLAIM_IF_HELD = <<~LUA
+      if redis.call("GET", KEYS[1]) == ARGV[1] then
+        return redis.call("DEL", KEYS[1])
+      end
+      return 0
+    LUA
+
     def set_installment
       @installment = current_seller.installments.alive.published.not_workflow_installment.find_by_external_id(params[:id])
       (skip_authorization and e404_json) if @installment.nil?
