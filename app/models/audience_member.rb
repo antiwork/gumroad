@@ -42,10 +42,17 @@ class AudienceMember < ApplicationRecord
   # resolved member list against the CURRENT filter criteria is cheap even when running
   # the unrestricted filter over the whole audience would be slow. Used by blast retries
   # to revalidate their snapshotted recipient lists.
-  def self.filter(seller_id:, params: {}, with_ids: false, ids: nil)
+  #
+  # as_of: optionally restricts the audience to what it was at that time: the row must have
+  # existed, and the purchase, follow or affiliation that qualifies the member must predate
+  # it too — `refresh!` adds a later purchase to an existing row without touching
+  # `created_at`. Anyone who has since left is still dropped. Used by blast resumes that
+  # have lost their snapshot, so a late send cannot reach later joiners.
+  def self.filter(seller_id:, params: {}, with_ids: false, ids: nil, as_of: nil)
     params = normalize_filter_params(params)
     base_scope = where(seller_id:)
     base_scope = base_scope.where(id: ids) if ids
+    base_scope = base_scope.where(created_at: ..as_of) if as_of
 
     if params[:type]
       types_sql = base_scope.where(params[:type] => true).to_sql
@@ -134,7 +141,7 @@ class AudienceMember < ApplicationRecord
     filter_purchases_when ||= (params[:paid_more_than_cents] && params[:paid_less_than_cents])
     filter_purchases_when ||= (params[:created_after] && params[:created_before])
     filter_purchases_when ||= params[:active_customers_only] || params[:minimum_license_uses]
-    if filter_purchases_when || with_ids
+    if filter_purchases_when || with_ids || as_of
       json_filter = base_scope
       json_table = <<~SQL.squish
         JSON_TABLE(details, '$' COLUMNS (
@@ -217,6 +224,32 @@ class AudienceMember < ApplicationRecord
       if params[:created_before] && timestamp_columns.any?
         where_conditions = timestamp_columns.map { "jt.#{_1} < :date" }.join(" OR ")
         json_filter = json_filter.where(where_conditions, date: params[:created_before])
+      end
+      if as_of
+        # Sibling JSON_TABLE paths expand into disjoint rows, so a follower's or affiliate's
+        # own timestamp is NULL on the purchase rows a purchase predicate keeps. Read the
+        # follow time from its own expansion, and bound the qualifying purchase row only when
+        # a purchase predicate has narrowed `jt` to purchases.
+        purchase_predicate = params.values_at(
+          :bought_product_ids, :bought_variant_ids, :paid_more_than_cents, :paid_less_than_cents,
+          :bought_from, :active_customers_only, :minimum_license_uses
+        ).any?
+        case params[:type]
+        when "customer"
+          json_filter = json_filter.where("jt.purchase_created_at <= ?", as_of)
+        when "follower"
+          # The stored date is the follow, not its confirmation, so a member who already had a
+          # row and confirmed a pending follow after as_of still passes. Accepted: a new
+          # follower has no earlier row, and the row bound above catches them.
+          follower_json_table = "JSON_TABLE(details, '$.follower' COLUMNS (created_at DATETIME PATH '$.created_at'))"
+          json_filter = json_filter.joins("INNER JOIN #{follower_json_table} AS follower_jt").where("follower_jt.created_at <= ?", as_of)
+          json_filter = json_filter.where("jt.purchase_created_at <= ?", as_of) if purchase_predicate
+        when "affiliate"
+          json_filter = json_filter.where("affiliate_jt.affiliate_created_at <= ?", as_of)
+          json_filter = json_filter.where("jt.purchase_created_at <= ?", as_of) if purchase_predicate
+        else
+          json_filter = json_filter.where("COALESCE(jt.purchase_created_at, jt.follower_created_at, jt.affiliate_created_at) <= ?", as_of)
+        end
       end
       if params[:bought_product_ids] && params[:bought_variant_ids]
         json_filter = json_filter.where("jt.purchase_product_id IN (?) OR jt.purchase_variant_id IN (?)", params[:bought_product_ids], params[:bought_variant_ids])
