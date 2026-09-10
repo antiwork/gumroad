@@ -17,11 +17,11 @@ class RetryFailedPaypalPayoutsWorker
                                 .where({
                                          payments: {
                                            state: "failed",
-                                           failure_reason: nil,
                                            processor: PayoutProcessorType::PAYPAL,
                                            payout_period_end_date:
                                          }
                                        })
+                                .where("payments.failure_reason IS NULL OR payments.failure_reason = ?", Payment::FailureReason::PROCESSOR_UNAVAILABLE)
                                 .uniq
     return if failed_payments_users.empty?
 

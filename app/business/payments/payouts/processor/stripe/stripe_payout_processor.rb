@@ -553,15 +553,35 @@ class StripePayoutProcessor
     if failure_reason.in?(Payment::FailureReason::REQUEUEABLE_REASONS)
       payment.update!(failure_reason: Payment::FailureReason::UNREVERSED_INTERNAL_TRANSFER)
     end
-    hold_payouts_for_unaccounted_money!(payment, failure_reason)
+    hold_error = nil
+    begin
+      hold_payouts_for_unaccounted_money!(payment, failure_reason)
+    rescue => he
+      hold_error = he
+    end
+    # One Sentry event for this incident. Prefer the hold-setup failure when present — that is the
+    # part ops still needs to finish by hand. SyncStuckPayoutsJob skips a second "rejected sync"
+    # alert once @payout_reversal_failure_notified is set.
+    action_required = if hold_error
+      "Payout reversal failed and the automatic payout hold could not be set. Pause this seller and reconcile at Stripe by hand."
+    else
+      "Payouts are paused for this seller. Reverse or reconcile this transfer at Stripe by hand, then resume payouts."
+    end
     ErrorNotifier.notify(
-      e,
+      hold_error || e,
       payment_id: payment.id,
       user_id: payment.user_id,
       stripe_internal_transfer_id: payment.stripe_internal_transfer_id,
       original_failure_reason: failure_reason,
-      action_required: "Payouts are paused for this seller. Reverse or reconcile this transfer at Stripe by hand, then resume payouts."
+      reverse_error: e.message,
+      hold_setup_failed: !hold_error.nil?,
+      action_required:
     )
+    payment.instance_variable_set(:@payout_reversal_failure_notified, true)
+    # reraise: false only swallows the reversal, and only because the hold already paused the
+    # seller. A failed hold must still raise: mark_failed! returned the balances to unpaid, and
+    # the next scheduled batch does not read failure_reason.
+    raise hold_error if hold_error
     raise if reraise
   end
 
