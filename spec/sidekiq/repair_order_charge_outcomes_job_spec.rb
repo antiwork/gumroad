@@ -156,4 +156,32 @@ describe RepairOrderChargeOutcomesJob do
 
     expect(stale.reload).to be_partially_successful
   end
+
+  it "wraps candidate lookups in WithMaxExecutionTime" do
+    expect(WithMaxExecutionTime).to receive(:timeout_queries)
+      .with(seconds: described_class::QUERY_TIME_BUDGET)
+      .and_call_original
+
+    described_class.new.perform
+  end
+
+  it "keeps each purchase id lookup at or under the IN-list batch size" do
+    expect(described_class::FAILED_ORDER_ID_BATCH).to be <= 1_000
+    expect(described_class::FAILED_ORDER_ID_BATCH).to be < described_class::MAX_BACKLOG_SCANNED
+  end
+
+  it "does not emit the old DISTINCT double-join of failed and non-failed purchases" do
+    sqls = []
+    subscriber = ActiveSupport::Notifications.subscribe("sql.active_record") do |*, payload|
+      sqls << payload[:sql]
+    end
+    settle_with_lost_enqueue(create(:order))
+    described_class.new.perform
+    ActiveSupport::Notifications.unsubscribe(subscriber)
+
+    purchase_sqls = sqls.select { _1.include?("purchase_state") }
+    expect(purchase_sqls).not_to be_empty
+    combined = purchase_sqls.select { |sql| sql.match?(/`purchase_state` IN \(/) && sql.match?(/NOT IN \(/) }
+    expect(combined).to be_empty
+  end
 end

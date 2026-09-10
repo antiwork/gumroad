@@ -22,70 +22,108 @@ class RepairOrderChargeOutcomesJob
   # reconciled in one invocation with no cap at all.
   MAX_BACKLOG_SCANNED = 2_000
 
+  # WHERE id IN (...) against purchases/order_purchases flips off the range plan past ~2k ids.
+  FAILED_ORDER_ID_BATCH = 1_000
+
+  # Caps how many failed-order id pages the backlog walk issues per run. Each page is bounded;
+  # without this a sparse stretch would keep paging until the wall clock blew the hourly slot.
+  MAX_FAILED_ORDER_BATCHES = 40
+
+  QUERY_TIME_BUDGET = 2.minutes.to_i
+
   def perform
     ApplicationRecord.connected_to(role: :writing) do
-      recent_ids = recent_candidate_ids
-      backlog_ids = backlog_candidate_ids(remaining_budget: MAX_BACKLOG_SCANNED - recent_ids.size)
+      WithMaxExecutionTime.timeout_queries(seconds: QUERY_TIME_BUDGET) do
+        recent_ids = recent_candidate_ids
+        backlog_ids = backlog_candidate_ids(remaining_budget: MAX_BACKLOG_SCANNED - recent_ids.size)
 
-      (recent_ids + backlog_ids).uniq.each { Order.find_by(id: _1)&.record_charge_outcome! }
+        (recent_ids + backlog_ids).uniq.each { Order.find_by(id: _1)&.record_charge_outcome! }
+      end
     end
   end
 
   private
-    # A failed line item is the cheap half of the predicate and the rarer one; `record_charge_outcome!`
-    # is authoritative about the rest, so narrowing further here would only duplicate it.
-    #
-    # Also excludes orders where EVERY purchase is already checkout-failed: `record_charge_outcome!`
-    # requires a succeeded sibling too, so such an order can never leave this scope. Left in, a
-    # persistent set of these (Greptile reproduced 2,000) would resurface at the same low IDs on
-    # every recent-pass run and permanently crowd out real candidates plus the whole backlog budget.
-    def candidates
-      Order.not_partially_successful
-           .joins(:purchases).merge(Purchase.checkout_failed)
-           .where(id: Order.joins(:purchases).where.not(purchases: { purchase_state: Purchase::CHECKOUT_FAILURE_STATES }).select(:id))
-           .distinct
-    end
-
     def recent_candidate_ids
-      candidates.where(created_at: RECENT_WINDOW.ago..).order(:id).limit(MAX_BACKLOG_SCANNED).pluck(:id)
+      failed_purchase_ids = Purchase.checkout_failed.where(created_at: RECENT_WINDOW.ago..).pluck(:id)
+      filter_candidates(order_ids_for_purchases(failed_purchase_ids), created_at: RECENT_WINDOW.ago..)
+        .first(MAX_BACKLOG_SCANNED)
     end
 
     def backlog_candidate_ids(remaining_budget:)
       return [] if remaining_budget <= 0
 
       after_id = current_cursor
-      # Pin the lap's upper bound at its start so a steady stream of new old-side failures can't
-      # keep every forward page non-empty forever — Greptile reproduced the cursor stalling below a
-      # skipped order across five runs while newer IDs kept it from ever reaching empty-and-wrap.
-      # Bounding each lap to what existed when it started guarantees the lap terminates.
       ceiling = lap_ceiling(after_id)
-      ids = backlog_page(after_id, ceiling, remaining_budget)
+      ids, _scan_to, exhausted = backlog_page(after_id, ceiling, remaining_budget)
 
-      if ids.empty? && after_id.positive?
+      if ids.empty? && exhausted && after_id.positive?
         save_cursor(0)
         ceiling = lap_ceiling(0)
-        ids = backlog_page(0, ceiling, remaining_budget)
+        ids, _scan_to, exhausted = backlog_page(0, ceiling, remaining_budget)
       end
 
-      # Advanced before the repairs run, so a run that dies partway cannot wedge on the same page.
-      # Safe only because the walk wraps: a skipped order comes back on the next lap.
       save_cursor(ids.last) if ids.any?
       ids
     end
 
     def backlog_page(after_id, ceiling, limit)
-      candidates.where(created_at: ...RECENT_WINDOW.ago)
-                .where("orders.id > ? AND orders.id <= ?", after_id, ceiling)
-                .order(:id)
-                .limit(limit)
-                .pluck(:id)
+      ids = []
+      cursor = after_id
+      exhausted = false
+      batches = 0
+
+      while ids.size < limit && batches < MAX_FAILED_ORDER_BATCHES
+        failed_order_ids = order_ids_with_checkout_failed(after_id: cursor, ceiling:, limit: FAILED_ORDER_ID_BATCH)
+        if failed_order_ids.empty?
+          exhausted = true
+          break
+        end
+
+        batches += 1
+        cursor = failed_order_ids.last
+        ids.concat(filter_candidates(failed_order_ids, created_at: ...RECENT_WINDOW.ago))
+      end
+
+      [ids.first(limit), cursor, exhausted]
     end
 
-    # Established once per lap and cached in Redis so restarts mid-lap don't reset it. A lap covers
-    # only IDs that existed when it started; anything created afterward waits for the next lap.
+    # Failed purchases are the rare side and sit on (purchase_state, created_at). Sibling and
+    # flag checks are separate PK lookups so MySQL never rebuilds the old DISTINCT double-join
+    # (primary EXPLAIN: type=ALL, 116M orders).
+    def order_ids_with_checkout_failed(after_id:, ceiling:, limit:)
+      rel = OrderPurchase.joins(:purchase)
+                         .merge(Purchase.checkout_failed)
+                         .where("order_purchases.order_id > ?", after_id)
+      rel = rel.where("order_purchases.order_id <= ?", ceiling) if ceiling&.positive?
+      rel.order("order_purchases.order_id").limit(limit).pluck(:order_id).uniq
+    end
+
+    def order_ids_for_purchases(purchase_ids)
+      purchase_ids.each_slice(FAILED_ORDER_ID_BATCH).flat_map do |slice|
+        OrderPurchase.where(purchase_id: slice).pluck(:order_id)
+      end.uniq
+    end
+
+    def filter_candidates(order_ids, created_at:)
+      return [] if order_ids.empty?
+
+      with_sibling = order_ids.each_slice(FAILED_ORDER_ID_BATCH).flat_map do |slice|
+        OrderPurchase.joins(:purchase)
+                     .where(order_id: slice)
+                     .where.not(purchases: { purchase_state: Purchase::CHECKOUT_FAILURE_STATES })
+                     .distinct
+                     .pluck(:order_id)
+      end
+      return [] if with_sibling.empty?
+
+      with_sibling.each_slice(FAILED_ORDER_ID_BATCH).flat_map do |slice|
+        Order.not_partially_successful.where(id: slice, created_at:).pluck(:id)
+      end.sort
+    end
+
     def lap_ceiling(after_id)
       if after_id.zero?
-        ceiling = candidates.where(created_at: ...RECENT_WINDOW.ago).maximum("orders.id") || 0
+        ceiling = Order.maximum(:id) || 0
         save_lap_ceiling(ceiling)
         ceiling
       else
@@ -96,7 +134,6 @@ class RepairOrderChargeOutcomesJob
     def current_cursor
       $redis.get(RedisKey.order_charge_outcome_repair_cursor).to_i
     rescue => e
-      # A lost cursor re-walks from the oldest page, which is wasted work but not a wrong outcome.
       ErrorNotifier.notify(e)
       0
     end
