@@ -30,11 +30,11 @@ module Gumroad
   class Application < Rails::Application
     # Initialize configuration defaults for originally generated Rails version.
     config.load_defaults 8.0
-    # Owner: gumclaw; audit scheduled times across DST before preserving named zones.
+    # Audit scheduled times across DST before preserving named zones.
     config.active_support.to_time_preserves_timezone = :offset
-    # Owner: gumclaw; verify conditional download responses before changing ETag precedence.
+    # Verify conditional download responses before changing ETag precedence.
     config.action_dispatch.strict_freshness = false
-    # Owner: gumclaw; preserve regex behavior during boot as well as after initialization.
+    # Preserve regex behavior during boot as well as after initialization.
     Regexp.timeout = nil
     # Owner: gumclaw; audit duplicate-instance purchase callbacks before changing the recipient.
     config.active_record.run_commit_callbacks_on_first_saved_instances_in_transaction = true
