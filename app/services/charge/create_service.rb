@@ -252,15 +252,13 @@ class Charge::CreateService
     deep_merged_mandate_options(presentment_cap_cents, presentment_currency)
   end
 
-  # Stripe uses the PaymentIntent currency for mandate options. Older code added an unsupported
-  # nested currency field, so preserve that behavior until the reliability flag is active.
-  def deep_merged_mandate_options(cap_cents, currency)
+  # Stripe uses the PaymentIntent currency for card mandate options. Nested
+  # `currency` is a SetupIntent-only field; sending it on a PaymentIntent 400s
+  # with "Received unknown parameter: currency" and the buyer sees a generic
+  # temporary-problem error after a successful 0.00 e-mandate OTP.
+  def deep_merged_mandate_options(cap_cents, _currency)
     card_options = mandate_options[:payment_method_options][:card]
-    inner = card_options[:mandate_options].merge(amount: cap_cents)
-    unless Feature.active?(StripeChargeProcessor::INDIA_CARD_MANDATE_RELIABILITY_FEATURE, seller) &&
-           !StripeIntentChargeRouting.direct_charge_account?(merchant_account)
-      inner = inner.merge(currency:)
-    end
+    inner = card_options[:mandate_options].merge(amount: cap_cents).except(:currency)
 
     mandate_options.merge(
       payment_method_options: mandate_options[:payment_method_options].merge(
