@@ -47,20 +47,16 @@ class RepairOrderChargeOutcomesJob
       ids = []
       batches = 0
       since = RECENT_WINDOW.ago
-      # created_at covers lost-enqueue at checkout. updated_at covers an older purchase that
-      # fails later (SCA/restart attached to a new order). orders.created_at is unindexed, so
-      # the recent cohort cannot be keyed off the order timestamp without a 116M-row scan.
+      # Failed purchases sit on (purchase_state, created_at). An updated_at window
+      # is unindexed and would abort this 2-minute cap before backlog runs.
+      # A pre-existing purchase that fails later on a new order is repaired by
+      # the backlog lap once the order leaves RECENT_WINDOW.
       #
-      # Fully-failed / already-flagged purchases never grow `ids`, so the candidate cap
-      # cannot stop this walk. Cap pages the same way the backlog does or a sparse recent
-      # cohort never reaches backlog repair.
-      [Purchase.checkout_failed.where(created_at: since..),
-       Purchase.checkout_failed.where(updated_at: since..)].each do |rel|
-        rel.in_batches(of: FAILED_ORDER_ID_BATCH) do |batch|
-          ids.concat(filter_candidates(order_ids_for_purchases(batch.pluck(:id)), created_at: since..))
-          batches += 1
-          break if ids.size >= MAX_BACKLOG_SCANNED || batches >= MAX_FAILED_ORDER_BATCHES
-        end
+      # Fully-failed / already-flagged purchases never grow `ids`, so the candidate
+      # cap cannot stop this walk. Cap pages the same way the backlog does.
+      Purchase.checkout_failed.where(created_at: since..).in_batches(of: FAILED_ORDER_ID_BATCH) do |batch|
+        ids.concat(filter_candidates(order_ids_for_purchases(batch.pluck(:id)), created_at: since..))
+        batches += 1
         break if ids.size >= MAX_BACKLOG_SCANNED || batches >= MAX_FAILED_ORDER_BATCHES
       end
       ids.uniq.sort.first(MAX_BACKLOG_SCANNED)

@@ -185,16 +185,17 @@ describe RepairOrderChargeOutcomesJob do
     expect(combined).to be_empty
   end
 
-  # Greptile (P1): a pre-existing purchase can fail after being attached to a new order
-  # (SCA/restart). The recent pass keys off purchase created_at/updated_at, not the
-  # unindexed orders.created_at, so a recent updated_at still has to catch it.
-  it "flags a recent order whose failed purchase was created before the freshness window" do
+  # An unindexed updated_at scan would abort the 2-minute cap. A new order
+  # whose failed purchase predates RECENT_WINDOW is repaired once the order
+  # itself is old enough for the backlog pass.
+  it "repairs via backlog an old order whose failed purchase predates the freshness window" do
     order = create(:order)
     succeeded = create(:purchase_in_progress, link: product_1, seller: seller_1)
     failed = create(:purchase_in_progress, link: product_2, seller: seller_2)
     order.purchases << succeeded << failed
     succeeded.update_columns(purchase_state: "successful")
     failed.update_columns(purchase_state: "failed", created_at: 30.days.ago, updated_at: Time.current)
+    order.update_column(:created_at, 4.days.ago)
     RecordOrderChargeOutcomeJob.jobs.clear
 
     described_class.new.perform
