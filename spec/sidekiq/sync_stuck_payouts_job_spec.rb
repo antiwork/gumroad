@@ -275,7 +275,6 @@ describe SyncStuckPayoutsJob do
 
         expect(Rails.logger).to have_received(:error).with(/rejected:.*API error/).exactly(2).times
       end
-
     end
   end
 end
