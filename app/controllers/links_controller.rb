@@ -34,6 +34,7 @@ class LinksController < ApplicationController
   before_action :check_banned, only: %i[show landing_iframe_content landing_version]
   before_action :ensure_seller_is_not_deleted, only: %i[show landing_iframe_content landing_version]
   before_action :set_x_robots_tag_header, only: :show
+  after_action :allow_framing_for_embed_or_overlay, only: :show
   before_action :check_payment_details, only: :index
 
   before_action :set_affiliate_cookie, only: [:show]
@@ -353,6 +354,14 @@ class LinksController < ApplicationController
 
   def set_x_robots_tag_header
     set_noindex_header  if params[:code].present?
+  end
+
+  # Product embeds load in third-party iframes. Rails still sets SAMEORIGIN via
+  # default_headers; SecureHeaders OPT_OUT does not strip it.
+  def allow_framing_for_embed_or_overlay
+    return unless params[:embed].present? || params[:overlay].present?
+
+    response.headers.delete("X-Frame-Options")
   end
 
   def increment_views
