@@ -36,8 +36,10 @@ class PurchasesController < ApplicationController
   before_action :hide_layouts, only: %i[subscribe unsubscribe receipt confirm_receipt_email]
   before_action :set_noindex_header, only: [:receipt, :confirm_receipt_email]
 
+  # #confirm reads back the purchase the buyer's own checkout request just created.
+  around_action :use_primary_database, only: :confirm
+
   def confirm
-    ActiveRecord::Base.connection.stick_to_primary!
     @purchase = Purchase.find_by_secure_external_id(params[:id], scope: "confirm")
     e404 unless @purchase
 

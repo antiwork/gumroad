@@ -199,25 +199,49 @@ end
 # unlock and connection cleanup. Without this, a single SAVEPOINT failure
 # poisons every subsequent retry because lock_thread is never reset and
 # clear_active_connections! is never called.
+# Rails 7.2 tracks fixture transactions per pool (`@fixture_connection_pools`,
+# `pin_connection!` / `unpin_connection!`) rather than per connection.
 module ResilientFixtureTeardown
   def teardown_fixtures
     if run_in_transaction?
       ActiveSupport::Notifications.unsubscribe(@connection_subscriber) if @connection_subscriber
-      @fixture_connections.each do |connection|
-        connection.rollback_transaction if connection.transaction_open?
+      pools = @fixture_connection_pools || []
+      clean = pools.map do |pool|
+        pool.unpin_connection!
       rescue StandardError => e
-        Rails.logger.warn("[RSpec] fixture rollback failed: #{e.message}")
-      ensure
-        connection.pool.lock_thread = false
+        Rails.logger.warn("[RSpec] fixture unpin failed: #{e.message}")
+        discard_pinned_connections(pool)
+        false
       end
-      @fixture_connections.clear
+      invalidate_already_loaded_fixtures unless clean.all?
+      pools.clear
       teardown_shared_connection_pool
     else
       ActiveRecord::FixtureSet.reset_cache
+      invalidate_already_loaded_fixtures
     end
 
     ActiveRecord::Base.connection_handler.clear_active_connections!(:all)
   end
+
+  private
+    # unpin_connection! clears @pinned_connection *before* it rolls back, so a failure
+    # inside it leaves the connection pinned, thread-locked and never checked in — and
+    # the next example's pin_connection! finds it through the thread's lease and opens a
+    # transaction on top of the unknown state. Its transaction state is unrecoverable at
+    # this point, so throw the connection away and let the pool make a fresh one.
+    def discard_pinned_connections(pool)
+      pool.connections.each do |connection|
+        next unless connection.pinned
+
+        connection.pinned = false
+        connection.lock_thread = nil
+        pool.remove(connection)
+        connection.disconnect!
+      end
+    rescue StandardError => e
+      Rails.logger.warn("[RSpec] fixture connection discard failed: #{e.message}")
+    end
 end
 ActiveRecord::TestFixtures.prepend(ResilientFixtureTeardown) if BUILDING_ON_CI
 

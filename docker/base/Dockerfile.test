@@ -27,7 +27,6 @@ RUN apt-get update -y -qq \
     default-libmysqlclient-dev \
     libssl-dev \
     libtag1-dev \
-    libvips-dev \
     libxrender1 \
     locales \
     netcat-openbsd \

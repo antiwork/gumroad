@@ -49,19 +49,12 @@ if env != "development"
   #
   preload_app!
 
-  # The code in the `on_worker_boot` will be called if you are using
-  # clustered mode by specifying a number of `workers`. After each worker
-  # process is booted this block will be run, if you are using `preload_app!`
-  # option you will want to use this block to reconnect to any threads
-  # or connections that may have been created at application boot, Ruby
-  # cannot share connections between processes.
-  #
-  on_worker_boot do
-    if defined?(ActiveRecord::Base)
-      ActiveRecord::Base.establish_connection
-      Makara::Context.release_all
-    end
-  end
+  # No `on_worker_boot` reconnect. Rails 7.2 discards every pool after a fork
+  # (ActiveSupport::ForkTracker, connection_adapters/pool_config.rb), so the old
+  # ActiveRecord::Base.establish_connection here was already redundant — and it is
+  # now actively harmful: ApplicationRecord.connects_to shares ActiveRecord::Base's
+  # pool, so re-establishing hands `connection_class` back to ActiveRecord::Base and
+  # mysql2_proxy stops honoring ApplicationRecord.connected_to(role: :writing).
 end
 
 pidfile "tmp/pids/puma.pid"

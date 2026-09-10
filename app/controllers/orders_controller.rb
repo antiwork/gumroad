@@ -11,6 +11,11 @@ class OrdersController < ApplicationController
   before_action :validate_order_request, only: [:create, :prepare]
   before_action :fetch_affiliates, only: [:create, :prepare]
 
+  # Each of these reads back an order a previous request from the same buyer just created —
+  # `prepare` for the client-confirm actions, `create` for #confirm — so a lagging replica can
+  # miss it entirely.
+  around_action :use_primary_database, only: %i[confirm finalize confirm_error]
+
   def create
     order_params = build_order_params
 
@@ -33,8 +38,6 @@ class OrdersController < ApplicationController
   end
 
   def confirm
-    ActiveRecord::Base.connection.stick_to_primary!
-
     order = Order.find_by_secure_external_id(params[:id], scope: "confirm")
     e404 unless order
 
@@ -91,8 +94,6 @@ class OrdersController < ApplicationController
 
   # Finalizes a client-confirm PaymentIntent without re-charging.
   def finalize
-    ActiveRecord::Base.connection.stick_to_primary!
-
     order = Order.find_by_secure_external_id(params[:id], scope: "confirm")
     e404 unless order
 
@@ -111,9 +112,6 @@ class OrdersController < ApplicationController
   CONFIRM_ERROR_CLEANUP_LIMIT_WINDOW = 5.minutes
 
   def confirm_error
-    # `prepare` just created this order, so the replica can be behind when Stripe returns an error.
-    ActiveRecord::Base.connection.stick_to_primary!
-
     order = Order.find_by_secure_external_id(params[:id], scope: "confirm")
     e404 unless order
 

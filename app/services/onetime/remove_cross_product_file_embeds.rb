@@ -17,11 +17,19 @@ module Onetime
           foreign_ids = rich_content.cross_product_file_embed_ids
           next if foreign_ids.empty?
 
-          cleaned += 1
           puts "[#{self.class.name}] rich_content=#{rich_content.id} entity=#{rich_content.entity_type}##{rich_content.entity_id} removing=#{foreign_ids.sort}"
-          next if dry_run
+          if dry_run
+            cleaned += 1
+            next
+          end
 
-          remediate!(rich_content, foreign_ids)
+          # The scan above can read a replica; remediate! re-checks under the lock, so a
+          # candidate can turn out to be already clean. Count only what it rewrote.
+          if remediate!(rich_content)
+            cleaned += 1
+          else
+            puts "[#{self.class.name}] rich_content=#{rich_content.id} already clean under lock"
+          end
         end
       end
 
@@ -30,15 +38,20 @@ module Onetime
     end
 
     private
-      def remediate!(rich_content, foreign_ids)
-        ApplicationRecord.connection.stick_to_primary!
-        ApplicationRecord.transaction do
-          rich_content.update!(description: RichContent.reject_file_embeds(rich_content.description, foreign_ids.to_set))
+      def remediate!(rich_content)
+        ApplicationRecord.connected_to(role: :writing) do
+          rich_content.with_lock do
+            foreign_ids = rich_content.cross_product_file_embed_ids
+            next false if foreign_ids.empty?
 
-          entity = rich_content.entity
-          if entity.is_a?(BaseVariant)
-            stale_join_files = entity.product_files.where(id: foreign_ids)
-            entity.product_files.delete(stale_join_files)
+            rich_content.update!(description: RichContent.reject_file_embeds(rich_content.description, foreign_ids.to_set))
+
+            entity = rich_content.entity
+            if entity.is_a?(BaseVariant)
+              stale_join_files = entity.product_files.where(id: foreign_ids)
+              entity.product_files.delete(stale_join_files)
+            end
+            true
           end
         end
       end

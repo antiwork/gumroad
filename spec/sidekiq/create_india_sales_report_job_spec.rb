@@ -30,8 +30,6 @@ describe CreateIndiaSalesReportJob do
 
     it "raises a clear error when the India GST ZipTaxRate row is missing" do
       allow(ZipTaxRate).to receive_message_chain(:where, :alive, :last).and_return(nil)
-      allow(ZipTaxRate.connection).to receive(:respond_to?).and_call_original
-      allow(ZipTaxRate.connection).to receive(:respond_to?).with(:stick_to_primary!).and_return(false)
 
       expect { described_class.new.perform(8, 2026) }.to raise_error(/India GST ZipTaxRate/)
     end

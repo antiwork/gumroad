@@ -24,8 +24,8 @@ DynamodbSetup.prepare_test_environment
 # Stub Elasticsearch globally so any model save/callback that calls EsClient
 # (search reindex, ProductPageView.count, etc.) doesn't make a real HTTP
 # request to localhost:9200, where 6 Faraday retries × N parallel test workers
-# saturates Makara's connection pool (each retry holds the AR thread inside an
-# Executor wrapper) and crashes the whole suite with AllConnectionsBlacklisted.
+# saturates the connection pool (each retry holds the AR thread inside an
+# Executor wrapper) and crashes the whole suite.
 require "elasticsearch"
 fake_es = Object.new
 # Real Elasticsearch echoes every requested aggregation back with a computed
@@ -87,11 +87,7 @@ Object.const_set(:EsClient, fake_es)
 Elasticsearch::Model.client = fake_es if defined?(Elasticsearch::Model)
 
 # Stub WithMaxExecutionTime in tests — it issues SET SESSION max_execution_time
-# on the AR connection, which fails under Makara when the replica is briefly
-# unavailable. The failure isn't recoverable (the `ensure` block runs the
-# unset against a now-blacklisted connection, triggering a recursive blacklist
-# cascade that takes down the entire suite). Tests don't need real query
-# timeouts; just yield the block.
+# on the AR connection. Tests don't need real query timeouts; just yield the block.
 require Rails.root.join("lib", "utilities", "with_max_execution_time") if File.exist?(Rails.root.join("lib", "utilities", "with_max_execution_time.rb"))
 if defined?(WithMaxExecutionTime)
   module WithMaxExecutionTime
@@ -99,28 +95,6 @@ if defined?(WithMaxExecutionTime)
       yield
     end
   end
-end
-
-# Disable Makara connection blacklisting in tests. CI sometimes hits transient
-# connection issues (especially during shutdown) that blacklist primary, which
-# then crashes teardown's disable_query_cache! callback with
-# Makara::Errors::AllConnectionsBlacklisted. We never test failover; treat
-# every connection as fresh.
-if defined?(Makara::Pool)
-  Makara::Pool.class_eval do
-    def connection_made?
-      true
-    end
-  end
-  Makara::ConnectionWrapper.class_eval do
-    def _makara_blacklist!
-      # no-op in test env
-    end
-
-    def _makara_blacklisted?
-      false
-    end
-  end if defined?(Makara::ConnectionWrapper)
 end
 
 module ActiveSupport
@@ -198,8 +172,7 @@ require Rails.root.join("spec", "support", "asset_preview_analysis_stub")
 # The RSpec test jobs bring up MinIO (S3) via docker-compose; the lightweight
 # Minitest CI job does not. Point ActiveStorage at a local Disk service so
 # file-attaching tests (thumbnails, asset previews, public files) never make S3
-# network calls — otherwise the upload fails with a connection error that Makara
-# escalates to BlacklistedWhileInTransaction. GitHub-hosted runners ship with
+# network calls — otherwise the upload fails with a connection error. GitHub-hosted runners ship with
 # ImageMagick/ffmpeg, so blob analysis and variants still work. A host must be
 # set for Disk-service URL generation.
 # Re-register the default :test service as a local Disk service (keeping the

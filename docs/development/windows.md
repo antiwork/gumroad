@@ -105,7 +105,7 @@ Install the required dependencies:
 ```bash
 sudo apt update && sudo apt install -y \
   build-essential libxslt-dev libxml2-dev \
-  imagemagick libvips-dev ffmpeg pdftk
+  imagemagick ffmpeg pdftk
 ```
 
 ---

@@ -26,8 +26,11 @@ describe RefundUnpaidPurchasesWorker, :vcr do
                         total_transaction_cents: 17_00)
       create(:refund, purchase:, amount_cents: 5_00, gumroad_tax_cents: 1_00)
 
+      # Name the per-purchase helpers rather than ApplicationRecord.connected_to: the
+      # summary must not walk purchases one at a time, and connected_to(role: :writing)
+      # is now common enough elsewhere that a bare negative on it just goes stale.
       expect_any_instance_of(Purchase).not_to receive(:gross_amount_refundable_cents)
-      expect(ActiveRecord::Base.connection).not_to receive(:stick_to_primary!)
+      expect_any_instance_of(Purchase).not_to receive(:gumroad_tax_refundable_cents)
 
       expected_summary = {
         count: 1,

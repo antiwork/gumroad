@@ -7,9 +7,10 @@ class Checkout::ReturnsController < ApplicationController
 
   before_action :set_noindex_header
 
-  def show
-    ActiveRecord::Base.connection.stick_to_primary!
+  # Stripe sends the buyer back here immediately after `orders#prepare` created the order.
+  around_action :use_primary_database, only: :show
 
+  def show
     order = Order.find_by_secure_external_id(params[:id], scope: "confirm")
     e404 unless order
 

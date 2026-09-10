@@ -22,9 +22,9 @@ describe RecordOrderChargeOutcomeJob do
   it "sticks the connection to the primary before reading the sibling states" do
     order # other code sticks to the primary while the fixtures are built, so count only `perform`
     calls = 0
-    allow(ActiveRecord::Base.connection).to receive(:stick_to_primary!).and_wrap_original do |method, *args|
+    allow(ApplicationRecord).to receive(:connected_to).and_wrap_original do |method, **kwargs, &block|
       calls += 1
-      method.call(*args)
+      method.call(**kwargs, &block)
     end
 
     described_class.new.perform(order.id)

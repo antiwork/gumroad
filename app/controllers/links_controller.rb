@@ -29,7 +29,7 @@ class LinksController < ApplicationController
   after_action :verify_authorized, except: PUBLIC_ACTIONS
   skip_before_action :require_account_email, only: PUBLIC_ACTIONS + %i[publish]
 
-  before_action :stick_to_primary_for_landing_iframe, only: %i[landing_iframe_content landing_version]
+  around_action :use_primary_for_landing_iframe, only: %i[landing_iframe_content landing_version]
   before_action :fetch_product_for_show, only: %i[show landing_iframe_content landing_version]
   before_action :check_banned, only: %i[show landing_iframe_content landing_version]
   before_action :ensure_seller_is_not_deleted, only: %i[show landing_iframe_content landing_version]
@@ -45,6 +45,10 @@ class LinksController < ApplicationController
   before_action :prepare_product_page, only: %i[show]
   before_action :fetch_product_and_enforce_ownership, only: %i[destroy]
   before_action :fetch_product_and_enforce_access, only: %i[update publish unpublish release_preorder update_sections]
+
+  # Declared after #show's other before_actions on purpose: this keeps the boundary the old
+  # in-action pin drew, leaving the product and seller lookups above on the replica.
+  around_action :use_primary_database, only: :show
 
   layout "inertia", only: %i[index new show cart_items_count edit]
 
@@ -127,7 +131,6 @@ class LinksController < ApplicationController
 
   def show
     return redirect_to custom_domain_coffee_path if @product.native_type == Link::NATIVE_TYPE_COFFEE
-    ActiveRecord::Base.connection.stick_to_primary!
     # Force a preload of all association data used in rendering
     preload_product
     set_favicon_meta_tags(@product.user)

@@ -119,21 +119,19 @@ describe UsersController, :vcr, type: :controller do
       expect(response.body).to start_with("<!doctype html>")
     end
 
-    it "sticks to primary before fetching the seller for the landing page HTML" do
-      steps = []
-      allow(ActiveRecord::Base.connection).to receive(:stick_to_primary!).and_wrap_original do |method, *args|
-        steps << :stick_to_primary
-        method.call(*args)
-      end
+    it "fetches the seller for the landing page HTML on the primary" do
+      pinned_during_fetch = nil
       allow(controller).to receive(:set_user_and_custom_domain_config).and_wrap_original do |method, *args|
-        steps << :fetch_user
+        pinned_during_fetch = ApplicationRecord.connected_to_stack.any? do |entry|
+          entry[:role] == :writing && entry[:klasses].include?(ApplicationRecord)
+        end
         method.call(*args)
       end
 
       get :landing_iframe_content
 
       expect(response).to be_successful
-      expect(steps.index(:stick_to_primary)).to be < steps.index(:fetch_user)
+      expect(pinned_during_fetch).to eq(true)
     end
 
     it "applies the strict CSP and iframe-friendly response headers" do
@@ -338,21 +336,19 @@ describe UsersController, :vcr, type: :controller do
 
     # A slice served by a lagging replica can disagree with the first page the wrapper just
     # rendered, so this pins to primary before the seller lookup like the embed does.
-    it "sticks to primary before fetching the seller" do
-      steps = []
-      allow(ActiveRecord::Base.connection).to receive(:stick_to_primary!).and_wrap_original do |method, *args|
-        steps << :stick_to_primary
-        method.call(*args)
-      end
+    it "fetches the seller on the primary" do
+      pinned_during_fetch = nil
       allow(controller).to receive(:set_user_and_custom_domain_config).and_wrap_original do |method, *args|
-        steps << :fetch_user
+        pinned_during_fetch = ApplicationRecord.connected_to_stack.any? do |entry|
+          entry[:role] == :writing && entry[:klasses].include?(ApplicationRecord)
+        end
         method.call(*args)
       end
 
       get :landing_products, params: { offset: 0, limit: 1 }
 
       expect(response).to be_successful
-      expect(steps.index(:stick_to_primary)).to be < steps.index(:fetch_user)
+      expect(pinned_during_fetch).to eq(true)
     end
   end
 

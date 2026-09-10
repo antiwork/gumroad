@@ -4,7 +4,7 @@ source "https://rubygems.org"
 
 ruby file: ".ruby-version"
 
-gem "rails", "7.1.6"
+gem "rails", "7.2.3.2"
 gem "rake", "13.2.1"
 gem "sentry-ruby"
 gem "sentry-rails"
@@ -132,11 +132,28 @@ gem "json-schema", "~> 5.0"
 gem "kaminari", "~> 1.2"
 gem "koala", "~> 3.3"
 gem "lograge", "~> 0.12"
-gem "makara", "0.6.0.pre"
 gem "maxmind-geoip2", "~> 1.1"
 gem "mime-types", "~> 3.4"
 gem "money", "~> 6.16"
 gem "mysql2", ">= 0.5.6"
+# Makara replacement: statement-level primary/replica split on Rails 7.2.
+# Only used when database.yml sets adapter: mysql2_proxy (USE_DB_WORKER_REPLICAS).
+# Pinned to 0.11.x: pre-1.0, and its SQL matchers decide primary vs. replica, so a
+# minor bump can silently re-route queries. spec/config/mysql2_proxy_semantics_spec.rb
+# asserts on its internals and would go quietly stale rather than fail.
+#
+# Do NOT widen this to the gem's own railtie. It pulls in Railties::RackMiddleware,
+# which unconditionally inserts a middleware that round-trips the stickiness window
+# through an `arpa_context` cookie, and that cookie is *read back as trusted input*:
+# Middleware::COOKIE_READER JSON-parses whatever the client sent into Context, whose
+# timestamps decide primary vs. replica. A far-future value forces every read in the
+# request onto the primary (a cheap lever for loading the primary at will); a 0 forces
+# reads onto the replica even immediately after that request's own write, defeating
+# read-your-own-write. It is also set without `secure` or `same_site`, and a Set-Cookie
+# on product and marketing pages makes Cloudflare bypass the edge cache (gp#1252).
+# We need none of it: stickiness is per-thread here and web has no reading pool at all.
+# Rakefile loads the gem's rake helper on its own.
+gem "active_record_proxy_adapters", "~> 0.11.1", require: "active_record_proxy_adapters/railties/mysql2"
 gem "nokogiri", "~> 1.19"
 gem "omniauth-apple", "~> 1.3"
 gem "omniauth-google-oauth2", "~> 1.1", ">= 1.1.1"
@@ -145,7 +162,7 @@ gem "omniauth-rails_csrf_protection", "~> 1.0"
 gem "omniauth-stripe-connect", github: "isaacsanders/omniauth-stripe-connect", ref: "468dd9acaccdbba38a38cdbcdf7f10c17be25e89"
 gem "omniauth-twitter", "~> 1.4"
 gem "twitter", "~> 8.0"
-gem "paper_trail", "~> 15.0"
+gem "paper_trail", "~> 17.0"
 gem "paypal-sdk-merchant", "~> 1.117"
 gem "paypal-checkout-sdk", "~> 1.0"
 gem "pdf-reader", "~> 2.11"

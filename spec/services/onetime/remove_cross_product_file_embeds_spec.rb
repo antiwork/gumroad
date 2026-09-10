@@ -30,6 +30,30 @@ describe Onetime::RemoveCrossProductFileEmbeds do
       expect(variant.reload.product_files.pluck(:id)).to eq([own_file.id])
     end
 
+    it "reloads primary content under lock before removing embeds" do
+      rich_content = seed_dirty_variant_content!
+      stale_content = RichContent.find(rich_content.id)
+      paragraph = { "type" => "paragraph", "content" => [{ "type" => "text", "text" => "Saved after the scan" }] }
+      rich_content.update_column(:description, [embed(own_file), embed(foreign_file), paragraph])
+
+      described_class.new.send(:remediate!, stale_content)
+
+      expect(rich_content.reload.description).to include(paragraph)
+      expect(rich_content.embedded_product_file_ids_in_order).to eq([own_file.id])
+    end
+
+    it "does not count a candidate that is already clean by the time it is locked" do
+      rich_content = seed_dirty_variant_content!
+      allow_any_instance_of(described_class).to receive(:remediate!).and_wrap_original do |method, content|
+        rich_content.update_column(:description, [embed(own_file)])
+        method.call(content)
+      end
+
+      result = described_class.process(dry_run: false)
+
+      expect(result[:cleaned]).to eq(0)
+    end
+
     it "reports without mutating anything on a dry run" do
       rich_content = seed_dirty_variant_content!
 

@@ -438,9 +438,14 @@ class Purchase
     # denominates refunds in the original charge currency, so a standalone VAT refund
     # must send the remaining presentment Gumroad-tax amount, never canonical USD cents.
     # Fail closed when no consistent tax-only presentment amount can be computed.
+    # The presentment math re-reads refunds.effective; it must see the same primary
+    # state the canonical refundable amount above was computed from, or a lagging
+    # replica could produce a processor amount that disagrees with it.
     presentment_refund = nil
     if buyer_presentment?
-      presentment_refund = Purchase::PresentmentRefund.new(purchase: self, canonical_gross_refund_cents: gumroad_tax_refundable_cents).tax_only_result if stripe_charge_processor?
+      ApplicationRecord.connected_to(role: :writing) do
+        presentment_refund = Purchase::PresentmentRefund.new(purchase: self, canonical_gross_refund_cents: gumroad_tax_refundable_cents).tax_only_result if stripe_charge_processor?
+      end
       return false if presentment_refund.blank? && buyer_presentment_refund_blocked?
     end
     processor_refund_amount_cents = presentment_refund ? presentment_refund.presentment_amount_cents : gumroad_tax_refundable_cents

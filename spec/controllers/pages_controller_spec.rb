@@ -318,7 +318,7 @@ describe PagesController, type: :controller, inertia: true do
     # The seller lands here right after a save, so a replica read could serve a slice that
     # disagrees with the first page the preview just rendered.
     it "reads from the primary, like the public landing endpoints" do
-      expect(ActiveRecord::Base.connection).to receive(:stick_to_primary!)
+      expect(ApplicationRecord).to receive(:connected_to).with(role: :writing).and_call_original
 
       get :products, params: { slug: "profile", offset: 0, limit: 1 }
     end

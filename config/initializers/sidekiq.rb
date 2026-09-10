@@ -9,8 +9,6 @@ rescue LoadError
   warn "sidekiq-pro is not installed"
 end
 
-require Rails.root.join("lib", "extras", "sidekiq_makara_reset_context_middleware")
-
 Sidekiq.configure_server do |config|
   config.redis = { url: "redis://#{ENV["SIDEKIQ_REDIS_HOST"]}" }
 
@@ -27,7 +25,6 @@ Sidekiq.configure_server do |config|
   end
 
   config.server_middleware do |chain|
-    chain.add SidekiqMakaraResetContextMiddleware
     chain.add SidekiqUniqueJobs::Middleware::Server
   end
 

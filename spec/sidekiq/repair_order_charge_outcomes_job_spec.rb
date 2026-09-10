@@ -90,7 +90,7 @@ describe RepairOrderChargeOutcomesJob do
   end
 
   it "reads from the primary" do
-    expect(ActiveRecord::Base.connection).to receive(:stick_to_primary!).at_least(:once).and_call_original
+    expect(ApplicationRecord).to receive(:connected_to).with(role: :writing).at_least(:once).and_call_original
 
     described_class.new.perform
   end

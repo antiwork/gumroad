@@ -100,21 +100,12 @@ brew services stop mysql@8.0
     - `apt install libmysqlclient-dev`
   - Percona Toolkit: https://www.percona.com/doc/percona-toolkit/LATEST/installation.html
 
-#### Image Processing Libraries
-
-##### ImageMagick
+#### ImageMagick
 
 We use `imagemagick` for preview editing.
 
 - For MacOS: `brew install imagemagick`
 - For Linux: `sudo apt-get install imagemagick`
-
-##### libvips
-
-For newer image formats we use `libvips` for image processing with ActiveStorage.
-
-- For MacOS: `brew install libvips`
-- For Linux: `sudo apt-get install libvips-dev`
 
 #### FFmpeg
 

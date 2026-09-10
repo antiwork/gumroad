@@ -247,7 +247,10 @@ class PostResendApi
         state: "sent",
         sent_at: Time.current,
       }
-      EmailInfo.create_with(base_attributes).insert_all!(attributes)
+      # Rails 7.2's insert_all! drops the STI column from the create_with scope
+      # (InsertAll#initialize: `scope_for_create.except(inheritance_column)`), so `type`
+      # would come through NULL. Merge the shared columns into each row instead.
+      EmailInfo.insert_all!(attributes.map { |row| base_attributes.merge(row) })
     end
 
     def log_mail_debug_info(email, recipient)

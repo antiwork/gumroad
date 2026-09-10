@@ -1,12 +1,11 @@
-development: &development
-  adapter: mysql2_makara
+default: &default
+  adapter: mysql2
   encoding: utf8mb4
   collation: utf8mb4_unicode_ci
   database: <%= ENV.fetch("DATABASE_NAME") %>
   host: <%= ENV.fetch("DATABASE_HOST") %>
   port: <%= ENV.fetch("DATABASE_PORT") %>
-  # Makara does not work well with Sidekiq's threaded model. We set the pool size to be more than the Sidekiq
-  # concurrency so that Sidekiq jobs don't run out of Active Record connections to the database.
+  # Keep the pool size above the Sidekiq concurrency so jobs don't run out of Active Record connections.
   # Sidekiq sets ENV["DB_POOL_SIZE"] to its concurrency. Web Puma does not, and
   # ActionController::Live plus publish-time AI threads checkout extra connections
   # beyond RAILS_MAX_THREADS (gp#2383). Production/staging never drop below 10,
@@ -28,60 +27,110 @@ development: &development
     max_execution_time: <%= 5 * 60000 %> # 5 minutes
     sql_mode: 'NO_ENGINE_SUBSTITUTION'
 
-  makara:
-    id: mysql
-    connections:
-      - role: primary
-        host: <%= ENV.fetch("DATABASE_HOST") %>
-        name: primary
-      <% if ENV["USE_DB_WORKER_REPLICAS"] == "true" %>
-      - role: replica
-        host: <%= ENV.fetch("DATABASE_HOST") %>
-        name: Worker Replica 1
-      <% end %>
+<%# development/test normally keep one plain pool. With USE_DB_WORKER_REPLICAS
+    they expand into the same primary + replica pair as the deployed
+    environments, both pointing at the local database, so the routing can be
+    exercised outside production — the flag used to abort boot here, which is
+    why it had to come out of Procfile.dev.
+
+    Not opt-in for local Sidekiq: Procfile.dev/Procfile.debug set the flag on the
+    sidekiq process, so `foreman start` boots it on mysql2_proxy with two pools
+    against the one local database. The RSpec/Minitest suites leave it unset.
+
+    Assert on the role that served a statement, not on the rows it returned.
+    Not because the reading pool sees stale rows — Rails 7.2's
+    setup_transactional_fixtures calls setup_shared_connection_pool first, which
+    repoints every non-writing role's pool_config at the writing one, so both
+    roles share the fixture transaction's connection. That is exactly why row
+    assertions cannot tell you which role a query would have used in production. %>
+<% replicas_enabled = ENV["USE_DB_WORKER_REPLICAS"] == "true" %>
+<% test_database = ENV.fetch("TEST_DATABASE_NAME", "gumroad_test") %>
+<% if replicas_enabled %>
+development:
+  primary:
+    <<: *default
+    adapter: mysql2_proxy
+  primary_replica:
+    <<: *default
+    replica: true
 
 test:
-  <<: *development
-  database: <%= ENV.fetch("TEST_DATABASE_NAME", "gumroad_test") %>
+  primary:
+    <<: *default
+    adapter: mysql2_proxy
+    database: <%= test_database %>
+  primary_replica:
+    <<: *default
+    replica: true
+    database: <%= test_database %>
+<% else %>
+development:
+  <<: *default
 
+test:
+  <<: *default
+  database: <%= test_database %>
+<% end %>
+
+<%# Production Sidekiq/rpush/anycable set USE_DB_WORKER_REPLICAS=true (nomad).
+    Makara used to SQL-route SELECTs to those replicas. Rails 7.2 cannot keep
+    mysql2_makara, so the same flag now expands a native primary + replica pair
+    and mysql2_proxy does the statement-level split. Web/Puma leave the flag
+    unset and keep a single primary pool. Production has one worker replica;
+    staging uses DATABASE_REPLICA2 instead.
+
+    Fall back to the primary, as a whole group, when the environment has no
+    replica secret: staging's Vault holds only secret/web/RDS, so these four
+    would all be nil and the reading pool would attempt (and fail) a localhost
+    connect on every read the proxy routes to it. Falling back per key instead
+    of per group would pair a replica host with primary credentials. Same shape
+    as database.branch-app.yml, which points the replica at the primary's host
+    for the same reason. %>
+<%# A group is present only if all of it is. One ERB pass renders every
+    environment, so keying the fallback on HOST alone let a half-provisioned
+    staging group abort production worker boot on the NAME fetch below. Warn
+    rather than fall back silently — losing read offloading with no signal is
+    its own failure. PASSWORD is excluded: blank is legitimate. %>
+<% replica_env = lambda do |prefix|
+     keys = %w[NAME USERNAME HOST]
+     present = keys.select { |key| ENV["#{prefix}_#{key}"].present? }
+     next prefix if present.size == keys.size
+
+     warn("[database.yml] Ignoring #{prefix}: missing #{(keys - present).join(", ")}. Reads will use the primary.") if present.any?
+     "DATABASE"
+   end %>
+<% if replicas_enabled %>
+<% staging_replica = replica_env.call("DATABASE_REPLICA2") %>
+<% production_replica = replica_env.call("DATABASE_WORKER_REPLICA1") %>
+staging:
+  primary:
+    <<: *default
+    adapter: mysql2_proxy
+  primary_replica:
+    <<: *default
+    adapter: mysql2
+    replica: true
+    database: <%= ENV.fetch("#{staging_replica}_NAME") %>
+    username: <%= ENV.fetch("#{staging_replica}_USERNAME") %>
+    password: <%= ENV.fetch("#{staging_replica}_PASSWORD", "") %>
+    host: <%= ENV.fetch("#{staging_replica}_HOST") %>
+
+production:
+  primary:
+    <<: *default
+    adapter: mysql2_proxy
+  primary_replica:
+    <<: *default
+    adapter: mysql2
+    replica: true
+    database: <%= ENV.fetch("#{production_replica}_NAME") %>
+    username: <%= ENV.fetch("#{production_replica}_USERNAME") %>
+    password: <%= ENV.fetch("#{production_replica}_PASSWORD", "") %>
+    host: <%= ENV.fetch("#{production_replica}_HOST") %>
+<% else %>
 staging: &staging
-  <<: *development
-
-  makara:
-    id: mysql
-    connections:
-      - role: primary
-        host: <%= ENV.fetch("DATABASE_HOST") %>
-        name: primary
-      <% if ENV["USE_DB_WORKER_REPLICAS"] == "true" %>
-      - role: replica
-        database: <%= ENV["DATABASE_REPLICA2_NAME"] %>
-        username: <%= ENV["DATABASE_REPLICA2_USERNAME"] %>
-        password: <%= ENV["DATABASE_REPLICA2_PASSWORD"] %>
-        host: <%= ENV["DATABASE_REPLICA2_HOST"] %>
-        name: Worker Replica 1
-      <% end %>
+  <<: *default
 
 production:
   <<: *staging
-
-  makara:
-    id: mysql
-    connections:
-      - role: primary
-        host: <%= ENV.fetch("DATABASE_HOST") %>
-        name: primary
-      <% if ENV["USE_DB_WORKER_REPLICAS"] == "true" %>
-      - role: replica
-        database: <%= ENV["DATABASE_WORKER_REPLICA1_NAME"] %>
-        username: <%= ENV["DATABASE_WORKER_REPLICA1_USERNAME"] %>
-        password: <%= ENV["DATABASE_WORKER_REPLICA1_PASSWORD"] %>
-        host: <%= ENV["DATABASE_WORKER_REPLICA1_HOST"] %>
-        name: Worker Replica 1
-      - role: replica
-        database: <%= ENV["DATABASE_WORKER_REPLICA2_NAME"] %>
-        username: <%= ENV["DATABASE_WORKER_REPLICA2_USERNAME"] %>
-        password: <%= ENV["DATABASE_WORKER_REPLICA2_PASSWORD"] %>
-        host: <%= ENV["DATABASE_WORKER_REPLICA2_HOST"] %>
-        name: Worker Replica 2
-      <% end %>
+<% end %>

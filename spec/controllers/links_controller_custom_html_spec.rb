@@ -292,21 +292,19 @@ describe LinksController, :vcr, type: :controller do
       expect(response.body).to start_with("<!doctype html>")
     end
 
-    it "sticks to primary before fetching the product for the landing page HTML" do
-      steps = []
-      allow(ActiveRecord::Base.connection).to receive(:stick_to_primary!).and_wrap_original do |method, *args|
-        steps << :stick_to_primary
-        method.call(*args)
-      end
+    it "fetches the product for the landing page HTML on the primary" do
+      pinned_during_fetch = nil
       allow(controller).to receive(:fetch_product_for_show).and_wrap_original do |method, *args|
-        steps << :fetch_product
+        pinned_during_fetch = ApplicationRecord.connected_to_stack.any? do |entry|
+          entry[:role] == :writing && entry[:klasses].include?(ApplicationRecord)
+        end
         method.call(*args)
       end
 
       get :landing_iframe_content, params: { id: product.unique_permalink }
 
       expect(response).to be_successful
-      expect(steps.index(:stick_to_primary)).to be < steps.index(:fetch_product)
+      expect(pinned_during_fetch).to eq(true)
     end
 
     it "applies the strict CSP and iframe-friendly response headers" do

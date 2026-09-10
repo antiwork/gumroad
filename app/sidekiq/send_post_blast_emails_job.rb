@@ -4,6 +4,7 @@ class SendPostBlastEmailsJob
   include Sidekiq::Job
   include ActionView::Helpers::SanitizeHelper
   include PostBlastSending
+  include DatabaseRoleRouting
   # Deliberately no `lock: :until_executed`. The digest keys on the blast id, and every caller
   # creates a fresh blast row before enqueuing, so it never deduplicated anything — but a hard-killed
   # worker skips its release, and the held digest then drops every later `perform_async` for that
@@ -47,20 +48,25 @@ class SendPostBlastEmailsJob
     end
 
     @filters = @post.audience_members_filter_params
-    # The filter query can be expensive to run, it's better to run it on the replica DB.
-    Makara::Context.release_all
-    @members = load_audience_members
-    remove_members_without_email
+    # The `started_at` write above lands microseconds before this, so the proxy's
+    # recent-write window would put the whole audience scan on the primary. These
+    # are the most expensive queries in the job and they tolerate lag — the mailer
+    # re-checks every recipient at send time — so keep them on the replica. Ends
+    # before the first write below; the reading role would reject one anyway.
+    with_replica_database do
+      @members = load_audience_members
+      remove_members_without_email
 
-    if @blast.to_non_openers?
-      keep_emails = load_non_opener_emails
-      @members.select! { keep_emails.include?(_1.email.downcase) }
-      remove_members_already_sent_in_this_blast
-    else
-      # We will check each batch of emails to see if they were already messaged,
-      # but we can already remove all of the ones we know have already been emailed, ahead of time (faster).
-      # This check is only useful if the post has been published twice, or if this job is being retried.
-      remove_already_emailed_members
+      if @blast.to_non_openers?
+        keep_emails = load_non_opener_emails
+        @members.select! { keep_emails.include?(_1.email.downcase) }
+        remove_members_already_sent_in_this_blast
+      else
+        # We will check each batch of emails to see if they were already messaged,
+        # but we can already remove all of the ones we know have already been emailed, ahead of time (faster).
+        # This check is only useful if the post has been published twice, or if this job is being retried.
+        remove_already_emailed_members
+      end
     end
 
     return mark_blast_as_completed if @members.empty?

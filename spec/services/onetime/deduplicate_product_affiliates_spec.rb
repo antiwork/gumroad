@@ -61,7 +61,7 @@ describe Onetime::DeduplicateProductAffiliates do
     end
 
     it "sticks a live run to the primary so discovery cannot read a lagging replica" do
-      expect(ActiveRecord::Base.connection).to receive(:stick_to_primary!).at_least(:once).and_call_original
+      expect(ApplicationRecord).to receive(:connected_to).with(role: :writing).at_least(:once).and_call_original
       described_class.process(dry_run: false)
     end
 
@@ -186,7 +186,7 @@ describe Onetime::DeduplicateProductAffiliates do
     end
 
     it "sticks a live run to the primary so discovery cannot read a lagging replica" do
-      expect(ActiveRecord::Base.connection).to receive(:stick_to_primary!).at_least(:once).and_call_original
+      expect(ApplicationRecord).to receive(:connected_to).with(role: :writing).at_least(:once).and_call_original
       described_class.process_url_divergent(dry_run: false)
     end
 
@@ -253,7 +253,7 @@ describe Onetime::DeduplicateProductAffiliates do
     end
 
     it "sticks a live run to the primary so discovery cannot read a lagging replica" do
-      expect(ActiveRecord::Base.connection).to receive(:stick_to_primary!).at_least(:once).and_call_original
+      expect(ApplicationRecord).to receive(:connected_to).with(role: :writing).at_least(:once).and_call_original
       described_class.process_commission_divergent(dry_run: false)
     end
 

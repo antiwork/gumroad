@@ -133,8 +133,7 @@ class CreateIndiaSalesReportJob
       row = scope.last
       return row if row
 
-      ZipTaxRate.connection.stick_to_primary! if ZipTaxRate.connection.respond_to?(:stick_to_primary!)
-      scope.last
+      ApplicationRecord.connected_to(role: :writing) { scope.last }
     end
 
     def row_headers
