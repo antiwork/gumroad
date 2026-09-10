@@ -20,6 +20,7 @@ class Bundles::ShareController < Bundles::BaseController
         tags: share_permitted_params[:tags],
         section_ids: share_permitted_params[:section_ids],
         display_product_reviews: share_permitted_params[:display_product_reviews],
+        hide_bundle_product_reviews: share_permitted_params[:hide_bundle_product_reviews],
         is_adult: share_permitted_params[:is_adult]
       ).perform
 
@@ -40,7 +41,7 @@ class Bundles::ShareController < Bundles::BaseController
 
   private
     def share_permitted_params
-      params.permit(:taxonomy_id, :display_product_reviews, :is_adult, section_ids: [], tags: [])
+      params.permit(:taxonomy_id, :display_product_reviews, :hide_bundle_product_reviews, :is_adult, section_ids: [], tags: [])
     end
 
     def ensure_published

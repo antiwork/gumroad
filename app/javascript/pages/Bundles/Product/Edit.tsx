@@ -64,6 +64,7 @@ type ProductPageProps = {
     custom_attributes: Attribute[];
     refund_policy: RefundPolicy;
     display_product_reviews: boolean;
+    hide_bundle_product_reviews: boolean;
     public_files: PublicFileWithStatus[];
     is_published: boolean;
     products: BundleProduct[];

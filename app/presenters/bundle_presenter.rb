@@ -129,6 +129,7 @@ class BundlePresenter
           taxonomy_id: bundle.taxonomy_id&.to_s,
           tags: bundle.tags.pluck(:name),
           display_product_reviews: bundle.display_product_reviews,
+          hide_bundle_product_reviews: bundle.hide_bundle_product_reviews?,
           is_adult: bundle.is_adult,
           discover_fee_per_thousand: bundle.discover_fee_per_thousand,
           section_ids: bundle.user.seller_profile_products_sections.on_profile.filter_map { |section| section.external_id if section.shown_products.include?(bundle.id) },

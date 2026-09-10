@@ -43,6 +43,7 @@ class Link < ApplicationRecord
             31 => :created_via_cli,
             32 => :DEPRECATED_moderated_by_iffy,
             33 => :hide_sold_out_variants,
+            34 => :hide_bundle_product_reviews,
             :column => "flags",
             :flag_query_mode => :bit_operator,
             check_for_column: false
