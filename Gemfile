@@ -4,7 +4,7 @@ source "https://rubygems.org"
 
 ruby file: ".ruby-version"
 
-gem "rails", "8.0.5.1"
+gem "rails", "8.1.3.1"
 gem "rake", "13.2.1"
 gem "sentry-ruby"
 gem "sentry-rails"
