@@ -181,7 +181,52 @@ describe RepairOrderChargeOutcomesJob do
 
     purchase_sqls = sqls.select { _1.include?("purchase_state") }
     expect(purchase_sqls).not_to be_empty
-    combined = purchase_sqls.select { |sql| sql.match?(/`purchase_state` IN \(/) && sql.match?(/NOT IN \(/) }
+    combined = purchase_sqls.select { |sql| sql.include?("`purchase_state` IN (") && sql.include?("NOT IN (") }
     expect(combined).to be_empty
+  end
+
+  # Greptile (P1): a pre-existing purchase can fail after being attached to a new order
+  # (SCA/restart). The recent pass keys off purchase created_at/updated_at, not the
+  # unindexed orders.created_at, so a recent updated_at still has to catch it.
+  it "flags a recent order whose failed purchase was created before the freshness window" do
+    order = create(:order)
+    succeeded = create(:purchase_in_progress, link: product_1, seller: seller_1)
+    failed = create(:purchase_in_progress, link: product_2, seller: seller_2)
+    order.purchases << succeeded << failed
+    succeeded.update_columns(purchase_state: "successful")
+    failed.update_columns(purchase_state: "failed", created_at: 30.days.ago, updated_at: Time.current)
+    RecordOrderChargeOutcomeJob.jobs.clear
+
+    described_class.new.perform
+
+    expect(order.reload).to be_partially_successful
+  end
+
+  # Greptile (P1): a full failed-order scan budget of non-qualifying rows used to
+  # discard the scan cursor, so the next hour rescanned the same stretch.
+  it "advances the backlog cursor across a sparse stretch of non-qualifying failed orders" do
+    stub_const("#{described_class}::MAX_FAILED_ORDER_BATCHES", 1)
+    stub_const("#{described_class}::FAILED_ORDER_ID_BATCH", 1)
+    stub_const("#{described_class}::MAX_BACKLOG_SCANNED", 1)
+
+    blocker = create(:order)
+    one = create(:purchase_in_progress, link: product_1, seller: seller_1)
+    two = create(:purchase_in_progress, link: product_2, seller: seller_2)
+    blocker.purchases << one << two
+    one.update_columns(purchase_state: "failed")
+    two.update_columns(purchase_state: "failed")
+    blocker.update_column(:created_at, 30.days.ago)
+    RecordOrderChargeOutcomeJob.jobs.clear
+
+    real = settle_with_lost_enqueue(create(:order))
+    real.update_column(:created_at, 30.days.ago)
+
+    described_class.new.perform
+    expect(blocker.reload).not_to be_partially_successful
+    expect(real.reload).not_to be_partially_successful
+    expect($redis.get(RedisKey.order_charge_outcome_repair_cursor).to_i).to eq(blocker.id)
+
+    described_class.new.perform
+    expect(real.reload).to be_partially_successful
   end
 end

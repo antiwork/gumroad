@@ -44,9 +44,20 @@ class RepairOrderChargeOutcomesJob
 
   private
     def recent_candidate_ids
-      failed_purchase_ids = Purchase.checkout_failed.where(created_at: RECENT_WINDOW.ago..).pluck(:id)
-      filter_candidates(order_ids_for_purchases(failed_purchase_ids), created_at: RECENT_WINDOW.ago..)
-        .first(MAX_BACKLOG_SCANNED)
+      ids = []
+      since = RECENT_WINDOW.ago
+      # created_at covers lost-enqueue at checkout. updated_at covers an older purchase that
+      # fails later (SCA/restart attached to a new order). orders.created_at is unindexed, so
+      # the recent cohort cannot be keyed off the order timestamp without a 116M-row scan.
+      [Purchase.checkout_failed.where(created_at: since..),
+       Purchase.checkout_failed.where(updated_at: since..)].each do |rel|
+        rel.in_batches(of: FAILED_ORDER_ID_BATCH) do |batch|
+          ids.concat(filter_candidates(order_ids_for_purchases(batch.pluck(:id)), created_at: since..))
+          break if ids.size >= MAX_BACKLOG_SCANNED
+        end
+        break if ids.size >= MAX_BACKLOG_SCANNED
+      end
+      ids.uniq.sort.first(MAX_BACKLOG_SCANNED)
     end
 
     def backlog_candidate_ids(remaining_budget:)
@@ -54,15 +65,22 @@ class RepairOrderChargeOutcomesJob
 
       after_id = current_cursor
       ceiling = lap_ceiling(after_id)
-      ids, _scan_to, exhausted = backlog_page(after_id, ceiling, remaining_budget)
+      ids, scan_to, exhausted = backlog_page(after_id, ceiling, remaining_budget)
 
       if ids.empty? && exhausted && after_id.positive?
         save_cursor(0)
+        after_id = 0
         ceiling = lap_ceiling(0)
-        ids, _scan_to, exhausted = backlog_page(0, ceiling, remaining_budget)
+        ids, scan_to, exhausted = backlog_page(0, ceiling, remaining_budget)
       end
 
-      save_cursor(ids.last) if ids.any?
+      if ids.any?
+        save_cursor(ids.last)
+      elsif !exhausted && scan_to > after_id
+        # 40 failed-order pages with no qualifying candidate used to discard scan_to, so the
+        # next hour rescanned the same stretch and starved everything past it.
+        save_cursor(scan_to)
+      end
       ids
     end
 
