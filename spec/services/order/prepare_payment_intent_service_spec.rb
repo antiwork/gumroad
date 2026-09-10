@@ -3253,10 +3253,10 @@ describe Order::PreparePaymentIntentService, :vcr do
         mandate_options = create_args.dig(:payment_method_options, :card, :mandate_options)
         expect(mandate_options).to include(
           amount_type: "maximum",
-          currency: Currency::INR,
           interval: "sporadic",
           supported_types: ["india"]
         )
+        expect(mandate_options).not_to have_key(:currency)
         expect(mandate_options[:amount]).to be > Checkout::PaymentMethodResolver::UPI_RECURRING_MAX_INR_CENTS
       end
 

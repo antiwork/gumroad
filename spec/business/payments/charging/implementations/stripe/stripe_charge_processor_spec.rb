@@ -872,6 +872,50 @@ describe StripeChargeProcessor, :vcr do
       subject.create_payment_intent_or_charge!(merchant_account, chargeable, 1_00, 30, "reference", "test description")
     end
 
+    it "strips nested currency from mandate_options on the PaymentIntent.create payload" do
+      stubbed_chargeable = instance_double(
+        StripeChargeablePaymentMethod,
+        requires_mandate?: false,
+        stripe_charge_params: { customer: "cus_mandate_currency", payment_method: "pm_mandate_currency" }
+      )
+      payment_intent = Stripe::PaymentIntent.construct_from(
+        id: "pi_mandate_currency_strip",
+        status: StripeIntentStatus::PROCESSING,
+        client_secret: "secret"
+      )
+      mandate_options = {
+        payment_method_options: {
+          card: {
+            mandate_options: {
+              amount: 1_00,
+              currency: "inr",
+              interval: "sporadic",
+              amount_type: "maximum"
+            }
+          }
+        }
+      }
+
+      expect(Stripe::PaymentIntent).to receive(:create) do |stripe_params|
+        nested = stripe_params.dig(:payment_method_options, :card, :mandate_options)
+        expect(nested).to include(amount: 1_00)
+        expect(nested).not_to have_key(:currency)
+        payment_intent
+      end
+      expect(payment_intent).not_to receive(:confirm)
+
+      subject.create_payment_intent_or_charge!(
+        merchant_account,
+        stubbed_chargeable,
+        1_00,
+        30,
+        "reference",
+        "test description",
+        off_session: false,
+        mandate_options:
+      )
+    end
+
     context "with a saved UPI Autopay instrument" do
       let(:chargeable) do
         StripeChargeableUpi.new(

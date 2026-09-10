@@ -417,7 +417,6 @@ class Order::PreparePaymentIntentService
             reference: StripeChargeProcessor::MANDATE_PREFIX + purchases_to_charge.first.external_id,
             amount_type: "maximum",
             amount: maximum_amount_cents,
-            currency: Currency::INR,
             start_date: Time.current.to_i,
             interval: "sporadic",
             supported_types: ["india"],

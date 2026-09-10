@@ -249,14 +249,14 @@ class Charge::CreateService
     # renewal at the same price is guaranteed to need re-authorisation.
     presentment_cap_cents = [presentment_cap_cents, processor_args[:processor_amount_cents].to_i].max
 
-    deep_merged_mandate_options(presentment_cap_cents, presentment_currency)
+    deep_merged_mandate_options(presentment_cap_cents)
   end
 
   # Stripe uses the PaymentIntent currency for card mandate options. Nested
   # `currency` is a SetupIntent-only field; sending it on a PaymentIntent 400s
   # with "Received unknown parameter: currency" and the buyer sees a generic
   # temporary-problem error after a successful 0.00 e-mandate OTP.
-  def deep_merged_mandate_options(cap_cents, _currency)
+  def deep_merged_mandate_options(cap_cents)
     card_options = mandate_options[:payment_method_options][:card]
     inner = card_options[:mandate_options].merge(amount: cap_cents).except(:currency)
 
