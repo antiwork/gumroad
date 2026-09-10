@@ -130,9 +130,18 @@ describe("Email List", :js, :sidekiq_inline, :elasticsearch_wait_for_refresh, ty
         within_modal "Email 1 (sent)" do
           expect(page).to have_text("Status Incomplete", normalize_ws: true)
           expect(page).to have_text("6,798 people got this email. 16,212 people have not received it yet. We are retrying automatically.")
+          click_on "Send to the rest"
         end
+
+        within_modal "Send to the rest?" do
+          expect(page).to have_text('This will send "Email 1 (sent)" to the 16,212 people who have not received it yet.')
+          click_on "Send"
+        end
+
+        expect(page).to have_alert(text: "Sending to everyone who has not received this yet. This may take a while.")
+        expect($redis.get(RedisKey.stalled_blast_auto_resumed(blast.id))).to start_with("seller:")
       ensure
-        $redis.del(RedisKey.blast_pending_recipients(blast.id)) if blast
+        $redis.del(RedisKey.blast_pending_recipients(blast.id), RedisKey.stalled_blast_auto_resumed(blast.id)) if blast
         Feature.deactivate(:auto_resume_stalled_post_blasts)
       end
 

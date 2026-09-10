@@ -309,6 +309,11 @@ export default function EmailsPublished() {
                 </Card>
                 <EmailSheetActions
                   installment={selectedInstallment}
+                  remainingSend={
+                    selectedInstallment.delivery?.status === "incomplete"
+                      ? { count: selectedInstallment.delivery.remaining_count }
+                      : null
+                  }
                   onDelete={() =>
                     setDeletingInstallment({
                       id: selectedInstallment.external_id,

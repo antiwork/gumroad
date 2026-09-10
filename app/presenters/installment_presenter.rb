@@ -98,35 +98,17 @@ class InstallmentPresenter
     # State of the latest regular send. Without it an incomplete blast reads as a finished one:
     # the Emailed column only ever showed the delivered count. Resends have their own rows.
     def delivery_props
-      blast = installment.blasts.reject(&:to_non_openers?).max_by(&:requested_at)
+      blast = installment.latest_regular_blast
       return if blast&.requested_at.nil?
-      sent = { status: "sent", delivered_count: blast.delivery_count, remaining_count: nil, scheduled_for: nil, retrying: false }
-      return sent if blast.completed_at.present?
 
-      # A zero pending count means every recipient reached the ESP and only the completion
-      # stamp is missing (see SendPostBlastEmailsJob.fully_delivered?).
-      pending = $redis.get(RedisKey.blast_pending_recipients(blast.id))
-      return sent if pending.present? && pending.to_i <= 0
-
-      scheduled_for = quota_deferred_until(blast)
-      status =
-        if scheduled_for&.future? then "waiting"
-        elsif [blast.requested_at, blast.last_email_delivered_at].compact.max > AlertOnStalledPostEmailBlastsJob::STALL_THRESHOLD.ago then "sending"
-        else "incomplete"
-        end
-
+      status = blast.delivery_status
       {
         status:,
         delivered_count: blast.delivery_count,
-        remaining_count: pending.present? ? pending.to_i : nil,
-        scheduled_for: status == "waiting" ? scheduled_for : nil,
+        remaining_count: status == "sent" ? nil : blast.remaining_recipient_count,
+        scheduled_for: status == "waiting" ? blast.quota_deferred_until : nil,
         retrying: status == "incomplete" && AlertOnStalledPostEmailBlastsJob.auto_resume_eligible?(blast),
       }
-    end
-
-    def quota_deferred_until(blast)
-      deferred_until = $redis.get(RedisKey.blast_quota_deferred_until(blast.id))
-      Time.zone.parse(deferred_until) if deferred_until.present?
     end
 
     # Stats for each "resend to non-openers" blast on this post, oldest first.

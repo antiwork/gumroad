@@ -184,6 +184,18 @@ export async function resendToNonOpeners(externalId: string) {
   return typia.assert<{ success: boolean }>(json);
 }
 
+export async function sendToRemaining(externalId: string) {
+  const response = await request({
+    method: "POST",
+    accept: "json",
+    url: Routes.internal_installment_remaining_send_path(externalId),
+  });
+
+  const json: unknown = await response.json();
+  if (!response.ok) throw new ResponseError(typia.assert<{ error: string }>(json).error);
+  return typia.assert<{ success: boolean }>(json);
+}
+
 export async function previewInstallment(externalId: string) {
   const response = await request({
     method: "POST",

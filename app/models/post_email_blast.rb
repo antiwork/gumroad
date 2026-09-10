@@ -31,6 +31,34 @@ class PostEmailBlast < ApplicationRecord
     recipient_filter == RECIPIENT_FILTER_UNOPENED
   end
 
+  # Seller-facing state of this send. "sent" also covers a blast whose every recipient reached
+  # the ESP and only lacks the completion stamp (a zero pending count, see
+  # SendPostBlastEmailsJob.fully_delivered?). "incomplete" means idle past the stall threshold
+  # with recipients unaccounted for.
+  def delivery_status
+    return "sent" if completed_at.present?
+    return "sent" if remaining_recipient_count&.<=(0)
+    return "waiting" if quota_deferred_until&.future?
+    return "sending" if [requested_at, last_email_delivered_at].compact.max > AlertOnStalledPostEmailBlastsJob::STALL_THRESHOLD.ago
+
+    "incomplete"
+  end
+
+  # Recipients the sender still owes, from its pending count; nil once that key is gone.
+  def remaining_recipient_count
+    return @remaining_recipient_count if defined?(@remaining_recipient_count)
+
+    pending = $redis.get(RedisKey.blast_pending_recipients(id))
+    @remaining_recipient_count = pending.present? ? pending.to_i : nil
+  end
+
+  def quota_deferred_until
+    return @quota_deferred_until if defined?(@quota_deferred_until)
+
+    deferred_until = $redis.get(RedisKey.blast_quota_deferred_until(id))
+    @quota_deferred_until = deferred_until.present? ? Time.zone.parse(deferred_until) : nil
+  end
+
   scope :aggregated, -> {
     select(
       "DATE(requested_at) AS date",

@@ -74,6 +74,11 @@ class AlertOnStalledPostEmailBlastsJob
     blast.requested_at > (AUTO_RESUME_WINDOW - SCAN_INTERVAL).ago || recipients_still_owed?(blast)
   end
 
+  # Whether a sender for this blast is busy, queued or retrying right now. Three Sidekiq scans.
+  def self.sender_visible?(blast_id)
+    new.send(:sender_visible_now?, blast_id)
+  end
+
   def self.recipients_still_owed?(blast)
     pending = $redis.get(RedisKey.blast_pending_recipients(blast.id))
     pending.present? && pending.to_i.positive?
