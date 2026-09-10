@@ -69,7 +69,6 @@ export default function EmailsPublished() {
   const isUnfinished = (installment: PublishedInstallment) =>
     installment.send_emails && installment.delivery !== null && installment.delivery.status !== "sent";
 
-  // Answers the two questions an unfinished row raises: what happened, and what happens next.
   const deliveryNote = (delivery: PublishedInstallment["delivery"]) => {
     if (!delivery || delivery.status === "sent") return null;
     const people = (count: number) => `${formatStatNumber({ value: count })} ${count === 1 ? "person" : "people"}`;
