@@ -359,6 +359,11 @@ class PaypalPayoutProcessor
 
     errors = errors_for_parsed_paypal_response(parsed_paypal_response) if ack_status != "Success"
     Rails.logger.info("PayPal payouts: Payout errors for user IDs #{user_ids}: #{errors.inspect}") if errors.present?
+  rescue Socket::ResolutionError, Errno::ECONNREFUSED, Errno::ENETUNREACH, Errno::EHOSTUNREACH, Net::OpenTimeout => e
+    # DNS / connect failures never handed MassPay to PayPal. A read timeout is NOT in this
+    # list: PayPal may have accepted the request, and failing the slice would let a retry
+    # send the same money twice.
+    mark_payments_processor_unavailable!(payments, e)
   end
 
   # Public: Sends the money in `split_payment_by_cents(payment.user)` increments.
@@ -444,6 +449,19 @@ class PaypalPayoutProcessor
 
   def self.paypal_auth_params
     PAYPAL_API_PARAMS.merge("METHOD" => "MassPay", "RECEIVERTYPE" => "EmailAddress")
+  end
+
+  def self.mark_payments_processor_unavailable!(payments, error)
+    Rails.logger.error("PayPal payouts: MassPay never reached PayPal (#{error.class}: #{error.message}) for payment IDs #{payments.map(&:id)}")
+    ErrorNotifier.notify(error)
+    payments.each do |payment|
+      payment.error_message = "#{error.class}: #{error.message}".truncate(1000)
+      payment.mark_failed!(Payment::FailureReason::PROCESSOR_UNAVAILABLE)
+    rescue => e
+      # One bad row must not leave the rest of the slice stuck in processing.
+      Rails.logger.error("PayPal payouts: could not mark payment #{payment.id} processor_unavailable (#{e.class}: #{e.message})")
+      ErrorNotifier.notify(e)
+    end
   end
 
   def self.errors_for_parsed_paypal_response(parsed_paypal_response)
@@ -610,6 +628,12 @@ class PaypalPayoutProcessor
     end
 
     response = Rack::Utils.parse_nested_query(paypal_response.parsed_response)
+
+    # Fail closed: a non-Success ACK with no L_STATUS* looks identical to "not found", and treating
+    # that as not-found marks the payout failed so the next batch can pay the same money twice.
+    unless %w[Success SuccessWithWarning].include?(response["ACK"])
+      raise "PayPal TransactionSearch failed (ACK=#{response["ACK"].inspect})"
+    end
 
     if response["L_STATUS0"].present? && response["L_STATUS1"].present? && response["L_STATUS2"].blank? &&
       transaction_id.in?([response["L_TRANSACTIONID0"], response["L_TRANSACTIONID1"]]) &&

@@ -137,6 +137,7 @@ class Api::Internal::Admin::UsersController < Api::Internal::Admin::BaseControll
 
     verifications = user.social_connect_verifications.order(:platform, Arel.sql("superseded_at IS NOT NULL"), last_verified_at: :desc).to_a
     shared_identity_user_counts = shared_identity_user_counts_for(user, verifications)
+    SocialConnectFunnel.record_reviewed!(user:, verifications:)
 
     render json: internal_admin_user_success_payload(user, {
                                                        social_connections: verifications.map { serialize_social_connect_verification(_1, shared_identity_user_count: shared_identity_user_counts[[_1.platform, _1.uid]] || 0) },

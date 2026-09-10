@@ -14,18 +14,29 @@ module OmniAuth
       option :access_type, "online"
 
       def request_phase
-        return redirect(flag_off_redirect) unless youtube_connect_enabled?
+        return unavailable_connection unless youtube_connect_enabled?
 
         super
       end
 
       def callback_phase
-        return redirect(flag_off_redirect) unless youtube_connect_enabled?
+        return unavailable_connection unless youtube_connect_enabled?
 
         super
       end
 
       private
+        def unavailable_connection
+          if session&.dig("omniauth.params", "social_connect_return").present? && on_request_path?
+            env["omniauth.params"] = session.delete("omniauth.params")
+          end
+          if env.dig("omniauth.params", "social_connect_return").present?
+            fail!(:social_connect_unavailable)
+          else
+            redirect(flag_off_redirect)
+          end
+        end
+
         def youtube_connect_enabled?
           Feature.active?(:youtube_connect, youtube_connect_actor)
         end
@@ -43,7 +54,7 @@ module OmniAuth
         end
 
         def flag_off_redirect
-          youtube_connect_actor.present? ? "/profile" : "/login"
+          youtube_connect_actor.present? ? "/settings/social_connections" : "/login"
         end
     end
   end

@@ -16,6 +16,7 @@ const PAGE_TITLES = {
   billing: "Billing",
   authorized_applications: "Applications",
   password: "Password and authentication",
+  social_connections: "Social connections",
   third_party_analytics: "Third-party analytics",
   advanced: "Advanced",
 };

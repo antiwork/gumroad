@@ -33,6 +33,7 @@ class User < ApplicationRecord
   has_many :social_connect_verifications, dependent: :destroy
   has_one :youtube_identity, class_name: "UserYoutubeIdentity", dependent: :destroy
   has_one :instagram_identity, class_name: "UserInstagramIdentity", dependent: :destroy
+  has_one :tiktok_identity, class_name: "UserTiktokIdentity", dependent: :destroy
 
   stripped_fields :name, :facebook_meta_tag, :google_analytics_id, :username, :email, :support_email
 
@@ -477,6 +478,7 @@ class User < ApplicationRecord
                      :do => :add_to_gmail_abuse_filter
 
     after_transition any => :compliant, :do => :enable_refunds!
+    after_transition any => :compliant, :do => :record_social_connect_hold_released
 
     after_transition %i[suspended_for_fraud suspended_for_tos_violation] => %i[compliant on_probation],
                      :do => :enable_links_and_tell_chat

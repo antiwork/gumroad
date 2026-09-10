@@ -9,7 +9,7 @@ afterEach(cleanup);
 
 describe("Button brand colors", () => {
   // The YouTube connect and disconnect buttons sit directly beside the X buttons in
-  // Settings > Profile > Social links, so both rows have to read as the same control. Comparing
+  // Settings > Social connections, so both rows have to read as the same control. Comparing
   // against the X button, instead of only asserting bg-black, is what catches a switch back to a
   // provider brand fill such as Google's blue.
   it("fills the YouTube button like the X button", () => {
@@ -40,5 +40,20 @@ describe("Button brand colors", () => {
 
     expect(instagram.className).toBe(x.className);
     expect(instagram.className).toContain("bg-black");
+  });
+
+  it("fills the TikTok button like the X button", () => {
+    render(
+      <>
+        <Button color="twitter">Connect to X</Button>
+        <Button color="tiktok">Connect to TikTok</Button>
+      </>,
+    );
+
+    const x = screen.getByRole("button", { name: "Connect to X" });
+    const tiktok = screen.getByRole("button", { name: "Connect to TikTok" });
+
+    expect(tiktok.className).toBe(x.className);
+    expect(tiktok.className).toContain("bg-black");
   });
 });

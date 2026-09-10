@@ -256,6 +256,7 @@ class GdprDataErasureService
       @user.social_connect_verifications.destroy_all
       @user.youtube_identity&.destroy
       @user.instagram_identity&.destroy
+      @user.tiktok_identity&.destroy
 
       anonymized_email
     end

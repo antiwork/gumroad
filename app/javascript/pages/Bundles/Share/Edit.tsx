@@ -40,6 +40,7 @@ type SharePageProps = {
     allow_installment_plan: boolean;
     installment_plan: { number_of_installments: number } | null;
     display_product_reviews: boolean;
+    hide_bundle_product_reviews: boolean;
     quantity_enabled: boolean;
     should_show_sales_count: boolean;
     custom_button_text_option: CustomButtonTextOption | null;
@@ -70,6 +71,7 @@ type ShareFormData = {
   taxonomy_id: string | null;
   tags: string[];
   display_product_reviews: boolean;
+  hide_bundle_product_reviews: boolean;
   is_adult: boolean;
   unpublish?: boolean;
 };
@@ -100,6 +102,7 @@ export default function BundlesShareEdit() {
     taxonomy_id: bundle.taxonomy_id,
     tags: bundle.tags,
     display_product_reviews: bundle.display_product_reviews,
+    hide_bundle_product_reviews: bundle.hide_bundle_product_reviews,
     is_adult: bundle.is_adult,
   });
 
@@ -124,7 +127,7 @@ export default function BundlesShareEdit() {
       isPublished={bundle.is_published}
       preview={
         <ProductPreview
-          bundle={bundle}
+          bundle={{ ...bundle, hide_bundle_product_reviews: form.data.hide_bundle_product_reviews }}
           id={id}
           uniquePermalink={unique_permalink}
           currencyType={currency_type}
@@ -196,6 +199,11 @@ export default function BundlesShareEdit() {
               checked={form.data.display_product_reviews}
               onChange={(e) => form.setData("display_product_reviews", e.target.checked)}
               label="Display your product's 1-5 star rating to prospective customers"
+            />
+            <Switch
+              checked={form.data.hide_bundle_product_reviews}
+              onChange={(e) => form.setData("hide_bundle_product_reviews", e.target.checked)}
+              label="Hide ratings of included products on this bundle page"
             />
             <Switch
               checked={form.data.is_adult}

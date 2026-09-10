@@ -59,6 +59,7 @@ import { computeInitialCheckout, type InitialCheckout } from "$app/components/Ch
 import {
   BUYER_CURRENCY_QUOTE_REFRESH_MESSAGE,
   hasExpiredBuyerCurrencyQuote,
+  hasExpiredDirectListedAmountToken,
   canDisplayBuyerCurrencyQuote,
   canUseStripePaymentElement,
   canUseStripePaymentElementClientConfirm,
@@ -536,7 +537,7 @@ const CheckoutIndexPage = () => {
       }
       // Analytics and CAPTCHA may outlive the quote even when Pay started with a fresh one.
       // Stop before either order endpoint; refreshing must not reuse this payment authorization.
-      if (hasExpiredBuyerCurrencyQuote(state)) {
+      if (hasExpiredBuyerCurrencyQuote(state) || hasExpiredDirectListedAmountToken(state)) {
         dispatch({ type: "refresh-expired-buyer-currency-quote", beforeSubmit: true });
         return;
       }

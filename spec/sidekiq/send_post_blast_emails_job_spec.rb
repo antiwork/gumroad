@@ -992,14 +992,16 @@ describe SendPostBlastEmailsJob, :freeze_time do
   end
 
   describe "one large blast per seller per day" do
-    it "holds a second large blast until tomorrow" do
+    it "holds a second large blast until the quota's overnight window" do
       blast = create(:blast, :just_requested, post: basic_post_with_audience)
       allow(SellerLargeBlastQuota).to receive(:allow?).and_return(false)
+      run_at = Time.zone.tomorrow.beginning_of_day + 5.hours
+      allow(SellerLargeBlastQuota).to receive(:deferred_run_at).and_return(run_at)
 
       described_class.new.perform(blast.id)
 
       expect(PostSendgridApi.mails).to be_empty
-      expect(described_class).to have_enqueued_sidekiq_job(blast.id).at(Time.zone.tomorrow.beginning_of_day)
+      expect(described_class).to have_enqueued_sidekiq_job(blast.id).at(run_at)
       expect(blast.reload.completed_at).to be_nil
     end
   end

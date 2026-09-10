@@ -15,7 +15,7 @@ describe SettingsPresenter do
     context "with owner as logged in user" do
       it "returns correct pages" do
         expect(presenter.pages).to eq(
-          %w(main team payments billing password third_party_analytics advanced)
+          %w(main team payments billing password social_connections third_party_analytics advanced)
         )
       end
 
@@ -364,7 +364,7 @@ describe SettingsPresenter do
   end
 
   describe "#password_props" do
-    let(:settings_pages) { %w(main team payments billing password third_party_analytics advanced) }
+    let(:settings_pages) { %w(main team payments billing password social_connections third_party_analytics advanced) }
 
     context "when seller is registered using a social provider" do
       before do
@@ -395,6 +395,49 @@ describe SettingsPresenter do
     end
   end
 
+  describe "#social_connections_props" do
+    it "reports X connected from the current link rather than a manually entered handle" do
+      seller.update!(twitter_handle: "example_creator")
+      expect(presenter.social_connections_props[:twitter_connected]).to eq(false)
+      expect(presenter.social_connections_props[:twitter_handle]).to eq("example_creator")
+
+      seller.update!(twitter_user_id: "example-social-id")
+      expect(presenter.social_connections_props[:twitter_connected]).to eq(true)
+    end
+
+    it "includes the YouTube handle only when connected" do
+      expect(presenter.social_connections_props[:youtube_connected]).to eq(false)
+      create(:user_youtube_identity, user: seller, channel_id: "UC123", handle: "googledevelopers")
+      seller.reload
+      props = described_class.new(pundit_user:).social_connections_props
+      expect(props[:youtube_connected]).to eq(true)
+      expect(props[:youtube_handle]).to eq("googledevelopers")
+    end
+
+    it "reports Instagram connected from the live identity, not a dormant verification row" do
+      create(:social_connect_verification, user: seller, platform: "instagram", uid: "17841400000000000", handle: "oldhandle")
+      seller.reload
+      props = described_class.new(pundit_user:).social_connections_props
+      expect(props[:instagram_connected]).to eq(false)
+      expect(props[:instagram_handle]).to be_nil
+
+      create(:user_instagram_identity, user: seller, instagram_user_id: "17841400000000000", handle: "gumroad")
+      seller.reload
+      props = described_class.new(pundit_user:).social_connections_props
+      expect(props[:instagram_connected]).to eq(true)
+      expect(props[:instagram_handle]).to eq("gumroad")
+    end
+
+    it "reports TikTok connected from the live identity" do
+      expect(presenter.social_connections_props[:tiktok_connected]).to eq(false)
+      create(:user_tiktok_identity, user: seller, tiktok_open_id: "open-123", handle: "gumroad")
+      seller.reload
+      props = described_class.new(pundit_user:).social_connections_props
+      expect(props[:tiktok_connected]).to eq(true)
+      expect(props[:tiktok_handle]).to eq("gumroad")
+    end
+  end
+
   describe "#authorized_applications_props" do
     context "when some applications have no access grants" do
       let(:oauth_application1) { create(:oauth_application, owner: seller) }
@@ -415,7 +458,7 @@ describe SettingsPresenter do
                                                                   scopes: oauth_application1.scopes,
                                                                   id: oauth_application1.external_id,
                                                                 }],
-                                                                settings_pages: %w(main team payments billing authorized_applications password third_party_analytics advanced),
+                                                                settings_pages: %w(main team payments billing authorized_applications password social_connections third_party_analytics advanced),
                                                               })
       end
     end
@@ -438,7 +481,7 @@ describe SettingsPresenter do
                                                                   scopes: oauth_application1.scopes,
                                                                   id: oauth_application1.external_id,
                                                                 }],
-                                                                settings_pages: %w(main team payments billing authorized_applications password third_party_analytics advanced),
+                                                                settings_pages: %w(main team payments billing authorized_applications password social_connections third_party_analytics advanced),
                                                               })
       end
     end
@@ -474,7 +517,7 @@ describe SettingsPresenter do
                                                                 scopes: oauth_application1.scopes,
                                                                 id: oauth_application1.external_id,
                                                               }],
-                                                              settings_pages: %w(main team payments billing authorized_applications password third_party_analytics advanced),
+                                                              settings_pages: %w(main team payments billing authorized_applications password social_connections third_party_analytics advanced),
                                                             })
     end
 

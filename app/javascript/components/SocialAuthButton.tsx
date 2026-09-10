@@ -7,6 +7,7 @@ import { BrandName, Button, ButtonProps } from "$app/components/Button";
 export const SocialAuthButton = ({
   href,
   provider,
+  color,
   ...props
 }: {
   href: string;
@@ -27,7 +28,7 @@ export const SocialAuthButton = ({
             document.body,
           )
         : null}
-      <Button {...props} color={provider} onClick={() => formRef.current?.submit()}>
+      <Button {...props} color={color ?? provider} onClick={() => formRef.current?.submit()}>
         {props.children}
       </Button>
     </>

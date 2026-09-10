@@ -14,6 +14,8 @@ describe RobotsController do
       allow(RobotsService).to receive(:new).and_return(robots_service)
       allow(robots_service).to receive(:sitemap_configs).and_return([@sitemap_config])
       allow(robots_service).to receive(:user_agent_rules).and_return(@user_agent_rules)
+
+      @request.host = URI("#{PROTOCOL}://#{DOMAIN}").host
     end
 
     it "renders robots.txt" do
@@ -30,6 +32,15 @@ describe RobotsController do
       @user_agent_rules.each do |rule|
         expect(response.body).to include(rule)
       end
+    end
+
+    it "tells the service whether the request is for a storefront host" do
+      get :index, format: :txt
+      expect(RobotsService).to have_received(:new).with(storefront_host: false)
+
+      @request.host = Subdomain.from_username("some-seller")
+      get :index, format: :txt
+      expect(RobotsService).to have_received(:new).with(storefront_host: true)
     end
   end
 end
