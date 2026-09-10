@@ -95,6 +95,7 @@ class AlertOnStalledPostEmailBlastsJob
           if last_email_recent?(blast) || busy.include?(blast.id) then :running
           elsif queued.include?(blast.id) then :queued
           elsif retrying.include?(blast.id) then :retrying
+          elsif quota_deferred_until(blast)&.future? then :deferred
           elsif @dead_entries.key?(blast.id) then :dead
           else :unaccounted
           end
@@ -138,7 +139,9 @@ class AlertOnStalledPostEmailBlastsJob
       return :held_non_opener if entry[:disposition] == :unaccounted && blast.to_non_openers?
       # Recipients still owed cannot double-send (SentPostEmail unique / per-blast sent set),
       # so a late resume is the remaining delivery, not a time-boxed surprise.
-      return :held_past_window if blast.requested_at < AUTO_RESUME_WINDOW.ago && !recipients_still_owed?(blast)
+      # A deferral whose time has passed means the scheduled job is late or lost. The quota
+      # gate sits before any send, so resuming cannot double-send either.
+      return :held_past_window if blast.requested_at < AUTO_RESUME_WINDOW.ago && !recipients_still_owed?(blast) && !quota_deferred_until(blast)&.past?
       return :held_already_resumed if $redis.exists?(RedisKey.stalled_blast_auto_resumed(blast.id))
       return :would_resume unless live
       # Re-read the live sets at action time — the scan's snapshots are already stale by now.
@@ -154,6 +157,12 @@ class AlertOnStalledPostEmailBlastsJob
     def last_email_recent?(blast)
       emailed_at = blast.last_email_delivered_at
       emailed_at.present? && emailed_at > STALL_THRESHOLD.ago
+    end
+
+    # A quota-deferred blast waits in the scheduled set, which none of the scans read.
+    def quota_deferred_until(blast)
+      deferred_until = $redis.get(RedisKey.blast_quota_deferred_until(blast.id))
+      Time.zone.parse(deferred_until) if deferred_until.present?
     end
 
     def recipients_still_owed?(blast)
@@ -238,7 +247,8 @@ class AlertOnStalledPostEmailBlastsJob
         *lines,
         (omitted.positive? ? "…and #{omitted} more." : nil),
         "",
-        "RUNNING/QUEUED may just be a very large blast mid-pass. DEAD/UNACCOUNTED blasts requested " \
+        "RUNNING/QUEUED may just be a very large blast mid-pass. DEFERRED is waiting for the seller's " \
+          "next daily large-blast slot. DEAD/UNACCOUNTED blasts requested " \
           "within #{AUTO_RESUME_WINDOW.inspect} are resumed automatically, once per blast " \
           "(gumroad-private#2106) — except UNACCOUNTED non-opener resends, which a concurrent " \
           "duplicate sender would double-deliver. UNACCOUNTED usually means a lost enqueue, a " \

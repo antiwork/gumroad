@@ -241,6 +241,33 @@ describe AlertOnStalledPostEmailBlastsJob do
         expect(InternalNotificationWorker).not_to have_received(:perform_async)
       end
 
+      it "reports a quota-deferred blast as DEFERRED and leaves it alone" do
+        blast = stalled_blast
+        $redis.set(RedisKey.blast_quota_deferred_until(blast.id), 5.hours.from_now.iso8601)
+        stub_sidekiq
+
+        described_class.new.perform
+
+        expect(SendPostBlastEmailsJob).not_to have_received(:perform_async)
+        expect($redis.exists?(RedisKey.stalled_blast_auto_resumed(blast.id))).to eq(false)
+      ensure
+        $redis.del(RedisKey.blast_quota_deferred_until(blast.id)) if blast
+      end
+
+      it "resumes a quota-deferred blast whose recorded deferral has passed, even past the window" do
+        # Quota rejection happens before any recipients are recorded as owed, so only the
+        # lapsed marker says this blast is late; without it the row would be HELD.
+        blast = stalled_blast(requested_hours_ago: 30)
+        $redis.set(RedisKey.blast_quota_deferred_until(blast.id), 1.minute.ago.iso8601)
+        stub_sidekiq
+
+        described_class.new.perform
+
+        expect(SendPostBlastEmailsJob).to have_received(:perform_async).with(blast.id)
+      ensure
+        $redis.del(RedisKey.blast_quota_deferred_until(blast.id)) if blast
+      end
+
       it "resumes a blast past the window when recipients are still owed" do
         blast = stalled_blast(requested_hours_ago: 30)
         $redis.set(RedisKey.blast_pending_recipients(blast.id), 12)
