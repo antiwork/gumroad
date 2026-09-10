@@ -34,32 +34,94 @@ class RepairOrderChargeOutcomesJob
   def perform
     ApplicationRecord.connected_to(role: :writing) do
       WithMaxExecutionTime.timeout_queries(seconds: QUERY_TIME_BUDGET) do
-        recent_ids = recent_candidate_ids
+        recent_ids, recent_after, recent_scan_to = recent_candidate_ids
         backlog_ids = backlog_candidate_ids(remaining_budget: MAX_BACKLOG_SCANNED - recent_ids.size)
 
         (recent_ids + backlog_ids).uniq.each { Order.find_by(id: _1)&.record_charge_outcome! }
+
+        # Persist the recent mark only after repairs land. Saving earlier would skip purchases
+        # whose repair never ran when newer failures keep the wrap from firing.
+        save_recent_mark(recent_scan_to) if recent_scan_to > recent_after
       end
     end
   end
 
   private
+    # Walk checkout-failed purchases by PRIMARY id from a Redis high-water mark. A created_at
+    # window on purchases would restart at the oldest row every hour; under volume that never
+    # reaches fresh failures within MAX_FAILED_ORDER_BATCHES. id > mark stays selective and
+    # advances toward the head; once caught up, each run only sees new failures.
+    #
+    # Fully-failed / already-flagged purchases never grow `ids`, so the candidate cap cannot stop
+    # this walk. Cap pages the same way the backlog does. A purchase whose id the mark has already
+    # passed and that only later becomes checkout-failed is repaired by the backlog lap once its
+    # order leaves RECENT_WINDOW — same trade-off as dropping the unindexed updated_at scan.
     def recent_candidate_ids
-      ids = []
-      batches = 0
       since = RECENT_WINDOW.ago
-      # Failed purchases sit on (purchase_state, created_at). An updated_at window
-      # is unindexed and would abort this 2-minute cap before backlog runs.
-      # A pre-existing purchase that fails later on a new order is repaired by
-      # the backlog lap once the order leaves RECENT_WINDOW.
-      #
-      # Fully-failed / already-flagged purchases never grow `ids`, so the candidate
-      # cap cannot stop this walk. Cap pages the same way the backlog does.
-      Purchase.checkout_failed.where(created_at: since..).in_batches(of: FAILED_ORDER_ID_BATCH) do |batch|
-        ids.concat(filter_candidates(order_ids_for_purchases(batch.pluck(:id)), created_at: since..))
-        batches += 1
-        break if ids.size >= MAX_BACKLOG_SCANNED || batches >= MAX_FAILED_ORDER_BATCHES
+      after_id = recent_mark_start
+      ids, scan_to, exhausted = recent_page(after_id, since:)
+
+      if ids.empty? && exhausted && after_id.positive?
+        save_recent_mark(0)
+        after_id = recent_mark_start
+        ids, scan_to, exhausted = recent_page(after_id, since:)
       end
-      ids.uniq.sort.first(MAX_BACKLOG_SCANNED)
+
+      # Caller persists scan_to after repairs. Returning after_id lets it distinguish a no-op scan.
+      [ids.uniq.sort.first(MAX_BACKLOG_SCANNED), after_id, scan_to]
+    end
+
+    def recent_page(after_id, since:)
+      ids = []
+      cursor = after_id
+      exhausted = false
+      batches = 0
+
+      while ids.size < MAX_BACKLOG_SCANNED && batches < MAX_FAILED_ORDER_BATCHES
+        purchase_ids = Purchase.checkout_failed
+                               .where("purchases.id > ?", cursor)
+                               .order(:id)
+                               .limit(FAILED_ORDER_ID_BATCH)
+                               .pluck(:id)
+        if purchase_ids.empty?
+          exhausted = true
+          break
+        end
+
+        batches += 1
+        batch_candidates = filter_candidates(order_ids_for_purchases(purchase_ids), created_at: since..)
+        if ids.size + batch_candidates.size <= MAX_BACKLOG_SCANNED
+          cursor = purchase_ids.last
+          ids.concat(batch_candidates)
+          next
+        end
+
+        # Stop the mark at the purchase that filled the budget so overflow
+        # candidates on this page are still above the mark next hour.
+        purchase_ids.each do |purchase_id|
+          room = MAX_BACKLOG_SCANNED - ids.size
+          break if room <= 0
+
+          fresh = filter_candidates(order_ids_for_purchases([purchase_id]), created_at: since..)
+                   .reject { ids.include?(_1) }
+          ids.concat(fresh.first(room))
+          cursor = purchase_id
+          break if ids.size >= MAX_BACKLOG_SCANNED
+        end
+        break
+      end
+
+      [ids, cursor, exhausted]
+    end
+
+    # When the mark is unset or wrapped to 0, start just below the oldest checkout-failed purchase
+    # still inside the freshness window so the first page does not walk pre-window history.
+    def recent_mark_start
+      mark = current_recent_mark
+      return mark if mark.positive?
+
+      floor = Purchase.checkout_failed.where(created_at: RECENT_WINDOW.ago..).minimum(:id)
+      floor.to_i.positive? ? floor - 1 : (Purchase.maximum(:id) || 0)
     end
 
     def backlog_candidate_ids(remaining_budget:)
@@ -148,7 +210,14 @@ class RepairOrderChargeOutcomesJob
         save_lap_ceiling(ceiling)
         ceiling
       else
-        current_lap_ceiling
+        ceiling = current_lap_ceiling
+        if ceiling.zero?
+          # Lost ceiling mid-lap would leave the page unbounded above; new failed rows then keep
+          # every page non-empty and the wrap never fires. Recompute once and pin it again.
+          ceiling = Order.maximum(:id) || 0
+          save_lap_ceiling(ceiling)
+        end
+        ceiling
       end
     end
 
@@ -161,6 +230,19 @@ class RepairOrderChargeOutcomesJob
 
     def save_cursor(cursor_id)
       $redis.set(RedisKey.order_charge_outcome_repair_cursor, cursor_id)
+    rescue => e
+      ErrorNotifier.notify(e)
+    end
+
+    def current_recent_mark
+      $redis.get(RedisKey.order_charge_outcome_repair_recent_mark).to_i
+    rescue => e
+      ErrorNotifier.notify(e)
+      0
+    end
+
+    def save_recent_mark(mark)
+      $redis.set(RedisKey.order_charge_outcome_repair_recent_mark, mark)
     rescue => e
       ErrorNotifier.notify(e)
     end

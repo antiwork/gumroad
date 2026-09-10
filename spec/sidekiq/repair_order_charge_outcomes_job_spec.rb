@@ -21,7 +21,13 @@ describe RepairOrderChargeOutcomesJob do
     order
   end
 
-  before { $redis.del(RedisKey.order_charge_outcome_repair_cursor) }
+  before do
+    $redis.del(
+      RedisKey.order_charge_outcome_repair_cursor,
+      RedisKey.order_charge_outcome_repair_lap_ceiling,
+      RedisKey.order_charge_outcome_repair_recent_mark
+    )
+  end
 
   it "flags a partial order whose reconciliation enqueue was lost" do
     order = settle_with_lost_enqueue(create(:order))
@@ -282,5 +288,73 @@ describe RepairOrderChargeOutcomesJob do
     job.perform
 
     expect(calls).to eq(1)
+  end
+
+  # A page that yields more candidates than the remaining budget must leave the
+  # high-water mark before the overflow purchases, otherwise those orders are
+  # skipped until a wrap that ongoing fresh failures can starve.
+  it "does not advance the recent mark past overflow candidates when the budget fills mid-page" do
+    stub_const("#{described_class}::MAX_BACKLOG_SCANNED", 1)
+    stub_const("#{described_class}::FAILED_ORDER_ID_BATCH", 10)
+    stub_const("#{described_class}::MAX_FAILED_ORDER_BATCHES", 1)
+
+    first = settle_with_lost_enqueue(create(:order))
+    second = settle_with_lost_enqueue(create(:order))
+    mark = first.purchases.minimum(:id) - 1
+    $redis.set(RedisKey.order_charge_outcome_repair_recent_mark, mark)
+
+    described_class.new.perform
+
+    expect(first.reload).to be_partially_successful
+    expect(second.reload).not_to be_partially_successful
+    saved = $redis.get(RedisKey.order_charge_outcome_repair_recent_mark).to_i
+    expect(saved).to be < second.purchases.minimum(:id)
+    expect(saved).to be >= first.purchases.maximum(:id)
+
+    described_class.new.perform
+    expect(second.reload).to be_partially_successful
+  end
+
+  # Oldest-first in_batches under a full page budget never reaches the head of
+  # the window. With the recent-pass high-water already past the older failures,
+  # one run still repairs the newest stranded order.
+  it "repairs the newest stranded recent order when older failed purchases exceed the page budget" do
+    stub_const("#{described_class}::MAX_FAILED_ORDER_BATCHES", 1)
+    stub_const("#{described_class}::FAILED_ORDER_ID_BATCH", 1)
+
+    3.times do
+      order = create(:order)
+      one = create(:purchase_in_progress, link: product_1, seller: seller_1)
+      two = create(:purchase_in_progress, link: product_2, seller: seller_2)
+      order.purchases << one << two
+      one.update_columns(purchase_state: "failed")
+      two.update_columns(purchase_state: "failed")
+      RecordOrderChargeOutcomeJob.jobs.clear
+    end
+
+    newest = settle_with_lost_enqueue(create(:order))
+    mark = newest.purchases.minimum(:id) - 1
+    $redis.set(RedisKey.order_charge_outcome_repair_recent_mark, mark)
+
+    described_class.new.perform
+
+    expect(newest.reload).to be_partially_successful
+  end
+
+  # A lost lap-ceiling key mid-lap used to leave the page unbounded above, so
+  # new failed rows kept every page non-empty and the wrap never fired.
+  it "recomputes a missing lap ceiling mid-lap so the backlog walk can still wrap" do
+    older = settle_with_lost_enqueue(create(:order))
+    newer = settle_with_lost_enqueue(create(:order))
+    [older, newer].each { _1.update_column(:created_at, 30.days.ago) }
+    stub_const("#{described_class}::MAX_BACKLOG_SCANNED", 1)
+
+    $redis.set(RedisKey.order_charge_outcome_repair_cursor, older.id)
+    $redis.del(RedisKey.order_charge_outcome_repair_lap_ceiling)
+
+    described_class.new.perform
+
+    expect(newer.reload).to be_partially_successful
+    expect($redis.get(RedisKey.order_charge_outcome_repair_lap_ceiling).to_i).to be >= newer.id
   end
 end

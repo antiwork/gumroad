@@ -121,6 +121,8 @@ class RedisKey
     # Fixed at lap start so the walk keeps making forward progress even while new failing orders
     # keep arriving above it. See RepairOrderChargeOutcomesJob.
     def order_charge_outcome_repair_lap_ceiling = "order_charge_outcome_repair:lap_ceiling"
+    # High-water mark for RepairOrderChargeOutcomesJob's recent pass: the last purchases id it walked.
+    def order_charge_outcome_repair_recent_mark = "order_charge_outcome_repair:recent_mark"
     # High-water mark for AlertOnStripeDobDriftJob: the last merchant_accounts id it compared.
     def stripe_dob_drift_sweep_cursor = "stripe_dob_drift_sweep:cursor"
     # Purchases whose notice was claimed but never transmitted. The cursor is already past their
