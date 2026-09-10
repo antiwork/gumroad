@@ -333,6 +333,7 @@ export const DashboardPage = ({
 }: DashboardPageProps) => {
   const loggedInUser = useLoggedInUser();
   const currentSeller = useCurrentSeller();
+  const connectedSocialNames = (social_connections ?? []).filter((c) => c.connected).map((c) => c.name);
   const [gettingStartedMinimized, setGettingStartedMinimized] = React.useState<boolean>(false);
   const [gettingStartedDismissed, setGettingStartedDismissed] = React.useState<boolean>(getting_started_dismissed);
   const [showDismissConfirmation, setShowDismissConfirmation] = React.useState<boolean>(false);
@@ -583,18 +584,17 @@ export const DashboardPage = ({
                   <CardContent className="grid gap-3">
                     <h3>Connect a social account (optional)</h3>
                     <p>
-                      Your verified social history can provide context during account review. Connecting does not
-                      replace identity verification or guarantee approval or a payout date.
+                      If we ever review your account, a connected social account gives us more to go on. It is not
+                      identity verification, and it does not guarantee approval or a payout date. We only read your
+                      public profile and never post for you.
                     </p>
-                    <ul className="flex flex-wrap gap-x-6 gap-y-2">
-                      {social_connections.map(({ name, connected }) => (
-                        <li key={name}>
-                          {name}: {connected ? "Connected" : "Available to connect"}
-                        </li>
-                      ))}
-                    </ul>
+                    {connectedSocialNames.length ? <p>Connected: {connectedSocialNames.join(", ")}</p> : null}
                     <div>
-                      <NavigationButton href={Routes.profile_path()}>Manage social connections</NavigationButton>
+                      <NavigationButton
+                        href={Routes.settings_social_connections_path({ social_connect_origin: "onboarding" })}
+                      >
+                        {connectedSocialNames.length ? "Manage connections" : "Connect an account"}
+                      </NavigationButton>
                     </div>
                   </CardContent>
                 </Card>

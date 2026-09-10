@@ -77,6 +77,8 @@ class SocialScoreShadowEvaluationService
     def scored_verifications(shared_identity_counts)
       user.social_connect_verifications.filter_map do |verification|
         next unless verification.currently_linked?
+        # Linking TikTok must not start scoring it. Any TikTok threshold is a separate reviewed decision.
+        next if verification.platform == "tiktok"
         next if verification.last_verified_at.nil? || verification.last_verified_at < MAX_VERIFICATION_AGE.ago
 
         shared_identity_user_count = shared_identity_counts.fetch(verification.id)

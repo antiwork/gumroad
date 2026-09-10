@@ -422,6 +422,7 @@ describe("Bundle edit page", type: :system, js: true) do
       end
 
       uncheck("Display your product's 1-5 star rating to prospective customers", checked: true)
+      check("Hide ratings of included products on this bundle page", checked: false)
       check("This product contains content meant only for adults, including the preview", checked: false)
 
       expect(page).to have_text "You currently have no sections in your profile to display this"
@@ -435,6 +436,7 @@ describe("Bundle edit page", type: :system, js: true) do
       expect(bundle.tags.first.name).to eq("test0")
       expect(bundle.tags.second.name).to eq("test1")
       expect(bundle.display_product_reviews?).to eq(false)
+      expect(bundle.hide_bundle_product_reviews?).to eq(true)
       expect(bundle.is_adult?).to eq(true)
       expect(bundle.discover_fee_per_thousand).to eq(100)
 
@@ -452,6 +454,7 @@ describe("Bundle edit page", type: :system, js: true) do
       end
 
       check("Display your product's 1-5 star rating to prospective customers", checked: false)
+      uncheck("Hide ratings of included products on this bundle page", checked: true)
       uncheck("This product contains content meant only for adults, including the preview", checked: true)
       check("Unnamed section", checked: false)
 
@@ -462,6 +465,7 @@ describe("Bundle edit page", type: :system, js: true) do
       expect(bundle.tags.size).to eq(1)
       expect(bundle.tags.first.name).to eq("test1")
       expect(bundle.display_product_reviews?).to eq(true)
+      expect(bundle.hide_bundle_product_reviews?).to eq(false)
       expect(bundle.is_adult?).to eq(false)
       expect(bundle.discover_fee_per_thousand).to eq(100)
       expect(section.reload.shown_products).to include bundle.id

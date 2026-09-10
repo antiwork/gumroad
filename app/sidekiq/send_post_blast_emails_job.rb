@@ -327,7 +327,7 @@ class SendPostBlastEmailsJob
     end
 
     def requeue_for_daily_blast_limit
-      job_id = self.class.perform_at(Time.zone.tomorrow.beginning_of_day, @blast.id)
+      job_id = self.class.perform_at(SellerLargeBlastQuota.deferred_run_at, @blast.id)
       return if job_id.present?
 
       raise "Sidekiq did not requeue the blast for the daily limit"

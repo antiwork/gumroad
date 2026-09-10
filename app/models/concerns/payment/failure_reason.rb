@@ -13,8 +13,14 @@ module Payment::FailureReason
   STRIPE_INTERVENTION_REQUIRED = "stripe_intervention_required"
   PROCESSOR_RATE_LIMITED = "processor_rate_limited"
   PROCESSOR_UNAVAILABLE = "processor_unavailable"
+  # Search found no MassPay on PayPal. Distinct from PROCESSOR_UNAVAILABLE (the POST never left
+  # the box): this one is the sync-job verdict after looking, and it is not auto-retried.
+  TRANSACTION_NOT_FOUND = "Transaction not found"
   UNREVERSED_INTERNAL_TRANSFER = "unreversed_internal_transfer"
   PAYOUT_OUTCOME_UNKNOWN = "payout_outcome_unknown"
+  # Failures where PayPal never assigned a correlation id, so requiring one on `failed` would
+  # leave the row in `processing` and block the next payout. Completed/unclaimed still need one.
+  NEVER_DISPATCHED_REASONS = [TRANSACTION_NOT_FOUND, PROCESSOR_UNAVAILABLE].freeze
   DESTINATION_LEDGER_NEGATIVE = "destination_ledger_negative"
   PAYPAL_PAYOUT_FAILED = "PAYPAL payout failed"
 
@@ -22,7 +28,7 @@ module Payment::FailureReason
   # details. They must not count toward MAX_CONSECUTIVE_FAILED_PAYOUTS, and they get no
   # STRIPE_FAILURE_SOLUTIONS entry, because there is nothing for the seller to fix.
   TRANSIENT_REASONS = [PROCESSOR_RATE_LIMITED, PROCESSOR_UNAVAILABLE, UNREVERSED_INTERNAL_TRANSFER,
-                       PAYOUT_OUTCOME_UNKNOWN].freeze
+                       PAYOUT_OUTCOME_UNKNOWN, TRANSACTION_NOT_FOUND].freeze
 
   # Failures where money may ALREADY have left Gumroad and we cannot tell from our own records:
   #   UNREVERSED_INTERNAL_TRANSFER — funds are on the seller's connected account because the

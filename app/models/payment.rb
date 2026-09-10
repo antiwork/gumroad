@@ -109,7 +109,9 @@ class Payment < ApplicationRecord
     end
 
     state any - %i[creating processing] do
-      validates_presence_of :correlation_id, if: proc { |p| p.processor == PayoutProcessorType::PAYPAL }
+      validates_presence_of :correlation_id, if: ->(p) {
+        p.processor == PayoutProcessorType::PAYPAL && FailureReason::NEVER_DISPATCHED_REASONS.exclude?(p.failure_reason)
+      }
     end
 
     state any - %i[creating processing cancelled failed] do
@@ -258,7 +260,10 @@ class Payment < ApplicationRecord
 
   def humanized_failure_reason
     if processor == PayoutProcessorType::PAYPAL
-      failure_reason.present? ? "#{failure_reason}: #{PAYPAL_MASS_PAY[failure_reason]}" : nil
+      return nil if failure_reason.blank?
+
+      description = PAYPAL_MASS_PAY[failure_reason]
+      description.present? ? "#{failure_reason}: #{description}" : failure_reason
     else
       failure_reason
     end
@@ -610,7 +615,7 @@ class Payment < ApplicationRecord
       mark!(PROCESSING) if state?(CREATING)
 
       if new_state == FAILED && transaction_id.blank?
-        mark_failed!("Transaction not found")
+        mark_failed!(FailureReason::TRANSACTION_NOT_FOUND)
       else
         mark!(new_state)
       end

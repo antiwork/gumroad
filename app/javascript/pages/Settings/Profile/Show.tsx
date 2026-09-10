@@ -1,15 +1,10 @@
-import { FontFamily, Instagram, TwitterX, Youtube } from "@boxicons/react";
+import { FontFamily } from "@boxicons/react";
 import { Link, router, usePage } from "@inertiajs/react";
 import { isEqual } from "lodash-es";
 import * as React from "react";
 import typia from "typia";
 
-import {
-  updateProfileSettings as saveProfileSettings,
-  unlinkInstagram,
-  unlinkTwitter,
-  unlinkYoutube,
-} from "$app/data/profile_settings";
+import { updateProfileSettings as saveProfileSettings } from "$app/data/profile_settings";
 import {
   ProfileSettingsForm,
   changedProfileSettings,
@@ -18,7 +13,6 @@ import {
 } from "$app/pages/Settings/Profile/profileSettingsForm";
 import { CreatorProfile } from "$app/parsers/profile";
 import { classNames } from "$app/utils/classNames";
-import { asyncVoid } from "$app/utils/promise";
 import { assertResponseError } from "$app/utils/request";
 
 import { Button, NavigationButton } from "$app/components/Button";
@@ -36,7 +30,6 @@ import { showAlert } from "$app/components/server-components/Alert";
 import { ToggleSettingRow } from "$app/components/SettingRow";
 import { postToMobileApp } from "$app/components/Settings/Layout";
 import { ShareButtons } from "$app/components/ShareButtons";
-import { SocialAuthButton } from "$app/components/SocialAuthButton";
 import { AgentSupportFallbackNote } from "$app/components/Support/AgentSupportFallbackNote";
 import { Alert } from "$app/components/ui/Alert";
 import { ColorPicker } from "$app/components/ui/ColorPicker";
@@ -73,13 +66,6 @@ type ProfilePageProps = {
   editable_profile: ProfileEditorProps;
   profile_version: string;
   custom_html_pages_enabled: boolean;
-  twitter_connected: boolean;
-  youtube_connect_enabled: boolean;
-  youtube_connected: boolean;
-  youtube_handle: string | null;
-  instagram_connect_enabled: boolean;
-  instagram_connected: boolean;
-  instagram_handle: string | null;
   has_custom_landing_page: boolean;
   seller_fonts_css_source: string;
   username: string;
@@ -93,13 +79,6 @@ export default function SettingsPage() {
     editable_profile,
     profile_version,
     custom_html_pages_enabled,
-    twitter_connected,
-    youtube_connect_enabled,
-    youtube_connected,
-    youtube_handle,
-    instagram_connect_enabled,
-    instagram_connected,
-    instagram_handle,
     has_custom_landing_page,
     seller_fonts_css_source,
     username,
@@ -273,36 +252,6 @@ export default function SettingsPage() {
   // Pin the chosen background too: #ffffff is a saved theme value, not an instruction to inherit
   // the dashboard's colour scheme. The preview must match the buyer-facing stylesheet.
   const profileColors = profileThemeColors(profileSettings.background_color, profileSettings.highlight_color);
-
-  const handleUnlinkTwitter = asyncVoid(async () => {
-    try {
-      await unlinkTwitter();
-      router.reload();
-    } catch (e) {
-      assertResponseError(e);
-      showAlert(e.message, "error");
-    }
-  });
-
-  const handleUnlinkYoutube = asyncVoid(async () => {
-    try {
-      await unlinkYoutube();
-      router.reload();
-    } catch (e) {
-      assertResponseError(e);
-      showAlert(e.message, "error");
-    }
-  });
-
-  const handleUnlinkInstagram = asyncVoid(async () => {
-    try {
-      await unlinkInstagram();
-      router.reload();
-    } catch (e) {
-      assertResponseError(e);
-      showAlert(e.message, "error");
-    }
-  });
 
   const customLandingPageActive = custom_html_pages_enabled && has_custom_landing_page;
   const showPagesTab = !customLandingPageActive;
@@ -519,58 +468,6 @@ export default function SettingsPage() {
                   from Pages.
                 </FieldsetDescription>
               </Fieldset>
-              {loggedInUser?.policies.settings_profile.manage_social_connections ? (
-                <Fieldset>
-                  <FieldsetTitle>Social links</FieldsetTitle>
-                  {twitter_connected ? (
-                    <Button type="button" color="twitter" onClick={handleUnlinkTwitter}>
-                      <TwitterX pack="brands" className="size-5" />
-                      Disconnect {creatorProfile.twitter_handle ? `${creatorProfile.twitter_handle} from X` : "X"}
-                    </Button>
-                  ) : (
-                    <>
-                      {creatorProfile.twitter_handle ? (
-                        <Button type="button" color="twitter" onClick={handleUnlinkTwitter}>
-                          <TwitterX pack="brands" className="size-5" />
-                          Disconnect {creatorProfile.twitter_handle} from X
-                        </Button>
-                      ) : null}
-                      <SocialAuthButton
-                        provider="twitter"
-                        href={Routes.user_twitter_omniauth_authorize_path({
-                          state: "link_twitter_account",
-                          x_auth_access_type: "read",
-                        })}
-                      >
-                        <TwitterX pack="brands" className="size-5" />
-                        Connect to X
-                      </SocialAuthButton>
-                    </>
-                  )}
-                  {youtube_connected ? (
-                    <Button type="button" color="youtube" onClick={handleUnlinkYoutube}>
-                      <Youtube pack="brands" className="size-5" />
-                      Disconnect {youtube_handle ? `${youtube_handle} from YouTube` : "YouTube"}
-                    </Button>
-                  ) : youtube_connect_enabled ? (
-                    <SocialAuthButton provider="youtube" href={Routes.user_youtube_omniauth_authorize_path()}>
-                      <Youtube pack="brands" className="size-5" />
-                      Connect to YouTube
-                    </SocialAuthButton>
-                  ) : null}
-                  {instagram_connected ? (
-                    <Button type="button" color="instagram" onClick={handleUnlinkInstagram}>
-                      <Instagram pack="brands" className="size-5" />
-                      Disconnect {instagram_handle ? `${instagram_handle} from Instagram` : "Instagram"}
-                    </Button>
-                  ) : instagram_connect_enabled ? (
-                    <SocialAuthButton provider="instagram" href={Routes.user_instagram_omniauth_authorize_path()}>
-                      <Instagram pack="brands" className="size-5" />
-                      Connect to Instagram
-                    </SocialAuthButton>
-                  ) : null}
-                </Fieldset>
-              ) : null}
             </section>
           ) : tab === "design" ? (
             <section className="grid gap-8 p-4! md:p-8!">

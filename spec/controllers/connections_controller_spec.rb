@@ -102,4 +102,17 @@ describe ConnectionsController do
       expect(SocialConnectVerification.exists?(id: verification.id)).to be(true)
     end
   end
+
+  describe "POST unlink_tiktok" do
+    it "clears the live TikTok identity and keeps the verification row" do
+      create(:user_tiktok_identity, user: seller, tiktok_open_id: "open-123", handle: "gumroad")
+      verification = create(:social_connect_verification, user: seller, platform: "tiktok", uid: "open-123", handle: "gumroad")
+
+      post :unlink_tiktok
+
+      expect(response.body).to eq({ success: true }.to_json)
+      expect(seller.reload.tiktok_identity).to be_nil
+      expect(SocialConnectVerification.exists?(id: verification.id)).to be(true)
+    end
+  end
 end

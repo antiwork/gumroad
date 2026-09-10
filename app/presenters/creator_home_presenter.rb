@@ -138,6 +138,9 @@ class CreatorHomePresenter
       if seller.instagram_identity.present? || Feature.active?(:instagram_connect, seller)
         connections << { name: "Instagram", connected: seller.instagram_identity.present? }
       end
+      if seller.tiktok_identity.present? || Feature.active?(:tiktok_connect, seller)
+        connections << { name: "TikTok", connected: seller.tiktok_identity.present? }
+      end
       { social_connections: connections }
     end
 
