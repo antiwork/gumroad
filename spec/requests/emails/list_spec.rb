@@ -112,6 +112,30 @@ describe("Email List", :js, :sidekiq_inline, :elasticsearch_wait_for_refresh, ty
         expect(page).to have_table_row({ "Subject" => "Email 3 (sent)", "Emailed" => "--", "Opened" => "--", "Clicks" => "0", "Views" => "1" })
       end
 
+      it "flags a blast that stopped short instead of passing it off as finished" do
+        blast = create(:blast, post: installment1, requested_at: 2.days.ago, started_at: 2.days.ago, first_email_delivered_at: 2.days.ago,
+                               last_email_delivered_at: 2.days.ago, completed_at: nil, delivery_count: 6_798)
+        $redis.set(RedisKey.blast_pending_recipients(blast.id), 16_212)
+        Feature.activate(:auto_resume_stalled_post_blasts)
+        create(:blast, post: installment3, completed_at: 3.days.ago, delivery_count: 1)
+
+        visit "#{emails_path}/published"
+
+        within_table "Published" do
+          expect(page).to have_table_row({ "Subject" => "Email 1 (sent)", "Emailed" => "--", "Status" => "Incomplete" })
+          expect(page).to have_table_row({ "Subject" => "Email 3 (sent)", "Emailed" => "--", "Status" => "Sent" })
+          find(:table_row, { "Subject" => "Email 1 (sent)" }).click
+        end
+
+        within_modal "Email 1 (sent)" do
+          expect(page).to have_text("Status Incomplete", normalize_ws: true)
+          expect(page).to have_text("6,798 people got this email. 16,212 people have not received it yet. We are retrying automatically.")
+        end
+      ensure
+        $redis.del(RedisKey.blast_pending_recipients(blast.id)) if blast
+        Feature.deactivate(:auto_resume_stalled_post_blasts)
+      end
+
       it "loads more emails" do
         stub_const("PaginatedInstallmentsPresenter::PER_PAGE", 2)
 

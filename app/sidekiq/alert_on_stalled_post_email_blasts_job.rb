@@ -45,6 +45,11 @@ class AlertOnStalledPostEmailBlastsJob
   # (time-boxed sales), so the resume decision goes back to a human.
   AUTO_RESUME_WINDOW = 24.hours
 
+  # Time between scans (the cron fires at 05:40, 11:40, 17:40 and 23:40 UTC). Eligibility shown
+  # to sellers is evaluated one scan ahead, so a blast that leaves a window before the next scan
+  # is never promised a retry.
+  SCAN_INTERVAL = 6.hours
+
   # Rows the run acted on (or would have) are the audit trail; message_for never truncates them.
   AUDITED_ACTIONS = [:resumed, :resumed_to_complete, :would_resume, :would_complete, :skipped_reappeared].freeze
 
@@ -55,6 +60,23 @@ class AlertOnStalledPostEmailBlastsJob
 
   def post_blast_sender?(klass)
     klass.in?(BLAST_SENDER_CLASSES)
+  end
+
+  # Whether the next scan can still resume this blast on its own. The seller-facing page uses
+  # it to decide whether to promise a retry, so it must never be more generous than
+  # `resolve_action`. Windows are checked as of the next scan; the lookback keeps a second
+  # scan in reserve because a resume marker holds a blast for one stall window.
+  def self.auto_resume_eligible?(blast)
+    return false unless Feature.active?(:auto_resume_stalled_post_blasts)
+    return false if blast.completed_at.present? || blast.requested_at.nil? || blast.to_non_openers?
+    return false unless blast.requested_at > (LOOKBACK - 2 * SCAN_INTERVAL).ago
+
+    blast.requested_at > (AUTO_RESUME_WINDOW - SCAN_INTERVAL).ago || recipients_still_owed?(blast)
+  end
+
+  def self.recipients_still_owed?(blast)
+    pending = $redis.get(RedisKey.blast_pending_recipients(blast.id))
+    pending.present? && pending.to_i.positive?
   end
 
   def perform
@@ -166,8 +188,7 @@ class AlertOnStalledPostEmailBlastsJob
     end
 
     def recipients_still_owed?(blast)
-      pending = $redis.get(RedisKey.blast_pending_recipients(blast.id))
-      pending.present? && pending.to_i.positive?
+      self.class.recipients_still_owed?(blast)
     end
 
     def sender_visible_now?(blast_id)
