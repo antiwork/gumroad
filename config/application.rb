@@ -41,8 +41,6 @@ module Gumroad
       "X-Permitted-Cross-Domain-Policies" => "none",
       "Referrer-Policy" => "strict-origin-when-cross-origin"
     }
-    # Owner: gumclaw; audit scheduled times across DST before preserving named zones.
-    config.active_support.to_time_preserves_timezone = :offset
     # Owner: gumclaw; verify conditional download responses before changing ETag precedence.
     config.action_dispatch.strict_freshness = false
     # Owner: gumclaw; preserve regex behavior during boot as well as after initialization.
