@@ -6,6 +6,7 @@ class ProductAffiliate < ApplicationRecord
   WORKFLOW_SCHEDULE_DISPATCH_LEASE = 15.minutes
 
   include FlagShihTzu
+  include Affiliate::DestinationUrlValidations
 
   self.table_name = "affiliates_links"
 

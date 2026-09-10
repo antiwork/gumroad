@@ -174,6 +174,12 @@ describe DirectAffiliate do
           expect(affiliate.final_destination_url(product:)).to eq "https://gumroad.com/bar"
         end
 
+        it "falls back to the product URL when the product destination is path-relative" do
+          product_affiliate = create(:product_affiliate, affiliate:, product:, destination_url: "https://gumroad.com/bar")
+          product_affiliate.update_column(:destination_url, "products/foo")
+          expect(affiliate.final_destination_url(product:)).to eq product.long_url
+        end
+
         it "returns the product URL if they're an affiliate for that product" do
           affiliate.products << product
           expect(affiliate.final_destination_url(product:)).to eq product.long_url

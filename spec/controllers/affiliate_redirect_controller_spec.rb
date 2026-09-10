@@ -75,6 +75,18 @@ describe AffiliateRedirectController do
       end
     end
 
+    context "when a per-product destination URL is path-relative" do
+      it "does not raise and falls back to the product URL" do
+        product_affiliate.update_column(:destination_url, "products/foo")
+
+        expect do
+          get :set_cookie_and_redirect, params: { affiliate_id: direct_affiliate.external_id_numeric }
+        end.not_to raise_error
+
+        expect(response).to redirect_to(product.long_url)
+      end
+    end
+
     context "when destination URL has leading/trailing whitespace" do
       it "strips whitespace and redirects successfully" do
         direct_affiliate.update_column(:destination_url, " https://example.gumroad.com/l/abc ")

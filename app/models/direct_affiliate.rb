@@ -35,11 +35,10 @@ class DirectAffiliate < Affiliate
   def final_destination_url(product: nil)
     product = products.last if !apply_to_all_products && product_affiliates.one?
     product_affiliate = product_affiliates.find_by(link_id: product.id) if product.present?
-    product_destination_url = product_affiliate&.destination_url
 
-    if product_destination_url.present?
-      product_destination_url
-    elsif apply_to_all_products && destination_url.present?
+    if http_redirect_url?(product_affiliate&.destination_url)
+      product_affiliate.destination_url
+    elsif apply_to_all_products && http_redirect_url?(destination_url)
       destination_url
     elsif product_affiliate.present?
       product.long_url
@@ -201,6 +200,10 @@ class DirectAffiliate < Affiliate
       return if destination_url.present? || seller&.username.present?
 
       errors.add(:base, "Please either provide a destination URL or add a username to your Gumroad account.") if products.length > 1 # .length so that we get the right number when self isn't saved.
+    end
+
+    def http_redirect_url?(url)
+      url.to_s.strip.match?(/\Ahttps?:\/\//i)
     end
 
     def send_invitation_email

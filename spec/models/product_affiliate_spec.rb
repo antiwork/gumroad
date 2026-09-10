@@ -36,6 +36,25 @@ describe ProductAffiliate do
   end
 
   describe "validations" do
+    describe "destination_url" do
+      let(:product_affiliate) { build(:product_affiliate) }
+
+      it "rejects path-relative destinations" do
+        product_affiliate.destination_url = "products/foo"
+        expect(product_affiliate).not_to be_valid
+      end
+
+      it "allows http destinations" do
+        product_affiliate.destination_url = "https://example.com/landing"
+        expect(product_affiliate).to be_valid
+      end
+
+      it "allows a blank destination" do
+        product_affiliate.destination_url = nil
+        expect(product_affiliate).to be_valid
+      end
+    end
+
     context "when another record exists" do
       it "validates uniqueness of affiliate scoped to product" do
         existing = create(:product_affiliate)
