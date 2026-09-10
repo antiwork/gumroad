@@ -245,7 +245,7 @@ module PostBlastSending
     $redis.del(*[snapshot_key, "#{snapshot_key}:tmp", checkpoint_key, "#{checkpoint_key}:tmp",
                  RedisKey.blast_pending_recipients(@blast.id), RedisKey.blast_done_slices(@blast.id),
                  RedisKey.blast_active_slice_partition(@blast.id), partition_chunks_key,
-                 RedisKey.blast_quota_deferred_until(@blast.id)].compact)
+                 RedisKey.blast_quota_deferred_until(@blast.id), RedisKey.blast_quota_admitted(@blast.id)].compact)
   end
 
   # Re-checked right before each provider call: the chunk-level filter ran once at the start

@@ -46,6 +46,7 @@ class RedisKey
     def blast_non_opener_emails(blast_id) = "blast:#{blast_id}:non_opener_emails"
     def blast_pending_recipients(blast_id) = "blast:#{blast_id}:pending_recipients"
     def blast_quota_deferred_until(blast_id) = "blast:#{blast_id}:quota_deferred_until"
+    def blast_quota_admitted(blast_id) = "blast:#{blast_id}:quota_admitted"
     def blast_active_slice_partition(blast_id) = "blast:#{blast_id}:active_slice_partition"
     def blast_slice_partition_chunks(blast_id, partition_key) = "blast:#{blast_id}:slice_partition:#{partition_key}:chunks"
     def blast_slice_claim(blast_id, partition_key, chunk_index) = "blast:#{blast_id}:slice_claim:#{partition_key}:#{chunk_index}"

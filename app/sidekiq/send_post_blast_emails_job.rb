@@ -69,16 +69,10 @@ class SendPostBlastEmailsJob
     end
 
     return mark_blast_as_completed if @members.empty?
-    unless admitted_earlier? || SellerLargeBlastQuota.allow?(
-      seller_id: @post.seller_id,
-      kind: "post_blast",
-      blast_id: @blast.id,
-      recipient_count: @members.size
-    )
+    unless admitted?
       requeue_for_daily_blast_limit
       return
     end
-    $redis.del(RedisKey.blast_quota_deferred_until(@blast.id))
 
     split_blast? ? enqueue_slice_jobs : send_inline
   end
@@ -335,32 +329,54 @@ class SendPostBlastEmailsJob
       ($redis.get(RedisKey.audience_member_load_max_execution_time_seconds) || 1.hour).to_i
     end
 
-    # Admission to the daily quota is per blast, once. A resume of a blast that already
-    # delivered was admitted the day it started; claiming a second day would take the slot
-    # from the post the seller scheduled, and that post's own deferral then re-claims every
-    # following midnight, so the seller's schedule never recovers (gumroad-private#2520).
-    def admitted_earlier?
-      @blast.first_email_delivered_at.present?
+    # Admission to the daily quota is per blast, once, and recorded when granted: the
+    # delivery stamp arrives from the ESP later, so a kill in between must not send a
+    # resume back through the quota to claim a second day.
+    def admitted?
+      admitted_key = RedisKey.blast_quota_admitted(@blast.id)
+      unless @blast.first_email_delivered_at.present? || $redis.exists?(admitted_key)
+        return false unless SellerLargeBlastQuota.allow?(
+          seller_id: @post.seller_id,
+          kind: "post_blast",
+          blast_id: @blast.id,
+          recipient_count: @members.size
+        )
+        $redis.set(admitted_key, Time.current.utc.iso8601, ex: AlertOnStalledPostEmailBlastsJob::LOOKBACK.to_i)
+      end
+      $redis.del(RedisKey.blast_quota_deferred_until(@blast.id))
+      true
     end
 
-    # One deferred job per blast. Every retry and auto-resume that meets the same closed
-    # quota would otherwise schedule its own copy, and the monitor cannot see the scheduled
-    # set to tell them apart. The marker also lets the monitor report DEFERRED instead of
-    # resuming a blast that is only waiting for its slot, and, once its time has passed,
-    # tells the monitor the scheduled job is late or lost. It lives for the scan window.
+    # Overwrites a marker only once its time has passed. ISO 8601 UTC strings order as times.
+    RESERVE_QUOTA_DEFERRAL = <<~LUA
+      local current = redis.call("GET", KEYS[1])
+      if current and current > ARGV[2] then return 0 end
+      redis.call("SET", KEYS[1], ARGV[1], "EX", ARGV[3])
+      return 1
+    LUA
+
+    # One deferred copy per blast: the marker is reserved before the enqueue, so concurrent
+    # attempts that meet the same closed quota cannot each schedule the blast. The monitor
+    # reads the marker as DEFERRED while it is ahead and as a lost job once it has passed.
     def requeue_for_daily_blast_limit
       deferred_key = RedisKey.blast_quota_deferred_until(@blast.id)
-      deferred_until = $redis.get(deferred_key)
-      if deferred_until.present? && Time.zone.parse(deferred_until).future?
-        Rails.logger.info("[#{self.class.name}] blast_id=#{@blast.id} already deferred until #{deferred_until} by the daily large-blast quota")
+      run_at = SellerLargeBlastQuota.deferred_run_at
+      argv = [run_at.utc.iso8601, Time.current.utc.iso8601, AlertOnStalledPostEmailBlastsJob::LOOKBACK.to_i]
+      unless $redis.eval(RESERVE_QUOTA_DEFERRAL, keys: [deferred_key], argv:).to_i == 1
+        Rails.logger.info("[#{self.class.name}] blast_id=#{@blast.id} already deferred until #{$redis.get(deferred_key)} by the daily large-blast quota")
         return
       end
 
-      run_at = SellerLargeBlastQuota.deferred_run_at
-      job_id = self.class.perform_at(run_at, @blast.id)
-      raise "Sidekiq did not requeue the blast for the daily limit" if job_id.blank?
-
-      $redis.set(deferred_key, run_at.iso8601, ex: AlertOnStalledPostEmailBlastsJob::LOOKBACK.to_i)
-      Rails.logger.info("[#{self.class.name}] blast_id=#{@blast.id} deferred until #{run_at.iso8601} by the daily large-blast quota")
+      job_id = begin
+        self.class.perform_at(run_at, @blast.id)
+      rescue StandardError
+        $redis.del(deferred_key)
+        raise
+      end
+      if job_id.blank?
+        $redis.del(deferred_key)
+        raise "Sidekiq did not requeue the blast for the daily limit"
+      end
+      Rails.logger.info("[#{self.class.name}] blast_id=#{@blast.id} deferred until #{run_at.utc.iso8601} by the daily large-blast quota")
     end
 end

@@ -159,9 +159,7 @@ class AlertOnStalledPostEmailBlastsJob
       emailed_at.present? && emailed_at > STALL_THRESHOLD.ago
     end
 
-    # The sender parks a blast that missed the seller's daily large-blast slot in the
-    # scheduled set, which none of the scans above read. Without the marker such a blast
-    # reads as UNACCOUNTED and gets a duplicate resume on every scan.
+    # A quota-deferred blast waits in the scheduled set, which none of the scans read.
     def quota_deferred_until(blast)
       deferred_until = $redis.get(RedisKey.blast_quota_deferred_until(blast.id))
       Time.zone.parse(deferred_until) if deferred_until.present?

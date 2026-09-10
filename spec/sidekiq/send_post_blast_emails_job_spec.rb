@@ -1095,6 +1095,51 @@ describe SendPostBlastEmailsJob, :freeze_time do
       expect_sent_count 1
       expect(blast.reload.completed_at).to be_present
     end
+
+    it "records admission when the quota grants it, so a resume before the first delivery stamp skips the quota" do
+      blast = create(:blast, :just_requested, post: basic_post_with_audience)
+      admitted_key = RedisKey.blast_quota_admitted(blast.id)
+      expect(SellerLargeBlastQuota).to receive(:allow?).once.and_return(true)
+      admitted_during_run = nil
+      allow(PostEmailApi).to receive(:provider_for).and_return(MailerInfo::EMAIL_PROVIDER_SENDGRID)
+      allow(PostSendgridApi).to receive(:process) { admitted_during_run = $redis.ttl(admitted_key) }
+
+      described_class.new.perform(blast.id)
+
+      expect(admitted_during_run).to be_between(13.days.to_i, AlertOnStalledPostEmailBlastsJob::LOOKBACK.to_i).inclusive
+      expect($redis.exists?(admitted_key)).to eq(false)
+
+      # Same blast, admission recorded, no delivery stamp yet: the quota is not consulted again.
+      $redis.set(admitted_key, Time.current.utc.iso8601)
+      blast.update!(completed_at: nil)
+      described_class.new.perform(blast.id)
+    ensure
+      $redis.del(admitted_key) if admitted_key
+    end
+
+    it "releases the deferral marker when the requeue fails" do
+      blast = create(:blast, :just_requested, post: basic_post_with_audience)
+      allow(SellerLargeBlastQuota).to receive(:allow?).and_return(false)
+      allow(described_class).to receive(:perform_at).and_return(nil)
+
+      expect do
+        described_class.new.perform(blast.id)
+      end.to raise_error(RuntimeError, /did not requeue/)
+
+      expect($redis.exists?(RedisKey.blast_quota_deferred_until(blast.id))).to eq(false)
+    end
+
+    it "releases the deferral marker when the requeue raises" do
+      blast = create(:blast, :just_requested, post: basic_post_with_audience)
+      allow(SellerLargeBlastQuota).to receive(:allow?).and_return(false)
+      allow(described_class).to receive(:perform_at).and_raise(Redis::CannotConnectError)
+
+      expect do
+        described_class.new.perform(blast.id)
+      end.to raise_error(Redis::CannotConnectError)
+
+      expect($redis.exists?(RedisKey.blast_quota_deferred_until(blast.id))).to eq(false)
+    end
   end
 
   describe "splitting large blasts into slice jobs" do
