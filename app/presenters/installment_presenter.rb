@@ -100,7 +100,7 @@ class InstallmentPresenter
     def delivery_props
       blast = installment.blasts.reject(&:to_non_openers?).max_by(&:requested_at)
       return if blast&.requested_at.nil?
-      sent = { status: "sent", delivered_count: blast.delivery_count, remaining_count: nil, scheduled_for: nil }
+      sent = { status: "sent", delivered_count: blast.delivery_count, remaining_count: nil, scheduled_for: nil, retrying: false }
       return sent if blast.completed_at.present?
 
       # A zero pending count means every recipient reached the ESP and only the completion
@@ -120,6 +120,7 @@ class InstallmentPresenter
         delivered_count: blast.delivery_count,
         remaining_count: pending.present? ? pending.to_i : nil,
         scheduled_for: status == "waiting" ? scheduled_for : nil,
+        retrying: status == "incomplete" && AlertOnStalledPostEmailBlastsJob.auto_resume_eligible?(blast),
       }
     end
 

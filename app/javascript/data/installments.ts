@@ -65,6 +65,7 @@ export type PublishedInstallment = SavedInstallment & {
     delivered_count: number;
     remaining_count: number | null;
     scheduled_for: string | null;
+    retrying: boolean;
   } | null;
 };
 

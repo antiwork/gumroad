@@ -240,7 +240,7 @@ describe InstallmentPresenter do
         create(:blast, post: installment, completed_at: 5.minutes.ago, delivery_count: 1500)
 
         expect(described_class.new(seller:, installment:).props[:delivery]).to eq(
-          { status: "sent", delivered_count: 1500, remaining_count: nil, scheduled_for: nil }
+          { status: "sent", delivered_count: 1500, remaining_count: nil, scheduled_for: nil, retrying: false }
         )
       end
 
@@ -258,7 +258,7 @@ describe InstallmentPresenter do
         $redis.set(RedisKey.blast_pending_recipients(blast.id), 16_212)
 
         expect(described_class.new(seller:, installment:).props[:delivery]).to eq(
-          { status: "sending", delivered_count: 6_798, remaining_count: 16_212, scheduled_for: nil }
+          { status: "sending", delivered_count: 6_798, remaining_count: 16_212, scheduled_for: nil, retrying: false }
         )
       ensure
         $redis.del(RedisKey.blast_pending_recipients(blast.id)) if blast
@@ -269,8 +269,27 @@ describe InstallmentPresenter do
                        last_email_delivered_at: 2.days.ago, completed_at: nil, delivery_count: 6_798)
 
         expect(described_class.new(seller:, installment:).props[:delivery]).to eq(
-          { status: "incomplete", delivered_count: 6_798, remaining_count: nil, scheduled_for: nil }
+          { status: "incomplete", delivered_count: 6_798, remaining_count: nil, scheduled_for: nil, retrying: false }
         )
+      end
+
+      it "promises a retry only while the monitor will resume the blast" do
+        blast = create(:blast, post: installment, requested_at: 2.days.ago, started_at: 2.days.ago, first_email_delivered_at: 2.days.ago,
+                               last_email_delivered_at: 2.days.ago, completed_at: nil, delivery_count: 6_798)
+        $redis.set(RedisKey.blast_pending_recipients(blast.id), 16_212)
+
+        Feature.deactivate(:auto_resume_stalled_post_blasts)
+        expect(described_class.new(seller:, installment:).props[:delivery]).to include(status: "incomplete", retrying: false)
+
+        Feature.activate(:auto_resume_stalled_post_blasts)
+        expect(described_class.new(seller:, installment:).props[:delivery]).to include(status: "incomplete", remaining_count: 16_212, retrying: true)
+
+        blast.update!(requested_at: 15.days.ago)
+        installment.blasts.reset
+        expect(described_class.new(seller:, installment:).props[:delivery]).to include(status: "incomplete", retrying: false)
+      ensure
+        $redis.del(RedisKey.blast_pending_recipients(blast.id)) if blast
+        Feature.deactivate(:auto_resume_stalled_post_blasts)
       end
 
       it "is waiting while the blast is deferred by the daily large-blast quota" do
@@ -280,7 +299,7 @@ describe InstallmentPresenter do
         $redis.set(RedisKey.blast_quota_deferred_until(blast.id), run_at.utc.iso8601)
 
         expect(described_class.new(seller:, installment:).props[:delivery]).to eq(
-          { status: "waiting", delivered_count: 0, remaining_count: nil, scheduled_for: run_at }
+          { status: "waiting", delivered_count: 0, remaining_count: nil, scheduled_for: run_at, retrying: false }
         )
       ensure
         $redis.del(RedisKey.blast_quota_deferred_until(blast.id)) if blast

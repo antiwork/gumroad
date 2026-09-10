@@ -85,10 +85,13 @@ export default function EmailsPublished() {
               timeStyle: "short",
             })}, when your daily limit for large emails resets.`
           : "Sends when your daily limit for large emails resets.";
-      case "incomplete":
-        return `${people(delivery.delivered_count)} got this email. ${
-          delivery.remaining_count !== null ? `${people(delivery.remaining_count)} have` : "Some people have"
-        } not received it yet. If this stays the same, contact support.`;
+      case "incomplete": {
+        const missing =
+          delivery.remaining_count !== null ? `${people(delivery.remaining_count)} have` : "Some people have";
+        return `${people(delivery.delivered_count)} got this email. ${missing} not received it yet.${
+          delivery.retrying ? " We are retrying automatically." : ""
+        }`;
+      }
     }
   };
 
