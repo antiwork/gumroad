@@ -29,7 +29,17 @@ require_relative "../lib/utilities/global_config"
 module Gumroad
   class Application < Rails::Application
     # Initialize configuration defaults for originally generated Rails version.
-    config.load_defaults 8.0
+    config.load_defaults 8.1
+    # Owner: gumclaw; audit embedded JSON consumers before removing response escaping.
+    config.action_controller.escape_json_responses = true
+    # Owner: gumclaw; verify older embedded JavaScript consumers before emitting literal separators.
+    config.active_support.escape_js_separators_in_json = true
+    # Owner: gumclaw; audit keyless query models before raising on implicit finder order.
+    config.active_record.raise_on_missing_required_finder_order_columns = false
+    # Owner: gumclaw; compare template cache dependencies before switching the render parser.
+    config.action_view.render_tracker = :regex
+    # Owner: gumclaw; check form/autofill behavior before changing hidden-field markup.
+    config.action_view.remove_hidden_field_autocomplete = false
     # Owner: gumclaw; audit scheduled times across DST before preserving named zones.
     config.active_support.to_time_preserves_timezone = :offset
     # Owner: gumclaw; verify conditional download responses before changing ETag precedence.
