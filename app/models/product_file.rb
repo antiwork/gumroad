@@ -97,6 +97,7 @@ class ProductFile < ApplicationRecord
   end
 
   def as_json(options = {})
+    options = (options || {}).dup
     return super(options) if options.delete(:original)
 
     url_for_thumbnail = thumbnail_url
