@@ -1015,6 +1015,61 @@ describe SendPostBlastEmailsJob, :freeze_time do
       expect(PostSendgridApi.mails).to be_empty
       expect(described_class).to have_enqueued_sidekiq_job(blast.id).at(run_at)
       expect(blast.reload.completed_at).to be_nil
+      expect($redis.get(RedisKey.blast_quota_deferred_until(blast.id))).to eq(run_at.iso8601)
+      expect($redis.ttl(RedisKey.blast_quota_deferred_until(blast.id))).to be_between(13.days.to_i, AlertOnStalledPostEmailBlastsJob::LOOKBACK.to_i).inclusive
+    ensure
+      $redis.del(RedisKey.blast_quota_deferred_until(blast.id)) if blast
+    end
+
+    it "schedules one deferred copy per blast while the recorded deferral is still ahead" do
+      blast = create(:blast, :just_requested, post: basic_post_with_audience)
+      allow(SellerLargeBlastQuota).to receive(:allow?).and_return(false)
+      run_at = Time.zone.tomorrow.beginning_of_day + 5.hours
+      allow(SellerLargeBlastQuota).to receive(:deferred_run_at).and_return(run_at)
+
+      described_class.new.perform(blast.id)
+      described_class.new.perform(blast.id)
+
+      expect(described_class.jobs.count { _1["args"] == [blast.id] }).to eq(1)
+    ensure
+      $redis.del(RedisKey.blast_quota_deferred_until(blast.id)) if blast
+    end
+
+    it "schedules again once the recorded deferral has passed" do
+      blast = create(:blast, :just_requested, post: basic_post_with_audience)
+      $redis.set(RedisKey.blast_quota_deferred_until(blast.id), 1.minute.ago.iso8601)
+      allow(SellerLargeBlastQuota).to receive(:allow?).and_return(false)
+      run_at = Time.zone.tomorrow.beginning_of_day + 5.hours
+      allow(SellerLargeBlastQuota).to receive(:deferred_run_at).and_return(run_at)
+
+      described_class.new.perform(blast.id)
+
+      expect(described_class).to have_enqueued_sidekiq_job(blast.id).at(run_at)
+      expect($redis.get(RedisKey.blast_quota_deferred_until(blast.id))).to eq(run_at.iso8601)
+    ensure
+      $redis.del(RedisKey.blast_quota_deferred_until(blast.id)) if blast
+    end
+
+    it "clears the deferral marker when the blast is admitted" do
+      blast = create(:blast, :just_requested, post: basic_post_with_audience)
+      $redis.set(RedisKey.blast_quota_deferred_until(blast.id), 1.hour.from_now.iso8601)
+      allow(SellerLargeBlastQuota).to receive(:allow?).and_return(true)
+
+      described_class.new.perform(blast.id)
+
+      expect_sent_count 1
+      expect($redis.exists?(RedisKey.blast_quota_deferred_until(blast.id))).to eq(false)
+    end
+
+    it "does not consult the quota again for a blast that already delivered" do
+      blast = create(:blast, :just_requested, post: basic_post_with_audience)
+      blast.update!(first_email_delivered_at: 1.day.ago)
+      expect(SellerLargeBlastQuota).not_to receive(:allow?)
+
+      described_class.new.perform(blast.id)
+
+      expect_sent_count 1
+      expect(blast.reload.completed_at).to be_present
     end
   end
 
