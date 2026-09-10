@@ -74,6 +74,11 @@ class AlertOnStalledPostEmailBlastsJob
     blast.requested_at > (AUTO_RESUME_WINDOW - SCAN_INTERVAL).ago || recipients_still_owed?(blast)
   end
 
+  # Whether a sender for this blast is busy, queued or retrying right now. Three Sidekiq scans.
+  def self.sender_visible?(blast_id)
+    new.send(:sender_visible_now?, blast_id)
+  end
+
   def self.recipients_still_owed?(blast)
     pending = $redis.get(RedisKey.blast_pending_recipients(blast.id))
     pending.present? && pending.to_i.positive?
@@ -191,8 +196,15 @@ class AlertOnStalledPostEmailBlastsJob
       self.class.recipients_still_owed?(blast)
     end
 
+    # A job moves between the retry set, the queue and a worker in both directions, so a single
+    # pass can miss one that moved between two scans. Two passes in opposite orders see a job
+    # that moved once, whichever way it went.
     def sender_visible_now?(blast_id)
-      @live_blast_ids ||= (busy_blast_ids + queued_blast_ids + retrying_blast_ids).to_set
+      @live_blast_ids ||= begin
+        forward = retrying_blast_ids + queued_blast_ids + busy_blast_ids
+        backward = busy_blast_ids + queued_blast_ids + retrying_blast_ids
+        (forward + backward).to_set
+      end
       @live_blast_ids.include?(blast_id)
     end
 

@@ -67,4 +67,8 @@ class InstallmentPolicy < ApplicationPolicy
   def resend_to_non_openers?
     create?
   end
+
+  def send_to_remaining?
+    create?
+  end
 end

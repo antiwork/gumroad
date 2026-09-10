@@ -69,7 +69,7 @@ export default function EmailsPublished() {
   const isUnfinished = (installment: PublishedInstallment) =>
     installment.send_emails && installment.delivery !== null && installment.delivery.status !== "sent";
 
-  const deliveryNote = (delivery: PublishedInstallment["delivery"]) => {
+  const deliveryNote = (delivery: PublishedInstallment["delivery"], sentCount: number | null) => {
     if (!delivery || delivery.status === "sent") return null;
     const people = (count: number) => `${formatStatNumber({ value: count })} ${count === 1 ? "person" : "people"}`;
     switch (delivery.status) {
@@ -86,10 +86,13 @@ export default function EmailsPublished() {
             })}, when your daily limit for large emails resets.`
           : "Sends when your daily limit for large emails resets.";
       case "incomplete": {
-        // The Emailed row above already carries the delivered count; lead with what is new.
+        // Emailed shows the post's total, which can differ from this send's own count after a
+        // resend; repeat the count only when it adds something.
+        const got =
+          delivery.delivered_count === sentCount ? "" : `${people(delivery.delivered_count)} got this email. `;
         const missing =
           delivery.remaining_count !== null ? `${people(delivery.remaining_count)} have` : "Some people have";
-        return `${missing} not received it yet.${delivery.retrying ? " We are retrying automatically." : ""}`;
+        return `${got}${missing} not received it yet.${delivery.retrying ? " We are retrying automatically." : ""}`;
       }
     }
   };
@@ -256,9 +259,12 @@ export default function EmailsPublished() {
                     <h5 className="grow font-bold">Status</h5>
                     {deliveryLabel(selectedInstallment)}
                   </CardContent>
-                  {selectedInstallment.send_emails && deliveryNote(selectedInstallment.delivery) ? (
+                  {selectedInstallment.send_emails &&
+                  deliveryNote(selectedInstallment.delivery, selectedInstallment.sent_count) ? (
                     <CardContent>
-                      <p className="text-sm text-muted">{deliveryNote(selectedInstallment.delivery)}</p>
+                      <p className="text-sm text-muted">
+                        {deliveryNote(selectedInstallment.delivery, selectedInstallment.sent_count)}
+                      </p>
                     </CardContent>
                   ) : null}
                   <CardContent>
@@ -308,6 +314,11 @@ export default function EmailsPublished() {
                 </Card>
                 <EmailSheetActions
                   installment={selectedInstallment}
+                  remainingSend={
+                    selectedInstallment.delivery?.status === "incomplete" && !selectedInstallment.delivery.retrying
+                      ? { count: selectedInstallment.delivery.remaining_count }
+                      : null
+                  }
                   onDelete={() =>
                     setDeletingInstallment({
                       id: selectedInstallment.external_id,
