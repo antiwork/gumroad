@@ -13,7 +13,7 @@ describe User::OmniauthCallbacksController do
     request.env["omniauth.params"] = { "social_connect_return" => token, "state" => "link_twitter_account" }
   end
 
-  %w[youtube instagram twitter].each do |provider|
+  %w[youtube instagram twitter tiktok].each do |provider|
     it "returns #{provider} cancellation to onboarding and consumes intent" do
       request.env["omniauth.error.strategy"] = double(name: provider)
       get :failure
@@ -48,6 +48,16 @@ describe User::OmniauthCallbacksController do
     post :instagram
     expect(response).to redirect_to dashboard_path
     expect(seller.reload.instagram_identity.instagram_user_id).to eq("example-id")
+  end
+
+  it "returns a successful TikTok connection to onboarding" do
+    Feature.activate_user(:tiktok_connect, seller)
+    request.env["omniauth.auth"] = OmniAuth::AuthHash.new(uid: "open-123", credentials: { token: "tiktok-token" })
+    profile = { "open_id" => "open-123", "username" => "gumroad" }
+    allow(TiktokProfileFetcher).to receive(:new).and_return(instance_double(TiktokProfileFetcher, fetch: profile))
+    post :tiktok
+    expect(response).to redirect_to dashboard_path
+    expect(seller.reload.tiktok_identity.tiktok_open_id).to eq("open-123")
   end
 
   it "preserves the Social connections default without a session intent" do

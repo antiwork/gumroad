@@ -37,7 +37,7 @@ module OmniAuth
       end
 
       def request_phase
-        return redirect(flag_off_redirect) unless tiktok_connect_enabled?
+        return unavailable_connection unless tiktok_connect_enabled?
 
         params = authorize_params.merge(redirect_uri: callback_url)
         params[:client_key] = client.id
@@ -48,12 +48,23 @@ module OmniAuth
       end
 
       def callback_phase
-        return redirect(flag_off_redirect) unless tiktok_connect_enabled?
+        return unavailable_connection unless tiktok_connect_enabled?
 
         super
       end
 
       private
+        def unavailable_connection
+          if session&.dig("omniauth.params", "social_connect_return").present? && on_request_path?
+            env["omniauth.params"] = session.delete("omniauth.params")
+          end
+          if env.dig("omniauth.params", "social_connect_return").present?
+            fail!(:social_connect_unavailable)
+          else
+            redirect(flag_off_redirect)
+          end
+        end
+
         def tiktok_connect_enabled?
           Feature.active?(:tiktok_connect, tiktok_connect_actor)
         end
@@ -69,7 +80,7 @@ module OmniAuth
         end
 
         def flag_off_redirect
-          tiktok_connect_actor.present? ? "/profile" : "/login"
+          tiktok_connect_actor.present? ? "/settings/social_connections" : "/login"
         end
     end
   end

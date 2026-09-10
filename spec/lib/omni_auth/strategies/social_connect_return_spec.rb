@@ -2,7 +2,7 @@
 
 require "spec_helper"
 
-[OmniAuth::Strategies::Youtube, OmniAuth::Strategies::Instagram].each do |strategy_class|
+[OmniAuth::Strategies::Youtube, OmniAuth::Strategies::Instagram, OmniAuth::Strategies::Tiktok].each do |strategy_class|
   describe strategy_class do
     let(:strategy) { described_class.new(->(_env) { [200, {}, ["ok"]] }) }
     let(:user) { create(:user) }
