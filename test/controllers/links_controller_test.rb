@@ -5060,6 +5060,15 @@ class LinksControllerShowTest < ActionController::TestCase
     assert page["props"]["product"].present?
   end
 
+  test "GET show applies application.rb default_headers without X-Download-Options" do
+    link = create_product(user: @user)
+    get :show, params: { id: link.to_param }
+    assert_response :success
+    assert_nil response.headers["X-Download-Options"]
+    assert_equal "SAMEORIGIN", response.headers["X-Frame-Options"]
+    assert_equal "nosniff", response.headers["X-Content-Type-Options"]
+  end
+
   test "GET show with embed param omits X-Frame-Options so third-party iframes can render" do
     link = create_product(user: @user)
     get :show, params: { id: link.to_param, embed: "true" }

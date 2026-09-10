@@ -25,13 +25,8 @@
 # Remove the default X-Download-Options headers since it is used only by Internet Explorer.
 # If you need to support Internet Explorer, add back `"X-Download-Options" => "noopen"`.
 #++
-Rails.application.config.action_dispatch.default_headers = {
-  "X-Frame-Options" => "SAMEORIGIN",
-  "X-XSS-Protection" => "0",
-  "X-Content-Type-Options" => "nosniff",
-  "X-Permitted-Cross-Domain-Policies" => "none",
-  "Referrer-Policy" => "strict-origin-when-cross-origin"
-}
+# Assigned in config/application.rb. A wholesale replacement here is ignored on
+# Rails 8.0.5+/8.1.2+ (rails/rails#58145).
 
 ###
 # Do not treat an `ActionController::Parameters` instance
