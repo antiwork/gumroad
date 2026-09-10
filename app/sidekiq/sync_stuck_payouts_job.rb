@@ -22,10 +22,6 @@ class SyncStuckPayoutsJob
       end
 
       if payment.errors.any?
-        # Stripe reverse_internal_transfer_or_hold_payouts! already notified before re-raising into
-        # sync_with_stripe's errors. A second "rejected sync" alert is wrong once the row is terminal.
-        next if Payment::NON_TERMINAL_STATES.exclude?(payment.state)
-
         message = "Syncing #{processor} payout #{payment.id} rejected: #{payment.errors.full_messages.join(', ')}"
         Rails.logger.error(message)
         ErrorNotifier.notify(message)
