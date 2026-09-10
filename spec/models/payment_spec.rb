@@ -799,7 +799,32 @@ describe Payment do
           expect do
             payment.send(:sync_with_paypal)
           end.to change { payment.reload.state }.from("processing").to("failed")
-        end.to change { payment.reload.failure_reason }.from(nil).to("Transaction not found")
+        end.to change { payment.reload.failure_reason }.from(nil).to(Payment::FailureReason::TRANSACTION_NOT_FOUND)
+      end
+
+      it "marks a never-dispatched PayPal payout failed even when correlation_id is blank" do
+        payment = create(:payment, processor_fee_cents: 10, txn_id: nil, correlation_id: nil)
+
+        expect(PaypalPayoutProcessor).to(
+          receive(:search_payment_on_paypal).with(amount_cents: payment.amount_cents, transaction_id: payment.txn_id,
+                                                  payment_address: payment.payment_address,
+                                                  start_date: payment.created_at.beginning_of_day - 1.day,
+                                                  end_date: payment.created_at.end_of_day + 1.day).and_return(nil))
+
+        expect do
+          payment.send(:sync_with_paypal)
+        end.to change { payment.reload.state }.from("processing").to("failed")
+        expect(payment.failure_reason).to eq(Payment::FailureReason::TRANSACTION_NOT_FOUND)
+        expect(payment.correlation_id).to be_nil
+      end
+
+      it "still requires correlation_id when failing a PayPal payout for any other reason" do
+        payment = create(:payment, correlation_id: nil)
+
+        expect do
+          payment.mark_failed!(Payment::FailureReason::CANNOT_PAY)
+        end.to raise_error(ActiveRecord::RecordInvalid, /Correlation can't be blank/)
+        expect(payment.reload.state).to eq("processing")
       end
 
       it "does not change the payment if multiple txns are found on PayPal" do

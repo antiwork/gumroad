@@ -17,6 +17,14 @@ class SyncStuckPayoutsJob
         payment.sync_with_payout_processor
       rescue => e
         Rails.logger.error("Error syncing #{processor} payout #{payment.id}: #{e.message}")
+        ErrorNotifier.notify(e)
+        next
+      end
+
+      if payment.errors.any?
+        message = "Syncing #{processor} payout #{payment.id} rejected: #{payment.errors.full_messages.join(', ')}"
+        Rails.logger.error(message)
+        ErrorNotifier.notify(message)
         next
       end
 

@@ -73,9 +73,25 @@ describe SyncStuckPayoutsJob do
 
         allow(PaypalPayoutProcessor).to receive(:search_payment_on_paypal).and_raise ActiveRecord::RecordInvalid
         expect(PaypalPayoutProcessor).to receive(:search_payment_on_paypal).exactly(7).times
+        allow(Rails.logger).to receive(:error)
         expect(Rails.logger).to receive(:error).with(/Error syncing PayPal payout/).exactly(7).times
+        allow(ErrorNotifier).to receive(:notify)
 
         described_class.new.perform(PayoutProcessorType::PAYPAL)
+        expect(ErrorNotifier).to have_received(:notify).exactly(7).times
+      end
+
+      it "notifies when a sync attempt is rejected onto the payment without raising" do
+        payment = create(:payment, processor: PayoutProcessorType::PAYPAL, state: "processing")
+        allow_any_instance_of(Payment).to receive(:sync_with_payout_processor) do |p|
+          p.errors.add(:base, "Correlation can't be blank")
+        end
+        allow(ErrorNotifier).to receive(:notify)
+
+        described_class.new.perform(PayoutProcessorType::PAYPAL)
+
+        expect(ErrorNotifier).to have_received(:notify).with(/rejected:.*Correlation can't be blank/)
+        expect(payment.reload.state).to eq("processing")
       end
     end
 

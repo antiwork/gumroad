@@ -14,5 +14,23 @@ describe RetryFailedPaypalPayoutsWorker do
       expect(Payouts).to_not receive(:create_payments_for_balances_up_to_date_for_users)
       described_class.new.perform
     end
+
+    it "retries a PayPal payout that failed because MassPay never reached PayPal" do
+      payout_period_end_date = User::PayoutSchedule.manual_payout_end_date
+      failed_payment = create(:payment_failed, user: create(:user), payout_period_end_date:,
+                                               failure_reason: Payment::FailureReason::PROCESSOR_UNAVAILABLE)
+
+      expect(Payouts).to receive(:create_payments_for_balances_up_to_date_for_users).with(payout_period_end_date, PayoutProcessorType::PAYPAL, [failed_payment.user], { perform_async: true, retrying: true })
+      described_class.new.perform
+    end
+
+    it "does not retry a PayPal payout whose MassPay search found nothing" do
+      payout_period_end_date = User::PayoutSchedule.manual_payout_end_date
+      create(:payment_failed, user: create(:user), payout_period_end_date:,
+                              failure_reason: Payment::FailureReason::TRANSACTION_NOT_FOUND)
+
+      expect(Payouts).to_not receive(:create_payments_for_balances_up_to_date_for_users)
+      described_class.new.perform
+    end
   end
 end
