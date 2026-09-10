@@ -1280,7 +1280,7 @@ describe Payment do
     end
 
     it "does not count a PayPal payout that sync marked Transaction not found" do
-      (Payment::MAX_CONSECUTIVE_FAILED_PAYOUTS - 1).times { failed_payout }
+      (Payment::MAX_CONSECUTIVE_FAILED_PAYOUTS - 1).times { failed_paypal_payout }
 
       payment = create(:payment, user:, processor: PayoutProcessorType::PAYPAL, payment_address: "seller@example.com",
                                  state: "processing", correlation_id: nil)
