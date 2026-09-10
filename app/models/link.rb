@@ -276,8 +276,8 @@ class Link < ApplicationRecord
   after_update :delete_unused_prices, if: :saved_change_to_purchase_type?
   after_commit :submit_to_indexnow, on: :update, if: :indexnow_submission_needed?
 
-  enum subscription_duration: %i[monthly yearly quarterly biannually every_two_years]
-  enum purchase_type: %i[buy_only rent_only buy_and_rent] # Indicates whether this product can be bought or rented or both.
+  enum :subscription_duration, %i[monthly yearly quarterly biannually every_two_years]
+  enum :purchase_type, %i[buy_only rent_only buy_and_rent] # Indicates whether this product can be bought or rented or both.
 
   def purchase_type=(value)
     super(value)
@@ -289,7 +289,7 @@ class Link < ApplicationRecord
     super(value.present? ? value.to_s.downcase : value)
   end
 
-  enum free_trial_duration_unit: %i[week month]
+  enum :free_trial_duration_unit, %i[week month]
 
   attr_json_data_accessor :excluded_sales_tax_regions, default: -> { [] }
   attr_json_data_accessor :sections, default: -> { [] }

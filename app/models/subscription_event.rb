@@ -9,7 +9,7 @@ class SubscriptionEvent < ApplicationRecord
   validates :event_type, :occurred_at, presence: true
   validate :consecutive_event_type_not_duplicated
 
-  enum event_type: %i[deactivated restarted]
+  enum :event_type, %i[deactivated restarted]
 
   private
     def assign_seller

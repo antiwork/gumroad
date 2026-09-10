@@ -11,7 +11,7 @@ class RecurringService < ApplicationRecord
   has_many :charges, class_name: "ServiceCharge"
   has_one :latest_charge, -> { order(id: :desc) }, class_name: "ServiceCharge"
 
-  enum recurrence: %i[monthly yearly]
+  enum :recurrence, %i[monthly yearly]
 
   validates_presence_of :user, :price_cents
   validates_associated :user
