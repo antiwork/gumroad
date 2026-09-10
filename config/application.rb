@@ -30,11 +30,7 @@ module Gumroad
   class Application < Rails::Application
     # Initialize configuration defaults for originally generated Rails version.
     config.load_defaults 7.2
-    # Owner: gumclaw; set here, not in an initializer. Rails 8.0.5+/8.1.2+ snapshot
-    # ActionDispatch::Response.default_headers during initialize! (rails/rails#58145),
-    # so replacing the hash in config/initializers is ignored. Hash content matches
-    # load_defaults 7.2 (intentionally redundant); assignment location keeps one
-    # shared object for SecureHeaders to empty in place.
+    # Must live here: Rails 8 snapshots default_headers during initialize!, so an initializer is ignored.
     config.action_dispatch.default_headers = {
       "X-Frame-Options" => "SAMEORIGIN",
       "X-XSS-Protection" => "0",

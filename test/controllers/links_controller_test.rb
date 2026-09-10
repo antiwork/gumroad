@@ -5061,13 +5061,8 @@ class LinksControllerShowTest < ActionController::TestCase
   end
 
   test "application.rb default_headers share one object with ActionDispatch::Response" do
-    # Hash content matches load_defaults 7.2, so content assertions alone do not
-    # prove the application.rb assignment. The load-bearing rails#58145 contract
-    # is object identity: SecureHeaders empties this shared hash in place when
-    # ActionController loads, so Response.default_headers must be the same object.
-    # ActionController::TestCase responses do include default_headers via
-    # TestResponse.create; empty frame/nosniff keys here come from SecureHeaders,
-    # not from TestCase skipping middleware.
+    # Identity is the contract (content already matches 7.2 defaults). Nil frame
+    # keys are SecureHeaders emptying the shared hash, not TestCase skipping middleware.
     headers = Rails.application.config.action_dispatch.default_headers
     assert_same headers, ActionDispatch::Response.default_headers
     assert_nil headers["X-Download-Options"]
