@@ -44,9 +44,15 @@ class RepairOrderChargeOutcomesJob
 
   private
     def recent_candidate_ids
-      failed_purchase_ids = Purchase.checkout_failed.where(created_at: RECENT_WINDOW.ago..).pluck(:id)
-      filter_candidates(order_ids_for_purchases(failed_purchase_ids), created_at: RECENT_WINDOW.ago..)
-        .first(MAX_BACKLOG_SCANNED)
+      ids = []
+      batches = 0
+      Purchase.checkout_failed.where(created_at: RECENT_WINDOW.ago..).in_batches(of: FAILED_ORDER_ID_BATCH) do |rel|
+        break if batches >= MAX_FAILED_ORDER_BATCHES || ids.size >= MAX_BACKLOG_SCANNED
+
+        batches += 1
+        ids.concat(filter_candidates(order_ids_for_purchases(rel.pluck(:id)), created_at: RECENT_WINDOW.ago..))
+      end
+      ids.sort.first(MAX_BACKLOG_SCANNED)
     end
 
     def backlog_candidate_ids(remaining_budget:)
@@ -54,16 +60,27 @@ class RepairOrderChargeOutcomesJob
 
       after_id = current_cursor
       ceiling = lap_ceiling(after_id)
-      ids, _scan_to, exhausted = backlog_page(after_id, ceiling, remaining_budget)
+      ids, scan_to, exhausted = backlog_page(after_id, ceiling, remaining_budget)
 
       if ids.empty? && exhausted && after_id.positive?
         save_cursor(0)
         ceiling = lap_ceiling(0)
-        ids, _scan_to, exhausted = backlog_page(0, ceiling, remaining_budget)
+        ids, scan_to, exhausted = backlog_page(0, ceiling, remaining_budget)
+        after_id = 0
       end
 
-      save_cursor(ids.last) if ids.any?
+      persist_backlog_cursor(ids:, scan_to:, exhausted:, after_id:)
       ids
+    end
+
+    def persist_backlog_cursor(ids:, scan_to:, exhausted:, after_id:)
+      if ids.any?
+        save_cursor(ids.last)
+      elsif !exhausted && scan_to > after_id
+        # No qualifying candidate in this run's pages, but the scan itself moved. Saving that
+        # watermark is what keeps the next hour from repeating the same filtered range.
+        save_cursor(scan_to)
+      end
     end
 
     def backlog_page(after_id, ceiling, limit)

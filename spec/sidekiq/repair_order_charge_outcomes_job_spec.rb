@@ -181,7 +181,46 @@ describe RepairOrderChargeOutcomesJob do
 
     purchase_sqls = sqls.select { _1.include?("purchase_state") }
     expect(purchase_sqls).not_to be_empty
-    combined = purchase_sqls.select { |sql| sql.match?(/`purchase_state` IN \(/) && sql.match?(/NOT IN \(/) }
+    combined = purchase_sqls.select { |sql| sql.include?("`purchase_state` IN (") && sql.include?("NOT IN (") }
     expect(combined).to be_empty
+  end
+
+  it "advances the backlog cursor past a scanned page that has no qualifying candidate" do
+    blocker = create(:order)
+    one = create(:purchase_in_progress, link: product_1, seller: seller_1)
+    two = create(:purchase_in_progress, link: product_2, seller: seller_2)
+    blocker.purchases << one << two
+    one.update_columns(purchase_state: "failed")
+    two.update_columns(purchase_state: "failed")
+    RecordOrderChargeOutcomeJob.jobs.clear
+    blocker.update_column(:created_at, 30.days.ago)
+
+    real = settle_with_lost_enqueue(create(:order))
+    real.update_column(:created_at, 30.days.ago)
+    expect(blocker.id).to be < real.id
+
+    stub_const("#{described_class}::FAILED_ORDER_ID_BATCH", 1)
+    stub_const("#{described_class}::MAX_FAILED_ORDER_BATCHES", 1)
+
+    described_class.new.perform
+    expect(real.reload).not_to be_partially_successful
+    expect($redis.get(RedisKey.order_charge_outcome_repair_cursor).to_i).to eq(blocker.id)
+
+    described_class.new.perform
+    expect(real.reload).to be_partially_successful
+  end
+
+  it "stops the recent failed-purchase scan after the page budget" do
+    stub_const("#{described_class}::FAILED_ORDER_ID_BATCH", 1)
+    stub_const("#{described_class}::MAX_FAILED_ORDER_BATCHES", 1)
+    stub_const("#{described_class}::MAX_BACKLOG_SCANNED", 10)
+
+    first = settle_with_lost_enqueue(create(:order))
+    second = settle_with_lost_enqueue(create(:order))
+    expect(first.id).to be < second.id
+
+    described_class.new.perform
+    expect(first.reload).to be_partially_successful
+    expect(second.reload).not_to be_partially_successful
   end
 end
