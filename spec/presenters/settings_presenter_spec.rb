@@ -427,6 +427,15 @@ describe SettingsPresenter do
       expect(props[:instagram_connected]).to eq(true)
       expect(props[:instagram_handle]).to eq("gumroad")
     end
+
+    it "reports TikTok connected from the live identity" do
+      expect(presenter.social_connections_props[:tiktok_connected]).to eq(false)
+      create(:user_tiktok_identity, user: seller, tiktok_open_id: "open-123", handle: "gumroad")
+      seller.reload
+      props = described_class.new(pundit_user:).social_connections_props
+      expect(props[:tiktok_connected]).to eq(true)
+      expect(props[:tiktok_handle]).to eq("gumroad")
+    end
   end
 
   describe "#authorized_applications_props" do

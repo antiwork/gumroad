@@ -693,6 +693,7 @@ describe GdprDataErasureService do
       user.update!(twitter_user_id: "12345", twitter_handle: "johndoe")
       create(:user_youtube_identity, user:, channel_id: "UC123", handle: "johndoe")
       create(:user_instagram_identity, user:, instagram_user_id: "17841400000000000", handle: "johndoe")
+      create(:user_tiktok_identity, user:, tiktok_open_id: "open-123", handle: "johndoe")
       verification = create(:social_connect_verification, user:, platform: "twitter", uid: "12345", handle: "johndoe")
       other_verification = create(:social_connect_verification, platform: "twitter", uid: "12345", handle: "johndoe")
 
@@ -704,6 +705,7 @@ describe GdprDataErasureService do
       expect(user.reload.twitter_user_id).to be_nil
       expect(user.youtube_identity).to be_nil
       expect(user.instagram_identity).to be_nil
+      expect(user.tiktok_identity).to be_nil
     end
 
     it "anonymizes all of the user's carts and credit card records" do

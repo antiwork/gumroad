@@ -72,4 +72,11 @@ describe "Settings social connections page", type: :system, js: true do
 
     expect(page).to have_button("Connect to Instagram")
   end
+
+  it "shows Connect to TikTok when the tiktok_connect flag is on" do
+    Feature.activate_user(:tiktok_connect, seller)
+    visit settings_social_connections_path
+
+    expect(page).to have_button("Connect to TikTok")
+  end
 end

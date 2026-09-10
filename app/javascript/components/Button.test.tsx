@@ -41,4 +41,19 @@ describe("Button brand colors", () => {
     expect(instagram.className).toBe(x.className);
     expect(instagram.className).toContain("bg-black");
   });
+
+  it("fills the TikTok button like the X button", () => {
+    render(
+      <>
+        <Button color="twitter">Connect to X</Button>
+        <Button color="tiktok">Connect to TikTok</Button>
+      </>,
+    );
+
+    const x = screen.getByRole("button", { name: "Connect to X" });
+    const tiktok = screen.getByRole("button", { name: "Connect to TikTok" });
+
+    expect(tiktok.className).toBe(x.className);
+    expect(tiktok.className).toContain("bg-black");
+  });
 });

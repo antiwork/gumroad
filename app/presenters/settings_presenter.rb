@@ -187,6 +187,9 @@ class SettingsPresenter
       instagram_connect_enabled: Feature.active?(:instagram_connect, seller),
       instagram_connected: seller.instagram_identity.present?,
       instagram_handle: seller.instagram_identity&.handle,
+      tiktok_connect_enabled: Feature.active?(:tiktok_connect, seller),
+      tiktok_connected: seller.tiktok_identity.present?,
+      tiktok_handle: seller.tiktok_identity&.handle,
     }
   end
 
@@ -595,6 +598,7 @@ class SettingsPresenter
       connections = [{ provider: "twitter", connected: seller.twitter_user_id.present? }]
       connections << { provider: "youtube", connected: seller.youtube_identity.present? } if Feature.active?(:youtube_connect, seller)
       connections << { provider: "instagram", connected: seller.instagram_identity.present? } if Feature.active?(:instagram_connect, seller)
+      connections << { provider: "tiktok", connected: seller.tiktok_identity.present? } if Feature.active?(:tiktok_connect, seller)
       connections
     end
 

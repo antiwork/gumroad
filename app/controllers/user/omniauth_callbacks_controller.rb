@@ -204,6 +204,41 @@ class User::OmniauthCallbacksController < Devise::OmniauthCallbacksController
     redirect_to social_connect_destination
   end
 
+  def tiktok
+    if logged_in_user.blank?
+      flash[:alert] = "You need to be logged in to link your TikTok account."
+      return redirect_to login_path
+    end
+
+    unless Feature.active?(:tiktok_connect, logged_in_user)
+      flash[:alert] = "TikTok connect is not available."
+      return redirect_to social_connect_destination
+    end
+
+    token = request.env.dig("omniauth.auth", "credentials", "token")
+    profile = TiktokProfileFetcher.new(token).fetch
+    if profile.blank?
+      SocialConnectFunnel.record!(user: logged_in_user, stage: "failed", provider: "tiktok", surface: "omniauth", extra: "no_profile")
+      flash[:alert] = "Couldn't read a TikTok account."
+      return redirect_to social_connect_destination
+    end
+
+    verification = SocialConnectVerification.record_from_tiktok!(logged_in_user, profile)
+    if verification.blank?
+      SocialConnectFunnel.record!(user: logged_in_user, stage: "failed", provider: "tiktok", surface: "omniauth", extra: "blank_verification")
+      flash[:alert] = "Couldn't save your TikTok connection. Please try again."
+      return redirect_to social_connect_destination
+    end
+    identity = logged_in_user.tiktok_identity || logged_in_user.build_tiktok_identity
+    identity.update!(tiktok_open_id: verification.uid, handle: verification.handle)
+    redirect_to social_connect_destination
+  rescue StandardError => e
+    Rails.logger.error("TikTok connect failed for user #{logged_in_user.id}: #{e.class}")
+    SocialConnectFunnel.record!(user: logged_in_user, stage: "failed", provider: "tiktok", surface: "omniauth", extra: e.class.name)
+    flash[:alert] = "Couldn't save your TikTok connection. Please try again."
+    redirect_to social_connect_destination
+  end
+
   def apple
     @user = User.find_or_create_for_apple_oauth(request.env["omniauth.auth"])
     sign_in_with_oauth("Apple")
@@ -212,12 +247,12 @@ class User::OmniauthCallbacksController < Devise::OmniauthCallbacksController
   def failure
     connect_provider = request.env["omniauth.error.strategy"]&.name.to_s
     twitter_link_failure = connect_provider == "twitter" && SocialConnectFunnel::TWITTER_LINK_STATES.include?(params[REQ_PARAM_STATE].to_s)
-    if %w[youtube instagram].include?(connect_provider) || twitter_link_failure
+    if %w[youtube instagram tiktok].include?(connect_provider) || twitter_link_failure
       extra = sanitize_oauth_error_param(params[:error].presence || request.env["omniauth.error.type"].to_s.presence)
       SocialConnectFunnel.record!(user: logged_in_user, stage: "failed", provider: connect_provider, surface: "omniauth", extra:)
     end
-    if %w[youtube instagram].include?(connect_provider)
-      provider_name = connect_provider == "youtube" ? "YouTube" : "Instagram"
+    if %w[youtube instagram tiktok].include?(connect_provider)
+      provider_name = { "youtube" => "YouTube", "instagram" => "Instagram", "tiktok" => "TikTok" }.fetch(connect_provider)
       flash[:alert] = "Couldn't connect #{provider_name}. Please try again."
       redirect_to(logged_in_user.present? ? social_connect_destination : login_path)
     elsif connect_provider == "twitter" && request.env.dig("omniauth.params", REQ_PARAM_STATE) == "link_twitter_account" && logged_in_user.present?
@@ -246,7 +281,7 @@ class User::OmniauthCallbacksController < Devise::OmniauthCallbacksController
 
     def set_social_connect_destination
       provider = action_name == "failure" ? request.env["omniauth.error.strategy"]&.name.to_s : action_name
-      connecting = %w[youtube instagram].include?(provider) ||
+      connecting = %w[youtube instagram tiktok].include?(provider) ||
         (provider == "twitter" && request.env.dig("omniauth.params", REQ_PARAM_STATE) == "link_twitter_account")
       @return_to_onboarding = connecting && consume_social_connect_return
       session.delete(:social_connect_return) unless connecting || action_name == "failure"

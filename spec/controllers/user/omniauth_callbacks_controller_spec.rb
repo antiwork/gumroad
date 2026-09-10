@@ -724,6 +724,66 @@ describe User::OmniauthCallbacksController do
     end
   end
 
+  describe "#tiktok" do
+    let(:user) { create(:user) }
+    let(:profile) do
+      {
+        "open_id" => "open-123",
+        "username" => "gumroad",
+        "follower_count" => 250_000,
+        "video_count" => 1_200,
+      }
+    end
+
+    before do
+      OmniAuth.config.mock_auth[:tiktok] = OmniAuth::AuthHash.new(
+        provider: "tiktok",
+        uid: profile["open_id"],
+        credentials: { token: "tiktok-token" },
+      )
+      request.env["omniauth.auth"] = OmniAuth.config.mock_auth[:tiktok]
+    end
+
+    it "records the TikTok account on a signed-in user" do
+      Feature.activate_user(:tiktok_connect, user)
+      allow(controller).to receive(:logged_in_user).and_return(user)
+      allow(TiktokProfileFetcher).to receive(:new).and_return(instance_double(TiktokProfileFetcher, fetch: profile))
+
+      post :tiktok
+
+      expect(response).to redirect_to settings_social_connections_path
+      identity = user.reload.tiktok_identity
+      expect(identity.tiktok_open_id).to eq("open-123")
+      expect(identity.handle).to eq("gumroad")
+      expect(user.social_connect_verifications.find_by!(platform: "tiktok")).to have_attributes(
+        uid: "open-123",
+        handle: "gumroad",
+        account_created_at: nil,
+        last_posted_at: nil,
+      )
+    end
+
+    it "redirects to login when no user is signed in" do
+      allow(controller).to receive(:logged_in_user).and_return(nil)
+
+      post :tiktok
+
+      expect(response).to redirect_to login_path
+      expect(flash[:alert]).to eq "You need to be logged in to link your TikTok account."
+    end
+
+    it "does not connect when the tiktok_connect flag is off" do
+      allow(controller).to receive(:logged_in_user).and_return(user)
+
+      post :tiktok
+
+      expect(user.social_connect_verifications.find_by(platform: "tiktok")).to be_nil
+      expect(user.reload.tiktok_identity).to be_nil
+      expect(flash[:alert]).to eq "TikTok connect is not available."
+      expect(response).to redirect_to settings_social_connections_path
+    end
+  end
+
   describe "#failure" do
     it "redirects YouTube OAuth failures to profile instead of payments settings" do
       user = create(:user)
@@ -751,6 +811,17 @@ describe User::OmniauthCallbacksController do
 
       expect(response).to redirect_to settings_social_connections_path
       expect(flash[:alert]).to eq "Couldn't connect Instagram. Please try again."
+    end
+
+    it "redirects TikTok OAuth failures to Social connections" do
+      user = create(:user)
+      allow(controller).to receive(:logged_in_user).and_return(user)
+      request.env["omniauth.error.strategy"] = instance_double(OmniAuth::Strategies::Tiktok, name: "tiktok")
+
+      get :failure, params: { error: "access_denied" }
+
+      expect(response).to redirect_to settings_social_connections_path
+      expect(flash[:alert]).to eq "Couldn't connect TikTok. Please try again."
     end
 
     it "sanitizes user-controlled OAuth error strings before writing Event.referrer" do

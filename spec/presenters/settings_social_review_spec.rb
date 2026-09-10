@@ -15,6 +15,7 @@ describe SettingsPresenter, "optional social connections for account review" do
     create(:user_compliance_info, user: seller, country: "United States")
     Feature.deactivate(:youtube_connect)
     Feature.deactivate(:instagram_connect)
+    Feature.deactivate(:tiktok_connect)
   end
 
   %w[on_probation flagged_for_fraud flagged_for_tos_violation].each do |state|
@@ -64,21 +65,26 @@ describe SettingsPresenter, "optional social connections for account review" do
     seller.update!(user_risk_state: "on_probation")
     Feature.activate_user(:youtube_connect, seller)
     Feature.activate_user(:instagram_connect, seller)
+    Feature.activate_user(:tiktok_connect, seller)
     expect(connections).to eq([
                                 { provider: "twitter", connected: false },
                                 { provider: "youtube", connected: false },
                                 { provider: "instagram", connected: false },
+                                { provider: "tiktok", connected: false },
                               ])
     seller.create_youtube_identity!(channel_id: "example_channel", handle: "example_creator")
     seller.create_instagram_identity!(instagram_user_id: "123", handle: "example_creator")
-    expect(connections.last(2)).to eq([
+    seller.create_tiktok_identity!(tiktok_open_id: "open-123", handle: "example_creator")
+    expect(connections.last(3)).to eq([
                                         { provider: "youtube", connected: true },
                                         { provider: "instagram", connected: true },
+                                        { provider: "tiktok", connected: true },
                                       ])
     seller.youtube_identity.destroy!
     seller.instagram_identity.destroy!
+    seller.tiktok_identity.destroy!
     seller.reload
-    expect(connections.last(2).map { _1[:connected] }).to eq([false, false])
+    expect(connections.last(3).map { _1[:connected] }).to eq([false, false, false])
   end
 
   it "does not borrow provider availability from another seller" do

@@ -1,9 +1,9 @@
-import { CheckCircle, Instagram, TwitterX, Youtube } from "@boxicons/react";
+import { CheckCircle, Instagram, Tiktok, TwitterX, Youtube } from "@boxicons/react";
 import { router, usePage } from "@inertiajs/react";
 import * as React from "react";
 import typia from "typia";
 
-import { unlinkInstagram, unlinkTwitter, unlinkYoutube } from "$app/data/profile_settings";
+import { unlinkInstagram, unlinkTiktok, unlinkTwitter, unlinkYoutube } from "$app/data/profile_settings";
 import { SettingPage } from "$app/parsers/settings";
 import { asyncVoid } from "$app/utils/promise";
 import { assertResponseError } from "$app/utils/request";
@@ -27,6 +27,9 @@ type SocialConnectionsPageProps = {
   instagram_connect_enabled: boolean;
   instagram_connected: boolean;
   instagram_handle: string | null;
+  tiktok_connect_enabled: boolean;
+  tiktok_connected: boolean;
+  tiktok_handle: string | null;
 };
 
 type Provider = {
@@ -58,6 +61,9 @@ export default function SocialConnectionsPage() {
     instagram_connect_enabled,
     instagram_connected,
     instagram_handle,
+    tiktok_connect_enabled,
+    tiktok_connected,
+    tiktok_handle,
   } = typia.assert<SocialConnectionsPageProps>(usePage().props);
 
   const disconnect = (unlink: () => Promise<unknown>) =>
@@ -109,6 +115,21 @@ export default function SocialConnectionsPage() {
             handle: instagram_handle,
             connectHref: Routes.user_instagram_omniauth_authorize_path({ social_connect_return }),
             disconnect: disconnect(unlinkInstagram),
+          },
+        ]
+      : []),
+    ...(tiktok_connect_enabled || tiktok_connected
+      ? [
+          {
+            key: "tiktok" as const,
+            name: "TikTok",
+            Icon: Tiktok,
+            connected: tiktok_connected,
+            handle: tiktok_handle,
+            connectHref: social_connect_return
+              ? `/users/auth/tiktok?social_connect_return=${encodeURIComponent(social_connect_return)}`
+              : "/users/auth/tiktok",
+            disconnect: disconnect(unlinkTiktok),
           },
         ]
       : []),
