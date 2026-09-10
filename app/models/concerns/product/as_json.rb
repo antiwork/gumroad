@@ -8,6 +8,7 @@ module Product::AsJson
   end
 
   def as_json(options = {})
+    options = (options || {}).dup
     return super(options) if options.delete(:original)
     return as_json_for_admin_info if options.delete(:admin_info)
     return as_json_for_api(options) if options[:api_scopes].present?
