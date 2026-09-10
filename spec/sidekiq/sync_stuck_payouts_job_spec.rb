@@ -213,6 +213,24 @@ describe SyncStuckPayoutsJob do
         expect(payment.reload.state).to eq("cancelled")
       end
 
+      it "does not report a rejected sync when Stripe already failed and reversal raises" do
+        payment = create(:payment, processor: PayoutProcessorType::STRIPE, state: "processing",
+                                   stripe_transfer_id: "po_rev_fail", stripe_connect_account_id: "acct_rev_fail",
+                                   created_at: 5.days.ago)
+
+        stripe_payout = { "status" => "failed", "failure_code" => "account_closed" }
+        allow(Stripe::Payout).to receive(:retrieve).with("po_rev_fail", { stripe_account: "acct_rev_fail" }).and_return(stripe_payout)
+        allow(StripePayoutProcessor).to receive(:reverse_internal_transfer_or_hold_payouts!)
+          .and_raise(Stripe::StripeError.new("reversal failed"))
+        allow_any_instance_of(Payment).to receive(:send_payout_failure_email)
+        allow(ErrorNotifier).to receive(:notify)
+
+        described_class.new.perform(PayoutProcessorType::STRIPE)
+
+        expect(payment.reload.state).to eq("failed")
+        expect(ErrorNotifier).not_to have_received(:notify).with(/rejected/)
+      end
+
       it "does not sync payments in terminal states" do
         create(:payment, processor: PayoutProcessorType::STRIPE, state: "completed", txn_id: "12345", processor_fee_cents: 0,
                          stripe_transfer_id: "tr_12", stripe_connect_account_id: "acct_12")
