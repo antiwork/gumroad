@@ -54,6 +54,43 @@ describe StripeChargeProcessor, :vcr do
     end
   end
 
+  describe "#mandate_options_without_nested_currency" do
+    it "strips nested currency from string-keyed options without adding a symbol-keyed branch" do
+      options = {
+        "payment_method_options" => {
+          "card" => {
+            "mandate_options" => { "amount" => 100, "currency" => "inr", "interval" => "month" }
+          }
+        }
+      }
+
+      cleaned = subject.send(:mandate_options_without_nested_currency, options)
+
+      expect(cleaned.dig("payment_method_options", "card", "mandate_options")).to eq(
+        "amount" => 100,
+        "interval" => "month"
+      )
+      expect(cleaned).not_to have_key(:payment_method_options)
+    end
+
+    it "strips nested currency from symbol-keyed options" do
+      options = {
+        payment_method_options: {
+          card: {
+            mandate_options: { amount: 100, currency: "inr", interval: "month" }
+          }
+        }
+      }
+
+      cleaned = subject.send(:mandate_options_without_nested_currency, options)
+
+      expect(cleaned.dig(:payment_method_options, :card, :mandate_options)).to eq(
+        amount: 100,
+        interval: "month"
+      )
+    end
+  end
+
   describe ".charge_minor_units_compatible?" do
     it "allows currencies whose stored minor units match what Stripe charges" do
       expect(described_class.charge_minor_units_compatible?("usd")).to be(true)

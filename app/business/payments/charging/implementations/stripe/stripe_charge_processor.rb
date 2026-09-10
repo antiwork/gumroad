@@ -1539,13 +1539,14 @@ class StripeChargeProcessor
       inner = mandate_options.dig(:payment_method_options, :card, :mandate_options) ||
         mandate_options.dig("payment_method_options", "card", "mandate_options")
       return mandate_options if inner.blank?
+      return mandate_options unless inner.key?(:currency) || inner.key?("currency")
 
-      cleaned = inner.except(:currency, "currency")
-      return mandate_options if cleaned.equal?(inner) || cleaned == inner
-
-      mandate_options.deep_merge(
-        payment_method_options: { card: { mandate_options: cleaned } }
-      )
+      cleaned = mandate_options.deep_dup
+      target = cleaned.dig(:payment_method_options, :card, :mandate_options) ||
+        cleaned.dig("payment_method_options", "card", "mandate_options")
+      target.delete(:currency)
+      target.delete("currency")
+      cleaned
     end
 
     # https://stripe.com/docs/api/files/object#file_object-purpose
