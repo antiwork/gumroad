@@ -401,6 +401,13 @@ describe MerchantAccount do
         expect(merchant_account.settlement_currency_mismatch_active?("eur")).to be(false)
       end
 
+      it "expires a 10-day-old per-currency marker so a recovered Stripe config is re-probed" do
+        # gp#2541: platform EUR marker from 2026-09-01 still hid the picker 10 days
+        # later while StripeFxQuote.create(to_currency: usd, from_currency: eur) succeeded.
+        travel_to(10.days.ago) { merchant_account.record_settlement_currency_mismatch!("eur") }
+        expect(merchant_account.reload.settlement_currency_mismatch_active?("eur")).to be(false)
+      end
+
       it "treats a malformed timestamp as no marker instead of raising" do
         merchant_account.update!(settlement_currency_mismatch_map: { "eur" => "not-a-timestamp" })
         expect(merchant_account.settlement_currency_mismatch_active?("eur")).to be(false)

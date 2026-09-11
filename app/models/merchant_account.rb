@@ -60,8 +60,11 @@ class MerchantAccount < ApplicationRecord
     !user_id
   end
 
-  # Stale marker costs a USD checkout instead of buyer currency; account.updated clears early.
-  SETTLEMENT_CURRENCY_MISMATCH_TTL = 30.days
+  # Skip doomed FX quotes this long. 30 days left EUR dark for 10 days after
+  # Stripe started accepting EUR→USD quotes again (gumroad-private#2541);
+  # account.updated never fired. One extra doomed quote/day per marked
+  # currency is cheaper than a dark picker.
+  SETTLEMENT_CURRENCY_MISMATCH_TTL = 1.day
 
   def settlement_currency_mismatch_active?(currency)
     return false if currency.blank?
