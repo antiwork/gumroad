@@ -56,8 +56,6 @@ module Gumroad
     config.active_record.run_after_transaction_callbacks_in_order_defined = false
     # Compare seller HTML rendering before adopting the HTML5 sanitizer.
     config.action_view.sanitizer_vendor = Rails::HTML4::Sanitizer
-    # Audit Active Job callers before changing transaction enqueue timing.
-    config.active_job.enqueue_after_transaction_commit = :never
     # Verify thumbnail delivery before serving WebP variants without conversion.
     config.active_storage.web_image_content_types = %w[image/png image/jpeg image/gif]
     # Reconcile existing future-dated migrations before enabling timestamp validation.
