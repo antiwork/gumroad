@@ -13,8 +13,10 @@ module PostBlastSending
   # unlike the audience snapshot, it is tiny and is the only evidence for late safe resumes.
   PENDING_RECIPIENTS_TTL = AlertOnStalledPostEmailBlastsJob::LOOKBACK
 
-  # How long a sent-in-this-blast marker survives for a non-opener resend's dedupe.
-  BLAST_DEDUPE_TTL = 7.days
+  # How long a sent-in-this-blast marker survives for a non-opener resend's dedupe. Kept for
+  # the full scan window: it is the only record of who already received the resend, so a
+  # late resume with no audience snapshot refuses to run once it is gone.
+  BLAST_DEDUPE_TTL = AlertOnStalledPostEmailBlastsJob::LOOKBACK
 
   # How long the per-chunk completion set survives. Long enough that the last children of a
   # multi-hour blast can finish and stamp `completed_at`; an abandoned shell just expires and
@@ -242,7 +244,8 @@ module PostBlastSending
     partition_chunks_key = active_partition_key && RedisKey.blast_slice_partition_chunks(@blast.id, active_partition_key)
     $redis.del(*[snapshot_key, "#{snapshot_key}:tmp", checkpoint_key, "#{checkpoint_key}:tmp",
                  RedisKey.blast_pending_recipients(@blast.id), RedisKey.blast_done_slices(@blast.id),
-                 RedisKey.blast_active_slice_partition(@blast.id), partition_chunks_key].compact)
+                 RedisKey.blast_active_slice_partition(@blast.id), partition_chunks_key,
+                 RedisKey.blast_quota_deferred_until(@blast.id), RedisKey.blast_quota_admitted(@blast.id)].compact)
   end
 
   # Re-checked right before each provider call: the chunk-level filter ran once at the start

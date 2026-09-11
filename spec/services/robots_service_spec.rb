@@ -23,6 +23,11 @@ describe RobotsService do
       expect(@redis_namespace.get("sitemap_configs")).to eq [@sitemap_config].to_json
     end
 
+    it "omits sitemaps on a storefront host" do
+      expect(described_class.new(storefront_host: true).sitemap_configs).to eq []
+      expect(@redis_namespace.get("sitemap_configs")).to eq nil
+    end
+
     it "doesn't generate sitemaps configs when cache exists" do
       expect_any_instance_of(RobotsService).to receive(:generate_sitemap_configs).once
 
@@ -35,6 +40,28 @@ describe RobotsService do
   describe "#user_agent_rules" do
     it "returns the user agent rules" do
       expect(described_class.new.user_agent_rules).to eq @user_agent_rules
+    end
+
+    context "on a storefront host" do
+      it "prepends a bingbot group carrying a crawl delay" do
+        expect(described_class.new(storefront_host: true).user_agent_rules).to eq [
+          "User-agent: bingbot",
+          "Crawl-delay: #{described_class::STOREFRONT_BINGBOT_CRAWL_DELAY_SECONDS}",
+          "Disallow: /purchases/",
+          "",
+          "User-agent: *",
+          "Disallow: /purchases/"
+        ]
+      end
+
+      it "repeats every wildcard disallow inside the bingbot group" do
+        rules = described_class.new(storefront_host: true).user_agent_rules
+        bingbot_group = rules[0...rules.index("")]
+        wildcard_disallows = rules.drop(rules.index("User-agent: *") + 1)
+
+        expect(wildcard_disallows).to_not be_empty
+        expect(bingbot_group).to include(*wildcard_disallows)
+      end
     end
   end
 

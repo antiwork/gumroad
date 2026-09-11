@@ -30,10 +30,9 @@ module Gumroad
   class Application < Rails::Application
     # Initialize configuration defaults for originally generated Rails version.
     config.load_defaults 8.0
-    # Owner: gumclaw; set here, not in an initializer. Rails 8.0.5+/8.1.2+ snapshot
-    # ActionDispatch::Response.default_headers during initialize! (rails/rails#58145),
-    # so replacing the hash in config/initializers is ignored. This is the 7.1 set
-    # without X-Download-Options.
+    # Same five headers load_defaults 8.0 sets; restated so SecureHeaders strips them from the
+    # object ActionDispatch::Response aliases. Must live here, not an initializer: since 8.0.5 the
+    # response class loads before initializers run, so a later assignment is ignored (rails#58145).
     config.action_dispatch.default_headers = {
       "X-Frame-Options" => "SAMEORIGIN",
       "X-XSS-Protection" => "0",
@@ -41,27 +40,32 @@ module Gumroad
       "X-Permitted-Cross-Domain-Policies" => "none",
       "Referrer-Policy" => "strict-origin-when-cross-origin"
     }
-    # Owner: gumclaw; verify conditional download responses before changing ETag precedence.
+    # No to_time_preserves_timezone pin: Rails 8.1 drops it from load_defaults 8.0, removes
+    # DateAndTime::Compatibility.preserve_timezone, and deprecates the accessor. to_time now
+    # always preserves the receiver's zone — the DST audit this pin deferred is forced here.
+    # Verify conditional download responses before changing ETag precedence.
     config.action_dispatch.strict_freshness = false
-    # Owner: gumclaw; preserve regex behavior during boot as well as after initialization.
+    # Opts out of the Rails 8 ReDoS ceiling until regex-heavy validators are audited
+    # (gumroad-private#2509). Must follow load_defaults: the framework sets it with `||= 1`,
+    # so pinning nil beforehand would be overwritten rather than preserved.
     Regexp.timeout = nil
-    # Owner: gumclaw; audit duplicate-instance purchase callbacks before changing the recipient.
+    # Audit duplicate-instance purchase callbacks before changing the recipient.
     config.active_record.run_commit_callbacks_on_first_saved_instances_in_transaction = true
-    # Owner: ershad; verify SQL log consumers before switching to SQLCommenter.
+    # Verify SQL log consumers before switching to SQLCommenter.
     config.active_record.query_log_tags_format = :legacy
-    # Owner: gumclaw; audit required associations without database foreign keys before skipping parent checks.
+    # Audit required associations without database foreign keys before skipping parent checks.
     config.active_record.belongs_to_required_validates_foreign_key = true
-    # Owner: gumclaw; prove purchase inventory/email callback ordering before reversing it.
+    # Prove purchase inventory/email callback ordering before reversing it.
     config.active_record.run_after_transaction_callbacks_in_order_defined = false
-    # Owner: gumclaw; compare seller HTML rendering before adopting the HTML5 sanitizer.
+    # Compare seller HTML rendering before adopting the HTML5 sanitizer.
     config.action_view.sanitizer_vendor = Rails::HTML4::Sanitizer
-    # Owner: gumclaw; verify thumbnail delivery before serving WebP variants without conversion.
+    # Verify thumbnail delivery before serving WebP variants without conversion.
     config.active_storage.web_image_content_types = %w[image/png image/jpeg image/gif]
-    # Owner: gumclaw; reconcile existing future-dated migrations before enabling timestamp validation.
+    # Reconcile existing future-dated migrations before enabling timestamp validation.
     config.active_record.validate_migration_timestamps = false
-    # Owner: gumclaw; audit manual requires before removing autoload paths from $LOAD_PATH.
+    # Audit manual requires before removing autoload paths from $LOAD_PATH.
     config.add_autoload_paths_to_load_path = true
-    # Owner: ershad; measure canary RSS before enabling YJIT on memory-limited workers.
+    # Measure canary RSS before enabling YJIT on memory-limited workers.
     config.yjit = false
     config.active_support.cache_format_version = 7.1
     config.active_storage.variant_processor = :mini_magick

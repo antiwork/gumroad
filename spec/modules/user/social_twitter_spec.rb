@@ -95,6 +95,41 @@ describe User::SocialTwitter do
         expect { User.query_twitter(@user, @data) }.not_to raise_error
         expect(@user.reload.twitter_handle).to eq(@data["screen_name"])
       end
+
+      it "records funnel connected for link-account query_twitter" do
+        expect do
+          User.query_twitter(@user, @data)
+        end.to change { Event.where(event_name: "social_connect_connected", user_id: @user.id).count }.by(1)
+      end
+
+      it "does not record funnel connected when login/signup disables it" do
+        expect do
+          User.query_twitter(@user, @data, record_funnel_connected: false)
+        end.not_to change { Event.where(event_name: "social_connect_connected").count }
+
+        expect(@user.social_connect_verifications.count).to eq(1)
+      end
+    end
+  end
+
+  describe ".find_or_create_for_twitter_oauth!" do
+    before(:all) do
+      @omniauth = JSON.parse(File.open("#{Rails.root}/spec/support/fixtures/twitter_omniauth.json").read)
+    end
+
+    it "stores verification metadata on login without writing funnel connected" do
+      auth = @omniauth.deep_dup
+      auth["extra"]["raw_info"]["id"] = rand(1_000_000_000..2_000_000_000)
+      auth["extra"]["raw_info"]["screen_name"] = "login_only_#{auth["extra"]["raw_info"]["id"]}"
+      allow_any_instance_of(User).to receive(:twitter_picture_url).and_return(nil)
+
+      user = nil
+      expect do
+        user = User.find_or_create_for_twitter_oauth!(auth)
+      end.not_to change { Event.where(event_name: "social_connect_connected").count }
+
+      expect(user.social_connect_verifications.current.sole.platform).to eq("twitter")
+      expect(Event.where(event_name: "social_connect_attempted", user_id: user.id)).to be_empty
     end
   end
 end

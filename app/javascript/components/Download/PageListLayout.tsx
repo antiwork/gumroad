@@ -21,7 +21,8 @@ export const PageListLayout = React.forwardRef<
     <div className="flex flex-col gap-4 [scrollbar-gutter:stable] lg:sticky lg:top-0 lg:h-full lg:max-h-[calc(100vh-184px)] lg:w-80 lg:overflow-y-auto lg:pb-8">
       {pageList}
     </div>
-    <div className="h-0 flex-1">{children}</div>
+    {/* h-0 zeros height once this is lg:flex-row, hiding the file list beside the review card. */}
+    <div className="min-h-0 min-w-0 flex-1">{children}</div>
   </div>
 ));
 PageListLayout.displayName = "PageListLayout";

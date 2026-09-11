@@ -24,6 +24,7 @@ type ProductPreviewBundle = {
   allow_installment_plan: boolean;
   installment_plan: { number_of_installments: number } | null;
   display_product_reviews: boolean;
+  hide_bundle_product_reviews?: boolean;
   quantity_enabled: boolean;
   should_show_sales_count: boolean;
   custom_button_text_option: CustomButtonTextOption | null;
@@ -144,6 +145,7 @@ export const ProductPreview = ({
             price: computeStandalonePrice(bundleProduct),
             variant:
               bundleProduct.variants?.list.find(({ id }) => id === bundleProduct.variants?.selected_id)?.name ?? null,
+            ratings: bundle.hide_bundle_product_reviews ? null : bundleProduct.ratings,
           })),
           public_files: bundle.public_files,
         }}

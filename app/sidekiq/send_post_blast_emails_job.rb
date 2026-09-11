@@ -30,8 +30,7 @@ class SendPostBlastEmailsJob
     Rails.logger.info("[#{self.class.name}] blast_id=#{@blast.id} post_id=#{@post.id}")
     return unless @post.alive? && @post.published? && @post.send_emails? && @blast.completed_at.nil?
 
-    # Capture before the first-run stamp: a late resume with no Redis snapshot must
-    # not rebuild the live audience (people who joined after the original send).
+    # Captured before the stamp: a first-run crash and a late resume both arrive without a snapshot.
     @resume_without_snapshot = @blast.started_at.present?
     @blast.update!(started_at: Time.current) if @blast.started_at.nil?
 
@@ -70,12 +69,7 @@ class SendPostBlastEmailsJob
     end
 
     return mark_blast_as_completed if @members.empty?
-    unless SellerLargeBlastQuota.allow?(
-      seller_id: @post.seller_id,
-      kind: "post_blast",
-      blast_id: @blast.id,
-      recipient_count: @members.size
-    )
+    unless admitted?
       requeue_for_daily_blast_limit
       return
     end
@@ -84,14 +78,12 @@ class SendPostBlastEmailsJob
   end
 
   private
-    # How long the point-in-time audience snapshot survives in Redis. It must cover the
-    # stalled-blast scan window: a late resume is only safe while the original audience
-    # still exists, otherwise the sender would rebuild the audience and include later joins.
+    # How long the audience snapshot survives in Redis. Covers the stalled-blast scan window
+    # so every retry and auto-resume in it takes the PK-bound path instead of rescanning the
+    # seller's audience. Once it is gone, `load_audience_members` rebuilds from MySQL.
     AUDIENCE_SNAPSHOT_TTL = AlertOnStalledPostEmailBlastsJob::LOOKBACK
 
-    # How long after `started_at` a resume may still rebuild the live audience. Covers the
-    # first-run crash (stamp written, snapshot not yet) without covering a stalled blast that
-    # only auto-resumes days later, by which point the audience has moved on.
+    # A resume older than this, or one that already owes recipients, cannot be a first-run crash.
     AUDIENCE_SNAPSHOT_GRACE = 1.day
 
     # How many snapshotted member ids to revalidate per statement. Small on purpose:
@@ -105,6 +97,13 @@ class SendPostBlastEmailsJob
 
     # Redis list/set writes only — no SQL — so this can stay large.
     REDIS_WRITE_SLICE_SIZE = 10_000
+
+    # Filter params `AudienceMember.filter(as_of:)` cannot rewind: each reads state outside the
+    # dated purchase, follow or affiliation (a live counter, a variant swap, a refund, an added
+    # product affiliation), or the absence of one.
+    UNREBUILDABLE_FILTER_KEYS = %i[
+      minimum_license_uses active_customers_only bought_variant_ids not_bought_product_ids not_bought_variant_ids affiliate_product_ids
+    ].freeze
 
     # Blasts above this many recipients are split into slice jobs. Small blasts send
     # inline (one short-lived job); large ones must not run for hours as a single unit.
@@ -203,27 +202,24 @@ class SendPostBlastEmailsJob
       snapshotted_ids = $redis.lrange(snapshot_key, 0, -1)
 
       if snapshotted_ids.empty?
+        # Fully delivered: nothing left to send, so skip the scan and let `perform` stamp it.
         pending = $redis.get(RedisKey.blast_pending_recipients(@blast.id))
+        return [] if pending.present? && pending.to_i <= 0
 
-        # Fully delivered (`fully_delivered?`) with the snapshot gone: every recipient the
-        # original attempt picked is already with the ESP, and this resume exists only to
-        # stamp `completed_at`. Rebuilding the audience here would email everyone who joined
-        # since, so hand back nothing — `perform` completes the blast on an empty audience.
-        # Age is irrelevant: there is nothing left to send at any age.
-        return [] if @resume_without_snapshot && pending.present? && pending.to_i <= 0
-
-        # First-run crash (started_at just set, no snapshot yet) must still load.
-        # A stalled auto-resume days later must not pick up people who joined after.
-        # A positive pending count means an earlier attempt got past the snapshot write
-        # with recipients still owed, so a missing snapshot is lost Redis state, not a
-        # first run — refuse inside the grace window too. The age check stands alone for
-        # the reverse loss: MySQL keeps `started_at` when Redis drops both keys.
-        if @resume_without_snapshot &&
-           (@blast.started_at < AUDIENCE_SNAPSHOT_GRACE.ago || (pending.present? && pending.to_i.positive?))
-          raise "missing audience snapshot for blast #{@blast.id}; refusing to rebuild the live audience"
+        if stale_resume?(pending)
+          # The per-blast sent set is a resend's only dedupe; SentPostEmail rows belong to the original send.
+          if @blast.to_non_openers? && !$redis.exists?(RedisKey.blast_sent_emails(@blast.id))
+            raise "missing audience snapshot and sent set for non-opener resend #{@blast.id}; refusing to rebuild"
+          end
+          if @filters.values_at(*UNREBUILDABLE_FILTER_KEYS).any?(&:present?)
+            raise "missing audience snapshot for blast #{@blast.id}; its filter's eligibility cannot be rebuilt"
+          end
         end
+
+        # Bounded to `started_at`: a resume days later must not reach people who joined after the send.
         members = WithMaxExecutionTime.timeout_queries(seconds: audience_load_timeout_seconds) do
-          AudienceMember.filter(seller_id: @post.seller_id, params: @filters, with_ids: true).select(:id, :email, :purchase_id, :follower_id, :affiliate_id).to_a
+          AudienceMember.filter(seller_id: @post.seller_id, params: @filters, with_ids: true, as_of: @blast.started_at)
+            .select(:id, :email, :purchase_id, :follower_id, :affiliate_id).to_a
         end
         write_audience_snapshot(snapshot_key, members)
         members
@@ -232,6 +228,13 @@ class SendPostBlastEmailsJob
         $redis.expire(snapshot_key, AUDIENCE_SNAPSHOT_TTL.to_i)
         revalidate_snapshotted_members(snapshotted_ids.map(&:to_i))
       end
+    end
+
+    # A first-run crash may still rebuild the live audience; a resume that delivered, owes
+    # recipients, or is past the grace window has an original audience the rebuild must respect.
+    def stale_resume?(pending)
+      @resume_without_snapshot &&
+        (@blast.first_email_delivered_at.present? || (pending.present? && pending.to_i.positive?) || @blast.started_at < AUDIENCE_SNAPSHOT_GRACE.ago)
     end
 
     # Existence of the audience_members row is not enough: a customer who also
@@ -326,10 +329,54 @@ class SendPostBlastEmailsJob
       ($redis.get(RedisKey.audience_member_load_max_execution_time_seconds) || 1.hour).to_i
     end
 
-    def requeue_for_daily_blast_limit
-      job_id = self.class.perform_at(Time.zone.tomorrow.beginning_of_day, @blast.id)
-      return if job_id.present?
+    # Admission to the daily quota is per blast, once, and recorded when granted: the
+    # delivery stamp arrives from the ESP later, so a kill in between must not send a
+    # resume back through the quota to claim a second day.
+    def admitted?
+      admitted_key = RedisKey.blast_quota_admitted(@blast.id)
+      unless @blast.first_email_delivered_at.present? || $redis.exists?(admitted_key)
+        return false unless SellerLargeBlastQuota.allow?(
+          seller_id: @post.seller_id,
+          kind: "post_blast",
+          blast_id: @blast.id,
+          recipient_count: @members.size
+        )
+        $redis.set(admitted_key, Time.current.utc.iso8601, ex: AlertOnStalledPostEmailBlastsJob::LOOKBACK.to_i)
+      end
+      $redis.del(RedisKey.blast_quota_deferred_until(@blast.id))
+      true
+    end
 
-      raise "Sidekiq did not requeue the blast for the daily limit"
+    # Overwrites a marker only once its time has passed. ISO 8601 UTC strings order as times.
+    RESERVE_QUOTA_DEFERRAL = <<~LUA
+      local current = redis.call("GET", KEYS[1])
+      if current and current > ARGV[2] then return 0 end
+      redis.call("SET", KEYS[1], ARGV[1], "EX", ARGV[3])
+      return 1
+    LUA
+
+    # One deferred copy per blast: the marker is reserved before the enqueue, so concurrent
+    # attempts that meet the same closed quota cannot each schedule the blast. The monitor
+    # reads the marker as DEFERRED while it is ahead and as a lost job once it has passed.
+    def requeue_for_daily_blast_limit
+      deferred_key = RedisKey.blast_quota_deferred_until(@blast.id)
+      run_at = SellerLargeBlastQuota.deferred_run_at
+      argv = [run_at.utc.iso8601, Time.current.utc.iso8601, AlertOnStalledPostEmailBlastsJob::LOOKBACK.to_i]
+      unless $redis.eval(RESERVE_QUOTA_DEFERRAL, keys: [deferred_key], argv:).to_i == 1
+        Rails.logger.info("[#{self.class.name}] blast_id=#{@blast.id} already deferred until #{$redis.get(deferred_key)} by the daily large-blast quota")
+        return
+      end
+
+      job_id = begin
+        self.class.perform_at(run_at, @blast.id)
+      rescue StandardError
+        $redis.del(deferred_key)
+        raise
+      end
+      if job_id.blank?
+        $redis.del(deferred_key)
+        raise "Sidekiq did not requeue the blast for the daily limit"
+      end
+      Rails.logger.info("[#{self.class.name}] blast_id=#{@blast.id} deferred until #{run_at.utc.iso8601} by the daily large-blast quota")
     end
 end

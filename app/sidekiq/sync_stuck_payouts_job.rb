@@ -17,6 +17,16 @@ class SyncStuckPayoutsJob
         payment.sync_with_payout_processor
       rescue => e
         Rails.logger.error("Error syncing #{processor} payout #{payment.id}: #{e.message}")
+        ErrorNotifier.notify(e)
+        next
+      end
+
+      if payment.errors.any?
+        message = "Syncing #{processor} payout #{payment.id} rejected: #{payment.errors.full_messages.join(', ')}"
+        Rails.logger.error(message)
+        # Stripe reverse_internal_transfer_or_hold_payouts! already sent the rich Sentry event.
+        # A second "rejected sync" alert is noise for that same incident.
+        ErrorNotifier.notify(message) unless payment.instance_variable_get(:@payout_reversal_failure_notified)
         next
       end
 

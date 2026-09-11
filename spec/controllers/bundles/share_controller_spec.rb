@@ -24,6 +24,7 @@ describe Bundles::ShareController, inertia: true do
         expect(inertia.props[:currency_type]).to eq(bundle.price_currency_type)
         expect(inertia.props[:bundle][:name]).to eq(bundle.name)
         expect(inertia.props[:bundle][:products]).to be_an(Array)
+        expect(inertia.props[:bundle][:hide_bundle_product_reviews]).to eq(false)
         expect(inertia.props[:taxonomies]).to be_an(Array)
         expect(inertia.props[:profile_sections]).to be_an(Array)
       end
@@ -72,12 +73,14 @@ describe Bundles::ShareController, inertia: true do
           taxonomy_id: taxonomy.id,
           tags: ["tag1", "tag2"],
           display_product_reviews: false,
+          hide_bundle_product_reviews: true,
           is_adult: true
         }
         bundle.reload
       end.to change { bundle.taxonomy_id }.from(nil).to(taxonomy.id)
       .and change { bundle.tags.pluck(:name) }.from([]).to(["tag1", "tag2"])
       .and change { bundle.display_product_reviews }.from(true).to(false)
+      .and change { bundle.hide_bundle_product_reviews }.from(false).to(true)
       .and change { bundle.is_adult }.from(false).to(true)
 
       expect(response).to redirect_to(edit_bundle_share_path(bundle.external_id))
