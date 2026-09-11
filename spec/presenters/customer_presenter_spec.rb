@@ -344,6 +344,37 @@ describe CustomerPresenter do
         expect(props[:commission][:status]).to eq("in_progress")
         expect(props[:commission][:files_are_editable]).to be false
       end
+
+      it "uses the deposit amount while the commission has no completion charge" do
+        deposit = commission.deposit_purchase
+        deposit.update!(displayed_price_cents: 500)
+
+        expect(described_class.new(purchase: deposit).customer(pundit_user:)[:price][:cents]).to eq(500)
+      end
+
+      it "includes the charged completion amount on the deposit row" do
+        deposit = commission.deposit_purchase
+        deposit.update!(displayed_price_cents: 500)
+        completion = create(:purchase, link: deposit.link, seller: deposit.seller, is_commission_completion_purchase: true, displayed_price_cents: 500)
+        create(:tip, purchase: deposit, value_cents: 50)
+        create(:tip, purchase: completion, value_cents: 50)
+        commission.update!(completion_purchase: completion)
+
+        props = described_class.new(purchase: deposit.reload).customer(pundit_user:)
+
+        expect(props[:price][:cents]).to eq(1000)
+        expect(props[:price][:cents_before_offer_code]).to eq(1000)
+        expect(props[:price][:tip_cents]).to eq(100)
+      end
+
+      it "does not include a failed completion charge" do
+        deposit = commission.deposit_purchase
+        deposit.update!(displayed_price_cents: 500)
+        completion = create(:failed_purchase, link: deposit.link, seller: deposit.seller, is_commission_completion_purchase: true, displayed_price_cents: 500)
+        commission.update!(completion_purchase: completion)
+
+        expect(described_class.new(purchase: deposit.reload).customer(pundit_user:)[:price][:cents]).to eq(500)
+      end
     end
 
     context "purchase has an installment plan" do
