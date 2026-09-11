@@ -1421,7 +1421,8 @@ class Link < ApplicationRecord
     recurrence = if is_recurring_billing
       prices.find { |price| price.recurrence == params[:recurrence] } ||
         prices.find { |price| price.recurrence == default_price_recurrence&.recurrence } ||
-        prices.min_by { |price| BasePrice::Recurrence.number_of_months_in_recurrence(price.recurrence) }
+        prices.select { |price| BasePrice::Recurrence.number_of_months_in_recurrence(price.recurrence) }
+              .min_by { |price| BasePrice::Recurrence.number_of_months_in_recurrence(price.recurrence) }
     end
     attrs[:recurrence] = recurrence&.recurrence
     attrs[:pay_in_installments] = !!params[:pay_in_installments] && allow_installment_plan?

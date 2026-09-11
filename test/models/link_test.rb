@@ -3979,6 +3979,17 @@ class LinkTest < ActiveSupport::TestCase
     assert_equal recurrences[:default], result[:recurrence]
   end
 
+  test "cart_item ignores a blank variant recurrence when falling back to the shortest interval" do
+    product = create_membership_product_with_preset_tiered_pricing
+    default_tier = product.default_tier
+    VariantPrice.create!(variant: default_tier, price_cents: 999, currency: product.price_currency_type, recurrence: nil)
+    product.update_column(:subscription_duration, BasePrice::Recurrence::YEARLY)
+    product.reload
+    assert_nil product.default_price_recurrence
+    result = product.cart_item({})
+    assert_equal "monthly", result[:recurrence]
+  end
+
   # --- currencies ------------------------------------------------------------
 
   test "prices round-trip through price_range for every supported currency" do
