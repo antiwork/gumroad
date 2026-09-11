@@ -845,7 +845,8 @@ class Link < ApplicationRecord
   def recurrences
     return nil unless is_recurring_billing
 
-    enabled = prices.alive.is_buy.sort_by { |price| BasePrice::Recurrence.number_of_months_in_recurrence(price.recurrence) }.map { |price| { recurrence: price.recurrence, price_cents: price.price_cents, id: price.external_id } }
+    enabled_prices = prices.alive.is_buy.select { |price| BasePrice::Recurrence.number_of_months_in_recurrence(price.recurrence) }
+    enabled = enabled_prices.sort_by { |price| BasePrice::Recurrence.number_of_months_in_recurrence(price.recurrence) }.map { |price| { recurrence: price.recurrence, price_cents: price.price_cents, id: price.external_id } }
     default = default_price_recurrence&.recurrence || enabled.first&.fetch(:recurrence, nil)
     return nil if default.nil?
 
@@ -1419,9 +1420,10 @@ class Link < ApplicationRecord
     variant = attrs[:option] ? Variant.find_by_external_id(attrs[:option][:id]) : nil
     prices = (is_tiered_membership && variant ? variant : self).prices.is_buy.alive
     recurrence = if is_recurring_billing
-      prices.find { |price| price.recurrence == params[:recurrence] } ||
-        prices.find { |price| price.recurrence == default_price_recurrence&.recurrence } ||
-        prices.min_by { |price| BasePrice::Recurrence.number_of_months_in_recurrence(price.recurrence) }
+      recurring_prices = prices.select { |price| BasePrice::Recurrence.number_of_months_in_recurrence(price.recurrence) }
+      recurring_prices.find { |price| price.recurrence == params[:recurrence] } ||
+        recurring_prices.find { |price| price.recurrence == default_price_recurrence&.recurrence } ||
+        recurring_prices.min_by { |price| BasePrice::Recurrence.number_of_months_in_recurrence(price.recurrence) }
     end
     attrs[:recurrence] = recurrence&.recurrence
     attrs[:pay_in_installments] = !!params[:pay_in_installments] && allow_installment_plan?

@@ -3979,6 +3979,29 @@ class LinkTest < ActiveSupport::TestCase
     assert_equal recurrences[:default], result[:recurrence]
   end
 
+  test "recurrences ignores buy prices with a blank recurrence when picking the default interval" do
+    product = create_membership_product
+    product.update_column(:subscription_duration, BasePrice::Recurrence::YEARLY)
+    blank = product.prices.build(price_cents: 999, recurrence: nil)
+    blank.save!(validate: false)
+    product.reload
+    recurrences = product.recurrences
+    assert_equal "monthly", recurrences[:default]
+    assert recurrences[:enabled].none? { |entry| entry[:recurrence].blank? }
+  end
+
+  test "cart_item does not raise when a variant has a blank-recurrence buy price" do
+    product = create_membership_product
+    product.update_column(:subscription_duration, BasePrice::Recurrence::YEARLY)
+    product.reload
+    blank = product.default_tier.prices.build(price_cents: 999, recurrence: nil)
+    blank.save!(validate: false)
+    result = product.cart_item({})
+    assert_kind_of Hash, result
+    assert_equal "monthly", result[:recurrence]
+    assert result[:price].is_a?(Integer)
+  end
+
   # --- currencies ------------------------------------------------------------
 
   test "prices round-trip through price_range for every supported currency" do
