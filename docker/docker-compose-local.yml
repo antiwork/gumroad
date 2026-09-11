@@ -50,7 +50,6 @@ services:
       - elasticsearch7data:/data
 
   minio:
-    # MinIO images come from quay.io; the Docker Hub repositories were removed.
     image: quay.io/minio/minio
     ports:
       - "9000:9000" # API port
