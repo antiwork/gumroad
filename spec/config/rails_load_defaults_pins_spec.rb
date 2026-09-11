@@ -2,15 +2,9 @@
 
 require "spec_helper"
 
-# config/application.rb advances load_defaults ahead of the behaviour the app has adopted,
-# then pins each deferred default back. Assert the runtime destinations rather than
-# Rails.application.config: a pin can sit in the config object and never reach the framework
-# if it is applied after the railtie has read it, which is the same failure rails/rails#58145
-# produces for default_headers.
-#
-# to_time_preserves_timezone is deliberately absent: Rails 8.1 deletes
-# DateAndTime::Compatibility.preserve_timezone and leaves only a deprecated accessor over an
-# ivar, so there is no runtime destination left to assert.
+# Assert runtime destinations, not Rails.application.config: a pin can sit on the
+# config object and never reach the framework (rails/rails#58145).
+# to_time_preserves_timezone has no runtime destination left in 8.1.
 describe "load_defaults pins" do
   it "runs the framework defaults for the version application.rb declares" do
     # Stored verbatim from the load_defaults argument, so it is the Float 8.1, not "8.1".

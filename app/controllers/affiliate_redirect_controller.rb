@@ -30,12 +30,8 @@ class AffiliateRedirectController < ApplicationController
       uri.to_s
     end
 
-    # A per-product destination_url is creator-supplied and unvalidated: unlike DirectAffiliate,
-    # ProductAffiliate does not include Affiliate::DestinationUrlValidations, and
-    # final_destination_url prefers it. So it can be path-relative ("products/foo"), which
-    # Rails 8.1 refuses to redirect to. Before 8.1 those did not work either — they became
-    # "https://gumroad.comproducts/foo" — so treat them as paths on this host, the same repair
-    # SafeRedirectPathService makes for `next` params.
+    # ProductAffiliate destination_url is unvalidated and can be path-relative; Rails 8.1
+    # raises on those. Prefix with / like SafeRedirectPathService does for next params.
     def host_relative(destination)
       return destination if destination.blank?
       return destination if destination.match?(%r{\A([a-z][a-z\d\-+.]*:|//)}i)
