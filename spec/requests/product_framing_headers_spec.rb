@@ -2,11 +2,8 @@
 
 require "spec_helper"
 
-# Sellers embed product pages in their own sites, so the standard product page must carry
-# no framing headers. SecureHeaders opts X-Frame-Options out globally and leaves
-# Referrer-Policy unset; only the custom-HTML path sets them (see
-# RendersCustomHtmlPages#apply_custom_html_response_headers, covered in user_pages_spec).
-# The wiring this depends on is asserted in spec/config/rails_default_headers_spec.rb.
+# Public product pages must omit framing headers; custom-HTML pages set them
+# (RendersCustomHtmlPages#apply_custom_html_response_headers, user_pages_spec).
 describe "framing headers on a public product page", type: :request do
   let(:seller) { create(:user) }
   let(:product) { create(:product, user: seller) }
