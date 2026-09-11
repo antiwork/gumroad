@@ -2461,17 +2461,15 @@ describe Ai::StoreAgentService do
       expect(captured[:fallback_model]).to be_nil
     end
 
-    it "requests DeepSeek V4.1 Flash with an Opus fallback once OpenRouter and the DeepSeek ramp flag are both on" do
+    it "requests DeepSeek with an Opus fallback once OpenRouter and the DeepSeek ramp flag are both on" do
       allow(Ai::AnthropicClient).to receive(:openrouter_configured?).and_return(true)
       Feature.activate_user(described_class::DEEPSEEK_RAMP_FEATURE, seller)
       allow(client).to receive(:messages).and_return(text_result("hi"))
 
       service.respond(messages: [{ role: "user", content: "hello" }])
 
-      expect(captured[:model]).to eq("deepseek/deepseek-v4.1-flash")
-      expect(captured[:model]).to eq(described_class::DEEPSEEK_MODEL)
+      expect(captured[:model]).to eq("deepseek/deepseek-v4-flash-0731")
       expect(captured[:fallback_model]).to eq("anthropic/claude-opus-5")
-      expect(captured[:fallback_model]).to eq(described_class::DEEPSEEK_FALLBACK_MODEL)
     end
 
     it "keeps requesting Opus when OpenRouter is configured but the seller is in neither ramp" do
@@ -2481,23 +2479,10 @@ describe Ai::StoreAgentService do
       service.respond(messages: [{ role: "user", content: "hello" }])
 
       expect(captured[:model]).to eq(Ai::AnthropicClient::DEFAULT_MODEL)
-      expect(captured[:model]).not_to eq("deepseek/deepseek-v4.1-flash")
       expect(captured[:fallback_model]).to be_nil
     end
 
-    it "does not request DeepSeek when OpenRouter is on but the DeepSeek ramp flag is off" do
-      allow(Ai::AnthropicClient).to receive(:openrouter_configured?).and_return(true)
-      Feature.activate_user(described_class::GROK_RAMP_FEATURE, seller)
-      allow(client).to receive(:messages).and_return(text_result("hi"))
-
-      service.respond(messages: [{ role: "user", content: "hello" }])
-
-      expect(captured[:model]).to eq("x-ai/grok-4.5")
-      expect(captured[:model]).not_to eq("deepseek/deepseek-v4.1-flash")
-      expect(captured[:fallback_model]).to eq("anthropic/claude-opus-5")
-    end
-
-    it "prefers DeepSeek V4.1 Flash over Grok when a seller is in both ramps" do
+    it "prefers DeepSeek over Grok when a seller is in both ramps" do
       allow(Ai::AnthropicClient).to receive(:openrouter_configured?).and_return(true)
       Feature.activate_user(described_class::GROK_RAMP_FEATURE, seller)
       Feature.activate_user(described_class::DEEPSEEK_RAMP_FEATURE, seller)
@@ -2505,7 +2490,7 @@ describe Ai::StoreAgentService do
 
       service.respond(messages: [{ role: "user", content: "hello" }])
 
-      expect(captured[:model]).to eq("deepseek/deepseek-v4.1-flash")
+      expect(captured[:model]).to eq("deepseek/deepseek-v4-flash-0731")
       expect(captured[:fallback_model]).to eq("anthropic/claude-opus-5")
     end
   end

@@ -4,7 +4,7 @@
 # assistant that can answer questions about their store and *propose* changes to it.
 #
 # The agent runs on Grok 4.5 via OpenRouter's Anthropic-compatible endpoint (see MODEL below), with
-# Claude Opus 5 as the request-level fallback when Grok errors. DeepSeek V4.1 Flash is ramped
+# Claude Opus 5 as the request-level fallback when Grok errors. DeepSeek V4 Flash is ramped
 # independently as a third option (see DEEPSEEK_MODEL below), also falling back to Opus.
 #
 # Safety model:
@@ -32,11 +32,11 @@ class Ai::StoreAgentService
   OPENROUTER_FALLBACK_MODEL = "anthropic/claude-opus-5"
   # Below 100%, gates Grok vs Opus per seller in addition to OPENROUTER_API_KEY being configured.
   GROK_RAMP_FEATURE = :store_agent_grok
-  # DeepSeek V4.1 Flash: cheap, fast MoE model worth ramping as a third option alongside Claude and
+  # DeepSeek V4 Flash: cheap, fast MoE model worth ramping as a third option alongside Claude and
   # Grok — same OpenRouter routing and Anthropic-compatible endpoint, so no client changes needed
   # beyond the model id. Falls back to Opus rather than Grok so a DeepSeek outage doesn't cascade
   # into a second experimental model.
-  DEEPSEEK_MODEL = "deepseek/deepseek-v4.1-flash"
+  DEEPSEEK_MODEL = "deepseek/deepseek-v4-flash-0731"
   DEEPSEEK_FALLBACK_MODEL = "anthropic/claude-opus-5"
   # Below 100%, gates DeepSeek vs Opus per seller in addition to OPENROUTER_API_KEY being
   # configured. Independent of GROK_RAMP_FEATURE — see #client for precedence when both are active
