@@ -363,7 +363,7 @@ class SendWorkflowPostEmailsJob
     end
 
     def requeue_for_daily_blast_limit(*args)
-      run_at = Time.zone.tomorrow.beginning_of_day
+      run_at = SellerLargeBlastQuota.deferred_run_at
       return unless defer_schedule_intent_until(run_at)
 
       job_id = self.class.perform_at(run_at, *args)

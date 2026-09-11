@@ -126,6 +126,44 @@ describe AlertOnStalledPostEmailBlastsJob do
     end
   end
 
+  describe ".auto_resume_eligible?" do
+    before { Feature.activate(:auto_resume_stalled_post_blasts) }
+    after { Feature.deactivate(:auto_resume_stalled_post_blasts) }
+
+    it "is true while the next scan still lands inside the resume window, and past it only while recipients are still owed" do
+      recent = stalled_blast(requested_hours_ago: 6)
+      # Inside the window now, but the next scan (up to six hours away) will find it past 24h.
+      leaving = stalled_blast(requested_hours_ago: 23)
+      old = stalled_blast(requested_hours_ago: 30)
+
+      expect(described_class.auto_resume_eligible?(recent)).to eq(true)
+      expect(described_class.auto_resume_eligible?(leaving)).to eq(false)
+      expect(described_class.auto_resume_eligible?(old)).to eq(false)
+
+      $redis.set(RedisKey.blast_pending_recipients(old.id), 12)
+      expect(described_class.auto_resume_eligible?(old)).to eq(true)
+    ensure
+      $redis.del(RedisKey.blast_pending_recipients(old.id)) if old
+    end
+
+    it "is false once fewer than two scans remain inside the lookback, so a held resume cannot be promised" do
+      blast = stalled_blast(requested_hours_ago: (described_class::LOOKBACK - 8.hours).in_hours)
+      $redis.set(RedisKey.blast_pending_recipients(blast.id), 12)
+
+      expect(described_class.auto_resume_eligible?(blast)).to eq(false)
+    ensure
+      $redis.del(RedisKey.blast_pending_recipients(blast.id)) if blast
+    end
+
+    it "is false for completed blasts, non-opener resends, and when auto-resume is off" do
+      expect(described_class.auto_resume_eligible?(stalled_blast.tap { _1.update!(completed_at: Time.current) })).to eq(false)
+      expect(described_class.auto_resume_eligible?(stalled_blast.tap { _1.update!(recipient_filter: "unopened") })).to eq(false)
+
+      Feature.deactivate(:auto_resume_stalled_post_blasts)
+      expect(described_class.auto_resume_eligible?(stalled_blast)).to eq(false)
+    end
+  end
+
   describe "auto-resume" do
     context "when :auto_resume_stalled_post_blasts is active" do
       before { Feature.activate(:auto_resume_stalled_post_blasts) }
@@ -239,6 +277,33 @@ describe AlertOnStalledPostEmailBlastsJob do
         expect(SendPostBlastEmailsJob).not_to have_received(:perform_async)
         expect($redis.exists?(RedisKey.stalled_blast_auto_resumed(blast.id))).to be(false)
         expect(InternalNotificationWorker).not_to have_received(:perform_async)
+      end
+
+      it "reports a quota-deferred blast as DEFERRED and leaves it alone" do
+        blast = stalled_blast
+        $redis.set(RedisKey.blast_quota_deferred_until(blast.id), 5.hours.from_now.iso8601)
+        stub_sidekiq
+
+        described_class.new.perform
+
+        expect(SendPostBlastEmailsJob).not_to have_received(:perform_async)
+        expect($redis.exists?(RedisKey.stalled_blast_auto_resumed(blast.id))).to eq(false)
+      ensure
+        $redis.del(RedisKey.blast_quota_deferred_until(blast.id)) if blast
+      end
+
+      it "resumes a quota-deferred blast whose recorded deferral has passed, even past the window" do
+        # Quota rejection happens before any recipients are recorded as owed, so only the
+        # lapsed marker says this blast is late; without it the row would be HELD.
+        blast = stalled_blast(requested_hours_ago: 30)
+        $redis.set(RedisKey.blast_quota_deferred_until(blast.id), 1.minute.ago.iso8601)
+        stub_sidekiq
+
+        described_class.new.perform
+
+        expect(SendPostBlastEmailsJob).to have_received(:perform_async).with(blast.id)
+      ensure
+        $redis.del(RedisKey.blast_quota_deferred_until(blast.id)) if blast
       end
 
       it "resumes a blast past the window when recipients are still owed" do

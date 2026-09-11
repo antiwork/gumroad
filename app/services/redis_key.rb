@@ -45,6 +45,8 @@ class RedisKey
     def blast_audience_snapshot(blast_id) = "blast:#{blast_id}:audience_snapshot"
     def blast_non_opener_emails(blast_id) = "blast:#{blast_id}:non_opener_emails"
     def blast_pending_recipients(blast_id) = "blast:#{blast_id}:pending_recipients"
+    def blast_quota_deferred_until(blast_id) = "blast:#{blast_id}:quota_deferred_until"
+    def blast_quota_admitted(blast_id) = "blast:#{blast_id}:quota_admitted"
     def blast_active_slice_partition(blast_id) = "blast:#{blast_id}:active_slice_partition"
     def blast_slice_partition_chunks(blast_id, partition_key) = "blast:#{blast_id}:slice_partition:#{partition_key}:chunks"
     def blast_slice_claim(blast_id, partition_key, chunk_index) = "blast:#{blast_id}:slice_claim:#{partition_key}:#{chunk_index}"
@@ -121,6 +123,8 @@ class RedisKey
     # Fixed at lap start so the walk keeps making forward progress even while new failing orders
     # keep arriving above it. See RepairOrderChargeOutcomesJob.
     def order_charge_outcome_repair_lap_ceiling = "order_charge_outcome_repair:lap_ceiling"
+    # High-water mark for RepairOrderChargeOutcomesJob's recent pass: the last purchases id it walked.
+    def order_charge_outcome_repair_recent_mark = "order_charge_outcome_repair:recent_mark"
     # High-water mark for AlertOnStripeDobDriftJob: the last merchant_accounts id it compared.
     def stripe_dob_drift_sweep_cursor = "stripe_dob_drift_sweep:cursor"
     # Purchases whose notice was claimed but never transmitted. The cursor is already past their
@@ -138,6 +142,8 @@ class RedisKey
     def workflow_immediate_enqueue_per_second = "workflow_immediate_enqueue_per_second"
     def workflow_immediate_fanout_max_spread_seconds = "workflow_immediate_fanout_max_spread_seconds"
     def seller_large_blast_threshold = "seller_large_blast_threshold"
+    def seller_large_blast_deferral_window_start_seconds = "seller_large_blast_deferral_window_start_seconds"
+    def seller_large_blast_deferral_window_length_seconds = "seller_large_blast_deferral_window_length_seconds"
     def seller_large_blast_quota(seller_id, day) = "seller_large_blast_quota:#{seller_id}:#{day}"
     # LIST of JSON {i: installment_id, p: purchase_id, t: epoch} pending an email_infos delivered UPDATE.
     def email_info_delivered_buffer = "email_info:delivered_buffer"

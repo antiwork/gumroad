@@ -4952,9 +4952,7 @@ class Purchase < ApplicationRecord
 
       inner = mandate_options[:payment_method_options][:card][:mandate_options]
                 .merge(amount: presentment_cap_cents)
-      unless india_card_mandate_reliability_enabled?
-        inner = inner.merge(currency: presentment_currency)
-      end
+                .except(:currency)
       mandate_options.deep_merge(
         payment_method_options: { card: { mandate_options: inner } }
       )

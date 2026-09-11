@@ -503,6 +503,7 @@ describe Charge::CreateService, :vcr do
               reference: "gumroad-ref",
               amount_type: "maximum",
               amount: 10_00,
+              currency: Currency::USD,
               start_date: Time.current.to_i,
               interval: "month",
               interval_count: 1,
@@ -532,7 +533,7 @@ describe Charge::CreateService, :vcr do
         inner = kwargs[:mandate_options][:payment_method_options][:card][:mandate_options]
         # 10_00 canonical scaled by the charge's own 12_50/10_00 ratio.
         expect(inner[:amount]).to eq 12_50
-        expect(inner[:currency]).to eq Currency::CAD
+        expect(inner).not_to have_key(:currency)
         # Everything else about the mandate is untouched.
         expect(inner[:amount_type]).to eq "maximum"
         expect(inner[:reference]).to eq "gumroad-ref"
@@ -639,7 +640,7 @@ describe Charge::CreateService, :vcr do
       expect(ChargeProcessor).to receive(:create_payment_intent_or_charge!) do |*, **kwargs|
         inner = kwargs[:mandate_options][:payment_method_options][:card][:mandate_options]
         expect(inner[:amount]).to be >= 277_77
-        expect(inner[:currency]).to eq Currency::INR
+        expect(inner).not_to have_key(:currency)
         nil
       end
 

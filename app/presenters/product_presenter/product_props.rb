@@ -140,7 +140,7 @@ class ProductPresenter::ProductProps
       {
         id: product.external_id,
         name: product.name,
-        ratings: product.display_product_reviews? ? {
+        ratings: (!@product.hide_bundle_product_reviews? && product.display_product_reviews?) ? {
           count: product.reviews_count,
           average: product.average_rating,
         } : nil,

@@ -2,7 +2,13 @@ import { Envelope, FileDetail } from "@boxicons/react";
 import { router, useForm } from "@inertiajs/react";
 import React from "react";
 
-import { SavedInstallment, getAudienceCount, getNonOpenerCount, resendToNonOpeners } from "$app/data/installments";
+import {
+  SavedInstallment,
+  getAudienceCount,
+  getNonOpenerCount,
+  resendToNonOpeners,
+  sendToRemaining,
+} from "$app/data/installments";
 import { formatStatNumber } from "$app/utils/formatStatNumber";
 import { asyncVoid } from "$app/utils/promise";
 import { assertResponseError } from "$app/utils/request";
@@ -194,15 +200,75 @@ export const ResendToNonOpenersButton = ({ installment }: { installment: SavedIn
   );
 };
 
+export const SendToRemainingButton = ({
+  installment,
+  remainingCount,
+}: {
+  installment: SavedInstallment;
+  remainingCount: number | null;
+}) => {
+  const [confirming, setConfirming] = React.useState(false);
+  const [sending, setSending] = React.useState(false);
+
+  const handleSend = asyncVoid(async () => {
+    setSending(true);
+    try {
+      await sendToRemaining(installment.external_id);
+      showAlert("Sending to everyone who has not received this yet. This may take a while.", "success");
+      setConfirming(false);
+      router.reload();
+    } catch (error) {
+      assertResponseError(error);
+      showAlert(error.message, "error");
+    } finally {
+      setSending(false);
+    }
+  });
+
+  const recipients =
+    remainingCount !== null
+      ? `the ${formatStatNumber({ value: remainingCount })} ${remainingCount === 1 ? "person" : "people"} who`
+      : "everyone who";
+
+  return (
+    <>
+      <Button onClick={() => setConfirming(true)}>Send to the rest</Button>
+      {confirming ? (
+        <Modal
+          open
+          allowClose={!sending}
+          onClose={() => setConfirming(false)}
+          title="Send to the rest?"
+          footer={
+            <>
+              <Button disabled={sending} onClick={() => setConfirming(false)}>
+                Cancel
+              </Button>
+              <Button color="accent" disabled={sending} onClick={handleSend}>
+                {sending ? "Sending..." : "Send"}
+              </Button>
+            </>
+          }
+        >
+          <h4>{`This will send "${installment.name}" to ${recipients} ${remainingCount === 1 ? "has" : "have"} not received it yet.`}</h4>
+        </Modal>
+      ) : null}
+    </>
+  );
+};
+
 type EmailSheetActionsProps = {
   installment: SavedInstallment;
   onDelete: () => void;
+  // Set when the latest send is incomplete; the count is the recipients still owed when known.
+  remainingSend?: { count: number | null } | null;
 };
 
-export const EmailSheetActions = ({ installment, onDelete }: EmailSheetActionsProps) => (
+export const EmailSheetActions = ({ installment, onDelete, remainingSend = null }: EmailSheetActionsProps) => (
   <>
     <div className="grid grid-flow-col gap-4">
       {installment.send_emails ? <ViewEmailButton installment={installment} /> : null}
+      {remainingSend ? <SendToRemainingButton installment={installment} remainingCount={remainingSend.count} /> : null}
       {canResendToNonOpeners(installment) ? <ResendToNonOpenersButton installment={installment} /> : null}
       {installment.shown_on_profile ? (
         <NavigationButton href={installment.full_url} target="_blank" rel="noopener noreferrer">

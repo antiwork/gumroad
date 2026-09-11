@@ -1054,6 +1054,9 @@ class Installment < ApplicationRecord
   end
 
   def has_been_blasted? = blasts.loaded? ? blasts.any? : blasts.exists?
+
+  # The send whose state the seller sees; resends to non-openers have their own rows.
+  def latest_regular_blast = blasts.reject(&:to_non_openers?).max_by(&:requested_at)
   def can_be_blasted? = send_emails? && !has_been_blasted?
 
   def featured_image_url

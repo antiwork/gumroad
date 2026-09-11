@@ -70,43 +70,39 @@ describe "Dashboard", js: true, type: :system do
   end
 
   describe "Getting started" do
-    it "offers optional social connections and opens the existing settings controls" do
+    it "offers optional social connections and opens the Social connections settings page" do
       Feature.deactivate(:youtube_connect)
       Feature.deactivate(:instagram_connect)
       seller.update!(twitter_handle: "example_creator")
       visit dashboard_path
 
       expect(page).to have_text("Connect a social account (optional)")
-      expect(page).to have_text("X: Available to connect")
-      expect(page).not_to have_text("YouTube: Available to connect")
-      expect(page).not_to have_text("Instagram: Available to connect")
-      click_on "Manage social connections"
-      expect(page).to have_current_path(profile_path)
-      expect(page).to have_text("Social links")
+      expect(page).to have_text("If we ever review your account, a connected social account gives us more to go on.")
+      expect(page).not_to have_text("Connected:")
+      click_on "Connect an account"
+      expect(page).to have_current_path(settings_social_connections_path(social_connect_origin: "onboarding"))
+      expect(page).to have_text("Social connections")
       expect(page).to have_button("Connect to X")
-      expect(page).to have_button("Disconnect example_creator from X")
-
-      click_on "Disconnect example_creator from X"
-      expect(page).not_to have_button("Disconnect example_creator from X")
-      expect(page).to have_button("Connect to X")
-      expect(seller.reload.twitter_handle).to be_nil
+      expect(page).not_to have_button("Connect to YouTube")
+      expect(page).not_to have_button("Connect to Instagram")
+      expect(page).not_to have_button("Disconnect @example_creator from X")
     end
 
     it "shows a connected account without making social connections required for checklist completion" do
       seller.update!(twitter_user_id: "example-social-id")
       visit dashboard_path
-      expect(page).to have_text("X: Connected")
-      click_on "Manage social connections"
+      expect(page).to have_text("Connected: X")
+      click_on "Manage connections"
       click_on "Disconnect X"
       expect(page).to have_button("Connect to X")
       expect(seller.reload.twitter_user_id).to be_nil
       visit dashboard_path
-      expect(page).to have_text("X: Available to connect")
-      expect(page).to have_link("Manage social connections")
+      expect(page).not_to have_text("Connected:")
+      expect(page).to have_link("Connect an account")
       click_on "Minimize getting started"
       expect(page).not_to have_text("Connect a social account (optional)")
       click_on "Expand getting started"
-      expect(page).to have_text("X: Available to connect")
+      expect(page).to have_link("Connect an account")
 
       click_on "Dismiss getting started"
       click_on "Yes, hide it"

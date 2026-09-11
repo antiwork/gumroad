@@ -3,7 +3,7 @@
 module ApplicationHelper
   def vite_entrypoint_stylesheet_tag(name, **options)
     entry = ViteRuby.instance.manifest.resolve_entries(name, type: :typescript)
-    options[:extname] = false if Rails::VERSION::MAJOR >= 7
+    options[:extname] = false
     stylesheets = entry.fetch(:stylesheets, [])
     return vite_stylesheet_tag("entrypoints/#{name}.scss", **options) if stylesheets.empty?
     stylesheet_link_tag(*stylesheets, **options)

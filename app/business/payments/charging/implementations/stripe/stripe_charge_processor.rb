@@ -371,7 +371,11 @@ class StripeChargeProcessor
 
     # Stripe does not update a mandate. Use the mandate from a completed SetupIntent instead
     # of asking the PaymentIntent to create different terms.
-    params.merge!(mandate_options) if mandate_options.present? && !upi_autopay && mandate.blank?
+    # Nested `currency` is valid on SetupIntent mandate_options only. PaymentIntent
+    # inherits currency from the intent; Stripe 400s the extra field.
+    if mandate_options.present? && !upi_autopay && mandate.blank?
+      params.merge!(mandate_options_without_nested_currency(mandate_options))
+    end
     params.merge!(chargeable.stripe_charge_params)
 
     if off_session && chargeable.requires_mandate? && !upi_autopay
@@ -1531,6 +1535,20 @@ class StripeChargeProcessor
   end
 
   private
+    def mandate_options_without_nested_currency(mandate_options)
+      inner = mandate_options.dig(:payment_method_options, :card, :mandate_options) ||
+        mandate_options.dig("payment_method_options", "card", "mandate_options")
+      return mandate_options if inner.blank?
+      return mandate_options unless inner.key?(:currency) || inner.key?("currency")
+
+      cleaned = mandate_options.deep_dup
+      target = cleaned.dig(:payment_method_options, :card, :mandate_options) ||
+        cleaned.dig("payment_method_options", "card", "mandate_options")
+      target.delete(:currency)
+      target.delete("currency")
+      cleaned
+    end
+
     # https://stripe.com/docs/api/files/object#file_object-purpose
     STRIPE_FILE_PURPOSE_DISPUTE_EVIDENCE = "dispute_evidence"
 

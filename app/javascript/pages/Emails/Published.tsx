@@ -57,6 +57,46 @@ export default function EmailsPublished() {
 
   const userAgentInfo = useUserAgentInfo();
 
+  const deliveryLabel = (installment: PublishedInstallment) => {
+    if (!installment.send_emails) return "n/a";
+    if (!installment.delivery) return "Sent";
+    return { sent: "Sent", sending: "Sending", waiting: "Waiting to send", incomplete: "Incomplete" }[
+      installment.delivery.status
+    ];
+  };
+  // On mobile every row is a card, so a finished send keeps the lines it has today and only an
+  // unfinished one earns a Status line. Desktop shows the column for every row.
+  const isUnfinished = (installment: PublishedInstallment) =>
+    installment.send_emails && installment.delivery !== null && installment.delivery.status !== "sent";
+
+  const deliveryNote = (delivery: PublishedInstallment["delivery"], sentCount: number | null) => {
+    if (!delivery || delivery.status === "sent") return null;
+    const people = (count: number) => `${formatStatNumber({ value: count })} ${count === 1 ? "person" : "people"}`;
+    switch (delivery.status) {
+      case "sending":
+        return delivery.remaining_count !== null
+          ? `Still sending. ${people(delivery.remaining_count)} left.`
+          : "Still sending.";
+      case "waiting":
+        return delivery.scheduled_for
+          ? `Sends ${new Date(delivery.scheduled_for).toLocaleString(userAgentInfo.locale, {
+              timeZone: currentSeller.timeZone.name,
+              dateStyle: "medium",
+              timeStyle: "short",
+            })}, when your daily limit for large emails resets.`
+          : "Sends when your daily limit for large emails resets.";
+      case "incomplete": {
+        // Emailed shows the post's total, which can differ from this send's own count after a
+        // resend; repeat the count only when it adds something.
+        const got =
+          delivery.delivered_count === sentCount ? "" : `${people(delivery.delivered_count)} got this email. `;
+        const missing =
+          delivery.remaining_count !== null ? `${people(delivery.remaining_count)} have` : "Some people have";
+        return `${got}${missing} not received it yet.${delivery.retrying ? " We are retrying automatically." : ""}`;
+      }
+    }
+  };
+
   return (
     <EmailsLayout selectedTab="published" hasPosts={has_posts} query={query} onQueryChange={setQuery}>
       <div className="space-y-4 p-4 md:p-8">
@@ -68,6 +108,7 @@ export default function EmailsPublished() {
                   <TableHead>Subject</TableHead>
                   <TableHead>Date</TableHead>
                   <TableHead>Emailed</TableHead>
+                  <TableHead>Status</TableHead>
                   <TableHead>Opened</TableHead>
                   <TableHead>Clicks</TableHead>
                   <TableHead>
@@ -100,6 +141,11 @@ export default function EmailsPublished() {
                       </TableCell>
                       <TableCell className="whitespace-nowrap">
                         {installment.send_emails ? formatStatNumber({ value: installment.sent_count }) : "n/a"}
+                      </TableCell>
+                      <TableCell
+                        className={isUnfinished(installment) ? "whitespace-nowrap" : "whitespace-nowrap max-lg:hidden"}
+                      >
+                        {deliveryLabel(installment)}
                       </TableCell>
                       <TableCell className="whitespace-nowrap">
                         {installment.send_emails
@@ -180,6 +226,7 @@ export default function EmailsPublished() {
                           <TableCell className="whitespace-nowrap text-muted">
                             {formatStatNumber({ value: resend.delivery_count })}
                           </TableCell>
+                          <TableCell className="whitespace-nowrap text-muted">n/a</TableCell>
                           <TableCell className="whitespace-nowrap text-muted">
                             {formatStatNumber({ value: resend.open_rate, suffix: "%", placeholder: "n/a" })}
                           </TableCell>
@@ -208,6 +255,18 @@ export default function EmailsPublished() {
                       ? formatStatNumber({ value: selectedInstallment.sent_count })
                       : "n/a"}
                   </CardContent>
+                  <CardContent>
+                    <h5 className="grow font-bold">Status</h5>
+                    {deliveryLabel(selectedInstallment)}
+                  </CardContent>
+                  {selectedInstallment.send_emails &&
+                  deliveryNote(selectedInstallment.delivery, selectedInstallment.sent_count) ? (
+                    <CardContent>
+                      <p className="text-sm text-muted">
+                        {deliveryNote(selectedInstallment.delivery, selectedInstallment.sent_count)}
+                      </p>
+                    </CardContent>
+                  ) : null}
                   <CardContent>
                     <h5 className="grow font-bold">Opened</h5>
                     {selectedInstallment.send_emails
@@ -255,6 +314,11 @@ export default function EmailsPublished() {
                 </Card>
                 <EmailSheetActions
                   installment={selectedInstallment}
+                  remainingSend={
+                    selectedInstallment.delivery?.status === "incomplete" && !selectedInstallment.delivery.retrying
+                      ? { count: selectedInstallment.delivery.remaining_count }
+                      : null
+                  }
                   onDelete={() =>
                     setDeletingInstallment({
                       id: selectedInstallment.external_id,
