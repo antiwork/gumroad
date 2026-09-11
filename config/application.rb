@@ -29,10 +29,11 @@ require_relative "../lib/utilities/global_config"
 module Gumroad
   class Application < Rails::Application
     # Initialize configuration defaults for originally generated Rails version.
-    config.load_defaults 8.0
-    # Same five headers load_defaults 8.0 sets; restated so SecureHeaders strips them from the
-    # object ActionDispatch::Response aliases. Must live here, not an initializer: since 8.0.5 the
-    # response class loads before initializers run, so a later assignment is ignored (rails#58145).
+    config.load_defaults 8.1
+    # Same five headers load_defaults inherits from 7.1; restated so SecureHeaders strips them
+    # from the object ActionDispatch::Response aliases. Must live here, not an initializer: since
+    # 8.0.5 the response class loads before initializers run, so a later assignment is ignored
+    # (rails#58145).
     config.action_dispatch.default_headers = {
       "X-Frame-Options" => "SAMEORIGIN",
       "X-XSS-Protection" => "0",
@@ -40,9 +41,22 @@ module Gumroad
       "X-Permitted-Cross-Domain-Policies" => "none",
       "Referrer-Policy" => "strict-origin-when-cross-origin"
     }
-    # No to_time_preserves_timezone pin: Rails 8.1 drops it from load_defaults 8.0, removes
-    # DateAndTime::Compatibility.preserve_timezone, and deprecates the accessor. to_time now
-    # always preserves the receiver's zone — the DST audit this pin deferred is forced here.
+    # action_on_path_relative_redirect is deliberately NOT pinned back to :log. It is a security
+    # check, and 8.1's :raise is the behaviour we want.
+    # Audit embedded JSON consumers before removing response escaping. Rails 8.1 deprecates
+    # setting this true, so it warns at boot; the alternative is shipping the behaviour change.
+    config.action_controller.escape_json_responses = true
+    # Verify older embedded JavaScript consumers before emitting literal separators.
+    config.active_support.escape_js_separators_in_json = true
+    # Audit keyless query models before raising on implicit finder order.
+    config.active_record.raise_on_missing_required_finder_order_columns = false
+    # Compare template cache dependencies before switching the render parser.
+    config.action_view.render_tracker = :regex
+    # Check form/autofill behaviour before changing hidden-field markup.
+    config.action_view.remove_hidden_field_autocomplete = false
+    # No to_time_preserves_timezone pin: 8.1 removes DateAndTime::Compatibility.preserve_timezone
+    # and leaves a deprecated no-op accessor. Inert for us either way — config.time_zone is unset,
+    # so Time.zone is UTC and offset and zone resolve identically.
     # Verify conditional download responses before changing ETag precedence.
     config.action_dispatch.strict_freshness = false
     # Opts out of the Rails 8 ReDoS ceiling until regex-heavy validators are audited
