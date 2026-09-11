@@ -344,18 +344,35 @@ describe CustomerPresenter do
         expect(props[:commission][:status]).to eq("in_progress")
         expect(props[:commission][:files_are_editable]).to be false
       end
+    end
+
+    context "commission list price" do
+      let(:commission_product) { create(:commission_product) }
+      let(:deposit) do
+        create(
+          :purchase,
+          link: commission_product,
+          seller: commission_product.user,
+          is_commission_deposit_purchase: true,
+          price_cents: 500,
+          displayed_price_cents: 500
+        )
+      end
+      let!(:commission) { create(:commission, deposit_purchase: deposit) }
 
       it "uses the deposit amount while the commission has no completion charge" do
-        deposit = commission.deposit_purchase
-        deposit.update!(displayed_price_cents: 500)
-
         expect(described_class.new(purchase: deposit).customer(pundit_user:)[:price][:cents]).to eq(500)
       end
 
       it "includes the charged completion amount on the deposit row" do
-        deposit = commission.deposit_purchase
-        deposit.update!(displayed_price_cents: 500)
-        completion = create(:purchase, link: deposit.link, seller: deposit.seller, is_commission_completion_purchase: true, displayed_price_cents: 500)
+        completion = create(
+          :purchase,
+          link: commission_product,
+          seller: commission_product.user,
+          is_commission_completion_purchase: true,
+          price_cents: 500,
+          displayed_price_cents: 500
+        )
         create(:tip, purchase: deposit, value_cents: 50)
         create(:tip, purchase: completion, value_cents: 50)
         commission.update!(completion_purchase: completion)
@@ -368,9 +385,14 @@ describe CustomerPresenter do
       end
 
       it "does not include a failed completion charge" do
-        deposit = commission.deposit_purchase
-        deposit.update!(displayed_price_cents: 500)
-        completion = create(:failed_purchase, link: deposit.link, seller: deposit.seller, is_commission_completion_purchase: true, displayed_price_cents: 500)
+        completion = create(
+          :failed_purchase,
+          link: commission_product,
+          seller: commission_product.user,
+          is_commission_completion_purchase: true,
+          price_cents: 500,
+          displayed_price_cents: 500
+        )
         commission.update!(completion_purchase: completion)
 
         expect(described_class.new(purchase: deposit.reload).customer(pundit_user:)[:price][:cents]).to eq(500)
