@@ -44,7 +44,9 @@ module Gumroad
     config.active_support.to_time_preserves_timezone = :offset
     # Verify conditional download responses before changing ETag precedence.
     config.action_dispatch.strict_freshness = false
-    # Preserve regex behavior during boot as well as after initialization.
+    # Opts out of the Rails 8 ReDoS ceiling until regex-heavy validators are audited
+    # (gumroad-private#2509). Must follow load_defaults: the framework sets it with `||= 1`,
+    # so pinning nil beforehand would be overwritten rather than preserved.
     Regexp.timeout = nil
     # Audit duplicate-instance purchase callbacks before changing the recipient.
     config.active_record.run_commit_callbacks_on_first_saved_instances_in_transaction = true
