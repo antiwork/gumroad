@@ -60,10 +60,7 @@ class MerchantAccount < ApplicationRecord
     !user_id
   end
 
-  # Skip doomed FX quotes this long. 30 days left EUR dark for 10 days after
-  # Stripe started accepting EUR→USD quotes again (gumroad-private#2541);
-  # account.updated never fired. One extra doomed quote/day per marked
-  # currency is cheaper than a dark picker.
+  # One extra doomed FX quote/day per marked currency is cheaper than a dark picker.
   SETTLEMENT_CURRENCY_MISMATCH_TTL = 1.day
 
   def settlement_currency_mismatch_active?(currency)
