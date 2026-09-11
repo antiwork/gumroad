@@ -29,8 +29,8 @@ require_relative "../lib/utilities/global_config"
 module Gumroad
   class Application < Rails::Application
     # Initialize configuration defaults for originally generated Rails version.
-    config.load_defaults 7.2
-    # Same five headers load_defaults 7.2 sets; restated so SecureHeaders strips them from the
+    config.load_defaults 8.0
+    # Same five headers load_defaults 8.0 sets; restated so SecureHeaders strips them from the
     # object ActionDispatch::Response aliases. Must live here, not an initializer: since 8.0.5 the
     # response class loads before initializers run, so a later assignment is ignored (rails#58145).
     config.action_dispatch.default_headers = {
@@ -40,6 +40,14 @@ module Gumroad
       "X-Permitted-Cross-Domain-Policies" => "none",
       "Referrer-Policy" => "strict-origin-when-cross-origin"
     }
+    # Audit scheduled times across DST before preserving named zones.
+    config.active_support.to_time_preserves_timezone = :offset
+    # Verify conditional download responses before changing ETag precedence.
+    config.action_dispatch.strict_freshness = false
+    # Opts out of the Rails 8 ReDoS ceiling until regex-heavy validators are audited
+    # (gumroad-private#2509). Must follow load_defaults: the framework sets it with `||= 1`,
+    # so pinning nil beforehand would be overwritten rather than preserved.
+    Regexp.timeout = nil
     # Audit duplicate-instance purchase callbacks before changing the recipient.
     config.active_record.run_commit_callbacks_on_first_saved_instances_in_transaction = true
     # Verify SQL log consumers before switching to SQLCommenter.

@@ -16,5 +16,7 @@ describe "Rails default_headers wiring" do
     expect(config_headers["X-Frame-Options"]).to be_nil
     expect(config_headers["Referrer-Policy"]).to be_nil
     expect(config_headers["X-Download-Options"]).to be_nil
+    # nosniff still reaches responses: SecureHeaders' middleware sets it, not this hash.
+    expect(config_headers["X-Content-Type-Options"]).to be_nil
   end
 end
