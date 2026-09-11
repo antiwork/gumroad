@@ -680,22 +680,50 @@ class PaypalPayoutProcessor
     (response["L_AMT0"].to_d * 100).to_i
   end
 
-  # Bank-account top-ups are not searchable by type. Sum every uncleared
-  # bank Transfer in the last two weeks, whatever the amount.
+  # Bank-account top-ups are not searchable by type. FundsAdded keeps
+  # TransactionSearch on deposits so the 100-row cap is less likely to
+  # hide an uncleared Transfer. If PayPal still truncates (warning 11002),
+  # page older windows until the two-week range is complete.
   def self.topup_amount_in_transit
-    params = PAYPAL_API_PARAMS.merge("METHOD" => "TransactionSearch",
-                                     "STARTDATE" => 2.weeks.ago.iso8601)
-    paypal_response = HTTParty.post(PAYPAL_ENDPOINT, body: params)
-    response = Rack::Utils.parse_nested_query(paypal_response.parsed_response)
-    return 0 unless %w[Success SuccessWithWarning].include?(response["ACK"])
-
+    seen = {}
     topup_amount = 0.to_d
-    response.keys.count { _1.include?("L_TRANSACTIONID") }.times do |i|
-      next unless response["L_TYPE#{i}"] == "Transfer" &&
-        response["L_NAME#{i}"] == "Bank Account" &&
-        response["L_STATUS#{i}"] == "Uncleared"
+    start_date = 2.weeks.ago
+    end_date = nil
 
-      topup_amount += response["L_AMT#{i}"].to_d
+    10.times do
+      params = PAYPAL_API_PARAMS.merge(
+        "METHOD" => "TransactionSearch",
+        "TRANSACTIONCLASS" => "FundsAdded",
+        "STARTDATE" => start_date.iso8601
+      )
+      params["ENDDATE"] = end_date.iso8601 if end_date
+      paypal_response = HTTParty.post(PAYPAL_ENDPOINT, body: params)
+      response = Rack::Utils.parse_nested_query(paypal_response.parsed_response)
+      return topup_amount unless %w[Success SuccessWithWarning].include?(response["ACK"])
+
+      count = response.keys.count { _1.include?("L_TRANSACTIONID") }
+      oldest_ts = nil
+      count.times do |i|
+        txn_id = response["L_TRANSACTIONID#{i}"]
+        ts = Time.iso8601(response["L_TIMESTAMP#{i}"]) if response["L_TIMESTAMP#{i}"].present?
+        oldest_ts = ts if ts && (oldest_ts.nil? || ts < oldest_ts)
+        next if txn_id.blank? || seen[txn_id]
+
+        seen[txn_id] = true
+        next unless response["L_TYPE#{i}"] == "Transfer" &&
+          response["L_NAME#{i}"] == "Bank Account" &&
+          response["L_STATUS#{i}"] == "Uncleared"
+
+        topup_amount += response["L_AMT#{i}"].to_d
+      end
+
+      truncated = response.keys.any? { |k| k.start_with?("L_ERRORCODE") && response[k] == "11002" }
+      break unless truncated
+      if oldest_ts.blank? || oldest_ts <= start_date
+        raise "PayPal TransactionSearch truncated (11002); cannot page older than #{oldest_ts.inspect}"
+      end
+
+      end_date = oldest_ts - 1.second
     end
     topup_amount
   end

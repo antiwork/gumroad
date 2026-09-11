@@ -1508,6 +1508,7 @@ describe PaypalPayoutProcessor do
       expect(HTTParty).to receive(:post) do |_url, opts|
         expect(opts[:body]["AMT"]).to be_nil
         expect(opts[:body]["METHOD"]).to eq("TransactionSearch")
+        expect(opts[:body]["TRANSACTIONCLASS"]).to eq("FundsAdded")
         paypal_nvp("ACK" => "Success")
       end
 
@@ -1563,6 +1564,46 @@ describe PaypalPayoutProcessor do
       allow(HTTParty).to receive(:post).and_return(paypal_nvp("ACK" => "Failure"))
 
       expect(described_class.topup_amount_in_transit).to eq(0)
+    end
+
+    it "pages older windows when TransactionSearch is truncated" do
+      first = paypal_nvp(
+        "ACK" => "SuccessWithWarning",
+        "L_ERRORCODE0" => "11002",
+        "L_TRANSACTIONID0" => "txn_recent",
+        "L_TIMESTAMP0" => "2026-09-11T12:00:00Z",
+        "L_TYPE0" => "Transfer",
+        "L_NAME0" => "Bank Account",
+        "L_STATUS0" => "Uncleared",
+        "L_AMT0" => "25000.00"
+      )
+      second = paypal_nvp(
+        "ACK" => "Success",
+        "L_TRANSACTIONID0" => "txn_older",
+        "L_TIMESTAMP0" => "2026-09-01T12:00:00Z",
+        "L_TYPE0" => "Transfer",
+        "L_NAME0" => "Bank Account",
+        "L_STATUS0" => "Uncleared",
+        "L_AMT0" => "100000.00"
+      )
+      expect(HTTParty).to receive(:post).ordered do |_url, opts|
+        expect(opts[:body]["ENDDATE"]).to be_nil
+        first
+      end
+      expect(HTTParty).to receive(:post).ordered do |_url, opts|
+        expect(opts[:body]["ENDDATE"]).to eq("2026-09-11T11:59:59Z")
+        second
+      end
+
+      expect(described_class.topup_amount_in_transit).to eq(125_000)
+    end
+
+    it "raises when truncation cannot be paged" do
+      allow(HTTParty).to receive(:post).and_return(
+        paypal_nvp("ACK" => "SuccessWithWarning", "L_ERRORCODE0" => "11002")
+      )
+
+      expect { described_class.topup_amount_in_transit }.to raise_error(/truncated \(11002\)/)
     end
   end
 end
