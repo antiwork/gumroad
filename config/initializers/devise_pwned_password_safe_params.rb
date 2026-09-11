@@ -1,9 +1,7 @@
 # frozen_string_literal: true
 
 # devise-pwned_password does params.fetch(scope, {}).fetch(:password, nil).
-# Apple (and other OAuth callbacks) post `user` as a JSON string, which 500s
-# sign-in. Skip the gem hook unless the scoped params are a Hash — OAuth has
-# no password to check.
+# Skip unless scoped params are a Hash — OAuth has no password to check.
 Warden::Manager._after_set_user.each do |pair|
   block, _conditions = pair
   next unless block.source_location&.first&.include?("devise/pwned_password/hooks/pwned_password")
