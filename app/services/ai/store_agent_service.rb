@@ -749,6 +749,7 @@ class Ai::StoreAgentService
         retrying = turn_contract_retries < MAX_TURN_CONTRACT_RETRIES
         log_turn_contract_mismatch(reason: decision.fetch(:reason), retrying:)
         unless retrying
+          @turn_contract_failure = decision.fetch(:reason).to_s
           return turn_result(reply: fallback_reply_for(decision:, proposed_action:), proposed_action:)
         end
 
@@ -865,6 +866,7 @@ class Ai::StoreAgentService
         retrying = turn_contract_retries < MAX_TURN_CONTRACT_RETRIES
         log_turn_contract_mismatch(reason: decision.fetch(:reason), retrying:)
         unless retrying
+          @turn_contract_failure = decision.fetch(:reason).to_s
           reply = fallback_reply_for(decision:, proposed_action:)
           return finish_stream(reply:, proposed_action:, last_user_message:, emit:, on_reply_complete:) do |turn|
             emit.call(:reset, {}) if emitted_any
@@ -914,12 +916,15 @@ class Ai::StoreAgentService
         {
           event: "store_agent_turn",
           model: @_client_model,
+          requested_model: @_client_model,
+          served_models: (@_client.respond_to?(:served_models) ? Array(@_client.served_models).uniq : []),
           outcome:,
           stop_reason: @last_stop_reason,
           tool_iterations: @turn_iterations_used,
           contract_retries: @turn_contract_retries,
+          contract_failure: @turn_contract_failure,
           latency_ms:,
-        }.to_json,
+        }.compact.to_json,
       )
     end
 

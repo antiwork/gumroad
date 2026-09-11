@@ -117,7 +117,10 @@ class Ai::AnthropicClient
     @fallback_model_override = fallback_model
     # Seconds already spent sleeping between retries; compared against RETRY_SLEEP_BUDGET_IN_SECONDS.
     @retry_sleep_spent = 0.0
+    @served_models = []
   end
+
+  attr_reader :served_models
 
   # Buffered request. `system` is Anthropic's top-level system prompt; `messages` is the Anthropic
   # message array (role + content); `tools` is the Anthropic tool-schema array (optional).
@@ -505,6 +508,8 @@ class Ai::AnthropicClient
     # version) — still the requested model, not a fallback. Only a genuinely different model warns.
     def log_served_model(served_model)
       return if served_model.blank?
+
+      @served_models << served_model
 
       requested = normalize_model_name(model)
       served = normalize_model_name(served_model)

@@ -323,6 +323,8 @@ describe Ai::StoreAgentService do
           outcome: "gave up",
         )
         allow(Rails.logger).to receive(:warn)
+        logged = []
+        allow(Rails.logger).to receive(:info) { |message| logged << message }
         allow(client).to receive(:messages).and_return(untyped_text_result("Still no marker."))
 
         result = service.respond(messages: [{ role: "user", content: "what sells best?" }])
@@ -330,6 +332,17 @@ describe Ai::StoreAgentService do
         expect(Rails.logger).to have_received(:warn).with("Store agent final turn did not match proposal state (missing_complete_turn, gave up)")
         expect(client).to have_received(:messages).twice
         expect(result[:reply]).to eq(described_class::TURN_CONTRACT_FAILURE_REPLY)
+        turn_log = logged.filter_map do |message|
+          next unless message.is_a?(String) && message.include?("store_agent_turn")
+
+          JSON.parse(message)
+        end.last
+        expect(turn_log).to include(
+          "event" => "store_agent_turn",
+          "contract_failure" => "missing_complete_turn",
+          "requested_model" => turn_log["model"],
+        )
+        expect(turn_log["served_models"]).to eq([])
       end
 
       it "still reports a non-marker proposal-state mismatch on the retry" do
