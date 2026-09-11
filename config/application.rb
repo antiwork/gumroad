@@ -30,10 +30,10 @@ module Gumroad
   class Application < Rails::Application
     # Initialize configuration defaults for originally generated Rails version.
     config.load_defaults 8.1
-    # Same five headers load_defaults 8.1 inherits from 7.1; restated so SecureHeaders strips them
-    # from the
-    # object ActionDispatch::Response aliases. Must live here, not an initializer: since 8.0.5 the
-    # response class loads before initializers run, so a later assignment is ignored (rails#58145).
+    # Same five headers load_defaults inherits from 7.1; restated so SecureHeaders strips them
+    # from the object ActionDispatch::Response aliases. Must live here, not an initializer: since
+    # 8.0.5 the response class loads before initializers run, so a later assignment is ignored
+    # (rails#58145).
     config.action_dispatch.default_headers = {
       "X-Frame-Options" => "SAMEORIGIN",
       "X-XSS-Protection" => "0",
@@ -54,9 +54,9 @@ module Gumroad
     config.action_view.render_tracker = :regex
     # Check form/autofill behaviour before changing hidden-field markup.
     config.action_view.remove_hidden_field_autocomplete = false
-    # No to_time_preserves_timezone pin: Rails 8.1 drops it from load_defaults 8.0, removes
-    # DateAndTime::Compatibility.preserve_timezone, and deprecates the accessor. to_time now
-    # always preserves the receiver's zone — the DST audit this pin deferred is forced here.
+    # No to_time_preserves_timezone pin: 8.1 removes DateAndTime::Compatibility.preserve_timezone
+    # and leaves a deprecated no-op accessor. Inert for us either way — config.time_zone is unset,
+    # so Time.zone is UTC and offset and zone resolve identically.
     # Verify conditional download responses before changing ETag precedence.
     config.action_dispatch.strict_freshness = false
     # Opts out of the Rails 8 ReDoS ceiling until regex-heavy validators are audited
