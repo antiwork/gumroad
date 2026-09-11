@@ -50,6 +50,20 @@ describe Ai::AnthropicClient do
       expect(captured["tools"][1]["cache_control"]).to eq("type" => "ephemeral")
     end
 
+    it "includes thinking in the request body when given and omits it otherwise" do
+      captured = nil
+      stub_request(:post, url)
+        .with { |request| captured = JSON.parse(request.body); true }
+        .to_return(status: 200, body: { "content" => [], "stop_reason" => "end_turn" }.to_json, headers: { "Content-Type" => "application/json" })
+
+      client.messages(system: "s", messages: [{ role: "user", content: "x" }], thinking: { type: "disabled" })
+      expect(captured["thinking"]).to eq("type" => "disabled")
+
+      captured = nil
+      client.messages(system: "s", messages: [{ role: "user", content: "x" }])
+      expect(captured).not_to have_key("thinking")
+    end
+
     it "parses tool_use blocks with their input" do
       body = {
         "content" => [

@@ -1166,17 +1166,25 @@ class Ai::StoreAgentService
     def follow_up_suggestions(reply:, last_user_message:)
       return [] if reply.blank?
 
+      # DeepSeek otherwise spends this 200-token budget on hidden reasoning and returns no chips.
       result = client.messages(
         system: FOLLOW_UP_PROMPT,
         messages: [
           { role: "user", content: "The creator said: #{last_user_message}\n\nYou answered: #{reply}\n\nSuggest up to three follow-up prompts." },
         ],
         max_tokens: MAX_SUGGESTION_TOKENS,
+        **follow_up_thinking,
       )
       parse_suggestions(result.text)
     rescue => e
       Rails.logger.warn("Store agent follow-up suggestions failed: #{e.message}")
       []
+    end
+
+    def follow_up_thinking
+      return {} unless @_client_model.to_s.start_with?("deepseek/")
+
+      { thinking: { type: "disabled" } }
     end
 
     # Coerce the model's reply into a clean list of suggestion strings. Prefers a JSON array but

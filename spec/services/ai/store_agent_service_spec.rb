@@ -2156,6 +2156,36 @@ describe Ai::StoreAgentService do
       expect(result[:suggestions]).to eq(["Show my best sellers", "Email my customers", "Create a discount"])
     end
 
+    it "disables thinking on the suggestions call when DeepSeek is selected" do
+      allow(Ai::AnthropicClient).to receive(:openrouter_configured?).and_return(true)
+      Feature.activate_user(described_class::DEEPSEEK_RAMP_FEATURE, seller)
+      stub_stream_turns(stream: ["You have 3 products."], result: text_result("You have 3 products."))
+      captured = nil
+      allow(client).to receive(:messages) do |**kwargs|
+        captured = kwargs
+        text_result('["List my products"]')
+      end
+
+      _events, result = collect_events([{ role: "user", content: "How many products?" }])
+
+      expect(captured[:thinking]).to eq({ type: "disabled" })
+      expect(captured[:max_tokens]).to eq(described_class::MAX_SUGGESTION_TOKENS)
+      expect(result[:suggestions]).to eq(["List my products"])
+    end
+
+    it "does not disable thinking on the suggestions call for Opus" do
+      stub_stream_turns(stream: ["You have 3 products."], result: text_result("You have 3 products."))
+      captured = nil
+      allow(client).to receive(:messages) do |**kwargs|
+        captured = kwargs
+        text_result('["List my products"]')
+      end
+
+      collect_events([{ role: "user", content: "How many products?" }])
+
+      expect(captured).not_to have_key(:thinking)
+    end
+
     it "emits a reset when an intermediate tool-use turn streams preamble text, then streams the real reply" do
       # First turn: the model streams a preamble ("Let me check...") AND asks to call a read tool.
       # That preamble is not the answer, so the service must emit :reset before the final turn.

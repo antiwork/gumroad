@@ -127,8 +127,8 @@ class Ai::AnthropicClient
   # Transient upstream failures (timeouts, 5xx/429/529) are retried a couple of times before
   # surfacing, because a buffered call has no partial output to worry about.
   # @return [Result]
-  def messages(system:, messages:, tools: nil, max_tokens: DEFAULT_MAX_TOKENS)
-    body = request_body(system:, messages:, tools:, max_tokens:, stream: false)
+  def messages(system:, messages:, tools: nil, max_tokens: DEFAULT_MAX_TOKENS, thinking: nil)
+    body = request_body(system:, messages:, tools:, max_tokens:, stream: false, thinking:)
     with_retries do
       response = http.post(api_url, json: body)
       raise_for_status!(response, kind: "request")
@@ -400,7 +400,7 @@ class Ai::AnthropicClient
       message.presence || body[0, 200]
     end
 
-    def request_body(system:, messages:, tools:, max_tokens:, stream:)
+    def request_body(system:, messages:, tools:, max_tokens:, stream:, thinking: nil)
       body = {
         model:,
         max_tokens:,
@@ -415,6 +415,7 @@ class Ai::AnthropicClient
       # the agent stays up on GPT when Anthropic is down. Sent only when routing through
       # OpenRouter; Anthropic's own API would reject the unknown parameter.
       body[:fallbacks] = [{ model: fallback_model }] if openrouter?
+      body[:thinking] = thinking if thinking.present?
       body
     end
 
