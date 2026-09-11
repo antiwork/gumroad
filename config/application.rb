@@ -40,8 +40,9 @@ module Gumroad
       "X-Permitted-Cross-Domain-Policies" => "none",
       "Referrer-Policy" => "strict-origin-when-cross-origin"
     }
-    # Audit scheduled times across DST before preserving named zones.
-    config.active_support.to_time_preserves_timezone = :offset
+    # No to_time_preserves_timezone pin: Rails 8.1 drops it from load_defaults 8.0, removes
+    # DateAndTime::Compatibility.preserve_timezone, and deprecates the accessor. to_time now
+    # always preserves the receiver's zone — the DST audit this pin deferred is forced here.
     # Verify conditional download responses before changing ETag precedence.
     config.action_dispatch.strict_freshness = false
     # Opts out of the Rails 8 ReDoS ceiling until regex-heavy validators are audited
