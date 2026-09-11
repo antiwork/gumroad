@@ -10,7 +10,8 @@ require "spec_helper"
 # and a dropped pin changes behaviour silently.
 describe "load_defaults pins" do
   it "runs the framework defaults for the version application.rb declares" do
-    expect(Rails.application.config.loaded_config_version).to eq("8.0")
+    # Stored verbatim from the load_defaults argument, so it is the Float 8.0, not "8.0".
+    expect(Rails.application.config.loaded_config_version.to_s).to eq("8.0")
   end
 
   it "keeps to_time on UTC offsets rather than named zones" do
