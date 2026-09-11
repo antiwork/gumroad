@@ -19,7 +19,7 @@ class AffiliateRedirectController < ApplicationController
     def redirect_url(affiliate)
       product = Link.find_by(unique_permalink: params[:unique_permalink]) if params[:unique_permalink].present?
       final_destination_url = affiliate.final_destination_url(product:)
-      uri = Addressable::URI.parse(final_destination_url.strip)
+      uri = Addressable::URI.parse(host_relative(final_destination_url.strip))
 
       request_uri = Addressable::URI.parse(request.url)
 
@@ -28,5 +28,19 @@ class AffiliateRedirectController < ApplicationController
       query_values["affiliate_id"] = params[:affiliate_id] if affiliate.destination_url.present?
       uri.query_values = query_values unless query_values.empty?
       uri.to_s
+    end
+
+    # A per-product destination_url is creator-supplied and unvalidated: unlike DirectAffiliate,
+    # ProductAffiliate does not include Affiliate::DestinationUrlValidations, and
+    # final_destination_url prefers it. So it can be path-relative ("products/foo"), which
+    # Rails 8.1 refuses to redirect to. Before 8.1 those did not work either — they became
+    # "https://gumroad.comproducts/foo" — so treat them as paths on this host, the same repair
+    # SafeRedirectPathService makes for `next` params.
+    def host_relative(destination)
+      return destination if destination.blank?
+      return destination if destination.match?(%r{\A([a-z][a-z\d\-+.]*:|//)}i)
+      return destination if destination.start_with?("/", "?")
+
+      "/#{destination}"
     end
 end

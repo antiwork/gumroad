@@ -75,6 +75,21 @@ describe AffiliateRedirectController do
       end
     end
 
+    context "when a per-product destination URL is path-relative" do
+      # ProductAffiliate does not include Affiliate::DestinationUrlValidations, so a creator can
+      # store "products/foo" here and final_destination_url prefers it. Rails 8.1 raises rather
+      # than redirecting to a path-relative URL.
+      it "redirects to it as a path on this host" do
+        product_affiliate.update!(destination_url: "products/foo")
+
+        get :set_cookie_and_redirect, params: { affiliate_id: direct_affiliate.external_id_numeric,
+                                                unique_permalink: product.unique_permalink }
+
+        expect(response).to be_redirect
+        expect(URI.parse(response.location).path).to eq("/products/foo")
+      end
+    end
+
     context "when destination URL has leading/trailing whitespace" do
       it "strips whitespace and redirects successfully" do
         direct_affiliate.update_column(:destination_url, " https://example.gumroad.com/l/abc ")
