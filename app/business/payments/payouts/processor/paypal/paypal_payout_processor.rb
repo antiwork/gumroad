@@ -680,31 +680,23 @@ class PaypalPayoutProcessor
     (response["L_AMT0"].to_d * 100).to_i
   end
 
-  # This method assumes that each topup is made for $100,000.
-  # We've always made topups in chunks of $100,000 so far.
-  # If that ever changes, this method will need to be updated accordingly.
-  # The bank account transfer transactions are not searchable by type,
-  # so using the $100,000 amount to easily search for them here.
+  # Bank-account top-ups are not searchable by type. Sum every uncleared
+  # bank Transfer in the last two weeks, whatever the amount.
   def self.topup_amount_in_transit
-    individual_topup_amount = 100000
-
     params = PAYPAL_API_PARAMS.merge("METHOD" => "TransactionSearch",
-                                     "AMT" => individual_topup_amount.to_s,
-                                     "STARTDATE" => 2.weeks.ago.iso8601) # Topups older than 2 weeks should have already completed
+                                     "STARTDATE" => 2.weeks.ago.iso8601)
     paypal_response = HTTParty.post(PAYPAL_ENDPOINT, body: params)
     response = Rack::Utils.parse_nested_query(paypal_response.parsed_response)
     return 0 unless %w[Success SuccessWithWarning].include?(response["ACK"])
 
-    topup_amount = 0
-
-    number_of_topups_made = response.keys.select { _1.include?("L_TRANSACTIONID") }.count
-    number_of_topups_made.times do |i|
-      topup_amount += individual_topup_amount if response["L_TYPE#{i}"] == "Transfer" &&
+    topup_amount = 0.to_d
+    response.keys.count { _1.include?("L_TRANSACTIONID") }.times do |i|
+      next unless response["L_TYPE#{i}"] == "Transfer" &&
         response["L_NAME#{i}"] == "Bank Account" &&
-        response["L_STATUS#{i}"] == "Uncleared" &&
-        response["L_AMT#{i}"].to_i == individual_topup_amount
-    end
+        response["L_STATUS#{i}"] == "Uncleared"
 
-    topup_amount
+      topup_amount += response["L_AMT#{i}"].to_d
+    end
+    topup_amount.to_i
   end
 end

@@ -106,4 +106,24 @@ describe PaypalBalanceCheckService do
       expect(service.topup_amount_cents).to eq(100_000_00)
     end
   end
+
+  describe ".next_paypal_payout_date" do
+    it "returns this week's Friday before the 10:00 UTC payout" do
+      travel_to Time.utc(2026, 9, 11, 9, 59, 0) do
+        expect(described_class.next_paypal_payout_date).to eq(Date.new(2026, 9, 11))
+      end
+    end
+
+    it "returns next Friday once the 10:00 UTC payout has started" do
+      travel_to Time.utc(2026, 9, 11, 10, 0, 0) do
+        expect(described_class.next_paypal_payout_date).to eq(Date.new(2026, 9, 18))
+      end
+    end
+
+    it "returns this week's Friday on a weekday before Friday" do
+      travel_to Time.utc(2026, 9, 9, 14, 0, 0) do
+        expect(described_class.next_paypal_payout_date).to eq(Date.new(2026, 9, 11))
+      end
+    end
+  end
 end

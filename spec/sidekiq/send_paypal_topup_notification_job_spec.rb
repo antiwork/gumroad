@@ -2,6 +2,10 @@
 
 describe SendPaypalTopupNotificationJob do
   describe "#perform" do
+    around do |example|
+      travel_to(Time.utc(2026, 9, 9, 14, 0, 0)) { example.run }
+    end
+
     before do
       seller = create(:user, unpaid_balance_cents: 152_279_86)
       seller2 = create(:user, unpaid_balance_cents: 215_145_32)
@@ -15,7 +19,7 @@ describe SendPaypalTopupNotificationJob do
     it "sends a notification with the required topup amount and sets redis key to true" do
       allow(PaypalPayoutProcessor).to receive(:topup_amount_in_transit).and_return(0)
 
-      notification_msg = "PayPal balance needs to be $367,425.18 by Friday to payout all creators.\n"\
+      notification_msg = "PayPal balance needs to be $367,425.18 by Friday, September 11 to payout all creators.\n"\
                        "Current PayPal balance is $125,000.\n"\
                        "A top-up of $242,425.18 is needed."
 
@@ -28,7 +32,7 @@ describe SendPaypalTopupNotificationJob do
     it "includes details of payout amount in transit in the notification" do
       allow(PaypalPayoutProcessor).to receive(:topup_amount_in_transit).and_return(100_000)
 
-      notification_msg = "PayPal balance needs to be $367,425.18 by Friday to payout all creators.\n"\
+      notification_msg = "PayPal balance needs to be $367,425.18 by Friday, September 11 to payout all creators.\n"\
                        "Current PayPal balance is $125,000.\n"\
                        "Top-up amount in transit is $100,000.\n"\
                        "A top-up of $142,425.18 is needed."
@@ -41,7 +45,7 @@ describe SendPaypalTopupNotificationJob do
     it "sends no more topup required green notification and sets redis key to false if there's sufficient amount in PayPal" do
       allow(PaypalPayoutProcessor).to receive(:topup_amount_in_transit).and_return(300_000)
 
-      notification_msg = "PayPal balance needs to be $367,425.18 by Friday to payout all creators.\n"\
+      notification_msg = "PayPal balance needs to be $367,425.18 by Friday, September 11 to payout all creators.\n"\
                        "Current PayPal balance is $125,000.\n"\
                        "Top-up amount in transit is $300,000.\n"\
                        "No more top-up required."
@@ -56,7 +60,7 @@ describe SendPaypalTopupNotificationJob do
       it "sends notification when topup is needed" do
         allow(PaypalPayoutProcessor).to receive(:topup_amount_in_transit).and_return(0)
 
-        notification_msg = "PayPal balance needs to be $367,425.18 by Friday to payout all creators.\n"\
+        notification_msg = "PayPal balance needs to be $367,425.18 by Friday, September 11 to payout all creators.\n"\
                          "Current PayPal balance is $125,000.\n"\
                          "A top-up of $242,425.18 is needed."
 
@@ -72,6 +76,22 @@ describe SendPaypalTopupNotificationJob do
 
         expect(InternalNotificationWorker.jobs.size).to eq(0)
         expect($redis.get(RedisKey.paypal_topup_needed)).to eq("false")
+      end
+    end
+
+    context "after Friday's PayPal payout has run" do
+      around do |example|
+        travel_to(Time.utc(2026, 9, 11, 14, 0, 0)) { example.run }
+      end
+
+      it "names next Friday, not today" do
+        allow(PaypalPayoutProcessor).to receive(:topup_amount_in_transit).and_return(0)
+
+        described_class.new.perform
+
+        expect(InternalNotificationWorker.jobs.size).to eq(1)
+        expect(InternalNotificationWorker.jobs.first["args"][2]).to include("by Friday, September 18")
+        expect(InternalNotificationWorker.jobs.first["args"][2]).not_to include("by Friday, September 11")
       end
     end
   end

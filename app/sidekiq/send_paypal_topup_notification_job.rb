@@ -19,7 +19,8 @@ class SendPaypalTopupNotificationJob
 
     return if notify_only_if_topup_needed && !balance_check.topup_needed?
 
-    notification_msg = "PayPal balance needs to be #{formatted_dollar_amount(balance_check.payout_amount_cents)} by Friday to payout all creators.\n"\
+    payout_on = balance_check.payout_date.strftime("%A, %B %-d")
+    notification_msg = "PayPal balance needs to be #{formatted_dollar_amount(balance_check.payout_amount_cents)} by #{payout_on} to payout all creators.\n"\
                        "Current PayPal balance is #{formatted_dollar_amount(balance_check.current_balance_cents)}.\n"
 
     notification_msg += "Top-up amount in transit is #{formatted_dollar_amount(balance_check.topup_in_transit_cents)}.\n" if balance_check.topup_in_transit_cents > 0

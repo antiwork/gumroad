@@ -1498,4 +1498,56 @@ describe PaypalPayoutProcessor do
       expect(payment.reload.failure_reason).to eq("PAYPAL 3148")
     end
   end
+
+  describe ".topup_amount_in_transit" do
+    def paypal_nvp(pairs)
+      instance_double(HTTParty::Response, parsed_response: Rack::Utils.build_query(pairs))
+    end
+
+    it "does not filter TransactionSearch by amount" do
+      expect(HTTParty).to receive(:post) do |_url, opts|
+        expect(opts[:body]["AMT"]).to be_nil
+        expect(opts[:body]["METHOD"]).to eq("TransactionSearch")
+        paypal_nvp("ACK" => "Success")
+      end
+
+      expect(described_class.topup_amount_in_transit).to eq(0)
+    end
+
+    it "sums uncleared bank-account transfers of any amount" do
+      allow(HTTParty).to receive(:post).and_return(
+        paypal_nvp(
+          "ACK" => "Success",
+          "L_TRANSACTIONID0" => "txn_small",
+          "L_TYPE0" => "Transfer",
+          "L_NAME0" => "Bank Account",
+          "L_STATUS0" => "Uncleared",
+          "L_AMT0" => "25000.00",
+          "L_TRANSACTIONID1" => "txn_large",
+          "L_TYPE1" => "Transfer",
+          "L_NAME1" => "Bank Account",
+          "L_STATUS1" => "Uncleared",
+          "L_AMT1" => "100000.00",
+          "L_TRANSACTIONID2" => "txn_cleared",
+          "L_TYPE2" => "Transfer",
+          "L_NAME2" => "Bank Account",
+          "L_STATUS2" => "Completed",
+          "L_AMT2" => "100000.00",
+          "L_TRANSACTIONID3" => "txn_other",
+          "L_TYPE3" => "Payment",
+          "L_NAME3" => "Someone",
+          "L_STATUS3" => "Uncleared",
+          "L_AMT3" => "50.00"
+        )
+      )
+
+      expect(described_class.topup_amount_in_transit).to eq(125_000)
+    end
+
+    it "returns 0 when ACK is not success" do
+      allow(HTTParty).to receive(:post).and_return(paypal_nvp("ACK" => "Failure"))
+
+      expect(described_class.topup_amount_in_transit).to eq(0)
+    end
+  end
 end
