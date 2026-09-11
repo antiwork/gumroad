@@ -27,6 +27,7 @@ vi.stubGlobal("Routes", {
 });
 
 const { request } = vi.mocked(await import("$app/utils/request"));
+const { executeAgentAction } = vi.mocked(await import("$app/data/agent"), { partial: true });
 const { showAlert } = vi.mocked(await import("$app/components/server-components/Alert"));
 const { AgentChat } = await import("$app/components/Agent/AgentChat");
 
@@ -166,7 +167,42 @@ describe("AgentChat stream ownership after early done", () => {
     expect(showAlert).not.toHaveBeenCalled();
   });
 
-  it("drops late callbacks after unmount", async () => {
+  it("keeps a proposal confirmed during the chip wait when the stream later settles", async () => {
+    const stream = openSseResponse();
+    request.mockResolvedValue(stream.response);
+    executeAgentAction.mockResolvedValue({ message: "Created.", object: null });
+
+    render(<AgentChat greeting="Hi" suggestions={[]} />);
+    await sendMessage("make a 20% off code");
+
+    await act(async () => {
+      stream.push(
+        frame("done", {
+          reply: "Confirm the card below.",
+          proposed_action: { type: "api_write", params: { endpoint: "create_offer_code" }, summary: "Create LAUNCH." },
+          proposal_message_id: "msg1",
+          suggestions: [],
+          conversation_id: "conv1",
+        }),
+      );
+    });
+    await waitFor(() => expect(composerLocked()).toBe(false));
+    fireEvent.click(screen.getByText("Confirm"));
+    await waitFor(() => expect(screen.getByText("Applied")).toBeTruthy());
+
+    await act(async () => {
+      stream.push(frame("suggestions", { suggestions: ["Show my discount codes"] }));
+      stream.close();
+    });
+    await waitFor(() =>
+      expect(screen.getByLabelText("Suggested follow-ups").textContent).toContain("Show my discount codes"),
+    );
+    expect(screen.getByText("Applied")).toBeTruthy();
+    expect(screen.queryByText("Confirm")).toBeNull();
+    expect(executeAgentAction).toHaveBeenCalledTimes(1);
+  });
+
+  it("drops late callbacks after unmount without aborting the server's turn", async () => {
     const stream = openSseResponse();
     request.mockResolvedValue(stream.response);
 
@@ -179,6 +215,8 @@ describe("AgentChat stream ownership after early done", () => {
 
     view.unmount();
 
+    // An abort would raise ClientDisconnected server-side and mark a still-generating turn failed.
+    expect(request.mock.calls[0]?.[0]?.abortSignal?.aborted).toBe(false);
     expect(() => {
       stream.push(frame("suggestions", { suggestions: ["After unmount"] }));
       stream.close();

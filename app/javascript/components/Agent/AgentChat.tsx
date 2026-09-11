@@ -507,9 +507,9 @@ export const AgentChat = ({ greeting, suggestions, locked = null }: Props) => {
     mountedRef.current = true;
     return () => {
       mountedRef.current = false;
+      // Drop late callbacks, but leave the connection open: aborting mid-generation raises
+      // ClientDisconnected server-side and the turn is marked failed before it can persist.
       sendGenerationRef.current += 1;
-      activeStreamAbortRef.current?.abort();
-      activeStreamAbortRef.current = null;
       for (const abortController of actionStatusAbortControllersRef.current.values()) abortController.abort();
       actionStatusAbortControllersRef.current.clear();
     };
@@ -724,6 +724,8 @@ export const AgentChat = ({ greeting, suggestions, locked = null }: Props) => {
     sendGenerationRef.current += 1;
     const generation = sendGenerationRef.current;
     const belongsToThisTurn = () => mountedRef.current && sendGenerationRef.current === generation;
+    // Only a post-`done` stream still draining suggestion chips can be open here (the composer
+    // stays locked until then), and that turn is already persisted, so aborting it is safe.
     activeStreamAbortRef.current?.abort();
 
     // From here on the seller owns the chat: block the mount-time hydration from replacing it.
@@ -846,25 +848,31 @@ export const AgentChat = ({ greeting, suggestions, locked = null }: Props) => {
         clientTurnId,
         streamAbort.signal,
       );
+      // When onDone already assembled this turn, the composer has been unlocked since then and the
+      // seller may have confirmed the proposal card. Rebuilding the message here would drop that
+      // applied state, so only the chips can still be new.
+      const assembledByDone = turnSettled;
       turnSettled = true;
       if (!belongsToThisTurn()) return;
-      if (result.conversationId) setConversationId(result.conversationId);
-      // Reconcile with the final assembled turn. Upsert (not map) so a turn that produced no token —
-      // e.g. the model staged a write and returned an empty reply — still lands its card/objects.
-      setMessages((prev) => {
-        const next = [...prev];
-        const existing = next[assistantIndex];
-        const prior: DisplayMessage =
-          existing && existing.role === "assistant" ? existing : { role: "assistant", content: "" };
-        next[assistantIndex] = {
-          role: "assistant",
-          content: result.reply || prior.content || "",
-          ...(result.proposedAction ? { proposedAction: result.proposedAction } : {}),
-          ...(result.proposalMessageId ? { proposalMessageId: result.proposalMessageId } : {}),
-          ...(result.objects.length > 0 ? { objects: result.objects } : {}),
-        };
-        return next;
-      });
+      if (!assembledByDone) {
+        if (result.conversationId) setConversationId(result.conversationId);
+        // Reconcile with the final assembled turn. Upsert (not map) so a turn that produced no token —
+        // e.g. the model staged a write and returned an empty reply — still lands its card/objects.
+        setMessages((prev) => {
+          const next = [...prev];
+          const existing = next[assistantIndex];
+          const prior: DisplayMessage =
+            existing && existing.role === "assistant" ? existing : { role: "assistant", content: "" };
+          next[assistantIndex] = {
+            role: "assistant",
+            content: result.reply || prior.content || "",
+            ...(result.proposedAction ? { proposedAction: result.proposedAction } : {}),
+            ...(result.proposalMessageId ? { proposalMessageId: result.proposalMessageId } : {}),
+            ...(result.objects.length > 0 ? { objects: result.objects } : {}),
+          };
+          return next;
+        });
+      }
       // Empty done.suggestions must not wipe chips that already arrived on this turn.
       if (result.suggestions.length > 0) setFollowUps(result.suggestions);
     } catch (e) {
@@ -934,9 +942,10 @@ export const AgentChat = ({ greeting, suggestions, locked = null }: Props) => {
       // the background watch started above releases it later instead.
       if (turnSettled) streamAbort.abort();
       if (activeStreamAbortRef.current === streamAbort) activeStreamAbortRef.current = null;
-      if (!belongsToThisTurn()) return;
-      setIsSending(false);
-      setIsStreaming(false);
+      if (belongsToThisTurn()) {
+        setIsSending(false);
+        setIsStreaming(false);
+      }
     }
   };
 

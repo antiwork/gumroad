@@ -718,6 +718,7 @@ class Ai::StoreAgentService
     @completed_read_targets = {}
     @reads_completed_in_tool_batch = nil
     turn_contract_retries = 0
+    @turn_contract_failure = nil
     @turn_started_at = Process.clock_gettime(Process::CLOCK_MONOTONIC)
 
     remaining_iterations = MAX_TOOL_ITERATIONS
@@ -790,6 +791,7 @@ class Ai::StoreAgentService
     @completed_read_targets = {}
     @reads_completed_in_tool_batch = nil
     turn_contract_retries = 0
+    @turn_contract_failure = nil
     @turn_started_at = Process.clock_gettime(Process::CLOCK_MONOTONIC)
 
     remaining_iterations = MAX_TOOL_ITERATIONS
