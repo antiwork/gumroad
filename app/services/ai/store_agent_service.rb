@@ -417,10 +417,15 @@ class Ai::StoreAgentService
   # Reserve both even when the invalid final turn arrives at the normal iteration cap.
   TURN_CONTRACT_RECOVERY_ITERATIONS = 2
   TURN_CONTRACT_CORRECTION = <<~TEXT.strip
-    Your last response did not finish with a valid complete_turn call. Repeat the response, write the
-    creator-facing text before the tool call, then call complete_turn exactly once and as the only
-    tool in that response. Use outcome reply_only when this turn has no proposed change. Use outcome
-    proposal_ready only after api_write returned proposed: true in this same turn.
+    Your last response did not finish with a valid complete_turn call. Call complete_turn exactly
+    once as the only tool in that response, and put the creator-facing text in complete_turn.reply.
+    Use outcome reply_only when this turn has no proposed change. Use outcome proposal_ready only
+    after api_write returned proposed: true in this same turn. Do not send a text-only response.
+  TEXT
+  BLANK_REPLY_CORRECTION = <<~TEXT.strip
+    Your complete_turn had no creator-facing reply. Call complete_turn exactly once as the only tool,
+    with outcome reply_only and a nonblank reply string in the tool arguments. Do not send a
+    text-only response.
   TEXT
   PROPOSAL_OUTCOME_CORRECTION = <<~TEXT.strip
     This turn already has a proposed change from api_write, but your final outcome did not report it.
@@ -668,10 +673,12 @@ class Ai::StoreAgentService
       them you'll continue once they confirm.
     - Monetary amounts in the API are in CENTS (integer). $10 = 1000.
     - End EVERY final reply by calling complete_turn exactly once, as the only tool in that response.
-      Write the creator-facing text before the call; on a proposal turn that text is replaced with
+      Put the creator-facing text in complete_turn.reply so the outcome and the answer arrive
+      together. You may also write the same text before the call; on a proposal turn that text is replaced with
       fixed server copy and never shown, so keep it minimal there. Use reply_only when this turn has
       no proposed change. Use proposal_ready only after api_write returned proposed: true in this
-      same turn. Never mix complete_turn with api_read or api_write.
+      same turn. Never mix complete_turn with api_read or api_write. Never send a text-only final
+      response.
 
     How to write:
     - Write like a person: warm, plain, and direct. Short sentences. No corporate filler.
@@ -845,9 +852,14 @@ class Ai::StoreAgentService
       when :complete
         reply = decision.fetch(:reply)
         return finish_stream(reply:, proposed_action:, last_user_message:, emit:, on_reply_complete:) do |turn|
-          # Normal reply text was already streamed. Proposal copy was deliberately withheld, and a
-          # buffered client may also return final text without yielding a delta.
-          emit.call(:token, { text: turn[:reply] }) if suppress_model_text || !emitted_any
+          # Proposal copy was withheld until persist. A complete_turn.reply can also differ from
+          # whatever text deltas already streamed, so replace those with the accepted reply.
+          if suppress_model_text || result.text.to_s.strip != turn[:reply]
+            emit.call(:reset, {}) if emitted_any
+            emit.call(:token, { text: turn[:reply] })
+          elsif !emitted_any
+            emit.call(:token, { text: turn[:reply] })
+          end
         end
       when :invalid
         retrying = turn_contract_retries < MAX_TURN_CONTRACT_RETRIES
@@ -930,7 +942,8 @@ class Ai::StoreAgentService
       return { status: :invalid, reason: :mixed_or_duplicate_complete_turn } unless tool_uses.one? && complete_turn_calls.one?
       return { status: :invalid, reason: :invalid_complete_turn_stop_reason } unless result.stop_reason == "tool_use"
 
-      outcome = sanitize_param_hash(complete_turn_calls.first[:input])["outcome"]
+      input = sanitize_param_hash(complete_turn_calls.first[:input])
+      outcome = input["outcome"]
       return { status: :invalid, reason: :invalid_complete_turn_outcome } unless TURN_OUTCOMES.include?(outcome)
 
       if proposed_action.present?
@@ -941,12 +954,29 @@ class Ai::StoreAgentService
 
       return { status: :invalid, reason: :proposal_ready_without_proposal } unless outcome == TURN_OUTCOME_REPLY_ONLY
 
-      reply = result.text.to_s.strip
+      reply = complete_turn_reply(input:, result:)
+      return { status: :invalid, reason: :invalid_complete_turn_reply } if reply == :invalid_type
       return { status: :invalid, reason: :blank_reply } if reply.blank?
       return { status: :invalid, reason: :staging_claim_without_proposal } if reply == PROPOSAL_READY_REPLY
       return { status: :invalid, reason: :staging_claim_without_proposal } if phantom_staged_claim?(reply:, proposed_action:)
 
       { status: :complete, reply: }
+    end
+
+    # Prefer a typed complete_turn.reply so the outcome and the creator-facing text arrive together.
+    # Visible text without that field stays valid so current models keep working. A present reply
+    # field must be a real string; empty strings fall through to the text channel instead of
+    # succeeding as a blank answer.
+    def complete_turn_reply(input:, result:)
+      if input.key?("reply")
+        payload = input["reply"]
+        return :invalid_type unless payload.is_a?(String)
+
+        stripped = payload.strip
+        return stripped if stripped.present?
+      end
+
+      result.text.to_s.strip
     end
 
     def fallback_reply_for(decision:, proposed_action:)
@@ -959,6 +989,7 @@ class Ai::StoreAgentService
     def turn_contract_correction(decision:, proposed_action:)
       return PROPOSAL_OUTCOME_CORRECTION if proposed_action.present?
       return STAGED_CLAIM_CORRECTION if [:staging_claim_without_proposal, :proposal_ready_without_proposal].include?(decision.fetch(:reason))
+      return BLANK_REPLY_CORRECTION if [:blank_reply, :invalid_complete_turn_reply].include?(decision.fetch(:reason))
 
       TURN_CONTRACT_CORRECTION
     end
@@ -1595,12 +1626,16 @@ class Ai::StoreAgentService
         ),
         tool_schema(
           COMPLETE_TURN_TOOL,
-          "Finish the creator-facing reply after every API tool result is back. Call exactly once and as the only tool in the final response. Write the reply text before this call; on a proposal turn that text is replaced with fixed server copy and never shown. Use proposal_ready only when api_write returned proposed: true in this same turn; otherwise use reply_only.",
+          "Finish the creator-facing reply after every API tool result is back. Call exactly once and as the only tool in the final response. Put the creator-facing text in reply; on a proposal turn that text is replaced with fixed server copy and never shown. Use proposal_ready only when api_write returned proposed: true in this same turn; otherwise use reply_only.",
           {
             outcome: {
               type: "string",
               enum: TURN_OUTCOMES,
               description: "Whether this turn has a real proposed change waiting for confirmation.",
+            },
+            reply: {
+              type: "string",
+              description: "Creator-facing reply for reply_only turns. Must be nonblank when present. Prefer this over a separate text channel so the outcome and the answer arrive together.",
             },
           },
           required: ["outcome"],
