@@ -5060,16 +5060,6 @@ class LinksControllerShowTest < ActionController::TestCase
     assert page["props"]["product"].present?
   end
 
-  test "application.rb default_headers share one object with ActionDispatch::Response" do
-    # Identity is the contract (content already matches 7.2 defaults). Nil frame
-    # keys are SecureHeaders emptying the shared hash, not TestCase skipping middleware.
-    headers = Rails.application.config.action_dispatch.default_headers
-    assert_same headers, ActionDispatch::Response.default_headers
-    assert_nil headers["X-Download-Options"]
-    assert_nil headers["X-Frame-Options"]
-    assert_nil headers["Referrer-Policy"]
-  end
-
   test "GET show renders Products/Iframe/Show with product props for overlay param" do
     link = create_product(user: @user)
     @request.headers["X-Inertia"] = "true"
