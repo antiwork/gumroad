@@ -2,13 +2,9 @@
 
 require "spec_helper"
 
-# config/application.rb assigns action_dispatch.default_headers instead of an initializer
-# because since Rails 8.0.5 the action_controller.live_streaming_excluded_keys initializer
-# loads ActionDispatch::Response before config/initializers run, so the response class
-# captures the hash early (rails/rails#58145). SecureHeaders then deletes its conflicting
-# keys from that hash in place, which only reaches the response if both sides are the same
-# object. Move the assignment back into an initializer and Rails starts emitting its own
-# X-Frame-Options again, which is what stops sellers framing product pages.
+# Same object as config.action_dispatch.default_headers: Response captures that hash
+# before initializers run (rails/rails#58145), so SecureHeaders' in-place deletes only
+# reach responses if the assignment lives in application.rb, not an initializer.
 describe "Rails default_headers wiring" do
   let(:config_headers) { Rails.application.config.action_dispatch.default_headers }
 
