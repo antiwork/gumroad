@@ -438,6 +438,29 @@ describe("streamAgentMessage", () => {
     expect(result.conversationId).toBe("conv1");
   });
 
+  it("keeps late suggestion chips when inactivity fires after a valid done frame", async () => {
+    vi.useFakeTimers();
+    const stream = openSseResponse();
+    request.mockResolvedValue(stream.response);
+    const onSuggestions = vi.fn();
+
+    const promise = streamAgentMessage(MESSAGES, { onSuggestions });
+    stream.push(frame("done", { reply: "You have one product.", proposed_action: null, suggestions: [] }));
+    await vi.advanceTimersByTimeAsync(0);
+    await Promise.resolve();
+    await Promise.resolve();
+    stream.push(frame("suggestions", { suggestions: ["Show my sales"] }));
+    await vi.advanceTimersByTimeAsync(0);
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(onSuggestions).toHaveBeenCalledWith(["Show my sales"]);
+
+    await vi.advanceTimersByTimeAsync(INACTIVITY_TIMEOUT_MS);
+    const result = await promise;
+    expect(result.reply).toBe("You have one product.");
+    expect(result.suggestions).toEqual(["Show my sales"]);
+  });
+
   it("throws AgentStreamInterruptedError when a frame arrives mangled", async () => {
     request.mockResolvedValue(sseResponse(["event: token\ndata: {not json\n\n"]));
 

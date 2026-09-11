@@ -148,7 +148,7 @@ class Api::Mobile::AgentStreamsController < Api::Mobile::BaseController
           reply: turn[:reply],
           proposed_action: assistant_message ? turn[:proposed_action] : nil,
           objects: turn[:objects] || [],
-          suggestions: [],
+          suggestions: unpersisted_proposal ? [] : turn[:suggestions] || [],
         }
         done_payload[:conversation_id] = conversation.external_id if conversation
         done_payload[:proposal_message_id] = assistant_message.external_id if turn[:proposed_action] && assistant_message
@@ -168,10 +168,10 @@ class Api::Mobile::AgentStreamsController < Api::Mobile::BaseController
         # Suggestions generated from discarded confirmation wording would contradict the
         # replacement reply, so suppress them when no persisted proposal backs this turn.
         next if event.to_s == "suggestions" && unpersisted_proposal
-        if event.to_s == "turn_ready"
-          flush_done.call(payload)
-          next
-        end
+        # Web uses this internal marker to unlock early. Mobile's shipped reader stops at `done`
+        # and does not consume later suggestion events, so keep the public terminal frame until
+        # chips are populated and never forward the marker.
+        next if event.to_s == "turn_ready"
 
         write_event.call(payload, event)
       end

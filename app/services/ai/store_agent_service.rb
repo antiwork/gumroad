@@ -1149,9 +1149,9 @@ class Ai::StoreAgentService
     # would raise ClientDisconnected and abandon the turn).
     #
     # turn_ready fires after the reply/objects/proposal are on the socket and BEFORE the extra
-    # suggestions LLM call. Controllers write the terminal `done` frame from that event so the
-    # creator is not held on a spinner while optional follow-up chips generate. Suggestions still
-    # emit afterwards; they are not dropped.
+    # suggestions LLM call. The web stream controller writes `done` from that event so the
+    # creator is not held on a spinner while optional follow-up chips generate. Mobile ignores
+    # the marker and still writes terminal `done` after suggestions. Suggestions are not dropped.
     def finish_stream(reply:, proposed_action:, last_user_message:, emit:, on_reply_complete: nil, &before_trailing_events)
       objects = deduped_objects
       result = turn_result(reply:, proposed_action:)

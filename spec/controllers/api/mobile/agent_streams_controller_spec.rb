@@ -80,6 +80,32 @@ describe Api::Mobile::AgentStreamsController do
       expect(response.body).to include(conversation.external_id)
     end
 
+    # Mobile's shipped reader returns on the first `done` frame and never consumes a later
+    # `suggestions` event (antiwork/gumroad-mobile lib/agent.ts). Keep `done` terminal and
+    # populated; do not forward the web-only internal `turn_ready` marker.
+    it "writes terminal done after suggestions and ignores internal turn_ready" do
+      service_double = instance_double(Ai::StoreAgentService)
+      allow(Ai::StoreAgentService).to receive(:new).and_return(service_double)
+      allow(service_double).to receive(:respond_streaming) do |on_reply_complete: nil, **_kwargs, &emit|
+        turn = store_agent_turn(reply: "You have one product.")
+        on_reply_complete&.call(turn)
+        emit.call(:token, { text: turn[:reply] })
+        emit.call(:turn_ready, turn)
+        emit.call(:suggestions, { suggestions: ["Show my sales"] })
+        turn.merge(suggestions: ["Show my sales"])
+      end
+
+      post :create, params: valid_params
+
+      expect(response.body.scan(/^event: (.+)$/).flatten).to eq(
+        %w[token suggestions done],
+      )
+      expect(response.body).not_to include("event: turn_ready")
+      done_data = JSON.parse(response.body[/event: done\ndata: (.*)/, 1])
+      expect(done_data["reply"]).to eq("You have one product.")
+      expect(done_data["suggestions"]).to eq(["Show my sales"])
+    end
+
     it "commits the stream with a keepalive comment before any event" do
       service_double = instance_double(Ai::StoreAgentService)
       allow(Ai::StoreAgentService).to receive(:new).and_return(service_double)

@@ -96,6 +96,30 @@ describe("AgentChat streamed reply reconciliation", () => {
     expect(fetchAgentTurnStatus).toHaveBeenCalledWith(sentClientTurnId());
   });
 
+  it("does not recover-wipe a completed answer if the stream promise rejects after onDone", async () => {
+    streamAgentMessage.mockImplementation(async (_messages, handlers = {}) => {
+      handlers.onDone?.({
+        reply: "You have one product.",
+        proposedAction: null,
+        proposalMessageId: null,
+        objects: [],
+        suggestions: ["Show my sales"],
+        conversationId: "conv1",
+      });
+      throw new AgentStreamInterruptedError();
+    });
+
+    render(<AgentChat greeting="Hi" suggestions={[]} />);
+    await sendMessage("how are sales");
+
+    await waitFor(() => expect(screen.getByText("You have one product.")).toBeTruthy());
+    expect(screen.getByLabelText("Suggested follow-ups").textContent).toContain("Show my sales");
+    expect(screen.queryByText("Sorry, I ran into a problem. Please try again.")).toBeNull();
+    expect(showAlert).not.toHaveBeenCalled();
+    expect(fetchAgentTurnStatus).not.toHaveBeenCalled();
+    expect(screen.getByLabelText("Message").hasAttribute("disabled")).toBe(false);
+  });
+
   it("adopts the recovered turn's conversation id for subsequent turns", async () => {
     interruptedStream();
     fetchAgentTurnStatus.mockResolvedValue({
