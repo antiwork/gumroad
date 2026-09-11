@@ -697,6 +697,6 @@ class PaypalPayoutProcessor
 
       topup_amount += response["L_AMT#{i}"].to_d
     end
-    topup_amount.to_i
+    topup_amount
   end
 end

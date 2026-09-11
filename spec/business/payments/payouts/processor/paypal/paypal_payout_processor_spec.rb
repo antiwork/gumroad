@@ -1544,6 +1544,21 @@ describe PaypalPayoutProcessor do
       expect(described_class.topup_amount_in_transit).to eq(125_000)
     end
 
+    it "keeps fractional transfer dollars" do
+      allow(HTTParty).to receive(:post).and_return(
+        paypal_nvp(
+          "ACK" => "Success",
+          "L_TRANSACTIONID0" => "txn_cents",
+          "L_TYPE0" => "Transfer",
+          "L_NAME0" => "Bank Account",
+          "L_STATUS0" => "Uncleared",
+          "L_AMT0" => "25000.50"
+        )
+      )
+
+      expect(described_class.topup_amount_in_transit).to eq(BigDecimal("25000.50"))
+    end
+
     it "returns 0 when ACK is not success" do
       allow(HTTParty).to receive(:post).and_return(paypal_nvp("ACK" => "Failure"))
 

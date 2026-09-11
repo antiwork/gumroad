@@ -92,6 +92,15 @@ describe PaypalBalanceCheckService do
       service = described_class.new
       expect(service.topup_in_transit_cents).to eq(100_000_00)
     end
+
+    context "when the in-transit amount has cents" do
+      let(:topup_in_transit_dollars) { BigDecimal("25000.50") }
+
+      it "keeps the fractional dollars" do
+        service = described_class.new
+        expect(service.topup_in_transit_cents).to eq(2_500_050)
+      end
+    end
   end
 
   describe "#topup_amount_cents" do
@@ -104,6 +113,23 @@ describe PaypalBalanceCheckService do
     it "returns the amount needed to top up" do
       service = described_class.new
       expect(service.topup_amount_cents).to eq(100_000_00)
+    end
+  end
+
+  describe "#payout_amount_cents after Friday's PayPal run" do
+    let(:seller) { create(:user) }
+    let!(:payment) { create(:payment, user: seller, processor: "paypal", created_at: Time.utc(2026, 9, 4)) }
+    let(:current_balance_cents) { 0 }
+
+    it "does not count balances past this week's Friday" do
+      travel_to Time.utc(2026, 9, 11, 14, 0, 0) do
+        create(:balance, user: seller, date: Date.new(2026, 9, 11), amount_cents: 10_000_00)
+        create(:balance, user: seller, date: Date.new(2026, 9, 12), amount_cents: 99_000_00)
+
+        service = described_class.new
+        expect(service.payout_date).to eq(Date.new(2026, 9, 18))
+        expect(service.payout_amount_cents).to eq(10_000_00)
+      end
     end
   end
 

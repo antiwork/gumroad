@@ -8,7 +8,7 @@ class PaypalBalanceCheckService
     @payout_date = self.class.next_paypal_payout_date
     @payout_amount_cents = calculate_payout_amount_cents
     @current_balance_cents = PaypalPayoutProcessor.current_paypal_balance_cents
-    @topup_in_transit_cents = PaypalPayoutProcessor.topup_amount_in_transit * 100
+    @topup_in_transit_cents = (PaypalPayoutProcessor.topup_amount_in_transit.to_d * 100).to_i
   end
 
   attr_reader :payout_date, :payout_amount_cents, :current_balance_cents, :topup_in_transit_cents
@@ -37,7 +37,9 @@ class PaypalBalanceCheckService
                           .where("created_at > ?", 1.month.ago)
                           .where(processor: "paypal")
                           .select(:user_id))
-        .where("date <= ?", payout_date)
+        # payout_date is hour-aware and becomes next Friday after 10:00 UTC.
+        # The named MassPay still only pays balances through this week's Friday.
+        .where("date <= ?", User::PayoutSchedule.next_scheduled_payout_date)
         .sum(:amount_cents)
     end
 end
