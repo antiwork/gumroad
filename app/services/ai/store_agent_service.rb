@@ -1142,11 +1142,16 @@ class Ai::StoreAgentService
       end
     end
 
-    # Emit the trailing events for a completed streaming turn (objects, any staged change, and the
-    # follow-up suggestions) and return the full result hash. The on_reply_complete hook fires
-    # first — before any further socket write — so the caller can persist the finished turn even
-    # when the client's connection is already dead (the next emit would raise ClientDisconnected
-    # and abandon the turn) and before the seller waits out the extra suggestions LLM call.
+    # Emit the trailing events for a completed streaming turn (objects, any staged change, a
+    # turn_ready marker, and the follow-up suggestions) and return the full result hash. The
+    # on_reply_complete hook fires first — before any further socket write — so the caller can
+    # persist the finished turn even when the client's connection is already dead (the next emit
+    # would raise ClientDisconnected and abandon the turn).
+    #
+    # turn_ready fires after the reply/objects/proposal are on the socket and BEFORE the extra
+    # suggestions LLM call. Controllers write the terminal `done` frame from that event so the
+    # creator is not held on a spinner while optional follow-up chips generate. Suggestions still
+    # emit afterwards; they are not dropped.
     def finish_stream(reply:, proposed_action:, last_user_message:, emit:, on_reply_complete: nil, &before_trailing_events)
       objects = deduped_objects
       result = turn_result(reply:, proposed_action:)
@@ -1154,6 +1159,7 @@ class Ai::StoreAgentService
       before_trailing_events&.call(result)
       emit.call(:objects, { objects: }) if objects.any?
       emit.call(:proposed_action, { proposed_action: proposed_action.as_json }) if proposed_action
+      emit.call(:turn_ready, result)
       suggestions = follow_up_suggestions(reply: result[:reply], last_user_message:)
       emit.call(:suggestions, { suggestions: }) if suggestions.any?
       result.merge(suggestions:)

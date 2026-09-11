@@ -152,6 +152,7 @@ class Api::Internal::AgentMessageStreamsController < Api::Internal::BaseControll
       turn_persisted = false
       assistant_message = nil
       unpersisted_proposal = false
+      done_written = false
       on_reply_complete = lambda do |turn|
         conversation, assistant_message = persist_agent_turn!(
           conversation,
@@ -167,6 +168,32 @@ class Api::Internal::AgentMessageStreamsController < Api::Internal::BaseControll
         ErrorNotifier.notify(e)
         unpersisted_proposal = replace_unpersisted_proposal_reply!(turn)
       end
+      flush_done = lambda do |turn|
+        next if done_written
+
+        turn = turn.with_indifferent_access if turn.respond_to?(:with_indifferent_access)
+        # conversation_id is omitted entirely (not null) when creating the conversation itself
+        # failed above — the client validates this frame against a schema where conversation_id
+        # is an optional string, so a null would fail validation and turn a benign persistence
+        # failure into a spurious interrupted-stream recovery. proposed_action stays present even
+        # when nil: the client schema requires it (nullable, not optional). A generated proposal is
+        # returned only when its assistant message persisted and has a claimable id.
+        #
+        # Suggestions are optional follow-up chips generated AFTER this frame. done.suggestions
+        # stays [] here so the composer can unlock without waiting on that extra model call; the
+        # later `suggestions` event fills the chips. A persistence failure still sends empty
+        # suggestions and suppresses that later event.
+        done_payload = {
+          reply: turn[:reply],
+          proposed_action: assistant_message ? turn[:proposed_action] : nil,
+          objects: turn[:objects] || [],
+          suggestions: [],
+        }
+        done_payload[:conversation_id] = conversation.external_id if conversation
+        done_payload[:proposal_message_id] = assistant_message.external_id if turn[:proposed_action] && assistant_message
+        write_event.call(done_payload, "done")
+        done_written = true
+      end
       result = ::Ai::StoreAgentService.new(seller: current_seller, pundit_user:)
         .respond_streaming(messages: history, on_reply_complete:) do |event, payload|
         # Extend only a marker that is still in progress. on_reply_complete runs before trailing
@@ -180,24 +207,14 @@ class Api::Internal::AgentMessageStreamsController < Api::Internal::BaseControll
         # The suggestion call still used the discarded confirmation wording. Do not pair the
         # honest fallback with prompts derived from a write that cannot be confirmed.
         next if event.to_s == "suggestions" && unpersisted_proposal
+        if event.to_s == "turn_ready"
+          flush_done.call(payload)
+          next
+        end
 
         write_event.call(payload, event)
       end
-      # conversation_id is omitted entirely (not null) when creating the conversation itself
-      # failed above — the client validates this frame against a schema where conversation_id
-      # is an optional string, so a null would fail validation and turn a benign persistence
-      # failure into a spurious interrupted-stream recovery. proposed_action stays present even
-      # when nil: the client schema requires it (nullable, not optional). A generated proposal is
-      # returned only when its assistant message persisted and has a claimable id.
-      done_payload = {
-        reply: result[:reply],
-        proposed_action: assistant_message ? result[:proposed_action] : nil,
-        objects: result[:objects] || [],
-        suggestions: unpersisted_proposal ? [] : result[:suggestions] || [],
-      }
-      done_payload[:conversation_id] = conversation.external_id if conversation
-      done_payload[:proposal_message_id] = assistant_message.external_id if result[:proposed_action] && assistant_message
-      write_event.call(done_payload, "done")
+      flush_done.call(result)
     rescue ::Ai::StoreAgentService::Error => e
       mark_agent_turn_failed!(client_turn_id) unless turn_persisted
       write_event.call({ message: e.message }, "error")

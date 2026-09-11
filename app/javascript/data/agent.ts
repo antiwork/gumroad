@@ -267,6 +267,9 @@ export type AgentStreamHandlers = {
   onObjects?: (objects: DisplayObject[]) => void;
   onProposedAction?: (action: ProposedAction) => void;
   onSuggestions?: (suggestions: string[]) => void;
+  // The reply is persisted and the terminal `done` frame arrived. Follow-up suggestion chips may
+  // still stream after this; unlock the composer here rather than waiting for them.
+  onDone?: (result: StreamResult) => void;
 };
 
 type StreamResult = {
@@ -437,11 +440,12 @@ export const streamAgentMessage = async (
       case "suggestions": {
         suggestions = typia.assert<SuggestionsData>(raw).suggestions;
         handlers.onSuggestions?.(suggestions);
+        if (done) done = { ...done, suggestions };
         return null;
       }
       case "done": {
         const data = typia.assert<DoneData>(raw);
-        return {
+        const assembled: StreamResult = {
           reply: data.reply,
           // Fall back to the proposed action accumulated mid-stream (the `proposed_action` event),
           // the same way objects/suggestions fall back to their accumulated state. A done frame that
@@ -452,6 +456,8 @@ export const streamAgentMessage = async (
           suggestions: data.suggestions ?? suggestions,
           conversationId: data.conversation_id ?? conversationId ?? null,
         };
+        handlers.onDone?.(assembled);
+        return assembled;
       }
       case "error": {
         throw new ResponseError(typia.assert<ErrorData>(raw).message);
@@ -474,10 +480,10 @@ export const streamAgentMessage = async (
         if (frame.trim().length > 0) done = handleFrame(frame) ?? done;
         separator = buffer.indexOf("\n\n");
       }
-      // `done` is the terminal frame — the server writes nothing meaningful after it. Return the
-      // assembled turn now rather than draining to EOF, so a connection whose close never reaches
-      // the client can't hold a finished turn hostage until the inactivity timeout.
-      if (done) return done;
+      // Keep reading after `done` so optional follow-up suggestion chips can still arrive. The
+      // composer unlocks from onDone when that frame lands; returning here would drop those chips.
+      // A connection that never closes is still bounded by the inactivity timeout, and the catch
+      // below returns an already-assembled `done` if the socket drops afterwards.
     }
     if (buffer.trim().length > 0) done = handleFrame(buffer) ?? done;
   } catch (e) {

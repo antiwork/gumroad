@@ -798,6 +798,19 @@ export const AgentChat = ({ greeting, suggestions, locked = null }: Props) => {
       onObjects: (objects) => upsertAssistant({ objects }),
       onProposedAction: (proposedAction) => upsertAssistant({ proposedAction }),
       onSuggestions: (next) => setFollowUps(next),
+      onDone: (result) => {
+        turnSettled = true;
+        if (result.conversationId) setConversationId(result.conversationId);
+        upsertAssistant({
+          content: result.reply,
+          ...(result.proposedAction ? { proposedAction: result.proposedAction } : {}),
+          ...(result.proposalMessageId ? { proposalMessageId: result.proposalMessageId } : {}),
+          ...(result.objects.length > 0 ? { objects: result.objects } : {}),
+        });
+        // Unlock as soon as the reply is persisted. Suggestion chips may still arrive.
+        setIsSending(false);
+        setIsStreaming(false);
+      },
     };
 
     try {

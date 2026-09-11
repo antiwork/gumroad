@@ -2020,7 +2020,7 @@ describe Ai::StoreAgentService do
       # The finished turn reaches the hook before anything else happens — before the extra
       # suggestions LLM call and before any trailing event is written to the (possibly already
       # dead) client socket — so callers can persist it no matter what happens afterwards.
-      expect(order).to eq([:reply_complete, :suggestions_call, :suggestions])
+      expect(order).to eq([:reply_complete, :turn_ready, :suggestions_call, :suggestions])
       expect(completed_turn).to eq(
         outcome: "reply_only",
         reply: "Here are your numbers.",
