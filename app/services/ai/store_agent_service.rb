@@ -1144,16 +1144,9 @@ class Ai::StoreAgentService
       end
     end
 
-    # Emit the trailing events for a completed streaming turn (objects, any staged change, a
-    # turn_ready marker, and the follow-up suggestions) and return the full result hash. The
-    # on_reply_complete hook fires first — before any further socket write — so the caller can
-    # persist the finished turn even when the client's connection is already dead (the next emit
-    # would raise ClientDisconnected and abandon the turn).
-    #
-    # turn_ready fires after the reply/objects/proposal are on the socket and BEFORE the extra
-    # suggestions LLM call. The web stream controller writes `done` from that event so the
-    # creator is not held on a spinner while optional follow-up chips generate. Mobile ignores
-    # the marker and still writes terminal `done` after suggestions. Suggestions are not dropped.
+    # Persist via on_reply_complete before any further emit so a dead socket still stores the turn.
+    # turn_ready is before the suggestions LLM call; web writes `done` from it, mobile ignores it
+    # and stays terminal after chips.
     def finish_stream(reply:, proposed_action:, last_user_message:, emit:, on_reply_complete: nil, &before_trailing_events)
       objects = deduped_objects
       result = turn_result(reply:, proposed_action:)
