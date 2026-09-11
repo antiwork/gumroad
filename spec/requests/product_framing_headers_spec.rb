@@ -2,8 +2,8 @@
 
 require "spec_helper"
 
-# Public product pages must omit framing headers; custom-HTML pages set them
-# (RendersCustomHtmlPages#apply_custom_html_response_headers, user_pages_spec).
+# Sellers embed public product pages, so they must omit framing headers; custom-HTML
+# pages set them (RendersCustomHtmlPages#apply_custom_html_response_headers, user_pages_spec).
 describe "framing headers on a public product page", type: :request do
   let(:seller) { create(:user) }
   let(:product) { create(:product, user: seller) }
