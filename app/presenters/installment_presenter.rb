@@ -67,6 +67,7 @@ class InstallmentPresenter
         has_been_blasted: installment.has_been_blasted?,
         shown_in_profile_sections: seller.seller_profile_posts_sections.filter_map { _1.external_id if _1.shown_posts.include?(installment.id) },
         non_opener_resends: non_opener_resend_props,
+        delivery: delivery_props,
       )
 
       unless installment.published?
@@ -94,6 +95,22 @@ class InstallmentPresenter
   end
 
   private
+    # State of the latest regular send. Without it an incomplete blast reads as a finished one:
+    # the Emailed column only ever showed the delivered count. Resends have their own rows.
+    def delivery_props
+      blast = installment.latest_regular_blast
+      return if blast&.requested_at.nil?
+
+      status = blast.delivery_status
+      {
+        status:,
+        delivered_count: blast.delivery_count,
+        remaining_count: status == "sent" ? nil : blast.remaining_recipient_count,
+        scheduled_for: status == "waiting" ? blast.quota_deferred_until : nil,
+        retrying: status == "incomplete" && AlertOnStalledPostEmailBlastsJob.auto_resume_eligible?(blast),
+      }
+    end
+
     # Stats for each "resend to non-openers" blast on this post, oldest first.
     #
     # Open events don't record which blast delivered the email — open tracking is

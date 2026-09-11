@@ -39,6 +39,31 @@ RSpec.describe PostEmailBlast do
     end
   end
 
+  describe "#delivery_status", :freeze_time do
+    let(:post) { create(:installment) }
+
+    it "is sent once completed, or once every recipient was handed off" do
+      expect(create(:blast, post:, completed_at: 1.minute.ago).delivery_status).to eq("sent")
+
+      handed_off = create(:blast, post:, requested_at: 2.days.ago, last_email_delivered_at: 2.days.ago, completed_at: nil)
+      $redis.set(RedisKey.blast_pending_recipients(handed_off.id), 0)
+      expect(handed_off.delivery_status).to eq("sent")
+    ensure
+      $redis.del(RedisKey.blast_pending_recipients(handed_off.id)) if handed_off
+    end
+
+    it "is waiting while a quota deferral is ahead, sending inside the stall threshold, incomplete past it" do
+      deferred = create(:blast, :just_requested, post:, requested_at: 5.hours.ago)
+      $redis.set(RedisKey.blast_quota_deferred_until(deferred.id), 1.hour.from_now.utc.iso8601)
+      expect(deferred.delivery_status).to eq("waiting")
+
+      expect(create(:blast, post:, requested_at: 1.hour.ago, last_email_delivered_at: 10.minutes.ago, completed_at: nil).delivery_status).to eq("sending")
+      expect(create(:blast, post:, requested_at: 2.days.ago, last_email_delivered_at: 2.days.ago, completed_at: nil).delivery_status).to eq("incomplete")
+    ensure
+      $redis.del(RedisKey.blast_quota_deferred_until(deferred.id)) if deferred
+    end
+  end
+
   describe "Latency metrics", :freeze_time do
     describe "#start_latency" do
       it "returns the difference between requested_at and started_at" do

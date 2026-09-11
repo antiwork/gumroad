@@ -42,10 +42,15 @@ class AudienceMember < ApplicationRecord
   # resolved member list against the CURRENT filter criteria is cheap even when running
   # the unrestricted filter over the whole audience would be slow. Used by blast retries
   # to revalidate their snapshotted recipient lists.
-  def self.filter(seller_id:, params: {}, with_ids: false, ids: nil)
+  #
+  # as_of: the audience as it stood then. The row and the purchase, follow or affiliation that
+  # qualifies the member must predate it; `refresh!` adds later purchases to an existing row
+  # without touching `created_at`, so the row bound alone is not enough.
+  def self.filter(seller_id:, params: {}, with_ids: false, ids: nil, as_of: nil)
     params = normalize_filter_params(params)
     base_scope = where(seller_id:)
     base_scope = base_scope.where(id: ids) if ids
+    base_scope = base_scope.where(created_at: ..as_of) if as_of
 
     if params[:type]
       types_sql = base_scope.where(params[:type] => true).to_sql
@@ -134,7 +139,7 @@ class AudienceMember < ApplicationRecord
     filter_purchases_when ||= (params[:paid_more_than_cents] && params[:paid_less_than_cents])
     filter_purchases_when ||= (params[:created_after] && params[:created_before])
     filter_purchases_when ||= params[:active_customers_only] || params[:minimum_license_uses]
-    if filter_purchases_when || with_ids
+    if filter_purchases_when || with_ids || as_of
       json_filter = base_scope
       json_table = <<~SQL.squish
         JSON_TABLE(details, '$' COLUMNS (
@@ -217,6 +222,29 @@ class AudienceMember < ApplicationRecord
       if params[:created_before] && timestamp_columns.any?
         where_conditions = timestamp_columns.map { "jt.#{_1} < :date" }.join(" OR ")
         json_filter = json_filter.where(where_conditions, date: params[:created_before])
+      end
+      if as_of
+        # Purchase predicates keep only purchase rows, on which the follower and affiliate
+        # timestamps are NULL, so bound the purchase row only once `jt` is narrowed to purchases.
+        purchase_predicate = params.values_at(
+          :bought_product_ids, :bought_variant_ids, :paid_more_than_cents, :paid_less_than_cents,
+          :bought_from, :active_customers_only, :minimum_license_uses
+        ).any?
+        case params[:type]
+        when "customer"
+          json_filter = json_filter.where("jt.purchase_created_at <= ?", as_of)
+        when "follower"
+          # The details JSON stores the follow date; eligibility begins at confirmation.
+          json_filter = json_filter
+            .joins("INNER JOIN followers ON followers.followed_id = audience_members.seller_id AND followers.email = audience_members.email")
+            .where("followers.confirmed_at <= ?", as_of)
+          json_filter = json_filter.where("jt.purchase_created_at <= ?", as_of) if purchase_predicate
+        when "affiliate"
+          json_filter = json_filter.where("affiliate_jt.affiliate_created_at <= ?", as_of)
+          json_filter = json_filter.where("jt.purchase_created_at <= ?", as_of) if purchase_predicate
+        else
+          json_filter = json_filter.where("COALESCE(jt.purchase_created_at, jt.follower_created_at, jt.affiliate_created_at) <= ?", as_of)
+        end
       end
       if params[:bought_product_ids] && params[:bought_variant_ids]
         json_filter = json_filter.where("jt.purchase_product_id IN (?) OR jt.purchase_variant_id IN (?)", params[:bought_product_ids], params[:bought_variant_ids])
