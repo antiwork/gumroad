@@ -50,7 +50,8 @@ services:
       - elasticsearch7data:/data
 
   minio:
-    image: minio/minio
+    # MinIO images come from quay.io; the Docker Hub repositories were removed.
+    image: quay.io/minio/minio
     ports:
       - "9000:9000" # API port
       - "9001:9001" # Console port
@@ -68,7 +69,7 @@ services:
       start_period: 30s
 
   createbuckets:
-    image: minio/mc
+    image: quay.io/minio/mc
     depends_on:
       minio:
         condition: service_healthy
@@ -88,7 +89,7 @@ services:
       done; exit 0; "
 
   copyfixturefiles:
-    image: minio/mc
+    image: quay.io/minio/mc
     depends_on:
       createbuckets:
         condition: service_completed_successfully

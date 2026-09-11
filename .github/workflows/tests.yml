@@ -509,8 +509,9 @@ jobs:
         ports:
           - 9200:9200
       # MinIO (S3-compatible object storage) is started as a step below rather than
-      # a service: the official minio/minio image needs a `server /data` command
-      # that GitHub Actions service containers can't supply.
+      # a service: the official quay.io/minio/minio image needs a `server /data` command
+      # that GitHub Actions service containers can't supply. MinIO images are pulled from
+      # quay.io because the Docker Hub repositories were removed (pulls fail with access denied).
 
     env:
       RAILS_ENV: test
@@ -547,7 +548,7 @@ jobs:
         run: |
           docker run -d --name minio -p 9000:9000 -p 9001:9001 \
             -e MINIO_ROOT_USER=minioadmin -e MINIO_ROOT_PASSWORD=minioadmin \
-            minio/minio:RELEASE.2025-09-07T16-13-09Z server /data --console-address ":9001"
+            quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z server /data --console-address ":9001"
           for i in $(seq 1 30); do curl -fsS http://localhost:9000/minio/health/ready >/dev/null 2>&1 && break; sleep 2; done
           curl -fsS http://localhost:9000/minio/health/ready || { echo "MinIO did not become ready"; exit 1; }
           # Provision the buckets the app's :test storage service expects (see
@@ -562,7 +563,7 @@ jobs:
           # `mc anonymous set` and `mc version enable` each take exactly ONE bucket — passing
           # two makes mc print its usage text and exit 1 — so they run per bucket in a loop.
           # (`mc mb` does accept several.)
-          docker run --rm --network host --entrypoint /bin/sh minio/mc:RELEASE.2025-08-13T08-35-41Z -c "
+          docker run --rm --network host --entrypoint /bin/sh quay.io/minio/mc:RELEASE.2025-08-13T08-35-41Z -c "
             set -e
             mc alias set local http://localhost:9000 minioadmin minioadmin
             mc mb --ignore-existing local/gumroad-specs local/gumroad-invoices
