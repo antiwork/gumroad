@@ -100,6 +100,28 @@ describe "Apple OmniAuth strategy cookie-based nonce patch" do
       expect(env["rack.request.form_hash"]["user"]["email"]).to eq("jane@example.com")
     end
 
+    it "parses JSON user param on ActionDispatch request_parameters" do
+      user_json = '{"name":{"firstName":"Jane","lastName":"Appleseed"},"email":"jane@example.com"}'
+      cookie_value = sign_cookie({ "nonce" => "test" })
+
+      env = build_env(
+        "/users/auth/apple/callback",
+        cookies: "#{APPLE_OAUTH_COOKIE_NAME}=#{Rack::Utils.escape(cookie_value)}"
+      )
+      env["action_dispatch.request.request_parameters"] = { "user" => user_json }
+      prepare_strategy(env)
+
+      begin
+        strategy.callback_phase
+      rescue
+      end
+
+      expect(env["action_dispatch.request.request_parameters"]["user"]).to be_a(Hash)
+      expect(env["action_dispatch.request.request_parameters"]["user"]["email"]).to eq("jane@example.com")
+      expect(ActionDispatch::Request.new(env).params["user"]).to be_a(Hash)
+      expect(ActionDispatch::Request.new(env).params["user"]["email"]).to eq("jane@example.com")
+    end
+
     it "leaves non-JSON user param as-is" do
       cookie_value = sign_cookie({ "nonce" => "test" })
 

@@ -237,6 +237,15 @@ describe User::OmniauthCallbacksController do
       expect(user.global_affiliate).to be_present
     end
 
+    it "signs in when Apple posts user as a JSON string" do
+      # First-time Sign In sends `user` as JSON. The pwned-password hook must not call String#fetch on it.
+      expect do
+        post :apple, params: { user: '{"name":{"firstName":"Jane","lastName":"Appleseed"},"email":"apple-user@example.com"}' }
+      end.to change { User.count }.by(1)
+
+      expect(controller.user_signed_in?).to be true
+    end
+
     it "associates past purchases with the same email to the new user" do
       email = request.env["omniauth.auth"]["info"]["email"]
       purchase1 = create(:purchase, email:)
