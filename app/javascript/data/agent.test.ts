@@ -426,7 +426,9 @@ describe("streamAgentMessage", () => {
     await vi.advanceTimersByTimeAsync(0);
     await Promise.resolve();
     await Promise.resolve();
-    expect(onDone).toHaveBeenCalledWith(expect.objectContaining({ reply: "Want me to pull up?", conversationId: "conv1" }));
+    expect(onDone).toHaveBeenCalledWith(
+      expect.objectContaining({ reply: "Want me to pull up?", conversationId: "conv1" }),
+    );
 
     // The promise stays on the open socket so late suggestion chips can still arrive. Inactivity
     // after done still returns the assembled turn instead of treating it as an interruption.
