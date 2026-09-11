@@ -143,6 +143,13 @@ describe Pages::BuyButtonParams do
         node = node_for(%(<a data-gumroad-action="buy" data-gumroad-recurrence="monthly">Buy</a>))
         expect(described_class.from(node, product:)).to eq({})
       end
+
+      it "does not raise when recurrences is nil on a recurring product" do
+        product = create(:membership_product)
+        allow(product).to receive(:recurrences).and_return(nil)
+        node = node_for(%(<a data-gumroad-action="buy" data-gumroad-recurrence="monthly">Buy</a>))
+        expect(described_class.from(node, product:)).to eq({})
+      end
     end
 
     context "multiple attributes together" do

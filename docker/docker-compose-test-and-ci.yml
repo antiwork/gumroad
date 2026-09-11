@@ -48,7 +48,7 @@ services:
       - "11211"
 
   minio:
-    image: minio/minio:RELEASE.2025-09-07T16-13-09Z
+    image: quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z
     ports:
       - "9000"
       - "9001"
@@ -66,7 +66,7 @@ services:
       start_period: 30s
 
   createbuckets:
-    image: minio/mc:RELEASE.2025-08-13T08-35-41Z
+    image: quay.io/minio/mc:RELEASE.2025-08-13T08-35-41Z
     depends_on:
       minio:
         condition: service_healthy
@@ -86,7 +86,7 @@ services:
       done; exit 0; "
 
   copyfixturefiles:
-    image: minio/mc:RELEASE.2025-08-13T08-35-41Z
+    image: quay.io/minio/mc:RELEASE.2025-08-13T08-35-41Z
     depends_on:
       createbuckets:
         condition: service_completed_successfully

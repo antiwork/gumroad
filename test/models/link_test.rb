@@ -1993,6 +1993,23 @@ class LinkTest < ActiveSupport::TestCase
     assert_nil product.default_price_recurrence
   end
 
+  test "recurrences falls back to the first enabled interval when no default price row exists" do
+    product = create_membership_product
+    product.update_column(:subscription_duration, BasePrice::Recurrence::YEARLY)
+    product.reload
+    assert_nil product.default_price_recurrence
+    recurrences = product.recurrences
+    assert_equal "monthly", recurrences[:default]
+    assert recurrences[:enabled].any? { |entry| entry[:recurrence] == "monthly" }
+  end
+
+  test "recurrences returns nil when recurring billing has no alive buy prices" do
+    product = create_membership_product
+    product.prices.alive.each { |price| price.update!(deleted_at: Time.current) }
+    product.reload
+    assert_nil product.recurrences
+  end
+
   # --- #price_range ----------------------------------------------------------
 
   test "price_range can be assigned a number" do
@@ -3930,6 +3947,59 @@ class LinkTest < ActiveSupport::TestCase
     assert_kind_of Hash, result
     assert result.key?(:option)
     assert result.key?(:price)
+  end
+
+  test "cart_item does not raise when no default recurrence price exists" do
+    product = create_membership_product
+    product.update_column(:subscription_duration, BasePrice::Recurrence::YEARLY)
+    product.reload
+    assert_nil product.default_price_recurrence
+    result = product.cart_item({})
+    assert_kind_of Hash, result
+    assert_equal "monthly", result[:recurrence]
+    assert result[:price].is_a?(Integer)
+  end
+
+  test "cart_item falls back to the same shortest interval recurrences advertises" do
+    product = create_membership_product
+    default_tier = product.default_tier
+    default_tier.prices.alive.each(&:mark_deleted!)
+    product.prices.alive.each(&:mark_deleted!)
+    default_tier.save_recurring_prices!(
+      BasePrice::Recurrence::YEARLY => { enabled: true, price: "10" },
+      BasePrice::Recurrence::MONTHLY => { enabled: true, price: "1" }
+    )
+    product.update_column(:subscription_duration, BasePrice::Recurrence::QUARTERLY)
+    product.reload
+    assert_nil product.default_price_recurrence
+    assert_equal "yearly", default_tier.prices.is_buy.alive.order(:id).first.recurrence
+    recurrences = product.recurrences
+    result = product.cart_item({})
+    assert_equal "monthly", recurrences[:default]
+    assert_equal recurrences[:default], result[:recurrence]
+  end
+
+  test "recurrences ignores buy prices with a blank recurrence when picking the default interval" do
+    product = create_membership_product
+    product.update_column(:subscription_duration, BasePrice::Recurrence::YEARLY)
+    blank = product.prices.build(price_cents: 999, recurrence: nil)
+    blank.save!(validate: false)
+    product.reload
+    recurrences = product.recurrences
+    assert_equal "monthly", recurrences[:default]
+    assert recurrences[:enabled].none? { |entry| entry[:recurrence].blank? }
+  end
+
+  test "cart_item does not raise when a variant has a blank-recurrence buy price" do
+    product = create_membership_product
+    product.update_column(:subscription_duration, BasePrice::Recurrence::YEARLY)
+    product.reload
+    blank = product.default_tier.prices.build(price_cents: 999, recurrence: nil)
+    blank.save!(validate: false)
+    result = product.cart_item({})
+    assert_kind_of Hash, result
+    assert_equal "monthly", result[:recurrence]
+    assert result[:price].is_a?(Integer)
   end
 
   # --- currencies ------------------------------------------------------------
