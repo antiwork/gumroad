@@ -30,7 +30,9 @@ module Gumroad
   class Application < Rails::Application
     # Initialize configuration defaults for originally generated Rails version.
     config.load_defaults 7.2
-    # Must live here: Rails 8 snapshots default_headers during initialize!, so an initializer is ignored.
+    # Same five headers load_defaults 7.2 sets; restated so SecureHeaders strips them from the
+    # object ActionDispatch::Response aliases. Must live here, not an initializer: since 8.0.5 the
+    # response class loads before initializers run, so a later assignment is ignored (rails#58145).
     config.action_dispatch.default_headers = {
       "X-Frame-Options" => "SAMEORIGIN",
       "X-XSS-Protection" => "0",
@@ -48,8 +50,6 @@ module Gumroad
     config.active_record.run_after_transaction_callbacks_in_order_defined = false
     # Compare seller HTML rendering before adopting the HTML5 sanitizer.
     config.action_view.sanitizer_vendor = Rails::HTML4::Sanitizer
-    # Audit Active Job callers before changing transaction enqueue timing.
-    config.active_job.enqueue_after_transaction_commit = :never
     # Verify thumbnail delivery before serving WebP variants without conversion.
     config.active_storage.web_image_content_types = %w[image/png image/jpeg image/gif]
     # Reconcile existing future-dated migrations before enabling timestamp validation.
