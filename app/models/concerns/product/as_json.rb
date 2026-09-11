@@ -8,6 +8,9 @@ module Product::AsJson
   end
 
   def as_json(options = {})
+    # Rails 8 hands every element of a collection the same frozen options hash, so the
+    # deletes below need a mutable copy.
+    options = (options || {}).dup
     return super(options) if options.delete(:original)
     return as_json_for_admin_info if options.delete(:admin_info)
     return as_json_for_api(options) if options[:api_scopes].present?

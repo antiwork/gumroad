@@ -25,19 +25,14 @@
 # Remove the default X-Download-Options headers since it is used only by Internet Explorer.
 # If you need to support Internet Explorer, add back `"X-Download-Options" => "noopen"`.
 #++
-Rails.application.config.action_dispatch.default_headers = {
-  "X-Frame-Options" => "SAMEORIGIN",
-  "X-XSS-Protection" => "0",
-  "X-Content-Type-Options" => "nosniff",
-  "X-Permitted-Cross-Domain-Policies" => "none",
-  "Referrer-Policy" => "strict-origin-when-cross-origin"
-}
+# Assigned in config/application.rb. A wholesale replacement here is ignored on
+# Rails 8.0.5+/8.1.2+ (rails/rails#58145).
 
 ###
 # Do not treat an `ActionController::Parameters` instance
 # as equal to an equivalent `Hash` by default.
 #++
-Rails.application.config.action_controller.allow_deprecated_parameters_hash_equality = false
+
 
 ###
 # Active Record Encryption now uses SHA-256 as its hash digest algorithm.
@@ -83,7 +78,7 @@ Rails.application.config.active_record.sqlite3_adapter_strict_strings_by_default
 ###
 # Disable deprecated singular associations names.
 #++
-Rails.application.config.active_record.allow_deprecated_singular_associations_name = false
+
 
 ###
 # Enable the Active Job `BigDecimal` argument serializer, which guarantees
@@ -95,7 +90,7 @@ Rails.application.config.active_record.allow_deprecated_singular_associations_na
 # serializer. Therefore, this setting should only be enabled after all replicas
 # have been successfully upgraded to Rails 7.1.
 #++
-Rails.application.config.active_job.use_big_decimal_serializer = true
+
 
 ###
 # Specify if an `ArgumentError` should be raised if `Rails.cache` `fetch` or

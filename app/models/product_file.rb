@@ -97,6 +97,9 @@ class ProductFile < ApplicationRecord
   end
 
   def as_json(options = {})
+    # Rails 8 hands every element of a collection the same frozen options hash, so the
+    # deletes below need a mutable copy.
+    options = (options || {}).dup
     return super(options) if options.delete(:original)
 
     url_for_thumbnail = thumbnail_url
