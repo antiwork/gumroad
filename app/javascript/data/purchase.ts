@@ -129,6 +129,7 @@ export type StartCartPurchaseRequestPayload = {
   recaptchaChallengeFallback?: boolean;
   usedStripePaymentElement: boolean;
   buyerCurrencyQuote: string | null;
+  directListedAmountToken: string | null;
 };
 
 export type PaymentDetailsSource = "card_element" | "payment_element" | "payment_request" | "saved_payment_method";
@@ -271,6 +272,7 @@ export const createPurchasesRequestData = (
     "g-recaptcha-response": payload.recaptchaResponse || "",
     recaptcha_challenge_fallback: payload.recaptchaChallengeFallback ?? false,
     buyer_currency_quote: payload.buyerCurrencyQuote || "",
+    direct_listed_amount_token: payload.directListedAmountToken,
     purchase,
     line_items: payload.lineItems.map((lineItem) => ({
       uid: lineItem.uid,

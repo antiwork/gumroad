@@ -2112,6 +2112,52 @@ describe Api::Internal::Admin::UsersController do
     include_examples "supports user lookup by user_id", :suspension, method: :get, build_user: -> { create(:compliant_user) }
   end
 
+  describe "GET social_connections" do
+    include_examples "admin api authorization required", :get, :social_connections
+
+    it "returns the user's verified social connections with the shared-identity count" do
+      user = create(:user, email: "seller@example.com")
+      verification = create(:social_connect_verification, user:, platform: "twitter", uid: "shared-uid", handle: "seller")
+      create(:social_connect_verification, platform: "twitter", uid: "shared-uid")
+
+      get :social_connections, params: { email: user.email }
+
+      expect(response).to have_http_status(:ok)
+      expect(response.parsed_body).to eq({
+        success: true,
+        user_id: user.external_id,
+        social_connections: [
+          {
+            platform: "twitter",
+            handle: "seller",
+            account_created_at: verification.account_created_at.iso8601,
+            follower_count: verification.follower_count,
+            post_count: verification.post_count,
+            last_posted_at: verification.last_posted_at.iso8601,
+            last_verified_at: verification.last_verified_at.iso8601,
+            shared_identity_user_count: 1
+          }
+        ]
+      }.as_json)
+    end
+
+    it "returns an empty list for a user with no connections" do
+      user = create(:user, email: "seller@example.com")
+
+      get :social_connections, params: { email: user.email }
+
+      expect(response).to have_http_status(:ok)
+      expect(response.parsed_body).to eq({ success: true, user_id: user.external_id, social_connections: [] }.as_json)
+    end
+
+    it "returns not found when the user does not exist" do
+      get :social_connections, params: { email: "missing@example.com" }
+
+      expect(response).to have_http_status(:not_found)
+      expect(response.parsed_body).to eq({ success: false, message: "User not found" }.as_json)
+    end
+  end
+
   describe "GET unpaid_balance" do
     include_examples "admin api authorization required", :get, :unpaid_balance
 

@@ -75,5 +75,26 @@ describe User::SocialTwitter do
         expect(@user).to be_valid
       end
     end
+
+    describe "social connect verification" do
+      before do
+        @user = create(:user)
+      end
+
+      it "records a verification with the profile metadata", :vcr do
+        expect { User.query_twitter(@user, @data) }.to change { @user.social_connect_verifications.count }.by(1)
+
+        verification = @user.social_connect_verifications.sole
+        expect(verification).to have_attributes(platform: "twitter", uid: @data["id"].to_s, handle: @data["screen_name"])
+        expect(verification.follower_count).to eq(@data["followers_count"])
+      end
+
+      it "does not break the connect flow when recording fails", :vcr do
+        allow(SocialConnectVerification).to receive(:record_from_twitter!).and_raise(StandardError, "boom")
+
+        expect { User.query_twitter(@user, @data) }.not_to raise_error
+        expect(@user.reload.twitter_handle).to eq(@data["screen_name"])
+      end
+    end
   end
 end

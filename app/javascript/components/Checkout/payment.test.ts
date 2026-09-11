@@ -14,6 +14,7 @@ import {
   getChargeTodayPrice,
   getConfiguredDirectListedCurrency,
   getFutureInstallmentsTotal,
+  getLoadedDirectListedAmountToken,
   getSelectableDirectListedCurrency,
   getStripePaymentElementAmount,
   getStripePaymentElementMountCurrency,
@@ -153,6 +154,7 @@ const directListedCardConfig: CheckoutPaymentConfig = {
     presentment_amount_cents: 1_500,
     listed_currency_display: { currency: "cad", subunit_to_unit: 100 },
     direct_listed_card: true,
+    direct_listed_currency_rate: 1.5,
   },
 };
 
@@ -967,6 +969,45 @@ describe("direct-listed card element", () => {
     expect(getStripePaymentElementMountCurrency(s)).toBe("cad");
   });
 
+  it("uses the final listed total for discounted percentage-tip direct-listed carts", () => {
+    const s = state({
+      checkoutPayment: directListedCardConfig,
+      products: [
+        product({
+          hasTippingEnabled: true,
+          listedPriceCents: 1_500,
+          listedChargePriceCents: 1_200,
+        }),
+      ],
+      tip: { type: "percentage", percentage: 15 },
+      surcharges: {
+        type: "loaded",
+        result: {
+          vat_id_valid: false,
+          has_vat_id_input: false,
+          shipping_rate_cents: 0,
+          tax_cents: 100,
+          tax_included_cents: 60,
+          subtotal: 900,
+          direct_listed_line_allocations: [
+            {
+              permalink: "product-a",
+              price_cents: 1_200,
+              tip_cents: 180,
+              tax_cents: 150,
+              shipping_cents: 0,
+              total_cents: 1_530,
+            },
+          ],
+          buyer_currency_quote: null,
+        },
+      },
+    });
+
+    expect(getStripePaymentElementAmount(s)).toBe(1_530);
+    expect(getStripePaymentElementMountCurrency(s)).toBe("cad");
+  });
+
   it("keeps the direct-listed lane and exact listed amount when a fixed tip is added", () => {
     const s = state({
       checkoutPayment: directListedCardConfig,
@@ -989,6 +1030,257 @@ describe("direct-listed card element", () => {
     expect(getSelectableDirectListedCurrency(s)).toBe("cad");
     expect(getStripePaymentElementAmount(s)).toBe(1_937);
     expect(getStripePaymentElementMountCurrency(s)).toBe("cad");
+  });
+
+  it("uses the final listed total for discounted fixed-tip direct-listed carts", () => {
+    const s = state({
+      checkoutPayment: directListedCardConfig,
+      products: [
+        product({
+          hasTippingEnabled: true,
+          listedPriceCents: 1_500,
+          listedChargePriceCents: 1_200,
+        }),
+      ],
+      tip: { type: "fixed", amount: 291, listedAmount: 437 },
+      surcharges: {
+        type: "loaded",
+        result: {
+          vat_id_valid: false,
+          has_vat_id_input: false,
+          shipping_rate_cents: 0,
+          tax_cents: 100,
+          tax_included_cents: 60,
+          subtotal: 1_191,
+          direct_listed_line_allocations: [
+            {
+              permalink: "product-a",
+              price_cents: 1_200,
+              tip_cents: 437,
+              tax_cents: 150,
+              shipping_cents: 0,
+              total_cents: 1_787,
+            },
+          ],
+          buyer_currency_quote: null,
+        },
+      },
+    });
+
+    expect(getStripePaymentElementAmount(s)).toBe(1_787);
+    expect(getStripePaymentElementMountCurrency(s)).toBe("cad");
+  });
+
+  it("uses the server direct-listed allocations so per-line tax rounding matches charge time", () => {
+    const s = state({
+      checkoutPayment: directListedCardConfig,
+      products: [
+        product({ permalink: "product-a", listedChargePriceCents: 1_000 }),
+        product({ permalink: "product-b", listedChargePriceCents: 1_000 }),
+      ],
+      surcharges: {
+        type: "loaded",
+        result: {
+          vat_id_valid: false,
+          has_vat_id_input: false,
+          shipping_rate_cents: 0,
+          tax_cents: 2,
+          tax_included_cents: 0,
+          subtotal: 1_334,
+          direct_listed_line_allocations: [
+            {
+              permalink: "product-a",
+              price_cents: 1_000,
+              tip_cents: 0,
+              tax_cents: 2,
+              shipping_cents: 0,
+              total_cents: 1_002,
+            },
+            {
+              permalink: "product-b",
+              price_cents: 1_000,
+              tip_cents: 0,
+              tax_cents: 2,
+              shipping_cents: 0,
+              total_cents: 1_002,
+            },
+          ],
+          buyer_currency_quote: null,
+        },
+      },
+    });
+
+    expect(getStripePaymentElementAmount(s)).toBe(2_004);
+  });
+
+  it("uses server allocations for JPY single-unit tax conversion", () => {
+    const s = state({
+      checkoutPayment: {
+        ...directListedCardConfig,
+        elements_options: {
+          ...directListedCardConfig.elements_options,
+          currency: "jpy",
+          listed_currency_display: { currency: "jpy", subunit_to_unit: 1 },
+          direct_listed_currency_rate: 150,
+        },
+      },
+      products: [product({ listedChargePriceCents: 1_500 })],
+      buyerCurrency: "jpy",
+      surcharges: {
+        type: "loaded",
+        result: {
+          vat_id_valid: false,
+          has_vat_id_input: false,
+          shipping_rate_cents: 0,
+          tax_cents: 100,
+          tax_included_cents: 0,
+          subtotal: 1_000,
+          direct_listed_line_allocations: [
+            {
+              permalink: "product-a",
+              price_cents: 1_500,
+              tip_cents: 0,
+              tax_cents: 150,
+              shipping_cents: 0,
+              total_cents: 1_650,
+            },
+          ],
+          buyer_currency_quote: null,
+        },
+      },
+    });
+
+    expect(getStripePaymentElementAmount(s)).toBe(1_650);
+  });
+
+  it("does not mount a listed amount when excluded tax has no matching per-line allocations", () => {
+    const s = state({
+      checkoutPayment: directListedCardConfig,
+      products: [product({ listedChargePriceCents: 1_200 })],
+      surcharges: {
+        type: "loaded",
+        result: {
+          vat_id_valid: false,
+          has_vat_id_input: false,
+          shipping_rate_cents: 0,
+          tax_cents: 100,
+          tax_included_cents: 0,
+          subtotal: 900,
+          buyer_currency_quote: null,
+        },
+      },
+    });
+
+    expect(getStripePaymentElementAmount(s)).toBeNull();
+  });
+
+  it("mounts a method-forced element on the per-line allocations, not the converted aggregate", () => {
+    // Two 1c USD tax lines at rate 1.5: the charge rounds each line (2 + 2 = 4 listed cents),
+    // while converting the 2c aggregate once would mount 3 and disagree with the intent.
+    const s = state({
+      checkoutPayment: {
+        ...methodForcedEurConfig,
+        elements_options: { ...methodForcedEurConfig.elements_options, direct_listed_currency_rate: 1.5 },
+      },
+      products: [
+        product({ permalink: "product-a", listedChargePriceCents: 1_000 }),
+        product({ permalink: "product-b", listedChargePriceCents: 500 }),
+      ],
+      surcharges: {
+        type: "loaded",
+        result: {
+          vat_id_valid: false,
+          has_vat_id_input: false,
+          shipping_rate_cents: 0,
+          tax_cents: 2,
+          tax_included_cents: 0,
+          subtotal: 1_000,
+          direct_listed_line_allocations: [
+            {
+              permalink: "product-a",
+              price_cents: 1_000,
+              tip_cents: 0,
+              tax_cents: 2,
+              shipping_cents: 0,
+              total_cents: 1_002,
+            },
+            {
+              permalink: "product-b",
+              price_cents: 500,
+              tip_cents: 0,
+              tax_cents: 2,
+              shipping_cents: 0,
+              total_cents: 502,
+            },
+          ],
+          buyer_currency_quote: null,
+        },
+      },
+    });
+
+    expect(getConfiguredDirectListedCurrency(s)).toBeNull();
+    expect(getStripePaymentElementAmount(s)).toBe(1_504);
+    expect(getStripePaymentElementMountCurrency(s)).toBe("eur");
+    expect(getLoadedDirectListedAmountToken(s)).toBeNull();
+  });
+
+  it("submits the loaded amount token for a method-forced listed mount", () => {
+    const s = state({
+      checkoutPayment: {
+        ...methodForcedEurConfig,
+        elements_options: { ...methodForcedEurConfig.elements_options, direct_listed_currency_rate: 1.5 },
+      },
+      products: [product({ listedChargePriceCents: 1_000 })],
+      surcharges: {
+        type: "loaded",
+        result: {
+          vat_id_valid: false,
+          has_vat_id_input: false,
+          shipping_rate_cents: 0,
+          tax_cents: 2,
+          tax_included_cents: 0,
+          subtotal: 1_000,
+          direct_listed_amount_token: "signed-method-forced-amount",
+          direct_listed_line_allocations: [
+            {
+              permalink: "product",
+              price_cents: 1_000,
+              tip_cents: 0,
+              tax_cents: 2,
+              shipping_cents: 0,
+              total_cents: 1_002,
+            },
+          ],
+          buyer_currency_quote: null,
+        },
+      },
+    });
+
+    expect(getConfiguredDirectListedCurrency(s)).toBeNull();
+    expect(getLoadedDirectListedAmountToken(s)).toBe("signed-method-forced-amount");
+  });
+
+  it("does not mount a method-forced element with tax before the per-line allocations arrive", () => {
+    const s = state({
+      checkoutPayment: {
+        ...methodForcedEurConfig,
+        elements_options: { ...methodForcedEurConfig.elements_options, direct_listed_currency_rate: 0.9 },
+      },
+      surcharges: {
+        type: "loaded",
+        result: {
+          vat_id_valid: false,
+          has_vat_id_input: false,
+          shipping_rate_cents: 0,
+          tax_cents: 100,
+          tax_included_cents: 0,
+          subtotal: 1_100,
+          buyer_currency_quote: null,
+        },
+      },
+    });
+
+    expect(getStripePaymentElementAmount(s)).toBeNull();
   });
 
   it("remounts in canonical USD for a shipping cart", () => {

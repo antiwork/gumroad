@@ -78,7 +78,8 @@ describe Checkout::StripePaymentPresenter do
   # The Element's Link toggle and the intent's method list derive from the same resolver output, so
   # they move together; Link is always launched, and the US-locked methods (cashapp/us_bank_account)
   # are passed explicitly by the region-gate specs.
-  def payment_element_client_confirm_props(stripe_link_enabled: true, payment_method_types: %w[card link], stripe_connect_account_id: nil, currency: "usd", buyer_currency_presentment: false, presentment_amount_cents: nil, listed_currency_display: nil, recurring_upi_registration: false, direct_listed_card: false, disable_wallets: false, request_apple_pay_merchant_tokens: false, india_card_mandate_reliability: false, payment_element_wallets: false, flat_payment_methods: payment_element_wallets || disable_wallets, inr_local_methods: [])
+  def payment_element_client_confirm_props(stripe_link_enabled: true, payment_method_types: %w[card link], stripe_connect_account_id: nil, currency: "usd", buyer_currency_presentment: false, presentment_amount_cents: nil, listed_currency_display: nil, recurring_upi_registration: false, direct_listed_card: false, disable_wallets: false, request_apple_pay_merchant_tokens: false, india_card_mandate_reliability: false, payment_element_wallets: false, flat_payment_methods: payment_element_wallets || disable_wallets, inr_local_methods: [], direct_listed_currency_rate: nil)
+    signed_rate = direct_listed_currency_rate || (currency == "usd" ? nil : 0.8)
     {
       integration: described_class::STRIPE_PAYMENT_ELEMENT_CLIENT_CONFIRM_INTEGRATION,
       fallback_reason: nil,
@@ -106,6 +107,7 @@ describe Checkout::StripePaymentPresenter do
         stripe_link_enabled:,
         stripe_connect_account_id:,
         **(direct_listed_card ? { direct_listed_card: true } : {}),
+        **(signed_rate ? { direct_listed_currency_rate: signed_rate } : {}),
       },
     }
   end
@@ -2284,6 +2286,7 @@ describe Checkout::StripePaymentPresenter do
       # The multi-item forced-currency lane charges the listed prices directly too, so the cart
       # summary must render in EUR rather than an FX-converted USD figure.
       expect(props[:elements_options][:listed_currency_display]).to eq(currency: "eur", subunit_to_unit: 100)
+      expect(props[:elements_options][:direct_listed_currency_rate]).to eq(0.8)
     ensure
       deactivate_buyer_currency_flags(seller) if seller
     end

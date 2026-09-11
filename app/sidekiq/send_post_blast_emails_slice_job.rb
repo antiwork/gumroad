@@ -18,13 +18,14 @@ class SendPostBlastEmailsSliceJob
       finalize_partition_if_complete(partition_key, total_chunks)
       return
     end
-    claim_chunk!(partition_key, chunk_index)
+    return reschedule_behind_claim(blast_id, partition_key, chunk_index, total_chunks, member_ids) unless claim_chunk(partition_key, chunk_index)
 
     begin
       @blast.update!(started_at: Time.current) if @blast.started_at.nil?
 
       @filters = @post.audience_members_filter_params
       @members = load_chunk_members(member_ids)
+      renew_chunk_claim!
       # A retried slice re-runs its own chunk and must not double-decrement pending for
       # recipients its first attempt already handed off.
       @blast.to_non_openers? ? remove_members_already_sent_in_this_blast : remove_already_emailed_members
@@ -38,7 +39,14 @@ class SendPostBlastEmailsSliceJob
 
   private
     CHUNK_REVALIDATION_SLICE_SIZE = 1_000
-    CHUNK_CLAIM_TTL = 4.hours
+    # Renewed on every member-load slice and every provider slice, so it only has to outlive
+    # one statement or one provider call. A hard-killed copy never releases it, and the chunk
+    # cannot resume until it lapses, so keep it short. Must stay above CHUNK_LOAD_TIMEOUT.
+    CHUNK_CLAIM_TTL = 30.minutes
+    # Statement cap for the member load. Below CHUNK_CLAIM_TTL so the claim cannot lapse mid-load.
+    CHUNK_LOAD_TIMEOUT = 20.minutes
+    # Wait this long past a held claim's expiry before looking again.
+    CLAIM_RECHECK_SLACK = 1.minute
     RELEASE_CHUNK_CLAIM_IF_HELD = <<~LUA
       if redis.call("GET", KEYS[1]) == ARGV[1] then
         return redis.call("DEL", KEYS[1])
@@ -60,12 +68,20 @@ class SendPostBlastEmailsSliceJob
       $redis.sismember(RedisKey.blast_done_slices(@blast.id, partition_key), chunk_index)
     end
 
-    def claim_chunk!(partition_key, chunk_index)
+    def claim_chunk(partition_key, chunk_index)
       @chunk_claim_key = RedisKey.blast_slice_claim(@blast.id, partition_key, chunk_index)
       @chunk_claim_token = SecureRandom.uuid
-      return if $redis.set(@chunk_claim_key, @chunk_claim_token, nx: true, ex: CHUNK_CLAIM_TTL.to_i)
+      $redis.set(@chunk_claim_key, @chunk_claim_token, nx: true, ex: CHUNK_CLAIM_TTL.to_i)
+    end
 
-      raise "slice #{chunk_index} is already claimed for blast #{@blast.id}"
+    # A held claim is not a failure, so it must not spend a retry: Sidekiq's backoff lands every
+    # retry inside the holder's window and the chunk dies with its recipients unsent. Come back
+    # once the claim can have lapsed; a holder that finished is caught by chunk_completed?.
+    def reschedule_behind_claim(blast_id, partition_key, chunk_index, total_chunks, member_ids)
+      ttl = $redis.ttl(@chunk_claim_key)
+      delay = (ttl.positive? ? ttl : 0) + CLAIM_RECHECK_SLACK.to_i
+      Rails.logger.info("[#{self.class.name}] blast_id=#{blast_id} chunk=#{chunk_index} claimed by another copy; rechecking in #{delay}s")
+      self.class.perform_in(delay, blast_id, partition_key, chunk_index, total_chunks, member_ids)
     end
 
     def renew_chunk_claim!
@@ -83,8 +99,11 @@ class SendPostBlastEmailsSliceJob
 
       # The send phase needs filter-provided virtual columns (purchase_id/follower_id/affiliate_id).
       Makara::Context.release_all
-      members = WithMaxExecutionTime.timeout_queries(seconds: 1.hour) do
+      # CHUNK_LOAD_TIMEOUT caps each statement and the renewal below covers the gap between
+      # statements, so the claim cannot lapse mid-load however many slices run.
+      members = WithMaxExecutionTime.timeout_queries(seconds: CHUNK_LOAD_TIMEOUT) do
         member_ids.each_slice(CHUNK_REVALIDATION_SLICE_SIZE).flat_map do |ids_slice|
+          renew_chunk_claim!
           AudienceMember.filter(seller_id: @post.seller_id, params: @filters, with_ids: true, ids: ids_slice)
             .select(:id, :email, :purchase_id, :follower_id, :affiliate_id).to_a
         end

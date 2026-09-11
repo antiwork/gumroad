@@ -287,6 +287,7 @@ class Checkout::StripePaymentPresenter
         payment_method_types -= [Checkout::PaymentMethodResolver::KLARNA_PAYMENT_METHOD_TYPE,
                                  Checkout::PaymentMethodResolver::ALIPAY_PAYMENT_METHOD_TYPE]
       end
+      signed_listed_rate = listed_currency ? listed_lane_rate(items) : nil
       elements_options = {
         stripe_elements_mode: STRIPE_ELEMENTS_MODE_FOR_PAYMENT_INTENT,
         currency: element_currency,
@@ -298,10 +299,16 @@ class Checkout::StripePaymentPresenter
         } : nil,
         payment_method_types:,
         inr_local_methods: inr_local_method_types,
-        payment_method_list_token: issued_payment_method_list_token(payment_method_types, inr_local_method_types:),
+        payment_method_list_token: issued_payment_method_list_token(
+          payment_method_types,
+          inr_local_method_types:,
+          direct_listed_currency: listed_currency ? element_currency : nil,
+          direct_listed_currency_rate: signed_listed_rate,
+        ),
         stripe_link_enabled: payment_method_types.include?(Checkout::PaymentMethodResolver::LINK_PAYMENT_METHOD_TYPE),
         stripe_connect_account_id: resolution.stripe_connect_account_id,
       }
+      elements_options[:direct_listed_currency_rate] = signed_listed_rate if signed_listed_rate.present?
       elements_options[:direct_listed_card] = true if direct_listed_card
 
       {
@@ -406,7 +413,7 @@ class Checkout::StripePaymentPresenter
          Checkout::PaymentMethodResolver::ALIPAY_PAYMENT_METHOD_TYPE]
     end
 
-    def issued_payment_method_list_token(payment_method_types, inr_local_method_types: inr_local_methods)
+    def issued_payment_method_list_token(payment_method_types, inr_local_method_types: inr_local_methods, direct_listed_currency: nil, direct_listed_currency_rate: nil)
       quoted_types = quoted_remount_payment_method_types(payment_method_types)
       inr_types = (quoted_types + inr_local_method_types).uniq
       Checkout::PaymentMethodListToken.issue(
@@ -414,6 +421,8 @@ class Checkout::StripePaymentPresenter
         sellers:,
         quoted_payment_method_types: quoted_types,
         inr_payment_method_types: inr_local_method_types.present? ? inr_types : nil,
+        direct_listed_currency:,
+        direct_listed_currency_rate:,
       )
     end
 
@@ -514,6 +523,18 @@ class Checkout::StripePaymentPresenter
     def listed_lane_rates_uniform?(items)
       rates = items.map { _1[:exchange_rate].to_f }
       rates.all?(&:positive?) && rates.uniq.one?
+    end
+
+    # Page payloads store the display rate (USD cents × rate = listed minor units). JPY's
+    # display rate is already divided by 100; usd_cents_to_currency expects the raw OXR
+    # rate and applies that /100 itself. Sign the raw rate so the Element and charge agree.
+    def listed_lane_rate(items)
+      return nil unless listed_lane_rates_uniform?(items)
+
+      scaled = items.first[:exchange_rate]
+      return nil unless scaled.to_f.positive?
+
+      scaled.to_f * (is_currency_type_single_unit?(items.first[:product_currency]) ? 100 : 1)
     end
 
     def method_forced_element_currency
