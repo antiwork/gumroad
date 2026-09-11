@@ -3960,6 +3960,25 @@ class LinkTest < ActiveSupport::TestCase
     assert result[:price].is_a?(Integer)
   end
 
+  test "cart_item falls back to the same shortest interval recurrences advertises" do
+    product = create_membership_product
+    default_tier = product.default_tier
+    default_tier.prices.alive.each(&:mark_deleted!)
+    product.prices.alive.each(&:mark_deleted!)
+    default_tier.save_recurring_prices!(
+      BasePrice::Recurrence::YEARLY => { enabled: true, price: "10" },
+      BasePrice::Recurrence::MONTHLY => { enabled: true, price: "1" }
+    )
+    product.update_column(:subscription_duration, BasePrice::Recurrence::QUARTERLY)
+    product.reload
+    assert_nil product.default_price_recurrence
+    assert_equal "yearly", default_tier.prices.is_buy.alive.order(:id).first.recurrence
+    recurrences = product.recurrences
+    result = product.cart_item({})
+    assert_equal "monthly", recurrences[:default]
+    assert_equal recurrences[:default], result[:recurrence]
+  end
+
   # --- currencies ------------------------------------------------------------
 
   test "prices round-trip through price_range for every supported currency" do
