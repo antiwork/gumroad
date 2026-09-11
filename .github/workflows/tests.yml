@@ -510,8 +510,7 @@ jobs:
           - 9200:9200
       # MinIO (S3-compatible object storage) is started as a step below rather than
       # a service: the official quay.io/minio/minio image needs a `server /data` command
-      # that GitHub Actions service containers can't supply. MinIO images are pulled from
-      # quay.io because the Docker Hub repositories were removed (pulls fail with access denied).
+      # that GitHub Actions service containers can't supply.
 
     env:
       RAILS_ENV: test
