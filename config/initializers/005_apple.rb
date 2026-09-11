@@ -45,18 +45,30 @@ OmniAuth::Strategies::Apple.class_eval do
 
   def callback_phase
     env["omniauth.params"] = cookie_data.except("nonce") if cookie_data
-
-    # Apple sends `user` as a JSON string; parse it so Devise sees a hash.
-    # Without this devise-pwned_password raises errors as it assumes user is a hash.
-    form_hash = env["rack.request.form_hash"]
-    if form_hash&.dig("user").is_a?(String)
-      form_hash["user"] = JSON.parse(form_hash["user"]) rescue form_hash["user"]
-    end
-
+    coerce_apple_user_param!
     super
   end
 
   private
+    def coerce_apple_user_param!
+      # Rails 8 builds ActionDispatch params from form_pairs/form_vars, not
+      # rack.request.form_hash. Devise makes Warden use ActionDispatch::Request,
+      # so the pwned-password hook never sees a form_hash-only rewrite.
+      ActionDispatch::Request.new(env).POST
+
+      [
+        "rack.request.form_hash",
+        "action_dispatch.request.request_parameters",
+        "action_dispatch.request.parameters"
+      ].each do |key|
+        hash = env[key]
+        next unless hash.is_a?(Hash) && hash["user"].is_a?(String)
+
+        parsed = JSON.parse(hash["user"]) rescue nil
+        hash["user"] = parsed if parsed.is_a?(Hash)
+      end
+    end
+
     def user_info
       user = request.params["user"]
       @user_info ||= if user.is_a?(String)
