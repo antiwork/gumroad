@@ -58,8 +58,7 @@ OmniAuth::Strategies::Apple.class_eval do
 
       [
         "rack.request.form_hash",
-        "action_dispatch.request.request_parameters",
-        "action_dispatch.request.parameters"
+        "action_dispatch.request.request_parameters"
       ].each do |key|
         hash = env[key]
         next unless hash.is_a?(Hash) && hash["user"].is_a?(String)

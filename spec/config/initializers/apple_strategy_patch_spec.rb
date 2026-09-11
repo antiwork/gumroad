@@ -109,7 +109,6 @@ describe "Apple OmniAuth strategy cookie-based nonce patch" do
         cookies: "#{APPLE_OAUTH_COOKIE_NAME}=#{Rack::Utils.escape(cookie_value)}"
       )
       env["action_dispatch.request.request_parameters"] = { "user" => user_json }
-      env["action_dispatch.request.parameters"] = { "user" => user_json }
       prepare_strategy(env)
 
       begin
