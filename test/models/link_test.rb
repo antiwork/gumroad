@@ -1993,6 +1993,23 @@ class LinkTest < ActiveSupport::TestCase
     assert_nil product.default_price_recurrence
   end
 
+  test "recurrences falls back to the first enabled interval when no default price row exists" do
+    product = create_membership_product
+    product.update_column(:subscription_duration, BasePrice::Recurrence::YEARLY)
+    product.reload
+    assert_nil product.default_price_recurrence
+    recurrences = product.recurrences
+    assert_equal "monthly", recurrences[:default]
+    assert recurrences[:enabled].any? { |entry| entry[:recurrence] == "monthly" }
+  end
+
+  test "recurrences returns nil when recurring billing has no alive buy prices" do
+    product = create_membership_product
+    product.prices.alive.each { |price| price.update!(deleted_at: Time.current) }
+    product.reload
+    assert_nil product.recurrences
+  end
+
   # --- #price_range ----------------------------------------------------------
 
   test "price_range can be assigned a number" do
@@ -3930,6 +3947,17 @@ class LinkTest < ActiveSupport::TestCase
     assert_kind_of Hash, result
     assert result.key?(:option)
     assert result.key?(:price)
+  end
+
+  test "cart_item does not raise when no default recurrence price exists" do
+    product = create_membership_product
+    product.update_column(:subscription_duration, BasePrice::Recurrence::YEARLY)
+    product.reload
+    assert_nil product.default_price_recurrence
+    result = product.cart_item({})
+    assert_kind_of Hash, result
+    assert_equal "monthly", result[:recurrence]
+    assert result[:price].is_a?(Integer)
   end
 
   # --- currencies ------------------------------------------------------------

@@ -102,6 +102,6 @@ class Pages::BuyButtonParams
     end
 
     def enabled_recurrences
-      @enabled_recurrences ||= (product.recurrences[:enabled] || []).map { |r| r[:recurrence].to_s }.to_set
+      @enabled_recurrences ||= (product.recurrences&.[](:enabled) || []).map { |r| r[:recurrence].to_s }.to_set
     end
 end

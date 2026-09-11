@@ -843,10 +843,13 @@ class Link < ApplicationRecord
   end
 
   def recurrences
-    is_recurring_billing ? {
-      default: default_price_recurrence.recurrence,
-      enabled: prices.alive.is_buy.sort_by { |price| BasePrice::Recurrence.number_of_months_in_recurrence(price.recurrence) }.map { |price| { recurrence: price.recurrence, price_cents: price.price_cents, id: price.external_id } }
-    } : nil
+    return nil unless is_recurring_billing
+
+    enabled = prices.alive.is_buy.sort_by { |price| BasePrice::Recurrence.number_of_months_in_recurrence(price.recurrence) }.map { |price| { recurrence: price.recurrence, price_cents: price.price_cents, id: price.external_id } }
+    default = default_price_recurrence&.recurrence || enabled.first&.fetch(:recurrence, nil)
+    return nil if default.nil?
+
+    { default:, enabled: }
   end
 
   def rental
@@ -1415,12 +1418,16 @@ class Link < ApplicationRecord
     attrs[:option] = attrs[:options].find { |o| o[:id] == params[:option] } || (native_type != NATIVE_TYPE_COFFEE ? attrs[:options].find { |o| o[:quantity_left] != 0 } : nil)
     variant = attrs[:option] ? Variant.find_by_external_id(attrs[:option][:id]) : nil
     prices = (is_tiered_membership && variant ? variant : self).prices.is_buy.alive
-    recurrence = is_recurring_billing ? prices.find { |price| price.recurrence == params[:recurrence] } || prices.find { |price| price.recurrence == default_price_recurrence.recurrence } : nil
+    recurrence = if is_recurring_billing
+      prices.find { |price| price.recurrence == params[:recurrence] } ||
+        prices.find { |price| price.recurrence == default_price_recurrence&.recurrence } ||
+        prices.first
+    end
     attrs[:recurrence] = recurrence&.recurrence
     attrs[:pay_in_installments] = !!params[:pay_in_installments] && allow_installment_plan?
     attrs[:price] = [
       customizable_price.present? || variant&.customizable_price.present? ? params[:price].to_i : 0,
-      (recurrence&.price_cents || (attrs[:rental] ? rental_price_cents : price_cents)) +
+      (recurrence&.price_cents || (attrs[:rental] ? rental_price_cents : price_cents).to_i) +
       (attrs[:option]&.fetch(:price_difference_cents) || 0)
     ].max
     attrs[:price] = currency["min_price"] if purchasing_power_parity_enabled? && attrs[:price] != 0 && attrs[:price] < currency["min_price"]
