@@ -955,8 +955,7 @@ GEM
       logger
     shoulda-matchers (6.3.0)
       activesupport (>= 5.2.0)
-    sidekiq (7.3.0)
-      concurrent-ruby (< 2)
+    sidekiq (7.3.4)
       connection_pool (>= 2.3.0)
       logger
       rack (>= 2.2.4)
@@ -1260,7 +1259,7 @@ DEPENDENCIES
   sentry-rails
   sentry-ruby
   shoulda-matchers (~> 6.0)
-  sidekiq (~> 7.2)
+  sidekiq (~> 7.3, >= 7.3.4)
   sidekiq-cron (~> 1.9)
   sidekiq-pro (~> 7.2)!
   sidekiq-unique-jobs (~> 8.0)

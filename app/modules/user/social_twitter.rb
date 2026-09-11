@@ -49,7 +49,8 @@ module User::SocialTwitter
           logger.error "Error getting extra info from Twitter OAuth: #{error.message}"
         end
       else
-        query_twitter(user, info)
+        # Plain Twitter login/signup must not count as funnel "connected".
+        query_twitter(user, info, record_funnel_connected: false)
       end
 
       user.save!
@@ -57,7 +58,7 @@ module User::SocialTwitter
     end
 
     # Save Twitter data in DB
-    def query_twitter(user, data)
+    def query_twitter(user, data, record_funnel_connected: true)
       return unless user
 
       # Dont overwrite fields of existing users.
@@ -67,10 +68,11 @@ module User::SocialTwitter
 
       if user.persisted?
         begin
-          SocialConnectVerification.record_from_twitter!(user, data)
+          SocialConnectVerification.record_from_twitter!(user, data, record_funnel_connected:)
         rescue StandardError => e
           # Verification metadata feeds risk reviews; it must never break signup/link.
           Rails.logger.error("SocialConnectVerification twitter record failed for user #{user.id}: #{e.message}")
+          SocialConnectFunnel.record!(user:, stage: "failed", provider: "twitter", surface: "omniauth", extra: e.class.name)
         end
       end
 

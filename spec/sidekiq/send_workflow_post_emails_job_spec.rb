@@ -850,6 +850,8 @@ describe SendWorkflowPostEmailsJob, :freeze_time do
   end
 
   describe "one large blast per seller per day" do
+    let(:deferred_run_at) { Time.zone.tomorrow.beginning_of_day + 5.hours }
+
     before do
       @product = create(:product, user: @seller, price_cents: 0)
       @post.update!(
@@ -867,11 +869,12 @@ describe SendWorkflowPostEmailsJob, :freeze_time do
 
     after { $redis.del(RedisKey.seller_large_blast_quota(@seller.id, Date.current)) }
 
-    it "fans out the first large post and holds the next one until tomorrow" do
+    it "fans out the first large post and holds the next one until the quota's overnight window" do
       second_post = create(:installment, :published, seller: @seller, link: @product, workflow: @workflow,
                                                      installment_type: Installment::PRODUCT_TYPE,
                                                      bought_products: [@product.unique_permalink])
       create(:post_rule, installment: second_post, delayed_delivery_time: 0)
+      allow(SellerLargeBlastQuota).to receive(:deferred_run_at).and_return(deferred_run_at)
 
       described_class.new.perform(@post.id)
       expect(SendWorkflowInstallmentWorker.jobs.size).to eq(4)
@@ -883,7 +886,7 @@ describe SendWorkflowPostEmailsJob, :freeze_time do
       expect(SendWorkflowInstallmentWorker.jobs).to be_empty
       expect(described_class).to have_enqueued_sidekiq_job(
         second_post.id, nil, false, nil, nil, nil
-      ).at(Time.zone.tomorrow.beginning_of_day)
+      ).at(deferred_run_at)
     end
 
     it "does not consume the day for a small audience" do
@@ -896,6 +899,7 @@ describe SendWorkflowPostEmailsJob, :freeze_time do
     end
 
     it "holds a started schedule intent until the deferred job, so recovery cannot steal it" do
+      allow(SellerLargeBlastQuota).to receive(:deferred_run_at).and_return(deferred_run_at)
       described_class.new.perform(@post.id)
       SendWorkflowInstallmentWorker.jobs.clear
       described_class.jobs.clear
@@ -917,12 +921,10 @@ describe SendWorkflowPostEmailsJob, :freeze_time do
       expect(SendWorkflowInstallmentWorker.jobs).to be_empty
       expect(described_class).to have_enqueued_sidekiq_job(
         second_post.id, nil, false, nil, intent.token, fanout_token
-      ).at(Time.zone.tomorrow.beginning_of_day)
+      ).at(deferred_run_at)
       expect(intent.reload.processed_at).to be_nil
       expect(intent.fanout_token).to eq(fanout_token)
-      expect(intent.fanout_expires_at).to eq(
-        Time.zone.tomorrow.beginning_of_day + WorkflowInstallmentScheduleIntent::FANOUT_LEASE
-      )
+      expect(intent.fanout_expires_at).to eq(deferred_run_at + WorkflowInstallmentScheduleIntent::FANOUT_LEASE)
       expect(WorkflowInstallmentScheduleIntent.dispatchable).not_to include(intent)
     end
   end

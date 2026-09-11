@@ -12,14 +12,16 @@ describe "Optional social connections during account review", type: :system, js:
     login_as seller
   end
 
-  it "offers X despite an unverified handle and leaves normal review available" do
+  it "offers a link to Social connections and leaves normal review available" do
     visit settings_payments_path
 
-    expect(page).to have_text("Add social connections (optional)")
-    expect(page).to have_button("Connect to X")
+    expect(page).to have_text("Connect a social account (optional)")
+    expect(page).to have_link("Connect an account", href: settings_social_connections_path)
+    expect(page).not_to have_text("Connected:")
+    expect(page).not_to have_button("Connect to X")
     expect(page).not_to have_button("Connect to YouTube")
     expect(page).not_to have_button("Connect to Instagram")
-    expect(page).to have_text("does not replace identity verification or guarantee approval or a payout date")
+    expect(page).to have_text("It is not identity verification, and it does not guarantee approval or a payout date.")
     within_section "Account status", section_element: :section do
       expect(page).to have_link("contact support", href: help_center_root_path)
     end
@@ -30,15 +32,16 @@ describe "Optional social connections during account review", type: :system, js:
   it "reflects current connections and removes the prompt when review ends" do
     seller.update!(twitter_user_id: "123")
     visit settings_payments_path
-    expect(page).to have_text("X connected")
+    expect(page).to have_text("Connected: X")
+    expect(page).to have_link("Manage connections", href: settings_social_connections_path)
     expect(page).not_to have_button("Connect to X")
 
     seller.update!(twitter_user_id: nil)
     visit settings_payments_path
-    expect(page).to have_button("Connect to X")
+    expect(page).to have_link("Connect an account", href: settings_social_connections_path)
 
     seller.mark_compliant!(author_name: "test")
     visit settings_payments_path
-    expect(page).not_to have_text("Add social connections (optional)")
+    expect(page).not_to have_text("Connect a social account (optional)")
   end
 end

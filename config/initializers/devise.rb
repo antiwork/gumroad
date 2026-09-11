@@ -5,6 +5,7 @@ require "omniauth-twitter"
 require "omniauth-google-oauth2"
 require_relative "../../lib/omni_auth/strategies/youtube"
 require_relative "../../lib/omni_auth/strategies/instagram"
+require_relative "../../lib/omni_auth/strategies/tiktok"
 
 Devise.setup do |config|
   # Changing this invalidates existing confirmation, reset-password, and unlock tokens.
@@ -55,6 +56,10 @@ Devise.setup do |config|
   config.omniauth :instagram,
                   INSTAGRAM_APP_ID,
                   INSTAGRAM_APP_SECRET
+
+  config.omniauth :tiktok,
+                  TIKTOK_CLIENT_KEY,
+                  TIKTOK_CLIENT_SECRET
 
   config.omniauth :apple,
                   APPLE_CLIENT_ID,

@@ -32,6 +32,14 @@ class ConnectionsController < Sellers::BaseController
     render json: { success: false, error_message: e.message }
   end
 
+  def unlink_tiktok
+    current_seller.tiktok_identity&.destroy!
+
+    render json: { success: true }
+  rescue => e
+    render json: { success: false, error_message: e.message }
+  end
+
   private
     def authorize
       super([:settings, :profile], :manage_social_connections?)

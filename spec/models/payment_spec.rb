@@ -478,6 +478,13 @@ describe Payment do
 
         expect(payment.humanized_failure_reason).to eq(nil)
       end
+
+      it "returns the reason alone when it has no PAYPAL_MASS_PAY description" do
+        payment = create(:payment_failed, processor: "PAYPAL",
+                                          failure_reason: Payment::FailureReason::TRANSACTION_NOT_FOUND)
+
+        expect(payment.humanized_failure_reason).to eq(Payment::FailureReason::TRANSACTION_NOT_FOUND)
+      end
     end
   end
 
@@ -638,7 +645,8 @@ describe Payment do
         expect(payment.errors[:base]).to include("Connection refused")
         expect(payment.user.reload.payouts_paused_internally?).to be(true)
         expect(payment.user.payouts_paused_by).to eq(User::PAYOUT_PAUSE_SOURCE_SYSTEM)
-        expect(ErrorNotifier).to have_received(:notify)
+        expect(ErrorNotifier).to have_received(:notify).once
+        expect(payment.instance_variable_get(:@payout_reversal_failure_notified)).to be(true)
       end
 
       it "still pauses payouts end to end when the failure email's real save raises" do
@@ -799,7 +807,32 @@ describe Payment do
           expect do
             payment.send(:sync_with_paypal)
           end.to change { payment.reload.state }.from("processing").to("failed")
-        end.to change { payment.reload.failure_reason }.from(nil).to("Transaction not found")
+        end.to change { payment.reload.failure_reason }.from(nil).to(Payment::FailureReason::TRANSACTION_NOT_FOUND)
+      end
+
+      it "marks a never-dispatched PayPal payout failed even when correlation_id is blank" do
+        payment = create(:payment, processor_fee_cents: 10, txn_id: nil, correlation_id: nil)
+
+        expect(PaypalPayoutProcessor).to(
+          receive(:search_payment_on_paypal).with(amount_cents: payment.amount_cents, transaction_id: payment.txn_id,
+                                                  payment_address: payment.payment_address,
+                                                  start_date: payment.created_at.beginning_of_day - 1.day,
+                                                  end_date: payment.created_at.end_of_day + 1.day).and_return(nil))
+
+        expect do
+          payment.send(:sync_with_paypal)
+        end.to change { payment.reload.state }.from("processing").to("failed")
+        expect(payment.failure_reason).to eq(Payment::FailureReason::TRANSACTION_NOT_FOUND)
+        expect(payment.correlation_id).to be_nil
+      end
+
+      it "still requires correlation_id when failing a PayPal payout for any other reason" do
+        payment = create(:payment, correlation_id: nil)
+
+        expect do
+          payment.mark_failed!(Payment::FailureReason::CANNOT_PAY)
+        end.to raise_error(StateMachines::InvalidTransition, /Correlation can't be blank/)
+        expect(payment.reload.state).to eq("processing")
       end
 
       it "does not change the payment if multiple txns are found on PayPal" do
@@ -814,6 +847,18 @@ describe Payment do
         expect do
           payment.send(:sync_with_paypal)
         end.not_to change { payment.reload.state }
+      end
+
+      it "does not mark the payment failed when TransactionSearch raises (failed ACK)" do
+        payment = create(:payment, processor_fee_cents: 10, txn_id: nil, correlation_id: nil)
+
+        expect(PaypalPayoutProcessor).to(
+          receive(:search_payment_on_paypal).and_raise(RuntimeError, 'PayPal TransactionSearch failed (ACK="Failure")'))
+
+        expect do
+          payment.send(:sync_with_paypal)
+        end.not_to change { payment.reload.state }
+        expect(payment.errors.full_messages.join).to include("PayPal TransactionSearch failed")
       end
     end
 
@@ -1230,6 +1275,17 @@ describe Payment do
       (Payment::MAX_CONSECUTIVE_FAILED_PAYOUTS - 1).times { failed_payout }
 
       failed_payout_with_reason(Payment::FailureReason::PROCESSOR_UNAVAILABLE)
+
+      expect(user.reload.payouts_paused?).to be(false)
+      expect(user.comments.with_type_on_probation).to be_empty
+    end
+
+    it "does not count a PayPal payout that sync marked Transaction not found" do
+      (Payment::MAX_CONSECUTIVE_FAILED_PAYOUTS - 1).times { failed_paypal_payout }
+
+      payment = create(:payment, user:, processor: PayoutProcessorType::PAYPAL, payment_address: "seller@example.com",
+                                 state: "processing", correlation_id: nil)
+      payment.mark_failed!(Payment::FailureReason::TRANSACTION_NOT_FOUND)
 
       expect(user.reload.payouts_paused?).to be(false)
       expect(user.comments.with_type_on_probation).to be_empty

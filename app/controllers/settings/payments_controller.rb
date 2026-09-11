@@ -7,7 +7,14 @@ class Settings::PaymentsController < Settings::BaseController
   before_action :authorize
 
   def show
-    render inertia: "Settings/Payments/Show", props: settings_presenter.payments_props(remote_ip: request.remote_ip)
+    props = settings_presenter.payments_props(remote_ip: request.remote_ip)
+    SocialConnectFunnel.record_offers!(
+      user: current_seller,
+      connections: props.dig(:account_status, :social_connections_for_review),
+      surface: "account_review",
+      skip: impersonating?,
+    )
+    render inertia: "Settings/Payments/Show", props:
   end
 
   def update

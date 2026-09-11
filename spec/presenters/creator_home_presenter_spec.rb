@@ -27,6 +27,7 @@ describe CreatorHomePresenter do
       before do
         Feature.deactivate(:youtube_connect)
         Feature.deactivate(:instagram_connect)
+        Feature.deactivate(:tiktok_connect)
       end
 
       it "offers X without offering gated providers" do
@@ -51,20 +52,23 @@ describe CreatorHomePresenter do
 
         Feature.activate_user(:youtube_connect, seller)
         Feature.activate_user(:instagram_connect, seller)
+        Feature.activate_user(:tiktok_connect, seller)
         expect(presenter.creator_home_props[:social_connections]).to eq([
-                                                                          { name: "X", connected: false }, { name: "YouTube", connected: false }, { name: "Instagram", connected: false }
+                                                                          { name: "X", connected: false }, { name: "YouTube", connected: false }, { name: "Instagram", connected: false }, { name: "TikTok", connected: false }
                                                                         ])
       end
 
       it "shows current identities even when new connections are gated and removes disconnected ones" do
         seller.create_youtube_identity!(channel_id: "example-channel")
         seller.create_instagram_identity!(instagram_user_id: "example-instagram")
+        seller.create_tiktok_identity!(tiktok_open_id: "example-tiktok")
         expect(presenter.creator_home_props[:social_connections]).to eq([
-                                                                          { name: "X", connected: false }, { name: "YouTube", connected: true }, { name: "Instagram", connected: true }
+                                                                          { name: "X", connected: false }, { name: "YouTube", connected: true }, { name: "Instagram", connected: true }, { name: "TikTok", connected: true }
                                                                         ])
 
         seller.youtube_identity.destroy!
         seller.instagram_identity.destroy!
+        seller.tiktok_identity.destroy!
         seller.reload
         expect(presenter.creator_home_props[:social_connections]).to eq([{ name: "X", connected: false }])
       end

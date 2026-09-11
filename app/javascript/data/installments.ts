@@ -60,6 +60,13 @@ export type PublishedInstallment = SavedInstallment & {
     open_count: number | null;
     open_rate: number | null;
   }[];
+  delivery: {
+    status: "sent" | "sending" | "waiting" | "incomplete";
+    delivered_count: number;
+    remaining_count: number | null;
+    scheduled_for: string | null;
+    retrying: boolean;
+  } | null;
 };
 
 export type ScheduledInstallment = SavedInstallment & {
@@ -170,6 +177,18 @@ export async function resendToNonOpeners(externalId: string) {
     method: "POST",
     accept: "json",
     url: Routes.internal_installment_non_opener_resend_path(externalId),
+  });
+
+  const json: unknown = await response.json();
+  if (!response.ok) throw new ResponseError(typia.assert<{ error: string }>(json).error);
+  return typia.assert<{ success: boolean }>(json);
+}
+
+export async function sendToRemaining(externalId: string) {
+  const response = await request({
+    method: "POST",
+    accept: "json",
+    url: Routes.internal_installment_remaining_send_path(externalId),
   });
 
   const json: unknown = await response.json();

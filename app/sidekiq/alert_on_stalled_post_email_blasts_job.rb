@@ -45,6 +45,11 @@ class AlertOnStalledPostEmailBlastsJob
   # (time-boxed sales), so the resume decision goes back to a human.
   AUTO_RESUME_WINDOW = 24.hours
 
+  # Time between scans (the cron fires at 05:40, 11:40, 17:40 and 23:40 UTC). Eligibility shown
+  # to sellers is evaluated one scan ahead, so a blast that leaves a window before the next scan
+  # is never promised a retry.
+  SCAN_INTERVAL = 6.hours
+
   # Rows the run acted on (or would have) are the audit trail; message_for never truncates them.
   AUDITED_ACTIONS = [:resumed, :resumed_to_complete, :would_resume, :would_complete, :skipped_reappeared].freeze
 
@@ -55,6 +60,28 @@ class AlertOnStalledPostEmailBlastsJob
 
   def post_blast_sender?(klass)
     klass.in?(BLAST_SENDER_CLASSES)
+  end
+
+  # Whether the next scan can still resume this blast on its own. The seller-facing page uses
+  # it to decide whether to promise a retry, so it must never be more generous than
+  # `resolve_action`. Windows are checked as of the next scan; the lookback keeps a second
+  # scan in reserve because a resume marker holds a blast for one stall window.
+  def self.auto_resume_eligible?(blast)
+    return false unless Feature.active?(:auto_resume_stalled_post_blasts)
+    return false if blast.completed_at.present? || blast.requested_at.nil? || blast.to_non_openers?
+    return false unless blast.requested_at > (LOOKBACK - 2 * SCAN_INTERVAL).ago
+
+    blast.requested_at > (AUTO_RESUME_WINDOW - SCAN_INTERVAL).ago || recipients_still_owed?(blast)
+  end
+
+  # Whether a sender for this blast is busy, queued or retrying right now. Three Sidekiq scans.
+  def self.sender_visible?(blast_id)
+    new.send(:sender_visible_now?, blast_id)
+  end
+
+  def self.recipients_still_owed?(blast)
+    pending = $redis.get(RedisKey.blast_pending_recipients(blast.id))
+    pending.present? && pending.to_i.positive?
   end
 
   def perform
@@ -95,6 +122,7 @@ class AlertOnStalledPostEmailBlastsJob
           if last_email_recent?(blast) || busy.include?(blast.id) then :running
           elsif queued.include?(blast.id) then :queued
           elsif retrying.include?(blast.id) then :retrying
+          elsif quota_deferred_until(blast)&.future? then :deferred
           elsif @dead_entries.key?(blast.id) then :dead
           else :unaccounted
           end
@@ -138,7 +166,9 @@ class AlertOnStalledPostEmailBlastsJob
       return :held_non_opener if entry[:disposition] == :unaccounted && blast.to_non_openers?
       # Recipients still owed cannot double-send (SentPostEmail unique / per-blast sent set),
       # so a late resume is the remaining delivery, not a time-boxed surprise.
-      return :held_past_window if blast.requested_at < AUTO_RESUME_WINDOW.ago && !recipients_still_owed?(blast)
+      # A deferral whose time has passed means the scheduled job is late or lost. The quota
+      # gate sits before any send, so resuming cannot double-send either.
+      return :held_past_window if blast.requested_at < AUTO_RESUME_WINDOW.ago && !recipients_still_owed?(blast) && !quota_deferred_until(blast)&.past?
       return :held_already_resumed if $redis.exists?(RedisKey.stalled_blast_auto_resumed(blast.id))
       return :would_resume unless live
       # Re-read the live sets at action time — the scan's snapshots are already stale by now.
@@ -156,13 +186,25 @@ class AlertOnStalledPostEmailBlastsJob
       emailed_at.present? && emailed_at > STALL_THRESHOLD.ago
     end
 
-    def recipients_still_owed?(blast)
-      pending = $redis.get(RedisKey.blast_pending_recipients(blast.id))
-      pending.present? && pending.to_i.positive?
+    # A quota-deferred blast waits in the scheduled set, which none of the scans read.
+    def quota_deferred_until(blast)
+      deferred_until = $redis.get(RedisKey.blast_quota_deferred_until(blast.id))
+      Time.zone.parse(deferred_until) if deferred_until.present?
     end
 
+    def recipients_still_owed?(blast)
+      self.class.recipients_still_owed?(blast)
+    end
+
+    # A job moves between the retry set, the queue and a worker in both directions, so a single
+    # pass can miss one that moved between two scans. Two passes in opposite orders see a job
+    # that moved once, whichever way it went.
     def sender_visible_now?(blast_id)
-      @live_blast_ids ||= (busy_blast_ids + queued_blast_ids + retrying_blast_ids).to_set
+      @live_blast_ids ||= begin
+        forward = retrying_blast_ids + queued_blast_ids + busy_blast_ids
+        backward = busy_blast_ids + queued_blast_ids + retrying_blast_ids
+        (forward + backward).to_set
+      end
       @live_blast_ids.include?(blast_id)
     end
 
@@ -238,7 +280,8 @@ class AlertOnStalledPostEmailBlastsJob
         *lines,
         (omitted.positive? ? "…and #{omitted} more." : nil),
         "",
-        "RUNNING/QUEUED may just be a very large blast mid-pass. DEAD/UNACCOUNTED blasts requested " \
+        "RUNNING/QUEUED may just be a very large blast mid-pass. DEFERRED is waiting for the seller's " \
+          "next daily large-blast slot. DEAD/UNACCOUNTED blasts requested " \
           "within #{AUTO_RESUME_WINDOW.inspect} are resumed automatically, once per blast " \
           "(gumroad-private#2106) — except UNACCOUNTED non-opener resends, which a concurrent " \
           "duplicate sender would double-deliver. UNACCOUNTED usually means a lost enqueue, a " \

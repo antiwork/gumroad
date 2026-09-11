@@ -401,6 +401,12 @@ describe MerchantAccount do
         expect(merchant_account.settlement_currency_mismatch_active?("eur")).to be(false)
       end
 
+      it "expires a marker just older than one day so a recovered Stripe config is re-probed" do
+        expect(described_class::SETTLEMENT_CURRENCY_MISMATCH_TTL).to eq(1.day)
+        travel_to(25.hours.ago) { merchant_account.record_settlement_currency_mismatch!("eur") }
+        expect(merchant_account.reload.settlement_currency_mismatch_active?("eur")).to be(false)
+      end
+
       it "treats a malformed timestamp as no marker instead of raising" do
         merchant_account.update!(settlement_currency_mismatch_map: { "eur" => "not-a-timestamp" })
         expect(merchant_account.settlement_currency_mismatch_active?("eur")).to be(false)

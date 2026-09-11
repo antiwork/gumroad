@@ -287,7 +287,7 @@ describe UtmLinksController, type: :controller, inertia: true do
     it "raises error for missing required utm_link param" do
       expect do
         post :create, params: {}
-      end.to raise_error(ActionController::ParameterMissing, /param is missing or the value is empty(?: or invalid)?: utm_link/)
+      end.to raise_error(ActionController::ParameterMissing, /param is missing or the value is empty or invalid: utm_link/)
     end
   end
 
@@ -391,7 +391,7 @@ describe UtmLinksController, type: :controller, inertia: true do
     it "raises error for missing required utm_link param" do
       expect do
         patch :update, params: { id: utm_link.external_id }
-      end.to raise_error(ActionController::ParameterMissing, /param is missing or the value is empty(?: or invalid)?: utm_link/)
+      end.to raise_error(ActionController::ParameterMissing, /param is missing or the value is empty or invalid: utm_link/)
     end
   end
 

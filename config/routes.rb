@@ -38,6 +38,8 @@ Rails.application.routes.draw do
   # forwards here instead of serving the static file directly.
   get "/favicon.ico" => "favicons#show", as: :favicon
 
+  get "/robots.:format" => "robots#index"
+
   use_doorkeeper do
     controllers applications: "oauth/applications"
     controllers authorized_applications: "oauth/authorized_applications"
@@ -569,9 +571,6 @@ Rails.application.routes.draw do
     post "/notion/unfurl" => "api/v2/notion_unfurl_urls#create"
     delete "/notion/unfurl" => "api/v2/notion_unfurl_urls#destroy"
 
-    # /robots.txt
-    get "/robots.:format" => "robots#index"
-
     # /llms.txt — AI-assistant discoverability (https://llmstxt.org)
     get "/llms.:format" => "llms#index"
 
@@ -627,6 +626,7 @@ Rails.application.routes.draw do
     end
 
     post "/instagram/deauthorize", to: "instagram_callbacks#deauthorize", as: :instagram_deauthorize
+    post "/tiktok/deauthorize", to: "tiktok_callbacks#deauthorize", as: :tiktok_deauthorize
     post "/instagram/data_deletion", to: "instagram_callbacks#data_deletion", as: :instagram_data_deletion
     get "/instagram/data_deletion/:confirmation_code", to: "instagram_callbacks#data_deletion_status", as: :instagram_data_deletion_status
 
@@ -708,6 +708,7 @@ Rails.application.routes.draw do
           post :unlink_twitter
           post :unlink_youtube
           post :unlink_instagram
+          post :unlink_tiktok
         end
       end
     end
@@ -716,6 +717,7 @@ Rails.application.routes.draw do
         post :resend_confirmation_email
       end
       resource :password, only: %i[show update], controller: "password"
+      resource :social_connections, only: :show, controller: "social_connections"
       resource :totp, only: %i[create destroy], controller: "totp" do
         post :confirm
         post :regenerate_recovery_codes
@@ -1244,6 +1246,7 @@ Rails.application.routes.draw do
             resource :audience_count, only: [:show], controller: "installments/audience_counts", as: :installment_audience_count
             resource :preview_email, only: [:create], controller: "installments/preview_emails", as: :installment_preview_email
             resource :non_opener_resend, only: [:show, :create], controller: "installments/non_opener_resends", as: :installment_non_opener_resend
+            resource :remaining_send, only: [:create], controller: "installments/remaining_sends", as: :installment_remaining_send
           end
           collection do
             resource :recipient_count, only: [:show], controller: "installments/recipient_counts", as: :installment_recipient_count
