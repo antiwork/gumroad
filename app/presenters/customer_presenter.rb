@@ -183,12 +183,15 @@ class CustomerPresenter
   private
     # Completions are excluded from the sales-list query so they don't get their own
     # row; fold a charged completion into the deposit row so the list matches the
-    # detail charges.
+    # detail charges. `!failed?` is not enough: create_completion_purchase! links the
+    # completion before it is successful, including in_progress rows that are still
+    # waiting on SCA. Pending presentment settlement is already charged.
     def charged_commission_completion_purchase
       return unless purchase.is_commission_deposit_purchase?
 
       completion = purchase.commission&.completion_purchase
-      return if completion.blank? || completion.failed?
+      return unless completion
+      return unless completion.successful? || completion.pending_buyer_presentment_settlement?
 
       completion
     end

@@ -397,6 +397,38 @@ describe CustomerPresenter do
 
         expect(described_class.new(purchase: deposit.reload).customer(pundit_user:)[:price][:cents]).to eq(500)
       end
+
+      it "does not include an uncharged in-progress completion" do
+        completion = create(
+          :purchase_in_progress,
+          link: commission_product,
+          seller: commission_product.user,
+          is_commission_completion_purchase: true,
+          price_cents: 500,
+          displayed_price_cents: 500
+        )
+        commission.update!(completion_purchase: completion)
+
+        expect(completion).not_to be_pending_buyer_presentment_settlement
+        expect(described_class.new(purchase: deposit.reload).customer(pundit_user:)[:price][:cents]).to eq(500)
+      end
+
+      it "includes a completion still settling in the buyer's presentment currency" do
+        completion = create(
+          :purchase_in_progress,
+          link: commission_product,
+          seller: commission_product.user,
+          is_commission_completion_purchase: true,
+          price_cents: 500,
+          displayed_price_cents: 500,
+          flow_of_funds: nil,
+          merchant_account: nil
+        )
+        commission.update!(completion_purchase: completion)
+
+        expect(completion).to be_pending_buyer_presentment_settlement
+        expect(described_class.new(purchase: deposit.reload).customer(pundit_user:)[:price][:cents]).to eq(1000)
+      end
     end
 
     context "purchase has an installment plan" do
