@@ -29,33 +29,47 @@ describe "devise-pwned_password OAuth-safe after_set_user wrap" do
     request = instance_double(ActionDispatch::Request, params: request_params)
     Object.new.tap do |proxy|
       proxy.define_singleton_method(:request) { request }
-      proxy.define_singleton_method(:session) { @session ||= {} }
       proxy.define_singleton_method(:authenticated?) { |_scope| true }
     end
   end
 
-  def run_after_set_user
-    Warden::Manager._run_callbacks(:after_set_user, user, auth, { scope: :user, event: :authentication })
+  def pwned_hook
+    pair = Warden::Manager._after_set_user.find do |block, _conditions|
+      block.source_location&.first&.include?("devise_pwned_password_safe_params.rb")
+    end
+    raise "pwned-password wrap not installed" unless pair
+
+    pair[0]
+  end
+
+  def run_pwned_hook
+    pwned_hook.call(user, auth, { scope: :user, event: :authentication })
+  end
+
+  it "replaces the gem after_set_user hook with the wrap" do
+    sources = Warden::Manager._after_set_user.map { |block, _| block.source_location&.first }
+    expect(sources.grep(/devise_pwned_password_safe_params\.rb/).size).to eq(1)
+    expect(sources.grep(%r{devise/pwned_password/hooks/pwned_password})).to be_empty
   end
 
   it "does not 500 when params[:user] is a JSON string" do
     request_params["user"] = '{"email":"jane@example.com"}'
 
-    expect { run_after_set_user }.not_to raise_error
+    expect { run_pwned_hook }.not_to raise_error
     expect(user.pwned_password_checked).to be_nil
   end
 
   it "does not 500 when params[:user] is an Array" do
     request_params["user"] = ["not-a-hash"]
 
-    expect { run_after_set_user }.not_to raise_error
+    expect { run_pwned_hook }.not_to raise_error
     expect(user.pwned_password_checked).to be_nil
   end
 
   it "still checks pwned passwords when params[:user] is a Hash" do
     request_params["user"] = { "password" => "secret-pass" }
 
-    expect { run_after_set_user }.not_to raise_error
+    expect { run_pwned_hook }.not_to raise_error
     expect(user.pwned_password_checked).to eq("secret-pass")
   end
 end
