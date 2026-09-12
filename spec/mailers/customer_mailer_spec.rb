@@ -667,6 +667,25 @@ describe CustomerMailer do
       expect(mail.body.sanitized).to include("View content")
     end
 
+    it "puts padding/hit-area on the download CTA anchor itself" do
+      product = create(:product)
+      purchase = create(:purchase, link: product)
+      create(:url_redirect, purchase:)
+      mail = CustomerMailer.receipt(purchase.id)
+      body = mail.html_part&.decoded || mail.body.decoded
+      html = Nokogiri::HTML(body)
+      link = html.at_css("a.button.primary")
+
+      expect(link).to be_present
+      expect(link.text).to include("View content")
+      expect(link["href"]).to eq(purchase.url_redirect.download_page_url)
+      expect(link["style"]).to match(/display:\s*inline-block/)
+      expect(link["style"]).to match(/box-sizing:\s*border-box/)
+      wrapper = link.ancestors("table").find { |table| table["role"] == "presentation" }
+      expect(wrapper).to be_present
+      expect(wrapper["class"].to_s.split).to include("reset")
+    end
+
     it "discloses sales tax when it was taxed" do
       user = create(:user)
       link = create(:product, user:)

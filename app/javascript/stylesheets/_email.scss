@@ -394,10 +394,11 @@ $accent-color: map-get($colors, "pink"); // [1]
         font-family: inherit;
         cursor: pointer;
         text-decoration: none;
-        /* Needed to expand button full width in emails */
-        display: block;
+        /* Gmail iOS: padding on display:block <a> paints but is not tappable. */
+        display: inline-block;
+        box-sizing: border-box;
         text-align: center;
-        width: unset;
+        width: 100%;
 
         /* Some email clients don't support CSS variables: https://www.caniemail.com/search/?s=var */
         background-color: transparent;

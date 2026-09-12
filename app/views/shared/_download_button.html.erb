@@ -17,9 +17,20 @@ is true then the url_redirect is nil. If the url_redirect is not nil then is_pre
 question the use of try in this template. %>
 
 <% preview = !!(defined?(is_preview) && is_preview) %>
-
-<% if !url_redirect&.is_rental? %>
-  <%= link_to view_content_button_text(link), preview ? "#" : url_redirect_download_page_url(url_redirect.token), class: "button primary" %>
-<% elsif link.streamable? %>
-  <%= link_to "Watch", preview ? "#" : url_redirect_stream_page_url(url_redirect.token), class: "button primary" %>
+<%
+  cta =
+    if !url_redirect&.is_rental?
+      [view_content_button_text(link), preview ? "#" : url_redirect_download_page_url(url_redirect.token)]
+    elsif link.streamable?
+      ["Watch", preview ? "#" : url_redirect_stream_page_url(url_redirect.token)]
+    end
+%>
+<% if cta %>
+  <table class="reset" role="presentation" align="center" border="0" cellpadding="0" cellspacing="0" width="100%">
+    <tr>
+      <td align="center">
+        <%= link_to cta[0], cta[1], class: "button primary", style: "display:inline-block;box-sizing:border-box;width:100%;" %>
+      </td>
+    </tr>
+  </table>
 <% end %>
