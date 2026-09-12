@@ -47,6 +47,7 @@ describe "Agent tab", type: :system, js: true do
       kwargs[:on_reply_complete]&.call(turn)
       emit.call(:objects, { objects: }) if objects.any?
       emit.call(:proposed_action, { proposed_action: }) if proposed_action
+      emit.call(:turn_ready, turn)
       emit.call(:suggestions, { suggestions: }) if suggestions.any?
       turn
     end

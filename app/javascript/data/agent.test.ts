@@ -252,6 +252,31 @@ describe("streamAgentMessage", () => {
     expect(result.conversationId).toBe("conv1");
   });
 
+  it("unlocks on done then keeps late suggestion chips", async () => {
+    const order: string[] = [];
+    request.mockResolvedValue(
+      sseResponse([
+        frame("token", { text: "You have one product." }),
+        frame("done", {
+          reply: "You have one product.",
+          proposed_action: null,
+          conversation_id: "conv1",
+          suggestions: [],
+        }),
+        frame("suggestions", { suggestions: ["Show my sales"] }),
+      ]),
+    );
+
+    const result = await streamAgentMessage(MESSAGES, {
+      onDone: () => order.push("done"),
+      onSuggestions: () => order.push("suggestions"),
+    });
+
+    expect(order).toEqual(["done", "suggestions"]);
+    expect(result.suggestions).toEqual(["Show my sales"]);
+    expect(result.conversationId).toBe("conv1");
+  });
+
   it("returns the persisted proposal message id from the done frame", async () => {
     const action = { type: "api_write" as const, params: { endpoint: "create_offer_code" }, summary: "Create it." };
     request.mockResolvedValue(
@@ -390,16 +415,50 @@ describe("streamAgentMessage", () => {
     await vi.advanceTimersByTimeAsync(0);
   });
 
-  it("resolves the turn on the done frame even when the connection never closes", async () => {
+  it("calls onDone on the done frame even when the connection never closes", async () => {
+    vi.useFakeTimers();
     const stream = openSseResponse();
     request.mockResolvedValue(stream.response);
+    const onDone = vi.fn();
 
-    const promise = streamAgentMessage(MESSAGES);
+    const promise = streamAgentMessage(MESSAGES, { onDone });
     stream.push(frame("done", { reply: "Want me to pull up?", proposed_action: null, conversation_id: "conv1" }));
-    // No close(): the stream stays open, but `done` is terminal so the turn must resolve anyway.
+    await vi.advanceTimersByTimeAsync(0);
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(onDone).toHaveBeenCalledWith(
+      expect.objectContaining({ reply: "Want me to pull up?", conversationId: "conv1" }),
+    );
+
+    // The promise stays on the open socket so late suggestion chips can still arrive. Inactivity
+    // after done still returns the assembled turn instead of treating it as an interruption.
+    await vi.advanceTimersByTimeAsync(INACTIVITY_TIMEOUT_MS);
     const result = await promise;
     expect(result.reply).toBe("Want me to pull up?");
     expect(result.conversationId).toBe("conv1");
+  });
+
+  it("keeps late suggestion chips when inactivity fires after a valid done frame", async () => {
+    vi.useFakeTimers();
+    const stream = openSseResponse();
+    request.mockResolvedValue(stream.response);
+    const onSuggestions = vi.fn();
+
+    const promise = streamAgentMessage(MESSAGES, { onSuggestions });
+    stream.push(frame("done", { reply: "You have one product.", proposed_action: null, suggestions: [] }));
+    await vi.advanceTimersByTimeAsync(0);
+    await Promise.resolve();
+    await Promise.resolve();
+    stream.push(frame("suggestions", { suggestions: ["Show my sales"] }));
+    await vi.advanceTimersByTimeAsync(0);
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(onSuggestions).toHaveBeenCalledWith(["Show my sales"]);
+
+    await vi.advanceTimersByTimeAsync(INACTIVITY_TIMEOUT_MS);
+    const result = await promise;
+    expect(result.reply).toBe("You have one product.");
+    expect(result.suggestions).toEqual(["Show my sales"]);
   });
 
   it("throws AgentStreamInterruptedError when a frame arrives mangled", async () => {

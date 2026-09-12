@@ -28,10 +28,12 @@ describe Ai::StoreAgentService do
     Ai::AnthropicClient::Result.new(text:, tool_uses: [], stop_reason: "end_turn")
   end
 
-  def complete_turn_result(text, outcome:)
+  def complete_turn_result(text, outcome:, reply: :omit)
+    input = { "outcome" => outcome }
+    input["reply"] = reply unless reply == :omit
     Ai::AnthropicClient::Result.new(
       text:,
-      tool_uses: [{ id: "toolu_complete", name: "complete_turn", input: { "outcome" => outcome } }],
+      tool_uses: [{ id: "toolu_complete", name: "complete_turn", input: }],
       stop_reason: "tool_use",
     )
   end
@@ -321,6 +323,8 @@ describe Ai::StoreAgentService do
           outcome: "gave up",
         )
         allow(Rails.logger).to receive(:warn)
+        logged = []
+        allow(Rails.logger).to receive(:info) { |message| logged << message }
         allow(client).to receive(:messages).and_return(untyped_text_result("Still no marker."))
 
         result = service.respond(messages: [{ role: "user", content: "what sells best?" }])
@@ -328,6 +332,17 @@ describe Ai::StoreAgentService do
         expect(Rails.logger).to have_received(:warn).with("Store agent final turn did not match proposal state (missing_complete_turn, gave up)")
         expect(client).to have_received(:messages).twice
         expect(result[:reply]).to eq(described_class::TURN_CONTRACT_FAILURE_REPLY)
+        turn_log = logged.filter_map do |message|
+          next unless message.is_a?(String) && message.include?("store_agent_turn")
+
+          JSON.parse(message)
+        end.last
+        expect(turn_log).to include(
+          "event" => "store_agent_turn",
+          "contract_failure" => "missing_complete_turn",
+          "requested_model" => turn_log["model"],
+        )
+        expect(turn_log["served_models"]).to eq([])
       end
 
       it "still reports a non-marker proposal-state mismatch on the retry" do
@@ -346,6 +361,169 @@ describe Ai::StoreAgentService do
 
         expect(client).to have_received(:messages).twice
         expect(result[:reply]).to eq("Here you go.")
+      end
+
+      it "accepts a nonblank complete_turn reply when visible text is blank" do
+        allow(client).to receive(:messages).and_return(
+          complete_turn_result("", outcome: "reply_only", reply: "You have 3 products."),
+        )
+
+        result = service.respond(messages: [{ role: "user", content: "How many products do I have?" }])
+
+        expect(client).to have_received(:messages).once
+        expect(result).to include(
+          outcome: "reply_only",
+          reply: "You have 3 products.",
+          proposed_action: nil,
+        )
+      end
+
+      it "still uses visible text when complete_turn omits reply" do
+        allow(client).to receive(:messages).and_return(
+          complete_turn_result("You have 3 products.", outcome: "reply_only"),
+        )
+
+        result = service.respond(messages: [{ role: "user", content: "How many products do I have?" }])
+
+        expect(result[:reply]).to eq("You have 3 products.")
+      end
+
+      it "rejects a non-string complete_turn reply" do
+        allow(client).to receive(:messages).and_return(
+          complete_turn_result("You have 3 products.", outcome: "reply_only", reply: ["You have 3 products."]),
+          complete_turn_result("You have 3 products.", outcome: "reply_only"),
+        )
+
+        result = service.respond(messages: [{ role: "user", content: "How many products do I have?" }])
+
+        expect(client).to have_received(:messages).twice
+        expect(result[:reply]).to eq("You have 3 products.")
+      end
+
+      it "rejects a blank complete_turn with no reply payload" do
+        allow(client).to receive(:messages).and_return(
+          complete_turn_result("", outcome: "reply_only"),
+          complete_turn_result("You have 3 products.", outcome: "reply_only"),
+        )
+
+        result = service.respond(messages: [{ role: "user", content: "How many products do I have?" }])
+
+        expect(client).to have_received(:messages).twice
+        expect(result[:reply]).to eq("You have 3 products.")
+      end
+
+      it "does not accept rejected prose when a blank complete_turn is followed by text without complete_turn" do
+        recovered_prose = "You have one published product named Cedar Ledger."
+        allow(client).to receive(:messages).and_return(
+          complete_turn_result("", outcome: "reply_only"),
+          untyped_text_result(recovered_prose),
+        )
+
+        result = service.respond(messages: [{ role: "user", content: "How many products do I have?" }])
+
+        expect(client).to have_received(:messages).twice
+        expect(result[:reply]).to eq(described_class::TURN_CONTRACT_FAILURE_REPLY)
+        expect(result[:reply]).not_to eq(recovered_prose)
+        expect(result[:proposed_action]).to be_nil
+      end
+
+      it "recovers a blank complete_turn when the retry puts the answer in the tool payload" do
+        allow(client).to receive(:messages).and_return(
+          complete_turn_result("", outcome: "reply_only"),
+          complete_turn_result("", outcome: "reply_only", reply: "You have 3 products."),
+        )
+
+        result = service.respond(messages: [{ role: "user", content: "How many products do I have?" }])
+
+        expect(client).to have_received(:messages).twice
+        expect(result[:reply]).to eq("You have 3 products.")
+      end
+
+      it "rejects a forged proposal_ready payload without a real proposal" do
+        allow(client).to receive(:messages).and_return(
+          complete_turn_result("", outcome: "proposal_ready", reply: "Confirm the card below."),
+        )
+
+        result = service.respond(messages: [{ role: "user", content: "unpublish Cedar Ledger" }])
+
+        expect(result[:reply]).to eq(described_class::NOTHING_STAGED_REPLY)
+        expect(result[:proposed_action]).to be_nil
+      end
+
+      it "keeps server-owned confirmation copy when complete_turn carries its own reply" do
+        allow(client).to receive(:messages).and_return(
+          tool_result("api_write", {
+                        "endpoint" => "create_offer_code",
+                        "path_params" => { "link_id" => "prod_1" },
+                        "params" => { "name" => "LAUNCH", "amount_off" => 20, "offer_type" => "percent" },
+                      }),
+          complete_turn_result("", outcome: "proposal_ready", reply: "I already applied that change."),
+        )
+
+        result = service.respond(messages: [{ role: "user", content: "Make a 20% off code" }])
+
+        expect(result[:reply]).to eq(described_class::PROPOSAL_READY_REPLY)
+        expect(result[:outcome]).to eq("proposal_ready")
+        expect(result[:proposed_action]).to include(type: "api_write")
+      end
+
+      it "rejects phantom staging text inside complete_turn.reply" do
+        allow(client).to receive(:messages).and_return(
+          complete_turn_result("", outcome: "reply_only", reply: "Staged. Confirm that card."),
+        )
+
+        result = service.respond(messages: [{ role: "user", content: "Make a 20% off code" }])
+
+        expect(result[:reply]).to eq(described_class::NOTHING_STAGED_REPLY)
+        expect(result[:proposed_action]).to be_nil
+      end
+
+      it "does not mutate when a mixed complete_turn payload claims a write" do
+        mixed_turn = Ai::AnthropicClient::Result.new(
+          text: "",
+          tool_uses: [
+            {
+              id: "toolu_write",
+              name: "api_write",
+              input: {
+                "endpoint" => "create_offer_code",
+                "path_params" => { "link_id" => "prod_1" },
+                "params" => { "name" => "LAUNCH", "amount_off" => 20, "offer_type" => "percent" },
+              },
+            },
+            { id: "toolu_complete", name: "complete_turn", input: { "outcome" => "proposal_ready", "reply" => "Ready." } },
+          ],
+          stop_reason: "tool_use",
+        )
+        allow(client).to receive(:messages).and_return(
+          mixed_turn,
+          complete_turn_result("I did not prepare that change.", outcome: "reply_only"),
+        )
+
+        expect do
+          result = service.respond(messages: [{ role: "user", content: "Make a 20% off code" }])
+          expect(result[:proposed_action]).to be_nil
+        end.not_to change { seller.offer_codes.count }
+      end
+
+      it "rejects duplicate complete_turn calls" do
+        duplicate = Ai::AnthropicClient::Result.new(
+          text: "You have 3 products.",
+          tool_uses: [
+            { id: "toolu_complete_1", name: "complete_turn", input: { "outcome" => "reply_only", "reply" => "You have 3 products." } },
+            { id: "toolu_complete_2", name: "complete_turn", input: { "outcome" => "reply_only", "reply" => "You have 3 products." } },
+          ],
+          stop_reason: "tool_use",
+        )
+        allow(client).to receive(:messages).and_return(
+          duplicate,
+          complete_turn_result("You have 3 products.", outcome: "reply_only"),
+        )
+
+        result = service.respond(messages: [{ role: "user", content: "How many products do I have?" }])
+
+        expect(client).to have_received(:messages).twice
+        expect(result[:reply]).to eq("You have 3 products.")
       end
     end
 
@@ -1842,7 +2020,7 @@ describe Ai::StoreAgentService do
       # The finished turn reaches the hook before anything else happens — before the extra
       # suggestions LLM call and before any trailing event is written to the (possibly already
       # dead) client socket — so callers can persist it no matter what happens afterwards.
-      expect(order).to eq([:reply_complete, :suggestions_call, :suggestions])
+      expect(order).to eq([:reply_complete, :turn_ready, :suggestions_call, :suggestions])
       expect(completed_turn).to eq(
         outcome: "reply_only",
         reply: "Here are your numbers.",
@@ -1976,6 +2154,36 @@ describe Ai::StoreAgentService do
       _events, result = collect_events([{ role: "user", content: "help" }])
 
       expect(result[:suggestions]).to eq(["Show my best sellers", "Email my customers", "Create a discount"])
+    end
+
+    it "disables thinking on the suggestions call when DeepSeek is selected" do
+      allow(Ai::AnthropicClient).to receive(:openrouter_configured?).and_return(true)
+      Feature.activate_user(described_class::DEEPSEEK_RAMP_FEATURE, seller)
+      stub_stream_turns(stream: ["You have 3 products."], result: text_result("You have 3 products."))
+      captured = nil
+      allow(client).to receive(:messages) do |**kwargs|
+        captured = kwargs
+        text_result('["List my products"]')
+      end
+
+      _events, result = collect_events([{ role: "user", content: "How many products?" }])
+
+      expect(captured[:thinking]).to eq({ type: "disabled" })
+      expect(captured[:max_tokens]).to eq(described_class::MAX_SUGGESTION_TOKENS)
+      expect(result[:suggestions]).to eq(["List my products"])
+    end
+
+    it "does not disable thinking on the suggestions call for Opus" do
+      stub_stream_turns(stream: ["You have 3 products."], result: text_result("You have 3 products."))
+      captured = nil
+      allow(client).to receive(:messages) do |**kwargs|
+        captured = kwargs
+        text_result('["List my products"]')
+      end
+
+      collect_events([{ role: "user", content: "How many products?" }])
+
+      expect(captured).not_to have_key(:thinking)
     end
 
     it "emits a reset when an intermediate tool-use turn streams preamble text, then streams the real reply" do
@@ -2152,6 +2360,65 @@ describe Ai::StoreAgentService do
       expect(result[:reply]).to eq(described_class::PROPOSAL_READY_REPLY)
       expect(result[:proposed_action]).to include(type: "api_write")
       expect(events.any? { |event, _| event == :proposed_action }).to be(true)
+    end
+
+    it "emits a complete_turn reply when the model streams no visible text" do
+      stub_stream_turns(
+        { stream: [], result: complete_turn_result("", outcome: "reply_only", reply: "You have 3 products.") },
+      )
+      allow(client).to receive(:messages).and_return(text_result("[]"))
+      persisted = nil
+
+      events = []
+      result = service.respond_streaming(
+        messages: [{ role: "user", content: "How many products?" }],
+        on_reply_complete: ->(turn) { persisted = turn },
+      ) { |event, payload| events << [event, payload] }
+
+      visible_reply = events.each_with_object(+"") do |(event, payload), text|
+        text.clear if event == :reset
+        text << payload[:text] if event == :token
+      end
+
+      expect(visible_reply).to eq("You have 3 products.")
+      expect(result[:reply]).to eq("You have 3 products.")
+      expect(persisted[:reply]).to eq("You have 3 products.")
+      expect(events.any? { |event, _| event == :reset }).to be(false)
+    end
+
+    it "does not accept streamed text-only after a blank complete_turn" do
+      stub_stream_turns(
+        { stream: [], result: complete_turn_result("", outcome: "reply_only") },
+        { stream: ["You have 3 products."], result: untyped_text_result("You have 3 products.") },
+      )
+      allow(client).to receive(:messages).and_return(text_result("[]"))
+
+      events, result = collect_events([{ role: "user", content: "How many products?" }])
+      visible_reply = events.each_with_object(+"") do |(event, payload), text|
+        text.clear if event == :reset
+        text << payload[:text] if event == :token
+      end
+
+      expect(result[:reply]).to eq(described_class::TURN_CONTRACT_FAILURE_REPLY)
+      expect(visible_reply).to eq(described_class::TURN_CONTRACT_FAILURE_REPLY)
+      expect(visible_reply).not_to eq("You have 3 products.")
+    end
+
+    it "replaces streamed channel text with the complete_turn reply when they disagree" do
+      stub_stream_turns(
+        { stream: ["partial channel text"], result: complete_turn_result("partial channel text", outcome: "reply_only", reply: "You have 3 products.") },
+      )
+      allow(client).to receive(:messages).and_return(text_result("[]"))
+
+      events, result = collect_events([{ role: "user", content: "How many products?" }])
+      visible_reply = events.each_with_object(+"") do |(event, payload), text|
+        text.clear if event == :reset
+        text << payload[:text] if event == :token
+      end
+
+      expect(events).to include([:reset, {}])
+      expect(visible_reply).to eq("You have 3 products.")
+      expect(result[:reply]).to eq("You have 3 products.")
     end
   end
 

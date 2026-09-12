@@ -493,6 +493,8 @@ export const AgentChat = ({ greeting, suggestions, locked = null }: Props) => {
   // Whether to follow new content to the bottom. Stays true while the seller is near the bottom and
   // flips off if they scroll up to read earlier messages, so streaming/suggestions don't yank them back.
   const stickToBottom = React.useRef(true);
+  const sendGenerationRef = React.useRef(0);
+  const activeStreamAbortRef = React.useRef<AbortController | null>(null);
 
   const handleScroll = () => {
     const el = scrollRef.current;
@@ -505,6 +507,9 @@ export const AgentChat = ({ greeting, suggestions, locked = null }: Props) => {
     mountedRef.current = true;
     return () => {
       mountedRef.current = false;
+      // Drop late callbacks, but leave the connection open: aborting mid-generation raises
+      // ClientDisconnected server-side and the turn is marked failed before it can persist.
+      sendGenerationRef.current += 1;
       for (const abortController of actionStatusAbortControllersRef.current.values()) abortController.abort();
       actionStatusAbortControllersRef.current.clear();
     };
@@ -716,6 +721,13 @@ export const AgentChat = ({ greeting, suggestions, locked = null }: Props) => {
     const trimmed = text.trim();
     if (trimmed.length === 0 || isSending || locked) return;
 
+    sendGenerationRef.current += 1;
+    const generation = sendGenerationRef.current;
+    const belongsToThisTurn = () => mountedRef.current && sendGenerationRef.current === generation;
+    // Only a post-`done` stream still draining suggestion chips can be open here (the composer
+    // stays locked until then), and that turn is already persisted, so aborting it is safe.
+    activeStreamAbortRef.current?.abort();
+
     // From here on the seller owns the chat: block the mount-time hydration from replacing it.
     hasSentMessageRef.current = true;
 
@@ -775,15 +787,18 @@ export const AgentChat = ({ greeting, suggestions, locked = null }: Props) => {
     // or errored, or recovery reached a server verdict); after an inconclusive recovery the
     // connection is left alone, because the server may still be generating on it.
     const streamAbort = new AbortController();
+    activeStreamAbortRef.current = streamAbort;
     let turnSettled = false;
     const turnWasReset = { current: false };
 
     const handlers: AgentStreamHandlers = {
       onToken: (chunk) => {
+        if (!belongsToThisTurn()) return;
         setIsStreaming(true);
         appendToken(chunk);
       },
       onReset: () => {
+        if (!belongsToThisTurn()) return;
         turnWasReset.current = true;
         // An intermediate tool-use turn streamed preamble text; clear it so the real reply replaces
         // it instead of appending to it. Remove the empty turn entirely so a retry failure can insert
@@ -795,9 +810,34 @@ export const AgentChat = ({ greeting, suggestions, locked = null }: Props) => {
           return next;
         });
       },
-      onObjects: (objects) => upsertAssistant({ objects }),
-      onProposedAction: (proposedAction) => upsertAssistant({ proposedAction }),
-      onSuggestions: (next) => setFollowUps(next),
+      onObjects: (objects) => {
+        if (!belongsToThisTurn()) return;
+        upsertAssistant({ objects });
+      },
+      onProposedAction: (proposedAction) => {
+        if (!belongsToThisTurn()) return;
+        upsertAssistant({ proposedAction });
+      },
+      onSuggestions: (next) => {
+        if (!belongsToThisTurn()) return;
+        setFollowUps(next);
+      },
+      onDone: (result) => {
+        if (!belongsToThisTurn()) return;
+        turnSettled = true;
+        if (result.conversationId) setConversationId(result.conversationId);
+        upsertAssistant({
+          content: result.reply,
+          ...(result.proposedAction ? { proposedAction: result.proposedAction } : {}),
+          ...(result.proposalMessageId ? { proposalMessageId: result.proposalMessageId } : {}),
+          ...(result.objects.length > 0 ? { objects: result.objects } : {}),
+        });
+        // Unlock as soon as the reply is persisted. Suggestion chips may still arrive.
+        // Empty done.suggestions must not wipe chips; a populated list can land immediately.
+        if (result.suggestions.length > 0) setFollowUps(result.suggestions);
+        setIsSending(false);
+        setIsStreaming(false);
+      },
     };
 
     try {
@@ -808,26 +848,38 @@ export const AgentChat = ({ greeting, suggestions, locked = null }: Props) => {
         clientTurnId,
         streamAbort.signal,
       );
+      // When onDone already assembled this turn, the composer has been unlocked since then and the
+      // seller may have confirmed the proposal card. Rebuilding the message here would drop that
+      // applied state, so only the chips can still be new.
+      const assembledByDone = turnSettled;
       turnSettled = true;
-      if (result.conversationId) setConversationId(result.conversationId);
-      // Reconcile with the final assembled turn. Upsert (not map) so a turn that produced no token —
-      // e.g. the model staged a write and returned an empty reply — still lands its card/objects.
-      setMessages((prev) => {
-        const next = [...prev];
-        const existing = next[assistantIndex];
-        const prior: DisplayMessage =
-          existing && existing.role === "assistant" ? existing : { role: "assistant", content: "" };
-        next[assistantIndex] = {
-          role: "assistant",
-          content: result.reply || prior.content || "",
-          ...(result.proposedAction ? { proposedAction: result.proposedAction } : {}),
-          ...(result.proposalMessageId ? { proposalMessageId: result.proposalMessageId } : {}),
-          ...(result.objects.length > 0 ? { objects: result.objects } : {}),
-        };
-        return next;
-      });
-      setFollowUps(result.suggestions);
+      if (!belongsToThisTurn()) return;
+      if (!assembledByDone) {
+        if (result.conversationId) setConversationId(result.conversationId);
+        // Reconcile with the final assembled turn. Upsert (not map) so a turn that produced no token —
+        // e.g. the model staged a write and returned an empty reply — still lands its card/objects.
+        setMessages((prev) => {
+          const next = [...prev];
+          const existing = next[assistantIndex];
+          const prior: DisplayMessage =
+            existing && existing.role === "assistant" ? existing : { role: "assistant", content: "" };
+          next[assistantIndex] = {
+            role: "assistant",
+            content: result.reply || prior.content || "",
+            ...(result.proposedAction ? { proposedAction: result.proposedAction } : {}),
+            ...(result.proposalMessageId ? { proposalMessageId: result.proposalMessageId } : {}),
+            ...(result.objects.length > 0 ? { objects: result.objects } : {}),
+          };
+          return next;
+        });
+      }
+      // Empty done.suggestions must not wipe chips that already arrived on this turn.
+      if (result.suggestions.length > 0) setFollowUps(result.suggestions);
     } catch (e) {
+      if (!belongsToThisTurn()) return;
+      // onDone already assembled this turn. A late timeout/EOF while draining chips must not
+      // recover-wipe the completed answer or lock the composer again.
+      if (turnSettled) return;
       // A broken stream usually means the server finished (or is still finishing) the turn
       // without noticing the client stopped receiving — so the truncated text on screen
       // misrepresents a reply that exists (or will exist) in full server-side. Recover this exact
@@ -849,6 +901,7 @@ export const AgentChat = ({ greeting, suggestions, locked = null }: Props) => {
           return next;
         });
         const outcome = await recoverInterruptedTurn(clientTurnId, assistantIndex);
+        if (!belongsToThisTurn()) return;
         recovered = outcome === "recovered";
         turnSettled = outcome !== "inconclusive";
         // Recovery couldn't tell what became of the turn, so the `finally` below leaves its
@@ -888,8 +941,11 @@ export const AgentChat = ({ greeting, suggestions, locked = null }: Props) => {
       // an abort would raise ClientDisconnected there and kill a turn that could yet persist —
       // the background watch started above releases it later instead.
       if (turnSettled) streamAbort.abort();
-      setIsSending(false);
-      setIsStreaming(false);
+      if (activeStreamAbortRef.current === streamAbort) activeStreamAbortRef.current = null;
+      if (belongsToThisTurn()) {
+        setIsSending(false);
+        setIsStreaming(false);
+      }
     }
   };
 

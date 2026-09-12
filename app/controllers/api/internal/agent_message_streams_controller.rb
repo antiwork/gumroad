@@ -152,6 +152,7 @@ class Api::Internal::AgentMessageStreamsController < Api::Internal::BaseControll
       turn_persisted = false
       assistant_message = nil
       unpersisted_proposal = false
+      done_written = false
       on_reply_complete = lambda do |turn|
         conversation, assistant_message = persist_agent_turn!(
           conversation,
@@ -167,37 +168,41 @@ class Api::Internal::AgentMessageStreamsController < Api::Internal::BaseControll
         ErrorNotifier.notify(e)
         unpersisted_proposal = replace_unpersisted_proposal_reply!(turn)
       end
+      flush_done = lambda do |turn|
+        next if done_written
+
+        turn = turn.with_indifferent_access if turn.respond_to?(:with_indifferent_access)
+        # Omit conversation_id (do not send null) or the client schema rejects the frame.
+        # Keep proposed_action even when nil. Suggestions stay [] so the composer unlocks;
+        # chips arrive on a later event, skipped if persistence failed.
+        done_payload = {
+          reply: turn[:reply],
+          proposed_action: assistant_message ? turn[:proposed_action] : nil,
+          objects: turn[:objects] || [],
+          suggestions: [],
+        }
+        done_payload[:conversation_id] = conversation.external_id if conversation
+        done_payload[:proposal_message_id] = assistant_message.external_id if turn[:proposed_action] && assistant_message
+        write_event.call(done_payload, "done")
+        done_written = true
+      end
       result = ::Ai::StoreAgentService.new(seller: current_seller, pundit_user:)
         .respond_streaming(messages: history, on_reply_complete:) do |event, payload|
-        # Extend only a marker that is still in progress. on_reply_complete runs before trailing
-        # object/proposal/suggestion events and can mark persistence failed; no later event may
-        # resurrect that terminal state.
+        # No-op if persistence already marked this turn failed.
         refresh_agent_turn_in_progress!(client_turn_id)
-        # finish_stream invokes on_reply_complete before emitting the proposal. If persistence
-        # failed, suppress that event: without a stored assistant message there is no proposal id
-        # the confirmation endpoint can claim.
+        # No stored assistant message means no proposal id the confirmation endpoint can claim.
         next if event.to_s == "proposed_action" && assistant_message.nil?
         # The suggestion call still used the discarded confirmation wording. Do not pair the
         # honest fallback with prompts derived from a write that cannot be confirmed.
         next if event.to_s == "suggestions" && unpersisted_proposal
+        if event.to_s == "turn_ready"
+          flush_done.call(payload)
+          next
+        end
 
         write_event.call(payload, event)
       end
-      # conversation_id is omitted entirely (not null) when creating the conversation itself
-      # failed above — the client validates this frame against a schema where conversation_id
-      # is an optional string, so a null would fail validation and turn a benign persistence
-      # failure into a spurious interrupted-stream recovery. proposed_action stays present even
-      # when nil: the client schema requires it (nullable, not optional). A generated proposal is
-      # returned only when its assistant message persisted and has a claimable id.
-      done_payload = {
-        reply: result[:reply],
-        proposed_action: assistant_message ? result[:proposed_action] : nil,
-        objects: result[:objects] || [],
-        suggestions: unpersisted_proposal ? [] : result[:suggestions] || [],
-      }
-      done_payload[:conversation_id] = conversation.external_id if conversation
-      done_payload[:proposal_message_id] = assistant_message.external_id if result[:proposed_action] && assistant_message
-      write_event.call(done_payload, "done")
+      flush_done.call(result)
     rescue ::Ai::StoreAgentService::Error => e
       mark_agent_turn_failed!(client_turn_id) unless turn_persisted
       write_event.call({ message: e.message }, "error")

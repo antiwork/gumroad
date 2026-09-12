@@ -241,6 +241,29 @@ describe Api::Internal::AgentMessageStreamsController do
         $redis.del(turn_status_key) if turn_status_key
       end
 
+      it "writes done on turn_ready before follow-up suggestions" do
+        service_double = instance_double(Ai::StoreAgentService)
+        allow(Ai::StoreAgentService).to receive(:new).and_return(service_double)
+        allow(service_double).to receive(:respond_streaming) do |on_reply_complete: nil, **_kwargs, &emit|
+          turn = store_agent_turn(reply: "You have one product.", proposed_action: nil)
+          on_reply_complete&.call(turn)
+          emit.call(:token, { text: turn[:reply] })
+          emit.call(:turn_ready, turn)
+          emit.call(:suggestions, { suggestions: ["Show my sales"] })
+          turn.merge(suggestions: ["Show my sales"])
+        end
+
+        post :create, params: valid_params, format: :json
+
+        expect(response.body.scan(/^event: (.+)$/).flatten).to eq(
+          %w[token done suggestions],
+        )
+        done_data = JSON.parse(response.body[/event: done\ndata: (.*)\n/, 1])
+        expect(done_data["reply"]).to eq("You have one product.")
+        expect(done_data["suggestions"]).to eq([])
+        expect(response.body).to include("Show my sales")
+      end
+
       it "rejects and replaces server-owned confirmation copy without a proposal" do
         service_double = instance_double(Ai::StoreAgentService)
         allow(Ai::StoreAgentService).to receive(:new).and_return(service_double)

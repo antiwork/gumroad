@@ -117,15 +117,18 @@ class Ai::AnthropicClient
     @fallback_model_override = fallback_model
     # Seconds already spent sleeping between retries; compared against RETRY_SLEEP_BUDGET_IN_SECONDS.
     @retry_sleep_spent = 0.0
+    @served_models = []
   end
+
+  attr_reader :served_models
 
   # Buffered request. `system` is Anthropic's top-level system prompt; `messages` is the Anthropic
   # message array (role + content); `tools` is the Anthropic tool-schema array (optional).
   # Transient upstream failures (timeouts, 5xx/429/529) are retried a couple of times before
   # surfacing, because a buffered call has no partial output to worry about.
   # @return [Result]
-  def messages(system:, messages:, tools: nil, max_tokens: DEFAULT_MAX_TOKENS)
-    body = request_body(system:, messages:, tools:, max_tokens:, stream: false)
+  def messages(system:, messages:, tools: nil, max_tokens: DEFAULT_MAX_TOKENS, thinking: nil)
+    body = request_body(system:, messages:, tools:, max_tokens:, stream: false, thinking:)
     with_retries do
       response = http.post(api_url, json: body)
       raise_for_status!(response, kind: "request")
@@ -397,7 +400,7 @@ class Ai::AnthropicClient
       message.presence || body[0, 200]
     end
 
-    def request_body(system:, messages:, tools:, max_tokens:, stream:)
+    def request_body(system:, messages:, tools:, max_tokens:, stream:, thinking: nil)
       body = {
         model:,
         max_tokens:,
@@ -412,6 +415,7 @@ class Ai::AnthropicClient
       # the agent stays up on GPT when Anthropic is down. Sent only when routing through
       # OpenRouter; Anthropic's own API would reject the unknown parameter.
       body[:fallbacks] = [{ model: fallback_model }] if openrouter?
+      body[:thinking] = thinking if thinking.present?
       body
     end
 
@@ -505,6 +509,8 @@ class Ai::AnthropicClient
     # version) — still the requested model, not a fallback. Only a genuinely different model warns.
     def log_served_model(served_model)
       return if served_model.blank?
+
+      @served_models << served_model
 
       requested = normalize_model_name(model)
       served = normalize_model_name(served_model)
