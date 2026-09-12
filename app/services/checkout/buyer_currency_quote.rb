@@ -695,7 +695,13 @@ class Checkout::BuyerCurrencyQuote
       # suppress quoting for its GBP, nor for a seller charging on a different account. Sellers
       # without their own Stripe Connect account share the Gumroad platform account, so they do
       # share a marker with each other (see the rescue in #create).
-      return unless Checkout::BuyerCurrencyEligibility.usd_settling_merchant_account?(merchant_account, presentment_currency: buyer_currency, seller:)
+      native_eur = Checkout::BuyerCurrencyEligibility.eur_native_charging_shape?(
+        seller:,
+        merchant_account:,
+        buyer_currency:,
+        products: charge_line_items.map(&:product)
+      )
+      return unless native_eur || Checkout::BuyerCurrencyEligibility.usd_settling_merchant_account?(merchant_account, presentment_currency: buyer_currency, seller:)
 
       # The quote must be minted on the account this seller's PaymentIntent will be created on,
       # which for a destination charge is the Gumroad platform account rather than the seller's
@@ -715,24 +721,29 @@ class Checkout::BuyerCurrencyQuote
       # the buyer's hands.
       return unless charge_canonical_total_cents.positive?
 
-      quote = begin
-        StripeFxQuote.create(
-          to_currency: Currency::USD,
-          from_currency: buyer_currency,
-          stripe_account_id: quote_merchant_account.charge_processor_merchant_id,
-          # Declared up front because Stripe matches the quote's destination against the
-          # intent's transfer_data[destination] exactly; see StripeFxQuote#create.
-          destination_account_id: Checkout::BuyerCurrencyEligibility.fx_quote_destination_account_id(merchant_account)
-        )
-      rescue StripeFxQuote::SettlementCurrencyMismatch
-        # Record which account rejected the currency so the next checkout on that account
-        # skips the doomed round trip, then re-raise: #create turns it into the quiet
-        # cart-wide canonical-USD fallback. The marker goes on the account the quote was
-        # MINTED on (the platform account for a destination charge), because that is the
-        # account whose settlement currency Stripe objected to.
-        record_settlement_currency_mismatch(quote_merchant_account, buyer_currency)
-        raise
+      quote = if native_eur
+        cached_rate_quote(buyer_currency)
+      else
+        begin
+          StripeFxQuote.create(
+            to_currency: Currency::USD,
+            from_currency: buyer_currency,
+            stripe_account_id: quote_merchant_account.charge_processor_merchant_id,
+            # Declared up front because Stripe matches the quote's destination against the
+            # intent's transfer_data[destination] exactly; see StripeFxQuote#create.
+            destination_account_id: Checkout::BuyerCurrencyEligibility.fx_quote_destination_account_id(merchant_account)
+          )
+        rescue StripeFxQuote::SettlementCurrencyMismatch
+          # Record which account rejected the currency so the next checkout on that account
+          # skips the doomed round trip, then re-raise: #create turns it into the quiet
+          # cart-wide canonical-USD fallback. The marker goes on the account the quote was
+          # MINTED on (the platform account for a destination charge), because that is the
+          # account whose settlement currency Stripe objected to.
+          record_settlement_currency_mismatch(quote_merchant_account, buyer_currency)
+          raise
+        end
       end
+      return if quote.blank?
       converted_total_cents = presentment_cents_for(charge_canonical_total_cents, quote.fx_rate, buyer_currency)
       # Give the converted total the same price ending the seller chose in USD ($9.99 →
       # €8,99, $10 → €9), HERE, before the token is signed, so the rounded amount is the one
@@ -1039,5 +1050,18 @@ class Checkout::BuyerCurrencyQuote
       raise ArgumentError, "FX rate must be positive" unless fx_rate.positive?
 
       ((BigDecimal(canonical_usd_cents.to_s) / subunit_to_unit(Currency::USD)) / fx_rate * subunit_to_unit(currency)).round
+    end
+
+    # Same Stripe-shaped rate the product page shows inverted (USD per EUR), locked for
+    # an hour so verify! still has an expiry. No Stripe FX quote id.
+    def cached_rate_quote(buyer_currency)
+      rate = buyer_local_currency_rate(from_currency: buyer_currency, to_currency: Currency::USD)
+      return if rate.blank?
+
+      StripeFxQuote::Quote.new(
+        id: nil,
+        expires_at: Checkout::BuyerCurrencyEligibility::EUR_NATIVE_QUOTE_TTL.from_now,
+        fx_rate: rate
+      )
     end
 end
