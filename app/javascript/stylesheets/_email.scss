@@ -50,13 +50,19 @@ $accent-color: map-get($colors, "pink"); // [1]
 
       &.reset {
         display: revert;
+        width: 100%;
         border-collapse: separate;
         border-spacing: 0;
 
         & > tbody,
         & > tfoot {
+          // Without this, tbody stays display:block and a width:100% CTA shrink-wraps.
+          display: revert;
+          width: 100%;
+
           & > * {
             display: revert;
+            width: 100%;
             border: none;
 
             & > * {
