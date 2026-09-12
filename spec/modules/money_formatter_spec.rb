@@ -4,13 +4,13 @@ describe MoneyFormatter do
   describe "#format" do
     it "formats a registered currency absent from product pricing choices" do
       expect(CURRENCY_CHOICES).not_to have_key(:pen)
-      expect(MoneyFormatter.format(1250, :pen)).to eq "S/.12.50"
-      expect(MoneyFormatter.format(1200, "pen", no_cents_if_whole: true)).to eq "S/.12"
+      expect(MoneyFormatter.format(1250, :pen)).to eq "S/12.50"
+      expect(MoneyFormatter.format(1200, "pen", no_cents_if_whole: true)).to eq "S/12"
     end
 
     it "omits the historical currency symbol only when requested" do
       expect(MoneyFormatter.format(1250, :pen, symbol: false)).to eq "12.50"
-      expect(MoneyFormatter.format(1250, :pen, symbol: true)).to eq "S/.12.50"
+      expect(MoneyFormatter.format(1250, :pen, symbol: true)).to eq "S/12.50"
     end
 
     it "uses the configured pricing symbol for Nordic, Mexican and newly added currencies" do
@@ -68,7 +68,7 @@ describe MoneyFormatter do
     end
 
     it "uses the registry symbol for historical currencies" do
-      expect(MoneyFormatter.symbol_for(:pen)).to eq "S/."
+      expect(MoneyFormatter.symbol_for(:pen)).to eq "S/"
     end
 
     it "uses the configured pricing symbol for Nordic, Mexican and newly added currencies" do

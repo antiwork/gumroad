@@ -18,9 +18,9 @@ describe SellerMobileAnalyticsService do
 
       expect(result[:sales_count]).to eq 1
       expect(result[:revenue]).to eq 200
-      expect(result[:purchases].sole[:price]).to eq "S/.12.50"
-      expect(purchase.reload.formatted_display_price).to eq "S/.12.50"
-      expect(purchase.as_json[:currency_symbol]).to eq "S/."
+      expect(result[:purchases].sole[:price]).to eq "S/12.50"
+      expect(purchase.reload.formatted_display_price).to eq "S/12.50"
+      expect(purchase.as_json[:currency_symbol]).to eq "S/"
       expect(purchase.displayed_price_cents).to eq 1250
       expect(purchase.price_cents).to eq 200
     end

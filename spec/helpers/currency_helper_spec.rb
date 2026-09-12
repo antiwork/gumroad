@@ -31,8 +31,8 @@ describe CurrencyHelper do
     end
 
     it "uses the registry symbol for historical currencies" do
-      expect(symbol_for(:pen)).to eq "S/."
-      expect(symbol_for("pen")).to eq "S/."
+      expect(symbol_for(:pen)).to eq "S/"
+      expect(symbol_for("pen")).to eq "S/"
       expect(symbol_for(:aud)).to eq "A$"
     end
 
@@ -134,7 +134,7 @@ describe CurrencyHelper do
       expect(format_just_price_in_cents(799, "aud")).to eq("A$7.99")
       expect(format_just_price_in_cents(799, "gbp")).to eq("£7.99")
       expect(format_just_price_in_cents(799, "jpy")).to eq("¥799")
-      expect(format_just_price_in_cents(1250, "pen")).to eq("S/.12.50")
+      expect(format_just_price_in_cents(1250, "pen")).to eq("S/12.50")
       expect(format_just_price_in_cents(1250, "dkk")).to eq("12.50 kr")
       expect(format_just_price_in_cents(1699, "mxn")).to eq("MX$16.99")
       expect(format_just_price_in_cents(3270, "thb")).to eq("฿32.70")
