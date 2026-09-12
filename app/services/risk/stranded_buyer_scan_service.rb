@@ -155,7 +155,8 @@ class Risk::StrandedBuyerScanService
     def reject_disputed(settled)
       # The exact complement of the not_chargedback_or_chargedback_reversed scope the counts above
       # use, so the numerator and the veto cannot disagree about what a live dispute is.
-      disputed = Purchase.where(email: settled.keys)
+      disputed = Purchase.excluding_paypal_processor
+                         .where(email: settled.keys)
                          .where.not(chargeback_date: nil)
                          .where("purchases.flags & :bit = 0", bit: Purchase.flag_mapping["flags"][:chargeback_reversed])
                          .distinct

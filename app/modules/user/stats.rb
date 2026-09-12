@@ -254,33 +254,17 @@ module User::Stats
   end
 
   def chargeback_rates(created_on_or_after: nil) # returns `{ volume: String, count: String }`
-    search_params = {
-      seller: self,
-      state: "successful",
-      exclude_refunded: true,
-      exclude_bundle_product_purchases: true,
-      track_total_hits: true,
-      aggs: {
-        price_cents_total: { sum: { field: "price_cents" } },
-        unreversed_chargebacks: {
-          filter: {
-            bool: {
-              must: [{ exists: { field: "chargeback_date" } }],
-              must_not: [{ term: { "selected_flags" => "chargeback_reversed" } }]
-            }
-          },
-          aggs: {
-            price_cents_total: { sum: { field: "price_cents" } }
-          }
-        }
-      }
-    }
-    search_params[:created_on_or_after] = created_on_or_after if created_on_or_after
-    search_result = PurchaseSearchService.search(search_params)
-    count_denominator = search_result.response.hits.total.value.to_f
-    volume_denominator = search_result.aggregations["price_cents_total"]["value"]
-    count_numerator = search_result.aggregations["unreversed_chargebacks"]["doc_count"].to_f
-    volume_numerator = search_result.aggregations["unreversed_chargebacks"]["price_cents_total"]["value"]
+    # SQL rather than PurchaseSearchService: ES does not index charge_processor_id, and
+    # PayPal-processor sales must be out of both numerator and denominator (not our MoR).
+    scope = sales.successful.not_fully_refunded.not_is_bundle_product_purchase.excluding_paypal_processor
+    scope = scope.where("purchases.created_at >= ?", created_on_or_after) if created_on_or_after
+
+    count_denominator = scope.count.to_f
+    volume_denominator = scope.sum(:price_cents).to_f
+    chargedback = scope.where.not(chargeback_date: nil)
+                       .where("purchases.flags & ? = 0", Purchase.flag_mapping["flags"][:chargeback_reversed])
+    count_numerator = chargedback.count.to_f
+    volume_numerator = chargedback.sum(:price_cents).to_f
     volume = volume_denominator > 0 ? format("%.1f%%", volume_numerator / volume_denominator * 100) : "NA"
     count = count_denominator > 0 ? format("%.1f%%", count_numerator / count_denominator * 100) : "NA"
     { volume:, count: }

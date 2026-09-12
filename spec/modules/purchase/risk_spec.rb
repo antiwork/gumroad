@@ -205,6 +205,18 @@ describe Purchase::Risk do
       end
     end
 
+    context "when the only past chargeback is PayPal-processor" do
+      before do
+        paypal = create(:purchase, link: product, email: "test@example.com", chargeback_date: Time.current)
+        paypal.update_column(:charge_processor_id, PaypalChargeProcessor.charge_processor_id)
+      end
+
+      it "does not add errors" do
+        expect { new_purchase.send(:check_for_past_chargebacks) }.not_to change { new_purchase.errors.count }
+        expect(new_purchase.error_code).to be_nil
+      end
+    end
+
     context "when purchase has neither email nor browser_guid" do
       let(:new_purchase) { build(:purchase, link: product, email: nil, browser_guid: nil) }
 

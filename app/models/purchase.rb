@@ -767,6 +767,9 @@ class Purchase < ApplicationRecord
   }
   scope :chargedback, -> { successful.where("purchases.chargeback_date IS NOT NULL") }
   scope :not_chargedback, -> { where("purchases.chargeback_date IS NULL") }
+  # PayPal checkout is seller-liability (not Gumroad MoR). Risk signals use this so a
+  # PayPal dispute cannot move a chargeback rate, payout pause, or buyer-block metric.
+  scope :excluding_paypal_processor, -> { where(*User::Risk.not_paypal_processor_sql) }
   scope :not_chargedback_or_chargedback_reversed, lambda {
     where("purchases.chargeback_date IS NULL OR " \
  "(purchases.chargeback_date IS NOT NULL AND purchases.flags & ? != 0)", Purchase.flag_mapping["flags"][:chargeback_reversed])

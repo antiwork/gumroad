@@ -191,6 +191,7 @@ class Api::Internal::Admin::ProductsController < Api::Internal::Admin::BaseContr
       window = RECENT_CHARGEBACK_WINDOW_DAYS.days.ago
       base = Purchase.not_is_bundle_product_purchase
         .not_fully_refunded
+        .excluding_paypal_processor
         .where(link_id: product.id)
         .where("purchases.created_at >= ?", window)
 

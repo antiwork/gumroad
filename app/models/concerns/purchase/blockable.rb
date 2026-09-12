@@ -501,12 +501,14 @@ module Purchase::Blockable
   end
 
   def block_buyer_based_on_chargeback_count!
-    email_cb_count = Purchase.where(email: email)
+    email_cb_count = Purchase.excluding_paypal_processor
+                             .where(email: email)
                              .where.not(chargeback_date: nil)
                              .count
 
     purchaser_cb_count = if purchaser_id.present?
-      Purchase.where(purchaser_id: purchaser_id)
+      Purchase.excluding_paypal_processor
+              .where(purchaser_id: purchaser_id)
               .where.not(chargeback_date: nil)
               .count
     else
