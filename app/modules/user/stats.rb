@@ -259,12 +259,14 @@ module User::Stats
     scope = sales.successful.not_fully_refunded.not_is_bundle_product_purchase.excluding_paypal_processor
     scope = scope.where("purchases.created_at >= ?", created_on_or_after) if created_on_or_after
 
-    count_denominator = scope.count.to_f
-    volume_denominator = scope.sum(:price_cents).to_f
-    chargedback = scope.where.not(chargeback_date: nil)
-                       .where("purchases.flags & ? = 0", Purchase.flag_mapping["flags"][:chargeback_reversed])
-    count_numerator = chargedback.count.to_f
-    volume_numerator = chargedback.sum(:price_cents).to_f
+    reversed_bit = Purchase.flag_mapping["flags"][:chargeback_reversed]
+    lost = "purchases.chargeback_date IS NOT NULL AND purchases.flags & #{reversed_bit} = 0"
+    count_denominator, volume_denominator, count_numerator, volume_numerator = scope.reorder(nil).pick(
+      Arel.sql("COUNT(*)"),
+      Arel.sql("COALESCE(SUM(purchases.price_cents), 0)"),
+      Arel.sql("COUNT(CASE WHEN #{lost} THEN 1 END)"),
+      Arel.sql("COALESCE(SUM(CASE WHEN #{lost} THEN purchases.price_cents ELSE 0 END), 0)")
+    ).map(&:to_f)
     volume = volume_denominator > 0 ? format("%.1f%%", volume_numerator / volume_denominator * 100) : "NA"
     count = count_denominator > 0 ? format("%.1f%%", count_numerator / count_denominator * 100) : "NA"
     { volume:, count: }
