@@ -88,7 +88,7 @@ describe("Checkout/Returns/Pending", () => {
     expect(replace).toHaveBeenCalledTimes(1);
     const nextUrl = new URL(String(replace.mock.calls[0]?.[0]));
     expect(nextUrl.searchParams.get("payment_intent")).toBe("pi_123");
-    expect(nextUrl.searchParams.get(PENDING_STARTED_AT_PARAM)).toMatch(/^\d+$/);
+    expect(nextUrl.searchParams.get(PENDING_STARTED_AT_PARAM)).toMatch(/^\d+$/u);
   });
 
   it("stops polling from the URL clock when sessionStorage is unavailable", () => {
