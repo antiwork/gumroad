@@ -1217,19 +1217,19 @@ describe Checkout::BuyerCurrencyEligibility do
 
     it "withholds the method when the forced currency's minor units differ between Gumroad and Stripe" do
       stub_const("#{described_class}::FORCED_CURRENCY_PAYMENT_METHODS",
-                 described_class::FORCED_CURRENCY_PAYMENT_METHODS.merge("krw_only_method" => Currency::KRW))
+                 described_class::FORCED_CURRENCY_PAYMENT_METHODS.merge("kwd_only_method" => Currency::KWD))
 
-      krw_decision = described_class.new(order:,
+      kwd_decision = described_class.new(order:,
                                          seller:,
                                          merchant_account:,
                                          chargeable:,
                                          purchases:,
                                          params:,
                                          setup_future_charges:,
-                                         off_session:).method_forced_decision(payment_method: "krw_only_method")
+                                         off_session:).method_forced_decision(payment_method: "kwd_only_method")
 
-      expect(krw_decision).not_to be_eligible
-      expect(krw_decision.fallback_reason).to eq(:unsupported_forced_currency)
+      expect(kwd_decision).not_to be_eligible
+      expect(kwd_decision.fallback_reason).to eq(:unsupported_forced_currency)
     end
   end
 
