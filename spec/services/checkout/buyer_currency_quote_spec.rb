@@ -73,6 +73,26 @@ describe Checkout::BuyerCurrencyQuote do
       expect(result).to have_attributes(currency: Currency::GBP, canonical_total_cents: 10_00)
     end
 
+    it "quotes SEK, NOK, DKK and MXN when requested instead of the IP currency" do
+      %w[sek nok dkk mxn].each do |currency|
+        allow(StripeFxQuote).to receive(:create).with(
+          to_currency: Currency::USD,
+          from_currency: currency,
+          stripe_account_id: merchant_account.charge_processor_merchant_id,
+          destination_account_id: nil
+        ).and_return(stripe_fx_quote)
+
+        result = described_class.create(
+          line_items: line_items_for(product),
+          canonical_total_cents: 10_00,
+          ip: "24.48.0.1",
+          currency:
+        )
+
+        expect(result).to have_attributes(currency:, canonical_total_cents: 10_00)
+      end
+    end
+
     it "does not quote when the buyer asks for US dollars" do
       result = described_class.create(
         line_items: line_items_for(product),

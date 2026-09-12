@@ -937,15 +937,14 @@ describe PaypalChargeProcessor, :vcr do
       it "records a refund settled in a currency Gumroad does not price products in" do
         capture_id = "0JF852973C016714D"
         @purchase.update!(stripe_transaction_id: capture_id)
-        # PayPal captures settle in the seller's PayPal primary currency, which is wider than
-        # CURRENCY_CHOICES — thousands of live merchant accounts are MXN/MYR/SEK/THB/HUF.
-        allow(described_class).to receive(:get_rate).with("mxn").and_return("20.0")
+        expect(CURRENCY_CHOICES).not_to have_key("thb")
+        allow(described_class).to receive(:get_rate).with("thb").and_return("20.0")
         event_info = paypal_refund_event(
-          refund_id: "PAYPAL-REFUND-MXN",
+          refund_id: "PAYPAL-REFUND-THB",
           capture_id:,
           amount: "40.00",
           total_refunded_amount: "40.00",
-          currency_code: "MXN"
+          currency_code: "THB"
         )
 
         expect(ErrorNotifier).not_to receive(:notify)
@@ -953,7 +952,7 @@ describe PaypalChargeProcessor, :vcr do
         described_class.handle_order_events(event_info)
 
         expect(@purchase.reload.refunds.pluck(:processor_refund_id, :amount_cents)).to eq(
-          [["PAYPAL-REFUND-MXN", 200]]
+          [["PAYPAL-REFUND-THB", 200]]
         )
       end
 

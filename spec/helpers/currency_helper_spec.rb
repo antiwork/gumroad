@@ -31,9 +31,16 @@ describe CurrencyHelper do
     end
 
     it "uses the registry symbol for historical currencies" do
-      expect(symbol_for(:dkk)).to eq "kr."
-      expect(symbol_for("dkk")).to eq "kr."
+      expect(symbol_for(:thb)).to eq "฿"
+      expect(symbol_for("thb")).to eq "฿"
       expect(symbol_for(:aud)).to eq "A$"
+    end
+
+    it "uses the configured pricing symbol for Nordic and Mexican currencies" do
+      expect(symbol_for(:dkk)).to eq "kr"
+      expect(symbol_for(:sek)).to eq "kr"
+      expect(symbol_for(:nok)).to eq "kr"
+      expect(symbol_for(:mxn)).to eq "MX$"
     end
 
     it "soft-fails invalid currencies with the ISO code instead of relabeling them as USD" do
@@ -58,6 +65,10 @@ describe CurrencyHelper do
     it "returns the correct value" do
       expect(min_price_for(:usd)).to eq 99
       expect(min_price_for(:gbp)).to eq 59
+      expect(min_price_for(:sek)).to eq 999
+      expect(min_price_for(:nok)).to eq 949
+      expect(min_price_for(:dkk)).to eq 649
+      expect(min_price_for(:mxn)).to eq 1699
     end
 
     it "falls back to USD for unknown currency types" do
@@ -118,7 +129,9 @@ describe CurrencyHelper do
       expect(format_just_price_in_cents(799, "aud")).to eq("A$7.99")
       expect(format_just_price_in_cents(799, "gbp")).to eq("£7.99")
       expect(format_just_price_in_cents(799, "jpy")).to eq("¥799")
-      expect(format_just_price_in_cents(1250, "dkk")).to eq("12.50 kr.")
+      expect(format_just_price_in_cents(1250, "thb")).to eq("฿12.50")
+      expect(format_just_price_in_cents(1250, "dkk")).to eq("12.50 kr")
+      expect(format_just_price_in_cents(1699, "mxn")).to eq("MX$16.99")
     end
   end
 

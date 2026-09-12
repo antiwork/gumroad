@@ -3,14 +3,21 @@
 describe MoneyFormatter do
   describe "#format" do
     it "formats a registered currency absent from product pricing choices" do
-      expect(CURRENCY_CHOICES).not_to have_key(:dkk)
-      expect(MoneyFormatter.format(1250, :dkk)).to eq "12.50 kr."
-      expect(MoneyFormatter.format(1200, "dkk", no_cents_if_whole: true)).to eq "12 kr."
+      expect(CURRENCY_CHOICES).not_to have_key(:thb)
+      expect(MoneyFormatter.format(1250, :thb)).to eq "฿12.50"
+      expect(MoneyFormatter.format(1200, "thb", no_cents_if_whole: true)).to eq "฿12"
     end
 
     it "omits the historical currency symbol only when requested" do
-      expect(MoneyFormatter.format(1250, :dkk, symbol: false)).to eq "12.50"
-      expect(MoneyFormatter.format(1250, :dkk, symbol: true)).to eq "12.50 kr."
+      expect(MoneyFormatter.format(1250, :thb, symbol: false)).to eq "12.50"
+      expect(MoneyFormatter.format(1250, :thb, symbol: true)).to eq "฿12.50"
+    end
+
+    it "uses the configured pricing symbol for Nordic and Mexican currencies" do
+      expect(MoneyFormatter.format(1250, :dkk)).to eq "12.50 kr"
+      expect(MoneyFormatter.format(1200, "sek", no_cents_if_whole: true)).to eq "12 kr"
+      expect(MoneyFormatter.format(1250, :nok)).to eq "12.50 kr"
+      expect(MoneyFormatter.format(1250, :mxn)).to eq "MX$12.50"
     end
 
     it "soft-fails unknown currencies with the ISO code instead of relabeling them as USD" do
@@ -60,7 +67,14 @@ describe MoneyFormatter do
     end
 
     it "uses the registry symbol for historical currencies" do
-      expect(MoneyFormatter.symbol_for(:dkk)).to eq "kr."
+      expect(MoneyFormatter.symbol_for(:thb)).to eq "฿"
+    end
+
+    it "uses the configured pricing symbol for Nordic and Mexican currencies" do
+      expect(MoneyFormatter.symbol_for(:dkk)).to eq "kr"
+      expect(MoneyFormatter.symbol_for(:sek)).to eq "kr"
+      expect(MoneyFormatter.symbol_for(:nok)).to eq "kr"
+      expect(MoneyFormatter.symbol_for(:mxn)).to eq "MX$"
     end
 
     it "soft-fails unknown currencies with the ISO code instead of relabeling them as USD" do

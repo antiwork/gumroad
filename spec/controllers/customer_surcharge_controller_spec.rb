@@ -158,6 +158,19 @@ describe CustomerSurchargeController, :vcr do
       expect(gbp).to include("label" => "£ (British Pounds)")
     end
 
+    it "offers SEK, NOK, DKK and MXN in the checkout currency picker" do
+      post "calculate_all", params: {
+        products: [{ permalink: @product.unique_permalink, price: 100, quantity: 1 }],
+      }, as: :json
+
+      expect(response.parsed_body.fetch("available_buyer_currencies")).to include(
+        include("code" => Currency::SEK, "label" => "kr (Swedish krona)"),
+        include("code" => Currency::NOK, "label" => "kr (Norwegian krone)"),
+        include("code" => Currency::DKK, "label" => "kr (Danish krone)"),
+        include("code" => Currency::MXN, "label" => "MX$ (Mexican peso)")
+      )
+    end
+
     it "does not quote when the buyer asks for US dollars" do
       post "calculate_all", params: {
         products: [{ permalink: @product.unique_permalink, price: 100, quantity: 1 }],

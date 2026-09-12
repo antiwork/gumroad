@@ -280,6 +280,15 @@ describe Checkout::BuyerCurrencyEligibility do
     expect(decision.currency).to eq(Currency::JPY)
   end
 
+  %w[sek nok dkk mxn].each do |currency|
+    it "allows #{currency} presentment" do
+      allow_any_instance_of(described_class).to receive(:buyer_currency_for_ip).and_return(currency)
+
+      expect(decision).to be_eligible
+      expect(decision.currency).to eq(currency)
+    end
+  end
+
   # Wallet payments are accepted, but only from the surface whose sheet quotes the locked
   # buyer-currency total (the Payment Element) and only while the seller is in both wallet
   # rollout flags. The Payment Request Button's sheet is built from the canonical USD total,
