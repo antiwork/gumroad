@@ -11,7 +11,7 @@ class Dispute < ApplicationRecord
   belongs_to :service_charge, optional: true
   has_many :credits
 
-  # Same PayPal-MoR exclusion as Purchase.excluding_paypal_processor, covering both
+  # Same processor exclusion as Purchase.excluding_paypal_processor, covering both
   # purchase-linked and charge-linked (multi-item cart) dispute rows.
   scope :excluding_paypal_processor, -> {
     left_joins(:purchase, :charge).where(*User::Risk.not_paypal_processor_sql(charge_table: "charges"))

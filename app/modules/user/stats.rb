@@ -255,7 +255,7 @@ module User::Stats
 
   def chargeback_rates(created_on_or_after: nil) # returns `{ volume: String, count: String }`
     # SQL rather than PurchaseSearchService: ES does not index charge_processor_id, and
-    # PayPal-processor sales must be out of both numerator and denominator (not our MoR).
+    # PayPal-processor sales must be out of both numerator and denominator.
     scope = sales.successful.not_fully_refunded.not_is_bundle_product_purchase.excluding_paypal_processor
     scope = scope.where("purchases.created_at >= ?", created_on_or_after) if created_on_or_after
 

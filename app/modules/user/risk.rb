@@ -55,9 +55,8 @@ module User::Risk
 
   REFUND_POLICY_ENFORCEMENT_COMMENT_AUTHOR = "enforce_refund_policy_for_seller_based_on_dispute_rate"
 
-  # PayPal checkout is the seller's own PayPal account — Gumroad is not merchant of record,
-  # the money never hits our books, so those disputes are not our risk. One SQL predicate;
-  # Purchase.excluding_paypal_processor / Dispute.excluding_paypal_processor wrap it.
+  # Excludes seller-liability transactions from risk signals. Purchase.excluding_paypal_processor
+  # and Dispute.excluding_paypal_processor wrap this shared SQL predicate.
   PAYPAL_CHARGE_PROCESSOR_ID = PaypalChargeProcessor.charge_processor_id
 
   def self.not_paypal_processor_sql(purchase_table: "purchases", charge_table: nil)
