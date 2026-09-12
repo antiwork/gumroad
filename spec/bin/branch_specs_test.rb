@@ -832,13 +832,10 @@ check(
 )
 
 check(
-  "profile parser fans out to profile request specs (#7341)",
-  base_files: {
-    "spec/requests/user/profile_spec.rb" => SPEC_STUB,
-    "app/javascript/parsers/profile.ts" => "old",
-  },
+  "profile parser still escalates (Coffee + product profile + settings consumers)",
+  base_files: { "app/javascript/parsers/profile.ts" => "old" },
   head_files: { "app/javascript/parsers/profile.ts" => "new" },
-  expect_specs: %w[spec/requests/user/profile_spec.rb],
+  expect_escalate: true,
 )
 
 # Negatives harvested as unsafe to map.
@@ -919,7 +916,7 @@ check(
 )
 
 check(
-  "pages/UrlRedirects selects download_page specs",
+  "pages/UrlRedirects/DownloadPage selects download_page specs",
   base_files: {
     "spec/requests/download_page/download_page_spec.rb" => SPEC_STUB,
     "spec/requests/url_redirects_epub_reader_system_spec.rb" => SPEC_STUB,
@@ -927,6 +924,13 @@ check(
   },
   head_files: { "app/javascript/pages/UrlRedirects/DownloadPage.tsx" => "new" },
   expect_specs: %w[spec/requests/download_page/download_page_spec.rb],
+)
+
+check(
+  "pages/UrlRedirects/Read still escalates (EPUB reader is not download_page)",
+  base_files: { "app/javascript/pages/UrlRedirects/Read.tsx" => "old" },
+  head_files: { "app/javascript/pages/UrlRedirects/Read.tsx" => "new" },
+  expect_escalate: true,
 )
 
 check(
@@ -1054,20 +1058,38 @@ check(
 )
 
 check(
-  "Users/Show selects profile request specs (storefront-only)",
+  "Users/Show selects profile request specs including custom-domain storefront",
   base_files: {
     "spec/requests/user/profile_spec.rb" => SPEC_STUB,
+    "spec/requests/user_custom_domain_spec.rb" => SPEC_STUB,
     "spec/controllers/users/review_reminders_controller_spec.rb" => SPEC_STUB,
     "app/javascript/pages/Users/Show.tsx" => "old",
   },
   head_files: { "app/javascript/pages/Users/Show.tsx" => "new" },
-  expect_specs: %w[spec/requests/user/profile_spec.rb],
+  expect_specs: %w[
+    spec/requests/user/profile_spec.rb
+    spec/requests/user_custom_domain_spec.rb
+  ],
 )
 
 check(
   "Users/ReviewReminders still escalates (not storefront)",
   base_files: { "app/javascript/pages/Users/ReviewReminders/Unsubscribe.tsx" => "old" },
   head_files: { "app/javascript/pages/Users/ReviewReminders/Unsubscribe.tsx" => "new" },
+  expect_escalate: true,
+)
+
+check(
+  "Users/SubscribePreview still escalates (preview generator, not storefront list)",
+  base_files: { "app/javascript/pages/Users/SubscribePreview.tsx" => "old" },
+  head_files: { "app/javascript/pages/Users/SubscribePreview.tsx" => "new" },
+  expect_escalate: true,
+)
+
+check(
+  "Followers/Cancel still escalates (buyer unsubscribe, not seller list)",
+  base_files: { "app/javascript/pages/Followers/Cancel.tsx" => "old" },
+  head_files: { "app/javascript/pages/Followers/Cancel.tsx" => "new" },
   expect_escalate: true,
 )
 

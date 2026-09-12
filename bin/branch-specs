@@ -58,6 +58,7 @@ PROFILE_FLOW_SPECS = %w[
   spec/requests/user
   spec/requests/profile_analytics_spec.rb
   spec/requests/profile_custom_html_spec.rb
+  spec/requests/user_custom_domain_spec.rb
 ].freeze
 
 # Harvested from PRs that had to carry run-all-specs because these JS
@@ -165,17 +166,21 @@ FANOUT = {
   %r{\Aapp/javascript/data/discord_integration} => DOWNLOAD_PAGE_SPECS + CHECKOUT_FLOW_SPECS + %w[spec/requests/products/edit/integrations/discord_integrations_spec.rb],
   # Importers: DiscordButton.tsx:4 join/leave;
   # ProductEdit/ProductTab/DiscordIntegrationEditor.tsx:4 fetchServerInfo.
-  %r{\Aapp/javascript/parsers/profile} => PROFILE_FLOW_SPECS,
+  # parsers/profile is shared (Coffee, product profile, settings) — escalate.
   %r{\Aapp/javascript/pages/Users/Coffee} => PROFILE_FLOW_SPECS + %w[spec/requests/purchases/product/coffee_spec.rb],
   # Renderer: users_controller.rb:115 Users/Coffee.
   %r{\Aapp/javascript/pages/Users/Show} => PROFILE_FLOW_SPECS,
   # Renderer: users_controller.rb:35 Users/Show storefront.
-  %r{\Aapp/javascript/pages/Users/Subscribe} => PROFILE_FLOW_SPECS,
-  # Renderer: users_controller.rb:125 Users/Subscribe, :133 SubscribePreview.
-  # Users/ReviewReminders is not storefront (review_reminders_controller) — escalate.
+  %r{\Aapp/javascript/pages/Users/Subscribe\.tsx\z} => PROFILE_FLOW_SPECS,
+  # Renderer: users_controller.rb:125 Users/Subscribe.
+  # SubscribePreview and ReviewReminders are not storefront-list coverage — escalate.
   %r{\Aapp/javascript/pages/User/Passwords/} => %w[spec/requests/password_reset_spec.rb spec/requests/login_spec.rb],
   # Renderer: user/passwords_controller.rb:16 New, :39 Edit.
-  %r{\Aapp/javascript/pages/UrlRedirects/} => DOWNLOAD_PAGE_SPECS,
+  %r{\Aapp/javascript/pages/UrlRedirects/DownloadPage} => DOWNLOAD_PAGE_SPECS,
+  # Renderer: url_redirects_controller.rb:107 DownloadPage. Read.tsx has
+  # a co-located vitest (Read.test.tsx); a directory catch-all would
+  # override that skip with download_page request specs that never visit
+  # the EPUB reader. Confirm/Stream/Expired escalate.
   %r{\Aapp/javascript/pages/Pages/} => %w[
     spec/controllers/pages_controller_spec.rb
     spec/requests/pages_landing_embed_csp_spec.rb
@@ -187,7 +192,9 @@ FANOUT = {
   %r{\Aapp/javascript/pages/Customers/} => %w[spec/requests/customers],
   %r{\Aapp/javascript/pages/Library/} => %w[spec/requests/library_spec.rb],
   %r{\Aapp/javascript/pages/Oauth/} => %w[spec/requests/oauth_applications_pages_spec.rb],
-  %r{\Aapp/javascript/pages/Followers/} => %w[spec/requests/followers],
+  %r{\Aapp/javascript/pages/Followers/Index} => %w[spec/requests/followers],
+  # Renderer: followers_controller.rb:39 Index (seller list). Cancel and
+  # FromEmbedForm are buyer unsubscribe/embed flows — escalate.
   %r{\Aapp/javascript/pages/Reviews/} => PRODUCT_FLOW_SPECS + DOWNLOAD_PAGE_SPECS + %w[spec/requests/library_spec.rb],
   %r{\Aapp/javascript/pages/Workflows/} => WORKFLOW_FLOW_SPECS,
   %r{\Aapp/javascript/data/paypal} => CHECKOUT_FLOW_SPECS,
