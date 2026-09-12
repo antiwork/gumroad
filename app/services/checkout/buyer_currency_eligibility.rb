@@ -137,6 +137,12 @@ class Checkout::BuyerCurrencyEligibility
     end
   end
 
+  # Native EUR is the card/Link quote lane. Forced-currency methods keep their own
+  # presentment path even when a card quote is already in params (buyer switched to iDEAL).
+  def self.eur_native_charging_payment_method?(payment_method)
+    forced_currency_for(payment_method).blank?
+  end
+
   # The cart-shaped half of #decision's listed lane, for the selector and the surcharge menu,
   # which have line items rather than purchases. Every gate #decision reaches before that lane
   # returns eligible is re-applied here when a line item can answer it, so this never advertises
@@ -389,7 +395,7 @@ class Checkout::BuyerCurrencyEligibility
     @client_confirm = client_confirm
   end
 
-  def decision
+  def decision(payment_method: nil)
     return fallback(:feature_disabled) unless self.class.seller_enabled?(seller)
     return fallback(:unsupported_processor) unless merchant_account&.stripe_charge_processor?
     return fallback(:unsupported_charge_model) unless supported_charge_model?
@@ -480,9 +486,11 @@ class Checkout::BuyerCurrencyEligibility
     # Checked here (not up top with the other account gates) because the settlement
     # mismatch marker is scoped to the presentment currency, which isn't known earlier.
     # Native EUR charging skips the Stripe FX quote, so a live EUR mismatch must not
-    # hide this lane when the flag is on for the seller.
+    # hide this lane when the flag is on for the seller. Forced-currency methods are
+    # excluded: a displayed card quote must not carry this lane onto iDEAL.
     unless usd_settling_merchant_account?(buyer_currency) ||
-           self.class.eur_native_charging_shape?(seller:, merchant_account:, buyer_currency:, purchases:)
+           (self.class.eur_native_charging_shape?(seller:, merchant_account:, buyer_currency:, purchases:) &&
+            self.class.eur_native_charging_payment_method?(payment_method))
       return fallback(:unsupported_settlement_currency)
     end
 

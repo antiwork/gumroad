@@ -142,7 +142,7 @@ class Charge::MethodForcedPresentment
       # Registry methods still need their live launch flag — a tab opened while UPI
       # was on can keep a signed inr_types list after rollback.
       decision = if displayed_quote?
-        eligibility.decision
+        eligibility.decision(payment_method: payment_method_type)
       else
         eligibility.method_forced_decision(payment_method: payment_method_type, forced_currency:)
       end

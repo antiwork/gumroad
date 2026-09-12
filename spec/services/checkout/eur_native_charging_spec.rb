@@ -39,7 +39,7 @@ describe "native EUR charging" do
     end
     let(:chargeable) { instance_double(Chargeable, get_chargeable_for: instance_double(StripeChargeablePaymentMethod)) }
 
-    def eligibility_decision(currency: Currency::EUR)
+    def eligibility_decision(currency: Currency::EUR, payment_method: nil)
       token = Rails.application.message_verifier(:buyer_currency_quote).generate({ currency: })
       described_class.new(
         order: create(:order),
@@ -50,7 +50,7 @@ describe "native EUR charging" do
         params: { buyer_currency_quote: token },
         setup_future_charges: false,
         off_session: false
-      ).decision
+      ).decision(payment_method:)
     end
 
     it "stays eligible for EUR on the platform account when the mismatch marker is set" do
@@ -60,6 +60,23 @@ describe "native EUR charging" do
       expect(decision).to be_eligible
       expect(decision.currency).to eq(Currency::EUR)
       expect(decision.direct_listed_amount?).to eq(false)
+    end
+
+    it "does not keep native EUR eligibility when the buyer pays with iDEAL" do
+      merchant_account.record_settlement_currency_mismatch!(Currency::EUR)
+
+      decision = eligibility_decision(payment_method: "ideal")
+      expect(decision).not_to be_eligible
+      expect(decision.fallback_reason).to eq(:unsupported_settlement_currency)
+    end
+
+    it "treats card as native-EUR-eligible and iDEAL/Bancontact/UPI/Pix as not" do
+      expect(described_class.eur_native_charging_payment_method?(nil)).to eq(true)
+      expect(described_class.eur_native_charging_payment_method?("card")).to eq(true)
+      expect(described_class.eur_native_charging_payment_method?("link")).to eq(true)
+      %w[ideal bancontact upi pix].each do |method|
+        expect(described_class.eur_native_charging_payment_method?(method)).to eq(false)
+      end
     end
 
     it "falls back when the flag is off" do
@@ -224,6 +241,54 @@ describe "native EUR charging" do
       expect(captured[:keyword][:processor_amount_cents]).to eq(909)
       expect(captured[:keyword][:stripe_fx_quote_id]).to be_nil
       expect(purchase.reload.total_transaction_cents).to eq(10_00)
+    end
+  end
+
+  describe Charge::MethodForcedPresentment do
+    it "does not persist native EUR presentment when the buyer switches to iDEAL" do
+      allow_any_instance_of(Checkout::BuyerCurrencyQuote).to receive(:buyer_local_currency_rate).and_return(fx_rate)
+      merchant_account.record_settlement_currency_mismatch!(Currency::EUR)
+
+      quote = Checkout::BuyerCurrencyQuote.create(
+        line_items: [Checkout::BuyerCurrencyQuote::LineItem.new(
+          permalink: product.unique_permalink,
+          product:,
+          price_cents: 10_00,
+          tip_cents: 0,
+          seller_tax_cents: 0,
+          gumroad_tax_cents: 0,
+          shipping_cents: 0
+        )],
+        canonical_total_cents: 10_00,
+        ip: "203.0.113.1",
+        currency: Currency::EUR
+      )
+      order = create(:order)
+      purchase = create(:purchase,
+                        link: product,
+                        seller:,
+                        merchant_account:,
+                        purchase_state: "in_progress",
+                        ip_address: "203.0.113.1",
+                        price_cents: 10_00,
+                        total_transaction_cents: 10_00)
+      order.purchases << purchase
+      charge = create(:charge, order:, seller:, merchant_account:, amount_cents: 10_00, gumroad_amount_cents: 1_50)
+
+      result = described_class.new(
+        charge:,
+        order:,
+        seller:,
+        merchant_account:,
+        purchases: [purchase],
+        amount_cents: 10_00,
+        gumroad_amount_cents: 1_50,
+        payment_method_type: "ideal",
+        params: { buyer_currency_quote: quote.token }
+      ).perform
+
+      expect(result).to be_nil
+      expect(charge.reload.charge_presentment).to be_nil
     end
   end
 
