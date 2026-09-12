@@ -738,53 +738,24 @@ check(
 )
 
 check(
-  "Tiptap extension fans out to every consuming flow, not just products",
-  base_files: {
-    "spec/requests/products/edit/covers_spec.rb" => SPEC_STUB,
-    "spec/requests/emails/list_spec.rb" => SPEC_STUB,
-    "spec/requests/download_page/show_spec.rb" => SPEC_STUB,
-    "spec/requests/user/profile_spec.rb" => SPEC_STUB,
-    "spec/requests/workflows_spec.rb" => SPEC_STUB,
-    "app/javascript/components/TiptapExtensions/FileUpload.tsx" => "old",
-  },
+  "Tiptap extension still escalates (shared editor, multi-flow consumers)",
+  base_files: { "app/javascript/components/TiptapExtensions/FileUpload.tsx" => "old" },
   head_files: { "app/javascript/components/TiptapExtensions/FileUpload.tsx" => "new" },
-  expect_specs: %w[
-    spec/requests/products/edit/covers_spec.rb
-    spec/requests/emails/list_spec.rb
-    spec/requests/download_page/show_spec.rb
-    spec/requests/user/profile_spec.rb
-    spec/requests/workflows_spec.rb
-  ],
+  expect_escalate: true,
 )
 
 check(
-  "RichTextEditor fans out to email and download consumers, not just products",
-  base_files: {
-    "spec/requests/products/edit/covers_spec.rb" => SPEC_STUB,
-    "spec/requests/emails/list_spec.rb" => SPEC_STUB,
-    "spec/requests/download_page/show_spec.rb" => SPEC_STUB,
-    "app/javascript/components/RichTextEditor.tsx" => "old",
-  },
+  "RichTextEditor still escalates (importer-complete union exceeds 120)",
+  base_files: { "app/javascript/components/RichTextEditor.tsx" => "old" },
   head_files: { "app/javascript/components/RichTextEditor.tsx" => "new" },
-  expect_specs: %w[
-    spec/requests/products/edit/covers_spec.rb
-    spec/requests/emails/list_spec.rb
-    spec/requests/download_page/show_spec.rb
-  ],
+  expect_escalate: true,
 )
 
 check(
-  "ImageUploader fans out to product and profile consumers",
-  base_files: {
-    "spec/requests/products/edit/covers_spec.rb" => SPEC_STUB,
-    "spec/requests/user/profile_spec.rb" => SPEC_STUB,
-    "app/javascript/components/ImageUploader.tsx" => "old",
-  },
+  "ImageUploader still escalates (product + profile + bundle consumers)",
+  base_files: { "app/javascript/components/ImageUploader.tsx" => "old" },
   head_files: { "app/javascript/components/ImageUploader.tsx" => "new" },
-  expect_specs: %w[
-    spec/requests/products/edit/covers_spec.rb
-    spec/requests/user/profile_spec.rb
-  ],
+  expect_escalate: true,
 )
 
 check(
@@ -854,13 +825,10 @@ check(
 )
 
 check(
-  "email stylesheet fans out to mailer specs (#7156)",
-  base_files: {
-    "spec/mailers/customer_mailer_spec.rb" => SPEC_STUB,
-    "app/javascript/stylesheets/_email.scss" => "old",
-  },
+  "email stylesheet still escalates (mailers plus receipt-preview renderer)",
+  base_files: { "app/javascript/stylesheets/_email.scss" => "old" },
   head_files: { "app/javascript/stylesheets/_email.scss" => "new" },
-  expect_specs: %w[spec/mailers/customer_mailer_spec.rb],
+  expect_escalate: true,
 )
 
 check(
@@ -938,6 +906,7 @@ check(
   base_files: {
     "spec/requests/products/show/custom_html_analytics_spec.rb" => SPEC_STUB,
     "spec/requests/profile_custom_html_spec.rb" => SPEC_STUB,
+    "spec/requests/profile_analytics_spec.rb" => SPEC_STUB,
     "spec/requests/analytics/sales_spec.rb" => SPEC_STUB,
     "app/javascript/entrypoints/custom_html_analytics.ts" => "old",
   },
@@ -945,6 +914,7 @@ check(
   expect_specs: %w[
     spec/requests/products/show/custom_html_analytics_spec.rb
     spec/requests/profile_custom_html_spec.rb
+    spec/requests/profile_analytics_spec.rb
   ],
 )
 
@@ -981,23 +951,10 @@ check(
 )
 
 check(
-  "RichTextEditor selects emails + download + profile, not products-only",
-  base_files: {
-    "spec/requests/products/edit/covers_spec.rb" => SPEC_STUB,
-    "spec/requests/emails/create_spec.rb" => SPEC_STUB,
-    "spec/requests/download_page/rich_text_editor_spec.rb" => SPEC_STUB,
-    "spec/requests/user/profile_spec.rb" => SPEC_STUB,
-    "spec/requests/workflows_spec.rb" => SPEC_STUB,
-    "app/javascript/components/RichTextEditor.tsx" => "old",
-  },
-  head_files: { "app/javascript/components/RichTextEditor.tsx" => "new" },
-  expect_specs: %w[
-    spec/requests/products/edit/covers_spec.rb
-    spec/requests/emails/create_spec.rb
-    spec/requests/download_page/rich_text_editor_spec.rb
-    spec/requests/user/profile_spec.rb
-    spec/requests/workflows_spec.rb
-  ],
+  "ReviewForm still escalates (editor + purchase + library consumers)",
+  base_files: { "app/javascript/components/ReviewForm.tsx" => "old" },
+  head_files: { "app/javascript/components/ReviewForm.tsx" => "new" },
+  expect_escalate: true,
 )
 
 check(
@@ -1026,53 +983,38 @@ check(
 )
 
 check(
-  "ImageUploader selects avatar upload settings spec",
-  base_files: {
-    "spec/requests/products/edit/covers_spec.rb" => SPEC_STUB,
-    "spec/requests/user/settings_spec.rb" => SPEC_STUB,
-    "app/javascript/components/ImageUploader.tsx" => "old",
-  },
-  head_files: { "app/javascript/components/ImageUploader.tsx" => "new" },
-  expect_specs: %w[
-    spec/requests/products/edit/covers_spec.rb
-    spec/requests/user/settings_spec.rb
-  ],
-)
-
-check(
-  "ReviewForm selects library spec",
-  base_files: {
-    "spec/requests/products/show/reviews_spec.rb" => SPEC_STUB,
-    "spec/requests/library_spec.rb" => SPEC_STUB,
-    "app/javascript/components/ReviewForm.tsx" => "old",
-  },
-  head_files: { "app/javascript/components/ReviewForm.tsx" => "new" },
-  expect_specs: %w[spec/requests/library_spec.rb],
-)
-
-check(
-  "ReviewVideoPlayer selects customers spec",
-  base_files: {
-    "spec/requests/products/show/reviews_spec.rb" => SPEC_STUB,
-    "spec/requests/customers/customers_spec.rb" => SPEC_STUB,
-    "app/javascript/components/ReviewVideoPlayer.tsx" => "old",
-  },
+  "ReviewVideoPlayer still escalates (editor + purchase + customers consumers)",
+  base_files: { "app/javascript/components/ReviewVideoPlayer.tsx" => "old" },
   head_files: { "app/javascript/components/ReviewVideoPlayer.tsx" => "new" },
-  expect_specs: %w[spec/requests/customers/customers_spec.rb],
+  expect_escalate: true,
 )
 
 check(
-  "data/search selects product_panel storefront specs",
-  base_files: {
-    "spec/requests/discover/index_spec.rb" => SPEC_STUB,
-    "spec/requests/user/product_panel/product_panel_sort_filter_spec.rb" => SPEC_STUB,
-    "app/javascript/data/search.ts" => "old",
-  },
+  "data/product_reviews still escalates (editor + purchase consumers)",
+  base_files: { "app/javascript/data/product_reviews.ts" => "old" },
+  head_files: { "app/javascript/data/product_reviews.ts" => "new" },
+  expect_escalate: true,
+)
+
+check(
+  "DateRangePicker still escalates (analytics + customers consumers)",
+  base_files: { "app/javascript/components/DateRangePicker.tsx" => "old" },
+  head_files: { "app/javascript/components/DateRangePicker.tsx" => "new" },
+  expect_escalate: true,
+)
+
+check(
+  "useRecaptcha still escalates (checkout + profile follow consumers)",
+  base_files: { "app/javascript/components/useRecaptcha.tsx" => "old" },
+  head_files: { "app/javascript/components/useRecaptcha.tsx" => "new" },
+  expect_escalate: true,
+)
+
+check(
+  "data/search still escalates (discover + storefront editor consumers)",
+  base_files: { "app/javascript/data/search.ts" => "old" },
   head_files: { "app/javascript/data/search.ts" => "new" },
-  expect_specs: %w[
-    spec/requests/discover/index_spec.rb
-    spec/requests/user/product_panel/product_panel_sort_filter_spec.rb
-  ],
+  expect_escalate: true,
 )
 
 check(
@@ -1109,6 +1051,24 @@ check(
   },
   head_files: { "app/javascript/pages/Users/Coffee.tsx" => "new" },
   expect_specs: %w[spec/requests/purchases/product/coffee_spec.rb],
+)
+
+check(
+  "Users/Show selects profile request specs (storefront-only)",
+  base_files: {
+    "spec/requests/user/profile_spec.rb" => SPEC_STUB,
+    "spec/controllers/users/review_reminders_controller_spec.rb" => SPEC_STUB,
+    "app/javascript/pages/Users/Show.tsx" => "old",
+  },
+  head_files: { "app/javascript/pages/Users/Show.tsx" => "new" },
+  expect_specs: %w[spec/requests/user/profile_spec.rb],
+)
+
+check(
+  "Users/ReviewReminders still escalates (not storefront)",
+  base_files: { "app/javascript/pages/Users/ReviewReminders/Unsubscribe.tsx" => "old" },
+  head_files: { "app/javascript/pages/Users/ReviewReminders/Unsubscribe.tsx" => "new" },
+  expect_escalate: true,
 )
 
 check(
@@ -1154,6 +1114,36 @@ check(
   },
   head_files: { "config/initializers/005_apple.rb" => "new" },
   expect_escalate: true,
+)
+
+check(
+  "alterity initializer maps to alterity_spec instead of escalating",
+  base_files: {
+    "spec/config/initializers/alterity_spec.rb" => SPEC_STUB,
+    "config/initializers/alterity.rb" => "old",
+  },
+  head_files: { "config/initializers/alterity.rb" => "new" },
+  expect_specs: %w[spec/config/initializers/alterity_spec.rb],
+)
+
+check(
+  "instant_ddl_first initializer maps to its dedicated spec",
+  base_files: {
+    "spec/config/initializers/instant_ddl_first_spec.rb" => SPEC_STUB,
+    "config/initializers/instant_ddl_first.rb" => "old",
+  },
+  head_files: { "config/initializers/instant_ddl_first.rb" => "new" },
+  expect_specs: %w[spec/config/initializers/instant_ddl_first_spec.rb],
+)
+
+check(
+  "active_storage_jobs initializer maps to its dedicated spec",
+  base_files: {
+    "spec/config/initializers/active_storage_jobs_spec.rb" => SPEC_STUB,
+    "config/initializers/active_storage_jobs.rb" => "old",
+  },
+  head_files: { "config/initializers/active_storage_jobs.rb" => "new" },
+  expect_specs: %w[spec/config/initializers/active_storage_jobs_spec.rb],
 )
 
 check(

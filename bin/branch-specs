@@ -82,15 +82,6 @@ DISCOVER_FLOW_SPECS = %w[spec/requests/discover].freeze
 WISHLIST_FLOW_SPECS = %w[spec/requests/wishlists].freeze
 DOWNLOAD_PAGE_SPECS = %w[spec/requests/download_page].freeze
 WORKFLOW_FLOW_SPECS = %w[spec/requests/workflows_spec.rb].freeze
-# Shared editor mounts on product, email, download, profile, and workflow
-# surfaces. Product-only fanout would let a change merge without those
-# consumers' request specs.
-EDITOR_FLOW_SPECS = (
-  PRODUCT_FLOW_SPECS + EMAIL_FLOW_SPECS + DOWNLOAD_PAGE_SPECS +
-  PROFILE_FLOW_SPECS + WORKFLOW_FLOW_SPECS +
-  %w[spec/controllers/pages_controller_spec.rb]
-).freeze
-MAILER_FLOW_SPECS = %w[spec/mailers].freeze
 HELP_CENTER_SPECS = %w[
   spec/requests/help_center_spec.rb
   spec/requests/help_center
@@ -151,32 +142,39 @@ FANOUT = {
   # authorize screens live in oauth_authorizations*_spec.rb.
   %r{\Aapp/views/doorkeeper/} => %w[spec/requests/oauth_authorizations_spec.rb spec/requests/oauth_authorize_scope_list_spec.rb],
   %r{\Aspec/support/dynamodb\.rb\z} => %w[spec/services/email_engagement_dynamo_store_spec.rb],
-  # Harvest 2026-09-12. A mapping is only safe when the spec set covers
-  # every flow that imports/renders/reads the source — not the PR that
-  # happened to share the path. Unions that exceed MAX_SELECTED_FILES
-  # escalate (the safe direction).
-  %r{\Aapp/javascript/components/Settings/} => SETTINGS_FLOW_SPECS + %w[spec/requests/oauth_applications_pages_spec.rb], # ApplicationForm also mounts on Oauth/Applications/Edit
-  %r{\Aapp/javascript/(components|pages)/Payouts/} => PAYOUT_PAGE_SPECS, # #7438 #7495
-  %r{\Aapp/javascript/pages/Emails/} => EMAIL_FLOW_SPECS, # #7578 #7580
-  %r{\Aapp/javascript/components/EmailsPage/} => EMAIL_FLOW_SPECS + %w[spec/requests/followers], # Layout also mounts on Followers/Index
-  %r{\Aapp/javascript/data/installments} => EMAIL_FLOW_SPECS, # #7578
-  %r{\Aapp/models/help_center/articles\.yml\z} => HELP_CENTER_SPECS, # YAML also feeds ArticleText + the v2 help API
-  %r{\Aapp/javascript/components/TiptapExtensions/} => EDITOR_FLOW_SPECS,
-  %r{\Aapp/javascript/components/RichTextEditor} => EDITOR_FLOW_SPECS,
-  %r{\Aapp/javascript/components/ImageUploader} => PRODUCT_FLOW_SPECS + PROFILE_FLOW_SPECS, # LogoInput avatar upload
-  %r{\Aapp/javascript/components/ReviewForm} => PRODUCT_FLOW_SPECS + DOWNLOAD_PAGE_SPECS + %w[spec/requests/library_spec.rb spec/requests/customers/customers_spec.rb],
-  %r{\Aapp/javascript/components/Review\.tsx\z} => PRODUCT_FLOW_SPECS + DOWNLOAD_PAGE_SPECS + %w[spec/requests/library_spec.rb spec/requests/customers/customers_spec.rb],
-  %r{\Aapp/javascript/components/ReviewVideoPlayer} => PRODUCT_FLOW_SPECS + DOWNLOAD_PAGE_SPECS + %w[spec/requests/library_spec.rb spec/requests/customers/customers_spec.rb],
-  %r{\Aapp/javascript/components/DiscordButton} => DOWNLOAD_PAGE_SPECS + CHECKOUT_FLOW_SPECS, # also Checkout/Receipt
-  %r{\Aapp/javascript/components/DownloadPage/} => DOWNLOAD_PAGE_SPECS, # #7529
+  # Harvest 2026-09-12, round 3. Shared components whose consumers span
+  # more than one flow ESCALATE. Do not raise MAX_SELECTED_FILES to keep
+  # an incomplete union (RichTextEditor importer-complete union is 157).
+  # Importer traces below are rg from "$app/<module>" (or the inertia render).
+  %r{\Aapp/javascript/components/Settings/} => SETTINGS_FLOW_SPECS + %w[spec/requests/oauth_applications_pages_spec.rb],
+  # Importers: pages/Settings/* Layout/Advanced/Payments; also
+  # Oauth/Applications/Edit.tsx:7 ApplicationForm and :8 Layout.
+  %r{\Aapp/javascript/(components|pages)/Payouts/} => PAYOUT_PAGE_SPECS,
+  # Renderer: balance_controller.rb:14 inertia "Payouts/Index".
+  %r{\Aapp/javascript/pages/Emails/} => EMAIL_FLOW_SPECS,
+  %r{\Aapp/javascript/components/EmailsPage/} => EMAIL_FLOW_SPECS + %w[spec/requests/followers],
+  # Importers: pages/Emails/{Edit,Scheduled,Published,Drafts,New}; also
+  # Followers/Index.tsx:9 EmailsLayout.
+  %r{\Aapp/javascript/data/installments} => EMAIL_FLOW_SPECS,
+  %r{\Aapp/models/help_center/articles.yml\z} => HELP_CENTER_SPECS,
+  # Consumers: article_text.rb:90/:122 HelpCenter::Article.all;
+  # api/v2/help_articles_controller.rb:25/:31/:36.
+  %r{\Aapp/javascript/components/DiscordButton} => DOWNLOAD_PAGE_SPECS + CHECKOUT_FLOW_SPECS,
+  # Importers: DownloadPage/WithContent.tsx:19, Checkout/Receipt.tsx:13.
+  %r{\Aapp/javascript/components/DownloadPage/} => DOWNLOAD_PAGE_SPECS,
   %r{\Aapp/javascript/data/discord_integration} => DOWNLOAD_PAGE_SPECS + CHECKOUT_FLOW_SPECS + %w[spec/requests/products/edit/integrations/discord_integrations_spec.rb],
-  %r{\Aapp/javascript/data/product_reviews} => PRODUCT_FLOW_SPECS + DOWNLOAD_PAGE_SPECS + %w[spec/requests/library_spec.rb spec/requests/customers/customers_spec.rb],
-  %r{\Aapp/javascript/components/DateRangePicker} => ANALYTICS_FLOW_SPECS, # #7259
-  %r{\Aapp/javascript/components/useRecaptcha} => CHECKOUT_FLOW_SPECS, # #7203
-  %r{\Aapp/javascript/parsers/profile} => PROFILE_FLOW_SPECS, # #7341
+  # Importers: DiscordButton.tsx:4 join/leave;
+  # ProductEdit/ProductTab/DiscordIntegrationEditor.tsx:4 fetchServerInfo.
+  %r{\Aapp/javascript/parsers/profile} => PROFILE_FLOW_SPECS,
   %r{\Aapp/javascript/pages/Users/Coffee} => PROFILE_FLOW_SPECS + %w[spec/requests/purchases/product/coffee_spec.rb],
-  %r{\Aapp/javascript/pages/Users/} => PROFILE_FLOW_SPECS,
+  # Renderer: users_controller.rb:115 Users/Coffee.
+  %r{\Aapp/javascript/pages/Users/Show} => PROFILE_FLOW_SPECS,
+  # Renderer: users_controller.rb:35 Users/Show storefront.
+  %r{\Aapp/javascript/pages/Users/Subscribe} => PROFILE_FLOW_SPECS,
+  # Renderer: users_controller.rb:125 Users/Subscribe, :133 SubscribePreview.
+  # Users/ReviewReminders is not storefront (review_reminders_controller) — escalate.
   %r{\Aapp/javascript/pages/User/Passwords/} => %w[spec/requests/password_reset_spec.rb spec/requests/login_spec.rb],
+  # Renderer: user/passwords_controller.rb:16 New, :39 Edit.
   %r{\Aapp/javascript/pages/UrlRedirects/} => DOWNLOAD_PAGE_SPECS,
   %r{\Aapp/javascript/pages/Pages/} => %w[
     spec/controllers/pages_controller_spec.rb
@@ -184,6 +182,7 @@ FANOUT = {
     spec/requests/pages_landing_embed_routing_spec.rb
     spec/requests/pages_landing_embed_storage_shim_spec.rb
   ],
+  # Renderer: pages_controller.rb:25 Index, :42/:77/:88 Edit.
   %r{\Aapp/javascript/pages/Dashboard/} => %w[spec/requests/dashboard_spec.rb],
   %r{\Aapp/javascript/pages/Customers/} => %w[spec/requests/customers],
   %r{\Aapp/javascript/pages/Library/} => %w[spec/requests/library_spec.rb],
@@ -191,20 +190,21 @@ FANOUT = {
   %r{\Aapp/javascript/pages/Followers/} => %w[spec/requests/followers],
   %r{\Aapp/javascript/pages/Reviews/} => PRODUCT_FLOW_SPECS + DOWNLOAD_PAGE_SPECS + %w[spec/requests/library_spec.rb],
   %r{\Aapp/javascript/pages/Workflows/} => WORKFLOW_FLOW_SPECS,
-  %r{\Aapp/javascript/data/paypal} => CHECKOUT_FLOW_SPECS, # Checkout/PaymentForm billing agreement, not Settings
-  %r{\Aapp/javascript/data/search} => DISCOVER_FLOW_SPECS + %w[spec/requests/user/product_panel], # CardGrid storefront filter
-  %r{\Aapp/javascript/pages/Discover/} => DISCOVER_FLOW_SPECS, # #7236
-  %r{\Aapp/javascript/pages/Wishlists/} => WISHLIST_FLOW_SPECS, # #7236
-  %r{\Aapp/javascript/components/WorkflowsPage/} => WORKFLOW_FLOW_SPECS, # #7474
+  %r{\Aapp/javascript/data/paypal} => CHECKOUT_FLOW_SPECS,
+  # Importers: Checkout/PaymentForm.tsx:33 createBillingAgreement (not Settings).
+  %r{\Aapp/javascript/pages/Discover/} => DISCOVER_FLOW_SPECS,
+  %r{\Aapp/javascript/pages/Wishlists/} => WISHLIST_FLOW_SPECS,
+  %r{\Aapp/javascript/components/WorkflowsPage/} => WORKFLOW_FLOW_SPECS,
   %r{\Aapp/javascript/entrypoints/custom_html_analytics} => %w[
     spec/requests/products/show/custom_html_analytics_spec.rb
     spec/requests/profile_custom_html_spec.rb
+    spec/requests/profile_analytics_spec.rb
     spec/requests/custom_html_background_wiring_spec.rb
     spec/controllers/links_controller_custom_html_spec.rb
     spec/controllers/users_controller_custom_html_spec.rb
     spec/requests/products/show
   ],
-  %r{\Aapp/javascript/stylesheets/_email} => MAILER_FLOW_SPECS, # #7156 #7404
+  # Renderers: links_controller custom HTML + users_controller.rb:425 profile wrapper.
 }.freeze
 
 # Config files with dedicated, local coverage. Boot-global files (domain.rb,
