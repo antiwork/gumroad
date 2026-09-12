@@ -148,9 +148,8 @@ class LaterChargePresentment < ApplicationRecord
         return
       end
 
-      # Stripe's charge units have to match the amount we send. Buyer-presentment KRW is
-      # converted to whole won (charge_subunit_to_unit); TWD is rounded to whole NT$.
-      # Seller-priced KRW stays on 1/100-won storage and is not used on this path.
+      # Buyer-presentment KRW is converted to whole won and TWD is rounded to whole NT$;
+      # seller-priced KRW stays on 1/100-won storage and must never reach this path.
       unless StripeChargeProcessor.charge_minor_units_compatible?(currency)
         errors.add(:presentment_currency, "cannot be charged in minor units by Stripe")
       end

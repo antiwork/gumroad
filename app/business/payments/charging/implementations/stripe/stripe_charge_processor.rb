@@ -91,10 +91,8 @@ class StripeChargeProcessor
     INDIA_CARD_MANDATE_CURRENCIES.include?(currency.to_s.downcase)
   end
 
-  # Whether checkout can produce a Stripe-chargeable amount in this currency.
-  # KRW is stored as 1/100 won for seller pricing (config/initializers/money.rb) but
-  # charged in whole won — presentment conversion uses charge_subunit_to_unit.
-  # TWD charges are rounded to whole NT$ (amounts divisible by 100).
+  # KRW is stored as 1/100 won for seller pricing (config/initializers/money.rb) but charged
+  # in whole won, and TWD must be divisible by 100 — presentment converts or rounds first.
   def self.charge_minor_units_compatible?(currency)
     return false if currency.blank?
 
@@ -105,15 +103,15 @@ class StripeChargeProcessor
     subunit_to_unit(currency) == (ZERO_DECIMAL_CURRENCIES.include?(currency) ? 1 : 100)
   end
 
-  # Minor units Stripe's Charge/PaymentIntent amount uses. Seller-priced KRW stays on
-  # Money's 100-subunit storage; buyer-presentment KRW uses this (whole won).
+  # Stripe's charge scale, which diverges from Gumroad's storage scale only for KRW: seller
+  # prices stay 1/100 won, buyer presentment is whole won.
   def self.charge_subunit_to_unit(currency)
     currency = currency.to_s.downcase
     ZERO_DECIMAL_CURRENCIES.include?(currency) ? 1 : subunit_to_unit(currency)
   end
 
-  # Presentment columns store Stripe charge units. Money/CurrencyHelper still use
-  # Gumroad's storage scale (KRW = 1/100 won). Convert before MoneyFormatter.
+  # Presentment columns store Stripe charge units; MoneyFormatter and CurrencyHelper read
+  # Gumroad's storage scale, so convert before either of them formats the amount.
   def self.money_subunits_from_charge_amount(amount_cents, currency)
     amount = amount_cents.to_i
     charge_sub = charge_subunit_to_unit(currency)
@@ -133,8 +131,8 @@ class StripeChargeProcessor
     )
   end
 
-  # Listed-price cents are Gumroad storage units. Sending them to Stripe as the
-  # PaymentIntent amount is only safe when that scale matches charge_subunit_to_unit.
+  # Listed-price cents are Gumroad storage units, so they only match what Stripe charges
+  # when the two scales agree.
   def self.listed_amount_matches_charge_units?(currency)
     return false if currency.blank?
 
