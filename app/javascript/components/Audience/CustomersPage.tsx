@@ -484,7 +484,7 @@ const CustomersPage = ({
                       style={{ cursor: "pointer" }}
                     >
                       <TableCell>
-                        {customer.shipping && !customer.shipping.tracking.shipped ? (
+                        {customer.shipping?.tracking && !customer.shipping.tracking.shipped ? (
                           <WithTooltip tip="Not Shipped">
                             <Truck
                               style={{ marginRight: "var(--spacer-2)" }}

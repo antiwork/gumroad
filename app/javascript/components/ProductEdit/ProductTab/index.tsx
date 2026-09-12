@@ -456,11 +456,13 @@ export const ProductTab = () => {
                       setShowPreview={setShowRefundPolicyPreview}
                     />
                   ) : null}
-                  <Switch
-                    checked={product.require_shipping}
-                    onChange={(e) => updateProduct({ require_shipping: e.target.checked })}
-                    label="Require shipping information"
-                  />
+                  {isPhysical || product.require_shipping ? (
+                    <Switch
+                      checked={product.require_shipping}
+                      onChange={(e) => updateProduct({ require_shipping: e.target.checked })}
+                      label="Require shipping information"
+                    />
+                  ) : null}
                 </Fieldset>
                 {product.native_type === "membership" ? (
                   <Fieldset>

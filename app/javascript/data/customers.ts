@@ -70,7 +70,7 @@ export type Customer = {
     native_type: ProductNativeType;
   };
   physical: { sku: string; order_number: string } | null;
-  shipping: { address: Address; tracking: Tracking; price: string } | null;
+  shipping: { address: Address; tracking: Tracking | null; price: string } | null;
   created_at: string;
   price: {
     cents: number;
