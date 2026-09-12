@@ -54,6 +54,8 @@ class Ai::AnthropicClient
   # Anthropic is entirely down. Routing is opt-in: it turns on only when OPENROUTER_API_KEY is
   # configured, and without it every request goes straight to Anthropic exactly as before.
   OPENROUTER_API_URL = "https://openrouter.ai/api/v1/messages"
+  VERCEL_HOST = "ai-gateway.vercel.sh"
+  GATEWAYS = %i[anthropic openrouter vercel].freeze
   API_VERSION = "2023-06-01"
   # Claude Opus 4.7 — top of the vending-bench leaderboard for autonomous commercial operation, which
   # is exactly the store-management job the agent does for creators.
@@ -111,16 +113,25 @@ class Ai::AnthropicClient
   # duration of the response — a healthy stream that takes minutes to finish is fine as long as
   # tokens keep arriving. For a buffered request it bounds the wait for the response to start,
   # which is effectively the model's full generation time (nothing is sent until it finishes).
-  def initialize(timeout: 60, model: DEFAULT_MODEL, fallback_model: nil)
+  def initialize(timeout: 60, model: DEFAULT_MODEL, fallback_model: nil, gateway: nil)
     @timeout = timeout
     @model = model
     @fallback_model_override = fallback_model
+    @preferred_gateway = gateway&.to_sym
+    if @preferred_gateway && GATEWAYS.exclude?(@preferred_gateway)
+      raise ArgumentError, "Unknown gateway #{gateway.inspect} (expected #{GATEWAYS.join(", ")})"
+    end
     # Seconds already spent sleeping between retries; compared against RETRY_SLEEP_BUDGET_IN_SECONDS.
     @retry_sleep_spent = 0.0
     @served_models = []
+    @using_fallback_model = false
   end
 
   attr_reader :served_models
+
+  def gateway_name
+    resolved_gateway.to_s
+  end
 
   # Buffered request. `system` is Anthropic's top-level system prompt; `messages` is the Anthropic
   # message array (role + content); `tools` is the Anthropic tool-schema array (optional).
@@ -128,14 +139,16 @@ class Ai::AnthropicClient
   # surfacing, because a buffered call has no partial output to worry about.
   # @return [Result]
   def messages(system:, messages:, tools: nil, max_tokens: DEFAULT_MAX_TOKENS, thinking: nil)
-    body = request_body(system:, messages:, tools:, max_tokens:, stream: false, thinking:)
-    with_retries do
-      response = http.post(api_url, json: body)
-      raise_for_status!(response, kind: "request")
+    with_vercel_model_fallback do
+      body = request_body(system:, messages:, tools:, max_tokens:, stream: false, thinking:)
+      with_retries do
+        response = http.post(api_url, json: body)
+        raise_for_status!(response, kind: "request")
 
-      parse_message(response.parse)
-    rescue HTTP::Error => e
-      raise TransientError, "Anthropic network error: #{e.message}"
+        parse_message(response.parse)
+      rescue HTTP::Error => e
+        raise TransientError, "Anthropic network error: #{e.message}"
+      end
     end
   end
 
@@ -168,57 +181,59 @@ class Ai::AnthropicClient
   # @yieldparam text [String] a chunk of assistant text
   # @return [Result]
   def stream_messages(system:, messages:, tools: nil, max_tokens: DEFAULT_MAX_TOKENS, on_discard_streamed_text: nil, &on_text)
-    body = request_body(system:, messages:, tools:, max_tokens:, stream: true)
     yielded_any = false
 
     begin
-      with_retries(retryable: -> { !yielded_any }) do
-        text = +""
-        # Content blocks accumulate by index: text blocks grow `text`, tool_use blocks grow a JSON string
-        # we parse when the block closes.
-        blocks = {}
-        stop_reason = nil
+      with_vercel_model_fallback(yielded: -> { yielded_any }) do
+        body = request_body(system:, messages:, tools:, max_tokens:, stream: true)
+        with_retries(retryable: -> { !yielded_any }) do
+          text = +""
+          # Content blocks accumulate by index: text blocks grow `text`, tool_use blocks grow a JSON string
+          # we parse when the block closes.
+          blocks = {}
+          stop_reason = nil
 
-        response = http.post(api_url, json: body)
-        raise_for_status!(response, kind: "stream")
+          response = http.post(api_url, json: body)
+          raise_for_status!(response, kind: "stream")
 
-        each_sse_event(response.body) do |event, data|
-          case event
-          when "message_start"
-            # The first stream event names the model actually generating this reply — the only
-            # place a fallback shows up on a stream. Log it so fallback turns are visible in app logs.
-            log_served_model(data.dig("message", "model"))
-          when "content_block_start"
-            index = data["index"]
-            block = data["content_block"] || {}
-            if block["type"] == "tool_use"
-              blocks[index] = { type: "tool_use", id: block["id"], name: block["name"], json: +"" }
-            else
-              blocks[index] = { type: "text" }
-            end
-          when "content_block_delta"
-            delta = data["delta"] || {}
-            case delta["type"]
-            when "text_delta"
-              chunk = delta["text"].to_s
-              next if chunk.empty?
-              text << chunk
-              yielded_any = true
-              on_text&.call(chunk)
-            when "input_json_delta"
+          each_sse_event(response.body) do |event, data|
+            case event
+            when "message_start"
+              # The first stream event names the model actually generating this reply — the only
+              # place a fallback shows up on a stream. Log it so fallback turns are visible in app logs.
+              log_served_model(data.dig("message", "model"))
+            when "content_block_start"
               index = data["index"]
-              blocks[index][:json] << delta["partial_json"].to_s if blocks[index]
+              block = data["content_block"] || {}
+              if block["type"] == "tool_use"
+                blocks[index] = { type: "tool_use", id: block["id"], name: block["name"], json: +"" }
+              else
+                blocks[index] = { type: "text" }
+              end
+            when "content_block_delta"
+              delta = data["delta"] || {}
+              case delta["type"]
+              when "text_delta"
+                chunk = delta["text"].to_s
+                next if chunk.empty?
+                text << chunk
+                yielded_any = true
+                on_text&.call(chunk)
+              when "input_json_delta"
+                index = data["index"]
+                blocks[index][:json] << delta["partial_json"].to_s if blocks[index]
+              end
+            when "message_delta"
+              stop_reason = data.dig("delta", "stop_reason") || stop_reason
+            when "error"
+              raise embedded_error(data, kind: "stream")
             end
-          when "message_delta"
-            stop_reason = data.dig("delta", "stop_reason") || stop_reason
-          when "error"
-            raise embedded_error(data, kind: "stream")
           end
-        end
 
-        Result.new(text:, tool_uses: assemble_tool_uses(blocks, stop_reason:), stop_reason:)
-      rescue HTTP::Error => e
-        raise TransientError, "Anthropic network error: #{e.message}"
+          Result.new(text:, tool_uses: assemble_tool_uses(blocks, stop_reason:), stop_reason:)
+        rescue HTTP::Error => e
+          raise TransientError, "Anthropic network error: #{e.message}"
+        end
       end
     rescue UnreadableToolCallError => e
       # Every streamed attempt "completed" yet delivered a corrupted tool call — retrying the same
@@ -402,19 +417,19 @@ class Ai::AnthropicClient
 
     def request_body(system:, messages:, tools:, max_tokens:, stream:, thinking: nil)
       body = {
-        model:,
+        model: request_model,
         max_tokens:,
         system: cacheable_system(system),
         messages:,
         stream:,
       }
       body[:tools] = cacheable_tools(tools) if tools.present?
-      # OpenRouter's Anthropic-compatible endpoint accepts a `fallbacks` list (same shape as
-      # Anthropic's SDKs): if Claude errors — rate limit, overload, provider downtime — OpenRouter
-      # retries the request against the fallback model and translates the wire format for it, so
-      # the agent stays up on GPT when Anthropic is down. Sent only when routing through
-      # OpenRouter; Anthropic's own API would reject the unknown parameter.
+      # OpenRouter's Anthropic-compatible endpoint accepts a `fallbacks` list. Anthropic rejects
+      # the unknown parameter; Vercel uses providerOptions.gateway.models instead.
       body[:fallbacks] = [{ model: fallback_model }] if openrouter?
+      if vercel? && !@using_fallback_model && fallback_model.present?
+        body[:providerOptions] = { gateway: { models: [fallback_model] } }
+      end
       body[:thinking] = thinking if thinking.present?
       body
     end
@@ -469,20 +484,61 @@ class Ai::AnthropicClient
     # is sent in the same x-api-key header — OpenRouter's Anthropic-compatible endpoint accepts it
     # there, so nothing else about the request changes.
     def api_key
-      return openrouter_api_key if openrouter?
+      case resolved_gateway
+      when :vercel
+        vercel_api_key
+      when :openrouter
+        openrouter_api_key
+      else
+        key = GlobalConfig.get("ANTHROPIC_API_KEY").presence ||
+              GlobalConfig.get("WALKS_ANTHROPIC_API_KEY").presence
+        raise Error, "Anthropic API key is not configured (set ANTHROPIC_API_KEY)." if key.blank?
 
-      key = GlobalConfig.get("ANTHROPIC_API_KEY").presence ||
-            GlobalConfig.get("WALKS_ANTHROPIC_API_KEY").presence
-      raise Error, "Anthropic API key is not configured (set ANTHROPIC_API_KEY)." if key.blank?
-
-      key
+        key
+      end
     end
 
-    # OpenRouter routing is on when its key is configured, off otherwise. A plain config check (no
-    # feature flag) keeps the switch trivially auditable: delete the key and traffic is back on
-    # Anthropic directly.
     def openrouter?
-      self.class.openrouter_configured?
+      resolved_gateway == :openrouter
+    end
+
+    def vercel?
+      resolved_gateway == :vercel
+    end
+
+    def resolved_gateway
+      case @preferred_gateway
+      when :vercel
+        return :vercel if vercel_configured?
+        return :openrouter if self.class.openrouter_configured?
+
+        :anthropic
+      when :openrouter, :anthropic
+        @preferred_gateway
+      else
+        self.class.openrouter_configured? ? :openrouter : :anthropic
+      end
+    end
+
+    def vercel_configured?
+      vercel_api_key.present? && vercel_messages_url.present?
+    end
+
+    def vercel_api_key
+      GlobalConfig.get("GUMHEAD_UPSTREAM_API_KEY").presence
+    end
+
+    def vercel_messages_url
+      base = GlobalConfig.get("GUMHEAD_UPSTREAM_API_BASE").to_s.strip.chomp("/")
+      return if base.blank?
+
+      uri = URI.parse(base)
+      # Reject http:// — the Gumhead key would otherwise go over plaintext.
+      return unless uri.scheme == "https" && uri.host == VERCEL_HOST
+
+      base.end_with?("/v1") ? "#{base}/messages" : "#{base}/v1/messages"
+    rescue URI::InvalidURIError
+      nil
     end
 
     def openrouter_api_key
@@ -490,7 +546,38 @@ class Ai::AnthropicClient
     end
 
     def api_url
-      openrouter? ? OPENROUTER_API_URL : API_URL
+      case resolved_gateway
+      when :vercel then vercel_messages_url
+      when :openrouter then OPENROUTER_API_URL
+      else API_URL
+      end
+    end
+
+    def request_model
+      @using_fallback_model ? fallback_model : model
+    end
+
+    # Vercel model failover is providerOptions.gateway.models. If that still errors, replay once
+    # on the Opus fallback model — same outcome as OpenRouter's `fallbacks` body param.
+    # StoreAgentService memoizes this client, so the replay flag must not stick across requests.
+    def with_vercel_model_fallback(yielded: -> { false })
+      yield
+    rescue Error => e
+      raise if e.is_a?(UnreadableToolCallError)
+      raise if yielded.call
+      raise unless vercel? && !@using_fallback_model && fallback_model.present? && fallback_model != model
+
+      Rails.logger.warn(
+        "Anthropic Vercel primary failed (#{e.class}: #{e.message}); " \
+        "replaying fallback requested=#{model} gateway=#{gateway_name}"
+      )
+      previous = @using_fallback_model
+      @using_fallback_model = true
+      begin
+        yield
+      ensure
+        @using_fallback_model = previous
+      end
     end
 
     # Caller override first (the store agent falls back to Opus 5) so the config knob stays a
@@ -511,12 +598,13 @@ class Ai::AnthropicClient
       return if served_model.blank?
 
       @served_models << served_model
+      Rails.logger.info("Anthropic request served by #{served_model} via #{gateway_name} (requested #{model})")
 
       requested = normalize_model_name(model)
       served = normalize_model_name(served_model)
       return if served.include?(requested) || requested.include?(served)
 
-      Rails.logger.warn("Anthropic request served by fallback model #{served_model} (requested #{model})")
+      Rails.logger.warn("Anthropic request served by fallback model #{served_model} via #{gateway_name} (requested #{model})")
     end
 
     def normalize_model_name(name)

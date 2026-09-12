@@ -13,6 +13,8 @@ describe Ai::AnthropicClient do
     # Pin OpenRouter routing OFF by default so these specs exercise the direct-to-Anthropic path
     # regardless of what the host machine's environment has configured.
     allow(GlobalConfig).to receive(:get).with("OPENROUTER_API_KEY").and_return(nil)
+    allow(GlobalConfig).to receive(:get).with("GUMHEAD_UPSTREAM_API_KEY").and_return(nil)
+    allow(GlobalConfig).to receive(:get).with("GUMHEAD_UPSTREAM_API_BASE").and_return(nil)
   end
 
   describe "#messages" do
@@ -358,7 +360,7 @@ describe Ai::AnthropicClient do
 
         client.messages(system: "s", messages: [{ role: "user", content: "x" }])
 
-        expect(Rails.logger).to have_received(:warn).with(/served by fallback model openai\/gpt-5 \(requested #{described_class::DEFAULT_MODEL}\)/o)
+        expect(Rails.logger).to have_received(:warn).with(/served by fallback model openai\/gpt-5 via openrouter \(requested #{described_class::DEFAULT_MODEL}\)/o)
       end
 
       it "warns when a stream's message_start names a different model than requested" do
@@ -370,7 +372,7 @@ describe Ai::AnthropicClient do
 
         client.stream_messages(system: "s", messages: [{ role: "user", content: "x" }]) { |_| }
 
-        expect(Rails.logger).to have_received(:warn).with(/served by fallback model openai\/gpt-5/)
+        expect(Rails.logger).to have_received(:warn).with(/served by fallback model openai\/gpt-5 via openrouter/)
       end
 
       it "does not warn when the served model is the requested one restyled by the provider" do
@@ -384,6 +386,174 @@ describe Ai::AnthropicClient do
 
         expect(Rails.logger).not_to have_received(:warn)
       end
+    end
+  end
+
+  describe "Vercel AI Gateway routing" do
+    let(:vercel_url) { "https://ai-gateway.vercel.sh/v1/messages" }
+    let(:openrouter_url) { "https://openrouter.ai/api/v1/messages" }
+    subject(:client) do
+      described_class.new(
+        timeout: 5,
+        gateway: :vercel,
+        model: "deepseek/deepseek-v4.1-flash",
+        fallback_model: "anthropic/claude-opus-5",
+      )
+    end
+
+    before do
+      allow(GlobalConfig).to receive(:get).with("GUMHEAD_UPSTREAM_API_KEY").and_return("sk-vercel-test")
+      allow(GlobalConfig).to receive(:get).with("GUMHEAD_UPSTREAM_API_BASE").and_return("https://ai-gateway.vercel.sh")
+    end
+
+    it "routes to Vercel with the Gumhead key, no OpenRouter fallbacks, and Vercel model failover" do
+      captured = nil
+      stub = stub_request(:post, vercel_url)
+        .with(headers: { "x-api-key" => "sk-vercel-test", "anthropic-version" => "2023-06-01" }) { |request| captured = JSON.parse(request.body); true }
+        .to_return(status: 200, body: { "model" => "deepseek/deepseek-v4.1-flash", "content" => [{ "type" => "text", "text" => "ok" }], "stop_reason" => "end_turn" }.to_json, headers: { "Content-Type" => "application/json" })
+
+      result = client.messages(system: "s", messages: [{ role: "user", content: "x" }])
+
+      expect(stub).to have_been_requested
+      expect(result.text).to eq("ok")
+      expect(client.gateway_name).to eq("vercel")
+      expect(captured["model"]).to eq("deepseek/deepseek-v4.1-flash")
+      expect(captured).not_to have_key("fallbacks")
+      expect(captured["providerOptions"]).to eq("gateway" => { "models" => ["anthropic/claude-opus-5"] })
+      expect(client.served_models).to eq(["deepseek/deepseek-v4.1-flash"])
+    end
+
+    it "joins a /v1 base onto /messages rather than doubling /v1" do
+      allow(GlobalConfig).to receive(:get).with("GUMHEAD_UPSTREAM_API_BASE").and_return("https://ai-gateway.vercel.sh/v1")
+      stub = stub_request(:post, vercel_url)
+        .to_return(status: 200, body: { "content" => [], "stop_reason" => "end_turn" }.to_json, headers: { "Content-Type" => "application/json" })
+
+      client.messages(system: "s", messages: [{ role: "user", content: "x" }])
+
+      expect(stub).to have_been_requested
+    end
+
+    it "falls back to OpenRouter when Vercel config is blank" do
+      allow(GlobalConfig).to receive(:get).with("GUMHEAD_UPSTREAM_API_KEY").and_return(nil)
+      allow(GlobalConfig).to receive(:get).with("GUMHEAD_UPSTREAM_API_BASE").and_return(nil)
+      allow(GlobalConfig).to receive(:get).with("OPENROUTER_API_KEY").and_return("sk-or-test")
+      captured = nil
+      stub = stub_request(:post, openrouter_url)
+        .with(headers: { "x-api-key" => "sk-or-test" }) { |request| captured = JSON.parse(request.body); true }
+        .to_return(status: 200, body: { "content" => [{ "type" => "text", "text" => "ok" }], "stop_reason" => "end_turn" }.to_json, headers: { "Content-Type" => "application/json" })
+
+      result = client.messages(system: "s", messages: [{ role: "user", content: "x" }])
+
+      expect(stub).to have_been_requested
+      expect(result.text).to eq("ok")
+      expect(client.gateway_name).to eq("openrouter")
+      expect(captured["fallbacks"]).to eq([{ "model" => "anthropic/claude-opus-5" }])
+      expect(captured).not_to have_key("providerOptions")
+    end
+
+    it "falls back to OpenRouter when the Gumhead base is not the Vercel host" do
+      allow(GlobalConfig).to receive(:get).with("GUMHEAD_UPSTREAM_API_BASE").and_return("https://openrouter.ai/api/v1")
+      allow(GlobalConfig).to receive(:get).with("OPENROUTER_API_KEY").and_return("sk-or-test")
+      stub = stub_request(:post, openrouter_url)
+        .to_return(status: 200, body: { "content" => [], "stop_reason" => "end_turn" }.to_json, headers: { "Content-Type" => "application/json" })
+
+      client.messages(system: "s", messages: [{ role: "user", content: "x" }])
+
+      expect(stub).to have_been_requested
+      expect(client.gateway_name).to eq("openrouter")
+    end
+
+    it "replays the Opus fallback model on the same Vercel URL after a non-retryable error" do
+      stub_request(:post, vercel_url)
+        .with { |request| JSON.parse(request.body)["model"] == "deepseek/deepseek-v4.1-flash" }
+        .to_return(status: 400, body: { error: { message: "unavailable" } }.to_json)
+      fallback = stub_request(:post, vercel_url)
+        .with { |request| JSON.parse(request.body)["model"] == "anthropic/claude-opus-5" }
+        .to_return(status: 200, body: { "model" => "anthropic/claude-opus-5", "content" => [{ "type" => "text", "text" => "ok" }], "stop_reason" => "end_turn" }.to_json, headers: { "Content-Type" => "application/json" })
+
+      result = client.messages(system: "s", messages: [{ role: "user", content: "x" }])
+
+      expect(fallback).to have_been_requested
+      expect(result.text).to eq("ok")
+      expect(client.served_models).to eq(["anthropic/claude-opus-5"])
+    end
+
+    it "warns with the primary error before replaying the fallback model" do
+      allow(Rails.logger).to receive(:warn)
+      allow(Rails.logger).to receive(:info)
+      stub_request(:post, vercel_url)
+        .with { |request| JSON.parse(request.body)["model"] == "deepseek/deepseek-v4.1-flash" }
+        .to_return(status: 400, body: { error: { message: "unavailable" } }.to_json)
+      stub_request(:post, vercel_url)
+        .with { |request| JSON.parse(request.body)["model"] == "anthropic/claude-opus-5" }
+        .to_return(status: 200, body: { "model" => "anthropic/claude-opus-5", "content" => [{ "type" => "text", "text" => "ok" }], "stop_reason" => "end_turn" }.to_json, headers: { "Content-Type" => "application/json" })
+
+      client.messages(system: "s", messages: [{ role: "user", content: "x" }])
+
+      expect(Rails.logger).to have_received(:warn).with(a_string_matching(
+        /Anthropic Vercel primary failed \(Ai::AnthropicClient::Error:.*unavailable\).*requested=deepseek\/deepseek-v4.1-flash gateway=vercel/
+      ))
+    end
+
+    it "restores the primary model after a fallback replay so the next request still sends gateway models" do
+      captured = []
+      stub_request(:post, vercel_url).to_return do |request|
+        body = JSON.parse(request.body)
+        captured << body
+        if body["model"] == "deepseek/deepseek-v4.1-flash" && captured.one?
+          { status: 400, body: { error: { message: "unavailable" } }.to_json }
+        elsif body["model"] == "anthropic/claude-opus-5"
+          { status: 200, body: { "model" => "anthropic/claude-opus-5", "content" => [{ "type" => "text", "text" => "ok" }], "stop_reason" => "end_turn" }.to_json, headers: { "Content-Type" => "application/json" } }
+        else
+          { status: 200, body: { "model" => "deepseek/deepseek-v4.1-flash", "content" => [{ "type" => "text", "text" => "ok2" }], "stop_reason" => "end_turn" }.to_json, headers: { "Content-Type" => "application/json" } }
+        end
+      end
+
+      client.messages(system: "s", messages: [{ role: "user", content: "x" }])
+      client.messages(system: "s", messages: [{ role: "user", content: "y" }])
+
+      expect(captured.map { |body| body["model"] }).to eq(
+        ["deepseek/deepseek-v4.1-flash", "anthropic/claude-opus-5", "deepseek/deepseek-v4.1-flash"]
+      )
+      expect(captured.last["providerOptions"]).to eq("gateway" => { "models" => ["anthropic/claude-opus-5"] })
+    end
+
+    it "falls back to OpenRouter when the Vercel base is http" do
+      allow(GlobalConfig).to receive(:get).with("GUMHEAD_UPSTREAM_API_BASE").and_return("http://ai-gateway.vercel.sh")
+      allow(GlobalConfig).to receive(:get).with("OPENROUTER_API_KEY").and_return("sk-or-test")
+      stub = stub_request(:post, openrouter_url)
+        .to_return(status: 200, body: { "content" => [], "stop_reason" => "end_turn" }.to_json, headers: { "Content-Type" => "application/json" })
+      plaintext = stub_request(:post, "http://ai-gateway.vercel.sh/v1/messages")
+
+      client.messages(system: "s", messages: [{ role: "user", content: "x" }])
+
+      expect(stub).to have_been_requested
+      expect(plaintext).not_to have_been_requested
+      expect(client.gateway_name).to eq("openrouter")
+    end
+
+    it "logs the gateway name with the served model" do
+      allow(Rails.logger).to receive(:info)
+      stub_request(:post, vercel_url)
+        .to_return(status: 200, body: { "model" => "deepseek/deepseek-v4.1-flash", "content" => [], "stop_reason" => "end_turn" }.to_json, headers: { "Content-Type" => "application/json" })
+
+      client.messages(system: "s", messages: [{ role: "user", content: "x" }])
+
+      expect(Rails.logger).to have_received(:info).with(/served by deepseek\/deepseek-v4.1-flash via vercel/)
+    end
+
+    it "does not send fallbacks on a default Anthropic client" do
+      default_client = described_class.new(timeout: 5)
+      captured = nil
+      stub_request(:post, url)
+        .with { |request| captured = JSON.parse(request.body); true }
+        .to_return(status: 200, body: { "content" => [], "stop_reason" => "end_turn" }.to_json, headers: { "Content-Type" => "application/json" })
+
+      default_client.messages(system: "s", messages: [{ role: "user", content: "x" }])
+
+      expect(default_client.gateway_name).to eq("anthropic")
+      expect(captured).not_to have_key("fallbacks")
+      expect(captured).not_to have_key("providerOptions")
     end
   end
 

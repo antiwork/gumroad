@@ -4,7 +4,7 @@
 # assistant that can answer questions about their store and *propose* changes to it.
 #
 # The agent runs on Grok 4.5 via OpenRouter's Anthropic-compatible endpoint (see MODEL below), with
-# Claude Opus 5 as the request-level fallback when Grok errors. DeepSeek V4 Flash is ramped
+# Claude Opus 5 as the request-level fallback when Grok errors. DeepSeek V4.1 Flash is ramped
 # independently as a third option (see DEEPSEEK_MODEL below), also falling back to Opus.
 #
 # Safety model:
@@ -32,11 +32,9 @@ class Ai::StoreAgentService
   OPENROUTER_FALLBACK_MODEL = "anthropic/claude-opus-5"
   # Below 100%, gates Grok vs Opus per seller in addition to OPENROUTER_API_KEY being configured.
   GROK_RAMP_FEATURE = :store_agent_grok
-  # DeepSeek V4 Flash: cheap, fast MoE model worth ramping as a third option alongside Claude and
-  # Grok — same OpenRouter routing and Anthropic-compatible endpoint, so no client changes needed
-  # beyond the model id. Falls back to Opus rather than Grok so a DeepSeek outage doesn't cascade
-  # into a second experimental model.
-  DEEPSEEK_MODEL = "deepseek/deepseek-v4-flash-0731"
+  # DeepSeek V4.1 Flash: cheap, fast MoE model. Routed through Vercel AI Gateway
+  # (OpenRouter if that config is blank) with Opus as the model fallback.
+  DEEPSEEK_MODEL = "deepseek/deepseek-v4.1-flash"
   DEEPSEEK_FALLBACK_MODEL = "anthropic/claude-opus-5"
   # Below 100%, gates DeepSeek vs Opus per seller in addition to OPENROUTER_API_KEY being
   # configured. Independent of GROK_RAMP_FEATURE — see #client for precedence when both are active
@@ -920,6 +918,7 @@ class Ai::StoreAgentService
           model: @_client_model,
           requested_model: @_client_model,
           served_models: (@_client.respond_to?(:served_models) ? Array(@_client.served_models).uniq : []),
+          gateway: (@_client.respond_to?(:gateway_name) ? @_client.gateway_name : nil),
           outcome:,
           stop_reason: @last_stop_reason,
           tool_iterations: @turn_iterations_used,
@@ -1602,7 +1601,7 @@ class Ai::StoreAgentService
     def client
       @_client ||= if Ai::AnthropicClient.openrouter_configured? && Feature.active?(DEEPSEEK_RAMP_FEATURE, seller)
         @_client_model = DEEPSEEK_MODEL
-        Ai::AnthropicClient.new(timeout: REQUEST_TIMEOUT_IN_SECONDS, model: DEEPSEEK_MODEL, fallback_model: DEEPSEEK_FALLBACK_MODEL)
+        Ai::AnthropicClient.new(timeout: REQUEST_TIMEOUT_IN_SECONDS, model: DEEPSEEK_MODEL, fallback_model: DEEPSEEK_FALLBACK_MODEL, gateway: :vercel)
       elsif Ai::AnthropicClient.openrouter_configured? && Feature.active?(GROK_RAMP_FEATURE, seller)
         @_client_model = OPENROUTER_MODEL
         Ai::AnthropicClient.new(timeout: REQUEST_TIMEOUT_IN_SECONDS, model: OPENROUTER_MODEL, fallback_model: OPENROUTER_FALLBACK_MODEL)
