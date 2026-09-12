@@ -684,6 +684,23 @@ describe CustomerMailer do
       wrapper = link.ancestors("table").find { |table| table["role"] == "presentation" }
       expect(wrapper).to be_present
       expect(wrapper["class"].to_s.split).to include("reset")
+      # Email CSS only resets `table.reset > tbody > *`. Nokogiri HTML4 does not
+      # invent an implicit tbody, so Premailer would leave the generic row
+      # border and cell padding on this wrapper without an explicit one.
+      expect(body).to match(/<table class="reset"[^>]*>\s*<tbody>\s*<tr>/)
+      row = wrapper.at_css("> tbody > tr")
+      cell = row&.at_css("> td")
+      expect(row).to be_present
+      expect(cell).to be_present
+
+      inlined = Premailer::Rails::CustomizedPremailer.new(body).to_inline_css
+      inlined_doc = Nokogiri::HTML(inlined)
+      inlined_link = inlined_doc.at_css("a.button.primary")
+      inlined_wrapper = inlined_link.ancestors("table").find { |table| table["role"] == "presentation" }
+      inlined_row = inlined_wrapper.at_css("> tbody > tr")
+      inlined_cell = inlined_row.at_css("> td")
+      expect(inlined_cell["style"].to_s).to match(/padding:\s*0/)
+      expect(inlined_row["style"].to_s).to match(/border-style:\s*none/)
     end
 
     it "discloses sales tax when it was taxed" do
