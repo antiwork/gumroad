@@ -1,35 +1,13 @@
 # frozen_string_literal: true
 
-# Ai::AnthropicClient is a thin wrapper over Anthropic's Messages API (the same upstream the Walks
-# synthesis endpoint already uses server-side). It exists so Ai::StoreAgentService can run on Claude
-# Opus 4.7 — which benchmarks best at autonomous, money-making store operations — while keeping all
-# of Anthropic's wire-format quirks (system as a top-level param, tool_use/tool_result content
-# blocks, the streaming event protocol) out of the service.
-#
-# It exposes two calls, matching how the agent uses an LLM:
-#   - #messages: one buffered request. Returns a normalized hash
-#       { text:, tool_uses: [{ id:, name:, input: }], stop_reason: }.
-#     Used for the cheap, non-streamed follow-up-suggestions call.
-#   - #stream_messages: one streaming request. Yields each text delta to the block as it arrives and
-#     returns the same normalized hash once the stream completes, with tool_use blocks fully
-#     assembled from their streamed input_json fragments.
-#
-# The API key stays server-side (GlobalConfig). Nothing here is creator-specific; the seller scoping
-# lives entirely in StoreAgentApiClient, which this never touches.
-#
-# When OPENROUTER_API_KEY is configured, all traffic routes through OpenRouter's
-# Anthropic-compatible endpoint instead of Anthropic directly. OpenRouter acts as a gateway:
-# it fails over between Anthropic's hosting providers, and falls back to GPT (via the request's
-# `fallbacks` parameter) when Claude is entirely unavailable — so an Anthropic outage degrades
-# the agent instead of taking it down. Without the key, behavior is byte-identical to before.
+# Anthropic Messages API client for StoreAgentService. OPENROUTER_API_KEY routes every request
+# through OpenRouter's Anthropic-compatible endpoint (provider failover + `fallbacks` to GPT);
+# without it, traffic is Anthropic-direct.
 class Ai::AnthropicClient
   class Error < StandardError; end
 
-  # A failure that is safe and worthwhile to retry: the upstream was momentarily overloaded, rate
-  # limited, returned a 5xx, the network dropped, or a streamed tool call arrived with its JSON
-  # cut off. Distinct from Error so callers (and our own retry loop) never retry a deterministic
-  # failure like a rejected request. `retry_after` carries the server's own back-off hint (the
-  # Retry-After header on a 429) in seconds, when it sent one.
+  # Retryable: overload, 5xx, dropped network, or a streamed tool call whose JSON was cut off.
+  # `retry_after` is the 429 Retry-After header in seconds, when the server sent one.
   class TransientError < Error
     attr_reader :retry_after
 
@@ -39,68 +17,40 @@ class Ai::AnthropicClient
     end
   end
 
-  # A "completed" streamed turn (stop_reason arrived) whose tool call's JSON still doesn't parse —
-  # the gateway lost or cut off input_json_delta fragments in transit. Distinguished from the other
-  # transient failures because it gets a dedicated recovery: once the streamed retries are
-  # exhausted, #stream_messages replays the request once WITHOUT streaming. A buffered response
-  # body arrives in one piece, so it cannot lose JSON fragments the way the streaming channel can.
+  # Streamed turn delivered stop_reason but the tool-call JSON still doesn't parse (gateway lost
+  # input_json_delta fragments). After streamed retries, #stream_messages replays once without
+  # streaming — a buffered body cannot drop those fragments.
   class UnreadableToolCallError < TransientError; end
 
   API_URL = "https://api.anthropic.com/v1/messages"
-  # OpenRouter exposes an endpoint compatible with Anthropic's Messages API — same request and
-  # response shapes, same streaming protocol — so routing through it is just a different URL and
-  # API key. We use it as a reliability layer: OpenRouter fails over between Anthropic's own
-  # providers and, via the `fallbacks` request parameter below, to a non-Anthropic model when
-  # Anthropic is entirely down. Routing is opt-in: it turns on only when OPENROUTER_API_KEY is
-  # configured, and without it every request goes straight to Anthropic exactly as before.
   OPENROUTER_API_URL = "https://openrouter.ai/api/v1/messages"
   VERCEL_HOST = "ai-gateway.vercel.sh"
   GATEWAYS = %i[anthropic openrouter vercel].freeze
   API_VERSION = "2023-06-01"
-  # Claude Opus 4.7 — top of the vending-bench leaderboard for autonomous commercial operation, which
-  # is exactly the store-management job the agent does for creators.
   DEFAULT_MODEL = "claude-opus-4-7"
   DEFAULT_MAX_TOKENS = 1024
-  # When requests go through OpenRouter, this model is tried if the primary errors out (provider
-  # down, rate limited, overloaded). OpenRouter translates the Anthropic-format request for the
-  # fallback provider, so no OpenAI-specific code is needed here. The `~` prefix is OpenRouter's
-  # "latest in this family" resolution, so we always fall back to the current GPT flagship without
-  # having to bump a pinned version. Overridable per-instance (the store agent falls back to Opus
-  # instead) or via the OPENROUTER_FALLBACK_MODEL config.
+  # OpenRouter `~` = latest in family. Override per-instance (store agent uses Opus) or
+  # OPENROUTER_FALLBACK_MODEL.
   DEFAULT_FALLBACK_MODEL = "~openai/gpt-latest"
 
-  # Whether traffic routes through OpenRouter rather than Anthropic directly. Public because model
-  # choice depends on it: OpenRouter hosts non-Anthropic models (the store agent requests Grok),
-  # while a direct Anthropic connection can only serve Claude.
+  # Public: OpenRouter can serve non-Claude models (store agent requests Grok); Anthropic-direct cannot.
   def self.openrouter_configured?
     GlobalConfig.get("OPENROUTER_API_KEY").present?
   end
 
-  # How long we wait to open the connection and to send the request. These are short on purpose:
-  # if Anthropic isn't reachable quickly, we want to fail fast and retry rather than sit on a dead
-  # socket while the seller stares at a spinner.
+  # Short on purpose: fail fast and retry rather than sit on a dead socket.
   CONNECT_TIMEOUT_IN_SECONDS = 10
   WRITE_TIMEOUT_IN_SECONDS = 30
 
-  # Total attempts per request (1 original + up to 2 retries) and the base delay between them
-  # (attempt N sleeps N * base). Retries only fire for TransientError, and a streaming request is
-  # never retried once any output has reached the caller — the seller would see the reply restart.
+  # Never retry a stream once any output has reached the caller — the seller would see the reply restart.
   MAX_ATTEMPTS = 3
   RETRY_BASE_DELAY_IN_SECONDS = 1
 
-  # Ceiling on the TOTAL seconds one client instance may spend asleep between retries, across all
-  # of its calls. The agent's buffered tool loop makes several requests on one client from the web
-  # request thread (which Rack::Timeout is watching), so without a shared cap each request could
-  # add its own retry delays and stack up many seconds of blocked time. Once the budget is spent,
-  # failures surface immediately instead of sleeping.
+  # Cap on sleep across every call on this instance. The agent's tool loop shares one client on
+  # the web thread (Rack::Timeout); per-request delays would stack.
   RETRY_SLEEP_BUDGET_IN_SECONDS = 6
 
-  # Response statuses worth a retry: request timeout (408), rate limit (429), server errors (5xx),
-  # and Anthropic's "overloaded" status (529). 408 was added for OpenRouter (it returns 408 when the
-  # upstream model times out; Anthropic itself doesn't use it today), but the list applies to both
-  # routing modes — so if a proxy in front of api.anthropic.com ever returned a 408, we'd retry that
-  # too, which is the right call for a timeout either way. Anything else (400 bad request, 401 bad
-  # key, ...) is deterministic — retrying would just repeat the same failure slower.
+  # 408 is OpenRouter's upstream-timeout (Anthropic does not send it). 400/401 are not retried.
   RETRYABLE_STATUS_CODES = [408, 429, 500, 502, 503, 504, 529].freeze
   # `error` objects with these types — arriving mid-stream or inside a buffered 200 body — are the
   # embedded equivalents of the retryable statuses above.
@@ -108,11 +58,8 @@ class Ai::AnthropicClient
 
   Result = Struct.new(:text, :tool_uses, :stop_reason, keyword_init: true)
 
-  # `timeout` is the READ timeout: how long a single read from Anthropic may block before we give
-  # up. For a streaming request that means "seconds of silence between chunks", not the total
-  # duration of the response — a healthy stream that takes minutes to finish is fine as long as
-  # tokens keep arriving. For a buffered request it bounds the wait for the response to start,
-  # which is effectively the model's full generation time (nothing is sent until it finishes).
+  # `timeout` is per-read silence, not total stream duration. Buffered calls wait this long for
+  # the whole body (nothing is sent until generation finishes).
   def initialize(timeout: 60, model: DEFAULT_MODEL, fallback_model: nil, gateway: nil)
     @timeout = timeout
     @model = model
@@ -121,7 +68,6 @@ class Ai::AnthropicClient
     if @preferred_gateway && GATEWAYS.exclude?(@preferred_gateway)
       raise ArgumentError, "Unknown gateway #{gateway.inspect} (expected #{GATEWAYS.join(", ")})"
     end
-    # Seconds already spent sleeping between retries; compared against RETRY_SLEEP_BUDGET_IN_SECONDS.
     @retry_sleep_spent = 0.0
     @served_models = []
     @using_fallback_model = false
@@ -133,11 +79,6 @@ class Ai::AnthropicClient
     resolved_gateway.to_s
   end
 
-  # Buffered request. `system` is Anthropic's top-level system prompt; `messages` is the Anthropic
-  # message array (role + content); `tools` is the Anthropic tool-schema array (optional).
-  # Transient upstream failures (timeouts, 5xx/429/529) are retried a couple of times before
-  # surfacing, because a buffered call has no partial output to worry about.
-  # @return [Result]
   def messages(system:, messages:, tools: nil, max_tokens: DEFAULT_MAX_TOKENS, thinking: nil)
     with_vercel_model_fallback do
       body = request_body(system:, messages:, tools:, max_tokens:, stream: false, thinking:)
@@ -152,34 +93,11 @@ class Ai::AnthropicClient
     end
   end
 
-  # Streaming request. Yields each text delta (String) to the block as it arrives, and returns the
-  # assembled Result once the stream ends. Tool-use blocks are streamed as a `content_block_start`
-  # (carrying id + name) followed by `input_json_delta` fragments we concatenate and JSON-parse.
-  #
-  # Transient failures are retried ONLY while nothing has been yielded to the caller yet (a failed
-  # connect, an immediate 529, silence before the first token). Once any delta has reached the
-  # caller a retry would replay the reply from the start on the seller's screen, so mid-stream
-  # failures surface immediately instead.
-  #
-  # One failure gets an extra recovery step: when every streamed attempt delivered a tool call
-  # with corrupted JSON (the gateway can lose input_json_delta fragments in transit), the request
-  # is replayed once WITHOUT streaming — see #buffered_fallback.
-  #
-  # That replay regenerates the turn from the start, so it must not leave earlier text on the
-  # seller's screen. When nothing has been yielded there is nothing to clean up. When text HAS
-  # been yielded, the caller can still opt in by passing `on_discard_streamed_text`: a callable
-  # that erases everything streamed so far (the store agent already has one — it discards tool-use
-  # preamble from the UI on every normal tool call). Without that callable the honest error
-  # surfaces instead, because silently replaying would duplicate the reply on screen.
-  #
-  # This distinction is the difference between the fallback running and never running at all: a
-  # tool-use turn usually streams a sentence of preamble ("Let me update that for you…") before the
-  # tool call, so in production the corrupted-tool-call failure nearly always arrives with text
-  # already yielded.
-  #
-  # @param on_discard_streamed_text [#call, nil] erases text already streamed to the seller
-  # @yieldparam text [String] a chunk of assistant text
-  # @return [Result]
+  # Retry only before the first yield — a later retry would replay on the seller's screen.
+  # Corrupted tool-call JSON after all streamed attempts: one buffered replay (#buffered_fallback).
+  # That regenerates the turn, so already-yielded text must be erased via on_discard_streamed_text
+  # or the error surfaces. Tool-use turns usually stream preamble first, so production almost
+  # always needs the discard callback for the fallback to run.
   def stream_messages(system:, messages:, tools: nil, max_tokens: DEFAULT_MAX_TOKENS, on_discard_streamed_text: nil, &on_text)
     yielded_any = false
 
@@ -188,8 +106,6 @@ class Ai::AnthropicClient
         body = request_body(system:, messages:, tools:, max_tokens:, stream: true)
         with_retries(retryable: -> { !yielded_any }) do
           text = +""
-          # Content blocks accumulate by index: text blocks grow `text`, tool_use blocks grow a JSON string
-          # we parse when the block closes.
           blocks = {}
           stop_reason = nil
 
@@ -199,8 +115,7 @@ class Ai::AnthropicClient
           each_sse_event(response.body) do |event, data|
             case event
             when "message_start"
-              # The first stream event names the model actually generating this reply — the only
-              # place a fallback shows up on a stream. Log it so fallback turns are visible in app logs.
+              # Only stream event that names the model actually serving — fallbacks are invisible otherwise.
               log_served_model(data.dig("message", "model"))
             when "content_block_start"
               index = data["index"]
@@ -236,13 +151,8 @@ class Ai::AnthropicClient
         end
       end
     rescue UnreadableToolCallError => e
-      # Every streamed attempt "completed" yet delivered a corrupted tool call — retrying the same
-      # lossy channel again wouldn't help (production showed all three attempts failing this way
-      # across different hosts), so the buffered replay is the only remaining recovery.
-      #
-      # The replay regenerates the whole turn, so anything already on the seller's screen has to go
-      # first. If the caller gave us a way to erase it, use that and recover; otherwise the honest
-      # failure surfaces rather than doubling the reply on screen.
+      # Streamed retries exhausted on a lossy channel; only a buffered replay can recover.
+      # Discard already-yielded text first or the replay doubles the reply on screen.
       raise if yielded_any && on_discard_streamed_text.nil?
 
       if yielded_any
@@ -257,23 +167,9 @@ class Ai::AnthropicClient
   private
     attr_reader :timeout, :model
 
-    # Last-resort recovery for a streamed turn whose tool-call JSON kept arriving corrupted: replay
-    # the request once with stream: false. A buffered response is delivered as a single body, so
-    # there are no input_json_delta fragments for the gateway to lose — this removes the failure
-    # mode instead of re-rolling the dice on the same lossy channel (widening the retry budget was
-    # considered and rejected: production showed all three streamed attempts failing across
-    # different hosts). Exactly one attempt, no extra retries or sleeps, bounded by the same
-    # connect/write/read timeouts as every other request, so a web request can't hang here.
-    #
-    # The assembled text (the model regenerates the whole turn, so there may be preamble text) is
-    # handed to the caller's block in one piece — nothing is on screen when the fallback fires, so
-    # this is the first and only time the caller sees it. Two kinds of replay text are withheld,
-    # both because the caller is going to throw them away the moment it inspects the result:
-    # a truncated turn, and a tool-use turn (whose text is preamble, not the answer). Yielding
-    # either would flash it onto the seller's screen for an instant before it is cleared again.
-    #
-    # If the buffered replay fails too, the seller-facing error must stay as clear as before the
-    # fallback existed, so the ORIGINAL unreadable-tool-call error is what surfaces.
+    # One non-streamed replay so the gateway cannot drop input_json_delta fragments. No extra retries.
+    # Withhold truncated and tool-use preamble text (the caller would discard them after a flash).
+    # If this fails too, re-raise original_error so the seller still sees the unreadable-tool-call message.
     def buffered_fallback(system:, messages:, tools:, max_tokens:, original_error:, &on_text)
       Rails.logger.warn("Anthropic streamed tool call unreadable after retries; falling back to a non-streamed request. (#{original_error.message})")
 
@@ -281,31 +177,19 @@ class Ai::AnthropicClient
       result = begin
         response = http.post(api_url, json: body)
         raise_for_status!(response, kind: "request")
-        # JSON::ParserError is caught alongside our own errors because the failure being recovered
-        # from here is a gateway that truncates bodies: the same gateway can just as easily hand
-        # back a cut-off 200 body, and `parse` raises on that. Letting it through would replace the
-        # clear "unreadable tool call" message with a raw parser error, which reads like a bug in
-        # our code rather than the upstream problem it is.
+        # Same gateway can truncate a 200 body; let parse errors re-raise original_error, not a parser bug.
         parse_buffered_fallback(response.parse)
       rescue Error, HTTP::Error, JSON::ParserError
         raise original_error
       end
 
-      # A buffered replay can hit the token cap itself, and it can come back as a tool-use turn.
-      # The caller discards the text in both cases — a "max_tokens" turn is unusable and gets
-      # replaced by a truncation notice, and a tool-use turn's text is preamble that gets cleared
-      # before the real reply — so yielding it here would only flash it onto the seller's screen a
-      # moment before it is thrown away. Hand back the result and let the caller decide what to show.
       discarded_by_caller = result.stop_reason == "max_tokens" || result.tool_uses.present?
       on_text&.call(result.text) if result.text.present? && !discarded_by_caller
       result
     end
 
-    # The regular buffered parser remains forgiving because existing callers can handle an empty
-    # result. This fallback cannot: it runs only after a failed streamed turn, so accepting damaged
-    # JSON as a blank reply or coercing a broken tool input to {} would hide the original error and
-    # could dispatch a different action. Require the parts of a complete Messages response that the
-    # agent consumes before allowing the replay to replace that error.
+    # Unlike #parse_message, do not treat damaged JSON as an empty result — that would hide the
+    # original error and could dispatch a different action.
     def parse_buffered_fallback(body)
       content = body["content"] if body.is_a?(Hash)
       stop_reason = body["stop_reason"] if body.is_a?(Hash)
@@ -338,17 +222,9 @@ class Ai::AnthropicClient
       result
     end
 
-    # Run the block, retrying on TransientError. The wait between attempts is the server's own
-    # Retry-After hint when it sent one (a rate-limited 429 says exactly how long to back off —
-    # retrying sooner just burns an attempt on another guaranteed 429), otherwise a short linear
-    # backoff. `retryable` lets the caller veto a retry at failure time — the streaming path uses
-    # it to stop retrying once any output has already reached the seller.
-    #
-    # Every sleep is charged against the instance-wide RETRY_SLEEP_BUDGET_IN_SECONDS, so a web
-    # request that chains several calls on one client (the agent's tool loop) can never accumulate
-    # more than that much blocked time. If the next wait would blow the budget — including a
-    # Retry-After longer than we're willing to hold the request thread — the failure surfaces
-    # immediately instead.
+    # Honor Retry-After on 429 (retrying sooner burns an attempt). Charge every sleep against
+    # RETRY_SLEEP_BUDGET_IN_SECONDS so a tool-loop on one client cannot stack delays past Rack::Timeout.
+    # `retryable` vetoes mid-stream retries after the seller has already seen output.
     def with_retries(retryable: -> { true })
       attempt = 1
       begin
@@ -366,8 +242,6 @@ class Ai::AnthropicClient
       end
     end
 
-    # Raise the right error class for a non-success response: TransientError for statuses a retry
-    # can plausibly fix, plain Error for deterministic failures (bad request, bad key, ...).
     def raise_for_status!(response, kind:)
       return if response.status.success?
 
@@ -379,20 +253,14 @@ class Ai::AnthropicClient
       raise Error, message
     end
 
-    # The Retry-After header on a rate-limited response, as a number of seconds. Anthropic sends the
-    # numeric form; the header can technically also be an HTTP date, which we treat the same as "no
-    # hint" and fall back to the linear backoff.
+    # Numeric Retry-After only; an HTTP-date header is treated as no hint.
     def parse_retry_after(response)
       Float(response.headers["Retry-After"])
     rescue ArgumentError, TypeError
       nil
     end
 
-    # Classify an `error` object embedded in an otherwise-successful response — either a mid-stream
-    # `error` event, or (OpenRouter only) an HTTP 200 whose buffered body carries an error object.
-    # Overload/rate-limit/server errors are transient (the retry loop may replay the request if
-    # nothing was yielded yet); anything else is a real error. `kind` keeps the raised message
-    # accurate for the path it came from ("stream" vs "response").
+    # Mid-stream `error` event, or (OpenRouter only) HTTP 200 whose body is an error object.
     def embedded_error(data, kind:)
       error = data["error"] || {}
       message = "Anthropic #{kind} error: #{error["message"] || "unknown"}"
@@ -401,9 +269,7 @@ class Ai::AnthropicClient
       Error.new(message)
     end
 
-    # A concise failure detail for an error response. Anthropic returns { "error": { "message": ... } };
-    # surface just that message rather than dumping the raw body (which can be large and may echo
-    # request content). Falls back to a short slice of the body when it isn't the expected JSON.
+    # Prefer error.message over dumping the body (large, may echo the request).
     def error_detail(response)
       body = response.body.to_s
       parsed = begin
@@ -434,20 +300,15 @@ class Ai::AnthropicClient
       body
     end
 
-    # Mark the system prompt as cacheable. The store agent's system prompt embeds the full endpoint
-    # manifest, so it is large and byte-identical across requests; letting Anthropic cache it means
-    # subsequent requests skip re-processing those tokens, which meaningfully cuts time-to-first-token
-    # and cost. Prompts too short to cache are simply not cached — the marker is harmless. A caller
-    # already passing structured content blocks is left untouched.
+    # Store-agent system prompt embeds the endpoint manifest (large, identical across requests).
+    # Marker is harmless if the prompt is too short to cache; structured content is left untouched.
     def cacheable_system(system)
       return system unless system.is_a?(String)
 
       [{ type: "text", text: system, cache_control: { type: "ephemeral" } }]
     end
 
-    # Cache the tool schemas too. Anthropic caches the prefix up to each cache_control marker, so
-    # tagging the LAST tool covers the whole (static) tool list. Tools already carrying a
-    # cache_control are left alone.
+    # Anthropic caches the prefix up to each cache_control marker; tagging the last tool covers the list.
     def cacheable_tools(tools)
       tools = tools.map { |tool| tool.deep_symbolize_keys }
       last = tools.last
@@ -455,11 +316,8 @@ class Ai::AnthropicClient
       tools
     end
 
-    # Per-operation timeouts instead of one global deadline. A global timeout (the old behavior)
-    # counts the ENTIRE request — for a streamed reply that killed healthy generations that simply
-    # took longer than the budget even while tokens were still arriving. With per-operation
-    # timeouts, `read` bounds each individual read (i.e. silence), so a slow-but-alive stream can
-    # finish while a genuinely stalled connection still fails after `timeout` seconds of nothing.
+    # Per-operation timeouts: a global deadline killed healthy streams that outlasted the budget
+    # while tokens were still arriving. `read` bounds silence, not total duration.
     def http
       HTTP.timeout(
         connect: CONNECT_TIMEOUT_IN_SECONDS,
@@ -472,17 +330,9 @@ class Ai::AnthropicClient
       )
     end
 
-    # The store agent's own Anthropic key. Falls back to the Walks synthesis key (already provisioned
-    # in production) when a dedicated ANTHROPIC_API_KEY hasn't been set yet, so the agent isn't dark
-    # on a missing config — otherwise every request goes out with a blank x-api-key and Anthropic
-    # rejects it with a 401 ("x-api-key header is required"), taking the whole feature down with the
-    # generic "Sorry, I ran into a problem" error. Remove the fallback once ANTHROPIC_API_KEY is set.
-    # Failing fast here with a clear message (rather than shipping a blank key upstream) keeps a future
-    # config gap legible instead of surfacing as a confusing upstream 401.
-    #
-    # When OPENROUTER_API_KEY is configured, requests route through OpenRouter instead and that key
-    # is sent in the same x-api-key header — OpenRouter's Anthropic-compatible endpoint accepts it
-    # there, so nothing else about the request changes.
+    # Walks key if ANTHROPIC_API_KEY is unset (remove once the dedicated key is provisioned).
+    # Raise here rather than send a blank x-api-key (upstream 401 becomes a generic seller error).
+    # OpenRouter/Vercel keys go in the same header.
     def api_key
       case resolved_gateway
       when :vercel
@@ -557,9 +407,8 @@ class Ai::AnthropicClient
       @using_fallback_model ? fallback_model : model
     end
 
-    # Vercel model failover is providerOptions.gateway.models. If that still errors, replay once
-    # on the Opus fallback model — same outcome as OpenRouter's `fallbacks` body param.
-    # StoreAgentService memoizes this client, so the replay flag must not stick across requests.
+    # Vercel failover is providerOptions.gateway.models; if that still errors, replay once on the
+    # fallback model. StoreAgentService memoizes this client — do not leave the replay flag set.
     def with_vercel_model_fallback(yielded: -> { false })
       yield
     rescue Error => e
@@ -580,20 +429,15 @@ class Ai::AnthropicClient
       end
     end
 
-    # Caller override first (the store agent falls back to Opus 5) so the config knob stays a
-    # global emergency override for the default GPT fallback only.
+    # Caller override first (store agent uses Opus) so OPENROUTER_FALLBACK_MODEL stays a global emergency.
     def fallback_model
       @fallback_model_override.presence ||
         GlobalConfig.get("OPENROUTER_FALLBACK_MODEL").presence ||
         DEFAULT_FALLBACK_MODEL
     end
 
-    # Warn when the model that generated the response isn't the one we asked for — i.e. OpenRouter
-    # fell back to GPT because Claude errored. Without this, time spent on the fallback would be
-    # invisible in app logs (OpenRouter's dashboard would be the only place to see it). The names
-    # are normalized before comparing because providers restyle the same model: we request
-    # "claude-opus-4-7" and OpenRouter reports "anthropic/claude-opus-4.7" (provider prefix, dotted
-    # version) — still the requested model, not a fallback. Only a genuinely different model warns.
+    # OpenRouter reports "anthropic/claude-opus-4.7" for requested "claude-opus-4-7"; normalize
+    # before warning so a restyled name is not treated as a GPT fallback.
     def log_served_model(served_model)
       return if served_model.blank?
 
@@ -611,14 +455,8 @@ class Ai::AnthropicClient
       name.to_s.downcase.tr(".", "-")
     end
 
-    # Normalize a buffered Messages response into a Result. Content is an array of typed blocks; we
-    # pull the joined text and any tool_use blocks (each with parsed input).
-    #
-    # OpenRouter can return HTTP 200 with an error object in the body when the failure happened
-    # after the upstream model started processing (Anthropic directly never does this for buffered
-    # requests). Without the check below, such a response would silently become an empty Result and
-    # the agent would render a blank reply; classifying it through the same transient-vs-real logic
-    # as mid-stream errors lets the retry loop recover from the transient ones.
+    # OpenRouter can return HTTP 200 with an error object in the body (Anthropic never does this
+    # for buffered requests). Treat it as a mid-stream error or the agent renders a blank reply.
     def parse_message(body)
       return Result.new(text: "", tool_uses: [], stop_reason: nil) unless body.is_a?(Hash)
       raise embedded_error(body, kind: "response") if body["error"].is_a?(Hash)
@@ -635,26 +473,12 @@ class Ai::AnthropicClient
       Result.new(text:, tool_uses:, stop_reason: body["stop_reason"])
     end
 
-    # Turn the accumulated streamed blocks into the same tool_use shape #parse_message returns. A
-    # tool_use block with no input fragments is a no-arg call; malformed non-empty input must fail the
-    # turn instead of dispatching a lossy {} tool call — with one exception where half-written JSON
-    # is expected rather than a failure:
-    #   - stop_reason == "max_tokens": the token cap cut the call off mid-arguments. Drop the block
-    #     and let the caller see the stop_reason so it can respond honestly instead of erroring out.
-    # Every other unparseable tool call raises TransientError so #stream_messages re-requests the
-    # turn (when nothing has reached the caller yet):
-    #   - stop_reason is nil: a complete Anthropic stream always delivers a stop_reason (via
-    #     message_delta) before it ends, so its absence means the connection dropped mid-stream and
-    #     the tool call's JSON was cut off by the disconnect — a network failure.
-    #   - stop_reason present but the JSON still doesn't parse: this used to be treated as a
-    #     deterministic model bug and raised a plain (non-retryable) Error, but production traffic
-    #     now flows through OpenRouter's Anthropic-compatible gateway, which can lose or cut off
-    #     input_json_delta fragments while still delivering the closing stop_reason — so a
-    #     "completed" turn no longer proves the tool call arrived intact. A fresh request almost
-    #     always succeeds. Raised as the UnreadableToolCallError subclass so that when the retries
-    #     DON'T succeed (production has shown all three streamed attempts losing fragments), the
-    #     streaming path can recognize this specific failure and replay the request once without
-    #     streaming — a buffered body can't lose fragments — instead of failing the seller's turn.
+    # Empty tool-use JSON is a no-arg call. Malformed non-empty JSON must fail the turn, except:
+    # max_tokens — drop the block and let the caller see the stop_reason.
+    # stop_reason nil — connection dropped mid-stream (complete Anthropic streams always send one).
+    # stop_reason present but JSON still unreadable — OpenRouter can lose input_json_delta fragments
+    # while still closing the stream; raise UnreadableToolCallError so #stream_messages can replay
+    # once without streaming. Do not coerce to {} (that would dispatch a lossy tool call).
     def assemble_tool_uses(blocks, stop_reason: nil)
       truncated = stop_reason == "max_tokens"
       blocks.keys.sort.filter_map do |index|
@@ -666,8 +490,6 @@ class Ai::AnthropicClient
         rescue Error
           next if truncated
           raise TransientError, "Anthropic stream ended mid-tool-call for #{block[:name].presence || "unknown tool"}." if stop_reason.nil?
-          # The turn claims to be complete, yet the tool call's JSON is unreadable — most likely the
-          # gateway dropped part of it in transit. Retryable: a re-request regenerates the call.
           raise UnreadableToolCallError, "Anthropic produced an unreadable tool call for #{block[:name].presence || "unknown tool"}."
         end
         { id: block[:id], name: block[:name], input: }
@@ -686,9 +508,7 @@ class Ai::AnthropicClient
       raise Error, "Anthropic produced an unreadable tool call for #{block[:name].presence || "unknown tool"}."
     end
 
-    # Parse an Anthropic SSE body line-by-line, yielding [event_name, parsed_data_hash] per event.
-    # Each event is an `event: <name>` line followed by a `data: <json>` line; a malformed/non-JSON
-    # data line is skipped rather than crashing the stream.
+    # Skip malformed/non-JSON `data:` lines rather than crashing the stream.
     def each_sse_event(body)
       event = nil
       buffer = +""
