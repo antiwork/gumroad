@@ -702,33 +702,39 @@ check(
 )
 
 check(
-  "help_center articles.yml maps to help center specs (#7375)",
+  "help_center articles.yml maps to help center + API/search specs (#7375)",
   base_files: {
     "spec/requests/help_center_spec.rb" => SPEC_STUB,
+    "spec/services/help_center/article_text_spec.rb" => SPEC_STUB,
+    "spec/controllers/api/v2/help_articles_controller_spec.rb" => SPEC_STUB,
     "app/models/help_center/articles.yml" => "old",
   },
   head_files: { "app/models/help_center/articles.yml" => "new" },
-  expect_specs: %w[spec/requests/help_center_spec.rb],
+  expect_specs: %w[
+    spec/requests/help_center_spec.rb
+    spec/services/help_center/article_text_spec.rb
+    spec/controllers/api/v2/help_articles_controller_spec.rb
+  ],
 )
 
 check(
-  "currencies.json maps to currencies spec instead of escalating (#7229)",
+  "currencies.json still escalates (boot-global pricing registry)",
   base_files: {
     "spec/config/currencies_spec.rb" => SPEC_STUB,
     "config/currencies.json" => "{}",
   },
   head_files: { "config/currencies.json" => "{\"USD\":{}}" },
-  expect_specs: %w[spec/config/currencies_spec.rb],
+  expect_escalate: true,
 )
 
 check(
-  "initializer with a dedicated spec maps (#7432 family)",
+  "secure_headers initializer still escalates (global CSP)",
   base_files: {
     "spec/config/initializers/secure_headers_spec.rb" => SPEC_STUB,
     "config/initializers/secure_headers.rb" => "old",
   },
   head_files: { "config/initializers/secure_headers.rb" => "new" },
-  expect_specs: %w[spec/config/initializers/secure_headers_spec.rb],
+  expect_escalate: true,
 )
 
 check(
@@ -796,7 +802,7 @@ check(
 )
 
 check(
-  "docker-only change does not escalate (#7260)",
+  "docker production server.sh-only change does not escalate (#7260)",
   base_files: { "docker/web/server.sh" => "old" },
   head_files: { "docker/web/server.sh" => "new" },
   expect_specs: [],
@@ -817,7 +823,7 @@ check(
 )
 
 check(
-  "docker test Dockerfile change still escalates",
+  "docker test-image Dockerfile.test escalates (feeds CI rspec image)",
   base_files: { "docker/web/Dockerfile.test" => "old" },
   head_files: { "docker/web/Dockerfile.test" => "new" },
   expect_escalate: true,
@@ -831,12 +837,9 @@ check(
 )
 
 check(
-  "Pages JS does not treat pages_landing_embed specs as coverage",
-  base_files: {
-    "spec/requests/pages_landing_embed_routing_spec.rb" => SPEC_STUB,
-    "app/javascript/pages/Pages/Edit.tsx" => "old",
-  },
-  head_files: { "app/javascript/pages/Pages/Edit.tsx" => "new" },
+  "docker fixture manifest escalates (feeds stamp_spec MinIO copies)",
+  base_files: { "docker/fixture-files-private.txt" => "old" },
+  head_files: { "docker/fixture-files-private.txt" => "new" },
   expect_escalate: true,
 )
 
@@ -915,6 +918,252 @@ check(
   },
   head_files: { "app/presenters/checkout/stripe_payment_presenter.rb" => "new" },
   expect_specs: %w[spec/requests/checkout/payment_spec.rb],
+)
+
+# Importer-traced pins (round 2). Each asserts a consuming flow's spec,
+# not a coincidental sibling path from a harvested PR.
+check(
+  "data/paypal selects checkout payment spec, not settings",
+  base_files: {
+    "spec/requests/checkout/payment_spec.rb" => SPEC_STUB,
+    "spec/requests/settings/payments_spec.rb" => SPEC_STUB,
+    "app/javascript/data/paypal.ts" => "old",
+  },
+  head_files: { "app/javascript/data/paypal.ts" => "new" },
+  expect_specs: %w[spec/requests/checkout/payment_spec.rb],
+)
+
+check(
+  "custom_html_analytics selects buyer custom-HTML specs, not seller analytics",
+  base_files: {
+    "spec/requests/products/show/custom_html_analytics_spec.rb" => SPEC_STUB,
+    "spec/requests/profile_custom_html_spec.rb" => SPEC_STUB,
+    "spec/requests/analytics/sales_spec.rb" => SPEC_STUB,
+    "app/javascript/entrypoints/custom_html_analytics.ts" => "old",
+  },
+  head_files: { "app/javascript/entrypoints/custom_html_analytics.ts" => "new" },
+  expect_specs: %w[
+    spec/requests/products/show/custom_html_analytics_spec.rb
+    spec/requests/profile_custom_html_spec.rb
+  ],
+)
+
+check(
+  "pages/UrlRedirects selects download_page specs",
+  base_files: {
+    "spec/requests/download_page/download_page_spec.rb" => SPEC_STUB,
+    "spec/requests/url_redirects_epub_reader_system_spec.rb" => SPEC_STUB,
+    "app/javascript/pages/UrlRedirects/DownloadPage.tsx" => "old",
+  },
+  head_files: { "app/javascript/pages/UrlRedirects/DownloadPage.tsx" => "new" },
+  expect_specs: %w[spec/requests/download_page/download_page_spec.rb],
+)
+
+check(
+  "pages/Pages selects pages_controller and landing embed specs",
+  base_files: {
+    "spec/controllers/pages_controller_spec.rb" => SPEC_STUB,
+    "spec/requests/pages_landing_embed_csp_spec.rb" => SPEC_STUB,
+    "app/javascript/pages/Pages/Edit.tsx" => "old",
+  },
+  head_files: { "app/javascript/pages/Pages/Edit.tsx" => "new" },
+  expect_specs: %w[
+    spec/controllers/pages_controller_spec.rb
+    spec/requests/pages_landing_embed_csp_spec.rb
+  ],
+)
+
+check(
+  "unlisted pages dir still escalates (generic name-match dropped)",
+  base_files: { "app/javascript/pages/Signup/New.tsx" => "old" },
+  head_files: { "app/javascript/pages/Signup/New.tsx" => "new" },
+  expect_escalate: true,
+)
+
+check(
+  "RichTextEditor selects emails + download + profile, not products-only",
+  base_files: {
+    "spec/requests/products/edit/covers_spec.rb" => SPEC_STUB,
+    "spec/requests/emails/create_spec.rb" => SPEC_STUB,
+    "spec/requests/download_page/rich_text_editor_spec.rb" => SPEC_STUB,
+    "spec/requests/user/profile_spec.rb" => SPEC_STUB,
+    "spec/requests/workflows_spec.rb" => SPEC_STUB,
+    "app/javascript/components/RichTextEditor.tsx" => "old",
+  },
+  head_files: { "app/javascript/components/RichTextEditor.tsx" => "new" },
+  expect_specs: %w[
+    spec/requests/products/edit/covers_spec.rb
+    spec/requests/emails/create_spec.rb
+    spec/requests/download_page/rich_text_editor_spec.rb
+    spec/requests/user/profile_spec.rb
+    spec/requests/workflows_spec.rb
+  ],
+)
+
+check(
+  "DiscordButton selects checkout receipt coverage",
+  base_files: {
+    "spec/requests/download_page/download_page_spec.rb" => SPEC_STUB,
+    "spec/requests/checkout/payment_spec.rb" => SPEC_STUB,
+    "app/javascript/components/DiscordButton.tsx" => "old",
+  },
+  head_files: { "app/javascript/components/DiscordButton.tsx" => "new" },
+  expect_specs: %w[
+    spec/requests/download_page/download_page_spec.rb
+    spec/requests/checkout/payment_spec.rb
+  ],
+)
+
+check(
+  "discord_integration selects product edit integrations spec",
+  base_files: {
+    "spec/requests/download_page/download_page_spec.rb" => SPEC_STUB,
+    "spec/requests/products/edit/integrations/discord_integrations_spec.rb" => SPEC_STUB,
+    "app/javascript/data/discord_integration.ts" => "old",
+  },
+  head_files: { "app/javascript/data/discord_integration.ts" => "new" },
+  expect_specs: %w[spec/requests/products/edit/integrations/discord_integrations_spec.rb],
+)
+
+check(
+  "ImageUploader selects avatar upload settings spec",
+  base_files: {
+    "spec/requests/products/edit/covers_spec.rb" => SPEC_STUB,
+    "spec/requests/user/settings_spec.rb" => SPEC_STUB,
+    "app/javascript/components/ImageUploader.tsx" => "old",
+  },
+  head_files: { "app/javascript/components/ImageUploader.tsx" => "new" },
+  expect_specs: %w[
+    spec/requests/products/edit/covers_spec.rb
+    spec/requests/user/settings_spec.rb
+  ],
+)
+
+check(
+  "ReviewForm selects library spec",
+  base_files: {
+    "spec/requests/products/show/reviews_spec.rb" => SPEC_STUB,
+    "spec/requests/library_spec.rb" => SPEC_STUB,
+    "app/javascript/components/ReviewForm.tsx" => "old",
+  },
+  head_files: { "app/javascript/components/ReviewForm.tsx" => "new" },
+  expect_specs: %w[spec/requests/library_spec.rb],
+)
+
+check(
+  "ReviewVideoPlayer selects customers spec",
+  base_files: {
+    "spec/requests/products/show/reviews_spec.rb" => SPEC_STUB,
+    "spec/requests/customers/customers_spec.rb" => SPEC_STUB,
+    "app/javascript/components/ReviewVideoPlayer.tsx" => "old",
+  },
+  head_files: { "app/javascript/components/ReviewVideoPlayer.tsx" => "new" },
+  expect_specs: %w[spec/requests/customers/customers_spec.rb],
+)
+
+check(
+  "data/search selects product_panel storefront specs",
+  base_files: {
+    "spec/requests/discover/index_spec.rb" => SPEC_STUB,
+    "spec/requests/user/product_panel/product_panel_sort_filter_spec.rb" => SPEC_STUB,
+    "app/javascript/data/search.ts" => "old",
+  },
+  head_files: { "app/javascript/data/search.ts" => "new" },
+  expect_specs: %w[
+    spec/requests/discover/index_spec.rb
+    spec/requests/user/product_panel/product_panel_sort_filter_spec.rb
+  ],
+)
+
+check(
+  "Settings ApplicationForm also selects oauth applications pages spec",
+  base_files: {
+    "spec/requests/settings/payments_spec.rb" => SPEC_STUB,
+    "spec/requests/oauth_applications_pages_spec.rb" => SPEC_STUB,
+    "app/javascript/components/Settings/AdvancedPage/ApplicationForm.tsx" => "old",
+  },
+  head_files: { "app/javascript/components/Settings/AdvancedPage/ApplicationForm.tsx" => "new" },
+  expect_specs: %w[spec/requests/oauth_applications_pages_spec.rb],
+)
+
+check(
+  "EmailsPage Layout selects followers specs",
+  base_files: {
+    "spec/requests/emails/list_spec.rb" => SPEC_STUB,
+    "spec/requests/followers/followers_spec.rb" => SPEC_STUB,
+    "app/javascript/components/EmailsPage/Layout.tsx" => "old",
+  },
+  head_files: { "app/javascript/components/EmailsPage/Layout.tsx" => "new" },
+  expect_specs: %w[
+    spec/requests/emails/list_spec.rb
+    spec/requests/followers/followers_spec.rb
+  ],
+)
+
+check(
+  "Users/Coffee selects purchase coffee spec",
+  base_files: {
+    "spec/requests/user/profile_spec.rb" => SPEC_STUB,
+    "spec/requests/purchases/product/coffee_spec.rb" => SPEC_STUB,
+    "app/javascript/pages/Users/Coffee.tsx" => "old",
+  },
+  head_files: { "app/javascript/pages/Users/Coffee.tsx" => "new" },
+  expect_specs: %w[spec/requests/purchases/product/coffee_spec.rb],
+)
+
+check(
+  "User/Passwords selects password_reset spec, not generic user/",
+  base_files: {
+    "spec/requests/password_reset_spec.rb" => SPEC_STUB,
+    "spec/requests/login_spec.rb" => SPEC_STUB,
+    "spec/requests/user/profile_spec.rb" => SPEC_STUB,
+    "app/javascript/pages/User/Passwords/Edit.tsx" => "old",
+  },
+  head_files: { "app/javascript/pages/User/Passwords/Edit.tsx" => "new" },
+  expect_specs: %w[
+    spec/requests/password_reset_spec.rb
+    spec/requests/login_spec.rb
+  ],
+)
+
+check(
+  "config/domain.rb still escalates (boot-global hosts)",
+  base_files: {
+    "spec/config/domain_spec.rb" => SPEC_STUB,
+    "config/domain.rb" => "old",
+  },
+  head_files: { "config/domain.rb" => "new" },
+  expect_escalate: true,
+)
+
+check(
+  "config/test_redis_isolation.rb still escalates (required from application.rb)",
+  base_files: {
+    "spec/config/test_redis_isolation_spec.rb" => SPEC_STUB,
+    "config/test_redis_isolation.rb" => "old",
+  },
+  head_files: { "config/test_redis_isolation.rb" => "new" },
+  expect_escalate: true,
+)
+
+check(
+  "005_apple.rb still escalates (global OmniAuth strategy)",
+  base_files: {
+    "spec/config/initializers/apple_strategy_patch_spec.rb" => SPEC_STUB,
+    "config/initializers/005_apple.rb" => "old",
+  },
+  head_files: { "config/initializers/005_apple.rb" => "new" },
+  expect_escalate: true,
+)
+
+check(
+  "devise_pwned_password_safe_params still escalates (Warden after_set_user)",
+  base_files: {
+    "spec/config/initializers/devise_pwned_password_safe_params_spec.rb" => SPEC_STUB,
+    "config/initializers/devise_pwned_password_safe_params.rb" => "old",
+  },
+  head_files: { "config/initializers/devise_pwned_password_safe_params.rb" => "new" },
+  expect_escalate: true,
 )
 
 WORKFLOW = File.expand_path("../../.github/workflows/tests.yml", __dir__)
