@@ -1045,6 +1045,17 @@ check(
 )
 
 check(
+  "Settings PasskeysSection selects passkey login spec",
+  base_files: {
+    "spec/requests/settings/payments_spec.rb" => SPEC_STUB,
+    "spec/requests/login/passkeys_spec.rb" => SPEC_STUB,
+    "app/javascript/components/Settings/PasswordPage/PasskeysSection.tsx" => "old",
+  },
+  head_files: { "app/javascript/components/Settings/PasswordPage/PasskeysSection.tsx" => "new" },
+  expect_specs: %w[spec/requests/login/passkeys_spec.rb],
+)
+
+check(
   "EmailsPage Layout selects followers specs",
   base_files: {
     "spec/requests/emails/list_spec.rb" => SPEC_STUB,
@@ -1106,6 +1117,27 @@ check(
   "Followers/Cancel still escalates (buyer unsubscribe, not seller list)",
   base_files: { "app/javascript/pages/Followers/Cancel.tsx" => "old" },
   head_files: { "app/javascript/pages/Followers/Cancel.tsx" => "new" },
+  expect_escalate: true,
+)
+
+check(
+  "Dashboard page selects mobile table spec, not only dashboard_spec",
+  base_files: {
+    "spec/requests/dashboard_spec.rb" => SPEC_STUB,
+    "spec/requests/dashboard_mobile_table_spec.rb" => SPEC_STUB,
+    "app/javascript/pages/Dashboard/Index.tsx" => "old",
+  },
+  head_files: { "app/javascript/pages/Dashboard/Index.tsx" => "new" },
+  expect_specs: %w[
+    spec/requests/dashboard_spec.rb
+    spec/requests/dashboard_mobile_table_spec.rb
+  ],
+)
+
+check(
+  "Wishlists/Show still escalates (Discover purchase/commission consumer)",
+  base_files: { "app/javascript/pages/Wishlists/Show.tsx" => "old" },
+  head_files: { "app/javascript/pages/Wishlists/Show.tsx" => "new" },
   expect_escalate: true,
 )
 
