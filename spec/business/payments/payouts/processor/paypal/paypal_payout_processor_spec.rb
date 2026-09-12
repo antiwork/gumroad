@@ -1498,4 +1498,189 @@ describe PaypalPayoutProcessor do
       expect(payment.reload.failure_reason).to eq("PAYPAL 3148")
     end
   end
+
+  describe ".topup_amount_in_transit" do
+    around { |example| travel_to(Time.utc(2026, 9, 11, 14, 0, 0)) { example.run } }
+
+    def paypal_nvp(pairs)
+      instance_double(HTTParty::Response, parsed_response: Rack::Utils.build_query(pairs))
+    end
+
+    it "does not filter TransactionSearch by amount" do
+      expect(HTTParty).to receive(:post) do |_url, opts|
+        expect(opts[:body]["AMT"]).to be_nil
+        expect(opts[:body]["METHOD"]).to eq("TransactionSearch")
+        expect(opts[:body]["TRANSACTIONCLASS"]).to be_nil
+        paypal_nvp("ACK" => "Success")
+      end
+
+      expect(described_class.topup_amount_in_transit).to eq(0)
+    end
+
+    it "sums uncleared bank-account transfers of any amount" do
+      allow(HTTParty).to receive(:post).and_return(
+        paypal_nvp(
+          "ACK" => "Success",
+          "L_TRANSACTIONID0" => "txn_small",
+          "L_TYPE0" => "Transfer",
+          "L_NAME0" => "Bank Account",
+          "L_STATUS0" => "Uncleared",
+          "L_AMT0" => "25000.00",
+          "L_TRANSACTIONID1" => "txn_large",
+          "L_TYPE1" => "Transfer",
+          "L_NAME1" => "Bank Account",
+          "L_STATUS1" => "Uncleared",
+          "L_AMT1" => "100000.00",
+          "L_TRANSACTIONID2" => "txn_cleared",
+          "L_TYPE2" => "Transfer",
+          "L_NAME2" => "Bank Account",
+          "L_STATUS2" => "Completed",
+          "L_AMT2" => "100000.00",
+          "L_TRANSACTIONID3" => "txn_other",
+          "L_TYPE3" => "Payment",
+          "L_NAME3" => "Someone",
+          "L_STATUS3" => "Uncleared",
+          "L_AMT3" => "50.00"
+        )
+      )
+
+      expect(described_class.topup_amount_in_transit).to eq(125_000)
+    end
+
+    it "keeps fractional transfer dollars" do
+      allow(HTTParty).to receive(:post).and_return(
+        paypal_nvp(
+          "ACK" => "Success",
+          "L_TRANSACTIONID0" => "txn_cents",
+          "L_TYPE0" => "Transfer",
+          "L_NAME0" => "Bank Account",
+          "L_STATUS0" => "Uncleared",
+          "L_AMT0" => "25000.50"
+        )
+      )
+
+      expect(described_class.topup_amount_in_transit).to eq(BigDecimal("25000.50"))
+    end
+
+    it "returns 0 when ACK is not success" do
+      allow(HTTParty).to receive(:post).and_return(paypal_nvp("ACK" => "Failure"))
+
+      expect(described_class.topup_amount_in_transit).to eq(0)
+    end
+
+    it "pages older windows when TransactionSearch is truncated" do
+      first = paypal_nvp(
+        "ACK" => "SuccessWithWarning",
+        "L_ERRORCODE0" => "11002",
+        "L_TRANSACTIONID0" => "txn_recent",
+        "L_TIMESTAMP0" => "2026-09-11T12:00:00Z",
+        "L_TYPE0" => "Transfer",
+        "L_NAME0" => "Bank Account",
+        "L_STATUS0" => "Uncleared",
+        "L_AMT0" => "25000.00"
+      )
+      second = paypal_nvp(
+        "ACK" => "Success",
+        "L_TRANSACTIONID0" => "txn_older",
+        "L_TIMESTAMP0" => "2026-09-01T12:00:00Z",
+        "L_TYPE0" => "Transfer",
+        "L_NAME0" => "Bank Account",
+        "L_STATUS0" => "Uncleared",
+        "L_AMT0" => "100000.00"
+      )
+      expect(HTTParty).to receive(:post).ordered do |_url, opts|
+        expect(opts[:body]["ENDDATE"]).to be_nil
+        first
+      end
+      expect(HTTParty).to receive(:post).ordered do |_url, opts|
+        expect(opts[:body]["ENDDATE"]).to eq("2026-09-11T12:00:00Z")
+        second
+      end
+
+      expect(described_class.topup_amount_in_transit).to eq(125_000)
+    end
+
+    it "raises when truncation cannot be paged" do
+      allow(HTTParty).to receive(:post).and_return(
+        paypal_nvp("ACK" => "SuccessWithWarning", "L_ERRORCODE0" => "11002")
+      )
+
+      expect { described_class.topup_amount_in_transit }.to raise_error(/truncated \(11002\)/)
+    end
+
+    it "raises when a continuation request fails after a truncated page" do
+      first = paypal_nvp(
+        "ACK" => "SuccessWithWarning",
+        "L_ERRORCODE0" => "11002",
+        "L_TRANSACTIONID0" => "txn_recent",
+        "L_TIMESTAMP0" => "2026-09-11T12:00:00Z",
+        "L_TYPE0" => "Transfer",
+        "L_NAME0" => "Bank Account",
+        "L_STATUS0" => "Uncleared",
+        "L_AMT0" => "25000.00"
+      )
+      expect(HTTParty).to receive(:post).ordered.and_return(first)
+      expect(HTTParty).to receive(:post).ordered.and_return(paypal_nvp("ACK" => "Failure"))
+
+      expect { described_class.topup_amount_in_transit }.to raise_error(/ACK="Failure"/)
+    end
+
+    it "keeps uncleared transfers that share the truncated page's oldest timestamp" do
+      first = paypal_nvp(
+        "ACK" => "SuccessWithWarning",
+        "L_ERRORCODE0" => "11002",
+        "L_TRANSACTIONID0" => "txn_recent",
+        "L_TIMESTAMP0" => "2026-09-11T12:00:00Z",
+        "L_TYPE0" => "Transfer",
+        "L_NAME0" => "Bank Account",
+        "L_STATUS0" => "Uncleared",
+        "L_AMT0" => "25000.00"
+      )
+      second = paypal_nvp(
+        "ACK" => "Success",
+        "L_TRANSACTIONID0" => "txn_recent",
+        "L_TIMESTAMP0" => "2026-09-11T12:00:00Z",
+        "L_TYPE0" => "Transfer",
+        "L_NAME0" => "Bank Account",
+        "L_STATUS0" => "Uncleared",
+        "L_AMT0" => "25000.00",
+        "L_TRANSACTIONID1" => "txn_same_second",
+        "L_TIMESTAMP1" => "2026-09-11T12:00:00Z",
+        "L_TYPE1" => "Transfer",
+        "L_NAME1" => "Bank Account",
+        "L_STATUS1" => "Uncleared",
+        "L_AMT1" => "100000.00"
+      )
+      expect(HTTParty).to receive(:post).ordered do |_url, opts|
+        expect(opts[:body]["ENDDATE"]).to be_nil
+        first
+      end
+      expect(HTTParty).to receive(:post).ordered do |_url, opts|
+        expect(opts[:body]["ENDDATE"]).to eq("2026-09-11T12:00:00Z")
+        second
+      end
+
+      expect(described_class.topup_amount_in_transit).to eq(125_000)
+    end
+
+    it "raises when the page limit is exhausted while still truncated" do
+      stub_const("#{described_class}::TOPUP_SEARCH_PAGE_LIMIT", 3)
+      allow(HTTParty).to receive(:post) do |_url, opts|
+        n = @page_n.to_i
+        @page_n = n + 1
+        paypal_nvp(
+          "ACK" => "SuccessWithWarning",
+          "L_ERRORCODE0" => "11002",
+          "L_TRANSACTIONID0" => "txn_#{n}",
+          "L_TIMESTAMP0" => (Time.iso8601("2026-09-11T12:00:00Z") - n.seconds).iso8601,
+          "L_TYPE0" => "Transfer",
+          "L_NAME0" => "Bank Account",
+          "L_STATUS0" => "Uncleared",
+          "L_AMT0" => "1.00"
+        )
+      end
+
+      expect { described_class.topup_amount_in_transit }.to raise_error(/pagination budget exhausted/)
+    end
+  end
 end

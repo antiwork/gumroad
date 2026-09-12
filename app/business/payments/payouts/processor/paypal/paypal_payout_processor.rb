@@ -17,6 +17,9 @@ class PaypalPayoutProcessor
   PAYOUT_RECIPIENTS_PER_JOB = 240 # Max recipients allowed in one API call is 250. Using 240 because I don't trust PayPal.
   PAYPAL_PAYOUT_FEE_PERCENT = 2
   PAYPAL_PAYOUT_FEE_EXEMPT_COUNTRY_CODES = [Compliance::Countries::BRA.alpha2, Compliance::Countries::IND.alpha2]
+  # Safety valve against a stalled cursor, not a volume cap. The payout
+  # account's two-week TransactionSearch can exceed 1,000 rows.
+  TOPUP_SEARCH_PAGE_LIMIT = 100
 
   # Countries where a PayPal account registered there can RECEIVE a payout from us.
   # Ref: https://docs.paypal.ai/growth/payouts/reference/countries-supported-features
@@ -680,31 +683,67 @@ class PaypalPayoutProcessor
     (response["L_AMT0"].to_d * 100).to_i
   end
 
-  # This method assumes that each topup is made for $100,000.
-  # We've always made topups in chunks of $100,000 so far.
-  # If that ever changes, this method will need to be updated accordingly.
-  # The bank account transfer transactions are not searchable by type,
-  # so using the $100,000 amount to easily search for them here.
+  # Bank-account top-ups are not searchable by type or amount. Do not
+  # send TRANSACTIONCLASS or AMT; keep Transfer / Bank Account /
+  # Uncleared in Ruby. If PayPal truncates (warning 11002), page older
+  # windows until the two-week range is complete.
   def self.topup_amount_in_transit
-    individual_topup_amount = 100000
+    seen = {}
+    topup_amount = 0.to_d
+    start_date = 2.weeks.ago
+    end_date = nil
+    truncated = false
 
-    params = PAYPAL_API_PARAMS.merge("METHOD" => "TransactionSearch",
-                                     "AMT" => individual_topup_amount.to_s,
-                                     "STARTDATE" => 2.weeks.ago.iso8601) # Topups older than 2 weeks should have already completed
-    paypal_response = HTTParty.post(PAYPAL_ENDPOINT, body: params)
-    response = Rack::Utils.parse_nested_query(paypal_response.parsed_response)
-    return 0 unless %w[Success SuccessWithWarning].include?(response["ACK"])
+    TOPUP_SEARCH_PAGE_LIMIT.times do
+      params = PAYPAL_API_PARAMS.merge(
+        "METHOD" => "TransactionSearch",
+        "STARTDATE" => start_date.iso8601
+      )
+      params["ENDDATE"] = end_date.iso8601 if end_date
+      paypal_response = HTTParty.post(PAYPAL_ENDPOINT, body: params)
+      response = Rack::Utils.parse_nested_query(paypal_response.parsed_response)
+      unless %w[Success SuccessWithWarning].include?(response["ACK"])
+        # First request still fail-opens to 0 (pre-existing). A later page
+        # that fails after a truncated success would otherwise publish a
+        # partial in-transit total and over-recommend a bank top-up.
+        if seen.any? || end_date
+          raise "PayPal TransactionSearch failed (ACK=#{response["ACK"].inspect})"
+        end
+        return topup_amount
+      end
 
-    topup_amount = 0
+      count = response.keys.count { _1.include?("L_TRANSACTIONID") }
+      oldest_ts = nil
+      new_ids = 0
+      count.times do |i|
+        txn_id = response["L_TRANSACTIONID#{i}"]
+        ts = Time.iso8601(response["L_TIMESTAMP#{i}"]) if response["L_TIMESTAMP#{i}"].present?
+        oldest_ts = ts if ts && (oldest_ts.nil? || ts < oldest_ts)
+        next if txn_id.blank? || seen[txn_id]
 
-    number_of_topups_made = response.keys.select { _1.include?("L_TRANSACTIONID") }.count
-    number_of_topups_made.times do |i|
-      topup_amount += individual_topup_amount if response["L_TYPE#{i}"] == "Transfer" &&
-        response["L_NAME#{i}"] == "Bank Account" &&
-        response["L_STATUS#{i}"] == "Uncleared" &&
-        response["L_AMT#{i}"].to_i == individual_topup_amount
+        seen[txn_id] = true
+        new_ids += 1
+        next unless response["L_TYPE#{i}"] == "Transfer" &&
+          response["L_NAME#{i}"] == "Bank Account" &&
+          response["L_STATUS#{i}"] == "Uncleared"
+
+        topup_amount += response["L_AMT#{i}"].to_d
+      end
+
+      truncated = response.keys.any? { |k| k.start_with?("L_ERRORCODE") && response[k] == "11002" }
+      break unless truncated
+      if oldest_ts.blank? || oldest_ts <= start_date || new_ids.zero?
+        raise "PayPal TransactionSearch truncated (11002); cannot page older than #{oldest_ts.inspect}"
+      end
+
+      # ENDDATE is inclusive. Keep the oldest returned timestamp so a
+      # same-second row that did not fit on this page is not skipped;
+      # seen[] drops the overlap.
+      end_date = oldest_ts
     end
-
+    if truncated
+      raise "PayPal TransactionSearch truncated (11002); pagination budget exhausted"
+    end
     topup_amount
   end
 end
