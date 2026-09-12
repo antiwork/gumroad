@@ -680,10 +680,10 @@ class PaypalPayoutProcessor
     (response["L_AMT0"].to_d * 100).to_i
   end
 
-  # Bank-account top-ups are not searchable by type. FundsAdded keeps
-  # TransactionSearch on deposits so the 100-row cap is less likely to
-  # hide an uncleared Transfer. If PayPal still truncates (warning 11002),
-  # page older windows until the two-week range is complete.
+  # Bank-account top-ups are not searchable by type or amount. Do not
+  # send TRANSACTIONCLASS or AMT; keep Transfer / Bank Account /
+  # Uncleared in Ruby. If PayPal truncates (warning 11002), page older
+  # windows until the two-week range is complete.
   def self.topup_amount_in_transit
     seen = {}
     topup_amount = 0.to_d
@@ -694,7 +694,6 @@ class PaypalPayoutProcessor
     10.times do
       params = PAYPAL_API_PARAMS.merge(
         "METHOD" => "TransactionSearch",
-        "TRANSACTIONCLASS" => "FundsAdded",
         "STARTDATE" => start_date.iso8601
       )
       params["ENDDATE"] = end_date.iso8601 if end_date

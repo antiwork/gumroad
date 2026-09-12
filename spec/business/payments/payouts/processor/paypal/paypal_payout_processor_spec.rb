@@ -1510,7 +1510,7 @@ describe PaypalPayoutProcessor do
       expect(HTTParty).to receive(:post) do |_url, opts|
         expect(opts[:body]["AMT"]).to be_nil
         expect(opts[:body]["METHOD"]).to eq("TransactionSearch")
-        expect(opts[:body]["TRANSACTIONCLASS"]).to eq("FundsAdded")
+        expect(opts[:body]["TRANSACTIONCLASS"]).to be_nil
         paypal_nvp("ACK" => "Success")
       end
 
