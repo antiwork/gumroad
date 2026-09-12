@@ -1174,6 +1174,8 @@ describe "Balance Pages Scenario", js: true, type: :system do
       let(:payout_processor_type) { PayoutProcessorType::STRIPE }
 
       before do
+        # These payout fixtures are not representative of the seller's chargeback rate.
+        allow_any_instance_of(Purchase).to receive(:pause_payouts_for_seller_based_on_chargeback_rate!)
         create(:merchant_account, user: seller, charge_processor_merchant_id: create_verified_stripe_account(country: "US").id)
 
         affiliate_product = create :product, price_cents: 1500
