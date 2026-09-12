@@ -664,6 +664,171 @@ check(
   expect_specs: [],
 )
 
+# Harvest 2026-09-12: recurring run-all-specs gaps.
+check(
+  "Payouts page fans out to balance request specs (#7438)",
+  base_files: {
+    "spec/requests/balance_pages_spec.rb" => SPEC_STUB,
+    "app/javascript/pages/Payouts/Index.tsx" => "old",
+    "app/javascript/components/Payouts/index.tsx" => "old",
+  },
+  head_files: {
+    "app/javascript/pages/Payouts/Index.tsx" => "new",
+    "app/javascript/components/Payouts/index.tsx" => "new",
+  },
+  expect_specs: %w[spec/requests/balance_pages_spec.rb],
+)
+
+check(
+  "Settings PaymentsPage component fans out to settings request specs (#7473)",
+  base_files: {
+    "spec/requests/settings/payments_spec.rb" => SPEC_STUB,
+    "app/javascript/components/Settings/PaymentsPage/PayPalEmailSection.tsx" => "old",
+  },
+  head_files: {
+    "app/javascript/components/Settings/PaymentsPage/PayPalEmailSection.tsx" => "new",
+  },
+  expect_specs: %w[spec/requests/settings/payments_spec.rb],
+)
+
+check(
+  "Emails page fans out to emails request specs (#7578)",
+  base_files: {
+    "spec/requests/emails/list_spec.rb" => SPEC_STUB,
+    "app/javascript/pages/Emails/Published.tsx" => "old",
+  },
+  head_files: { "app/javascript/pages/Emails/Published.tsx" => "new" },
+  expect_specs: %w[spec/requests/emails/list_spec.rb],
+)
+
+check(
+  "help_center articles.yml maps to help center specs (#7375)",
+  base_files: {
+    "spec/requests/help_center_spec.rb" => SPEC_STUB,
+    "app/models/help_center/articles.yml" => "old",
+  },
+  head_files: { "app/models/help_center/articles.yml" => "new" },
+  expect_specs: %w[spec/requests/help_center_spec.rb],
+)
+
+check(
+  "currencies.json maps to currencies spec instead of escalating (#7229)",
+  base_files: {
+    "spec/config/currencies_spec.rb" => SPEC_STUB,
+    "config/currencies.json" => "{}",
+  },
+  head_files: { "config/currencies.json" => "{\"USD\":{}}" },
+  expect_specs: %w[spec/config/currencies_spec.rb],
+)
+
+check(
+  "initializer with a dedicated spec maps (#7432 family)",
+  base_files: {
+    "spec/config/initializers/secure_headers_spec.rb" => SPEC_STUB,
+    "config/initializers/secure_headers.rb" => "old",
+  },
+  head_files: { "config/initializers/secure_headers.rb" => "new" },
+  expect_specs: %w[spec/config/initializers/secure_headers_spec.rb],
+)
+
+check(
+  "Tiptap extension fans out to product request specs (#7535)",
+  base_files: {
+    "spec/requests/products/edit/covers_spec.rb" => SPEC_STUB,
+    "app/javascript/components/TiptapExtensions/FileUpload.tsx" => "old",
+  },
+  head_files: { "app/javascript/components/TiptapExtensions/FileUpload.tsx" => "new" },
+  expect_specs: %w[spec/requests/products/edit/covers_spec.rb],
+)
+
+check(
+  "docker nginx with a mapped spec does not escalate (#7468)",
+  base_files: {
+    "app/models/widget.rb" => "old",
+    "spec/models/widget_spec.rb" => SPEC_STUB,
+    "docker/nginx/nginx.conf" => "old",
+  },
+  head_files: {
+    "app/models/widget.rb" => "new",
+    "docker/nginx/nginx.conf" => "new",
+  },
+  expect_specs: %w[spec/models/widget_spec.rb],
+)
+
+check(
+  "docker-only change does not escalate (#7260)",
+  base_files: { "docker/web/server.sh" => "old" },
+  head_files: { "docker/web/server.sh" => "new" },
+  expect_specs: [],
+)
+
+check(
+  "email stylesheet fans out to mailer specs (#7156)",
+  base_files: {
+    "spec/mailers/customer_mailer_spec.rb" => SPEC_STUB,
+    "app/javascript/stylesheets/_email.scss" => "old",
+  },
+  head_files: { "app/javascript/stylesheets/_email.scss" => "new" },
+  expect_specs: %w[spec/mailers/customer_mailer_spec.rb],
+)
+
+check(
+  "profile parser fans out to profile request specs (#7341)",
+  base_files: {
+    "spec/requests/user/profile_spec.rb" => SPEC_STUB,
+    "app/javascript/parsers/profile.ts" => "old",
+  },
+  head_files: { "app/javascript/parsers/profile.ts" => "new" },
+  expect_specs: %w[spec/requests/user/profile_spec.rb],
+)
+
+# Negatives harvested as unsafe to map.
+check(
+  "shared Select.tsx still escalates (#7437)",
+  base_files: { "app/javascript/components/Select.tsx" => "old" },
+  head_files: { "app/javascript/components/Select.tsx" => "new" },
+  expect_escalate: true,
+)
+
+check(
+  "ui/Select.tsx still escalates (imported from checkout+payouts+settings)",
+  base_files: { "app/javascript/components/ui/Select.tsx" => "old" },
+  head_files: { "app/javascript/components/ui/Select.tsx" => "new" },
+  expect_escalate: true,
+)
+
+check(
+  "routes.rb still escalates",
+  base_files: { "config/routes.rb" => "old" },
+  head_files: { "config/routes.rb" => "new" },
+  expect_escalate: true,
+)
+
+check(
+  "sidekiq_schedule.yml still escalates",
+  base_files: { "config/sidekiq_schedule.yml" => "old" },
+  head_files: { "config/sidekiq_schedule.yml" => "new" },
+  expect_escalate: true,
+)
+
+check(
+  "application.rb still escalates",
+  base_files: { "config/application.rb" => "old" },
+  head_files: { "config/application.rb" => "new" },
+  expect_escalate: true,
+)
+
+# #7070 post-merge miss: checkout presenter must still pull checkout flow specs.
+check(
+  "checkout presenter still fans out to checkout request specs (#7070)",
+  base_files: {
+    "spec/requests/checkout/payment_spec.rb" => SPEC_STUB,
+    "app/presenters/checkout/stripe_payment_presenter.rb" => "old",
+  },
+  head_files: { "app/presenters/checkout/stripe_payment_presenter.rb" => "new" },
+  expect_specs: %w[spec/requests/checkout/payment_spec.rb],
+)
+
 WORKFLOW = File.expand_path("../../.github/workflows/tests.yml", __dir__)
 workflow = YAML.load_file(WORKFLOW)
 migration_versions = workflow.fetch("jobs").fetch("migration_versions")

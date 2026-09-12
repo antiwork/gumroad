@@ -77,6 +77,20 @@ AUDIENCE_FLOW_SPECS = %w[
   spec/requests/analytics/audience_spec.rb
   spec/requests/customers
 ].freeze
+EMAIL_FLOW_SPECS = %w[spec/requests/emails].freeze
+DISCOVER_FLOW_SPECS = %w[spec/requests/discover].freeze
+WISHLIST_FLOW_SPECS = %w[spec/requests/wishlists].freeze
+DOWNLOAD_PAGE_SPECS = %w[spec/requests/download_page].freeze
+WORKFLOW_FLOW_SPECS = %w[spec/requests/workflows_spec.rb].freeze
+MAILER_FLOW_SPECS = %w[spec/mailers].freeze
+HELP_CENTER_SPECS = %w[spec/requests/help_center_spec.rb spec/requests/help_center spec/presenters/help_center_presenter_spec.rb].freeze
+# Instant-payout / balance page (Inertia Payouts/Index), not the 45 backend payout specs.
+PAYOUT_PAGE_SPECS = %w[
+  spec/requests/balance_pages_spec.rb
+  spec/controllers/balance_controller_spec.rb
+  spec/controllers/instant_payouts_controller_spec.rb
+  spec/controllers/payouts
+].freeze
 
 FANOUT = {
   %r{\Aapp/presenters/checkout/} => CHECKOUT_FLOW_SPECS,
@@ -101,9 +115,9 @@ FANOUT = {
   %r{\Aapp/javascript/pages/Profile/} => PROFILE_FLOW_SPECS,
   # Help-center article partials render through the help_center request specs;
   # the per-article view glob finds nothing because specs aren't per-article.
-  %r{\Aapp/views/help_center/} => %w[spec/requests/help_center_spec.rb spec/requests/help_center],
-  %r{\Aapp/javascript/components/HelpCenterPage} => %w[spec/requests/help_center_spec.rb spec/requests/help_center],
-  %r{\Aapp/javascript/pages/HelpCenter/} => %w[spec/requests/help_center_spec.rb spec/requests/help_center],
+  %r{\Aapp/views/help_center/} => HELP_CENTER_SPECS,
+  %r{\Aapp/javascript/components/HelpCenterPage} => HELP_CENTER_SPECS,
+  %r{\Aapp/javascript/pages/HelpCenter/} => HELP_CENTER_SPECS,
   # Recurring run-all-specs gaps (ProductEdit, Settings, API docs, Analytics,
   # Audience, Bundles, Dashboard). These trees have no co-located rspec.
   %r{\Aapp/javascript/components/ProductEdit/} => PRODUCT_FLOW_SPECS,
@@ -123,23 +137,70 @@ FANOUT = {
   # authorize screens live in oauth_authorizations*_spec.rb.
   %r{\Aapp/views/doorkeeper/} => %w[spec/requests/oauth_authorizations_spec.rb spec/requests/oauth_authorize_scope_list_spec.rb],
   %r{\Aspec/support/dynamodb\.rb\z} => %w[spec/services/email_engagement_dynamo_store_spec.rb],
+  # Harvest 2026-09-12 (run-all-specs PRs since 2026-08-01). Each line names
+  # the PR(s) that escalated on this path.
+  %r{\Aapp/javascript/components/Settings/} => SETTINGS_FLOW_SPECS, # #7473 PayPalEmailSection
+  %r{\Aapp/javascript/(components|pages)/Payouts/} => PAYOUT_PAGE_SPECS, # #7438 #7495
+  %r{\Aapp/javascript/pages/Emails/} => EMAIL_FLOW_SPECS, # #7578 #7580
+  %r{\Aapp/javascript/components/EmailsPage/} => EMAIL_FLOW_SPECS, # #7581
+  %r{\Aapp/javascript/data/installments} => EMAIL_FLOW_SPECS, # #7578
+  %r{\Aapp/models/help_center/articles\.yml\z} => HELP_CENTER_SPECS, # #7375
+  %r{\Aapp/javascript/components/TiptapExtensions/} => PRODUCT_FLOW_SPECS, # #7404 #7535
+  %r{\Aapp/javascript/components/RichTextEditor} => PRODUCT_FLOW_SPECS, # #7207 #7403
+  %r{\Aapp/javascript/components/ImageUploader} => PRODUCT_FLOW_SPECS, # #7403
+  %r{\Aapp/javascript/components/ReviewForm} => PRODUCT_FLOW_SPECS + DOWNLOAD_PAGE_SPECS, # #7332
+  %r{\Aapp/javascript/components/Review\.tsx\z} => PRODUCT_FLOW_SPECS + DOWNLOAD_PAGE_SPECS, # #7529
+  %r{\Aapp/javascript/components/ReviewVideoPlayer} => PRODUCT_FLOW_SPECS + DOWNLOAD_PAGE_SPECS, # #7474
+  %r{\Aapp/javascript/components/DiscordButton} => DOWNLOAD_PAGE_SPECS, # #7529
+  %r{\Aapp/javascript/components/DownloadPage/} => DOWNLOAD_PAGE_SPECS, # #7529
+  %r{\Aapp/javascript/data/discord_integration} => DOWNLOAD_PAGE_SPECS, # #7529
+  %r{\Aapp/javascript/data/product_reviews} => PRODUCT_FLOW_SPECS + DOWNLOAD_PAGE_SPECS, # #7529
+  %r{\Aapp/javascript/components/DateRangePicker} => ANALYTICS_FLOW_SPECS, # #7259
+  %r{\Aapp/javascript/components/useRecaptcha} => CHECKOUT_FLOW_SPECS, # #7203
+  %r{\Aapp/javascript/parsers/profile} => PROFILE_FLOW_SPECS, # #7341
+  %r{\Aapp/javascript/pages/Users/} => PROFILE_FLOW_SPECS, # #7236 Coffee
+  %r{\Aapp/javascript/data/paypal} => SETTINGS_FLOW_SPECS, # #7355
+  %r{\Aapp/javascript/data/search} => DISCOVER_FLOW_SPECS, # #7267
+  %r{\Aapp/javascript/pages/Discover/} => DISCOVER_FLOW_SPECS, # #7236
+  %r{\Aapp/javascript/pages/Wishlists/} => WISHLIST_FLOW_SPECS, # #7236
+  %r{\Aapp/javascript/components/WorkflowsPage/} => WORKFLOW_FLOW_SPECS, # #7474
+  %r{\Aapp/javascript/entrypoints/custom_html_analytics} => ANALYTICS_FLOW_SPECS, # #7504
+  %r{\Aapp/javascript/stylesheets/_email} => MAILER_FLOW_SPECS, # #7156 #7404
 }.freeze
 
-# Config files with dedicated request coverage. Everything else under
-# config/ still escalates via ESCALATE_PATTERNS; entries here are reviewed
-# like FANOUT — a file belongs only when a spec exists whose entire purpose
-# is exercising it.
+# Config files with a dedicated spec. Boot-global files still escalate via
+# ESCALATE_PATTERNS. Other config/* is tried via spec_candidates (spec/config/...)
+# and mapping-gaps if nothing exists — harvested 2026-09-12.
 CONFIG_SPEC_MAP = {
   "config/initializers/rack_attack.rb" => %w[spec/requests/rack_attack_spec.rb],
+  "config/currencies.json" => %w[spec/config/currencies_spec.rb spec/requests/checkout/currencies_spec.rb], # #7229
+  "config/initializers/sentry.rb" => %w[spec/config/initializers/sentry_spec.rb],
+  "config/initializers/filter_parameter_logging.rb" => %w[spec/config/initializers/filter_parameter_logging_spec.rb],
+  "config/initializers/devise_pwned_password_safe_params.rb" => %w[spec/config/initializers/devise_pwned_password_safe_params_spec.rb],
+  "config/initializers/secure_headers.rb" => %w[spec/config/initializers/secure_headers_spec.rb], # #7432
+  "config/initializers/alterity.rb" => %w[spec/config/initializers/alterity_spec.rb],
+  "config/initializers/active_storage_jobs.rb" => %w[spec/config/initializers/active_storage_jobs_spec.rb],
+  "config/initializers/instant_ddl_first.rb" => %w[spec/config/initializers/instant_ddl_first_spec.rb],
+  "config/initializers/005_apple.rb" => %w[spec/config/initializers/apple_strategy_patch_spec.rb], # #7589
 }.freeze
 
 # Support files with mappings; any OTHER spec/support change escalates.
 MAPPED_SUPPORT = FANOUT.keys.select { |re| re.source.start_with?('\Aspec/support') }.freeze
 
 # Paths that cannot be attributed to specs by filename: run the full suite.
+# Blanket `config/` was replaced 2026-09-12: only boot-global files stay here.
+# Other config (currencies.json, domain.rb, initializers with a dedicated spec)
+# maps via CONFIG_SPEC_MAP / spec_candidates. Unknown config still mapping-gaps.
 ESCALATE_PATTERNS = [
   %r{\AGemfile},
-  %r{\Aconfig/},
+  %r{\Aconfig/application\.rb\z},
+  %r{\Aconfig/boot\.rb\z},
+  %r{\Aconfig/environment\.rb\z},
+  %r{\Aconfig/environments/},
+  %r{\Aconfig/database},
+  %r{\Aconfig/routes\.rb\z},
+  # Cron graph — 13 harvested PRs; no spec/config/sidekiq_schedule_spec.rb.
+  %r{\Aconfig/sidekiq_schedule\.yml\z},
   %r{\Adb/},
   %r{\Apackage\.json\z},
   %r{\A(pnpm-lock\.yaml|yarn\.lock|package-lock\.json)\z},
@@ -168,6 +229,8 @@ IGNORED_PATTERNS = [
   # Recorded HTTP, not helpers. A cassette-only diff must not force Slow;
   # the spec that plays the tape is already in the selection (or unchanged).
   %r{\Aspec/support/fixtures/vcr_cassettes/},
+  # Image/nginx/web scripts are not the rspec suite. Harvest: #7260 #7468 #7527.
+  %r{\Adocker/},
 ].freeze
 
 # Above this many selected files the full suite's parallelism wins anyway.
@@ -369,6 +432,13 @@ def spec_candidates(path)
     ["spec/#{$1}/#{$2}_spec.rb"]
   when %r{\Alib/(.*)\.rb\z}
     ["spec/lib/#{$1}_spec.rb"]
+  when %r{\Aconfig/(.*)\.(rb|yml|json)\z}
+    # Convention: config/foo.rb → spec/config/foo_spec.rb (and nested initializers).
+    ["spec/config/#{$1}_spec.rb"]
+  when %r{\Aapp/javascript/pages/([^/]+)/}
+    underscored = $1.gsub(/([a-z\d])([A-Z])/, '\1_\2').downcase
+    Dir.glob("spec/requests/#{underscored}/**/*_spec.rb") +
+      Dir.glob("spec/requests/#{underscored}*_spec.rb")
   else
     []
   end
