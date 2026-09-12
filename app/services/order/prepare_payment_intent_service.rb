@@ -643,7 +643,7 @@ class Order::PreparePaymentIntentService
         setup_future_charges: false,
         off_session: false,
         client_confirm: true
-      ).decision
+      ).decision(payment_method: @previewed_payment_method_type)
     end
 
     def buyer_currency_quote_presentment_for(charge)
