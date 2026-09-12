@@ -259,28 +259,7 @@ describe Checkout::BuyerCurrencyEligibility do
     expect(decision.fallback_reason).to be_nil
   end
 
-  it "falls back for buyer currencies Gumroad stores in different minor units than Stripe charges" do
-    allow_any_instance_of(described_class).to receive(:buyer_currency_for_ip).and_return(Currency::KRW)
-
-    expect(decision).not_to be_eligible
-    expect(decision.fallback_reason).to eq(:unsupported_buyer_currency)
-  end
-
-  it "falls back for buyer currencies Stripe only charges in amounts divisible by 100" do
-    allow_any_instance_of(described_class).to receive(:buyer_currency_for_ip).and_return(Currency::TWD)
-
-    expect(decision).not_to be_eligible
-    expect(decision.fallback_reason).to eq(:unsupported_buyer_currency)
-  end
-
-  it "allows zero-decimal buyer currencies that Gumroad also stores in whole units" do
-    allow_any_instance_of(described_class).to receive(:buyer_currency_for_ip).and_return(Currency::JPY)
-
-    expect(decision).to be_eligible
-    expect(decision.currency).to eq(Currency::JPY)
-  end
-
-  %w[sek nok dkk mxn].each do |currency|
+  %w[jpy sek nok dkk mxn sar aed try cop ron thb myr idr krw twd].each do |currency|
     it "allows #{currency} presentment" do
       allow_any_instance_of(described_class).to receive(:buyer_currency_for_ip).and_return(currency)
 

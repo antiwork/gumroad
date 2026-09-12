@@ -3,14 +3,14 @@
 require "spec_helper"
 
 describe "config/currencies.json" do
-  let(:added) { %w[sek nok dkk mxn] }
+  let(:added) { %w[sar aed try cop ron thb myr idr] }
   let(:help_article) do
     Rails.root.join("app/views/help_center/articles/contents/_46-what-currency-does-gumroad-use.html.erb").read
   end
 
-  it "keeps one 23-currency pricing list including EUR and the four new buyer currencies" do
+  it "keeps one 31-currency pricing list including EUR, KRW, TWD and the eight new buyer currencies" do
     expect(CURRENCY_CHOICES.keys.map(&:to_s)).to eq(
-      %w[usd gbp eur jpy inr aud cad hkd sgd twd nzd brl zar chf ils php krw pln czk sek nok dkk mxn]
+      %w[usd gbp eur jpy inr aud cad hkd sgd twd nzd brl zar chf ils php krw pln czk sek nok dkk mxn sar aed try cop ron thb myr idr]
     )
   end
 
@@ -22,16 +22,20 @@ describe "config/currencies.json" do
     )
   end
 
-  it "defines SEK, NOK, DKK and MXN with 100 subunits and the configured floors" do
-    expect(CURRENCY_CHOICES[:sek]).to eq("symbol" => "kr", "display_format" => "kr (Swedish krona)", "min_price" => 999)
-    expect(CURRENCY_CHOICES[:nok]).to eq("symbol" => "kr", "display_format" => "kr (Norwegian krone)", "min_price" => 949)
-    expect(CURRENCY_CHOICES[:dkk]).to eq("symbol" => "kr", "display_format" => "kr (Danish krone)", "min_price" => 649)
-    expect(CURRENCY_CHOICES[:mxn]).to eq(
-      "symbol" => "MX$",
-      "display_format" => "MX$ (Mexican peso)",
+  it "defines the eight new currencies with 100 subunits and the configured floors" do
+    expect(CURRENCY_CHOICES[:sar]).to eq("symbol" => "SAR", "display_format" => "SAR (Saudi riyal)", "min_price" => 372)
+    expect(CURRENCY_CHOICES[:aed]).to eq("symbol" => "AED", "display_format" => "AED (UAE dirham)", "min_price" => 364)
+    expect(CURRENCY_CHOICES[:try]).to eq("symbol" => "₺", "display_format" => "₺ (Turkish lira)", "min_price" => 4812)
+    expect(CURRENCY_CHOICES[:cop]).to eq(
+      "symbol" => "COL$",
+      "display_format" => "COL$ (Colombian peso)",
       "short_symbol" => "$",
-      "min_price" => 1699
+      "min_price" => 307474
     )
+    expect(CURRENCY_CHOICES[:ron]).to eq("symbol" => "lei", "display_format" => "lei (Romanian leu)", "min_price" => 449)
+    expect(CURRENCY_CHOICES[:thb]).to eq("symbol" => "฿", "display_format" => "฿ (Thai baht)", "min_price" => 3270)
+    expect(CURRENCY_CHOICES[:myr]).to eq("symbol" => "RM", "display_format" => "RM (Malaysian ringgit)", "min_price" => 403)
+    expect(CURRENCY_CHOICES[:idr]).to eq("symbol" => "Rp", "display_format" => "Rp (Indonesian rupiah)", "min_price" => 1743007)
 
     added.each do |code|
       expect(CURRENCY_CHOICES[code]).not_to have_key(:single_unit)
@@ -41,12 +45,24 @@ describe "config/currencies.json" do
     end
   end
 
+  it "lets KRW and TWD through the checkout minor-unit gate" do
+    expect(StripeChargeProcessor.charge_minor_units_compatible?("krw")).to be(true)
+    expect(StripeChargeProcessor.charge_minor_units_compatible?("twd")).to be(true)
+    expect(StripeChargeProcessor.charge_subunit_to_unit("krw")).to eq(1)
+    expect(StripeChargeProcessor.charge_subunit_to_unit("twd")).to eq(100)
+    expect(StripeChargeProcessor.align_charge_amount_cents(32_258, "twd")).to eq(32_300)
+  end
+
   it "keeps payout-only currencies out of the pricing list" do
-    expect(CURRENCY_CHOICES).not_to have_key(:thb)
-    expect(Currency::THB).to eq("thb")
+    expect(CURRENCY_CHOICES).not_to have_key(:pen)
+    expect(Currency::PEN).to eq("pen")
   end
 
   it "lists the new checkout currencies in the public help article" do
-    expect(help_article).to include("Swedish krona", "Norwegian krone", "Danish krone", "Mexican peso")
+    expect(help_article).to include(
+      "Saudi riyal", "UAE dirham", "Turkish lira", "Colombian peso",
+      "Romanian leu", "Thai baht", "Malaysian ringgit", "Indonesian rupiah",
+      "Korean won", "Taiwanese dollars"
+    )
   end
 end

@@ -158,7 +158,7 @@ describe CustomerSurchargeController, :vcr do
       expect(gbp).to include("label" => "£ (British Pounds)")
     end
 
-    it "offers SEK, NOK, DKK and MXN in the checkout currency picker" do
+    it "offers SEK, NOK, DKK, MXN and the eight new buyer currencies in the checkout currency picker" do
       post "calculate_all", params: {
         products: [{ permalink: @product.unique_permalink, price: 100, quantity: 1 }],
       }, as: :json
@@ -167,7 +167,17 @@ describe CustomerSurchargeController, :vcr do
         include("code" => Currency::SEK, "label" => "kr (Swedish krona)"),
         include("code" => Currency::NOK, "label" => "kr (Norwegian krone)"),
         include("code" => Currency::DKK, "label" => "kr (Danish krone)"),
-        include("code" => Currency::MXN, "label" => "MX$ (Mexican peso)")
+        include("code" => Currency::MXN, "label" => "MX$ (Mexican peso)"),
+        include("code" => Currency::SAR, "label" => "SAR (Saudi riyal)"),
+        include("code" => Currency::AED, "label" => "AED (UAE dirham)"),
+        include("code" => Currency::TRY, "label" => "₺ (Turkish lira)"),
+        include("code" => Currency::COP, "label" => "COL$ (Colombian peso)"),
+        include("code" => Currency::RON, "label" => "lei (Romanian leu)"),
+        include("code" => Currency::THB, "label" => "฿ (Thai baht)"),
+        include("code" => Currency::MYR, "label" => "RM (Malaysian ringgit)"),
+        include("code" => Currency::IDR, "label" => "Rp (Indonesian rupiah)"),
+        include("code" => Currency::KRW, "label" => "₩ (Korean Won)"),
+        include("code" => Currency::TWD, "label" => "NT$ (Taiwanese Dollars)")
       )
     end
 
@@ -934,13 +944,19 @@ describe CustomerSurchargeController, :vcr do
       end
     end
 
-    it "returns no quote props for buyer currencies Gumroad stores in different minor units than Stripe charges" do
+    it "quotes KRW in whole won for a Korean IP" do
+      allow(StripeFxQuote).to receive(:create).and_return(
+        StripeFxQuote::Quote.new(id: "fxq_krw", expires_at: 30.minutes.from_now, fx_rate: BigDecimal("0.00072"))
+      )
       allow_any_instance_of(CustomerSurchargeController).to receive(:buyer_currency_for_ip).and_return(Currency::KRW)
 
       post "calculate_all", params: { products: [{ permalink: @product.unique_permalink, price: 100, quantity: 1 }] }, as: :json
 
       expect(response.parsed_body.fetch("detected_buyer_currency")).to eq(Currency::KRW)
-      expect(response.parsed_body["buyer_currency_quote"]).to be_nil
+      expect(response.parsed_body.fetch("buyer_currency_quote")).to include(
+        "currency" => Currency::KRW,
+        "subunit_to_unit" => 1
+      )
     end
 
     it "responds without a quote instead of erroring when a crafted request submits a negative price" do

@@ -11,16 +11,16 @@ describe SellerMobileAnalyticsService do
   describe "#process" do
     it "serializes historical currencies in all-time sales without converting the displayed amount" do
       purchase = create(:purchase, link: @product, price_cents: 200, created_at: 2.years.ago)
-      purchase.update_columns(displayed_price_currency_type: "thb", displayed_price_cents: 1250)
+      purchase.update_columns(displayed_price_currency_type: "pen", displayed_price_cents: 1250)
       index_model_records(Purchase)
 
       result = described_class.new(@user, range: "all", fields: [:purchases, :sales_count]).process
 
       expect(result[:sales_count]).to eq 1
       expect(result[:revenue]).to eq 200
-      expect(result[:purchases].sole[:price]).to eq "฿12.50"
-      expect(purchase.reload.formatted_display_price).to eq "฿12.50"
-      expect(purchase.as_json[:currency_symbol]).to eq "฿"
+      expect(result[:purchases].sole[:price]).to eq "S/.12.50"
+      expect(purchase.reload.formatted_display_price).to eq "S/.12.50"
+      expect(purchase.as_json[:currency_symbol]).to eq "S/."
       expect(purchase.displayed_price_cents).to eq 1250
       expect(purchase.price_cents).to eq 200
     end

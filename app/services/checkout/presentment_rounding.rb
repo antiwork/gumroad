@@ -110,7 +110,11 @@ class Checkout::PresentmentRounding
 
   private
     def zero_decimal?
-      subunit_to_unit(currency) == 1
+      StripeChargeProcessor::ZERO_DECIMAL_CURRENCIES.include?(currency)
+    end
+
+    def whole_charge_unit?
+      StripeChargeProcessor::AMOUNT_DIVISIBLE_BY_100_CURRENCIES.include?(currency)
     end
 
     # Ties (an amount exactly between the occurrence below and the one above) go to the
@@ -145,6 +149,8 @@ class Checkout::PresentmentRounding
     # above — 99 cents becomes 99 yen out of every hundred, or 99 euro cents out of every
     # euro.
     def target_ending
+      return 0 if whole_charge_unit?
+
       canonical_total_cents % subunit_to_unit(Currency::USD) * target_step / subunit_to_unit(Currency::USD)
     end
 

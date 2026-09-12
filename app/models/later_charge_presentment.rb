@@ -119,13 +119,11 @@ class LaterChargePresentment < ApplicationRecord
     def usd_cents_for(units_per_usd)
       return nil if units_per_usd.blank?
 
-      # `exception: false` because this method promises nil for an unusable rate, and the rate can
-      # arrive as a String from CurrencyHelper#get_rate (which reads a cache) — a garbage cached
-      # value should make a reporting figure unanswerable, not raise out of a report.
       rate = BigDecimal(units_per_usd.to_s, exception: false)
       return nil if rate.nil? || !rate.positive?
 
-      get_usd_cents(presentment_currency, presentment_price_cents, rate:)
+      subunit = StripeChargeProcessor.charge_subunit_to_unit(presentment_currency)
+      ((BigDecimal(presentment_price_cents.to_s) / subunit) / rate * subunit_to_unit(Currency::USD)).round
     end
 
     # A row the charge path could never use is worse than no row: the owner would look like it
@@ -150,18 +148,9 @@ class LaterChargePresentment < ApplicationRecord
         return
       end
 
-      # Stripe's minor-unit convention has to match ours or the amount we send is off by a factor
-      # of 100 — the same gate Checkout::BuyerCurrencyEligibility#decision applies before it will
-      # quote a currency at all.
-      #
-      # This gate is also what keeps the USD figures above correct. Korean won is the one
-      # supported currency where Gumroad's stored minor unit (1/100 won, see
-      # config/initializers/money.rb) disagrees with both Stripe (whole won) and
-      # config/currencies.json (which does not flag KRW single_unit, so CurrencyHelper reads a
-      # KRW amount as hundredths). A stored KRW fixing would therefore be unchargeable AND
-      # report a USD value 100x too small; rejecting the row here is what makes both impossible.
-      # Japanese yen, the only supported currency stored in whole units, is flagged single_unit
-      # and so converts correctly.
+      # Stripe's charge units have to match the amount we send. Buyer-presentment KRW is
+      # converted to whole won (charge_subunit_to_unit); TWD is rounded to whole NT$.
+      # Seller-priced KRW stays on 1/100-won storage and is not used on this path.
       unless StripeChargeProcessor.charge_minor_units_compatible?(currency)
         errors.add(:presentment_currency, "cannot be charged in minor units by Stripe")
       end

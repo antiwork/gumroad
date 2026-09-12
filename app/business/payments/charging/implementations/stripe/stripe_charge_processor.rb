@@ -91,17 +91,44 @@ class StripeChargeProcessor
     INDIA_CARD_MANDATE_CURRENCIES.include?(currency.to_s.downcase)
   end
 
-  # Gumroad stores some currencies in non-ISO minor units (e.g. KRW is stored as 1/100 won —
-  # see config/initializers/money.rb) while Stripe charges KRW in whole won. Amounts are
-  # passed to Stripe verbatim, so a charge is only safe when both conventions agree and
-  # Stripe accepts arbitrary amounts in the currency (TWD must be divisible by 100).
+  # Whether checkout can produce a Stripe-chargeable amount in this currency.
+  # KRW is stored as 1/100 won for seller pricing (config/initializers/money.rb) but
+  # charged in whole won — presentment conversion uses charge_subunit_to_unit.
+  # TWD charges are rounded to whole NT$ (amounts divisible by 100).
   def self.charge_minor_units_compatible?(currency)
     return false if currency.blank?
 
     currency = currency.to_s.downcase
+    return true if currency == Currency::KRW || currency == Currency::TWD
     return false if AMOUNT_DIVISIBLE_BY_100_CURRENCIES.include?(currency)
 
     subunit_to_unit(currency) == (ZERO_DECIMAL_CURRENCIES.include?(currency) ? 1 : 100)
+  end
+
+  # Minor units Stripe's Charge/PaymentIntent amount uses. Seller-priced KRW stays on
+  # Money's 100-subunit storage; buyer-presentment KRW uses this (whole won).
+  def self.charge_subunit_to_unit(currency)
+    currency = currency.to_s.downcase
+    ZERO_DECIMAL_CURRENCIES.include?(currency) ? 1 : subunit_to_unit(currency)
+  end
+
+  def self.align_charge_amount_cents(amount_cents, currency)
+    amount = amount_cents.to_i
+    return amount unless AMOUNT_DIVISIBLE_BY_100_CURRENCIES.include?(currency.to_s.downcase)
+
+    aligned = (BigDecimal(amount) / 100).round * 100
+    amount.positive? && aligned < 100 ? 100 : aligned
+  end
+
+  def self.presentment_cents_for(canonical_usd_cents, fx_rate, currency)
+    return 0 if canonical_usd_cents.to_i.zero?
+    raise ArgumentError, "FX rate must be positive" unless fx_rate.positive?
+
+    converted = (
+      BigDecimal(canonical_usd_cents.to_s) / subunit_to_unit(Currency::USD) /
+        fx_rate * charge_subunit_to_unit(currency)
+    ).round
+    align_charge_amount_cents(converted, currency)
   end
 
   def merchant_migrated?(merchant_account)

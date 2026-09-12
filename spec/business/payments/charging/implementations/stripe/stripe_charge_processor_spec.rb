@@ -98,14 +98,23 @@ describe StripeChargeProcessor, :vcr do
       expect(described_class.charge_minor_units_compatible?("jpy")).to be(true)
     end
 
-    it "rejects KRW because Gumroad stores 1/100 won while Stripe charges whole won" do
-      expect(described_class.charge_minor_units_compatible?("krw")).to be(false)
-      expect(described_class.charge_minor_units_compatible?(Currency::KRW)).to be(false)
+    it "allows KRW by converting presentment amounts to Stripe's whole-won units" do
+      expect(described_class.charge_minor_units_compatible?("krw")).to be(true)
+      expect(described_class.charge_minor_units_compatible?(Currency::KRW)).to be(true)
+      expect(described_class.charge_subunit_to_unit("krw")).to eq(1)
+      expect(Money::Currency.new("krw").subunit_to_unit).to eq(100)
     end
 
-    it "rejects TWD because Stripe only accepts amounts evenly divisible by 100" do
-      expect(described_class.charge_minor_units_compatible?("twd")).to be(false)
-      expect(described_class.charge_minor_units_compatible?(Currency::TWD)).to be(false)
+    it "allows TWD by rounding presentment amounts to whole NT$" do
+      expect(described_class.charge_minor_units_compatible?("twd")).to be(true)
+      expect(described_class.charge_minor_units_compatible?(Currency::TWD)).to be(true)
+      expect(described_class.align_charge_amount_cents(32_258, "twd")).to eq(32_300)
+      expect(described_class.align_charge_amount_cents(50, "twd")).to eq(100)
+    end
+
+    it "quotes KRW in whole won and TWD in whole NT$ from a USD total" do
+      expect(described_class.presentment_cents_for(10_00, BigDecimal("0.00072"), "krw")).to eq(13_889)
+      expect(described_class.presentment_cents_for(10_00, BigDecimal("0.031"), "twd")).to eq(32_300)
     end
 
     it "rejects blank currencies" do
