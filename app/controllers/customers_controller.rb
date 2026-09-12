@@ -205,7 +205,10 @@ class CustomersController < Sellers::BaseController
           :url_redirect,
           :variant_attributes,
           affiliate: :affiliate_user,
-          commission_as_deposit: [:completion_purchase, { files_attachments: :blob }],
+          commission_as_deposit: [
+            { completion_purchase: [:tip, :purchase_offer_code_discount] },
+            { files_attachments: :blob },
+          ],
           link: :alive_variants,
           product_review: [:response, { alive_videos: [:video_file] }],
           purchase_custom_fields: { files_attachments: :blob },

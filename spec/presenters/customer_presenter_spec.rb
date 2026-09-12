@@ -346,6 +346,91 @@ describe CustomerPresenter do
       end
     end
 
+    context "commission list price" do
+      let(:commission_product) { create(:commission_product) }
+      let(:deposit) do
+        create(
+          :purchase,
+          link: commission_product,
+          seller: commission_product.user,
+          is_commission_deposit_purchase: true,
+          price_cents: 500,
+          displayed_price_cents: 500
+        )
+      end
+      let!(:commission) { create(:commission, deposit_purchase: deposit) }
+
+      it "uses the deposit amount while the commission has no completion charge" do
+        expect(described_class.new(purchase: deposit).customer(pundit_user:)[:price][:cents]).to eq(500)
+      end
+
+      it "includes the charged completion amount on the deposit row" do
+        completion = create(
+          :purchase,
+          link: commission_product,
+          seller: commission_product.user,
+          is_commission_completion_purchase: true,
+          price_cents: 500,
+          displayed_price_cents: 500
+        )
+        create(:tip, purchase: deposit, value_cents: 50)
+        create(:tip, purchase: completion, value_cents: 50)
+        commission.update!(completion_purchase: completion)
+
+        props = described_class.new(purchase: deposit.reload).customer(pundit_user:)
+
+        expect(props[:price][:cents]).to eq(1000)
+        expect(props[:price][:cents_before_offer_code]).to eq(1000)
+        expect(props[:price][:tip_cents]).to eq(100)
+      end
+
+      it "does not include a failed completion charge" do
+        completion = create(
+          :failed_purchase,
+          link: commission_product,
+          seller: commission_product.user,
+          is_commission_completion_purchase: true,
+          price_cents: 500,
+          displayed_price_cents: 500
+        )
+        commission.update!(completion_purchase: completion)
+
+        expect(described_class.new(purchase: deposit.reload).customer(pundit_user:)[:price][:cents]).to eq(500)
+      end
+
+      it "does not include an uncharged in-progress completion" do
+        completion = create(
+          :purchase_in_progress,
+          link: commission_product,
+          seller: commission_product.user,
+          is_commission_completion_purchase: true,
+          price_cents: 500,
+          displayed_price_cents: 500
+        )
+        commission.update!(completion_purchase: completion)
+
+        expect(completion).not_to be_pending_buyer_presentment_settlement
+        expect(described_class.new(purchase: deposit.reload).customer(pundit_user:)[:price][:cents]).to eq(500)
+      end
+
+      it "includes a completion still settling in the buyer's presentment currency" do
+        completion = create(
+          :purchase_in_progress,
+          link: commission_product,
+          seller: commission_product.user,
+          is_commission_completion_purchase: true,
+          price_cents: 500,
+          displayed_price_cents: 500,
+          flow_of_funds: nil,
+          merchant_account: nil
+        )
+        commission.update!(completion_purchase: completion)
+
+        expect(completion).to be_pending_buyer_presentment_settlement
+        expect(described_class.new(purchase: deposit.reload).customer(pundit_user:)[:price][:cents]).to eq(1000)
+      end
+    end
+
     context "purchase has an installment plan" do
       let(:installment_plan) { create(:product_installment_plan, number_of_installments: 3, recurrence: "monthly") }
       let(:purchase) { create(:installment_plan_purchase, link: installment_plan.link) }

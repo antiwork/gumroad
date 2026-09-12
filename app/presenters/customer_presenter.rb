@@ -64,12 +64,12 @@ class CustomerPresenter
       created_at: purchase.created_at.iso8601,
       price:
         {
-          cents: purchase.subscription&.current_subscription_price_cents || purchase.displayed_price_cents,
-          cents_before_offer_code: purchase.displayed_price_cents_before_offer_code(include_deleted: true) || purchase.displayed_price_cents,
+          cents: listed_price_cents,
+          cents_before_offer_code: listed_price_cents_before_offer_code,
           cents_refundable: purchase.amount_refundable_cents_in_currency,
           currency_type: purchase.displayed_price_currency_type.to_s,
           recurrence: (purchase.subscription || purchase.price)&.recurrence,
-          tip_cents: purchase.tip&.value_cents,
+          tip_cents: listed_tip_cents,
         },
       quantity: purchase.quantity,
       discount: offer_code.present? ?
@@ -181,6 +181,42 @@ class CustomerPresenter
   end
 
   private
+    # Completions are excluded from the sales-list query so they don't get their own
+    # row; fold a charged completion into the deposit row so the list matches the
+    # detail charges. `!failed?` is not enough: create_completion_purchase! links the
+    # completion before it is successful, including in_progress rows that are still
+    # waiting on SCA. Pending presentment settlement is already charged.
+    def charged_commission_completion_purchase
+      return unless purchase.is_commission_deposit_purchase?
+
+      completion = purchase.commission&.completion_purchase
+      return unless completion
+      return unless completion.successful? || completion.pending_buyer_presentment_settlement?
+
+      completion
+    end
+
+    def listed_price_cents
+      (purchase.subscription&.current_subscription_price_cents || purchase.displayed_price_cents) +
+        charged_commission_completion_purchase&.displayed_price_cents.to_i
+    end
+
+    def listed_price_cents_before_offer_code
+      deposit = purchase.displayed_price_cents_before_offer_code(include_deleted: true) || purchase.displayed_price_cents
+      completion = charged_commission_completion_purchase
+      return deposit unless completion
+
+      deposit + (completion.displayed_price_cents_before_offer_code(include_deleted: true) || completion.displayed_price_cents)
+    end
+
+    def listed_tip_cents
+      deposit = purchase.tip&.value_cents
+      completion = charged_commission_completion_purchase&.tip&.value_cents
+      return deposit if completion.blank?
+
+      deposit.to_i + completion
+    end
+
     def file_details(file)
       {
         id: file.signed_id,
