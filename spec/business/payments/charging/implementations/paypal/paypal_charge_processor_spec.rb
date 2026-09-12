@@ -938,7 +938,7 @@ describe PaypalChargeProcessor, :vcr do
         capture_id = "0JF852973C016714D"
         @purchase.update!(stripe_transaction_id: capture_id)
         # PayPal captures settle in the seller's PayPal primary currency, which is wider than
-        # CURRENCY_CHOICES — thousands of live merchant accounts are MXN/MYR/SEK/THB/HUF.
+        # CURRENCY_CHOICES — thousands of live merchant accounts are MYR/THB/HUF.
         allow(described_class).to receive(:get_rate).with("mxn").and_return("20.0")
         event_info = paypal_refund_event(
           refund_id: "PAYPAL-REFUND-MXN",

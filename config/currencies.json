@@ -104,6 +104,27 @@
       "symbol": "Kč",
       "display_format": "Kč (Czech koruna)",
       "min_price": 2149
+    },
+    "sek": {
+      "symbol": "kr",
+      "display_format": "kr (Swedish krona)",
+      "min_price": 999
+    },
+    "nok": {
+      "symbol": "kr",
+      "display_format": "kr (Norwegian krone)",
+      "min_price": 949
+    },
+    "dkk": {
+      "symbol": "kr",
+      "display_format": "kr (Danish krone)",
+      "min_price": 649
+    },
+    "mxn": {
+      "symbol": "MX$",
+      "display_format": "MX$ (Mexican peso)",
+      "short_symbol": "$",
+      "min_price": 1699
     }
   }
 }

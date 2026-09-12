@@ -50,6 +50,26 @@ describe("currencyCodeList", () => {
   it("includes usd, pinning the config/currencies.json wiring through the JSON import", () => {
     expect(currencyCodeList).toContain("usd");
   });
+
+  it("includes Nordic and Mexican currencies with 100 subunits and configured floors", () => {
+    const added = [
+      { code: "sek", min: 999, longSymbol: "kr", displayFormat: "kr (Swedish krona)" },
+      { code: "nok", min: 949, longSymbol: "kr", displayFormat: "kr (Norwegian krone)" },
+      { code: "dkk", min: 649, longSymbol: "kr", displayFormat: "kr (Danish krone)" },
+      { code: "mxn", min: 1699, longSymbol: "MX$", displayFormat: "MX$ (Mexican peso)" },
+    ] as const;
+
+    for (const { code, min, longSymbol, displayFormat } of added) {
+      expect(currencyCodeList).toContain(code);
+      expect(getIsSingleUnitCurrency(code)).toBe(false);
+      expect(getMinPriceCents(code)).toBe(min);
+      expect(findCurrencyByCode(code).longSymbol).toBe(longSymbol);
+      expect(findCurrencyByCode(code).displayFormat).toBe(displayFormat);
+    }
+
+    expect(findCurrencyByCode("mxn").shortSymbol).toBe("$");
+    expect(findCurrencyByCode("sek").shortSymbol).toBe("kr");
+  });
 });
 
 describe("formatMinorUnitPriceWithIntl", () => {
