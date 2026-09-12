@@ -532,8 +532,9 @@ class Ai::AnthropicClient
       base = GlobalConfig.get("GUMHEAD_UPSTREAM_API_BASE").to_s.strip.chomp("/")
       return if base.blank?
 
-      host = URI.parse(base).host
-      return unless host == VERCEL_HOST
+      uri = URI.parse(base)
+      # Reject http:// — the Gumhead key would otherwise go over plaintext.
+      return unless uri.scheme == "https" && uri.host == VERCEL_HOST
 
       base.end_with?("/v1") ? "#{base}/messages" : "#{base}/v1/messages"
     rescue URI::InvalidURIError
@@ -558,6 +559,7 @@ class Ai::AnthropicClient
 
     # Vercel model failover is providerOptions.gateway.models. If that still errors, replay once
     # on the Opus fallback model — same outcome as OpenRouter's `fallbacks` body param.
+    # StoreAgentService memoizes this client, so the replay flag must not stick across requests.
     def with_vercel_model_fallback(yielded: -> { false })
       yield
     rescue Error => e
@@ -565,8 +567,17 @@ class Ai::AnthropicClient
       raise if yielded.call
       raise unless vercel? && !@using_fallback_model && fallback_model.present? && fallback_model != model
 
+      Rails.logger.warn(
+        "Anthropic Vercel primary failed (#{e.class}: #{e.message}); " \
+        "replaying fallback requested=#{model} gateway=#{gateway_name}"
+      )
+      previous = @using_fallback_model
       @using_fallback_model = true
-      yield
+      begin
+        yield
+      ensure
+        @using_fallback_model = previous
+      end
     end
 
     # Caller override first (the store agent falls back to Opus 5) so the config knob stays a
