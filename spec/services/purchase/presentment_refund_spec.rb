@@ -25,6 +25,17 @@ describe Purchase::PresentmentRefund do
            presentment_total_cents: 135)
   end
 
+  %w[krw twd].each do |currency|
+    it "rounds a partial #{currency} refund snapshot to whole units" do
+      purchase.purchase_presentment.update!(presentment_currency: currency, presentment_price_cents: 100_065,
+                                            presentment_total_cents: 100_100)
+      result = described_class.new(purchase:, canonical_gross_refund_cents: 33).result
+
+      expect(result.presentment_amount_cents).to eq(33_000)
+      expect(described_class.new(purchase:, canonical_gross_refund_cents: 100).result.presentment_amount_cents).to eq(100_100)
+    end
+  end
+
   it "returns nil for canonical purchases" do
     purchase.purchase_presentment.destroy!
     purchase.association(:purchase_presentment).reset

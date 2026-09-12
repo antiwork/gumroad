@@ -1824,6 +1824,42 @@ describe("buyer-currency presentment lane", () => {
     expect(getStripePaymentElementAmount(s)).toBe(625);
   });
 
+  it.each([
+    ["krw", 1369900, 13699],
+    ["twd", 31300, 31300],
+  ] as const)(
+    "mounts %s in Stripe units while keeping display amounts in stored units",
+    (currency, amount, stripeAmount) => {
+      const s = state({
+        checkoutPayment: buyerCurrencyPresentmentPaymentElementConfig,
+        surcharges: {
+          ...loadedSurchargesWithQuote,
+          result: {
+            ...loadedSurchargesWithQuote.result,
+            buyer_currency_quote: {
+              ...buyerCurrencyQuote,
+              currency,
+              presentment_total_cents: amount,
+              charge_presentment_total_cents: amount,
+              line_allocations: [
+                {
+                  permalink: "product-a",
+                  price_cents: amount,
+                  tip_cents: 0,
+                  tax_cents: 0,
+                  shipping_cents: 0,
+                  total_cents: amount,
+                },
+              ],
+            },
+          },
+        },
+      });
+      expect(getStripePaymentElementPresentment(s)).toEqual({ currency, amountCents: amount });
+      expect(getStripePaymentElementAmount(s)).toBe(stripeAmount);
+    },
+  );
+
   it("holds the presentment mount while a wallet is selected inside the element", () => {
     // A USD flip here remounts the element (currency is in the provider key) and wipes the
     // wallet selection before the sheet can open.

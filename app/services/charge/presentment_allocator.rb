@@ -43,12 +43,13 @@ class Charge::PresentmentAllocator
   # (see Checkout::PresentmentRounding); it is added on top of the exact components,
   # touching only the non-tax ones. The returned line totals therefore sum to
   # presentment_total_cents + rounding_delta_cents, which is what the buyer is charged.
-  def self.allocate_lines(presentment_total_cents:, lines:, rounding_delta_cents: 0, presentment_component_overrides: nil)
+  def self.allocate_lines(presentment_total_cents:, lines:, rounding_delta_cents: 0, presentment_component_overrides: nil, currency: nil)
+    step = StripeChargeProcessor.whole_unit_presentment_currency?(currency) ? 100 : 1
     line_total_shares = Charge.allocate_by_largest_remainder(
-      presentment_total_cents,
+      presentment_total_cents / step,
       lines.map(&:canonical_total_cents),
       lines.sum(&:canonical_total_cents)
-    )
+    ).map { _1 * step }
 
     component_shares = lines.each_with_index.map do |line, index|
       Charge.allocate_by_largest_remainder(
@@ -132,7 +133,8 @@ class Charge::PresentmentAllocator
   # the price-ending rounding moved the charged total away from it (see #allocate_lines).
   # presentment_gumroad_amount_cents already includes the difference, because Gumroad's
   # share of the charge is what absorbs it.
-  def initialize(purchases:, presentment_total_cents:, presentment_gumroad_amount_cents:, rounding_delta_cents: 0, presentment_component_overrides: nil)
+  def initialize(purchases:, presentment_total_cents:, presentment_gumroad_amount_cents:, rounding_delta_cents: 0, presentment_component_overrides: nil, currency: nil)
+    @currency = currency
     @purchases = purchases
     @presentment_total_cents = presentment_total_cents
     @presentment_gumroad_amount_cents = presentment_gumroad_amount_cents
@@ -142,6 +144,7 @@ class Charge::PresentmentAllocator
 
   def allocations
     line_allocations = self.class.allocate_lines(
+      currency: @currency,
       presentment_total_cents:,
       rounding_delta_cents:,
       presentment_component_overrides:,

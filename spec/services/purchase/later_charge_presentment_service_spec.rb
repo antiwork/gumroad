@@ -43,6 +43,22 @@ describe Purchase::LaterChargePresentmentService do
     allow(StripeChargeProcessor).to receive(:charge_minor_units_compatible?).and_return(true)
   end
 
+  %w[krw twd].each do |currency|
+    it "rounds the #{currency} renewal total without changing the fixed price or tax conversion" do
+      allow(StripeChargeProcessor).to receive(:charge_minor_units_compatible?).and_call_original
+      create(:later_charge_presentment, owner: subscription, presentment_currency: currency,
+                                        presentment_price_cents: 30_000, effective_from: 1.hour.ago)
+      renewal_purchase.update!(total_transaction_cents: 1001, tax_cents: 1, gumroad_tax_cents: 0, shipping_cents: 0)
+      runner = service(amount_cents: 1001)
+      result = runner.perform
+
+      expect(result).to be_present, runner.fallback_reason.to_s
+      expect(result.processor_currency).to eq(currency)
+      expect(result.processor_amount_cents).to eq(30_000)
+      expect(renewal_purchase.reload.purchase_presentment.presentment_seller_tax_cents).to eq(1)
+    end
+  end
+
   it "charges the amount stored at signup rather than one derived from the current rate" do
     result = service.perform
 

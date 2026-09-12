@@ -463,7 +463,7 @@ class Checkout::StripePaymentPresenter
 
       currency = buyer_currency_for_ip(ip).to_s.downcase.presence
       return false if currency.blank? || currency == Currency::USD
-      return false unless StripeChargeProcessor.charge_minor_units_compatible?(currency)
+      return false unless StripeChargeProcessor.quoted_currency_supported?(currency)
 
       # Prepare can honor the displayed quote today only for a single USD-priced line. Multi-line
       # USD carts and non-USD listing quotes still need the per-line quote basis work before a

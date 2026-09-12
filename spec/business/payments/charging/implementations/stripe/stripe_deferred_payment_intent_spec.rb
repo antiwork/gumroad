@@ -68,6 +68,19 @@ describe StripeDeferredPaymentIntent do
       end
     end
 
+    { "krw" => [1_369_900, 13_699], "twd" => [31_300, 31_300] }.each do |currency, (stored_amount, stripe_amount)|
+      it "creates a #{currency} intent in Stripe units without changing the stored amount" do
+        create_deferred_intent(currency:, amount_cents: stored_amount, amount_for_gumroad_cents: 0, stripe_fx_quote_id: "fxq_whole_units")
+
+        expect(captured_params.last[:params]).to include(currency:, amount: stripe_amount, fx_quote: "fxq_whole_units")
+      end
+    end
+
+    it "refuses a fractional won rather than silently changing the confirmed amount" do
+      expect { create_deferred_intent(currency: "krw", amount_cents: 100_050) }.to raise_error(ArgumentError, /whole won/)
+      expect(captured_params).to be_empty
+    end
+
     it "passes the idempotency key as a Stripe request option" do
       create_deferred_intent
 

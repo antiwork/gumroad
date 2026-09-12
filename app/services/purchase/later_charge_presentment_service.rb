@@ -53,7 +53,7 @@ class Purchase::LaterChargePresentmentService
     purchase = purchases.first
     currency = presentment.presentment_currency
     return fallback(:required_currency_mismatch) if required_currency.present? && currency != required_currency
-    return fallback(:unsupported_currency) unless StripeChargeProcessor.charge_minor_units_compatible?(currency)
+    return fallback(:unsupported_currency) unless StripeChargeProcessor.quoted_currency_supported?(currency)
     return fallback(:unsupported_charge_model) unless Checkout::BuyerCurrencyEligibility.supported_merchant_account?(merchant_account)
     return fallback(:settlement_currency_mismatch) unless Checkout::BuyerCurrencyEligibility.usd_settling_merchant_account?(merchant_account, presentment_currency: currency)
 
@@ -71,7 +71,7 @@ class Purchase::LaterChargePresentmentService
 
     variable_canonical_cents = variable_component_canonical_cents(purchase)
     variable_presentment_cents = presentment_cents_for(variable_canonical_cents, quote.fx_rate, currency)
-    presentment_total_cents = fixed_price_cents + variable_presentment_cents
+    presentment_total_cents = StripeChargeProcessor.round_presentment_amount(fixed_price_cents + variable_presentment_cents, currency)
     return fallback(:non_positive_total) unless presentment_total_cents.positive?
 
     # Gumroad's share converts at today's rate. Because the buyer's price stays fixed, the

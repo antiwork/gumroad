@@ -17,8 +17,8 @@ class StripeDeferredPaymentIntent
                  transfer_group: nil, metadata: nil, stripe_fx_quote_id: nil, payment_method_options: nil,
                  setup_future_usage: nil, customer_params: nil, customer_idempotency_key: nil)
     @merchant_account = merchant_account
-    @amount_cents = amount_cents
-    @amount_for_gumroad_cents = amount_for_gumroad_cents
+    @amount_cents = StripeChargeProcessor.stripe_presentment_amount(amount_cents, currency)
+    @amount_for_gumroad_cents = currency == Currency::KRW ? (amount_for_gumroad_cents.to_d / 100).round : amount_for_gumroad_cents
     @reference = reference
     @description = description
     @idempotency_key = idempotency_key

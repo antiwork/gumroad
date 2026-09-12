@@ -653,7 +653,7 @@ export function getStripePaymentElementAmount(state: State) {
   // A client-confirm surface can become quote-backed after a total-affecting edit. Prefer the
   // loaded quote before the server-rendered listed amount from the stale initial configuration.
   const presentment = getStripePaymentElementPresentment(state);
-  if (presentment) return presentment.amountCents;
+  if (presentment) return presentment.currency === "krw" ? presentment.amountCents / 100 : presentment.amountCents;
   // Recurring UPI is a server-selected INR registration lane. A stale stored USD picker
   // preference must not reinterpret either the Element amount or its currency.
   if (

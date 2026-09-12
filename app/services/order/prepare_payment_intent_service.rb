@@ -890,7 +890,7 @@ class Order::PreparePaymentIntentService
       return false unless Checkout::BuyerCurrencyEligibility.seller_enabled?(seller)
       return false if params[:buyer_currency_quote].blank?
 
-      StripeChargeProcessor.charge_minor_units_compatible?(currency)
+      StripeChargeProcessor.quoted_currency_supported?(currency)
     end
 
     # A ConfirmationToken from a non-USD Payment Element can never confirm a USD intent.

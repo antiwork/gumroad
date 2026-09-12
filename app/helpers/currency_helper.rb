@@ -233,8 +233,8 @@ module CurrencyHelper
     # for a commission, one installment for an installment plan), so checkout falls back to
     # canonical USD for them and a converted price shown here is never the amount charged.
     return false if buyer_currency_unquotable_product?(product)
-    # Gumroad and Stripe must agree on the currency's minor units before we can charge it.
-    return false unless StripeChargeProcessor.charge_minor_units_compatible?(buyer_currency)
+    # The quote normalizes whole-unit currencies before the amount is confirmed.
+    return false unless StripeChargeProcessor.quoted_currency_supported?(buyer_currency)
 
     merchant_account = buyer_currency_merchant_account(seller)
     return false if merchant_account.blank?

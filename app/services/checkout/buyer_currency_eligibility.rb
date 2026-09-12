@@ -373,7 +373,7 @@ class Checkout::BuyerCurrencyEligibility
       buyer_currency_for_ip(purchases.first.ip_address)
     return fallback(:missing_buyer_currency) if buyer_currency.blank?
     return fallback(:canonical_buyer_currency) if buyer_currency == Currency::USD
-    return fallback(:unsupported_buyer_currency) unless StripeChargeProcessor.charge_minor_units_compatible?(buyer_currency)
+    return fallback(:unsupported_buyer_currency) unless StripeChargeProcessor.quoted_currency_supported?(buyer_currency)
     if purchases.any? { _1.link.is_recurring_billing? } &&
        !self.class.indian_card_mandate_presentment_supported?(seller:, merchant_account:, currency: buyer_currency)
       return fallback(:unsupported_indian_card_mandate_currency)
@@ -397,7 +397,7 @@ class Checkout::BuyerCurrencyEligibility
     # listed cents. A mixed listing cart is still one USD basis (gumroad-private#1433) — quote
     # the whole cart into the buyer currency instead of falling presentment back to USD.
     if listed_in_buyer_currency.any?
-      listed_lane = listed_in_buyer_currency.all? &&
+      listed_lane = StripeChargeProcessor.charge_minor_units_compatible?(buyer_currency) && listed_in_buyer_currency.all? &&
         # The snapshotted currency, not the product's current one: a seller who repriced into
         # the buyer's currency later would otherwise get USD cents sent as the buyer's.
         purchases.all? { _1.displayed_price_currency_type.to_s.downcase == buyer_currency } &&
@@ -517,10 +517,12 @@ class Checkout::BuyerCurrencyEligibility
       return fallback(:unsupported_settlement_currency)
     end
 
-    # Defensive guard for future registry entries: Gumroad and Stripe must agree
-    # on the currency's minor units before we can charge in it (EUR always
-    # passes; this protects against someone adding e.g. a KRW-forced method).
-    return fallback(:unsupported_forced_currency) unless StripeChargeProcessor.charge_minor_units_compatible?(forced_currency)
+    supported = if priced_in_forced_currency || !quote_bound_card_surface?(forced_currency)
+      StripeChargeProcessor.charge_minor_units_compatible?(forced_currency)
+    else
+      StripeChargeProcessor.quoted_currency_supported?(forced_currency)
+    end
+    return fallback(:unsupported_forced_currency) unless supported
 
     eligible(currency: forced_currency, direct_listed_amount: priced_in_forced_currency)
   end
@@ -571,7 +573,7 @@ class Checkout::BuyerCurrencyEligibility
       return false unless self.class.seller_enabled?(seller)
       return false if params[:buyer_currency_quote].blank?
 
-      StripeChargeProcessor.charge_minor_units_compatible?(currency)
+      StripeChargeProcessor.quoted_currency_supported?(currency)
     end
 
     def usd_settling_merchant_account?(presentment_currency)

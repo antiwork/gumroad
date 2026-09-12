@@ -128,6 +128,7 @@ class Charge::PresentmentOrchestrator
     # charging anything else would break the invariant this feature rests on. Nothing is
     # persisted either way: the raise happens before the transactional #persist!.
     allocations = Charge::PresentmentAllocator.new(
+      currency: eligibility_decision.currency,
       purchases:,
       presentment_total_cents: presentment_total_cents - rounding_delta_cents,
       presentment_gumroad_amount_cents:,

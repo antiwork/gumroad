@@ -64,7 +64,7 @@ class Purchase::FixLaterChargePresentmentService
     owner.later_charge_presentments.create!(
       processor: StripeChargeProcessor.charge_processor_id,
       presentment_currency: currency,
-      presentment_price_cents:,
+      presentment_price_cents: StripeChargeProcessor.round_presentment_amount(presentment_price_cents, currency),
       canonical_price_cents:,
       signup_currency_units_per_usd: 1 / fx_rate,
       effective_from: Time.current

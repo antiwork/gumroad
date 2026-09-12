@@ -613,7 +613,7 @@ class Purchase
     issued_amount = flow_of_funds&.issued_amount
     derived = if issued_amount&.currency.to_s.downcase == purchase_presentment.presentment_currency.to_s.downcase
       Purchase::PresentmentRefund.from_presentment_amount(purchase: self,
-                                                          presentment_amount_cents: issued_amount.cents.abs)
+                                                          presentment_amount_cents: issued_amount.cents.abs * (issued_amount.currency.to_s.downcase == Currency::KRW ? 100 : 1))
     end
     return derived if derived.present?
 

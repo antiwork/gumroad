@@ -91,6 +91,15 @@ describe StripeChargeProcessor, :vcr do
     end
   end
 
+  describe ".quoted_currency_supported?" do
+    it "admits whole-unit quotes without admitting unrounded direct-listed amounts" do
+      %w[krw twd].each do |currency|
+        expect(described_class.quoted_currency_supported?(currency)).to be(true)
+        expect(described_class.charge_minor_units_compatible?(currency)).to be(false)
+      end
+    end
+  end
+
   describe ".charge_minor_units_compatible?" do
     it "allows currencies whose stored minor units match what Stripe charges" do
       expect(described_class.charge_minor_units_compatible?("usd")).to be(true)
@@ -1041,6 +1050,22 @@ describe StripeChargeProcessor, :vcr do
           stripe_fx_quote_id: "fxq_test"
         )
       end.to raise_error(ChargeProcessorFxQuoteInvalidError)
+    end
+
+    { "krw" => [1_369_900, 13_699], "twd" => [31_300, 31_300] }.each do |currency, (stored_amount, stripe_amount)|
+      it "sends the whole-unit #{currency} quoted amount to Stripe on server-confirm checkout" do
+        merchant_account = build(:merchant_account, user: nil)
+        quote_chargeable = instance_double(StripeChargeablePaymentMethod, stripe_charge_params: { payment_method: "pm_test" })
+        payment_intent = Stripe::PaymentIntent.construct_from(id: "pi_whole_units", status: StripeIntentStatus::PROCESSING)
+        expect(Stripe::PaymentIntent).to receive(:create).with(
+          hash_including(amount: stripe_amount, currency:, fx_quote: "fxq_whole_units"),
+          hash_including(stripe_version: StripeFxQuote::API_VERSION)
+        ).and_return(payment_intent)
+
+        subject.create_payment_intent_or_charge!(merchant_account, quote_chargeable, 10_00, 3_00, "reference", "test description",
+                                                 off_session: false, processor_amount_cents: stored_amount,
+                                                 processor_currency: currency, processor_gumroad_amount_cents: 0, stripe_fx_quote_id: "fxq_whole_units")
+      end
     end
 
     it "uses buyer-presentment params for direct connected-account charges" do

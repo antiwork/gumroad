@@ -22,27 +22,20 @@ describe LaterChargePresentment do
       expect(presentment.errors[:presentment_currency]).to include("is the canonical currency, so there is nothing to present")
     end
 
-    # twd rather than a stubbed currency: Stripe genuinely only accepts New Taiwan dollars in
-    # amounts divisible by 100, so this exercises the real gate and would catch a drift in
-    # StripeChargeProcessor::AMOUNT_DIVISIBLE_BY_100_CURRENCIES that a stub would hide.
-    it "rejects a currency Stripe cannot charge in minor units" do
-      presentment = build(:later_charge_presentment, owner: subscription, presentment_currency: "twd")
+    { "krw" => [150_000, 1500, 100], "twd" => [30_000, 30, 1000] }.each do |currency, (amount, rate, usd_cents)|
+      it "accepts whole-unit #{currency} in stored hundredths and reads its USD value" do
+        presentment = create(:later_charge_presentment, owner: subscription, presentment_currency: currency,
+                                                        presentment_price_cents: amount, signup_currency_units_per_usd: rate)
 
-      expect(presentment).not_to be_valid
-      expect(presentment.errors[:presentment_currency]).to include("cannot be charged in minor units by Stripe")
-    end
+        expect(presentment.usd_cents_when_fixed).to eq(usd_cents)
+      end
 
-    # Korean won is the one currency where Gumroad's stored minor unit disagrees with Stripe's:
-    # Gumroad stores 1/100 won (config/initializers/money.rb) while Stripe charges whole won, so
-    # it must never reach a stored fixing at all. Pinned because a KRW row would ALSO read back
-    # wrong: KRW is not flagged single_unit in config/currencies.json, so CurrencyHelper would
-    # treat a whole-won amount as hundredths and understate the USD figures by a factor of 100.
-    # Rejecting the row is what keeps that unreachable, and this asserts the rejection directly.
-    it "rejects Korean won, whose stored minor unit disagrees with Stripe's" do
-      presentment = build(:later_charge_presentment, owner: subscription, presentment_currency: Currency::KRW)
+      it "rejects fractional-unit #{currency} fixings" do
+        presentment = build(:later_charge_presentment, owner: subscription, presentment_currency: currency, presentment_price_cents: 12345)
 
-      expect(presentment).not_to be_valid
-      expect(presentment.errors[:presentment_currency]).to include("cannot be charged in minor units by Stripe")
+        expect(presentment).not_to be_valid
+        expect(presentment.errors[:presentment_price_cents]).to include("must be a whole currency unit")
+      end
     end
 
     # Japanese yen is the only currency Gumroad both allows and stores in whole units, so it is

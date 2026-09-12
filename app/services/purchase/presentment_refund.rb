@@ -173,6 +173,7 @@ class Purchase::PresentmentRefund
         [canonical_gross_refund_cents, purchase.gross_amount_refundable_cents - canonical_gross_refund_cents],
         purchase.gross_amount_refundable_cents
       ).first
+      refunded_share = StripeChargeProcessor.round_presentment_amount(refunded_share, purchase_presentment.presentment_currency)
       [refunded_share, remaining_presentment_amount_cents].min
     end
 

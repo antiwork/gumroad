@@ -528,7 +528,7 @@ class Checkout::BuyerCurrencyQuote
 
     buyer_currency = currency.presence || buyer_currency_for_ip(ip)
     return if buyer_currency.blank? || buyer_currency == Currency::USD
-    return unless StripeChargeProcessor.charge_minor_units_compatible?(buyer_currency)
+    return unless StripeChargeProcessor.quoted_currency_supported?(buyer_currency)
     return unless sellers.all? { Checkout::BuyerCurrencyEligibility.seller_enabled?(_1) }
     return unless self.class.buyer_currency_listing_quotable?(line_items:, buyer_currency:)
 
@@ -740,7 +740,7 @@ class Checkout::BuyerCurrencyQuote
       # would charge an amount the buyer never saw. Applied per charge because the setting is
       # the seller's own, and because the rounding difference is booked against Gumroad's
       # share of THAT charge.
-      rounding = if Checkout::PresentmentRounding.enabled_for?(seller) && charge_line_items.none?(&:partial_or_setup_charge?)
+      rounding = if Checkout::PresentmentRounding.enabled_for?(seller) && !StripeChargeProcessor.whole_unit_presentment_currency?(buyer_currency) && charge_line_items.none?(&:partial_or_setup_charge?)
         Checkout::PresentmentRounding.round(
           presentment_total_cents: converted_total_cents,
           canonical_total_cents: charge_canonical_total_cents,
@@ -781,7 +781,8 @@ class Checkout::BuyerCurrencyQuote
         charge_line_items,
         converted_total_cents,
         rounding.delta_cents,
-        presentment_component_overrides: display_presentment_component_overrides
+        presentment_component_overrides: display_presentment_component_overrides,
+        currency: buyer_currency
       )
       future_installments_presentment_total_cents = 0
       later_charge_presentments = charge_line_items.each_with_index.filter_map do |line_item, index|
@@ -881,8 +882,9 @@ class Checkout::BuyerCurrencyQuote
     # A raise from the allocator (a difference with no non-tax component to carry it) is
     # caught by #create's rescue, which drops the whole cart back to canonical USD — a
     # cosmetic price ending must never break a checkout.
-    def line_allocations_for(charge_line_items, converted_total_cents, rounding_delta_cents, presentment_component_overrides:)
+    def line_allocations_for(charge_line_items, converted_total_cents, rounding_delta_cents, presentment_component_overrides:, currency:)
       Charge::PresentmentAllocator.allocate_lines(
+        currency:,
         presentment_total_cents: converted_total_cents,
         rounding_delta_cents:,
         presentment_component_overrides:,
@@ -1038,6 +1040,7 @@ class Checkout::BuyerCurrencyQuote
     def presentment_cents_for(canonical_usd_cents, fx_rate, currency)
       raise ArgumentError, "FX rate must be positive" unless fx_rate.positive?
 
-      ((BigDecimal(canonical_usd_cents.to_s) / subunit_to_unit(Currency::USD)) / fx_rate * subunit_to_unit(currency)).round
+      amount = (BigDecimal(canonical_usd_cents.to_s) / subunit_to_unit(Currency::USD)) / fx_rate * subunit_to_unit(currency)
+      StripeChargeProcessor.round_presentment_amount(amount, currency)
     end
 end

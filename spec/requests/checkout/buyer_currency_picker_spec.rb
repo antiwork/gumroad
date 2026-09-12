@@ -84,6 +84,19 @@ describe "Buyer-currency checkout currency picker", type: :system, js: true do
     expect(page).to have_text("Total €8", normalize_ws: true)
   end
 
+  it "selects whole-unit Korean won and Taiwan dollar quotes" do
+    allow(StripeFxQuote).to receive(:create) do |from_currency:, **_args|
+      quote({ "krw" => "0.00073", "twd" => "0.032" }.fetch(from_currency, "1.25"))
+    end
+    visit "/l/#{@product.unique_permalink}"
+    add_to_cart(@product)
+
+    select "₩ (Korean Won)", from: "Currency"
+    expect(page).to have_text("Total ₩13,699", normalize_ws: true)
+    select "NT$ (Taiwanese Dollars)", from: "Currency"
+    expect(page).to have_text("Total NT$313", normalize_ws: true)
+  end
+
   it "offers SEK, NOK, DKK and MXN in the checkout currency menu" do
     allow(StripeFxQuote).to receive(:create) { quote("1.25") }
 

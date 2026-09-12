@@ -68,6 +68,7 @@ module Charge::Refundable
       # buyer-presentment charges is the buyer's currency, not canonical USD.
       expected_refunded_amount_cents = refundable.presentment_refundable_amount_cents || refundable.refundable_amount_cents
       refunded_amount_cents = event.extras[:refunded_amount_cents].to_i
+      refunded_amount_cents *= 100 if refundable.presentment_currency == Currency::KRW
       return unless refunded_amount_cents > 0 && refunded_amount_cents <= expected_refunded_amount_cents
 
       # A partial charge-level refund on a combined charge with multiple purchases

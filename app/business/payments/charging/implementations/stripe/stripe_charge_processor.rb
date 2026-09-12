@@ -91,10 +91,8 @@ class StripeChargeProcessor
     INDIA_CARD_MANDATE_CURRENCIES.include?(currency.to_s.downcase)
   end
 
-  # Gumroad stores some currencies in non-ISO minor units (e.g. KRW is stored as 1/100 won —
-  # see config/initializers/money.rb) while Stripe charges KRW in whole won. Amounts are
-  # passed to Stripe verbatim, so a charge is only safe when both conventions agree and
-  # Stripe accepts arbitrary amounts in the currency (TWD must be divisible by 100).
+  # Direct-listed amounts need identical units and no whole-unit rounding. FX quotes
+  # can also use KRW/TWD after rounding in stored units and converting at the Stripe boundary.
   def self.charge_minor_units_compatible?(currency)
     return false if currency.blank?
 
@@ -102,6 +100,29 @@ class StripeChargeProcessor
     return false if AMOUNT_DIVISIBLE_BY_100_CURRENCIES.include?(currency)
 
     subunit_to_unit(currency) == (ZERO_DECIMAL_CURRENCIES.include?(currency) ? 1 : 100)
+  end
+
+  def self.quoted_currency_supported?(currency)
+    charge_minor_units_compatible?(currency) || whole_unit_presentment_currency?(currency)
+  end
+
+  def self.whole_unit_presentment_currency?(currency)
+    [Currency::KRW, Currency::TWD].include?(currency.to_s.downcase)
+  end
+
+  def self.round_presentment_amount(amount, currency)
+    return amount.round unless whole_unit_presentment_currency?(currency)
+
+    (amount.to_d / 100).round * 100
+  end
+
+  # Stored KRW amounts remain hundredths of won; only Stripe's wire amounts are whole won.
+  def self.stripe_presentment_amount(amount, currency)
+    return amount unless currency.to_s.downcase == Currency::KRW
+
+    raise ArgumentError, "KRW charge must be a whole won amount" unless (amount % 100).zero?
+
+    amount / 100
   end
 
   def merchant_migrated?(merchant_account)
@@ -338,6 +359,10 @@ class StripeChargeProcessor
     charge_amount_cents = processor_amount_cents || amount_cents
     charge_currency = processor_currency || Currency::USD
     charge_gumroad_amount_cents = processor_gumroad_amount_cents || amount_for_gumroad_cents
+    charge_amount_cents = self.class.stripe_presentment_amount(charge_amount_cents, charge_currency)
+    if charge_currency == Currency::KRW
+      charge_gumroad_amount_cents = (charge_gumroad_amount_cents.to_d / 100).round
+    end
     upi_autopay = chargeable.is_a?(StripeChargeableUpi)
     validate_upi_autopay_charge!(chargeable, charge_amount_cents, charge_currency, off_session:) if upi_autopay
 
@@ -582,7 +607,7 @@ class StripeChargeProcessor
     params = {
       charge: charge_id
     }
-    params[:amount] = amount_cents if amount_cents.present?
+    params[:amount] = self.class.stripe_presentment_amount(amount_cents, stripe_charge.currency) if amount_cents.present?
     params[:reason] = REFUND_REASON_FRAUDULENT if is_for_fraud.present?
 
     # For Stripe-Connect:

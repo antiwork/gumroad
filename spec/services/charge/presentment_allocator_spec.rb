@@ -2,6 +2,19 @@
 
 describe Charge::PresentmentAllocator do
   describe "#allocations" do
+    %w[krw twd].each do |currency|
+      it "allocates whole-unit #{currency} purchase totals with unchanged component sums" do
+        purchases = [334, 333, 333].map do |total|
+          instance_double(Purchase, total_transaction_cents: total, total_transaction_amount_for_gumroad_cents: 100,
+                                    tip: nil, tax_cents: 0, gumroad_tax_cents: 0, shipping_cents: 0)
+        end
+        allocations = described_class.new(purchases:, currency:, presentment_total_cents: 100_100, presentment_gumroad_amount_cents: 10_000).allocations
+
+        expect(allocations.map(&:presentment_total_cents)).to eq([33_500, 33_300, 33_300])
+        expect(allocations.sum(&:presentment_total_cents)).to eq(100_100)
+      end
+    end
+
     it "allocates one purchase's presentment components and reconciles to the charge totals" do
       tip = instance_double(Tip, value_usd_cents: 1_00)
       purchase = instance_double(Purchase,

@@ -55,6 +55,23 @@ describe Checkout::BuyerCurrencyQuote do
   end
 
   describe ".create" do
+    { "krw" => ["0.00073", 1_369_900, 13_699], "twd" => ["0.032", 31_300, 31_300] }.each do |currency, (rate, stored_amount, stripe_amount)|
+      [true, false].each do |disable_rounding|
+        it "quotes whole-unit #{currency} with price-ending mirroring disabled=#{disable_rounding}" do
+          seller.update!(disable_buyer_currency_rounding: disable_rounding)
+          allow(StripeFxQuote).to receive(:create).and_return(
+            StripeFxQuote::Quote.new(id: "fxq_whole_units", expires_at: 30.minutes.from_now, fx_rate: BigDecimal(rate))
+          )
+
+          result = described_class.create(line_items: line_items_for(product), canonical_total_cents: 10_00, ip: "24.48.0.1", currency:)
+
+          expect(result).to have_attributes(currency:, presentment_total_cents: stored_amount, rounding_delta_cents: 0)
+          expect(result.line_allocations.sum(&:presentment_total_cents)).to eq(stored_amount)
+          expect(StripeChargeProcessor.stripe_presentment_amount(result.presentment_total_cents, currency)).to eq(stripe_amount)
+        end
+      end
+    end
+
     it "quotes the requested currency instead of the IP currency" do
       allow(StripeFxQuote).to receive(:create).with(
         to_currency: Currency::USD,
@@ -1378,26 +1395,11 @@ describe Checkout::BuyerCurrencyQuote do
       end
     end
 
-    it "returns nil for buyer currencies Gumroad stores in different minor units than Stripe charges" do
-      # KRW is stored as 1/100 won (config/initializers/money.rb) but Stripe charges whole won,
-      # so quoting it would charge buyers 100x the displayed amount.
-      allow_any_instance_of(described_class).to receive(:buyer_currency_for_ip).and_return(Currency::KRW)
+    it "withholds unsupported whole-unit currencies not normalized by the quote path" do
+      allow_any_instance_of(described_class).to receive(:buyer_currency_for_ip).and_return("huf")
       expect(StripeFxQuote).not_to receive(:create)
 
-      result = described_class.create(line_items: line_items_for(product), canonical_total_cents: 10_00, ip: "175.223.10.1")
-
-      expect(result).to be_nil
-    end
-
-    it "returns nil for buyer currencies Stripe only charges in amounts divisible by 100" do
-      # Stripe rejects TWD amounts that are not evenly divisible by 100, and unrounded
-      # FX-quoted amounts cannot guarantee that.
-      allow_any_instance_of(described_class).to receive(:buyer_currency_for_ip).and_return(Currency::TWD)
-      expect(StripeFxQuote).not_to receive(:create)
-
-      result = described_class.create(line_items: line_items_for(product), canonical_total_cents: 10_00, ip: "1.164.0.1")
-
-      expect(result).to be_nil
+      expect(described_class.create(line_items: line_items_for(product), canonical_total_cents: 10_00, ip: "24.48.0.1")).to be_nil
     end
 
     it "quotes whole-unit presentment amounts for zero-decimal buyer currencies" do
