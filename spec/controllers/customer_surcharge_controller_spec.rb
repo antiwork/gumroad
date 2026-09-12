@@ -934,13 +934,16 @@ describe CustomerSurchargeController, :vcr do
       end
     end
 
-    it "returns no quote props for buyer currencies Gumroad stores in different minor units than Stripe charges" do
-      allow_any_instance_of(CustomerSurchargeController).to receive(:buyer_currency_for_ip).and_return(Currency::KRW)
+    %w[krw twd].each do |currency|
+      it "offers #{currency} with a whole-unit quote" do
+        allow_any_instance_of(CustomerSurchargeController).to receive(:buyer_currency_for_ip).and_return(currency)
 
-      post "calculate_all", params: { products: [{ permalink: @product.unique_permalink, price: 100, quantity: 1 }] }, as: :json
+        post "calculate_all", params: { products: [{ permalink: @product.unique_permalink, price: 100, quantity: 1 }] }, as: :json
 
-      expect(response.parsed_body.fetch("detected_buyer_currency")).to eq(Currency::KRW)
-      expect(response.parsed_body["buyer_currency_quote"]).to be_nil
+        expect(response.parsed_body.fetch("detected_buyer_currency")).to eq(currency)
+        expect(response.parsed_body.fetch("available_buyer_currencies")).to include(include("code" => currency))
+        expect(response.parsed_body.fetch("buyer_currency_quote")).to include("currency" => currency, "presentment_total_cents" => 100)
+      end
     end
 
     it "responds without a quote instead of erroring when a crafted request submits a negative price" do
