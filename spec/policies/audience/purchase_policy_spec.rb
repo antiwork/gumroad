@@ -74,7 +74,19 @@ describe Audience::PurchasePolicy do
 
   permissions :mark_as_shipped? do
     let(:physical_purchase) { create(:physical_purchase, seller:, link: create(:physical_product, user: seller)) }
-    let(:digital_purchase) { create(:purchase, seller:, link: create(:product, user: seller, require_shipping: true)) }
+    let(:digital_purchase) do
+      create(
+        :purchase,
+        seller:,
+        link: create(:product, user: seller, require_shipping: true),
+        full_name: "Jane Buyer",
+        street_address: "123 Main St",
+        city: "San Francisco",
+        state: "CA",
+        zip_code: "94105",
+        country: "United States",
+      )
+    end
 
     it "grants access to owner for a physical product" do
       expect(subject).to permit(SellerContext.new(user: seller, seller:), physical_purchase)
