@@ -158,7 +158,7 @@ describe CustomerSurchargeController, :vcr do
       expect(gbp).to include("label" => "£ (British Pounds)")
     end
 
-    it "offers SEK, NOK, DKK and MXN in the checkout currency picker" do
+    it "offers the additional buyer currencies in the checkout currency picker" do
       post "calculate_all", params: {
         products: [{ permalink: @product.unique_permalink, price: 100, quantity: 1 }],
       }, as: :json
@@ -167,7 +167,15 @@ describe CustomerSurchargeController, :vcr do
         include("code" => Currency::SEK, "label" => "kr (Swedish krona)"),
         include("code" => Currency::NOK, "label" => "kr (Norwegian krone)"),
         include("code" => Currency::DKK, "label" => "kr (Danish krone)"),
-        include("code" => Currency::MXN, "label" => "MX$ (Mexican peso)")
+        include("code" => Currency::MXN, "label" => "MX$ (Mexican peso)"),
+        include("code" => Currency::SAR, "label" => "SAR (Saudi riyal)"),
+        include("code" => Currency::AED, "label" => "AED (UAE dirham)"),
+        include("code" => Currency::TRY, "label" => "₺ (Turkish lira)"),
+        include("code" => Currency::COP, "label" => "COP$ (Colombian peso)"),
+        include("code" => Currency::RON, "label" => "lei (Romanian leu)"),
+        include("code" => Currency::THB, "label" => "฿ (Thai baht)"),
+        include("code" => Currency::MYR, "label" => "RM (Malaysian ringgit)"),
+        include("code" => Currency::IDR, "label" => "Rp (Indonesian rupiah)")
       )
     end
 

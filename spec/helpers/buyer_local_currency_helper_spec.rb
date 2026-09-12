@@ -45,6 +45,14 @@ describe CurrencyHelper do
       expect(helper.buyer_currency_for_country("NO")).to eq("nok")
       expect(helper.buyer_currency_for_country("DK")).to eq("dkk")
       expect(helper.buyer_currency_for_country("MX")).to eq("mxn")
+      expect(helper.buyer_currency_for_country("SA")).to eq("sar")
+      expect(helper.buyer_currency_for_country("AE")).to eq("aed")
+      expect(helper.buyer_currency_for_country("TR")).to eq("try")
+      expect(helper.buyer_currency_for_country("CO")).to eq("cop")
+      expect(helper.buyer_currency_for_country("RO")).to eq("ron")
+      expect(helper.buyer_currency_for_country("TH")).to eq("thb")
+      expect(helper.buyer_currency_for_country("MY")).to eq("myr")
+      expect(helper.buyer_currency_for_country("ID")).to eq("idr")
     end
 
     it "maps any country in the eurozone to eur, not just a hardcoded subset" do
@@ -58,7 +66,7 @@ describe CurrencyHelper do
     end
 
     it "returns nil for countries whose currency is not supported for display or input" do
-      expect(helper.buyer_currency_for_country("TH")).to be_nil # thb is not in currencies.json
+      expect(helper.buyer_currency_for_country("HU")).to be_nil # huf is not in currencies.json
     end
   end
 

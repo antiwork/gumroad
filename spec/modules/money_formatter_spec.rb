@@ -3,14 +3,14 @@
 describe MoneyFormatter do
   describe "#format" do
     it "formats a registered currency absent from product pricing choices" do
-      expect(CURRENCY_CHOICES).not_to have_key(:thb)
-      expect(MoneyFormatter.format(1250, :thb)).to eq "฿12.50"
-      expect(MoneyFormatter.format(1200, "thb", no_cents_if_whole: true)).to eq "฿12"
+      expect(CURRENCY_CHOICES).not_to have_key(:huf)
+      expect(MoneyFormatter.format(1250, :huf)).to eq "12.50 Ft"
+      expect(MoneyFormatter.format(1200, "huf", no_cents_if_whole: true)).to eq "12 Ft"
     end
 
     it "omits the historical currency symbol only when requested" do
-      expect(MoneyFormatter.format(1250, :thb, symbol: false)).to eq "12.50"
-      expect(MoneyFormatter.format(1250, :thb, symbol: true)).to eq "฿12.50"
+      expect(MoneyFormatter.format(1250, :huf, symbol: false)).to eq "12.50"
+      expect(MoneyFormatter.format(1250, :huf, symbol: true)).to eq "12.50 Ft"
     end
 
     it "uses the configured pricing symbol for Nordic and Mexican currencies" do
@@ -67,7 +67,7 @@ describe MoneyFormatter do
     end
 
     it "uses the registry symbol for historical currencies" do
-      expect(MoneyFormatter.symbol_for(:thb)).to eq "฿"
+      expect(MoneyFormatter.symbol_for(:huf)).to eq "Ft"
     end
 
     it "uses the configured pricing symbol for Nordic and Mexican currencies" do
@@ -89,5 +89,24 @@ describe MoneyFormatter do
       expect(MoneyFormatter.symbol_for(nil)).to eq ""
       expect(MoneyFormatter.symbol_for("")).to eq ""
     end
+  end
+
+  it "uses the configured symbols for the eight additional buyer currencies" do
+    expect(MoneyFormatter.symbol_for(:sar)).to eq("SAR")
+    expect(MoneyFormatter.format(1234, :sar, symbol: false)).to eq("12.34")
+    expect(MoneyFormatter.symbol_for(:aed)).to eq("AED")
+    expect(MoneyFormatter.format(1234, :aed, symbol: false)).to eq("12.34")
+    expect(MoneyFormatter.symbol_for(:try)).to eq("₺")
+    expect(MoneyFormatter.format(1234, :try, symbol: false)).to eq("12.34")
+    expect(MoneyFormatter.symbol_for(:cop)).to eq("COP$")
+    expect(MoneyFormatter.format(1234, :cop, symbol: false)).to eq("12.34")
+    expect(MoneyFormatter.symbol_for(:ron)).to eq("lei")
+    expect(MoneyFormatter.format(1234, :ron, symbol: false)).to eq("12.34")
+    expect(MoneyFormatter.symbol_for(:thb)).to eq("฿")
+    expect(MoneyFormatter.format(1234, :thb, symbol: false)).to eq("12.34")
+    expect(MoneyFormatter.symbol_for(:myr)).to eq("RM")
+    expect(MoneyFormatter.format(1234, :myr, symbol: false)).to eq("12.34")
+    expect(MoneyFormatter.symbol_for(:idr)).to eq("Rp")
+    expect(MoneyFormatter.format(1234, :idr, symbol: false)).to eq("12.34")
   end
 end

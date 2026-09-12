@@ -51,12 +51,20 @@ describe("currencyCodeList", () => {
     expect(currencyCodeList).toContain("usd");
   });
 
-  it("includes Nordic and Mexican currencies with 100 subunits and configured floors", () => {
+  it("includes additional buyer currencies with 100 subunits and configured floors", () => {
     const added = [
       { code: "sek", min: 999, longSymbol: "kr", displayFormat: "kr (Swedish krona)" },
       { code: "nok", min: 949, longSymbol: "kr", displayFormat: "kr (Norwegian krone)" },
       { code: "dkk", min: 649, longSymbol: "kr", displayFormat: "kr (Danish krone)" },
       { code: "mxn", min: 1699, longSymbol: "MX$", displayFormat: "MX$ (Mexican peso)" },
+      { code: "sar", min: 372, longSymbol: "SAR", displayFormat: "SAR (Saudi riyal)" },
+      { code: "aed", min: 364, longSymbol: "AED", displayFormat: "AED (UAE dirham)" },
+      { code: "try", min: 4795, longSymbol: "₺", displayFormat: "₺ (Turkish lira)" },
+      { code: "cop", min: 305678, longSymbol: "COP$", displayFormat: "COP$ (Colombian peso)" },
+      { code: "ron", min: 449, longSymbol: "lei", displayFormat: "lei (Romanian leu)" },
+      { code: "thb", min: 3267, longSymbol: "฿", displayFormat: "฿ (Thai baht)" },
+      { code: "myr", min: 403, longSymbol: "RM", displayFormat: "RM (Malaysian ringgit)" },
+      { code: "idr", min: 1743103, longSymbol: "Rp", displayFormat: "Rp (Indonesian rupiah)" },
     ] as const;
 
     for (const { code, min, longSymbol, displayFormat } of added) {

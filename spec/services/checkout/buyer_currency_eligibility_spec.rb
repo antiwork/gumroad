@@ -280,7 +280,7 @@ describe Checkout::BuyerCurrencyEligibility do
     expect(decision.currency).to eq(Currency::JPY)
   end
 
-  %w[sek nok dkk mxn].each do |currency|
+  %w[sek nok dkk mxn sar aed try cop ron thb myr idr].each do |currency|
     it "allows #{currency} presentment" do
       allow_any_instance_of(described_class).to receive(:buyer_currency_for_ip).and_return(currency)
 

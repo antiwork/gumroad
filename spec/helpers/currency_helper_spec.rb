@@ -31,8 +31,8 @@ describe CurrencyHelper do
     end
 
     it "uses the registry symbol for historical currencies" do
-      expect(symbol_for(:thb)).to eq "฿"
-      expect(symbol_for("thb")).to eq "฿"
+      expect(symbol_for(:huf)).to eq "Ft"
+      expect(symbol_for("huf")).to eq "Ft"
       expect(symbol_for(:aud)).to eq "A$"
     end
 
@@ -129,7 +129,7 @@ describe CurrencyHelper do
       expect(format_just_price_in_cents(799, "aud")).to eq("A$7.99")
       expect(format_just_price_in_cents(799, "gbp")).to eq("£7.99")
       expect(format_just_price_in_cents(799, "jpy")).to eq("¥799")
-      expect(format_just_price_in_cents(1250, "thb")).to eq("฿12.50")
+      expect(format_just_price_in_cents(1250, "huf")).to eq("12.50 Ft")
       expect(format_just_price_in_cents(1250, "dkk")).to eq("12.50 kr")
       expect(format_just_price_in_cents(1699, "mxn")).to eq("MX$16.99")
     end
@@ -232,6 +232,29 @@ describe CurrencyHelper do
           end
         end
       end
+    end
+  end
+
+  it "exposes the eight additional currencies for seller pricing and settings" do
+    expect(currency_choices).to include(["SAR (Saudi riyal)", "sar", "SAR"])
+    expect(min_price_for(:sar)).to eq(372)
+    expect(currency_choices).to include(["AED (UAE dirham)", "aed", "AED"])
+    expect(min_price_for(:aed)).to eq(364)
+    expect(currency_choices).to include(["₺ (Turkish lira)", "try", "₺"])
+    expect(min_price_for(:try)).to eq(4795)
+    expect(currency_choices).to include(["COP$ (Colombian peso)", "cop", "COP$"])
+    expect(min_price_for(:cop)).to eq(305678)
+    expect(currency_choices).to include(["lei (Romanian leu)", "ron", "lei"])
+    expect(min_price_for(:ron)).to eq(449)
+    expect(currency_choices).to include(["฿ (Thai baht)", "thb", "฿"])
+    expect(min_price_for(:thb)).to eq(3267)
+    expect(currency_choices).to include(["RM (Malaysian ringgit)", "myr", "RM"])
+    expect(min_price_for(:myr)).to eq(403)
+    expect(currency_choices).to include(["Rp (Indonesian rupiah)", "idr", "Rp"])
+    expect(min_price_for(:idr)).to eq(1743103)
+    %w[sar aed try cop ron thb myr idr].each do |currency|
+      expect(string_to_price_cents(currency, "12.34")).to eq(1234)
+      expect(unit_scaling_factor(currency)).to eq(100)
     end
   end
 end

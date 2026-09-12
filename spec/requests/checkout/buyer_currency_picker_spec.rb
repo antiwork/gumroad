@@ -99,4 +99,28 @@ describe "Buyer-currency checkout currency picker", type: :system, js: true do
     select "kr (Swedish krona)", from: "Currency"
     expect(page).to have_select("Currency", selected: "kr (Swedish krona)")
   end
+
+  it "selects and re-quotes each of the eight additional buyer currencies" do
+    allow(StripeFxQuote).to receive(:create) { quote("0.1") }
+
+    visit "/l/#{@product.unique_permalink}"
+    add_to_cart(@product)
+
+    [
+      ["sar", "SAR (Saudi riyal)"],
+      ["aed", "AED (UAE dirham)"],
+      ["try", "₺ (Turkish lira)"],
+      ["cop", "COP$ (Colombian peso)"],
+      ["ron", "lei (Romanian leu)"],
+      ["thb", "฿ (Thai baht)"],
+      ["myr", "RM (Malaysian ringgit)"],
+      ["idr", "Rp (Indonesian rupiah)"]
+    ].each do |code, label|
+      select label, from: "Currency"
+      expect(page).to have_select("Currency", selected: label)
+      expect(page).to have_no_text("Updating total…")
+      expect(find_field("Currency").value).to eq(code)
+      expect(page).to have_text("Total #{code.upcase} 100", normalize_ws: true)
+    end
+  end
 end

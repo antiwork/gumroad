@@ -73,8 +73,8 @@ describe Checkout::BuyerCurrencyQuote do
       expect(result).to have_attributes(currency: Currency::GBP, canonical_total_cents: 10_00)
     end
 
-    it "quotes SEK, NOK, DKK and MXN when requested instead of the IP currency" do
-      %w[sek nok dkk mxn].each do |currency|
+    it "quotes supported buyer currencies when requested instead of the IP currency" do
+      %w[sek nok dkk mxn sar aed try cop ron thb myr idr].each do |currency|
         allow(StripeFxQuote).to receive(:create).with(
           to_currency: Currency::USD,
           from_currency: currency,

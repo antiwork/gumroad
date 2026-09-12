@@ -221,6 +221,17 @@ describe "Products API currency normalization", type: :request do
     expect(seller.links.last.price_currency_type).to eq("sek")
   end
 
+  %w[sar aed try cop ron thb myr idr].each do |currency|
+    it "accepts #{currency} as a product pricing currency" do
+      post "/api/v2/products",
+           params: { access_token: token.token, name: "Currency workbook", price: CURRENCY_CHOICES.fetch(currency).fetch("min_price") * 2, price_currency_type: currency.upcase }
+
+      expect(response).to have_http_status(:ok)
+      expect(response.parsed_body).to include("success" => true)
+      expect(seller.links.last.price_currency_type).to eq(currency)
+    end
+  end
+
   it "names the currency the caller actually sent when rejecting it" do
     post "/api/v2/products",
          params: { access_token: token.token, name: "Bad currency", price: 21_999, price_currency_type: "ZZZ" }
