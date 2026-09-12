@@ -689,6 +689,7 @@ class PaypalPayoutProcessor
     topup_amount = 0.to_d
     start_date = 2.weeks.ago
     end_date = nil
+    truncated = false
 
     10.times do
       params = PAYPAL_API_PARAMS.merge(
@@ -699,10 +700,19 @@ class PaypalPayoutProcessor
       params["ENDDATE"] = end_date.iso8601 if end_date
       paypal_response = HTTParty.post(PAYPAL_ENDPOINT, body: params)
       response = Rack::Utils.parse_nested_query(paypal_response.parsed_response)
-      return topup_amount unless %w[Success SuccessWithWarning].include?(response["ACK"])
+      unless %w[Success SuccessWithWarning].include?(response["ACK"])
+        # First request still fail-opens to 0 (pre-existing). A later page
+        # that fails after a truncated success would otherwise publish a
+        # partial in-transit total and over-recommend a bank top-up.
+        if seen.any? || end_date
+          raise "PayPal TransactionSearch failed (ACK=#{response["ACK"].inspect})"
+        end
+        return topup_amount
+      end
 
       count = response.keys.count { _1.include?("L_TRANSACTIONID") }
       oldest_ts = nil
+      new_ids = 0
       count.times do |i|
         txn_id = response["L_TRANSACTIONID#{i}"]
         ts = Time.iso8601(response["L_TIMESTAMP#{i}"]) if response["L_TIMESTAMP#{i}"].present?
@@ -710,6 +720,7 @@ class PaypalPayoutProcessor
         next if txn_id.blank? || seen[txn_id]
 
         seen[txn_id] = true
+        new_ids += 1
         next unless response["L_TYPE#{i}"] == "Transfer" &&
           response["L_NAME#{i}"] == "Bank Account" &&
           response["L_STATUS#{i}"] == "Uncleared"
@@ -719,11 +730,17 @@ class PaypalPayoutProcessor
 
       truncated = response.keys.any? { |k| k.start_with?("L_ERRORCODE") && response[k] == "11002" }
       break unless truncated
-      if oldest_ts.blank? || oldest_ts <= start_date
+      if oldest_ts.blank? || oldest_ts <= start_date || new_ids.zero?
         raise "PayPal TransactionSearch truncated (11002); cannot page older than #{oldest_ts.inspect}"
       end
 
-      end_date = oldest_ts - 1.second
+      # ENDDATE is inclusive. Keep the oldest returned timestamp so a
+      # same-second row that did not fit on this page is not skipped;
+      # seen[] drops the overlap.
+      end_date = oldest_ts
+    end
+    if truncated
+      raise "PayPal TransactionSearch truncated (11002); pagination budget exhausted"
     end
     topup_amount
   end
