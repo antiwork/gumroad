@@ -250,7 +250,18 @@ module CurrencyHelper
 
     # Accounts that settle this currency in itself rather than USD reject the FX quote the
     # charge needs, so a local price shown for them always ends up charged in USD.
-    Checkout::BuyerCurrencyEligibility.usd_settling_merchant_account?(merchant_account, presentment_currency: buyer_currency, seller:)
+    return true if Checkout::BuyerCurrencyEligibility.usd_settling_merchant_account?(merchant_account, presentment_currency: buyer_currency, seller:)
+
+    # Native EUR charging (flag on, platform account, USD one-time product) skips the quote,
+    # so the mismatch marker must not hide EUR from the picker for that seller.
+    return false unless Checkout::BuyerCurrencyEligibility.eur_native_charging_shape?(
+      seller:,
+      merchant_account:,
+      buyer_currency:,
+      products: [product]
+    )
+
+    buyer_local_currency_rate(from_currency: buyer_currency, to_currency: Currency::USD).present?
   end
 
   # The product-shape half of the gate, kept in step with

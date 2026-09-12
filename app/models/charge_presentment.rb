@@ -10,10 +10,10 @@ class ChargePresentment < ApplicationRecord
   # base_rate is deliberately not persisted, so the spread is not reconstructible from these
   # rows (see StripeFxQuote#parsed_rate and the note on Balance#holding_currency).
 
-  # Stripe rows come in two shapes. Quote-backed buyer presentment carries all three quote
-  # columns. Direct-listed presentment has no FX conversion, so all three stay null.
-  # Enforce all-or-none so a partially persisted quote can never slip through.
-  validate :stripe_fx_quote_fields_all_or_none, if: :stripe_processor?
+  # Stripe rows: quote-backed (all three quote columns), direct-listed (all three
+  # blank), or cached-rate native presentment (fx_rate only). A quote id without
+  # expiry and rate is never valid.
+  validate :stripe_fx_quote_fields_consistent, if: :stripe_processor?
   validates :presentment_total_cents, :presentment_gumroad_amount_cents, numericality: { greater_than_or_equal_to: 0, only_integer: true }
   # Signed on purpose: negative when mirroring the seller's price ending lowered the
   # buyer's total, positive when it raised it. Zero on every charge that was not rounded.
@@ -24,10 +24,12 @@ class ChargePresentment < ApplicationRecord
       processor == StripeChargeProcessor.charge_processor_id
     end
 
-    def stripe_fx_quote_fields_all_or_none
-      quote_fields = [stripe_fx_quote_id, stripe_fx_quote_expires_at, fx_rate]
-      return if quote_fields.all?(&:present?) || quote_fields.all?(&:blank?)
+    def stripe_fx_quote_fields_consistent
+      quoted = stripe_fx_quote_id.present? || stripe_fx_quote_expires_at.present?
+      if quoted
+        return if stripe_fx_quote_id.present? && stripe_fx_quote_expires_at.present? && fx_rate.present?
 
-      errors.add(:base, "Stripe FX quote fields must either all be present (quote-backed row) or all be blank (quote-less direct-listed row)")
+        errors.add(:base, "Stripe FX quote id, expiry, and rate must all be present together")
+      end
     end
 end

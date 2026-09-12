@@ -270,6 +270,25 @@ describe CurrencyHelper do
       expect(props).to include(display_mode: "default", buyer_currency_shown: "usd", rate: nil)
     end
 
+    it "shows EUR on the platform account when native EUR charging is on for the seller" do
+      platform = MerchantAccount.gumroad(StripeChargeProcessor.charge_processor_id) ||
+        create(:merchant_account, user: nil, charge_processor_merchant_id: "acct_gumroad", currency: Currency::USD)
+      platform.record_settlement_currency_mismatch!("eur")
+      platform_seller = create(:user, disable_buyer_local_currency: false)
+      platform_product = create(:product, user: platform_seller, price_cents: 1000, price_currency_type: "usd")
+      Feature.activate_user(:buyer_local_currency, platform_seller)
+      Feature.activate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, platform_seller)
+      Feature.activate_user(Checkout::BuyerCurrencyEligibility::EUR_NATIVE_CHARGING_FEATURE_NAME, platform_seller)
+
+      props = helper.buyer_currency_display_props(product: platform_product, price_cents: 1000, ip: "1.2.3.4")
+
+      expect(props).to include(display_mode: "buyer_local", buyer_currency_shown: "eur")
+    ensure
+      Feature.deactivate_user(:buyer_local_currency, platform_seller) if platform_seller
+      Feature.deactivate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, platform_seller) if platform_seller
+      Feature.deactivate_user(Checkout::BuyerCurrencyEligibility::EUR_NATIVE_CHARGING_FEATURE_NAME, platform_seller) if platform_seller
+    end
+
     it "keeps showing another currency the same account can still settle" do
       merchant_account.record_settlement_currency_mismatch!("eur")
       allow(helper).to receive(:buyer_currency_for_ip).and_return("gbp")

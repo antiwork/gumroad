@@ -135,6 +135,7 @@ describe CustomerSurchargeController, :vcr do
       Feature.deactivate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, @user)
       Feature.deactivate_user(Checkout::BuyerCurrencyEligibility::SUBSCRIPTION_FEATURE_NAME, @user)
       Feature.deactivate_user(Checkout::BuyerCurrencyEligibility::LISTED_CURRENCY_DIRECT_CHARGE_FEATURE_NAME, @user)
+      Feature.deactivate_user(Checkout::BuyerCurrencyEligibility::EUR_NATIVE_CHARGING_FEATURE_NAME, @user)
     end
 
 
@@ -165,6 +166,26 @@ describe CustomerSurchargeController, :vcr do
       }, as: :json
 
       expect(response.parsed_body.fetch("buyer_currency_quote")).to be_nil
+    end
+
+    it "offers EUR and quotes it without Stripe when native EUR charging is on" do
+      Feature.activate_user(Checkout::BuyerCurrencyEligibility::EUR_NATIVE_CHARGING_FEATURE_NAME, @user)
+      MerchantAccount.gumroad(StripeChargeProcessor.charge_processor_id).record_settlement_currency_mismatch!(Currency::EUR)
+      allow_any_instance_of(Checkout::BuyerCurrencyQuote).to receive(:buyer_local_currency_rate).and_return(BigDecimal("1.1"))
+      allow_any_instance_of(CustomerSurchargeController).to receive(:buyer_local_currency_rate).and_return(BigDecimal("1.1"))
+      expect(StripeFxQuote).not_to receive(:create)
+
+      post "calculate_all", params: {
+        products: [{ permalink: @product.unique_permalink, price: 100, quantity: 1 }],
+        buyer_currency: Currency::EUR,
+      }, as: :json
+
+      codes = response.parsed_body.fetch("available_buyer_currencies").map { |currency| currency["code"] }
+      expect(codes).to include(Currency::EUR)
+      quote = response.parsed_body.fetch("buyer_currency_quote")
+      expect(quote).to include("currency" => Currency::EUR)
+      payload = Rails.application.message_verifier(:buyer_currency_quote).verify(quote.fetch("token"))
+      expect(payload["stripe_fx_quote_id"]).to be_nil
     end
 
     it "keeps the quoted buyer currency available for a mixed listed-currency cart" do

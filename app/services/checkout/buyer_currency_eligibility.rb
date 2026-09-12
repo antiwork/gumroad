@@ -24,6 +24,12 @@ class Checkout::BuyerCurrencyEligibility
   # with the purchase's stored rate.
   LISTED_CURRENCY_DIRECT_CHARGE_FEATURE_NAME = :checkout_listed_currency_direct_charge
 
+  # USD-priced one-time products on the shared platform account, card only. Mints a EUR
+  # PaymentIntent with no Stripe FX quote and converts at the cached product-page rate.
+  # Default off; actor-gated.
+  EUR_NATIVE_CHARGING_FEATURE_NAME = :eur_native_charging
+  EUR_NATIVE_QUOTE_TTL = 1.hour
+
   # Memberships get their own ramp because the buyer-currency amount outlives checkout.
   # Pulling it stops new memberships; renewals keep billing the stored fixed amount.
   SUBSCRIPTION_FEATURE_NAME = :buyer_currency_subscriptions
@@ -78,6 +84,57 @@ class Checkout::BuyerCurrencyEligibility
 
   def self.listed_currency_direct_charge_enabled?(seller)
     seller.present? && Feature.active?(LISTED_CURRENCY_DIRECT_CHARGE_FEATURE_NAME, seller)
+  end
+
+  def self.eur_native_charging_enabled?(seller)
+    seller.present? && Feature.active?(EUR_NATIVE_CHARGING_FEATURE_NAME, seller)
+  end
+
+  # Shared platform account only (MerchantAccount.gumroad / user_id nil). Connect and
+  # Custom destination charges keep the FX-quote path.
+  def self.platform_charging_account?(merchant_account)
+    merchant_account.present? &&
+      merchant_account.stripe_charge_processor? &&
+      merchant_account.is_managed_by_gumroad?
+  end
+
+  def self.eur_native_charging_product?(product)
+    return false if product.blank?
+    return false unless product.price_currency_type.to_s.downcase == Currency::USD
+    return false if product.is_physical?
+    return false if product.is_recurring_billing?
+    return false if product.is_in_preorder_state?
+    return false if product.native_type == Link::NATIVE_TYPE_COMMISSION
+    return false if product.installment_plan.present?
+    return false if product.free_trial_enabled?
+
+    true
+  end
+
+  def self.eur_native_charging_purchase?(purchase)
+    return false unless eur_native_charging_product?(purchase&.link)
+    return false if purchase.shipping_cents.to_i.positive?
+    return false if purchase.is_installment_payment?
+    return false if purchase.is_preorder_authorization?
+    return false if purchase.is_commission_deposit_purchase?
+
+    true
+  end
+
+  # Shape-only: flag, EUR, platform account, one-time USD product. Callers that
+  # convert still need a positive cached USD-per-EUR rate.
+  def self.eur_native_charging_shape?(seller:, merchant_account:, buyer_currency:, products: [], purchases: [])
+    return false unless buyer_currency.to_s.downcase == Currency::EUR
+    return false unless eur_native_charging_enabled?(seller)
+    return false unless platform_charging_account?(merchant_account)
+
+    if purchases.present?
+      purchases.all? { eur_native_charging_purchase?(_1) }
+    elsif products.present?
+      products.all? { eur_native_charging_product?(_1) }
+    else
+      false
+    end
   end
 
   # The cart-shaped half of #decision's listed lane, for the selector and the surcharge menu,
@@ -422,7 +479,12 @@ class Checkout::BuyerCurrencyEligibility
 
     # Checked here (not up top with the other account gates) because the settlement
     # mismatch marker is scoped to the presentment currency, which isn't known earlier.
-    return fallback(:unsupported_settlement_currency) unless usd_settling_merchant_account?(buyer_currency)
+    # Native EUR charging skips the Stripe FX quote, so a live EUR mismatch must not
+    # hide this lane when the flag is on for the seller.
+    unless usd_settling_merchant_account?(buyer_currency) ||
+           self.class.eur_native_charging_shape?(seller:, merchant_account:, buyer_currency:, purchases:)
+      return fallback(:unsupported_settlement_currency)
+    end
 
     eligible(currency: buyer_currency)
   end
