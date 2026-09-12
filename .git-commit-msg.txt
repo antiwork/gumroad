@@ -1,0 +1,7 @@
+Fill shipping fields on digital require_shipping spec purchases
+
+#7596 added presenter and policy examples that create a purchase against
+require_shipping: true without the address attributes Purchase validates
+on create. That reds main Fast 16/17 (full_name/street/country/state/zip/city
+blank). Give those factories the same required shipping fields as
+:physical_purchase so the examples can assert clerk hiding.
