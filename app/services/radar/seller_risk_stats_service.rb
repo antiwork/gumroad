@@ -48,7 +48,10 @@ module Radar
       end
 
       def successful_purchases_count
-        @successful_purchases_count ||= user.sales.successful.where("purchases.created_at >= ?", cutoff_date).count
+        @successful_purchases_count ||= user.sales.successful
+          .excluding_paypal_processor
+          .where("purchases.created_at >= ?", cutoff_date)
+          .count
       end
 
       def efws
@@ -68,6 +71,7 @@ module Radar
 
       def dispute_count
         @dispute_count ||= Dispute
+          .excluding_paypal_processor
           .where(seller_id: user.id)
           .where.not(state: "won")
           .where("disputes.created_at >= ?", cutoff_date)

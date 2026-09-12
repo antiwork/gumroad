@@ -254,33 +254,19 @@ module User::Stats
   end
 
   def chargeback_rates(created_on_or_after: nil) # returns `{ volume: String, count: String }`
-    search_params = {
-      seller: self,
-      state: "successful",
-      exclude_refunded: true,
-      exclude_bundle_product_purchases: true,
-      track_total_hits: true,
-      aggs: {
-        price_cents_total: { sum: { field: "price_cents" } },
-        unreversed_chargebacks: {
-          filter: {
-            bool: {
-              must: [{ exists: { field: "chargeback_date" } }],
-              must_not: [{ term: { "selected_flags" => "chargeback_reversed" } }]
-            }
-          },
-          aggs: {
-            price_cents_total: { sum: { field: "price_cents" } }
-          }
-        }
-      }
-    }
-    search_params[:created_on_or_after] = created_on_or_after if created_on_or_after
-    search_result = PurchaseSearchService.search(search_params)
-    count_denominator = search_result.response.hits.total.value.to_f
-    volume_denominator = search_result.aggregations["price_cents_total"]["value"]
-    count_numerator = search_result.aggregations["unreversed_chargebacks"]["doc_count"].to_f
-    volume_numerator = search_result.aggregations["unreversed_chargebacks"]["price_cents_total"]["value"]
+    # SQL rather than PurchaseSearchService: ES does not index charge_processor_id, and
+    # PayPal-processor sales must be out of both numerator and denominator.
+    scope = sales.successful.not_fully_refunded.not_is_bundle_product_purchase.excluding_paypal_processor
+    scope = scope.where("purchases.created_at >= ?", created_on_or_after) if created_on_or_after
+
+    reversed_bit = Purchase.flag_mapping["flags"][:chargeback_reversed]
+    lost = "purchases.chargeback_date IS NOT NULL AND purchases.flags & #{reversed_bit} = 0"
+    count_denominator, volume_denominator, count_numerator, volume_numerator = scope.reorder(nil).pick(
+      Arel.sql("COUNT(*)"),
+      Arel.sql("COALESCE(SUM(purchases.price_cents), 0)"),
+      Arel.sql("COUNT(CASE WHEN #{lost} THEN 1 END)"),
+      Arel.sql("COALESCE(SUM(CASE WHEN #{lost} THEN purchases.price_cents ELSE 0 END), 0)")
+    ).map(&:to_f)
     volume = volume_denominator > 0 ? format("%.1f%%", volume_numerator / volume_denominator * 100) : "NA"
     count = count_denominator > 0 ? format("%.1f%%", count_numerator / count_denominator * 100) : "NA"
     { volume:, count: }

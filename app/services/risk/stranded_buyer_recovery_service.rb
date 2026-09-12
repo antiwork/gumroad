@@ -270,7 +270,8 @@ class Risk::StrandedBuyerRecoveryService
     # person veto (or fail to veto) recovery for the resolved buyer (same identity-isolation class
     # as candidate_purchases/identifier_emails above).
     def unreversed_chargeback?
-      scope = Purchase.where.not(chargeback_date: nil)
+      scope = Purchase.excluding_paypal_processor
+                      .where.not(chargeback_date: nil)
                       .where("purchases.flags & :bit = 0", bit: Purchase.flag_mapping["flags"][:chargeback_reversed])
       scope = if user.present?
         scope.where("purchaser_id = ? OR email = ?", user.id, user.email)

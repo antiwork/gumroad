@@ -533,6 +533,26 @@ describe Api::Internal::Admin::ProductsController do
       )
     end
 
+    it "ignores PayPal-processor chargebacks in recent_chargeback_rate and still counts Stripe ones" do
+      create(:merchant_account, user: nil)
+      product = create(:product, user: seller)
+      4.times { create(:purchase, link: product, seller:, created_at: 10.days.ago) }
+      stripe_cb = create(:purchase, link: product, seller:, created_at: 5.days.ago)
+      stripe_cb.update_column(:chargeback_date, 4.days.ago)
+      paypal_cb = create(:purchase, link: product, seller:, created_at: 5.days.ago)
+      paypal_cb.update_columns(
+        chargeback_date: 4.days.ago,
+        charge_processor_id: PaypalChargeProcessor.charge_processor_id
+      )
+
+      get :show, params: { id: product.external_id }
+
+      payload = response.parsed_body["product"]["recent_chargeback_rate"]
+      expect(payload["successful_count"]).to eq(5)
+      expect(payload["chargedback_count"]).to eq(1)
+      expect(payload["rate"]).to eq(0.2)
+    end
+
     it "omits recent_chargeback_rate from index rows to keep the listing cheap" do
       create(:merchant_account, user: nil)
       product = create(:product, user: seller)

@@ -55,6 +55,19 @@ module User::Risk
 
   REFUND_POLICY_ENFORCEMENT_COMMENT_AUTHOR = "enforce_refund_policy_for_seller_based_on_dispute_rate"
 
+  # Excludes seller-liability transactions from risk signals. Purchase.excluding_paypal_processor
+  # and Dispute.excluding_paypal_processor wrap this shared SQL predicate.
+  PAYPAL_CHARGE_PROCESSOR_ID = PaypalChargeProcessor.charge_processor_id
+
+  def self.not_paypal_processor_sql(purchase_table: "purchases", charge_table: nil)
+    column = if charge_table
+      "COALESCE(#{purchase_table}.charge_processor_id, #{charge_table}.processor, '')"
+    else
+      "COALESCE(#{purchase_table}.charge_processor_id, '')"
+    end
+    ["#{column} != ?", PAYPAL_CHARGE_PROCESSOR_ID]
+  end
+
   # Lifetime dispute stats by UNIQUE BUYER (not raw purchases, not dollar volume). Used to
   # decide whether to auto-enforce a buyer-friendly refund policy on the seller — see
   # Purchase::Blockable#enforce_refund_policy_for_seller_based_on_dispute_rate!.
@@ -75,9 +88,10 @@ module User::Risk
     # as its own buyer (keyed by the purchase id).
     buyer_key = Arel.sql("COALESCE(purchases.email, CONCAT('missing-email-', purchases.id))")
 
-    settled_count = sales.successful.count
-    settled_buyers_count = sales.successful.distinct.count(buyer_key)
-    disputing_buyers_count = sales.successful
+    settled = sales.successful.excluding_paypal_processor
+    settled_count = settled.count
+    settled_buyers_count = settled.distinct.count(buyer_key)
+    disputing_buyers_count = settled
                                   .where.not(chargeback_date: nil)
                                   .where("purchases.flags & ? = 0", Purchase.flag_mapping["flags"][:chargeback_reversed])
                                   .distinct

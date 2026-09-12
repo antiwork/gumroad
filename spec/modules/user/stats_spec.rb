@@ -1627,6 +1627,15 @@ describe User::Stats, :vcr do
         expect(result[:volume]).to eq("16.7%") # (disputed_volume / all_volume) == (10 / (50 + 10))
         expect(result[:count]).to eq("50.0%") # (disputed_count / all_count) == (1 / (1 + 1))
       end
+
+      it "ignores PayPal-processor chargebacks and still counts Stripe ones" do
+        paypal_disputed = create(:disputed_purchase, link: create(:product, price_cents: 4000, user: @user))
+        paypal_disputed.update_column(:charge_processor_id, PaypalChargeProcessor.charge_processor_id)
+
+        result = @user.lost_chargebacks
+        expect(result[:volume]).to eq("16.7%")
+        expect(result[:count]).to eq("50.0%")
+      end
     end
 
     context "when the user has no sales" do

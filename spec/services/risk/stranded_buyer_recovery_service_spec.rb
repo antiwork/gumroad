@@ -235,6 +235,15 @@ describe Risk::StrandedBuyerRecoveryService do
       expect(result.reason).to eq(:unreversed_chargeback)
     end
 
+    it "does not veto on a PayPal-processor chargeback" do
+      paypal = create(:purchase, email: buyer_email, purchase_state: "successful",
+                                 stripe_fingerprint: "paypal-other-card", chargeback_date: 1.month.ago,
+                                 created_at: 7.months.ago)
+      paypal.update_column(:charge_processor_id, PaypalChargeProcessor.charge_processor_id)
+
+      expect(call.verdict).to eq(:cleared)
+    end
+
     it "does not veto on a chargeback that was reversed" do
       create(:purchase, email: buyer_email, purchase_state: "successful",
                         stripe_fingerprint: "reversed-other-card", chargeback_date: 1.month.ago,

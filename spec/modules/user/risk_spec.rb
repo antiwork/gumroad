@@ -329,6 +329,21 @@ describe User::Risk do
       expect(stats[:disputing_buyers_count]).to eq(1)
       expect(stats[:rate]).to eq(1 * 100.0 / 3)
     end
+
+    it "ignores PayPal-processor sales and chargebacks, and still counts Stripe ones" do
+      create(:purchase, link: product, email: "stripe-clean@example.com")
+      create(:purchase, link: product, email: "stripe-disputed@example.com", chargeback_date: Time.current)
+      paypal_clean = create(:purchase, link: product, email: "paypal-clean@example.com")
+      paypal_clean.update_column(:charge_processor_id, PaypalChargeProcessor.charge_processor_id)
+      paypal_disputed = create(:purchase, link: product, email: "paypal-disputed@example.com", chargeback_date: Time.current)
+      paypal_disputed.update_column(:charge_processor_id, PaypalChargeProcessor.charge_processor_id)
+
+      stats = seller.dispute_rate_stats
+      expect(stats[:settled_count]).to eq(2)
+      expect(stats[:settled_buyers_count]).to eq(2)
+      expect(stats[:disputing_buyers_count]).to eq(1)
+      expect(stats[:rate]).to eq(50.0)
+    end
   end
 
   describe "#clear_refund_policy_enforcement!" do

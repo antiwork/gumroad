@@ -1889,6 +1889,23 @@ describe Purchase::Blockable do
       end
     end
 
+    context "when buyer has 5 PayPal-processor chargebacks by email" do
+      before do
+        5.times do
+          p = create(:purchase)
+          p.update_columns(
+            chargeback_date: Time.current,
+            email: "repeat-offender@example.com",
+            charge_processor_id: PaypalChargeProcessor.charge_processor_id
+          )
+        end
+      end
+
+      it "does not block the buyer" do
+        expect { purchase.block_buyer_based_on_chargeback_count! }.not_to change { PlatformBlock.count }
+      end
+    end
+
     context "when buyer has 5 chargebacks by purchaser_id with different email" do
       before do
         create_chargebacked_purchases_by_purchaser(5, buyer)

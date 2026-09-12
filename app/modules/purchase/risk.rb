@@ -36,8 +36,8 @@ module Purchase::Risk
 
   def find_past_chargebacked_purchases
     @_find_past_chargebacked_purchases_for_purchases ||= begin
-      past_email_purchases = Purchase.where(email:).chargedback.not_chargeback_reversed.order(chargeback_date: :desc)
-      past_guid_purchases = Purchase.where("browser_guid is not null").where(browser_guid:).chargedback.not_chargeback_reversed.order(chargeback_date: :desc)
+      past_email_purchases = Purchase.excluding_paypal_processor.where(email:).chargedback.not_chargeback_reversed.order(chargeback_date: :desc)
+      past_guid_purchases = Purchase.excluding_paypal_processor.where("browser_guid is not null").where(browser_guid:).chargedback.not_chargeback_reversed.order(chargeback_date: :desc)
 
       past_email_purchases + past_guid_purchases
     end
