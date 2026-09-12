@@ -94,10 +94,8 @@ class Ai::AnthropicClient
   end
 
   # Retry only before the first yield — a later retry would replay on the seller's screen.
-  # Corrupted tool-call JSON after all streamed attempts: one buffered replay (#buffered_fallback).
-  # That regenerates the turn, so already-yielded text must be erased via on_discard_streamed_text
-  # or the error surfaces. Tool-use turns usually stream preamble first, so production almost
-  # always needs the discard callback for the fallback to run.
+  # Corrupted tool-call JSON: one buffered replay. Already-yielded text (usual tool-use preamble)
+  # must be erased via on_discard_streamed_text or the fallback cannot run.
   def stream_messages(system:, messages:, tools: nil, max_tokens: DEFAULT_MAX_TOKENS, on_discard_streamed_text: nil, &on_text)
     yielded_any = false
 
@@ -473,12 +471,9 @@ class Ai::AnthropicClient
       Result.new(text:, tool_uses:, stop_reason: body["stop_reason"])
     end
 
-    # Empty tool-use JSON is a no-arg call. Malformed non-empty JSON must fail the turn, except:
-    # max_tokens — drop the block and let the caller see the stop_reason.
-    # stop_reason nil — connection dropped mid-stream (complete Anthropic streams always send one).
-    # stop_reason present but JSON still unreadable — OpenRouter can lose input_json_delta fragments
-    # while still closing the stream; raise UnreadableToolCallError so #stream_messages can replay
-    # once without streaming. Do not coerce to {} (that would dispatch a lossy tool call).
+    # Empty JSON is a no-arg call. Do not coerce unreadable JSON to {} (lossy dispatch).
+    # max_tokens: drop the block. nil stop_reason: mid-stream drop. Otherwise UnreadableToolCallError
+    # so #stream_messages can replay once without streaming (OpenRouter can lose input_json_delta).
     def assemble_tool_uses(blocks, stop_reason: nil)
       truncated = stop_reason == "max_tokens"
       blocks.keys.sort.filter_map do |index|
