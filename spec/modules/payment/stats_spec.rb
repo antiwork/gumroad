@@ -48,6 +48,11 @@ describe Payment::Stats, :vcr do
     end
 
     describe "chargeback", :vcr do
+      before do
+        # These payout fixtures are not representative of the seller's chargeback rate.
+        allow_any_instance_of(Purchase).to receive(:pause_payouts_for_seller_based_on_chargeback_rate!)
+      end
+
       it "deducts the chargeback and refund fees from the link's revenue if we didn't waive our fee" do
         travel_to(Date.today - 10) do
           p1 = create(:purchase_in_progress, link: @product_1, chargeable: create(:chargeable))
