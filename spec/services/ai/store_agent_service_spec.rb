@@ -2478,6 +2478,7 @@ describe Ai::StoreAgentService do
 
       expect(captured[:model]).to eq("x-ai/grok-4.5")
       expect(captured[:fallback_model]).to eq("anthropic/claude-opus-5")
+      expect(captured[:gateway]).to be_nil
     end
 
     it "keeps requesting Opus directly from Anthropic when OpenRouter is not configured" do
@@ -2502,6 +2503,7 @@ describe Ai::StoreAgentService do
       expect(captured[:model]).to eq(described_class::DEEPSEEK_MODEL)
       expect(captured[:fallback_model]).to eq("anthropic/claude-opus-5")
       expect(captured[:fallback_model]).to eq(described_class::DEEPSEEK_FALLBACK_MODEL)
+      expect(captured[:gateway]).to eq(:vercel)
     end
 
     it "keeps requesting Opus when OpenRouter is configured but the seller is in neither ramp" do
@@ -2537,6 +2539,7 @@ describe Ai::StoreAgentService do
 
       expect(captured[:model]).to eq("deepseek/deepseek-v4.1-flash")
       expect(captured[:fallback_model]).to eq("anthropic/claude-opus-5")
+      expect(captured[:gateway]).to eq(:vercel)
     end
   end
 end
