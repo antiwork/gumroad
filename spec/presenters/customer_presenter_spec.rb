@@ -224,6 +224,20 @@ describe CustomerPresenter do
       )
     end
 
+    context "when a digital product requires shipping" do
+      let(:digital_product) { create(:product, user: seller, require_shipping: true) }
+      let(:digital_purchase) do
+        create(:purchase, link: digital_product, seller:, street_address: "123 Main St", city: "San Francisco", state: "CA", zip_code: "94105", country: "United States")
+      end
+
+      it "exposes the address but not the mark-as-shipped clerk" do
+        props = described_class.new(purchase: digital_purchase).customer(pundit_user:)
+
+        expect(props[:shipping][:address]).to eq(digital_purchase.shipping_information)
+        expect(props[:shipping][:tracking]).to be_nil
+      end
+    end
+
     context "when a shipment has a legacy invalid tracking_url" do
       it "does not expose the raw tracking_url" do
         shipment = create(:shipment, purchase: purchase1, shipped_at: Time.current)

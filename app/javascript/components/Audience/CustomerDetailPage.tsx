@@ -633,23 +633,25 @@ const CustomerDetailPage = ({
         ) : null}
         {shipping ? (
           <Card className="break-inside-avoid">
-            <CardContent>
-              <TrackingSection
-                tracking={shipping.tracking}
-                onMarkShipped={(url) =>
-                  markShipped(customer.id, url).then(
-                    () => {
-                      showAlert("Changes saved!", "success");
-                      updateCustomer({ shipping: { ...shipping, tracking: { url, shipped: true } } });
-                    },
-                    (e: unknown) => {
-                      assertResponseError(e);
-                      showAlert(e.message, "error");
-                    },
-                  )
-                }
-              />
-            </CardContent>
+            {shipping.tracking ? (
+              <CardContent>
+                <TrackingSection
+                  tracking={shipping.tracking}
+                  onMarkShipped={(url) =>
+                    markShipped(customer.id, url).then(
+                      () => {
+                        showAlert("Changes saved!", "success");
+                        updateCustomer({ shipping: { ...shipping, tracking: { url, shipped: true } } });
+                      },
+                      (e: unknown) => {
+                        assertResponseError(e);
+                        showAlert(e.message, "error");
+                      },
+                    )
+                  }
+                />
+              </CardContent>
+            ) : null}
             <CardContent>
               <AddressSection
                 address={shipping.address}

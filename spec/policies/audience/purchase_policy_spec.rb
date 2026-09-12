@@ -45,7 +45,7 @@ describe Audience::PurchasePolicy do
     end
   end
 
-  permissions :update?, :refund?, :change_can_contact?, :cancel_preorder_by_seller?, :mark_as_shipped?, :manage_license? do
+  permissions :update?, :refund?, :change_can_contact?, :cancel_preorder_by_seller?, :manage_license? do
     it "grants access to owner" do
       seller_context = SellerContext.new(user: seller, seller:)
       expect(subject).to permit(seller_context, Follower)
@@ -69,6 +69,27 @@ describe Audience::PurchasePolicy do
     it "grants access to support" do
       seller_context = SellerContext.new(user: support_for_seller, seller:)
       expect(subject).to permit(seller_context, Purchase)
+    end
+  end
+
+  permissions :mark_as_shipped? do
+    let(:physical_purchase) { create(:physical_purchase, seller:, link: create(:physical_product, user: seller)) }
+    let(:digital_purchase) { create(:purchase, seller:, link: create(:product, user: seller, require_shipping: true)) }
+
+    it "grants access to owner for a physical product" do
+      expect(subject).to permit(SellerContext.new(user: seller, seller:), physical_purchase)
+    end
+
+    it "denies access for a digital product even when require_shipping is on" do
+      expect(subject).not_to permit(SellerContext.new(user: seller, seller:), digital_purchase)
+    end
+
+    it "grants access to admin for a physical product" do
+      expect(subject).to permit(SellerContext.new(user: admin_for_seller, seller:), physical_purchase)
+    end
+
+    it "denies access to accountant" do
+      expect(subject).not_to permit(SellerContext.new(user: accountant_for_seller, seller:), physical_purchase)
     end
   end
 

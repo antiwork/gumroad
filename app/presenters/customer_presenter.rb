@@ -47,11 +47,13 @@ class CustomerPresenter
         {
           address: purchase.shipping_information,
           price: purchase.formatted_shipping_amount,
-          tracking: purchase.shipment.present? ?
-            {
-              shipped: purchase.shipment.shipped?,
-              url: purchase.shipment.calculated_tracking_url,
-            } : { shipped: false },
+          # Address collection can stay on; the clerk is physical-only.
+          tracking: purchase.link.is_physical? ?
+            purchase.shipment.present? ?
+              {
+                shipped: purchase.shipment.shipped?,
+                url: purchase.shipment.calculated_tracking_url,
+              } : { shipped: false } : nil,
         } : nil,
       is_bundle_purchase: purchase.is_bundle_purchase,
       is_existing_user: purchase.purchaser.present?,

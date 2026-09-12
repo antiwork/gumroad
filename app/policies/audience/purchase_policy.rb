@@ -30,7 +30,7 @@ class Audience::PurchasePolicy < ApplicationPolicy
   end
 
   def mark_as_shipped?
-    update?
+    update? && record.link.is_physical?
   end
 
   def manage_license?
