@@ -1045,6 +1045,17 @@ check(
 )
 
 check(
+  "Settings Layout selects account confirmation spec",
+  base_files: {
+    "spec/requests/settings/payments_spec.rb" => SPEC_STUB,
+    "spec/requests/account_confirmation_spec.rb" => SPEC_STUB,
+    "app/javascript/components/Settings/Layout.tsx" => "old",
+  },
+  head_files: { "app/javascript/components/Settings/Layout.tsx" => "new" },
+  expect_specs: %w[spec/requests/account_confirmation_spec.rb],
+)
+
+check(
   "Settings PasskeysSection selects passkey login spec",
   base_files: {
     "spec/requests/settings/payments_spec.rb" => SPEC_STUB,
@@ -1085,18 +1096,10 @@ check(
 )
 
 check(
-  "Users/Show selects profile request specs including custom-domain storefront",
-  base_files: {
-    "spec/requests/user/profile_spec.rb" => SPEC_STUB,
-    "spec/requests/user_custom_domain_spec.rb" => SPEC_STUB,
-    "spec/controllers/users/review_reminders_controller_spec.rb" => SPEC_STUB,
-    "app/javascript/pages/Users/Show.tsx" => "old",
-  },
+  "Users/Show still escalates (UTM checkout consumer)",
+  base_files: { "app/javascript/pages/Users/Show.tsx" => "old" },
   head_files: { "app/javascript/pages/Users/Show.tsx" => "new" },
-  expect_specs: %w[
-    spec/requests/user/profile_spec.rb
-    spec/requests/user_custom_domain_spec.rb
-  ],
+  expect_escalate: true,
 )
 
 check(
@@ -1121,17 +1124,10 @@ check(
 )
 
 check(
-  "Dashboard page selects mobile table spec, not only dashboard_spec",
-  base_files: {
-    "spec/requests/dashboard_spec.rb" => SPEC_STUB,
-    "spec/requests/dashboard_mobile_table_spec.rb" => SPEC_STUB,
-    "app/javascript/pages/Dashboard/Index.tsx" => "old",
-  },
+  "Dashboard page still escalates (auth and Agent visitors)",
+  base_files: { "app/javascript/pages/Dashboard/Index.tsx" => "old" },
   head_files: { "app/javascript/pages/Dashboard/Index.tsx" => "new" },
-  expect_specs: %w[
-    spec/requests/dashboard_spec.rb
-    spec/requests/dashboard_mobile_table_spec.rb
-  ],
+  expect_escalate: true,
 )
 
 check(
