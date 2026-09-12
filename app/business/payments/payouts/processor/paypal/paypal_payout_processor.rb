@@ -17,6 +17,9 @@ class PaypalPayoutProcessor
   PAYOUT_RECIPIENTS_PER_JOB = 240 # Max recipients allowed in one API call is 250. Using 240 because I don't trust PayPal.
   PAYPAL_PAYOUT_FEE_PERCENT = 2
   PAYPAL_PAYOUT_FEE_EXEMPT_COUNTRY_CODES = [Compliance::Countries::BRA.alpha2, Compliance::Countries::IND.alpha2]
+  # Safety valve against a stalled cursor, not a volume cap. The payout
+  # account's two-week TransactionSearch can exceed 1,000 rows.
+  TOPUP_SEARCH_PAGE_LIMIT = 100
 
   # Countries where a PayPal account registered there can RECEIVE a payout from us.
   # Ref: https://docs.paypal.ai/growth/payouts/reference/countries-supported-features
@@ -691,7 +694,7 @@ class PaypalPayoutProcessor
     end_date = nil
     truncated = false
 
-    10.times do
+    TOPUP_SEARCH_PAGE_LIMIT.times do
       params = PAYPAL_API_PARAMS.merge(
         "METHOD" => "TransactionSearch",
         "STARTDATE" => start_date.iso8601

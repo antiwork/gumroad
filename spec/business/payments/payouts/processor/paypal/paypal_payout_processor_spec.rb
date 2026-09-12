@@ -1663,7 +1663,8 @@ describe PaypalPayoutProcessor do
       expect(described_class.topup_amount_in_transit).to eq(125_000)
     end
 
-    it "raises when ten truncated pages still omit results" do
+    it "raises when the page limit is exhausted while still truncated" do
+      stub_const("#{described_class}::TOPUP_SEARCH_PAGE_LIMIT", 3)
       allow(HTTParty).to receive(:post) do |_url, opts|
         n = @page_n.to_i
         @page_n = n + 1
