@@ -112,6 +112,35 @@ class StripeChargeProcessor
     ZERO_DECIMAL_CURRENCIES.include?(currency) ? 1 : subunit_to_unit(currency)
   end
 
+  # Presentment columns store Stripe charge units. Money/CurrencyHelper still use
+  # Gumroad's storage scale (KRW = 1/100 won). Convert before MoneyFormatter.
+  def self.money_subunits_from_charge_amount(amount_cents, currency)
+    amount = amount_cents.to_i
+    charge_sub = charge_subunit_to_unit(currency)
+    return amount unless charge_sub.positive?
+
+    gumroad_sub = subunit_to_unit(currency)
+    return amount if gumroad_sub == charge_sub
+
+    (BigDecimal(amount) * gumroad_sub / charge_sub).round
+  end
+
+  def self.format_charge_presentment_amount(amount_cents, currency, opts = {})
+    MoneyFormatter.format(
+      money_subunits_from_charge_amount(amount_cents, currency),
+      currency.to_s.downcase.to_sym,
+      { no_cents_if_whole: true, symbol: true }.merge(opts)
+    )
+  end
+
+  # Listed-price cents are Gumroad storage units. Sending them to Stripe as the
+  # PaymentIntent amount is only safe when that scale matches charge_subunit_to_unit.
+  def self.listed_amount_matches_charge_units?(currency)
+    return false if currency.blank?
+
+    charge_subunit_to_unit(currency) == subunit_to_unit(currency)
+  end
+
   def self.align_charge_amount_cents(amount_cents, currency)
     amount = amount_cents.to_i
     return amount unless AMOUNT_DIVISIBLE_BY_100_CURRENCIES.include?(currency.to_s.downcase)

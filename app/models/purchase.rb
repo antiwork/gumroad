@@ -1882,7 +1882,7 @@ class Purchase < ApplicationRecord
   end
 
   def format_buyer_presentment_amount(amount_cents, symbol: true)
-    MoneyFormatter.format(amount_cents, buyer_presentment_currency.to_sym, no_cents_if_whole: true, symbol:)
+    StripeChargeProcessor.format_charge_presentment_amount(amount_cents, buyer_presentment_currency, symbol:)
   end
 
   def find_enabled_integration(integration_name)

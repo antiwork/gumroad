@@ -92,6 +92,7 @@ class Checkout::BuyerCurrencyEligibility
     currency = buyer_currency.to_s.downcase
     return false if currency.blank? || currency == Currency::USD
     return false unless StripeChargeProcessor.charge_minor_units_compatible?(currency)
+    return false unless StripeChargeProcessor.listed_amount_matches_charge_units?(currency)
     return false if line_items.any? { _1.product.blank? }
     return false unless line_items.all? { _1.product.price_currency_type.to_s.downcase == currency }
 
@@ -406,6 +407,7 @@ class Checkout::BuyerCurrencyEligibility
         purchases.all? { _1.seller_id == seller.id } &&
         !multi_seller_order? &&
         self.class.listed_currency_direct_charge_enabled?(seller) &&
+        StripeChargeProcessor.listed_amount_matches_charge_units?(buyer_currency) &&
         listed_currency_displayed?(buyer_currency) &&
         purchases.none? { Purchase::FixLaterChargePresentmentService.kind_for(_1).present? } &&
         purchases.none? { _1.shipping_cents.to_i.positive? } &&
@@ -521,6 +523,9 @@ class Checkout::BuyerCurrencyEligibility
     # on the currency's minor units before we can charge in it (EUR always
     # passes; this protects against someone adding e.g. a KRW-forced method).
     return fallback(:unsupported_forced_currency) unless StripeChargeProcessor.charge_minor_units_compatible?(forced_currency)
+    if priced_in_forced_currency && !StripeChargeProcessor.listed_amount_matches_charge_units?(forced_currency)
+      return fallback(:unsupported_forced_currency)
+    end
 
     eligible(currency: forced_currency, direct_listed_amount: priced_in_forced_currency)
   end

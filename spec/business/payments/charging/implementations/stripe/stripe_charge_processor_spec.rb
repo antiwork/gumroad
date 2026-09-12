@@ -117,6 +117,23 @@ describe StripeChargeProcessor, :vcr do
       expect(described_class.presentment_cents_for(10_00, BigDecimal("0.031"), "twd")).to eq(32_300)
     end
 
+    it "formats KRW charge units through Money's 100-subunit scale" do
+      expect(described_class.money_subunits_from_charge_amount(13_889, "krw")).to eq(1_388_900)
+      expect(described_class.format_charge_presentment_amount(13_889, "krw")).to eq(
+        MoneyFormatter.format(1_388_900, :krw, no_cents_if_whole: true, symbol: true)
+      )
+      expect(described_class.format_charge_presentment_amount(13_889, "krw")).not_to eq(
+        MoneyFormatter.format(13_889, :krw, no_cents_if_whole: true, symbol: true)
+      )
+      expect(described_class.format_charge_presentment_amount(12_50, "cad")).to eq(
+        MoneyFormatter.format(12_50, :cad, no_cents_if_whole: true, symbol: true)
+      )
+      expect(described_class.listed_amount_matches_charge_units?("krw")).to be(false)
+      expect(described_class.listed_amount_matches_charge_units?("twd")).to be(true)
+      expect(described_class.listed_amount_matches_charge_units?("cad")).to be(true)
+      expect(described_class.listed_amount_matches_charge_units?("jpy")).to be(true)
+    end
+
     it "rejects blank currencies" do
       expect(described_class.charge_minor_units_compatible?(nil)).to be(false)
       expect(described_class.charge_minor_units_compatible?("")).to be(false)

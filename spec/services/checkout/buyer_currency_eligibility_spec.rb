@@ -423,6 +423,18 @@ describe Checkout::BuyerCurrencyEligibility do
     expect(decision.direct_listed_amount?).to eq(true)
   end
 
+  it "falls back from the listed lane when listed storage units differ from Stripe charge units" do
+    Feature.activate_user(described_class::LISTED_CURRENCY_DIRECT_CHARGE_FEATURE_NAME, seller)
+    allow_any_instance_of(described_class).to receive(:buyer_currency_for_ip).and_return(Currency::KRW)
+    report_listed_currency_element(params, Currency::KRW)
+    purchase.update!(link: create(:product, user: seller, price_currency_type: Currency::KRW, price_cents: 111_000),
+                     displayed_price_currency_type: Currency::KRW,
+                     rate_converted_to_usd: "0.00072")
+
+    expect(decision).not_to be_eligible
+    expect(decision.fallback_reason).to eq(:listed_currency_is_buyer_currency)
+  end
+
   it "allows direct listed charging for a multi-item cart uniformly priced in the buyer's currency" do
     Feature.activate_user(described_class::LISTED_CURRENCY_DIRECT_CHARGE_FEATURE_NAME, seller)
     report_listed_currency_element(params)
