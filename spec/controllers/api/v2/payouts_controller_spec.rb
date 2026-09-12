@@ -544,6 +544,8 @@ describe Api::V2::PayoutsController do
         @another_seller = create :named_user
         @direct_affiliate = create :direct_affiliate, affiliate_user: @seller, seller: @another_seller
         base_past_date = 1.month.ago
+        # These payout fixtures are not representative of the seller's chargeback rate.
+        allow_any_instance_of(Purchase).to receive(:pause_payouts_for_seller_based_on_chargeback_rate!)
         allow_any_instance_of(Purchase).to receive(:create_dispute_evidence_if_needed!).and_return(nil)
 
         travel_to(base_past_date) do

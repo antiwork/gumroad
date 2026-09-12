@@ -1180,6 +1180,8 @@ describe "Balance Pages Scenario", js: true, type: :system do
         creator_as_affiliate = create :direct_affiliate, affiliate_user: seller, seller: affiliate_product.user, affiliate_basis_points: 4000, products: [affiliate_product]
 
         base_past_date = 1.month.ago
+        # These payout fixtures are not representative of the seller's chargeback rate.
+        allow_any_instance_of(Purchase).to receive(:pause_payouts_for_seller_based_on_chargeback_rate!)
         travel_to(base_past_date) do
           @product = create :product, user: seller, name: "Hunting Capybaras For Fun And Profit"
         end
