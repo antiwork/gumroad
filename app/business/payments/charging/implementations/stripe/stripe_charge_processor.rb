@@ -112,6 +112,25 @@ class StripeChargeProcessor
     ZERO_DECIMAL_CURRENCIES.include?(currency) ? 1 : subunit_to_unit(currency)
   end
 
+  # The listed-direct lane forwards seller-stored cents unchanged. KRW storage is 1/100 won
+  # while Stripe charges whole won, so that lane would overcharge 100×.
+  def self.listed_minor_units_match_stripe?(currency)
+    return false if currency.blank?
+
+    currency = currency.to_s.downcase
+    subunit_to_unit(currency) == charge_subunit_to_unit(currency)
+  end
+
+  # Buyer-presentment amounts are stored in Stripe charge units. MoneyFormatter and seller
+  # pricing still use Money's subunit (100 for KRW).
+  def self.money_cents_from_charge_units(amount_cents, currency)
+    charge = charge_subunit_to_unit(currency)
+    money = subunit_to_unit(currency)
+    return amount_cents.to_i if !charge.positive? || charge == money
+
+    (BigDecimal(amount_cents.to_s) * money / charge).round
+  end
+
   def self.align_charge_amount_cents(amount_cents, currency)
     amount = amount_cents.to_i
     return amount unless AMOUNT_DIVISIBLE_BY_100_CURRENCIES.include?(currency.to_s.downcase)

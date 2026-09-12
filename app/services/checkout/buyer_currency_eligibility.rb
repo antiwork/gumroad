@@ -92,6 +92,7 @@ class Checkout::BuyerCurrencyEligibility
     currency = buyer_currency.to_s.downcase
     return false if currency.blank? || currency == Currency::USD
     return false unless StripeChargeProcessor.charge_minor_units_compatible?(currency)
+    return false unless StripeChargeProcessor.listed_minor_units_match_stripe?(currency)
     return false if line_items.any? { _1.product.blank? }
     return false unless line_items.all? { _1.product.price_currency_type.to_s.downcase == currency }
 
@@ -406,6 +407,7 @@ class Checkout::BuyerCurrencyEligibility
         purchases.all? { _1.seller_id == seller.id } &&
         !multi_seller_order? &&
         self.class.listed_currency_direct_charge_enabled?(seller) &&
+        StripeChargeProcessor.listed_minor_units_match_stripe?(buyer_currency) &&
         listed_currency_displayed?(buyer_currency) &&
         purchases.none? { Purchase::FixLaterChargePresentmentService.kind_for(_1).present? } &&
         purchases.none? { _1.shipping_cents.to_i.positive? } &&

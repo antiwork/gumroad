@@ -71,7 +71,10 @@ class Purchase::LaterChargePresentmentService
 
     variable_canonical_cents = variable_component_canonical_cents(purchase)
     variable_presentment_cents = presentment_cents_for(variable_canonical_cents, quote.fx_rate, currency)
-    presentment_total_cents = fixed_price_cents + variable_presentment_cents
+    presentment_total_cents = StripeChargeProcessor.align_charge_amount_cents(
+      fixed_price_cents + variable_presentment_cents,
+      currency
+    )
     return fallback(:non_positive_total) unless presentment_total_cents.positive?
 
     # Gumroad's share converts at today's rate. Because the buyer's price stays fixed, the

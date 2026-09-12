@@ -72,7 +72,7 @@ module Charge::Disputable
       currency = presentment_currency
       return canonical if presentment_cents.blank? || currency.blank?
 
-      presentment = MoneyFormatter.format(presentment_cents, currency.to_sym, no_cents_if_whole: false, symbol: true)
+      presentment = MoneyFormatter.format_charge_units(presentment_cents, currency.to_sym, no_cents_if_whole: false, symbol: true)
       "#{presentment} (#{canonical})"
     end
 

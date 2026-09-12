@@ -1318,6 +1318,18 @@ describe Checkout::BuyerCurrencyEligibility do
 
       expect(eligible_for?(membership)).to be(false)
     end
+
+    it "refuses KRW-listed carts so seller 1/100-won cents are not sent as whole won" do
+      merchant_account
+      krw_product = create(:product, user: seller, price_currency_type: Currency::KRW, price_cents: 1_500_000)
+
+      expect(
+        described_class.direct_listed_line_items_eligible?(
+          line_items: [cad_line_item(krw_product, listed_currency_rate: "1390")],
+          buyer_currency: Currency::KRW
+        )
+      ).to be(false)
+    end
   end
 
   describe ".buyer_presentment_display?" do

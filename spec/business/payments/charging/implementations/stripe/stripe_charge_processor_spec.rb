@@ -117,6 +117,18 @@ describe StripeChargeProcessor, :vcr do
       expect(described_class.presentment_cents_for(10_00, BigDecimal("0.031"), "twd")).to eq(32_300)
     end
 
+    it "keeps KRW out of the listed-direct lane because seller storage is not Stripe units" do
+      expect(described_class.listed_minor_units_match_stripe?("krw")).to be(false)
+      expect(described_class.listed_minor_units_match_stripe?("twd")).to be(true)
+      expect(described_class.listed_minor_units_match_stripe?("cad")).to be(true)
+      expect(described_class.listed_minor_units_match_stripe?(nil)).to be(false)
+    end
+
+    it "rescales presentment KRW into Money 100-subunit storage for display" do
+      expect(described_class.money_cents_from_charge_units(13_889, "krw")).to eq(1_388_900)
+      expect(described_class.money_cents_from_charge_units(8_99, "eur")).to eq(8_99)
+    end
+
     it "rejects blank currencies" do
       expect(described_class.charge_minor_units_compatible?(nil)).to be(false)
       expect(described_class.charge_minor_units_compatible?("")).to be(false)

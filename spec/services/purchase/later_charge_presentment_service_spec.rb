@@ -122,6 +122,24 @@ describe Purchase::LaterChargePresentmentService do
     expect(result.processor_amount_cents).to eq(899 + 125)
   end
 
+  context "when the stored amount is TWD" do
+    let!(:stored) do
+      create(:later_charge_presentment, owner: subscription, presentment_currency: "twd",
+                                        presentment_price_cents: 32_158,
+                                        signup_currency_units_per_usd: BigDecimal("32.258"),
+                                        effective_from: 30.days.ago)
+    end
+
+    it "aligns the processor total to a whole NT$" do
+      renewal_purchase.update!(tax_cents: 0, gumroad_tax_cents: 0, shipping_cents: 0)
+
+      result = service.perform
+
+      expect(result.processor_currency).to eq("twd")
+      expect(result.processor_amount_cents).to eq(32_200)
+    end
+  end
+
   context "when the subscription has no stored amount" do
     let!(:stored) { nil }
 

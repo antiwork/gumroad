@@ -794,6 +794,7 @@ class Checkout::BuyerCurrencyQuote
         else
           presentment_cents_for(line_item.later_charge_price_cents, quote.fx_rate, buyer_currency)
         end
+        presentment_price_cents = StripeChargeProcessor.align_charge_amount_cents(presentment_price_cents, buyer_currency)
         if line_item.later_charge_kind == "installment"
           remaining_installments = line_item.product.installment_plan.number_of_installments - 1
           future_installments_presentment_total_cents += presentment_price_cents * remaining_installments

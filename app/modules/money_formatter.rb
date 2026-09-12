@@ -5,6 +5,10 @@ module MoneyFormatter
 
   # Soft-fail unknown codes (log + ISO) so one corrupt sale cannot 500 a Sales list.
   # Do not fall back to USD. Hard-fail callers should build Money::Currency themselves.
+  def format_charge_units(amount, currency_type, opts = {})
+    format(StripeChargeProcessor.money_cents_from_charge_units(amount, currency_type), currency_type, opts)
+  end
+
   def format(amount, currency_type, opts = {})
     amount ||= 0
     opts = opts.dup

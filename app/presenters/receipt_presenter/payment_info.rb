@@ -381,7 +381,7 @@ class ReceiptPresenter::PaymentInfo
     end
 
     def format_today_amount(amount_cents)
-      return MoneyFormatter.format(amount_cents, presentment_currency.to_sym, no_cents_if_whole: true, symbol: true) if presentment_currency.present?
+      return MoneyFormatter.format_charge_units(amount_cents, presentment_currency.to_sym, no_cents_if_whole: true, symbol: true) if presentment_currency.present?
 
       formatted_dollar_amount(amount_cents)
     end

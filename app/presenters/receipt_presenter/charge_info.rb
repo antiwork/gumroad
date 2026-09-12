@@ -21,7 +21,7 @@ class ReceiptPresenter::ChargeInfo
 
   def formatted_total_transaction_amount
     if presentment_currency.present?
-      MoneyFormatter.format(presentment_total_cents, presentment_currency.to_sym, no_cents_if_whole: true, symbol: true)
+      MoneyFormatter.format_charge_units(presentment_total_cents, presentment_currency.to_sym, no_cents_if_whole: true, symbol: true)
     else
       formatted_dollar_amount(chargeable.charged_amount_cents)
     end

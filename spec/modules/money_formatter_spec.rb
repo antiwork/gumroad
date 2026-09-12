@@ -21,6 +21,12 @@ describe MoneyFormatter do
       expect(MoneyFormatter.format(1250, :thb)).to eq "฿12.50"
     end
 
+    it "formats Stripe whole-won presentment amounts without applying Money 100-subunit KRW storage" do
+      expect(MoneyFormatter.format(13_889, :krw, no_cents_if_whole: true)).to eq "₩138.89"
+      expect(MoneyFormatter.format_charge_units(13_889, :krw, no_cents_if_whole: true)).to eq "₩13,889"
+      expect(MoneyFormatter.format_charge_units(8_99, :eur, no_cents_if_whole: true)).to eq "€8.99"
+    end
+
     it "soft-fails unknown currencies with the ISO code instead of relabeling them as USD" do
       expect(Rails.logger).to receive(:warn).with(/unknown currency :xyz/).at_least(:once)
       expect(MoneyFormatter.format(1250, :xyz)).to eq "12.50 XYZ"

@@ -1740,14 +1740,12 @@ class Purchase < ApplicationRecord
   # Buyer-currency minor units expressed as a plain major-unit number (12.34, not "$12.34"),
   # for consumers that need to do arithmetic on the amount rather than display it:
   # spreadsheet columns in the sales CSV and the `value` field on analytics events.
-  # Zero-decimal currencies (JPY, KRW) have no subunit, so their minor unit already IS the
-  # major unit and must not be divided by 100 — unit_scaling_factor handles that, and
-  # falls back to USD's factor for a currency Gumroad doesn't have a spec for.
-  # Returns nil for canonical-USD sales, which have no buyer-currency amount at all.
+  # Presentment amounts use Stripe charge units (whole won for KRW), not Money's 100-subunit
+  # KRW storage used for seller prices.
   def buyer_presentment_major_units(amount_cents)
     return if buyer_presentment_currency.blank? || amount_cents.nil?
 
-    scaling_factor = unit_scaling_factor(buyer_presentment_currency)
+    scaling_factor = StripeChargeProcessor.charge_subunit_to_unit(buyer_presentment_currency)
     return amount_cents if scaling_factor == 1
 
     (amount_cents.to_f / scaling_factor).round(2)
@@ -1882,7 +1880,7 @@ class Purchase < ApplicationRecord
   end
 
   def format_buyer_presentment_amount(amount_cents, symbol: true)
-    MoneyFormatter.format(amount_cents, buyer_presentment_currency.to_sym, no_cents_if_whole: true, symbol:)
+    MoneyFormatter.format_charge_units(amount_cents, buyer_presentment_currency.to_sym, no_cents_if_whole: true, symbol:)
   end
 
   def find_enabled_integration(integration_name)
