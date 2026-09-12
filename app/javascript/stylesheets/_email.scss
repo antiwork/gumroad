@@ -50,13 +50,19 @@ $accent-color: map-get($colors, "pink"); // [1]
 
       &.reset {
         display: revert;
+        width: 100%;
         border-collapse: separate;
         border-spacing: 0;
 
         & > tbody,
         & > tfoot {
+          // Without this, tbody stays display:block and a width:100% CTA shrink-wraps.
+          display: revert;
+          width: 100%;
+
           & > * {
             display: revert;
+            width: 100%;
             border: none;
 
             & > * {
@@ -394,10 +400,11 @@ $accent-color: map-get($colors, "pink"); // [1]
         font-family: inherit;
         cursor: pointer;
         text-decoration: none;
-        /* Needed to expand button full width in emails */
-        display: block;
+        /* Gmail iOS: padding on display:block <a> paints but is not tappable. */
+        display: inline-block;
+        box-sizing: border-box;
         text-align: center;
-        width: unset;
+        width: 100%;
 
         /* Some email clients don't support CSS variables: https://www.caniemail.com/search/?s=var */
         background-color: transparent;
