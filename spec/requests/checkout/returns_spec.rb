@@ -168,6 +168,27 @@ describe "Checkout return page", :vcr, type: :request do
       expect(purchase.reload).to be_in_progress
       expect(purchase.stripe_status).to eq(StripeIntentStatus::PROCESSING)
     end
+
+    it "redirects to the content page on a later visit once the intent has succeeded" do
+      order, charge = build_client_confirmed_order
+      purchase = order.purchases.first
+      charge_intent = instance_double(StripeChargeIntent, succeeded?: false, processing?: true)
+      allow(ChargeProcessor).to receive(:get_charge_intent)
+        .with(charge.merchant_account, charge.stripe_payment_intent_id)
+        .and_return(charge_intent)
+
+      visit_return_page(order, payment_intent: charge.stripe_payment_intent_id)
+      expect(response.body).to include("Checkout/Returns/Pending")
+      expect(purchase.reload).to be_in_progress
+
+      allow(ChargeProcessor).to receive(:get_charge_intent).and_call_original
+      Stripe::PaymentIntent.confirm(charge.stripe_payment_intent_id, { payment_method: "pm_card_visa" })
+
+      visit_return_page(order, payment_intent: charge.stripe_payment_intent_id)
+
+      expect(purchase.reload).to be_successful
+      expect(response).to redirect_to("#{purchase.url_redirect.download_page_url}?receipt=true")
+    end
   end
 
   context "when the intent succeeded but no purchase could be finalized" do
