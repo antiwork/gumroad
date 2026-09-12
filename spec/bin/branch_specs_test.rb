@@ -732,13 +732,53 @@ check(
 )
 
 check(
-  "Tiptap extension fans out to product request specs (#7535)",
+  "Tiptap extension fans out to every consuming flow, not just products",
   base_files: {
     "spec/requests/products/edit/covers_spec.rb" => SPEC_STUB,
+    "spec/requests/emails/list_spec.rb" => SPEC_STUB,
+    "spec/requests/download_page/show_spec.rb" => SPEC_STUB,
+    "spec/requests/user/profile_spec.rb" => SPEC_STUB,
+    "spec/requests/workflows_spec.rb" => SPEC_STUB,
     "app/javascript/components/TiptapExtensions/FileUpload.tsx" => "old",
   },
   head_files: { "app/javascript/components/TiptapExtensions/FileUpload.tsx" => "new" },
-  expect_specs: %w[spec/requests/products/edit/covers_spec.rb],
+  expect_specs: %w[
+    spec/requests/products/edit/covers_spec.rb
+    spec/requests/emails/list_spec.rb
+    spec/requests/download_page/show_spec.rb
+    spec/requests/user/profile_spec.rb
+    spec/requests/workflows_spec.rb
+  ],
+)
+
+check(
+  "RichTextEditor fans out to email and download consumers, not just products",
+  base_files: {
+    "spec/requests/products/edit/covers_spec.rb" => SPEC_STUB,
+    "spec/requests/emails/list_spec.rb" => SPEC_STUB,
+    "spec/requests/download_page/show_spec.rb" => SPEC_STUB,
+    "app/javascript/components/RichTextEditor.tsx" => "old",
+  },
+  head_files: { "app/javascript/components/RichTextEditor.tsx" => "new" },
+  expect_specs: %w[
+    spec/requests/products/edit/covers_spec.rb
+    spec/requests/emails/list_spec.rb
+    spec/requests/download_page/show_spec.rb
+  ],
+)
+
+check(
+  "ImageUploader fans out to product and profile consumers",
+  base_files: {
+    "spec/requests/products/edit/covers_spec.rb" => SPEC_STUB,
+    "spec/requests/user/profile_spec.rb" => SPEC_STUB,
+    "app/javascript/components/ImageUploader.tsx" => "old",
+  },
+  head_files: { "app/javascript/components/ImageUploader.tsx" => "new" },
+  expect_specs: %w[
+    spec/requests/products/edit/covers_spec.rb
+    spec/requests/user/profile_spec.rb
+  ],
 )
 
 check(
@@ -760,6 +800,54 @@ check(
   base_files: { "docker/web/server.sh" => "old" },
   head_files: { "docker/web/server.sh" => "new" },
   expect_specs: [],
+)
+
+check(
+  "docker nginx-only change does not escalate",
+  base_files: { "docker/nginx/nginx.conf" => "old" },
+  head_files: { "docker/nginx/nginx.conf" => "new" },
+  expect_specs: [],
+)
+
+check(
+  "docker compose-test change still escalates",
+  base_files: { "docker/docker-compose-test-and-ci.yml" => "old" },
+  head_files: { "docker/docker-compose-test-and-ci.yml" => "new" },
+  expect_escalate: true,
+)
+
+check(
+  "docker test Dockerfile change still escalates",
+  base_files: { "docker/web/Dockerfile.test" => "old" },
+  head_files: { "docker/web/Dockerfile.test" => "new" },
+  expect_escalate: true,
+)
+
+check(
+  "docker ci restore_test_db change still escalates",
+  base_files: { "docker/ci/restore_test_db.sh" => "old" },
+  head_files: { "docker/ci/restore_test_db.sh" => "new" },
+  expect_escalate: true,
+)
+
+check(
+  "Pages JS does not treat pages_landing_embed specs as coverage",
+  base_files: {
+    "spec/requests/pages_landing_embed_routing_spec.rb" => SPEC_STUB,
+    "app/javascript/pages/Pages/Edit.tsx" => "old",
+  },
+  head_files: { "app/javascript/pages/Pages/Edit.tsx" => "new" },
+  expect_escalate: true,
+)
+
+check(
+  "domain.rb still escalates even when domain_spec exists",
+  base_files: {
+    "spec/config/domain_spec.rb" => SPEC_STUB,
+    "config/domain.rb" => "old",
+  },
+  head_files: { "config/domain.rb" => "new" },
+  expect_escalate: true,
 )
 
 check(
