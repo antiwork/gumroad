@@ -227,7 +227,7 @@ describe CustomerPresenter do
     context "when a digital product requires shipping" do
       let(:digital_product) { create(:product, user: seller, require_shipping: true) }
       let(:digital_purchase) do
-        create(:purchase, link: digital_product, seller:, street_address: "123 Main St", city: "San Francisco", state: "CA", zip_code: "94105", country: "United States")
+        create(:purchase, link: digital_product, seller:, full_name: "Jane Buyer", street_address: "123 Main St", city: "San Francisco", state: "CA", zip_code: "94105", country: "United States")
       end
 
       it "exposes the address but not the mark-as-shipped clerk" do
