@@ -1500,6 +1500,8 @@ describe PaypalPayoutProcessor do
   end
 
   describe ".topup_amount_in_transit" do
+    around { |example| travel_to(Time.utc(2026, 9, 11, 14, 0, 0)) { example.run } }
+
     def paypal_nvp(pairs)
       instance_double(HTTParty::Response, parsed_response: Rack::Utils.build_query(pairs))
     end
