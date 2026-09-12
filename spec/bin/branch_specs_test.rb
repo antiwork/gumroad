@@ -879,10 +879,16 @@ check(
   "checkout presenter still fans out to checkout request specs (#7070)",
   base_files: {
     "spec/requests/checkout/payment_spec.rb" => SPEC_STUB,
+    "spec/requests/purchases/product_spec.rb" => SPEC_STUB,
+    "spec/requests/subscription/non_tiered_membership_spec.rb" => SPEC_STUB,
     "app/presenters/checkout/stripe_payment_presenter.rb" => "old",
   },
   head_files: { "app/presenters/checkout/stripe_payment_presenter.rb" => "new" },
-  expect_specs: %w[spec/requests/checkout/payment_spec.rb],
+  expect_specs: %w[
+    spec/requests/checkout/payment_spec.rb
+    spec/requests/purchases/product_spec.rb
+    spec/requests/subscription/non_tiered_membership_spec.rb
+  ],
 )
 
 # Importer-traced pins (round 2). Each asserts a consuming flow's spec,
@@ -916,14 +922,20 @@ check(
 )
 
 check(
-  "pages/UrlRedirects/DownloadPage selects download_page specs",
+  "pages/UrlRedirects/DownloadPage selects download_page plus reading/video specs",
   base_files: {
     "spec/requests/download_page/download_page_spec.rb" => SPEC_STUB,
+    "spec/requests/reading_spec.rb" => SPEC_STUB,
+    "spec/requests/video_streaming_spec.rb" => SPEC_STUB,
     "spec/requests/url_redirects_epub_reader_system_spec.rb" => SPEC_STUB,
     "app/javascript/pages/UrlRedirects/DownloadPage.tsx" => "old",
   },
   head_files: { "app/javascript/pages/UrlRedirects/DownloadPage.tsx" => "new" },
-  expect_specs: %w[spec/requests/download_page/download_page_spec.rb],
+  expect_specs: %w[
+    spec/requests/download_page/download_page_spec.rb
+    spec/requests/reading_spec.rb
+    spec/requests/video_streaming_spec.rb
+  ],
 )
 
 check(
@@ -1047,14 +1059,18 @@ check(
 )
 
 check(
-  "Users/Coffee selects purchase coffee spec",
+  "Users/Coffee selects purchase coffee spec and tipping spec",
   base_files: {
     "spec/requests/user/profile_spec.rb" => SPEC_STUB,
     "spec/requests/purchases/product/coffee_spec.rb" => SPEC_STUB,
+    "spec/requests/purchases/tipping_spec.rb" => SPEC_STUB,
     "app/javascript/pages/Users/Coffee.tsx" => "old",
   },
   head_files: { "app/javascript/pages/Users/Coffee.tsx" => "new" },
-  expect_specs: %w[spec/requests/purchases/product/coffee_spec.rb],
+  expect_specs: %w[
+    spec/requests/purchases/product/coffee_spec.rb
+    spec/requests/purchases/tipping_spec.rb
+  ],
 )
 
 check(

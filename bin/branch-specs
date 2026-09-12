@@ -81,7 +81,11 @@ AUDIENCE_FLOW_SPECS = %w[
 EMAIL_FLOW_SPECS = %w[spec/requests/emails].freeze
 DISCOVER_FLOW_SPECS = %w[spec/requests/discover].freeze
 WISHLIST_FLOW_SPECS = %w[spec/requests/wishlists].freeze
-DOWNLOAD_PAGE_SPECS = %w[spec/requests/download_page].freeze
+DOWNLOAD_PAGE_SPECS = %w[
+  spec/requests/download_page
+  spec/requests/reading_spec.rb
+  spec/requests/video_streaming_spec.rb
+].freeze
 WORKFLOW_FLOW_SPECS = %w[spec/requests/workflows_spec.rb].freeze
 HELP_CENTER_SPECS = %w[
   spec/requests/help_center_spec.rb
@@ -167,8 +171,12 @@ FANOUT = {
   # Importers: DiscordButton.tsx:4 join/leave;
   # ProductEdit/ProductTab/DiscordIntegrationEditor.tsx:4 fetchServerInfo.
   # parsers/profile is shared (Coffee, product profile, settings) — escalate.
-  %r{\Aapp/javascript/pages/Users/Coffee} => PROFILE_FLOW_SPECS + %w[spec/requests/purchases/product/coffee_spec.rb],
-  # Renderer: users_controller.rb:115 Users/Coffee.
+  %r{\Aapp/javascript/pages/Users/Coffee} => PROFILE_FLOW_SPECS + %w[
+    spec/requests/purchases/product/coffee_spec.rb
+    spec/requests/purchases/tipping_spec.rb
+  ],
+  # Renderer: users_controller.rb:115 Users/Coffee. tipping_spec.rb visits
+  # coffee.long_url then checkout (coffee-only carts cannot tip).
   %r{\Aapp/javascript/pages/Users/Show} => PROFILE_FLOW_SPECS,
   # Renderer: users_controller.rb:35 Users/Show storefront.
   %r{\Aapp/javascript/pages/Users/Subscribe\.tsx\z} => PROFILE_FLOW_SPECS,
@@ -177,10 +185,9 @@ FANOUT = {
   %r{\Aapp/javascript/pages/User/Passwords/} => %w[spec/requests/password_reset_spec.rb spec/requests/login_spec.rb],
   # Renderer: user/passwords_controller.rb:16 New, :39 Edit.
   %r{\Aapp/javascript/pages/UrlRedirects/DownloadPage} => DOWNLOAD_PAGE_SPECS,
-  # Renderer: url_redirects_controller.rb:107 DownloadPage. Read.tsx has
-  # a co-located vitest (Read.test.tsx); a directory catch-all would
-  # override that skip with download_page request specs that never visit
-  # the EPUB reader. Confirm/Stream/Expired escalate.
+  # Renderer: url_redirects_controller.rb:107 DownloadPage. reading_spec
+  # and video_streaming_spec visit /d/:token (Watch/Read controls).
+  # Read.tsx has co-located vitest; Confirm/Stream/Expired escalate.
   %r{\Aapp/javascript/pages/Pages/} => %w[
     spec/controllers/pages_controller_spec.rb
     spec/requests/pages_landing_embed_csp_spec.rb
