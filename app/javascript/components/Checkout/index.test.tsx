@@ -504,7 +504,9 @@ describe("Checkout method-forced listed-currency amounts", () => {
       cart,
     );
 
-    expect(getAllByLabelText("Price").map((node) => node.textContent)).toEqual(["US$9.15", "US$10"]);
+    // The first line is not a whole dollar, so the second one shows its cents too rather than
+    // sitting next to it as US$10.
+    expect(getAllByLabelText("Price").map((node) => node.textContent)).toEqual(["US$9.15", "US$10.00"]);
   });
 
   // The tip is canonical USD cents in state on every lane (`computeTip` takes its percentage of
@@ -573,7 +575,7 @@ describe("Checkout method-forced listed-currency amounts", () => {
     );
 
     expect(getByLabelText("Tip").getAttribute("value")).toBe("10");
-    expect(getAllByText("R$10").length).toBeGreaterThan(0);
+    expect(getAllByText("R$10.00").length).toBeGreaterThan(0);
     expect(queryByText("R$9.97")).toBeNull();
     expect(queryByText("R$9.96")).toBeNull();
   });
@@ -924,7 +926,7 @@ describe("Checkout direct-listed currency picker", () => {
       "usd",
       "cad",
     ]);
-    expect(getAllByLabelText("Price").map((node) => node.textContent)).toEqual(["US$10"]);
+    expect(getAllByLabelText("Price").map((node) => node.textContent)).toEqual(["US$10.00"]);
     expect(getByLabelText("Tip").getAttribute("value")).toBe("3.50");
   });
 
@@ -974,7 +976,105 @@ describe("Checkout direct-listed currency picker", () => {
       "cad",
     ]);
     expect(picker).toHaveProperty("value", "cad");
-    expect(getAllByLabelText("Price").map((node) => node.textContent)).toEqual(["CA$15"]);
+    expect(getAllByLabelText("Price").map((node) => node.textContent)).toEqual(["CA$15.00"]);
+  });
+});
+
+describe("Checkout order summary decimals", () => {
+  const cart: CartState = { items: [cartItem()], discountCodes: [] };
+  const surchargesWithTax = (taxCents: number): SurchargesResponse => ({
+    vat_id_valid: false,
+    has_vat_id_input: false,
+    shipping_rate_cents: 0,
+    tax_cents: taxCents,
+    tax_included_cents: 0,
+    subtotal: 1_000,
+    buyer_currency_quote: null,
+  });
+
+  it("keeps the whole-unit look when every amount in the summary is whole", () => {
+    const { getAllByLabelText, getAllByText, queryByText } = renderCheckout(buildState(), cart);
+
+    expect(getAllByLabelText("Price").map((node) => node.textContent)).toEqual(["US$10"]);
+    // The item price, Subtotal and Total.
+    expect(getAllByText("US$10")).toHaveLength(3);
+    expect(queryByText("US$10.00")).toBeNull();
+  });
+
+  it("shows cents on every amount once one of them has them", () => {
+    const { getAllByText } = renderCheckout(
+      buildState({ surcharges: { type: "loaded", result: surchargesWithTax(210) } }),
+      cart,
+    );
+
+    // The item price and Subtotal are whole dollars and the tax line is not, so the column shows
+    // cents throughout instead of US$10 beside US$2.10.
+    expect(getAllByText("US$10.00")).toHaveLength(2);
+    expect(getAllByText("US$2.10").length).toBeGreaterThan(0);
+    expect(getAllByText("US$12.10").length).toBeGreaterThan(0);
+  });
+
+  it("leaves a zero-decimal currency whole even when another amount is fractional", () => {
+    // KRW is stored in 100 subunits but has no fractional unit to show, so the column's cents
+    // decision cannot put decimals on it.
+    const krwQuote: NonNullable<SurchargesResponse["buyer_currency_quote"]> = {
+      token: "quote-token",
+      currency: "krw",
+      canonical_total_cents: 100_000,
+      presentment_total_cents: 1_000_005,
+      rate: 10,
+      subunit_to_unit: 100,
+      expires_at: "2999-01-01T00:00:00Z",
+      line_allocations: [
+        {
+          permalink: "prod",
+          price_cents: 1_000_000,
+          tip_cents: 5,
+          tax_cents: 0,
+          shipping_cents: 0,
+          total_cents: 1_000_005,
+        },
+      ],
+    };
+    const { getAllByText, queryByText } = renderCheckout(
+      buildState({
+        products: [stateProduct({ hasTippingEnabled: true })],
+        tip: { type: "fixed", amount: 1 },
+        surcharges: {
+          type: "loaded",
+          result: {
+            ...surchargesWithTax(0),
+            subtotal: 100_000,
+            detected_buyer_currency: "krw",
+            buyer_currency_quote: krwQuote,
+          },
+        },
+      }),
+      cart,
+    );
+
+    // Item price, Subtotal and Total.
+    expect(getAllByText("₩10,000").length).toBeGreaterThanOrEqual(3);
+    expect(queryByText(/₩10,000\./u)).toBeNull();
+  });
+
+  it("shows cents on the whole rows when a free trial's renewal price has them", () => {
+    const trialCart: CartState = {
+      items: [
+        cartItem({
+          price: 999,
+          recurrence: "monthly",
+          product: cartProduct({ price_cents: 999, free_trial: { duration: { amount: 1, unit: "week" } } }),
+        }),
+      ],
+      discountCodes: [],
+    };
+    const { getAllByLabelText, getAllByText } = renderCheckout(buildState(), trialCart);
+
+    // Nothing is charged today, so the line price and the summary are whole. The renewal price the
+    // trial prints under the line price is in the same column and is not, so the column shows cents.
+    expect(getAllByLabelText("Price").map((node) => node.textContent)).toEqual(["US$0.00"]);
+    expect(getAllByText(/US\$9\.99/u).length).toBeGreaterThan(0);
   });
 });
 
@@ -1114,6 +1214,28 @@ describe("Checkout currency picker", () => {
     expect(getByText("Total")).toBeTruthy();
     expect(getByText("Subtotal")).toBeTruthy();
     expect(getByText("Updating total…")).toBeTruthy();
+  });
+
+  it("holds skeletons over the held quote's amounts while the new currency is quoted", () => {
+    renderCheckout(
+      buildState({
+        buyerCurrency: "usd",
+        surcharges: { type: "pending" },
+        buyerCurrencyRemint: { surcharges: quotedSurcharges, previousCurrency: "cad" },
+      }),
+      cart,
+    );
+
+    // The price rows and the Total footer, the two blocks that carry the amounts still on screen.
+    const busy = Array.from(document.querySelectorAll('[aria-busy="true"]'));
+    expect(busy).toHaveLength(2);
+    for (const block of busy) {
+      // Those amounts belong to the currency the buyer just left, and a dimmed wrong-currency
+      // number reads as the new price — so the amount is replaced, not faded.
+      expect(block.textContent).not.toContain("CA$12.50");
+      expect(block.querySelectorAll('[data-slot="skeleton"]').length).toBeGreaterThan(0);
+      expect(block.className).not.toContain("opacity-50");
+    }
   });
 
   it("leaves the focused select in the document across the re-quote", () => {

@@ -43,6 +43,7 @@ import {
 } from "$app/components/Product/ConfigurationSelector";
 import { Thumbnail } from "$app/components/Product/Thumbnail";
 import { showAlert } from "$app/components/server-components/Alert";
+import { Skeleton } from "$app/components/Skeleton";
 import { Alert } from "$app/components/ui/Alert";
 import { Fieldset, FieldsetTitle } from "$app/components/ui/Fieldset";
 import { Input } from "$app/components/ui/Input";
@@ -67,6 +68,7 @@ import {
   getCheckoutPresentmentAmounts,
   getMatchingDirectListedAllocations,
   isRecurringUpiPaymentConfig,
+  summaryAmountsAreAllWhole,
   toBuyerCurrencyCents,
   toCanonicalCents,
 } from "./buyerCurrencyDisplay";
@@ -493,6 +495,47 @@ export const Checkout = ({
     totalCents: number;
   } | null = presentmentAmounts ?? listedAmounts;
 
+  // The amounts the summary card displays, in the currency it displays them in. Rows backed by a
+  // server allocation render that allocation; every other row is converted from canonical USD the
+  // same way the formatters below convert it, so the column's one cents decision matches what it
+  // prints. Rows that are not rendered are left out, since an off-screen amount must not be able to
+  // change what the visible ones look like.
+  const toDisplayedCents = (canonicalCents: number) =>
+    localCurrency ? toBuyerCurrencyCents(Math.floor(canonicalCents), localCurrency) : Math.floor(canonicalCents);
+  const summaryDisplayedCents = [
+    ...cart.items.map((item, index) => {
+      const allocated = localAmounts?.linePriceCents[index];
+      if (allocated != null) return allocated;
+      return toDisplayedCents(convertToUSD(item, hasFreeTrial(item, isGift) ? 0 : item.price * item.quantity));
+    }),
+    // A free trial's renewal price prints under its line price in this same column, so it counts
+    // toward the column's one cents decision even though it is not charged today.
+    ...cart.items
+      .filter((item) => hasFreeTrial(item, isGift) && item.recurrence)
+      .map((item) => toDisplayedCents(convertToUSD(item, getDiscountedPrice(cart, item).price))),
+    localAmounts?.subtotalCents ?? toDisplayedCents(subtotal),
+    listedAmounts?.taxIncludedCents ?? toDisplayedCents(summarySurcharges?.tax_included_cents ?? 0),
+    localAmounts?.taxCents ?? toDisplayedCents(summarySurcharges?.tax_cents ?? 0),
+    localAmounts?.shippingCents ?? toDisplayedCents(summarySurcharges?.shipping_rate_cents ?? 0),
+    localAmounts?.discountCents ?? toDisplayedCents(discount),
+    localAmounts?.tipCents ?? toDisplayedCents(computeTip(state)),
+    localAmounts?.totalCents ?? toDisplayedCents(total ?? 0),
+    ...(commissionCompletionTotal > 0 || futureInstallmentsWithoutTipsTotal > 0
+      ? [
+          buyerCurrencyDisplay?.chargePresentmentTotalCents ??
+            toDisplayedCents(
+              total == null ? 0 : total - commissionCompletionTotal - futureInstallmentsWithoutTipsTotal,
+            ),
+          buyerCurrencyDisplay?.futureInstallmentsPresentmentTotalCents ??
+            toDisplayedCents(futureInstallmentsWithoutTipsTotal),
+          toDisplayedCents(commissionCompletionTotal),
+        ]
+      : []),
+  ];
+  // The summary is one column of amounts, so one fractional line switches the whole column to cents;
+  // an all-whole cart keeps the compact US$10 look.
+  const noCentsIfWhole = summaryAmountsAreAllWhole(summaryDisplayedCents, localCurrency?.subunitToUnit ?? 100);
+
   return (
     // data-checkout-scope bounds PaymentForm's scroll-to-first-error scan: wide enough to reach
     // the tip and gift fields above it, narrow enough to ignore the rest of the page.
@@ -520,6 +563,7 @@ export const Checkout = ({
                     isGift={isGift}
                     buyerCurrencyDisplay={localCurrency}
                     presentmentPriceCents={localAmounts?.linePriceCents[index] ?? null}
+                    noCentsIfWhole={noCentsIfWhole}
                     updateCart={updateCart}
                   />
                 ))}
@@ -536,15 +580,13 @@ export const Checkout = ({
                       buyerCurrencyDisplay={localCurrency}
                       presentmentTipCents={localAmounts?.tipCents ?? null}
                       isListedCurrency={listedCurrency != null}
+                      noCentsIfWhole={noCentsIfWhole}
+                      isRequoting={isRequoting}
                     />
                   </div>
                 ) : null}
                 <div
-                  className={classNames(
-                    "grid gap-4 p-4 transition-opacity sm:px-5",
-                    displayTipSelector && "border-t border-border",
-                    isRequoting && "opacity-50",
-                  )}
+                  className={classNames("grid gap-4 p-4 sm:px-5", displayTipSelector && "border-t border-border")}
                   data-checkout-price-rows="true"
                   aria-busy={isRequoting}
                 >
@@ -554,18 +596,24 @@ export const Checkout = ({
                         title="Subtotal"
                         price={
                           localAmounts && localCurrency
-                            ? formatPresentmentCents(localAmounts.subtotalCents, localCurrency)
-                            : formatCheckoutPrice(subtotal, localCurrency)
+                            ? formatPresentmentCents(localAmounts.subtotalCents, localCurrency, { noCentsIfWhole })
+                            : formatCheckoutPrice(subtotal, localCurrency, { noCentsIfWhole })
                         }
+                        isRequoting={isRequoting}
                       />
                       {summarySurcharges.tax_included_cents ? (
                         <CartPriceItem
                           title={`${nameOfSalesTaxForCountry(state.country)} (included)`}
                           price={
                             listedAmounts && listedCurrency
-                              ? formatPresentmentCents(listedAmounts.taxIncludedCents, listedCurrency)
-                              : formatCheckoutPrice(summarySurcharges.tax_included_cents, localCurrency)
+                              ? formatPresentmentCents(listedAmounts.taxIncludedCents, listedCurrency, {
+                                  noCentsIfWhole,
+                                })
+                              : formatCheckoutPrice(summarySurcharges.tax_included_cents, localCurrency, {
+                                  noCentsIfWhole,
+                                })
                           }
+                          isRequoting={isRequoting}
                         />
                       ) : null}
                       {summarySurcharges.tax_cents ? (
@@ -573,9 +621,10 @@ export const Checkout = ({
                           title={nameOfSalesTaxForCountry(state.country)}
                           price={
                             localAmounts && localCurrency
-                              ? formatPresentmentCents(localAmounts.taxCents, localCurrency)
-                              : formatCheckoutPrice(summarySurcharges.tax_cents, localCurrency)
+                              ? formatPresentmentCents(localAmounts.taxCents, localCurrency, { noCentsIfWhole })
+                              : formatCheckoutPrice(summarySurcharges.tax_cents, localCurrency, { noCentsIfWhole })
                           }
+                          isRequoting={isRequoting}
                         />
                       ) : null}
                       {summarySurcharges.shipping_rate_cents ? (
@@ -583,9 +632,12 @@ export const Checkout = ({
                           title="Shipping rate"
                           price={
                             localAmounts && localCurrency
-                              ? formatPresentmentCents(localAmounts.shippingCents, localCurrency)
-                              : formatCheckoutPrice(summarySurcharges.shipping_rate_cents, localCurrency)
+                              ? formatPresentmentCents(localAmounts.shippingCents, localCurrency, { noCentsIfWhole })
+                              : formatCheckoutPrice(summarySurcharges.shipping_rate_cents, localCurrency, {
+                                  noCentsIfWhole,
+                                })
                           }
+                          isRequoting={isRequoting}
                         />
                       ) : null}
                     </>
@@ -628,9 +680,13 @@ export const Checkout = ({
                       </h4>
                       {discount > 0 ? (
                         <div>
-                          {localAmounts && localCurrency
-                            ? formatPresentmentCents(-localAmounts.discountCents, localCurrency)
-                            : formatCheckoutPrice(-discount, localCurrency)}
+                          {isRequoting ? (
+                            <PendingAmount />
+                          ) : localAmounts && localCurrency ? (
+                            formatPresentmentCents(-localAmounts.discountCents, localCurrency, { noCentsIfWhole })
+                          ) : (
+                            formatCheckoutPrice(-discount, localCurrency, { noCentsIfWhole })
+                          )}
                         </div>
                       ) : null}
                     </div>
@@ -658,21 +714,16 @@ export const Checkout = ({
                 </div>
                 {total != null ? (
                   <>
-                    <footer
-                      className={classNames(
-                        "grid gap-4 border-t border-border p-4 transition-opacity sm:px-5",
-                        isRequoting && "opacity-50",
-                      )}
-                      aria-busy={isRequoting}
-                    >
+                    <footer className="grid gap-4 border-t border-border p-4 sm:px-5" aria-busy={isRequoting}>
                       <CartPriceItem
                         title="Total"
                         price={
                           localAmounts && localCurrency
-                            ? formatPresentmentCents(localAmounts.totalCents, localCurrency)
-                            : formatCheckoutPrice(total, localCurrency)
+                            ? formatPresentmentCents(localAmounts.totalCents, localCurrency, { noCentsIfWhole })
+                            : formatCheckoutPrice(total, localCurrency, { noCentsIfWhole })
                         }
                         variant="large"
+                        isRequoting={isRequoting}
                       />
                     </footer>
                     <CurrencyPicker
@@ -692,17 +743,21 @@ export const Checkout = ({
                               ? formatPresentmentCents(
                                   buyerCurrencyDisplay.chargePresentmentTotalCents,
                                   buyerCurrencyDisplay,
+                                  { noCentsIfWhole },
                                 )
                               : formatCheckoutPrice(
                                   total - commissionCompletionTotal - futureInstallmentsWithoutTipsTotal,
                                   localCurrency,
+                                  { noCentsIfWhole },
                                 )
                           }
+                          isRequoting={isRequoting}
                         />
                         {commissionCompletionTotal > 0 ? (
                           <CartPriceItem
                             title="Payment after completion"
-                            price={formatCheckoutPrice(commissionCompletionTotal, localCurrency)}
+                            price={formatCheckoutPrice(commissionCompletionTotal, localCurrency, { noCentsIfWhole })}
+                            isRequoting={isRequoting}
                           />
                         ) : null}
                         {futureInstallmentsWithoutTipsTotal > 0 ? (
@@ -713,9 +768,13 @@ export const Checkout = ({
                                 ? formatPresentmentCents(
                                     buyerCurrencyDisplay.futureInstallmentsPresentmentTotalCents,
                                     buyerCurrencyDisplay,
+                                    { noCentsIfWhole },
                                   )
-                                : formatCheckoutPrice(futureInstallmentsWithoutTipsTotal, localCurrency)
+                                : formatCheckoutPrice(futureInstallmentsWithoutTipsTotal, localCurrency, {
+                                    noCentsIfWhole,
+                                  })
                             }
+                            isRequoting={isRequoting}
                           />
                         ) : null}
                       </div>
@@ -761,12 +820,16 @@ const TipSelector = ({
   buyerCurrencyDisplay,
   presentmentTipCents,
   isListedCurrency = false,
+  noCentsIfWhole = true,
+  isRequoting = false,
 }: {
   buyerCurrencyDisplay?: CheckoutLocalCurrencyFormat | null;
   presentmentTipCents?: number | null;
   // True while checkout displays the listed-currency lane. The listed lane preserves fixed tips
   // exactly as typed instead of round-tripping them through canonical USD cents.
   isListedCurrency?: boolean;
+  noCentsIfWhole?: boolean;
+  isRequoting?: boolean;
 }) => {
   const [state, dispatch] = useState();
   const errors = getErrors(state);
@@ -807,10 +870,11 @@ const TipSelector = ({
         title="Add a tip?"
         price={
           presentmentTipCents != null && buyerCurrencyDisplay
-            ? formatPresentmentCents(presentmentTipCents, buyerCurrencyDisplay)
-            : formatCheckoutPrice(computeTip(state), buyerCurrencyDisplay)
+            ? formatPresentmentCents(presentmentTipCents, buyerCurrencyDisplay, { noCentsIfWhole })
+            : formatCheckoutPrice(computeTip(state), buyerCurrencyDisplay, { noCentsIfWhole })
         }
         variant="tip"
+        isRequoting={isRequoting}
       />
       <div className="grid grid-cols-1 gap-4 @[52rem]:grid-cols-5">
         {showPercentageOptions ? (
@@ -881,14 +945,22 @@ const TipSelector = ({
   );
 };
 
+// A summary amount while its re-quote is in flight. The figure still on screen belongs to the
+// currency the buyer just left, and a dimmed wrong-currency number reads as the new price, so the
+// amount is replaced rather than faded. Sized like a typical amount so the row does not jump when
+// the real one lands.
+const PendingAmount = () => <Skeleton className="h-5 w-16" aria-hidden="true" />;
+
 const CartPriceItem = ({
   title,
   price,
   variant = "default",
+  isRequoting = false,
 }: {
   title: React.ReactNode;
   price: string | number | null;
   variant?: "default" | "large" | "tip";
+  isRequoting?: boolean;
 }) => {
   const isLarge = variant === "large";
   const isDefault = variant === "default";
@@ -903,7 +975,9 @@ const CartPriceItem = ({
       >
         {title}
       </h4>
-      <div className={classNames("text-base sm:text-lg", !isDefault && "font-bold")}>{price}</div>
+      <div className={classNames("text-base sm:text-lg", !isDefault && "font-bold")}>
+        {isRequoting ? <PendingAmount /> : price}
+      </div>
     </div>
   );
 };
@@ -915,6 +989,7 @@ const CartItemComponent = ({
   isGift,
   buyerCurrencyDisplay,
   presentmentPriceCents,
+  noCentsIfWhole,
 }: {
   item: CartItemProps;
   cart: CartState;
@@ -926,6 +1001,7 @@ const CartItemComponent = ({
   // amount later persisted for the receipt; converting the USD price here instead can be a
   // cent off from both.
   presentmentPriceCents?: number | null;
+  noCentsIfWhole: boolean;
 }) => {
   const [editPopoverOpen, setEditPopoverOpen] = React.useState(false);
   const [selection, setSelection] = React.useState<PriceSelection>({
@@ -1126,8 +1202,8 @@ const CartItemComponent = ({
       <CartItemEnd className="max-w-1/2 text-right">
         <span className="current-price text-base font-bold sm:text-lg" aria-label="Price">
           {presentmentPriceCents != null && buyerCurrencyDisplay
-            ? formatPresentmentCents(presentmentPriceCents, buyerCurrencyDisplay)
-            : formatCheckoutPrice(convertToUSD(item, price), buyerCurrencyDisplay)}
+            ? formatPresentmentCents(presentmentPriceCents, buyerCurrencyDisplay, { noCentsIfWhole })
+            : formatCheckoutPrice(convertToUSD(item, price), buyerCurrencyDisplay, { noCentsIfWhole })}
         </span>
         {hasFreeTrial(item, isGift) && item.product.free_trial ? (
           <>
@@ -1144,7 +1220,9 @@ const CartItemComponent = ({
                     always a canonical USD amount. */}
                 {formatAmountPerRecurrence(
                   item.recurrence,
-                  formatCheckoutPrice(convertToUSD(item, discount.price), buyerCurrencyDisplay),
+                  formatCheckoutPrice(convertToUSD(item, discount.price), buyerCurrencyDisplay, {
+                    noCentsIfWhole,
+                  }),
                 )}{" "}
                 after
               </span>

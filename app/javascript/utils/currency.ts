@@ -86,8 +86,10 @@ export const formatPriceCentsWithCurrencySymbol = (
 
 // USD's long symbol is set to $, which is often what we want.
 // In some places, though, we want to be more explicit (like cart total), and for these, we want to use US$ as the symbol.
-export const formatUSDCentsWithExpandedCurrencySymbol = (amountCents: number): string =>
-  formatPrice("US$", priceCentsToUnit(amountCents, false), 2, { noCentsIfWhole: true });
+export const formatUSDCentsWithExpandedCurrencySymbol = (
+  amountCents: number,
+  { noCentsIfWhole = true }: { noCentsIfWhole?: boolean } = {},
+) => formatPrice("US$", priceCentsToUnit(amountCents, false), 2, { noCentsIfWhole });
 
 export const formatPriceCentsWithoutCurrencySymbol = (code: CurrencyCode, amountCents: number): string => {
   const currency = findCurrencyByCode(code);
@@ -111,6 +113,7 @@ export const formatMinorUnitPriceWithIntl = (
   currencyCode: string,
   amountMinorUnits: number,
   subunitToUnit?: number | null,
+  { noCentsIfWhole = true }: { noCentsIfWhole?: boolean } = {},
 ): string => {
   const currency = currencyCode.toUpperCase();
   // Prefer the backend's authoritative subunit_to_unit (the Money gem's value, which is
@@ -128,9 +131,11 @@ export const formatMinorUnitPriceWithIntl = (
   const units = amountMinorUnits / resolvedSubunitToUnit;
   // Match USD checkout amounts by dropping .00 on whole units. Fractional values
   // use the currency's own convention, so KRW stays whole even though Gumroad stores it in 100 subunits.
+  // Callers rendering a column of amounts together pass noCentsIfWhole: false, so one line holding
+  // cents doesn't leave its neighbours looking truncated.
   const currencyFractionDigits = new Intl.NumberFormat("en-US", { style: "currency", currency }).resolvedOptions()
     .maximumFractionDigits;
-  const fractionDigits = Number.isInteger(units) ? 0 : currencyFractionDigits;
+  const fractionDigits = Number.isInteger(units) && noCentsIfWhole ? 0 : currencyFractionDigits;
   return new Intl.NumberFormat("en-US", {
     style: "currency",
     currency,
