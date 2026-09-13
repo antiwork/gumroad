@@ -499,8 +499,8 @@ export const Product = ({
             isBundle={isBundle}
             customViewContentButtonText={product.custom_view_content_button_text}
           />
-        ) : product.is_licensed && !product.can_edit ? (
-          <LicenseKeyLookupPrompt />
+        ) : !product.can_edit ? (
+          <LicenseKeyLookupPrompt isLicensed={product.is_licensed} />
         ) : null}
         {isBundle ? (
           <section className="grid gap-4 border-t border-border p-6">
@@ -902,10 +902,7 @@ const LicenseKeyRow = ({ licenseKey }: { licenseKey: string }) => (
   </CardContent>
 );
 
-// For a licensed product where we could not identify the visitor as a past buyer, point
-// them at the existing self-serve lookup page instead of leaving them to contact the
-// seller. The page emails their receipt (including the license key) to the purchase email.
-const LicenseKeyLookupPrompt = () => {
+const LicenseKeyLookupPrompt = ({ isLicensed }: { isLicensed: boolean }) => {
   // Absolute root-domain URL, not a path: this section renders on the seller's subdomain
   // and custom domain too, and /license-key-lookup is only drawn under
   // GumroadDomainConstraint, so a relative href 404s there.
@@ -918,7 +915,7 @@ const LicenseKeyLookupPrompt = () => {
           <li>
             <h3 className="grow">Already bought this?</h3>
             <NavigationButton href={Routes.license_key_lookup_url({ protocol: scheme, host: rootDomain })}>
-              View your information
+              {isLicensed ? "View your information" : "Get your download link"}
             </NavigationButton>
           </li>
         </CardContent>
