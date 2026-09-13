@@ -1704,15 +1704,16 @@ describe Purchase::Blockable do
 
     context "when number of free purchases of the same product from same IP address exceeds the threshold" do
       context "when the purchase happens within the configured time limit" do
-        it "blocks the ip_address" do
+        it "blocks the product without blocking the guest's ip_address" do
           freeze_time do
             expect do
-              purchase = create(:purchase, link: @product, ip_address: "127.0.0.1", purchase_state: "in_progress")
+              purchase = create(:purchase, link: @product, ip_address: "127.0.0.1", purchaser: nil, purchase_state: "in_progress")
               purchase.mark_successful!
             end.to change { PlatformBlock.count }.from(0).to(1)
 
-            expect(PlatformBlock.pluck(:object_type, :object_value)).to eq [["ip_address", "127.0.0.1"]]
-            expect(PlatformBlock.ip_address.active.find_by(object_value: "127.0.0.1").expires_at.to_i).to eq 24.hours.from_now.to_i
+            expect(PlatformBlock.pluck(:object_type, :object_value)).to eq [["product", @product.id.to_s]]
+            expect(PlatformBlock.product.active.find_by(object_value: @product.id).expires_at.to_i).to eq 24.hours.from_now.to_i
+            expect(PlatformBlock.ip_address.active).to be_empty
           end
         end
       end
@@ -1756,7 +1757,70 @@ describe Purchase::Blockable do
       end
     end
 
-    context "when the free purchases are the product owner's own downloads (gumroad-private#2578)" do
+    context "after guest downloads using the product owner's email exceed the threshold" do
+      before do
+        Feature.activate(:block_purchases_on_product)
+        @product.update!(allow_double_charges: true)
+        @product.sales.update_all(email: @product.user.email, purchaser_id: nil)
+        purchase = create(:purchase, link: @product, ip_address: "127.0.0.1", purchaser: nil,
+                                     email: @product.user.email, purchase_state: "in_progress")
+        purchase.mark_successful!
+
+        expect(@product.sales.pluck(:purchaser_id)).to eq [nil, nil, nil]
+        expect(PlatformBlock.pluck(:object_type, :object_value)).to eq [["product", @product.id.to_s]]
+        expect(PlatformBlock.ip_address.active).to be_empty
+      end
+
+      it "rejects paid purchases of that product from any IP without charging" do
+        ["127.0.0.1", "127.0.0.2"].each do |ip_address|
+          purchase = build(:purchase, link: @product, price_cents: 100, ip_address:)
+          purchase.save
+
+          expect(purchase.error_code).to eq PurchaseErrorCode::TEMPORARILY_BLOCKED_PRODUCT
+          expect(purchase.errors.full_messages).to include "Your card was not charged."
+          expect(purchase.blocked_by_ip_address?).to be false
+        end
+      end
+
+      it "allows paid purchases of another product by the same seller on the same IP" do
+        other_product = create(:product, user: @product.user)
+        purchase = create(:purchase, link: other_product, ip_address: "127.0.0.1")
+
+        expect(purchase.price_cents).to be_positive
+        expect(purchase.error_code).to be_nil
+        expect(purchase.errors).to be_empty
+        expect(purchase.blocked_by_ip_address?).to be false
+      end
+
+      it "continues allowing free downloads under the existing product gate" do
+        purchase = create(:purchase, link: @product, ip_address: "127.0.0.1", purchaser: nil)
+
+        expect(purchase.price_cents).to eq 0
+        expect(purchase.error_code).to be_nil
+        expect(purchase.errors).to be_empty
+      end
+
+      it "allows paid purchases once the product block expires" do
+        travel_to(25.hours.from_now) do
+          purchase = create(:purchase, link: @product, price_cents: 100, ip_address: "127.0.0.1")
+
+          expect(PlatformBlock.product.active).to be_empty
+          expect(purchase.error_code).to be_nil
+          expect(purchase.errors).to be_empty
+        end
+      end
+
+      it "does not enforce the product block when the product gate is disabled" do
+        Feature.deactivate(:block_purchases_on_product)
+        purchase = create(:purchase, link: @product, price_cents: 100, ip_address: "127.0.0.1")
+
+        expect(PlatformBlock.product.active).to exist
+        expect(purchase.error_code).to be_nil
+        expect(purchase.errors).to be_empty
+      end
+    end
+
+    context "when the free purchases are the product owner's signed-in downloads" do
       before do
         @own_product = create(:product, price_cents: 0)
         create_list(:purchase, 2, link: @own_product, ip_address: "127.0.0.1", purchaser: @own_product.user)
