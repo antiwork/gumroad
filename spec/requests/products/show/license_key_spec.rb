@@ -55,6 +55,7 @@ describe "License key on the product page", :js, type: :system do
 
   [:physical_product, :call_product, :commission_product].each do |factory|
     context "when the product is a #{factory}" do
+      let(:seller) { create(:named_user, created_at: 31.days.ago) }
       let(:product) { create(factory, user: seller, is_licensed: false) }
 
       it "offers receipt recovery without promising a download" do
