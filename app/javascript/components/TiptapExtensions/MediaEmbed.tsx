@@ -100,6 +100,57 @@ export const Raw = TiptapNode.create({
 });
 type IframelyEmbedData = { html: string; title: string; url: string; provider_name: string; thumbnail_url?: string };
 
+// Iframely stores the exact URL we ask for, so use one canonical spelling first and a distinct fallback.
+const YOUTUBE_VIDEO_ID = /^[A-Za-z0-9_-]{11}$/u;
+const YOUTUBE_START_TIME = /^(?=\d)(?:(\d+)h)?(?:(\d+)m)?(?:(\d+)s?)?$/u;
+
+const isYouTubeHost = (host: string) =>
+  ["youtube.com", "youtube-nocookie.com"].some((domain) => host === domain || host.endsWith(`.${domain}`));
+
+const youtubeVideoId = (url: URL): string | null => {
+  const host = url.hostname.toLowerCase();
+  const segments = url.pathname.split("/").filter(Boolean);
+  if (host === "youtu.be") return segments[0] ?? null;
+  if (!isYouTubeHost(host)) return null;
+  if (segments[0] === "watch") return url.searchParams.get("v");
+  if (["shorts", "embed", "live", "v"].includes(segments[0] ?? "")) return segments[1] ?? null;
+  return null;
+};
+
+const youtubeStartSeconds = (value: string | null): number | null => {
+  if (!value) return null;
+  const match = YOUTUBE_START_TIME.exec(value);
+  if (!match) return null;
+  return Number(match[1] ?? 0) * 3600 + Number(match[2] ?? 0) * 60 + Number(match[3] ?? 0);
+};
+
+export const mediaEmbedUrlCandidates = (raw: string): string[] => {
+  let parsed: URL;
+  try {
+    parsed = new URL(raw.trim());
+  } catch {
+    return [raw];
+  }
+  if (parsed.protocol !== "https:" && parsed.protocol !== "http:") return [raw];
+  if (
+    (parsed.hostname.toLowerCase() === "youtu.be" || isYouTubeHost(parsed.hostname.toLowerCase())) &&
+    parsed.searchParams.has("list")
+  )
+    return [raw];
+  // A path we don't recognize (a playlist, a channel, a mistyped id) is left exactly as typed.
+  const id = youtubeVideoId(parsed);
+  if (!id || !YOUTUBE_VIDEO_ID.test(id)) return [raw];
+  const start = parsed.searchParams.get("t") ?? parsed.searchParams.get("start");
+  const startSeconds = youtubeStartSeconds(start);
+  const canonical = new URL(`https://www.youtube.com/watch?v=${id}`);
+  const fallback = new URL(`https://www.youtube.com/embed/${id}`);
+  if (start && startSeconds !== null) {
+    canonical.searchParams.set("t", start);
+    fallback.searchParams.set("start", String(startSeconds));
+  }
+  return [canonical.toString(), fallback.toString()];
+};
+
 export type EmbedMediaFormProps = {
   type: "embed" | "twitter";
   onEmbedReceived: ((data: IframelyEmbedData) => void) | undefined;
@@ -142,11 +193,19 @@ export const EmbedMediaForm = React.forwardRef<{ focus: () => void }, EmbedMedia
               if (!inputRef.current) {
                 return;
               }
-              const encoded = encodeURIComponent(inputRef.current.value);
               // omit_script forces iframely to return an <iframe> tag
-              const iframelyUrl = `https://iframe.ly/api/oembed?iframe=1&api_key=6317bed3ca048a1a75d850&url=${encoded}&omit_script=1`;
+              const lookup = (url: string) =>
+                request({
+                  method: "GET",
+                  url: `https://iframe.ly/api/oembed?iframe=1&api_key=6317bed3ca048a1a75d850&url=${encodeURIComponent(url)}&omit_script=1`,
+                  accept: "json",
+                });
               try {
-                const data: unknown = await (await request({ method: "GET", url: iframelyUrl, accept: "json" })).json();
+                let data: unknown = null;
+                for (const candidate of mediaEmbedUrlCandidates(inputRef.current.value)) {
+                  data = await (await lookup(candidate)).json();
+                  if (typia.is<IframelyEmbedData>(data)) break;
+                }
                 if (typia.is<IframelyEmbedData>(data)) {
                   inputRef.current.value = "";
                   onEmbedReceived?.(data);
