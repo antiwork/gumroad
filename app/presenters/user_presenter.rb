@@ -34,6 +34,7 @@ class UserPresenter
   def as_current_seller
     time_zone = ActiveSupport::TimeZone[user.timezone]
     can_publish = user.can_publish_products?
+    compliance_info = user.alive_user_compliance_info
     {
       id: user.external_id,
       email: user.email,
