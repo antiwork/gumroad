@@ -8,10 +8,21 @@ describe "config/currencies.json" do
     Rails.root.join("app/views/help_center/articles/contents/_46-what-currency-does-gumroad-use.html.erb").read
   end
 
-  it "keeps one 31-currency pricing list including EUR, KRW, TWD and the eight new buyer currencies" do
+  it "keeps one 32-currency pricing list including EUR, KRW, TWD and the eight new buyer currencies" do
     expect(CURRENCY_CHOICES.keys.map(&:to_s)).to eq(
-      %w[usd gbp eur jpy inr aud cad hkd sgd twd nzd brl zar chf ils php krw pln czk sek nok dkk mxn sar aed try cop ron thb myr idr]
+      %w[usd gbp eur jpy inr aud cad hkd sgd twd nzd brl zar chf ils php krw pln czk sek nok dkk mxn sar aed try cop ron thb myr vnd idr]
     )
+  end
+
+  it "defines VND in whole dong for pricing and Stripe charges" do
+    expect(CURRENCY_CHOICES[:vnd]).to eq(
+      "symbol" => "₫", "display_format" => "₫ (Vietnamese Dong)",
+      "min_price" => 25_618, "single_unit" => true
+    )
+    expect(Currency::VND).to eq("vnd")
+    expect(Money::Currency.new("vnd").subunit_to_unit).to eq(1)
+    expect(StripeChargeProcessor.charge_minor_units_compatible?("vnd")).to be(true)
+    expect(StripeChargeProcessor.listed_amount_matches_charge_units?("vnd")).to be(true)
   end
 
   it "leaves the euro entry unchanged" do
@@ -72,7 +83,7 @@ describe "config/currencies.json" do
       "Swedish Krona", "Norwegian Krone", "Danish Krone", "Mexican Peso",
       "Saudi Riyal", "UAE Dirham", "Turkish Lira", "Colombian Peso",
       "Romanian Leu", "Thai Baht", "Malaysian Ringgit", "Indonesian Rupiah",
-      "Korean Won", "Taiwanese Dollars"
+      "Korean Won", "Taiwanese Dollars", "Vietnamese Dong"
     )
   end
 end

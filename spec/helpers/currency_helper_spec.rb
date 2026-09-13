@@ -3,6 +3,14 @@
 require "spec_helper"
 
 describe CurrencyHelper do
+  it "uses whole dong for VND price input and USD conversion" do
+    expect(string_to_price_cents(:vnd, "25,618")).to eq(25_618)
+    expect(unit_scaling_factor("vnd")).to eq(1)
+    expect(usd_cents_to_currency("vnd", 100, "25000")).to eq(25_000)
+    expect(get_usd_cents("vnd", 25_000, rate: "25000")).to eq(100)
+    expect(currency_choices).to include(["₫ (Vietnamese Dong)", "vnd", "₫"])
+  end
+
   describe "#get_rate" do
     it "returns the correct value" do
       expect(get_rate("JPY")).to eq "78.3932"
@@ -74,6 +82,7 @@ describe CurrencyHelper do
       expect(min_price_for(:sar)).to eq 372
       expect(min_price_for(:thb)).to eq 3270
       expect(min_price_for(:idr)).to eq 1_743_007
+      expect(min_price_for(:vnd)).to eq 25_618
     end
 
     it "falls back to USD for unknown currency types" do

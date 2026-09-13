@@ -177,6 +177,7 @@ describe CustomerSurchargeController, :vcr do
         include("code" => Currency::THB, "label" => "฿ (Thai Baht)"),
         include("code" => Currency::MYR, "label" => "RM (Malaysian Ringgit)"),
         include("code" => Currency::IDR, "label" => "Rp (Indonesian Rupiah)"),
+        include("code" => Currency::VND, "label" => "₫ (Vietnamese Dong)"),
         include("code" => Currency::KRW, "label" => "₩ (Korean Won)"),
         include("code" => Currency::TWD, "label" => "NT$ (Taiwanese Dollars)")
       )

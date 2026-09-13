@@ -21,7 +21,6 @@ module Currency
   ARS = "ars"
   BWP = "bwp"
   PEN = "pen"
-  VND = "vnd"
   XCD = "xcd"
   TZS = "tzs"
   NAD = "nad"

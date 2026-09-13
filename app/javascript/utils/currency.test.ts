@@ -16,6 +16,15 @@ describe("findCurrencyByCode", () => {
     expect(usd.isSingleUnit).toBe(false);
   });
 
+  it("includes VND with a whole-dong minimum and display name", () => {
+    expect(currencyCodeList).toContain("vnd");
+    expect(getIsSingleUnitCurrency("vnd")).toBe(true);
+    expect(getMinPriceCents("vnd")).toBe(25618);
+    expect(findCurrencyByCode("vnd").longSymbol).toBe("₫");
+    expect(findCurrencyByCode("vnd").displayFormat).toBe("₫ (Vietnamese Dong)");
+    expect(formatMinorUnitPriceWithIntl("vnd", 25618, 1)).toBe("₫25,618");
+  });
+
   it("marks JPY as a single-unit currency", () => {
     const jpy = findCurrencyByCode("jpy");
     expect(jpy.isSingleUnit).toBe(true);
