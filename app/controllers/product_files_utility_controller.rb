@@ -21,7 +21,7 @@ class ProductFilesUtilityController < ApplicationController
   end
 
   def download_product_files
-    product_files = @product.user.alive_product_files_preferred_for_product(@product).by_external_ids(params[:product_file_ids])
+    product_files = downloadable_product_files.by_external_ids(params[:product_file_ids])
     e404 if product_files.blank?
 
     url_redirect = @product.url_redirects.build
@@ -59,6 +59,14 @@ class ProductFilesUtilityController < ApplicationController
   end
 
   private
+    # The editor's file list is the seller's whole library, so a requested id can name a row attached to
+    # another of their products. A collaborator reaches only this product's rows; the seller keeps the
+    # whole library.
+    def downloadable_product_files
+      scope = @product.user.alive_product_files_preferred_for_product(@product)
+      @product.user == current_seller ? scope : scope.where(link: @product)
+    end
+
     def set_product
       @product = Link.find_by_external_id(params[:product_id])
       e404 unless product_accessible_by_current_user?(@product)

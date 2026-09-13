@@ -84,6 +84,16 @@ describe ProductFilesUtilityController, :vcr do
       expect(response).to redirect_to("https://example.com/file.srt")
     end
 
+    it "returns the download info for a library file attached to another of the seller's products" do
+      library_file = create(:product_file, link: create(:product, user: seller), display_name: "library")
+      allow_any_instance_of(UrlRedirect).to receive(:signed_location_for_file).with(library_file).and_return("https://example.com/library.pdf")
+
+      get :download_product_files, format: :json, params: { product_id: product.external_id, product_file_ids: [library_file.external_id] }
+
+      expect(response).to have_http_status(:success)
+      expect(response.parsed_body["files"]).to eq([{ "url" => "https://example.com/library.pdf", "filename" => library_file.s3_filename }])
+    end
+
     context "when the current user is a collaborator on the product" do
       let(:affiliate_user) { create(:user) }
       let!(:collaborator) { create(:collaborator, seller:, affiliate_user:, products: [product]) }
@@ -109,6 +119,15 @@ describe ProductFilesUtilityController, :vcr do
 
         expect do
           get :download_product_files, format: :json, params: { product_id: other_product.external_id, product_file_ids: [file.external_id] }
+        end.to raise_error(ActionController::RoutingError, "Not Found")
+      end
+
+      it "does not sign a URL for a private file attached to another product of the same seller" do
+        other_product = create(:product, user: seller)
+        other_file = create(:product_file, link: other_product)
+
+        expect do
+          get :download_product_files, format: :json, params: { product_id: product.external_id, product_file_ids: [other_file.external_id] }
         end.to raise_error(ActionController::RoutingError, "Not Found")
       end
     end
