@@ -997,11 +997,9 @@ module Purchase::Blockable
       max_allowed_free_purchases_of_same_product = max_allowed_free_purchases_of_same_product&.to_i || 2
       fraudulent_free_purchases_block_hours = fraudulent_free_purchases_block_hours&.to_i || 24 # 1 day
 
-      # The product owner's own $0 downloads don't count, mirroring the self-purchase exemption in
-      # #block_ip_address_based_on_recent_failures! (gumroad-private#1755): downloading your own free
-      # product a few times is how creators check their delivery flow, and it must not arm a rule
-      # meant for a stranger harvesting samples. Only a confirmed `purchaser_id` match exempts a row
-      # — a guest checkout's typed-in email must never be enough.
+      # Mirror the self-purchase exemption in #block_ip_address_based_on_recent_failures!: creators
+      # download their own $0 product to check delivery. Only a confirmed `purchaser_id` match exempts
+      # a row — a guest checkout's typed-in email does not prove ownership.
       recent_free_purchases_of_same_product = link.sales
                                                   .successful
                                                   .not_recurring_charge
