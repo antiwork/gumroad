@@ -4897,6 +4897,82 @@ describe Purchase::CreateService, :vcr do
     end
   end
 
+  # A $0-base product with a priced version can now carry pay-what-you-want on the
+  # product (gumroad-private#2573). The amount box floor is the SELECTED version's total —
+  # `minimum_paid_price_cents` is base + the chosen variant's price_difference_cents — so a
+  # buyer cannot name $0 and walk away with the priced version. gp#1660's hole stays shut
+  # without Product::Prices#set_customizable_price clearing the flag.
+  describe "pay what you want on a $0-base product with a priced version" do
+    let(:pwyw_product) do
+      product = create(:product, price_cents: 0)
+      category = create(:variant_category, title: "versions", link: product)
+      category.variants.create!(name: "Free Version", price_difference_cents: 0)
+      category.variants.create!(name: "Full Version", price_difference_cents: 10_00)
+      # What the editor saves when the seller flips the switch: nothing rewrites the column
+      # on save any more, so the seller's word is what checkout sees.
+      product.update_column(:customizable_price, true)
+      product.reload
+    end
+    let(:free_version) { pwyw_product.alive_variants.find_by!(name: "Free Version") }
+    let(:priced_version) { pwyw_product.alive_variants.find_by!(name: "Full Version") }
+
+    def name_a_price(product, variant, named_price_cents)
+      params = {
+        purchase: {
+          email: "buyer@gumroad.com",
+          quantity: 1,
+          perceived_price_cents: named_price_cents,
+          price_range: format("%.2f", named_price_cents / 100.0),
+          ip_address: "0.0.0.0",
+          session_id: "a107d0b7ab5ab3c1eeb7d3aaf9792977",
+          is_mobile: false,
+        },
+        variants: [variant.external_id],
+      }
+      Purchase::CreateService.new(product:, params:).perform
+    end
+
+    it "floors the named price at the selected version's total" do
+      purchase = build(:purchase, link: pwyw_product, seller: pwyw_product.user)
+      purchase.variant_attributes = [priced_version]
+      expect(purchase.minimum_paid_price_cents).to eq 10_00
+
+      purchase = build(:purchase, link: pwyw_product, seller: pwyw_product.user)
+      purchase.variant_attributes = [free_version]
+      expect(purchase.minimum_paid_price_cents).to eq 0
+    end
+
+    it "rejects a $0 name on the priced version" do
+      purchase, error = name_a_price(pwyw_product, priced_version, 0)
+
+      expect(error).to eq "Please enter an amount greater than or equal to the minimum."
+      expect(purchase.error_code).to eq PurchaseErrorCode::PRICE_CENTS_TOO_LOW
+      expect(purchase.purchase_state).to eq "failed"
+    end
+
+    it "rejects a name below the priced version's total" do
+      purchase, _error = name_a_price(pwyw_product, priced_version, 5_00)
+
+      expect(purchase.error_code).to eq PurchaseErrorCode::PRICE_CENTS_TOO_LOW
+    end
+
+    it "lets a name at the priced version's total through the floor" do
+      purchase, _error = name_a_price(pwyw_product, priced_version, 10_00)
+
+      expect(purchase.displayed_price_cents).to eq 10_00
+      # Only the missing card stops it, which is the proof the floor admitted the amount.
+      expect(purchase.error_code).to eq PurchaseErrorCode::CREDIT_CARD_NOT_PROVIDED
+    end
+
+    it "still takes a $0 name on the free version" do
+      purchase, error = name_a_price(pwyw_product, free_version, 0)
+
+      expect(error).to be_nil
+      expect(purchase.purchase_state).to eq "successful"
+      expect(purchase.price_cents).to eq 0
+    end
+  end
+
   describe "payment flow analytics recording" do
     let(:payment_flow_params) do
       # `payment_details_source` + a Stripe payment param make

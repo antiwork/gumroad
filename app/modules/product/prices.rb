@@ -58,22 +58,20 @@ module Product::Prices
     create_or_update_new_price!(price_cents: rental_price_cents, recurrence: subscription_duration.try(:to_s), is_rental: true)
   end
 
+  # A $0 base is pay-what-you-want by default, but beside a paid version the flag is the
+  # seller's choice: the switch is live in the editor, so forcing it either way would fight
+  # the seller's last save. Nothing is left unguarded by that — the amount box floor is the
+  # selected version's total, not the $0 base (Purchase#minimum_paid_price_cents), so a $0
+  # name cannot buy the paid version (gumroad-private#1660, gumroad-private#2573).
   def set_customizable_price
     return if is_tiered_membership
     return unless default_price_cents == 0
     # Coffee is deliberately $0-base with paid "Suggested Amounts" variants and a free-entry box
-    # (initialize_suggested_amount_if_needed! sets both in one write), so the clear below would
-    # undo it. Above the paid-variant branch, matching the pre-existing behaviour: coffee always
-    # trips that branch, so it never reached the set either.
+    # (initialize_suggested_amount_if_needed! sets both in one write), so it keeps its own flag
+    # rather than being forced on below.
     return if native_type == Link::NATIVE_TYPE_COFFEE
-    # Clearing, not returning: a $0-base product that gains a paid variant keeps the stale
-    # `true` otherwise, and no editor control switches PWYW off on a $0 base — so checkout
-    # offers a free-entry amount box whose minimum on the free option is 0 and a buyer can
-    # pay full price for the free tier (gumroad-private#1660).
-    if variant_categories_alive.joins(:variants).merge(BaseVariant.alive).sum("base_variants.price_difference_cents") > 0
-      write_customizable_price_column(false)
-      return
-    end
+    return if variant_categories_alive.joins(:variants).merge(BaseVariant.alive).sum("base_variants.price_difference_cents") > 0
+
     write_customizable_price_column(true)
   end
 
