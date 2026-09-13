@@ -500,7 +500,10 @@ export const Product = ({
             customViewContentButtonText={product.custom_view_content_button_text}
           />
         ) : !product.can_edit ? (
-          <LicenseKeyLookupPrompt isLicensed={product.is_licensed} />
+          <LicenseKeyLookupPrompt
+            isLicensed={product.is_licensed}
+            hasDownload={!product.is_physical && product.native_type !== "call" && product.native_type !== "commission"}
+          />
         ) : null}
         {isBundle ? (
           <section className="grid gap-4 border-t border-border p-6">
@@ -902,7 +905,7 @@ const LicenseKeyRow = ({ licenseKey }: { licenseKey: string }) => (
   </CardContent>
 );
 
-const LicenseKeyLookupPrompt = ({ isLicensed }: { isLicensed: boolean }) => {
+const LicenseKeyLookupPrompt = ({ isLicensed, hasDownload }: { isLicensed: boolean; hasDownload: boolean }) => {
   // Absolute root-domain URL, not a path: this section renders on the seller's subdomain
   // and custom domain too, and /license-key-lookup is only drawn under
   // GumroadDomainConstraint, so a relative href 404s there.
@@ -915,7 +918,7 @@ const LicenseKeyLookupPrompt = ({ isLicensed }: { isLicensed: boolean }) => {
           <li>
             <h3 className="grow">Already bought this?</h3>
             <NavigationButton href={Routes.license_key_lookup_url({ protocol: scheme, host: rootDomain })}>
-              {isLicensed ? "View your information" : "Get your download link"}
+              {isLicensed ? "View your information" : hasDownload ? "Get your download link" : "Resend your receipt"}
             </NavigationButton>
           </li>
         </CardContent>

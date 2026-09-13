@@ -53,6 +53,20 @@ describe "License key on the product page", :js, type: :system do
     end
   end
 
+  [:physical_product, :call_product, :commission_product].each do |factory|
+    context "when the product is a #{factory}" do
+      let(:product) { create(factory, user: seller, is_licensed: false) }
+
+      it "offers receipt recovery without promising a download" do
+        visit short_link_path(product)
+
+        expect(page).to have_text("Already bought this?")
+        expect(page).to have_link("Resend your receipt", href: license_key_lookup_url(protocol: PROTOCOL, host: ROOT_DOMAIN))
+        expect(page).to have_no_link("Get your download link")
+      end
+    end
+  end
+
   [true, false].each do |is_licensed|
     context "when the seller views their #{is_licensed ? 'licensed' : 'non-licensed'} product" do
       let(:product) { create(:product, user: seller, is_licensed:) }
