@@ -1245,15 +1245,15 @@ class LinksController < ApplicationController
       editor_save_lock_probe_rows(sql)
     end
 
-    # A wait on the product's own row: the failed statement names `links` and this
-    # product's id, which is what the holders read is scoped to.
+    # A wait on the product's own row: the failed statement names `links` and compares
+    # something to this product's id. A heuristic on the statement's own SQL, and the
+    # reason the holders read is skipped rather than guessed at.
     def editor_save_lock_probe_lock_row_wait?(waiting_rows)
       return false unless waiting_rows.is_a?(Array)
 
-      id = /\bid\s*=\s*#{@product.id}\b/i
       waiting_rows.any? do |row|
         sql = row["SQL_TEXT"].to_s
-        sql.match?(/`links`/i) && sql.match?(id)
+        sql.match?(/\blinks\b/i) && sql.match?(/=\s*#{@product.id}\b/)
       end
     end
 
