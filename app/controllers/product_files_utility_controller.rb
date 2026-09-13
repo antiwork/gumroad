@@ -21,7 +21,7 @@ class ProductFilesUtilityController < ApplicationController
   end
 
   def download_product_files
-    product_files = @product.user.alive_product_files_preferred_for_product(@product).by_external_ids(params[:product_file_ids])
+    product_files = product_files_for_download
     e404 if product_files.blank?
 
     url_redirect = @product.url_redirects.build
@@ -59,6 +59,19 @@ class ProductFilesUtilityController < ApplicationController
   end
 
   private
+    # A duplicate url across the seller's products (copied content, or the same file uploaded twice)
+    # can leave the editor holding the other product's row, so those rows stay resolvable. Everything
+    # else of the seller's is out: a collaborator on this product must not be able to name a file that
+    # belongs to a product they have no access to.
+    def product_files_for_download
+      seller_product_files = @product.user.product_files.alive.merge(Link.alive)
+
+      seller_product_files
+        .where(link_id: @product.id)
+        .or(seller_product_files.where(url: @product.product_files.alive.select(:url)))
+        .by_external_ids(params[:product_file_ids])
+    end
+
     def set_product
       @product = Link.find_by_external_id(params[:product_id])
       e404 unless product_accessible_by_current_user?(@product)

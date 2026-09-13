@@ -111,6 +111,28 @@ describe ProductFilesUtilityController, :vcr do
           get :download_product_files, format: :json, params: { product_id: other_product.external_id, product_file_ids: [file.external_id] }
         end.to raise_error(ActionController::RoutingError, "Not Found")
       end
+
+      it "does not resolve a file of another product belonging to the same seller" do
+        other_product = create(:product, user: seller)
+        other_file = create(:product_file, link: other_product)
+
+        expect do
+          get :download_product_files, format: :json, params: { product_id: product.external_id, product_file_ids: [other_file.external_id] }
+        end.to raise_error(ActionController::RoutingError, "Not Found")
+      end
+
+      it "still resolves a duplicate of the product's file that lives on another product of the seller" do
+        duplicate_url = "#{S3_BASE_URL}specs/duplicate.pdf"
+        create(:product_file, link: product, url: duplicate_url)
+        other_product = create(:product, user: seller)
+        duplicate = create(:product_file, link: other_product, url: duplicate_url)
+        allow_any_instance_of(UrlRedirect).to receive(:signed_location_for_file).and_return("https://example.com/duplicate.pdf")
+
+        get :download_product_files, format: :json, params: { product_id: product.external_id, product_file_ids: [duplicate.external_id] }
+
+        expect(response).to have_http_status(:success)
+        expect(response.parsed_body["files"].length).to eq(1)
+      end
     end
 
     context "when the S3 file is missing" do

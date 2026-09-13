@@ -18,6 +18,14 @@ class LinksController < ApplicationController
   DEFAULT_PRICE = 500
   PRICE_INPUT_MAX_LENGTH = 64
   PRICE_INPUT_PATTERN = /\A[+-]?(?:\d+(?:\.\d*)?|\.\d+)\z/
+  # A lock-wait timeout means a concurrent save of the same product holds the
+  # row lock, so the client should wait for it to commit — not reload, which
+  # re-enters the same queue.
+  EDITOR_SAVE_LOCK_RETRY_AFTER_SECONDS = 5
+  # One report per product per window: a client looping on a wedged save wrote
+  # 1,293 events in five hours and became the org's top production issue,
+  # hiding real regressions (gumroad-private#2583).
+  EDITOR_SAVE_LOCK_REPORT_WINDOW = 10.minutes
   TRANSPARENT_1X1_GIF = "GIF89a\x01\x00\x01\x00\x80\x00\x00\x00\x00\x00\xFF\xFF\xFF!\xF9\x04\x01\x00\x00\x00\x00,\x00\x00\x00\x00\x01\x00\x01\x00\x00\x02\x02D\x01\x00;".b.freeze
 
   prepend_before_action :disable_third_party_analytics!, only: :cart_items_count
@@ -684,6 +692,19 @@ class LinksController < ApplicationController
         error_message = @product.errors.full_messages.first || e.message
       end
       return render json: { error_message: }, status: :unprocessable_entity
+    rescue ActiveRecord::LockWaitTimeout => e
+      # The transaction never committed, so nothing was written: another save of
+      # this product held `@product.lock!` past `innodb_lock_wait_timeout`. The
+      # catch-all below answers "refresh the page and try again", which is the
+      # one thing that cannot work here — the reload queues behind the same lock
+      # (gumroad-private#2583).
+      report_editor_save_lock_contention(e)
+      response.set_header("Retry-After", EDITOR_SAVE_LOCK_RETRY_AFTER_SECONDS.to_s)
+      return render json: {
+        error_message: "Another save for this product is still in progress. Please wait a few seconds, then try again.",
+        error_code: "product_save_busy",
+        retry_after: EDITOR_SAVE_LOCK_RETRY_AFTER_SECONDS,
+      }, status: :conflict
     rescue => e
       # Catch-all so an unanticipated failure never leaves the editor's save
       # request with no JSON body (gumroad-private#1784) — mirrors `publish`
@@ -1085,6 +1106,25 @@ class LinksController < ApplicationController
         "seller_id=#{@product.user_id} provenance_version=#{product_permitted_params[:rich_content_provenance_version].to_i} " \
         "request_id=#{request.request_id}#{detail_suffix}"
       )
+    end
+
+    # Reports the first lock-wait conflict in the window and only counts the
+    # rest. Every one of these is the same seller retrying the same product, so
+    # the volume carries no information — it just made one stuck product the
+    # org's top Sentry issue (gumroad-private#2583). The count stays in the log
+    # line, which is greppable per request.
+    def report_editor_save_lock_contention(exception)
+      key = "editor_save_lock_contention:#{@product.id}"
+      occurrences = $redis.incr(key)
+      $redis.expire(key, EDITOR_SAVE_LOCK_REPORT_WINDOW.to_i) if occurrences == 1
+
+      Rails.logger.info(
+        "[product_editor_save_lock_contention] product_id=#{@product.id} seller_id=#{@product.user_id} " \
+        "occurrences_in_window=#{occurrences} request_id=#{request.request_id}"
+      )
+      return if occurrences > 1
+
+      ErrorNotifier.notify(exception, product_id: @product.id, seller_id: @product.user_id)
     end
 
     def check_banned
