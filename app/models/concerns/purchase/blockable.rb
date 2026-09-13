@@ -1010,12 +1010,26 @@ module Purchase::Blockable
 
       return if recent_free_purchases_of_same_product <= max_allowed_free_purchases_of_same_product
 
-      # Guest downloads can be the creator testing delivery; do not block their IP across products.
+      # Keep the velocity stop on the repeated free-download source without denying unrelated paid
+      # checkout for the seller, the product, or everyone sharing the guest's IP.
       PlatformBlock.add!(
-        object_type: PlatformBlock::TYPES[:product],
-        object_value: link_id,
+        object_type: PlatformBlock::TYPES[:product_ip_address],
+        object_value: free_product_ip_address_block_value,
         expires_in: fraudulent_free_purchases_block_hours.hours,
       )
+    end
+
+    def free_product_ip_address_is_not_blocked
+      return unless free_purchase?
+      return if link_id.blank? || ip_address.blank?
+      return if PlatformBlock.product_ip_address.active.find_by(object_value: free_product_ip_address_block_value).blank?
+
+      self.error_code = PurchaseErrorCode::TEMPORARILY_BLOCKED_PRODUCT
+      errors.add :base, "The transaction could not complete."
+    end
+
+    def free_product_ip_address_block_value
+      "#{link_id}:#{ip_address}"
     end
 
     def delete_failed_purchases_count

@@ -380,6 +380,7 @@ class Purchase < ApplicationRecord
 
   # before_create instead of validate since we want to persist the purchases that fail these.
   before_create :product_is_sellable
+  before_create :free_product_ip_address_is_not_blocked
   before_create :product_is_not_blocked
   before_create :validate_purchase_type
   before_create :variants_available

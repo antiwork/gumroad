@@ -95,9 +95,9 @@ class Onetime::ClearMistakenBuyerBlocks
 
     # Every other unattended writer of a blocked_by: nil row blocks a single IP
     # (BlockSuspendedAccountIpWorker, #block_ip_address_based_on_recent_failures!),
-    # browser (#ban_fraudulent_buyer_browser_guid!) or product (#block_purchases_on_product!,
-    # #block_fraudulent_free_purchases!) — never an email or a card. So these two types identify a
-    # burst as block_buyer!'s.
+    # browser (#ban_fraudulent_buyer_browser_guid!), product (#block_purchases_on_product!),
+    # or product/IP pair (#block_fraudulent_free_purchases!) — never an email or a card. So these
+    # two types identify a burst as block_buyer!'s.
     BLOCK_BUYER_ONLY_TYPES = [PlatformBlock::TYPES[:email], PlatformBlock::TYPES[:charge_processor_fingerprint]].freeze
 
     # Without this, sharing an IP with somebody suspended in the same two minutes (carrier NAT, an
