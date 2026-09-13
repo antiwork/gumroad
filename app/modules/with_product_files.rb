@@ -81,6 +81,11 @@ module WithProductFiles
           new_product_files << product_file
           file_params[:is_linked_to_existing_file] = true if link && link.user.alive_product_files_excluding_product.where("product_files.url = ? AND product_files.link_id != ?", file_params[:url], link.id).any?
           WithProductFiles.associate_dropbox_file_and_product_file(product_file)
+        else
+          # An existing row's `size` was measured from the object (ProductFile#analyze);
+          # the client's echo of it is not a write. SaveFilesService passes a create's
+          # byte count through as :size (gumroad-private#2584).
+          file_params.delete(:size)
         end
         file_params.delete(:folder_id) if file_params[:folder_id].nil? && !(product_file.folder&.alive?)
         # TODO(product_edit_react) remove fallback

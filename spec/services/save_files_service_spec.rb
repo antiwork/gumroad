@@ -219,6 +219,36 @@ describe SaveFilesService do
       expect(file.display_name).to eq("renamed file")
     end
 
+    it "persists the client's byte count when it creates a file, before AnalyzeFileWorker measures the object (#2584)" do
+      service.perform(@product, ActionController::Parameters.new(
+                                  files: [{
+                                    "id" => "client-guid",
+                                    "display_name" => "lost-found-complete-with-video",
+                                    "extension" => "ZIP",
+                                    "url" => "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachment/lost-found-complete-with-video.zip",
+                                    "file_size" => 1_746_035,
+                                  }]
+                                ).permit!)
+
+      file = @product.product_files.reload.sole
+      expect(file.size).to eq(1_746_035)
+      # What the editor's reload reads back as `file_size`.
+      expect(file.as_json[:file_size]).to eq(1_746_035)
+    end
+
+    it "still creates a file with no size when the payload carries none" do
+      service.perform(@product, ActionController::Parameters.new(
+                                  files: [{
+                                    "id" => "client-guid",
+                                    "display_name" => "no size",
+                                    "extension" => "ZIP",
+                                    "url" => "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachment/no-size.zip",
+                                  }]
+                                ).permit!)
+
+      expect(@product.product_files.reload.sole.size).to be_nil
+    end
+
     it "still applies writable flag-backed attributes (stream_only) when serializer-only keys are also present" do
       video = create(:streamable_video, link: @product, size: 4321)
       @product.product_files << video

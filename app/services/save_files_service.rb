@@ -5,7 +5,7 @@ class SaveFilesService
   # GET shape) includes these derived keys, but ProductFile cannot write them
   # back. Keep writable flag-backed as_json attributes out of this list.
   UNWRITABLE_SERIALIZED_FILE_KEYS = %i[
-    file_size extension is_pdf is_streamable is_transcoding_in_progress attached_product_name status
+    extension is_pdf is_streamable is_transcoding_in_progress attached_product_name status
   ].freeze
 
   delegate :product_files, to: :owner
@@ -132,6 +132,14 @@ class SaveFilesService
           file_params.delete(key)
           file_params.delete(key.to_s)
         end
+        # `file_size` is the editor's name for the `size` column: the byte count of
+        # the object the client just uploaded. AnalyzeFileWorker measures that object
+        # only seconds after the create, so dropping the client's number leaves `size`
+        # NULL in the meantime and the editor renders the null as "0 byte"
+        # (gumroad-private#2584). `save_files!` drops it again for rows that already
+        # exist — a measured size is never overwritten by a client echo.
+        client_file_size = file_params.delete(:file_size) || file_params.delete("file_size")
+        file_params[:size] ||= client_file_size if client_file_size.is_a?(Integer) && client_file_size.positive?
       end
     end
 end
