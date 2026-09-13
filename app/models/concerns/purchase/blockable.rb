@@ -695,7 +695,8 @@ module Purchase::Blockable
     # stop the actual human from paying with a card that is fine. Somebody spraying many stolen
     # cards at us is still caught by the card-testing velocity checks (#ban_card_testers!,
     # #ban_fraudulent_buyer_browser_guid!), which do block the browser and the email once several
-    # distinct cards have failed.
+    # distinct cards have failed — unless that browser/email pair has clean checkout history
+    # (#buyer_has_clean_checkout_history?), where only the per-card, IP and per-product limits apply.
     #
     # A renewal does not always carry a fingerprint of its own — a charge can fail before we ever
     # record one — so for a recurring charge we also block the card that renewal was charged on,
