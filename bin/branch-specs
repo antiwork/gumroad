@@ -58,6 +58,7 @@ PROFILE_FLOW_SPECS = %w[
   spec/requests/user
   spec/requests/profile_analytics_spec.rb
   spec/requests/profile_custom_html_spec.rb
+  spec/requests/user_custom_domain_spec.rb
 ].freeze
 
 # Harvested from PRs that had to carry run-all-specs because these JS
@@ -76,6 +77,29 @@ BUNDLE_FLOW_SPECS = %w[spec/requests/bundles].freeze
 AUDIENCE_FLOW_SPECS = %w[
   spec/requests/analytics/audience_spec.rb
   spec/requests/customers
+].freeze
+EMAIL_FLOW_SPECS = %w[spec/requests/emails].freeze
+DISCOVER_FLOW_SPECS = %w[spec/requests/discover].freeze
+WISHLIST_FLOW_SPECS = %w[spec/requests/wishlists].freeze
+DOWNLOAD_PAGE_SPECS = %w[
+  spec/requests/download_page
+  spec/requests/reading_spec.rb
+  spec/requests/video_streaming_spec.rb
+].freeze
+WORKFLOW_FLOW_SPECS = %w[spec/requests/workflows_spec.rb].freeze
+HELP_CENTER_SPECS = %w[
+  spec/requests/help_center_spec.rb
+  spec/requests/help_center
+  spec/presenters/help_center_presenter_spec.rb
+  spec/services/help_center/article_text_spec.rb
+  spec/controllers/api/v2/help_articles_controller_spec.rb
+].freeze
+# Instant-payout / balance page (Inertia Payouts/Index), not the 45 backend payout specs.
+PAYOUT_PAGE_SPECS = %w[
+  spec/requests/balance_pages_spec.rb
+  spec/controllers/balance_controller_spec.rb
+  spec/controllers/instant_payouts_controller_spec.rb
+  spec/controllers/payouts
 ].freeze
 
 FANOUT = {
@@ -101,9 +125,9 @@ FANOUT = {
   %r{\Aapp/javascript/pages/Profile/} => PROFILE_FLOW_SPECS,
   # Help-center article partials render through the help_center request specs;
   # the per-article view glob finds nothing because specs aren't per-article.
-  %r{\Aapp/views/help_center/} => %w[spec/requests/help_center_spec.rb spec/requests/help_center],
-  %r{\Aapp/javascript/components/HelpCenterPage} => %w[spec/requests/help_center_spec.rb spec/requests/help_center],
-  %r{\Aapp/javascript/pages/HelpCenter/} => %w[spec/requests/help_center_spec.rb spec/requests/help_center],
+  %r{\Aapp/views/help_center/} => HELP_CENTER_SPECS,
+  %r{\Aapp/javascript/components/HelpCenterPage} => HELP_CENTER_SPECS,
+  %r{\Aapp/javascript/pages/HelpCenter/} => HELP_CENTER_SPECS,
   # Recurring run-all-specs gaps (ProductEdit, Settings, API docs, Analytics,
   # Audience, Bundles, Dashboard). These trees have no co-located rspec.
   %r{\Aapp/javascript/components/ProductEdit/} => PRODUCT_FLOW_SPECS,
@@ -123,20 +147,104 @@ FANOUT = {
   # authorize screens live in oauth_authorizations*_spec.rb.
   %r{\Aapp/views/doorkeeper/} => %w[spec/requests/oauth_authorizations_spec.rb spec/requests/oauth_authorize_scope_list_spec.rb],
   %r{\Aspec/support/dynamodb\.rb\z} => %w[spec/services/email_engagement_dynamo_store_spec.rb],
+  # Harvest 2026-09-12, round 3. Shared components whose consumers span
+  # more than one flow ESCALATE. Do not raise MAX_SELECTED_FILES to keep
+  # an incomplete union (RichTextEditor importer-complete union is 157).
+  # Importer traces below are rg from "$app/<module>" (or the inertia render).
+  %r{\Aapp/javascript/components/Settings/} => SETTINGS_FLOW_SPECS + %w[
+    spec/requests/oauth_applications_pages_spec.rb
+    spec/requests/login/passkeys_spec.rb
+    spec/requests/account_confirmation_spec.rb
+    spec/requests/user/disable_affiliate_requests_setting_spec.rb
+  ],
+  # Importers: pages/Settings/* Layout/Advanced/Payments; also
+  # Oauth/Applications/Edit.tsx:7 ApplicationForm and :8 Layout.
+  # PasskeysSection registers then logs in (login/passkeys_spec.rb).
+  %r{\Aapp/javascript/(components|pages)/Payouts/} => PAYOUT_PAGE_SPECS,
+  # Renderer: balance_controller.rb:14 inertia "Payouts/Index".
+  %r{\Aapp/javascript/pages/Emails/} => EMAIL_FLOW_SPECS,
+  %r{\Aapp/javascript/components/EmailsPage/} => EMAIL_FLOW_SPECS + %w[spec/requests/followers],
+  # Importers: pages/Emails/{Edit,Scheduled,Published,Drafts,New}; also
+  # Followers/Index.tsx:9 EmailsLayout.
+  %r{\Aapp/javascript/data/installments} => EMAIL_FLOW_SPECS,
+  %r{\Aapp/models/help_center/articles.yml\z} => HELP_CENTER_SPECS,
+  # Consumers: article_text.rb:90/:122 HelpCenter::Article.all;
+  # api/v2/help_articles_controller.rb:25/:31/:36.
+  %r{\Aapp/javascript/components/DiscordButton} => DOWNLOAD_PAGE_SPECS + CHECKOUT_FLOW_SPECS,
+  # Importers: DownloadPage/WithContent.tsx:19, Checkout/Receipt.tsx:13.
+  %r{\Aapp/javascript/components/DownloadPage/} => DOWNLOAD_PAGE_SPECS,
+  %r{\Aapp/javascript/data/discord_integration} => DOWNLOAD_PAGE_SPECS + CHECKOUT_FLOW_SPECS + %w[spec/requests/products/edit/integrations/discord_integrations_spec.rb],
+  # Importers: DiscordButton.tsx:4 join/leave;
+  # ProductEdit/ProductTab/DiscordIntegrationEditor.tsx:4 fetchServerInfo.
+  # parsers/profile is shared (Coffee, product profile, settings) — escalate.
+  %r{\Aapp/javascript/pages/Users/Coffee} => PROFILE_FLOW_SPECS + %w[
+    spec/requests/purchases/product/coffee_spec.rb
+    spec/requests/purchases/tipping_spec.rb
+  ],
+  # Renderer: users_controller.rb:115 Users/Coffee. tipping_spec.rb visits
+  # coffee.long_url then checkout (coffee-only carts cannot tip).
+  # Users/Show is also a Discover/UTM checkout surface — escalate.
+  %r{\Aapp/javascript/pages/Users/Subscribe\.tsx\z} => PROFILE_FLOW_SPECS,
+  # Renderer: users_controller.rb:125 Users/Subscribe.
+  # SubscribePreview and ReviewReminders are not storefront-list coverage — escalate.
+  %r{\Aapp/javascript/pages/User/Passwords/} => %w[spec/requests/password_reset_spec.rb spec/requests/login_spec.rb],
+  # Renderer: user/passwords_controller.rb:16 New, :39 Edit.
+  %r{\Aapp/javascript/pages/UrlRedirects/DownloadPage} => DOWNLOAD_PAGE_SPECS,
+  # Renderer: url_redirects_controller.rb:107 DownloadPage. reading_spec
+  # and video_streaming_spec visit /d/:token (Watch/Read controls).
+  # Read.tsx has co-located vitest; Confirm/Stream/Expired escalate.
+  %r{\Aapp/javascript/pages/Pages/} => %w[
+    spec/controllers/pages_controller_spec.rb
+    spec/requests/pages_landing_embed_csp_spec.rb
+    spec/requests/pages_landing_embed_routing_spec.rb
+    spec/requests/pages_landing_embed_storage_shim_spec.rb
+  ],
+  # Renderer: pages_controller.rb:25 Index, :42/:77/:88 Edit.
+  %r{\Aapp/javascript/pages/Customers/} => %w[spec/requests/customers],
+  %r{\Aapp/javascript/pages/Library/} => %w[spec/requests/library_spec.rb],
+  %r{\Aapp/javascript/pages/Oauth/} => %w[spec/requests/oauth_applications_pages_spec.rb],
+  %r{\Aapp/javascript/pages/Followers/Index} => %w[spec/requests/followers],
+  # Renderer: followers_controller.rb:39 Index (seller list). Cancel and
+  # FromEmbedForm are buyer unsubscribe/embed flows — escalate.
+  %r{\Aapp/javascript/pages/Reviews/} => PRODUCT_FLOW_SPECS + DOWNLOAD_PAGE_SPECS + %w[spec/requests/library_spec.rb],
+  %r{\Aapp/javascript/pages/Workflows/} => WORKFLOW_FLOW_SPECS,
+  %r{\Aapp/javascript/data/paypal} => CHECKOUT_FLOW_SPECS,
+  # Importers: Checkout/PaymentForm.tsx:33 createBillingAgreement (not Settings).
+  %r{\Aapp/javascript/pages/Discover/} => DISCOVER_FLOW_SPECS,
+  %r{\Aapp/javascript/pages/Wishlists/Index} => WISHLIST_FLOW_SPECS,
+  %r{\Aapp/javascript/pages/Wishlists/Following} => WISHLIST_FLOW_SPECS,
+  # Wishlists/Show is also a Discover purchase/commission surface — escalate.
+  %r{\Aapp/javascript/components/WorkflowsPage/} => WORKFLOW_FLOW_SPECS,
+  %r{\Aapp/javascript/entrypoints/custom_html_analytics} => %w[
+    spec/requests/products/show/custom_html_analytics_spec.rb
+    spec/requests/profile_custom_html_spec.rb
+    spec/requests/profile_analytics_spec.rb
+    spec/requests/custom_html_background_wiring_spec.rb
+    spec/controllers/links_controller_custom_html_spec.rb
+    spec/controllers/users_controller_custom_html_spec.rb
+    spec/requests/products/show
+  ],
+  # Renderers: links_controller custom HTML + users_controller.rb:425 profile wrapper.
 }.freeze
 
-# Config files with dedicated request coverage. Everything else under
-# config/ still escalates via ESCALATE_PATTERNS; entries here are reviewed
-# like FANOUT — a file belongs only when a spec exists whose entire purpose
-# is exercising it.
+# Config files with dedicated, local coverage. Boot-global files (domain.rb,
+# currencies.json, secure_headers, test_redis_isolation, devise/sentry/filter
+# hooks, OmniAuth Apple) stay in ESCALATE_PATTERNS — a matching
+# spec/config/*_spec.rb is not proof the initializer's effect is local.
 CONFIG_SPEC_MAP = {
   "config/initializers/rack_attack.rb" => %w[spec/requests/rack_attack_spec.rb],
+  "config/initializers/alterity.rb" => %w[spec/config/initializers/alterity_spec.rb],
+  "config/initializers/instant_ddl_first.rb" => %w[spec/config/initializers/instant_ddl_first_spec.rb],
+  "config/initializers/active_storage_jobs.rb" => %w[spec/config/initializers/active_storage_jobs_spec.rb],
 }.freeze
 
 # Support files with mappings; any OTHER spec/support change escalates.
 MAPPED_SUPPORT = FANOUT.keys.select { |re| re.source.start_with?('\Aspec/support') }.freeze
 
 # Paths that cannot be attributed to specs by filename: run the full suite.
+# Blanket config/ stays: a spec/config twin is not enough for boot-global
+# files (domain, CSP, currencies, test redis, Warden/Sentry hooks).
+# CONFIG_SPEC_MAP is the only reviewed exception.
 ESCALATE_PATTERNS = [
   %r{\AGemfile},
   %r{\Aconfig/},
@@ -168,6 +276,12 @@ IGNORED_PATTERNS = [
   # Recorded HTTP, not helpers. A cassette-only diff must not force Slow;
   # the spec that plays the tape is already in the selection (or unchanged).
   %r{\Aspec/support/fixtures/vcr_cassettes/},
+  # Production nginx/startup/local-compose only. Test-image inputs
+  # (Dockerfile.test, compose-test-and-ci, docker/ci, rspec.sh, fixture
+  # manifests) are unattributed and escalate — they feed the rspec image.
+  %r{\Adocker/(nginx|branch_app_nginx)/},
+  %r{\Adocker/web/(server|sidekiq_worker|rpush|post_deployment|database_migration|compile_assets|push_assets_to_s3|setup_db)\.sh\z},
+  %r{\Adocker/docker-compose-local\.yml\z},
 ].freeze
 
 # Above this many selected files the full suite's parallelism wins anyway.

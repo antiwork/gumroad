@@ -97,74 +97,74 @@
     },
     "pln": {
       "symbol": "zł",
-      "display_format": "zł (Polish zloty)",
+      "display_format": "zł (Polish Zloty)",
       "min_price": 379
     },
     "czk": {
       "symbol": "Kč",
-      "display_format": "Kč (Czech koruna)",
+      "display_format": "Kč (Czech Koruna)",
       "min_price": 2149
     },
     "sek": {
       "symbol": "kr",
-      "display_format": "kr (Swedish krona)",
+      "display_format": "kr (Swedish Krona)",
       "min_price": 999
     },
     "nok": {
       "symbol": "kr",
-      "display_format": "kr (Norwegian krone)",
+      "display_format": "kr (Norwegian Krone)",
       "min_price": 949
     },
     "dkk": {
       "symbol": "kr",
-      "display_format": "kr (Danish krone)",
+      "display_format": "kr (Danish Krone)",
       "min_price": 649
     },
     "mxn": {
       "symbol": "MX$",
-      "display_format": "MX$ (Mexican peso)",
+      "display_format": "MX$ (Mexican Peso)",
       "short_symbol": "$",
       "min_price": 1699
     },
     "sar": {
       "symbol": "SAR",
-      "display_format": "SAR (Saudi riyal)",
+      "display_format": "SAR (Saudi Riyal)",
       "min_price": 372
     },
     "aed": {
       "symbol": "AED",
-      "display_format": "AED (UAE dirham)",
+      "display_format": "AED (UAE Dirham)",
       "min_price": 364
     },
     "try": {
       "symbol": "₺",
-      "display_format": "₺ (Turkish lira)",
+      "display_format": "₺ (Turkish Lira)",
       "min_price": 4812
     },
     "cop": {
       "symbol": "COL$",
-      "display_format": "COL$ (Colombian peso)",
+      "display_format": "COL$ (Colombian Peso)",
       "short_symbol": "$",
       "min_price": 307474
     },
     "ron": {
       "symbol": "lei",
-      "display_format": "lei (Romanian leu)",
+      "display_format": "lei (Romanian Leu)",
       "min_price": 449
     },
     "thb": {
       "symbol": "฿",
-      "display_format": "฿ (Thai baht)",
+      "display_format": "฿ (Thai Baht)",
       "min_price": 3270
     },
     "myr": {
       "symbol": "RM",
-      "display_format": "RM (Malaysian ringgit)",
+      "display_format": "RM (Malaysian Ringgit)",
       "min_price": 403
     },
     "idr": {
       "symbol": "Rp",
-      "display_format": "Rp (Indonesian rupiah)",
+      "display_format": "Rp (Indonesian Rupiah)",
       "min_price": 1743007
     }
   }

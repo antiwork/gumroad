@@ -164,18 +164,18 @@ describe CustomerSurchargeController, :vcr do
       }, as: :json
 
       expect(response.parsed_body.fetch("available_buyer_currencies")).to include(
-        include("code" => Currency::SEK, "label" => "kr (Swedish krona)"),
-        include("code" => Currency::NOK, "label" => "kr (Norwegian krone)"),
-        include("code" => Currency::DKK, "label" => "kr (Danish krone)"),
-        include("code" => Currency::MXN, "label" => "MX$ (Mexican peso)"),
-        include("code" => Currency::SAR, "label" => "SAR (Saudi riyal)"),
-        include("code" => Currency::AED, "label" => "AED (UAE dirham)"),
-        include("code" => Currency::TRY, "label" => "₺ (Turkish lira)"),
-        include("code" => Currency::COP, "label" => "COL$ (Colombian peso)"),
-        include("code" => Currency::RON, "label" => "lei (Romanian leu)"),
-        include("code" => Currency::THB, "label" => "฿ (Thai baht)"),
-        include("code" => Currency::MYR, "label" => "RM (Malaysian ringgit)"),
-        include("code" => Currency::IDR, "label" => "Rp (Indonesian rupiah)"),
+        include("code" => Currency::SEK, "label" => "kr (Swedish Krona)"),
+        include("code" => Currency::NOK, "label" => "kr (Norwegian Krone)"),
+        include("code" => Currency::DKK, "label" => "kr (Danish Krone)"),
+        include("code" => Currency::MXN, "label" => "MX$ (Mexican Peso)"),
+        include("code" => Currency::SAR, "label" => "SAR (Saudi Riyal)"),
+        include("code" => Currency::AED, "label" => "AED (UAE Dirham)"),
+        include("code" => Currency::TRY, "label" => "₺ (Turkish Lira)"),
+        include("code" => Currency::COP, "label" => "COL$ (Colombian Peso)"),
+        include("code" => Currency::RON, "label" => "lei (Romanian Leu)"),
+        include("code" => Currency::THB, "label" => "฿ (Thai Baht)"),
+        include("code" => Currency::MYR, "label" => "RM (Malaysian Ringgit)"),
+        include("code" => Currency::IDR, "label" => "Rp (Indonesian Rupiah)"),
         include("code" => Currency::KRW, "label" => "₩ (Korean Won)"),
         include("code" => Currency::TWD, "label" => "NT$ (Taiwanese Dollars)")
       )

@@ -93,21 +93,25 @@ describe "Buyer-currency checkout currency picker", type: :system, js: true do
     expect(page).to have_select(
       "Currency",
       with_options: [
-        "SAR (Saudi riyal)",
-        "AED (UAE dirham)",
-        "₺ (Turkish lira)",
-        "COL$ (Colombian peso)",
-        "lei (Romanian leu)",
-        "฿ (Thai baht)",
-        "RM (Malaysian ringgit)",
-        "Rp (Indonesian rupiah)",
+        "kr (Swedish Krona)",
+        "kr (Norwegian Krone)",
+        "kr (Danish Krone)",
+        "MX$ (Mexican Peso)",
+        "SAR (Saudi Riyal)",
+        "AED (UAE Dirham)",
+        "₺ (Turkish Lira)",
+        "COL$ (Colombian Peso)",
+        "lei (Romanian Leu)",
+        "฿ (Thai Baht)",
+        "RM (Malaysian Ringgit)",
+        "Rp (Indonesian Rupiah)",
         "₩ (Korean Won)",
         "NT$ (Taiwanese Dollars)",
       ]
     )
 
     allow(StripeFxQuote).to receive(:create) { quote("0.27") }
-    select "SAR (Saudi riyal)", from: "Currency"
-    expect(page).to have_select("Currency", selected: "SAR (Saudi riyal)")
+    select "SAR (Saudi Riyal)", from: "Currency"
+    expect(page).to have_select("Currency", selected: "SAR (Saudi Riyal)")
   end
 end

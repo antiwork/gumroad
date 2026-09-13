@@ -667,6 +667,49 @@ describe CustomerMailer do
       expect(mail.body.sanitized).to include("View content")
     end
 
+    it "puts padding/hit-area on the download CTA anchor itself" do
+      product = create(:product)
+      purchase = create(:purchase, link: product)
+      create(:url_redirect, purchase:)
+      mail = CustomerMailer.receipt(purchase.id)
+      body = mail.html_part&.decoded || mail.body.decoded
+      html = Nokogiri::HTML(body)
+      link = html.at_css("a.button.primary")
+
+      expect(link).to be_present
+      expect(link.text).to include("View content")
+      expect(link["href"]).to eq(purchase.url_redirect.download_page_url)
+      expect(link["style"]).to match(/display:\s*inline-block/)
+      expect(link["style"]).to match(/box-sizing:\s*border-box/)
+      wrapper = link.ancestors("table").find { |table| table["role"] == "presentation" }
+      expect(wrapper).to be_present
+      expect(wrapper["class"].to_s.split).to include("reset")
+      # Email CSS only resets `table.reset > tbody > *`. Nokogiri HTML4 does not
+      # invent an implicit tbody, so Premailer would leave the generic row
+      # border and cell padding on this wrapper without an explicit one.
+      expect(body).to match(/<table class="reset"[^>]*>\s*<tbody[^>]*>\s*<tr[^>]*>/)
+      row = wrapper.at_css("> tbody > tr")
+      cell = row&.at_css("> td")
+      expect(row).to be_present
+      expect(cell).to be_present
+
+      inlined = Premailer::Rails::CustomizedPremailer.new(body).to_inline_css
+      inlined_doc = Nokogiri::HTML(inlined)
+      inlined_link = inlined_doc.at_css("a.button.primary")
+      inlined_wrapper = inlined_link.ancestors("table").find { |table| table["role"] == "presentation" }
+      inlined_tbody = inlined_wrapper.at_css("> tbody")
+      inlined_row = inlined_wrapper.at_css("> tbody > tr")
+      inlined_cell = inlined_row.at_css("> td")
+      expect(inlined_cell["style"].to_s).to match(/padding:\s*0/)
+      expect(inlined_row["style"].to_s).to match(/border-style:\s*none/)
+      tbody_displays = inlined_tbody["style"].to_s.scan(/display:\s*([^;]+)/).flatten.map(&:strip)
+      expect(tbody_displays.last).to match(/\A(table-row-group|revert)\z/)
+      expect(inlined_wrapper["style"].to_s).to match(/width:\s*100%/)
+      expect(inlined_cell["style"].to_s).to match(/width:\s*100%/)
+      cell_displays = inlined_cell["style"].to_s.scan(/display:\s*([^;]+)/).flatten.map(&:strip)
+      expect(cell_displays.last).to match(/\A(table-cell|revert)\z/)
+    end
+
     it "discloses sales tax when it was taxed" do
       user = create(:user)
       link = create(:product, user:)
