@@ -236,6 +236,20 @@ describe SaveFilesService do
       expect(file.as_json[:file_size]).to eq(1_746_035)
     end
 
+    it "persists a zero-byte count for an empty upload" do
+      service.perform(@product, ActionController::Parameters.new(
+                                  files: [{
+                                    "id" => "client-guid",
+                                    "display_name" => "empty",
+                                    "extension" => "TXT",
+                                    "url" => "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachment/empty.txt",
+                                    "file_size" => 0,
+                                  }]
+                                ).permit!)
+
+      expect(@product.product_files.reload.sole.size).to eq(0)
+    end
+
     it "still creates a file with no size when the payload carries none" do
       service.perform(@product, ActionController::Parameters.new(
                                   files: [{

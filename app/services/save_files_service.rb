@@ -132,14 +132,11 @@ class SaveFilesService
           file_params.delete(key)
           file_params.delete(key.to_s)
         end
-        # `file_size` is the editor's name for the `size` column: the byte count of
-        # the object the client just uploaded. AnalyzeFileWorker measures that object
-        # only seconds after the create, so dropping the client's number leaves `size`
-        # NULL in the meantime and the editor renders the null as "0 byte"
-        # (gumroad-private#2584). `save_files!` drops it again for rows that already
-        # exist — a measured size is never overwritten by a client echo.
+        # The editor's `file_size` is the `size` column — the byte count of the object
+        # just uploaded. Dropping it leaves `size` NULL until AnalyzeFileWorker measures
+        # S3 seconds later, which the editor rendered as "0 byte" (gumroad-private#2584).
         client_file_size = file_params.delete(:file_size) || file_params.delete("file_size")
-        file_params[:size] ||= client_file_size if client_file_size.is_a?(Integer) && client_file_size.positive?
+        file_params[:size] ||= client_file_size if client_file_size.is_a?(Integer) && !client_file_size.negative?
       end
     end
 end

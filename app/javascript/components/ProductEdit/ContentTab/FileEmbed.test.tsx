@@ -238,8 +238,7 @@ it("re-enables the subtitle picker when an over-budget upload errors", async () 
 });
 
 it("renders no size for a file the server has not measured yet", async () => {
-  // ProductFile#size stays null between the save and AnalyzeFileWorker; the row
-  // must not claim the file is empty (gumroad-private#2584).
+  // ProductFile#size is null until AnalyzeFileWorker measures it (gumroad-private#2584).
   const file: FileEntry = { ...streamableFile, file_size: null, status: { type: "saved" } };
   context.filesById = new Map<string, FileEntry>([[FILE_ID, file]]);
 
