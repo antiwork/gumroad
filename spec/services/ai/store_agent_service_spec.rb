@@ -1946,6 +1946,32 @@ describe Ai::StoreAgentService do
         expect(result[:reply]).to eq(described_class::TRUNCATED_REPLY)
         expect(client).to have_received(:messages).twice
       end
+
+      it "gives the larger cap and its re-ask to the turn that truncated only" do
+        # The recovered turn was a tool call, so the loop continues. The next turn must go back to the
+        # normal cap with a fresh re-ask — not stay at 16,384 and fall back on its first truncation.
+        caps = []
+        allow(client).to receive(:messages) do |**kwargs|
+          caps << kwargs[:max_tokens]
+          case caps.length
+          when 1 then truncated_text_result("")
+          when 2 then tool_result("api_read", { "endpoint" => "list_products" })
+          when 3 then truncated_text_result("")
+          else text_result("You have 3 products.")
+          end
+        end
+        allow(api_client).to receive(:get).and_return({ "success" => true, "products" => [], "http_status" => 200 })
+
+        result = service.respond(messages: [{ role: "user", content: "how many products do I have?" }])
+
+        expect(result[:reply]).to eq("You have 3 products.")
+        expect(caps).to eq([
+          described_class::MAX_REPLY_TOKENS,
+          described_class::MAX_TRUNCATION_RETRY_TOKENS,
+          described_class::MAX_REPLY_TOKENS,
+          described_class::MAX_TRUNCATION_RETRY_TOKENS,
+        ])
+      end
     end
 
     context "when the model emits a non-hash tool input" do
@@ -2291,6 +2317,33 @@ describe Ai::StoreAgentService do
       expect(fragment_index).not_to be_nil
       expect(reset_index).to be > fragment_index
       expect(reset_index).to be < answer_index
+    end
+
+    it "gives the streamed larger cap and its re-ask to the turn that truncated only" do
+      truncated = Ai::AnthropicClient::Result.new(text: "", tool_uses: [], stop_reason: "max_tokens")
+      caps = []
+      turns = [
+        { stream: [], result: truncated },
+        { stream: [], result: tool_result("api_read", { "endpoint" => "list_products" }) },
+        { stream: ["You have 3 products."], result: text_result("You have 3 products.") },
+      ]
+      allow(client).to receive(:stream_messages) do |args, &on_text|
+        caps << args[:max_tokens]
+        turn = turns.shift
+        Array(turn[:stream]).each { |piece| on_text&.call(piece) }
+        turn[:result]
+      end
+      allow(client).to receive(:messages).and_return(text_result("[]"))
+      allow(api_client).to receive(:get).and_return({ "success" => true, "products" => [], "http_status" => 200 })
+
+      _events, result = collect_events([{ role: "user", content: "how many products do I have?" }])
+
+      expect(result[:reply]).to eq("You have 3 products.")
+      expect(caps).to eq([
+        described_class::MAX_REPLY_TOKENS,
+        described_class::MAX_TRUNCATION_RETRY_TOKENS,
+        described_class::MAX_REPLY_TOKENS,
+      ])
     end
 
     it "discards a phantom staging claim from the UI and streams the honest line instead" do

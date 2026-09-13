@@ -70,12 +70,9 @@ class Ai::StoreAgentService
   # seller as a generic "Something went wrong" error. 8,192 comfortably fits real product
   # descriptions while still bounding the cost of a runaway turn.
   MAX_REPLY_TOKENS = 8_192
-  # A turn that still hits MAX_REPLY_TOKENS is retried once at this larger cap before the seller gets
-  # the fallback. Production (2026-09-13, DeepSeek V4.1 Flash, n=55) truncated 3 turns, all of them
-  # intermediate tool turns at iteration 2-3 that simply ran out of budget while emitting their
-  # arguments — none looked like a request that genuinely needs scoping down. One retry at double the
-  # cap turns those into a normal reply, and it is only paid for on the ~5% of turns that truncate;
-  # the cap stays 8,192 everywhere else so the runaway-turn bound is unchanged.
+  # A truncated turn is normally the model running out of budget while emitting an intermediate tool
+  # turn's arguments, not a request that needs scoping down, so re-ask it once at double the cap.
+  # Only the turns that truncate pay this, so the runaway-turn bound at MAX_REPLY_TOKENS is unchanged.
   MAX_TRUNCATION_RETRY_TOKENS = 16_384
   MAX_TRUNCATION_RETRIES = 1
   # What the seller sees when a model turn still hits MAX_REPLY_TOKENS (stop_reason "max_tokens").
@@ -741,12 +738,10 @@ class Ai::StoreAgentService
       @turn_iterations_used = MAX_TOOL_ITERATIONS - remaining_iterations
       @turn_contract_retries = turn_contract_retries
 
-      # The model hit MAX_REPLY_TOKENS mid-turn. Whatever came back is incomplete — a cut-off tool
-      # call has unusable arguments, and a cut-off text answer would read as a complete reply when
-      # it isn't — so never act on it. Re-ask this same turn once at the larger cap first (nothing
-      # from the truncated turn is in the conversation, so this is a clean re-ask), and only then
-      # stop with an honest message. The re-ask replaces the attempt it is retrying, so it does not
-      # spend one of the turn's tool iterations.
+      # Whatever came back is incomplete — a cut-off tool call has unusable arguments, and a cut-off
+      # text answer would read as a complete reply when it isn't — so never act on it: re-ask this
+      # same turn once at the larger cap (nothing from it is in the conversation), then fall back.
+      # The re-ask replaces the attempt it retries, so it does not spend a tool iteration.
       if result.stop_reason == "max_tokens"
         if truncation_retries < MAX_TRUNCATION_RETRIES
           truncation_retries += 1
@@ -757,6 +752,10 @@ class Ai::StoreAgentService
         reply = proposed_action ? PROPOSAL_READY_REPLY : TRUNCATED_REPLY
         return turn_result(reply:, proposed_action:)
       end
+
+      # The larger cap and its one re-ask belong to the turn that truncated, not to the conversation:
+      # the next turn starts back at MAX_REPLY_TOKENS with its own re-ask.
+      truncation_retries = 0
 
       decision = final_turn_decision(result:, proposed_action:)
       case decision.fetch(:status)
@@ -856,10 +855,9 @@ class Ai::StoreAgentService
       @turn_iterations_used = MAX_TOOL_ITERATIONS - remaining_iterations
       @turn_contract_retries = turn_contract_retries
 
-      # Same truncation handling as #respond, including the single re-ask at the larger cap. Anything
-      # this turn streamed is incomplete, so tell the UI to discard it before the re-ask (the seller
-      # must not be left reading a fragment while the re-ask runs) — and if the re-ask truncates too,
-      # stream the honest fallback instead of leaving half an answer on screen as if it were final.
+      # Same truncation handling as #respond. Anything this turn streamed is incomplete, so discard it
+      # before the re-ask (the seller must not be left reading a fragment while it runs) — and if the
+      # re-ask truncates too, stream the honest fallback instead.
       if result.stop_reason == "max_tokens"
         if truncation_retries < MAX_TRUNCATION_RETRIES
           emit.call(:reset, {}) if emitted_any
@@ -874,6 +872,10 @@ class Ai::StoreAgentService
           emit.call(:token, { text: turn[:reply] })
         end
       end
+
+      # The larger cap and its one re-ask belong to the turn that truncated, not to the conversation:
+      # the next turn starts back at MAX_REPLY_TOKENS with its own re-ask.
+      truncation_retries = 0
 
       decision = final_turn_decision(result:, proposed_action:)
       case decision.fetch(:status)
