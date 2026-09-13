@@ -70,6 +70,14 @@ class Ai::StoreAgentService
   # seller as a generic "Something went wrong" error. 8,192 comfortably fits real product
   # descriptions while still bounding the cost of a runaway turn.
   MAX_REPLY_TOKENS = 8_192
+  # A turn that still hits MAX_REPLY_TOKENS is retried once at this larger cap before the seller gets
+  # the fallback. Production (2026-09-13, DeepSeek V4.1 Flash, n=55) truncated 3 turns, all of them
+  # intermediate tool turns at iteration 2-3 that simply ran out of budget while emitting their
+  # arguments — none looked like a request that genuinely needs scoping down. One retry at double the
+  # cap turns those into a normal reply, and it is only paid for on the ~5% of turns that truncate;
+  # the cap stays 8,192 everywhere else so the runaway-turn bound is unchanged.
+  MAX_TRUNCATION_RETRY_TOKENS = 16_384
+  MAX_TRUNCATION_RETRIES = 1
   # What the seller sees when a model turn still hits MAX_REPLY_TOKENS (stop_reason "max_tokens").
   # A truncated turn is unusable — a cut-off tool call has unparseable arguments, and a cut-off
   # text reply would silently present half an answer as if it were complete — so we replace it
@@ -720,13 +728,14 @@ class Ai::StoreAgentService
     @turn_started_at = Process.clock_gettime(Process::CLOCK_MONOTONIC)
 
     remaining_iterations = MAX_TOOL_ITERATIONS
+    truncation_retries = 0
     while remaining_iterations.positive?
       remaining_iterations -= 1
       result = client.messages(
         system: system_prompt,
         messages: conversation,
         tools: tool_schemas,
-        max_tokens: MAX_REPLY_TOKENS,
+        max_tokens: truncation_retries.zero? ? MAX_REPLY_TOKENS : MAX_TRUNCATION_RETRY_TOKENS,
       )
       @last_stop_reason = result.stop_reason
       @turn_iterations_used = MAX_TOOL_ITERATIONS - remaining_iterations
@@ -734,8 +743,17 @@ class Ai::StoreAgentService
 
       # The model hit MAX_REPLY_TOKENS mid-turn. Whatever came back is incomplete — a cut-off tool
       # call has unusable arguments, and a cut-off text answer would read as a complete reply when
-      # it isn't — so stop here with an honest message instead of acting on a truncated turn.
+      # it isn't — so never act on it. Re-ask this same turn once at the larger cap first (nothing
+      # from the truncated turn is in the conversation, so this is a clean re-ask), and only then
+      # stop with an honest message. The re-ask replaces the attempt it is retrying, so it does not
+      # spend one of the turn's tool iterations.
       if result.stop_reason == "max_tokens"
+        if truncation_retries < MAX_TRUNCATION_RETRIES
+          truncation_retries += 1
+          remaining_iterations += 1
+          next
+        end
+
         reply = proposed_action ? PROPOSAL_READY_REPLY : TRUNCATED_REPLY
         return turn_result(reply:, proposed_action:)
       end
@@ -793,6 +811,7 @@ class Ai::StoreAgentService
     @turn_started_at = Process.clock_gettime(Process::CLOCK_MONOTONIC)
 
     remaining_iterations = MAX_TOOL_ITERATIONS
+    truncation_retries = 0
     while remaining_iterations.positive?
       remaining_iterations -= 1
       # Stream this turn's text deltas live. We don't yet know if the turn is final (text-only) or an
@@ -809,7 +828,7 @@ class Ai::StoreAgentService
             system: system_prompt,
             messages: conversation,
             tools: tool_schemas,
-            max_tokens: MAX_REPLY_TOKENS,
+            max_tokens: truncation_retries.zero? ? MAX_REPLY_TOKENS : MAX_TRUNCATION_RETRY_TOKENS,
             # A corrupted tool call is recovered by replaying the turn without streaming, which
             # regenerates the reply from the start. Tool-use turns usually stream a sentence of
             # preamble first, so without a way to clear it that recovery could never run — the
@@ -837,10 +856,18 @@ class Ai::StoreAgentService
       @turn_iterations_used = MAX_TOOL_ITERATIONS - remaining_iterations
       @turn_contract_retries = turn_contract_retries
 
-      # Same truncation handling as #respond. Anything this turn streamed is incomplete, so tell
-      # the UI to discard it and stream the honest fallback instead of leaving half an answer (or
-      # half a tool call's preamble) on screen as if it were the finished reply.
+      # Same truncation handling as #respond, including the single re-ask at the larger cap. Anything
+      # this turn streamed is incomplete, so tell the UI to discard it before the re-ask (the seller
+      # must not be left reading a fragment while the re-ask runs) — and if the re-ask truncates too,
+      # stream the honest fallback instead of leaving half an answer on screen as if it were final.
       if result.stop_reason == "max_tokens"
+        if truncation_retries < MAX_TRUNCATION_RETRIES
+          emit.call(:reset, {}) if emitted_any
+          truncation_retries += 1
+          remaining_iterations += 1
+          next
+        end
+
         reply = proposed_action ? PROPOSAL_READY_REPLY : TRUNCATED_REPLY
         return finish_stream(reply:, proposed_action:, last_user_message:, emit:, on_reply_complete:) do |turn|
           emit.call(:reset, {}) if emitted_any
