@@ -1935,10 +1935,7 @@ describe Purchase::Blockable do
         expect(PlatformBlock.product_ip_address.sole.blocked_at).to eq blocked_at
       end
 
-      # Purchase::CreateService shares one Gift object between both rows and, after the charge, asks
-      # it whether the gifter row is `successful?` (Gift#everything_successful?). If this hook loaded
-      # `gift.gifter_purchase` it would cache an in_progress copy of the gifter on that shared object
-      # and the gift's own mark_successful! would halt after the buyer had been charged.
+      # Pins the association-caching trap guarded in `#receiver_row_of_a_paid_gift?`.
       it "allows the receiver's row without loading the gift's gifter_purchase association" do
         create_paid_gifter_purchase
         expect(gift.association(:gifter_purchase)).not_to be_loaded

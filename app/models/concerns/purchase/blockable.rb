@@ -1036,13 +1036,9 @@ module Purchase::Blockable
       errors.add :base, "The transaction could not complete."
     end
 
-    # Deliberately NOT `gift_received.gifter_purchase`. This runs from the receiver row's
-    # before_create, while Purchase::CreateService still holds one Gift object shared by both rows
-    # and, after the charge, asks that same object whether the gifter row is `successful?`
-    # (Gift#everything_successful?). Reading the belongs_to here would cache a copy of the gifter
-    # that still says in_progress — the service's own instance is the one that later transitions —
-    # and the gift's mark_successful! would halt on the stale copy after the buyer was charged.
-    # A fresh query leaves the association untouched.
+    # A fresh query, deliberately not `gift_received.gifter_purchase`: loading it would cache the
+    # still-in_progress gifter on the Gift that Purchase::CreateService shares with the charge path,
+    # and Gift#everything_successful? would then halt after the buyer had been charged.
     def receiver_row_of_a_paid_gift?
       return false unless is_gift_receiver_purchase
 
