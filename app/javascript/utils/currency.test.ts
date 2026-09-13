@@ -53,10 +53,10 @@ describe("currencyCodeList", () => {
 
   it("includes Nordic and Mexican currencies with 100 subunits and configured floors", () => {
     const added = [
-      { code: "sek", min: 999, longSymbol: "kr", displayFormat: "kr (Swedish krona)" },
-      { code: "nok", min: 949, longSymbol: "kr", displayFormat: "kr (Norwegian krone)" },
-      { code: "dkk", min: 649, longSymbol: "kr", displayFormat: "kr (Danish krone)" },
-      { code: "mxn", min: 1699, longSymbol: "MX$", displayFormat: "MX$ (Mexican peso)" },
+      { code: "sek", min: 999, longSymbol: "kr", displayFormat: "kr (Swedish Krona)" },
+      { code: "nok", min: 949, longSymbol: "kr", displayFormat: "kr (Norwegian Krone)" },
+      { code: "dkk", min: 649, longSymbol: "kr", displayFormat: "kr (Danish Krone)" },
+      { code: "mxn", min: 1699, longSymbol: "MX$", displayFormat: "MX$ (Mexican Peso)" },
     ] as const;
 
     for (const { code, min, longSymbol, displayFormat } of added) {

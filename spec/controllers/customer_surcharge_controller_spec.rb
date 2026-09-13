@@ -164,10 +164,10 @@ describe CustomerSurchargeController, :vcr do
       }, as: :json
 
       expect(response.parsed_body.fetch("available_buyer_currencies")).to include(
-        include("code" => Currency::SEK, "label" => "kr (Swedish krona)"),
-        include("code" => Currency::NOK, "label" => "kr (Norwegian krone)"),
-        include("code" => Currency::DKK, "label" => "kr (Danish krone)"),
-        include("code" => Currency::MXN, "label" => "MX$ (Mexican peso)")
+        include("code" => Currency::SEK, "label" => "kr (Swedish Krona)"),
+        include("code" => Currency::NOK, "label" => "kr (Norwegian Krone)"),
+        include("code" => Currency::DKK, "label" => "kr (Danish Krone)"),
+        include("code" => Currency::MXN, "label" => "MX$ (Mexican Peso)")
       )
     end
 

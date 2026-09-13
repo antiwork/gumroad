@@ -92,11 +92,11 @@ describe "Buyer-currency checkout currency picker", type: :system, js: true do
 
     expect(page).to have_select(
       "Currency",
-      with_options: ["kr (Swedish krona)", "kr (Norwegian krone)", "kr (Danish krone)", "MX$ (Mexican peso)"]
+      with_options: ["kr (Swedish Krona)", "kr (Norwegian Krone)", "kr (Danish Krone)", "MX$ (Mexican Peso)"]
     )
 
     allow(StripeFxQuote).to receive(:create) { quote("0.1") }
-    select "kr (Swedish krona)", from: "Currency"
-    expect(page).to have_select("Currency", selected: "kr (Swedish krona)")
+    select "kr (Swedish Krona)", from: "Currency"
+    expect(page).to have_select("Currency", selected: "kr (Swedish Krona)")
   end
 end
