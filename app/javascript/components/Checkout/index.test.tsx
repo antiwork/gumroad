@@ -1017,7 +1017,7 @@ describe("Checkout order summary decimals", () => {
   it("leaves a zero-decimal currency whole even when another amount is fractional", () => {
     // KRW is stored in 100 subunits but has no fractional unit to show, so the column's cents
     // decision cannot put decimals on it.
-    const krwQuote = {
+    const krwQuote: NonNullable<SurchargesResponse["buyer_currency_quote"]> = {
       token: "quote-token",
       currency: "krw",
       canonical_total_cents: 100_000,
