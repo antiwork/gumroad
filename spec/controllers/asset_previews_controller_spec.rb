@@ -104,15 +104,15 @@ describe AssetPreviewsController do
     before do
       sign_out(user_with_role_for_seller)
       sign_in(affiliate_user)
-      # The cover URL is fetched through SsrfFilter; serve it from a local fixture instead of
-      # the specs bucket so this example does not depend on a seeded object.
-      allow(SsrfFilter).to receive(:get).and_return(
-        instance_double(HTTParty::Response, body: Rails.root.join("spec", "support", "fixtures", "kFDzu.png").binread, content_type: "image/png")
-      )
     end
 
     it "creates a cover" do
-      post(:create, params: { link_id: product.unique_permalink, asset_preview: { url: s3_url }, format: :json })
+      blob = ActiveStorage::Blob.create_and_upload!(
+        io: Rack::Test::UploadedFile.new(Rails.root.join("spec", "support", "fixtures", "kFDzu.png"), "image/png"),
+        filename: "kFDzu.png"
+      )
+
+      post(:create, params: { link_id: product.unique_permalink, asset_preview: { signed_blob_id: blob.signed_id }, format: :json })
 
       expect(response).to have_http_status(:success)
       expect(response.parsed_body["success"]).to eq(true)
