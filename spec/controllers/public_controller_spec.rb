@@ -40,7 +40,7 @@ describe PublicController, type: :controller, inertia: true do
     it "succeeds and renders with Inertia" do
       get :license_key_lookup
       expect(response).to be_successful
-      expect(controller.send(:page_title)).to eq("What is my license key?")
+      expect(controller.send(:page_title)).to eq("Find your download or license key")
       expect(inertia).to render_component("Public/LicenseKeyLookup")
     end
   end

@@ -11,6 +11,7 @@ vi.stubGlobal("SSR", false);
 vi.stubGlobal("Routes", {
   checkout_url: () => "https://example.com/checkout",
   edit_link_url: () => "https://example.com/edit",
+  license_key_lookup_url: () => "https://example.com/license-key-lookup",
 });
 
 vi.mock("$app/utils/classNames", () => ({
@@ -30,7 +31,10 @@ vi.mock("$app/components/useOriginalLocation", () => ({
   useOriginalLocation: () => "https://example.com/products/bundle",
 }));
 vi.mock("$app/components/useRunOnce", () => ({ useRunOnce: vi.fn() }));
-vi.mock("$app/components/DomainSettings", () => ({ useAppDomain: () => "example.com" }));
+vi.mock("$app/components/DomainSettings", () => ({
+  useAppDomain: () => "example.com",
+  useDomains: () => ({ scheme: "https", rootDomain: "example.com" }),
+}));
 vi.mock("$app/components/useIsAboveBreakpoint", () => ({ useIsAboveBreakpoint: () => false }));
 vi.mock("$app/components/Product/ConfigurationSelector", () => {
   const ConfigurationSelector = React.forwardRef(() => null);
@@ -144,6 +148,33 @@ const product: ProductData = {
   public_files: [],
 };
 
+describe("product page recovery prompt", () => {
+  it.each([
+    [false, false, "Get your download link"],
+    [true, false, "View your information"],
+    [false, true, null],
+    [true, true, null],
+  ] as const)("handles is_licensed=%s and can_edit=%s", (is_licensed, can_edit, label) => {
+    render(
+      <Product
+        product={{ ...product, is_licensed, can_edit }}
+        purchase={null}
+        selection={selection}
+        disableAnalytics
+      />,
+    );
+
+    if (label) {
+      expect(screen.getByText("Already bought this?")).toBeTruthy();
+      expect(screen.getByRole("link", { name: label }).getAttribute("href")).toBe(
+        "https://example.com/license-key-lookup",
+      );
+    } else {
+      expect(screen.queryByText("Already bought this?")).toBeNull();
+    }
+  });
+});
+
 describe("product page bundle mobile layout", () => {
   it("renders mobile-safe price/seller and bundle item columns", () => {
     render(<Product product={product} purchase={null} selection={selection} disableAnalytics />);
@@ -155,14 +186,14 @@ describe("product page bundle mobile layout", () => {
     expect(summarySection?.className.split(" ")).toEqual(expect.arrayContaining(["grid", "grid-cols-1"]));
     expect(summarySection?.className).not.toContain("grid-cols-[auto_1fr]");
 
-    const bundleItem = screen.getByRole("listitem");
-    expect(bundleItem.querySelector("figure")?.className.split(" ")).toEqual(
-      expect.arrayContaining(["h-16", "w-16", "shrink-0", "sm:h-28", "sm:w-28"]),
-    );
-
     const bundleProduct = product.bundle_products[0];
     if (!bundleProduct) throw new Error("expected a bundle product");
     const bundleLink = screen.getByRole("link", { name: bundleProduct.name });
+    const bundleItem = bundleLink.closest('[role="listitem"]');
+    if (!bundleItem) throw new Error("expected a bundle list item");
+    expect(bundleItem.querySelector("figure")?.className.split(" ")).toEqual(
+      expect.arrayContaining(["h-16", "w-16", "shrink-0", "sm:h-28", "sm:w-28"]),
+    );
     expect(bundleLink.closest("section")?.className.split(" ")).toEqual(expect.arrayContaining(["min-w-2/5"]));
 
     const bundlePrice = bundleItem.querySelector(".current-price");
