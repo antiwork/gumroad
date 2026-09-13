@@ -18,6 +18,13 @@ class LinksController < ApplicationController
   DEFAULT_PRICE = 500
   PRICE_INPUT_MAX_LENGTH = 64
   PRICE_INPUT_PATTERN = /\A[+-]?(?:\d+(?:\.\d*)?|\.\d+)\z/
+  # A lock-wait timeout means a concurrent save of the same product holds the
+  # row lock, so the client should wait for it to commit — not reload, which
+  # re-enters the same queue.
+  EDITOR_SAVE_LOCK_RETRY_AFTER_SECONDS = 5
+  # One report per product per window: repeats from the same client carry no
+  # information past the first, and reporting every one drowns the tracker.
+  EDITOR_SAVE_LOCK_REPORT_WINDOW = 10.minutes
   TRANSPARENT_1X1_GIF = "GIF89a\x01\x00\x01\x00\x80\x00\x00\x00\x00\x00\xFF\xFF\xFF!\xF9\x04\x01\x00\x00\x00\x00,\x00\x00\x00\x00\x01\x00\x01\x00\x00\x02\x02D\x01\x00;".b.freeze
 
   prepend_before_action :disable_third_party_analytics!, only: :cart_items_count
@@ -684,6 +691,18 @@ class LinksController < ApplicationController
         error_message = @product.errors.full_messages.first || e.message
       end
       return render json: { error_message: }, status: :unprocessable_entity
+    rescue ActiveRecord::LockWaitTimeout => e
+      # The transaction never committed, so nothing was written: another save of
+      # this product held `@product.lock!` past `innodb_lock_wait_timeout`. The
+      # catch-all below tells the client to refresh, which is the one thing that
+      # cannot work here — the reload queues behind the same lock.
+      report_editor_save_lock_contention(e)
+      response.set_header("Retry-After", EDITOR_SAVE_LOCK_RETRY_AFTER_SECONDS.to_s)
+      return render json: {
+        error_message: "Another save for this product is still in progress. Please wait a few seconds, then try again.",
+        error_code: "product_save_busy",
+        retry_after: EDITOR_SAVE_LOCK_RETRY_AFTER_SECONDS,
+      }, status: :conflict
     rescue => e
       # Catch-all so an unanticipated failure never leaves the editor's save
       # request with no JSON body (gumroad-private#1784) — mirrors `publish`
@@ -1084,6 +1103,31 @@ class LinksController < ApplicationController
         "[product_editor_save_conflict] error_code=#{error_code} product_id=#{@product.id} " \
         "seller_id=#{@product.user_id} provenance_version=#{product_permitted_params[:rich_content_provenance_version].to_i} " \
         "request_id=#{request.request_id}#{detail_suffix}"
+      )
+    end
+
+    # Reports the first lock-wait conflict per product per window and counts the
+    # rest for the log line. Best-effort: this runs inside the rescue that owes
+    # the client a retryable 409, so a tracker problem must not turn that into a
+    # 500. The counter is claimed with one atomic SET NX EX — an INCR/EXPIRE pair
+    # whose EXPIRE failed would leave the key with no TTL and suppress this
+    # product's reports forever.
+    def report_editor_save_lock_contention(exception)
+      key = "editor_save_lock_contention:#{@product.id}"
+      first_in_window = $redis.set(key, 1, nx: true, ex: EDITOR_SAVE_LOCK_REPORT_WINDOW.to_i)
+      occurrences = first_in_window ? 1 : $redis.incr(key)
+
+      Rails.logger.info(
+        "[product_editor_save_lock_contention] product_id=#{@product.id} seller_id=#{@product.user_id} " \
+        "occurrences_in_window=#{occurrences} request_id=#{request.request_id}"
+      )
+      return unless first_in_window
+
+      ErrorNotifier.notify(exception, product_id: @product.id, seller_id: @product.user_id)
+    rescue Redis::BaseError, RedisClient::Error => e
+      # RedisClient::Error is not a subclass of Redis::BaseError.
+      Rails.logger.warn(
+        "[product_editor_save_lock_contention] product_id=#{@product.id} report_skipped=#{e.class}"
       )
     end
 
