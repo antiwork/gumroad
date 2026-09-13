@@ -582,11 +582,25 @@ describe("ProductShowScenario", type: :system, js: true) do
           product.alive_variants.each_with_index { _1.update(price_difference_cents: (_2 + 1) * 100) }
         end
 
-        it "does not show the PWYW input" do
+        it "shows the PWYW input, floored at the selected version's total" do
           visit product.long_url
-          expect(page).not_to have_field("Name a fair price:")
+          # The seller turned PWYW on and kept it on: a $0 base beside a priced version offers
+          # both a name-your-price entry and the priced version (gumroad-private#2573).
+          expect(page).to have_field("Name a fair price:")
+
           choose "Untitled 2"
-          expect(page).not_to have_field("Name a fair price:")
+
+          # Untitled 2 carries a $2 price difference, so $2 is the floor the buyer is held to;
+          # naming less than the selected version's total can't buy it (gp#1660 stays closed).
+          expect(page).to have_field("Name a fair price:", with: "", placeholder: "2+")
+          pwyw_field = find_field("Name a fair price")
+          pwyw_field.fill_in with: "1.5"
+          find(:label, "Name a fair price:").click
+          expect(pwyw_field["aria-invalid"]).to eq("true")
+
+          pwyw_field.fill_in with: "2"
+          find(:label, "Name a fair price:").click
+          expect(pwyw_field["aria-invalid"]).to eq("false")
         end
       end
 

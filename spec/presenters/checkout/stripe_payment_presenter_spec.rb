@@ -795,13 +795,9 @@ describe Checkout::StripePaymentPresenter do
   end
 
   # A product that genuinely cannot be paid for must keep falling back, but "free and not
-  # pay-what-you-want" is not that product: Product::Prices#set_customizable_price forces
-  # customizable_price to true on any $0 product, so CheckoutPresenter never emits that
-  # combination — measured across 39,875 recent production products, zero of which are $0
-  # with customizable_price false. Pinning it would assert on a hash production cannot
-  # produce. The reachable shape is line 64's escape hatch: a $0 base product whose alive
-  # variants carry a positive price_difference_cents keeps customizable_price false, and the
-  # buyer pays the variant's price rather than naming their own.
+  # pay-what-you-want" is not that product: set_customizable_price forces the flag true on a $0
+  # base without priced versions (zero of 39,875 measured production products are $0 with it
+  # false), and with priced versions the seller's choice stands.
   it "still falls back to CardElement for a free non-pay-what-you-want product priced by its variants" do
     seller = create(:user)
     Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, seller)
@@ -809,8 +805,8 @@ describe Checkout::StripePaymentPresenter do
     category = create(:variant_category, link: variant_priced_product)
     create(:variant, variant_category: category, price_difference_cents: 500)
     # create(:product) already ran the callback while the product had no variants, forcing
-    # customizable_price true. Clear it and re-run now that the priced variant exists, which
-    # is the order a real seller produces: add the variant, then save.
+    # customizable_price true. Clear it and re-run now that the priced variant exists, which is
+    # the state the seller saves by switching PWYW off on a $0 product that has versions.
     variant_priced_product.update_column(:customizable_price, false)
     variant_priced_product.send(:set_customizable_price)
 

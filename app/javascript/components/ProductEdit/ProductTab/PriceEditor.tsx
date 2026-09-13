@@ -56,14 +56,11 @@ export const PriceEditor = ({
 }) => {
   const uid = React.useId();
   const isFreeProduct = priceCents === 0;
-  // Backend Product::Prices#set_customizable_price forces PWYW off on a $0 base
-  // with paid variants (otherwise checkout offers a $0 amount box next to a paid
-  // option). The product editor keeps state in step via reconcileCustomizablePrice;
-  // deriving here too keeps the switch honest under parents that don't (the
-  // bundle editor has no variants and its own $0 transition handling).
-  const cannotBePWYW = isFreeProduct && Boolean(hasPaidVariants);
+  // A free product needs an amount box, so a $0 base with no paid version forces PWYW on.
+  // Beside a paid version the flag is the seller's — the floor is the selected version's
+  // total. Product::Prices#set_customizable_price writes the same rule.
   const mustBePWYW = isFreeProduct && !hasPaidVariants;
-  const pwywOn = cannotBePWYW ? false : mustBePWYW ? true : isPWYW;
+  const pwywOn = mustBePWYW ? true : isPWYW;
   const productEditContext = React.useContext(ProductEditContext);
 
   // The regular product editor provides ProductEditContext; the bundle editor
@@ -97,15 +94,12 @@ export const PriceEditor = ({
         currencyCodeSelector={currencyCodeSelector}
       />
       {mustBePWYW ? <Alert variant="info">Free products require a pay what they want price.</Alert> : null}
-      {cannotBePWYW ? (
-        <Alert variant="info">Pay what you want isn't available on products with paid pricing options.</Alert>
-      ) : null}
       <Details open={pwywOn}>
         <DetailsToggle chevronPosition="none" className="mb-0">
           <Switch
             checked={pwywOn}
             onChange={(e) => setIsPWYW(e.target.checked)}
-            disabled={mustBePWYW || cannotBePWYW}
+            disabled={mustBePWYW}
             label={
               <a href="/help/article/133-pay-what-you-want-pricing" target="_blank" rel="noreferrer">
                 Allow customers to pay what they want

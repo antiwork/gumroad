@@ -32,45 +32,27 @@ describe("hasPaidVariantPricing", () => {
 });
 
 describe("reconcileCustomizablePrice", () => {
-  it("forces PWYW off on a $0 base with paid variant pricing", () => {
+  it("keeps the seller's flag on a $0 base with paid variant pricing", () => {
+    const paidVariants = [1500];
     expect(
-      reconcileCustomizablePrice(
-        product({ priceCents: 0, customizablePrice: true, variantPriceCents: [1500] }),
-        0,
-        true,
-      ),
+      reconcileCustomizablePrice(product({ priceCents: 0, customizablePrice: true, variantPriceCents: paidVariants })),
+    ).toBe(true);
+    expect(
+      reconcileCustomizablePrice(product({ priceCents: 0, customizablePrice: false, variantPriceCents: paidVariants })),
     ).toBe(false);
   });
 
   it("forces PWYW on for a $0 base without paid variant pricing", () => {
-    expect(reconcileCustomizablePrice(product({ priceCents: 0, customizablePrice: false }), 1500, false)).toBe(true);
-  });
-
-  it("turns PWYW back on when a $0 product loses its last paid variant", () => {
-    expect(reconcileCustomizablePrice(product({ priceCents: 0, customizablePrice: false }), 0, false)).toBe(true);
+    expect(reconcileCustomizablePrice(product({ priceCents: 0, customizablePrice: false }))).toBe(true);
   });
 
   it("keeps a forced-on flag when the price leaves $0 without paid variants", () => {
-    expect(reconcileCustomizablePrice(product({ priceCents: 1000, customizablePrice: true }), 0, false)).toBe(true);
-  });
-
-  it("restores the prior choice when the price leaves $0 with paid variants", () => {
-    expect(
-      reconcileCustomizablePrice(
-        product({ priceCents: 1500, customizablePrice: false, variantPriceCents: [1500] }),
-        0,
-        true,
-      ),
-    ).toBe(true);
+    expect(reconcileCustomizablePrice(product({ priceCents: 1000, customizablePrice: true }))).toBe(true);
   });
 
   it("keeps the current choice at a nonzero price", () => {
     expect(
-      reconcileCustomizablePrice(
-        product({ priceCents: 1500, customizablePrice: true, variantPriceCents: [1500] }),
-        1000,
-        false,
-      ),
+      reconcileCustomizablePrice(product({ priceCents: 1500, customizablePrice: true, variantPriceCents: [1500] })),
     ).toBe(true);
   });
 
@@ -79,8 +61,6 @@ describe("reconcileCustomizablePrice", () => {
       expect(
         reconcileCustomizablePrice(
           product({ priceCents: 0, customizablePrice: true, variantPriceCents: [500], nativeType }),
-          0,
-          false,
         ),
       ).toBe(true);
     }

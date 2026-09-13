@@ -60,26 +60,40 @@ describe("Product Edit pay what you want setting", type: :system, js: true) do
     expect(pwyw_toggle).not_to be_disabled
   end
 
-  it "disables the toggle on a $0 product that already has paid pricing options" do
+  it "keeps the toggle usable on a $0 product that already has paid pricing options" do
     variant_category = create(:variant_category, link: product, title: "Pack")
     create(:variant, variant_category:, name: "Home Kit", price_difference_cents: 1500)
 
     visit edit_link_path(product.unique_permalink)
     fill_in "Amount", with: "0"
 
-    expect(page).to have_content("Pay what you want isn't available on products with paid pricing options.")
-    expect(page).not_to have_content("Free products require a pay what they want price.")
-    pwyw_toggle = find_field("Allow customers to pay what they want", disabled: true)
-    expect(pwyw_toggle).not_to be_checked
-
-    fill_in "Amount", with: "10"
-
     expect(page).not_to have_content("Pay what you want isn't available on products with paid pricing options.")
+    expect(page).not_to have_content("Free products require a pay what they want price.")
     pwyw_toggle = find_field("Allow customers to pay what they want")
     expect(pwyw_toggle).not_to be_disabled
+    expect(pwyw_toggle).not_to be_checked
   end
 
-  it "restores the seller's choice after the price dips to $0 on a product with paid pricing options" do
+  it "saves pay what you want alongside a paid pricing option on a $0 product" do
+    variant_category = create(:variant_category, link: product, title: "Pack")
+    create(:variant, variant_category:, name: "Home Kit", price_difference_cents: 1500)
+
+    visit edit_link_path(product.unique_permalink)
+    fill_in "Amount", with: "0"
+    check "Allow customers to pay what they want"
+    save_change
+    wait_for_ajax
+
+    expect(product.reload.customizable_price).to eq(true)
+    expect(product.reload.price_cents).to eq(0)
+    in_preview do
+      # The preview renders the product page; with versions present it has no standalone price
+      # tag to assert on, so the PWYW box beside the paid version is the visible proof.
+      expect(page).to have_field("Name a fair price")
+    end
+  end
+
+  it "keeps a $0 product's PWYW toggle on while paid pricing options exist" do
     variant_category = create(:variant_category, link: product, title: "Pack")
     create(:variant, variant_category:, name: "Home Kit", price_difference_cents: 1500)
     product.update!(price_cents: 1500, customizable_price: true)
@@ -88,12 +102,14 @@ describe("Product Edit pay what you want setting", type: :system, js: true) do
     expect(find_field("Allow customers to pay what they want")).to be_checked
 
     fill_in "Amount", with: "0"
-    expect(page).to have_content("Pay what you want isn't available on products with paid pricing options.")
-    expect(find_field("Allow customers to pay what they want", disabled: true)).not_to be_checked
 
-    fill_in "Amount", with: "15"
     pwyw_toggle = find_field("Allow customers to pay what they want")
-    expect(pwyw_toggle).to be_checked
     expect(pwyw_toggle).not_to be_disabled
+    expect(pwyw_toggle).to be_checked
+
+    save_change
+    wait_for_ajax
+
+    expect(product.reload.customizable_price).to eq(true)
   end
 end
