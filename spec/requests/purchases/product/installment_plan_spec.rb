@@ -14,7 +14,7 @@ describe "Product with installment plan", type: :system, js: true do
     click_on "Pay in 3 installments"
 
     within_cart_item product.name do
-      expect(page).to have_text("US$10 in 3 installments", normalize_ws: true)
+      expect(page).to have_text("US$10.00 in 3 installments", normalize_ws: true)
 
       select_disclosure "Edit" do
         choose "Pay in full"
@@ -37,7 +37,7 @@ describe "Product with installment plan", type: :system, js: true do
     end
 
     within_cart_item product.name do
-      expect(page).to have_text("US$10 in 3 installments", normalize_ws: true)
+      expect(page).to have_text("US$10.00 in 3 installments", normalize_ws: true)
     end
 
     expect(page).to have_text("Subtotal US$10", normalize_ws: true)
@@ -89,7 +89,7 @@ describe "Product with installment plan", type: :system, js: true do
       click_on "Pay in 3 installments"
 
       within_cart_item product.name do
-        expect(page).to have_text("US$10 in 3 installments", normalize_ws: true)
+        expect(page).to have_text("US$10.00 in 3 installments", normalize_ws: true)
 
         select_disclosure "Edit" do
           choose "Pay in full"
@@ -112,7 +112,7 @@ describe "Product with installment plan", type: :system, js: true do
       end
 
       within_cart_item product.name do
-        expect(page).to have_text("US$10 in 3 installments", normalize_ws: true)
+        expect(page).to have_text("US$10.00 in 3 installments", normalize_ws: true)
       end
 
       expect(page).to have_text("Subtotal US$10", normalize_ws: true)
@@ -193,7 +193,7 @@ describe "Product with installment plan", type: :system, js: true do
       click_on "Pay in 3 installments"
 
       within_cart_item product.name do
-        expect(page).to have_text("US$10 in 3 installments", normalize_ws: true)
+        expect(page).to have_text("US$10.00 in 3 installments", normalize_ws: true)
       end
 
       expect(page).to have_text("Subtotal US$10", normalize_ws: true)
@@ -303,7 +303,7 @@ describe "Product with installment plan", type: :system, js: true do
       click_on "Pay in 3 installments"
 
       within_cart_item bundle.name do
-        expect(page).to have_text("US$10 in 3 installments", normalize_ws: true)
+        expect(page).to have_text("US$10.00 in 3 installments", normalize_ws: true)
       end
 
       expect(page).to have_text("Subtotal US$10", normalize_ws: true)
