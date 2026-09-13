@@ -5,7 +5,7 @@ class SaveFilesService
   # GET shape) includes these derived keys, but ProductFile cannot write them
   # back. Keep writable flag-backed as_json attributes out of this list.
   UNWRITABLE_SERIALIZED_FILE_KEYS = %i[
-    file_size extension is_pdf is_streamable is_transcoding_in_progress attached_product_name status
+    extension is_pdf is_streamable is_transcoding_in_progress attached_product_name status
   ].freeze
 
   delegate :product_files, to: :owner
@@ -132,6 +132,9 @@ class SaveFilesService
           file_params.delete(key)
           file_params.delete(key.to_s)
         end
+        # `file_size` is the editor's name for ProductFile#size.
+        client_file_size = file_params.delete(:file_size) || file_params.delete("file_size")
+        file_params[:size] ||= client_file_size if client_file_size.is_a?(Integer) && !client_file_size.negative?
       end
     end
 end

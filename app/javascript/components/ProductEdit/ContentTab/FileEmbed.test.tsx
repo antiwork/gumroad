@@ -17,6 +17,13 @@ vi.mock("$app/components/server-components/Alert", () => ({
 
 // vite.config.ts replaces the bare `SSR` identifier at build time.
 Object.assign(globalThis, { SSR: false });
+// Rails injects this global; a `saved` file's download URL goes through it.
+Object.assign(globalThis, {
+  Routes: {
+    download_product_files_path: (productId: string, options: { product_file_ids: string[] }) =>
+      `/products/${productId}/download?product_file_ids=${options.product_file_ids.join(",")}`,
+  },
+});
 
 const FILE_ID = "file-1";
 
@@ -228,4 +235,26 @@ it("re-enables the subtitle picker when an over-budget upload errors", async () 
   expect(product.files[0]?.subtitle_files).toEqual([]);
   expect(alerts).toEqual([{ message: "Subtitle upload failed.", level: "error" }]);
   expect(cancelUpload).toHaveBeenCalled();
+});
+
+it("renders no size for a file the server has not measured yet", async () => {
+  // ProductFile#size is null until AnalyzeFileWorker measures it (gumroad-private#2584).
+  const file: FileEntry = { ...streamableFile, file_size: null, status: { type: "saved" } };
+  context.filesById = new Map<string, FileEntry>([[FILE_ID, file]]);
+
+  render(<FileEmbedEditor config={{ filesById: context.filesById }} />);
+  await act(() => Promise.resolve());
+
+  expect(screen.getByText("MP4")).toBeTruthy();
+  expect(screen.queryByText("0 byte")).toBeNull();
+});
+
+it("renders the human-readable size once the file has one", async () => {
+  const file: FileEntry = { ...streamableFile, file_size: 1_746_035, status: { type: "saved" } };
+  context.filesById = new Map<string, FileEntry>([[FILE_ID, file]]);
+
+  render(<FileEmbedEditor config={{ filesById: context.filesById }} />);
+  await act(() => Promise.resolve());
+
+  expect(screen.getByText("1.7 MB")).toBeTruthy();
 });

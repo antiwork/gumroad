@@ -554,13 +554,15 @@ const FileEmbedNodeView = ({
                 <>
                   {file.extension ? <li>{file.extension}</li> : null}
 
-                  <li>
-                    {file.extension === "URL"
-                      ? file.url
-                      : uploadProgress != null
-                        ? summarizeUploadProgress(uploadProgress.percent, uploadProgress.bitrate, file.file_size ?? 0)
-                        : FileUtils.getFullFileSizeString(file.file_size ?? 0)}
-                  </li>
+                  {file.extension === "URL" ? (
+                    <li>{file.url}</li>
+                  ) : uploadProgress != null ? (
+                    <li>
+                      {summarizeUploadProgress(uploadProgress.percent, uploadProgress.bitrate, file.file_size ?? 0)}
+                    </li>
+                  ) : file.file_size != null ? (
+                    <li>{FileUtils.getFullFileSizeString(file.file_size)}</li>
+                  ) : null}
 
                   {file.is_streamable && isComplete ? (
                     <li>
