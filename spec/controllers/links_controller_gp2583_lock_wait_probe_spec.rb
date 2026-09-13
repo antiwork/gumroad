@@ -3,11 +3,8 @@
 require "spec_helper"
 require "timeout"
 
-# Pins the blocker half of the lock-wait report (antiwork/gumroad-private#2583,
-# direction 3). #7626 gave a `LockWaitTimeout` its own 409 and reported it once per
-# product per window, but the payload still named nothing about the wait. These
-# examples pin three things about the probe that now rides that one report: it runs
-# only on the first occurrence in the window, it attaches what the server can see,
+# Pins the blocker half of the lock-wait report (antiwork/gumroad-private#2583). The
+# probe rides the once-per-window report: it attaches what the server can still see,
 # and its own failure cannot turn the retryable 409 into a 500.
 describe LinksController, type: :controller do
   let(:seller) { create(:user) }
@@ -16,9 +13,8 @@ describe LinksController, type: :controller do
 
   before { sign_in seller }
 
-  # The probe is three performance_schema reads; this counts executions of the one
-  # that can only run once per probe, so "did the probe run?" is answered by the
-  # real SQL rather than by a stub.
+  # The probe is three performance_schema reads; this counts executions of the one that
+  # runs once per probe, so "did the probe run?" is answered by real SQL, not a stub.
   def count_probe_runs
     runs = 0
     subscriber = ActiveSupport::Notifications.subscribe("sql.active_record") do |_name, _start, _finish, _id, payload|
@@ -72,6 +68,28 @@ describe LinksController, type: :controller do
     # One unavailable table (no PROCESS privilege, instrumentation off) costs its own
     # row set: the other two reads still report.
     expect(controller.send(:editor_save_lock_probe_rows, "SELECT 1")).to eq(error: "ActiveRecord::StatementInvalid")
+  end
+
+  it "names no holder when the timed-out statement is not this product's links row" do
+    controller.instance_variable_set(:@product, product)
+    allow(controller).to receive(:editor_save_lock_probe_rows).and_return(
+      [{ "SQL_TEXT" => "UPDATE `purchases` SET `flags` = 1 WHERE `purchases`.`id` = 7" }]
+    )
+
+    probe = controller.send(:editor_save_lock_wait_probe)[:lock_wait_probe]
+
+    expect(probe[:link_row_lock_holders]).to eq(skipped: "wait was not on this product's links row")
+  end
+
+  it "reads holders when the timed-out statement is this product's links row" do
+    controller.instance_variable_set(:@product, product)
+    allow(controller).to receive(:editor_save_lock_probe_rows).and_return(
+      [{ "SQL_TEXT" => "SELECT `links`.`id` FROM `links` WHERE `links`.`id` = #{product.id} FOR UPDATE" }]
+    )
+
+    probe = controller.send(:editor_save_lock_wait_probe)[:lock_wait_probe]
+
+    expect(probe[:link_row_lock_holders]).to be_an(Array)
   end
 
   describe "against a real lock wait" do

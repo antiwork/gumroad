@@ -25,10 +25,8 @@ class LinksController < ApplicationController
   # One report per product per window: repeats from the same client carry no
   # information past the first, and reporting every one drowns the tracker.
   EDITOR_SAVE_LOCK_REPORT_WINDOW = 10.minutes
-  # Bounds for the blocker probe attached to that report. The wait itself already
-  # cost innodb_lock_wait_timeout (50s), and the probe runs inside the rescue that
-  # owes the client a 409, so every read is capped three ways: statement time,
-  # rows, and SQL text length.
+  # Blocker-probe bounds. The probe runs inside the rescue that owes the client a 409,
+  # so each read is capped three ways: statement time, rows, and SQL text length.
   EDITOR_SAVE_LOCK_PROBE_TIMEOUT_MS = 250
   EDITOR_SAVE_LOCK_PROBE_ROW_LIMIT = 5
   EDITOR_SAVE_LOCK_PROBE_SQL_LENGTH = 300
@@ -1138,24 +1136,18 @@ class LinksController < ApplicationController
       )
     end
 
-    # What the server can still say about the wait that just timed out. Nothing keeps
-    # a lock wait after the fact — `events_statements_history_long` is disabled on
-    # production and the timed-out transaction has already rolled back — so the three
-    # reads below only work in the moments after the timeout: the waiter's own thread
-    # history still holds the failed statement, and the blocker is very likely still
-    # holding the row lock it refused to release.
-    #
-    # Best-effort by construction: this runs inside the rescue that owes the client its
-    # 409, so the whole body is under one rescue of its own, and a reporting failure
-    # degrades to a marker in the payload rather than a 500.
+    # What the server can still say about the wait that just timed out. A lock wait
+    # leaves nothing behind once the transaction rolls back, so the reads below only
+    # work now: our thread history still holds the failed statement and the blocker is
+    # probably still holding the row. Best-effort — a failure here must not cost the
+    # caller its 409, so the payload records the error instead.
     def editor_save_lock_wait_probe
       hint = "/*+ MAX_EXECUTION_TIME(#{EDITOR_SAVE_LOCK_PROBE_TIMEOUT_MS}) */"
       sql_length = EDITOR_SAVE_LOCK_PROBE_SQL_LENGTH
       limit = EDITOR_SAVE_LOCK_PROBE_ROW_LIMIT
 
-      # The statement that waited: this connection's own statement history, which is
-      # kept per thread after the statement ends, selected by MySQL error 1205
-      # (ER_LOCK_WAIT_TIMEOUT). TIMER_WAIT is how long it spent waiting.
+      # This connection's own statement history, selected by MySQL error 1205
+      # (ER_LOCK_WAIT_TIMEOUT); TIMER_WAIT is how long it spent waiting.
       waiting_statements = <<~SQL
         SELECT #{hint} EVENT_ID, MYSQL_ERRNO, LEFT(SQL_TEXT, #{sql_length}) AS SQL_TEXT,
                TIMER_WAIT, LOCK_TIME, ROWS_AFFECTED
@@ -1166,11 +1158,9 @@ class LinksController < ApplicationController
         LIMIT #{limit}
       SQL
 
-      # Which transaction holds a record lock on this product's `links` row. Our own
-      # transaction is gone, so any holder here is another connection — and for a save
-      # that just timed out, that is the blocker. `trx_query` is NULL whenever the
-      # holder sits between statements, so the transaction identity is the reliable
-      # half of this and its SQL text is the best-effort half.
+      # Who holds a record lock on this product's `links` row. Our transaction is gone,
+      # so any holder is another connection. `trx_query` is NULL between statements, so
+      # the transaction identity is the reliable half here and its SQL text is not.
       link_row_lock_holders = <<~SQL
         SELECT #{hint} locks.LOCK_MODE, locks.LOCK_DATA,
                threads.PROCESSLIST_ID AS holder_connection_id,
@@ -1185,9 +1175,8 @@ class LinksController < ApplicationController
         LIMIT #{limit}
       SQL
 
-      # Waits queued on the table right now, both sides named. A retry storm answers
-      # its own first timeout here: the requests behind it are visible as waiters
-      # while the one that reported has already given up.
+      # Waits queued on this product's row right now, both sides named: a retry storm
+      # shows its tail here, because the request that reported has already given up.
       link_row_lock_waits = <<~SQL
         SELECT #{hint} requesting_thread.PROCESSLIST_ID AS waiting_connection_id,
                LEFT(requesting_statement.SQL_TEXT, #{sql_length}) AS waiting_statement,
@@ -1212,16 +1201,19 @@ class LinksController < ApplicationController
         LEFT JOIN information_schema.innodb_trx AS blocking_trx
           ON blocking_trx.trx_mysql_thread_id = blocking_thread.PROCESSLIST_ID
         WHERE requested.OBJECT_SCHEMA = DATABASE() AND requested.OBJECT_NAME = 'links'
+          AND requested.LOCK_DATA = '#{@product.id}'
         LIMIT #{limit}
       SQL
+
+      waiting_rows = editor_save_lock_probe_rows(waiting_statements)
 
       {
         lock_wait_probe: {
           # Read after the failed transaction unwound, to record what state the probe
           # itself ran in.
           save_transaction_open: ActiveRecord::Base.connection.transaction_open?,
-          waiting_statements: editor_save_lock_probe_rows(waiting_statements),
-          link_row_lock_holders: editor_save_lock_probe_rows(link_row_lock_holders),
+          waiting_statements: waiting_rows,
+          link_row_lock_holders: editor_save_lock_probe_holders(link_row_lock_holders, waiting_rows),
           link_row_lock_waits: editor_save_lock_probe_rows(link_row_lock_waits),
         },
       }
@@ -1240,6 +1232,29 @@ class LinksController < ApplicationController
       ActiveRecord::Base.connection.select_all(sql).to_a
     rescue => e
       { error: e.class.name }
+    end
+
+    # The holders read only answers for the wait it was written for. The reporter runs
+    # for any lock-wait timeout in the editor save, so a wait on some other row would
+    # otherwise come back naming the holder of this product's `links` row.
+    def editor_save_lock_probe_holders(sql, waiting_rows)
+      return {
+        skipped: "wait was not on this product's links row",
+      } unless editor_save_lock_probe_lock_row_wait?(waiting_rows)
+
+      editor_save_lock_probe_rows(sql)
+    end
+
+    # A wait on the product's own row: the failed statement names `links` and this
+    # product's id, which is what the holders read is scoped to.
+    def editor_save_lock_probe_lock_row_wait?(waiting_rows)
+      return false unless waiting_rows.is_a?(Array)
+
+      id = /\bid\s*=\s*#{@product.id}\b/i
+      waiting_rows.any? do |row|
+        sql = row["SQL_TEXT"].to_s
+        sql.match?(/`links`/i) && sql.match?(id)
+      end
     end
 
     def check_banned
