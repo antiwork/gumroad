@@ -161,8 +161,8 @@ const LookupLayout = ({ children, title, type }: {
           <FormSection
             header={
               <>
-                <h2>{type === "charge" ? "What was I charged for?" : "Look up your license key"}</h2>
-                {type === "charge" ? "Fill out this form and we'll send you a receipt for your charge." : "We'll send you a receipt including your license key."}
+                <h2>{type === "charge" ? "What was I charged for?" : "Look up your purchase"}</h2>
+                {type === "charge" ? "Fill out this form and we'll send you a receipt for your charge." : "We'll send you a receipt with your download link and license key, if applicable."}
               </>
             }
           >

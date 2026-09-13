@@ -77,7 +77,7 @@ class PublicController < ApplicationController
   end
 
   def license_key_lookup
-    set_meta_tag(title: "What is my license key?")
+    set_meta_tag(title: "Find your download or license key")
     render inertia: "Public/LicenseKeyLookup"
   end
 

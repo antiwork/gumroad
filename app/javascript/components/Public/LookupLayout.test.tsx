@@ -16,6 +16,15 @@ vi.mock("$app/data/charge", () => ({
 afterEach(cleanup)
 
 describe("LookupLayout", () => {
+  it("offers receipt recovery without requiring a license key", () => {
+    render(<LookupLayout title="Find your download or license key" type="licenseKey" />)
+
+    expect(screen.getByRole("heading", { name: "Look up your purchase" })).toBeTruthy()
+    expect(screen.getByText("We'll send you a receipt with your download link and license key, if applicable.")).toBeTruthy()
+    expect(screen.getByLabelText("What email address did you use?")).toBeTruthy()
+    expect(screen.queryByLabelText(/last 4 digits/iu)).toBeNull()
+  })
+
   // greptile-apps P1: submitting the card form and the PayPal form in the same batch, before
   // React commits the disabled-button render, must still send only one email — a ref-gated
   // in-flight check (not the disabled-state render) is what has to close the window.
