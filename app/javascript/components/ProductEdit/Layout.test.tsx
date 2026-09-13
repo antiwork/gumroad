@@ -18,12 +18,12 @@ vi.mock("$app/components/Preview", () => ({ Preview: () => null }));
 vi.mock("$app/components/PreviewSidebar", () => ({
   PreviewChrome: () => null,
   PreviewSidebar: ({ children }: { children?: React.ReactNode }) => <aside>{children}</aside>,
-  WithPreviewSidebar: ({ children }: { children?: React.ReactNode }) => <>{children}</>,
+  WithPreviewSidebar: ({ children }: { children?: React.ReactNode }) => <div>{children}</div>,
 }));
 vi.mock("$app/components/RichTextEditor", () => ({ useImageUploadSettings: () => null }));
 vi.mock("$app/components/SubtitleList/Row", () => ({ SubtitleFile: () => null }));
 vi.mock("$app/components/WithTooltip", () => ({
-  WithTooltip: ({ children }: { children?: React.ReactNode }) => <>{children}</>,
+  WithTooltip: ({ children }: { children?: React.ReactNode }) => <span>{children}</span>,
 }));
 vi.mock("$app/data/publish_product", () => ({ setProductPublished: vi.fn() }));
 vi.mock("$app/components/server-components/Alert", () => ({ showAlert: vi.fn() }));
@@ -206,7 +206,7 @@ describe("ProductEdit Layout under-18 banner", () => {
     renderLayout({ ...minor, legalGuardianUnsupported: true });
 
     expect(
-      screen.getByText(/cannot verify a seller under 18 in your country, even with a legal guardian/),
+      screen.getByText(/cannot verify a seller under 18 in your country, even with a legal guardian/u),
     ).toBeTruthy();
     expect(screen.getByRole("link", { name: "Review your payout setup" }).getAttribute("href")).toBe(
       "/settings/payments",
@@ -217,8 +217,8 @@ describe("ProductEdit Layout under-18 banner", () => {
   it("still asks a US minor with no guardian on file to add one", () => {
     renderLayout({ ...minor, legalGuardianUnsupported: false });
 
-    expect(screen.getByText(/a parent or guardian needs to be added to your account/)).toBeTruthy();
+    expect(screen.getByText(/a parent or guardian needs to be added to your account/u)).toBeTruthy();
     expect(screen.getByRole("link", { name: "Add a guardian" }).getAttribute("href")).toBe("/settings/payments");
-    expect(screen.queryByText(/cannot verify a seller under 18/)).toBeNull();
+    expect(screen.queryByText(/cannot verify a seller under 18/u)).toBeNull();
   });
 });

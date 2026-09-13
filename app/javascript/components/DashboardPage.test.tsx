@@ -143,7 +143,7 @@ describe("DashboardPage under-18 banner", () => {
     renderDashboard({ ...minor, legalGuardianUnsupported: true });
 
     expect(
-      screen.getByText(/cannot verify a seller under 18 in your country, even with a legal guardian/),
+      screen.getByText(/cannot verify a seller under 18 in your country, even with a legal guardian/u),
     ).toBeTruthy();
     expect(screen.getByRole("link", { name: "Review your payout setup" }).getAttribute("href")).toBe(
       "/settings/payments",
@@ -154,8 +154,8 @@ describe("DashboardPage under-18 banner", () => {
   it("still asks a US minor with no guardian on file to add one", () => {
     renderDashboard({ ...minor, legalGuardianUnsupported: false });
 
-    expect(screen.getByText(/a parent or guardian needs to be added to your account/)).toBeTruthy();
+    expect(screen.getByText(/a parent or guardian needs to be added to your account/u)).toBeTruthy();
     expect(screen.getByRole("link", { name: "Add a guardian" }).getAttribute("href")).toBe("/settings/payments");
-    expect(screen.queryByText(/cannot verify a seller under 18/)).toBeNull();
+    expect(screen.queryByText(/cannot verify a seller under 18/u)).toBeNull();
   });
 });
