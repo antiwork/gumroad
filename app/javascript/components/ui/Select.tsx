@@ -16,7 +16,13 @@ export const Select = React.forwardRef<HTMLSelectElement, SelectProps>(
       <div className={classNames("relative inline-grid", wrapperClassName)}>
         <select
           ref={ref}
-          className={classNames(baseInputStyles, "appearance-none bg-none pr-10", stateBorderStyles[state], className)}
+          className={classNames(
+            baseInputStyles,
+            // 44px clears the 20px chevron at `right-4`, with a gap before it.
+            "appearance-none truncate bg-none pr-11",
+            stateBorderStyles[state],
+            className,
+          )}
           {...props}
         >
           {children}
