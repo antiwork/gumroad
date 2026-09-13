@@ -1920,6 +1920,58 @@ describe Ai::StoreAgentService do
           expect(result[:reply]).to eq(described_class::TRUNCATED_REPLY)
         end.not_to raise_error
       end
+
+      it "re-asks the turn once at the larger cap before falling back" do
+        # Truncation is normally the model running out of budget while emitting an intermediate
+        # turn's arguments rather than a request that genuinely needs scoping down, so the first
+        # truncation earns one re-ask at the larger cap.
+        allow(client).to receive(:messages).and_return(
+          truncated_text_result(""),
+          text_result("You have 3 products."),
+        )
+
+        result = service.respond(messages: [{ role: "user", content: "how many products do I have?" }])
+
+        expect(result[:reply]).to eq("You have 3 products.")
+        expect(client).to have_received(:messages).twice
+        expect(client).to have_received(:messages).with(hash_including(max_tokens: described_class::MAX_TRUNCATION_RETRY_TOKENS)).once
+        expect(client).to have_received(:messages).with(hash_including(max_tokens: described_class::MAX_REPLY_TOKENS)).once
+      end
+
+      it "returns the honest fallback when the re-ask truncates too" do
+        allow(client).to receive(:messages).and_return(truncated_text_result(""))
+
+        result = service.respond(messages: [{ role: "user", content: "rewrite my whole description" }])
+
+        expect(result[:reply]).to eq(described_class::TRUNCATED_REPLY)
+        expect(client).to have_received(:messages).twice
+      end
+
+      it "gives the larger cap and its re-ask to the turn that truncated only" do
+        # The recovered turn was a tool call, so the loop continues. The next turn must go back to the
+        # normal cap with a fresh re-ask — not stay at 16,384 and fall back on its first truncation.
+        caps = []
+        allow(client).to receive(:messages) do |**kwargs|
+          caps << kwargs[:max_tokens]
+          case caps.length
+          when 1 then truncated_text_result("")
+          when 2 then tool_result("api_read", { "endpoint" => "list_products" })
+          when 3 then truncated_text_result("")
+          else text_result("You have 3 products.")
+          end
+        end
+        allow(api_client).to receive(:get).and_return({ "success" => true, "products" => [], "http_status" => 200 })
+
+        result = service.respond(messages: [{ role: "user", content: "how many products do I have?" }])
+
+        expect(result[:reply]).to eq("You have 3 products.")
+        expect(caps).to eq([
+                             described_class::MAX_REPLY_TOKENS,
+                             described_class::MAX_TRUNCATION_RETRY_TOKENS,
+                             described_class::MAX_REPLY_TOKENS,
+                             described_class::MAX_TRUNCATION_RETRY_TOKENS,
+                           ])
+      end
     end
 
     context "when the model emits a non-hash tool input" do
@@ -2212,10 +2264,14 @@ describe Ai::StoreAgentService do
 
     it "resets any streamed fragment and streams the honest fallback when a turn hits max_tokens" do
       # The model streams part of a reply (or a tool call's preamble) and is then cut off by the
-      # token cap. What streamed is incomplete, so the UI must be told to discard it and the seller
-      # must get the honest fallback rather than half an answer presented as complete.
+      # token cap — on both the attempt and the larger-cap re-ask. What streamed is incomplete, so
+      # the UI must be told to discard it and the seller must get the honest fallback rather than
+      # half an answer presented as complete.
       truncated = Ai::AnthropicClient::Result.new(text: "Here's the new descri", tool_uses: [], stop_reason: "max_tokens")
-      stub_stream_turns(stream: ["Here's the new descri"], result: truncated)
+      stub_stream_turns(
+        { stream: ["Here's the new descri"], result: truncated },
+        { stream: ["Here's the new descri"], result: truncated },
+      )
       allow(client).to receive(:messages).and_return(text_result("[]"))
 
       events, result = collect_events([{ role: "user", content: "rewrite my whole description" }])
@@ -2230,6 +2286,64 @@ describe Ai::StoreAgentService do
       final_tokens = events.filter_map { |event, payload| payload[:text] if event == :token }
       expect(final_tokens.last).to eq(described_class::TRUNCATED_REPLY)
       expect(result[:reply]).to eq(described_class::TRUNCATED_REPLY)
+    end
+
+    it "re-asks the streamed turn at the larger cap instead of falling back on the first truncation" do
+      truncated = Ai::AnthropicClient::Result.new(text: "Here's the new descri", tool_uses: [], stop_reason: "max_tokens")
+      caps = []
+      turns = [
+        { stream: ["Here's the new descri"], result: truncated },
+        { stream: ["You have 3 products."], result: text_result("You have 3 products.") },
+      ]
+      allow(client).to receive(:stream_messages) do |args, &on_text|
+        caps << args[:max_tokens]
+        turn = turns.shift
+        Array(turn[:stream]).each { |piece| on_text&.call(piece) }
+        turn[:result]
+      end
+      allow(client).to receive(:messages).and_return(text_result("[]"))
+
+      events, result = collect_events([{ role: "user", content: "rewrite my whole description" }])
+
+      expect(caps).to eq([described_class::MAX_REPLY_TOKENS, described_class::MAX_TRUNCATION_RETRY_TOKENS])
+      expect(result[:reply]).to eq("You have 3 products.")
+      tokens = events.filter_map { |event, payload| payload[:text] if event == :token }
+      expect(tokens.last).to eq("You have 3 products.")
+      # The truncated attempt's fragment is emitted, then discarded by a reset, then the re-asked
+      # answer streams — the seller never ends up reading the fragment as the answer.
+      fragment_index = events.index { |event, payload| event == :token && payload[:text] == "Here's the new descri" }
+      reset_index = events.index { |event, _payload| event == :reset }
+      answer_index = events.rindex { |event, payload| event == :token && payload[:text] == "You have 3 products." }
+      expect(fragment_index).not_to be_nil
+      expect(reset_index).to be > fragment_index
+      expect(reset_index).to be < answer_index
+    end
+
+    it "gives the streamed larger cap and its re-ask to the turn that truncated only" do
+      truncated = Ai::AnthropicClient::Result.new(text: "", tool_uses: [], stop_reason: "max_tokens")
+      caps = []
+      turns = [
+        { stream: [], result: truncated },
+        { stream: [], result: tool_result("api_read", { "endpoint" => "list_products" }) },
+        { stream: ["You have 3 products."], result: text_result("You have 3 products.") },
+      ]
+      allow(client).to receive(:stream_messages) do |args, &on_text|
+        caps << args[:max_tokens]
+        turn = turns.shift
+        Array(turn[:stream]).each { |piece| on_text&.call(piece) }
+        turn[:result]
+      end
+      allow(client).to receive(:messages).and_return(text_result("[]"))
+      allow(api_client).to receive(:get).and_return({ "success" => true, "products" => [], "http_status" => 200 })
+
+      _events, result = collect_events([{ role: "user", content: "how many products do I have?" }])
+
+      expect(result[:reply]).to eq("You have 3 products.")
+      expect(caps).to eq([
+                           described_class::MAX_REPLY_TOKENS,
+                           described_class::MAX_TRUNCATION_RETRY_TOKENS,
+                           described_class::MAX_REPLY_TOKENS,
+                         ])
     end
 
     it "discards a phantom staging claim from the UI and streams the honest line instead" do
