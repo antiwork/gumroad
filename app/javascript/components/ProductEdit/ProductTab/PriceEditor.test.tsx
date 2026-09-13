@@ -113,7 +113,8 @@ describe("PriceEditor installments toggle", () => {
 
     const toggle = screen.getByRole("switch", { name: /installments/iu });
     expect(toggle).toHaveProperty("disabled", true);
-    expect(screen.getByText("Installments aren't available with pay what you want.")).toBeTruthy();
+    const note = screen.getByText("Installments aren't available with pay what you want.");
+    expect(toggle.getAttribute("aria-describedby")).toBe(note.id);
   });
 
   it("leaves installments selectable and unexplained when pay what you want is off", () => {
@@ -128,5 +129,6 @@ describe("PriceEditor installments toggle", () => {
 
     expect(screen.getByRole("switch", { name: /installments/iu })).toHaveProperty("disabled", false);
     expect(screen.queryByText("Installments aren't available with pay what you want.")).toBeNull();
+    expect(screen.getByRole("switch", { name: /installments/iu }).getAttribute("aria-describedby")).toBeNull();
   });
 });

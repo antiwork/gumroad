@@ -11,13 +11,16 @@ type ToggleProps = {
   onChange?: (newValue: boolean) => void;
   dropdown?: React.ReactNode;
   disabled?: boolean;
+  // id of the element explaining why the toggle is unavailable, if any.
+  describedById?: string | undefined;
 };
-export const ToggleSettingRow = ({ label, value, help, onChange, dropdown, disabled }: ToggleProps) => {
+export const ToggleSettingRow = ({ label, value, help, onChange, dropdown, disabled, describedById }: ToggleProps) => {
   const toggle = (
     <Switch
       checked={value}
       onChange={(e) => onChange?.(e.target.checked)}
       disabled={Boolean(disabled)}
+      aria-describedby={describedById}
       label={
         <>
           {label}

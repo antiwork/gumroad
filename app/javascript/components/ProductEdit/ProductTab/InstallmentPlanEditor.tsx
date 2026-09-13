@@ -36,10 +36,13 @@ export const InstallmentPlanEditor = ({
     }
   }, [allowInstallmentPayments]);
 
+  const noteId = React.useId();
+
   return (
     <>
       <ToggleSettingRow
         disabled={totalAmountCents <= 0 || isPWYW}
+        describedById={isPWYW ? noteId : undefined}
         value={allowInstallmentPayments}
         onChange={onAllowInstallmentPaymentsChange}
         label="Allow customers to pay in installments"
@@ -57,7 +60,9 @@ export const InstallmentPlanEditor = ({
         }
       />
       {isPWYW ? (
-        <FieldsetDescription>Installments aren&apos;t available with pay what you want.</FieldsetDescription>
+        <FieldsetDescription id={noteId}>
+          Installments aren&apos;t available with pay what you want.
+        </FieldsetDescription>
       ) : null}
     </>
   );
