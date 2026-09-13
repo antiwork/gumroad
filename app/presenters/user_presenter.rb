@@ -55,6 +55,10 @@ class UserPresenter
       # publish, then discover payouts are frozen with no signal until they check into Settings.
       # No compliance info on file at all means no guardian requirement can have kicked in yet.
       legal_guardian_requirement_met: user.alive_user_compliance_info.nil? || user.alive_user_compliance_info.legal_guardian_requirement_met?,
+      # The boolean above folds "no guardian added yet" together with "this country has no guardian
+      # path", but the banners need to tell them apart: one asks for a guardian, the other would send
+      # the seller to a page that already says no guardian can help them.
+      legal_guardian_unsupported: user.alive_user_compliance_info&.legal_guardian_unsupported? || false,
       is_name_invalid_for_email_delivery: user.is_name_invalid_for_email_delivery?,
       profile_background_color: user.seller_profile.background_color,
       profile_highlight_color: user.seller_profile.highlight_color,

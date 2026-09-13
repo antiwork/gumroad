@@ -18,6 +18,7 @@ export type CurrentSeller = {
   publishBlockedReason: "no_payout_method" | "payout_setup_rejected" | null;
   noPayoutRailInComplianceCountry: boolean;
   legalGuardianRequirementMet: boolean;
+  legalGuardianUnsupported: boolean;
   isNameInvalidForEmailDelivery: boolean;
   profileBackgroundColor: string;
   profileHighlightColor: string;
@@ -40,6 +41,7 @@ export const parseCurrentSeller = (data: unknown): CurrentSeller | null => {
     publish_blocked_reason: "no_payout_method" | "payout_setup_rejected" | null;
     no_payout_rail_in_compliance_country: boolean;
     legal_guardian_requirement_met: boolean;
+    legal_guardian_unsupported: boolean;
     is_name_invalid_for_email_delivery: boolean;
     profile_background_color: string;
     profile_highlight_color: string;
@@ -59,6 +61,7 @@ export const parseCurrentSeller = (data: unknown): CurrentSeller | null => {
     publishBlockedReason: parsed.publish_blocked_reason,
     noPayoutRailInComplianceCountry: parsed.no_payout_rail_in_compliance_country,
     legalGuardianRequirementMet: parsed.legal_guardian_requirement_met,
+    legalGuardianUnsupported: parsed.legal_guardian_unsupported,
     isNameInvalidForEmailDelivery: parsed.is_name_invalid_for_email_delivery,
     profileBackgroundColor: parsed.profile_background_color,
     profileHighlightColor: parsed.profile_highlight_color,

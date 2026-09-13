@@ -98,6 +98,7 @@ const seller: CurrentSeller = {
   publishBlockedReason: null,
   noPayoutRailInComplianceCountry: false,
   legalGuardianRequirementMet: true,
+  legalGuardianUnsupported: false,
   isNameInvalidForEmailDelivery: false,
   profileBackgroundColor: "#ffffff",
   profileHighlightColor: "#000000",

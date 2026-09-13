@@ -422,8 +422,18 @@ export const DashboardPage = ({
           currentSeller.can_publish_products &&
           !currentSeller.legalGuardianRequirementMet ? (
             <Alert variant="warning">
-              You're under 18, so a parent or guardian needs to be added to your account before your payouts can go
-              through. <a href={Routes.settings_payments_path()}>Add a guardian</a>
+              {currentSeller.legalGuardianUnsupported ? (
+                <>
+                  Our payment partner cannot verify a seller under 18 in your country, even with a legal guardian on the
+                  account. Payouts will start once you turn 18.{" "}
+                  <a href={Routes.settings_payments_path()}>Review your payout setup</a>
+                </>
+              ) : (
+                <>
+                  You're under 18, so a parent or guardian needs to be added to your account before your payouts can go
+                  through. <a href={Routes.settings_payments_path()}>Add a guardian</a>
+                </>
+              )}
             </Alert>
           ) : null}
           {stripe_verification_message ? (

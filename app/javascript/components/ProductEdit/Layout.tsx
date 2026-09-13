@@ -279,9 +279,19 @@ export const Layout = ({
       !product.is_published ? (
         <div className="p-4 pb-0 md:p-8 md:pb-0">
           <Alert variant="warning">
-            You're under 18, so a parent or guardian needs to be added to your account before you can get paid out for
-            this product. <a href={Routes.settings_payments_path()}>Add a guardian</a> — you can still publish and take
-            orders, but payouts won't go through until that's done.
+            {currentSeller.legalGuardianUnsupported ? (
+              <>
+                Our payment partner cannot verify a seller under 18 in your country, even with a legal guardian on the
+                account — you can still publish and take orders, but payouts will start once you turn 18.{" "}
+                <a href={Routes.settings_payments_path()}>Review your payout setup</a>
+              </>
+            ) : (
+              <>
+                You're under 18, so a parent or guardian needs to be added to your account before you can get paid out
+                for this product. <a href={Routes.settings_payments_path()}>Add a guardian</a> — you can still publish
+                and take orders, but payouts won't go through until that's done.
+              </>
+            )}
           </Alert>
         </div>
       ) : null}
