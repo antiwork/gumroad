@@ -22,9 +22,8 @@ class LinksController < ApplicationController
   # row lock, so the client should wait for it to commit — not reload, which
   # re-enters the same queue.
   EDITOR_SAVE_LOCK_RETRY_AFTER_SECONDS = 5
-  # One report per product per window: a client looping on a wedged save wrote
-  # 1,293 events in five hours and became the org's top production issue,
-  # hiding real regressions (gumroad-private#2583).
+  # One report per product per window: repeats from the same client carry no
+  # information past the first, and reporting every one drowns the tracker.
   EDITOR_SAVE_LOCK_REPORT_WINDOW = 10.minutes
   TRANSPARENT_1X1_GIF = "GIF89a\x01\x00\x01\x00\x80\x00\x00\x00\x00\x00\xFF\xFF\xFF!\xF9\x04\x01\x00\x00\x00\x00,\x00\x00\x00\x00\x01\x00\x01\x00\x00\x02\x02D\x01\x00;".b.freeze
 
@@ -695,9 +694,8 @@ class LinksController < ApplicationController
     rescue ActiveRecord::LockWaitTimeout => e
       # The transaction never committed, so nothing was written: another save of
       # this product held `@product.lock!` past `innodb_lock_wait_timeout`. The
-      # catch-all below answers "refresh the page and try again", which is the
-      # one thing that cannot work here — the reload queues behind the same lock
-      # (gumroad-private#2583).
+      # catch-all below tells the client to refresh, which is the one thing that
+      # cannot work here — the reload queues behind the same lock.
       report_editor_save_lock_contention(e)
       response.set_header("Retry-After", EDITOR_SAVE_LOCK_RETRY_AFTER_SECONDS.to_s)
       return render json: {
@@ -1108,23 +1106,29 @@ class LinksController < ApplicationController
       )
     end
 
-    # Reports the first lock-wait conflict in the window and only counts the
-    # rest. Every one of these is the same seller retrying the same product, so
-    # the volume carries no information — it just made one stuck product the
-    # org's top Sentry issue (gumroad-private#2583). The count stays in the log
-    # line, which is greppable per request.
+    # Reports the first lock-wait conflict per product per window and counts the
+    # rest for the log line. Best-effort: this runs inside the rescue that owes
+    # the client a retryable 409, so a tracker problem must not turn that into a
+    # 500. The counter is claimed with one atomic SET NX EX — an INCR/EXPIRE pair
+    # whose EXPIRE failed would leave the key with no TTL and suppress this
+    # product's reports forever.
     def report_editor_save_lock_contention(exception)
       key = "editor_save_lock_contention:#{@product.id}"
-      occurrences = $redis.incr(key)
-      $redis.expire(key, EDITOR_SAVE_LOCK_REPORT_WINDOW.to_i) if occurrences == 1
+      first_in_window = $redis.set(key, 1, nx: true, ex: EDITOR_SAVE_LOCK_REPORT_WINDOW.to_i)
+      occurrences = first_in_window ? 1 : $redis.incr(key)
 
       Rails.logger.info(
         "[product_editor_save_lock_contention] product_id=#{@product.id} seller_id=#{@product.user_id} " \
         "occurrences_in_window=#{occurrences} request_id=#{request.request_id}"
       )
-      return if occurrences > 1
+      return unless first_in_window
 
       ErrorNotifier.notify(exception, product_id: @product.id, seller_id: @product.user_id)
+    rescue Redis::BaseError, RedisClient::Error => e
+      # RedisClient::Error is not a subclass of Redis::BaseError.
+      Rails.logger.warn(
+        "[product_editor_save_lock_contention] product_id=#{@product.id} report_skipped=#{e.class}"
+      )
     end
 
     def check_banned

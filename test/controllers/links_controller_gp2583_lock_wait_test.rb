@@ -2,14 +2,10 @@
 
 require "test_helper"
 
-# Pins gumroad-private#2583: one product's editor save was retried by a looping
-# client for five hours — 1,293 POSTs, each waiting the full 50s
-# `innodb_lock_wait_timeout` before a 422 carrying the catch-all's "Something
-# went wrong while saving your changes. Please refresh the page and try again"
-# copy. Two things were wrong with that answer. A reload re-enters the lock
-# queue the request just timed out on, which is the opposite of backing off;
-# and `ErrorNotifier.notify` ran once per event, so one stuck product became the
-# org's top production issue and buried that day's real regressions.
+# Pins the lock-wait branch of LinksController#update: a save that waits past
+# innodb_lock_wait_timeout answers 409 product_save_busy with a Retry-After
+# instead of the catch-all's 422 "refresh the page and try again", and reports
+# to Sentry once per product per window rather than once per request.
 class LinksControllerGp2583LockWaitTest < ActionController::TestCase
   tests LinksController
 
@@ -35,9 +31,8 @@ class LinksControllerGp2583LockWaitTest < ActionController::TestCase
     assert_equal "product_save_busy", body["error_code"]
     assert_equal 5, body["retry_after"]
     assert_equal "5", response.headers["Retry-After"]
-    # Assert the message, not just the status: falling through to the catch-all
-    # would render JSON too, but with the refresh copy — the one action that
-    # guarantees the same timeout again.
+    # The message matters, not just the status: the catch-all renders JSON too,
+    # but with the refresh copy — the one action that repeats the same timeout.
     assert_not_includes body["error_message"].to_s, "refresh"
     assert_includes body["error_message"].to_s, "wait"
   end
@@ -50,6 +45,10 @@ class LinksControllerGp2583LockWaitTest < ActionController::TestCase
       put :update, params: @base_params, as: :json
       assert_response :conflict
     end
+
+    # Pins the atomic claim: the window key must carry its own expiry, because
+    # the suppression is only safe while the window ends on its own.
+    assert $redis.ttl("editor_save_lock_contention:#{@product.id}").positive?
   end
 
   test "the report window is per product, so one product's flood cannot silence another product's contention" do
@@ -75,5 +74,16 @@ class LinksControllerGp2583LockWaitTest < ActionController::TestCase
     lines = logged.grep(/product_editor_save_lock_contention/)
     assert_equal 2, lines.size, "expected one log line per lock wait, got: #{logged.inspect}"
     assert_includes lines.last, "occurrences_in_window=2"
+  end
+
+  test "a Redis failure while reporting still answers the retryable 409 instead of a 500" do
+    Link.any_instance.stubs(:lock!).raises(ActiveRecord::LockWaitTimeout)
+    ErrorNotifier.expects(:notify).never
+    $redis.stubs(:set).raises(Redis::CannotConnectError)
+
+    put :update, params: @base_params, as: :json
+
+    assert_response :conflict
+    assert_equal "product_save_busy", response.parsed_body["error_code"]
   end
 end
