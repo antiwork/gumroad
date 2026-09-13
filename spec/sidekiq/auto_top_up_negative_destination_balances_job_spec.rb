@@ -72,6 +72,42 @@ describe AutoTopUpNegativeDestinationBalancesJob do
     Feature.deactivate(:auto_topup_negative_destination_balances)
   end
 
+  it "funds a payable LAK destination past refund-netted accounts at the scan cap" do
+    stub_const("AlertOnNegativeDestinationBalancesJob::MAX_CANDIDATES_SCANNED", 1)
+    stub_const("AlertOnNegativeDestinationBalancesJob::USER_BATCH_SIZE", 1)
+    earlier_seller = create(:user)
+    earlier_account = create(:merchant_account, user: earlier_seller,
+                                                charge_processor_merchant_id: "acct_netted_#{SecureRandom.hex(6)}")
+    create(:balance, user: earlier_seller, merchant_account: earlier_account, date: in_cycle_date,
+                     amount_cents: -100, holding_amount_cents: -100)
+    merchant_account.update!(currency: "lak", country: "LA")
+    row = create(:balance, user: seller, merchant_account:, date: in_cycle_date,
+                           amount_cents: 0, holding_currency: "lak", holding_amount_cents: -10_000_00)
+    seller.update!(payout_threshold_cents: 100_00)
+    make_payable(125_00)
+    3.times do |week|
+      create(:payment, user: seller, processor: PayoutProcessorType::STRIPE, state: "failed",
+                       failure_reason: Payment::FailureReason::DESTINATION_LEDGER_NEGATIVE,
+                       amount_cents: 0, created_at: (week + 1).weeks.ago)
+    end
+    dedupe_key = RedisKey.auto_topup_negative_destination_balance_last_amount(merchant_account.id)
+    expect(earlier_seller.id).to be < seller.id
+    expect(merchant_account).to be_alive
+    expect(seller.unpaid_balance_cents_up_to_date(in_cycle_date)).to eq(125_00)
+    expect($redis.get(dedupe_key)).to be_nil
+    Feature.activate(:auto_topup_negative_destination_balances)
+
+    expect(StripeTransferInternallyToCreator).to receive(:transfer_funds_to_account).with(
+      hash_including(stripe_account_id: merchant_account.charge_processor_merchant_id, currency: "lak", amount_cents: 10_000_00)
+    )
+
+    described_class.new.perform
+
+    expect($redis.get(dedupe_key)).to eq("1000000:#{row.id}")
+  ensure
+    Feature.deactivate(:auto_topup_negative_destination_balances)
+  end
+
   it "does not repeat a transfer for an unchanged candidate on a later run" do
     residue_row(-728_50)
     make_payable
