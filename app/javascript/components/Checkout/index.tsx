@@ -508,6 +508,11 @@ export const Checkout = ({
       if (allocated != null) return allocated;
       return toDisplayedCents(convertToUSD(item, hasFreeTrial(item, isGift) ? 0 : item.price * item.quantity));
     }),
+    // A free trial's renewal price prints under its line price in this same column, so it counts
+    // toward the column's one cents decision even though it is not charged today.
+    ...cart.items
+      .filter((item) => hasFreeTrial(item, isGift) && item.recurrence)
+      .map((item) => toDisplayedCents(convertToUSD(item, getDiscountedPrice(cart, item).price))),
     localAmounts?.subtotalCents ?? toDisplayedCents(subtotal),
     listedAmounts?.taxIncludedCents ?? toDisplayedCents(summarySurcharges?.tax_included_cents ?? 0),
     localAmounts?.taxCents ?? toDisplayedCents(summarySurcharges?.tax_cents ?? 0),
@@ -527,9 +532,8 @@ export const Checkout = ({
         ]
       : []),
   ];
-  // The summary is one column of amounts, so a single line holding cents makes every whole line in
-  // it look truncated (US$10 next to US$2.10 — tastelint on #7602). One fractional line switches the
-  // whole column to cents; an all-whole cart keeps the compact US$10 look.
+  // The summary is one column of amounts, so one fractional line switches the whole column to cents;
+  // an all-whole cart keeps the compact US$10 look.
   const noCentsIfWhole = summaryAmountsAreAllWhole(summaryDisplayedCents, localCurrency?.subunitToUnit ?? 100);
 
   return (
@@ -943,8 +947,8 @@ const TipSelector = ({
 
 // A summary amount while its re-quote is in flight. The figure still on screen belongs to the
 // currency the buyer just left, and a dimmed wrong-currency number reads as the new price, so the
-// amount is replaced rather than faded (tastelint on #7600). Sized like a typical amount so the row
-// does not jump when the real one lands.
+// amount is replaced rather than faded. Sized like a typical amount so the row does not jump when
+// the real one lands.
 const PendingAmount = () => <Skeleton className="h-5 w-16" aria-hidden="true" />;
 
 const CartPriceItem = ({

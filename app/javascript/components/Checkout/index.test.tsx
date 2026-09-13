@@ -1008,7 +1008,7 @@ describe("Checkout order summary decimals", () => {
     );
 
     // The item price and Subtotal are whole dollars and the tax line is not, so the column shows
-    // cents throughout instead of US$10 beside US$2.10 (tastelint on #7602).
+    // cents throughout instead of US$10 beside US$2.10.
     expect(getAllByText("US$10.00")).toHaveLength(2);
     expect(getAllByText("US$2.10").length).toBeGreaterThan(0);
     expect(getAllByText("US$12.10").length).toBeGreaterThan(0);
@@ -1056,6 +1056,25 @@ describe("Checkout order summary decimals", () => {
     // Item price, Subtotal and Total.
     expect(getAllByText("₩10,000").length).toBeGreaterThanOrEqual(3);
     expect(queryByText(/₩10,000\./u)).toBeNull();
+  });
+
+  it("shows cents on the whole rows when a free trial's renewal price has them", () => {
+    const trialCart: CartState = {
+      items: [
+        cartItem({
+          price: 999,
+          recurrence: "monthly",
+          product: cartProduct({ price_cents: 999, free_trial: { duration: { amount: 1, unit: "week" } } }),
+        }),
+      ],
+      discountCodes: [],
+    };
+    const { getAllByLabelText, getAllByText } = renderCheckout(buildState(), trialCart);
+
+    // Nothing is charged today, so the line price and the summary are whole. The renewal price the
+    // trial prints under the line price is in the same column and is not, so the column shows cents.
+    expect(getAllByLabelText("Price").map((node) => node.textContent)).toEqual(["US$0.00"]);
+    expect(getAllByText(/US\$9\.99/u).length).toBeGreaterThan(0);
   });
 });
 
@@ -1212,7 +1231,7 @@ describe("Checkout currency picker", () => {
     expect(busy).toHaveLength(2);
     for (const block of busy) {
       // Those amounts belong to the currency the buyer just left, and a dimmed wrong-currency
-      // number reads as the new price — so the amount is replaced, not faded (tastelint on #7600).
+      // number reads as the new price — so the amount is replaced, not faded.
       expect(block.textContent).not.toContain("CA$12.50");
       expect(block.querySelectorAll('[data-slot="skeleton"]').length).toBeGreaterThan(0);
       expect(block.className).not.toContain("opacity-50");
