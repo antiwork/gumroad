@@ -23,12 +23,12 @@ describe "config/currencies.json" do
   end
 
   it "defines SEK, NOK, DKK and MXN with 100 subunits and the configured floors" do
-    expect(CURRENCY_CHOICES[:sek]).to eq("symbol" => "kr", "display_format" => "kr (Swedish krona)", "min_price" => 999)
-    expect(CURRENCY_CHOICES[:nok]).to eq("symbol" => "kr", "display_format" => "kr (Norwegian krone)", "min_price" => 949)
-    expect(CURRENCY_CHOICES[:dkk]).to eq("symbol" => "kr", "display_format" => "kr (Danish krone)", "min_price" => 649)
+    expect(CURRENCY_CHOICES[:sek]).to eq("symbol" => "kr", "display_format" => "kr (Swedish Krona)", "min_price" => 999)
+    expect(CURRENCY_CHOICES[:nok]).to eq("symbol" => "kr", "display_format" => "kr (Norwegian Krone)", "min_price" => 949)
+    expect(CURRENCY_CHOICES[:dkk]).to eq("symbol" => "kr", "display_format" => "kr (Danish Krone)", "min_price" => 649)
     expect(CURRENCY_CHOICES[:mxn]).to eq(
       "symbol" => "MX$",
-      "display_format" => "MX$ (Mexican peso)",
+      "display_format" => "MX$ (Mexican Peso)",
       "short_symbol" => "$",
       "min_price" => 1699
     )
@@ -47,6 +47,6 @@ describe "config/currencies.json" do
   end
 
   it "lists the new checkout currencies in the public help article" do
-    expect(help_article).to include("Swedish krona", "Norwegian krone", "Danish krone", "Mexican peso")
+    expect(help_article).to include("Swedish Krona", "Norwegian Krone", "Danish Krone", "Mexican Peso")
   end
 end
