@@ -251,7 +251,7 @@ class InvoicePresenter::OrderInfo
           next 0 if purchase.is_free_trial_purchase? || purchase.total_transaction_cents.to_i.zero?
           purchase.buyer_presentment_non_refunded_total_cents
         end
-        MoneyFormatter.format(amount_cents, currency.to_sym, no_cents_if_whole: true, symbol: true)
+        StripeChargeProcessor.format_charge_presentment_amount(amount_cents, currency)
       else
         amount_cents = purchases.sum do |purchase|
           purchase.is_free_trial_purchase? ? 0 : purchase.non_refunded_total_transaction_amount

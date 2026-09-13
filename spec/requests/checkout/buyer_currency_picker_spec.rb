@@ -84,7 +84,7 @@ describe "Buyer-currency checkout currency picker", type: :system, js: true do
     expect(page).to have_text("Total €8", normalize_ws: true)
   end
 
-  it "offers SEK, NOK, DKK and MXN in the checkout currency menu" do
+  it "offers the new buyer currencies in the checkout currency menu" do
     allow(StripeFxQuote).to receive(:create) { quote("1.25") }
 
     visit "/l/#{@product.unique_permalink}"
@@ -92,11 +92,26 @@ describe "Buyer-currency checkout currency picker", type: :system, js: true do
 
     expect(page).to have_select(
       "Currency",
-      with_options: ["kr (Swedish Krona)", "kr (Norwegian Krone)", "kr (Danish Krone)", "MX$ (Mexican Peso)"]
+      with_options: [
+        "kr (Swedish Krona)",
+        "kr (Norwegian Krone)",
+        "kr (Danish Krone)",
+        "MX$ (Mexican Peso)",
+        "SAR (Saudi Riyal)",
+        "AED (UAE Dirham)",
+        "₺ (Turkish Lira)",
+        "COL$ (Colombian Peso)",
+        "lei (Romanian Leu)",
+        "฿ (Thai Baht)",
+        "RM (Malaysian Ringgit)",
+        "Rp (Indonesian Rupiah)",
+        "₩ (Korean Won)",
+        "NT$ (Taiwanese Dollars)",
+      ]
     )
 
-    allow(StripeFxQuote).to receive(:create) { quote("0.1") }
-    select "kr (Swedish Krona)", from: "Currency"
-    expect(page).to have_select("Currency", selected: "kr (Swedish Krona)")
+    allow(StripeFxQuote).to receive(:create) { quote("0.27") }
+    select "SAR (Saudi Riyal)", from: "Currency"
+    expect(page).to have_select("Currency", selected: "SAR (Saudi Riyal)")
   end
 end

@@ -57,6 +57,12 @@ describe Checkout::PresentmentRounding do
       expect(result.delta_cents).to eq(0)
     end
 
+    it "rounds TWD to a whole NT$ instead of mirroring a .99 ending Stripe would reject" do
+      result = round(32_258, canonical: 9_99, currency: Currency::TWD)
+
+      expect(result.presentment_total_cents).to eq(32_300)
+    end
+
     it "mirrors the ending in zero-decimal currencies one place up" do
       # ¥ has no cents, so a .99 ending becomes "one below a round hundred": ¥1,499.
       expect(round(1_483, canonical: 9_99, currency: Currency::JPY).presentment_total_cents).to eq(1_499)

@@ -198,7 +198,7 @@ class CustomerSurchargeController < ApplicationController
         # need not be identical, so it reports what its locked totals imply instead (see
         # Checkout::BuyerCurrencyQuote#display_rate_for).
         rate: quote.display_rate.to_f,
-        subunit_to_unit: subunit_to_unit(quote.currency),
+        subunit_to_unit: StripeChargeProcessor.charge_subunit_to_unit(quote.currency),
         # The soonest expiry among the cart's locked quotes: the cart is only as fresh as its
         # earliest-lapsing amount, so reporting a later one would overstate how long the quote
         # is good for.

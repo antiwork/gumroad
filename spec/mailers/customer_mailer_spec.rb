@@ -1722,6 +1722,25 @@ describe CustomerMailer do
       end
     end
 
+    context "when the refund is in Korean won" do
+      before do
+        # The :purchase factory resolves its merchant account via MerchantAccount.gumroad, which
+        # is nil in a database no earlier example has seeded; a paid purchase then fails
+        # financial_transaction_validation. Seed it here so this example passes in isolation.
+        MerchantAccount.gumroad(StripeChargeProcessor.charge_processor_id) ||
+          create(:merchant_account, user: nil, charge_processor_id: StripeChargeProcessor.charge_processor_id)
+        # Presentment cents are Stripe charge units: whole won, not the 1/100 won Gumroad stores.
+        create(:purchase_presentment, purchase:, presentment_currency: Currency::KRW, presentment_price_cents: 13_889, presentment_gumroad_tax_cents: 0, presentment_total_cents: 13_889, presentment_gumroad_amount_cents: 1_389)
+      end
+
+      it "shows the refund in whole won with the USD amount alongside" do
+        mail = CustomerMailer.partial_refund("test@example.com", product.id, purchase.id, 500, "partially", 6_945, Currency::KRW)
+        expect(mail.body.encoded).to include("partial refund of ₩6,945 ($5 USD)")
+        expect(mail.body.encoded).to include("for your ₩13,889 (#{purchase.formatted_total_transaction_amount} USD) purchase")
+        expect(mail.body.encoded).not_to include("₩69.45")
+      end
+    end
+
     context "when the refund has no presentment amount" do
       it "renders the canonical amounts exactly as before" do
         mail = CustomerMailer.partial_refund("test@example.com", product.id, purchase.id, 500, "partially", nil, nil)

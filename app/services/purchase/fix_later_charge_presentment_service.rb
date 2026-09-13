@@ -123,6 +123,6 @@ class Purchase::FixLaterChargePresentmentService
     end
 
     def presentment_cents_for(canonical_usd_cents, fx_rate, currency)
-      ((BigDecimal(canonical_usd_cents.to_s) / subunit_to_unit(Currency::USD)) / fx_rate * subunit_to_unit(currency)).round
+      StripeChargeProcessor.presentment_cents_for(canonical_usd_cents, fx_rate, currency)
     end
 end

@@ -512,6 +512,7 @@ class Checkout::StripePaymentPresenter
       buyer_currency = buyer_currency_for_ip(ip).to_s.downcase
       return false if buyer_currency.blank? || buyer_currency == Currency::USD
       return false unless StripeChargeProcessor.charge_minor_units_compatible?(buyer_currency)
+      return false unless StripeChargeProcessor.listed_amount_matches_charge_units?(buyer_currency)
 
       items.all? { _1[:product_currency] == buyer_currency } &&
         listed_lane_rates_uniform?(items)

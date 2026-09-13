@@ -125,6 +125,47 @@
       "display_format": "MX$ (Mexican Peso)",
       "short_symbol": "$",
       "min_price": 1699
+    },
+    "sar": {
+      "symbol": "SAR",
+      "display_format": "SAR (Saudi Riyal)",
+      "min_price": 372
+    },
+    "aed": {
+      "symbol": "AED",
+      "display_format": "AED (UAE Dirham)",
+      "min_price": 364
+    },
+    "try": {
+      "symbol": "₺",
+      "display_format": "₺ (Turkish Lira)",
+      "min_price": 4812
+    },
+    "cop": {
+      "symbol": "COL$",
+      "display_format": "COL$ (Colombian Peso)",
+      "short_symbol": "$",
+      "min_price": 307474
+    },
+    "ron": {
+      "symbol": "lei",
+      "display_format": "lei (Romanian Leu)",
+      "min_price": 449
+    },
+    "thb": {
+      "symbol": "฿",
+      "display_format": "฿ (Thai Baht)",
+      "min_price": 3270
+    },
+    "myr": {
+      "symbol": "RM",
+      "display_format": "RM (Malaysian Ringgit)",
+      "min_price": 403
+    },
+    "idr": {
+      "symbol": "Rp",
+      "display_format": "Rp (Indonesian Rupiah)",
+      "min_price": 1743007
     }
   }
 }

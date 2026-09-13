@@ -179,7 +179,7 @@ class Refund < ApplicationRecord
   def formatted_presentment_amount
     return nil unless presentment_snapshot?
 
-    MoneyFormatter.format(presentment_amount_cents, presentment_currency.to_sym, no_cents_if_whole: true, symbol: true)
+    StripeChargeProcessor.format_charge_presentment_amount(presentment_amount_cents, presentment_currency)
   end
 
   private
