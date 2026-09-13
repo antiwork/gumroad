@@ -23,6 +23,7 @@ type PageProps = {
     publish_blocked_reason: "no_payout_method" | "payout_setup_rejected" | null;
     no_payout_rail_in_compliance_country: boolean;
     legal_guardian_requirement_met: boolean;
+    legal_guardian_unsupported: boolean;
     subdomain: string;
     is_buyer: boolean;
     time_zone: {

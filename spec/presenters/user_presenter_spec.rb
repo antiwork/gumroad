@@ -58,6 +58,8 @@ describe UserPresenter do
   end
 
   describe "#as_current_seller" do
+    let(:minor_birthday) { 15.years.ago.to_date }
+
     it "returns the correct props" do
       time_zone = ActiveSupport::TimeZone[seller.timezone]
 
@@ -74,11 +76,39 @@ describe UserPresenter do
         publish_blocked_reason: seller.can_publish_products? ? nil : "no_payout_method",
         no_payout_rail_in_compliance_country: seller.no_payout_rail_in_compliance_country?,
         legal_guardian_requirement_met: seller.alive_user_compliance_info.nil? || seller.alive_user_compliance_info.legal_guardian_requirement_met?,
+        legal_guardian_unsupported: seller.alive_user_compliance_info&.legal_guardian_unsupported? || false,
         is_name_invalid_for_email_delivery: seller.is_name_invalid_for_email_delivery?,
         profile_background_color: seller.seller_profile.background_color,
         profile_highlight_color: seller.seller_profile.highlight_color,
         profile_font: seller.seller_profile.font
       )
+    end
+
+    # The banner branches on this, so folding it into legal_guardian_requirement_met would put an
+    # "Add a guardian" link in front of a minor whose country has no guardian path at all.
+    context "when the seller is a minor in a country with no guardian path" do
+      before do
+        create(:user_compliance_info, user: seller, birthday: minor_birthday, country: "Brazil",
+                                      state: "SP", zip_code: "01000-000")
+      end
+
+      it "reports the country as unsupported and the requirement as unmet" do
+        props = presenter.as_current_seller
+
+        expect(props[:legal_guardian_requirement_met]).to eq(false)
+        expect(props[:legal_guardian_unsupported]).to eq(true)
+      end
+    end
+
+    context "when the seller is a US minor with no guardian on file" do
+      before { create(:user_compliance_info, user: seller, birthday: minor_birthday) }
+
+      it "reports the guardian path as supported" do
+        props = presenter.as_current_seller
+
+        expect(props[:legal_guardian_requirement_met]).to eq(false)
+        expect(props[:legal_guardian_unsupported]).to eq(false)
+      end
     end
 
     context "when the seller cannot publish products" do
