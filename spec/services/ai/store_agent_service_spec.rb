@@ -1966,11 +1966,11 @@ describe Ai::StoreAgentService do
 
         expect(result[:reply]).to eq("You have 3 products.")
         expect(caps).to eq([
-          described_class::MAX_REPLY_TOKENS,
-          described_class::MAX_TRUNCATION_RETRY_TOKENS,
-          described_class::MAX_REPLY_TOKENS,
-          described_class::MAX_TRUNCATION_RETRY_TOKENS,
-        ])
+                             described_class::MAX_REPLY_TOKENS,
+                             described_class::MAX_TRUNCATION_RETRY_TOKENS,
+                             described_class::MAX_REPLY_TOKENS,
+                             described_class::MAX_TRUNCATION_RETRY_TOKENS,
+                           ])
       end
     end
 
@@ -2340,10 +2340,10 @@ describe Ai::StoreAgentService do
 
       expect(result[:reply]).to eq("You have 3 products.")
       expect(caps).to eq([
-        described_class::MAX_REPLY_TOKENS,
-        described_class::MAX_TRUNCATION_RETRY_TOKENS,
-        described_class::MAX_REPLY_TOKENS,
-      ])
+                           described_class::MAX_REPLY_TOKENS,
+                           described_class::MAX_TRUNCATION_RETRY_TOKENS,
+                           described_class::MAX_REPLY_TOKENS,
+                         ])
     end
 
     it "discards a phantom staging claim from the UI and streams the honest line instead" do
