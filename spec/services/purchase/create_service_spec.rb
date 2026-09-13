@@ -3651,10 +3651,9 @@ describe Purchase::CreateService, :vcr do
     end
   end
 
-  # The counting rule in Purchase::Blockable#block_fraudulent_free_purchases! already leaves the
-  # seller's own signed-in downloads out of the free-download velocity block. The enforcement
-  # side used to hold the seller anyway once GUESTS on the same ip_address had armed the block,
-  # so a seller checking delivery of their own $0 product from a shared network was refused.
+  # The counting rule in #block_fraudulent_free_purchases! already exempts the seller's own signed-in
+  # downloads, but enforcement used to hold them anyway once GUESTS on the same ip_address armed the
+  # block — refusing a seller checking delivery of their own $0 product from a shared network.
   context "when guest free downloads have blocked the seller's free product on the seller's ip_address" do
     let(:free_product) { create(:product, user:, price_cents: 0) }
     let(:shared_ip_address) { "0.0.0.0" }
