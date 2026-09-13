@@ -1022,10 +1022,35 @@ module Purchase::Blockable
     def free_product_ip_address_is_not_blocked
       return unless free_purchase?
       return if link_id.blank? || ip_address.blank?
+      # Mirror the counting exemption in #block_fraudulent_free_purchases!: a confirmed `purchaser_id`
+      # match is the seller checking their own delivery. Their rows never arm this block, so a block
+      # guests earned on the seller's own network must not hold the signed-in seller either.
+      return if purchaser_id.present? && purchaser_id == link.user_id
       return if PlatformBlock.product_ip_address.active.find_by(object_value: free_product_ip_address_block_value).blank?
+      # A gift receiver's row is $0 only because the gifter's row carries the payment. That row is
+      # checked on its own (a 100%-off gift is still refused there), so a paid gift has no free
+      # download here to stop, and refusing it would fail a paid checkout.
+      return if receiver_row_of_a_paid_gift?
 
       self.error_code = PurchaseErrorCode::TEMPORARILY_BLOCKED_PRODUCT
       errors.add :base, "The transaction could not complete."
+    end
+
+    # Deliberately NOT `gift_received.gifter_purchase`. This runs from the receiver row's
+    # before_create, while Purchase::CreateService still holds one Gift object shared by both rows
+    # and, after the charge, asks that same object whether the gifter row is `successful?`
+    # (Gift#everything_successful?). Reading the belongs_to here would cache a copy of the gifter
+    # that still says in_progress — the service's own instance is the one that later transitions —
+    # and the gift's mark_successful! would halt on the stale copy after the buyer was charged.
+    # A fresh query leaves the association untouched.
+    def receiver_row_of_a_paid_gift?
+      return false unless is_gift_receiver_purchase
+
+      gifter_purchase_id = gift_received&.gifter_purchase_id
+      return false if gifter_purchase_id.blank?
+
+      gifter_purchase = Purchase.find_by(id: gifter_purchase_id)
+      gifter_purchase.present? && !gifter_purchase.free_purchase?
     end
 
     def free_product_ip_address_block_value
