@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 class ThumbnailsController < Sellers::BaseController
-  before_action :find_product
+  before_action :fetch_product_and_enforce_access
 
   def create
     authorize Thumbnail
@@ -49,10 +49,6 @@ class ThumbnailsController < Sellers::BaseController
   end
 
   private
-    def find_product
-      @product = Link.fetch(params[:link_id], user: current_seller) || e404
-    end
-
     def permitted_params
       params.require(:thumbnail).permit(:signed_blob_id)
     end

@@ -43,7 +43,7 @@ class AssetPreviewsController < ApplicationController
   private
     def find_product
       e404 unless user_signed_in?
-      @product = Link.fetch(params[:link_id], user: current_seller) || e404
+      fetch_product_and_enforce_access
     end
 
     def permitted_params

@@ -96,4 +96,37 @@ describe AssetPreviewsController do
       expect(product.main_preview).to be(nil)
     end
   end
+
+  describe "as a collaborator on the product" do
+    let(:affiliate_user) { create(:user) }
+    let!(:collaborator) { create(:collaborator, seller:, affiliate_user:, products: [product]) }
+
+    before do
+      sign_out(user_with_role_for_seller)
+      sign_in(affiliate_user)
+    end
+
+    it "creates a cover" do
+      blob = ActiveStorage::Blob.create_and_upload!(
+        io: Rack::Test::UploadedFile.new(Rails.root.join("spec", "support", "fixtures", "kFDzu.png"), "image/png"),
+        filename: "kFDzu.png"
+      )
+
+      post(:create, params: { link_id: product.unique_permalink, asset_preview: { signed_blob_id: blob.signed_id }, format: :json })
+
+      expect(response).to have_http_status(:success)
+      expect(response.parsed_body["success"]).to eq(true)
+      expect(product.asset_previews.alive.count).to eq(1)
+    end
+
+    it "deletes a cover" do
+      create(:asset_preview, link: product)
+
+      expect do
+        delete(:destroy, params: { link_id: product.unique_permalink, id: product.main_preview.guid })
+      end.to change { product.asset_previews.alive.count }.by(-1)
+
+      expect(response.parsed_body["success"]).to eq(true)
+    end
+  end
 end
