@@ -18,9 +18,7 @@ export const Select = React.forwardRef<HTMLSelectElement, SelectProps>(
           ref={ref}
           className={classNames(
             baseInputStyles,
-            // The chevron sits at `right-4` and is 20px wide, so the value needs 44px of right
-            // padding to clear it — otherwise a long value (a country name at 375px) runs into the
-            // icon. `truncate` keeps the overflow readable as an ellipsis instead of a hard cut.
+            // 44px clears the 20px chevron at `right-4`, with a gap before it.
             "appearance-none truncate bg-none pr-11",
             stateBorderStyles[state],
             className,
