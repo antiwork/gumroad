@@ -100,3 +100,33 @@ describe("PriceEditor PWYW toggle", () => {
     expect(setIsPWYW).not.toHaveBeenCalled();
   });
 });
+
+describe("PriceEditor installments toggle", () => {
+  it("says why installments are unavailable while pay what you want is on", () => {
+    renderEditor({
+      isPWYW: true,
+      setIsPWYW: noop,
+      eligibleForInstallmentPlans: true,
+      maxEffectivePriceCents: 1500,
+      hasPaidVariants: true,
+    });
+
+    const toggle = screen.getByRole("switch", { name: /installments/iu });
+    expect(toggle).toHaveProperty("disabled", true);
+    expect(screen.getByText("Installments aren't available with pay what you want.")).toBeTruthy();
+  });
+
+  it("leaves installments selectable and unexplained when pay what you want is off", () => {
+    renderEditor({
+      isPWYW: false,
+      setIsPWYW: noop,
+      eligibleForInstallmentPlans: true,
+      maxEffectivePriceCents: 1500,
+      hasPaidVariants: true,
+      priceCents: 1500,
+    });
+
+    expect(screen.getByRole("switch", { name: /installments/iu })).toHaveProperty("disabled", false);
+    expect(screen.queryByText("Installments aren't available with pay what you want.")).toBeNull();
+  });
+});
