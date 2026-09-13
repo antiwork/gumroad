@@ -21,6 +21,27 @@ describe ChargePresentment do
     expect(presentment).to be_valid
   end
 
+  it "allows Stripe rows with a cached rate and no quote id" do
+    presentment = build(:charge_presentment,
+                        stripe_fx_quote_id: nil,
+                        stripe_fx_quote_expires_at: nil,
+                        fx_rate: BigDecimal("1.1"),
+                        presentment_currency: Currency::EUR)
+
+    expect(presentment).to be_valid
+  end
+
+  it "rejects cached-rate rows without a quote id for currencies other than EUR" do
+    presentment = build(:charge_presentment,
+                        stripe_fx_quote_id: nil,
+                        stripe_fx_quote_expires_at: nil,
+                        fx_rate: BigDecimal("1.1"),
+                        presentment_currency: Currency::GBP)
+
+    expect(presentment).not_to be_valid
+    expect(presentment.errors).to include(:base)
+  end
+
   it "rejects Stripe rows with a partially persisted quote" do
     presentment = build(:charge_presentment,
                         stripe_fx_quote_id: "fxq_partial",

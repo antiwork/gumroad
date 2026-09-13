@@ -142,7 +142,7 @@ class Charge::MethodForcedPresentment
       # Registry methods still need their live launch flag — a tab opened while UPI
       # was on can keep a signed inr_types list after rollback.
       decision = if displayed_quote?
-        eligibility.decision
+        eligibility.decision(payment_method: payment_method_type)
       else
         eligibility.method_forced_decision(payment_method: payment_method_type, forced_currency:)
       end
@@ -211,6 +211,13 @@ class Charge::MethodForcedPresentment
 
       locked_quote = locked_or_minted_quote(currency, quote_merchant_account)
       return nil if locked_quote.blank?
+      # A card-minted native EUR token has a cached rate and no Stripe FX quote id.
+      # Forced-currency methods cannot charge through that shape.
+      if Checkout::BuyerCurrencyEligibility.forced_currency_for(payment_method_type).present? &&
+         locked_quote.stripe_fx_quote_id.blank?
+        reject_displayed_quote!
+        return nil
+      end
 
       orchestrator = Charge::PresentmentOrchestrator.new(
         charge:,

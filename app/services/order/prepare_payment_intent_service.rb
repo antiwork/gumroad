@@ -643,7 +643,7 @@ class Order::PreparePaymentIntentService
         setup_future_charges: false,
         off_session: false,
         client_confirm: true
-      ).decision
+      ).decision(payment_method: @previewed_payment_method_type)
     end
 
     def buyer_currency_quote_presentment_for(charge)
@@ -671,6 +671,16 @@ class Order::PreparePaymentIntentService
         end,
         later_charge_canonical_line_items: Purchase::FixLaterChargePresentmentService.canonical_line_items_for(purchases_to_charge)
       )
+      # Same guard as Charge::MethodForcedPresentment#quoted_result, which this token route never
+      # reaches: a native EUR token (cached rate, no Stripe FX quote id) is card/Link scope only.
+      # Eligibility cannot catch this — the USD-settling branch passes whenever the mismatch
+      # marker is absent — so check the verified token's shape before anything is persisted.
+      if Checkout::BuyerCurrencyEligibility.forced_currency_for(@previewed_payment_method_type).present? &&
+         locked_quote.stripe_fx_quote_id.blank?
+        Rails.logger.info("Client-confirm buyer currency quote rejected for order #{order.id}: #{@previewed_payment_method_type} cannot charge a #{decision.currency} quote with no Stripe FX quote")
+        return reject_client_confirm_buyer_currency_quote!
+      end
+
       orchestrator = Charge::PresentmentOrchestrator.new(
         charge:,
         merchant_account:,

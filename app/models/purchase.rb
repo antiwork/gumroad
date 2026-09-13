@@ -172,6 +172,7 @@ class Purchase < ApplicationRecord
   has_one :charge_purchase, dependent: :destroy
   has_one :charge, through: :charge_purchase, dependent: :destroy
   has_one :purchase_presentment, dependent: :destroy
+  has_one :charge_presentment, through: :purchase_presentment
   has_one :early_fraud_warning, dependent: :destroy
   has_one :tip, dependent: :destroy
 
@@ -664,6 +665,13 @@ class Purchase < ApplicationRecord
   scope :by_email, ->(email) { where(email:) }
   scope :with_stripe_fingerprint, -> { where.not(stripe_fingerprint: nil) }
   scope :successful, -> { where(purchase_state: "successful") }
+  # Quote-less EUR presentment that still stored a conversion rate (native EUR charging).
+  # Distinct from iDEAL/Bancontact on EUR-priced products, which persist no fx_rate.
+  scope :with_eur_native_charging_rate, -> {
+    joins(purchase_presentment: :charge_presentment)
+      .where(charge_presentments: { presentment_currency: Currency::EUR, stripe_fx_quote_id: nil })
+      .where.not(charge_presentments: { fx_rate: nil })
+  }
   scope :test_successful, -> { where(purchase_state: "test_successful") }
   scope :in_progress, -> { where(purchase_state: "in_progress") }
   # In-flight payment: ACH clearing, or a Pix QR still payable. stripe_status is set only

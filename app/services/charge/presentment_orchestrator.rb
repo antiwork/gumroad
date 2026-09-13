@@ -140,8 +140,8 @@ class Charge::PresentmentOrchestrator
       presentment_total_cents:,
       presentment_gumroad_amount_cents:,
       allocations:,
-      stripe_fx_quote_id: locked_quote.id,
-      stripe_fx_quote_expires_at: locked_quote.expires_at,
+      stripe_fx_quote_id: locked_quote.stripe_fx_quote_id,
+      stripe_fx_quote_expires_at: locked_quote.stripe_fx_quote_id.present? ? locked_quote.expires_at : nil,
       fx_rate: locked_quote.fx_rate,
       rounding_delta_cents: rounding_delta_cents
     )
