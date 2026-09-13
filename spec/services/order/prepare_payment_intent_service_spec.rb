@@ -2309,6 +2309,168 @@ describe Order::PreparePaymentIntentService, :vcr do
       end
     end
 
+    # Native EUR charging mints a EUR quote from the cached rate with no Stripe FX quote id, for
+    # card/Link on the platform account only. A quote token sends prepare straight down
+    # #buyer_currency_quote_presentment_for, which never reaches the guard in
+    # Charge::MethodForcedPresentment#quoted_result, and eligibility's USD-settling branch passes
+    # a forced-currency method whenever the mismatch marker is absent. The token route has to
+    # refuse the same shape itself.
+    context "with a native EUR quote on the platform account" do
+      let(:seller) { create(:user, disable_buyer_local_currency: false, disable_buyer_currency_rounding: true) }
+      let(:product) { create(:product, user: seller, price_cents: 10_00) }
+      let!(:platform_account) do
+        MerchantAccount.gumroad(StripeChargeProcessor.charge_processor_id)&.tap do |account|
+          account.update!(charge_processor_merchant_id: "acct_gumroad_platform", currency: Currency::USD)
+        end || create(:merchant_account, user: nil, charge_processor_merchant_id: "acct_gumroad_platform", currency: Currency::USD)
+      end
+      let(:fx_rate) { BigDecimal("1.1") }
+
+      before do
+        Feature.activate_user(:buyer_local_currency, seller)
+        Feature.activate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, seller)
+        Feature.activate_user(Checkout::BuyerCurrencyEligibility::EUR_NATIVE_CHARGING_FEATURE_NAME, seller)
+        allow(Stripe).to receive(:api_key).and_return("sk_test_eur_native")
+        allow_any_instance_of(Checkout::BuyerCurrencyQuote).to receive(:buyer_local_currency_rate).and_return(fx_rate)
+      end
+
+      after do
+        Feature.deactivate_user(:buyer_local_currency, seller)
+        Feature.deactivate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, seller)
+        Feature.deactivate_user(Checkout::BuyerCurrencyEligibility::EUR_NATIVE_CHARGING_FEATURE_NAME, seller)
+      end
+
+      def mint_eur_quote
+        quote = Checkout::BuyerCurrencyQuote.create(
+          line_items: [
+            Checkout::BuyerCurrencyQuote::LineItem.new(
+              uid: line_item[:uid],
+              line_index: 0,
+              permalink: product.unique_permalink,
+              product:,
+              price_cents: product.price_cents,
+              tip_cents: 0,
+              seller_tax_cents: 0,
+              gumroad_tax_cents: 0,
+              shipping_cents: 0
+            )
+          ],
+          canonical_total_cents: product.price_cents,
+          ip: "203.0.113.1",
+          currency: Currency::EUR
+        )
+        expect(quote).to be_present
+        quote
+      end
+
+      def build_eur_quoted_order(quote)
+        params = {
+          line_items: [line_item],
+          buyer_currency_quote: quote.token,
+          payment_details_source: PurchasePaymentFlow::PAYMENT_ELEMENT,
+          payment_element_mount_currency: Currency::EUR,
+          payment_method_list_token: Checkout::PaymentMethodListToken.issue(
+            payment_method_types: %w[card link],
+            sellers: [seller],
+            quoted_payment_method_types: %w[card link],
+          ),
+        }.merge(common_params)
+        order, = Order::CreateService.new(params:).perform
+        [order, params]
+      end
+
+      def prepare_with_preview(order, params, payment_method_type:, confirmation_token:)
+        preview = if payment_method_type == "card"
+          Stripe::StripeObject.construct_from(type: "card", card: { country: "NL" })
+        else
+          Stripe::StripeObject.construct_from(type: payment_method_type, payment_method_type.to_sym => {}, card: nil)
+        end
+        allow(Stripe::ConfirmationToken).to receive(:retrieve)
+          .and_return(Stripe::StripeObject.construct_from(payment_method_preview: preview))
+
+        charge_intent = instance_double(StripeChargeIntent, id: "pi_eur_native", client_secret: "pi_eur_native_secret")
+        create_args = nil
+        allow(StripeDeferredPaymentIntent).to receive(:create) do |**kwargs|
+          create_args = kwargs
+          charge_intent
+        end
+
+        responses = described_class.new(order:, params:, confirmation_token:).perform
+        [create_args, responses]
+      end
+
+      it "rejects an iDEAL token against the native EUR quote before any processor call, with the mismatch marker absent" do
+        quote = mint_eur_quote
+        signed = Rails.application.message_verifier(:buyer_currency_quote).verify(quote.token)
+        expect(signed["stripe_fx_quote_id"]).to be_nil
+        expect(platform_account.settlement_currency_mismatch_active?(Currency::EUR)).to eq(false)
+        order, params = build_eur_quoted_order(quote)
+        expect(StripeFxQuote).not_to receive(:create)
+
+        create_args, responses = prepare_with_preview(order, params, payment_method_type: "ideal", confirmation_token: "ctoken_ideal_native_eur")
+
+        expect(create_args).to be_nil
+        expect(StripeDeferredPaymentIntent).not_to have_received(:create)
+        expect(responses["unique-id-0"]).to include(
+          success: false,
+          error_code: PurchaseErrorCode::BUYER_CURRENCY_QUOTE_INVALID,
+          error_message: Charge::CreateService::BUYER_CURRENCY_QUOTE_INVALID_MESSAGE
+        )
+        purchase = order.purchases.first.reload
+        expect(purchase).to be_failed
+        expect(purchase.merchant_account).to eq(platform_account)
+        expect(order.charges.last.charge_presentment).to be_nil
+        expect(purchase.purchase_presentment).to be_nil
+      end
+
+      it "prepares the native EUR intent for card with no Stripe FX quote" do
+        quote = mint_eur_quote
+        order, params = build_eur_quoted_order(quote)
+        expect(StripeFxQuote).not_to receive(:create)
+
+        create_args, responses = prepare_with_preview(order, params, payment_method_type: "card", confirmation_token: "ctoken_card_native_eur")
+
+        expect(responses["unique-id-0"][:success]).to eq(true), responses.inspect
+        expect(create_args).to include(
+          merchant_account: platform_account,
+          currency: Currency::EUR,
+          amount_cents: quote.charge_presentment_total_cents,
+          stripe_fx_quote_id: nil
+        )
+        expect(create_args[:payment_method_types]).to eq(%w[card link])
+        expect(order.charges.last.charge_presentment).to have_attributes(
+          presentment_currency: Currency::EUR,
+          presentment_total_cents: quote.charge_presentment_total_cents,
+          stripe_fx_quote_id: nil,
+          fx_rate:
+        )
+      end
+
+      # The legacy quoted local-method flow: with native EUR off, the same seller's EUR quote
+      # carries a Stripe FX quote id, and iDEAL may still charge through the token route.
+      it "still prepares an iDEAL intent through a EUR quote that carries a Stripe FX quote id" do
+        Feature.deactivate_user(Checkout::BuyerCurrencyEligibility::EUR_NATIVE_CHARGING_FEATURE_NAME, seller)
+        allow(StripeFxQuote).to receive(:create).and_return(
+          StripeFxQuote::Quote.new(id: "fxq_ideal_platform", expires_at: 30.minutes.from_now, fx_rate: BigDecimal("1.25"))
+        )
+        quote = mint_eur_quote
+        order, params = build_eur_quoted_order(quote)
+
+        create_args, responses = prepare_with_preview(order, params, payment_method_type: "ideal", confirmation_token: "ctoken_ideal_fx_quote")
+
+        expect(responses["unique-id-0"][:success]).to eq(true), responses.inspect
+        expect(create_args).to include(
+          currency: Currency::EUR,
+          amount_cents: quote.charge_presentment_total_cents,
+          stripe_fx_quote_id: "fxq_ideal_platform"
+        )
+        expect(create_args[:payment_method_types]).to include("ideal")
+        expect(order.charges.last.charge_presentment).to have_attributes(
+          presentment_currency: Currency::EUR,
+          stripe_fx_quote_id: "fxq_ideal_platform"
+        )
+      end
+    end
+
     context "with a direct-listed client-confirm card" do
       let(:seller) { create(:user, check_merchant_account_is_linked: true, disable_buyer_local_currency: false) }
       let(:product) { create(:product, user: seller, price_currency_type: Currency::CAD, price_cents: 15_00) }
