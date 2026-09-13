@@ -1145,7 +1145,8 @@ class LinksController < ApplicationController
       limit = EDITOR_SAVE_LOCK_PROBE_ROW_LIMIT
 
       # This connection's own statement history, selected by MySQL error 1205
-      # (ER_LOCK_WAIT_TIMEOUT); TIMER_WAIT is how long it spent waiting.
+      # (ER_LOCK_WAIT_TIMEOUT); TIMER_WAIT is how long it spent waiting. The history
+      # outlives the request, so the newest row is this failure and the rest are older.
       waiting_statements = <<~SQL
         SELECT #{hint} EVENT_ID, MYSQL_ERRNO, LEFT(SQL_TEXT, #{sql_length}) AS SQL_TEXT,
                TIMER_WAIT, LOCK_TIME, ROWS_AFFECTED
@@ -1243,16 +1244,14 @@ class LinksController < ApplicationController
       editor_save_lock_probe_rows(sql)
     end
 
-    # A wait on the product's own row: the failed statement names `links` and compares
-    # something to this product's id. A heuristic on the statement's own SQL, and the
-    # reason the holders read is skipped rather than guessed at.
+    # A wait on the product's own row: the newest 1205 names `links` and compares
+    # something to this product's id. Only the newest answers — the history outlives this
+    # request, so an older row for this product would speak for a wait that happened elsewhere.
     def editor_save_lock_probe_lock_row_wait?(waiting_rows)
       return false unless waiting_rows.is_a?(Array)
 
-      waiting_rows.any? do |row|
-        sql = row["SQL_TEXT"].to_s
-        sql.match?(/\blinks\b/i) && sql.match?(/=\s*#{@product.id}\b/)
-      end
+      sql = waiting_rows.first.to_h["SQL_TEXT"].to_s
+      sql.match?(/\blinks\b/i) && sql.match?(/=\s*#{@product.id}\b/)
     end
 
     def check_banned

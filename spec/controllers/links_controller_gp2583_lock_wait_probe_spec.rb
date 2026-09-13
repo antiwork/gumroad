@@ -81,6 +81,23 @@ describe LinksController, type: :controller do
     expect(probe[:link_row_lock_holders]).to eq(skipped: "wait was not on this product's links row")
   end
 
+  it "answers for the newest timeout, not an older one for this product" do
+    controller.instance_variable_set(:@product, product)
+    # Newest first, as the probe's own ORDER BY EVENT_ID DESC returns them: a previous
+    # request on this pooled connection timed out on this product's links row, and this
+    # one timed out on something else.
+    allow(controller).to receive(:editor_save_lock_probe_rows).and_return(
+      [
+        { "SQL_TEXT" => "UPDATE `purchases` SET `flags` = 1 WHERE `purchases`.`id` = 7" },
+        { "SQL_TEXT" => "SELECT `links`.`id` FROM `links` WHERE `links`.`id` = #{product.id} FOR UPDATE" },
+      ]
+    )
+
+    probe = controller.send(:editor_save_lock_wait_probe)[:lock_wait_probe]
+
+    expect(probe[:link_row_lock_holders]).to eq(skipped: "wait was not on this product's links row")
+  end
+
   it "reads holders when the timed-out statement is this product's links row" do
     controller.instance_variable_set(:@product, product)
     allow(controller).to receive(:editor_save_lock_probe_rows).and_return(
