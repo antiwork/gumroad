@@ -1,10 +1,51 @@
 // @vitest-environment happy-dom
-import { describe, expect, it } from "vitest";
+import { act, cleanup, fireEvent, render } from "@testing-library/react";
+import * as React from "react";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { mediaEmbedUrlCandidates } from "$app/components/TiptapExtensions/MediaEmbed";
+import { EmbedMediaForm, mediaEmbedUrlCandidates } from "$app/components/TiptapExtensions/MediaEmbed";
+
+const state = vi.hoisted(() => ({ requests: new Array<string>(), bodies: new Array<unknown>() }));
+
+vi.mock("$app/utils/request", () => ({
+  request: async ({ url }: { url: string }) => {
+    state.requests.push(url);
+    return { json: async () => state.bodies[state.requests.length - 1] };
+  },
+  assertResponseError: () => undefined,
+}));
 
 const ID = "xwE0xYM0S6k";
 const CANONICAL = `https://www.youtube.com/watch?v=${ID}`;
+const EMBED = {
+  html: '<iframe src="https://iframely.net/api/iframe?url=x"></iframe>',
+  title: "Welcome",
+  url: CANONICAL,
+  provider_name: "YouTube",
+};
+const NOT_FOUND = { status: 404, error: "The content is no longer available at the origin" };
+
+const askedUrls = () => state.requests.map((url) => new URL(url).searchParams.get("url"));
+
+const insertUrl = async (value: string) => {
+  const onEmbedReceived = vi.fn();
+  render(<EmbedMediaForm type="embed" onEmbedReceived={onEmbedReceived} onClose={() => undefined} />);
+  const input = document.querySelector<HTMLInputElement>("input.top-level-input");
+  if (!input) throw new Error("embed input did not mount");
+  input.value = value;
+  const insert = [...document.querySelectorAll("button")].find((button) => button.textContent === "Insert");
+  if (!insert) throw new Error("insert button did not mount");
+  await act(async () => {
+    fireEvent.click(insert);
+  });
+  return onEmbedReceived;
+};
+
+afterEach(() => {
+  cleanup();
+  state.requests.length = 0;
+  state.bodies.length = 0;
+});
 
 describe("mediaEmbedUrlCandidates", () => {
   it("rewrites every YouTube spelling of a video to the canonical watch URL", () => {
@@ -52,5 +93,33 @@ describe("mediaEmbedUrlCandidates", () => {
     ]) {
       expect(mediaEmbedUrlCandidates(url), url).toEqual([url]);
     }
+  });
+});
+
+describe("EmbedMediaForm", () => {
+  it("asks for the canonical URL and stops there when iframely answers", async () => {
+    state.bodies = [EMBED];
+
+    const onEmbedReceived = await insertUrl(`https://youtu.be/${ID}?si=39y64u9WmoVVivHh`);
+
+    expect(askedUrls()).toEqual([CANONICAL]);
+    expect(onEmbedReceived).toHaveBeenCalledWith(EMBED);
+  });
+
+  it("retries with the fallback spelling before giving up on a stale lookup", async () => {
+    state.bodies = [NOT_FOUND, EMBED];
+
+    const onEmbedReceived = await insertUrl(`https://youtu.be/${ID}`);
+
+    expect(askedUrls()).toEqual([CANONICAL, `https://www.youtube.com/embed/${ID}`]);
+    expect(onEmbedReceived).toHaveBeenCalledWith(EMBED);
+  });
+
+  it("does not retry a non-YouTube URL iframely cannot embed", async () => {
+    state.bodies = [NOT_FOUND];
+
+    await insertUrl("https://vimeo.com/76979871");
+
+    expect(askedUrls()).toEqual(["https://vimeo.com/76979871"]);
   });
 });
