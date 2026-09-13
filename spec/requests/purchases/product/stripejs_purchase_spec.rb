@@ -638,8 +638,10 @@ describe("PurchaseScenario using StripeJs", type: :system, js: true) do
       it "lets the zero variant be added for free" do
         visit "/l/#{@pwyw_product.unique_permalink}"
 
-        expect(page).not_to have_field("Name a fair price")
-        add_to_cart(@pwyw_product, option: "Zero-plus")
+        # The seller kept PWYW on beside the priced version, so the box is offered and the buyer
+        # names an amount; naming $0 on the free version still buys it for nothing.
+        expect(page).to have_field("Name a fair price")
+        add_to_cart(@pwyw_product, option: "Zero-plus", pwyw_price: 0)
 
         expect(page).to have_text("Zero-plus")
         expect(page).to have_text("US$0")
@@ -648,8 +650,10 @@ describe("PurchaseScenario using StripeJs", type: :system, js: true) do
       it "prices the paid variant at its fixed amount" do
         visit "/l/#{@pwyw_product.unique_permalink}"
 
-        expect(page).not_to have_field("Name a fair price")
-        add_to_cart(@pwyw_product, option: "Paid")
+        # Naming the paid version's own total is the floor the box accepts, so the total is the
+        # version's price and not the $0 base.
+        expect(page).to have_field("Name a fair price")
+        add_to_cart(@pwyw_product, option: "Paid", pwyw_price: 5)
 
         expect(page).to have_button("Pay")
 

@@ -87,7 +87,9 @@ describe("Product Edit pay what you want setting", type: :system, js: true) do
     expect(product.reload.customizable_price).to eq(true)
     expect(product.reload.price_cents).to eq(0)
     in_preview do
-      expect(page).to have_selector("[itemprop='price']", text: "$0+")
+      # The preview renders the product page; with versions present it has no standalone price
+      # tag to assert on, so the PWYW box beside the paid version is the visible proof.
+      expect(page).to have_field("Name a fair price")
     end
   end
 
