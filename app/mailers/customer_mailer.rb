@@ -170,7 +170,7 @@ class CustomerMailer < ApplicationMailer
     if presentment_refund_currency.present? && presentment_refund_amount_cents.to_i > 0
       # Buyer-currency amount of this refund — the number that matches the buyer's card
       # statement — shown first, with the canonical USD amounts alongside.
-      @formatted_presentment_refund_amount = formatted_price(presentment_refund_currency, presentment_refund_amount_cents)
+      @formatted_presentment_refund_amount = StripeChargeProcessor.format_charge_presentment_amount(presentment_refund_amount_cents, presentment_refund_currency)
       # Amounts shown next to a "USD" label must actually be formatted in USD.
       # @formatted_refund_amount above is in the product's price currency and
       # formatted_total_transaction_amount is in the display currency — neither is

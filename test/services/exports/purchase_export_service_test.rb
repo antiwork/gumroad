@@ -839,6 +839,17 @@ class PurchaseExportServiceBuyerCurrencyTest < ActiveSupport::TestCase
     assert_equal "1500", field_value(row, "Buyer Total")
   end
 
+  test "reports Korean won in the whole won Stripe charged, not Gumroad's 1/100-won storage scale" do
+    create_purchase_presentment(purchase: @purchase, presentment_currency: Currency::KRW,
+                                presentment_price_cents: 13_889, presentment_tip_cents: 0,
+                                presentment_seller_tax_cents: 0, presentment_gumroad_tax_cents: 0,
+                                presentment_shipping_cents: 0, presentment_total_cents: 13_889)
+
+    row = last_data_row
+    assert_equal "KRW", field_value(row, "Buyer Currency")
+    assert_equal "13889", field_value(row, "Buyer Total")
+  end
+
   test "keeps the canonical USD columns and the totals row unchanged" do
     create_purchase_presentment(purchase: @purchase, presentment_currency: Currency::CAD)
 

@@ -105,6 +105,22 @@ describe PurchaseSellerAnalyticsPresenter do
         expect(event[:buyer_presentment_currency]).to eq("JPY")
         expect(event[:buyer_presentment_value]).to eq(1_500)
       end
+
+      it "reports Korean won in the whole won Stripe charged, not Gumroad's 1/100-won storage scale" do
+        create(:purchase_presentment, purchase:, charge_presentment:,
+                                      presentment_currency: Currency::KRW,
+                                      presentment_price_cents: 13_889,
+                                      presentment_tip_cents: 0,
+                                      presentment_seller_tax_cents: 0,
+                                      presentment_gumroad_tax_cents: 0,
+                                      presentment_shipping_cents: 0,
+                                      presentment_total_cents: 13_889)
+
+        event = described_class.new(purchase.reload).props[:purchase_event]
+
+        expect(event[:buyer_presentment_currency]).to eq("KRW")
+        expect(event[:buyer_presentment_value]).to eq(13_889)
+      end
     end
   end
 end

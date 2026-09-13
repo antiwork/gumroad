@@ -1487,7 +1487,7 @@ class Purchase < ApplicationRecord
         json[:buyer_presentment_currency] = purchase.buyer_presentment_currency.to_s.upcase
         json[:buyer_presentment_total_cents] = purchase.buyer_presentment_total_cents
         # Major-unit form of the charged total, for the analytics `purchased` event. Done
-        # server-side because zero-decimal handling depends on Gumroad's currency specs,
+        # server-side because the scale is Stripe's charge scale, not the storage scale,
         # and the buyer's presentment currency is not guaranteed to be one of the
         # sellable currencies the frontend currency helpers know about.
         json[:buyer_presentment_value] = purchase.buyer_presentment_major_units(purchase.buyer_presentment_total_cents)
@@ -1740,14 +1740,13 @@ class Purchase < ApplicationRecord
   # Buyer-currency minor units expressed as a plain major-unit number (12.34, not "$12.34"),
   # for consumers that need to do arithmetic on the amount rather than display it:
   # spreadsheet columns in the sales CSV and the `value` field on analytics events.
-  # Zero-decimal currencies (JPY, KRW) have no subunit, so their minor unit already IS the
-  # major unit and must not be divided by 100 — unit_scaling_factor handles that, and
-  # falls back to USD's factor for a currency Gumroad doesn't have a spec for.
+  # Presentment cents are Stripe charge units, so scale by Stripe's subunit rather than
+  # Gumroad's storage scale: KRW is charged in whole won but stored as 1/100 won.
   # Returns nil for canonical-USD sales, which have no buyer-currency amount at all.
   def buyer_presentment_major_units(amount_cents)
     return if buyer_presentment_currency.blank? || amount_cents.nil?
 
-    scaling_factor = unit_scaling_factor(buyer_presentment_currency)
+    scaling_factor = StripeChargeProcessor.charge_subunit_to_unit(buyer_presentment_currency)
     return amount_cents if scaling_factor == 1
 
     (amount_cents.to_f / scaling_factor).round(2)
