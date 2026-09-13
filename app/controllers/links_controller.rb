@@ -1106,22 +1106,20 @@ class LinksController < ApplicationController
       )
     end
 
-    # Reports the first lock-wait conflict per product per window and counts the
-    # rest for the log line. Best-effort: this runs inside the rescue that owes
-    # the client a retryable 409, so a tracker problem must not turn that into a
-    # 500. The counter is claimed with one atomic SET NX EX — an INCR/EXPIRE pair
-    # whose EXPIRE failed would leave the key with no TTL and suppress this
-    # product's reports forever.
+    # Best-effort: this runs inside the rescue that owes the client a 409, so a
+    # tracker problem must not turn that into a 500.
     def report_editor_save_lock_contention(exception)
       key = "editor_save_lock_contention:#{@product.id}"
-      first_in_window = $redis.set(key, 1, nx: true, ex: EDITOR_SAVE_LOCK_REPORT_WINDOW.to_i)
-      occurrences = first_in_window ? 1 : $redis.incr(key)
+      occurrences = $redis.incr(key)
+      # Same ttl == -1 repair as the Gumhead gateway throttle: a counter that
+      # outlives its window would suppress this product's reports forever.
+      $redis.expire(key, EDITOR_SAVE_LOCK_REPORT_WINDOW.to_i) if occurrences == 1 || $redis.ttl(key) == -1
 
       Rails.logger.info(
         "[product_editor_save_lock_contention] product_id=#{@product.id} seller_id=#{@product.user_id} " \
         "occurrences_in_window=#{occurrences} request_id=#{request.request_id}"
       )
-      return unless first_in_window
+      return unless occurrences == 1
 
       ErrorNotifier.notify(exception, product_id: @product.id, seller_id: @product.user_id)
     rescue Redis::BaseError, RedisClient::Error => e

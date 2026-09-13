@@ -51,6 +51,35 @@ class LinksControllerGp2583LockWaitTest < ActionController::TestCase
     assert $redis.ttl("editor_save_lock_contention:#{@product.id}").positive?
   end
 
+  test "a window key that outlived its window's TTL is re-armed instead of suppressing the product's reports" do
+    Link.any_instance.stubs(:lock!).raises(ActiveRecord::LockWaitTimeout)
+    ErrorNotifier.expects(:notify).once.with(instance_of(ActiveRecord::LockWaitTimeout), anything)
+
+    key = "editor_save_lock_contention:#{@product.id}"
+    # The state a window that expires mid-request leaves behind: a counter with no
+    # TTL. A claim that can only fail while the key exists would then report
+    # nothing for this product ever again.
+    $redis.set(key, 4)
+    assert_equal(-1, $redis.ttl(key))
+
+    put :update, params: @base_params, as: :json
+    assert_response :conflict
+    assert $redis.ttl(key).positive?, "expected the stale counter to be re-armed with an expiry"
+
+    # And the re-armed window must still end on schedule: a client that keeps
+    # looping must not be able to push it out. Shortening it first makes the
+    # reset distinguishable from the passage of a second.
+    $redis.expire(key, 5)
+    put :update, params: @base_params, as: :json
+    assert_response :conflict
+    assert_operator $redis.ttl(key), :<=, 5
+
+    # Once that window ends, the product reports again.
+    $redis.del(key)
+    put :update, params: @base_params, as: :json
+    assert_response :conflict
+  end
+
   test "the report window is per product, so one product's flood cannot silence another product's contention" do
     other_product = create_product(user: @seller)
     Link.any_instance.stubs(:lock!).raises(ActiveRecord::LockWaitTimeout)
@@ -79,7 +108,7 @@ class LinksControllerGp2583LockWaitTest < ActionController::TestCase
   test "a Redis failure while reporting still answers the retryable 409 instead of a 500" do
     Link.any_instance.stubs(:lock!).raises(ActiveRecord::LockWaitTimeout)
     ErrorNotifier.expects(:notify).never
-    $redis.stubs(:set).raises(Redis::CannotConnectError)
+    $redis.stubs(:incr).raises(Redis::CannotConnectError)
 
     put :update, params: @base_params, as: :json
 
