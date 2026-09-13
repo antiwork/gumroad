@@ -1755,6 +1755,41 @@ describe Purchase::Blockable do
         end.not_to change { PlatformBlock.count }
       end
     end
+
+    context "when the free purchases are the product owner's own downloads (gumroad-private#2578)" do
+      before do
+        @own_product = create(:product, price_cents: 0)
+        create_list(:purchase, 2, link: @own_product, ip_address: "127.0.0.1", purchaser: @own_product.user)
+      end
+
+      it "doesn't block the ip_address on the owner's own downloads alone" do
+        expect do
+          purchase = create(:purchase, link: @own_product, ip_address: "127.0.0.1", purchaser: @own_product.user,
+                                       purchase_state: "in_progress")
+          purchase.mark_successful!
+        end.not_to change { PlatformBlock.count }
+      end
+
+      it "still blocks when a stranger's free purchases on the same ip_address exceed the threshold" do
+        create_list(:purchase, 2, link: @own_product, ip_address: "127.0.0.1", purchaser: create(:user))
+
+        expect do
+          purchase = create(:purchase, link: @own_product, ip_address: "127.0.0.1", purchaser: create(:user),
+                                       purchase_state: "in_progress")
+          purchase.mark_successful!
+        end.to change { PlatformBlock.count }.from(0).to(1)
+      end
+
+      it "still counts guest free purchases, whose typed-in email proves nothing" do
+        create_list(:purchase, 2, link: @own_product, ip_address: "127.0.0.1", purchaser: nil)
+
+        expect do
+          purchase = create(:purchase, link: @own_product, ip_address: "127.0.0.1", purchaser: nil,
+                                       purchase_state: "in_progress")
+          purchase.mark_successful!
+        end.to change { PlatformBlock.count }.from(0).to(1)
+      end
+    end
   end
 
   describe "#suspend_buyer_on_fraudulent_card_decline!" do

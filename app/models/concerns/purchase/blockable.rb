@@ -997,12 +997,16 @@ module Purchase::Blockable
       max_allowed_free_purchases_of_same_product = max_allowed_free_purchases_of_same_product&.to_i || 2
       fraudulent_free_purchases_block_hours = fraudulent_free_purchases_block_hours&.to_i || 24 # 1 day
 
+      # Mirror the self-purchase exemption in #block_ip_address_based_on_recent_failures!: creators
+      # download their own $0 product to check delivery. Only a confirmed `purchaser_id` match exempts
+      # a row — a guest checkout's typed-in email does not prove ownership.
       recent_free_purchases_of_same_product = link.sales
                                                   .successful
                                                   .not_recurring_charge
                                                   .where(total_transaction_cents: 0)
                                                   .where(ip_address:)
-                                                  .where(created_at: free_purchases_watch_hours.hours.ago..).count
+                                                  .where(created_at: free_purchases_watch_hours.hours.ago..)
+                                                  .where("purchaser_id IS NULL OR purchaser_id != ?", link.user_id).count
 
       return if recent_free_purchases_of_same_product <= max_allowed_free_purchases_of_same_product
 
