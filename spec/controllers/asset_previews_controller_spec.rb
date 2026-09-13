@@ -96,4 +96,37 @@ describe AssetPreviewsController do
       expect(product.main_preview).to be(nil)
     end
   end
+
+  describe "as a collaborator on the product" do
+    let(:affiliate_user) { create(:user) }
+    let!(:collaborator) { create(:collaborator, seller:, affiliate_user:, products: [product]) }
+
+    before do
+      sign_out(user_with_role_for_seller)
+      sign_in(affiliate_user)
+      # The cover URL is fetched through SsrfFilter; serve it from a local fixture instead of
+      # the specs bucket so this example does not depend on a seeded object.
+      allow(SsrfFilter).to receive(:get).and_return(
+        instance_double(HTTParty::Response, body: Rails.root.join("spec", "support", "fixtures", "kFDzu.png").binread, content_type: "image/png")
+      )
+    end
+
+    it "creates a cover" do
+      post(:create, params: { link_id: product.unique_permalink, asset_preview: { url: s3_url }, format: :json })
+
+      expect(response).to have_http_status(:success)
+      expect(response.parsed_body["success"]).to eq(true)
+      expect(product.asset_previews.alive.count).to eq(1)
+    end
+
+    it "deletes a cover" do
+      create(:asset_preview, link: product)
+
+      expect do
+        delete(:destroy, params: { link_id: product.unique_permalink, id: product.main_preview.guid })
+      end.to change { product.asset_previews.alive.count }.by(-1)
+
+      expect(response.parsed_body["success"]).to eq(true)
+    end
+  end
 end

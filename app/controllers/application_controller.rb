@@ -102,7 +102,13 @@ class ApplicationController < ActionController::Base
     unique_permalink = params[:link_id] || params[:id]
 
     @product = Link.fetch(unique_permalink)
-    e404 unless @product.present? && (@product.user == current_seller || logged_in_user.collaborator_for?(@product))
+    e404 unless product_accessible_by_current_user?(@product)
+  end
+
+  # Team members reach an owned product through the account switcher, which makes current_seller the
+  # owner; collaborators are not team members, so they have to be checked against the product itself.
+  def product_accessible_by_current_user?(product)
+    product.present? && (product.user == current_seller || logged_in_user&.collaborator_for?(product))
   end
 
   # Fetches a product identified by a unique permalink

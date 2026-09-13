@@ -21,7 +21,7 @@ class ProductFilesUtilityController < ApplicationController
   end
 
   def download_product_files
-    product_files = current_seller.alive_product_files_preferred_for_product(@product).by_external_ids(params[:product_file_ids])
+    product_files = @product.user.alive_product_files_preferred_for_product(@product).by_external_ids(params[:product_file_ids])
     e404 if product_files.blank?
 
     url_redirect = @product.url_redirects.build
@@ -60,8 +60,8 @@ class ProductFilesUtilityController < ApplicationController
 
   private
     def set_product
-      @product = current_seller.products.find_by_external_id(params[:product_id])
-      e404 if @product.nil?
+      @product = Link.find_by_external_id(params[:product_id])
+      e404 unless product_accessible_by_current_user?(@product)
 
       authorize @product, :edit?
     end
