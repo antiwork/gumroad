@@ -100,22 +100,28 @@ export const Raw = TiptapNode.create({
 });
 type IframelyEmbedData = { html: string; title: string; url: string; provider_name: string; thumbnail_url?: string };
 
-// Iframely keys its cache on the exact URL string it was asked about, and it bakes that same string
-// into the iframe it returns — which is what we store in RichContent. So a share link's spelling is
-// what lives in the saved description forever: if iframely ever cached a failed lookup for
-// `youtu.be/<id>`, that embed shows "Content is no longer available" for a video that plays fine from
-// `watch?v=<id>`. Ask in one canonical spelling, and hold a second, distinct spelling for the retry.
+// Iframely stores the exact URL we ask for, so use one canonical spelling first and a distinct fallback.
 const YOUTUBE_VIDEO_ID = /^[A-Za-z0-9_-]{11}$/u;
+const YOUTUBE_START_TIME = /^(?=\d)(?:(\d+)h)?(?:(\d+)m)?(?:(\d+)s?)?$/u;
+
+const isYouTubeHost = (host: string) =>
+  ["youtube.com", "youtube-nocookie.com"].some((domain) => host === domain || host.endsWith(`.${domain}`));
 
 const youtubeVideoId = (url: URL): string | null => {
   const host = url.hostname.toLowerCase();
   const segments = url.pathname.split("/").filter(Boolean);
   if (host === "youtu.be") return segments[0] ?? null;
-  if (!["youtube.com", "youtube-nocookie.com"].some((domain) => host === domain || host.endsWith(`.${domain}`)))
-    return null;
+  if (!isYouTubeHost(host)) return null;
   if (segments[0] === "watch") return url.searchParams.get("v");
   if (["shorts", "embed", "live", "v"].includes(segments[0] ?? "")) return segments[1] ?? null;
   return null;
+};
+
+const youtubeStartSeconds = (value: string | null): number | null => {
+  if (!value) return null;
+  const match = YOUTUBE_START_TIME.exec(value);
+  if (!match) return null;
+  return Number(match[1] ?? 0) * 3600 + Number(match[2] ?? 0) * 60 + Number(match[3] ?? 0);
 };
 
 export const mediaEmbedUrlCandidates = (raw: string): string[] => {
@@ -126,13 +132,23 @@ export const mediaEmbedUrlCandidates = (raw: string): string[] => {
     return [raw];
   }
   if (parsed.protocol !== "https:" && parsed.protocol !== "http:") return [raw];
+  if (
+    (parsed.hostname.toLowerCase() === "youtu.be" || isYouTubeHost(parsed.hostname.toLowerCase())) &&
+    parsed.searchParams.has("list")
+  )
+    return [raw];
   // A path we don't recognize (a playlist, a channel, a mistyped id) is left exactly as typed.
   const id = youtubeVideoId(parsed);
   if (!id || !YOUTUBE_VIDEO_ID.test(id)) return [raw];
   const start = parsed.searchParams.get("t") ?? parsed.searchParams.get("start");
+  const startSeconds = youtubeStartSeconds(start);
   const canonical = new URL(`https://www.youtube.com/watch?v=${id}`);
-  if (start && /^(?=\d)(?:\d+h)?(?:\d+m)?(?:\d+s?)?$/u.test(start)) canonical.searchParams.set("t", start);
-  return [canonical.toString(), `https://www.youtube.com/embed/${id}`];
+  const fallback = new URL(`https://www.youtube.com/embed/${id}`);
+  if (start && startSeconds !== null) {
+    canonical.searchParams.set("t", start);
+    fallback.searchParams.set("start", String(startSeconds));
+  }
+  return [canonical.toString(), fallback.toString()];
 };
 
 export type EmbedMediaFormProps = {

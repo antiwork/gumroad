@@ -68,10 +68,14 @@ describe("mediaEmbedUrlCandidates", () => {
   });
 
   it("keeps a start offset, since dropping it would change what the embed plays", () => {
-    expect(mediaEmbedUrlCandidates(`https://youtu.be/${ID}?t=42`)[0]).toBe(`${CANONICAL}&t=42`);
-    expect(mediaEmbedUrlCandidates(`https://www.youtube.com/watch?v=${ID}&start=1m10s`)[0]).toBe(
+    expect(mediaEmbedUrlCandidates(`https://youtu.be/${ID}?t=42`)).toEqual([
+      `${CANONICAL}&t=42`,
+      `https://www.youtube.com/embed/${ID}?start=42`,
+    ]);
+    expect(mediaEmbedUrlCandidates(`https://www.youtube.com/watch?v=${ID}&start=1m10s`)).toEqual([
       `${CANONICAL}&t=1m10s`,
-    );
+      `https://www.youtube.com/embed/${ID}?start=70`,
+    ]);
   });
 
   it("offers a second, distinct spelling so one poisoned cache key cannot kill the embed", () => {
@@ -81,11 +85,13 @@ describe("mediaEmbedUrlCandidates", () => {
     ]);
   });
 
-  it("passes a non-YouTube URL through unchanged", () => {
+  it("passes playlist-context and non-YouTube URLs through unchanged", () => {
     for (const url of [
       "https://vimeo.com/76979871",
       "https://x.com/gumroad/status/1663556902624845824",
       "https://www.youtube.com/playlist?list=PL1234567890",
+      `https://www.youtube.com/watch?v=${ID}&list=PL1234567890`,
+      `https://youtu.be/${ID}?list=PL1234567890`,
       "https://www.youtube.com/@somechannel",
       "https://youtu.be/not-an-id",
       "youtu.be/xwE0xYM0S6k",
