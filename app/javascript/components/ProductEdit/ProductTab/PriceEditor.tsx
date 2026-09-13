@@ -56,10 +56,9 @@ export const PriceEditor = ({
 }) => {
   const uid = React.useId();
   const isFreeProduct = priceCents === 0;
-  // A $0 base is PWYW by default, so with no paid version the flag is forced on (a free
-  // product needs an amount box). Beside a paid version it is the seller's choice, and the
-  // amount box floor is the selected version's total, so the combination is safe
-  // (gumroad-private#2573). Product::Prices#set_customizable_price writes the same rule.
+  // A free product needs an amount box, so a $0 base with no paid version forces PWYW on.
+  // Beside a paid version the flag is the seller's — the floor is the selected version's
+  // total. Product::Prices#set_customizable_price writes the same rule.
   const mustBePWYW = isFreeProduct && !hasPaidVariants;
   const pwywOn = mustBePWYW ? true : isPWYW;
   const productEditContext = React.useContext(ProductEditContext);

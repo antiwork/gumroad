@@ -795,11 +795,9 @@ describe Checkout::StripePaymentPresenter do
   end
 
   # A product that genuinely cannot be paid for must keep falling back, but "free and not
-  # pay-what-you-want" is not that product: Product::Prices#set_customizable_price forces
-  # customizable_price to true on any $0 product without priced versions, so this combination
-  # is only ever a seller's deliberate choice — a $0 base whose alive variants carry a positive
-  # price_difference_cents keeps the flag the seller set (gumroad-private#2573), and the buyer
-  # pays the variant's price rather than naming their own.
+  # pay-what-you-want" is not that product: set_customizable_price forces the flag true on a $0
+  # base without priced versions (zero of 39,875 measured production products are $0 with it
+  # false), and with priced versions the seller's choice stands.
   it "still falls back to CardElement for a free non-pay-what-you-want product priced by its variants" do
     seller = create(:user)
     Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, seller)

@@ -4897,11 +4897,9 @@ describe Purchase::CreateService, :vcr do
     end
   end
 
-  # A $0-base product with a priced version can now carry pay-what-you-want on the
-  # product (gumroad-private#2573). The amount box floor is the SELECTED version's total —
-  # `minimum_paid_price_cents` is base + the chosen variant's price_difference_cents — so a
-  # buyer cannot name $0 and walk away with the priced version. gp#1660's hole stays shut
-  # without Product::Prices#set_customizable_price clearing the flag.
+  # A $0-base product with a priced version can carry pay-what-you-want: the amount box floor
+  # is the SELECTED version's total (`minimum_paid_price_cents` = base + that variant's
+  # price_difference_cents), so a $0 name cannot buy the priced version.
   describe "pay what you want on a $0-base product with a priced version" do
     let(:pwyw_product) do
       product = create(:product, price_cents: 0)

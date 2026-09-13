@@ -230,11 +230,9 @@ type PricedVariant = { price_difference_cents?: number | null } | Tier;
 export const hasPaidVariantPricing = (product: { variants: PricedVariant[] }) =>
   product.variants.some((variant) => "price_difference_cents" in variant && (variant.price_difference_cents ?? 0) > 0);
 
-// Mirror of the backend Product::Prices#set_customizable_price: a $0 base with no paid
-// variant pricing forces PWYW — a free product needs an amount box. Beside a paid version
-// the flag is the seller's choice, because the amount box floor is the selected version's
-// total rather than the $0 base, so the combination is safe (gumroad-private#2573).
-// Coffee and tiered memberships are exempt on the backend.
+// Mirror of Product::Prices#set_customizable_price: a $0 base with no paid variant pricing
+// forces PWYW on (a free product needs an amount box); beside a paid version the flag is the
+// seller's, the amount box floor being the selected version's total. Coffee/memberships exempt.
 export const reconcileCustomizablePrice = (product: {
   native_type: ProductNativeType;
   price_cents: number;

@@ -59,10 +59,8 @@ module Product::Prices
   end
 
   # A $0 base is pay-what-you-want by default, but beside a paid version the flag is the
-  # seller's choice: the switch is live in the editor, so forcing it either way would fight
-  # the seller's last save. Nothing is left unguarded by that — the amount box floor is the
-  # selected version's total, not the $0 base (Purchase#minimum_paid_price_cents), so a $0
-  # name cannot buy the paid version (gumroad-private#1660, gumroad-private#2573).
+  # seller's: the editor switch is live, and the amount box floor is the selected version's
+  # total (Purchase#minimum_paid_price_cents), so forcing it either way would be wrong.
   def set_customizable_price
     return if is_tiered_membership
     return unless default_price_cents == 0
