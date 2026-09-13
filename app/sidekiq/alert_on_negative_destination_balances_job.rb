@@ -117,6 +117,8 @@ class AlertOnNegativeDestinationBalancesJob
       last_merchant_account_id = 0
       in_cycle_sum = Arel.sql(ActiveRecord::Base.sanitize_sql_array(
                                 ["SUM(CASE WHEN date <= ? THEN holding_amount_cents ELSE 0 END)", payout_cutoff_date]))
+      in_cycle_usd_sum = Arel.sql(ActiveRecord::Base.sanitize_sql_array(
+                                    ["SUM(CASE WHEN date <= ? THEN amount_cents ELSE 0 END)", payout_cutoff_date]))
 
       loop do
         batch = Balance.unpaid
@@ -126,11 +128,16 @@ class AlertOnNegativeDestinationBalancesJob
                        .group(:user_id, :merchant_account_id)
                        .order(:user_id, :merchant_account_id)
                        .limit(USER_BATCH_SIZE)
-                       .pluck(:user_id, :merchant_account_id, Arel.sql("SUM(holding_amount_cents)"), in_cycle_sum)
+                       .pluck(:user_id, :merchant_account_id, Arel.sql("SUM(holding_amount_cents)"), in_cycle_sum,
+                              Arel.sql("SUM(amount_cents)"), in_cycle_usd_sum)
         break if batch.empty?
 
-        pairs.concat(batch.filter_map do |user_id, merchant_account_id, holding_cents, in_cycle_cents|
-          [user_id, merchant_account_id] if holding_cents.negative? || in_cycle_cents.negative?
+        # Refund-netted windows cannot trip the payout guard. Exclude them before they consume
+        # the scan cap, not just in resolve_entry after later sellers have already been cut off.
+        pairs.concat(batch.filter_map do |user_id, merchant_account_id, holding_cents, in_cycle_cents, usd_cents, in_cycle_usd_cents|
+          if (holding_cents.negative? && !usd_cents.negative?) || (in_cycle_cents.negative? && !in_cycle_usd_cents.negative?)
+            [user_id, merchant_account_id]
+          end
         end)
         last_user_id, last_merchant_account_id = batch.last.first(2)
         break if pairs.size > MAX_CANDIDATES_SCANNED
