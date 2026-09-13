@@ -45,15 +45,12 @@ module Purchase::Blockable
                          PurchaseErrorCode::EXCEEDING_OFFER_CODE_QUANTITY]
   private_constant :IGNORED_ERROR_CODES
 
-  # Failures the buyer had no part in, so they cannot be evidence of card testing.
+  # Failures the buyer had no part in, so they cannot be evidence of card testing: our call to
+  # the processor never completed, so the card was never contacted. Counting these lets a
+  # processor incident manufacture fraud evidence against everyone who retried during it.
   #
-  # Split by the column each lands in: our own outage codes are written to `error_code`, while a
-  # card decline is written to `stripe_error_code` (and leaves `error_code` NULL — see
-  # #failure_code, which reads `stripe_error_code || error_code`).
-  #
-  # The outage codes mean our call to the processor never completed, so the card was never
-  # contacted and the attempt says nothing about it. Counting them lets a processor incident
-  # manufacture its own fraud evidence against everyone who retried during it.
+  # These codes land in `error_code`; a card decline lands in `stripe_error_code` and leaves
+  # `error_code` NULL (#failure_code reads `stripe_error_code || error_code`).
   CARD_TESTING_UNCOUNTED_ERROR_CODES = [
     PurchaseErrorCode::STRIPE_UNAVAILABLE,
     PurchaseErrorCode::PAYPAL_UNAVAILABLE,
@@ -63,15 +60,13 @@ module Purchase::Blockable
   private_constant :CARD_TESTING_UNCOUNTED_ERROR_CODES
 
   # Card errors carrying no signal about the card, spelled the way StripeErrorHandler composes
-  # them ("card_declined" + "_" + decline_code) plus Braintree's own network code.
+  # them ("card_declined" + "_" + decline_code), plus Braintree's own network code.
   #
-  # Only failures the processor could not answer about belong here. A decline the ISSUER answered
-  # stays counted, insufficient_funds included: the issuer accepted the number, expiry and CVC and
-  # refused only on balance, which is the positive validity signal a tester is buying — and since
-  # the attacker picks the amount, they can push live stolen cards into it at will. Exempting it
-  # would turn the rule's blind spot into a card-validation oracle, while doing nothing for the
-  # stranded buyer this exists for: one person retrying one card is one fingerprint and can never
-  # reach a four-card threshold.
+  # Issuer declines stay counted, insufficient_funds included: the issuer accepted the number,
+  # expiry and CVC, and that validity signal is exactly what a tester is buying — the attacker
+  # picks the amount, so exempting it turns this rule's blind spot into a card-validation
+  # oracle. It would not help the stranded buyer either: one person retrying one card is one
+  # fingerprint and can never reach a four-card threshold.
   CARD_TESTING_UNCOUNTED_DECLINE_CODES = [
     "card_declined_processing_error",
     "processing_error",
@@ -95,21 +90,19 @@ module Purchase::Blockable
 
     # PayPal writes a per-transaction billing-agreement token into stripe_fingerprint, so one
     # wallet mints a fresh "card" on every attempt and four retries on a single funding source
-    # trip a four-card rule. Collapse each PayPal wallet to one unit of evidence — somebody
-    # cycling several stolen wallets still accumulates one per wallet — while every Stripe
-    # fingerprint stays its own card.
+    # would trip a four-card rule. Collapse each PayPal wallet to one unit of evidence, while
+    # Stripe fingerprints stay one card each.
     #
-    # Keyed on card_visual, which holds the payer email PayPal attested for the order, NOT
-    # purchases.email: the buyer types that one, so keying on it would let an attacker cycle any
-    # number of stolen wallets under a single checkout email and count as one forever. A wallet
-    # with no attested payer is not provably the same wallet as any other, so it counts on its
-    # own token rather than merging into one free unit.
+    # Key on card_visual (the payer email PayPal attested), NOT purchases.email: the buyer types
+    # that one, so keying on it would let an attacker cycle any number of stolen wallets under a
+    # single checkout email and count as one forever. A wallet with no attested payer is not
+    # provably the same wallet as any other, so it counts on its own token.
     #
-    # Returns at most MAX_NUMBER_OF_FAILED_FINGERPRINTS — every caller only compares against
-    # that threshold. Deduplicating in SQL and stopping at the threshold is what bounds the scan
-    # (the guid rule has no time window, and this runs inside the purchase state-machine
-    # transition): a newest-N row cap before the dedup made the count depend on retry order, so
-    # a tester could flush an older card out of the window by retrying fewer cards more often.
+    # Stops at MAX_NUMBER_OF_FAILED_FINGERPRINTS, the only figure callers compare against, which
+    # is what bounds the scan (the guid rule has no time window and this runs inside the purchase
+    # state-machine transition). Deduplicate in SQL before that cap — capping newest-N rows first
+    # made the count depend on retry order, so a tester could flush an older card out of the
+    # window by retrying fewer cards more often.
     def distinct_card_count(relation)
       paypal_id = ActiveRecord::Base.connection.quote(PaypalChargeProcessor.charge_processor_id)
       identity = <<~SQL.squish
@@ -170,25 +163,22 @@ module Purchase::Blockable
     create_blocked_buyer_comments!(blocking_user:, comment_content:)
   end
 
-  # Unblocking is scoped to the BUYER, not to this one purchase row. The purchase an agent opens
-  # to press Unblock is almost never the purchase the block was written from — a buyer browses
-  # from several devices over the years, so unblocking from purchase A cleared guid A while the
-  # block sat on guid B and kept rejecting them. #block_buyer! is symmetric with the old
-  # single-row unblock, so the round trip looked fine on the acting row and nothing anywhere said
-  # a row had been left behind: `buyer_blocked?` is an OR, the controller still wrote "Buyer
-  # unblocked", and the response was still `success: true`. Browser-guid blocks are the worst ones
-  # to strand, because PlatformBlock.add! only accepts an `expires_in` for ip_address and so a guid
-  # block never lapses (gumroad-private#1648: 71% of hand-unblocked buyers were still blocked, one
-  # of them for 2.5 years).
+  # Unblocking is scoped to the BUYER, not to this purchase row. The purchase an agent opens to
+  # press Unblock is almost never the purchase the block was written from — a buyer browses from
+  # several devices over the years — so the old single-row unblock cleared guid A while the block
+  # sat on guid B. That round trip still looked fine (the acting row's block is gone,
+  # `buyer_blocked?` is an OR, the response is `success: true`) while the buyer stayed blocked,
+  # and a stranded guid block never lapses: `PlatformBlock.add!` takes `expires_in` only for
+  # ip_address (gumroad-private#1648).
   #
-  # IP addresses are deliberately NOT widened across rows. An IP is not buyer-bound — it is shared
-  # by everyone behind a NAT or a carrier pool and gets reallocated — so clearing every IP this
-  # buyer has ever checked out from would lift blocks earned by other people. It also expires on
-  # its own. The identifiers widened here are the ones that identify this buyer specifically:
-  # their browser, their email addresses and their cards.
+  # IP addresses are deliberately NOT widened across rows: an IP is shared behind a NAT or a
+  # carrier pool and gets reallocated, so clearing every IP this buyer ever checked out from
+  # would lift blocks earned by other people — and it expires on its own. The identifiers widened
+  # here are the ones that identify this buyer specifically: their browser, their emails, their
+  # cards.
   #
-  # Returns the PlatformBlocks that are STILL active afterwards, so a caller can tell the agent the
-  # truth instead of reporting an unqualified success. Non-empty means something outside this
+  # Returns the PlatformBlocks that are STILL active afterwards, so a caller can tell the agent
+  # the truth instead of reporting an unqualified success. Non-empty means something outside this
   # buyer's identifiers is holding them (an email-domain block, a shared IP).
   def unblock_buyer!
     unblock_by_ip_address!
@@ -208,10 +198,9 @@ module Purchase::Blockable
   # rather than a boolean, so the caller can name what survived.
   #
   # Also reports blocks on same-email guest rows that failed the corroboration bar in
-  # #corroborated_guest_purchases. Those are blocks the unblock refused to clear because the row
-  # may be somebody else's; reporting them keeps the refusal visible, so the agent sees the
-  # surviving row and judges it instead of the response reading as a full success while the buyer
-  # may still be held — the silence gumroad-private#1648 is about.
+  # #corroborated_guest_purchases: the unblock refused to clear those because the row may be
+  # somebody else's, and surfacing the refusal lets the agent judge it instead of reading a full
+  # success while the buyer may still be held (gumroad-private#1648).
   def surviving_buyer_blocks
     scopes = buyer_blockable_values.map { |object_type, values| PlatformBlock.active.where(object_type:, object_value: values) }
     scopes << PlatformBlock.active.ip_address.where(object_value: ip_address) if ip_address.present?
@@ -265,18 +254,15 @@ module Purchase::Blockable
   # Whether the PROCESSOR is still refusing this buyer on one of our own risk rules, read from the
   # processor rather than inferred from our rows.
   #
-  # This has to come from Stripe. A refusal on a Radar VELOCITY predicate is computed over Stripe's
+  # It has to come from Stripe: a refusal on a Radar VELOCITY predicate is computed over Stripe's
   # own view of the last 24h, so there is no value-list item to delete and clearing every
-  # PlatformBlock leaves it standing. Our purchase rows cannot stand in for it: an attempt that dies
-  # before the card is authorised stores no `stripe_fingerprint` at all, so a buyer who cycled four
-  # payment methods can look like one card to us (gumroad-private#1739 — 14 of 16 attempts had a
-  # NULL fingerprint).
+  # PlatformBlock leaves it standing. Our purchase rows cannot stand in for it — an attempt that
+  # dies before the card is authorised stores no `stripe_fingerprint` at all, so a buyer cycling
+  # four payment methods can look like one card to us (gumroad-private#1739).
   #
-  # `reason == "rule"` alone cannot carry the message, because our email/card PlatformBlocks are
-  # ALSO enforced at Stripe as user-defined value-list rules and refuse with the identical
-  # type/reason pair. Verified live on the #1739 buyer: the refusing rule was
-  # `:email: IN @gumroad_blocked_emails`, the very block being cleared. So the rule's predicate
-  # decides which of the two stories the agent is told — see `:kind` below.
+  # `reason == "rule"` alone cannot carry the message: our email/card PlatformBlocks are ALSO
+  # enforced at Stripe as user-defined value-list rules and refuse with the identical type/reason
+  # pair, so the rule's predicate decides which of the two stories the agent is told (see `:kind`).
   #
   # Only platform-account charges are considered: a refusal on a creator's own Connect account came
   # from THEIR Radar rules, which we neither set nor can lift.
@@ -411,19 +397,17 @@ module Purchase::Blockable
   # `widened_emails: false` keeps a sibling row's typed-in addresses out of the unblock set, and
   # is the default for anything that CLEARS blocks. A checkout, PayPal or gifter email is
   # unauthenticated text on a row — the buyer can put anyone's address there, and a gift row
-  # legitimately carries the recipient's. Siblings are selected by `purchaser_id`, so widening
-  # those would let an unblock of this buyer deactivate a PlatformBlock earned by a different
-  # person whose address happens to sit on one of the buyer's rows. Only `purchaser_email` is
-  # account-owned (it is delegated to the purchaser record), so that is the one a sibling
-  # contributes; the acting row's own addresses stay in scope because the admin is acting on it.
+  # legitimately carries the recipient's — and siblings are selected by `purchaser_id`, so
+  # widening those would let an unblock deactivate a PlatformBlock earned by a different person.
+  # Only `purchaser_email` is account-owned (it is delegated to the purchaser record), so that is
+  # the one a sibling contributes; the acting row's own addresses stay in scope because the admin
+  # is acting on it.
   #
-  # Guids and card fingerprints ARE widened from siblings, for the reason #unblock_buyer! gives:
-  # they name a browser and a physical card, not a string somebody typed.
-  #
-  # A browser can still be shared, so clearing a sibling guid can lift a block a co-user of that
-  # browser earned. Accepted deliberately: the co-user's person-bound blocks (email, card) stay
-  # put, renewed abuse re-earns the guid block via the velocity checks, and withholding sibling
-  # guids is exactly the never-expiring stranded-block problem this widening exists to fix.
+  # Guids and card fingerprints ARE widened from siblings: they name a browser and a physical card,
+  # not a string somebody typed. A browser can still be shared, so clearing a sibling guid can lift
+  # a block a co-user earned — accepted deliberately, because the co-user's person-bound blocks
+  # (email, card) stay put, renewed abuse re-earns the guid block via the velocity checks, and
+  # withholding sibling guids is the never-expiring stranded-block problem this widening fixes.
   private def blockable_values_for(purchases, extra_fingerprints: [], widened_emails: true)
     guids = Set.new
     emails = Set.new
@@ -469,16 +453,14 @@ module Purchase::Blockable
 
   # The buyer's guest checkouts: same-email rows that resolved to no account at all. A checkout
   # email is unauthenticated — anyone can type anyone's address, and card testers do exactly that —
-  # so sharing the email is NOT enough to call a guest row this buyer's: a tester who checked out
-  # under this buyer's address would otherwise get their own browser and card unblocked whenever
-  # an admin unblocks the buyer. A guest row only counts when its card fingerprint matches a row
-  # we already trust (this one, or an account-bound sibling) — the fingerprint is derived from a
-  # physical card in the buyer's hands, so it is the one corroborating identifier that is itself
-  # buyer-bound. A browser guid match deliberately does NOT corroborate: a guid names a browser,
-  # and browsers are shared, so another person's guest checkout under the buyer's email on the
-  # buyer's machine would match on guid and get their own card unblocked. One hop only — a
-  # corroborated guest row does not corroborate further rows. Rows that fail the bar contribute
-  # nothing here; their blocks are surfaced by #surviving_buyer_blocks for a human to judge.
+  # so sharing the email is NOT enough to call a guest row this buyer's: a tester checked out under
+  # this buyer's address would otherwise get their own browser and card unblocked whenever an admin
+  # unblocks the buyer. A guest row only counts when its card fingerprint matches a row we already
+  # trust (this one, or an account-bound sibling): the fingerprint is derived from a physical card
+  # in the buyer's hands, so it is the one corroborating identifier that is itself buyer-bound. A
+  # browser guid match deliberately does NOT corroborate — a guid names a browser, and browsers are
+  # shared. One hop only: a corroborated guest row does not corroborate further rows. Rows that
+  # fail the bar contribute nothing here; #surviving_buyer_blocks surfaces them for a human.
   #
   # Same-email rows that resolved to a DIFFERENT account are excluded outright, corroborated or
   # not — those identifiers belong to that account's blocks, not this buyer's.
@@ -621,20 +603,19 @@ module Purchase::Blockable
   # Whose history counts is the delicate part, and it is deliberately NOT "whoever this purchase
   # says it belongs to".
   #
-  # The only identity we accept here is the card itself. A Stripe fingerprint is derived from the
-  # card number, so a run of settled, undisputed purchases on this fingerprint is proof that THIS
-  # CARD has paid us before and nobody complained. Nothing the person filling in a checkout form
-  # can type gets them somebody else's fingerprint.
+  # The only identity we accept here is the card itself: a Stripe fingerprint is derived from the
+  # card number, so a run of settled, undisputed purchases on it proves THIS CARD has paid us before
+  # and nobody complained, and nothing a buyer types at checkout gets them somebody else's
+  # fingerprint.
   #
-  # Email addresses and accounts are not accepted, on a renewal either. An unauthenticated
-  # checkout supplies its own email address and purchase creation resolves an account from it
-  # (Purchase::CreateService#set_purchaser_for) without ever proving the person owns it — and that
-  # unproven identity is what a subscription then persists as its own (`subscription.user`) and
-  # copies onto every later charge (Subscription#build_purchase). So "this came from our records,
-  # not from this request" is true of a renewal and still says nothing about who the buyer is:
-  # somebody can start a membership under an established customer's address today and have a
-  # later renewal on a stolen card inherit that customer's clean record. Until we persist identity
-  # that was actually authenticated, the card is the only provenance we have.
+  # Email addresses and accounts are not accepted, on a renewal either. An unauthenticated checkout
+  # supplies its own email address, and purchase creation resolves an account from it
+  # (Purchase::CreateService#set_purchaser_for) without ever proving the person owns it — an
+  # unproven identity a subscription then persists as its own (`subscription.user`) and copies onto
+  # every later charge (Subscription#build_purchase). So "this came from our records, not from this
+  # request" is true of a renewal and still says nothing about who the buyer is: somebody can start
+  # a membership under an established customer's address today and have a later renewal on a stolen
+  # card inherit that customer's clean record. The card is the only provenance we have.
   #
   # The subscriber this exemption exists for — a long-standing member whose bank reissued their
   # card (gumroad-private#1480) — is still covered: the card on file that just declined is the
@@ -680,24 +661,21 @@ module Purchase::Blockable
     end
 
     # A single fraud-flavoured decline from the card issuer used to platform-block everything we
-    # know about the person who attempted the payment: their browser, their email addresses, their
-    # IP address and their card. That is the right response to somebody testing a stolen card on us.
-    # It is the wrong response to a long-standing customer whose bank reissued their card, which is
-    # what the "lost card" and "pickup card" codes almost always mean in practice — and because we
-    # blocked the email and the browser too, those customers could not pay us with a replacement
-    # card either, so a renewal that should have recovered by itself turned into a lost membership
-    # (gumroad-private#1480).
+    # knew about the person who attempted the payment: browser, emails, IP address and card. That is
+    # the right response to somebody testing a stolen card; it is the wrong response to a
+    # long-standing customer whose bank reissued their card, which is what the "lost card" and
+    # "pickup card" codes almost always mean — and because we blocked the email and browser too,
+    # those customers could not pay us with a replacement card either, so a renewal that should have
+    # recovered by itself turned into a lost membership (gumroad-private#1480).
     #
-    # Two guards now stand in front of the block:
+    # Two guards stand in front of the block now:
     #
     #   1. Only the codes where the issuer is actually reporting card misuse count
     #      (PurchaseErrorCode::AUTO_BLOCK_ERROR_CODES). Lost/pickup declines still fail the charge,
     #      they just do not brand the buyer.
-    #   2. A buyer with real successful payment history behind them is not blocked at all. Somebody
-    #      who has paid us repeatedly, with nothing refunded and nothing charged back, is not a card
-    #      tester; whatever the issuer is reporting, the right outcome is that they can put a new
-    #      card in and carry on. Only history that the card itself proves counts — see
-    #      #buyer_has_clean_payment_history?.
+    #   2. A buyer with real successful payment history behind them is not blocked at all
+    #      (#buyer_has_clean_payment_history?). Whatever the issuer reports, the right outcome is
+    #      that they can put a new card in and carry on.
     #
     # And when we do block, we block the payment method only — see #block_buyer_payment_method!.
     def ban_buyer_on_fraud_related_error_code!
@@ -717,22 +695,19 @@ module Purchase::Blockable
     # stop the actual human from paying with a card that is fine. Somebody spraying many stolen
     # cards at us is still caught by the card-testing velocity checks (#ban_card_testers!,
     # #ban_fraudulent_buyer_browser_guid!), which do block the browser and the email once several
-    # distinct cards have failed — unless the sprayer has clean checkout history
+    # distinct cards have failed — unless that browser/email pair has clean checkout history
     # (#buyer_has_clean_checkout_history?), where only the per-card, IP and per-product limits apply.
     #
     # A renewal does not always carry a fingerprint of its own — a charge can fail before we ever
     # record one — so for a recurring charge we also block the card that renewal was charged on,
-    # when we can prove which card that was. See #subscription_card_fingerprint for what counts as
-    # proof; when there is none, we block nothing beyond the failed charge's own fingerprint.
+    # when we can prove which card that was (#subscription_card_fingerprint); when there is no
+    # proof, we block nothing beyond the failed charge's own fingerprint.
     #
-    # The card is deliberately NOT looked up from the email or the account on the purchase. Both of
-    # those can belong to somebody else: a membership can be started under an established customer's
-    # address at an unauthenticated checkout (see #buyer_has_clean_payment_history?), so "the newest
-    # card on any purchase sharing this email or account" — what #recent_stripe_fingerprint returns
-    # — can be a bystander's working card, and a fingerprint-less renewal would get that card
-    # blocked platform-wide. Subscription#credit_card_to_charge is avoided for the same reason: it
-    # falls back to the account owner's card when the subscription has none of its own, and the
-    # account is exactly the identity we cannot trust here.
+    # That card is deliberately NOT looked up from the email or the account on the purchase — see
+    # #buyer_has_clean_payment_history? for why that identity cannot be trusted. Both
+    # #recent_stripe_fingerprint and Subscription#credit_card_to_charge fall back to the account
+    # owner's card, which can be a bystander's working card that a fingerprint-less renewal would
+    # then get blocked platform-wide.
     def block_buyer_payment_method!
       block_by_charge_processor_fingerprint!
       block_by_subscription_card_fingerprint! if is_recurring_subscription_charge
@@ -742,36 +717,27 @@ module Purchase::Blockable
     # subscription's own purchase records prove that card was already paying for it before this
     # attempt. Nil otherwise, including when there is no subscription.
     #
-    # Two things are going on here, and both matter.
+    # Read from this purchase's own `credit_card_id`, not from the subscription row: that column is
+    # a snapshot taken when the renewal was built and charged, and nothing rewrites it afterwards,
+    # while `subscription.credit_card_id` moves. A charge held for Strong Customer Authentication
+    # can fail up to a quarter of an hour after it was attempted, so by the time this failure
+    # callback runs the subscription row can already point at a different card — reading that would
+    # block a card this charge never touched and leave the one that actually declined alone.
     #
-    # The card is read from this purchase's own `credit_card_id`, not from the subscription row.
-    # `credit_card_id` is a snapshot taken when the renewal was built and charged, and nothing
-    # rewrites it afterwards. `subscription.credit_card_id` moves: the buyer can replace their card,
-    # and a charge held for Strong Customer Authentication fails up to a quarter of an hour after it
-    # was attempted, so by the time this failure callback runs the subscription row can already point
-    # at a different card. Reading it then would block a card this charge never touched while leaving
-    # the one that actually declined alone.
-    #
-    # The snapshot on its own is not trustworthy either, because of where it can come from. When the
+    # The snapshot is not proof on its own either, because of where it can come from: when the
     # subscription holds no card of its own, both Subscription#build_purchase and
-    # Purchase#load_chargeable_for_charging fall back to the card on the purchaser's account — and
-    # that account is the identity we cannot trust, for the reason set out in
-    # #buyer_has_clean_payment_history?: somebody can open a membership under an established
-    # customer's email address at an unauthenticated checkout, and the account resolved from that
-    # address carries the real customer's saved card. So we additionally require that an earlier
-    # purchase of this same subscription was charged successfully on the same card. That is the
-    # subscription itself having paid us with that card, recorded in purchase rows nobody edits
-    # later. A card appearing for the first time on the failed attempt gets no fallback block: on a
-    # genuine card-testing attempt the charge normally records its own fingerprint anyway, and being
-    # wrong in the other direction blocks a bystander's working card platform-wide.
+    # Purchase#load_chargeable_for_charging fall back to the card on the purchaser's account, and
+    # that account can belong to somebody else (see #buyer_has_clean_payment_history?). So we also
+    # require that an earlier purchase of this same subscription was charged successfully on the
+    # same card — the subscription itself having paid us with it, in purchase rows nobody edits
+    # later. A card appearing for the first time on the failed attempt gets no fallback block: a
+    # genuine card-testing attempt records its own fingerprint anyway, and erring the other way
+    # blocks a bystander's working card platform-wide.
     #
-    # That earlier purchase also has to be one money actually moved for. A renewal whose price came
-    # out at zero — fully covered by a discount or by credit — is still recorded as `successful` and
-    # still carries whichever card was on file at the time, even though nothing was charged to it.
-    # Counting such a row would hand provenance to a card that never paid us: open a membership under
-    # an established customer's email address at an unauthenticated checkout, let one zero-priced
-    # renewal record their saved card, and a later fingerprint-less decline would block that
-    # bystander's working card platform-wide. `non_free` keeps the proof to charges that settled.
+    # That earlier purchase must also be one money actually moved for. A renewal whose price came
+    # out at zero — covered by a discount or credit — is still `successful` and still carries
+    # whichever card was on file, though nothing was charged to it, so counting it would hand
+    # provenance to a card that never paid us. `non_free` keeps the proof to charges that settled.
     def subscription_card_fingerprint
       return if credit_card_id.blank?
       return if subscription.blank?
