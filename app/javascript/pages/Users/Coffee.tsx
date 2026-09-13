@@ -2,11 +2,14 @@ import { usePage } from "@inertiajs/react";
 import * as React from "react";
 import typia from "typia";
 
+import { incrementProductViews } from "$app/data/view_event";
 import { CreatorProfile } from "$app/parsers/profile";
 
 import { Product, Purchase } from "$app/components/Product";
 import { CoffeeProduct } from "$app/components/Product/CoffeeProduct";
 import { Layout as ProfileLayout } from "$app/components/Profile/Layout";
+import { useOriginalLocation } from "$app/components/useOriginalLocation";
+import { useRunOnce } from "$app/components/useRunOnce";
 
 type Props = {
   product: Product;
@@ -16,6 +19,13 @@ type Props = {
 
 export default function CoffeePage() {
   const { product, purchase, creator_profile } = typia.assert<Props>(usePage().props);
+  const { searchParams } = new URL(useOriginalLocation());
+
+  // The coffee page is served from /coffee rather than /l/:permalink, so nothing else records its
+  // views and the seller's analytics stay at zero. Same call the standard product page makes.
+  useRunOnce(() => {
+    void incrementProductViews({ permalink: product.permalink, recommendedBy: searchParams.get("recommended_by") });
+  });
 
   return (
     <ProfileLayout
