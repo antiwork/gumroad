@@ -435,6 +435,19 @@ describe Checkout::BuyerCurrencyEligibility do
     expect(decision.fallback_reason).to eq(:listed_currency_is_buyer_currency)
   end
 
+  it "falls back from the listed lane for a currency Stripe only charges in multiples of 100" do
+    Feature.activate_user(described_class::LISTED_CURRENCY_DIRECT_CHARGE_FEATURE_NAME, seller)
+    allow_any_instance_of(described_class).to receive(:buyer_currency_for_ip).and_return(Currency::TWD)
+    report_listed_currency_element(params, Currency::TWD)
+    # NT$150.50: the listed lane would send 15_050 to Stripe verbatim, which it rejects.
+    purchase.update!(link: create(:product, user: seller, price_currency_type: Currency::TWD, price_cents: 15_050),
+                     displayed_price_currency_type: Currency::TWD,
+                     rate_converted_to_usd: "0.0312")
+
+    expect(decision).not_to be_eligible
+    expect(decision.fallback_reason).to eq(:listed_currency_is_buyer_currency)
+  end
+
   it "allows direct listed charging for a multi-item cart uniformly priced in the buyer's currency" do
     Feature.activate_user(described_class::LISTED_CURRENCY_DIRECT_CHARGE_FEATURE_NAME, seller)
     report_listed_currency_element(params)

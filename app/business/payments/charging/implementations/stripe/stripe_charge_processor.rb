@@ -132,11 +132,16 @@ class StripeChargeProcessor
   end
 
   # Listed-price cents are Gumroad storage units, so they only match what Stripe charges
-  # when the two scales agree.
+  # when the two scales agree. Currencies Stripe takes only in multiples of 100 never match
+  # either: this lane forwards the stored cents verbatim and Stripe rejects e.g. NT$150.50,
+  # so TWD quotes on the FX lane, where align_charge_amount_cents rounds it.
   def self.listed_amount_matches_charge_units?(currency)
     return false if currency.blank?
 
-    charge_subunit_to_unit(currency) == subunit_to_unit(currency)
+    normalized = currency.to_s.downcase
+    return false if AMOUNT_DIVISIBLE_BY_100_CURRENCIES.include?(normalized)
+
+    charge_subunit_to_unit(normalized) == subunit_to_unit(normalized)
   end
 
   def self.align_charge_amount_cents(amount_cents, currency)

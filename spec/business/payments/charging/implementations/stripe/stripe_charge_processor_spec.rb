@@ -129,7 +129,9 @@ describe StripeChargeProcessor, :vcr do
         MoneyFormatter.format(12_50, :cad, no_cents_if_whole: true, symbol: true)
       )
       expect(described_class.listed_amount_matches_charge_units?("krw")).to be(false)
-      expect(described_class.listed_amount_matches_charge_units?("twd")).to be(true)
+      # Stripe rejects a TWD amount that is not a multiple of 100, and this lane charges the
+      # stored listed cents verbatim, so TWD has to quote on the FX lane instead.
+      expect(described_class.listed_amount_matches_charge_units?("twd")).to be(false)
       expect(described_class.listed_amount_matches_charge_units?("cad")).to be(true)
       expect(described_class.listed_amount_matches_charge_units?("jpy")).to be(true)
     end
