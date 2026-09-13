@@ -2,7 +2,7 @@ import * as React from "react";
 
 import { NumberInput } from "$app/components/NumberInput";
 import { ToggleSettingRow } from "$app/components/SettingRow";
-import { Fieldset } from "$app/components/ui/Fieldset";
+import { Fieldset, FieldsetDescription } from "$app/components/ui/Fieldset";
 import { Input } from "$app/components/ui/Input";
 import { InputGroup } from "$app/components/ui/InputGroup";
 import { Label } from "$app/components/ui/Label";
@@ -36,24 +36,34 @@ export const InstallmentPlanEditor = ({
     }
   }, [allowInstallmentPayments]);
 
+  const noteId = React.useId();
+
   return (
-    <ToggleSettingRow
-      disabled={totalAmountCents <= 0 || isPWYW}
-      value={allowInstallmentPayments}
-      onChange={onAllowInstallmentPaymentsChange}
-      label="Allow customers to pay in installments"
-      dropdown={
-        <Fieldset>
-          <NumberInput value={numberOfInstallments} onChange={(value) => onNumberOfInstallmentsChange(value || 0)}>
-            {(props) => (
-              <InputGroup>
-                <Input {...props} type="number" min={2} aria-label="Number of installments" />
-                <Label>equal monthly payments</Label>
-              </InputGroup>
-            )}
-          </NumberInput>
-        </Fieldset>
-      }
-    />
+    <>
+      <ToggleSettingRow
+        disabled={totalAmountCents <= 0 || isPWYW}
+        describedById={isPWYW ? noteId : undefined}
+        value={allowInstallmentPayments}
+        onChange={onAllowInstallmentPaymentsChange}
+        label="Allow customers to pay in installments"
+        dropdown={
+          <Fieldset>
+            <NumberInput value={numberOfInstallments} onChange={(value) => onNumberOfInstallmentsChange(value || 0)}>
+              {(props) => (
+                <InputGroup>
+                  <Input {...props} type="number" min={2} aria-label="Number of installments" />
+                  <Label>equal monthly payments</Label>
+                </InputGroup>
+              )}
+            </NumberInput>
+          </Fieldset>
+        }
+      />
+      {isPWYW ? (
+        <FieldsetDescription id={noteId}>
+          Installments aren&apos;t available with pay what you want.
+        </FieldsetDescription>
+      ) : null}
+    </>
   );
 };
