@@ -1010,11 +1010,47 @@ module Purchase::Blockable
 
       return if recent_free_purchases_of_same_product <= max_allowed_free_purchases_of_same_product
 
+      # Keep the velocity stop on the repeated free-download source without denying unrelated paid
+      # checkout for the seller, the product, or everyone sharing the guest's IP.
       PlatformBlock.add!(
-        object_type: PlatformBlock::TYPES[:ip_address],
-        object_value: ip_address,
+        object_type: PlatformBlock::TYPES[:product_ip_address],
+        object_value: free_product_ip_address_block_value,
         expires_in: fraudulent_free_purchases_block_hours.hours,
       )
+    end
+
+    def free_product_ip_address_is_not_blocked
+      return unless free_purchase?
+      return if link_id.blank? || ip_address.blank?
+      # Mirror the counting exemption in #block_fraudulent_free_purchases!: a confirmed `purchaser_id`
+      # match is the seller checking their own delivery. Their rows never arm this block, so a block
+      # guests earned on the seller's own network must not hold the signed-in seller either.
+      return if purchaser_id.present? && purchaser_id == link.user_id
+      return if PlatformBlock.product_ip_address.active.find_by(object_value: free_product_ip_address_block_value).blank?
+      # A gift receiver's row is $0 only because the gifter's row carries the payment. That row is
+      # checked on its own (a 100%-off gift is still refused there), so a paid gift has no free
+      # download here to stop, and refusing it would fail a paid checkout.
+      return if receiver_row_of_a_paid_gift?
+
+      self.error_code = PurchaseErrorCode::TEMPORARILY_BLOCKED_PRODUCT
+      errors.add :base, "The transaction could not complete."
+    end
+
+    # A fresh query, deliberately not `gift_received.gifter_purchase`: loading it would cache the
+    # still-in_progress gifter on the Gift that Purchase::CreateService shares with the charge path,
+    # and Gift#everything_successful? would then halt after the buyer had been charged.
+    def receiver_row_of_a_paid_gift?
+      return false unless is_gift_receiver_purchase
+
+      gifter_purchase_id = gift_received&.gifter_purchase_id
+      return false if gifter_purchase_id.blank?
+
+      gifter_purchase = Purchase.find_by(id: gifter_purchase_id)
+      gifter_purchase.present? && !gifter_purchase.free_purchase?
+    end
+
+    def free_product_ip_address_block_value
+      "#{link_id}:#{ip_address}"
     end
 
     def delete_failed_purchases_count

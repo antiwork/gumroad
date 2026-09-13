@@ -8,6 +8,7 @@ class PlatformBlock < ApplicationRecord
     email_domain: "email_domain",
     charge_processor_fingerprint: "charge_processor_fingerprint",
     product: "product",
+    product_ip_address: "product_ip_address",
   }.freeze
 
   # Block the IP for 6 months so that if the IP gets reallocated it can be used again.

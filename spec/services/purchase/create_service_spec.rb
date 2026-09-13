@@ -3515,6 +3515,125 @@ describe Purchase::CreateService, :vcr do
         expect(error).to eq "You have chosen a quantity that exceeds what is available."
       end
     end
+
+    # The receiver's row of a gift is a $0 row on the gifter's ip_address. Guests behind the same
+    # NAT who took the product for free too often have already written a product/ip_address block,
+    # and that block used to refuse the receiver's row and so fail a paid gift before the charge.
+    context "when guest free downloads have blocked the product on the gifter's ip_address" do
+      let(:blocked_ip_address) { "0.0.0.0" }
+      let!(:free_download_code) { create(:offer_code, products: [product], amount_cents: nil, amount_percentage: 100) }
+
+      def guest_free_download(email)
+        guest_params = {
+          purchase: {
+            email:,
+            quantity: 1,
+            perceived_price_cents: 0,
+            discount_code: free_download_code.code,
+            ip_address: blocked_ip_address,
+            session_id: "a107d0b7ab5ab3c1eeb7d3aaf9792977",
+            is_mobile: false,
+            browser_guid: SecureRandom.uuid,
+          }
+        }
+        Purchase::CreateService.new(product:, params: guest_params).perform
+      end
+
+      # A successful paid row must carry a merchant account (Purchase#financial_transaction_validation),
+      # and the charge path falls back to the seeded Gumroad Stripe account, which an unseeded test
+      # database lacks. Same guard as the model spec's paid-gifter fixture.
+      before do
+        MerchantAccount.gumroad(StripeChargeProcessor.charge_processor_id) ||
+          create(:merchant_account, user: nil, charge_processor_id: StripeChargeProcessor.charge_processor_id)
+      end
+
+      before do
+        3.times do |index|
+          purchase, error = guest_free_download("guest-#{index}@example.com")
+
+          expect(error).to be_nil
+          expect(purchase).to be_successful
+          expect(purchase.price_cents).to eq 0
+          expect(purchase.purchaser).to be_nil
+        end
+
+        expect(PlatformBlock.product_ip_address.active.find_by(object_value: "#{product.id}:#{blocked_ip_address}")).to be_present
+        expect(PlatformBlock.ip_address.active).to be_empty
+        expect(PlatformBlock.product.active).to be_empty
+      end
+
+      it "still refuses a fourth guest free download from that ip_address" do
+        purchase, error = guest_free_download("guest-3@example.com")
+
+        expect(error).to eq "The transaction could not complete."
+        expect(purchase.error_code).to eq PurchaseErrorCode::TEMPORARILY_BLOCKED_PRODUCT
+        expect(purchase).not_to be_successful
+      end
+
+      # The only example here that reaches Stripe. It is the baseline `gift_params` charge, so it
+      # replays that example's cassette instead of recording a new one.
+      it "completes a paid gift from that ip_address, including the receiver's free row, without refreshing the block",
+         vcr: { cassette_name: "Purchase_CreateService/when_purchase_is_a_gift/creates_a_giftee_and_a_gifter_purchase_successfully_if_user_with_giftee_email_doesn_t_exist" } do
+        expect(gift_params[:purchase][:ip_address]).to eq blocked_ip_address
+        block = PlatformBlock.product_ip_address.active.find_by!(object_value: "#{product.id}:#{blocked_ip_address}")
+        blocked_at = block.blocked_at
+
+        purchase, error = Purchase::CreateService.new(product:, params: gift_params).perform
+
+        expect(error).to be_nil
+        expect(purchase).to be_successful
+        expect(purchase.price_cents).to eq price
+        expect(purchase.ip_address).to eq blocked_ip_address
+
+        gift = purchase.gift_given
+        expect(gift).to be_successful
+
+        giftee_purchase = gift.giftee_purchase
+        expect(giftee_purchase.purchase_state).to eq "gift_receiver_purchase_successful"
+        expect(giftee_purchase.ip_address).to eq blocked_ip_address
+        expect(giftee_purchase.price_cents).to eq 0
+        expect(giftee_purchase.error_code).to be_nil
+
+        expect(block.reload.blocked_at).to eq blocked_at
+        expect(PlatformBlock.product_ip_address.active.count).to eq 1
+      end
+
+      it "still refuses a gift taken for free with the 100%-off code from that ip_address" do
+        # Built standalone, like `guest_free_download`, rather than from `gift_params`: evaluating
+        # `gift_params` evaluates `params`, whose chargeable calls Stripe and would need a cassette.
+        free_gift_params = {
+          purchase: {
+            email: "gifter@gumroad.com",
+            quantity: 1,
+            perceived_price_cents: 0,
+            discount_code: free_download_code.code,
+            ip_address: blocked_ip_address,
+            session_id: "a107d0b7ab5ab3c1eeb7d3aaf9792977",
+            is_mobile: false,
+            browser_guid: SecureRandom.uuid,
+          },
+          is_gift: "true",
+          gift: {
+            gifter_email: "gifter@gumroad.com",
+            giftee_email: "giftee@gumroad.com",
+            gift_note: "Happy birthday!",
+          },
+          custom_fields: [
+            { id: country_field.external_id, value: "Brazil" },
+            { id: zip_field.external_id, value: "123456" }
+          ]
+        }
+
+        purchase, error = Purchase::CreateService.new(product:, params: free_gift_params).perform
+
+        expect(error).to eq "The transaction could not complete."
+        expect(purchase.price_cents).to eq 0
+        expect(purchase.error_code).to eq PurchaseErrorCode::TEMPORARILY_BLOCKED_PRODUCT
+        expect(purchase).not_to be_successful
+        expect(purchase.gift_given.state).to eq "failed"
+        expect(purchase.gift_given.giftee_purchase.purchase_state).to eq "gift_receiver_purchase_failed"
+      end
+    end
   end
 
   context "when purchase is a test purchase" do
@@ -3529,6 +3648,82 @@ describe Purchase::CreateService, :vcr do
         expect(purchase.purchase_state).to eq "test_successful"
         expect(purchase.succeeded_at).to be_present
       end.to change { Purchase.count }.by 1
+    end
+  end
+
+  # The counting rule in #block_fraudulent_free_purchases! already exempts the seller's own signed-in
+  # downloads, but enforcement used to hold them anyway once GUESTS on the same ip_address armed the
+  # block — refusing a seller checking delivery of their own $0 product from a shared network.
+  context "when guest free downloads have blocked the seller's free product on the seller's ip_address" do
+    let(:free_product) { create(:product, user:, price_cents: 0) }
+    let(:shared_ip_address) { "0.0.0.0" }
+
+    def free_download_params(email:)
+      {
+        purchase: {
+          email:,
+          quantity: 1,
+          perceived_price_cents: 0,
+          ip_address: shared_ip_address,
+          session_id: "a107d0b7ab5ab3c1eeb7d3aaf9792977",
+          is_mobile: false,
+          browser_guid: SecureRandom.uuid,
+        }
+      }
+    end
+
+    before do
+      3.times do |index|
+        purchase, error = Purchase::CreateService.new(product: free_product, params: free_download_params(email: "guest-#{index}@example.com")).perform
+
+        expect(error).to be_nil
+        expect(purchase).to be_successful
+        expect(purchase.purchaser).to be_nil
+      end
+
+      expect(PlatformBlock.product_ip_address.active.find_by(object_value: "#{free_product.id}:#{shared_ip_address}")).to be_present
+      expect(PlatformBlock.ip_address.active).to be_empty
+      expect(PlatformBlock.product.active).to be_empty
+    end
+
+    it "still refuses a fourth guest free download from that ip_address" do
+      purchase, error = Purchase::CreateService.new(product: free_product, params: free_download_params(email: "guest-3@example.com")).perform
+
+      expect(error).to eq "The transaction could not complete."
+      expect(purchase.error_code).to eq PurchaseErrorCode::TEMPORARILY_BLOCKED_PRODUCT
+      expect(purchase).not_to be_successful
+    end
+
+    it "still refuses a guest free download that types in the seller's own email" do
+      purchase, error = Purchase::CreateService.new(product: free_product, params: free_download_params(email: user.email)).perform
+
+      expect(error).to eq "The transaction could not complete."
+      expect(purchase.purchaser).to be_nil
+      expect(purchase.error_code).to eq PurchaseErrorCode::TEMPORARILY_BLOCKED_PRODUCT
+      expect(purchase).not_to be_successful
+    end
+
+    it "lets the signed-in seller download their own free product from that ip_address" do
+      purchase, error = Purchase::CreateService.new(product: free_product, params: free_download_params(email: user.email), buyer: user).perform
+
+      expect(error).to be_nil
+      expect(purchase.purchaser).to eq user
+      expect(purchase.ip_address).to eq shared_ip_address
+      expect(purchase.price_cents).to eq 0
+      expect(purchase.error_code).to be_nil
+      expect(purchase.purchase_state).to eq "test_successful"
+    end
+
+    it "does not refresh the block when letting the signed-in seller download" do
+      block = PlatformBlock.product_ip_address.active.find_by!(object_value: "#{free_product.id}:#{shared_ip_address}")
+      blocked_at = block.blocked_at
+
+      purchase, error = Purchase::CreateService.new(product: free_product, params: free_download_params(email: user.email), buyer: user).perform
+
+      expect(error).to be_nil
+      expect(purchase.purchase_state).to eq "test_successful"
+      expect(block.reload.blocked_at).to eq blocked_at
+      expect(PlatformBlock.product_ip_address.active.count).to eq 1
     end
   end
 

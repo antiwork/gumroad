@@ -11,8 +11,8 @@ class Radar::ValueListSyncService
     PlatformBlock::TYPES[:charge_processor_fingerprint] => { list_alias: BLOCKED_CARDS_LIST, name: "Gumroad Blocked Cards", item_type: "card_fingerprint" },
   }.freeze
 
-  # The other PlatformBlock types (ip_address, browser_guid, email_domain, product) are enforced
-  # in-app, so there is no Radar item to remove for them.
+  # The other PlatformBlock types (ip_address, browser_guid, email_domain, product,
+  # product_ip_address) are enforced in-app, so there is no Radar item to remove for them.
   def self.syncs?(object_type)
     LIST_FOR_TYPE.key?(object_type)
   end

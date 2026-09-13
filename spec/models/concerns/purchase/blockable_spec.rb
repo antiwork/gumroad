@@ -1704,15 +1704,17 @@ describe Purchase::Blockable do
 
     context "when number of free purchases of the same product from same IP address exceeds the threshold" do
       context "when the purchase happens within the configured time limit" do
-        it "blocks the ip_address" do
+        it "blocks only the product and ip_address pair" do
           freeze_time do
             expect do
-              purchase = create(:purchase, link: @product, ip_address: "127.0.0.1", purchase_state: "in_progress")
+              purchase = create(:purchase, link: @product, ip_address: "127.0.0.1", purchaser: nil, purchase_state: "in_progress")
               purchase.mark_successful!
             end.to change { PlatformBlock.count }.from(0).to(1)
 
-            expect(PlatformBlock.pluck(:object_type, :object_value)).to eq [["ip_address", "127.0.0.1"]]
-            expect(PlatformBlock.ip_address.active.find_by(object_value: "127.0.0.1").expires_at.to_i).to eq 24.hours.from_now.to_i
+            expect(PlatformBlock.pluck(:object_type, :object_value)).to eq [["product_ip_address", "#{@product.id}:127.0.0.1"]]
+            expect(PlatformBlock.product_ip_address.active.find_by(object_value: "#{@product.id}:127.0.0.1").expires_at.to_i).to eq 24.hours.from_now.to_i
+            expect(PlatformBlock.ip_address.active).to be_empty
+            expect(PlatformBlock.product.active).to be_empty
           end
         end
       end
@@ -1732,7 +1734,7 @@ describe Purchase::Blockable do
     context "when the purchase is created for another product" do
       it "doesn't block the ip_address" do
         expect do
-          purchase = create(:purchase, ip_address: "127.0.0.1", purchase_state: "in_progress")
+          purchase = create(:purchase, link: create(:product, price_cents: 0), ip_address: "127.0.0.1", purchase_state: "in_progress")
           purchase.mark_successful!
         end.not_to change { PlatformBlock.count }
       end
@@ -1750,13 +1752,103 @@ describe Purchase::Blockable do
     context "when purchase is not free" do
       it "doesn't block the ip_address" do
         expect do
-          purchase = create(:purchase, price_cents: 100, link: @product, ip_address: "127.0.0.1", purchase_state: "in_progress")
-          purchase.mark_successful!
+          purchase = build(:purchase, price_cents: 100, total_transaction_cents: 100, link: @product, ip_address: "127.0.0.1")
+          purchase.send(:block_fraudulent_free_purchases!)
         end.not_to change { PlatformBlock.count }
       end
     end
 
-    context "when the free purchases are the product owner's own downloads (gumroad-private#2578)" do
+    context "after guest downloads using the product owner's email exceed the threshold" do
+      before do
+        @product.update!(allow_double_charges: true)
+        @product.sales.update_all(email: @product.user.email, purchaser_id: nil)
+        purchase = create(:purchase, link: @product, ip_address: "127.0.0.1", purchaser: nil,
+                                     email: @product.user.email, purchase_state: "in_progress")
+        purchase.mark_successful!
+
+        expect(@product.sales.pluck(:purchaser_id)).to eq [nil, nil, nil]
+        expect(PlatformBlock.pluck(:object_type, :object_value)).to eq [["product_ip_address", "#{@product.id}:127.0.0.1"]]
+        expect(PlatformBlock.ip_address.active).to be_empty
+        expect(PlatformBlock.product.active).to be_empty
+      end
+
+      it "rejects later free downloads of that product from the same ip_address" do
+        purchase = build(:purchase, link: @product, ip_address: "127.0.0.1", purchaser: nil)
+        purchase.save
+
+        expect(purchase.price_cents).to eq 0
+        expect(purchase.error_code).to eq PurchaseErrorCode::TEMPORARILY_BLOCKED_PRODUCT
+        expect(purchase.errors.full_messages).to include "The transaction could not complete."
+      end
+
+      it "does not refresh the block when rejecting a later free download" do
+        blocked_at = PlatformBlock.product_ip_address.sole.blocked_at
+        purchase = build(:purchase, link: @product, ip_address: "127.0.0.1", purchaser: nil)
+
+        expect { purchase.save }.not_to change { PlatformBlock.product_ip_address.sole.reload.blocked_at }
+        expect(PlatformBlock.product_ip_address.sole.blocked_at).to eq blocked_at
+      end
+
+      it "allows the product owner's signed-in free download of that product from the same ip_address" do
+        purchase = create(:purchase, link: @product, ip_address: "127.0.0.1", purchaser: @product.user, email: @product.user.email)
+
+        expect(purchase.price_cents).to eq 0
+        expect(purchase.is_test_purchase?).to be true
+        expect(purchase.error_code).to be_nil
+        expect(purchase.errors).to be_empty
+      end
+
+      it "does not refresh the block when allowing the product owner's signed-in free download" do
+        blocked_at = PlatformBlock.product_ip_address.sole.blocked_at
+
+        expect do
+          create(:purchase, link: @product, ip_address: "127.0.0.1", purchaser: @product.user, email: @product.user.email)
+        end.not_to change { PlatformBlock.product_ip_address.sole.reload.blocked_at }
+        expect(PlatformBlock.product_ip_address.sole.blocked_at).to eq blocked_at
+        expect(PlatformBlock.product_ip_address.active.count).to eq 1
+      end
+
+      it "allows free downloads of that product from another ip_address" do
+        purchase = create(:purchase, link: @product, ip_address: "127.0.0.2", purchaser: nil)
+
+        expect(purchase.price_cents).to eq 0
+        expect(purchase.error_code).to be_nil
+        expect(purchase.errors).to be_empty
+      end
+
+      it "allows paid purchases of that product from any ip_address" do
+        ["127.0.0.1", "127.0.0.2"].each do |ip_address|
+          purchase = build(:purchase, link: @product, price_cents: 100, total_transaction_cents: 100, ip_address:)
+          purchase.send(:free_product_ip_address_is_not_blocked)
+
+          expect(purchase.error_code).to be_nil
+          expect(purchase.errors).to be_empty
+          expect(purchase.blocked_by_ip_address?).to be false
+        end
+      end
+
+      it "allows paid purchases of another product by the same seller on the same ip_address" do
+        other_product = create(:product, user: @product.user)
+        purchase = build(:purchase, link: other_product, price_cents: 100, total_transaction_cents: 100, ip_address: "127.0.0.1")
+        purchase.send(:free_product_ip_address_is_not_blocked)
+
+        expect(purchase.error_code).to be_nil
+        expect(purchase.errors).to be_empty
+        expect(purchase.blocked_by_ip_address?).to be false
+      end
+
+      it "allows free downloads once the product ip_address block expires" do
+        travel_to(25.hours.from_now) do
+          purchase = create(:purchase, link: @product, ip_address: "127.0.0.1", purchaser: nil)
+
+          expect(PlatformBlock.product_ip_address.active).to be_empty
+          expect(purchase.error_code).to be_nil
+          expect(purchase.errors).to be_empty
+        end
+      end
+    end
+
+    context "when the free purchases are the product owner's signed-in downloads" do
       before do
         @own_product = create(:product, price_cents: 0)
         create_list(:purchase, 2, link: @own_product, ip_address: "127.0.0.1", purchaser: @own_product.user)
@@ -1778,6 +1870,7 @@ describe Purchase::Blockable do
                                        purchase_state: "in_progress")
           purchase.mark_successful!
         end.to change { PlatformBlock.count }.from(0).to(1)
+        expect(PlatformBlock.product_ip_address.sole.object_value).to eq "#{@own_product.id}:127.0.0.1"
       end
 
       it "still counts guest free purchases, whose typed-in email proves nothing" do
@@ -1788,6 +1881,92 @@ describe Purchase::Blockable do
                                        purchase_state: "in_progress")
           purchase.mark_successful!
         end.to change { PlatformBlock.count }.from(0).to(1)
+        expect(PlatformBlock.product_ip_address.sole.object_value).to eq "#{@own_product.id}:127.0.0.1"
+      end
+    end
+
+    context "for the $0 receiver's row of a gift, once free downloads of the product are blocked on that ip_address" do
+      let(:gifted_product) { create(:product, user: @product.user, price_cents: 100) }
+      let(:gift) { create(:gift, link: gifted_product) }
+
+      before do
+        # The row #block_fraudulent_free_purchases! writes once guests have taken a paid product for
+        # free (a 100%-off code) more than the allowed number of times from one ip_address.
+        PlatformBlock.add!(object_type: PlatformBlock::TYPES[:product_ip_address],
+                           object_value: "#{gifted_product.id}:127.0.0.1",
+                           expires_in: 24.hours)
+      end
+
+      # A successful paid row must carry a merchant account (Purchase#financial_transaction_validation).
+      # The factory looks up the seeded Gumroad Stripe account, which an unseeded test database lacks.
+      let(:gumroad_merchant_account) do
+        MerchantAccount.gumroad(StripeChargeProcessor.charge_processor_id) ||
+          create(:merchant_account, user: nil, charge_processor_id: StripeChargeProcessor.charge_processor_id)
+      end
+
+      def build_giftee_purchase
+        build(:free_purchase, link: gifted_product, ip_address: "127.0.0.1", purchaser: nil,
+                              gift_received: gift, is_gift_receiver_purchase: true, purchase_state: "in_progress")
+      end
+
+      def create_paid_gifter_purchase
+        create(:purchase, link: gifted_product, ip_address: "127.0.0.1", merchant_account: gumroad_merchant_account,
+                          gift_given: gift, is_gift_sender_purchase: true)
+      end
+
+      it "allows the receiver's row when the gifter paid" do
+        gifter_purchase = create_paid_gifter_purchase
+        expect(gifter_purchase.free_purchase?).to be false
+        expect(gifter_purchase.error_code).to be_nil
+
+        giftee_purchase = build_giftee_purchase
+        giftee_purchase.save
+
+        expect(giftee_purchase.price_cents).to eq 0
+        expect(giftee_purchase.error_code).to be_nil
+        expect(giftee_purchase.errors).to be_empty
+      end
+
+      it "does not refresh the block when allowing a paid gift's receiver row" do
+        create_paid_gifter_purchase
+        blocked_at = PlatformBlock.product_ip_address.sole.blocked_at
+
+        expect { build_giftee_purchase.save }.not_to change { PlatformBlock.product_ip_address.sole.reload.blocked_at }
+        expect(PlatformBlock.product_ip_address.sole.blocked_at).to eq blocked_at
+      end
+
+      # Pins the association-caching trap guarded in `#receiver_row_of_a_paid_gift?`.
+      it "allows the receiver's row without loading the gift's gifter_purchase association" do
+        create_paid_gifter_purchase
+        expect(gift.association(:gifter_purchase)).not_to be_loaded
+
+        giftee_purchase = build_giftee_purchase
+        giftee_purchase.save
+
+        expect(giftee_purchase.error_code).to be_nil
+        expect(gift.association(:gifter_purchase)).not_to be_loaded
+      end
+
+      it "still rejects both rows when the gifter's row is itself a free download" do
+        offer_code = create(:offer_code, products: [gifted_product], amount_cents: nil, amount_percentage: 100)
+        gifter_purchase = create(:free_purchase, link: gifted_product, ip_address: "127.0.0.1", offer_code:,
+                                                 gift_given: gift, is_gift_sender_purchase: true, purchase_state: "in_progress")
+        expect(gifter_purchase.free_purchase?).to be true
+        expect(gifter_purchase.error_code).to eq PurchaseErrorCode::TEMPORARILY_BLOCKED_PRODUCT
+
+        giftee_purchase = build_giftee_purchase
+        giftee_purchase.save
+
+        expect(giftee_purchase.error_code).to eq PurchaseErrorCode::TEMPORARILY_BLOCKED_PRODUCT
+        expect(giftee_purchase.errors.full_messages).to include "The transaction could not complete."
+      end
+
+      it "still rejects the receiver's row when no gifter row is attached to the gift" do
+        giftee_purchase = build_giftee_purchase
+        giftee_purchase.save
+
+        expect(gift.gifter_purchase).to be_nil
+        expect(giftee_purchase.error_code).to eq PurchaseErrorCode::TEMPORARILY_BLOCKED_PRODUCT
       end
     end
   end
