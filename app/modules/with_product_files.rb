@@ -82,8 +82,6 @@ module WithProductFiles
           file_params[:is_linked_to_existing_file] = true if link && link.user.alive_product_files_excluding_product.where("product_files.url = ? AND product_files.link_id != ?", file_params[:url], link.id).any?
           WithProductFiles.associate_dropbox_file_and_product_file(product_file)
         else
-          # A measured size is not overwritten by a client echo; SaveFilesService passes
-          # a create's byte count through as :size (gumroad-private#2584).
           file_params.delete(:size)
         end
         file_params.delete(:folder_id) if file_params[:folder_id].nil? && !(product_file.folder&.alive?)
@@ -333,7 +331,8 @@ module WithProductFiles
     end
 
     def s3_etag_for(product_file)
-      product_file.s3_object.etag
+      s3_object = product_file.s3_object
+      s3_object.etag if s3_object.respond_to?(:etag)
     rescue Aws::S3::Errors::ServiceError, Seahorse::Client::NetworkingError
       nil
     end

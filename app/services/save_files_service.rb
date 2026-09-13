@@ -132,9 +132,7 @@ class SaveFilesService
           file_params.delete(key)
           file_params.delete(key.to_s)
         end
-        # The editor's `file_size` is the `size` column — the byte count of the object
-        # just uploaded. Dropping it leaves `size` NULL until AnalyzeFileWorker measures
-        # S3 seconds later, which the editor rendered as "0 byte" (gumroad-private#2584).
+        # `file_size` is the editor's name for ProductFile#size.
         client_file_size = file_params.delete(:file_size) || file_params.delete("file_size")
         file_params[:size] ||= client_file_size if client_file_size.is_a?(Integer) && !client_file_size.negative?
       end

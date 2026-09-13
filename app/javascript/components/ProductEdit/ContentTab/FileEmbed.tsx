@@ -561,7 +561,6 @@ const FileEmbedNodeView = ({
                       {summarizeUploadProgress(uploadProgress.percent, uploadProgress.bitrate, file.file_size ?? 0)}
                     </li>
                   ) : file.file_size != null ? (
-                    // Null until AnalyzeFileWorker measures the object (gumroad-private#2584).
                     <li>{FileUtils.getFullFileSizeString(file.file_size)}</li>
                   ) : null}
 
