@@ -73,8 +73,8 @@ describe Checkout::BuyerCurrencyQuote do
       expect(result).to have_attributes(currency: Currency::GBP, canonical_total_cents: 10_00)
     end
 
-    it "quotes SEK, NOK, DKK and MXN when requested instead of the IP currency" do
-      %w[sek nok dkk mxn].each do |currency|
+    it "quotes SEK, NOK, DKK, MXN and the eight new buyer currencies when requested instead of the IP currency" do
+      %w[sek nok dkk mxn sar aed try cop ron thb myr idr].each do |currency|
         allow(StripeFxQuote).to receive(:create).with(
           to_currency: Currency::USD,
           from_currency: currency,
@@ -1378,26 +1378,34 @@ describe Checkout::BuyerCurrencyQuote do
       end
     end
 
-    it "returns nil for buyer currencies Gumroad stores in different minor units than Stripe charges" do
-      # KRW is stored as 1/100 won (config/initializers/money.rb) but Stripe charges whole won,
-      # so quoting it would charge buyers 100x the displayed amount.
+    it "quotes KRW in whole won when requested" do
+      krw_quote = StripeFxQuote::Quote.new(id: "fxq_krw", expires_at: 30.minutes.from_now, fx_rate: BigDecimal("0.00072"))
       allow_any_instance_of(described_class).to receive(:buyer_currency_for_ip).and_return(Currency::KRW)
-      expect(StripeFxQuote).not_to receive(:create)
+      allow(StripeFxQuote).to receive(:create).with(
+        to_currency: Currency::USD,
+        from_currency: Currency::KRW,
+        stripe_account_id: merchant_account.charge_processor_merchant_id,
+        destination_account_id: nil
+      ).and_return(krw_quote)
 
       result = described_class.create(line_items: line_items_for(product), canonical_total_cents: 10_00, ip: "175.223.10.1")
 
-      expect(result).to be_nil
+      expect(result).to have_attributes(currency: Currency::KRW, presentment_total_cents: 13_889)
     end
 
-    it "returns nil for buyer currencies Stripe only charges in amounts divisible by 100" do
-      # Stripe rejects TWD amounts that are not evenly divisible by 100, and unrounded
-      # FX-quoted amounts cannot guarantee that.
+    it "quotes TWD amounts rounded to whole NT$" do
+      twd_quote = StripeFxQuote::Quote.new(id: "fxq_twd", expires_at: 30.minutes.from_now, fx_rate: BigDecimal("0.031"))
       allow_any_instance_of(described_class).to receive(:buyer_currency_for_ip).and_return(Currency::TWD)
-      expect(StripeFxQuote).not_to receive(:create)
+      allow(StripeFxQuote).to receive(:create).with(
+        to_currency: Currency::USD,
+        from_currency: Currency::TWD,
+        stripe_account_id: merchant_account.charge_processor_merchant_id,
+        destination_account_id: nil
+      ).and_return(twd_quote)
 
       result = described_class.create(line_items: line_items_for(product), canonical_total_cents: 10_00, ip: "1.164.0.1")
 
-      expect(result).to be_nil
+      expect(result).to have_attributes(currency: Currency::TWD, presentment_total_cents: 32_300)
     end
 
     it "quotes whole-unit presentment amounts for zero-decimal buyer currencies" do

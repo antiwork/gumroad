@@ -209,8 +209,6 @@ class Charge::PresentmentOrchestrator
     end
 
     def presentment_cents_for(canonical_usd_cents, fx_rate)
-      raise ArgumentError, "FX rate must be positive" unless fx_rate.positive?
-
-      ((BigDecimal(canonical_usd_cents.to_s) / subunit_to_unit(Currency::USD)) / fx_rate * subunit_to_unit(eligibility_decision.currency)).round
+      StripeChargeProcessor.presentment_cents_for(canonical_usd_cents, fx_rate, eligibility_decision.currency)
     end
 end

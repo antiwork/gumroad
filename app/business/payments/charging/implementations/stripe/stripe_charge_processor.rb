@@ -91,17 +91,71 @@ class StripeChargeProcessor
     INDIA_CARD_MANDATE_CURRENCIES.include?(currency.to_s.downcase)
   end
 
-  # Gumroad stores some currencies in non-ISO minor units (e.g. KRW is stored as 1/100 won —
-  # see config/initializers/money.rb) while Stripe charges KRW in whole won. Amounts are
-  # passed to Stripe verbatim, so a charge is only safe when both conventions agree and
-  # Stripe accepts arbitrary amounts in the currency (TWD must be divisible by 100).
+  # KRW is stored as 1/100 won for seller pricing (config/initializers/money.rb) but charged
+  # in whole won, and TWD must be divisible by 100 — presentment converts or rounds first.
   def self.charge_minor_units_compatible?(currency)
     return false if currency.blank?
 
     currency = currency.to_s.downcase
+    return true if currency == Currency::KRW || currency == Currency::TWD
     return false if AMOUNT_DIVISIBLE_BY_100_CURRENCIES.include?(currency)
 
     subunit_to_unit(currency) == (ZERO_DECIMAL_CURRENCIES.include?(currency) ? 1 : 100)
+  end
+
+  # Stripe's charge scale, which diverges from Gumroad's storage scale only for KRW: seller
+  # prices stay 1/100 won, buyer presentment is whole won.
+  def self.charge_subunit_to_unit(currency)
+    currency = currency.to_s.downcase
+    ZERO_DECIMAL_CURRENCIES.include?(currency) ? 1 : subunit_to_unit(currency)
+  end
+
+  # Presentment columns store Stripe charge units; MoneyFormatter and CurrencyHelper read
+  # Gumroad's storage scale, so convert before either of them formats the amount.
+  def self.money_subunits_from_charge_amount(amount_cents, currency)
+    amount = amount_cents.to_i
+    charge_sub = charge_subunit_to_unit(currency)
+    return amount unless charge_sub.positive?
+
+    gumroad_sub = subunit_to_unit(currency)
+    return amount if gumroad_sub == charge_sub
+
+    (BigDecimal(amount) * gumroad_sub / charge_sub).round
+  end
+
+  def self.format_charge_presentment_amount(amount_cents, currency, opts = {})
+    MoneyFormatter.format(
+      money_subunits_from_charge_amount(amount_cents, currency),
+      currency.to_s.downcase.to_sym,
+      { no_cents_if_whole: true, symbol: true }.merge(opts)
+    )
+  end
+
+  # Listed-price cents are Gumroad storage units, so they only match what Stripe charges
+  # when the two scales agree.
+  def self.listed_amount_matches_charge_units?(currency)
+    return false if currency.blank?
+
+    charge_subunit_to_unit(currency) == subunit_to_unit(currency)
+  end
+
+  def self.align_charge_amount_cents(amount_cents, currency)
+    amount = amount_cents.to_i
+    return amount unless AMOUNT_DIVISIBLE_BY_100_CURRENCIES.include?(currency.to_s.downcase)
+
+    aligned = (BigDecimal(amount) / 100).round * 100
+    amount.positive? && aligned < 100 ? 100 : aligned
+  end
+
+  def self.presentment_cents_for(canonical_usd_cents, fx_rate, currency)
+    return 0 if canonical_usd_cents.to_i.zero?
+    raise ArgumentError, "FX rate must be positive" unless fx_rate.positive?
+
+    converted = (
+      BigDecimal(canonical_usd_cents.to_s) / subunit_to_unit(Currency::USD) /
+        fx_rate * charge_subunit_to_unit(currency)
+    ).round
+    align_charge_amount_cents(converted, currency)
   end
 
   def merchant_migrated?(merchant_account)

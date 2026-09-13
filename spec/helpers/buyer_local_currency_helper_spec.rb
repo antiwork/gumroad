@@ -45,6 +45,15 @@ describe CurrencyHelper do
       expect(helper.buyer_currency_for_country("NO")).to eq("nok")
       expect(helper.buyer_currency_for_country("DK")).to eq("dkk")
       expect(helper.buyer_currency_for_country("MX")).to eq("mxn")
+      expect(helper.buyer_currency_for_country("SA")).to eq("sar")
+      expect(helper.buyer_currency_for_country("AE")).to eq("aed")
+      expect(helper.buyer_currency_for_country("TR")).to eq("try")
+      expect(helper.buyer_currency_for_country("CO")).to eq("cop")
+      expect(helper.buyer_currency_for_country("RO")).to eq("ron")
+      expect(helper.buyer_currency_for_country("TH")).to eq("thb")
+      expect(helper.buyer_currency_for_country("MY")).to eq("myr")
+      expect(helper.buyer_currency_for_country("ID")).to eq("idr")
+      expect(helper.buyer_currency_for_country("TW")).to eq("twd")
     end
 
     it "maps any country in the eurozone to eur, not just a hardcoded subset" do
@@ -58,7 +67,7 @@ describe CurrencyHelper do
     end
 
     it "returns nil for countries whose currency is not supported for display or input" do
-      expect(helper.buyer_currency_for_country("TH")).to be_nil # thb is not in currencies.json
+      expect(helper.buyer_currency_for_country("VN")).to be_nil # vnd is not in currencies.json
     end
   end
 
@@ -283,9 +292,8 @@ describe CurrencyHelper do
     end
 
     it "hides the buyer currency when Gumroad and Stripe disagree on its minor units" do
-      # HUF is charged by Stripe only in amounts divisible by 100, so the charge path
-      # refuses it — see StripeChargeProcessor.charge_minor_units_compatible?.
-      allow(helper).to receive(:buyer_currency_for_ip).and_return("huf")
+      # KWD is a 3-decimal currency Stripe charges in thousandths; we do not convert it.
+      allow(helper).to receive(:buyer_currency_for_ip).and_return("kwd")
 
       props = helper.buyer_currency_display_props(product:, price_cents: 1000, ip: "1.2.3.4")
 

@@ -259,28 +259,7 @@ describe Checkout::BuyerCurrencyEligibility do
     expect(decision.fallback_reason).to be_nil
   end
 
-  it "falls back for buyer currencies Gumroad stores in different minor units than Stripe charges" do
-    allow_any_instance_of(described_class).to receive(:buyer_currency_for_ip).and_return(Currency::KRW)
-
-    expect(decision).not_to be_eligible
-    expect(decision.fallback_reason).to eq(:unsupported_buyer_currency)
-  end
-
-  it "falls back for buyer currencies Stripe only charges in amounts divisible by 100" do
-    allow_any_instance_of(described_class).to receive(:buyer_currency_for_ip).and_return(Currency::TWD)
-
-    expect(decision).not_to be_eligible
-    expect(decision.fallback_reason).to eq(:unsupported_buyer_currency)
-  end
-
-  it "allows zero-decimal buyer currencies that Gumroad also stores in whole units" do
-    allow_any_instance_of(described_class).to receive(:buyer_currency_for_ip).and_return(Currency::JPY)
-
-    expect(decision).to be_eligible
-    expect(decision.currency).to eq(Currency::JPY)
-  end
-
-  %w[sek nok dkk mxn].each do |currency|
+  %w[jpy sek nok dkk mxn sar aed try cop ron thb myr idr krw twd].each do |currency|
     it "allows #{currency} presentment" do
       allow_any_instance_of(described_class).to receive(:buyer_currency_for_ip).and_return(currency)
 
@@ -442,6 +421,18 @@ describe Checkout::BuyerCurrencyEligibility do
     expect(decision).to be_eligible
     expect(decision.currency).to eq(Currency::CAD)
     expect(decision.direct_listed_amount?).to eq(true)
+  end
+
+  it "falls back from the listed lane when listed storage units differ from Stripe charge units" do
+    Feature.activate_user(described_class::LISTED_CURRENCY_DIRECT_CHARGE_FEATURE_NAME, seller)
+    allow_any_instance_of(described_class).to receive(:buyer_currency_for_ip).and_return(Currency::KRW)
+    report_listed_currency_element(params, Currency::KRW)
+    purchase.update!(link: create(:product, user: seller, price_currency_type: Currency::KRW, price_cents: 111_000),
+                     displayed_price_currency_type: Currency::KRW,
+                     rate_converted_to_usd: "0.00072")
+
+    expect(decision).not_to be_eligible
+    expect(decision.fallback_reason).to eq(:listed_currency_is_buyer_currency)
   end
 
   it "allows direct listed charging for a multi-item cart uniformly priced in the buyer's currency" do
@@ -1238,19 +1229,19 @@ describe Checkout::BuyerCurrencyEligibility do
 
     it "withholds the method when the forced currency's minor units differ between Gumroad and Stripe" do
       stub_const("#{described_class}::FORCED_CURRENCY_PAYMENT_METHODS",
-                 described_class::FORCED_CURRENCY_PAYMENT_METHODS.merge("krw_only_method" => Currency::KRW))
+                 described_class::FORCED_CURRENCY_PAYMENT_METHODS.merge("kwd_only_method" => Currency::KWD))
 
-      krw_decision = described_class.new(order:,
+      kwd_decision = described_class.new(order:,
                                          seller:,
                                          merchant_account:,
                                          chargeable:,
                                          purchases:,
                                          params:,
                                          setup_future_charges:,
-                                         off_session:).method_forced_decision(payment_method: "krw_only_method")
+                                         off_session:).method_forced_decision(payment_method: "kwd_only_method")
 
-      expect(krw_decision).not_to be_eligible
-      expect(krw_decision.fallback_reason).to eq(:unsupported_forced_currency)
+      expect(kwd_decision).not_to be_eligible
+      expect(kwd_decision.fallback_reason).to eq(:unsupported_forced_currency)
     end
   end
 

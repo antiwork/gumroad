@@ -307,8 +307,6 @@ class Charge::MethodForcedPresentment
     # Same conversion as Checkout::BuyerCurrencyQuote / Charge::PresentmentOrchestrator:
     # the fx_rate expresses 1 unit of the presentment currency in USD, so divide.
     def presentment_cents_for(canonical_usd_cents, fx_rate, currency)
-      raise ArgumentError, "FX rate must be positive" unless fx_rate.positive?
-
-      ((BigDecimal(canonical_usd_cents.to_s) / subunit_to_unit(Currency::USD)) / fx_rate * subunit_to_unit(currency)).round
+      StripeChargeProcessor.presentment_cents_for(canonical_usd_cents, fx_rate, currency)
     end
 end

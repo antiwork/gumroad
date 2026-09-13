@@ -632,7 +632,7 @@ class Checkout::BuyerCurrencyQuote
     # the rate a tip is converted at.
     def display_rate_for(charge_quotes, buyer_currency)
       if charge_quotes.one?
-        return BigDecimal(subunit_to_unit(buyer_currency)) /
+        return BigDecimal(StripeChargeProcessor.charge_subunit_to_unit(buyer_currency)) /
                (subunit_to_unit(Currency::USD) * charge_quotes.sole.fx_rate)
       end
 
@@ -1036,8 +1036,6 @@ class Checkout::BuyerCurrencyQuote
     end
 
     def presentment_cents_for(canonical_usd_cents, fx_rate, currency)
-      raise ArgumentError, "FX rate must be positive" unless fx_rate.positive?
-
-      ((BigDecimal(canonical_usd_cents.to_s) / subunit_to_unit(Currency::USD)) / fx_rate * subunit_to_unit(currency)).round
+      StripeChargeProcessor.presentment_cents_for(canonical_usd_cents, fx_rate, currency)
     end
 end
