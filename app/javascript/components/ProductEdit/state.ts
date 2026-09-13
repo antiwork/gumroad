@@ -230,26 +230,17 @@ type PricedVariant = { price_difference_cents?: number | null } | Tier;
 export const hasPaidVariantPricing = (product: { variants: PricedVariant[] }) =>
   product.variants.some((variant) => "price_difference_cents" in variant && (variant.price_difference_cents ?? 0) > 0);
 
-// Mirror of the backend guard Product::Prices#set_customizable_price: a $0 base
-// price forces PWYW — off when paid variant pricing exists (a free-entry amount
-// box next to a paid option is the gumroad-private#1660 checkout hole), on
-// otherwise. Leaving $0 keeps a forced-on flag (it's visible and editable, the
-// long-standing behavior) but restores the seller's last nonzero-price choice
-// over a forced-off one, so a dip to $0 while retyping the amount doesn't
-// silently erase it. Coffee and tiered memberships are exempt on the backend.
-export const reconcileCustomizablePrice = (
-  product: {
-    native_type: ProductNativeType;
-    price_cents: number;
-    customizable_price: boolean;
-    variants: PricedVariant[];
-  },
-  previousPriceCents: number,
-  priorCustomizablePrice: boolean,
-): boolean => {
+// Mirror of Product::Prices#set_customizable_price: a $0 base with no paid variant pricing
+// forces PWYW on (a free product needs an amount box); beside a paid version the flag is the
+// seller's, the amount box floor being the selected version's total. Coffee/memberships exempt.
+export const reconcileCustomizablePrice = (product: {
+  native_type: ProductNativeType;
+  price_cents: number;
+  customizable_price: boolean;
+  variants: PricedVariant[];
+}): boolean => {
   if (product.native_type === "coffee" || product.native_type === "membership") return product.customizable_price;
-  if (product.price_cents === 0) return !hasPaidVariantPricing(product);
-  if (previousPriceCents === 0 && hasPaidVariantPricing(product)) return priorCustomizablePrice;
+  if (product.price_cents === 0 && !hasPaidVariantPricing(product)) return true;
   return product.customizable_price;
 };
 

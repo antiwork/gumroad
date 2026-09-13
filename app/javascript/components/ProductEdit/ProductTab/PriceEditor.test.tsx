@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import * as React from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -32,15 +32,25 @@ const renderEditor = (
   );
 
 describe("PriceEditor PWYW toggle", () => {
-  it("disables PWYW on a $0-base product with paid variants and shows a stale on state as off", () => {
+  it("leaves PWYW editable on a $0-base product with paid variants", () => {
     const setIsPWYW = vi.fn();
     renderEditor({ isPWYW: true, setIsPWYW, hasPaidVariants: true, priceCents: 0 });
 
     const toggle = screen.getByRole("switch");
-    expect(toggle).toHaveProperty("disabled", true);
-    expect(toggle).toHaveProperty("checked", false);
-    expect(screen.getByText("Pay what you want isn't available on products with paid pricing options.")).toBeTruthy();
+    expect(toggle).toHaveProperty("disabled", false);
+    expect(toggle).toHaveProperty("checked", true);
+    expect(screen.queryByText("Pay what you want isn't available on products with paid pricing options.")).toBeNull();
     expect(setIsPWYW).not.toHaveBeenCalled();
+  });
+
+  it("turns PWYW on from the switch on a $0-base product with paid variants", () => {
+    const setIsPWYW = vi.fn();
+    renderEditor({ isPWYW: false, setIsPWYW, hasPaidVariants: true, priceCents: 0 });
+
+    const toggle = screen.getByRole("switch");
+    expect(toggle).toHaveProperty("checked", false);
+    fireEvent.click(toggle);
+    expect(setIsPWYW).toHaveBeenCalledWith(true);
   });
 
   it("keeps a free product without variants locked on to PWYW", () => {
