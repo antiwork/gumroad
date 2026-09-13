@@ -25,6 +25,13 @@ class LinksController < ApplicationController
   # One report per product per window: repeats from the same client carry no
   # information past the first, and reporting every one drowns the tracker.
   EDITOR_SAVE_LOCK_REPORT_WINDOW = 10.minutes
+  # Bounds for the blocker probe attached to that report. The wait itself already
+  # cost innodb_lock_wait_timeout (50s), and the probe runs inside the rescue that
+  # owes the client a 409, so every read is capped three ways: statement time,
+  # rows, and SQL text length.
+  EDITOR_SAVE_LOCK_PROBE_TIMEOUT_MS = 250
+  EDITOR_SAVE_LOCK_PROBE_ROW_LIMIT = 5
+  EDITOR_SAVE_LOCK_PROBE_SQL_LENGTH = 300
   TRANSPARENT_1X1_GIF = "GIF89a\x01\x00\x01\x00\x80\x00\x00\x00\x00\x00\xFF\xFF\xFF!\xF9\x04\x01\x00\x00\x00\x00,\x00\x00\x00\x00\x01\x00\x01\x00\x00\x02\x02D\x01\x00;".b.freeze
 
   prepend_before_action :disable_third_party_analytics!, only: :cart_items_count
@@ -1123,12 +1130,116 @@ class LinksController < ApplicationController
       )
       return unless first_in_window
 
-      ErrorNotifier.notify(exception, product_id: @product.id, seller_id: @product.user_id)
+      ErrorNotifier.notify(exception, product_id: @product.id, seller_id: @product.user_id, **editor_save_lock_wait_probe)
     rescue Redis::BaseError, RedisClient::Error => e
       # RedisClient::Error is not a subclass of Redis::BaseError.
       Rails.logger.warn(
         "[product_editor_save_lock_contention] product_id=#{@product.id} report_skipped=#{e.class}"
       )
+    end
+
+    # What the server can still say about the wait that just timed out. Nothing keeps
+    # a lock wait after the fact — `events_statements_history_long` is disabled on
+    # production and the timed-out transaction has already rolled back — so the three
+    # reads below only work in the moments after the timeout: the waiter's own thread
+    # history still holds the failed statement, and the blocker is very likely still
+    # holding the row lock it refused to release.
+    #
+    # Best-effort by construction: this runs inside the rescue that owes the client its
+    # 409, so the whole body is under one rescue of its own, and a reporting failure
+    # degrades to a marker in the payload rather than a 500.
+    def editor_save_lock_wait_probe
+      hint = "/*+ MAX_EXECUTION_TIME(#{EDITOR_SAVE_LOCK_PROBE_TIMEOUT_MS}) */"
+      sql_length = EDITOR_SAVE_LOCK_PROBE_SQL_LENGTH
+      limit = EDITOR_SAVE_LOCK_PROBE_ROW_LIMIT
+
+      # The statement that waited: this connection's own statement history, which is
+      # kept per thread after the statement ends, selected by MySQL error 1205
+      # (ER_LOCK_WAIT_TIMEOUT). TIMER_WAIT is how long it spent waiting.
+      waiting_statements = <<~SQL
+        SELECT #{hint} EVENT_ID, MYSQL_ERRNO, LEFT(SQL_TEXT, #{sql_length}) AS SQL_TEXT,
+               TIMER_WAIT, LOCK_TIME, ROWS_AFFECTED
+        FROM performance_schema.events_statements_history
+        WHERE THREAD_ID = (SELECT THREAD_ID FROM performance_schema.threads WHERE PROCESSLIST_ID = CONNECTION_ID())
+          AND MYSQL_ERRNO = 1205
+        ORDER BY EVENT_ID DESC
+        LIMIT #{limit}
+      SQL
+
+      # Which transaction holds a record lock on this product's `links` row. Our own
+      # transaction is gone, so any holder here is another connection — and for a save
+      # that just timed out, that is the blocker. `trx_query` is NULL whenever the
+      # holder sits between statements, so the transaction identity is the reliable
+      # half of this and its SQL text is the best-effort half.
+      link_row_lock_holders = <<~SQL
+        SELECT #{hint} locks.LOCK_MODE, locks.LOCK_DATA,
+               threads.PROCESSLIST_ID AS holder_connection_id,
+               trx.trx_id, trx.trx_started, trx.trx_state, trx.trx_rows_locked, trx.trx_rows_modified,
+               LEFT(trx.trx_query, #{sql_length}) AS holder_query
+        FROM performance_schema.data_locks AS locks
+        INNER JOIN performance_schema.threads AS threads ON threads.THREAD_ID = locks.THREAD_ID
+        LEFT JOIN information_schema.innodb_trx AS trx ON trx.trx_mysql_thread_id = threads.PROCESSLIST_ID
+        WHERE locks.OBJECT_SCHEMA = DATABASE() AND locks.OBJECT_NAME = 'links'
+          AND locks.LOCK_TYPE = 'RECORD' AND locks.LOCK_DATA = '#{@product.id}'
+          AND threads.PROCESSLIST_ID <> CONNECTION_ID()
+        LIMIT #{limit}
+      SQL
+
+      # Waits queued on the table right now, both sides named. A retry storm answers
+      # its own first timeout here: the requests behind it are visible as waiters
+      # while the one that reported has already given up.
+      link_row_lock_waits = <<~SQL
+        SELECT #{hint} requesting_thread.PROCESSLIST_ID AS waiting_connection_id,
+               LEFT(requesting_statement.SQL_TEXT, #{sql_length}) AS waiting_statement,
+               blocking_thread.PROCESSLIST_ID AS blocking_connection_id,
+               LEFT(blocking_statement.SQL_TEXT, #{sql_length}) AS blocking_statement,
+               requested.LOCK_MODE AS requested_lock_mode, requested.LOCK_DATA AS requested_lock_data,
+               blocking.LOCK_MODE AS blocking_lock_mode,
+               blocking_trx.trx_id AS blocking_trx_id, blocking_trx.trx_started AS blocking_trx_started
+        FROM performance_schema.data_lock_waits AS waits
+        INNER JOIN performance_schema.data_locks AS requested
+          ON requested.ENGINE_LOCK_ID = waits.REQUESTING_ENGINE_LOCK_ID
+        INNER JOIN performance_schema.data_locks AS blocking
+          ON blocking.ENGINE_LOCK_ID = waits.BLOCKING_ENGINE_LOCK_ID
+        INNER JOIN performance_schema.threads AS requesting_thread
+          ON requesting_thread.THREAD_ID = waits.REQUESTING_THREAD_ID
+        INNER JOIN performance_schema.threads AS blocking_thread
+          ON blocking_thread.THREAD_ID = waits.BLOCKING_THREAD_ID
+        LEFT JOIN performance_schema.events_statements_current AS requesting_statement
+          ON requesting_statement.THREAD_ID = waits.REQUESTING_THREAD_ID
+        LEFT JOIN performance_schema.events_statements_current AS blocking_statement
+          ON blocking_statement.THREAD_ID = waits.BLOCKING_THREAD_ID
+        LEFT JOIN information_schema.innodb_trx AS blocking_trx
+          ON blocking_trx.trx_mysql_thread_id = blocking_thread.PROCESSLIST_ID
+        WHERE requested.OBJECT_SCHEMA = DATABASE() AND requested.OBJECT_NAME = 'links'
+        LIMIT #{limit}
+      SQL
+
+      {
+        lock_wait_probe: {
+          # Read after the failed transaction unwound, to record what state the probe
+          # itself ran in.
+          save_transaction_open: ActiveRecord::Base.connection.transaction_open?,
+          waiting_statements: editor_save_lock_probe_rows(waiting_statements),
+          link_row_lock_holders: editor_save_lock_probe_rows(link_row_lock_holders),
+          link_row_lock_waits: editor_save_lock_probe_rows(link_row_lock_waits),
+        },
+      }
+    rescue => e
+      # The 409 the caller owes the client is the only thing that must survive this.
+      Rails.logger.warn(
+        "[product_editor_save_lock_contention] product_id=#{@product.id} probe_skipped=#{e.class}"
+      )
+      { lock_wait_probe: { error: e.class.name } }
+    end
+
+    # One read of the probe, isolated so a single unavailable table (privilege,
+    # instrumentation disabled, statement timeout) costs its own row set rather
+    # than the whole payload.
+    def editor_save_lock_probe_rows(sql)
+      ActiveRecord::Base.connection.select_all(sql).to_a
+    rescue => e
+      { error: e.class.name }
     end
 
     def check_banned
