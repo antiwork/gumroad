@@ -16,7 +16,15 @@ export const Select = React.forwardRef<HTMLSelectElement, SelectProps>(
       <div className={classNames("relative inline-grid", wrapperClassName)}>
         <select
           ref={ref}
-          className={classNames(baseInputStyles, "appearance-none bg-none pr-10", stateBorderStyles[state], className)}
+          className={classNames(
+            baseInputStyles,
+            // The chevron sits at `right-4` and is 20px wide, so the value needs 44px of right
+            // padding to clear it — otherwise a long value (a country name at 375px) runs into the
+            // icon. `truncate` keeps the overflow readable as an ellipsis instead of a hard cut.
+            "appearance-none truncate bg-none pr-11",
+            stateBorderStyles[state],
+            className,
+          )}
           {...props}
         >
           {children}
