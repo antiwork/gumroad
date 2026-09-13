@@ -86,4 +86,13 @@ describe("formatMinorUnitPriceWithIntl", () => {
   it("uses the currency convention when an internal 100-subunit amount is fractional", () => {
     expect(formatMinorUnitPriceWithIntl("krw", 1_343_250, 100)).toBe("₩13,433");
   });
+
+  it("shows cents on a whole amount when the caller is matching a column that has them", () => {
+    expect(formatMinorUnitPriceWithIntl("usd", 1_000, 100, { noCentsIfWhole: false })).toBe("$10.00");
+    expect(formatMinorUnitPriceWithIntl("usd", 1_000, 100)).toBe("$10");
+  });
+
+  it("keeps a zero-decimal currency whole even when the caller asks for cents", () => {
+    expect(formatMinorUnitPriceWithIntl("krw", 1_000_000, 100, { noCentsIfWhole: false })).toBe("₩10,000");
+  });
 });

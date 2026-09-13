@@ -279,7 +279,19 @@ export const getMatchingDirectListedAllocations = (
 export const formatPresentmentCents = (
   cents: number,
   buyerCurrencyDisplay: Pick<CheckoutBuyerCurrencyDisplay, "currencyCode" | "subunitToUnit">,
-) => formatMinorUnitPriceWithIntl(buyerCurrencyDisplay.currencyCode, cents, buyerCurrencyDisplay.subunitToUnit);
+  { noCentsIfWhole = true }: { noCentsIfWhole?: boolean } = {},
+) =>
+  formatMinorUnitPriceWithIntl(buyerCurrencyDisplay.currencyCode, cents, buyerCurrencyDisplay.subunitToUnit, {
+    noCentsIfWhole,
+  });
+
+// The order summary is one column of amounts, so a single line holding cents makes every whole line
+// above and below it look truncated (US$10 next to US$2.10). Every amount the card renders is
+// passed in here in the displayed currency's minor units; if any one of them is fractional the
+// whole column shows cents. Zero-decimal currencies have no fractional unit to show, so their
+// whole-unit look is unaffected either way.
+export const summaryAmountsAreAllWhole = (amountsInMinorUnits: readonly number[], subunitToUnit: number) =>
+  amountsInMinorUnits.every((amount) => amount % subunitToUnit === 0);
 
 // All the listed-currency amounts the checkout table displays on the direct-listed lane. Two
 // different kinds of input meet here, and keeping them straight is the whole point of this
@@ -368,7 +380,7 @@ export const formatCheckoutPrice = (
   const canonicalCents = Math.floor(price);
   if (!buyerCurrencyDisplay) {
     return usdSymbolFormat === "expanded"
-      ? formatUSDCentsWithExpandedCurrencySymbol(canonicalCents)
+      ? formatUSDCentsWithExpandedCurrencySymbol(canonicalCents, { noCentsIfWhole })
       : formatPriceCentsWithCurrencySymbol("usd", canonicalCents, {
           symbolFormat: "short",
           noCentsIfWhole,
@@ -379,5 +391,6 @@ export const formatCheckoutPrice = (
     buyerCurrencyDisplay.currencyCode,
     toBuyerCurrencyCents(canonicalCents, buyerCurrencyDisplay),
     buyerCurrencyDisplay.subunitToUnit,
+    { noCentsIfWhole },
   );
 };
