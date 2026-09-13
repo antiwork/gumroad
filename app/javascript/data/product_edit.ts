@@ -97,6 +97,10 @@ export class StaleDeletionConflictError extends Error {}
 export type SaveProductErrorPayload = {
   error_message: string;
   error_code?: string;
+  // Seconds to wait before this save is worth retrying, sent by
+  // `product_save_busy` responses (the server's row lock on the product was
+  // held by another save, so nothing was written).
+  retry_after?: number;
   hidden_variant_pages?: { id: string; title: string | null; variant_name: string | null }[];
   stale_records?: { type: "page" | "variant"; id: string; name: string | null }[];
 };
