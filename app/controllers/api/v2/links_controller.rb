@@ -788,8 +788,8 @@ class Api::V2::LinksController < Api::V2::BaseController
     UNSUPPORTED_UPLOAD_FIELDS = %i[file preview thumbnail].freeze
 
     # files[] keys the update path consumes itself rather than assigning to ProductFile: the
-    # aliases SaveFilesService rewrites, the serializer echoes it drops, and the entries
-    # WithProductFiles#save_files! deletes before the write.
+    # aliases SaveFilesService rewrites, the ProductFile#as_json echoes it drops, and the
+    # entries WithProductFiles#save_files! deletes before the write.
     DERIVED_FILE_PARAMS = (SaveFilesService::UNWRITABLE_SERIALIZED_FILE_KEYS + %i[
       id external_id modified name file_name file_size subtitles subtitle_files
       thumbnail thumbnail_signed_id
