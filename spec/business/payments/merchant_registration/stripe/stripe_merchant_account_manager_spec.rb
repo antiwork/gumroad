@@ -10404,15 +10404,11 @@ describe StripeMerchantAccountManager, :vcr do
       end
 
       describe "bank code that is one of Stripe's test routing numbers" do
-        # The error carries neither code nor param, so before this it matched no classifier at all:
-        # nil rejection kind, seller_visible false, no email.
+        # No code or param on this error, so only the message can classify it.
         let(:error_message) { "Known test bank accounts cannot be used in live mode." }
 
         before do
-          # Built the way StripeClient#specific_api_error does, status and request-id included:
-          # `message` is a plain attr_reader (errors.rb) and only `to_s` carries the
-          # "(Status 400) (Request req_…)" decoration, so equality is safe — and a stripe-ruby
-          # that ever starts decorating `message` fails here instead of dropping the email.
+          # Status and request ID decorate `to_s`, but `message` must stay raw for exact matching.
           error = Stripe::InvalidRequestError.new(
             error_message, nil,
             http_status: 400,

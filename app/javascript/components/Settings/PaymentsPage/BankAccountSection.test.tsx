@@ -233,8 +233,8 @@ describe("BankAccountSection bank-code placeholders", () => {
   // mode, and a seller cannot tell it apart from a real branch code.
   it.each([
     ["GH", "Bank code", "123456", "022112", false],
-    ["BD", "Bank Code", "123456789", "110000000", false],
-    ["VN", "Bank Code", "12345678", "01101100", false],
+    ["BD", "Bank code", "123456789", "110000000", false],
+    ["VN", "Bank code", "12345678", "01101100", false],
     ["ID", "Bank code", "123", "000", false],
     ["JM", "Bank code", "123", "111", false],
     ["JM", "Branch code", "12345", "00000", false],

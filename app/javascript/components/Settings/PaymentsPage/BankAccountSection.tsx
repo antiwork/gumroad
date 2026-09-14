@@ -1236,7 +1236,7 @@ const BankAccountSection = ({
               ) : user.country_code === "VN" ? (
                 <Fieldset state={errorFieldNames.has("bank_code") ? "danger" : undefined}>
                   <FieldsetTitle>
-                    <Label htmlFor={`${uid}-bank-code`}>Bank Code</Label>
+                    <Label htmlFor={`${uid}-bank-code`}>Bank code</Label>
                   </FieldsetTitle>
                   <Input
                     type="text"
@@ -2003,7 +2003,7 @@ const BankAccountSection = ({
               ) : user.country_code === "BD" ? (
                 <Fieldset state={errorFieldNames.has("bank_code") ? "danger" : undefined}>
                   <FieldsetTitle>
-                    <Label htmlFor={`${uid}-bank-code`}>Bank Code</Label>
+                    <Label htmlFor={`${uid}-bank-code`}>Bank code</Label>
                   </FieldsetTitle>
                   <Input
                     type="text"
