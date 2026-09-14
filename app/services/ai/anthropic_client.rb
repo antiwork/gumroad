@@ -58,6 +58,43 @@ class Ai::AnthropicClient
 
   Result = Struct.new(:text, :tool_uses, :stop_reason, keyword_init: true)
 
+  # Per-call telemetry scratchpad. The call sites fill in what only they can see (first byte, usage,
+  # response) and #with_retries writes the #call_metrics entry when the call ends.
+  CallTrace = Struct.new(
+    :streamed, :buffered_fallback, :started_at, :served_models_before, :retries, :ttft_ms, :usage, :response, :provider_hint, :error,
+    keyword_init: true,
+  )
+  private_constant :CallTrace
+
+  # Neither gateway documents a stable header naming the upstream that served a request. These are
+  # the names they have used; the first present one wins, with a body `provider` field as fallback.
+  PROVIDER_HEADER_NAMES = %w[
+    x-vercel-ai-gateway-provider
+    x-vercel-ai-provider
+    x-vercel-ai-gateway-upstream-provider
+    x-or-provider
+    x-openrouter-provider
+    x-upstream-provider
+    x-provider
+  ].freeze
+  private_constant :PROVIDER_HEADER_NAMES
+
+  # Token counts, by the (possibly nested) `usage` paths each gateway has used. A field no gateway
+  # reported stays nil — never 0, which would read as a real measurement of no tokens.
+  TOKEN_USAGE_PATHS = {
+    input_tokens: %w[input_tokens],
+    output_tokens: %w[output_tokens],
+    cache_read_input_tokens: %w[cache_read_input_tokens],
+    cache_creation_input_tokens: %w[cache_creation_input_tokens],
+    reasoning_tokens: %w[
+      reasoning_tokens
+      thinking_tokens
+      output_tokens_details.reasoning_tokens
+      completion_tokens_details.reasoning_tokens
+    ],
+  }.freeze
+  private_constant :TOKEN_USAGE_PATHS
+
   # `timeout` is per-read silence, not total stream duration. Buffered calls wait this long for
   # the whole body (nothing is sent until generation finishes).
   def initialize(timeout: 60, model: DEFAULT_MODEL, fallback_model: nil, gateway: nil)
@@ -70,10 +107,13 @@ class Ai::AnthropicClient
     end
     @retry_sleep_spent = 0.0
     @served_models = []
+    @call_metrics = []
     @using_fallback_model = false
   end
 
-  attr_reader :served_models
+  # Per upstream call, in call order, for the caller to log after a turn — latency and token counts
+  # per call, which the turn-level counters cannot attribute to a single stalled request.
+  attr_reader :served_models, :call_metrics
 
   def gateway_name
     resolved_gateway.to_s
@@ -82,11 +122,17 @@ class Ai::AnthropicClient
   def messages(system:, messages:, tools: nil, max_tokens: DEFAULT_MAX_TOKENS, thinking: nil)
     with_vercel_model_fallback do
       body = request_body(system:, messages:, tools:, max_tokens:, stream: false, thinking:)
-      with_retries do
+      with_retries do |trace|
         response = http.post(api_url, json: body)
+        trace.response = response
+        # Buffered: the gem hands back the whole body, so first byte and last byte arrive together.
+        mark_first_byte!(trace)
         raise_for_status!(response, kind: "request")
 
-        parse_message(response.parse)
+        parsed = response.parse
+        trace.usage = usage_from_body(parsed)
+        trace.provider_hint = provider_hint_from(parsed)
+        parse_message(parsed)
       rescue HTTP::Error => e
         raise TransientError, "Anthropic network error: #{e.message}"
       end
@@ -102,18 +148,21 @@ class Ai::AnthropicClient
     begin
       with_vercel_model_fallback(yielded: -> { yielded_any }) do
         body = request_body(system:, messages:, tools:, max_tokens:, stream: true)
-        with_retries(retryable: -> { !yielded_any }) do
+        with_retries(retryable: -> { !yielded_any }, streamed: true) do |trace|
           text = +""
           blocks = {}
           stop_reason = nil
 
           response = http.post(api_url, json: body)
+          trace.response = response
           raise_for_status!(response, kind: "stream")
 
           each_sse_event(response.body) do |event, data|
             case event
             when "message_start"
               # Only stream event that names the model actually serving — fallbacks are invisible otherwise.
+              trace.usage = usage_from(data.dig("message", "usage"))
+              trace.provider_hint = provider_hint_from(data["message"])
               log_served_model(data.dig("message", "model"))
             when "content_block_start"
               index = data["index"]
@@ -124,6 +173,7 @@ class Ai::AnthropicClient
                 blocks[index] = { type: "text" }
               end
             when "content_block_delta"
+              mark_first_byte!(trace)
               delta = data["delta"] || {}
               case delta["type"]
               when "text_delta"
@@ -137,6 +187,8 @@ class Ai::AnthropicClient
                 blocks[index][:json] << delta["partial_json"].to_s if blocks[index]
               end
             when "message_delta"
+              # Output tokens arrive here and are cumulative; keep the input/cache counts from message_start.
+              trace.usage.merge!(usage_from(data["usage"]))
               stop_reason = data.dig("delta", "stop_reason") || stop_reason
             when "error"
               raise embedded_error(data, kind: "stream")
@@ -172,13 +224,29 @@ class Ai::AnthropicClient
       Rails.logger.warn("Anthropic streamed tool call unreadable after retries; falling back to a non-streamed request. (#{original_error.message})")
 
       body = request_body(system:, messages:, tools:, max_tokens:, stream: false)
+      trace = CallTrace.new(
+        streamed: false,
+        buffered_fallback: true,
+        started_at: monotonic_now,
+        served_models_before: @served_models.length,
+        retries: 0,
+        usage: {},
+      )
       result = begin
         response = http.post(api_url, json: body)
+        trace.response = response
+        mark_first_byte!(trace)
         raise_for_status!(response, kind: "request")
         # Same gateway can truncate a 200 body; let parse errors re-raise original_error, not a parser bug.
-        parse_buffered_fallback(response.parse)
-      rescue Error, HTTP::Error, JSON::ParserError
+        parsed = response.parse
+        trace.usage = usage_from_body(parsed)
+        trace.provider_hint = provider_hint_from(parsed)
+        parse_buffered_fallback(parsed)
+      rescue Error, HTTP::Error, JSON::ParserError => e
+        trace.error = e
         raise original_error
+      ensure
+        record_call_metric(trace)
       end
 
       discarded_by_caller = result.stop_reason == "max_tokens" || result.tool_uses.present?
@@ -222,22 +290,135 @@ class Ai::AnthropicClient
 
     # Honor Retry-After on 429 (retrying sooner burns an attempt). Charge every sleep against
     # RETRY_SLEEP_BUDGET_IN_SECONDS so a tool-loop on one client cannot stack delays past Rack::Timeout.
-    # `retryable` vetoes mid-stream retries after the seller has already seen output.
-    def with_retries(retryable: -> { true })
+    # `retryable` vetoes mid-stream retries after the seller has already seen output. Records one
+    # call_metrics entry per call, on every outcome, including a give-up.
+    def with_retries(retryable: -> { true }, streamed: false)
+      trace = CallTrace.new(
+        streamed:,
+        buffered_fallback: false,
+        started_at: monotonic_now,
+        served_models_before: @served_models.length,
+        retries: 0,
+        ttft_ms: nil,
+        usage: {},
+      )
       attempt = 1
       begin
-        yield
+        yield(trace)
       rescue TransientError => e
+        trace.error = e
         raise if attempt >= MAX_ATTEMPTS || !retryable.call
 
         delay = e.retry_after || attempt * RETRY_BASE_DELAY_IN_SECONDS
         raise if @retry_sleep_spent + delay > RETRY_SLEEP_BUDGET_IN_SECONDS
 
+        # A retried call has not failed; only what the last attempt ended in is an error. TTFT is
+        # reset with it so the next attempt's first delta is what gets timed.
+        trace.error = nil
+        trace.ttft_ms = nil
+        trace.retries += 1
         @retry_sleep_spent += delay
         sleep(delay)
         attempt += 1
         retry
+      rescue StandardError => e
+        trace.error = e
+        raise
+      ensure
+        record_call_metric(trace)
       end
+    end
+
+    # One entry per upstream call, in the order the calls were made. `served_model` is the model this
+    # call's response named, not the requested one.
+    def record_call_metric(trace)
+      usage = trace.usage || {}
+      served_model = @served_models[trace.served_models_before..].to_a.last
+      @call_metrics << {
+        streamed: trace.streamed,
+        buffered_fallback: trace.buffered_fallback,
+        latency_ms: elapsed_ms(trace.started_at),
+        ttft_ms: trace.ttft_ms,
+        retries: trace.retries,
+        input_tokens: usage[:input_tokens],
+        output_tokens: usage[:output_tokens],
+        cache_read_input_tokens: usage[:cache_read_input_tokens],
+        cache_creation_input_tokens: usage[:cache_creation_input_tokens],
+        reasoning_tokens: usage[:reasoning_tokens],
+        served_model: served_model.presence,
+        served_provider: provider_from(trace),
+        gateway: gateway_name,
+        status: trace.response&.status&.code,
+        error: trace.error&.class&.name,
+      }
+    rescue StandardError => e
+      # Contract: telemetry never fails a seller's turn, and this runs in an ensure where a raise
+      # would replace the error the caller needs to see.
+      Rails.logger.warn("Anthropic call metrics not recorded: #{e.class}: #{e.message}")
+    end
+
+    # First output of this attempt, measured from the call's start so a retried call reports the
+    # attempt that actually delivered. Streamed: the first content_block_delta. Buffered: the body
+    # arriving. Later deltas must not overwrite it, or TTFT would just track the end of the stream.
+    def mark_first_byte!(trace)
+      return if trace.ttft_ms
+
+      trace.ttft_ms = elapsed_ms(trace.started_at)
+    end
+
+    def elapsed_ms(started_at)
+      ((monotonic_now - started_at) * 1000).round
+    end
+
+    def monotonic_now
+      Process.clock_gettime(Process::CLOCK_MONOTONIC)
+    end
+
+    def provider_from(trace)
+      header = trace.response && PROVIDER_HEADER_NAMES.filter_map { |name| trace.response.headers[name] }.first
+      header.presence || trace.provider_hint.presence
+    end
+
+    # OpenRouter names the serving upstream in the body; Vercel's Anthropic-compatible responses do
+    # not carry it today, which is why the headers above are the primary source.
+    def provider_hint_from(body)
+      return unless body.is_a?(Hash)
+
+      provider = body["provider"]
+      case provider
+      when String then provider.presence
+      when Hash then (provider["name"] || provider["slug"] || provider["provider"]).presence
+      end
+    end
+
+    # Buffered bodies carry `usage` one level down; the streamed path merges message_start and
+    # message_delta usage instead.
+    def usage_from_body(body)
+      usage_from(body.is_a?(Hash) ? body["usage"] : nil)
+    end
+
+    # Only fields the gateway actually reported; a missing field must not read as a real 0.
+    def usage_from(raw)
+      return {} unless raw.is_a?(Hash)
+
+      TOKEN_USAGE_PATHS.each_with_object({}) do |(field, paths), usage|
+        count = token_count(raw, paths)
+        usage[field] = count unless count.nil?
+      end
+    end
+
+    def token_count(raw, paths)
+      value = paths.lazy.filter_map { |path| safe_dig(raw, path) }.first
+      return value if value.is_a?(Integer)
+      return value.to_i if value.is_a?(String) && value.match?(/\A\d+\z/)
+
+      nil
+    end
+
+    # Hash#dig raises when an intermediate value is not diggable, and a malformed usage object must
+    # not fail the caller's turn.
+    def safe_dig(raw, path)
+      path.split(".").reduce(raw) { |current, key| current.is_a?(Hash) ? current[key] : nil }
     end
 
     def raise_for_status!(response, kind:)

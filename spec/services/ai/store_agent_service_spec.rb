@@ -2656,4 +2656,146 @@ describe Ai::StoreAgentService do
       expect(captured[:gateway]).to eq(:vercel)
     end
   end
+
+  describe "turn telemetry" do
+    # Stands in for what Ai::AnthropicClient records per upstream call, so the log line can be
+    # checked without exercising the HTTP client (its own spec covers the capture).
+    def call_metric(**overrides)
+      {
+        streamed: true,
+        buffered_fallback: false,
+        latency_ms: 8000,
+        ttft_ms: 1200,
+        retries: 0,
+        input_tokens: 500,
+        output_tokens: 40,
+        cache_read_input_tokens: 300,
+        cache_creation_input_tokens: nil,
+        reasoning_tokens: nil,
+        served_model: "deepseek/deepseek-v4.1-flash",
+        served_provider: "deepinfra",
+        gateway: "vercel",
+        status: 200,
+        error: nil,
+      }.merge(overrides)
+    end
+
+    def logged_json(messages)
+      messages.filter_map do |message|
+        next unless message.is_a?(String) && message.start_with?("{")
+
+        JSON.parse(message)
+      rescue JSON::ParserError
+        nil
+      end
+    end
+
+    let(:logger_lines) { [] }
+    # Shared, mutable: the stubbed model calls append what the real client would have recorded, so
+    # the service's position-based tagging of the suggestions call is what puts the entries on the
+    # right line.
+    let(:metrics) { [] }
+
+    before do
+      allow(Rails.logger).to receive(:info) { |message| logger_lines << message }
+      allow(client).to receive(:served_models).and_return(["deepseek/deepseek-v4.1-flash"])
+      allow(client).to receive(:gateway_name).and_return("vercel")
+    end
+
+    it "logs every pre-existing turn key unchanged, plus the calls and their rollups" do
+      allow(client).to receive(:messages).and_return(text_result("You have 3 products."))
+      allow(client).to receive(:call_metrics).and_return([call_metric])
+
+      service.respond(messages: [{ role: "user", content: "How many products do I have?" }])
+
+      turn_log = logged_json(logger_lines).find { |line| line["event"] == "store_agent_turn" }
+      expect(turn_log).to be_present
+      # Exact key set: the canary monitor parses this line, so no pre-existing key may move or vanish.
+      expect(turn_log.keys).to contain_exactly(
+        "calls", "contract_retries", "event", "gateway", "input_tokens_sum", "latency_ms", "model",
+        "model_latency_ms_sum", "outcome", "output_tokens_sum", "reasoning_tokens_sum", "requested_model",
+        "served_models", "served_providers", "stop_reason", "tool_iterations", "ttft_ms_max",
+        "cache_read_tokens_sum",
+      )
+      expect(turn_log).to include(
+        "event" => "store_agent_turn",
+        "requested_model" => turn_log["model"],
+        "served_models" => ["deepseek/deepseek-v4.1-flash"],
+        "gateway" => "vercel",
+        "outcome" => "reply_only",
+        "stop_reason" => "tool_use",
+        "tool_iterations" => 1,
+        "contract_retries" => 0,
+      )
+      expect(turn_log["calls"]).to eq([call_metric.merge(purpose: "turn").deep_stringify_keys])
+      expect(turn_log).to include(
+        "model_latency_ms_sum" => 8000,
+        "ttft_ms_max" => 1200,
+        "input_tokens_sum" => 500,
+        "output_tokens_sum" => 40,
+        "cache_read_tokens_sum" => 300,
+        "served_providers" => ["deepinfra"],
+      )
+    end
+
+    it "logs the follow-up-suggestions call on its own line, tagged and excluded from the turn's rollups" do
+      allow(client).to receive(:stream_messages) do |_args, &on_text|
+        on_text&.call("You have 3 products.")
+        metrics << call_metric
+        text_result("You have 3 products.")
+      end
+      allow(client).to receive(:messages) do
+        metrics << call_metric(streamed: false, latency_ms: 900, ttft_ms: 850, input_tokens: nil, output_tokens: nil, cache_read_input_tokens: nil, served_provider: "bedrock")
+        text_result('["Show my sales"]')
+      end
+      allow(client).to receive(:call_metrics) { metrics }
+
+      service.respond_streaming(messages: [{ role: "user", content: "how are sales" }]) { |_event, _payload| }
+
+      turn_log, suggestions_log = logged_json(logger_lines)
+      expect(turn_log["event"]).to eq("store_agent_turn")
+      expect(turn_log["calls"].map { |call| call["purpose"] }).to eq(["turn"])
+      expect(turn_log).to include("model_latency_ms_sum" => 8000, "served_providers" => ["deepinfra"])
+
+      expect(suggestions_log["event"]).to eq("store_agent_suggestions")
+      expect(suggestions_log["calls"].map { |call| call["purpose"] }).to eq(["suggestions"])
+      expect(suggestions_log["calls"].first).to include("streamed" => false, "latency_ms" => 900)
+      # The suggestions call happens after the turn line is written, so it never inflates the turn's.
+      expect(suggestions_log).to include(
+        "model_latency_ms_sum" => 900,
+        "ttft_ms_max" => 850,
+        "input_tokens_sum" => nil,
+        "output_tokens_sum" => nil,
+        "served_providers" => ["bedrock"],
+      )
+    end
+
+    it "keeps the call fields present with null rollups when no call reported a field" do
+      allow(client).to receive(:messages).and_return(text_result("You have 3 products."))
+      allow(client).to receive(:call_metrics)
+        .and_return([call_metric(input_tokens: nil, output_tokens: nil, cache_read_input_tokens: nil, reasoning_tokens: nil, served_provider: nil)])
+
+      service.respond(messages: [{ role: "user", content: "How many products do I have?" }])
+
+      turn_log = logged_json(logger_lines).find { |line| line["event"] == "store_agent_turn" }
+      expect(turn_log["calls"].first).to include("input_tokens" => nil, "served_provider" => nil)
+      expect(turn_log).to include(
+        "input_tokens_sum" => nil,
+        "output_tokens_sum" => nil,
+        "cache_read_tokens_sum" => nil,
+        "reasoning_tokens_sum" => nil,
+        "served_providers" => [],
+        "ttft_ms_max" => 1200,
+      )
+    end
+
+    it "still logs the turn line when the client records no calls" do
+      allow(client).to receive(:messages).and_return(text_result("You have 3 products."))
+
+      service.respond(messages: [{ role: "user", content: "How many products do I have?" }])
+
+      turn_log = logged_json(logger_lines).find { |line| line["event"] == "store_agent_turn" }
+      expect(turn_log).to include("calls" => [], "model_latency_ms_sum" => nil, "served_providers" => [])
+    end
+  end
 end

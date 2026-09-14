@@ -1002,4 +1002,251 @@ describe Ai::AnthropicClient do
         .to raise_error(described_class::Error, /overloaded/i)
     end
   end
+
+  # gp#2535: per-call latency/TTFT/tokens/provider, read by StoreAgentService after a turn. The
+  # clock is stubbed because every measurement here is a delta between two reads of it.
+  describe "call metrics" do
+    def sse(*events)
+      events.map { |event, data| "event: #{event}\ndata: #{data.to_json}\n\n" }.join
+    end
+
+    # One read at the call's start, one at its first byte/delta, one when it ends.
+    def stub_call_clock(*offsets)
+      allow(client).to receive(:monotonic_now).and_return(*offsets)
+    end
+
+    it "records latency, TTFT, tokens and the served model for a buffered call" do
+      stub_call_clock(10.0, 10.4, 10.9)
+      body = {
+        "model" => "claude-opus-4-7",
+        "content" => [{ "type" => "text", "text" => "ok" }],
+        "stop_reason" => "end_turn",
+        "usage" => { "input_tokens" => 120, "output_tokens" => 8, "cache_read_input_tokens" => 90 },
+      }
+      stub_request(:post, url).to_return(status: 200, body: body.to_json, headers: { "Content-Type" => "application/json" })
+
+      client.messages(system: "s", messages: [{ role: "user", content: "x" }])
+
+      expect(client.call_metrics).to eq(
+        [
+          {
+            streamed: false,
+            buffered_fallback: false,
+            latency_ms: 900,
+            ttft_ms: 400,
+            retries: 0,
+            input_tokens: 120,
+            output_tokens: 8,
+            cache_read_input_tokens: 90,
+            cache_creation_input_tokens: nil,
+            reasoning_tokens: nil,
+            served_model: "claude-opus-4-7",
+            served_provider: nil,
+            gateway: "anthropic",
+            status: 200,
+            error: nil,
+          },
+        ],
+      )
+    end
+
+    it "times TTFT from the first delta of a multi-delta stream, not the last" do
+      stub_call_clock(0.0, 0.25, 1.5)
+      stream = sse(
+        ["message_start", { message: { model: "claude-opus-4-7" } }],
+        ["content_block_start", { index: 0, content_block: { type: "text" } }],
+        ["content_block_delta", { index: 0, delta: { type: "text_delta", text: "You have " } }],
+        ["content_block_delta", { index: 0, delta: { type: "text_delta", text: "3 products." } }],
+        ["content_block_stop", { index: 0 }],
+        ["message_delta", { delta: { stop_reason: "end_turn" } }],
+      )
+      stub_request(:post, url).to_return(status: 200, body: stream, headers: { "Content-Type" => "text/event-stream" })
+
+      client.stream_messages(system: "s", messages: [{ role: "user", content: "x" }]) { |_| }
+
+      expect(client.call_metrics.first).to include(ttft_ms: 250, latency_ms: 1500)
+    end
+
+    context "through OpenRouter" do
+      let(:openrouter_url) { "https://openrouter.ai/api/v1/messages" }
+
+      before do
+        allow(GlobalConfig).to receive(:get).with("OPENROUTER_API_KEY").and_return("sk-or-test")
+        allow(GlobalConfig).to receive(:get).with("OPENROUTER_FALLBACK_MODEL").and_return(nil)
+      end
+
+      it "times TTFT from the first content delta and merges usage split across message_start and message_delta" do
+        stub_call_clock(0.0, 0.25, 1.5)
+        stream = sse(
+          ["message_start", { message: { model: "deepseek/deepseek-v4.1-flash", usage: { "input_tokens" => 900, "cache_read_input_tokens" => 640 } } }],
+          ["content_block_start", { index: 0, content_block: { type: "text" } }],
+          ["content_block_delta", { index: 0, delta: { type: "text_delta", text: "hi" } }],
+          ["message_delta", { delta: { stop_reason: "end_turn" }, usage: { "output_tokens" => 30, "reasoning_tokens" => 11 } }],
+        )
+        stub_request(:post, openrouter_url)
+          .to_return(status: 200, body: stream, headers: { "Content-Type" => "text/event-stream", "x-or-provider" => "DeepInfra" })
+
+        client.stream_messages(system: "s", messages: [{ role: "user", content: "x" }]) { |_| }
+
+        expect(client.call_metrics).to eq(
+          [
+            {
+              streamed: true,
+              buffered_fallback: false,
+              latency_ms: 1500,
+              ttft_ms: 250,
+              retries: 0,
+              input_tokens: 900,
+              output_tokens: 30,
+              cache_read_input_tokens: 640,
+              cache_creation_input_tokens: nil,
+              reasoning_tokens: 11,
+              served_model: "deepseek/deepseek-v4.1-flash",
+              served_provider: "DeepInfra",
+              gateway: "openrouter",
+              status: 200,
+              error: nil,
+            },
+          ],
+        )
+      end
+    end
+
+    context "through the Vercel gateway" do
+      let(:vercel_url) { "https://ai-gateway.vercel.sh/v1/messages" }
+
+      subject(:client) do
+        described_class.new(
+          timeout: 5,
+          gateway: :vercel,
+          model: "deepseek/deepseek-v4.1-flash",
+          fallback_model: "anthropic/claude-opus-5",
+        )
+      end
+
+      before do
+        allow(GlobalConfig).to receive(:get).with("GUMHEAD_UPSTREAM_API_KEY").and_return("sk-vercel-test")
+        allow(GlobalConfig).to receive(:get).with("GUMHEAD_UPSTREAM_API_BASE").and_return("https://ai-gateway.vercel.sh")
+      end
+
+      it "reads the served provider from the gateway's response header" do
+        stub_call_clock(0.0, 0.6, 0.8)
+        stub_request(:post, vercel_url).to_return(
+          status: 200,
+          body: { "model" => "deepseek/deepseek-v4.1-flash", "content" => [], "stop_reason" => "end_turn" }.to_json,
+          headers: { "Content-Type" => "application/json", "x-vercel-ai-gateway-provider" => "deepinfra" },
+        )
+
+        client.messages(system: "s", messages: [{ role: "user", content: "x" }])
+
+        expect(client.call_metrics.first)
+          .to include(gateway: "vercel", served_provider: "deepinfra", served_model: "deepseek/deepseek-v4.1-flash")
+      end
+
+      it "keeps TTFT and latency on the attempt that delivered when the first attempt is retried" do
+        allow(client).to receive(:sleep)
+        stub_call_clock(0.0, 0.1, 0.2, 1.0)
+        body = { "model" => "deepseek/deepseek-v4.1-flash", "content" => [], "stop_reason" => "end_turn" }
+        stub_request(:post, vercel_url)
+          .to_return({ status: 529, body: { error: { type: "overloaded_error", message: "Overloaded" } }.to_json },
+                     { status: 200, body: body.to_json, headers: { "Content-Type" => "application/json" } })
+
+        client.messages(system: "s", messages: [{ role: "user", content: "x" }])
+
+        expect(client.call_metrics).to contain_exactly(
+          hash_including(retries: 1, ttft_ms: 200, latency_ms: 1000, status: 200, error: nil),
+        )
+      end
+
+      it "records the buffered replay as its own entry, after the streamed call it recovered" do
+        allow(client).to receive(:sleep)
+        stub_call_clock(0.0, 0.1, 0.2, 0.3, 0.4, 10.0, 10.5, 11.0)
+        corrupted = sse(
+          ["content_block_start", { index: 0, content_block: { type: "tool_use", id: "toolu_x", name: "api_write" } }],
+          ["content_block_delta", { index: 0, delta: { type: "input_json_delta", partial_json: '{"endpoint":"update_product","params":{"name":"cut off' } }],
+          ["message_delta", { delta: { stop_reason: "tool_use" } }],
+        )
+        stub_request(:post, vercel_url).with(body: hash_including("stream" => true))
+          .to_return(status: 200, body: corrupted, headers: { "Content-Type" => "text/event-stream" })
+        stub_request(:post, vercel_url).with(body: hash_including("stream" => false)).to_return(
+          status: 200,
+          body: { "model" => "deepseek/deepseek-v4.1-flash", "content" => [{ "type" => "text", "text" => "ok" }], "stop_reason" => "end_turn" }.to_json,
+          headers: { "Content-Type" => "application/json" },
+        )
+
+        client.stream_messages(system: "s", messages: [{ role: "user", content: "x" }])
+
+        streamed, replay = client.call_metrics
+        expect(streamed).to include(
+          streamed: true,
+          buffered_fallback: false,
+          retries: 2,
+          latency_ms: 400,
+          status: 200,
+          error: "Ai::AnthropicClient::UnreadableToolCallError",
+        )
+        expect(replay).to include(streamed: false, buffered_fallback: true, retries: 0, latency_ms: 1000, error: nil)
+      end
+    end
+
+    it "reports a missing token or provider field as nil, never 0" do
+      stub_call_clock(0.0, 0.1, 0.2)
+      body = {
+        "content" => [{ "type" => "text", "text" => "ok" }],
+        "stop_reason" => "end_turn",
+        "usage" => { "input_tokens" => "not a number", "output_tokens_details" => 5 },
+      }
+      stub_request(:post, url).to_return(status: 200, body: body.to_json, headers: { "Content-Type" => "application/json" })
+
+      client.messages(system: "s", messages: [{ role: "user", content: "x" }])
+
+      expect(client.call_metrics.first).to include(
+        input_tokens: nil,
+        output_tokens: nil,
+        cache_read_input_tokens: nil,
+        cache_creation_input_tokens: nil,
+        reasoning_tokens: nil,
+        served_model: nil,
+        served_provider: nil,
+      )
+    end
+
+    it "records a call that never succeeded, with its error class and status" do
+      stub_call_clock(0.0, 0.3, 0.5)
+      stub_request(:post, url).to_return(status: 400, body: { error: { message: "bad request" } }.to_json)
+
+      expect { client.messages(system: "s", messages: [{ role: "user", content: "x" }]) }
+        .to raise_error(described_class::Error, /bad request/)
+
+      expect(client.call_metrics).to contain_exactly(
+        hash_including(status: 400, error: "Ai::AnthropicClient::Error", latency_ms: 500, input_tokens: nil),
+      )
+    end
+
+    it "never fails the call when a metric cannot be recorded" do
+      allow(Rails.logger).to receive(:warn)
+      # The latency read raises, as it would on a clock that returned something unusable.
+      stub_call_clock(0.0, 0.1, "not a time")
+      stub_request(:post, url).to_return(status: 200, body: { "content" => [], "stop_reason" => "end_turn" }.to_json, headers: { "Content-Type" => "application/json" })
+
+      result = client.messages(system: "s", messages: [{ role: "user", content: "x" }])
+
+      expect(result.stop_reason).to eq("end_turn")
+      expect(client.call_metrics).to eq([])
+      expect(Rails.logger).to have_received(:warn).with(/call metrics not recorded/)
+    end
+
+    it "attributes each entry's served model to its own response" do
+      stub_call_clock(0.0, 0.1, 0.2, 5.0, 5.1, 5.2)
+      stub_request(:post, url).to_return(
+        { status: 200, body: { "model" => "claude-opus-4-7", "content" => [], "stop_reason" => "end_turn" }.to_json, headers: { "Content-Type" => "application/json" } },
+        { status: 200, body: { "model" => "openai/gpt-5", "content" => [], "stop_reason" => "end_turn" }.to_json, headers: { "Content-Type" => "application/json" } },
+      )
+      allow(Rails.logger).to receive(:warn)
+
+      2.times { client.messages(system: "s", messages: [{ role: "user", content: "x" }]) }
+
+      expect(client.call_metrics.map { |call| call[:served_model] }).to eq(["claude-opus-4-7", "openai/gpt-5"])
+    end
+  end
 end
