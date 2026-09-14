@@ -1011,8 +1011,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        ci_node_total: [4]
-        ci_node_index: [0, 1, 2, 3]
+        # Twelve dynamically queued shards let selections of up to
+        # MAX_SELECTED_FILES drain within the existing 25-minute timeout.
+        ci_node_total: [12]
+        ci_node_index: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
     steps:
       - name: Check out trusted workflow files
         uses: actions/checkout@v4
