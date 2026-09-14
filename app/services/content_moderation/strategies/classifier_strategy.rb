@@ -43,13 +43,10 @@ class ContentModeration::Strategies::ClassifierStrategy
   # send the seller at the URL, not at the image's format or size.
   UNFETCHABLE = :unfetchable
   PERMANENT_REJECTION_CODES = %w[invalid_data_url invalid_image_format file_too_large].freeze
-  # Query parameters that carry a time-limited grant to fetch the URL. Their
-  # presence is what makes `image_url_unavailable` ambiguous: an expired
-  # signature is re-minted by the next save, while a URL carrying no grant at
-  # all (a stored page image, the private bucket) fails identically every time
-  # until the seller replaces it.
-  SIGNED_URL_QUERY_PARAMS = %w[Expires Signature Key-Pair-Id verify
-                               X-Amz-Signature X-Amz-Expires X-Amz-Credential].freeze
+  # Private-bucket URLs 403 to OpenAI unconditionally (not a signed-URL
+  # expiry), so unlike the same error code on a product/post URL, retrying
+  # here can never succeed.
+  UNFETCHABLE_PRIVATE_BUCKET_URL_PREFIX = S3_BASE_URL
   UNAVAILABLE_REASON = "We cannot moderate the content at this time, please try again later or update the content."
   # Not "inline": `file_too_large` reaches here for a remote URL OpenAI
   # downloaded and refused, not only for a `data:` payload we refused locally.
@@ -76,10 +73,14 @@ class ContentModeration::Strategies::ClassifierStrategy
   # attempts on. `:all` means every image — used by pages, where the images are
   # arbitrary URLs the seller wrote into a public document and approving the page
   # on a subset would approve whatever the rest displays.
-  def initialize(text:, image_urls: [], max_images: MAX_IMAGES_TO_MODERATE)
+  # `image_urls_are_stored:` says the URLs came out of a document we hold — a
+  # page's custom_html, a post's message — rather than being minted for this
+  # save. Nothing re-mints a stored URL, so a grant inside it cannot come back.
+  def initialize(text:, image_urls: [], max_images: MAX_IMAGES_TO_MODERATE, image_urls_are_stored: false)
     @text = text
     @image_urls = image_urls
     @max_images = max_images
+    @image_urls_are_stored = image_urls_are_stored
   end
 
   def perform
@@ -221,8 +222,7 @@ class ContentModeration::Strategies::ClassifierStrategy
   private
     # The single reason to report for a blocked verdict. A retry can still
     # resolve an expiry or a timeout, so a transient cause outranks a permanent
-    # one: the seller acts on that first, and once it clears the next save
-    # reports the permanent cause on its own.
+    # one: the seller acts on that first.
     def blocking_reason(skipped_urls:, unreached_urls:, unfetchable_urls:, unsupported_urls:)
       return UNAVAILABLE_REASON if skipped_urls.any? || unreached_urls.any?
       return UNFETCHABLE_IMAGE_REASON if unfetchable_urls.any?
@@ -296,14 +296,10 @@ class ContentModeration::Strategies::ClassifierStrategy
       "#{url.to_s[0, 30]}…(#{url.to_s.bytesize} bytes inline)"
     end
 
-    # Whether the URL carries a grant of its own that a later save would renew.
-    def signed_url?(url)
-      query = URI.parse(url.to_s).query
-      return false if query.blank?
-
-      query.split("&").any? { |pair| SIGNED_URL_QUERY_PARAMS.include?(pair.split("=", 2).first) }
-    rescue URI::InvalidURIError
-      false
+    # Whether no later save could make this URL fetchable: a stored URL (the
+    # document holds the string, so nothing re-signs it) or a private-bucket one.
+    def unfetchable_url?(url)
+      @image_urls_are_stored || url.to_s.start_with?(UNFETCHABLE_PRIVATE_BUCKET_URL_PREFIX)
     end
 
     def moderate_one_image(url)
@@ -368,11 +364,9 @@ class ContentModeration::Strategies::ClassifierStrategy
         # perform) reproduces on every save of the same content, so it must not
         # be reported as a passing failure.
         code = body.is_a?(Hash) ? body.dig("error", "code") : nil
-        # A URL with no grant of its own cannot be made fetchable by retrying:
-        # either the file is gone or the host refuses OpenAI outright (the
-        # private bucket). A signed URL is the opposite case — the next save
-        # re-mints the signature — so its failure stays transient.
-        return UNFETCHABLE if code == "image_url_unavailable" && !signed_url?(skip_url)
+        # A stored or private-bucket URL is never fetchable by a later save, so
+        # its failure must not read as one a retry would clear.
+        return UNFETCHABLE if code == "image_url_unavailable" && unfetchable_url?(skip_url)
 
         PERMANENT_REJECTION_CODES.include?(code) ? UNSUPPORTED : nil
       end

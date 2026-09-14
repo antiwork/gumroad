@@ -222,6 +222,26 @@ RSpec.describe ContentModeration::ModerateRecordService, :vcr do
         expect(described_class.check(page, :page).passed).to eq(true)
       end
 
+      it "tells the classifier a page's image URLs came out of the stored document" do
+        # Nothing re-signs a URL a page holds, so an unfetchable one has to be
+        # reported as permanent rather than as an outage to retry through.
+        expect(ContentModeration::Strategies::ClassifierStrategy).to receive(:new)
+          .with(hash_including(image_urls_are_stored: true))
+          .and_return(instance_double(ContentModeration::Strategies::ClassifierStrategy,
+                                      perform: strategy_result.new(status: "compliant", reasoning: [])))
+
+        described_class.check(page, :page)
+      end
+
+      it "leaves a product's URLs renewable, since the caller mints them per save" do
+        expect(ContentModeration::Strategies::ClassifierStrategy).to receive(:new)
+          .with(hash_including(image_urls_are_stored: false))
+          .and_return(instance_double(ContentModeration::Strategies::ClassifierStrategy,
+                                      perform: strategy_result.new(status: "compliant", reasoning: [])))
+
+        described_class.check(product, :product)
+      end
+
       context "when the page carries more images than we will review" do
         let(:over_budget_html) do
           count = ContentModeration::ContentExtractor::MAX_PAGE_IMAGE_URLS + 1

@@ -398,6 +398,9 @@ class ContentModeration::ModerateRecordService
           # A page's images are arbitrary URLs the seller wrote into a public
           # document, so every accepted one gets a moderation attempt.
           max_images: entity_type == :page ? :all : ContentModeration::Strategies::ClassifierStrategy::MAX_IMAGES_TO_MODERATE,
+          # A page's custom_html and a post's message ARE the storage, so an
+          # image URL inside them is never re-signed by a later save.
+          image_urls_are_stored: %i[page post].include?(entity_type),
         ),
         # `corroborate_judgment_flags` makes a spam, off-platform-fulfillment, or
         # text-only adult-content flag block only when it reproduces on resampling;
