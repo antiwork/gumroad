@@ -2,6 +2,11 @@
 
 describe MoneyFormatter do
   describe "#format" do
+    it "formats VND in whole dong" do
+      expect(MoneyFormatter.format(25_618, :vnd)).to eq "25,618 ₫"
+      expect(MoneyFormatter.symbol_for(:vnd)).to eq "₫"
+    end
+
     it "formats a registered currency absent from product pricing choices" do
       expect(CURRENCY_CHOICES).not_to have_key(:pen)
       expect(MoneyFormatter.format(1250, :pen)).to eq "S/12.50"

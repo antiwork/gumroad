@@ -107,11 +107,17 @@ describe "Buyer-currency checkout currency picker", type: :system, js: true do
         "Rp (Indonesian Rupiah)",
         "₩ (Korean Won)",
         "NT$ (Taiwanese Dollars)",
+        "₫ (Vietnamese Dong)",
       ]
     )
 
     allow(StripeFxQuote).to receive(:create) { quote("0.27") }
     select "SAR (Saudi Riyal)", from: "Currency"
     expect(page).to have_select("Currency", selected: "SAR (Saudi Riyal)")
+
+    allow(StripeFxQuote).to receive(:create) { quote("0.00004") }
+    select "₫ (Vietnamese Dong)", from: "Currency"
+    expect(page).to have_select("Currency", selected: "₫ (Vietnamese Dong)")
+    expect(page).to have_text("Total ₫250,000", normalize_ws: true)
   end
 end

@@ -162,6 +162,12 @@
       "display_format": "RM (Malaysian Ringgit)",
       "min_price": 403
     },
+    "vnd": {
+      "symbol": "₫",
+      "display_format": "₫ (Vietnamese Dong)",
+      "min_price": 25618,
+      "single_unit": true
+    },
     "idr": {
       "symbol": "Rp",
       "display_format": "Rp (Indonesian Rupiah)",

@@ -259,7 +259,7 @@ describe Checkout::BuyerCurrencyEligibility do
     expect(decision.fallback_reason).to be_nil
   end
 
-  %w[jpy sek nok dkk mxn sar aed try cop ron thb myr idr krw twd].each do |currency|
+  %w[jpy sek nok dkk mxn sar aed try cop ron thb myr idr krw twd vnd].each do |currency|
     it "allows #{currency} presentment" do
       allow_any_instance_of(described_class).to receive(:buyer_currency_for_ip).and_return(currency)
 

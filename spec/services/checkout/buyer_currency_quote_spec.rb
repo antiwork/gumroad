@@ -1424,6 +1424,21 @@ describe Checkout::BuyerCurrencyQuote do
       expect(result).to have_attributes(currency: Currency::JPY, presentment_total_cents: 1441)
     end
 
+    it "quotes VND in whole dong when explicitly requested" do
+      vnd_quote = StripeFxQuote::Quote.new(id: "fxq_vnd", expires_at: 30.minutes.from_now, fx_rate: BigDecimal("0.00004"))
+      allow_any_instance_of(described_class).to receive(:buyer_currency_for_ip).and_return(Currency::JPY)
+      allow(StripeFxQuote).to receive(:create).with(
+        to_currency: Currency::USD,
+        from_currency: Currency::VND,
+        stripe_account_id: merchant_account.charge_processor_merchant_id,
+        destination_account_id: nil
+      ).and_return(vnd_quote)
+
+      result = described_class.create(line_items: line_items_for(product), canonical_total_cents: 10_00, ip: "126.79.0.1", currency: Currency::VND)
+
+      expect(result).to have_attributes(currency: Currency::VND, presentment_total_cents: 250_000)
+    end
+
     it "falls back to nil without notifying Sentry when the account settles in a non-USD currency" do
       # Production case: Stripe rejects the quote request for accounts with multi-currency
       # settlement ("The FX Quote's to_currency ... must match the payment intent's

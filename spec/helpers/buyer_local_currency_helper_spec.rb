@@ -54,6 +54,7 @@ describe CurrencyHelper do
       expect(helper.buyer_currency_for_country("MY")).to eq("myr")
       expect(helper.buyer_currency_for_country("ID")).to eq("idr")
       expect(helper.buyer_currency_for_country("TW")).to eq("twd")
+      expect(helper.buyer_currency_for_country("VN")).to eq("vnd")
     end
 
     it "maps any country in the eurozone to eur, not just a hardcoded subset" do
@@ -67,7 +68,8 @@ describe CurrencyHelper do
     end
 
     it "returns nil for countries whose currency is not supported for display or input" do
-      expect(helper.buyer_currency_for_country("VN")).to be_nil # vnd is not in currencies.json
+      expect(CURRENCY_CHOICES).not_to have_key(:pen)
+      expect(helper.buyer_currency_for_country("PE")).to be_nil
     end
   end
 
