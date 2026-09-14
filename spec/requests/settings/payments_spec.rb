@@ -5253,7 +5253,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         select("Bangladesh", from: "Nationality")
 
         fill_in("Pay to the order of", with: "Bangladesh Creator")
-        fill_in("Bank Code", with: "110000000")
+        fill_in("Bank code", with: "110000000")
         fill_in("Account #", with: "0000123456789")
         fill_in("Confirm account #", with: "0000123456789")
 

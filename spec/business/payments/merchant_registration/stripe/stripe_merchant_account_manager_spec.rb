@@ -10403,6 +10403,63 @@ describe StripeMerchantAccountManager, :vcr do
         end
       end
 
+      describe "bank code that is one of Stripe's test routing numbers" do
+        # No code or param on this error, so only the message can classify it.
+        let(:error_message) { "Known test bank accounts cannot be used in live mode." }
+
+        before do
+          # Status and request ID decorate `to_s`, but `message` must stay raw for exact matching.
+          error = Stripe::InvalidRequestError.new(
+            error_message, nil,
+            http_status: 400,
+            http_headers: { "request-id" => "req_2610" },
+            json_body: { error: { message: error_message, type: "invalid_request_error" } },
+          )
+          expect(Stripe::Account).to receive(:update).and_raise(error)
+        end
+
+        it "emails the creator with the format rejection kind and returns invalid_bank_account" do
+          result = nil
+          expect do
+            result = subject.update_bank_account(user, passphrase: "1234")
+          end.to have_enqueued_mail(ContactingCreatorMailer, :invalid_bank_account)
+            .with(user.id, StripeMerchantAccountManager::BANK_REJECTION_KIND_FORMAT, error_message, user.active_bank_account.id)
+          expect(result).to eq(:invalid_bank_account)
+        end
+
+        it "leaves a payout note the retry loop reads as a format rejection" do
+          subject.update_bank_account(user, passphrase: "1234")
+
+          note = user.comments.with_type_payout_note.last
+          expect(note.json_data["stripe_error_message"]).to eq(error_message)
+          expect(described_class.bank_details_format_rejection_note?(note)).to be(true)
+        end
+      end
+
+      describe "a Stripe bank rejection whose wording is not the one above" do
+        # Negative control for the exact match: same shape, one character off. It must keep falling
+        # through to Sentry rather than emailing the seller a fix that cannot work.
+        let(:error_message) { "Known test bank accounts cannot be used in live mode" }
+
+        before do
+          error = Stripe::InvalidRequestError.new(
+            error_message, nil,
+            http_status: 400,
+            http_headers: { "request-id" => "req_2610" },
+            json_body: { error: { message: error_message, type: "invalid_request_error" } },
+          )
+          expect(Stripe::Account).to receive(:update).and_raise(error)
+        end
+
+        it "does not email the creator and reports the unknown error instead" do
+          result = nil
+          expect do
+            result = subject.update_bank_account(user, passphrase: "1234")
+          end.not_to have_enqueued_mail(ContactingCreatorMailer, :invalid_bank_account)
+          expect(result).to eq(:stripe_invalid_request)
+        end
+      end
+
       describe "Stripe rejects the external account with a CardError" do
         before do
           expect(Stripe::Account).to receive(:update).and_raise(Stripe::CardError.new("Your card does not support this type of purchase.", "external_account", code: "card_decline_rate_limit_exceeded"))
