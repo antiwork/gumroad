@@ -512,9 +512,12 @@ class Country
     end
   end
 
+  # The local-cents table above is stored in hundredths of the local currency for every row,
+  # including zero-decimal currencies, so convert directly instead of via get_usd_cents (which
+  # rescales single-unit currencies by 100).
   def min_cross_border_payout_amount_usd_cents
     return 0 unless payout_currency.present?
 
-    get_usd_cents(payout_currency, min_cross_border_payout_amount_local_cents.to_i)
+    (BigDecimal(min_cross_border_payout_amount_local_cents.to_i) / get_rate(payout_currency).to_f).round
   end
 end

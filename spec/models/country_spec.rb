@@ -523,12 +523,21 @@ describe Country do
   end
 
   describe "#min_cross_border_payout_amount_usd_cents" do
-    it "returns the min_cross_border_payout_amount_local_cents converted to usd cents " do
+    it "converts the local-cents floor at the payout currency rate for every cross-border country" do
       Country.const_get(:CROSS_BORDER_PAYOUTS_COUNTRIES).map(&:alpha2).each do |country_alpha2_code|
         country = Country.new(country_alpha2_code)
-        expect(country.min_cross_border_payout_amount_usd_cents).to be_present
-        expect(country.min_cross_border_payout_amount_usd_cents).to eq(country.get_usd_cents(country.payout_currency, country.min_cross_border_payout_amount_local_cents))
+        allow(country).to receive(:get_rate).with(country.payout_currency).and_return("2.0")
+        expect(country.min_cross_border_payout_amount_usd_cents).to eq((country.min_cross_border_payout_amount_local_cents / 2.0).round)
       end
+    end
+
+    it "does not rescale zero-decimal payout currencies, so Vietnam's floor stays below the platform minimum" do
+      country = Country.new(Compliance::Countries::VNM.alpha2)
+      expect(country.is_currency_type_single_unit?(country.payout_currency)).to be true
+      allow(country).to receive(:get_rate).with("vnd").and_return("25984.15")
+
+      expect(country.min_cross_border_payout_amount_usd_cents).to eq 312
+      expect(country.min_cross_border_payout_amount_usd_cents).to be < Payouts::MIN_AMOUNT_CENTS
     end
 
     it "returns 0 if min_cross_border_payout_amount_local_cents is nil" do
