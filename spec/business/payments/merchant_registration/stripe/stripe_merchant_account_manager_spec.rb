@@ -10404,10 +10404,8 @@ describe StripeMerchantAccountManager, :vcr do
       end
 
       describe "bank code that is one of Stripe's test routing numbers" do
-        # Live mode refuses an external account built from Stripe's published test bank details, and
-        # the error carries neither code nor param, so this rejection matched nothing: a nil
-        # rejection kind, seller_visible false, no email. The seller re-saved and heard nothing
-        # (gumroad-private#2610).
+        # The error carries neither code nor param, so before this it matched no classifier at all:
+        # nil rejection kind, seller_visible false, no email.
         let(:error_message) { "Known test bank accounts cannot be used in live mode." }
 
         before do

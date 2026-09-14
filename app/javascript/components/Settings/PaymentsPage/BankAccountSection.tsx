@@ -1003,11 +1003,8 @@ const BankAccountSection = ({
         <div className="grid gap-2">
           {showNewBankAccount ? (
             <div className="grid gap-5 md:auto-cols-fr md:grid-flow-col">
-              {/* Bank-code placeholders are format hints, never a value a seller should submit.
-                  A hint that matches the country's Stripe test routing number — Ghana's 022112,
-                  Bangladesh's 110000000, Vietnam's 01101100, Indonesia's 000, Jamaica's
-                  111-00000, Azerbaijan's 123456-123456 — is refused outright in live mode, and the
-                  seller cannot tell it apart from a real branch code. Keep them sequences. */}
+              {/* A placeholder must not complete the country's Stripe test routing pair: live mode
+                  refuses it outright and the seller cannot tell it apart from a real branch code. */}
               {user.country_code === "CA" ? (
                 <>
                   <Fieldset state={errorFieldNames.has("transit_number") ? "danger" : undefined}>

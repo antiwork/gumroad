@@ -229,10 +229,8 @@ describe("BankAccountSection Bolivia bank code", () => {
 });
 
 describe("BankAccountSection bank-code placeholders", () => {
-  // A placeholder equal to a country's Stripe test routing number is refused outright in live mode
-  // ("Known test bank accounts cannot be used in live mode."), and a seller cannot tell it apart
-  // from a real branch code: Ghana's 022112 was the hint, and no account carrying it ever attached
-  // to Stripe (gumroad-private#2610). Same failure the Bolivia hint had (gp#1967).
+  // A placeholder equal to a country's Stripe test routing number is refused outright in live
+  // mode, and a seller cannot tell it apart from a real branch code.
   it.each([
     ["GH", "Bank code", "123456", "022112", false],
     ["BD", "Bank Code", "123456789", "110000000", false],

@@ -655,9 +655,8 @@ describe StripeMerchantAccountManager do
       expect(described_class.bank_rejection_kind_for(error)).to eq(StripeMerchantAccountManager::BANK_REJECTION_KIND_FORMAT)
     end
 
-    # The match is exact on purpose. Every message here is either a neighbouring Stripe failure or
-    # a near miss on the wording, and a classifier that accepted any of them would email sellers
-    # about a code that is not the problem (gumroad-private#2610).
+    # Exact match on purpose: a classifier that accepted any of these near misses would email
+    # sellers about a code that is not the problem.
     it "leaves every other rejection unclassified" do
       [
         "Known test bank accounts cannot be used in live mode",

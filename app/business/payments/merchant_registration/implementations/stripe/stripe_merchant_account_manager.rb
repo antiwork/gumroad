@@ -27,11 +27,9 @@ module StripeMerchantAccountManager
   BANK_DETAILS_DIRECTORY_MISS_MESSAGE = /couldn't find (the bank|that)/i
 
   # Stripe refuses an external account built from its own published test bank details when the
-  # connected account is live. It belongs to the format family — the value as typed can never be
-  # accepted, so only re-entering a different code fixes it — but the error carries neither `code`
-  # nor `param`, so the message is the only signal. See bank_details_test_bank_account_message?.
+  # connected account is live. Format family — only re-entering a different code fixes it — and the
+  # error carries neither `code` nor `param`, so the message is the whole signal.
   BANK_DETAILS_TEST_BANK_ACCOUNT_MESSAGE = "Known test bank accounts cannot be used in live mode."
-
 
   # Stripe refuses a specific external account outright when it's on the connected account's
   # block list ("...because it is on your block list"). Unlike a format or directory-miss
@@ -1544,9 +1542,8 @@ module StripeMerchantAccountManager
     code.to_s.in?(BANK_DETAILS_FORMAT_REJECTION_CODES) || message.match?(BANK_DETAILS_FORMAT_REJECTION_MESSAGE)
   end
 
-  # True only for Stripe's exact wording — anything looser ("test bank account" as a substring)
-  # would pull unrelated Stripe errors into a seller-facing "re-enter your code" email. The
-  # message we saw in production carried no code and no param, so equality is all we have.
+  # Exact wording only: matching more loosely would pull unrelated Stripe errors into a
+  # seller-facing "re-enter your code" email.
   def self.bank_details_test_bank_account_message?(message)
     message.to_s.strip == BANK_DETAILS_TEST_BANK_ACCOUNT_MESSAGE
   end
@@ -1687,9 +1684,7 @@ module StripeMerchantAccountManager
     return true if bank_account_blocked?(error)
 
     # A live account sent our own published test routing number, which Stripe refuses outright.
-    # The seller clears it by entering their own code, so it is seller input like the cases above
-    # and must not page Sentry — or, worse, fall through to the generic handling that tells them
-    # nothing (gumroad-private#2610).
+    # The seller clears it by entering their own code, so this is seller input, not a Sentry page.
     return true if bank_details_test_bank_account_message?(error.message)
 
     # Stripe rejects some bank accounts with "Stripe is unable to support this bank at this
