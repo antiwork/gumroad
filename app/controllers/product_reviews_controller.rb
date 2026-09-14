@@ -16,7 +16,7 @@ class ProductReviewsController < ApplicationController
       product.product_reviews
         .alive
         .visible_on_product_page
-        .includes(:response, approved_video: :video_file, purchase: :purchaser, link: :user)
+        .includes(:response, approved_video: :video_file, purchase: { purchaser: { avatar_attachment: :blob } }, link: :user)
         .order(rating: :desc, created_at: :desc, id: :desc),
       page: [permitted_params[:page].to_i, 1].max,
       limit: PER_PAGE,
@@ -36,7 +36,7 @@ class ProductReviewsController < ApplicationController
     review = ProductReview
       .alive
       .visible_on_product_page
-      .includes(:response, purchase: :purchaser, link: :user)
+      .includes(:response, purchase: { purchaser: { avatar_attachment: :blob } }, link: :user)
       .find_by_external_id!(permitted_params[:id])
 
     presenter = ProductReviewPresenter.new(review)
