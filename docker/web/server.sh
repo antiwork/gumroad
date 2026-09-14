@@ -32,4 +32,7 @@ else
   echo "npm run setup skipped (outputs already in image)"
 fi
 
-exec bundle exec rails server -p $PORT
+# Boot through config/puma.rb so workers, threads and the bind come from one place.
+# `rails server -p` installs a user-level bind that outranks the file's `bind`, silently
+# dropping its `?backlog=4096` back to Puma's 1024 default.
+exec bundle exec puma -C config/puma.rb
