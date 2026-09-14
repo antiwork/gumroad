@@ -116,12 +116,15 @@ class StripeChargeablePaymentMethod
     card[:country].presence if card.present?
   end
 
+  # Stripe::PaymentMethod only exposes the attributes present in its payload; dot-syntax on an
+  # absent one raises NoMethodError, which safe navigation does not catch (the receiver exists).
+  # Hash access returns nil, which every caller of #card already guards for.
   def card
-    @merchant_account&.is_a_stripe_connect_account? ? @payment_method_on_connect_account&.card : @payment_method&.card
+    payment_method&.[](:card)
   end
 
-  # The Stripe::PaymentMethod backing this chargeable (fetched by #prepare!). Mirrors the
-  # connect-account selection in #card so both read the same object.
+  # The Stripe::PaymentMethod backing this chargeable (fetched by #prepare!), on the connect
+  # account when the charge is a direct charge.
   def payment_method
     @merchant_account&.is_a_stripe_connect_account? ? @payment_method_on_connect_account : @payment_method
   end

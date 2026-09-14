@@ -222,6 +222,26 @@ RSpec.describe ContentModeration::ModerateRecordService, :vcr do
         expect(described_class.check(page, :page).passed).to eq(true)
       end
 
+      it "tells the classifier a page's image URLs came out of the stored document" do
+        # Nothing re-signs a URL a page holds, so an unfetchable one has to be
+        # reported as permanent rather than as an outage to retry through.
+        expect(ContentModeration::Strategies::ClassifierStrategy).to receive(:new)
+          .with(hash_including(image_urls_are_stored: true))
+          .and_return(instance_double(ContentModeration::Strategies::ClassifierStrategy,
+                                      perform: strategy_result.new(status: "compliant", reasoning: [])))
+
+        described_class.check(page, :page)
+      end
+
+      it "leaves a product's URLs renewable, since the caller mints them per save" do
+        expect(ContentModeration::Strategies::ClassifierStrategy).to receive(:new)
+          .with(hash_including(image_urls_are_stored: false))
+          .and_return(instance_double(ContentModeration::Strategies::ClassifierStrategy,
+                                      perform: strategy_result.new(status: "compliant", reasoning: [])))
+
+        described_class.check(product, :product)
+      end
+
       context "when the page carries more images than we will review" do
         let(:over_budget_html) do
           count = ContentModeration::ContentExtractor::MAX_PAGE_IMAGE_URLS + 1
@@ -1076,6 +1096,20 @@ RSpec.describe ContentModeration::ModerateRecordService, :vcr do
         "or the file is too large. Replace it with a smaller PNG, JPEG, GIF, or WebP and try again."
       )
       expect(message).not_to include("temporary issue")
+    end
+
+    it "tells the seller to replace the image, not to retry, when the block is an image URL we couldn’t download" do
+      message = described_class.seller_message(
+        [ContentModeration::Strategies::ClassifierStrategy::UNFETCHABLE_IMAGE_REASON],
+        "page"
+      )
+
+      expect(message).to eq(
+        "This page includes an image we couldn’t download from its link, so we couldn’t review it. " \
+        "Replace that image with a new upload and save again."
+      )
+      expect(message).not_to include("temporary issue")
+      expect(message).not_to include("try again")
     end
 
     it "does not tell a seller whose asset is only oversized to re-encode a format they are already using" do

@@ -650,8 +650,16 @@ class LinksController < ApplicationController
         @product.description = SavePublicFilesService.new(resource: @product, files_params: product_permitted_params[:public_files], content: @product.description, contract: product_save_contract).process
         @product.save!
         toggle_community_chat!(product_permitted_params[:community_chat_enabled])
-        @product.generate_product_files_archives!
+
+        # Same lock and commit as the content change: a ready archive must not
+        # outlive the content it was built from. Rebuilding is the job's work, below.
+        @product.invalidate_stale_product_files_archives!
       end
+
+      # Stale archives were invalidated inside the save transaction above; the
+      # replacements are built after commit by the job, under its own product
+      # lock. The response reports only the canonical write.
+      enqueue_product_files_archives_generation
     rescue Product::StaleContentWriteGuard::StaleContentConflict => e
       # Raised before any mutation: the payload's echoed snapshot timestamps
       # are older than the stored rows, meaning another session saved after
@@ -1127,6 +1135,14 @@ class LinksController < ApplicationController
       yield
     ensure
       connection.execute("SET SESSION innodb_lock_wait_timeout = #{previous.to_i}") if previous.present?
+    end
+
+    # Post-commit: a raise here must not reach update's catch-all and report a saved product
+    # as failed. A nil jid may be a stale lock, not a queued rebuild; UrlRedirect#folder_archive recovers.
+    def enqueue_product_files_archives_generation
+      GenerateProductFilesArchivesJob.perform_async(@product.id)
+    rescue StandardError => e
+      ErrorNotifier.notify(e, product_id: @product.id, seller_id: @product.user_id, archive_generation_enqueue_failed: true)
     end
 
     # Best-effort: this runs inside the rescue that owes the client a 409, so a

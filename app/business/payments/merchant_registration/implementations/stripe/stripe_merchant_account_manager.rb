@@ -2119,7 +2119,10 @@ module StripeMerchantAccountManager
       }
     }
 
-    if user_compliance_info.country_code == Compliance::Countries::JPN.alpha2
+    # The kanji/kana blocks below carry a hardcoded country and are only populated for a Japanese
+    # legal entity, so they follow the same account-country rule as the AE branch below.
+    if user_compliance_info.country_code == Compliance::Countries::JPN.alpha2 &&
+       user_compliance_info.legal_entity_country_code == Compliance::Countries::JPN.alpha2
       business_address_kanji = {
         line1: user_compliance_info.business_building_number,
         town: user_compliance_info.business_street_address_kanji,
@@ -2149,7 +2152,10 @@ module StripeMerchantAccountManager
                        })
     end
 
-    if user_compliance_info.country_code == Compliance::Countries::ARE.alpha2
+    # Stripe validates `company[structure]` against the account country, which create_account takes
+    # from the legal entity rather than the seller's residence.
+    if user_compliance_info.country_code == Compliance::Countries::ARE.alpha2 &&
+       user_compliance_info.legal_entity_country_code == Compliance::Countries::ARE.alpha2
       hash.deep_merge!(
         company: {
           structure: user_compliance_info.business_type,
