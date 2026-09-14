@@ -24,7 +24,9 @@ class StripeChargeProcessor
 
   MANDATE_PREFIX = "Mandate-"
   INDIA_CARD_MANDATE_RELIABILITY_FEATURE = :india_card_mandate_reliability
-  INDIA_CARD_MANDATE_CURRENCIES = %w[inr usd eur gbp sgd cad chf sek aed jpy nok myr hkd].freeze
+  # Stripe's India mandate currency list for non-IN businesses. Every currency here is also
+  # offered to buyers in config/currencies.json, so this list must track the vendor doc.
+  INDIA_CARD_MANDATE_CURRENCIES = %w[inr aud usd eur gbp sgd cad chf sek aed jpy nok myr hkd].freeze
   UPI_PAYMENT_METHOD_UPDATE_MESSAGE = "Your saved UPI payment method can no longer be used. Please update your payment method to continue your membership."
   # Stripe does not echo UPI mandate_options, so finalization validates this server-authored copy.
   UPI_RECURRING_MAX_AMOUNT_METADATA_KEY = "gumroad_upi_max_amount_cents"

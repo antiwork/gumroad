@@ -46,6 +46,7 @@ describe StripeChargeProcessor, :vcr do
       expect(described_class.indian_card_mandate_currency_supported?(Currency::INR)).to be(true)
       expect(described_class.indian_card_mandate_currency_supported?(Currency::USD)).to be(true)
       expect(described_class.indian_card_mandate_currency_supported?(Currency::CAD)).to be(true)
+      expect(described_class.indian_card_mandate_currency_supported?(Currency::AUD)).to be(true)
     end
 
     it "rejects other Stripe charge currencies" do
