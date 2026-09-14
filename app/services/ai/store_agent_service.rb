@@ -938,24 +938,73 @@ class Ai::StoreAgentService
     end
 
     # One structured line per completed turn — model, tool iterations, stop_reason, contract
-    # retries, and latency are the signals the ramp's pass bar checks each step against.
+    # retries, and latency are the signals the ramp's pass bar checks each step against. The
+    # upstream calls made during the turn ride along, because turn latency alone cannot say which
+    # request stalled (gp#2535). Every pre-existing key keeps its name and meaning.
     def log_turn_metrics(outcome:)
       latency_ms = @turn_started_at ? ((Process.clock_gettime(Process::CLOCK_MONOTONIC) - @turn_started_at) * 1000).round : nil
-      Rails.logger.info(
-        {
-          event: "store_agent_turn",
-          model: @_client_model,
-          requested_model: @_client_model,
-          served_models: (@_client.respond_to?(:served_models) ? Array(@_client.served_models).uniq : []),
-          gateway: (@_client.respond_to?(:gateway_name) ? @_client.gateway_name : nil),
-          outcome:,
-          stop_reason: @last_stop_reason,
-          tool_iterations: @turn_iterations_used,
-          contract_retries: @turn_contract_retries,
-          contract_failure: @turn_contract_failure,
-          latency_ms:,
-        }.compact.to_json,
-      )
+      calls = call_metrics(purpose: "turn")
+      @logged_turn_call_count = calls.length
+      payload = {
+        event: "store_agent_turn",
+        model: @_client_model,
+        requested_model: @_client_model,
+        served_models: (@_client.respond_to?(:served_models) ? Array(@_client.served_models).uniq : []),
+        gateway: (@_client.respond_to?(:gateway_name) ? @_client.gateway_name : nil),
+        outcome:,
+        stop_reason: @last_stop_reason,
+        tool_iterations: @turn_iterations_used,
+        contract_retries: @turn_contract_retries,
+        contract_failure: @turn_contract_failure,
+        latency_ms:,
+      }.compact
+      # The call fields are added after compressing so they are always present: a reader must be able
+      # to tell "no call reported this" (null) from "not instrumented" (absent key).
+      payload[:calls] = calls
+      payload.merge!(call_rollups(calls))
+      Rails.logger.info(payload.to_json)
+    end
+
+    # The suggestions pass is a separate upstream call whose latency is not part of the turn's, so it
+    # gets its own line. Entries are matched by position: the client appends in call order.
+    def log_suggestion_metrics
+      calls = call_metrics(purpose: "suggestions", from: @logged_turn_call_count.to_i)
+      return if calls.empty?
+
+      payload = {
+        event: "store_agent_suggestions",
+        model: @_client_model,
+        gateway: (@_client.respond_to?(:gateway_name) ? @_client.gateway_name : nil),
+      }.compact
+      payload[:calls] = calls
+      payload.merge!(call_rollups(calls))
+      Rails.logger.info(payload.to_json)
+    end
+
+    # Per-call entries the client recorded, tagged with the phase of the turn that made them.
+    def call_metrics(purpose:, from: 0)
+      return [] unless @_client.respond_to?(:call_metrics)
+
+      Array(@_client.call_metrics)[from..].to_a.map { |call| call.merge(purpose:) }
+    end
+
+    # Rollups over one phase's calls. A sum skips calls the gateway reported no field for and is nil
+    # when no call did — 0 there would read as a measured zero rather than a missing field.
+    def call_rollups(calls)
+      {
+        model_latency_ms_sum: sum_call_field(calls, :latency_ms),
+        ttft_ms_max: calls.filter_map { |call| call[:ttft_ms] }.max,
+        input_tokens_sum: sum_call_field(calls, :input_tokens),
+        output_tokens_sum: sum_call_field(calls, :output_tokens),
+        cache_read_tokens_sum: sum_call_field(calls, :cache_read_input_tokens),
+        reasoning_tokens_sum: sum_call_field(calls, :reasoning_tokens),
+        served_providers: calls.filter_map { |call| call[:served_provider] }.uniq,
+      }
+    end
+
+    def sum_call_field(calls, field)
+      values = calls.filter_map { |call| call[field] }
+      values.sum unless values.empty?
     end
 
     # A final model turn is valid only when its typed outcome agrees with the proposal this service
@@ -1185,6 +1234,7 @@ class Ai::StoreAgentService
       emit.call(:turn_ready, result)
       suggestions = follow_up_suggestions(reply: result[:reply], last_user_message:)
       emit.call(:suggestions, { suggestions: }) if suggestions.any?
+      log_suggestion_metrics
       result.merge(suggestions:)
     end
 
