@@ -2,12 +2,9 @@
 
 require "spec_helper"
 
-# gumroad-private#2583: an editor save held the `links` row (FOR UPDATE) for the
-# whole save transaction, archive generation included. Archive rows are a derived
-# cache — UpdateProductFilesArchiveWorker fills them in later and every save
-# regenerates them — so building them inside the transaction only extended the
-# window concurrent saves had to queue on. These specs pin that the archive pass
-# runs after the save transaction closes, and that it still runs.
+# Archive rows are a derived cache, so this pass must run outside the save
+# transaction — inside it, the `links` row lock stayed held through a query-heavy
+# pass that concurrent saves were queued behind. These specs pin that ordering.
 describe LinksController, type: :controller do
   let(:seller) { create(:user) }
   let(:product) { create(:product, user: seller) }
