@@ -644,8 +644,12 @@ class LinksController < ApplicationController
         @product.description = SavePublicFilesService.new(resource: @product, files_params: product_permitted_params[:public_files], content: @product.description, contract: product_save_contract).process
         @product.save!
         toggle_community_chat!(product_permitted_params[:community_chat_enabled])
-        @product.generate_product_files_archives!
       end
+
+      # Archive rows are a derived cache (the worker fills them in, every save
+      # regenerates them) and building them is a query-heavy pass over the
+      # product's files — too much to hold the `links` row lock for.
+      @product.generate_product_files_archives!
     rescue Product::StaleContentWriteGuard::StaleContentConflict => e
       # Raised before any mutation: the payload's echoed snapshot timestamps
       # are older than the stored rows, meaning another session saved after
