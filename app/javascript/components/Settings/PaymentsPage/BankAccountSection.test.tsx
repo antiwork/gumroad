@@ -228,6 +228,29 @@ describe("BankAccountSection Bolivia bank code", () => {
   });
 });
 
+describe("BankAccountSection bank-code placeholders", () => {
+  // A placeholder equal to a country's Stripe test routing number is refused outright in live mode
+  // ("Known test bank accounts cannot be used in live mode."), and a seller cannot tell it apart
+  // from a real branch code: Ghana's 022112 was the hint, and no account carrying it ever attached
+  // to Stripe (gumroad-private#2610). Same failure the Bolivia hint had (gp#1967).
+  it.each([
+    ["GH", "Bank code", "123456", "022112"],
+    ["BD", "Bank code", "123456789", "110000000"],
+    ["VN", "Bank Code", "12345678", "01101100"],
+    ["ID", "Bank code", "123", "000"],
+    ["JM", "Bank code", "123", "111"],
+    ["JM", "Branch code", "12345", "00000"],
+    // Azerbaijan's Stripe test routing is the PAIR 123456-123456, so the two fields must not both
+    // carry the sequence.
+    ["AZ", "Branch code", "234567", "123456"],
+  ])("does not hint %s with a value Stripe reserves for tests", (code, label, expected, reserved) => {
+    renderForCountry(code);
+    const field = screen.getByLabelText<HTMLInputElement>(label);
+
+    expect(field.placeholder).toBe(expected);
+    expect(field.placeholder).not.toBe(reserved);
+  });
+});
 describe("BankAccountSection Indonesian bank code", () => {
   // Stripe resolves the ID bank from its 3-digit Sandi Bank directory. The old field advertised
   // maxLength 4 and no shape at all, so `BBSB` and `0140` typed cleanly and were only refused once

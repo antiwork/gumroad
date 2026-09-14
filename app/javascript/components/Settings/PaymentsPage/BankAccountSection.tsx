@@ -1003,6 +1003,11 @@ const BankAccountSection = ({
         <div className="grid gap-2">
           {showNewBankAccount ? (
             <div className="grid gap-5 md:auto-cols-fr md:grid-flow-col">
+              {/* Bank-code placeholders are format hints, never a value a seller should submit.
+                  A hint that matches the country's Stripe test routing number — Ghana's 022112,
+                  Bangladesh's 110000000, Vietnam's 01101100, Indonesia's 000, Jamaica's
+                  111-00000, Azerbaijan's 123456-123456 — is refused outright in live mode, and the
+                  seller cannot tell it apart from a real branch code. Keep them sequences. */}
               {user.country_code === "CA" ? (
                 <>
                   <Fieldset state={errorFieldNames.has("transit_number") ? "danger" : undefined}>
@@ -1239,7 +1244,7 @@ const BankAccountSection = ({
                   <Input
                     type="text"
                     id={`${uid}-bank-code`}
-                    placeholder="01101100"
+                    placeholder="12345678"
                     maxLength={8}
                     required
                     disabled={isFormDisabled}
@@ -1271,7 +1276,7 @@ const BankAccountSection = ({
                   <Input
                     type="text"
                     id={`${uid}-bank-code`}
-                    placeholder="000"
+                    placeholder="123"
                     maxLength={3}
                     inputMode="numeric"
                     pattern="[0-9]{3}"
@@ -1356,7 +1361,7 @@ const BankAccountSection = ({
                     <Input
                       type="text"
                       id={`${uid}-bank-code`}
-                      placeholder="111"
+                      placeholder="123"
                       maxLength={3}
                       required
                       disabled={isFormDisabled}
@@ -1371,7 +1376,7 @@ const BankAccountSection = ({
                     <Input
                       type="text"
                       id={`${uid}-branch-code`}
-                      placeholder="00000"
+                      placeholder="12345"
                       maxLength={5}
                       required
                       disabled={isFormDisabled}
@@ -1706,7 +1711,7 @@ const BankAccountSection = ({
                   <Input
                     type="text"
                     id={`${uid}-bank-code`}
-                    placeholder="022112"
+                    placeholder="123456"
                     maxLength={6}
                     required
                     disabled={isFormDisabled}
@@ -2006,7 +2011,7 @@ const BankAccountSection = ({
                   <Input
                     type="text"
                     id={`${uid}-bank-code`}
-                    placeholder="110000000"
+                    placeholder="123456789"
                     maxLength={9}
                     required
                     disabled={isFormDisabled}
@@ -2393,7 +2398,7 @@ const BankAccountSection = ({
                         <Input
                           type="text"
                           id={`${uid}-branch-code`}
-                          placeholder="123456"
+                          placeholder="234567"
                           maxLength={6}
                           required
                           disabled={isFormDisabled}
