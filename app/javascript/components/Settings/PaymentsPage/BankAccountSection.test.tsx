@@ -234,17 +234,17 @@ describe("BankAccountSection bank-code placeholders", () => {
   // from a real branch code: Ghana's 022112 was the hint, and no account carrying it ever attached
   // to Stripe (gumroad-private#2610). Same failure the Bolivia hint had (gp#1967).
   it.each([
-    ["GH", "Bank code", "123456", "022112"],
-    ["BD", "Bank code", "123456789", "110000000"],
-    ["VN", "Bank Code", "12345678", "01101100"],
-    ["ID", "Bank code", "123", "000"],
-    ["JM", "Bank code", "123", "111"],
-    ["JM", "Branch code", "12345", "00000"],
+    ["GH", "Bank code", "123456", "022112", false],
+    ["BD", "Bank Code", "123456789", "110000000", false],
+    ["VN", "Bank Code", "12345678", "01101100", false],
+    ["ID", "Bank code", "123", "000", false],
+    ["JM", "Bank code", "123", "111", false],
+    ["JM", "Branch code", "12345", "00000", false],
     // Azerbaijan's Stripe test routing is the PAIR 123456-123456, so the two fields must not both
-    // carry the sequence.
-    ["AZ", "Branch code", "234567", "123456"],
-  ])("does not hint %s with a value Stripe reserves for tests", (code, label, expected, reserved) => {
-    renderForCountry(code);
+    // carry the sequence. Its bank fields render for IBAN countries only.
+    ["AZ", "Branch code", "234567", "123456", true],
+  ])("does not hint %s with a value Stripe reserves for tests", (code, label, expected, reserved, supportsIban) => {
+    renderForCountry(code, supportsIban);
     const field = screen.getByLabelText<HTMLInputElement>(label);
 
     expect(field.placeholder).toBe(expected);
