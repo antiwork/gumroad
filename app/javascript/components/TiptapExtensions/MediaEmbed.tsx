@@ -289,8 +289,9 @@ export const ExternalMediaFileEmbed = TiptapNode.create({
           </RowContent>
           {editor.isEditable ? (
             <RowActions>
-              <Button size="icon" color="danger" outline aria-label="Remove" onClick={deleteNode}>
+              <Button size="sm" color="danger" outline onClick={deleteNode}>
                 <Trash className="size-5" />
+                Remove
               </Button>
             </RowActions>
           ) : null}

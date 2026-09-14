@@ -1,9 +1,16 @@
 // @vitest-environment happy-dom
 import { act, cleanup, fireEvent, render } from "@testing-library/react";
+import { Editor } from "@tiptap/core";
+import { EditorContent } from "@tiptap/react";
+import StarterKit from "@tiptap/starter-kit";
 import * as React from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { EmbedMediaForm, mediaEmbedUrlCandidates } from "$app/components/TiptapExtensions/MediaEmbed";
+import {
+  EmbedMediaForm,
+  ExternalMediaFileEmbed,
+  mediaEmbedUrlCandidates,
+} from "$app/components/TiptapExtensions/MediaEmbed";
 
 const state = vi.hoisted(() => ({ requests: new Array<string>(), bodies: new Array<unknown>() }));
 
@@ -127,5 +134,29 @@ describe("EmbedMediaForm", () => {
     await insertUrl("https://vimeo.com/76979871");
 
     expect(askedUrls()).toEqual(["https://vimeo.com/76979871"]);
+  });
+});
+
+describe("ExternalMediaFileEmbed node view", () => {
+  it("labels the remove control so the row does not rely on a bare icon", async () => {
+    const editor = new Editor({
+      extensions: [StarterKit, ExternalMediaFileEmbed],
+      content: {
+        type: "doc",
+        content: [{ type: "mediaEmbed", attrs: { html: "<p>preview</p>", title: EMBED.title, url: EMBED.url } }],
+      },
+    });
+
+    try {
+      await act(async () => {
+        render(<EditorContent editor={editor} />);
+      });
+
+      const remove = [...document.querySelectorAll("button")].find((button) => button.textContent?.trim() === "Remove");
+
+      expect(remove, "remove control did not mount").toBeDefined();
+    } finally {
+      editor.destroy();
+    }
   });
 });
