@@ -101,6 +101,7 @@ class ContentModeration::ModerateRecordService
     rs = Array(reasons)
     transient = ContentModeration::Strategies::ClassifierStrategy::UNAVAILABLE_REASON
     unsupported = ContentModeration::Strategies::ClassifierStrategy::UNSUPPORTED_IMAGE_REASON
+    unfetchable = ContentModeration::Strategies::ClassifierStrategy::UNFETCHABLE_IMAGE_REASON
     if rs.any? && rs.all? { |r| r.to_s.include?(transient) }
       "We couldn’t review this #{noun} just now (a temporary issue on our end). Please try again in a few minutes."
     elsif rs.any? && rs.all? { |r| r.to_s.include?(unsupported) }
@@ -108,6 +109,13 @@ class ContentModeration::ModerateRecordService
       # download limit differ, so one number would be wrong for the other case.
       "This #{noun} includes an image we can’t review, because the format is unsupported (such as an SVG data URL) " \
       "or the file is too large. Replace it with a smaller PNG, JPEG, GIF, or WebP and try again."
+    elsif rs.any? && rs.all? { |r| r.to_s.include?(unfetchable) }
+      # The image is at a URL that no longer resolves for us, so this must not
+      # read as a passing outage the seller waits out: the fix is at the image.
+      # Not "its link is broken" either — a host that is merely down right now
+      # would make that false, and the seller can see the same thing we can.
+      "This #{noun} includes an image we couldn’t download from its link, so we couldn’t review it. " \
+      "Replace that image with a new upload and save again."
     elsif rs.any? { |r| r.to_s.start_with?(TOO_MANY_IMAGES_REASON_PREFIX) }
       "This #{noun} has more images than we can review, so we can’t publish it as is. " \
       "Reduce it to at most #{ContentModeration::ContentExtractor::MAX_PAGE_IMAGE_URLS} images " \
@@ -390,6 +398,9 @@ class ContentModeration::ModerateRecordService
           # A page's images are arbitrary URLs the seller wrote into a public
           # document, so every accepted one gets a moderation attempt.
           max_images: entity_type == :page ? :all : ContentModeration::Strategies::ClassifierStrategy::MAX_IMAGES_TO_MODERATE,
+          # A page's custom_html and a post's message ARE the storage, so an
+          # image URL inside them is never re-signed by a later save.
+          image_urls_are_stored: %i[page post].include?(entity_type),
         ),
         # `corroborate_judgment_flags` makes a spam, off-platform-fulfillment, or
         # text-only adult-content flag block only when it reproduces on resampling;
