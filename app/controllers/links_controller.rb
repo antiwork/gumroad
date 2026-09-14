@@ -646,10 +646,10 @@ class LinksController < ApplicationController
         toggle_community_chat!(product_permitted_params[:community_chat_enabled])
       end
 
-      # Archive rows are a derived cache (the worker fills them in, every save
-      # regenerates them) and building them is a query-heavy pass over the
-      # product's files — too much to hold the `links` row lock for.
-      @product.generate_product_files_archives!
+      # Archive rows are a derived cache rebuilt from committed state, so they are
+      # not part of the save: the row lock is released and the response reports
+      # only the canonical write.
+      GenerateProductFilesArchivesJob.perform_async(@product.id)
     rescue Product::StaleContentWriteGuard::StaleContentConflict => e
       # Raised before any mutation: the payload's echoed snapshot timestamps
       # are older than the stored rows, meaning another session saved after
