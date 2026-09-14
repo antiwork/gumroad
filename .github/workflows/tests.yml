@@ -1011,8 +1011,13 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        ci_node_total: [4]
-        ci_node_index: [0, 1, 2, 3]
+        # 12 shards, not 4: the step timeout below is 25 minutes, but a
+        # selection can reach MAX_SELECTED_FILES (120) — a diff under
+        # components/Checkout/ alone selects 77 specs — and 4 shards cannot
+        # drain that. Knapsack queue mode hands work out dynamically, so
+        # extra shards drain a short selection and exit instead of idling.
+        ci_node_total: [12]
+        ci_node_index: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
     steps:
       - name: Check out trusted workflow files
         uses: actions/checkout@v4
