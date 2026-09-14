@@ -397,6 +397,16 @@ class Api::V2::LinksController < Api::V2::BaseController
       end
       error = validate_file_urls(new_files)
       return render_response(false, message: error) if error
+
+      # `create` filters files[] through permit; update hands the entries to
+      # ProductFile#update!, where an unknown key raises
+      # ActiveModel::UnknownAttributeError. That is a NoMethodError, so the
+      # RecordInvalid rescue in WithProductFiles#save_files! misses it and the
+      # whole product update 500s (GUMROAD-1KG) — reject the key instead.
+      unknown_key = params[:files].flat_map { |f| f.keys.map(&:to_s) }.uniq.find { |key| !product_file_param?(key) }
+      if unknown_key
+        return render_response(false, message: "'#{unknown_key}' is not an accepted parameter on files[]; it is not a writable ProductFile attribute.")
+      end
     end
 
     if params.key?(:cover_ids)
@@ -778,6 +788,31 @@ class Api::V2::LinksController < Api::V2::BaseController
     end
 
     UNSUPPORTED_UPLOAD_FIELDS = %i[file preview thumbnail].freeze
+
+    # files[] keys the update path consumes itself rather than assigning to
+    # ProductFile: the serializer echoes SaveFilesService drops, the aliases it
+    # rewrites (name/file_name → display_name, file_size → size, extension into
+    # filetype), and the params WithProductFiles#save_files! deletes before the
+    # write (id/external_id, the modified flag it injects for id-only entries,
+    # subtitles, thumbnail).
+    DERIVED_FILE_PARAMS = (SaveFilesService::UNWRITABLE_SERIALIZED_FILE_KEYS + %i[
+      id external_id modified name file_name file_size subtitles subtitle_files
+      thumbnail thumbnail_signed_id
+    ]).map(&:to_s).freeze
+
+    # Writable ProductFile attributes, asked of the model so a new column or
+    # flag needs no second edit here. epub_section_info is an
+    # attr_json_data_accessor, which the model does not list as an attribute.
+    WRITABLE_PRODUCT_FILE_ATTRIBUTES = (
+      ProductFile.attribute_names +
+      ProductFile.flag_mapping.values.flat_map(&:keys).map(&:to_s) +
+      %w[epub_section_info]
+    ).uniq.freeze
+
+    def product_file_param?(key)
+      key = key.to_s
+      DERIVED_FILE_PARAMS.include?(key) || WRITABLE_PRODUCT_FILE_ATTRIBUTES.include?(key)
+    end
 
     def reject_unsupported_upload_fields
       rejected_field = UNSUPPORTED_UPLOAD_FIELDS.find { |key| legacy_upload_present?(params[key]) }

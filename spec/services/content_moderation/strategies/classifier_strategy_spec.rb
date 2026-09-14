@@ -211,6 +211,57 @@ RSpec.describe ContentModeration::Strategies::ClassifierStrategy, :vcr do
     expect(result.reasoning).to eq([described_class::UNAVAILABLE_REASON])
   end
 
+  it "reports a permanent rejection, not a retry-later one, for a stored URL OpenAI can never fetch" do
+    # The gp#2611 shape: a card image the page has always carried, whose asset
+    # has since stopped serving. The page holds the URL, so no save re-signs it.
+    image_urls = ["https://public-files.gumroad.com/7zginwv8lmcwwvztdwt0c4nug7k2"]
+    bad_response = instance_double(Faraday::Response, status: 400, body: "", headers: {})
+    unfetchable_error = Faraday::BadRequestError.new(
+      { status: 400, body: { "error" => { "code" => "image_url_unavailable" } } },
+      bad_response
+    )
+    allow(client).to receive(:moderations).and_raise(unfetchable_error)
+
+    result = described_class.new(text: "", image_urls:, max_images: :all, image_urls_are_stored: true).perform
+
+    expect(result.status).to eq("flagged")
+    expect(result.reasoning).to eq([described_class::UNFETCHABLE_IMAGE_REASON])
+    expect(result.reasoning).not_to eq([described_class::UNAVAILABLE_REASON])
+  end
+
+  it "keeps the retry reason for a URL the caller minted for this save" do
+    # A product's attachment URLs are signed in the request that moderates them,
+    # so a refused fetch is worth retrying: the next save mints a new grant.
+    image_urls = ["https://cdn.example.com/photo.png?Expires=#{1.hour.from_now.to_i}&Signature=abc&Key-Pair-Id=APK"]
+    bad_response = instance_double(Faraday::Response, status: 400, body: "", headers: {})
+    unfetchable_error = Faraday::BadRequestError.new(
+      { status: 400, body: { "error" => { "code" => "image_url_unavailable" } } },
+      bad_response
+    )
+    allow(client).to receive(:moderations).and_raise(unfetchable_error)
+
+    result = described_class.new(text: "", image_urls:, max_images: :all).perform
+
+    expect(result.status).to eq("flagged")
+    expect(result.reasoning).to eq([described_class::UNAVAILABLE_REASON])
+  end
+
+  it "reports the same URL as unfetchable once it is stored content, since no save renews its grant" do
+    # A seller can paste a signed URL into a page, where it outlives the grant.
+    image_urls = ["https://cdn.example.com/photo.png?Expires=1&Signature=abc&Key-Pair-Id=APK"]
+    bad_response = instance_double(Faraday::Response, status: 400, body: "", headers: {})
+    unfetchable_error = Faraday::BadRequestError.new(
+      { status: 400, body: { "error" => { "code" => "image_url_unavailable" } } },
+      bad_response
+    )
+    allow(client).to receive(:moderations).and_raise(unfetchable_error)
+
+    result = described_class.new(text: "", image_urls:, max_images: :all, image_urls_are_stored: true).perform
+
+    expect(result.status).to eq("flagged")
+    expect(result.reasoning).to eq([described_class::UNFETCHABLE_IMAGE_REASON])
+  end
+
   it "reports a permanent rejection, not a retry-later one, for a private S3 bucket URL OpenAI can never fetch" do
     image_urls = ["#{S3_BASE_URL}attachments/123/original/photo.png"]
     bad_response = instance_double(Faraday::Response, status: 400, body: "", headers: {})
@@ -223,7 +274,7 @@ RSpec.describe ContentModeration::Strategies::ClassifierStrategy, :vcr do
     result = described_class.new(text: "", image_urls:, max_images: :all).perform
 
     expect(result.status).to eq("flagged")
-    expect(result.reasoning).to eq([described_class::UNSUPPORTED_IMAGE_REASON])
+    expect(result.reasoning).to eq([described_class::UNFETCHABLE_IMAGE_REASON])
   end
 
   it "never logs an inline image payload verbatim" do

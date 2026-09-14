@@ -3,10 +3,6 @@
 # Ai::StoreAgentService powers the conversational "Agent" dashboard tab. The seller chats with an
 # assistant that can answer questions about their store and *propose* changes to it.
 #
-# The agent runs on Grok 4.5 via OpenRouter's Anthropic-compatible endpoint (see MODEL below), with
-# Claude Opus 5 as the request-level fallback when Grok errors. DeepSeek V4.1 Flash is ramped
-# independently as a third option (see DEEPSEEK_MODEL below), also falling back to Opus.
-#
 # Safety model:
 #   - READ tools (api_read) run automatically and only ever query data the seller already owns. They
 #     are scoped to current_seller, so the agent can never read another seller's data.
@@ -14,10 +10,6 @@
 #     that the frontend renders as a confirmation card. Nothing is applied until the seller explicitly
 #     confirms, at which point the controller hands the action to Ai::StoreAgentActionExecutor. This
 #     keeps an LLM hallucination or a prompt injection from silently changing a store.
-#
-# The loop is a standard Anthropic tool-use exchange: we send the system prompt + conversation + tool
-# schemas, run any read tools the model asks for, feed the results back as tool_result blocks, and
-# repeat until the model returns a normal assistant message (optionally carrying one proposed write).
 class Ai::StoreAgentService
   include CurrencyHelper
 
@@ -40,59 +32,49 @@ class Ai::StoreAgentService
   # configured. Independent of GROK_RAMP_FEATURE — see #client for precedence when both are active
   # for the same seller (DeepSeek is checked first; a seller in both ramps gets DeepSeek).
   DEEPSEEK_RAMP_FEATURE = :store_agent_deepseek
-  # Passed to Ai::AnthropicClient as its READ timeout. For the streamed reply this bounds silence
-  # between chunks (not the total generation time — a long healthy stream is fine); for the buffered
-  # calls it bounds the wait for the full response. Production showed a steady stream of 60-second
-  # network timeouts on real (slow but working) generations, so this is deliberately generous — the
-  # client fails fast on connect problems and retries transient failures on its own.
+  # Ai::AnthropicClient's READ timeout, so for the streamed reply it bounds silence between chunks
+  # rather than total generation time. Deliberately generous — the client fails fast on connect
+  # problems and retries transient failures itself, so a tighter cap only kills slow-but-working
+  # generations.
   REQUEST_TIMEOUT_IN_SECONDS = 120
-  # Base upper bound on model turns per reply (each turn may run one or more tools). This has to
-  # leave room for pagination: list endpoints return 10 items per page and the system prompt tells
-  # the model to walk EVERY page for "all of X" tasks, so each page fetch consumes one turn and the
-  # final answer needs one more. The previous cap of 5 meant a seller with more than ~40 products
-  # hit the generic "couldn't finish" fallback on exactly the catalog-wide tasks the pagination
-  # rule exists for. 25 turns covers catalogs of roughly 240 items while still bounding the cost
-  # of a runaway tool loop. A late phantom-staging claim can reserve the two tightly scoped turns
-  # below when the normal budget no longer has room for them.
+  # Base upper bound on model turns per reply, each turn running one or more tools. Pagination sets
+  # the floor: list endpoints return 10 items per page and the prompt tells the model to walk EVERY
+  # page for "all of X", so each page costs a turn plus one for the answer — a lower cap truncates
+  # exactly the catalog-wide tasks that rule exists for. 25 covers catalogs of roughly 240 items.
+  # A late phantom-staging claim can reserve the two tightly scoped turns below when the normal
+  # budget no longer has room for them.
   MAX_TOOL_ITERATIONS = 25
   # History budget per PRIOR message, so twenty turns of recap cannot crowd out the system prompt.
   MAX_MESSAGE_LENGTH = 2_000
-  # The turn being answered gets its own budget: it is the request, not a recap, and trimming it
-  # drops the instructions the model needs. Gumroad's own Share tab → Landing page → "Copy prompt"
-  # emits ~4,900 characters, so at the history budget every creator who pasted it lost most of it
-  # before the model saw it and was told the request was too large.
+  # The turn being answered gets its own budget: it is the request, not a recap. Gumroad's Share tab
+  # → Landing page → "Copy prompt" emits ~4,900 characters, which the history budget would trim away
+  # before the model ever saw it.
   MAX_CURRENT_MESSAGE_LENGTH = 20_000
   MISSING_REQUIRED_READ_MESSAGE = "Store agent write proposal blocked by missing required full read"
-  # Anthropic requires max_tokens on every request. This cap has to fit more than a brief chat
-  # reply: when the agent edits a product, the model must emit the ENTIRE new value (for example a
-  # long description's full HTML) inside the tool call's JSON arguments. A cap sized only for text
-  # replies (this was previously 1,500) cut those tool calls off mid-JSON, which surfaced to the
-  # seller as a generic "Something went wrong" error. 8,192 comfortably fits real product
-  # descriptions while still bounding the cost of a runaway turn.
+  # Anthropic requires max_tokens on every request. Has to fit more than a chat reply: a product edit
+  # makes the model emit the ENTIRE new value (a long description's full HTML) inside the tool call's
+  # JSON arguments, so a text-sized cap cuts those calls off mid-JSON. 8,192 fits real descriptions
+  # while still bounding a runaway turn.
   MAX_REPLY_TOKENS = 8_192
   # A truncated turn is normally the model running out of budget while emitting an intermediate tool
-  # turn's arguments, not a request that needs scoping down, so re-ask it once at double the cap.
-  # Only the turns that truncate pay this, so the runaway-turn bound at MAX_REPLY_TOKENS is unchanged.
+  # turn's arguments, so re-ask it once at double the cap. Only truncating turns pay this.
   MAX_TRUNCATION_RETRY_TOKENS = 16_384
   MAX_TRUNCATION_RETRIES = 1
-  # What the seller sees when a model turn still hits MAX_REPLY_TOKENS (stop_reason "max_tokens").
-  # A truncated turn is unusable — a cut-off tool call has unparseable arguments, and a cut-off
-  # text reply would silently present half an answer as if it were complete — so we replace it
-  # with an honest ask to scope the request down instead of streaming garbage or raising.
+  # What the seller sees when a turn still hits MAX_REPLY_TOKENS. A truncated turn is unusable (a
+  # cut-off tool call has unparseable arguments; a cut-off reply would present half an answer as
+  # complete), so ask for something smaller instead of streaming garbage or raising.
   TRUNCATED_REPLY = "That's too much for me to handle in one go — try asking me to change or " \
                     "summarize a smaller section, and I'll take it from there."
-  # Phrases a reply uses when it asserts THIS turn staged a change for the creator to confirm. Such
-  # a reply is only TRUE when this same turn produced a proposed action: the confirmation card the
-  # creator is told to click is rendered from that action, so with no action there is no card and
-  # the creator is hunting a button that cannot exist. The model does occasionally write the claim
-  # without calling api_write (roughly one staging claim in seven, measured in production), which
-  # reads to the creator as the agent lying to them.
+  # Phrases a reply uses when it asserts THIS turn staged a change. Such a reply is only TRUE when
+  # the same turn produced a proposed action — the confirmation card is rendered from that action, so
+  # with no action there is no card and the creator hunts a button that cannot exist. The model does
+  # occasionally write the claim without calling api_write, which reads as the agent lying.
   #
-  # Precision matters more than recall here, because a match REPLACES the model's reply: a truthful
-  # reply wrongly matched would tell the creator a change doesn't exist when it does. Each pattern
-  # therefore starts at a sentence/current-assertion boundary. Conditional and negated clauses such
-  # as "if it is staged" and "it isn't staged" cannot match merely because they contain the same
-  # words, while a later assertion in "nothing was staged before, but I've staged it now" still can.
+  # Precision beats recall: a match REPLACES the model's reply, so a wrongly matched truthful reply
+  # would tell the creator a change doesn't exist. Each pattern therefore starts at a sentence or
+  # current-assertion boundary, so conditional and negated clauses ("if it is staged", "it isn't
+  # staged") cannot match merely by containing the same words, while a later assertion in the same
+  # reply still can.
   STAGED_CLAIM_BOUNDARY = /
     (?:\A|[.!?;:—–]\s*|\s-\s*|\n+\s*|\b(?:but|however|though)\s+|
        \b(?:although|yet|so)\s+(?=i\b)|,\s*and\s+(?=i\b))
@@ -156,10 +138,8 @@ class Ai::StoreAgentService
       \b(?:staged|prepared)\s+(?:if|when|whenever)\b
     )
   /ix
-  # Two subjectless forms survived the original guard in production: a bounded action followed by
-  # a card instruction, and "Staged again" followed by a replacement-card instruction. Keep this
-  # grammar anchored to the whole reply and to the measured action shapes. Widening it into a noun
-  # phrase parser would make explanatory or quoted prose eligible for destructive replacement.
+  # Keep this grammar anchored to the whole reply and to the measured action shapes: widening it into
+  # a noun-phrase parser would make explanatory or quoted prose eligible for destructive replacement.
   STAGED_CLAIM_SUBJECTLESS_DETAIL = /
     (?>[[:blank:]]*)
     \((?>[-[:alnum:]&+'’]+),(?>[[:blank:]]*)
@@ -297,10 +277,8 @@ class Ai::StoreAgentService
         :\s*(?:please\s+)?(?:confirm|approve)\b|
         ,\s*(?:please\s+)?(?:confirm|approve)\b))
     /ix,
-    # Production emits a subjectless participle when it skips api_write. Only the measured frame
-    # and two bounded sibling shapes qualify, and the action must end its clause before an exact
-    # card instruction. Feature prose such as "Staged deletion of the draft is permanent" cannot
-    # enter this arm.
+    # Only these bounded shapes qualify: the action must end its clause before an exact card
+    # instruction, so feature prose like "Staged deletion of the draft is permanent" cannot enter.
     /
       \Astaged(?>[[:blank:]]+)#{STAGED_CLAIM_SUBJECTLESS_ACTION}
       (?>[[:blank:]]*)[.!:](?>[[:space:]]*)
@@ -938,24 +916,73 @@ class Ai::StoreAgentService
     end
 
     # One structured line per completed turn — model, tool iterations, stop_reason, contract
-    # retries, and latency are the signals the ramp's pass bar checks each step against.
+    # retries, and latency are the signals the ramp's pass bar checks each step against. The
+    # upstream calls made during the turn ride along, because turn latency alone cannot say which
+    # request stalled (gp#2535). Every pre-existing key keeps its name and meaning.
     def log_turn_metrics(outcome:)
       latency_ms = @turn_started_at ? ((Process.clock_gettime(Process::CLOCK_MONOTONIC) - @turn_started_at) * 1000).round : nil
-      Rails.logger.info(
-        {
-          event: "store_agent_turn",
-          model: @_client_model,
-          requested_model: @_client_model,
-          served_models: (@_client.respond_to?(:served_models) ? Array(@_client.served_models).uniq : []),
-          gateway: (@_client.respond_to?(:gateway_name) ? @_client.gateway_name : nil),
-          outcome:,
-          stop_reason: @last_stop_reason,
-          tool_iterations: @turn_iterations_used,
-          contract_retries: @turn_contract_retries,
-          contract_failure: @turn_contract_failure,
-          latency_ms:,
-        }.compact.to_json,
-      )
+      calls = call_metrics(purpose: "turn")
+      @logged_turn_call_count = calls.length
+      payload = {
+        event: "store_agent_turn",
+        model: @_client_model,
+        requested_model: @_client_model,
+        served_models: (@_client.respond_to?(:served_models) ? Array(@_client.served_models).uniq : []),
+        gateway: (@_client.respond_to?(:gateway_name) ? @_client.gateway_name : nil),
+        outcome:,
+        stop_reason: @last_stop_reason,
+        tool_iterations: @turn_iterations_used,
+        contract_retries: @turn_contract_retries,
+        contract_failure: @turn_contract_failure,
+        latency_ms:,
+      }.compact
+      # The call fields are added after compressing so they are always present: a reader must be able
+      # to tell "no call reported this" (null) from "not instrumented" (absent key).
+      payload[:calls] = calls
+      payload.merge!(call_rollups(calls))
+      Rails.logger.info(payload.to_json)
+    end
+
+    # The suggestions pass is a separate upstream call whose latency is not part of the turn's, so it
+    # gets its own line. Entries are matched by position: the client appends in call order.
+    def log_suggestion_metrics
+      calls = call_metrics(purpose: "suggestions", from: @logged_turn_call_count.to_i)
+      return if calls.empty?
+
+      payload = {
+        event: "store_agent_suggestions",
+        model: @_client_model,
+        gateway: (@_client.respond_to?(:gateway_name) ? @_client.gateway_name : nil),
+      }.compact
+      payload[:calls] = calls
+      payload.merge!(call_rollups(calls))
+      Rails.logger.info(payload.to_json)
+    end
+
+    # Per-call entries the client recorded, tagged with the phase of the turn that made them.
+    def call_metrics(purpose:, from: 0)
+      return [] unless @_client.respond_to?(:call_metrics)
+
+      Array(@_client.call_metrics)[from..].to_a.map { |call| call.merge(purpose:) }
+    end
+
+    # Rollups over one phase's calls. A sum skips calls the gateway reported no field for and is nil
+    # when no call did — 0 there would read as a measured zero rather than a missing field.
+    def call_rollups(calls)
+      {
+        model_latency_ms_sum: sum_call_field(calls, :latency_ms),
+        ttft_ms_max: calls.filter_map { |call| call[:ttft_ms] }.max,
+        input_tokens_sum: sum_call_field(calls, :input_tokens),
+        output_tokens_sum: sum_call_field(calls, :output_tokens),
+        cache_read_tokens_sum: sum_call_field(calls, :cache_read_input_tokens),
+        reasoning_tokens_sum: sum_call_field(calls, :reasoning_tokens),
+        served_providers: calls.filter_map { |call| call[:served_provider] }.uniq,
+      }
+    end
+
+    def sum_call_field(calls, field)
+      values = calls.filter_map { |call| call[field] }
+      values.sum unless values.empty?
     end
 
     # A final model turn is valid only when its typed outcome agrees with the proposal this service
@@ -1185,6 +1212,7 @@ class Ai::StoreAgentService
       emit.call(:turn_ready, result)
       suggestions = follow_up_suggestions(reply: result[:reply], last_user_message:)
       emit.call(:suggestions, { suggestions: }) if suggestions.any?
+      log_suggestion_metrics
       result.merge(suggestions:)
     end
 
