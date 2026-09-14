@@ -14622,4 +14622,115 @@ describe StripeMerchantAccountManager, :vcr do
       end.not_to have_enqueued_mail(ContactingCreatorMailer, :more_kyc_needed)
     end
   end
+
+  # Stripe validates `company[structure]` against the ACCOUNT country, and create_account takes that
+  # country from the legal entity rather than the seller's residence. gumroad-private#2609: a
+  # UAE-resident seller with a US legal entity had the UAE business type sent as their structure.
+  describe "company hash keyed on the Stripe account country" do
+    let(:passphrase) { GlobalConfig.get("STRONGBOX_GENERAL_PASSWORD") }
+
+    let(:uae_legal_entity) do
+      create(:user_compliance_info_uae_business, user:, business_vat_id_number: "100000000000003")
+    end
+
+    let(:uae_resident_with_us_legal_entity) do
+      create(:user_compliance_info_uae_business,
+             user:,
+             business_country: "United States",
+             business_state: "California",
+             business_city: "Burbank",
+             business_zip_code: "91506",
+             business_type: UserComplianceInfo::BusinessTypes::LLC)
+    end
+
+    it "sends the UAE structure and VAT id when the legal entity is in the UAE" do
+      company = described_class.send(:company_hash, uae_legal_entity, passphrase)[:company]
+
+      expect(company[:structure]).to eq("llc")
+      expect(company[:vat_id]).to eq("100000000000003")
+    end
+
+    it "does not send the UAE business type as the structure for a US legal entity" do
+      company = described_class.send(:company_hash, uae_resident_with_us_legal_entity, passphrase)[:company]
+
+      expect(company).not_to have_key(:structure)
+      expect(company).not_to have_key(:vat_id)
+    end
+
+    it "omits the structure from the create payload for a US legal entity" do
+      account = described_class.send(:account_hash, user, nil, uae_resident_with_us_legal_entity, passphrase:)
+
+      # create_account builds the Stripe account country from the legal entity, not the residence.
+      expect(account[:business_type]).to eq("company")
+      expect(account[:company][:address]).to include(country: "US")
+      expect(account[:company]).not_to have_key(:structure)
+      expect(account[:company]).not_to have_key(:vat_id)
+    end
+
+    it "keeps the structure in the create payload for a UAE legal entity" do
+      account = described_class.send(:account_hash, user, nil, uae_legal_entity, passphrase:)
+
+      expect(account[:company][:address]).to include(country: "AE")
+      expect(account[:company][:structure]).to eq("llc")
+      expect(account[:business_type]).to eq("company")
+    end
+
+    it "leaves a Canadian legal entity to the Canadian branch, without the UAE VAT id" do
+      canadian = create(:user_compliance_info_uae_business,
+                        user:,
+                        business_country: "Canada",
+                        business_state: "Ontario",
+                        business_city: "Toronto",
+                        business_zip_code: "M4C 1T2",
+                        business_type: "private_corporation")
+      company = described_class.send(:company_hash, canadian, passphrase)[:company]
+
+      expect(company[:structure]).to eq("private_corporation")
+      expect(company).not_to have_key(:vat_id)
+    end
+
+    describe "Japanese address blocks" do
+      let(:japanese_legal_entity) do
+        create(:user_compliance_info_business,
+               user:,
+               country: "Japan",
+               state: "東京都",
+               zip_code: "100-0000",
+               business_country: "Japan",
+               business_state: "東京都",
+               business_zip_code: "100-0000",
+               business_city: "渋谷区",
+               business_building_number: "1-1",
+               business_street_address_kanji: "神宮前",
+               business_name_kanji: "株式会社買う")
+      end
+
+      it "sends the kanji and kana blocks when the legal entity is in Japan" do
+        company = described_class.send(:company_hash, japanese_legal_entity, passphrase)[:company]
+
+        expect(company[:address_kanji]).to include(country: "JP", town: "神宮前")
+        expect(company[:address_kana]).to include(country: "JP")
+        expect(company[:name_kanji]).to eq("株式会社買う")
+      end
+
+      it "does not send them for a US legal entity, which is not a Japanese account" do
+        mixed = create(:user_compliance_info_business,
+                       user:,
+                       country: "Japan",
+                       state: "東京都",
+                       zip_code: "100-0000",
+                       business_country: "United States",
+                       business_state: "California",
+                       business_zip_code: "91506",
+                       business_city: "Burbank",
+                       business_type: UserComplianceInfo::BusinessTypes::LLC)
+        company = described_class.send(:company_hash, mixed, passphrase)[:company]
+
+        expect(company).not_to have_key(:address_kanji)
+        expect(company).not_to have_key(:address_kana)
+        expect(company).not_to have_key(:name_kanji)
+        expect(company).not_to have_key(:name_kana)
+      end
+    end
+  end
 end
