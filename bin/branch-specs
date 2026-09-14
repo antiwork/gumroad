@@ -173,12 +173,9 @@ FANOUT = {
   %r{\Aapp/javascript/components/DiscordButton} => DOWNLOAD_PAGE_SPECS + CHECKOUT_FLOW_SPECS,
   # Importers: DownloadPage/WithContent.tsx:19, Checkout/Receipt.tsx:13.
   %r{\Aapp/javascript/components/DownloadPage/(?!Layout\.tsx\z|WithContent\.tsx\z)} => DOWNLOAD_PAGE_SPECS,
-  # Layout.tsx renders the UrlRedirects pages
-  # (url_redirects_controller.rb:239/:244/:254) and WithContent.tsx's exports
-  # reach ProductEdit/ContentTab and TiptapExtensions through
-  # components/Download/{RichContent,FileList} — both have consumers outside
-  # DOWNLOAD_PAGE_SPECS, so they escalate like the other shared components.
-  # AudioPlayerContainer.tsx has no importer outside components/Download/.
+  # Layout.tsx and WithContent.tsx escalate: the former renders the
+  # UrlRedirects pages, the latter reaches ProductEdit/ContentTab through
+  # components/Download/{RichContent,FileList}.
   %r{\Aapp/javascript/data/discord_integration} => DOWNLOAD_PAGE_SPECS + CHECKOUT_FLOW_SPECS + %w[spec/requests/products/edit/integrations/discord_integrations_spec.rb],
   # Importers: DiscordButton.tsx:4 join/leave;
   # ProductEdit/ProductTab/DiscordIntegrationEditor.tsx:4 fetchServerInfo.

@@ -938,10 +938,9 @@ check(
   ],
 )
 
-# A shared-component directory maps as a whole, but a file with consumers
-# outside that mapping escalates. Layout.tsx renders the UrlRedirects pages;
-# WithContent.tsx's exports reach ProductEdit/ContentTab and TiptapExtensions
-# through components/Download/{RichContent,FileList}.
+# A shared-component directory maps as a whole; a file whose consumers leave
+# that mapping escalates. Layout renders the UrlRedirects pages; WithContent
+# reaches ProductEdit/ContentTab through components/Download/{RichContent,FileList}.
 check(
   "components/DownloadPage keeps its directory mapping for a file with no outside consumer",
   base_files: {
