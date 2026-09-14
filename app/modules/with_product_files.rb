@@ -192,16 +192,8 @@ module WithProductFiles
 
   def generate_folder_archives!(for_files: [])
     archives = product_files_archives.folder_archives.alive
-    archived_folders = archives.pluck(:folder_id)
     folder_to_files = folder_to_files_mapping
-
-    rich_content_folders = folder_to_files.keys
-    existing_folders = archived_folders & rich_content_folders
-    deleted_folders = archived_folders - rich_content_folders
-    new_folders = rich_content_folders - archived_folders
-    folders_need_updating = existing_folders.select do |folder_id|
-      for_files.any? { folder_to_files[folder_id]&.include?(_1.id) } || archives.find_by(folder_id:)&.needs_updating?(product_files.alive)
-    end
+    folders_need_updating, deleted_folders, new_folders = folder_archive_changes(archives, folder_to_files, for_files:)
 
     archives.where(folder_id: (folders_need_updating + deleted_folders)).find_each(&:mark_deleted!)
 
@@ -211,6 +203,15 @@ module WithProductFiles
 
       create_archive!(files_to_archive, folder_id)
     end
+  end
+
+  # Deletion half of generate_folder_archives!; runs inside the save transaction so no stale
+  # ready archive outlives the commit.
+  def invalidate_stale_folder_archives!(for_files: [])
+    archives = product_files_archives.folder_archives.alive
+    folders_need_updating, deleted_folders, _new_folders = folder_archive_changes(archives, folder_to_files_mapping, for_files:)
+
+    archives.where(folder_id: (folders_need_updating + deleted_folders)).find_each(&:mark_deleted!)
   end
 
   def generate_entity_archive!
@@ -260,6 +261,20 @@ module WithProductFiles
       product_files_archive.save!
       product_files_archive.set_url_if_not_present
       product_files_archive.save!
+    end
+
+    # Shared by the in-save invalidation and the job's rebuild so both agree on which archives are stale.
+    def folder_archive_changes(archives, folder_to_files, for_files:)
+      archived_folders = archives.pluck(:folder_id)
+      rich_content_folders = folder_to_files.keys
+      existing_folders = archived_folders & rich_content_folders
+      deleted_folders = archived_folders - rich_content_folders
+      new_folders = rich_content_folders - archived_folders
+      folders_need_updating = existing_folders.select do |folder_id|
+        for_files.any? { folder_to_files[folder_id]&.include?(_1.id) } || archives.find_by(folder_id:)&.needs_updating?(product_files.alive)
+      end
+
+      [folders_need_updating, deleted_folders, new_folders]
     end
 
     def rich_content_mapping(page:, folder: nil, file:)

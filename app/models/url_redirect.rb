@@ -33,6 +33,20 @@ class UrlRedirect < ApplicationRecord
   GUID_GETTER_FROM_S3_URL_REGEX = %r{attachments/(.*)/original}
   BUNDLE_ARCHIVE_FAILED_RETRY_COOLDOWN = 24.hours
   BUNDLE_ARCHIVE_MAX_FAILED_ATTEMPTS = 3
+  # Bounds buyer-poll enqueues per product once the job's until_executing lock is released at start.
+  # Kept below the job's LOCK_TTL so a stranded lock, not this window, is the recovery bound.
+  FOLDER_ARCHIVE_REBUILD_COOLDOWN = 5.minutes
+  # Token-checked so a release after a failed enqueue never drops a reservation a later poll has taken.
+  RELEASE_FOLDER_ARCHIVE_REBUILD_COOLDOWN_IF_HELD = <<~LUA
+    if redis.call('GET', KEYS[1]) == ARGV[1] then
+      return redis.call('DEL', KEYS[1])
+    end
+    return 0
+  LUA
+
+  def self.folder_archive_rebuild_cooldown_key(product_id)
+    "folder_archive_rebuild_cooldown:#{product_id}"
+  end
 
   # Public: If one exists, returns the product that this UrlRedirect is associated to, directly or indirectly. Otherwise nil is returned.
   def referenced_link
@@ -111,7 +125,9 @@ class UrlRedirect < ApplicationRecord
   def folder_archive(folder_id)
     return if with_product_files.has_stampable_pdfs?
 
-    product_files_archives.latest_ready_folder_archive(folder_id)
+    archive = product_files_archives.latest_ready_folder_archive(folder_id)
+    enqueue_missing_folder_archive_rebuild(folder_id) if archive.nil?
+    archive
   end
 
   def alive_product_files
@@ -503,6 +519,60 @@ class UrlRedirect < ApplicationRecord
   private
     def set_token
       self.token ||= self.class.generate_new_token
+    end
+
+    # Only when no alive row exists: queued rows stay the worker's and failed keeps its no-retry
+    # semantics. SET NX before the push collapses racing polls to one enqueue.
+    def enqueue_missing_folder_archive_rebuild(folder_id)
+      return if folder_id.blank?
+
+      product = referenced_link
+      return if product.nil? || product.deleted?
+      return if product_files_archives.folder_archives.alive.where(folder_id:).exists?
+      return unless folder_archive_buildable?(product, folder_id)
+
+      cooldown_key = self.class.folder_archive_rebuild_cooldown_key(product.id)
+      token = SecureRandom.hex(16)
+      reserved = false
+      begin
+        reserved = $redis.set(cooldown_key, token, nx: true, ex: FOLDER_ARCHIVE_REBUILD_COOLDOWN.to_i)
+        return unless reserved
+
+        jid = GenerateProductFilesArchivesJob.perform_async(product.id)
+        release_folder_archive_rebuild_cooldown(cooldown_key, token) if jid.nil?
+      rescue StandardError => e
+        release_folder_archive_rebuild_cooldown(cooldown_key, token) if reserved
+        Rails.logger.warn("[url_redirect=#{id}] folder archive rebuild enqueue failed (product=#{product.id}, folder=#{folder_id}): #{e.class} => #{e.message}")
+        unless ProductFile::EXPECTED_ENQUEUE_ERRORS.any? { e.is_a?(_1) }
+          ErrorNotifier.notify(e, product_id: product.id, url_redirect_id: id, folder_archive_recovery_enqueue_failed: true)
+        end
+      end
+    end
+
+    # A nil jid may be a stale until_executing lock rather than a queued job, so the window is given
+    # back for the next poll. If Redis is unreachable here the reservation stands until it expires.
+    def release_folder_archive_rebuild_cooldown(cooldown_key, token)
+      $redis.eval(RELEASE_FOLDER_ARCHIVE_REBUILD_COOLDOWN_IF_HELD, keys: [cooldown_key], argv: [token])
+    rescue *ProductFile::EXPECTED_ENQUEUE_ERRORS => e
+      Rails.logger.warn("[url_redirect=#{id}] folder archive rebuild cooldown release skipped: #{e.class}")
+    end
+
+    # Mirrors the job's gate so polls don't enqueue for a folder the job would skip; passing here
+    # does not guarantee the job creates an archive.
+    def folder_archive_buildable?(product, folder_id)
+      owner = rich_content_provider.presence || with_product_files
+      if owner.is_a?(Link)
+        return false unless product.has_product_level_rich_content?
+      elsif owner.is_a?(BaseVariant)
+        return false if owner.deleted? || product.has_product_level_rich_content?
+      else
+        return false
+      end
+
+      file_ids = owner.folder_to_files_mapping[folder_id]
+      return false if file_ids.blank?
+
+      owner.alive_product_files.select { |file| file_ids.include?(file.id) && file.archivable? }.size > 1
     end
 
     def latest_mobile_media_locations_by_product_file_id
