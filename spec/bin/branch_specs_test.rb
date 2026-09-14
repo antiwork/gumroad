@@ -938,6 +938,40 @@ check(
   ],
 )
 
+# A shared-component directory maps as a whole, but a file with consumers
+# outside that mapping escalates. Layout.tsx renders the UrlRedirects pages;
+# WithContent.tsx's exports reach ProductEdit/ContentTab and TiptapExtensions
+# through components/Download/{RichContent,FileList}.
+check(
+  "components/DownloadPage keeps its directory mapping for a file with no outside consumer",
+  base_files: {
+    "spec/requests/download_page/download_page_spec.rb" => SPEC_STUB,
+    "app/javascript/components/DownloadPage/AudioPlayerContainer.tsx" => "old",
+  },
+  head_files: { "app/javascript/components/DownloadPage/AudioPlayerContainer.tsx" => "new" },
+  expect_specs: %w[spec/requests/download_page/download_page_spec.rb],
+)
+
+check(
+  "components/DownloadPage/Layout escalates (UrlRedirects pages render it)",
+  base_files: {
+    "spec/requests/download_page/download_page_spec.rb" => SPEC_STUB,
+    "app/javascript/components/DownloadPage/Layout.tsx" => "old",
+  },
+  head_files: { "app/javascript/components/DownloadPage/Layout.tsx" => "new" },
+  expect_escalate: true,
+)
+
+check(
+  "components/DownloadPage/WithContent escalates (its exports reach ProductEdit/ContentTab)",
+  base_files: {
+    "spec/requests/download_page/download_page_spec.rb" => SPEC_STUB,
+    "app/javascript/components/DownloadPage/WithContent.tsx" => "old",
+  },
+  head_files: { "app/javascript/components/DownloadPage/WithContent.tsx" => "new" },
+  expect_escalate: true,
+)
+
 check(
   "pages/UrlRedirects/Read still escalates (EPUB reader is not download_page)",
   base_files: { "app/javascript/pages/UrlRedirects/Read.tsx" => "old" },
