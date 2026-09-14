@@ -1050,6 +1050,23 @@ describe Ai::AnthropicClient do
       )
     end
 
+    it "times TTFT from the first delta of a multi-delta stream, not the last" do
+      stub_call_clock(0.0, 0.25, 1.5)
+      stream = sse(
+        ["message_start", { message: { model: "claude-opus-4-7" } }],
+        ["content_block_start", { index: 0, content_block: { type: "text" } }],
+        ["content_block_delta", { index: 0, delta: { type: "text_delta", text: "You have " } }],
+        ["content_block_delta", { index: 0, delta: { type: "text_delta", text: "3 products." } }],
+        ["content_block_stop", { index: 0 }],
+        ["message_delta", { delta: { stop_reason: "end_turn" } }],
+      )
+      stub_request(:post, url).to_return(status: 200, body: stream, headers: { "Content-Type" => "text/event-stream" })
+
+      client.stream_messages(system: "s", messages: [{ role: "user", content: "x" }]) { |_| }
+
+      expect(client.call_metrics.first).to include(ttft_ms: 250, latency_ms: 1500)
+    end
+
     context "through OpenRouter" do
       let(:openrouter_url) { "https://openrouter.ai/api/v1/messages" }
 

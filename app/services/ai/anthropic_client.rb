@@ -312,8 +312,10 @@ class Ai::AnthropicClient
         delay = e.retry_after || attempt * RETRY_BASE_DELAY_IN_SECONDS
         raise if @retry_sleep_spent + delay > RETRY_SLEEP_BUDGET_IN_SECONDS
 
-        # A retried call has not failed; only what the last attempt ended in is an error.
+        # A retried call has not failed; only what the last attempt ended in is an error. TTFT is
+        # reset with it so the next attempt's first delta is what gets timed.
         trace.error = nil
+        trace.ttft_ms = nil
         trace.retries += 1
         @retry_sleep_spent += delay
         sleep(delay)
@@ -355,9 +357,12 @@ class Ai::AnthropicClient
       Rails.logger.warn("Anthropic call metrics not recorded: #{e.class}: #{e.message}")
     end
 
-    # First output of this call, measured from its start so a retried call reports the attempt that
-    # actually delivered. Streamed: the first content_block_delta. Buffered: the body arriving.
+    # First output of this attempt, measured from the call's start so a retried call reports the
+    # attempt that actually delivered. Streamed: the first content_block_delta. Buffered: the body
+    # arriving. Later deltas must not overwrite it, or TTFT would just track the end of the stream.
     def mark_first_byte!(trace)
+      return if trace.ttft_ms
+
       trace.ttft_ms = elapsed_ms(trace.started_at)
     end
 
