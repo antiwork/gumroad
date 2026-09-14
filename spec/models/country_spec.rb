@@ -541,9 +541,6 @@ describe Country do
     end
 
     it "keeps Vietnam's floor below the platform minimum now that VND is a single-unit currency" do
-      # VND became single-unit with #7639, which scaled the previously-written 8_112_500 by 100 and
-      # pushed the VN floor to $312.21 — above Payouts::MIN_AMOUNT_CENTS, which silently raised every
-      # VN seller's minimum and stopped their payouts.
       expect(Country.new("VN").min_cross_border_payout_amount_usd_cents).to be < Payouts::MIN_AMOUNT_CENTS
     end
   end
