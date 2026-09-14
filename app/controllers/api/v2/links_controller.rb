@@ -398,11 +398,9 @@ class Api::V2::LinksController < Api::V2::BaseController
       error = validate_file_urls(new_files)
       return render_response(false, message: error) if error
 
-      # `create` filters files[] through permit; update hands the entries to
-      # ProductFile#update!, where an unknown key raises
-      # ActiveModel::UnknownAttributeError. That is a NoMethodError, so the
-      # RecordInvalid rescue in WithProductFiles#save_files! misses it and the
-      # whole product update 500s (GUMROAD-1KG) — reject the key instead.
+      # `create` permits files[] keys; update hands them to ProductFile#update!, where an unknown
+      # key raises UnknownAttributeError — a NoMethodError, so the RecordInvalid rescue in
+      # WithProductFiles#save_files! misses it and the whole update 500s. Reject it instead.
       unknown_key = params[:files].flat_map { |f| f.keys.map(&:to_s) }.uniq.find { |key| !product_file_param?(key) }
       if unknown_key
         return render_response(false, message: "'#{unknown_key}' is not an accepted parameter on files[]; it is not a writable ProductFile attribute.")
@@ -789,12 +787,9 @@ class Api::V2::LinksController < Api::V2::BaseController
 
     UNSUPPORTED_UPLOAD_FIELDS = %i[file preview thumbnail].freeze
 
-    # files[] keys the update path consumes itself rather than assigning to
-    # ProductFile: the serializer echoes SaveFilesService drops, the aliases it
-    # rewrites (name/file_name → display_name, file_size → size, extension into
-    # filetype), and the params WithProductFiles#save_files! deletes before the
-    # write (id/external_id, the modified flag it injects for id-only entries,
-    # subtitles, thumbnail).
+    # files[] keys the update path consumes itself rather than assigning to ProductFile: the
+    # aliases SaveFilesService rewrites, the ProductFile#as_json echoes it drops, and the
+    # entries WithProductFiles#save_files! deletes before the write.
     DERIVED_FILE_PARAMS = (SaveFilesService::UNWRITABLE_SERIALIZED_FILE_KEYS + %i[
       id external_id modified name file_name file_size subtitles subtitle_files
       thumbnail thumbnail_signed_id
