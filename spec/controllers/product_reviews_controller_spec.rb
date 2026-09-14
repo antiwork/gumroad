@@ -288,13 +288,19 @@ describe ProductReviewsController do
     end
 
     it "loads every reviewer's avatar in one query instead of one per review" do
+      reviewed_product = create(:product, display_product_reviews: true)
+      3.times do |i|
+        create(:product_review, link: reviewed_product, rating: i + 1,
+                                purchase: create(:purchase, link: reviewed_product, purchaser: create(:user)))
+      end
+
       avatar_queries = 0
       counter = lambda do |_name, _start, _finish, _id, payload|
         avatar_queries += 1 if payload[:sql].include?("active_storage_attachments")
       end
 
       ActiveSupport::Notifications.subscribed(counter, "sql.active_record") do
-        get :index, params: { product_id: product.external_id }
+        get :index, params: { product_id: reviewed_product.external_id }
       end
 
       expect(response.parsed_body["reviews"].size).to eq(2)
