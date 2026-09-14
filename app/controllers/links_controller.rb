@@ -18,6 +18,13 @@ class LinksController < ApplicationController
   DEFAULT_PRICE = 500
   PRICE_INPUT_MAX_LENGTH = 64
   PRICE_INPUT_PATTERN = /\A[+-]?(?:\d+(?:\.\d*)?|\.\d+)\z/
+  # How long the save waits for a concurrent save of the same product to release
+  # the `links` row before it answers the retryable 409 below. MySQL's 50s default
+  # is what let one product park 37.7 sessions on that `FOR UPDATE` and stall both
+  # ALBs (gumroad-private#2583), and a parked session costs a Puma thread and a DB
+  # connection for the whole wait. Anything longer than this still fails the saves
+  # that arrive after it, so the timeout is not what protects them — the retry is.
+  EDITOR_SAVE_LOCK_WAIT_TIMEOUT_SECONDS = 1
   # A lock-wait timeout means a concurrent save of the same product holds the
   # row lock, so the client should wait for it to commit — not reload, which
   # re-enters the same queue.
@@ -57,6 +64,11 @@ class LinksController < ApplicationController
   before_action :prepare_product_page, only: %i[show]
   before_action :fetch_product_and_enforce_ownership, only: %i[destroy]
   before_action :fetch_product_and_enforce_access, only: %i[update publish unpublish release_preorder update_sections]
+
+  # Declared after the lookup above, which keeps the server's default. The bound
+  # covers the save transaction and the reports that follow it: the action's only
+  # lock wait is the save's.
+  around_action :bound_editor_save_lock_wait, only: :update
 
   # Declared after #show's other before_actions on purpose: this keeps the boundary the old
   # in-action pin drew, leaving the product and seller lookups above on the replica.
@@ -1109,6 +1121,19 @@ class LinksController < ApplicationController
         "seller_id=#{@product.user_id} provenance_version=#{product_permitted_params[:rich_content_provenance_version].to_i} " \
         "request_id=#{request.request_id}#{detail_suffix}"
       )
+    end
+
+    # MySQL's `innodb_lock_wait_timeout` is the only thing `@product.lock!` waits for,
+    # so bounding it is what turns a queued save into the retryable 409 instead of a
+    # 50s park. Set for the action and restored in the ensure: the value lives on the
+    # pooled connection, whose next checkout must not inherit it.
+    def bound_editor_save_lock_wait
+      connection = ActiveRecord::Base.connection
+      previous = connection.select_value("SELECT @@SESSION.innodb_lock_wait_timeout")
+      connection.execute("SET SESSION innodb_lock_wait_timeout = #{EDITOR_SAVE_LOCK_WAIT_TIMEOUT_SECONDS}")
+      yield
+    ensure
+      connection.execute("SET SESSION innodb_lock_wait_timeout = #{previous.to_i}") if previous.present?
     end
 
     # Best-effort: this runs inside the rescue that owes the client a 409, so a
