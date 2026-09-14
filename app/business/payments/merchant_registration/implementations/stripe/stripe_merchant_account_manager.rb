@@ -2152,9 +2152,8 @@ module StripeMerchantAccountManager
                        })
     end
 
-    # Stripe validates `company[structure]` against the ACCOUNT country, which create_account takes
-    # from the legal entity rather than the seller's residence. On residence alone, a UAE-resident
-    # seller with a US legal entity sent their US business type here and the account was rejected.
+    # Stripe validates `company[structure]` against the account country, which create_account takes
+    # from the legal entity rather than the seller's residence.
     if user_compliance_info.country_code == Compliance::Countries::ARE.alpha2 &&
        user_compliance_info.legal_entity_country_code == Compliance::Countries::ARE.alpha2
       hash.deep_merge!(
