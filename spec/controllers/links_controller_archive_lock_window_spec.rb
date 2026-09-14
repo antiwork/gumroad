@@ -65,5 +65,9 @@ describe LinksController, type: :controller do
     expect(response).to be_successful
     expect(transaction_depth_during_archive_generation).to eq(transaction_depth_before_save)
     expect(product.reload.product_files_archives.folder_archives.alive.count).to eq(2)
+    # The archive row's own commit is what enqueues the zip build; moving the row
+    # creation out of the save transaction must not lose that.
+    archive_ids = product.product_files_archives.folder_archives.alive.pluck(:id)
+    expect(UpdateProductFilesArchiveWorker.jobs.map { _1["args"].first }).to include(*archive_ids)
   end
 end
