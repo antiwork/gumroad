@@ -332,7 +332,7 @@ describe CurrencyHelper do
       Feature.activate_user(Checkout::BuyerCurrencyEligibility::SUBSCRIPTION_FEATURE_NAME, seller)
       Feature.activate_user(StripeChargeProcessor::INDIA_CARD_MANDATE_RELIABILITY_FEATURE, seller)
       allow(helper).to receive(:buyer_currency_merchant_account).with(seller).and_return(platform_merchant_account)
-      allow(helper).to receive(:buyer_currency_for_ip).and_return(Currency::AUD)
+      allow(helper).to receive(:buyer_currency_for_ip).and_return(Currency::DKK)
 
       props = helper.buyer_currency_display_props(product: membership, price_cents: 1000, ip: "1.2.3.4")
 

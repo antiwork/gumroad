@@ -592,10 +592,10 @@ describe Charge::CreateService, :vcr do
       expect do
         service.send(
           :mandate_options_in_charge_currency,
-          processor_currency: Currency::AUD,
+          processor_currency: Currency::DKK,
           processor_amount_cents: 15_00
         )
-      end.to raise_error(Charge::CreateService::BuyerCurrencyQuoteInvalid, /aud/)
+      end.to raise_error(Charge::CreateService::BuyerCurrencyQuoteInvalid, /dkk/)
     ensure
       Feature.deactivate_user(StripeChargeProcessor::INDIA_CARD_MANDATE_RELIABILITY_FEATURE, seller_1)
     end
