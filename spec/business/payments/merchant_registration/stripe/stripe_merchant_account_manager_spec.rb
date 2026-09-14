@@ -14624,8 +14624,7 @@ describe StripeMerchantAccountManager, :vcr do
   end
 
   # Stripe validates `company[structure]` against the ACCOUNT country, and create_account takes that
-  # country from the legal entity rather than the seller's residence. gumroad-private#2609: a
-  # UAE-resident seller with a US legal entity had the UAE business type sent as their structure.
+  # country from the legal entity rather than the seller's residence.
   describe "company hash keyed on the Stripe account country" do
     # The file-level user carries an unpaid balance, which needs the seeded gumroad merchant
     # account. None of these cases touch balances.
