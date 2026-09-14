@@ -172,7 +172,10 @@ FANOUT = {
   # api/v2/help_articles_controller.rb:25/:31/:36.
   %r{\Aapp/javascript/components/DiscordButton} => DOWNLOAD_PAGE_SPECS + CHECKOUT_FLOW_SPECS,
   # Importers: DownloadPage/WithContent.tsx:19, Checkout/Receipt.tsx:13.
-  %r{\Aapp/javascript/components/DownloadPage/} => DOWNLOAD_PAGE_SPECS,
+  %r{\Aapp/javascript/components/DownloadPage/(?!Layout\.tsx\z|WithContent\.tsx\z)} => DOWNLOAD_PAGE_SPECS,
+  # Layout.tsx and WithContent.tsx escalate: the former renders the
+  # UrlRedirects pages, the latter reaches ProductEdit/ContentTab through
+  # components/Download/{RichContent,FileList}.
   %r{\Aapp/javascript/data/discord_integration} => DOWNLOAD_PAGE_SPECS + CHECKOUT_FLOW_SPECS + %w[spec/requests/products/edit/integrations/discord_integrations_spec.rb],
   # Importers: DiscordButton.tsx:4 join/leave;
   # ProductEdit/ProductTab/DiscordIntegrationEditor.tsx:4 fetchServerInfo.
