@@ -38,15 +38,23 @@ class ContentModeration::Strategies::ClassifierStrategy
   # caller like nil/UNREACHED, but must not read as transient: the input is
   # static, so "try again later" can never come true.
   UNSUPPORTED = :unsupported
+  # A URL OpenAI asked for and could not download. Separate from UNSUPPORTED
+  # (where the payload reached it and was refused) because the reason has to
+  # send the seller at the URL, not at the image's format or size.
+  UNFETCHABLE = :unfetchable
   PERMANENT_REJECTION_CODES = %w[invalid_data_url invalid_image_format file_too_large].freeze
-  # Private-bucket URLs 403 to OpenAI unconditionally (not a signed-URL
-  # expiry), so unlike the same error code on a product/post URL, retrying
-  # here can never succeed.
-  UNFETCHABLE_PRIVATE_BUCKET_URL_PREFIX = S3_BASE_URL
+  # Query parameters that carry a time-limited grant to fetch the URL. Their
+  # presence is what makes `image_url_unavailable` ambiguous: an expired
+  # signature is re-minted by the next save, while a URL carrying no grant at
+  # all (a stored page image, the private bucket) fails identically every time
+  # until the seller replaces it.
+  SIGNED_URL_QUERY_PARAMS = %w[Expires Signature Key-Pair-Id verify
+                               X-Amz-Signature X-Amz-Expires X-Amz-Credential].freeze
   UNAVAILABLE_REASON = "We cannot moderate the content at this time, please try again later or update the content."
   # Not "inline": `file_too_large` reaches here for a remote URL OpenAI
   # downloaded and refused, not only for a `data:` payload we refused locally.
   UNSUPPORTED_IMAGE_REASON = "The content contains an image the moderation endpoint cannot review (unsupported format or too large)."
+  UNFETCHABLE_IMAGE_REASON = "The content contains an image we could not download from its URL."
 
   DEFAULT_THRESHOLDS = {
     "harassment" => 0.8,
@@ -100,6 +108,7 @@ class ContentModeration::Strategies::ClassifierStrategy
     moderated_count = 0
     skipped_urls = []
     unreached_urls = []
+    unfetchable_urls = []
     unsupported_urls = []
     # See ContentModeration::ImageSelection for why this order, not a shuffle.
     # Walking it (rather than taking the first MAX) means an image OpenAI refuses
@@ -120,6 +129,11 @@ class ContentModeration::Strategies::ClassifierStrategy
       moderate_images(selected).each do |url, scores|
         if scores == UNREACHED
           unreached_urls << url
+          next
+        end
+
+        if scores == UNFETCHABLE
+          unfetchable_urls << url
           next
         end
 
@@ -153,18 +167,19 @@ class ContentModeration::Strategies::ClassifierStrategy
     # not moderate blocks rather than degrading to a text-only pass — otherwise a
     # single image on a host that serves browsers and refuses OpenAI publishes
     # unreviewed, which is the bypass the budget rejection exists to close.
-    if @max_images == :all && (skipped_urls.any? || unreached_urls.any? || unsupported_urls.any?)
+    if @max_images == :all && (skipped_urls.any? || unreached_urls.any? || unfetchable_urls.any? || unsupported_urls.any?)
       Rails.logger.warn(
         "ContentModeration::ClassifierStrategy blocking full-coverage content: " \
-        "#{skipped_urls.size} image(s) rejected by OpenAI, #{unsupported_urls.size} with an unreviewable payload, " \
+        "#{skipped_urls.size} image(s) rejected by OpenAI, #{unfetchable_urls.size} not downloadable, " \
+        "#{unsupported_urls.size} with an unreviewable payload, " \
         "#{unreached_urls.size} not reached within #{IMAGE_PHASE_DEADLINE_IN_SECONDS}s, of #{@image_urls.size}"
       )
-      # "Try again later" only when a retry could plausibly change the outcome.
-      # When every unmoderated image was a deterministic payload rejection, the
-      # block is permanent and the reason has to send the seller at the image,
-      # not at the clock.
-      reason = skipped_urls.none? && unreached_urls.none? ? UNSUPPORTED_IMAGE_REASON : UNAVAILABLE_REASON
-      return Result.new(status: "flagged", reasoning: [reason])
+      return Result.new(
+        status: "flagged",
+        reasoning: [blocking_reason(
+          skipped_urls:, unreached_urls:, unfetchable_urls:, unsupported_urls:
+        )]
+      )
     end
 
     if @image_urls.any? && moderated_count == 0
@@ -177,7 +192,7 @@ class ContentModeration::Strategies::ClassifierStrategy
         # producing hundreds of noise events a month with no action to take.
         Rails.logger.warn(
           "ContentModeration::ClassifierStrategy could not moderate any image " \
-          "(#{skipped_urls.size + unsupported_urls.size}/#{@image_urls.size} rejected by OpenAI); text was moderated, continuing with text-only result"
+          "(#{skipped_urls.size + unfetchable_urls.size + unsupported_urls.size}/#{@image_urls.size} rejected by OpenAI); text was moderated, continuing with text-only result"
         )
       else
         # No text and no image could be moderated — the content got zero
@@ -186,10 +201,14 @@ class ContentModeration::Strategies::ClassifierStrategy
         ErrorNotifier.notify(
           "ContentModeration::ClassifierStrategy could not moderate any image",
           image_url_count: @image_urls.size,
-          skipped_urls: (skipped_urls + unsupported_urls).map { |url| loggable_url(url) },
+          skipped_urls: (skipped_urls + unfetchable_urls + unsupported_urls).map { |url| loggable_url(url) },
         )
-        reason = skipped_urls.none? && unreached_urls.none? && unsupported_urls.any? ? UNSUPPORTED_IMAGE_REASON : UNAVAILABLE_REASON
-        return Result.new(status: "flagged", reasoning: [reason])
+        return Result.new(
+          status: "flagged",
+          reasoning: [blocking_reason(
+            skipped_urls:, unreached_urls:, unfetchable_urls:, unsupported_urls:
+          )]
+        )
       end
     end
 
@@ -200,6 +219,18 @@ class ContentModeration::Strategies::ClassifierStrategy
   end
 
   private
+    # The single reason to report for a blocked verdict. A retry can still
+    # resolve an expiry or a timeout, so a transient cause outranks a permanent
+    # one: the seller acts on that first, and once it clears the next save
+    # reports the permanent cause on its own.
+    def blocking_reason(skipped_urls:, unreached_urls:, unfetchable_urls:, unsupported_urls:)
+      return UNAVAILABLE_REASON if skipped_urls.any? || unreached_urls.any?
+      return UNFETCHABLE_IMAGE_REASON if unfetchable_urls.any?
+      return UNSUPPORTED_IMAGE_REASON if unsupported_urls.any?
+
+      UNAVAILABLE_REASON
+    end
+
     # One request per batch of image URLs, returning `[url, scores_or_nil]` pairs
     # in the order given. The endpoint answers an array of inputs with one result
     # per input, positionally.
@@ -265,6 +296,16 @@ class ContentModeration::Strategies::ClassifierStrategy
       "#{url.to_s[0, 30]}…(#{url.to_s.bytesize} bytes inline)"
     end
 
+    # Whether the URL carries a grant of its own that a later save would renew.
+    def signed_url?(url)
+      query = URI.parse(url.to_s).query
+      return false if query.blank?
+
+      query.split("&").any? { |pair| SIGNED_URL_QUERY_PARAMS.include?(pair.split("=", 2).first) }
+    rescue URI::InvalidURIError
+      false
+    end
+
     def moderate_one_image(url)
       moderate([{ type: "image_url", image_url: { url: url } }],
                skip_url: url,
@@ -327,7 +368,11 @@ class ContentModeration::Strategies::ClassifierStrategy
         # perform) reproduces on every save of the same content, so it must not
         # be reported as a passing failure.
         code = body.is_a?(Hash) ? body.dig("error", "code") : nil
-        return UNSUPPORTED if code == "image_url_unavailable" && skip_url.to_s.start_with?(UNFETCHABLE_PRIVATE_BUCKET_URL_PREFIX)
+        # A URL with no grant of its own cannot be made fetchable by retrying:
+        # either the file is gone or the host refuses OpenAI outright (the
+        # private bucket). A signed URL is the opposite case — the next save
+        # re-mints the signature — so its failure stays transient.
+        return UNFETCHABLE if code == "image_url_unavailable" && !signed_url?(skip_url)
 
         PERMANENT_REJECTION_CODES.include?(code) ? UNSUPPORTED : nil
       end

@@ -186,9 +186,9 @@ RSpec.describe ContentModeration::Strategies::ClassifierStrategy, :vcr do
   end
 
   it "keeps the retry reason when a transient failure sits alongside an unsupported payload" do
-    # Retrying can still resolve the fetch failure, and once it does, the next
-    # save reports the unsupported image on its own.
-    image_urls = ["data:image/svg+xml;base64,PHN2Zy8+", "https://cdn.example.com/refused.png"]
+    # Retrying can still resolve the expired signature, and once it does, the
+    # next save reports the unsupported image on its own.
+    image_urls = ["data:image/svg+xml;base64,PHN2Zy8+", "https://cdn.example.com/refused.png?Expires=1&Signature=abc"]
     bad_response = instance_double(Faraday::Response, status: 400, body: "", headers: {})
     unsupported_error = Faraday::BadRequestError.new(
       { status: 400, body: { "error" => { "code" => "invalid_image_format" } } },
@@ -211,6 +211,39 @@ RSpec.describe ContentModeration::Strategies::ClassifierStrategy, :vcr do
     expect(result.reasoning).to eq([described_class::UNAVAILABLE_REASON])
   end
 
+  it "reports a permanent rejection, not a retry-later one, for a stored URL OpenAI can never fetch" do
+    # The gp#2611 shape: a card image the page has always carried, whose asset
+    # has since stopped serving. No grant on the URL, so no retry can help.
+    image_urls = ["https://public-files.gumroad.com/7zginwv8lmcwwvztdwt0c4nug7k2"]
+    bad_response = instance_double(Faraday::Response, status: 400, body: "", headers: {})
+    unfetchable_error = Faraday::BadRequestError.new(
+      { status: 400, body: { "error" => { "code" => "image_url_unavailable" } } },
+      bad_response
+    )
+    allow(client).to receive(:moderations).and_raise(unfetchable_error)
+
+    result = described_class.new(text: "", image_urls:, max_images: :all).perform
+
+    expect(result.status).to eq("flagged")
+    expect(result.reasoning).to eq([described_class::UNFETCHABLE_IMAGE_REASON])
+    expect(result.reasoning).not_to eq([described_class::UNAVAILABLE_REASON])
+  end
+
+  it "keeps the retry reason for a signed URL, whose grant the next save renews" do
+    image_urls = ["https://cdn.example.com/photo.png?Expires=#{1.hour.from_now.to_i}&Signature=abc&Key-Pair-Id=APK"]
+    bad_response = instance_double(Faraday::Response, status: 400, body: "", headers: {})
+    unfetchable_error = Faraday::BadRequestError.new(
+      { status: 400, body: { "error" => { "code" => "image_url_unavailable" } } },
+      bad_response
+    )
+    allow(client).to receive(:moderations).and_raise(unfetchable_error)
+
+    result = described_class.new(text: "", image_urls:, max_images: :all).perform
+
+    expect(result.status).to eq("flagged")
+    expect(result.reasoning).to eq([described_class::UNAVAILABLE_REASON])
+  end
+
   it "reports a permanent rejection, not a retry-later one, for a private S3 bucket URL OpenAI can never fetch" do
     image_urls = ["#{S3_BASE_URL}attachments/123/original/photo.png"]
     bad_response = instance_double(Faraday::Response, status: 400, body: "", headers: {})
@@ -223,7 +256,7 @@ RSpec.describe ContentModeration::Strategies::ClassifierStrategy, :vcr do
     result = described_class.new(text: "", image_urls:, max_images: :all).perform
 
     expect(result.status).to eq("flagged")
-    expect(result.reasoning).to eq([described_class::UNSUPPORTED_IMAGE_REASON])
+    expect(result.reasoning).to eq([described_class::UNFETCHABLE_IMAGE_REASON])
   end
 
   it "never logs an inline image payload verbatim" do
@@ -564,7 +597,7 @@ RSpec.describe ContentModeration::Strategies::ClassifierStrategy, :vcr do
     expect(result.reasoning).to eq(["OpenAI moderation flagged: violence (score: 0.95, threshold: 0.9)"])
   end
 
-  it "returns flagged with a retry reason and notifies Sentry when every image URL fails and there is no text" do
+  it "returns flagged with the unfetchable reason and notifies Sentry when every image URL fails and there is no text" do
     image_urls = [
       "blob:https://gumroad.com/bad-1",
       "https://cdn.example.com/bad-2.png",
@@ -580,7 +613,7 @@ RSpec.describe ContentModeration::Strategies::ClassifierStrategy, :vcr do
     result = described_class.new(text: "", image_urls:).perform
 
     expect(result.status).to eq("flagged")
-    expect(result.reasoning).to eq([described_class::UNAVAILABLE_REASON])
+    expect(result.reasoning).to eq([described_class::UNFETCHABLE_IMAGE_REASON])
     expect(ErrorNotifier).to have_received(:notify).with(
       "ContentModeration::ClassifierStrategy could not moderate any image",
       image_url_count: 3,
