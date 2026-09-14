@@ -33,12 +33,10 @@ class UrlRedirect < ApplicationRecord
   GUID_GETTER_FROM_S3_URL_REGEX = %r{attachments/(.*)/original}
   BUNDLE_ARCHIVE_FAILED_RETRY_COOLDOWN = 24.hours
   BUNDLE_ARCHIVE_MAX_FAILED_ATTEMPTS = 3
-  # Bounds buyer-poll enqueues of GenerateProductFilesArchivesJob per product: its until_executing
-  # lock is released when the job starts, so every poll after that would otherwise enqueue again.
+  # Bounds buyer-poll enqueues per product once the job's until_executing lock is released at start.
   # Kept below the job's LOCK_TTL so a stranded lock, not this window, is the recovery bound.
   FOLDER_ARCHIVE_REBUILD_COOLDOWN = 5.minutes
-  # Deletes the reservation only while it still holds this poll's token, so giving the window
-  # back after a failed enqueue never removes a reservation a later poll has since taken.
+  # Token-checked so a release after a failed enqueue never drops a reservation a later poll has taken.
   RELEASE_FOLDER_ARCHIVE_REBUILD_COOLDOWN_IF_HELD = <<~LUA
     if redis.call('GET', KEYS[1]) == ARGV[1] then
       return redis.call('DEL', KEYS[1])
@@ -523,9 +521,8 @@ class UrlRedirect < ApplicationRecord
       self.token ||= self.class.generate_new_token
     end
 
-    # Recovers a rebuild whose post-save enqueue was lost, only when no alive row exists so queued
-    # rows stay the worker's and failed keeps its no-retry semantics. The window is reserved with
-    # SET NX before the push, so polls racing each other collapse to one enqueue.
+    # Only when no alive row exists: queued rows stay the worker's and failed keeps its no-retry
+    # semantics. SET NX before the push collapses racing polls to one enqueue.
     def enqueue_missing_folder_archive_rebuild(folder_id)
       return if folder_id.blank?
 
@@ -552,18 +549,16 @@ class UrlRedirect < ApplicationRecord
       end
     end
 
-    # A nil jid (already queued) or a raised push gives the window back so the next poll can retry.
-    # If Redis is unreachable here the reservation stands until it expires, so that retry waits out
-    # FOLDER_ARCHIVE_REBUILD_COOLDOWN; the bound holds only while $redis answers.
+    # A nil jid may be a stale until_executing lock rather than a queued job, so the window is given
+    # back for the next poll. If Redis is unreachable here the reservation stands until it expires.
     def release_folder_archive_rebuild_cooldown(cooldown_key, token)
       $redis.eval(RELEASE_FOLDER_ARCHIVE_REBUILD_COOLDOWN_IF_HELD, keys: [cooldown_key], argv: [token])
     rescue *ProductFile::EXPECTED_ENQUEUE_ERRORS => e
       Rails.logger.warn("[url_redirect=#{id}] folder archive rebuild cooldown release skipped: #{e.class}")
     end
 
-    # Mirrors the job's gate for this folder so an enqueue always yields a row and the
-    # polls stop: the archive owner must be the level the job builds for, the folder must
-    # be in that owner's current content, and it must hold more than one archivable file.
+    # Mirrors the job's gate so polls don't enqueue for a folder the job would skip; passing here
+    # does not guarantee the job creates an archive.
     def folder_archive_buildable?(product, folder_id)
       owner = rich_content_provider.presence || with_product_files
       if owner.is_a?(Link)

@@ -645,16 +645,14 @@ class LinksController < ApplicationController
         @product.save!
         toggle_community_chat!(product_permitted_params[:community_chat_enabled])
 
-        # Archives whose folder this save renamed, re-arranged, or removed are
-        # invalidated here, under the same lock and in the same commit as the
-        # content change — a ready archive must not outlive the content it was
-        # built from. Building the replacements is the job's work, below.
+        # Same lock and commit as the content change: a ready archive must not
+        # outlive the content it was built from. Rebuilding is the job's work, below.
         @product.invalidate_stale_product_files_archives!
       end
 
-      # Archive rows are a derived cache rebuilt from committed state, so their
-      # creation is not part of the save: the row lock is released and the
-      # response reports only the canonical write.
+      # Stale archives were invalidated inside the save transaction above; the
+      # replacements are built after commit by the job, under its own product
+      # lock. The response reports only the canonical write.
       enqueue_product_files_archives_generation
     rescue Product::StaleContentWriteGuard::StaleContentConflict => e
       # Raised before any mutation: the payload's echoed snapshot timestamps
@@ -1121,11 +1119,8 @@ class LinksController < ApplicationController
       )
     end
 
-    # Runs after the commit, so it must not change the response. A nil jid is the
-    # until_executing lock deduping onto a queued rebuild that starts after this
-    # commit and so covers it. A raise is swallowed: the catch-all rescue in update
-    # would otherwise report a saved product as failed. A lost enqueue is recovered
-    # from the buyer's download request (UrlRedirect#folder_archive).
+    # Post-commit: a raise here must not reach update's catch-all and report a saved product
+    # as failed. A nil jid may be a stale lock, not a queued rebuild; UrlRedirect#folder_archive recovers.
     def enqueue_product_files_archives_generation
       GenerateProductFilesArchivesJob.perform_async(@product.id)
     rescue StandardError => e

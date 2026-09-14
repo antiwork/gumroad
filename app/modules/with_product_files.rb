@@ -205,9 +205,8 @@ module WithProductFiles
     end
   end
 
-  # Deletion half of generate_folder_archives!, same staleness rules, no creation. Runs
-  # inside the save transaction so no stale ready archive is served between the commit
-  # and the GenerateProductFilesArchivesJob pass that rebuilds it.
+  # Deletion half of generate_folder_archives!; runs inside the save transaction so no stale
+  # ready archive outlives the commit.
   def invalidate_stale_folder_archives!(for_files: [])
     archives = product_files_archives.folder_archives.alive
     folders_need_updating, deleted_folders, _new_folders = folder_archive_changes(archives, folder_to_files_mapping, for_files:)
@@ -264,10 +263,7 @@ module WithProductFiles
       product_files_archive.save!
     end
 
-    # Splits the alive folder archives against the current rich content into the
-    # folders whose archive is stale, the folders that no longer exist, and the
-    # folders with no archive yet. Shared by the in-save invalidation and the job's
-    # rebuild so both agree on which archives are stale.
+    # Shared by the in-save invalidation and the job's rebuild so both agree on which archives are stale.
     def folder_archive_changes(archives, folder_to_files, for_files:)
       archived_folders = archives.pluck(:folder_id)
       rich_content_folders = folder_to_files.keys
