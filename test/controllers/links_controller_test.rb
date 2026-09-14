@@ -4168,6 +4168,7 @@ class LinksControllerUpdateTest < ActionController::TestCase
         rich_content: [{ title: "Page 1", description: { type: "doc", content: description } }],
         files:,
       }, format: :json
+      GenerateProductFilesArchivesJob.drain
     end
     archives = @product.product_files_archives.alive.to_a
     archives.each do |archive|
@@ -4181,6 +4182,7 @@ class LinksControllerUpdateTest < ActionController::TestCase
         rich_content: [{ id: @product.alive_rich_contents.find_by(position: 0).external_id, title: "Page 1", description: { type: "doc", content: description } }],
         files:,
       }, format: :json
+      GenerateProductFilesArchivesJob.drain
     end
     assert_equal true, archives.all?(&:alive?)
 
@@ -4196,6 +4198,7 @@ class LinksControllerUpdateTest < ActionController::TestCase
           variants: [{ name: "Version 1", rich_content: [{ id: @product.alive_rich_contents.find_by(position: 0).external_id, title: "Version 1 - Page 1", description: { type: "doc", content: description } }] }],
           files:,
         }, format: :json
+        GenerateProductFilesArchivesJob.drain
       end
     end
   end
@@ -4221,6 +4224,7 @@ class LinksControllerUpdateTest < ActionController::TestCase
           files: [{ id: file1.external_id, url: file1.url }, { id: file2.external_id, url: file2.url }],
           variants: [{ id: version1.external_id, name: version1.name, rich_content: [{ id: nil, title: "Version 1 - Page 1", description: { type: "doc", content: version1_rich_content_description } }] }]
         }, format: :json
+        GenerateProductFilesArchivesJob.drain
       end
     end
 
@@ -4237,6 +4241,7 @@ class LinksControllerUpdateTest < ActionController::TestCase
           files: [{ id: file1.external_id, url: file1.url }, { id: file2.external_id, url: file2.url }],
           variants: [{ id: version1.external_id, name: version1.name }]
         }, format: :json
+        GenerateProductFilesArchivesJob.drain
       end
     end
   end
@@ -4244,6 +4249,7 @@ class LinksControllerUpdateTest < ActionController::TestCase
   test "PUT update does not generate a folder archive when nothing has changed" do
     assert_no_difference -> { @product.product_files_archives.folder_archives.alive.count } do
       post :update, params: { id: @product.unique_permalink, name: @product.name }, format: :json
+      GenerateProductFilesArchivesJob.drain
     end
     assert_equal 0, @product.product_files_archives.folder_archives.alive.count
   end
@@ -4259,6 +4265,7 @@ class LinksControllerUpdateTest < ActionController::TestCase
         rich_content: [{ id: nil, title: "Page 1", description: { type: "doc", content: description } }],
         files: [{ id: file1.external_id, url: file1.url }]
       }, format: :json
+      GenerateProductFilesArchivesJob.drain
     end
   end
 
@@ -4276,6 +4283,7 @@ class LinksControllerUpdateTest < ActionController::TestCase
         rich_content: [{ id: nil, title: "Page 1", description: { type: "doc", content: description } }],
         files: [{ id: file1.external_id, url: file1.url }]
       }, format: :json
+      GenerateProductFilesArchivesJob.drain
     end
   end
 
@@ -4295,6 +4303,7 @@ class LinksControllerUpdateTest < ActionController::TestCase
       rich_content: [{ id: nil, title: "Page 1", description: { type: "doc", content: [folder1] } }],
       files: [{ id: file1.external_id, url: file1.url }, { id: file2.external_id, url: file2.url }]
     }, format: :json
+    GenerateProductFilesArchivesJob.drain
 
     folder1_archive = @product.product_files_archives.folder_archives.alive.find_by(folder_id: folder1_id)
     folder1_archive.mark_in_progress!
@@ -4310,6 +4319,7 @@ class LinksControllerUpdateTest < ActionController::TestCase
         rich_content: [{ id: @product.alive_rich_contents.first.external_id, title: "New page title", description: { type: "doc", content: [folder1] } }],
         files: [{ id: file1.external_id, url: file1.url }, { id: file2.external_id, url: file2.url }],
       }, format: :json
+      GenerateProductFilesArchivesJob.drain
     end
     assert_equal true, folder1_archive.reload.alive?
     assert_equal 1, @product.product_files_archives.folder_archives.alive.count
@@ -4338,6 +4348,7 @@ class LinksControllerUpdateTest < ActionController::TestCase
         rich_content: [{ id: nil, title: "Page 1", description: { type: "doc", content: page1_description } }],
         files: [file1, file2, file3, file4].map { { id: _1.external_id, url: _1.url } }
       }, format: :json
+      GenerateProductFilesArchivesJob.drain
     end
 
     folder1_archive = @product.product_files_archives.folder_archives.alive.find_by(folder_id: folder1_id)
@@ -4363,6 +4374,7 @@ class LinksControllerUpdateTest < ActionController::TestCase
         rich_content: [{ id: page1.external_id, title: page1.title, description: { type: "doc", content: updated_description } }],
         files: [file2, file3, file4, file5].map { { id: _1.external_id, url: _1.url } }
       }, format: :json
+      GenerateProductFilesArchivesJob.drain
     end
     assert_equal true, folder1_archive.reload.alive?
 
@@ -4403,6 +4415,7 @@ class LinksControllerUpdateTest < ActionController::TestCase
         rich_content: [{ id: nil, title: "Page 1", description: { type: "doc", content: description } }],
         files: [file1, file2, file3, file4, file5, file6].map { { id: _1.external_id, url: _1.url } }
       }, format: :json
+      GenerateProductFilesArchivesJob.drain
     end
 
     folder1_archive = Link.find(@product.id).product_files_archives.folder_archives.alive.find_by(folder_id: folder1_id)
@@ -4430,6 +4443,7 @@ class LinksControllerUpdateTest < ActionController::TestCase
         rich_content: [{ id: page1.external_id, title: page1.title, description: { type: "doc", content: page1.description } }],
         files: [file1, file2, file3, file4, file5, file6].map { { id: _1.external_id, url: _1.url } }
       }, format: :json
+      GenerateProductFilesArchivesJob.drain
     end
 
     assert_equal true, [folder1_archive.reload, folder2_archive.reload, folder3_archive.reload].all?(&:alive?)
@@ -4451,6 +4465,7 @@ class LinksControllerUpdateTest < ActionController::TestCase
         rich_content: [{ id: nil, title: "Page 1", description: { type: "doc", content: [folder1] } }],
         files: [file1, file2].map { { id: _1.external_id, url: _1.url } }
       }, format: :json
+      GenerateProductFilesArchivesJob.drain
     end
     archive = @product.product_files_archives.folder_archives.alive.last
     archive.mark_in_progress!
@@ -4474,6 +4489,7 @@ class LinksControllerUpdateTest < ActionController::TestCase
         rich_content: [{ id: page1.external_id, title: page1.title, description: { type: "doc", content: updated_page1_description } }],
         files: [{ id: file1.external_id, url: file1.url }, { id: file2.external_id, url: file2.url }, { id: file3_id, display_name: "File 3", url: "#{S3_BASE_URL}specs/#{unique_suffix}.pdf" }, { id: file4_id, display_name: "File 4", url: "#{S3_BASE_URL}specs/#{unique_suffix}.pdf" }],
       }, format: :json
+      GenerateProductFilesArchivesJob.drain
     end
     assert_equal false, archive.needs_updating?(@product.product_files)
     assert_equal true, archive.reload.alive?
@@ -4507,6 +4523,7 @@ class LinksControllerUpdateTest < ActionController::TestCase
         rich_content: [{ id: nil, title: "Page 1", description: { type: "doc", content: description } }],
         files: [file1, file2].map { { id: _1.external_id, url: _1.url } }
       }, format: :json
+      GenerateProductFilesArchivesJob.drain
     end
 
     old_archive = @product.product_files_archives.folder_archives.alive.last
@@ -4525,6 +4542,7 @@ class LinksControllerUpdateTest < ActionController::TestCase
       rich_content: [{ id: page1.external_id, title: page1.title, description: { type: "doc", content: description } }],
       files: [file1, file2].map { { id: _1.external_id, url: _1.url } },
     }, format: :json
+    GenerateProductFilesArchivesJob.drain
 
     assert_equal false, old_archive.reload.alive?
     assert_equal 1, @product.product_files_archives.folder_archives.alive.count
@@ -4561,6 +4579,7 @@ class LinksControllerUpdateTest < ActionController::TestCase
       rich_content: [{ id: nil, title: "Page 1", description: { type: "doc", content: description } }],
       files: [file1, file2, file3, file4, file5].map { { id: _1.external_id, url: _1.url } }
     }, format: :json
+    GenerateProductFilesArchivesJob.drain
 
     folder1_archive = @product.product_files_archives.create!(folder_id: folder1.dig("attrs", "uid"))
     folder1_archive.product_files = @product.product_files
@@ -4589,6 +4608,7 @@ class LinksControllerUpdateTest < ActionController::TestCase
       rich_content: [{ id: page1.external_id, title: page1.title, description: { type: "doc", content: new_description } }],
       files: [file1, file2, file3, file4, file5].map { { id: _1.external_id, url: _1.url } },
     }, format: :json
+    GenerateProductFilesArchivesJob.drain
 
     assert_equal false, folder1_archive.reload.alive?
     assert_equal false, folder2_archive.reload.alive?
@@ -4621,6 +4641,7 @@ class LinksControllerUpdateTest < ActionController::TestCase
       rich_content: [{ id: nil, title: "Page 1", description: { type: "doc", content: description } }],
       files: [file1, file2].map { { id: _1.external_id, url: _1.url } },
     }, format: :json
+    GenerateProductFilesArchivesJob.drain
     assert_equal 1, @product.product_files_archives.folder_archives.alive.count
 
     old_archive = @product.product_files_archives.folder_archives.alive.find_by(folder_id:)
@@ -4635,6 +4656,7 @@ class LinksControllerUpdateTest < ActionController::TestCase
       rich_content: [{ id: page1.external_id, title: page1.title, description: { type: "doc", content: new_description } }],
       files: [],
     }, format: :json
+    GenerateProductFilesArchivesJob.drain
 
     assert_equal false, old_archive.reload.alive?
     assert_equal 0, @product.product_files_archives.folder_archives.alive.count
@@ -4655,6 +4677,7 @@ class LinksControllerUpdateTest < ActionController::TestCase
       rich_content: [{ id: nil, title: "Page 1", description: { type: "doc", content: description } }],
       files: [file1, file2].map { { id: _1.external_id, url: _1.url } },
     }, format: :json
+    GenerateProductFilesArchivesJob.drain
     assert_equal 1, @product.product_files_archives.folder_archives.alive.count
 
     old_archive = @product.product_files_archives.folder_archives.alive.find_by(folder_id:)
@@ -4672,6 +4695,7 @@ class LinksControllerUpdateTest < ActionController::TestCase
       rich_content: [{ id: page1.external_id, title: page1.title, description: { type: "doc", content: new_description } }],
       files: [{ id: file1.external_id, url: file1.url }]
     }, format: :json
+    GenerateProductFilesArchivesJob.drain
 
     assert_equal false, old_archive.reload.alive?
     assert_equal 0, @product.product_files_archives.folder_archives.alive.count
@@ -4703,6 +4727,7 @@ class LinksControllerUpdateTest < ActionController::TestCase
       rich_content: [{ id: nil, title: "Page 1", description: { type: "doc", content: page1_description } }, { id: nil, title: "Page 2", description: { type: "doc", content: page2_description } }],
       files: [file1, file2, file3, file4].map { { id: _1.external_id, url: _1.url } },
     }, format: :json
+    GenerateProductFilesArchivesJob.drain
 
     folder1_archive = Link.find(@product.id).product_files_archives.folder_archives.alive.find_by(folder_id: folder1_id)
     folder1_archive.mark_in_progress!
@@ -4735,6 +4760,7 @@ class LinksControllerUpdateTest < ActionController::TestCase
       rich_content: [{ id: page1.external_id, title: page1.title, description: { type: "doc", content: updated_page1_description } }, { id: page2.external_id, title: page2.title, description: { type: "doc", content: updated_page2_description } }],
       files: [file1, file3, file4, file5].map { { id: _1.external_id, url: _1.url } },
     }, format: :json
+    GenerateProductFilesArchivesJob.drain
 
     assert_equal false, folder1_archive.reload.alive?
     assert_equal false, folder2_archive.reload.alive?
@@ -4768,6 +4794,7 @@ class LinksControllerUpdateTest < ActionController::TestCase
           files: [file1, file2].map { { id: _1.external_id, url: _1.url } },
           variants: [{ id: version1.external_id, name: version1.name, rich_content: [{ id: nil, title: "Version 1 - Page 1", description: { type: "doc", content: version1_rich_content_description } }] }]
         }, format: :json
+        GenerateProductFilesArchivesJob.drain
       end
     end
   end
@@ -4794,6 +4821,7 @@ class LinksControllerUpdateTest < ActionController::TestCase
           variants: [{ "id" => variant.external_id, "name" => "linux", "price" => "2" }],
           files: [file1, file2].map { { id: _1.external_id, url: _1.url } },
         }, format: :json
+        GenerateProductFilesArchivesJob.drain
       end
     end
   end
