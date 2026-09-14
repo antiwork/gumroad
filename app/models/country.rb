@@ -506,7 +506,9 @@ class Country
     when Compliance::Countries::UZB.alpha2 # Uzbekistan
       343_000_00
     when Compliance::Countries::VNM.alpha2 # Vietnam
-      81_125_00
+      # VND is single-unit (config/currencies.json), so Stripe's minor-unit minimum is already the
+      # whole-dong amount: 81,125, not padded with the `_00` used for 2-decimal currencies.
+      81_125
     else
       nil
     end

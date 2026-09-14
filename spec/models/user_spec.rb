@@ -4001,6 +4001,16 @@ describe User, :vcr do
       end
     end
 
+    describe "when the user is in Vietnam, whose payout currency (VND) is single-unit" do
+      let(:user) { create(:user) }
+      let!(:compliance_info) { create(:user_compliance_info_vietnam, user:) }
+
+      it "keeps the $100 platform minimum as the floor" do
+        expect(user.minimum_payout_threshold_cents).to eq(Payouts::MIN_AMOUNT_CENTS)
+        expect(user.minimum_payout_amount_cents).to eq(Payouts::MIN_AMOUNT_CENTS)
+      end
+    end
+
     describe "when Stripe has rejected the user's account" do
       it "returns the rejected-account floor so the remaining balance can be released" do
         create(:merchant_account, user:, stripe_disabled_reason: "rejected.listed")

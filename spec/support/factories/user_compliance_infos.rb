@@ -51,6 +51,11 @@ FactoryBot.define do
     country { "Korea, Republic of" }
   end
 
+  factory :user_compliance_info_vietnam, parent: :user_compliance_info do
+    zip_code { "100000" }
+    country { "Vietnam" }
+  end
+
   factory :user_compliance_info_business, parent: :user_compliance_info do
     is_business { true }
     business_name { "Buy More, LLC" }

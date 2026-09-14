@@ -496,6 +496,7 @@ describe Country do
       expect(Country.new("GY").min_cross_border_payout_amount_local_cents).to eq 6_300_00
       expect(Country.new("KH").min_cross_border_payout_amount_local_cents).to eq 123_000_00
       expect(Country.new("MN").min_cross_border_payout_amount_local_cents).to eq 105_000_00
+      expect(Country.new("VN").min_cross_border_payout_amount_local_cents).to eq 81_125
       expect(Country.new("AO").min_cross_border_payout_amount_local_cents).to eq 23_000_00
       expect(Country.new("AR").min_cross_border_payout_amount_local_cents).to eq 4_600_00
       expect(Country.new("RW").min_cross_border_payout_amount_local_cents).to eq 100_00
@@ -537,6 +538,13 @@ describe Country do
         expect(Country.new(country.alpha2).min_cross_border_payout_amount_usd_cents).to eq 0
       end
       expect(Country.new(Compliance::Countries::BRA.alpha2).min_cross_border_payout_amount_usd_cents).to eq 0 # Brazil (unsupported country)
+    end
+
+    it "keeps Vietnam's floor below the platform minimum now that VND is a single-unit currency" do
+      # VND became single-unit with #7639, which scaled the previously-written 8_112_500 by 100 and
+      # pushed the VN floor to $312.21 — above Payouts::MIN_AMOUNT_CENTS, which silently raised every
+      # VN seller's minimum and stopped their payouts.
+      expect(Country.new("VN").min_cross_border_payout_amount_usd_cents).to be < Payouts::MIN_AMOUNT_CENTS
     end
   end
 end
