@@ -1121,14 +1121,11 @@ class LinksController < ApplicationController
       )
     end
 
-    # Runs after the save transaction has committed, so nothing here may change
-    # the response: the write is durable and the editor must be told so. A nil
-    # jid is not a failure — GenerateProductFilesArchivesJob's until_executing
-    # lock deduped this enqueue onto a rebuild that is still queued, and that
-    # rebuild starts after this commit, so it archives this save's state. An
-    # enqueue that raises (Redis down, serialization) is reported and swallowed;
-    # the catch-all `rescue => e` in update would otherwise answer a committed
-    # save with "Something went wrong while saving your changes".
+    # Runs after the commit, so it must not change the response. A nil jid is the
+    # until_executing lock deduping onto a queued rebuild that starts after this
+    # commit and so covers it. A raise is swallowed: the catch-all rescue in update
+    # would otherwise report a saved product as failed. A lost enqueue is recovered
+    # from the buyer's download request (UrlRedirect#folder_archive).
     def enqueue_product_files_archives_generation
       GenerateProductFilesArchivesJob.perform_async(@product.id)
     rescue StandardError => e

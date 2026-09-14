@@ -205,12 +205,9 @@ module WithProductFiles
     end
   end
 
-  # The deletion half of generate_folder_archives!: marks the folder archives the
-  # current rich content no longer describes (folder renamed, files re-arranged,
-  # folder removed) as deleted without creating replacements. The editor save runs
-  # this inside its transaction so a ready archive for stale content cannot be served
-  # between the commit and the GenerateProductFilesArchivesJob pass that rebuilds it.
-  # Unchanged folders are left alone, exactly as generate_folder_archives! leaves them.
+  # Deletion half of generate_folder_archives!, same staleness rules, no creation. Runs
+  # inside the save transaction so no stale ready archive is served between the commit
+  # and the GenerateProductFilesArchivesJob pass that rebuilds it.
   def invalidate_stale_folder_archives!(for_files: [])
     archives = product_files_archives.folder_archives.alive
     folders_need_updating, deleted_folders, _new_folders = folder_archive_changes(archives, folder_to_files_mapping, for_files:)

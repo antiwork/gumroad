@@ -1505,10 +1505,9 @@ class Link < ApplicationRecord
     end
   end
 
-  # The invalidation half of generate_product_files_archives!, for the editor save
-  # transaction: same branch on has_product_level_rich_content?, same deletions,
-  # no creation. This way a stale ready archive is gone the moment the save commits,
-  # and GenerateProductFilesArchivesJob only has to build the replacements.
+  # Deletion half of generate_product_files_archives!, run inside the save transaction
+  # so a stale ready archive dies with the commit; GenerateProductFilesArchivesJob builds
+  # the replacements afterwards.
   def invalidate_stale_product_files_archives!
     if has_product_level_rich_content?
       invalidate_stale_folder_archives!
