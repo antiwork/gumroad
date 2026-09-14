@@ -78,13 +78,13 @@ describe LinksController, type: :controller do
 
     before { sign_in seller }
 
-    # The save's own lock wait is the only one inside the bound, and the products that are
-    # not the one being saved must still queue on their own timeout rather than fail here.
-    it "bounds the save's lock wait and leaves the rest of the request at the server's default" do
+    # The save's own lock wait is the only one inside the bound: every later write in the
+    # transaction must queue on the server's timeout, not on a bound chosen for the lock.
+    it "sets the bound for the row lock and lifts it there, leaving the rest of the save at the server's default" do
+      previous = ActiveRecord::Base.connection.select_value("SELECT @@SESSION.innodb_lock_wait_timeout")
       statements = []
       subscriber = ActiveSupport::Notifications.subscribe("sql.active_record") do |_name, _start, _finish, _id, payload|
-        sql = payload[:sql].to_s
-        statements << sql if sql.match?(/innodb_lock_wait_timeout|FOR UPDATE/i)
+        statements << payload[:sql].to_s
       end
 
       begin
@@ -94,17 +94,18 @@ describe LinksController, type: :controller do
       end
 
       expect(response).to have_http_status(:success)
-      bounded = statements.index { |sql| sql.match?(/SET SESSION innodb_lock_wait_timeout = #{LinksController::EDITOR_SAVE_LOCK_WAIT_TIMEOUT_SECONDS}\z/o) }
-      lock_taken = statements.index { |sql| sql.match?(/FOR UPDATE/i) }
-      restored = statements.index { |sql| sql.match?(/SET SESSION innodb_lock_wait_timeout = \d+\z/) && !sql.end_with?("= #{LinksController::EDITOR_SAVE_LOCK_WAIT_TIMEOUT_SECONDS}") }
+      set_indexes = statements.each_index.select { |i| statements[i].start_with?("SET SESSION innodb_lock_wait_timeout") }
+      lock_taken = statements.index { |sql| sql.include?("FOR UPDATE") }
 
-      expect(bounded).to be_present
+      expect(set_indexes.size).to eq(2)
       expect(lock_taken).to be_present
-      expect(restored).to be_present
-      # Before the lock is taken, so the wait it starts is the bounded one; and after it,
-      # so no later statement in the request waits on the bound.
-      expect(bounded).to be < lock_taken
-      expect(restored).to be > lock_taken
+      # Before the lock is taken, so the wait it starts is the bounded one.
+      expect(set_indexes.first).to be < lock_taken
+      expect(statements[set_indexes.first]).to eq("SET SESSION innodb_lock_wait_timeout = #{LinksController::EDITOR_SAVE_LOCK_WAIT_TIMEOUT_SECONDS}")
+      # On the statement right after it, so no write in the save runs at the bound; the
+      # value restored is the one the session actually had, not the constant.
+      expect(set_indexes.last).to eq(lock_taken + 1)
+      expect(statements[set_indexes.last]).to eq("SET SESSION innodb_lock_wait_timeout = #{previous}")
     end
   end
 end
