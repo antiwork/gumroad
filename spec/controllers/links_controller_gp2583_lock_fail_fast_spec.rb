@@ -94,7 +94,7 @@ describe LinksController, type: :controller do
       end
 
       expect(response).to have_http_status(:success)
-      bounded = statements.index { |sql| sql.match?(/SET SESSION innodb_lock_wait_timeout = #{LinksController::EDITOR_SAVE_LOCK_WAIT_TIMEOUT_SECONDS}\z/) }
+      bounded = statements.index { |sql| sql.match?(/SET SESSION innodb_lock_wait_timeout = #{LinksController::EDITOR_SAVE_LOCK_WAIT_TIMEOUT_SECONDS}\z/o) }
       lock_taken = statements.index { |sql| sql.match?(/FOR UPDATE/i) }
       restored = statements.index { |sql| sql.match?(/SET SESSION innodb_lock_wait_timeout = \d+\z/) && !sql.end_with?("= #{LinksController::EDITOR_SAVE_LOCK_WAIT_TIMEOUT_SECONDS}") }
 
