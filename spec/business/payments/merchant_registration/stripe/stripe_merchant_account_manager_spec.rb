@@ -10409,7 +10409,17 @@ describe StripeMerchantAccountManager, :vcr do
         let(:error_message) { "Known test bank accounts cannot be used in live mode." }
 
         before do
-          expect(Stripe::Account).to receive(:update).and_raise(Stripe::InvalidRequestError.new(error_message, nil))
+          # Built the way StripeClient#specific_api_error does, status and request-id included:
+          # `message` is a plain attr_reader (errors.rb) and only `to_s` carries the
+          # "(Status 400) (Request req_…)" decoration, so equality is safe — and a stripe-ruby
+          # that ever starts decorating `message` fails here instead of dropping the email.
+          error = Stripe::InvalidRequestError.new(
+            error_message, nil,
+            http_status: 400,
+            http_headers: { "request-id" => "req_2610" },
+            json_body: { error: { message: error_message, type: "invalid_request_error" } },
+          )
+          expect(Stripe::Account).to receive(:update).and_raise(error)
         end
 
         it "emails the creator with the format rejection kind and returns invalid_bank_account" do
@@ -10436,7 +10446,13 @@ describe StripeMerchantAccountManager, :vcr do
         let(:error_message) { "Known test bank accounts cannot be used in live mode" }
 
         before do
-          expect(Stripe::Account).to receive(:update).and_raise(Stripe::InvalidRequestError.new(error_message, nil))
+          error = Stripe::InvalidRequestError.new(
+            error_message, nil,
+            http_status: 400,
+            http_headers: { "request-id" => "req_2610" },
+            json_body: { error: { message: error_message, type: "invalid_request_error" } },
+          )
+          expect(Stripe::Account).to receive(:update).and_raise(error)
         end
 
         it "does not email the creator and reports the unknown error instead" do

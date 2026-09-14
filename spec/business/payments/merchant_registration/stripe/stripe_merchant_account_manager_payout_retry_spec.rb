@@ -649,8 +649,16 @@ describe StripeMerchantAccountManager do
     end
 
     it "calls a bank code Stripe refuses as one of its own test accounts a format rejection" do
-      error = Stripe::InvalidRequestError.new("Known test bank accounts cannot be used in live mode.", nil)
+      message = "Known test bank accounts cannot be used in live mode."
+      error = Stripe::InvalidRequestError.new(
+        message, nil,
+        http_status: 400,
+        http_headers: { "request-id" => "req_2610" },
+        json_body: { error: { message:, type: "invalid_request_error" } },
+      )
 
+      # The classifier compares `message`, which is the raw text even on a decorated error.
+      expect(error.to_s).to start_with("(Status 400)")
       expect(described_class.bank_details_format_rejection?(error)).to be(true)
       expect(described_class.bank_rejection_kind_for(error)).to eq(StripeMerchantAccountManager::BANK_REJECTION_KIND_FORMAT)
     end
