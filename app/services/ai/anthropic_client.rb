@@ -66,8 +66,8 @@ class Ai::AnthropicClient
   )
   private_constant :CallTrace
 
-  # Neither gateway documents a stable header naming the upstream that served a request. These are
-  # the names they have used; the first present one wins, with a body `provider` field as fallback.
+  # Neither gateway documents a stable header naming the upstream that served a request, so try the
+  # known names in order and fall back to the body's `provider` field.
   PROVIDER_HEADER_NAMES = %w[
     x-vercel-ai-gateway-provider
     x-vercel-ai-provider

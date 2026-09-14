@@ -1003,8 +1003,8 @@ describe Ai::AnthropicClient do
     end
   end
 
-  # gp#2535: per-call latency/TTFT/tokens/provider, read by StoreAgentService after a turn. The
-  # clock is stubbed because every measurement here is a delta between two reads of it.
+  # Per-call latency/TTFT/tokens/provider, read by StoreAgentService after a turn. The clock is
+  # stubbed because every measurement here is a delta between two reads of it.
   describe "call metrics" do
     def sse(*events)
       events.map { |event, data| "event: #{event}\ndata: #{data.to_json}\n\n" }.join

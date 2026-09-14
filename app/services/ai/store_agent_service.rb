@@ -917,8 +917,8 @@ class Ai::StoreAgentService
 
     # One structured line per completed turn — model, tool iterations, stop_reason, contract
     # retries, and latency are the signals the ramp's pass bar checks each step against. The
-    # upstream calls made during the turn ride along, because turn latency alone cannot say which
-    # request stalled (gp#2535). Every pre-existing key keeps its name and meaning.
+    # upstream calls ride along, since turn latency alone cannot say which request stalled. Every
+    # pre-existing key keeps its name and meaning.
     def log_turn_metrics(outcome:)
       latency_ms = @turn_started_at ? ((Process.clock_gettime(Process::CLOCK_MONOTONIC) - @turn_started_at) * 1000).round : nil
       calls = call_metrics(purpose: "turn")
