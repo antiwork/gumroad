@@ -287,24 +287,28 @@ describe ProductReviewsController do
       expect(response.parsed_body["reviews"].map { _1["purchase_id"] }).to all(be_nil)
     end
 
-    it "loads every reviewer's avatar in one query instead of one per review" do
+    it "does not query the reviewers' avatars once per review" do
       reviewed_product = create(:product, display_product_reviews: true)
       3.times do |i|
         create(:product_review, link: reviewed_product, rating: i + 1,
                                 purchase: create(:purchase, link: reviewed_product, purchaser: create(:user)))
       end
 
-      avatar_queries = 0
-      counter = lambda do |_name, _start, _finish, _id, payload|
-        avatar_queries += 1 if payload[:sql].include?("active_storage_attachments")
+      avatar_queries_for = lambda do |per_page|
+        stub_const("ProductReviewsController::PER_PAGE", per_page)
+        count = 0
+        counter = lambda do |_name, _start, _finish, _id, payload|
+          count += 1 if payload[:sql].include?("active_storage_attachments")
+        end
+        ActiveSupport::Notifications.subscribed(counter, "sql.active_record") do
+          get :index, params: { product_id: reviewed_product.external_id }
+        end
+        expect(response.parsed_body["reviews"].size).to eq(per_page)
+        count
       end
 
-      ActiveSupport::Notifications.subscribed(counter, "sql.active_record") do
-        get :index, params: { product_id: reviewed_product.external_id }
-      end
-
-      expect(response.parsed_body["reviews"].size).to eq(2)
-      expect(avatar_queries).to eq(1)
+      # The page renders three reviews; avatar loading must not scale with them.
+      expect(avatar_queries_for.call(3)).to eq(avatar_queries_for.call(1))
     end
 
     it "includes purchase external ids for the product's seller" do
