@@ -1505,6 +1505,22 @@ class Link < ApplicationRecord
     end
   end
 
+  # The invalidation half of generate_product_files_archives!, for the editor save
+  # transaction: same branch on has_product_level_rich_content?, same deletions,
+  # no creation. This way a stale ready archive is gone the moment the save commits,
+  # and GenerateProductFilesArchivesJob only has to build the replacements.
+  def invalidate_stale_product_files_archives!
+    if has_product_level_rich_content?
+      invalidate_stale_folder_archives!
+
+      alive_variants.find_each { _1.product_files_archives.alive.each(&:mark_deleted!) }
+    else
+      alive_variants.find_each(&:invalidate_stale_folder_archives!)
+
+      product_files_archives.alive.each(&:mark_deleted!)
+    end
+  end
+
   def has_product_level_rich_content?
     is_physical? || alive_variants.empty? || (has_same_rich_content_for_all_variants? && !recoverable_hidden_variant_rich_content?)
   end

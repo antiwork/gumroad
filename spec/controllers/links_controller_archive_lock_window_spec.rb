@@ -67,6 +67,35 @@ describe LinksController, type: :controller do
     expect(product.reload.description).to eq("A description")
   end
 
+  # The enqueue runs after the commit. If it raises, the write is already durable,
+  # so the response must still say so — the catch-all rescue in `update` would
+  # otherwise answer a saved product with "Something went wrong while saving".
+  it "reports an enqueue failure without turning the committed save into a failed response" do
+    allow(GenerateProductFilesArchivesJob).to receive(:perform_async).and_raise(Redis::CannotConnectError, "redis is down")
+    expect(ErrorNotifier).to receive(:notify).with(
+      instance_of(Redis::CannotConnectError),
+      hash_including(product_id: product.id, archive_generation_enqueue_failed: true)
+    )
+
+    post :update, params: params, as: :json
+
+    expect(response).to be_successful
+    expect(product.reload.description).to eq("A description")
+  end
+
+  # sidekiq-unique-jobs returns a nil jid when the until_executing lock is already
+  # held by a queued rebuild. That rebuild starts after this commit, so it covers
+  # this save: nil is dedup, not an error, and must not be reported as one.
+  it "treats a nil jid from the job's unique lock as an already-queued rebuild, not a failure" do
+    allow(GenerateProductFilesArchivesJob).to receive(:perform_async).and_return(nil)
+    expect(ErrorNotifier).not_to receive(:notify).with(anything, hash_including(archive_generation_enqueue_failed: true))
+
+    post :update, params: params, as: :json
+
+    expect(response).to be_successful
+    expect(product.reload.description).to eq("A description")
+  end
+
   it "builds the folder archives and enqueues their zip builds when the job runs", :sidekiq_inline do
     post :update, params: params, as: :json
 

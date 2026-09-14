@@ -4662,6 +4662,137 @@ class LinksControllerUpdateTest < ActionController::TestCase
     assert_equal 0, @product.product_files_archives.folder_archives.alive.count
   end
 
+  # --- in-save invalidation of stale archives ----------------------------------
+  # Archive creation runs in GenerateProductFilesArchivesJob after the save
+  # commits, but a ready archive whose folder this save changed must die with
+  # the save itself: until the job runs, a buyer would otherwise be served a zip
+  # of content the seller just replaced. These tests assert BEFORE draining.
+
+  test "PUT update marks a ready folder archive deleted in the save when its folder is renamed, before the rebuild job runs" do
+    file1 = create_product_file(link: @product, display_name: "File 1")
+    file2 = create_product_file(link: @product, display_name: "File 2")
+    @product.product_files = [file1, file2]
+    folder_id = SecureRandom.uuid
+    folder = { "type" => "fileEmbedGroup", "attrs" => { "name" => "folder 1", "uid" => folder_id }, "content" => [
+      { "type" => "fileEmbed", "attrs" => { "id" => file1.external_id, "uid" => SecureRandom.uuid } },
+      { "type" => "fileEmbed", "attrs" => { "id" => file2.external_id, "uid" => SecureRandom.uuid } },
+    ] }
+    files = [file1, file2].map { { id: _1.external_id, url: _1.url } }
+
+    post :update, params: {
+      id: @product.unique_permalink,
+      rich_content: [{ id: nil, title: "Page 1", description: { type: "doc", content: [folder] } }],
+      files:,
+    }, format: :json
+    GenerateProductFilesArchivesJob.drain
+
+    old_archive = @product.product_files_archives.folder_archives.alive.find_by(folder_id:)
+    old_archive.mark_in_progress!
+    old_archive.mark_ready!
+    assert_equal old_archive, @product.product_files_archives.latest_ready_folder_archive(folder_id)
+
+    folder["attrs"]["name"] = "New folder name"
+    page1 = @product.alive_rich_contents.find_by(position: 0)
+    post :update, params: {
+      id: @product.unique_permalink,
+      rich_content: [{ id: page1.external_id, title: page1.title, description: { type: "doc", content: [folder] } }],
+      files:,
+    }, format: :json
+    assert_response :success
+
+    # Job still pending: the stale archive is already gone and nothing has replaced it yet.
+    assert_equal false, old_archive.reload.alive?
+    assert_nil @product.product_files_archives.latest_ready_folder_archive(folder_id)
+    assert_equal 0, @product.product_files_archives.folder_archives.alive.count
+
+    GenerateProductFilesArchivesJob.drain
+
+    new_archive = Link.find(@product.id).product_files_archives.folder_archives.alive.find_by(folder_id:)
+    assert_not_nil new_archive
+    assert_not_equal old_archive.id, new_archive.id
+    new_archive.mark_in_progress!
+    assert_equal Digest::SHA1.hexdigest(["#{folder_id}/New folder name/#{file1.external_id}/File 1", "#{folder_id}/New folder name/#{file2.external_id}/File 2"].sort.join("\n")), new_archive.digest
+  end
+
+  test "PUT update marks a ready folder archive deleted in the save when its folder is removed, before the rebuild job runs" do
+    file1 = create_product_file(link: @product, display_name: "File 1")
+    file2 = create_product_file(link: @product, display_name: "File 2")
+    @product.product_files = [file1, file2]
+    folder_id = SecureRandom.uuid
+    description = [{ "type" => "fileEmbedGroup", "attrs" => { "name" => "folder 1", "uid" => folder_id }, "content" => [
+      { "type" => "fileEmbed", "attrs" => { "id" => file1.external_id, "uid" => SecureRandom.uuid } },
+      { "type" => "fileEmbed", "attrs" => { "id" => file2.external_id, "uid" => SecureRandom.uuid } },
+    ] }]
+
+    post :update, params: {
+      id: @product.unique_permalink,
+      rich_content: [{ id: nil, title: "Page 1", description: { type: "doc", content: description } }],
+      files: [file1, file2].map { { id: _1.external_id, url: _1.url } },
+    }, format: :json
+    GenerateProductFilesArchivesJob.drain
+
+    old_archive = @product.product_files_archives.folder_archives.alive.find_by(folder_id:)
+    old_archive.mark_in_progress!
+    old_archive.mark_ready!
+
+    new_description = [{ "type" => "paragraph", "content" => [{ "type" => "text", "text" => "Hello" }] }]
+    page1 = @product.alive_rich_contents.find_by(position: 0)
+    post :update, params: {
+      id: @product.unique_permalink,
+      rich_content: [{ id: page1.external_id, title: page1.title, description: { type: "doc", content: new_description } }],
+      files: [],
+    }, format: :json
+    assert_response :success
+
+    assert_equal false, old_archive.reload.alive?
+    assert_nil @product.product_files_archives.latest_ready_folder_archive(folder_id)
+
+    GenerateProductFilesArchivesJob.drain
+
+    assert_equal 0, @product.product_files_archives.folder_archives.alive.count
+  end
+
+  test "PUT update marks product-level archives deleted in the save when switching to variant-level content, before the rebuild job runs" do
+    file1 = create_product_file(link: @product, display_name: "File 1")
+    file2 = create_product_file(link: @product, display_name: "File 2")
+    @product.product_files = [file1, file2]
+    folder_id = SecureRandom.uuid
+    description = [{ "type" => "fileEmbedGroup", "attrs" => { "name" => "folder 1", "uid" => folder_id }, "content" => [
+      { "type" => "fileEmbed", "attrs" => { "id" => file1.external_id, "uid" => SecureRandom.uuid } },
+      { "type" => "fileEmbed", "attrs" => { "id" => file2.external_id, "uid" => SecureRandom.uuid } },
+    ] }]
+    files = [file1, file2].map { { id: _1.external_id, url: _1.url } }
+
+    post :update, params: {
+      id: @product.unique_permalink,
+      rich_content: [{ title: "Page 1", description: { type: "doc", content: description } }],
+      files:,
+    }, format: :json
+    GenerateProductFilesArchivesJob.drain
+
+    product_archive = @product.product_files_archives.folder_archives.alive.find_by(folder_id:)
+    product_archive.mark_in_progress!
+    product_archive.mark_ready!
+
+    post :update, params: {
+      id: @product.unique_permalink,
+      has_same_rich_content_for_all_variants: false,
+      # The page keeps its id as it moves to the version, as the editor sends it.
+      variants: [{ name: "Version 1", rich_content: [{ id: @product.alive_rich_contents.find_by(position: 0).external_id, title: "Version 1 - Page 1", description: { type: "doc", content: description } }] }],
+      files:,
+    }, format: :json
+    assert_response :success
+
+    # Job still pending: the product-level archive is gone, the version's archive is not built yet.
+    assert_equal false, product_archive.reload.alive?
+    assert_equal 0, @product.product_files_archives.alive.count
+    assert_equal 0, ProductFilesArchive.where.not(variant_id: nil).alive.count
+
+    GenerateProductFilesArchivesJob.drain
+
+    assert_equal 1, ProductFilesArchive.where.not(variant_id: nil).alive.count
+  end
+
   test "PUT update deletes a folder archive if the folder is updated to contain only 1 file" do
     file1 = create_product_file(link: @product, display_name: "File 1")
     file2 = create_product_file(link: @product, display_name: "File 2")

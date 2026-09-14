@@ -644,12 +644,18 @@ class LinksController < ApplicationController
         @product.description = SavePublicFilesService.new(resource: @product, files_params: product_permitted_params[:public_files], content: @product.description, contract: product_save_contract).process
         @product.save!
         toggle_community_chat!(product_permitted_params[:community_chat_enabled])
+
+        # Archives whose folder this save renamed, re-arranged, or removed are
+        # invalidated here, under the same lock and in the same commit as the
+        # content change — a ready archive must not outlive the content it was
+        # built from. Building the replacements is the job's work, below.
+        @product.invalidate_stale_product_files_archives!
       end
 
-      # Archive rows are a derived cache rebuilt from committed state, so they are
-      # not part of the save: the row lock is released and the response reports
-      # only the canonical write.
-      GenerateProductFilesArchivesJob.perform_async(@product.id)
+      # Archive rows are a derived cache rebuilt from committed state, so their
+      # creation is not part of the save: the row lock is released and the
+      # response reports only the canonical write.
+      enqueue_product_files_archives_generation
     rescue Product::StaleContentWriteGuard::StaleContentConflict => e
       # Raised before any mutation: the payload's echoed snapshot timestamps
       # are older than the stored rows, meaning another session saved after
@@ -1113,6 +1119,20 @@ class LinksController < ApplicationController
         "seller_id=#{@product.user_id} provenance_version=#{product_permitted_params[:rich_content_provenance_version].to_i} " \
         "request_id=#{request.request_id}#{detail_suffix}"
       )
+    end
+
+    # Runs after the save transaction has committed, so nothing here may change
+    # the response: the write is durable and the editor must be told so. A nil
+    # jid is not a failure — GenerateProductFilesArchivesJob's until_executing
+    # lock deduped this enqueue onto a rebuild that is still queued, and that
+    # rebuild starts after this commit, so it archives this save's state. An
+    # enqueue that raises (Redis down, serialization) is reported and swallowed;
+    # the catch-all `rescue => e` in update would otherwise answer a committed
+    # save with "Something went wrong while saving your changes".
+    def enqueue_product_files_archives_generation
+      GenerateProductFilesArchivesJob.perform_async(@product.id)
+    rescue StandardError => e
+      ErrorNotifier.notify(e, product_id: @product.id, seller_id: @product.user_id, archive_generation_enqueue_failed: true)
     end
 
     # Best-effort: this runs inside the rescue that owes the client a 409, so a
