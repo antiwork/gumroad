@@ -287,6 +287,20 @@ describe ProductReviewsController do
       expect(response.parsed_body["reviews"].map { _1["purchase_id"] }).to all(be_nil)
     end
 
+    it "loads every reviewer's avatar in one query instead of one per review" do
+      avatar_queries = 0
+      counter = lambda do |_name, _start, _finish, _id, payload|
+        avatar_queries += 1 if payload[:sql].include?("active_storage_attachments")
+      end
+
+      ActiveSupport::Notifications.subscribed(counter, "sql.active_record") do
+        get :index, params: { product_id: product.external_id }
+      end
+
+      expect(response.parsed_body["reviews"].size).to eq(2)
+      expect(avatar_queries).to eq(1)
+    end
+
     it "includes purchase external ids for the product's seller" do
       sign_in product.user
       get :index, params: { product_id: product.external_id }
