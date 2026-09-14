@@ -114,7 +114,7 @@ describe Checkout::BuyerCurrencyEligibility do
     before do
       Feature.activate_user(described_class::SUBSCRIPTION_FEATURE_NAME, seller)
       Feature.activate_user(StripeChargeProcessor::INDIA_CARD_MANDATE_RELIABILITY_FEATURE, seller)
-      allow_any_instance_of(described_class).to receive(:buyer_currency_for_ip).and_return(Currency::AUD)
+      allow_any_instance_of(described_class).to receive(:buyer_currency_for_ip).and_return(Currency::DKK)
     end
 
     it "falls back before quoting an unsupported platform mandate currency" do
@@ -143,7 +143,7 @@ describe Checkout::BuyerCurrencyEligibility do
 
     it "keeps direct Connect outside the mandate currency gate" do
       expect(decision).to be_eligible
-      expect(decision.currency).to eq(Currency::AUD)
+      expect(decision.currency).to eq(Currency::DKK)
     end
   end
 
