@@ -197,6 +197,81 @@ describe Purchase::ReassignByEmailService do
       end
     end
 
+    context "when the recurring rows belong to a gifted membership" do
+      let!(:target_user) { create(:user, email: to_email) }
+      let(:sender_email) { "gift_sender@example.com" }
+      let(:subscription) { create(:subscription, user: buyer) }
+      let(:product) { subscription.link }
+      let!(:sender_original) do
+        create(:purchase, :gift_sender, email: sender_email, purchaser: nil, is_original_subscription_purchase: true, subscription:, link: product, merchant_account:).tap do |purchase|
+          purchase.update_column(:card_visual, "**** **** **** 9999")
+        end
+      end
+      let!(:giftee_purchase) do
+        create(:purchase, :gift_receiver, email: from_email, purchaser: buyer, subscription:, link: product, merchant_account:).tap do |purchase|
+          purchase.update_column(:card_visual, "**** **** **** 1111")
+        end
+      end
+      let!(:gift) { create(:gift, link: product, gifter_email: sender_email, giftee_email: from_email, gifter_purchase: sender_original, giftee_purchase:) }
+      let!(:renewals) do
+        ["**** **** **** 1111", "**** **** **** 2222", "**** **** **** 3333"].map do |card_visual|
+          create(:purchase, email: from_email, purchaser: buyer, subscription:, link: product, merchant_account:).tap do |purchase|
+            purchase.update_column(:card_visual, card_visual)
+          end
+        end
+      end
+
+      it "moves the giftee's rows and subscription but leaves the gift sender's original purchase alone" do
+        result = described_class.new(from_email:, to_email:).perform
+
+        expect(result.success?).to be(true)
+        expect(result.reassigned_purchase_ids).to match_array([giftee_purchase.id, *renewals.map(&:id)])
+        expect(sender_original.reload.email).to eq(sender_email)
+        expect(sender_original.purchaser_id).to be_nil
+        expect(giftee_purchase.reload.email).to eq(to_email)
+        expect(giftee_purchase.purchaser_id).to eq(target_user.id)
+        renewals.each do |renewal|
+          expect(renewal.reload.email).to eq(to_email)
+          expect(renewal.purchaser_id).to eq(target_user.id)
+        end
+        expect(subscription.reload.user).to eq(target_user)
+        expect(gift.reload.giftee_email).to eq(to_email)
+        expect(subscription.email).to eq(target_user.form_email)
+      end
+
+      it "does not count the gift sender's card toward the distinct-card guard" do
+        service = described_class.new(from_email:, to_email:)
+        allow(service).to receive(:payment_fingerprint).and_call_original
+
+        result = service.perform
+
+        expect(result.success?).to be(true)
+        expect(result.reason).to be_nil
+        expect(service).not_to have_received(:payment_fingerprint).with(sender_original)
+      end
+
+      it "keeps renewal routing on the moved giftee email when the destination has no account" do
+        target_user.deactivate!
+
+        result = described_class.new(from_email:, to_email:).perform
+
+        expect(result.success?).to be(true)
+        expect(subscription.reload.user).to be_nil
+        expect(subscription.email).to eq(to_email)
+        expect(sender_original.reload.email).to eq(sender_email)
+      end
+
+      it "still sweeps an unmatched original that shares the requester's purchaser account" do
+        sender_original.update_columns(purchaser_id: buyer.id, card_visual: "**** **** **** 1111")
+
+        result = described_class.new(from_email:, to_email:).perform
+
+        expect(result.success?).to be(true)
+        expect(sender_original.reload.email).to eq(to_email)
+        expect(sender_original.purchaser_id).to eq(target_user.id)
+      end
+    end
+
     context "when no purchases save successfully" do
       let!(:target_user) { create(:user, email: to_email) }
       let!(:purchase) { create(:purchase, email: from_email, purchaser: buyer, merchant_account:) }

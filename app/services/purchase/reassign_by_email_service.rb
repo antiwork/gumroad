@@ -35,17 +35,22 @@ class Purchase::ReassignByEmailService
 
     # Every purchase this service may mutate, including original subscription
     # purchases that are not themselves matched by from_email but get reassigned
-    # alongside a recurring charge.
+    # alongside a recurring charge. An original that belongs to someone else
+    # (a gift sender's purchase behind the giftee's membership) stays put and
+    # does not count toward the fingerprint guard.
     mutable_purchases = purchases.dup
     mutable_purchase_id_set = purchase_id_set.dup
+    sweepable_original_purchase_ids = Set.new
     purchases.each do |purchase|
       next unless purchase.subscription.present? && !purchase.is_original_subscription_purchase?
 
       original_purchase = purchase.original_purchase
-      if original_purchase.present? && !mutable_purchase_id_set.include?(original_purchase.id)
-        mutable_purchases << original_purchase
-        mutable_purchase_id_set.add(original_purchase.id)
-      end
+      next if original_purchase.blank? || mutable_purchase_id_set.include?(original_purchase.id)
+      next unless same_requester?(original_purchase, purchase)
+
+      mutable_purchases << original_purchase
+      mutable_purchase_id_set.add(original_purchase.id)
+      sweepable_original_purchase_ids.add(original_purchase.id)
     end
 
     if mutable_purchases.any?(&:is_reassignment_locked?)
@@ -70,10 +75,15 @@ class Purchase::ReassignByEmailService
       # again, so clear the flag as part of the reassignment.
       purchase.is_deleted_by_buyer = false
 
-      if purchase.subscription.present? && !purchase.is_original_subscription_purchase? && !purchase_id_set.include?(purchase.original_purchase.id)
-        if purchase.original_purchase.update(email: @to_email, purchaser_id: target_user&.id, is_deleted_by_buyer: false)
-          reassigned_purchase_ids << purchase.original_purchase.id if purchase.original_purchase.saved_changes?
-          purchase.subscription.update(user: target_user)
+      transfer_subscription = purchase.subscription.present?
+      if transfer_subscription && !purchase.is_original_subscription_purchase?
+        original_purchase = purchase.original_purchase
+        if sweepable_original_purchase_ids.delete?(original_purchase.id)
+          if original_purchase.update(email: @to_email, purchaser_id: target_user&.id, is_deleted_by_buyer: false)
+            reassigned_purchase_ids << original_purchase.id if original_purchase.saved_changes?
+          else
+            transfer_subscription = false
+          end
         end
       end
 
@@ -81,8 +91,12 @@ class Purchase::ReassignByEmailService
 
       if purchase.save
         reassigned_purchase_ids << purchase.id
-        if purchase.is_original_subscription_purchase? && purchase.subscription.present?
+        if transfer_subscription
           purchase.subscription.update(user: target_user)
+          # A gifted membership without a destination account routes renewal
+          # emails through gift.giftee_email, so move that pointer with the rows.
+          gift = purchase.original_purchase.gift_given if purchase.original_purchase&.is_gift_sender_purchase?
+          gift.update(giftee_email: @to_email) if gift.present? && gift.giftee_email.to_s.casecmp?(@from_email.to_s)
         end
       end
     end
@@ -97,6 +111,16 @@ class Purchase::ReassignByEmailService
   end
 
   private
+    # An unmatched original purchase is only swept along with a recurring charge
+    # when it belongs to the same requester: same email as from_email, or the
+    # same purchaser account as the recurring row. A gift sender's original sits
+    # behind the giftee's membership with a different email and card.
+    def same_requester?(original_purchase, purchase)
+      return true if original_purchase.email.to_s.casecmp?(@from_email.to_s)
+
+      purchase.purchaser_id.present? && original_purchase.purchaser_id == purchase.purchaser_id
+    end
+
     # Returns a normalized, distinct payment-method signal for a purchase.
     # Card purchases collapse to the card's last 4 digits; non-card processors
     # (e.g. PayPal) store an email or other token in card_visual, so fall back to
