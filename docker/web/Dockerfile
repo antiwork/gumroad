@@ -10,11 +10,13 @@ ENV APP_DIR=/app
 ENV LANG=C.UTF-8
 
 # setup app user, directories
+# tmp/pids is where config/puma.rb's `pidfile` writes; Puma does not create the directory itself.
 RUN useradd -ms /bin/bash app \
   && mkdir -p $APP_DIR \
   && mkdir -p $BUNDLE_PATH \
   && mkdir -p $APP_DIR/log \
-  && mkdir -p $APP_DIR/tmp
+  && mkdir -p $APP_DIR/tmp \
+  && mkdir -p $APP_DIR/tmp/pids
 
 # Update ImageMagick configuration
 # Set memory limit to 1GiB
