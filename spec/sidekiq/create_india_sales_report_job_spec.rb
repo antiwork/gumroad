@@ -52,14 +52,14 @@ describe CreateIndiaSalesReportJob do
         allow(Purchase).to receive(:joins).and_return(purchase_double)
         allow(purchase_double).to receive(:where).and_return(purchase_double)
         allow(purchase_double).to receive_message_chain(:where, :not).and_return(purchase_double)
-        allow(purchase_double).to receive(:find_each).and_return([])
+        allow(purchase_double).to receive(:pluck).and_return([])
 
         refund_double = double
         allow(Refund).to receive(:effective).and_return(refund_double)
         allow(refund_double).to receive(:joins).and_return(refund_double)
         allow(refund_double).to receive(:where).and_return(refund_double)
         allow(refund_double).to receive_message_chain(:where, :not).and_return(refund_double)
-        allow(refund_double).to receive(:find_each).and_return([])
+        allow(refund_double).to receive(:pluck).and_return([])
 
         # Mock ZipTaxRate lookup
         zip_tax_rate_double = double
