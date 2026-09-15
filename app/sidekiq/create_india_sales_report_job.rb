@@ -223,8 +223,8 @@ class CreateIndiaSalesReportJob
       each_batch(scope) { |slice| block.call(Refund.where(id: slice).order(:id).preload(purchase: PURCHASE_PRELOADS)) }
     end
 
-    def each_batch(scope)
-      scope.pluck(:id).sort.each_slice(ROW_BATCH_SIZE) { |slice| yield slice }
+    def each_batch(scope, &block)
+      scope.pluck(:id).sort.each_slice(ROW_BATCH_SIZE, &block)
     end
 
     # The India-report purchase filters shared by every leg, applied to an arbitrary base

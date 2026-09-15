@@ -42,33 +42,33 @@ class CreateCanadaMonthlySalesReportJob
           .where(state: Compliance::Countries.subdivisions_for_select(Compliance::Countries::CAN.alpha2).map(&:first))
           .where(charge_processor_id: [nil, *ChargeProcessor.charge_processor_ids])) do |batch|
           batch.each do |purchase|
-          taxjar_info = purchase.purchase_taxjar_info
+            taxjar_info = purchase.purchase_taxjar_info
 
-          price_cents = purchase.price_cents_for_tax_reporting
-          fee_cents = purchase.fee_cents_for_tax_reporting
-          gumroad_tax_cents = purchase.gumroad_tax_cents_for_tax_reporting
-          total_cents = purchase.total_cents_for_tax_reporting
+            price_cents = purchase.price_cents_for_tax_reporting
+            fee_cents = purchase.fee_cents_for_tax_reporting
+            gumroad_tax_cents = purchase.gumroad_tax_cents_for_tax_reporting
+            total_cents = purchase.total_cents_for_tax_reporting
 
-          row = [
-            purchase.external_id,
-            purchase.created_at.strftime("%m/%d/%Y"),
-            ISO3166::Country["CA"].subdivisions[purchase.state]&.name,
-            purchase.link.native_type,
-            Link::NATIVE_TYPES_TO_TAX_CODE[purchase.link.native_type],
-            taxjar_info&.gst_tax_rate,
-            taxjar_info&.pst_tax_rate,
-            taxjar_info&.qst_tax_rate,
-            taxjar_info&.combined_tax_rate,
-            Money.new(gumroad_tax_cents).format(no_cents_if_whole: false, symbol: false),
-            Money.new(gumroad_tax_cents).format(no_cents_if_whole: false, symbol: false),
-            Money.new(price_cents).format(no_cents_if_whole: false, symbol: false),
-            Money.new(fee_cents).format(no_cents_if_whole: false, symbol: false),
-            Money.new(purchase.shipping_cents).format(no_cents_if_whole: false, symbol: false),
-            Money.new(total_cents).format(no_cents_if_whole: false, symbol: false),
-            purchase.receipt_url
-          ]
+            row = [
+              purchase.external_id,
+              purchase.created_at.strftime("%m/%d/%Y"),
+              ISO3166::Country["CA"].subdivisions[purchase.state]&.name,
+              purchase.link.native_type,
+              Link::NATIVE_TYPES_TO_TAX_CODE[purchase.link.native_type],
+              taxjar_info&.gst_tax_rate,
+              taxjar_info&.pst_tax_rate,
+              taxjar_info&.qst_tax_rate,
+              taxjar_info&.combined_tax_rate,
+              Money.new(gumroad_tax_cents).format(no_cents_if_whole: false, symbol: false),
+              Money.new(gumroad_tax_cents).format(no_cents_if_whole: false, symbol: false),
+              Money.new(price_cents).format(no_cents_if_whole: false, symbol: false),
+              Money.new(fee_cents).format(no_cents_if_whole: false, symbol: false),
+              Money.new(purchase.shipping_cents).format(no_cents_if_whole: false, symbol: false),
+              Money.new(total_cents).format(no_cents_if_whole: false, symbol: false),
+              purchase.receipt_url
+            ]
 
-          temp_file.write(row.to_csv)
+            temp_file.write(row.to_csv)
           end
           temp_file.flush
         end
@@ -91,29 +91,29 @@ class CreateCanadaMonthlySalesReportJob
               .where(purchases: { charge_processor_id: [nil, *ChargeProcessor.charge_processor_ids] })
           )) do |batch|
           batch.each do |refund|
-          purchase = refund.purchase
-          taxjar_info = purchase.purchase_taxjar_info
+            purchase = refund.purchase
+            taxjar_info = purchase.purchase_taxjar_info
 
-          row = [
-            purchase.external_id,
-            refund.created_at.strftime("%m/%d/%Y"),
-            ISO3166::Country["CA"].subdivisions[purchase.state]&.name,
-            purchase.link.native_type,
-            Link::NATIVE_TYPES_TO_TAX_CODE[purchase.link.native_type],
-            taxjar_info&.gst_tax_rate,
-            taxjar_info&.pst_tax_rate,
-            taxjar_info&.qst_tax_rate,
-            taxjar_info&.combined_tax_rate,
-            Money.new(-refund.gumroad_tax_cents.to_i).format(no_cents_if_whole: false, symbol: false),
-            Money.new(-refund.gumroad_tax_cents.to_i).format(no_cents_if_whole: false, symbol: false),
-            Money.new(-refund.amount_cents.to_i).format(no_cents_if_whole: false, symbol: false),
-            Money.new(-refund.fee_cents.to_i).format(no_cents_if_whole: false, symbol: false),
-            Money.new(0).format(no_cents_if_whole: false, symbol: false),
-            Money.new(-refund.total_transaction_cents.to_i).format(no_cents_if_whole: false, symbol: false),
-            purchase.receipt_url
-          ]
+            row = [
+              purchase.external_id,
+              refund.created_at.strftime("%m/%d/%Y"),
+              ISO3166::Country["CA"].subdivisions[purchase.state]&.name,
+              purchase.link.native_type,
+              Link::NATIVE_TYPES_TO_TAX_CODE[purchase.link.native_type],
+              taxjar_info&.gst_tax_rate,
+              taxjar_info&.pst_tax_rate,
+              taxjar_info&.qst_tax_rate,
+              taxjar_info&.combined_tax_rate,
+              Money.new(-refund.gumroad_tax_cents.to_i).format(no_cents_if_whole: false, symbol: false),
+              Money.new(-refund.gumroad_tax_cents.to_i).format(no_cents_if_whole: false, symbol: false),
+              Money.new(-refund.amount_cents.to_i).format(no_cents_if_whole: false, symbol: false),
+              Money.new(-refund.fee_cents.to_i).format(no_cents_if_whole: false, symbol: false),
+              Money.new(0).format(no_cents_if_whole: false, symbol: false),
+              Money.new(-refund.total_transaction_cents.to_i).format(no_cents_if_whole: false, symbol: false),
+              purchase.receipt_url
+            ]
 
-          temp_file.write(row.to_csv)
+            temp_file.write(row.to_csv)
           end
           temp_file.flush
         end
@@ -125,10 +125,10 @@ class CreateCanadaMonthlySalesReportJob
         # refund was relieved by the refund's own reporting path and is not clawed back again.
         each_purchase_batch(canada_purchase_filters(Purchase.chargebacks_for_tax_period_reporting(starts_at, ends_at))) do |batch|
           batch.each do |purchase|
-          row = chargeback_row(purchase, purchase.chargeback_date, -1)
-          next unless row
+            row = chargeback_row(purchase, purchase.chargeback_date, -1)
+            next unless row
 
-          temp_file.write(row.to_csv)
+            temp_file.write(row.to_csv)
           end
           temp_file.flush
         end
@@ -138,13 +138,13 @@ class CreateCanadaMonthlySalesReportJob
         # reversal dates are never synthesized).
         each_purchase_batch(canada_purchase_filters(Purchase.chargeback_reversals_for_tax_period_reporting(starts_at, ends_at))) do |batch|
           batch.each do |purchase|
-          won_at = purchase.chargeback_reversal_reporting_date
-          next unless won_at&.between?(starts_at, ends_at)
+            won_at = purchase.chargeback_reversal_reporting_date
+            next unless won_at&.between?(starts_at, ends_at)
 
-          row = chargeback_row(purchase, won_at, 1)
-          next unless row
+            row = chargeback_row(purchase, won_at, 1)
+            next unless row
 
-          temp_file.write(row.to_csv)
+            temp_file.write(row.to_csv)
           end
           temp_file.flush
         end
@@ -184,8 +184,8 @@ class CreateCanadaMonthlySalesReportJob
       each_batch(scope) { |slice| block.call(Refund.where(id: slice).order(:id).preload(purchase: PURCHASE_PRELOADS)) }
     end
 
-    def each_batch(scope)
-      scope.pluck(:id).sort.each_slice(ROW_BATCH_SIZE) { |slice| yield slice }
+    def each_batch(scope, &block)
+      scope.pluck(:id).sort.each_slice(ROW_BATCH_SIZE, &block)
     end
 
     # The Canada-report purchase filters shared by the chargeback legs — the sales leg's
