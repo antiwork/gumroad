@@ -3077,7 +3077,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         select("1980", from: "Year")
 
         fill_in("Pay to the order of", with: "barnabas ngagy")
-        fill_in("SWIFT / BIC Code", with: "NBEGEGCX331")
+        fill_in("SWIFT / BIC Code", with: "NBEGEGCX")
         fill_in("IBAN", with: "EG800002000156789012345180002")
         fill_in("Confirm IBAN", with: "EG800002000156789012345180002")
 

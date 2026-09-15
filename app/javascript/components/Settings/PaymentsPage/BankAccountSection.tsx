@@ -2267,7 +2267,7 @@ const BankAccountSection = ({
                       <Input
                         type="text"
                         id={`${uid}-bank-code`}
-                        placeholder="NBEGEGCX331"
+                        placeholder="NBEGEGCX"
                         maxLength={11}
                         required
                         disabled={isFormDisabled}
