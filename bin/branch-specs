@@ -194,9 +194,8 @@ FANOUT = {
   # Renderer: user/passwords_controller.rb:16 New, :39 Edit.
   %r{\Aapp/javascript/pages/UrlRedirects/DownloadPage} => DOWNLOAD_PAGE_SPECS,
   # Renderer: url_redirects_controller.rb:107 DownloadPage. reading_spec and
-  # video_streaming_spec visit /d/:token (Watch/Read controls). Read.tsx, whose
-  # reader is driven by url_redirects_epub_reader_system_spec, and
-  # Confirm/Stream/Expired escalate.
+  # video_streaming_spec visit /d/:token (Watch/Read controls); Read.tsx (epub
+  # reader system spec) and Confirm/Stream/Expired escalate.
   %r{\Aapp/javascript/pages/Pages/} => %w[
     spec/controllers/pages_controller_spec.rb
     spec/requests/pages_landing_embed_csp_spec.rb
