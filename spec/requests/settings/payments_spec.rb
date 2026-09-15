@@ -367,7 +367,8 @@ describe("Payments Settings Scenario", type: :system, js: true) do
 
       choose("Business")
       fill_in("Legal business name", with: "Acme")
-      select("LLC", from: "Type")
+      # The US list splits LLC by member count; "LLC" alone substring-matches both options.
+      select("LLC (single member)", from: "Type")
       find_field("Address", match: :first).set("123 North street")
       find_field("City", match: :first).set("Barnesville")
       find_field("State", match: :first).select("State")
@@ -676,7 +677,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
 
         choose "Business"
         fill_in "Legal business name", with: "Acme"
-        select "LLC", from: "Type"
+        select "LLC (single member)", from: "Type"
         find_field("Address", match: :first).set("PO Box 123 North street")
         find_field("City", match: :first).set("Barnesville")
         find_field("State", match: :first).select("California")
@@ -721,7 +722,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         choose "Business"
 
         fill_in("Legal business name", with: "US LLC with Brazilian rep")
-        select("LLC", from: "Type")
+        select("LLC (single member)", from: "Type")
         find_field("Address", match: :first).set("address_full_match")
         find_field("City", match: :first).set("NY")
         find_field("State", match: :first).select("New York")
@@ -765,7 +766,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         expect(compliance_info.business_country).to eq("United States")
         expect(compliance_info.business_zip_code).to eq("10110")
         expect(compliance_info.business_phone).to eq("+15052426789")
-        expect(compliance_info.business_type).to eq("llc")
+        expect(compliance_info.business_type).to eq("single_member_llc")
         expect(compliance_info.business_tax_id.decrypt("1234")).to eq("000000000")
         expect(compliance_info.first_name).to eq("Brazilian")
         expect(compliance_info.last_name).to eq("Creator")
