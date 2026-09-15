@@ -9,6 +9,7 @@ class LinksController < ApplicationController
   include RequireAccountEmail
   include RendersCustomHtmlPages
   include MobileAppWebView
+  include Throttling
 
   enable_mobile_app_web_view only: %i[new create edit]
 
@@ -29,6 +30,12 @@ class LinksController < ApplicationController
   # One report per product per window: repeats from the same client carry no
   # information past the first, and reporting every one drowns the tracker.
   EDITOR_SAVE_LOCK_REPORT_WINDOW = 10.minutes
+  # How many save attempts one product admits per window before the attempt is refused
+  # with a retryable 429. A save is an explicit user action and a human editor session is
+  # single-digit attempts per minute; the storm that parked 37 sessions on the row lock was
+  # ~3 attempts/second on a single product, so only the looping case reaches this.
+  EDITOR_SAVE_RATE_LIMIT = 30
+  EDITOR_SAVE_RATE_LIMIT_PERIOD = 1.minute
   # Blocker-probe bounds. The probe runs inside the rescue that owes the client a 409,
   # so each read is capped three ways: statement time, rows, and SQL text length.
   EDITOR_SAVE_LOCK_PROBE_TIMEOUT_MS = 250
@@ -436,6 +443,22 @@ class LinksController < ApplicationController
 
   def update
     authorize @product
+
+    begin
+      # The row lock serializes saves of this product anyway, so a client retrying faster than a
+      # save can finish only builds the queue behind it. Refuse the attempt itself, before it
+      # opens the transaction and takes a DB connection: a human editor session is far under this.
+      return unless throttle!(
+        key: RedisKey.editor_save_throttle(@product.id),
+        limit: EDITOR_SAVE_RATE_LIMIT,
+        period: EDITOR_SAVE_RATE_LIMIT_PERIOD
+      )
+    rescue Redis::BaseError, RedisClient::Error => e
+      # RedisClient::Error is not a subclass of Redis::BaseError. An unreadable counter admits
+      # the save: the limit is a guard against a looping client, not the writer of record.
+      Rails.logger.warn("[editor_save_rate_limit] product_id=#{@product.id} check_skipped=#{e.class}")
+    end
+
     begin
       if custom_html_removal_update?
         with_editor_save_lock_wait_bound do
