@@ -523,7 +523,7 @@ class Settings::PaymentsController < Settings::BaseController
       if current_seller.payouts_paused_internally? &&
          current_seller.payouts_paused_by_source == User::PAYOUT_PAUSE_SOURCE_STRIPE
         { alert: "Stripe has paused payouts on your account and hasn't told us what it needs. " \
-                 "There's nothing for you to submit — please contact support and we'll chase it with Stripe." }
+                 "There's nothing for you to submit right now." }
       else
         { notice: "Thanks! You're all set." }
       end
@@ -533,7 +533,7 @@ class Settings::PaymentsController < Settings::BaseController
       stripe_account = Stripe::Account.retrieve(merchant_account.charge_processor_merchant_id)
       requirements = stripe_account["requirements"] || {}
       future_requirements = stripe_account["future_requirements"] || {}
-      [
+      return true if [
         requirements["currently_due"],
         requirements["past_due"],
         requirements["eventually_due"],
@@ -541,8 +541,21 @@ class Settings::PaymentsController < Settings::BaseController
         future_requirements["past_due"],
         future_requirements["eventually_due"],
       ].any?(&:present?)
+
+      stripe_review_has_no_exit?(stripe_account, requirements)
     rescue Stripe::StripeError => e
       ErrorNotifier.notify(e, context: { user_id: current_seller.id })
       false
+    end
+
+    # An ordinary `pending_verification` requirement is Stripe reviewing what the seller
+    # submitted, and keeps the reassuring behaviour. With every "due" list empty, no errors and
+    # no deadline nothing can decide or time out the review (an empty `verification.document`
+    # slot blocks the account indefinitely), so offer the `account_update` link Stripe serves.
+    def stripe_review_has_no_exit?(stripe_account, requirements)
+      requirements["pending_verification"].present? &&
+        !stripe_account["charges_enabled"] &&
+        Array(requirements["errors"]).empty? &&
+        requirements["current_deadline"].blank?
     end
 end
