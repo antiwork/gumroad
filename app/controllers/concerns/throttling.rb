@@ -3,6 +3,14 @@
 module Throttling
   extend ActiveSupport::Concern
 
+  # Opens a counter and its window in one command. A Redis failure cannot split them, and a counter
+  # left without an expiry never resets — it would refuse that caller from then on.
+  OPEN_WINDOW_SCRIPT = <<~LUA
+    local count = redis.call("INCR", KEYS[1])
+    if count == 1 then redis.call("EXPIRE", KEYS[1], ARGV[1]) end
+    return count
+  LUA
+
   private
     # Counts one request against `key` and renders a 429 once `limit` is exceeded within `period`,
     # returning false so the caller's before_action halts.
@@ -14,10 +22,7 @@ module Throttling
     # header and in the JSON body, because a client reading the body via fetch() can't always get
     # at the header (CORS-exposed headers) and needs the number to show a countdown.
     def throttle!(key:, limit:, period:, redis: $redis, message: nil)
-      # The counter and its window are opened by one command. A separate INCR-then-EXPIRE can be
-      # split by a Redis failure, and a counter left without an expiry never resets, so every
-      # later request from that caller is refused.
-      count = redis.set(key, 1, ex: period.to_i, nx: true) ? 1 : redis.incr(key)
+      count = redis.eval(OPEN_WINDOW_SCRIPT, keys: [key], argv: [period.to_i]).to_i
 
       if count > limit
         retry_after = ttl_to_retry_after(redis:, key:, period:)

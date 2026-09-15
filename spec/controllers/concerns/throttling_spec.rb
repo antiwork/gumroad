@@ -158,12 +158,28 @@ describe Throttling, type: :request do
 
     it "opens a new counter and its window in one command, so a lost expiry cannot strand it" do
       # INCR-then-EXPIRE can be split by a Redis failure: the counter is created, the expiry never
-      # lands, and it never resets — refusing that caller from then on.
+      # lands, and it never resets — refusing that caller from then on. A second INCR would also
+      # count this request twice.
+      expect(redis).not_to receive(:incr)
       expect(redis).not_to receive(:expire)
 
       get "/test_throttle"
 
       expect(response).to have_http_status(:ok)
+      expect(redis.get("test_key")).to eq("1")
+      expect(redis.ttl("test_key")).to be > 0
+    end
+
+    it "gives a fresh window to a counter that expired between requests" do
+      3.times { get "/test_throttle" }
+      redis.del("test_key")
+
+      # The counter is recreated without the expiry of the one it replaced, so the window has to be
+      # set with it — otherwise it counts this caller across every later window.
+      get "/test_throttle"
+
+      expect(response).to have_http_status(:ok)
+      expect(redis.get("test_key")).to eq("1")
       expect(redis.ttl("test_key")).to be > 0
     end
 
