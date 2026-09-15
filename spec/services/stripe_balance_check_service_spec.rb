@@ -65,6 +65,14 @@ describe StripeBalanceCheckService do
     end
   end
 
+  describe "#cycle_last_run_at" do
+    it "is the Friday 10:00 UTC run that closes the cycle the next run belongs to" do
+      expect(described_class.new(now: Time.utc(2026, 9, 15, 14, 0)).cycle_last_run_at).to eq(Time.utc(2026, 9, 18, 10, 0)) # Tue pm -> this Fri
+      expect(described_class.new(now: Time.utc(2026, 9, 18, 9, 0)).cycle_last_run_at).to eq(Time.utc(2026, 9, 18, 10, 0))  # Fri am -> today
+      expect(described_class.new(now: Time.utc(2026, 9, 18, 14, 0)).cycle_last_run_at).to eq(Time.utc(2026, 9, 25, 10, 0)) # Fri pm -> next Fri
+    end
+  end
+
   describe "#swept_to_bank_last_day_cents" do
     it "sums the last day's USD bank payouts, counting only paid ones" do
       payouts = [

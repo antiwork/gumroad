@@ -15,6 +15,7 @@ describe SendStripeBalanceCheckNotificationJob do
         topup_needed?: true,
         payout_end_date: Date.new(2026, 9, 11),
         next_payout_run_at: Time.utc(2026, 9, 16, 10, 0),
+        cycle_last_run_at: Time.utc(2026, 9, 18, 10, 0),
         swept_to_bank_last_day_cents: 301_513_34
       )
     end
@@ -31,10 +32,10 @@ describe SendStripeBalanceCheckNotificationJob do
         expect(InternalNotificationWorker).to have_enqueued_sidekiq_job("payments", "Stripe Balance Check", kind_of(String), "red")
         message = InternalNotificationWorker.jobs.last["args"][2]
         expect(message).to include("Seller payouts for balances up to September 11 need $300,000")
-        expect(message).to include("the next run is Wednesday, September 16 at 10:00 UTC (6:00 AM ET), so that total is the most the balance has to cover by then.")
+        expect(message).to include("between the next run (Wednesday, September 16 at 10:00 UTC (6:00 AM ET)) and the last run of the cycle (Friday, September 18 at 10:00 UTC (6:00 AM ET)).")
         expect(message).to include("Stripe balance: $200,000 ($150,000 available + $50,000 pending, which normally settles")
         expect(message).to include("Stripe paid $301,513.34 out to Gumroad's bank in the last 24 hours")
-        expect(message).to include("A top-up of $100,000 is needed before Wednesday, September 16 at 10:00 UTC (6:00 AM ET). Nothing tops up automatically")
+        expect(message).to include("A top-up of $100,000 is needed, ideally before Wednesday, September 16 at 10:00 UTC (6:00 AM ET) and no later than Friday, September 18 at 10:00 UTC (6:00 AM ET). Nothing tops up automatically")
         expect($redis.get(RedisKey.stripe_balance_topup_needed)).to eq("true")
       end
     end
@@ -59,7 +60,7 @@ describe SendStripeBalanceCheckNotificationJob do
         described_class.new.perform
 
         expect(InternalNotificationWorker).to have_enqueued_sidekiq_job("payments", "Stripe Balance Check", kind_of(String), "green")
-        expect(InternalNotificationWorker.jobs.last["args"][2]).to include("No top-up needed: the balance now covers the run. Nothing to do.")
+        expect(InternalNotificationWorker.jobs.last["args"][2]).to include("No top-up needed: the balance now covers the cycle. Nothing to do.")
         expect($redis.get(RedisKey.stripe_balance_topup_needed)).to eq("false")
       end
     end

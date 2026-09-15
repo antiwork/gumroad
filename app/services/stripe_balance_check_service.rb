@@ -37,12 +37,22 @@ class StripeBalanceCheckService
     topup_amount_cents > 0
   end
 
-  # The next scheduled payout run, i.e. the deadline by which the balance must be covered.
+  # The next scheduled payout run: the first draw on the balance.
   def next_payout_run_at
     @next_payout_run_at ||= begin
       run_at = @now.beginning_of_day + PAYOUT_RUN_HOUR_UTC.hours
       run_at += 1.day if run_at <= @now
       run_at += 1.day until PAYOUT_RUN_WDAYS.include?(run_at.wday)
+      run_at
+    end
+  end
+
+  # The cycle's last run (Friday). The estimate covers every weekday cohort, so this is the point
+  # by which the whole amount has been drawn.
+  def cycle_last_run_at
+    @cycle_last_run_at ||= begin
+      run_at = next_payout_run_at
+      run_at += 1.day until run_at.wday == PAYOUT_RUN_WDAYS.last
       run_at
     end
   end
