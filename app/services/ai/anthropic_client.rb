@@ -22,6 +22,40 @@ class Ai::AnthropicClient
   # streaming — a buffered body cannot drop those fragments.
   class UnreadableToolCallError < TransientError; end
 
+  # Nothing reached the caller within the first-byte deadline. Retrying the model that stalled only
+  # spends the deadline again, so the caller fails over instead (see #stream_messages).
+  class TtftDeadlineError < TransientError; end
+
+  # Shared with the caller so the deadline can be lifted mid-stream, where no callback would fire.
+  class FirstByteMarker
+    def arrived!
+      @arrived = true
+    end
+
+    def arrived?
+      @arrived == true
+    end
+  end
+  private_constant :FirstByteMarker
+
+  # Reads wait `first_byte_timeout` until the first delta arrives, then the configured read timeout:
+  # bounding the wait for output must not bound silence between chunks afterwards.
+  class FirstByteTimeout < HTTP::Timeout::PerOperation
+    def initialize(*args)
+      super
+      @stream_read_timeout = @read_timeout
+      @first_byte_timeout = options.fetch(:first_byte_timeout)
+      @first_byte_marker = options.fetch(:first_byte_marker)
+      @read_timeout = @first_byte_timeout
+    end
+
+    def readpartial(size, buffer = nil)
+      @read_timeout = @stream_read_timeout if @first_byte_marker.arrived?
+      super
+    end
+  end
+  private_constant :FirstByteTimeout
+
   API_URL = "https://api.anthropic.com/v1/messages"
   OPENROUTER_API_URL = "https://openrouter.ai/api/v1/messages"
   VERCEL_HOST = "ai-gateway.vercel.sh"
@@ -142,18 +176,24 @@ class Ai::AnthropicClient
   # Retry only before the first yield — a later retry would replay on the seller's screen.
   # Corrupted tool-call JSON: one buffered replay. Already-yielded text (usual tool-use preamble)
   # must be erased via on_discard_streamed_text or the fallback cannot run.
-  def stream_messages(system:, messages:, tools: nil, max_tokens: DEFAULT_MAX_TOKENS, thinking: nil, on_discard_streamed_text: nil, &on_text)
+  def stream_messages(system:, messages:, tools: nil, max_tokens: DEFAULT_MAX_TOKENS, thinking: nil, ttft_deadline: nil, on_discard_streamed_text: nil, &on_text)
     yielded_any = false
 
     begin
       with_vercel_model_fallback(yielded: -> { yielded_any }) do
+        # The replay is the model we failed over TO; bounding its first output too would only move
+        # the deadline onto the path that exists to be fast.
+        deadline = @using_fallback_model ? nil : ttft_deadline
+        first_byte_marker = FirstByteMarker.new if deadline.present?
+        deadline_stalled = false
+
         body = request_body(system:, messages:, tools:, max_tokens:, stream: true, thinking:)
-        with_retries(retryable: -> { !yielded_any }, streamed: true) do |trace|
+        with_retries(retryable: -> { !yielded_any && !deadline_stalled }, streamed: true) do |trace|
           text = +""
           blocks = {}
           stop_reason = nil
 
-          response = http.post(api_url, json: body)
+          response = http(ttft_deadline: deadline, first_byte_marker:).post(api_url, json: body)
           trace.response = response
           raise_for_status!(response, kind: "stream")
 
@@ -173,6 +213,7 @@ class Ai::AnthropicClient
                 blocks[index] = { type: "text" }
               end
             when "content_block_delta"
+              first_byte_marker&.arrived!
               mark_first_byte!(trace)
               delta = data["delta"] || {}
               case delta["type"]
@@ -196,6 +237,13 @@ class Ai::AnthropicClient
           end
 
           Result.new(text:, tool_uses: assemble_tool_uses(blocks, stop_reason:), stop_reason:)
+        rescue HTTP::TimeoutError => e
+          # Until the first delta the read timeout IS the deadline, so a timeout here means the
+          # attempt produced nothing: fail over rather than re-issue the model that stalled.
+          deadline_stalled = deadline.present? && !first_byte_marker.arrived?
+          raise TtftDeadlineError, "Anthropic produced no output within #{deadline}s" if deadline_stalled
+
+          raise TransientError, "Anthropic network error: #{e.message}"
         rescue HTTP::Error => e
           raise TransientError, "Anthropic network error: #{e.message}"
         end
@@ -498,12 +546,32 @@ class Ai::AnthropicClient
 
     # Per-operation timeouts: a global deadline killed healthy streams that outlasted the budget
     # while tokens were still arriving. `read` bounds silence, not total duration.
-    def http
-      HTTP.timeout(
-        connect: CONNECT_TIMEOUT_IN_SECONDS,
-        write: WRITE_TIMEOUT_IN_SECONDS,
-        read: timeout,
-      ).headers(
+    def http(ttft_deadline: nil, first_byte_marker: nil)
+      client =
+        if ttft_deadline.present?
+          # An attempt is only free to abandon before it has produced anything, so the read timeout
+          # starts at the deadline and widens to `timeout` on the first delta.
+          HTTP::Client.new(
+            HTTP.default_options.merge(
+              timeout_class: FirstByteTimeout,
+              timeout_options: {
+                connect_timeout: CONNECT_TIMEOUT_IN_SECONDS,
+                write_timeout: WRITE_TIMEOUT_IN_SECONDS,
+                read_timeout: timeout,
+                first_byte_timeout: ttft_deadline,
+                first_byte_marker:,
+              },
+            ),
+          )
+        else
+          HTTP.timeout(
+            connect: CONNECT_TIMEOUT_IN_SECONDS,
+            write: WRITE_TIMEOUT_IN_SECONDS,
+            read: timeout,
+          )
+        end
+
+      client.headers(
         "x-api-key" => api_key,
         "anthropic-version" => API_VERSION,
         "content-type" => "application/json",
