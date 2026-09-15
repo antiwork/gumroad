@@ -38,8 +38,8 @@ class Ai::AnthropicClient
   end
   private_constant :FirstByteMarker
 
-  # Reads wait `first_byte_timeout` until the first delta arrives, then the configured read timeout:
-  # bounding the wait for output must not bound silence between chunks afterwards.
+  # Reads wait out the first-byte budget until a delta arrives, then fall back to the configured read
+  # timeout: bounding the wait for output must not bound silence between chunks after it.
   class FirstByteTimeout < HTTP::Timeout::PerOperation
     def initialize(*args)
       super

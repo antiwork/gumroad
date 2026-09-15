@@ -36,13 +36,11 @@ class Ai::StoreAgentService
   # which is most of a turn's per-call latency. Below 100%, disables it per seller; models that
   # don't reason this way keep the request they send today.
   NO_HIDDEN_REASONING_FEATURE = :store_agent_deepseek_no_hidden_reasoning
-  # Most of DeepSeek's latency tail is calls that sit for a long time before their first token. The
-  # read timeout below is deliberately generous, so a stalled attempt spends it — and its retries —
-  # before the Opus fallback is even tried. Below 100%, bounds the wait for the first output per
-  # seller on streamed tool-loop turns.
+  # DeepSeek's latency tail is calls that sit before their first token, and the generous read timeout
+  # below means a stalled attempt spends it — plus its retries — before the Opus fallback is tried.
+  # Below 100%, bounds the wait for the first output on streamed tool-loop turns.
   TTFT_DEADLINE_FEATURE = :store_agent_deepseek_ttft_deadline
-  # Above the usual per-call time to first token, so a healthy slow call is untouched; the calls it
-  # drops are the ones already several times the median.
+  # Above the usual time to first token, so a healthy slow call is untouched.
   TTFT_DEADLINE_IN_SECONDS = 15
   # Ai::AnthropicClient's READ timeout, so for the streamed reply it bounds silence between chunks
   # rather than total generation time. Deliberately generous — the client fails fast on connect
