@@ -13,18 +13,46 @@ class SendStripeBalanceCheckNotificationJob
 
     balance_check = StripeBalanceCheckService.new
 
+    was_needed = $redis.get(RedisKey.stripe_balance_topup_needed) == "true"
     $redis.set(RedisKey.stripe_balance_topup_needed, balance_check.topup_needed?)
 
-    return unless balance_check.topup_needed?
-
-    notification_msg = "Stripe balance needs to be #{formatted_dollar_amount(balance_check.upcoming_payouts_cents)} " \
-                       "to cover upcoming payouts.\n" \
-                       "Current Stripe balance is #{formatted_dollar_amount(balance_check.current_balance_cents)}.\n" \
-                       "A top-up of #{formatted_dollar_amount(balance_check.topup_amount_cents)} is needed."
-
-    InternalNotificationWorker.perform_async("payments",
-                                             "Stripe Balance Check",
-                                             notification_msg,
-                                             "red")
+    if balance_check.topup_needed?
+      notify(balance_check, "red")
+    elsif was_needed
+      # Yesterday's alert asked for money; say so when it's no longer needed.
+      notify(balance_check, "green")
+    end
   end
+
+  private
+    def notify(balance_check, color)
+      InternalNotificationWorker.perform_async("payments", "Stripe Balance Check", message_for(balance_check), color)
+    end
+
+    def message_for(balance_check)
+      run_at = balance_check.next_payout_run_at
+      deadline = "#{run_at.strftime('%A, %B %-d')} at #{run_at.strftime('%H:%M')} UTC (#{run_at.in_time_zone('America/New_York').strftime('%-l:%M %p ET')})"
+      period_end = balance_check.payout_end_date.strftime("%B %-d")
+
+      lines = [
+        "Seller payouts for balances up to #{period_end} need #{formatted_dollar_amount(balance_check.upcoming_payouts_cents)} " \
+        "from Gumroad's Stripe balance. The next payout run is #{deadline}.",
+        "Stripe balance: #{formatted_dollar_amount(balance_check.current_balance_cents)} " \
+        "(#{formatted_dollar_amount(balance_check.available_cents)} available + " \
+        "#{formatted_dollar_amount(balance_check.pending_cents)} pending, which settles before the run).",
+        "Stripe swept #{formatted_dollar_amount(balance_check.swept_to_bank_last_day_cents)} to Gumroad's bank in the last 24 hours; " \
+        "that is what draws the balance down.",
+      ]
+
+      if balance_check.topup_needed?
+        lines << "A top-up of #{formatted_dollar_amount(balance_check.topup_amount_cents)} is needed before #{deadline}. " \
+                 "Nothing tops up automatically: add funds in the Stripe dashboard (Balances > Add to balance) " \
+                 "or move the money to the Stripe account from the bank. Payouts the balance cannot cover fail with " \
+                 "\"insufficient funds\" and have to be re-run by hand."
+      else
+        lines << "No top-up needed: the balance now covers the run. Nothing to do."
+      end
+
+      lines.join("\n")
+    end
 end
