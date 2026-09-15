@@ -2,6 +2,8 @@
 
 module UserComplianceInfo::BusinessTypes
   LLC = "llc"
+  SINGLE_MEMBER_LLC = "single_member_llc"
+  MULTI_MEMBER_LLC = "multi_member_llc"
   PARTNERSHIP = "partnership"
   NON_PROFIT = "profit"
   REGISTERED_CHARITY = "registered_charity"
@@ -11,6 +13,8 @@ module UserComplianceInfo::BusinessTypes
   def self.all
     [
       LLC,
+      SINGLE_MEMBER_LLC,
+      MULTI_MEMBER_LLC,
       PARTNERSHIP,
       NON_PROFIT,
       SOLE_PROPRIETORSHIP,
@@ -22,12 +26,26 @@ module UserComplianceInfo::BusinessTypes
   # ‘INDIVIDUAL’, ‘CORPORATION’, ‘LLC_SINGLE’, LLC_C_CORP’, ‘LLC_S_CORP’, ‘LLC_PARTNER’, ‘C_CORP’, ‘S_CORP’, ‘PARTNERSHIP’, ’NON_PROFIT’.
   def payable_type_map
     { LLC => "LLC_PARTNER",
+      SINGLE_MEMBER_LLC => "LLC_SINGLE",
+      MULTI_MEMBER_LLC => "LLC_PARTNER",
       PARTNERSHIP => "PARTNERSHIP",
       NON_PROFIT => "NON_PROFIT",
       SOLE_PROPRIETORSHIP => "INDIVIDUAL",
       CORPORATION => "CORPORATION"
     }
   end
+
+  # Stripe's US `company[structure]` separates single- from multi-member LLCs, so the US list asks
+  # for that instead of the generic `llc`. Rows saved as `llc` before this list existed still work;
+  # they send no structure (see StripeMerchantAccountManager::US_COMPANY_STRUCTURES).
+  BUSINESS_TYPES_US = {
+    SOLE_PROPRIETORSHIP => "Sole Proprietorship",
+    SINGLE_MEMBER_LLC => "LLC (single member)",
+    MULTI_MEMBER_LLC => "LLC (multi-member)",
+    PARTNERSHIP => "Partnership",
+    CORPORATION => "Corporation",
+    NON_PROFIT => "Non Profit"
+  }.freeze
 
   BUSINESS_TYPES_UAE = {
     "llc" => "LLC",

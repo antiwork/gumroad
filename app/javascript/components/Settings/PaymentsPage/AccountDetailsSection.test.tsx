@@ -55,15 +55,25 @@ const complianceInfo: ComplianceInfo = {
   dob_year: 2000,
 };
 
-const renderSection = (user: User) =>
+const usBusinessTypes = [
+  { code: "sole_proprietorship", name: "Sole Proprietorship" },
+  { code: "single_member_llc", name: "LLC (single member)" },
+  { code: "multi_member_llc", name: "LLC (multi-member)" },
+  { code: "partnership", name: "Partnership" },
+  { code: "corporation", name: "Corporation" },
+  { code: "profit", name: "Non Profit" },
+];
+
+const renderSection = (user: User, complianceOverrides: Partial<ComplianceInfo> = {}) =>
   render(
     <AccountDetailsSection
       user={user}
-      complianceInfo={complianceInfo}
+      complianceInfo={{ ...complianceInfo, ...complianceOverrides }}
       updateComplianceInfo={() => {}}
       isFormDisabled={false}
       minDobYear={2008}
-      countries={{ US: "United States" }}
+      countries={{ US: "United States", GB: "United Kingdom" }}
+      usBusinessTypes={usBusinessTypes}
       uaeBusinessTypes={[]}
       indiaBusinessTypes={[]}
       canadaBusinessTypes={[]}
@@ -128,5 +138,30 @@ describe("AccountDetailsSection SSN field", () => {
     const input = screen.getByLabelText<HTMLInputElement>("Social Security Number");
     expect(input.disabled).toBe(true);
     expect(screen.getByRole("button", { name: "Change" })).toBeTruthy();
+  });
+});
+
+describe("AccountDetailsSection business type", () => {
+  const optionValues = () =>
+    Array.from(screen.getByLabelText<HTMLSelectElement>("Type").options).map((option) => option.value);
+
+  it("offers the US list, split by LLC membership, for a US legal entity", () => {
+    renderSection(makeUser({ country_code: "AE" }), { is_business: true, business_country: "US" });
+
+    expect(optionValues()).toEqual([
+      "Type",
+      "sole_proprietorship",
+      "single_member_llc",
+      "multi_member_llc",
+      "partnership",
+      "corporation",
+      "profit",
+    ]);
+  });
+
+  it("keeps the generic list for a legal entity without its own list", () => {
+    renderSection(makeUser(), { is_business: true, business_country: "GB" });
+
+    expect(optionValues()).toEqual(["Type", "llc", "partnership", "profit", "sole_proprietorship", "corporation"]);
   });
 });

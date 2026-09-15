@@ -193,6 +193,7 @@ type PaymentsPageProps = {
   min_dob_year: number;
   user: User;
   compliance_info: ComplianceInfo;
+  us_business_types: { code: string; name: string }[];
   uae_business_types: { code: string; name: string }[];
   india_business_types: { code: string; name: string }[];
   canada_business_types: { code: string; name: string }[];
@@ -1529,6 +1530,7 @@ export default function PaymentsPage() {
                 minDobYear={props.min_dob_year}
                 isFormDisabled={props.is_form_disabled}
                 countries={props.countries}
+                usBusinessTypes={props.us_business_types}
                 uaeBusinessTypes={props.uae_business_types}
                 indiaBusinessTypes={props.india_business_types}
                 canadaBusinessTypes={props.canada_business_types}

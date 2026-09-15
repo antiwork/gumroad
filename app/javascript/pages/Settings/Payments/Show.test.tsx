@@ -135,6 +135,7 @@ const pageProps = (userOverrides: Partial<User> = {}, complianceOverrides: Parti
   min_dob_year: 2008,
   user: user(userOverrides),
   compliance_info: complianceInfo(complianceOverrides),
+  us_business_types: [],
   uae_business_types: [],
   india_business_types: [],
   canada_business_types: [],

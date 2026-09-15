@@ -43,6 +43,7 @@ const AccountDetailsSection = ({
   isFormDisabled,
   minDobYear,
   countries,
+  usBusinessTypes,
   uaeBusinessTypes,
   indiaBusinessTypes,
   canadaBusinessTypes,
@@ -56,6 +57,7 @@ const AccountDetailsSection = ({
   isFormDisabled: boolean;
   minDobYear: number;
   countries: Record<string, string>;
+  usBusinessTypes: { code: string; name: string }[];
   uaeBusinessTypes: { code: string; name: string }[];
   indiaBusinessTypes: { code: string; name: string }[];
   canadaBusinessTypes: { code: string; name: string }[];
@@ -102,6 +104,7 @@ const AccountDetailsSection = ({
 
   const getBusinessTypes = (): { code: string; name: string }[] | null => {
     const businessTypesMap: Record<string, { code: string; name: string }[]> = {
+      US: usBusinessTypes,
       AE: uaeBusinessTypes,
       IN: indiaBusinessTypes,
       CA: canadaBusinessTypes,

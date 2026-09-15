@@ -14792,4 +14792,131 @@ describe StripeMerchantAccountManager, :vcr do
       end
     end
   end
+
+  # The form's US business types are ours; Stripe's US `company[structure]` values differ, and Stripe
+  # validates the field against the legal entity's country, not the seller's residence.
+  describe "US company structure" do
+    let(:user) { create(:user, email: "gp2609-us-structure@example.com", username: "gp2609usstructure") }
+    let(:passphrase) { GlobalConfig.get("STRONGBOX_GENERAL_PASSWORD") }
+
+    def company_for(business_type, factory: :user_compliance_info_business, **attrs)
+      info = create(factory, user:, business_type:, **attrs)
+      described_class.send(:company_hash, info, passphrase)[:company]
+    end
+
+    {
+      UserComplianceInfo::BusinessTypes::SOLE_PROPRIETORSHIP => "sole_proprietorship",
+      UserComplianceInfo::BusinessTypes::SINGLE_MEMBER_LLC => "single_member_llc",
+      UserComplianceInfo::BusinessTypes::MULTI_MEMBER_LLC => "multi_member_llc",
+      UserComplianceInfo::BusinessTypes::CORPORATION => "private_corporation",
+      UserComplianceInfo::BusinessTypes::PARTNERSHIP => "private_partnership",
+    }.each do |business_type, structure|
+      it "maps #{business_type} to #{structure} for a US legal entity" do
+        expect(company_for(business_type)[:structure]).to eq(structure)
+      end
+    end
+
+    it "sends no structure for the generic llc, which does not say how many members the LLC has" do
+      expect(company_for(UserComplianceInfo::BusinessTypes::LLC)).not_to have_key(:structure)
+    end
+
+    it "sends no structure for a non-profit, whose Stripe structures need a non_profit business type" do
+      expect(company_for(UserComplianceInfo::BusinessTypes::NON_PROFIT)).not_to have_key(:structure)
+    end
+
+    it "keys on the legal entity, so a non-resident seller's US company still gets its structure" do
+      company = company_for(UserComplianceInfo::BusinessTypes::MULTI_MEMBER_LLC,
+                            factory: :user_compliance_info_uae_business,
+                            business_country: "United States",
+                            business_state: "California",
+                            business_city: "Burbank",
+                            business_zip_code: "91506")
+
+      expect(company[:address]).to include(country: "US")
+      expect(company[:structure]).to eq("multi_member_llc")
+      expect(company).not_to have_key(:vat_id)
+    end
+
+    it "does not apply the US mapping to a UAE legal entity" do
+      company = company_for("llc", factory: :user_compliance_info_uae_business, business_vat_id_number: "100000000000003")
+
+      expect(company[:structure]).to eq("llc")
+      expect(company[:vat_id]).to eq("100000000000003")
+    end
+
+    it "does not apply the US mapping to a US-resident seller's non-US company" do
+      company = company_for(UserComplianceInfo::BusinessTypes::CORPORATION,
+                            business_country: "United Kingdom",
+                            business_state: nil,
+                            business_city: "London",
+                            business_zip_code: "SW1A 1AA")
+
+      expect(company[:address]).to include(country: "GB")
+      expect(company).not_to have_key(:structure)
+    end
+
+    describe "update_account" do
+      # No Stripe account is created; every call the update makes is stubbed below.
+      let(:merchant_account) { create(:merchant_account, user:) }
+
+      def stub_stripe_account(previous_info)
+        stripe_account = Stripe::Account.construct_from(
+          id: merchant_account.charge_processor_merchant_id,
+          object: "account",
+          metadata: { user_compliance_info_id: previous_info.external_id },
+          capabilities: {},
+          requirements: { currently_due: [], eventually_due: [], past_due: [] }
+        )
+        allow(Stripe::Account).to receive(:retrieve).with(merchant_account.charge_processor_merchant_id).and_return(stripe_account)
+        allow(Stripe::Account).to receive(:list_persons).and_return({ "data" => [] })
+        allow(Stripe::Account).to receive(:update_person)
+        allow(Stripe::Account).to receive(:create_person)
+        allow(StripeGuardianManager).to receive(:sync)
+        stripe_account
+      end
+
+      before do
+        merchant_account
+        create(:tos_agreement, user:)
+      end
+
+      it "sends the mapped structure for a non-resident seller's US company" do
+        previous = create(:user_compliance_info_uae_business, user:,
+                                                              business_country: "United States", business_state: "California",
+                                                              business_city: "Burbank", business_zip_code: "91506",
+                                                              business_type: UserComplianceInfo::BusinessTypes::LLC)
+        previous.mark_deleted!
+        create(:user_compliance_info_uae_business, user:,
+                                                   business_country: "United States", business_state: "California",
+                                                   business_city: "Burbank", business_zip_code: "91506",
+                                                   business_type: UserComplianceInfo::BusinessTypes::SINGLE_MEMBER_LLC)
+        stub_stripe_account(previous)
+
+        expect(Stripe::Account).to receive(:update).with(
+          merchant_account.charge_processor_merchant_id,
+          hash_including(company: hash_including(structure: "single_member_llc"))
+        )
+
+        described_class.update_account(user, passphrase:)
+      end
+
+      it "clears the structure before a US company with a mapped structure becomes an individual" do
+        previous = create(:user_compliance_info_business, user:, business_type: UserComplianceInfo::BusinessTypes::MULTI_MEMBER_LLC)
+        previous.mark_deleted!
+        create(:user_compliance_info, user:)
+        stub_stripe_account(previous)
+
+        expect(Stripe::Account).to receive(:update).with(
+          merchant_account.charge_processor_merchant_id,
+          { company: { structure: "" } }
+        ).ordered
+        expect(Stripe::Account).to receive(:update).with(
+          merchant_account.charge_processor_merchant_id,
+          hash_including(business_type: "individual")
+        ).ordered
+
+        described_class.update_account(user, passphrase:)
+      end
+    end
+  end
 end
