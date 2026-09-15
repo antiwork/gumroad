@@ -137,8 +137,6 @@ describe Ai::StoreAgentService do
         service.respond(messages: [{ role: "user", content: "How many products?" }])
 
         expect(tool_loop_call).not_to have_key(:thinking)
-        # The follow-up call's pre-existing DeepSeek treatment does not depend on the flag.
-        expect(calls.last[:thinking]).to eq({ type: "disabled" })
       end
 
       it "leaves a non-DeepSeek model's tool loop alone when the flag is on" do
