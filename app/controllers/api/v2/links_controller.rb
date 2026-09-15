@@ -795,14 +795,13 @@ class Api::V2::LinksController < Api::V2::BaseController
       thumbnail thumbnail_signed_id
     ]).map(&:to_s).freeze
 
-    # Writable ProductFile attributes, asked of the model so a new column or
-    # flag needs no second edit here. epub_section_info is an
-    # attr_json_data_accessor, which the model does not list as an attribute.
-    WRITABLE_PRODUCT_FILE_ATTRIBUTES = (
-      ProductFile.attribute_names +
-      ProductFile.flag_mapping.values.flat_map(&:keys).map(&:to_s) +
-      %w[epub_section_info]
-    ).uniq.freeze
+    # Publicly writable ProductFile fields. Keep this explicit: attribute_names also contains
+    # ownership and lifecycle fields such as link_id, installment_id, deleted_at, and flags. Letting
+    # a new database column into the API automatically would turn this guard into mass assignment.
+    WRITABLE_PRODUCT_FILE_ATTRIBUTES = %w[
+      url display_name description folder_id size position isbn pagelength duration width height
+      stream_only pdf_stamp_enabled hide_kindle_and_read_buttons epub_section_info
+    ].freeze
 
     def product_file_param?(key)
       key = key.to_s

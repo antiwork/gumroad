@@ -46,6 +46,21 @@ describe "PUT /api/v2/products/:id files[] parameters", type: :request do
       expect(file.reload.display_name).to eq("Old")
     end
 
+    it "rejects database ownership and lifecycle fields instead of mass-assigning them" do
+      file = create(:product_file, link: product, display_name: "Old")
+
+      %i[link_id installment_id deleted_at flags json_data].each do |field|
+        put_product(files: [{ id: file.external_id, url: file.url, field => 1 }])
+
+        expect(response.parsed_body["success"]).to be(false)
+        expect(response.parsed_body["message"]).to include("'#{field}' is not an accepted parameter on files[]")
+      end
+
+      expect(file.reload.link_id).to eq(product.id)
+      expect(file.deleted_at).to be_nil
+      expect(file.flags).to eq(0)
+    end
+
     it "leaves the existing id/url rejection in front of the key check" do
       put_product(files: [{ type: "archive" }])
 
