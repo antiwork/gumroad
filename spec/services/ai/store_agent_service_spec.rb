@@ -104,6 +104,50 @@ describe Ai::StoreAgentService do
       expect(captured[:messages].none? { |m| m[:role] == "system" }).to be(true)
     end
 
+    context "hidden reasoning on the tool loop" do
+      let(:calls) { [] }
+
+      before do
+        allow(client).to receive(:messages) do |**kwargs|
+          calls << kwargs
+          kwargs[:max_tokens] == described_class::MAX_SUGGESTION_TOKENS ? text_result("[]") : text_result("You have 3 products.")
+        end
+      end
+
+      # The tool loop is this turn's MAX_REPLY_TOKENS call; the follow-up suggestions call is the
+      # much smaller MAX_SUGGESTION_TOKENS one.
+      def tool_loop_call
+        calls.find { |call| call[:max_tokens] == described_class::MAX_REPLY_TOKENS }
+      end
+
+      it "disables thinking for DeepSeek when the flag is on" do
+        allow(Ai::AnthropicClient).to receive(:openrouter_configured?).and_return(true)
+        Feature.activate_user(described_class::DEEPSEEK_RAMP_FEATURE, seller)
+        Feature.activate_user(described_class::NO_HIDDEN_REASONING_FEATURE, seller)
+
+        service.respond(messages: [{ role: "user", content: "How many products?" }])
+
+        expect(tool_loop_call[:thinking]).to eq({ type: "disabled" })
+      end
+
+      it "leaves the tool loop as it is today when the flag is off" do
+        allow(Ai::AnthropicClient).to receive(:openrouter_configured?).and_return(true)
+        Feature.activate_user(described_class::DEEPSEEK_RAMP_FEATURE, seller)
+
+        service.respond(messages: [{ role: "user", content: "How many products?" }])
+
+        expect(tool_loop_call).not_to have_key(:thinking)
+      end
+
+      it "leaves a non-DeepSeek model's tool loop alone when the flag is on" do
+        Feature.activate_user(described_class::NO_HIDDEN_REASONING_FEATURE, seller)
+
+        service.respond(messages: [{ role: "user", content: "How many products?" }])
+
+        expect(tool_loop_call).not_to have_key(:thinking)
+      end
+    end
+
     it "keeps trusted proposal state after truncating an assistant history message" do
       captured = nil
       allow(client).to receive(:messages) do |args|
@@ -2236,6 +2280,23 @@ describe Ai::StoreAgentService do
       collect_events([{ role: "user", content: "How many products?" }])
 
       expect(captured).not_to have_key(:thinking)
+    end
+
+    it "disables thinking on the streamed tool loop for DeepSeek when the flag is on" do
+      allow(Ai::AnthropicClient).to receive(:openrouter_configured?).and_return(true)
+      Feature.activate_user(described_class::DEEPSEEK_RAMP_FEATURE, seller)
+      Feature.activate_user(described_class::NO_HIDDEN_REASONING_FEATURE, seller)
+      tool_loop = nil
+      allow(client).to receive(:stream_messages) do |**kwargs, &_on_text|
+        tool_loop ||= kwargs
+        text_result("You have 3 products.")
+      end
+      allow(client).to receive(:messages).and_return(text_result("[]"))
+
+      collect_events([{ role: "user", content: "How many products?" }])
+
+      expect(tool_loop[:thinking]).to eq({ type: "disabled" })
+      expect(tool_loop[:max_tokens]).to eq(described_class::MAX_REPLY_TOKENS)
     end
 
     it "emits a reset when an intermediate tool-use turn streams preamble text, then streams the real reply" do

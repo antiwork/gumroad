@@ -142,12 +142,12 @@ class Ai::AnthropicClient
   # Retry only before the first yield — a later retry would replay on the seller's screen.
   # Corrupted tool-call JSON: one buffered replay. Already-yielded text (usual tool-use preamble)
   # must be erased via on_discard_streamed_text or the fallback cannot run.
-  def stream_messages(system:, messages:, tools: nil, max_tokens: DEFAULT_MAX_TOKENS, on_discard_streamed_text: nil, &on_text)
+  def stream_messages(system:, messages:, tools: nil, max_tokens: DEFAULT_MAX_TOKENS, thinking: nil, on_discard_streamed_text: nil, &on_text)
     yielded_any = false
 
     begin
       with_vercel_model_fallback(yielded: -> { yielded_any }) do
-        body = request_body(system:, messages:, tools:, max_tokens:, stream: true)
+        body = request_body(system:, messages:, tools:, max_tokens:, stream: true, thinking:)
         with_retries(retryable: -> { !yielded_any }, streamed: true) do |trace|
           text = +""
           blocks = {}
@@ -210,7 +210,7 @@ class Ai::AnthropicClient
         yielded_any = false
       end
 
-      buffered_fallback(system:, messages:, tools:, max_tokens:, original_error: e, &on_text)
+      buffered_fallback(system:, messages:, tools:, max_tokens:, thinking:, original_error: e, &on_text)
     end
   end
 
@@ -220,10 +220,10 @@ class Ai::AnthropicClient
     # One non-streamed replay so the gateway cannot drop input_json_delta fragments. No extra retries.
     # Withhold truncated and tool-use preamble text (the caller would discard them after a flash).
     # If this fails too, re-raise original_error so the seller still sees the unreadable-tool-call message.
-    def buffered_fallback(system:, messages:, tools:, max_tokens:, original_error:, &on_text)
+    def buffered_fallback(system:, messages:, tools:, max_tokens:, thinking: nil, original_error:, &on_text)
       Rails.logger.warn("Anthropic streamed tool call unreadable after retries; falling back to a non-streamed request. (#{original_error.message})")
 
-      body = request_body(system:, messages:, tools:, max_tokens:, stream: false)
+      body = request_body(system:, messages:, tools:, max_tokens:, stream: false, thinking:)
       trace = CallTrace.new(
         streamed: false,
         buffered_fallback: true,
@@ -475,7 +475,8 @@ class Ai::AnthropicClient
       if vercel? && !@using_fallback_model && fallback_model.present?
         body[:providerOptions] = { gateway: { models: [fallback_model] } }
       end
-      body[:thinking] = thinking if thinking.present?
+      # A caller's override describes the model it asked for; the fallback replay is a different one.
+      body[:thinking] = thinking if thinking.present? && !@using_fallback_model
       body
     end
 
