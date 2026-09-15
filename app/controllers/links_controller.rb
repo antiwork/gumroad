@@ -30,10 +30,8 @@ class LinksController < ApplicationController
   # One report per product per window: repeats from the same client carry no
   # information past the first, and reporting every one drowns the tracker.
   EDITOR_SAVE_LOCK_REPORT_WINDOW = 10.minutes
-  # How many save attempts one product admits per window before the attempt is refused
-  # with a retryable 429. A save is an explicit user action and a human editor session is
-  # single-digit attempts per minute; the storm that parked 37 sessions on the row lock was
-  # ~3 attempts/second on a single product, so only the looping case reaches this.
+  # Save attempts one product admits per window before a retryable 429. A human editor session is
+  # single-digit attempts per minute, so only a client looping on one product reaches this.
   EDITOR_SAVE_RATE_LIMIT = 30
   EDITOR_SAVE_RATE_LIMIT_PERIOD = 1.minute
   # Blocker-probe bounds. The probe runs inside the rescue that owes the client a 409,
@@ -445,9 +443,8 @@ class LinksController < ApplicationController
     authorize @product
 
     begin
-      # The row lock serializes saves of this product anyway, so a client retrying faster than a
-      # save can finish only builds the queue behind it. Refuse the attempt itself, before it
-      # opens the transaction and takes a DB connection: a human editor session is far under this.
+      # Counted before the save opens its transaction: the row lock serializes saves of this
+      # product anyway, so a faster retry only takes a DB connection to queue behind it.
       return unless throttle!(
         key: RedisKey.editor_save_throttle(@product.id),
         limit: EDITOR_SAVE_RATE_LIMIT,

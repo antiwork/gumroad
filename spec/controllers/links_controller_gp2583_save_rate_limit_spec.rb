@@ -2,10 +2,9 @@
 
 require "spec_helper"
 
-# Pins the per-product save rate limit (antiwork/gumroad-private#2583). The row lock
-# serializes saves of one product, so a client retrying faster than a save can finish is
-# what builds the queue behind it — the attempt rate itself has to be bounded, and bounded
-# per product so one product's storm cannot refuse a save of another.
+# The attempt rate, not only the hold, is what a client looping on one product spends: the row
+# lock serializes saves of a product, so faster retries just queue behind it. Bounded per product
+# so one product's storm cannot refuse a save of another.
 describe LinksController, type: :controller do
   let(:seller) { create(:user) }
   let(:product) { create(:product, user: seller) }
@@ -55,10 +54,24 @@ describe LinksController, type: :controller do
   end
 
   it "admits the save when the counter is unreadable, instead of failing the save with Redis" do
+    spend_window(product, 1)
     allow($redis).to receive(:incr).and_raise(Redis::CannotConnectError)
 
     save_product(product)
 
     expect(response).to have_http_status(:success)
+  end
+
+  it "creates the counter with its expiry, so a failed window open cannot refuse every later save" do
+    allow($redis).to receive(:expire).and_call_original
+    allow($redis).to receive(:expire)
+      .with(RedisKey.editor_save_throttle(product.id), anything)
+      .and_raise(Redis::CannotConnectError)
+
+    save_product(product)
+
+    expect(response).to have_http_status(:success)
+    # An expiry-less counter never resets, so the product would be refused 30 saves from now.
+    expect($redis.ttl(RedisKey.editor_save_throttle(product.id))).to be > 0
   end
 end
