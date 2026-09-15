@@ -3,10 +3,10 @@
 class EgyptBankAccount < BankAccount
   BANK_ACCOUNT_TYPE = "EG"
 
-  # Stripe's EG directory resolves the 8-char BIC and the XXX-padded 11-char form, but not an 11-char
-  # value whose suffix is the bank's local branch number — the shape Egyptian banks print as "SWIFT +
-  # branch". Those rows save here with no external account attached and never get paid.
-  BANK_CODE_FORMAT_REGEX = /^[a-zA-Z]{6}[0-9a-zA-Z]{2}(?:XXX)?$/i
+  # Stripe rejects a lowercase EG routing number outright ("Invalid routing number"), but whether an
+  # 11-char branch code resolves is a per-BIC question only its own directory answers (NBEGEGCX331
+  # does, QNBAEGCX027 does not), so the case is all this can enforce.
+  BANK_CODE_FORMAT_REGEX = /^[A-Z]{6}[A-Z0-9]{2}(?:[A-Z0-9]{3})?$/
   private_constant :BANK_CODE_FORMAT_REGEX
 
   alias_attribute :bank_code, :bank_number
@@ -48,7 +48,7 @@ class EgyptBankAccount < BankAccount
   private
     def validate_bank_code
       return if BANK_CODE_FORMAT_REGEX.match?(bank_code)
-      errors.add :base, "Enter your bank's 8-character SWIFT/BIC code (for example NBEGEGCX); the branch number is not part of it."
+      errors.add :base, "Enter your bank's SWIFT/BIC code in capitals: 8 characters, or 11 including the branch code (for example NBEGEGCX)."
     end
 
     def validate_account_number

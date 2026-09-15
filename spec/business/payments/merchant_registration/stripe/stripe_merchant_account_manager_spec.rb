@@ -2658,7 +2658,7 @@ describe StripeMerchantAccountManager, :vcr do
             country: "EG",
             currency: "egp",
             account_number: "EG800002000156789012345180002",
-            routing_number: "NBEGEGCX"
+            routing_number: "NBEGEGCX331"
           },
           settings: {
             payouts: {

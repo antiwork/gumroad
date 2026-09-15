@@ -307,10 +307,10 @@ describe("BankAccountSection Indonesian bank code", () => {
   });
 });
 describe("BankAccountSection Egyptian bank code", () => {
-  // Stripe's EG directory resolves the 8-char BIC but not an 11-char value carrying the bank's local
-  // branch number — the "SWIFT + branch" shape Egyptian banks print. The old placeholder was one of
-  // those, so it advertised exactly the value that never attaches a payout account.
-  it("advertises the 8-character BIC instead of a SWIFT plus branch number", () => {
+  // Egyptian banks publish an 8-char BIC and a separate branch number, and an 11-char "BIC + branch"
+  // code resolves only when Stripe's directory lists that branch. So the field advertises the 8-char
+  // form, which resolves for every bank.
+  it("advertises the 8-character BIC rather than a branch-suffixed code", () => {
     renderForCountry("EG", true);
     const field = screen.getByLabelText<HTMLInputElement>("SWIFT / BIC Code");
 
