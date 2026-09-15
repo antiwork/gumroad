@@ -28,8 +28,8 @@ describe AutoTopUpNegativeDestinationBalancesJob do
     Digest::SHA1.hexdigest(balance_ids.join("-"))[0, 12]
   end
 
-  # Rates the job reads through CurrencyHelper#get_rate (USD → local). Stubbed on the job rather
-  # than seeded into the shared Redis currencies namespace, which other spec processes flush.
+  # USD → local rates; stubbed on the job because the shared Redis currencies namespace is flushed
+  # by other spec processes.
   RATES = { "php" => "2.0", "lak" => "20000.0", "jpy" => "100.0" }.freeze
 
   def usd_for(local_cents, currency: Currency::PHP)
@@ -839,7 +839,7 @@ describe AutoTopUpNegativeDestinationBalancesJob do
   end
 
   it "sizes the USD transfer from the local hole: converted at the current rate, plus the buffer, rounded up to a whole cent" do
-    residue_row(-101)  # 101 PHP cents / 2.0 = 50.5 USD cents → ×1.2 = 60.6 → ceil → 61
+    residue_row(-101) # 101 / 2.0 = 50.5 → ×1.2 = 60.6 → 61
     make_payable
     Feature.activate(:auto_topup_negative_destination_balances)
 
@@ -865,8 +865,7 @@ describe AutoTopUpNegativeDestinationBalancesJob do
     make_payable
     Feature.activate(:auto_topup_negative_destination_balances)
 
-    # ¥1,000 (whole yen — jpy is single_unit in config/currencies.json) / 100 = 10 USD = 1,000 US
-    # cents → ×1.2 = 1,200. Treating the figure as hundredths would send 12 cents instead.
+    # ¥1,000 (single_unit) / 100 = 1,000 US cents → ×1.2 = 1,200; as hundredths it would be 12.
     expect(StripeTransferInternallyToCreator).to receive(:transfer_funds_to_account).with(
       hash_including(currency: Currency::USD, amount_cents: 1_200)
     )
@@ -894,6 +893,20 @@ describe AutoTopUpNegativeDestinationBalancesJob do
     expect($redis.keys("#{dedupe_key}:*")).to be_empty
   ensure
     Feature.deactivate(:auto_topup_negative_destination_balances)
+  end
+
+  it "escalates on a dry run too when no exchange rate is available, so the preview matches live readiness" do
+    residue_row(-728_50)
+    make_payable
+    allow_any_instance_of(described_class).to receive(:get_rate).and_return(nil)
+
+    described_class.new.perform
+
+    expect(InternalNotificationWorker).to have_received(:perform_async) do |_room, _subject, message|
+      expect(message).to include("would top up 0 of 1 candidates")
+      expect(message).to include("ESCALATE #{seller.email} — no usable USD exchange rate for php")
+      expect(message).not_to include("nil USD cents")
+    end
   end
 
   it "flags a live run that processed payable candidates and funded none, in the subject and the body" do

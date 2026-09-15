@@ -15,15 +15,10 @@ class AutoTopUpNegativeDestinationBalancesJob
   # reaches the biggest gaps first rather than an arbitrary subset.
   MAX_TOPUPS_PER_RUN = 10
 
-  # Transfers are sent in USD, never in the destination currency: the platform balance only holds
-  # USD (every non-USD platform balance is zero or negative), so a local-currency transfer is
-  # rejected by Stripe as "insufficient funds in your Stripe account" — 0 of 310 attempts funded
-  # over 31 live runs (gp#2622). The payout pipeline (StripePayoutProcessor) and the manual repair
-  # lane both send USD through the same helper and succeed. The USD amount is the local hole
-  # converted at the current rate plus this buffer, rounded up to whole cents, so the FX leg lands
-  # at or above the hole (the standing manual-lane sizing rule: 15–20% over the converted gap; any
-  # residual is in the seller's favor). Under-delivery would leave a smaller negative behind and
-  # the payout would fail again on the same guard.
+  # Transfers are sent in USD: the platform balance holds no fundable non-USD balance, so a
+  # destination-currency transfer is rejected by Stripe. Buffer over the converted hole so FX
+  # drift cannot under-deliver (a residual negative fails the same payout guard again); any
+  # excess lands on the seller's Connect account.
   USD_TOPUP_BUFFER_RATIO = BigDecimal("0.20")
 
   # A leg-two reconciliation pass can take days; this only needs to outlive the daily scan
@@ -112,8 +107,10 @@ class AutoTopUpNegativeDestinationBalancesJob
       return { entry:, verdict: :noop, reason: "nothing to transfer" } if amount_cents.zero?
 
       unless live
-        return { entry:, verdict: :dry_run, reason: nil, amount_cents:, currency: entry[:merchant_account].currency,
-                 usd_amount_cents: usd_topup_cents_for(amount_cents, entry[:merchant_account].currency) }
+        usd_amount_cents = usd_topup_cents_for(amount_cents, entry[:merchant_account].currency)
+        return no_rate_escalation(entry, amount_cents) unless usd_amount_cents&.positive?
+
+        return { entry:, verdict: :dry_run, reason: nil, amount_cents:, currency: entry[:merchant_account].currency, usd_amount_cents: }
       end
 
       dedupe_key = RedisKey.auto_topup_negative_destination_balance_last_amount(entry[:merchant_account].id)
@@ -222,12 +219,9 @@ class AutoTopUpNegativeDestinationBalancesJob
       end
 
       to_transfer_cents = funded_signed ? (current_total_cents - funded_signed).abs : current_total_cents.abs
-      # Sized BEFORE any claim is taken: a missing/zero rate must escalate with nothing to unwind,
-      # not leave a persisted transfer_key behind for a call that never reached Stripe.
+      # Sized before any claim is taken, so a missing rate leaves nothing to unwind.
       usd_amount_cents = usd_topup_cents_for(to_transfer_cents, entry[:merchant_account].currency)
-      unless usd_amount_cents&.positive?
-        return { entry:, verdict: :escalate, reason: "no usable USD exchange rate for #{entry[:merchant_account].currency} — cannot size the USD top-up for #{to_transfer_cents} #{entry[:merchant_account].currency} cents" }
-      end
+      return no_rate_escalation(entry, to_transfer_cents) unless usd_amount_cents&.positive?
       # The transfer's own idempotency key is scoped to the specific (account, current row set,
       # funded-so-far, target) transition, not just the amounts — an amount-only key persisted
       # forever (below) would otherwise collide across two UNRELATED shortfalls that happen to
@@ -253,9 +247,8 @@ class AutoTopUpNegativeDestinationBalancesJob
       StripeTransferInternallyToCreator.transfer_funds_to_account(
         message_why: "Reconciling negative destination ledger (gumroad-private#1903, auto top-up leg)",
         stripe_account_id: entry[:merchant_account].charge_processor_merchant_id,
-        # USD, not the destination currency — see USD_TOPUP_BUFFER_RATIO. Stripe converts on
-        # arrival; the local-cents figures (to_transfer_cents, dedupe/transfer keys) stay the
-        # bookkeeping basis because they are what the ledger and leg two are measured in.
+        # USD (see USD_TOPUP_BUFFER_RATIO); local cents remain the bookkeeping basis for
+        # to_transfer_cents and the dedupe/transfer keys, since the ledger is measured in them.
         currency: Currency::USD,
         amount_cents: usd_amount_cents,
         # Stripe's own idempotency window (24h) is the real backstop against an ambiguous local
@@ -357,16 +350,14 @@ class AutoTopUpNegativeDestinationBalancesJob
       ].compact.join("\n")
     end
 
-    # "Topped up 0 of 10" read as a quiet day for 31 consecutive runs (gp#2622). A live run that
-    # processed payable candidates and funded none is the loud case, so it goes in the subject
-    # where a reader cannot miss it. Dry runs and empty runs are not failures.
+    # A live run that funded none of its payable candidates goes in the subject, where a reader
+    # cannot miss it.
     def subject_for(outcomes, live:)
       prefix = all_failed?(outcomes, live:) ? "ALL FAILED: " : ""
       "#{prefix}Negative destination balance top-ups"
     end
 
-    # Only errors and human-withholds count as "failed": a run whose candidates all reconciled
-    # between scan and transfer (:noop) funded nothing because nothing was left to fund.
+    # :noop candidates (reconciled between scan and transfer) are not failures.
     def all_failed?(outcomes, live:)
       return false unless live
       return false if outcomes.any? { _1[:verdict] == :topped_up }
@@ -374,11 +365,14 @@ class AutoTopUpNegativeDestinationBalancesJob
       outcomes.any? { _1[:verdict] == :error || _1[:verdict] == :escalate }
     end
 
-    # USD cents to send for a hole of `local_cents` in `currency`: the converted amount plus
-    # USD_TOPUP_BUFFER_RATIO, rounded UP once to a whole cent (no intermediate rounding, so the
-    # result never lands below the buffered figure). Single-unit currencies (JPY-style, where a
-    # "cent" is a whole unit) scale the same way CurrencyHelper#get_usd_cents does. Returns nil
-    # when no rate is available so the caller can escalate instead of sending 0 or a garbage amount.
+    def no_rate_escalation(entry, local_cents)
+      currency = entry[:merchant_account].currency
+      { entry:, verdict: :escalate, reason: "no usable USD exchange rate for #{currency} — cannot size the USD top-up for #{local_cents} #{currency} cents" }
+    end
+
+    # Converted hole plus the buffer, rounded up once (an intermediate round could land below the
+    # buffered figure). Single-unit currencies scale as in CurrencyHelper#get_usd_cents. nil when
+    # no rate is available.
     def usd_topup_cents_for(local_cents, currency)
       currency = currency.to_s.downcase
       return local_cents if currency == Currency::USD
@@ -386,11 +380,10 @@ class AutoTopUpNegativeDestinationBalancesJob
       rate = BigDecimal(get_rate(currency).to_s)
       return nil unless rate.positive?
 
-      # unit_scaling_factor is 1 for single-unit currencies and 100 otherwise, so this is ×100 for
-      # a whole-unit hole and ×1 for a hundredths hole — same asymmetry as get_usd_cents.
       usd_cents = BigDecimal(local_cents.to_s) / rate * (100 / unit_scaling_factor(currency))
       (usd_cents * (1 + USD_TOPUP_BUFFER_RATIO)).ceil.to_i
-    rescue StandardError
+    rescue ArgumentError, TypeError
+      # BigDecimal("") / BigDecimal(nil) — an absent or malformed cached rate, not an outage.
       nil
     end
 end
