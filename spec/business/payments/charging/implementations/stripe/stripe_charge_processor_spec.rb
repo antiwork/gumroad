@@ -1803,7 +1803,18 @@ describe StripeChargeProcessor, :vcr do
       end
 
       it "calls refund with reason if refund is for fraud" do
-        expect(Stripe::Refund).to receive(:create).with({ charge: charge_id, reason: StripeChargeProcessor::REFUND_REASON_FRAUDULENT }).and_call_original
+        allow(Checkout::BuyerCurrencyEligibility).to receive(:stripe_test_mode?).and_return(false)
+        # Never send a real `fraudulent` refund: on the shared test account it blocklists the card.
+        expect(Stripe::Refund).to receive(:create).with({ charge: charge_id, reason: StripeChargeProcessor::REFUND_REASON_FRAUDULENT })
+          .and_wrap_original { |m, params, *args| m.call(params.except(:reason), *args) }
+        subject.refund!(charge_id, is_for_fraud: true)
+      end
+
+      it "omits the fraud reason on a Stripe test key so the shared test card is not blocklisted" do
+        charge_id = create_stripe_charge(payment_method_id, amount: amount_cents, currency:, confirm: true).id
+
+        expect(Checkout::BuyerCurrencyEligibility.stripe_test_mode?).to be(true)
+        expect(Stripe::Refund).to receive(:create).with({ charge: charge_id }).and_call_original
         subject.refund!(charge_id, is_for_fraud: true)
       end
 
