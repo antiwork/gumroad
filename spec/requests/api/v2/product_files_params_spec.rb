@@ -46,6 +46,21 @@ describe "PUT /api/v2/products/:id files[] parameters", type: :request do
       expect(file.reload.display_name).to eq("Old")
     end
 
+    it "rejects database ownership and lifecycle fields instead of mass-assigning them" do
+      file = create(:product_file, link: product, display_name: "Old")
+
+      %i[link_id installment_id deleted_at flags json_data].each do |field|
+        put_product(files: [{ id: file.external_id, url: file.url, field => 1 }])
+
+        expect(response.parsed_body["success"]).to be(false)
+        expect(response.parsed_body["message"]).to include("'#{field}' is not an accepted parameter on files[]")
+      end
+
+      expect(file.reload.link_id).to eq(product.id)
+      expect(file.deleted_at).to be_nil
+      expect(file.flags).to eq(0)
+    end
+
     it "leaves the existing id/url rejection in front of the key check" do
       put_product(files: [{ type: "archive" }])
 
@@ -116,8 +131,38 @@ describe "PUT /api/v2/products/:id files[] parameters", type: :request do
     expect(file.reload.display_name).to eq("Editor name")
   end
 
-  # A client echoing GET /v2/products files[] back into a PUT (the keys
-  # SaveFilesService deliberately drops) must still be accepted.
+  it "accepts file metadata from GET with the canonical upload URL" do
+    file = create(:product_file, link: product, display_name: "Old")
+    Aws::S3::Resource.new.bucket(S3_BUCKET).object(file.s3_key).put(body: "test content")
+
+    get "/api/v2/products/#{product.external_id}", params: { access_token: token.token }
+
+    expect(response).to have_http_status(:ok)
+    expect(response.parsed_body["success"]).to be(true)
+    echo = response.parsed_body.fetch("product").fetch("files").sole
+    expect(echo.keys).to include("filetype", "filegroup")
+    # GET returns a signed download URL; PUT requires the retained upload URL.
+    echo["url"] = file.url
+    echo["name"] = "Renamed"
+
+    put_product(files: [echo])
+
+    expect(response).to have_http_status(:ok)
+    expect(response.parsed_body["success"]).to be(true)
+    expect(file.reload.display_name).to eq("Renamed")
+  end
+
+  it "ignores client file classifications when attaching an upload" do
+    put_product(files: [{ url: new_file_url, filetype: "link", filegroup: "link" }])
+
+    expect(response).to have_http_status(:ok)
+    expect(response.parsed_body["success"]).to be(true)
+    file = product.product_files.alive.sole
+    expect(file.filetype).to eq("pdf")
+    expect(file.filegroup).to eq("document")
+  end
+
+  # The editor serializer includes derived fields that SaveFilesService drops.
   it "accepts an entry carrying the keys ProductFile#as_json emits" do
     file = create(:product_file, link: product)
     echo = file.as_json.transform_keys(&:to_s).slice(
