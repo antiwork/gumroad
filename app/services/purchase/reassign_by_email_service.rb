@@ -33,11 +33,8 @@ class Purchase::ReassignByEmailService
 
     purchase_id_set = purchases.map(&:id).to_set
 
-    # Every purchase this service may mutate, including original subscription
-    # purchases that are not themselves matched by from_email but get reassigned
-    # alongside a recurring charge. An original that belongs to someone else
-    # (a gift sender's purchase behind the giftee's membership) stays put and
-    # does not count toward the fingerprint guard.
+    # Unmatched originals swept along with a recurring charge count toward the
+    # fingerprint guard; a third party's original (gift sender) stays put and does not.
     mutable_purchases = purchases.dup
     mutable_purchase_id_set = purchase_id_set.dup
     sweepable_original_purchase_ids = Set.new
@@ -66,6 +63,8 @@ class Purchase::ReassignByEmailService
 
     target_user = User.alive.by_email(@to_email).first
     reassigned_purchase_ids = []
+    pending_original_ids = sweepable_original_purchase_ids.dup
+    moved_original_ids = Set.new
 
     purchases.each do |purchase|
       purchase.email = @to_email
@@ -78,12 +77,17 @@ class Purchase::ReassignByEmailService
       transfer_subscription = purchase.subscription.present?
       if transfer_subscription && !purchase.is_original_subscription_purchase?
         original_purchase = purchase.original_purchase
-        if sweepable_original_purchase_ids.delete?(original_purchase.id)
-          if original_purchase.update(email: @to_email, purchaser_id: target_user&.id, is_deleted_by_buyer: false)
-            reassigned_purchase_ids << original_purchase.id if original_purchase.saved_changes?
-          else
-            transfer_subscription = false
-          end
+        if pending_original_ids.delete?(original_purchase.id) && original_purchase.update(email: @to_email, purchaser_id: target_user&.id, is_deleted_by_buyer: false)
+          moved_original_ids.add(original_purchase.id)
+          reassigned_purchase_ids << original_purchase.id if original_purchase.saved_changes?
+        end
+
+        # Several recurring rows can share one original: the subscription follows a swept
+        # original only once it actually moved, and a matched original moves it from its own row.
+        if sweepable_original_purchase_ids.include?(original_purchase.id)
+          transfer_subscription = moved_original_ids.include?(original_purchase.id)
+        elsif purchase_id_set.include?(original_purchase.id)
+          transfer_subscription = false
         end
       end
 
@@ -111,10 +115,8 @@ class Purchase::ReassignByEmailService
   end
 
   private
-    # An unmatched original purchase is only swept along with a recurring charge
-    # when it belongs to the same requester: same email as from_email, or the
-    # same purchaser account as the recurring row. A gift sender's original sits
-    # behind the giftee's membership with a different email and card.
+    # A gift sender's original sits behind the giftee's membership with a different
+    # email and card, so only sweep an unmatched original owned by the same requester.
     def same_requester?(original_purchase, purchase)
       return true if original_purchase.email.to_s.casecmp?(@from_email.to_s)
 

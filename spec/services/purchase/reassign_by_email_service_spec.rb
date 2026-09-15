@@ -169,6 +169,22 @@ describe Purchase::ReassignByEmailService do
         expect(original_purchase.reload.email).to eq("old_original@example.com")
       end
 
+      it "does not transfer a subscription shared by several recurring rows when the original_purchase update fails" do
+        subscription = create(:subscription, user: buyer)
+        original_purchase = create(:purchase, email: "old_original@example.com", purchaser: buyer, is_original_subscription_purchase: true, subscription:, merchant_account:)
+        renewals = 2.times.map { create(:purchase, email: from_email, purchaser: buyer, subscription:, merchant_account:) }
+
+        allow_any_instance_of(Purchase).to receive(:update).with(hash_including(:email)).and_return(false)
+
+        result = described_class.new(from_email:, to_email:).perform
+
+        expect(result.success?).to be(true)
+        expect(result.reassigned_purchase_ids).to match_array([purchase1.id, purchase2.id, *renewals.map(&:id)])
+        expect(subscription.reload.user).to eq(buyer)
+        expect(original_purchase.reload.email).to eq("old_original@example.com")
+        expect(original_purchase.purchaser_id).to eq(buyer.id)
+      end
+
       it "clears is_deleted_by_buyer so transferred purchases show in the new library" do
         hidden_purchase = create(:purchase, email: from_email, purchaser: buyer, merchant_account:, is_deleted_by_buyer: true)
 
