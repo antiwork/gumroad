@@ -7,6 +7,11 @@ logger() {
   echo -e "${GREEN}$(date "+%Y/%m/%d %H:%M:%S") build_web.sh: $1${NC}"
 }
 
+# Skip the whole production pipeline when this commit changes nothing that ships
+# (specs, workflows, docs, the pipeline itself). See deploy_relevance.sh.
+source .buildkite/scripts/deploy_relevance.sh
+skip_if_production_noop "build_web.sh"
+
 source .buildkite/scripts/buildkit_cache.sh
 
 WEB_REPO=${ECR_REGISTRY}/gumroad/web
