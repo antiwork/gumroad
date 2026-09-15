@@ -895,6 +895,24 @@ describe AutoTopUpNegativeDestinationBalancesJob do
     Feature.deactivate(:auto_topup_negative_destination_balances)
   end
 
+  it "reports a rate-lookup failure as an error instead of misreading it as a missing rate" do
+    residue_row(-728_50)
+    make_payable
+    Feature.activate(:auto_topup_negative_destination_balances)
+    allow_any_instance_of(described_class).to receive(:get_rate).and_raise(Redis::CannotConnectError)
+
+    expect(StripeTransferInternallyToCreator).not_to receive(:transfer_funds_to_account)
+
+    described_class.new.perform
+
+    expect(InternalNotificationWorker).to have_received(:perform_async) do |_room, _subject, message|
+      expect(message).to include("ERROR #{seller.email} — Redis::CannotConnectError")
+      expect(message).not_to include("no usable USD exchange rate")
+    end
+  ensure
+    Feature.deactivate(:auto_topup_negative_destination_balances)
+  end
+
   it "escalates on a dry run too when no exchange rate is available, so the preview matches live readiness" do
     residue_row(-728_50)
     make_payable
