@@ -421,6 +421,61 @@ describe CreateIndiaSalesReportJob do
 
         temp_file.close(true)
       end
+
+      it "does not report a refund that leaves the effective scope between the id walk and the batch load" do
+        s3_object_sept = Aws::S3::Resource.new.bucket("gumroad-specs").object("specs/india-sales-report-race-#{SecureRandom.hex(18)}.csv")
+        expect(s3_bucket_double).to receive(:object).and_return(s3_object_sept)
+
+        raced_product = create(:product, price_cents: 5000)
+        raced_purchase = nil
+        raced_refund = nil
+        travel_to(Time.zone.local(2023, 9, 10)) do
+          raced_purchase = create(:purchase,
+                                  link: raced_product,
+                                  purchaser: raced_product.user,
+                                  purchase_state: "in_progress",
+                                  quantity: 1,
+                                  perceived_price_cents: 5000,
+                                  country: "India",
+                                  ip_country: "India",
+                                  ip_state: "KA",
+                                  stripe_transaction_id: "txn_raced_refund"
+          )
+          raced_purchase.mark_test_successful!
+          raced_purchase.update!(gumroad_tax_cents: 900)
+          raced_refund = create(:refund, purchase: raced_purchase, amount_cents: 5000, gumroad_tax_cents: 900)
+        end
+
+        # The leg collects this refund's id while it is still effective, then its balance debits
+        # are reversed before the batch carrying it is read. The refund leg must not report it:
+        # the row is written from the id walk, so the load has to reapply the leg's scope.
+        job = described_class.new
+        raced = false
+        allow(job).to receive(:each_batch) do |scope, &block|
+          ids = scope.pluck(:id).sort
+          if !raced && scope.klass == Refund && ids.include?(raced_refund.id)
+            raced = true
+            raced_refund.update!(status: "failed")
+            raced_refund.balance_reversed_on_failure = true
+            raced_refund.balance_reversed_on_failure_at = Time.current.utc.iso8601
+            raced_refund.save!
+          end
+          ids.each_slice(described_class::ROW_BATCH_SIZE, &block)
+        end
+
+        job.perform(9, 2023)
+
+        temp_file = Tempfile.new("actual-file", encoding: "ascii-8bit")
+        s3_object_sept.get(response_target: temp_file)
+        temp_file.rewind
+        actual_payload = CSV.read(temp_file)
+
+        expect(actual_payload.count { |row| row[11] == "sale" }).to eq(3)
+        expect(actual_payload.filter_map { |row| row[0] if row[11] == "refund" })
+          .to contain_exactly(@still_debited_purchase.external_id)
+
+        temp_file.close(true)
+      end
     end
 
     describe "chargeback event-date attribution" do

@@ -184,6 +184,40 @@ describe CreateCanadaMonthlySalesReportJob do
       temp_file.close(true)
     end
 
+    it "does not report a refund that leaves the effective scope between the id walk and the batch load" do
+      expect(s3_bucket_double).to receive(:object).and_return(@s3_object)
+
+      # The leg collects the refund's id while it is still effective, then its balance debits are
+      # reversed before the batch carrying it is read. The refund leg must not report it: the row
+      # is written from the id walk, so the load has to reapply the leg's scope.
+      job = described_class.new
+      raced = false
+      allow(job).to receive(:each_batch) do |scope, &block|
+        ids = scope.pluck(:id).sort
+        if !raced && scope.klass == Refund && ids.include?(@refund.id)
+          raced = true
+          @refund.update!(status: "failed")
+          @refund.balance_reversed_on_failure = true
+          @refund.balance_reversed_on_failure_at = Time.current.utc.iso8601
+          @refund.save!
+        end
+        ids.each_slice(described_class::ROW_BATCH_SIZE, &block)
+      end
+
+      job.perform(report_month_start.month, report_month_start.year)
+
+      temp_file = Tempfile.new("actual-file", encoding: "ascii-8bit")
+      @s3_object.get(response_target: temp_file)
+      temp_file.rewind
+      actual_payload = CSV.read(temp_file)
+
+      # Header only: the purchase's sale belongs to the month before, and the refund is now
+      # outside Refund.effective.
+      expect(actual_payload.length).to eq(1)
+
+      temp_file.close(true)
+    end
+
     it "does not restate the purchase's own month when re-generated after the refund" do
       expect(s3_bucket_double).to receive(:object).and_return(@s3_object)
 
