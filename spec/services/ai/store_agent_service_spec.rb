@@ -2299,6 +2299,51 @@ describe Ai::StoreAgentService do
       expect(tool_loop[:max_tokens]).to eq(described_class::MAX_REPLY_TOKENS)
     end
 
+    it "bounds the first output of the streamed tool loop for DeepSeek when the deadline flag is on" do
+      allow(Ai::AnthropicClient).to receive(:openrouter_configured?).and_return(true)
+      Feature.activate_user(described_class::DEEPSEEK_RAMP_FEATURE, seller)
+      Feature.activate_user(described_class::TTFT_DEADLINE_FEATURE, seller)
+      tool_loop = nil
+      allow(client).to receive(:stream_messages) do |**kwargs, &_on_text|
+        tool_loop ||= kwargs
+        text_result("You have 3 products.")
+      end
+      allow(client).to receive(:messages).and_return(text_result("[]"))
+
+      collect_events([{ role: "user", content: "How many products?" }])
+
+      expect(tool_loop[:ttft_deadline]).to eq(described_class::TTFT_DEADLINE_IN_SECONDS)
+    end
+
+    it "leaves the streamed tool loop without a deadline when the flag is off" do
+      allow(Ai::AnthropicClient).to receive(:openrouter_configured?).and_return(true)
+      Feature.activate_user(described_class::DEEPSEEK_RAMP_FEATURE, seller)
+      tool_loop = nil
+      allow(client).to receive(:stream_messages) do |**kwargs, &_on_text|
+        tool_loop ||= kwargs
+        text_result("You have 3 products.")
+      end
+      allow(client).to receive(:messages).and_return(text_result("[]"))
+
+      collect_events([{ role: "user", content: "How many products?" }])
+
+      expect(tool_loop[:ttft_deadline]).to be_nil
+    end
+
+    it "leaves a non-DeepSeek model's streamed tool loop without a deadline when the flag is on" do
+      Feature.activate_user(described_class::TTFT_DEADLINE_FEATURE, seller)
+      tool_loop = nil
+      allow(client).to receive(:stream_messages) do |**kwargs, &_on_text|
+        tool_loop ||= kwargs
+        text_result("You have 3 products.")
+      end
+      allow(client).to receive(:messages).and_return(text_result("[]"))
+
+      collect_events([{ role: "user", content: "How many products?" }])
+
+      expect(tool_loop[:ttft_deadline]).to be_nil
+    end
+
     it "emits a reset when an intermediate tool-use turn streams preamble text, then streams the real reply" do
       # First turn: the model streams a preamble ("Let me check...") AND asks to call a read tool.
       # That preamble is not the answer, so the service must emit :reset before the final turn.
