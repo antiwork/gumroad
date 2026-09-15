@@ -11,8 +11,10 @@
 // are needed: the inputs carry a `pattern`, but the Save button posts through Inertia instead of
 // submitting the form element, so the browser never enforces `pattern` on its own.
 //
-// Each `pattern` mirrors the country's bank-account model regex, and each placeholder is the value
-// that model accepts (the same fixtures spec/requests/settings/payments_spec.rb posts).
+// Each `pattern` mirrors the country's bank-account model regex, and each placeholder is a value the
+// model accepts. The placeholders read as sequences on purpose: one equal to the test account number
+// Stripe publishes for the country is refused in live mode ("Known test bank accounts cannot be used
+// in live mode."), and a seller copying the hint cannot tell it apart from their own number.
 //
 // Deliberately no `maxLength` anywhere: the server strips separators before it validates (see
 // normalizeAccountNumber below), so "12-3456-7890123-00" is a valid New Zealand entry even though
@@ -86,7 +88,7 @@ export const COUNTRY_ACCOUNT_NUMBER_HINTS: Record<string, CountryAccountNumberHi
     title: "Enter your 13 to 16 character account number",
   },
   BD: {
-    placeholder: "0000123456789",
+    placeholder: "1234567890123",
     pattern: "[0-9A-Za-z]{13,17}",
     title: "Enter your 13 to 17 character account number",
   },
@@ -103,7 +105,7 @@ export const COUNTRY_ACCOUNT_NUMBER_HINTS: Record<string, CountryAccountNumberHi
     title: "Enter your 22-digit CBU",
   },
   PE: {
-    placeholder: "99934500012345670024",
+    placeholder: "12345678901234567890",
     pattern: "[0-9]{20}",
     inputMode: "numeric",
     title: "Enter your 20-digit CCI",
@@ -121,7 +123,7 @@ export const COUNTRY_ACCOUNT_NUMBER_HINTS: Record<string, CountryAccountNumberHi
     title: "Enter your 11 to 16 digit account number",
   },
   NZ: {
-    placeholder: "1100000000000010",
+    placeholder: "1234567890123456",
     pattern: "[0-9]{15,16}",
     inputMode: "numeric",
     title: "Enter your 15 or 16 digit account number, including the bank and branch digits",
@@ -141,7 +143,7 @@ export const COUNTRY_ACCOUNT_NUMBER_HINTS: Record<string, CountryAccountNumberHi
   // OmanBankAccount only runs its format check in production, so this is the one entry whose
   // pattern a local or CI run cannot cross-check against the model.
   OM: {
-    placeholder: "000123456789",
+    placeholder: "123456789012",
     pattern: "[0-9]{6,16}",
     inputMode: "numeric",
     title: "Enter your 6 to 16 digit account number, not your IBAN",
