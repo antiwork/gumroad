@@ -7,6 +7,11 @@ logger() {
   echo -e "${GREEN}$(date "+%Y/%m/%d %H:%M:%S") deploy_production.sh: $1${NC}"
 }
 
+# Skip the whole production pipeline when this commit changes nothing that ships
+# (specs, workflows, docs, the pipeline itself). See deploy_relevance.sh.
+source .buildkite/scripts/deploy_relevance.sh
+skip_if_production_noop "deploy_production.sh"
+
 # Deploys wait while work a deploy would destroy is ACTUALLY running, by asking the app
 # rather than guessing from the clock. Jobs a deploy must not interrupt register a token in
 # Redis while they run (see DeployBlockingJobTracking) and the matching healthcheck answers

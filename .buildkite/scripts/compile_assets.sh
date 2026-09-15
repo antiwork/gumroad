@@ -19,6 +19,11 @@ quietly() {
 
 source .buildkite/scripts/preview_asset_cache.sh
 
+# Skip the whole production pipeline when this commit changes nothing that ships
+# (specs, workflows, docs, the pipeline itself). See deploy_relevance.sh.
+source .buildkite/scripts/deploy_relevance.sh
+skip_if_production_noop "compile_assets.sh"
+
 ECR_REGISTRY=${ECR_REGISTRY}
 WEB_REPO=${ECR_REGISTRY}/gumroad/web
 REVISION=${BUILDKITE_COMMIT}
