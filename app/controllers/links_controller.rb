@@ -18,6 +18,10 @@ class LinksController < ApplicationController
   DEFAULT_PRICE = 500
   PRICE_INPUT_MAX_LENGTH = 64
   PRICE_INPUT_PATTERN = /\A[+-]?(?:\d+(?:\.\d*)?|\.\d+)\z/
+  # How long the save waits for a concurrent save of the same product to release
+  # the `links` row before it answers the retryable 409 below. A longer wait only
+  # holds a Puma thread and a DB connection on a save that fails anyway.
+  EDITOR_SAVE_LOCK_WAIT_TIMEOUT_SECONDS = 1
   # A lock-wait timeout means a concurrent save of the same product holds the
   # row lock, so the client should wait for it to commit — not reload, which
   # re-enters the same queue.
@@ -434,8 +438,10 @@ class LinksController < ApplicationController
     authorize @product
     begin
       if custom_html_removal_update?
-        @product.with_lock do
-          @product.update!(custom_html: nil)
+        with_editor_save_lock_wait_bound do
+          @product.with_lock do
+            @product.update!(custom_html: nil)
+          end
         end
         return render json: { success: true }
       end
@@ -456,7 +462,7 @@ class LinksController < ApplicationController
         # (dropping stale association caches) so the freshness check below
         # reads committed state. Without it, two saves echoing the same
         # timestamps both pass and the last writer silently wins.
-        @product.lock!
+        with_editor_save_lock_wait_bound { @product.lock! }
 
         # Capture the deletion-guard diagnostics (alive counts, persisted
         # shared-content flag) NOW, after the lock/reload but before
@@ -1117,6 +1123,18 @@ class LinksController < ApplicationController
         "seller_id=#{@product.user_id} provenance_version=#{product_permitted_params[:rich_content_provenance_version].to_i} " \
         "request_id=#{request.request_id}#{detail_suffix}"
       )
+    end
+
+    # Bounds `innodb_lock_wait_timeout` around the product row lock, the save's only wait
+    # on a row a concurrent save holds. Lifted as soon as the lock resolves: the setting
+    # stays on the pooled connection, and a wider bound would fail unrelated writes at it.
+    def with_editor_save_lock_wait_bound
+      connection = ActiveRecord::Base.connection
+      previous = connection.select_value("SELECT @@SESSION.innodb_lock_wait_timeout")
+      connection.execute("SET SESSION innodb_lock_wait_timeout = #{EDITOR_SAVE_LOCK_WAIT_TIMEOUT_SECONDS}")
+      yield
+    ensure
+      connection.execute("SET SESSION innodb_lock_wait_timeout = #{previous.to_i}") if previous.present?
     end
 
     # Post-commit: a raise here must not reach update's catch-all and report a saved product
