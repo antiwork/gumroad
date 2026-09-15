@@ -164,4 +164,54 @@ describe("AccountDetailsSection business type", () => {
 
     expect(optionValues()).toEqual(["Type", "llc", "partnership", "profit", "sole_proprietorship", "corporation"]);
   });
+
+  // A `<select>` whose `value` matches no option displays the first option, so dropping a saved
+  // code from the list would show the seller a business type they never declared.
+  it("keeps a saved type that predates its country's list, and shows it as the selection", () => {
+    renderSection(makeUser(), { is_business: true, business_country: "US", business_type: "llc" });
+
+    expect(optionValues()).toEqual([
+      "Type",
+      "sole_proprietorship",
+      "single_member_llc",
+      "multi_member_llc",
+      "partnership",
+      "corporation",
+      "profit",
+      "llc",
+    ]);
+    const select = screen.getByLabelText<HTMLSelectElement>("Type");
+    expect(select.value).toBe("llc");
+    expect(select.selectedOptions[0]?.text).toBe("LLC");
+  });
+
+  it("keeps a saved type that is not in the generic list, and shows it as the selection", () => {
+    renderSection(makeUser(), { is_business: true, business_country: "GB", business_type: "registered_charity" });
+
+    const select = screen.getByLabelText<HTMLSelectElement>("Type");
+    expect(optionValues()).toEqual([
+      "Type",
+      "llc",
+      "partnership",
+      "profit",
+      "sole_proprietorship",
+      "corporation",
+      "registered_charity",
+    ]);
+    expect(select.value).toBe("registered_charity");
+  });
+
+  it("does not repeat a saved type that is already an option", () => {
+    renderSection(makeUser(), { is_business: true, business_country: "US", business_type: "single_member_llc" });
+
+    expect(optionValues()).toEqual([
+      "Type",
+      "sole_proprietorship",
+      "single_member_llc",
+      "multi_member_llc",
+      "partnership",
+      "corporation",
+      "profit",
+    ]);
+  });
 });

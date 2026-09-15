@@ -36,6 +36,18 @@ type TaxIdConfig = {
   idSuffix: string;
 };
 
+// The list shown for a legal entity with no country-specific list of its own, and the source of a
+// label for a saved business type that predates its country's list.
+const GENERIC_BUSINESS_TYPES: Record<string, string> = {
+  llc: "LLC",
+  partnership: "Partnership",
+  profit: "Non Profit",
+  sole_proprietorship: "Sole Proprietorship",
+  corporation: "Corporation",
+};
+
+const genericBusinessTypes = () => Object.entries(GENERIC_BUSINESS_TYPES).map(([code, name]) => ({ code, name }));
+
 const AccountDetailsSection = ({
   user,
   complianceInfo,
@@ -416,6 +428,14 @@ const AccountDetailsSection = ({
   };
 
   const businessTypes = getBusinessTypes();
+  // A saved type can predate its country's list — the generic `llc` on a US entity, which the US
+  // list splits by member count. Keep it as an option anyway: a `<select>` whose `value` matches no
+  // option displays the first one instead, showing the seller a type they never declared.
+  const savedBusinessType = complianceInfo.business_type;
+  const withSavedBusinessType = (list: { code: string; name: string }[]) =>
+    savedBusinessType && !list.some((type) => type.code === savedBusinessType)
+      ? [...list, { code: savedBusinessType, name: GENERIC_BUSINESS_TYPES[savedBusinessType] ?? savedBusinessType }]
+      : list;
   const businessStateConfig = getBusinessStateConfig();
   const individualStateConfig = getIndividualStateConfig();
   const businessTaxIdConfig = getBusinessTaxIdConfig();
@@ -537,7 +557,7 @@ const AccountDetailsSection = ({
                   onChange={(evt) => updateComplianceInfo({ business_type: evt.target.value })}
                 >
                   <option disabled>Type</option>
-                  {businessTypes.map((businessType) => (
+                  {withSavedBusinessType(businessTypes).map((businessType) => (
                     <option key={businessType.code} value={businessType.code}>
                       {businessType.name}
                     </option>
@@ -553,11 +573,11 @@ const AccountDetailsSection = ({
                   onChange={(evt) => updateComplianceInfo({ business_type: evt.target.value })}
                 >
                   <option disabled>Type</option>
-                  <option value="llc">LLC</option>
-                  <option value="partnership">Partnership</option>
-                  <option value="profit">Non Profit</option>
-                  <option value="sole_proprietorship">Sole Proprietorship</option>
-                  <option value="corporation">Corporation</option>
+                  {withSavedBusinessType(genericBusinessTypes()).map((businessType) => (
+                    <option key={businessType.code} value={businessType.code}>
+                      {businessType.name}
+                    </option>
+                  ))}
                 </Select>
               )}
             </Fieldset>
