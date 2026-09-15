@@ -126,6 +126,7 @@ const AddTeamMembersSection = ({
       showAlert("Invitation sent!", "success");
       updateTeamInvitation({ email: "", role: null });
     } else {
+      showAlert(result.error_message, "error", { position: "bottom" });
       errors.set("error", result.error_message);
     }
     setErrors(errors);
@@ -144,7 +145,6 @@ const AddTeamMembersSection = ({
         </>
       }
     >
-      {errors.has("error") ? <Alert variant="danger">{errors.get("error")}</Alert> : null}
       <div
         style={{
           display: "grid",
@@ -213,13 +213,7 @@ const TeamMembersSection = ({
   const [loading, setLoading] = React.useState(false);
   const [confirming, setConfirming] = React.useState<MemberInfo | null>(null);
   const [deletedMember, setDeletedMember] = React.useState<MemberInfo | null>(null);
-  const [resendError, setResendError] = React.useState<{ id: string; message: string } | null>(null);
   const ref = React.useRef<HTMLHeadingElement>(null);
-  const resendErrorRef = React.useRef<HTMLDivElement>(null);
-
-  React.useEffect(() => {
-    resendErrorRef.current?.scrollIntoView({ block: "nearest" });
-  }, [resendError]);
 
   const handleOptionChange = async ({
     memberInfo,
@@ -229,7 +223,6 @@ const TeamMembersSection = ({
     selectedOption: string;
   }) => {
     setDeletedMember(null);
-    setResendError(null);
     setLoading(true);
     try {
       switch (selectedOption) {
@@ -266,11 +259,7 @@ const TeamMembersSection = ({
       }
     } catch (e) {
       assertResponseError(e);
-      if (selectedOption === "resend_invitation") {
-        setResendError({ id: memberInfo.id, message: e.message });
-      } else {
-        showAlert(e.message, "error");
-      }
+      showAlert(e.message, "error", { position: selectedOption === "resend_invitation" ? "bottom" : "top" });
     }
     setLoading(false);
   };
@@ -302,7 +291,7 @@ const TeamMembersSection = ({
           </div>
         </Alert>
       ) : null}
-      <Table className="lg:table-fixed">
+      <Table>
         <TableHeader>
           <TableRow>
             <TableHead>Member</TableHead>
@@ -362,11 +351,6 @@ const TeamMembersSection = ({
                     </Button>
                   ) : null}
                 </div>
-                {memberInfo.type === "invitation" && resendError?.id === memberInfo.id ? (
-                  <Alert ref={resendErrorRef} variant="danger" className="mt-3 scroll-mb-4">
-                    {resendError.message}
-                  </Alert>
-                ) : null}
               </TableCell>
             </TableRow>
           ))}
