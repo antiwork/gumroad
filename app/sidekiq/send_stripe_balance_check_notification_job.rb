@@ -36,12 +36,13 @@ class SendStripeBalanceCheckNotificationJob
 
       lines = [
         "Seller payouts for balances up to #{period_end} need #{formatted_dollar_amount(balance_check.upcoming_payouts_cents)} " \
-        "from Gumroad's Stripe balance. The next payout run is #{deadline}.",
+        "from Gumroad's Stripe balance in total. The payout jobs run Tuesday to Friday at 10:00 UTC and each takes its " \
+        "share; the next run is #{deadline}, so that total is the most the balance has to cover by then.",
         "Stripe balance: #{formatted_dollar_amount(balance_check.current_balance_cents)} " \
         "(#{formatted_dollar_amount(balance_check.available_cents)} available + " \
-        "#{formatted_dollar_amount(balance_check.pending_cents)} pending, which settles before the run).",
-        "Stripe swept #{formatted_dollar_amount(balance_check.swept_to_bank_last_day_cents)} to Gumroad's bank in the last 24 hours; " \
-        "that is what draws the balance down.",
+        "#{formatted_dollar_amount(balance_check.pending_cents)} pending, which normally settles within a couple of business days).",
+        "Stripe paid #{formatted_dollar_amount(balance_check.swept_to_bank_last_day_cents)} out to Gumroad's bank in the last 24 hours; " \
+        "those automatic sweeps are what draw the balance down.",
       ]
 
       if balance_check.topup_needed?

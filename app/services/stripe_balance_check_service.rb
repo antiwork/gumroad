@@ -47,14 +47,14 @@ class StripeBalanceCheckService
     end
   end
 
-  # Stripe's automatic sweeps to Gumroad's bank are what drain the balance; the last day's total
+  # Stripe's automatic sweeps to Gumroad's bank are what drain the balance; the last day's paid total
   # tells the reader where the money went.
   def swept_to_bank_last_day_cents
     @swept_to_bank_last_day_cents ||= Stripe::Payout.list(
       created: { gte: (@now - 1.day).to_i },
       limit: 100
     ).auto_paging_each.sum do |payout|
-      payout.currency == Currency::USD && payout.status != "canceled" ? payout.amount : 0
+      payout.currency == Currency::USD && payout.status == "paid" ? payout.amount : 0
     end
   end
 

@@ -31,9 +31,9 @@ describe SendStripeBalanceCheckNotificationJob do
         expect(InternalNotificationWorker).to have_enqueued_sidekiq_job("payments", "Stripe Balance Check", kind_of(String), "red")
         message = InternalNotificationWorker.jobs.last["args"][2]
         expect(message).to include("Seller payouts for balances up to September 11 need $300,000")
-        expect(message).to include("The next payout run is Wednesday, September 16 at 10:00 UTC (6:00 AM ET).")
-        expect(message).to include("Stripe balance: $200,000 ($150,000 available + $50,000 pending")
-        expect(message).to include("Stripe swept $301,513.34 to Gumroad's bank in the last 24 hours")
+        expect(message).to include("the next run is Wednesday, September 16 at 10:00 UTC (6:00 AM ET), so that total is the most the balance has to cover by then.")
+        expect(message).to include("Stripe balance: $200,000 ($150,000 available + $50,000 pending, which normally settles")
+        expect(message).to include("Stripe paid $301,513.34 out to Gumroad's bank in the last 24 hours")
         expect(message).to include("A top-up of $100,000 is needed before Wednesday, September 16 at 10:00 UTC (6:00 AM ET). Nothing tops up automatically")
         expect($redis.get(RedisKey.stripe_balance_topup_needed)).to eq("true")
       end

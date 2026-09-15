@@ -66,10 +66,10 @@ describe StripeBalanceCheckService do
   end
 
   describe "#swept_to_bank_last_day_cents" do
-    it "sums the last day's USD bank payouts, skipping canceled and non-USD ones" do
+    it "sums the last day's USD bank payouts, counting only paid ones" do
       payouts = [
         Stripe::Payout.construct_from(currency: "usd", amount: 301_513_34, status: "paid"),
-        Stripe::Payout.construct_from(currency: "usd", amount: 10_00, status: "canceled"),
+        Stripe::Payout.construct_from(currency: "usd", amount: 10_00, status: "failed"),
         Stripe::Payout.construct_from(currency: "eur", amount: 10_00, status: "paid"),
       ]
       expect(Stripe::Payout).to receive(:list).with(created: { gte: (now - 1.day).to_i }, limit: 100)
