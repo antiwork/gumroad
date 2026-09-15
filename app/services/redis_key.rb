@@ -27,6 +27,8 @@ class RedisKey
     def auto_topup_negative_destination_balance_last_amount(merchant_account_id) = "auto_topup_negative_destination_balance:#{merchant_account_id}:last_amount_cents"
     def ai_request_throttle(user_id) = "ai_request_throttle:#{user_id}"
     def agent_request_throttle(user_id) = "agent_request_throttle:#{user_id}"
+    def team_invitation_send_throttle(seller_id) = "team_invitation_send_throttle:#{seller_id}"
+    def team_invitation_burst_reported(seller_id) = "team_invitation_burst_reported:#{seller_id}"
     def gumhead_gateway_throttle(user_id) = "gumhead_gateway_throttle:#{user_id}"
     def gumhead_gateway_in_flight(user_id) = "gumhead_gateway_in_flight:#{user_id}"
     def gumhead_model_map = "gumhead_model_map"

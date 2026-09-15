@@ -4,11 +4,18 @@ class Settings::Team::InvitationsController < Sellers::BaseController
   skip_before_action :require_account_email, only: :accept
   before_action :set_team_invitation, only: %i[update destroy restore resend_invitation]
 
+  INVITATION_BURST_REPORT_TTL = 24.hours
+
   def create
     authorize [:settings, :team, TeamInvitation]
 
     team_invitation = current_seller.team_invitations.new(create_params)
     team_invitation.expires_at = TeamInvitation::ACTIVE_INTERVAL_IN_DAYS.days.from_now.at_end_of_day
+
+    unless team_invitation.valid?
+      return render json: { success: false, error_message: team_invitation.errors.full_messages.to_sentence }
+    end
+    return unless throttle_invitation_sends
 
     if team_invitation.save
       TeamMailer.invite(team_invitation).deliver_later
@@ -93,6 +100,7 @@ class Settings::Team::InvitationsController < Sellers::BaseController
 
   def resend_invitation
     authorize [:settings, :team, @team_invitation]
+    return unless throttle_invitation_sends
 
     @team_invitation.update!(
       expires_at: TeamInvitation::ACTIVE_INTERVAL_IN_DAYS.days.from_now.at_end_of_day
@@ -117,5 +125,46 @@ class Settings::Team::InvitationsController < Sellers::BaseController
 
     def external_team_invitation_id
       params.require(:id)
+    end
+
+    def throttle_invitation_sends
+      restriction = TeamInvitationThrottle.check(current_seller.id)
+      return true unless restriction
+
+      response.set_header("Retry-After", restriction[:retry_after])
+      render json: {
+        error: invitation_limit_message(restriction[:window], restriction[:limit], restriction[:retry_after]),
+        retry_after: restriction[:retry_after]
+      }, status: :too_many_requests
+      report_invitation_burst(restriction)
+      false
+    end
+
+    def invitation_limit_message(name, limit, retry_after)
+      return "You can invite again now." if retry_after <= 0
+
+      unit, seconds = name == "day" ? ["hour", 1.hour] : ["minute", 1.minute]
+      remaining = [(retry_after.to_f / seconds).ceil, 1].max
+      "You've reached the limit of #{limit} team invitations per #{name}. " \
+        "You can invite again in #{remaining} #{unit.pluralize(remaining)}."
+    end
+
+    # Notification failures must preserve the refusal response.
+    def report_invitation_burst(restriction)
+      return unless $redis.set(
+        RedisKey.team_invitation_burst_reported(current_seller.id),
+        1,
+        nx: true,
+        ex: INVITATION_BURST_REPORT_TTL.to_i
+      )
+
+      InternalNotificationWorker.perform_async(
+        "risk",
+        "Team invitations rate limited",
+        "Seller #{current_seller.username || current_seller.external_id} (#{current_seller.email}) was " \
+          "refused team invitations past #{restriction[:limit]}/#{restriction[:window]}. Admin: #{current_seller.external_id}"
+      )
+    rescue => e
+      ErrorNotifier.notify(e)
     end
 end

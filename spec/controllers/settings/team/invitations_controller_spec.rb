@@ -50,6 +50,88 @@ describe Settings::Team::InvitationsController do
         expect(response.parsed_body["error_message"]).to eq("Email is invalid and Role is not included in the list")
       end
     end
+
+    context "when invitation sends are limited" do
+      def post_invitation(email)
+        post :create, params: { team_invitation: { email:, role: "admin" } }, as: :json
+      end
+
+      def enqueued_invitation_emails
+        ActiveJob::Base.queue_adapter.enqueued_jobs.count { |job| job[:args].first == "TeamMailer" }
+      end
+
+      it "refuses the eleventh send without creating an invitation or enqueueing an email" do
+        expect do
+          10.times { |index| post_invitation("member#{index}@example.com") }
+        end.to change { enqueued_invitation_emails }.by(10)
+
+        expect(TeamMailer).not_to receive(:invite)
+        expect do
+          post_invitation("one-too-many@example.com")
+        end.to not_change { seller.team_invitations.count }
+          .and not_change { enqueued_invitation_emails }
+
+        expect(response).to have_http_status(:too_many_requests)
+        expect(response.parsed_body["error"]).to match(/limit of 10 team invitations per hour/)
+        expect(response.parsed_body["retry_after"]).to be_between(1, 3600)
+        expect(response.headers["Retry-After"].to_i).to eq(response.parsed_body["retry_after"])
+      end
+
+      it "refuses sends past the daily limit and reports the daily restriction" do
+        key = RedisKey.team_invitation_send_throttle(seller.id)
+        50.times { |index| $redis.zadd(key, 2.hours.ago.to_f, index.to_s) }
+
+        expect(TeamMailer).not_to receive(:invite)
+        expect(InternalNotificationWorker).to receive(:perform_async)
+          .with("risk", "Team invitations rate limited", /past 50\/day/).once
+        expect do
+          post_invitation("one-too-many@example.com")
+        end.to not_change { seller.team_invitations.count }
+          .and not_change { enqueued_invitation_emails }
+
+        expect(response).to have_http_status(:too_many_requests)
+        expect(response.parsed_body["error"]).to include("limit of 50 team invitations per day")
+        expect(response.parsed_body["retry_after"]).to be > 21.hours.to_i
+      end
+
+      it "reports the first refusal once and preserves the response if reporting fails" do
+        10.times { TeamInvitationThrottle.check(seller.id) }
+        expect(InternalNotificationWorker).to receive(:perform_async).once.and_raise(StandardError, "unavailable")
+        expect(ErrorNotifier).to receive(:notify).with(instance_of(StandardError))
+
+        3.times do
+          post_invitation("overflow@example.com")
+          expect(response).to have_http_status(:too_many_requests)
+        end
+      end
+
+      it "does not reserve sends for invalid or duplicate invitations" do
+        post_invitation("member@example.com")
+        key = RedisKey.team_invitation_send_throttle(seller.id)
+
+        expect do
+          10.times do
+            ["not-an-email", "member@example.com", seller.email].each do |email|
+              post_invitation(email)
+              expect(response.parsed_body["success"]).to eq(false)
+            end
+          end
+        end.not_to change { $redis.zcard(key) }
+
+        post_invitation("teammate@example.com")
+        expect(response.parsed_body["success"]).to eq(true)
+      end
+
+      it "does not let another seller's sends block this seller" do
+        other_seller = create(:user)
+        10.times { TeamInvitationThrottle.check(other_seller.id) }
+
+        expect do
+          3.times { |index| post_invitation("teammate#{index}@example.com") }
+        end.to change { seller.team_invitations.count }.by(3)
+        expect(response.parsed_body["success"]).to eq(true)
+      end
+    end
   end
 
   describe "PUT update" do
@@ -333,6 +415,21 @@ describe Settings::Team::InvitationsController do
       expect(team_invitation.reload.expires_at).to be_within(1.second).of(
         TeamInvitation::ACTIVE_INTERVAL_IN_DAYS.days.from_now.at_end_of_day
       )
+    end
+
+    it "shares the send allowance with new invitations and refuses resends without changing expiry" do
+      10.times do |index|
+        post :create, params: { team_invitation: { email: "new#{index}@example.com", role: "admin" } }, as: :json
+      end
+
+      expect(TeamMailer).not_to receive(:invite)
+      expect do
+        put :resend_invitation, params: { id: team_invitation.external_id }, as: :json
+      end.to not_change { team_invitation.reload.expires_at }
+        .and not_change { ActiveJob::Base.queue_adapter.enqueued_jobs.count { |job| job[:args].first == "TeamMailer" } }
+
+      expect(response).to have_http_status(:too_many_requests)
+      expect(response.parsed_body["error"]).to include("limit of 10 team invitations per hour")
     end
   end
 end

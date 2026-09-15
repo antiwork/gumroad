@@ -1,6 +1,6 @@
 import typia from "typia";
 
-import { request, ResponseError } from "$app/utils/request";
+import { RateLimitError, request, ResponseError } from "$app/utils/request";
 
 import { Option } from "$app/components/Select";
 
@@ -26,15 +26,24 @@ export type TeamInvitation = {
   role: string | null;
 };
 
-export const createTeamInvitation = async (teamInvitation: TeamInvitation) => {
-  const response = await request({
-    method: "POST",
-    accept: "json",
-    url: Routes.settings_team_invitations_path("json"),
-    data: { team_invitation: teamInvitation },
-  });
-  if (response.ok) {
-    return typia.assert<{ success: false; error_message: string } | { success: true }>(await response.json());
+export const createTeamInvitation = async (
+  teamInvitation: TeamInvitation,
+): Promise<{ success: false; error_message: string } | { success: true }> => {
+  try {
+    const response = await request({
+      method: "POST",
+      accept: "json",
+      url: Routes.settings_team_invitations_path("json"),
+      data: { team_invitation: teamInvitation },
+    });
+    if (response.ok) {
+      return typia.assert<{ success: false; error_message: string } | { success: true }>(await response.json());
+    }
+  } catch (e) {
+    // A refused invitation answers 429, which `request` raises as a RateLimitError carrying the
+    // server's own wording; the caller renders only `error_message`, so it has to go there.
+    if (!(e instanceof RateLimitError)) throw e;
+    return { success: false, error_message: e.message };
   }
   return { success: false, error_message: "Sorry, something went wrong. Please try again." };
 };
