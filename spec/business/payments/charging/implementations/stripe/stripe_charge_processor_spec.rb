@@ -1802,20 +1802,28 @@ describe StripeChargeProcessor, :vcr do
         subject.refund!(charge_id)
       end
 
-      it "calls refund with reason if refund is for fraud" do
-        allow(Checkout::BuyerCurrencyEligibility).to receive(:stripe_test_mode?).and_return(false)
-        # Never send a real `fraudulent` refund: on the shared test account it blocklists the card.
-        expect(Stripe::Refund).to receive(:create).with({ charge: charge_id, reason: StripeChargeProcessor::REFUND_REASON_FRAUDULENT })
-          .and_wrap_original { |m, params, *args| m.call(params.except(:reason), *args) }
-        subject.refund!(charge_id, is_for_fraud: true)
+      it "reports fraudulent refunds for live charges" do
+        charge = Stripe::Charge.construct_from(id: "ch_live", livemode: true, destination: nil)
+        refund = Stripe::Refund.construct_from(id: "re_live")
+        allow(Stripe::Charge).to receive(:retrieve).with(charge.id).and_return(charge)
+        allow(subject).to receive(:get_refund).with(refund.id, merchant_account: nil).and_return(refund)
+
+        # Keep fraud reporting off the network even when VCR records new interactions.
+        expect(Stripe::Refund).to receive(:create)
+          .with({ charge: charge.id, reason: StripeChargeProcessor::REFUND_REASON_FRAUDULENT }).and_return(refund)
+
+        expect(subject.refund!(charge.id, is_for_fraud: true)).to eq(refund)
       end
 
-      it "omits the fraud reason on a Stripe test key so the shared test card is not blocklisted" do
-        charge_id = create_stripe_charge(payment_method_id, amount: amount_cents, currency:, confirm: true).id
+      it "omits the fraud reason for test charges" do
+        charge = create_stripe_charge(payment_method_id, amount: amount_cents, currency:, confirm: true)
 
-        expect(Checkout::BuyerCurrencyEligibility.stripe_test_mode?).to be(true)
-        expect(Stripe::Refund).to receive(:create).with({ charge: charge_id }).and_call_original
-        subject.refund!(charge_id, is_for_fraud: true)
+        expect(charge.livemode).to be(false)
+        expect(Stripe::Refund).to receive(:create).with({ charge: charge.id }).and_call_original
+
+        refund = subject.refund!(charge.id, is_for_fraud: true)
+        expect(refund.refund.status).to eq("succeeded")
+        expect(refund.refund.reason).to be_nil
       end
 
       describe "return value" do

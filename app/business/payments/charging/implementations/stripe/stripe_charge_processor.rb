@@ -644,7 +644,8 @@ class StripeChargeProcessor
       charge: charge_id
     }
     params[:amount] = amount_cents if amount_cents.present?
-    params[:reason] = REFUND_REASON_FRAUDULENT if is_for_fraud.present? && report_fraud_to_stripe?
+    # Stripe adds fraudulent refunds to Radar's blocklists, including shared test cards.
+    params[:reason] = REFUND_REASON_FRAUDULENT if is_for_fraud.present? && stripe_charge.livemode
 
     # For Stripe-Connect:
     # Charges (which have a destination):
@@ -1596,15 +1597,6 @@ class StripeChargeProcessor
   end
 
   private
-    # A `fraudulent` refund makes Stripe add the card's fingerprint to the account's built-in Radar
-    # blocklist. Every non-production environment shares one test account, so one such refund
-    # blocks the 4242 test card for every checkout spec until the item is deleted by hand.
-    # Gumroad's own fraud state (is_for_fraud, block-buyer) is unaffected — only the Stripe-side
-    # reason is withheld on a test key.
-    def report_fraud_to_stripe?
-      !Checkout::BuyerCurrencyEligibility.stripe_test_mode?
-    end
-
     def mandate_options_without_nested_currency(mandate_options)
       inner = mandate_options.dig(:payment_method_options, :card, :mandate_options) ||
         mandate_options.dig("payment_method_options", "card", "mandate_options")
