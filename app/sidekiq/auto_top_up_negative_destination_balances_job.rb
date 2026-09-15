@@ -7,12 +7,24 @@
 # invisible to the alert's scan, so a topped-up candidate keeps reappearing daily — expected.
 class AutoTopUpNegativeDestinationBalancesJob
   include Sidekiq::Job
+  include CurrencyHelper
   sidekiq_options retry: 1, queue: :low
 
   # Bounds one run's blast radius — real money moves per candidate. The scan itself already
   # ranks worst-first (AlertOnNegativeDestinationBalancesJob#report_order), so a bounded run
   # reaches the biggest gaps first rather than an arbitrary subset.
   MAX_TOPUPS_PER_RUN = 10
+
+  # Transfers are sent in USD, never in the destination currency: the platform balance only holds
+  # USD (every non-USD platform balance is zero or negative), so a local-currency transfer is
+  # rejected by Stripe as "insufficient funds in your Stripe account" — 0 of 310 attempts funded
+  # over 31 live runs (gp#2622). The payout pipeline (StripePayoutProcessor) and the manual repair
+  # lane both send USD through the same helper and succeed. The USD amount is the local hole
+  # converted at the current rate plus this buffer, rounded up to whole cents, so the FX leg lands
+  # at or above the hole (the standing manual-lane sizing rule: 15–20% over the converted gap; any
+  # residual is in the seller's favor). Under-delivery would leave a smaller negative behind and
+  # the payout would fail again on the same guard.
+  USD_TOPUP_BUFFER_RATIO = BigDecimal("0.20")
 
   # A leg-two reconciliation pass can take days; this only needs to outlive the daily scan
   # cadence so a candidate isn't re-transferred before a human gets to it.
@@ -43,7 +55,7 @@ class AutoTopUpNegativeDestinationBalancesJob
     outcomes = candidates.map { |entry| topup(entry, live:) }
 
     InternalNotificationWorker.perform_async(
-      "payouts", "Negative destination balance top-ups", message_for(outcomes, live:, total: scan[:payable].size)
+      "payouts", subject_for(outcomes, live:), message_for(outcomes, live:, total: scan[:payable].size)
     )
   end
 
@@ -100,7 +112,8 @@ class AutoTopUpNegativeDestinationBalancesJob
       return { entry:, verdict: :noop, reason: "nothing to transfer" } if amount_cents.zero?
 
       unless live
-        return { entry:, verdict: :dry_run, reason: nil, amount_cents:, currency: entry[:merchant_account].currency }
+        return { entry:, verdict: :dry_run, reason: nil, amount_cents:, currency: entry[:merchant_account].currency,
+                 usd_amount_cents: usd_topup_cents_for(amount_cents, entry[:merchant_account].currency) }
       end
 
       dedupe_key = RedisKey.auto_topup_negative_destination_balance_last_amount(entry[:merchant_account].id)
@@ -209,6 +222,12 @@ class AutoTopUpNegativeDestinationBalancesJob
       end
 
       to_transfer_cents = funded_signed ? (current_total_cents - funded_signed).abs : current_total_cents.abs
+      # Sized BEFORE any claim is taken: a missing/zero rate must escalate with nothing to unwind,
+      # not leave a persisted transfer_key behind for a call that never reached Stripe.
+      usd_amount_cents = usd_topup_cents_for(to_transfer_cents, entry[:merchant_account].currency)
+      unless usd_amount_cents&.positive?
+        return { entry:, verdict: :escalate, reason: "no usable USD exchange rate for #{entry[:merchant_account].currency} — cannot size the USD top-up for #{to_transfer_cents} #{entry[:merchant_account].currency} cents" }
+      end
       # The transfer's own idempotency key is scoped to the specific (account, current row set,
       # funded-so-far, target) transition, not just the amounts — an amount-only key persisted
       # forever (below) would otherwise collide across two UNRELATED shortfalls that happen to
@@ -234,14 +253,18 @@ class AutoTopUpNegativeDestinationBalancesJob
       StripeTransferInternallyToCreator.transfer_funds_to_account(
         message_why: "Reconciling negative destination ledger (gumroad-private#1903, auto top-up leg)",
         stripe_account_id: entry[:merchant_account].charge_processor_merchant_id,
-        currency: entry[:merchant_account].currency,
-        amount_cents: to_transfer_cents,
+        # USD, not the destination currency — see USD_TOPUP_BUFFER_RATIO. Stripe converts on
+        # arrival; the local-cents figures (to_transfer_cents, dedupe/transfer keys) stay the
+        # bookkeeping basis because they are what the ledger and leg two are measured in.
+        currency: Currency::USD,
+        amount_cents: usd_amount_cents,
         # Stripe's own idempotency window (24h) is the real backstop against an ambiguous local
         # outcome (timeout/network drop after Stripe already accepted the transfer): transfer_key
         # is stable for this specific delta, so a retry hitting Stripe again with the same key
         # returns the original transfer instead of creating a second one.
         idempotency_key: transfer_key,
-        metadata: { user_id: entry[:user].id, merchant_account_id: entry[:merchant_account].id, reason: "negative_destination_balance_topup" }
+        metadata: { user_id: entry[:user].id, merchant_account_id: entry[:merchant_account].id, reason: "negative_destination_balance_topup",
+                    destination_hole_cents: to_transfer_cents, destination_currency: entry[:merchant_account].currency }
       )
       # PERSIST (drop the 7-day TTL) the instant Stripe accepts: the vulnerable window is between
       # here and the dedupe_key write below — if the worker dies in it, the transfer_key must not
@@ -266,7 +289,7 @@ class AutoTopUpNegativeDestinationBalancesJob
       # part of the original shortfall (the bug this window/credit split exists to close).
       $redis.set(dedupe_key, "#{current_total_cents.abs}:#{current_window_ids.join("-")}", ex: DEDUPE_TTL)
       $redis.del(unresolved_key)
-      { entry:, verdict: :topped_up, reason: nil, amount_cents: to_transfer_cents, currency: entry[:merchant_account].currency }
+      { entry:, verdict: :topped_up, reason: nil, amount_cents: to_transfer_cents, currency: entry[:merchant_account].currency, usd_amount_cents: }
     rescue Stripe::InvalidRequestError, Stripe::RateLimitError => e
       # Neither error moves money (a bad param is rejected before charge; a 429 never reaches
       # Stripe's processing), so it's safe to release both claims for a legitimate retry.
@@ -315,17 +338,59 @@ class AutoTopUpNegativeDestinationBalancesJob
       counts = outcomes.group_by { _1[:verdict] }.transform_values(&:size)
       escalations = outcomes.select { _1[:verdict] == :escalate }
       errors = outcomes.select { _1[:verdict] == :error }
+      funded = outcomes.select { _1[:verdict] == :topped_up || _1[:verdict] == :dry_run }
 
       [
+        ("ALL FAILED: a live run processed #{outcomes.size} payable candidates and topped up none — #{counts[:escalate].to_i} withheld, #{counts[:error].to_i} errored. This has been happening silently; check the error lines below (gumroad-private#2622)." if all_failed?(outcomes, live:)),
         "#{live ? "Topped up" : "DRY RUN (auto_topup_negative_destination_balances off) — would top up"} " \
           "#{counts[:topped_up].to_i + counts[:dry_run].to_i} of #{outcomes.size} candidates processed " \
           "(#{total} payable total): #{counts[:escalate].to_i} withheld for a human, #{counts[:error].to_i} errored. " \
+          "Transfers are sent in USD (local hole converted at the current rate + #{(USD_TOPUP_BUFFER_RATIO * 100).to_i}% buffer, rounded up). " \
           "Reminder: this only closes the Stripe-side gap — the internal Balance row(s) still need a human " \
           "reconciliation pass before this candidate stops re-appearing in the daily report.",
+        ("" if funded.any?),
+        *funded.map { |o| "• #{o[:verdict] == :dry_run ? "WOULD FUND" : "FUNDED"} #{o[:entry][:user].email} — #{o[:amount_cents]} #{o[:currency]} cents hole → #{o[:usd_amount_cents].inspect} USD cents sent" },
         ("" if escalations.any?),
         *escalations.map { |o| "• ESCALATE #{o[:entry][:user].email} — #{o[:reason]}" },
         ("" if errors.any?),
         *errors.map { |o| "• ERROR #{o[:entry][:user].email} — #{o[:reason]}" },
       ].compact.join("\n")
+    end
+
+    # "Topped up 0 of 10" read as a quiet day for 31 consecutive runs (gp#2622). A live run that
+    # processed payable candidates and funded none is the loud case, so it goes in the subject
+    # where a reader cannot miss it. Dry runs and empty runs are not failures.
+    def subject_for(outcomes, live:)
+      prefix = all_failed?(outcomes, live:) ? "ALL FAILED: " : ""
+      "#{prefix}Negative destination balance top-ups"
+    end
+
+    # Only errors and human-withholds count as "failed": a run whose candidates all reconciled
+    # between scan and transfer (:noop) funded nothing because nothing was left to fund.
+    def all_failed?(outcomes, live:)
+      return false unless live
+      return false if outcomes.any? { _1[:verdict] == :topped_up }
+
+      outcomes.any? { _1[:verdict] == :error || _1[:verdict] == :escalate }
+    end
+
+    # USD cents to send for a hole of `local_cents` in `currency`: the converted amount plus
+    # USD_TOPUP_BUFFER_RATIO, rounded UP once to a whole cent (no intermediate rounding, so the
+    # result never lands below the buffered figure). Single-unit currencies (JPY-style, where a
+    # "cent" is a whole unit) scale the same way CurrencyHelper#get_usd_cents does. Returns nil
+    # when no rate is available so the caller can escalate instead of sending 0 or a garbage amount.
+    def usd_topup_cents_for(local_cents, currency)
+      currency = currency.to_s.downcase
+      return local_cents if currency == Currency::USD
+
+      rate = BigDecimal(get_rate(currency).to_s)
+      return nil unless rate.positive?
+
+      # unit_scaling_factor is 1 for single-unit currencies and 100 otherwise, so this is ×100 for
+      # a whole-unit hole and ×1 for a hundredths hole — same asymmetry as get_usd_cents.
+      usd_cents = BigDecimal(local_cents.to_s) / rate * (100 / unit_scaling_factor(currency))
+      (usd_cents * (1 + USD_TOPUP_BUFFER_RATIO)).ceil.to_i
+    rescue StandardError
+      nil
     end
 end

@@ -28,8 +28,18 @@ describe AutoTopUpNegativeDestinationBalancesJob do
     Digest::SHA1.hexdigest(balance_ids.join("-"))[0, 12]
   end
 
+  # Rates the job reads through CurrencyHelper#get_rate (USD → local). Stubbed on the job rather
+  # than seeded into the shared Redis currencies namespace, which other spec processes flush.
+  RATES = { "php" => "2.0", "lak" => "20000.0", "jpy" => "100.0" }.freeze
+
+  def usd_for(local_cents, currency: Currency::PHP)
+    (BigDecimal(local_cents.to_s) / BigDecimal(RATES.fetch(currency.to_s.downcase)) *
+      (1 + described_class::USD_TOPUP_BUFFER_RATIO)).ceil.to_i
+  end
+
   before do
     allow(InternalNotificationWorker).to receive(:perform_async)
+    allow_any_instance_of(described_class).to receive(:get_rate) { |_job, currency| RATES[currency.to_s.downcase] }
   end
 
   it "stays silent when nothing is payable" do
@@ -60,7 +70,8 @@ describe AutoTopUpNegativeDestinationBalancesJob do
     Feature.activate(:auto_topup_negative_destination_balances)
 
     expect(StripeTransferInternallyToCreator).to receive(:transfer_funds_to_account).with(
-      hash_including(stripe_account_id: merchant_account.charge_processor_merchant_id, currency: Currency::PHP, amount_cents: 728_50)
+      hash_including(stripe_account_id: merchant_account.charge_processor_merchant_id, currency: Currency::USD, amount_cents: usd_for(728_50),
+                     metadata: hash_including(destination_hole_cents: 728_50, destination_currency: Currency::PHP))
     )
 
     described_class.new.perform
@@ -98,7 +109,7 @@ describe AutoTopUpNegativeDestinationBalancesJob do
     Feature.activate(:auto_topup_negative_destination_balances)
 
     expect(StripeTransferInternallyToCreator).to receive(:transfer_funds_to_account).with(
-      hash_including(stripe_account_id: merchant_account.charge_processor_merchant_id, currency: "lak", amount_cents: 10_000_00)
+      hash_including(stripe_account_id: merchant_account.charge_processor_merchant_id, currency: Currency::USD, amount_cents: usd_for(10_000_00, currency: "lak"))
     )
 
     described_class.new.perform
@@ -164,7 +175,7 @@ describe AutoTopUpNegativeDestinationBalancesJob do
 
     expect(StripeTransferInternallyToCreator).to receive(:transfer_funds_to_account).with(
       hash_including(
-        amount_cents: 150_00,
+        amount_cents: usd_for(150_00),
         idempotency_key: satisfy { |key| key == "#{dedupe_key}:#{fingerprint_for(row.id, new_row.id)}:0:15000" }
       )
     )
@@ -210,7 +221,7 @@ describe AutoTopUpNegativeDestinationBalancesJob do
     # cycle window the weekly run actually pays is still -728_50 — the window resolve_entry's
     # full_total used and the one this re-read must preserve.
     expect(StripeTransferInternallyToCreator).to receive(:transfer_funds_to_account).with(
-      hash_including(amount_cents: 728_50)
+      hash_including(amount_cents: usd_for(728_50))
     )
 
     described_class.new.perform
@@ -361,14 +372,14 @@ describe AutoTopUpNegativeDestinationBalancesJob do
     Feature.activate(:auto_topup_negative_destination_balances)
     dedupe_key = RedisKey.auto_topup_negative_destination_balance_last_amount(merchant_account.id)
 
-    expect(StripeTransferInternallyToCreator).to receive(:transfer_funds_to_account).with(hash_including(amount_cents: 100_00)).once
+    expect(StripeTransferInternallyToCreator).to receive(:transfer_funds_to_account).with(hash_including(amount_cents: usd_for(100_00))).once
     described_class.new.perform
     expect($redis.get(dedupe_key).to_i).to eq(100_00)
 
     row2 = residue_row(-150_00) # total shortfall is now 250_00 cents across both rows
 
     expect(StripeTransferInternallyToCreator).to receive(:transfer_funds_to_account).with(
-      hash_including(amount_cents: 150_00, idempotency_key: "#{dedupe_key}:#{fingerprint_for(row1.id, row2.id)}:10000:25000")
+      hash_including(amount_cents: usd_for(150_00), idempotency_key: "#{dedupe_key}:#{fingerprint_for(row1.id, row2.id)}:10000:25000")
     )
 
     described_class.new.perform
@@ -386,13 +397,13 @@ describe AutoTopUpNegativeDestinationBalancesJob do
     Feature.activate(:auto_topup_negative_destination_balances)
 
     # Net shortfall is 50,000 cents (150,000 - 200,000).
-    expect(StripeTransferInternallyToCreator).to receive(:transfer_funds_to_account).with(hash_including(amount_cents: 5_00_00)).once
+    expect(StripeTransferInternallyToCreator).to receive(:transfer_funds_to_account).with(hash_including(amount_cents: usd_for(5_00_00))).once
     described_class.new.perform
 
     # A new -30,000-cent row lands: net shortfall grows to 80,000 cents, a 30,000-cent increment.
     # The bug summed |150,000| + |-200,000| = 350,000 cents of "credit" and withheld this entirely.
     residue_row(-3_00_00)
-    expect(StripeTransferInternallyToCreator).to receive(:transfer_funds_to_account).with(hash_including(amount_cents: 3_00_00)).once
+    expect(StripeTransferInternallyToCreator).to receive(:transfer_funds_to_account).with(hash_including(amount_cents: usd_for(3_00_00))).once
 
     described_class.new.perform
 
@@ -407,7 +418,7 @@ describe AutoTopUpNegativeDestinationBalancesJob do
     make_payable
     Feature.activate(:auto_topup_negative_destination_balances)
 
-    expect(StripeTransferInternallyToCreator).to receive(:transfer_funds_to_account).with(hash_including(amount_cents: 100_00)).once
+    expect(StripeTransferInternallyToCreator).to receive(:transfer_funds_to_account).with(hash_including(amount_cents: usd_for(100_00))).once
     described_class.new.perform
 
     # Leg two reconciles: the old row is paid off and a new, unrelated shortfall lands.
@@ -415,7 +426,7 @@ describe AutoTopUpNegativeDestinationBalancesJob do
     old_row.mark_paid!
     residue_row(-50_00)
 
-    expect(StripeTransferInternallyToCreator).to receive(:transfer_funds_to_account).with(hash_including(amount_cents: 50_00)).once
+    expect(StripeTransferInternallyToCreator).to receive(:transfer_funds_to_account).with(hash_including(amount_cents: usd_for(50_00))).once
     described_class.new.perform
 
     expect(InternalNotificationWorker).to have_received(:perform_async).with(anything, anything, a_string_including("ESCALATE")).exactly(0).times
@@ -430,7 +441,7 @@ describe AutoTopUpNegativeDestinationBalancesJob do
     Feature.activate(:auto_topup_negative_destination_balances)
     dedupe_key = RedisKey.auto_topup_negative_destination_balance_last_amount(merchant_account.id)
 
-    expect(StripeTransferInternallyToCreator).to receive(:transfer_funds_to_account).with(hash_including(amount_cents: 100_00)).once
+    expect(StripeTransferInternallyToCreator).to receive(:transfer_funds_to_account).with(hash_including(amount_cents: usd_for(100_00))).once
     described_class.new.perform
 
     expect(StripeTransferInternallyToCreator).not_to receive(:transfer_funds_to_account)
@@ -521,7 +532,7 @@ describe AutoTopUpNegativeDestinationBalancesJob do
     Feature.activate(:auto_topup_negative_destination_balances)
     dedupe_key = RedisKey.auto_topup_negative_destination_balance_last_amount(merchant_account.id)
 
-    expect(StripeTransferInternallyToCreator).to receive(:transfer_funds_to_account).with(hash_including(amount_cents: 250_00)).once
+    expect(StripeTransferInternallyToCreator).to receive(:transfer_funds_to_account).with(hash_including(amount_cents: usd_for(250_00))).once
     described_class.new.perform
 
     # Only row_a reconciles; row_b (still unpaid, still funded) survives — partial reconciliation.
@@ -587,7 +598,7 @@ describe AutoTopUpNegativeDestinationBalancesJob do
     make_payable
     Feature.activate(:auto_topup_negative_destination_balances)
 
-    expect(StripeTransferInternallyToCreator).to receive(:transfer_funds_to_account).with(hash_including(amount_cents: 300_00)).once
+    expect(StripeTransferInternallyToCreator).to receive(:transfer_funds_to_account).with(hash_including(amount_cents: usd_for(300_00))).once
     described_class.new.perform
 
     # row_a reconciles; row_b (still funded) survives; a brand-new, unrelated row_c lands alongside it.
@@ -597,7 +608,7 @@ describe AutoTopUpNegativeDestinationBalancesJob do
 
     # Only row_b's 200_00 credit should carry forward — the aggregate 300_00 must not swallow row_c's
     # new 50_00 shortfall (the exact "Aggregate credit suppresses new negative rows" scenario).
-    expect(StripeTransferInternallyToCreator).to receive(:transfer_funds_to_account).with(hash_including(amount_cents: 50_00)).once
+    expect(StripeTransferInternallyToCreator).to receive(:transfer_funds_to_account).with(hash_including(amount_cents: usd_for(50_00))).once
     described_class.new.perform
 
     expect(InternalNotificationWorker).to have_received(:perform_async).with(anything, anything, a_string_including("ESCALATE")).exactly(0).times
@@ -667,7 +678,7 @@ describe AutoTopUpNegativeDestinationBalancesJob do
     Feature.activate(:auto_topup_negative_destination_balances)
     dedupe_key = RedisKey.auto_topup_negative_destination_balance_last_amount(merchant_account.id)
 
-    expect(StripeTransferInternallyToCreator).to receive(:transfer_funds_to_account).with(hash_including(amount_cents: 100_00)).once
+    expect(StripeTransferInternallyToCreator).to receive(:transfer_funds_to_account).with(hash_including(amount_cents: usd_for(100_00))).once
     described_class.new.perform
     expect($redis.get(dedupe_key).to_i).to eq(100_00)
     $redis.expire(dedupe_key, 1.hour) # simulate the funded-state TTL nearly lapsing
@@ -698,7 +709,7 @@ describe AutoTopUpNegativeDestinationBalancesJob do
     Feature.activate(:auto_topup_negative_destination_balances)
     dedupe_key = RedisKey.auto_topup_negative_destination_balance_last_amount(merchant_account.id)
 
-    expect(StripeTransferInternallyToCreator).to receive(:transfer_funds_to_account).with(hash_including(amount_cents: 100_00)).once
+    expect(StripeTransferInternallyToCreator).to receive(:transfer_funds_to_account).with(hash_including(amount_cents: usd_for(100_00))).once
     described_class.new.perform
     expect($redis.get(dedupe_key).to_i).to eq(100_00)
     $redis.expire(dedupe_key, 1.hour)
@@ -717,7 +728,7 @@ describe AutoTopUpNegativeDestinationBalancesJob do
     new_row = residue_row(-50_00)
     payable_balance.update!(amount_cents: 200_00, holding_amount_cents: 200_00)
     seller.reload
-    expect(StripeTransferInternallyToCreator).to receive(:transfer_funds_to_account).with(hash_including(amount_cents: 50_00)).once
+    expect(StripeTransferInternallyToCreator).to receive(:transfer_funds_to_account).with(hash_including(amount_cents: usd_for(50_00))).once
 
     described_class.new.perform
   ensure
@@ -733,7 +744,7 @@ describe AutoTopUpNegativeDestinationBalancesJob do
     Feature.activate(:auto_topup_negative_destination_balances)
     dedupe_key = RedisKey.auto_topup_negative_destination_balance_last_amount(merchant_account.id)
 
-    expect(StripeTransferInternallyToCreator).to receive(:transfer_funds_to_account).with(hash_including(amount_cents: 100_00)).once
+    expect(StripeTransferInternallyToCreator).to receive(:transfer_funds_to_account).with(hash_including(amount_cents: usd_for(100_00))).once
     described_class.new.perform
     expect($redis.get(dedupe_key).to_i).to eq(100_00)
     $redis.expire(dedupe_key, 1.hour)
@@ -825,5 +836,96 @@ describe AutoTopUpNegativeDestinationBalancesJob do
     Feature.deactivate(:auto_topup_negative_destination_balances)
     $redis.del(dedupe_key)
     $redis.del("#{dedupe_key}:unresolved")
+  end
+
+  it "sizes the USD transfer from the local hole: converted at the current rate, plus the buffer, rounded up to a whole cent" do
+    residue_row(-101)  # 101 PHP cents / 2.0 = 50.5 USD cents → ×1.2 = 60.6 → ceil → 61
+    make_payable
+    Feature.activate(:auto_topup_negative_destination_balances)
+
+    expect(StripeTransferInternallyToCreator).to receive(:transfer_funds_to_account).with(
+      hash_including(currency: Currency::USD, amount_cents: 61, metadata: hash_including(destination_hole_cents: 101))
+    )
+
+    described_class.new.perform
+
+    expect(InternalNotificationWorker).to have_received(:perform_async) do |_room, subject, message|
+      expect(subject).to eq("Negative destination balance top-ups")
+      expect(message).to include("FUNDED #{seller.email} — 101 php cents hole → 61 USD cents sent")
+      expect(message).to include("20% buffer")
+    end
+  ensure
+    Feature.deactivate(:auto_topup_negative_destination_balances)
+  end
+
+  it "sizes a single-unit destination currency through get_usd_cents, so a whole-unit hole is not treated as hundredths" do
+    merchant_account.update!(currency: "jpy", country: "JP")
+    create(:balance, user: seller, merchant_account:, date: in_cycle_date,
+                     amount_cents: 0, holding_currency: "jpy", holding_amount_cents: -1_000)
+    make_payable
+    Feature.activate(:auto_topup_negative_destination_balances)
+
+    # ¥1,000 (whole yen — jpy is single_unit in config/currencies.json) / 100 = 10 USD = 1,000 US
+    # cents → ×1.2 = 1,200. Treating the figure as hundredths would send 12 cents instead.
+    expect(StripeTransferInternallyToCreator).to receive(:transfer_funds_to_account).with(
+      hash_including(currency: Currency::USD, amount_cents: 1_200)
+    )
+
+    described_class.new.perform
+  ensure
+    Feature.deactivate(:auto_topup_negative_destination_balances)
+  end
+
+  it "escalates without taking a claim when no exchange rate is available, instead of sending zero or a local-currency amount" do
+    residue_row(-728_50)
+    make_payable
+    Feature.activate(:auto_topup_negative_destination_balances)
+    allow_any_instance_of(described_class).to receive(:get_rate).and_return(nil)
+    dedupe_key = RedisKey.auto_topup_negative_destination_balance_last_amount(merchant_account.id)
+
+    expect(StripeTransferInternallyToCreator).not_to receive(:transfer_funds_to_account)
+
+    described_class.new.perform
+
+    expect(InternalNotificationWorker).to have_received(:perform_async) do |_room, _subject, message|
+      expect(message).to include("ESCALATE #{seller.email} — no usable USD exchange rate for php")
+    end
+    expect($redis.get(dedupe_key)).to be_nil
+    expect($redis.keys("#{dedupe_key}:*")).to be_empty
+  ensure
+    Feature.deactivate(:auto_topup_negative_destination_balances)
+  end
+
+  it "flags a live run that processed payable candidates and funded none, in the subject and the body" do
+    residue_row(-728_50)
+    make_payable
+    Feature.activate(:auto_topup_negative_destination_balances)
+
+    allow(StripeTransferInternallyToCreator).to receive(:transfer_funds_to_account)
+      .and_raise(Stripe::InvalidRequestError.new("You have insufficient funds in your Stripe account.", nil))
+
+    described_class.new.perform
+
+    expect(InternalNotificationWorker).to have_received(:perform_async) do |room, subject, message|
+      expect(room).to eq("payouts")
+      expect(subject).to eq("ALL FAILED: Negative destination balance top-ups")
+      expect(message).to start_with("ALL FAILED: a live run processed 1 payable candidates and topped up none — 0 withheld, 1 errored.")
+      expect(message).to include("Topped up 0 of 1 candidates")
+    end
+  ensure
+    Feature.deactivate(:auto_topup_negative_destination_balances)
+  end
+
+  it "does not raise the all-failed flag on a dry run, which never tops anything up by design" do
+    residue_row(-728_50)
+    make_payable
+
+    described_class.new.perform
+
+    expect(InternalNotificationWorker).to have_received(:perform_async) do |_room, subject, message|
+      expect(subject).to eq("Negative destination balance top-ups")
+      expect(message).not_to include("ALL FAILED")
+      expect(message).to include("WOULD FUND #{seller.email} — 72850 php cents hole → #{usd_for(728_50)} USD cents sent")
+    end
   end
 end
