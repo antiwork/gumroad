@@ -6,6 +6,14 @@ class CreateCanadaMonthlySalesReportJob
   include LongRunningJobTracking
   sidekiq_options retry: 5, queue: :default, lock: :until_executed, on_conflict: :replace
 
+  # Rows are written one batch at a time: this sizes both the walk and the single flush that
+  # follows it, so the report issues one round of association loads and one write syscall per
+  # batch rather than per row.
+  ROW_BATCH_SIZE = 1_000
+  # Everything a row builder reads beyond the purchase's own columns: the product type and TaxJar
+  # rates, plus the refunds/disputes the net-of-refunds and chargeback amounts are computed from.
+  PURCHASE_PRELOADS = [:link, :purchase_taxjar_info, :disputes, :refunds, { charge: :dispute }].freeze
+
   def perform(month, year)
     raise ArgumentError, "Invalid month" unless month.in?(1..12)
     raise ArgumentError, "Invalid year" unless year.in?(2014..3200)
@@ -34,7 +42,8 @@ class CreateCanadaMonthlySalesReportJob
           .where("ip_country = 'Canada' OR card_country = 'CA'")
           .where(state: Compliance::Countries.subdivisions_for_select(Compliance::Countries::CAN.alpha2).map(&:first))
           .where(charge_processor_id: [nil, *ChargeProcessor.charge_processor_ids])
-          .find_each do |purchase|
+          .in_batches(of: ROW_BATCH_SIZE) do |batch|
+          batch.preload(*PURCHASE_PRELOADS).each do |purchase|
           taxjar_info = purchase.purchase_taxjar_info
 
           price_cents = purchase.price_cents_for_tax_reporting
@@ -62,6 +71,7 @@ class CreateCanadaMonthlySalesReportJob
           ]
 
           temp_file.write(row.to_csv)
+          end
           temp_file.flush
         end
 
@@ -82,7 +92,8 @@ class CreateCanadaMonthlySalesReportJob
               .where(purchases: { state: Compliance::Countries.subdivisions_for_select(Compliance::Countries::CAN.alpha2).map(&:first) })
               .where(purchases: { charge_processor_id: [nil, *ChargeProcessor.charge_processor_ids] })
           )
-          .find_each do |refund|
+          .in_batches(of: ROW_BATCH_SIZE) do |batch|
+          batch.preload(purchase: PURCHASE_PRELOADS).each do |refund|
           purchase = refund.purchase
           taxjar_info = purchase.purchase_taxjar_info
 
@@ -106,6 +117,7 @@ class CreateCanadaMonthlySalesReportJob
           ]
 
           temp_file.write(row.to_csv)
+          end
           temp_file.flush
         end
 
@@ -115,11 +127,13 @@ class CreateCanadaMonthlySalesReportJob
         # needed). Amounts are net of the purchase's refunds — money already returned by a
         # refund was relieved by the refund's own reporting path and is not clawed back again.
         canada_purchase_filters(Purchase.chargebacks_for_tax_period_reporting(starts_at, ends_at))
-          .find_each do |purchase|
+          .in_batches(of: ROW_BATCH_SIZE) do |batch|
+          batch.preload(*PURCHASE_PRELOADS).each do |purchase|
           row = chargeback_row(purchase, purchase.chargeback_date, -1)
           next unless row
 
           temp_file.write(row.to_csv)
+          end
           temp_file.flush
         end
 
@@ -127,7 +141,8 @@ class CreateCanadaMonthlySalesReportJob
         # back as positive rows dated by the Dispute row's won_at (real dispute rows only —
         # reversal dates are never synthesized).
         canada_purchase_filters(Purchase.chargeback_reversals_for_tax_period_reporting(starts_at, ends_at))
-          .find_each do |purchase|
+          .in_batches(of: ROW_BATCH_SIZE) do |batch|
+          batch.preload(*PURCHASE_PRELOADS).each do |purchase|
           won_at = purchase.chargeback_reversal_reporting_date
           next unless won_at&.between?(starts_at, ends_at)
 
@@ -135,6 +150,7 @@ class CreateCanadaMonthlySalesReportJob
           next unless row
 
           temp_file.write(row.to_csv)
+          end
           temp_file.flush
         end
       end

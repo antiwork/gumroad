@@ -131,10 +131,17 @@ module Purchase::Reportable
   # the purchase's own dispute rows (pre-Charge era) or the dispute on the purchase's Charge
   # (multi-purchase carts). Returns nil when no dispute row records a win — reversal dates are
   # never synthesized (see CHARGEBACK_REPORTING_CUTOVER).
+  # Reads the preloaded associations when the caller eager-loaded them (the report jobs walk
+  # thousands of purchases; the untouched branch is the same query it always was).
   def chargeback_reversal_reporting_date
     return nil unless chargeback_reversed?
 
-    disputes.where.not(won_at: nil).order(:won_at).last&.won_at || charge&.dispute&.won_at
+    won_at = if disputes.loaded?
+      disputes.filter_map(&:won_at).max
+    else
+      disputes.where.not(won_at: nil).order(:won_at).last&.won_at
+    end
+    won_at || charge&.dispute&.won_at
   end
 
   # Amounts for the chargeback legs. A dispute claws back whatever part of the charge was not
@@ -204,7 +211,7 @@ module Purchase::Reportable
       # same definition used by the post-cutover refund leg (Refund.for_tax_period_reporting)
       # and the other tax reports (VAT, global summary). Using one scope everywhere keeps a
       # single, auditable answer to "which refunds count" across the whole reporting family.
-      refunded_cents = refunds.effective.where("refunds.created_at < ?", self.class.refund_reporting_cutover_time).sum(refund_attribute)
+      refunded_cents = refund_cents_created_before(self.class.refund_reporting_cutover_time, refund_attribute)
       net_cents = gross_cents - refunded_cents
       net_cents.positive? ? net_cents : 0
     end
@@ -224,8 +231,19 @@ module Purchase::Reportable
     # the netted set at the instant the chargeback came into existence.
     def chargeback_reporting_cents(purchase_attribute, refund_attribute)
       gross_cents = self.send(purchase_attribute)
-      refunded_cents = refunds.effective.where("refunds.created_at < ?", chargeback_date).sum(refund_attribute)
+      refunded_cents = refund_cents_created_before(chargeback_date, refund_attribute)
       net_cents = gross_cents - refunded_cents
       net_cents.positive? ? net_cents : 0
+    end
+
+    # Effective refunds created before `instant`, summed on `refund_attribute`. When the caller
+    # eager-loaded #refunds this answers from memory — the report jobs walk thousands of rows and
+    # a per-row sum is otherwise one query each. The loaded branch mirrors the SQL it replaces:
+    # effective? is the in-memory twin of the .effective scope, and SUM ignores NULLs the way
+    # .to_i does here.
+    def refund_cents_created_before(instant, refund_attribute)
+      return refunds.effective.where("refunds.created_at < ?", instant).sum(refund_attribute) unless refunds.loaded?
+
+      refunds.sum { |refund| refund.effective? && refund.created_at < instant ? refund.public_send(refund_attribute).to_i : 0 }
     end
 end
