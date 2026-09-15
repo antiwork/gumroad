@@ -478,6 +478,28 @@ describe Ai::AnthropicClient do
       expect(client.served_models).to eq(["anthropic/claude-opus-5"])
     end
 
+    it "drops a caller's thinking override on the fallback replay" do
+      # The override is scoped to the requested model. The replay goes to a different one, so sending
+      # it there would change a request the caller has no opinion about.
+      captured = []
+      stub_request(:post, vercel_url).to_return do |request|
+        body = JSON.parse(request.body)
+        captured << body
+        if body["model"] == "deepseek/deepseek-v4.1-flash"
+          { status: 400, body: { error: { message: "unavailable" } }.to_json }
+        else
+          { status: 200, body: { "model" => "anthropic/claude-opus-5", "content" => [{ "type" => "text", "text" => "ok" }], "stop_reason" => "end_turn" }.to_json, headers: { "Content-Type" => "application/json" } }
+        end
+      end
+
+      result = client.messages(system: "s", messages: [{ role: "user", content: "x" }], thinking: { type: "disabled" })
+
+      expect(result.text).to eq("ok")
+      expect(captured.first["thinking"]).to eq("type" => "disabled")
+      expect(captured.last["model"]).to eq("anthropic/claude-opus-5")
+      expect(captured.last).not_to have_key("thinking")
+    end
+
     it "warns with the primary error before replaying the fallback model" do
       allow(Rails.logger).to receive(:warn)
       allow(Rails.logger).to receive(:info)
@@ -586,6 +608,25 @@ describe Ai::AnthropicClient do
       expect(result.tool_uses).to eq([])
     end
 
+    it "includes thinking in the request body when given and omits it otherwise" do
+      captured = nil
+      stream = sse(
+        ["content_block_start", { index: 0, content_block: { type: "text" } }],
+        ["content_block_delta", { index: 0, delta: { type: "text_delta", text: "hi" } }],
+        ["message_delta", { delta: { stop_reason: "end_turn" } }],
+      )
+      stub_request(:post, url)
+        .with { |request| captured = JSON.parse(request.body); true }
+        .to_return(status: 200, body: stream, headers: { "Content-Type" => "text/event-stream" })
+
+      client.stream_messages(system: "s", messages: [{ role: "user", content: "x" }], thinking: { type: "disabled" }) { |_| }
+      expect(captured["thinking"]).to eq("type" => "disabled")
+
+      captured = nil
+      client.stream_messages(system: "s", messages: [{ role: "user", content: "x" }]) { |_| }
+      expect(captured).not_to have_key("thinking")
+    end
+
     it "assembles a streamed tool_use block from its input_json_delta fragments" do
       stream = sse(
         ["content_block_start", { index: 0, content_block: { type: "tool_use", id: "toolu_9", name: "api_write" } }],
@@ -659,6 +700,33 @@ describe Ai::AnthropicClient do
       expect(buffered).to have_been_requested.once
       expect(result.tool_uses).to eq([{ id: "toolu_y", name: "api_write", input: { "endpoint" => "update_product" } }])
       expect(result.stop_reason).to eq("tool_use")
+    end
+
+    it "carries thinking into the buffered replay of an unreadable tool call" do
+      # The replay is the same seller turn on the same requested model, so an override the caller
+      # set for that model has to survive it. Without this the flagged DeepSeek turn turns hidden
+      # reasoning back on for exactly the replayed request.
+      allow(client).to receive(:sleep)
+      corrupted = sse(
+        ["content_block_start", { index: 0, content_block: { type: "tool_use", id: "toolu_x", name: "api_write" } }],
+        ["content_block_delta", { index: 0, delta: { type: "input_json_delta", partial_json: '{"endpoint":"update_product","params":{"name":"cut off' } }],
+        ["content_block_stop", { index: 0 }],
+        ["message_delta", { delta: { stop_reason: "tool_use" } }],
+      )
+      stub_request(:post, url)
+        .with(body: hash_including("stream" => true))
+        .to_return(status: 200, body: corrupted, headers: { "Content-Type" => "text/event-stream" })
+      replayed = nil
+      stub_request(:post, url)
+        .with { |request| replayed = JSON.parse(request.body); replayed["stream"] == false }
+        .to_return(status: 200, body: {
+          "content" => [{ "type" => "tool_use", "id" => "toolu_y", "name" => "api_write", "input" => { "endpoint" => "update_product" } }],
+          "stop_reason" => "tool_use",
+        }.to_json, headers: { "Content-Type" => "application/json" })
+
+      client.stream_messages(system: "s", messages: [{ role: "user", content: "x" }], thinking: { type: "disabled" })
+
+      expect(replayed["thinking"]).to eq("type" => "disabled")
     end
 
     it "hands the fallback's regenerated text to the caller's block in one piece when the replay is the final answer" do
