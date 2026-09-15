@@ -1,11 +1,10 @@
 # frozen_string_literal: true
 
 class SaveFilesService
-  # ProductFile.as_json (editor/internal serialization — not the smaller v2
-  # GET shape) includes these derived keys, but ProductFile cannot write them
-  # back. Keep writable flag-backed as_json attributes out of this list.
+  # The editor and v2 API return derived fields that clients cannot write back.
+  # Keep writable flag-backed attributes out of this list.
   UNWRITABLE_SERIALIZED_FILE_KEYS = %i[
-    extension is_pdf is_streamable is_transcoding_in_progress attached_product_name status
+    extension filetype filegroup is_pdf is_streamable is_transcoding_in_progress attached_product_name status
   ].freeze
 
   delegate :product_files, to: :owner
@@ -116,7 +115,7 @@ class SaveFilesService
     def updated_file_params(all_file_params)
       all_file_params = all_file_params.is_a?(Array) ? all_file_params : all_file_params.values
       all_file_params.each do |file_params|
-        file_params[:filetype] = "link" if file_params.delete(:extension) == "URL"
+        extension = file_params.delete(:extension) || file_params.delete("extension")
         if file_params.key?(:name)
           file_params[:display_name] ||= file_params[:name]
           file_params.delete(:name)
@@ -132,6 +131,7 @@ class SaveFilesService
           file_params.delete(key)
           file_params.delete(key.to_s)
         end
+        file_params[:filetype] = "link" if extension == "URL"
         # `file_size` is the editor's name for ProductFile#size.
         client_file_size = file_params.delete(:file_size) || file_params.delete("file_size")
         file_params[:size] ||= client_file_size if client_file_size.is_a?(Integer) && !client_file_size.negative?
