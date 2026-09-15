@@ -12,9 +12,8 @@
 // submitting the form element, so the browser never enforces `pattern` on its own.
 //
 // Each `pattern` mirrors the country's bank-account model regex, and each placeholder is a value the
-// model accepts. The placeholders read as sequences on purpose: one equal to the test account number
-// Stripe publishes for the country is refused in live mode ("Known test bank accounts cannot be used
-// in live mode."), and a seller copying the hint cannot tell it apart from their own number.
+// model accepts. A placeholder must not be an account number Stripe reserves for tests: live mode
+// refuses those, and a seller copying the hint cannot tell it apart from their own number.
 //
 // Deliberately no `maxLength` anywhere: the server strips separators before it validates (see
 // normalizeAccountNumber below), so "12-3456-7890123-00" is a valid New Zealand entry even though
