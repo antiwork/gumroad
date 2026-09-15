@@ -64,8 +64,8 @@ describe Settings::Team::InvitationsController do
         post :create, params: { team_invitation: { email:, role: "admin" } }, as: :json
       end
 
-      # Counted by the mailer the job carries rather than its class name: `deliver_later` enqueues
-      # the same MailDeliveryJob every other mailer uses, so the class alone would count them all.
+      # `deliver_later` puts every mailer's job in the same MailDeliveryJob class, so count the
+      # mailer the job carries, not the class.
       def enqueued_invitation_emails
         ActiveJob::Base.queue_adapter.enqueued_jobs.count { |job| job[:args].first == "TeamMailer" }
       end
@@ -126,6 +126,22 @@ describe Settings::Team::InvitationsController do
 
         3.times { post_invitation("overflow@example.com") }
         expect(response).to have_http_status(:too_many_requests)
+      end
+
+      it "does not spend the window on a payload that is rejected before it would send" do
+        Settings::Team::InvitationsController::INVITATIONS_PER_HOUR.times do
+          post_invitation("not-an-email")
+          expect(response).to be_successful
+          expect(response.parsed_body["success"]).to eq(false)
+        end
+
+        expect($redis.get(RedisKey.team_invitation_send_throttle(seller.id, "hour"))).to be_nil
+        expect($redis.get(RedisKey.team_invitation_send_throttle(seller.id, "day"))).to be_nil
+
+        expect do
+          post_invitation("teammate@example.com")
+        end.to change { seller.team_invitations.count }.by(1)
+        expect(response.parsed_body["success"]).to eq(true)
       end
 
       it "keys the windows to the account, so one account's burst never charges another" do
@@ -450,8 +466,7 @@ describe Settings::Team::InvitationsController do
       )
     end
 
-    # A resend inserts no row, so a cap that only counted creations would let an account re-mail its
-    # whole invitation list without limit — the same send, just not a new record.
+    # A resend inserts no row, so a cap on rows alone would leave it uncapped.
     it "refuses a resend past the hourly limit without enqueueing the email" do
       $redis.set(
         RedisKey.team_invitation_send_throttle(seller.id, "hour"),

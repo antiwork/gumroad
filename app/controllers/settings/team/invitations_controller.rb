@@ -12,10 +12,15 @@ class Settings::Team::InvitationsController < Sellers::BaseController
 
   def create
     authorize [:settings, :team, TeamInvitation]
-    return unless throttle_invitation_sends
 
     team_invitation = current_seller.team_invitations.new(create_params)
     team_invitation.expires_at = TeamInvitation::ACTIVE_INTERVAL_IN_DAYS.days.from_now.at_end_of_day
+
+    # Counted only for an invitation that would really be sent, so a seller retrying a rejected
+    # payload does not spend the account's own allowance.
+    if team_invitation.valid?
+      return unless throttle_invitation_sends
+    end
 
     if team_invitation.save
       TeamMailer.invite(team_invitation).deliver_later
@@ -127,10 +132,8 @@ class Settings::Team::InvitationsController < Sellers::BaseController
       params.require(:id)
     end
 
-    # Counts sends rather than rows: `create` mails every new address, and `resend_invitation` re-mails
-    # an existing one without inserting, so a row-only cap would leave an account's addresses
-    # blastable. Called after `authorize` so a non-admin team member cannot spend the account's
-    # allowance. Returns false once a window is exhausted, having rendered the refusal.
+    # Sends rather than rows: `resend_invitation` re-mails without inserting, and a row-only cap would
+    # leave an account's addresses blastable.
     def throttle_invitation_sends
       return true unless current_seller
 
@@ -141,8 +144,8 @@ class Settings::Team::InvitationsController < Sellers::BaseController
       allowed
     end
 
-    # Hourly first: a request the hourly window refuses never opens the daily counter, so a burst is
-    # cut off inside the hour instead of spending the account's whole day on refused requests.
+    # Hourly first, so a burst is cut off inside the hour rather than spending the day's allowance on
+    # requests that were already refused.
     def throttle_invitation_window(name, limit, period)
       throttle!(
         key: RedisKey.team_invitation_send_throttle(current_seller.id, name),
@@ -152,9 +155,8 @@ class Settings::Team::InvitationsController < Sellers::BaseController
       )
     end
 
-    # Rendered verbatim to the seller by the settings page, so it names the limit and the wait —
-    # generic wording reads as a fault in their account. A non-positive countdown means the window
-    # ended while Redis was answering, and promising a wait there would be false.
+    # Shown verbatim to the seller, so it names the real limit and wait; a non-positive countdown means
+    # the window ended while Redis was answering, and promising a wait there would be false.
     def invitation_limit_message(name, limit, retry_after)
       return "You can invite again now." if retry_after <= 0
 
@@ -164,9 +166,8 @@ class Settings::Team::InvitationsController < Sellers::BaseController
         "You can invite again in #{remaining} #{unit.pluralize(remaining)}."
     end
 
-    # Refusals are the signal worth a human's attention, and the refusal path runs on every attempt
-    # past the limit, so claim one report per account per day. Best-effort: the refusal is already
-    # rendered by the time this runs, and failing to report it must not turn a 429 into a 500.
+    # This runs on every attempt past the limit, so one report per account per day. The refusal is
+    # already rendered: failing to report it must not turn a 429 into a 500.
     def report_invitation_burst
       return unless $redis.set(
         RedisKey.team_invitation_burst_reported(current_seller.id),

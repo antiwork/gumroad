@@ -41,8 +41,7 @@ export const createTeamInvitation = async (
     }
   } catch (e) {
     // A refused invitation answers 429, which `request` raises as a RateLimitError carrying the
-    // server's own wording. Return it as the endpoint's `error_message`: the caller only reads that,
-    // so letting it propagate would leave the seller with no explanation at all.
+    // server's own wording; the caller renders only `error_message`, so it has to go there.
     if (!(e instanceof RateLimitError)) throw e;
     return { success: false, error_message: e.message };
   }
