@@ -171,10 +171,9 @@ class CreateCanadaMonthlySalesReportJob
   end
 
   private
-    # Walks a leg in primary-key batches, yielding one preloaded batch at a time. Ids are collected
-    # first and each batch is then loaded back through the leg's own scope, so the leg's filters
-    # still hold when the rows are read; ordering happens after that walk because walking a filtered
-    # scope in id order makes MySQL scan the primary key for matches.
+    # Walks a leg in primary-key batches, yielding one preloaded batch at a time. Each batch is
+    # loaded back through the leg's own scope so its filters still hold at read time; the id order
+    # is applied after the walk because walking a filtered scope in id order scans the primary key.
     def each_purchase_batch(scope, &block)
       each_batch(scope) { |slice| block.call(scope.where(id: slice).order(:id).preload(*PURCHASE_PRELOADS)) }
     end
