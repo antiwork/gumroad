@@ -8,7 +8,8 @@ import { CopyToClipboard } from "$app/components/CopyToClipboard";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { CustomHtmlPreview } from "$app/components/Pages/CustomHtmlPreview";
 import { PreviewChrome, PreviewSidebar, WithPreviewSidebar } from "$app/components/PreviewSidebar";
-import { RichTextEditor } from "$app/components/RichTextEditor";
+import { useSectionImageUploadSettings } from "$app/components/Profile/EditSections";
+import { ImageUploadSettingsContext, RichTextEditor } from "$app/components/RichTextEditor";
 import { showAlert } from "$app/components/server-components/Alert";
 import { AgentSupportFallbackNote } from "$app/components/Support/AgentSupportFallbackNote";
 import { Alert } from "$app/components/ui/Alert";
@@ -67,6 +68,9 @@ export default function PagesEdit() {
   const [savedContent, setSavedContent] = React.useState(page.content);
   const [previewVersion, setPreviewVersion] = React.useState(0);
   const [isSaving, setIsSaving] = React.useState(false);
+  // The toolbar's Insert image item and the paste/drop handlers both read this context and no-op
+  // without it; the page editor shares the profile rich-text section's upload settings.
+  const imageUploadSettings = useSectionImageUploadSettings();
 
   // Only rich-text pages are editable in place; the profile and custom HTML
   // pages change through profile settings or the agent/CLI.
@@ -379,17 +383,19 @@ export default function PagesEdit() {
               </Fieldset>
               <Fieldset>
                 <Label htmlFor="page-content">Content</Label>
-                <RichTextEditor
-                  id="page-content"
-                  className="textarea block w-full rounded border border-border bg-background px-4 py-3 text-foreground placeholder:text-muted focus-within:outline-2 focus-within:outline-offset-0 focus-within:outline-accent"
-                  ariaLabel="Page content"
-                  placeholder="Write your page..."
-                  initialValue={page.content}
-                  editable={canEdit}
-                  // Published pages are static HTML; the upsell card is a client-only node.
-                  allowUpsells={false}
-                  onChange={setContent}
-                />
+                <ImageUploadSettingsContext.Provider value={imageUploadSettings}>
+                  <RichTextEditor
+                    id="page-content"
+                    className="textarea block w-full rounded border border-border bg-background px-4 py-3 text-foreground placeholder:text-muted focus-within:outline-2 focus-within:outline-offset-0 focus-within:outline-accent"
+                    ariaLabel="Page content"
+                    placeholder="Write your page..."
+                    initialValue={page.content}
+                    editable={canEdit}
+                    // Published pages are static HTML; the upsell card is a client-only node.
+                    allowUpsells={false}
+                    onChange={setContent}
+                  />
+                </ImageUploadSettingsContext.Provider>
               </Fieldset>
               {canEdit ? agentPanel : null}
             </>
