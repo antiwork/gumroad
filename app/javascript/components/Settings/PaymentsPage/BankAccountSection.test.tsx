@@ -95,13 +95,13 @@ const COUNTRY_EXAMPLES: {
   { code: "GA", label: "Account #", example: "00001234567890123456789", pattern: "[0-9]{23}" },
   { code: "DZ", label: "Account #", example: "00001234567890123456", pattern: "[0-9]{20}" },
   { code: "ET", label: "Account #", example: "0000000012345", pattern: "[0-9A-Za-z]{13,16}" },
-  { code: "BD", label: "Account #", example: "0000123456789", pattern: "[0-9A-Za-z]{13,17}" },
+  { code: "BD", label: "Account #", example: "1234567890123", pattern: "[0-9A-Za-z]{13,17}" },
   { code: "AM", label: "Account #", example: "00001234567890", pattern: "[0-9]{11,16}" },
   { code: "AR", label: "Account number", example: "0110000600000000000000", pattern: "[0-9]{22}" },
-  { code: "PE", label: "Account number", example: "99934500012345670024", pattern: "[0-9]{20}" },
+  { code: "PE", label: "Account number", example: "12345678901234567890", pattern: "[0-9]{20}" },
   { code: "MX", label: "Account number", example: "032180000118359719", pattern: "[0-9]{18}" },
   { code: "KR", label: "Account #", example: "00012345678901", pattern: "[0-9]{11,16}" },
-  { code: "NZ", label: "Account #", example: "1100000000000010", pattern: "[0-9]{15,16}" },
+  { code: "NZ", label: "Account #", example: "1234567890123456", pattern: "[0-9]{15,16}" },
   { code: "JP", label: "Account #", example: "1234567", pattern: "[0-9]{4,8}" },
   { code: "GI", label: "Account #", example: "01234567", pattern: "[0-9]{8}" },
 ];
@@ -190,10 +190,10 @@ describe("BankAccountSection account-number hints", () => {
     renderForCountry("OM");
     const field = accountNumberField("Account #");
 
-    expect(field.placeholder).toBe("000123456789");
+    expect(field.placeholder).toBe("123456789012");
     expect(field.pattern).toBe("[0-9]{6,16}");
     const pattern = new RegExp(`^(?:${field.pattern})$`, "u");
-    expect(pattern.test("000123456789")).toBe(true);
+    expect(pattern.test("123456789012")).toBe(true);
     expect(pattern.test("OM810180000001299123456")).toBe(false);
   });
 
@@ -247,6 +247,43 @@ describe("BankAccountSection bank-code placeholders", () => {
 
     expect(field.placeholder).toBe(expected);
     expect(field.placeholder).not.toBe(reserved);
+  });
+});
+describe("BankAccountSection account-number placeholders", () => {
+  // The bank-code rule above, applied to the account-number field: Stripe publishes a test account
+  // number per country and refuses it in live mode. Every published value for the country is listed,
+  // both the one that succeeds and the ones that fail, so a rewrite cannot land on a neighbour.
+  const RESERVED_ACCOUNT_NUMBERS: Record<string, string[]> = {
+    BD: ["0000123456789", "0000000011116", "0000000011113", "0000000022227", "0000000033335", "0000000044440"],
+    NZ: [
+      "1100000000000010",
+      "1100001111111016",
+      "1100001111111013",
+      "1100002222222027",
+      "1100003333333035",
+      "1100004444444040",
+    ],
+    OM: ["000123456789", "001111111116", "001111111113", "002222222227", "003333333335", "004444444440"],
+    PE: [
+      "99934500012345670024",
+      "99934500012345670122",
+      "99934500012345670220",
+      "99934500012345670328",
+      "99934500012345670426",
+      "99934500012345670523",
+    ],
+  };
+
+  it.each([
+    ["BD", "Account #"],
+    ["NZ", "Account #"],
+    ["OM", "Account #"],
+    ["PE", "Account number"],
+  ])("does not hint %s with a value Stripe reserves for tests", (code, label) => {
+    renderForCountry(code);
+    const field = accountNumberField(label);
+
+    expect(RESERVED_ACCOUNT_NUMBERS[code]).not.toContain(field.placeholder);
   });
 });
 describe("BankAccountSection Indonesian bank code", () => {
