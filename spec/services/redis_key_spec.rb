@@ -27,4 +27,17 @@ describe RedisKey do
       expect(key).to eq("acme_challenge:abc123")
     end
   end
+
+  describe ".team_invitation_send_throttle" do
+    it "returns a key per seller and window" do
+      expect(described_class.team_invitation_send_throttle(123, "hour")).to eq("team_invitation_send_throttle:123:hour")
+      expect(described_class.team_invitation_send_throttle(123, "day")).to eq("team_invitation_send_throttle:123:day")
+    end
+  end
+
+  describe ".team_invitation_burst_reported" do
+    it "returns a key per seller" do
+      expect(described_class.team_invitation_burst_reported(123)).to eq("team_invitation_burst_reported:123")
+    end
+  end
 end

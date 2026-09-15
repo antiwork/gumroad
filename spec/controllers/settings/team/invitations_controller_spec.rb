@@ -50,6 +50,121 @@ describe Settings::Team::InvitationsController do
         expect(response.parsed_body["error_message"]).to eq("Email is invalid and Role is not included in the list")
       end
     end
+
+    context "when the account has spent its invitation sends for a window" do
+      before do
+        $redis.del(
+          RedisKey.team_invitation_send_throttle(seller.id, "hour"),
+          RedisKey.team_invitation_send_throttle(seller.id, "day"),
+          RedisKey.team_invitation_burst_reported(seller.id)
+        )
+      end
+
+      def post_invitation(email)
+        post :create, params: { team_invitation: { email:, role: "admin" } }, as: :json
+      end
+
+      # Counted by the mailer the job carries rather than its class name: `deliver_later` enqueues
+      # the same MailDeliveryJob every other mailer uses, so the class alone would count them all.
+      def enqueued_invitation_emails
+        ActiveJob::Base.queue_adapter.enqueued_jobs.count { |job| job[:args].first == "TeamMailer" }
+      end
+
+      it "refuses invitations past the hourly limit, with no row and no email enqueued" do
+        expect do
+          Settings::Team::InvitationsController::INVITATIONS_PER_HOUR.times do |index|
+            post_invitation("member#{index}@example.com")
+            expect(response).to be_successful
+          end
+        end.to change { enqueued_invitation_emails }
+          .by(Settings::Team::InvitationsController::INVITATIONS_PER_HOUR)
+
+        # The send is the harm, so the refusal has to land before the mailer is even built — a
+        # refusal that still queued the email would not have stopped anything.
+        expect(TeamMailer).not_to receive(:invite)
+        expect do
+          post_invitation("one-too-many@example.com")
+        end.to not_change { seller.team_invitations.count }
+          .and not_change { enqueued_invitation_emails }
+
+        expect(response).to have_http_status(:too_many_requests)
+        expect(response.parsed_body["error"]).to match(
+          /\AYou've reached the limit of 10 team invitations per hour\. You can invite again in \d+ minutes?\.\z/
+        )
+        expect(response.parsed_body["retry_after"]).to be > 0
+        expect(response.headers["Retry-After"]).to be_present
+      end
+
+      it "refuses invitations past the daily limit, with no row and no email enqueued" do
+        $redis.set(
+          RedisKey.team_invitation_send_throttle(seller.id, "day"),
+          Settings::Team::InvitationsController::INVITATIONS_PER_DAY
+        )
+
+        expect(TeamMailer).not_to receive(:invite)
+        expect do
+          post_invitation("one-too-many@example.com")
+        end.to not_change { seller.team_invitations.count }
+          .and not_change { enqueued_invitation_emails }
+
+        expect(response).to have_http_status(:too_many_requests)
+        expect(response.parsed_body["error"]).to match(
+          /\AYou've reached the limit of 50 team invitations per day\. You can invite again in \d+ hours?\.\z/
+        )
+        expect(response.parsed_body["retry_after"]).to be > 0
+      end
+
+      it "reports a refused burst to the risk room once, not once per refused attempt" do
+        $redis.set(
+          RedisKey.team_invitation_send_throttle(seller.id, "hour"),
+          Settings::Team::InvitationsController::INVITATIONS_PER_HOUR
+        )
+
+        expect(InternalNotificationWorker).to receive(:perform_async)
+          .with("risk", "Team invitations rate limited", /refused team invitations/)
+          .once
+
+        3.times { post_invitation("overflow@example.com") }
+        expect(response).to have_http_status(:too_many_requests)
+      end
+
+      it "keys the windows to the account, so one account's burst never charges another" do
+        Settings::Team::InvitationsController::INVITATIONS_PER_HOUR.times do |index|
+          post_invitation("member#{index}@example.com")
+        end
+        post_invitation("one-too-many@example.com")
+        expect(response).to have_http_status(:too_many_requests)
+
+        # The refused attempt is still counted against the window that refused it, and never reaches
+        # the daily one — so the hourly counter is one ahead of the daily after a refusal.
+        expect($redis.get(RedisKey.team_invitation_send_throttle(seller.id, "hour")))
+          .to eq((Settings::Team::InvitationsController::INVITATIONS_PER_HOUR + 1).to_s)
+        expect($redis.get(RedisKey.team_invitation_send_throttle(seller.id, "day")))
+          .to eq(Settings::Team::InvitationsController::INVITATIONS_PER_HOUR.to_s)
+
+        other_seller = create(:user)
+        expect($redis.get(RedisKey.team_invitation_send_throttle(other_seller.id, "hour"))).to be_nil
+        expect($redis.get(RedisKey.team_invitation_send_throttle(other_seller.id, "day"))).to be_nil
+      end
+
+      it "does not let another account's exhausted windows block this one, and passes a normal team" do
+        other_seller = create(:user)
+        $redis.set(
+          RedisKey.team_invitation_send_throttle(other_seller.id, "hour"),
+          Settings::Team::InvitationsController::INVITATIONS_PER_HOUR
+        )
+        $redis.set(
+          RedisKey.team_invitation_send_throttle(other_seller.id, "day"),
+          Settings::Team::InvitationsController::INVITATIONS_PER_DAY
+        )
+
+        expect do
+          3.times { |index| post_invitation("teammate#{index}@example.com") }
+        end.to change { seller.team_invitations.count }.by(3)
+        expect(response).to be_successful
+        expect(response.parsed_body["success"]).to eq(true)
+      end
+    end
   end
 
   describe "PUT update" do
@@ -332,6 +447,26 @@ describe Settings::Team::InvitationsController do
 
       expect(team_invitation.reload.expires_at).to be_within(1.second).of(
         TeamInvitation::ACTIVE_INTERVAL_IN_DAYS.days.from_now.at_end_of_day
+      )
+    end
+
+    # A resend inserts no row, so a cap that only counted creations would let an account re-mail its
+    # whole invitation list without limit — the same send, just not a new record.
+    it "refuses a resend past the hourly limit without enqueueing the email" do
+      $redis.set(
+        RedisKey.team_invitation_send_throttle(seller.id, "hour"),
+        Settings::Team::InvitationsController::INVITATIONS_PER_HOUR
+      )
+      $redis.del(RedisKey.team_invitation_burst_reported(seller.id))
+
+      expect(TeamMailer).not_to receive(:invite)
+      expect do
+        put :resend_invitation, params: { id: team_invitation.external_id }, as: :json
+      end.not_to change { ActiveJob::Base.queue_adapter.enqueued_jobs.count { |job| job[:args].first == "TeamMailer" } }
+
+      expect(response).to have_http_status(:too_many_requests)
+      expect(response.parsed_body["error"]).to match(
+        /\AYou've reached the limit of 10 team invitations per hour\./
       )
     end
   end
