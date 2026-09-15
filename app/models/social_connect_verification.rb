@@ -1,0 +1,47 @@
+# frozen_string_literal: true
+
+class SocialConnectVerification < ApplicationRecord
+  PLATFORMS = %w[twitter youtube instagram tiktok].freeze
+
+  belongs_to :user
+
+  validates :platform, presence: true, inclusion: { in: PLATFORMS }
+  validates :uid, presence: true
+  validates :last_verified_at, presence: true
+  validates :platform, uniqueness: { scope: :user_id }
+
+  # Other Gumroad accounts vouched for by the same social identity — the
+  # dedupe signal risk reviewers check (same precedent as bank/card fingerprints).
+  def shared_identity_user_ids
+    self.class.where(platform:, uid:).where.not(user_id:).pluck(:user_id)
+  end
+
+  # Twitter's OAuth 1.0a raw_info payload, from both the signup and the
+  # link-account callback paths.
+  def self.record_from_twitter!(user, raw_info)
+    uid = raw_info["id"].to_s
+    return if uid.blank? || raw_info["errors"].present?
+
+    verification = find_or_initialize_by(user:, platform: "twitter")
+    verification.update!(
+      uid:,
+      handle: raw_info["screen_name"],
+      account_created_at: parse_twitter_time(raw_info["created_at"]),
+      follower_count: raw_info["followers_count"],
+      post_count: raw_info["statuses_count"],
+      last_posted_at: parse_twitter_time(raw_info.dig("status", "created_at")),
+      last_verified_at: Time.current,
+    )
+    verification
+  end
+
+  def self.parse_twitter_time(value)
+    return if value.blank?
+
+    # Twitter's legacy format: "Sat Mar 21 16:47:01 +0000 2015"
+    DateTime.strptime(value, "%a %b %d %H:%M:%S %z %Y")
+  rescue Date::Error
+    nil
+  end
+  private_class_method :parse_twitter_time
+end

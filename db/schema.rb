@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.1].define(version: 2026_12_08_130000) do
+ActiveRecord::Schema[7.1].define(version: 2026_12_09_041314) do
   create_table "active_storage_attachments", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
     t.string "name", limit: 191, null: false
     t.string "record_type", limit: 191, null: false
@@ -181,11 +181,8 @@ ActiveRecord::Schema[7.1].define(version: 2026_12_08_130000) do
     t.integer "affiliate_basis_points"
     t.string "destination_url"
     t.bigint "flags", default: 0, null: false
-    t.string "workflow_schedule_token"
-    t.index ["affiliate_id", "link_id"], name: "index_affiliates_links_on_affiliate_id_and_link_id", unique: true
     t.index ["affiliate_id"], name: "index_affiliates_links_on_affiliate_id"
     t.index ["link_id"], name: "index_affiliates_links_on_link_id"
-    t.index ["workflow_schedule_token"], name: "index_affiliates_links_on_workflow_schedule_token"
   end
 
   create_table "ai_conversations", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
@@ -318,7 +315,7 @@ ActiveRecord::Schema[7.1].define(version: 2026_12_08_130000) do
     t.string "currency", default: "usd"
     t.string "holding_currency", default: "usd"
     t.integer "holding_amount_cents", default: 0
-    t.index ["state", "merchant_account_id", "date", "user_id"], name: "index_balances_on_state_merchant_account_date_for_payouts"
+    t.index ["state", "updated_at"], name: "index_balances_on_state_and_updated_at"
     t.index ["state", "user_id", "amount_cents"], name: "index_balances_on_state_user_id_amount_cents"
     t.index ["user_id", "merchant_account_id", "date"], name: "index_on_user_merchant_account_date"
   end
@@ -428,6 +425,18 @@ ActiveRecord::Schema[7.1].define(version: 2026_12_08_130000) do
     t.index ["seller_id"], name: "index_blocked_customer_objects_on_seller_id"
   end
 
+  create_table "blocked_objects", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
+    t.string "object_type", limit: 50, null: false
+    t.string "object_value", limit: 320, null: false
+    t.datetime "blocked_at"
+    t.datetime "expires_at"
+    t.bigint "blocked_by"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["object_type", "object_value"], name: "index_blocked_objects_on_type_and_value", unique: true
+    t.index ["object_value"], name: "index_blocked_objects_on_value"
+  end
+
   create_table "bundle_product_purchases", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
     t.bigint "bundle_purchase_id", null: false
     t.bigint "product_purchase_id", null: false
@@ -533,6 +542,18 @@ ActiveRecord::Schema[7.1].define(version: 2026_12_08_130000) do
     t.index ["order_id"], name: "index_carts_on_order_id"
     t.index ["updated_at"], name: "index_carts_on_updated_at"
     t.index ["user_id"], name: "index_carts_on_user_id"
+  end
+
+  create_table "charge_buyer_currency_amounts", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
+    t.bigint "charge_id", null: false
+    t.string "buyer_currency", limit: 3, null: false
+    t.bigint "buyer_currency_amount_cents"
+    t.bigint "buyer_currency_gumroad_amount_cents"
+    t.decimal "buyer_currency_exchange_rate", precision: 20, scale: 10
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["buyer_currency"], name: "index_charge_buyer_currency_amounts_on_buyer_currency"
+    t.index ["charge_id"], name: "index_charge_buyer_currency_amounts_on_charge_id", unique: true
   end
 
   create_table "charge_presentments", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
@@ -752,7 +773,7 @@ ActiveRecord::Schema[7.1].define(version: 2026_12_08_130000) do
     t.json "json_data"
     t.string "payment_method_type"
     t.string "stripe_account_id"
-    t.datetime "recurring_authorization_verified_at"
+    t.datetime "recurring_authorization_verified_at", precision: nil
     t.string "recurring_authorization_currency"
     t.integer "recurring_authorization_max_amount_cents"
     t.index ["preorder_id"], name: "index_credit_cards_on_preorder_id"
@@ -775,12 +796,10 @@ ActiveRecord::Schema[7.1].define(version: 2026_12_08_130000) do
     t.integer "fee_retention_refund_id"
     t.bigint "backtax_agreement_id"
     t.text "json_data"
-    t.text "reason"
     t.bigint "failed_refund_id"
     t.index ["balance_id"], name: "index_credits_on_balance_id"
     t.index ["dispute_id"], name: "index_credits_on_dispute_id"
     t.index ["failed_refund_id"], name: "index_credits_on_failed_refund_id"
-    t.index ["user_id", "created_at", "id"], name: "index_credits_on_user_id_and_created_at_and_id"
   end
 
   create_table "custom_domains", id: :integer, charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
@@ -793,8 +812,6 @@ ActiveRecord::Schema[7.1].define(version: 2026_12_08_130000) do
     t.string "state", default: "unverified", null: false
     t.integer "failed_verification_attempts_count", default: 0, null: false
     t.bigint "product_id"
-    t.boolean "routable"
-    t.datetime "routability_checked_at"
     t.index ["domain"], name: "index_custom_domains_on_domain"
     t.index ["product_id"], name: "index_custom_domains_on_product_id"
     t.index ["ssl_certificate_issued_at"], name: "index_custom_domains_on_ssl_certificate_issued_at"
@@ -896,6 +913,7 @@ ActiveRecord::Schema[7.1].define(version: 2026_12_08_130000) do
     t.string "error_message"
     t.text "access_activity_log"
     t.text "reason_for_winning"
+    t.integer "customer_communication_source_file_count", default: 0, null: false
     t.index ["dispute_id"], name: "index_dispute_evidences_on_dispute_id", unique: true
     t.index ["resolved_at"], name: "index_dispute_evidences_on_resolved_at"
   end
@@ -1044,7 +1062,6 @@ ActiveRecord::Schema[7.1].define(version: 2026_12_08_130000) do
     t.index ["email", "followed_id"], name: "index_followers_on_email_and_followed_id", unique: true
     t.index ["followed_id", "confirmed_at"], name: "index_followers_on_followed_id_and_confirmed_at"
     t.index ["followed_id", "email"], name: "index_followers_on_followed_id_and_email"
-    t.index ["follower_user_id", "deleted_at"], name: "index_followers_on_follower_user_id_and_deleted_at"
   end
 
   create_table "friendly_id_slugs", id: :integer, charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
@@ -1099,19 +1116,6 @@ ActiveRecord::Schema[7.1].define(version: 2026_12_08_130000) do
     t.datetime "updated_at", null: false
     t.index ["stripe_person_id"], name: "index_guardians_on_stripe_person_id", unique: true
     t.index ["user_id"], name: "index_guardians_on_user_id"
-  end
-
-  create_table "gumhead_usage_events", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
-    t.bigint "user_id", null: false
-    t.string "model", null: false
-    t.bigint "input_tokens", default: 0, null: false
-    t.bigint "output_tokens", default: 0, null: false
-    t.bigint "cache_creation_input_tokens", default: 0, null: false
-    t.bigint "cache_creation_1h_input_tokens", default: 0, null: false
-    t.bigint "cache_read_input_tokens", default: 0, null: false
-    t.datetime "created_at", null: false
-    t.datetime "updated_at", null: false
-    t.index ["user_id", "created_at"], name: "index_gumhead_usage_events_on_user_id_and_created_at"
   end
 
   create_table "gumroad_daily_analytics", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
@@ -1237,20 +1241,6 @@ ActiveRecord::Schema[7.1].define(version: 2026_12_08_130000) do
     t.index ["community_id"], name: "index_last_read_community_chat_messages_on_community_id"
     t.index ["user_id", "community_id"], name: "idx_on_user_id_community_id_45efa2a41c", unique: true
     t.index ["user_id"], name: "index_last_read_community_chat_messages_on_user_id"
-  end
-
-  create_table "later_charge_presentments", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
-    t.string "owner_type", null: false
-    t.bigint "owner_id", null: false
-    t.string "processor", null: false
-    t.string "presentment_currency", null: false
-    t.bigint "presentment_price_cents", null: false
-    t.decimal "signup_currency_units_per_usd", precision: 30, scale: 15, null: false
-    t.datetime "effective_from", null: false
-    t.datetime "created_at", null: false
-    t.datetime "updated_at", null: false
-    t.bigint "canonical_price_cents", null: false
-    t.index ["owner_type", "owner_id", "effective_from"], name: "index_later_charge_presentments_on_owner_and_effective"
   end
 
   create_table "legacy_permalinks", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
@@ -1428,44 +1418,10 @@ ActiveRecord::Schema[7.1].define(version: 2026_12_08_130000) do
     t.datetime "deleted_at", precision: nil
     t.string "scopes", default: "", null: false
     t.boolean "confidential", default: false, null: false
-    t.boolean "device_authorization_enabled", default: false, null: false
     t.boolean "is_first_party_agent_app", default: false, null: false
     t.index ["owner_id", "owner_type", "is_first_party_agent_app"], name: "index_oauth_applications_on_owner_and_first_party_agent"
     t.index ["owner_id", "owner_type"], name: "index_oauth_applications_on_owner_id_and_owner_type"
     t.index ["uid"], name: "index_oauth_applications_on_uid", unique: true
-  end
-
-  create_table "oauth_device_authorizations", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
-    t.integer "oauth_application_id", null: false
-    t.integer "resource_owner_id"
-    t.integer "access_token_id"
-    t.string "device_code_digest", null: false
-    t.string "user_code_digest", null: false
-    t.string "scopes", null: false
-    t.string "status", default: "pending", null: false
-    t.datetime "expires_at", null: false
-    t.datetime "last_polled_at"
-    t.integer "poll_count", default: 0, null: false
-    t.integer "poll_interval_seconds", default: 5, null: false
-    t.datetime "approved_at"
-    t.datetime "denied_at"
-    t.datetime "consumed_at"
-    t.string "created_ip_address"
-    t.string "approved_ip_address"
-    t.string "denied_ip_address"
-    t.string "last_poll_ip_address"
-    t.string "created_user_agent"
-    t.string "approved_user_agent"
-    t.string "denied_user_agent"
-    t.string "last_poll_user_agent"
-    t.datetime "created_at", null: false
-    t.datetime "updated_at", null: false
-    t.index ["access_token_id"], name: "index_oauth_device_authorizations_on_access_token_id"
-    t.index ["device_code_digest"], name: "index_oauth_device_authorizations_on_device_code_digest", unique: true
-    t.index ["oauth_application_id"], name: "index_oauth_device_authorizations_on_oauth_application_id"
-    t.index ["resource_owner_id"], name: "index_oauth_device_authorizations_on_resource_owner_id"
-    t.index ["status", "expires_at"], name: "index_oauth_device_authorizations_on_status_and_expires_at"
-    t.index ["user_code_digest"], name: "index_oauth_device_authorizations_on_user_code_digest", unique: true
   end
 
   create_table "offer_codes", id: :integer, charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
@@ -1539,6 +1495,17 @@ ActiveRecord::Schema[7.1].define(version: 2026_12_08_130000) do
     t.bigint "flags", default: 0, null: false
     t.datetime "review_reminder_scheduled_at"
     t.index ["purchaser_id"], name: "index_orders_on_purchaser_id"
+  end
+
+  create_table "page_versions", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
+    t.bigint "page_id", null: false
+    t.bigint "parent_id"
+    t.text "html", null: false
+    t.text "prompt", null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["page_id"], name: "index_page_versions_on_page_id"
+    t.index ["parent_id"], name: "index_page_versions_on_parent_id"
   end
 
   create_table "pages", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
@@ -1666,14 +1633,6 @@ ActiveRecord::Schema[7.1].define(version: 2026_12_08_130000) do
     t.integer "suggested_price_cents"
     t.index ["link_id"], name: "index_prices_on_link_id"
     t.index ["variant_id"], name: "index_prices_on_variant_id"
-  end
-
-  create_table "processed_stripe_events", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
-    t.string "event_id", null: false
-    t.string "event_type"
-    t.datetime "created_at", null: false
-    t.datetime "updated_at", null: false
-    t.index ["event_id"], name: "index_processed_stripe_events_on_event_id", unique: true
   end
 
   create_table "processor_payment_intents", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
@@ -1841,7 +1800,6 @@ ActiveRecord::Schema[7.1].define(version: 2026_12_08_130000) do
     t.text "message"
     t.virtual "has_message", type: :boolean, null: false, as: "if((`message` is null),false,true)", stored: true
     t.datetime "deleted_at"
-    t.datetime "seller_notified_at"
     t.index ["link_id", "has_message", "created_at"], name: "idx_on_link_id_has_message_created_at_2fcf6c0c64"
     t.index ["purchase_id"], name: "index_product_reviews_on_purchase_id", unique: true
   end
@@ -1855,7 +1813,7 @@ ActiveRecord::Schema[7.1].define(version: 2026_12_08_130000) do
     t.index ["tag_id"], name: "index_product_taggings_on_tag_id"
   end
 
-  create_table "product_variant_deletion_audits", charset: "utf8mb4", collation: "utf8mb4_0900_ai_ci", force: :cascade do |t|
+  create_table "product_variant_deletion_audits", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
     t.bigint "actor_user_id", null: false
     t.bigint "product_id", null: false
     t.string "route", null: false
@@ -1898,6 +1856,17 @@ ActiveRecord::Schema[7.1].define(version: 2026_12_08_130000) do
     t.index ["resource_type", "resource_id"], name: "index_public_files_on_resource"
     t.index ["scheduled_for_deletion_at"], name: "index_public_files_on_scheduled_for_deletion_at"
     t.index ["seller_id"], name: "index_public_files_on_seller_id"
+  end
+
+  create_table "purchase_buyer_currency_amounts", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
+    t.bigint "purchase_id", null: false
+    t.string "buyer_currency", limit: 3, null: false
+    t.bigint "buyer_currency_amount_cents"
+    t.decimal "buyer_currency_exchange_rate", precision: 20, scale: 10
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["buyer_currency"], name: "index_purchase_buyer_currency_amounts_on_buyer_currency"
+    t.index ["purchase_id"], name: "index_purchase_buyer_currency_amounts_on_purchase_id", unique: true
   end
 
   create_table "purchase_custom_field_files", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
@@ -1962,11 +1931,7 @@ ActiveRecord::Schema[7.1].define(version: 2026_12_08_130000) do
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
     t.integer "duration_in_months"
-    t.boolean "once_per_cart", default: false, null: false
-    t.integer "pre_discount_displayed_price_cents"
-    t.string "once_per_cart_allocation_id"
     t.index ["offer_code_id"], name: "index_purchase_offer_code_discounts_on_offer_code_id"
-    t.index ["once_per_cart_allocation_id"], name: "index_poc_discounts_on_once_per_cart_allocation_id"
     t.index ["purchase_id"], name: "index_purchase_offer_code_discounts_on_purchase_id", unique: true
   end
 
@@ -2037,14 +2002,6 @@ ActiveRecord::Schema[7.1].define(version: 2026_12_08_130000) do
     t.decimal "pst_tax_rate", precision: 8, scale: 7
     t.decimal "qst_tax_rate", precision: 8, scale: 7
     t.index ["purchase_id"], name: "index_purchase_taxjar_infos_on_purchase_id"
-  end
-
-  create_table "purchase_url_parameters", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
-    t.bigint "purchase_id", null: false
-    t.json "params", null: false
-    t.datetime "created_at", null: false
-    t.datetime "updated_at", null: false
-    t.index ["purchase_id"], name: "index_purchase_url_parameters_on_purchase_id", unique: true
   end
 
   create_table "purchase_wallet_types", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
@@ -2132,11 +2089,15 @@ ActiveRecord::Schema[7.1].define(version: 2026_12_08_130000) do
     t.bigint "price_id"
     t.string "recommended_by"
     t.datetime "deleted_at", precision: nil
+    t.string "buyer_currency", limit: 3
+    t.integer "buyer_currency_amount_cents"
+    t.decimal "buyer_currency_exchange_rate", precision: 20, scale: 10
     t.index ["affiliate_id", "created_at"], name: "index_purchases_on_affiliate_id_and_created_at"
     t.index ["browser_guid"], name: "index_purchases_on_browser_guid"
     t.index ["card_type", "card_visual", "created_at", "stripe_fingerprint"], name: "index_purchases_on_card_type_visual_date_fingerprint"
     t.index ["card_type", "card_visual", "stripe_fingerprint"], name: "index_purchases_on_card_type_visual_fingerprint"
     t.index ["created_at"], name: "index_purchases_on_created_at"
+    t.index ["email", "link_id"], name: "index_purchases_on_email_and_link_id", length: { email: 191 }
     t.index ["email"], name: "index_purchases_on_email_long", length: 191
     t.index ["full_name"], name: "index_purchases_on_full_name"
     t.index ["ip_address"], name: "index_purchases_on_ip_address"
@@ -2299,7 +2260,6 @@ ActiveRecord::Schema[7.1].define(version: 2026_12_08_130000) do
     t.bigint "payout_amount_cents", null: false
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
-    t.string "processor"
     t.index ["created_by_id"], name: "index_scheduled_payouts_on_created_by_id"
     t.index ["status", "scheduled_at"], name: "index_scheduled_payouts_on_status_and_scheduled_at"
     t.index ["user_id"], name: "index_scheduled_payouts_on_user_id"
@@ -2488,6 +2448,22 @@ ActiveRecord::Schema[7.1].define(version: 2026_12_08_130000) do
     t.index ["variant_id"], name: "index_skus_variants_on_variant_id"
   end
 
+  create_table "social_connect_verifications", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
+    t.bigint "user_id", null: false
+    t.string "platform", null: false
+    t.string "uid", null: false
+    t.string "handle"
+    t.datetime "account_created_at"
+    t.bigint "follower_count"
+    t.bigint "post_count"
+    t.datetime "last_posted_at"
+    t.datetime "last_verified_at", null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["platform", "uid"], name: "index_social_connect_verifications_on_platform_and_uid"
+    t.index ["user_id", "platform"], name: "index_social_connect_verifications_on_user_id_and_platform", unique: true
+  end
+
   create_table "staff_picked_products", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
     t.bigint "product_id", null: false
     t.datetime "deleted_at"
@@ -2570,7 +2546,6 @@ ActiveRecord::Schema[7.1].define(version: 2026_12_08_130000) do
     t.string "token"
     t.datetime "token_expires_at"
     t.string "business_vat_id", limit: 191
-    t.string "stripe_mandate_id"
     t.index ["cancelled_at"], name: "index_subscriptions_on_cancelled_at"
     t.index ["deactivated_at"], name: "index_subscriptions_on_deactivated_at"
     t.index ["ended_at"], name: "index_subscriptions_on_ended_at"
@@ -3115,27 +3090,6 @@ ActiveRecord::Schema[7.1].define(version: 2026_12_08_130000) do
     t.index ["user_id"], name: "index_video_files_on_user_id"
   end
 
-  create_table "walks_app_attest_keys", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
-    t.string "key_id", limit: 64, null: false
-    t.binary "public_key", limit: 200, null: false
-    t.bigint "counter", default: 0, null: false
-    t.string "environment", limit: 16, null: false
-    t.datetime "attested_at", null: false
-    t.datetime "last_used_at"
-    t.datetime "created_at", null: false
-    t.datetime "updated_at", null: false
-    t.index ["key_id"], name: "index_walks_app_attest_keys_on_key_id", unique: true
-  end
-
-  create_table "walks_free_trials", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
-    t.bigint "walks_app_attest_key_id", null: false
-    t.datetime "consumed_at", null: false
-    t.datetime "created_at", null: false
-    t.datetime "updated_at", null: false
-    t.integer "synthesis_attempts", default: 0, null: false
-    t.index ["walks_app_attest_key_id"], name: "index_walks_free_trials_on_walks_app_attest_key_id", unique: true
-  end
-
   create_table "watched_users", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
     t.bigint "user_id", null: false
     t.bigint "created_by_id"
@@ -3206,25 +3160,6 @@ ActiveRecord::Schema[7.1].define(version: 2026_12_08_130000) do
     t.index ["user_id"], name: "index_wishlists_on_user_id"
   end
 
-  create_table "workflow_installment_schedule_intents", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
-    t.string "token", null: false
-    t.integer "installment_id", null: false
-    t.integer "rule_version", null: false
-    t.integer "old_delayed_delivery_time"
-    t.datetime "cutoff_reference_time", null: false
-    t.datetime "expected_published_at"
-    t.string "dispatch_token"
-    t.datetime "dispatch_expires_at"
-    t.string "fanout_token"
-    t.datetime "fanout_expires_at"
-    t.datetime "processed_at"
-    t.datetime "created_at", null: false
-    t.datetime "updated_at", null: false
-    t.index ["installment_id"], name: "index_workflow_installment_schedule_intents_on_installment_id"
-    t.index ["processed_at", "dispatch_expires_at", "fanout_expires_at"], name: "index_workflow_intent_on_pending_dispatch"
-    t.index ["token"], name: "index_workflow_installment_schedule_intents_on_token", unique: true
-  end
-
   create_table "workflows", id: :integer, charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
     t.string "name", limit: 1024
     t.integer "seller_id"
@@ -3273,6 +3208,8 @@ ActiveRecord::Schema[7.1].define(version: 2026_12_08_130000) do
     t.index ["zip_code"], name: "index_zip_tax_rates_on_zip_code"
   end
 
-  add_foreign_key "active_storage_attachments", "active_storage_blobs", column: "blob_id"
   add_foreign_key "active_storage_variant_records", "active_storage_blobs", column: "blob_id"
+  add_foreign_key "page_versions", "page_versions", column: "parent_id"
+  add_foreign_key "page_versions", "pages"
+  add_foreign_key "taxonomy_attributes", "taxonomies"
 end

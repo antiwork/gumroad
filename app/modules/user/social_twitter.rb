@@ -65,6 +65,15 @@ module User::SocialTwitter
       user.twitter_user_id = data["id"]
       user.twitter_handle = data["screen_name"]
 
+      if user.persisted?
+        begin
+          SocialConnectVerification.record_from_twitter!(user, data)
+        rescue StandardError => e
+          # Verification metadata feeds risk reviews; it must never break signup/link.
+          Rails.logger.error("SocialConnectVerification twitter record failed for user #{user.id}: #{e.message}")
+        end
+      end
+
       # don't set these properties if they already have values
       if user.name.blank? && data["name"].present?
         user.name = data["name"].gsub(User::INVALID_NAME_FOR_EMAIL_DELIVERY_REGEX, "")
