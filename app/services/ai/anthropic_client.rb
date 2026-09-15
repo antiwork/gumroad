@@ -142,12 +142,12 @@ class Ai::AnthropicClient
   # Retry only before the first yield — a later retry would replay on the seller's screen.
   # Corrupted tool-call JSON: one buffered replay. Already-yielded text (usual tool-use preamble)
   # must be erased via on_discard_streamed_text or the fallback cannot run.
-  def stream_messages(system:, messages:, tools: nil, max_tokens: DEFAULT_MAX_TOKENS, on_discard_streamed_text: nil, &on_text)
+  def stream_messages(system:, messages:, tools: nil, max_tokens: DEFAULT_MAX_TOKENS, thinking: nil, on_discard_streamed_text: nil, &on_text)
     yielded_any = false
 
     begin
       with_vercel_model_fallback(yielded: -> { yielded_any }) do
-        body = request_body(system:, messages:, tools:, max_tokens:, stream: true)
+        body = request_body(system:, messages:, tools:, max_tokens:, stream: true, thinking:)
         with_retries(retryable: -> { !yielded_any }, streamed: true) do |trace|
           text = +""
           blocks = {}

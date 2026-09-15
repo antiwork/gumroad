@@ -32,6 +32,10 @@ class Ai::StoreAgentService
   # configured. Independent of GROK_RAMP_FEATURE — see #client for precedence when both are active
   # for the same seller (DeepSeek is checked first; a seller in both ramps gets DeepSeek).
   DEEPSEEK_RAMP_FEATURE = :store_agent_deepseek
+  # DeepSeek spends part of every tool-loop turn's budget on hidden reasoning the loop never reads,
+  # which is most of a turn's per-call latency. Below 100%, disables it per seller; models that
+  # don't reason this way keep the request they send today.
+  NO_HIDDEN_REASONING_FEATURE = :store_agent_deepseek_no_hidden_reasoning
   # Ai::AnthropicClient's READ timeout, so for the streamed reply it bounds silence between chunks
   # rather than total generation time. Deliberately generous — the client fails fast on connect
   # problems and retries transient failures itself, so a tighter cap only kills slow-but-working
@@ -711,6 +715,7 @@ class Ai::StoreAgentService
         messages: conversation,
         tools: tool_schemas,
         max_tokens: truncation_retries.zero? ? MAX_REPLY_TOKENS : MAX_TRUNCATION_RETRY_TOKENS,
+        **tool_loop_thinking,
       )
       @last_stop_reason = result.stop_reason
       @turn_iterations_used = MAX_TOOL_ITERATIONS - remaining_iterations
@@ -806,6 +811,7 @@ class Ai::StoreAgentService
             messages: conversation,
             tools: tool_schemas,
             max_tokens: truncation_retries.zero? ? MAX_REPLY_TOKENS : MAX_TRUNCATION_RETRY_TOKENS,
+            **tool_loop_thinking,
             # A corrupted tool call is recovered by replaying the turn without streaming, which
             # regenerates the reply from the start. Tool-use turns usually stream a sentence of
             # preamble first, so without a way to clear it that recovery could never run — the
@@ -1241,6 +1247,18 @@ class Ai::StoreAgentService
       return {} unless @_client_model.to_s.start_with?("deepseek/")
 
       { thinking: { type: "disabled" } }
+    end
+
+    # Per-turn thinking override for the tool loop, which spends real tokens on reasoning it never
+    # reads. Flag-gated per seller so it reverts without a deploy, and empty otherwise so every
+    # other model's request body is byte-identical to today's.
+    def tool_loop_thinking
+      return {} unless Feature.active?(NO_HIDDEN_REASONING_FEATURE, seller)
+
+      # Resolving `client` here is what sets @_client_model, and callers splat this into the request
+      # before the memoized reader would otherwise run.
+      client
+      @_client_model.to_s.start_with?("deepseek/") ? { thinking: { type: "disabled" } } : {}
     end
 
     # Coerce the model's reply into a clean list of suggestion strings. Prefers a JSON array but

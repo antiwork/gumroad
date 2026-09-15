@@ -586,6 +586,25 @@ describe Ai::AnthropicClient do
       expect(result.tool_uses).to eq([])
     end
 
+    it "includes thinking in the request body when given and omits it otherwise" do
+      captured = nil
+      stream = sse(
+        ["content_block_start", { index: 0, content_block: { type: "text" } }],
+        ["content_block_delta", { index: 0, delta: { type: "text_delta", text: "hi" } }],
+        ["message_delta", { delta: { stop_reason: "end_turn" } }],
+      )
+      stub_request(:post, url)
+        .with { |request| captured = JSON.parse(request.body); true }
+        .to_return(status: 200, body: stream, headers: { "Content-Type" => "text/event-stream" })
+
+      client.stream_messages(system: "s", messages: [{ role: "user", content: "x" }], thinking: { type: "disabled" }) { |_| }
+      expect(captured["thinking"]).to eq("type" => "disabled")
+
+      captured = nil
+      client.stream_messages(system: "s", messages: [{ role: "user", content: "x" }]) { |_| }
+      expect(captured).not_to have_key("thinking")
+    end
+
     it "assembles a streamed tool_use block from its input_json_delta fragments" do
       stream = sse(
         ["content_block_start", { index: 0, content_block: { type: "tool_use", id: "toolu_9", name: "api_write" } }],
