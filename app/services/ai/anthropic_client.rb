@@ -44,15 +44,33 @@ class Ai::AnthropicClient
     def initialize(*args)
       super
       @stream_read_timeout = @read_timeout
-      @first_byte_timeout = options.fetch(:first_byte_timeout)
+      @first_byte_deadline = options.fetch(:first_byte_timeout)
       @first_byte_marker = options.fetch(:first_byte_marker)
-      @read_timeout = @first_byte_timeout
+      @started_at = Process.clock_gettime(Process::CLOCK_MONOTONIC)
     end
 
+    # The first-byte timeout is a budget for the whole wait, not a per-read allowance: pre-delta
+    # noise (message_start, pings, partial frames) must not hand the stream another full interval.
     def readpartial(size, buffer = nil)
-      @read_timeout = @stream_read_timeout if @first_byte_marker.arrived?
-      super
+      if @first_byte_marker.arrived?
+        @read_timeout = @stream_read_timeout
+        return super
+      end
+
+      @read_timeout = [@first_byte_deadline - elapsed, 0].max
+      begin
+        super
+      rescue HTTP::TimeoutError
+        # Only this wait is bounded by the deadline, so a timeout here is the deadline — a connect or
+        # write timeout comes out of #connect / #write and keeps the ordinary class.
+        raise TtftDeadlineError, "Anthropic produced no output within #{@first_byte_deadline}s"
+      end
     end
+
+    private
+      def elapsed
+        Process.clock_gettime(Process::CLOCK_MONOTONIC) - @started_at
+      end
   end
   private_constant :FirstByteTimeout
 
@@ -237,13 +255,11 @@ class Ai::AnthropicClient
           end
 
           Result.new(text:, tool_uses: assemble_tool_uses(blocks, stop_reason:), stop_reason:)
-        rescue HTTP::TimeoutError => e
-          # Until the first delta the read timeout IS the deadline, so a timeout here means the
-          # attempt produced nothing: fail over rather than re-issue the model that stalled.
-          deadline_stalled = deadline.present? && !first_byte_marker.arrived?
-          raise TtftDeadlineError, "Anthropic produced no output within #{deadline}s" if deadline_stalled
-
-          raise TransientError, "Anthropic network error: #{e.message}"
+        rescue TtftDeadlineError
+          # The attempt produced nothing. Retrying the model that stalled spends the deadline again,
+          # so veto the retry and let #with_vercel_model_fallback re-issue on the fallback model.
+          deadline_stalled = true
+          raise
         rescue HTTP::Error => e
           raise TransientError, "Anthropic network error: #{e.message}"
         end
