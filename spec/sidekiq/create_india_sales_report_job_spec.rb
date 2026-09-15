@@ -52,14 +52,14 @@ describe CreateIndiaSalesReportJob do
         allow(Purchase).to receive(:joins).and_return(purchase_double)
         allow(purchase_double).to receive(:where).and_return(purchase_double)
         allow(purchase_double).to receive_message_chain(:where, :not).and_return(purchase_double)
-        allow(purchase_double).to receive(:find_each).and_return([])
+        allow(purchase_double).to receive(:pluck).and_return([])
 
         refund_double = double
         allow(Refund).to receive(:effective).and_return(refund_double)
         allow(refund_double).to receive(:joins).and_return(refund_double)
         allow(refund_double).to receive(:where).and_return(refund_double)
         allow(refund_double).to receive_message_chain(:where, :not).and_return(refund_double)
-        allow(refund_double).to receive(:find_each).and_return([])
+        allow(refund_double).to receive(:pluck).and_return([])
 
         # Mock ZipTaxRate lookup
         zip_tax_rate_double = double
@@ -420,6 +420,259 @@ describe CreateIndiaSalesReportJob do
         expect(refund_rows.map { |row| row[0] }).to contain_exactly(@still_debited_purchase.external_id)
 
         temp_file.close(true)
+      end
+
+      it "does not report a refund that leaves the effective scope between the id walk and the batch load" do
+        s3_object_sept = Aws::S3::Resource.new.bucket("gumroad-specs").object("specs/india-sales-report-race-#{SecureRandom.hex(18)}.csv")
+        expect(s3_bucket_double).to receive(:object).and_return(s3_object_sept)
+
+        raced_product = create(:product, price_cents: 5000)
+        raced_purchase = nil
+        raced_refund = nil
+        travel_to(Time.zone.local(2023, 9, 10)) do
+          raced_purchase = create(:purchase,
+                                  link: raced_product,
+                                  purchaser: raced_product.user,
+                                  purchase_state: "in_progress",
+                                  quantity: 1,
+                                  perceived_price_cents: 5000,
+                                  country: "India",
+                                  ip_country: "India",
+                                  ip_state: "KA",
+                                  stripe_transaction_id: "txn_raced_refund"
+          )
+          raced_purchase.mark_test_successful!
+          raced_purchase.update!(gumroad_tax_cents: 900)
+          raced_refund = create(:refund, purchase: raced_purchase, amount_cents: 5000, gumroad_tax_cents: 900)
+        end
+
+        # The leg collects this refund's id while it is still effective, then its balance debits
+        # are reversed before the batch carrying it is read. The refund leg must not report it:
+        # the row is written from the id walk, so the load has to reapply the leg's scope.
+        job = described_class.new
+        raced = false
+        allow(job).to receive(:each_batch) do |scope, &block|
+          ids = scope.pluck(:id).sort
+          if !raced && scope.klass == Refund && ids.include?(raced_refund.id)
+            raced = true
+            raced_refund.update!(status: "failed")
+            raced_refund.balance_reversed_on_failure = true
+            raced_refund.balance_reversed_on_failure_at = Time.current.utc.iso8601
+            raced_refund.save!
+          end
+          ids.each_slice(described_class::ROW_BATCH_SIZE, &block)
+        end
+
+        job.perform(9, 2023)
+
+        temp_file = Tempfile.new("actual-file", encoding: "ascii-8bit")
+        s3_object_sept.get(response_target: temp_file)
+        temp_file.rewind
+        actual_payload = CSV.read(temp_file)
+
+        expect(actual_payload.count { |row| row[11] == "sale" }).to eq(3)
+        expect(actual_payload.filter_map { |row| row[0] if row[11] == "refund" })
+          .to contain_exactly(@still_debited_purchase.external_id)
+
+        temp_file.close(true)
+      end
+    end
+
+    # Every table the legs read a row set from: the purchases/refunds they walk, and the dispute
+    # rows (directly, or through the purchase's Charge) the chargeback legs resolve dates from.
+    def count_report_queries(&block)
+      queries = 0
+      subscriber = ActiveSupport::Notifications.subscribe("sql.active_record") do |*, payload|
+        queries += 1 if /FROM `(purchases|refunds|disputes|charges)`/.match?(payload[:sql]) && payload[:name] != "SCHEMA" && !payload[:cached]
+      end
+      block.call
+      queries
+    ensure
+      ActiveSupport::Notifications.unsubscribe(subscriber)
+    end
+
+    describe "query growth" do
+      it "reads the same number of times when the month holds more sales and refunds" do
+        s3_object = Aws::S3::Resource.new.bucket("gumroad-specs").object("specs/india-sales-report-growth-#{SecureRandom.hex(18)}.csv")
+        allow(s3_bucket_double).to receive(:object).and_return(s3_object)
+
+        small_month = count_report_queries { described_class.new.perform(6, 2023) }
+
+        travel_to(Time.zone.local(2023, 6, 15)) do
+          product = create(:product, price_cents: 1000)
+          10.times do |index|
+            purchase = create(:purchase, link: product, purchaser: product.user, purchase_state: "in_progress",
+                                         quantity: 1, perceived_price_cents: 1000, country: "India",
+                                         ip_country: "India", ip_state: "MH", stripe_transaction_id: "txn_growth#{index}")
+            purchase.mark_test_successful!
+            purchase.update!(gumroad_tax_cents: 180, stripe_refunded: true)
+            create(:refund, purchase:, amount_cents: 1000, gumroad_tax_cents: 180)
+          end
+        end
+
+        # Six times the sales and eleven times the refunds, still inside one batch: reads are per
+        # batch and per association, never per row.
+        expect(count_report_queries { described_class.new.perform(6, 2023) }).to eq(small_month)
+      end
+    end
+
+    describe "chargeback leg batching" do
+      let(:cutover) { Purchase::Reportable::CHARGEBACK_REPORTING_CUTOVER.beginning_of_day }
+      # The reported month is past the cutover, so its chargebacks are event-dated and both
+      # chargeback legs actually emit entries for it.
+      let(:report_month_start) { (cutover + 1.month).beginning_of_month }
+      let(:chargeback_event_time) { report_month_start + 10.days }
+      let(:dispute_won_time) { report_month_start + 20.days }
+      let(:chargeback_product) { create(:product, price_cents: 3000) }
+
+      before do
+        @s3_object = Aws::S3::Resource.new.bucket("gumroad-specs").object("specs/india-sales-report-cb-batch-#{SecureRandom.hex(18)}.csv")
+        allow(s3_bucket_double).to receive(:object).and_return(@s3_object)
+      end
+
+      it "reads the same number of times when the month holds more chargebacks and dispute wins" do
+        seed_chargeback_legs("base")
+        small_month = count_report_queries { read_report(report_month_start.month, report_month_start.year) }
+
+        4.times { |index| seed_chargeback_legs("growth#{index}") }
+
+        payload = nil
+        large_month = count_report_queries { payload = read_report(report_month_start.month, report_month_start.year) }
+
+        # Five times the chargebacks and wins, still one batch per leg. Every reversal date is
+        # resolved from the batch's preloaded dispute rows — the purchase's own, and the one
+        # hanging off the Charge for the cart purchase that has no dispute of its own.
+        expect(large_month).to eq(small_month)
+        cart_rows = payload.select { |row| row[0] == @cart_won_purchase.external_id }
+        expect(cart_rows.map { |row| row[11] }).to include("chargeback_reversal")
+      end
+
+      it "writes the same rows over several batches as it does in one" do
+        3.times do |index|
+          travel_to(report_month_start + 5.days) do
+            sale = create_india_sale("txn_india_multi#{index}")
+            create(:refund, purchase: sale, amount_cents: 1000, gumroad_tax_cents: 180)
+            sale.update!(stripe_partially_refunded: true)
+          end
+        end
+        seed_chargeback_legs("multi")
+
+        single_batch = nil
+        single_batch_queries = count_report_queries { single_batch = read_report(report_month_start.month, report_month_start.year) }
+        # Header, then three sale, three refund and three chargeback rows, then two dispute wins.
+        expect(single_batch.length).to eq(12)
+
+        # Two-row batches over three-row legs: every leg but the reversal leg crosses a slice
+        # boundary, so a dropped or unpreloaded later slice shows up as missing rows or a SUM.
+        stub_const("#{described_class}::ROW_BATCH_SIZE", 2)
+        statements = []
+        batched = nil
+        batched_queries = count_report_queries do
+          batched = capturing_sql(statements) { read_report(report_month_start.month, report_month_start.year) }
+        end
+
+        expect(batched).to eq(single_batch)
+        expect(statements.grep(/SELECT SUM\(.*FROM `refunds`/)).to be_empty
+        # Only the per-batch reads grow with the slice count; the per-leg id walks do not, so this
+        # is a floor rather than a multiple.
+        expect(batched_queries).to be > single_batch_queries
+      end
+
+      it "nets a refund made before the chargeback out of the clawback, from the preloaded refunds" do
+        purchase = create_chargedback_purchase("txn_india_cb_refunded")
+        travel_to(report_month_start - 5.days) do
+          create(:refund, purchase:, amount_cents: 1000, gumroad_tax_cents: 180)
+          purchase.update!(stripe_partially_refunded: true)
+        end
+        create(:dispute, purchase:, event_created_at: chargeback_event_time)
+
+        statements = []
+        payload = capturing_sql(statements) { read_report(report_month_start.month, report_month_start.year) }
+
+        # The chargeback leg nets refunds through the same loaded/unloaded branch the sales leg
+        # takes, off the same preloaded batch: an absent SUM is what says the in-memory branch ran.
+        expect(statements.grep(/SELECT SUM\(.*FROM `refunds`/)).to be_empty
+        # Positive control: the unloaded copy must take the SQL branch, or the absent-SUM check proves nothing.
+        unloaded_statements = []
+        capturing_sql(unloaded_statements) { Purchase.find(purchase.id).price_cents_for_chargeback_reporting }
+        expect(unloaded_statements.grep(/SELECT SUM\(.*FROM `refunds`/)).not_to be_empty
+
+        chargeback_rows = payload.select { |row| row[11] == "chargeback" }
+        expect(chargeback_rows.length).to eq(1)
+        expect(chargeback_rows.first[0]).to eq(purchase.external_id)
+        expect(chargeback_rows.first[4]).to eq("-2000") # 3000 of price less the 1000 already returned
+        expect(chargeback_rows.first[5]).to eq("-360")  # 540 of tax less the 180 already returned
+      end
+
+      it "dates the re-add by the latest recorded win, not by the win that selected the month" do
+        event_time = report_month_start - 4.days
+        late_win = report_month_start + 1.month + 5.days
+        purchase = create_chargedback_purchase("txn_india_two_wins", reversed: true, event_time:)
+        create(:dispute, purchase:, state: "won", event_created_at: event_time, won_at: report_month_start + 10.days)
+        create(:dispute, purchase:, state: "won", event_created_at: event_time, won_at: late_win)
+
+        # The earlier win selects the purchase into this month's reversal leg, but the resolved
+        # reversal date is the later one, so nothing is re-added here.
+        payload = read_report(report_month_start.month, report_month_start.year)
+        expect(payload.count { |row| row[11] == "chargeback_reversal" }).to eq(0)
+
+        reversal_rows = read_report(late_win.month, late_win.year).select { |row| row[11] == "chargeback_reversal" }
+        expect(reversal_rows.length).to eq(1)
+        expect(reversal_rows.first[0]).to eq(purchase.external_id)
+        expect(reversal_rows.first[1]).to eq(late_win.strftime("%Y-%m-%d"))
+        expect(reversal_rows.first[4]).to eq("3000")
+      end
+
+      def create_india_sale(stripe_transaction_id)
+        sale = create(:purchase, link: chargeback_product, purchaser: chargeback_product.user,
+                                 purchase_state: "in_progress", quantity: 1, perceived_price_cents: 3000,
+                                 country: "India", ip_country: "India", ip_state: "MH", stripe_transaction_id:)
+        sale.mark_test_successful!
+        sale.update!(gumroad_tax_cents: 540)
+        sale
+      end
+
+      # A sale from the month before, charged back inside the reported month.
+      def create_chargedback_purchase(stripe_transaction_id, reversed: false, event_time: chargeback_event_time)
+        purchase = travel_to(report_month_start - 10.days) { create_india_sale(stripe_transaction_id) }
+        purchase.update!(chargeback_date: event_time, chargeback_reversed: reversed)
+        purchase
+      end
+
+      # One purchase per chargeback shape the two chargeback legs have to read a dispute for: a
+      # lost chargeback (debit leg only), a win recorded on the purchase's own dispute, and a win
+      # recorded only on the purchase's Charge — the fallback the reversal date resolves through.
+      def seed_chargeback_legs(tag)
+        lost = create_chargedback_purchase("txn_india_cb_#{tag}")
+        create(:dispute, purchase: lost, event_created_at: chargeback_event_time)
+
+        won = create_chargedback_purchase("txn_india_won_#{tag}", reversed: true)
+        create(:dispute, purchase: won, state: "won", event_created_at: chargeback_event_time, won_at: dispute_won_time)
+
+        @cart_won_purchase = create_chargedback_purchase("txn_india_cart_#{tag}", reversed: true)
+        charge = create(:charge)
+        charge.purchases << @cart_won_purchase
+        create(:dispute_on_charge, charge:, state: "won", event_created_at: chargeback_event_time, won_at: dispute_won_time)
+      end
+
+      def read_report(month, year)
+        described_class.new.perform(month, year)
+
+        temp_file = Tempfile.new("actual-file", encoding: "ascii-8bit")
+        @s3_object.get(response_target: temp_file)
+        temp_file.rewind
+        CSV.read(temp_file)
+      ensure
+        temp_file&.close(true)
+      end
+
+      def capturing_sql(statements, &block)
+        subscriber = ActiveSupport::Notifications.subscribe("sql.active_record") do |*, payload|
+          statements << payload[:sql] unless payload[:name] == "SCHEMA" || payload[:cached]
+        end
+        block.call
+      ensure
+        ActiveSupport::Notifications.unsubscribe(subscriber)
       end
     end
 
