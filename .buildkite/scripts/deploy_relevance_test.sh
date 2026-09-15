@@ -1,13 +1,7 @@
 #!/bin/bash
-# Harness for .buildkite/scripts/deploy_relevance.sh
-#
-# CI only ever `bash -n`s the deploy scripts, so this is the only test the no-op
-# skip has. It builds a throwaway git repo with a release tag, then drives the
-# SHIPPED functions against real commits — no retyped logic.
-#
-# Usage: ./deploy_relevance_test.sh            run the cases
-#        ./deploy_relevance_test.sh --mutate   also prove the cases FAIL against broken
-#                                              variants of the library (anti-vacuity)
+# Harness for deploy_relevance.sh. CI only `bash -n`s the deploy scripts, so this is the only test
+# the no-op skip has: it drives the SHIPPED functions against real commits, no retyped logic.
+# Usage: ./deploy_relevance_test.sh [--mutate]   (--mutate also proves each case bites)
 set -uo pipefail
 
 LIB="$(cd "$(dirname "$0")" && pwd)/deploy_relevance.sh"
@@ -52,6 +46,18 @@ commit() {
       if [ "$content" = "@DELETE" ]; then git rm -q "$path"; else echo "$content" > "$path"; git add "$path"; fi
     done
     git commit -q -m "$msg" --allow-empty
+    git rev-parse HEAD
+  )
+}
+
+# rename <message> <from> <to> -> prints new sha
+rename() {
+  local msg="$1"
+  (
+    cd "$WORK/repo" || exit 1
+    mkdir -p "$(dirname "$3")"
+    git mv "$2" "$3"
+    git commit -q -m "$msg"
     git rev-parse HEAD
   )
 }
@@ -104,8 +110,6 @@ run_suite() {
   expect "workflow-only on top of spec-only" SKIP   "$(decide "$s")"
   s=$(commit "root md" "README.md=# new" "CONTRIBUTING.md=hi")
   expect "root markdown"                     SKIP   "$(decide "$s")"
-  s=$(commit "pipeline" ".buildkite/pipeline.yml=steps: []" ".buildkite/scripts/x.sh=echo")
-  expect "buildkite config"                  SKIP   "$(decide "$s")"
   s=$(commit "frontend test" "app/javascript/x/Foo.test.tsx=test()" "app/javascript/x/__tests__/bar.ts=t")
   expect "frontend unit tests"               SKIP   "$(decide "$s")"
   s=$(commit "spec deleted" "spec/models/link_spec.rb=@DELETE")
@@ -134,9 +138,25 @@ run_suite() {
   ships_alone "Dockerfile"                  "docker/web/Dockerfile=FROM ruby"
   ships_alone "frontend source (not .test)" "app/javascript/x/Foo.tsx=export const a=1"
   ships_alone "config/"                     "config/routes.rb=Rails.application.routes"
+  # Build inputs: a change here changes how the image is built, not just what a test sees.
+  ships_alone ".dockerignore"               ".dockerignore=spec/ config/"
+  ships_alone "buildkite pipeline config"   ".buildkite/pipeline.yml=steps: []"
+  ships_alone "buildkite build script"      ".buildkite/scripts/build_web.sh=echo hi"
   reset_to_release
   s=$(commit "mixed" "spec/a_spec.rb=x" "config/routes.rb=Rails.application.routes")
   expect "mixed spec + config"               DEPLOY "$(decide "$s")"
+
+  # A default diff collapses a rename to its destination, hiding the removal side. The
+  # rename of a runtime file OUT of the tree must still deploy; spec -> spec must not.
+  reset_to_release
+  s=$(rename "shipped -> spec" app/models/link.rb spec/models/link_helper.rb)
+  expect "runtime file renamed into spec/"   DEPLOY "$(decide "$s")"
+  reset_to_release
+  s=$(rename "shipped -> docs" app/models/link.rb docs/link.rb)
+  expect "runtime file renamed into docs/"   DEPLOY "$(decide "$s")"
+  reset_to_release
+  s=$(rename "spec -> spec" spec/models/link_spec.rb spec/models/link_helper_spec.rb)
+  expect "spec file renamed, both sides excluded" SKIP "$(decide "$s")"
 
   # Ambiguities deploy.
   make_fixture
@@ -189,7 +209,10 @@ if [ "${1:-}" = "--mutate" ]; then
     out=$(run_suite 2>&1)
     if echo "$out" | grep -q ' 0 failed'; then echo "  ESC  $name (all cases still pass)"; ESCAPED=$((ESCAPED + 1)); else echo "  kill $name"; fi
   }
-  mutate "baseline-is-parent"      's|git diff --name-only "\$base" "\$commit"|git diff --name-only "$commit^" "$commit"|'
+  mutate "baseline-is-parent"      's|git diff --name-only --no-renames "\$base" "\$commit"|git diff --name-only "$commit^" "$commit"|'
+  mutate "renames-collapse"        's/ --no-renames//'
+  mutate "dockerignore-excluded"   's/.git-blame-ignore-revs) return 0 ;;/.git-blame-ignore-revs|.dockerignore) return 0 ;;/'
+  mutate "buildkite-excluded"      's/.github\/\*|docs/.buildkite\/*|.github\/*|docs/'
   mutate "spec-not-excluded"       's/|spec\/\*|/|/'
   mutate "app-md-excluded"         's/\*\.md) \[\[ "\$1" != \*\/\* \]\] \&\& return 0; return 1 ;;/*.md) return 0 ;;/'
   mutate "force-ignored"           's/"\${FORCE_DEPLOY:-}" = "1"/"${FORCE_DEPLOY:-}" = "never"/'
