@@ -69,7 +69,8 @@ export default function PagesEdit() {
   const [previewVersion, setPreviewVersion] = React.useState(0);
   const [isSaving, setIsSaving] = React.useState(false);
   // The toolbar's Insert image item and the paste/drop handlers both read this context and no-op
-  // without it; the page editor shares the profile rich-text section's upload settings.
+  // without it. A read-only viewer gets none: the toolbar renders regardless of `editable`, and an
+  // upload started there could never be saved.
   const imageUploadSettings = useSectionImageUploadSettings();
 
   // Only rich-text pages are editable in place; the profile and custom HTML
@@ -131,6 +132,12 @@ export default function PagesEdit() {
   const previewProductsPath = page.slug ? Routes.products_page_path(page.slug) : null;
 
   const save = () => {
+    // An in-flight image is an <img> with a blob: src, which the sanitizer drops — saving now would
+    // persist the page without it.
+    if (imageUploadSettings.isUploading) {
+      showAlert("Please wait for all images to finish uploading before saving.", "warning");
+      return;
+    }
     setIsSaving(true);
     const params = { title, content };
     const options = {
@@ -383,7 +390,7 @@ export default function PagesEdit() {
               </Fieldset>
               <Fieldset>
                 <Label htmlFor="page-content">Content</Label>
-                <ImageUploadSettingsContext.Provider value={imageUploadSettings}>
+                <ImageUploadSettingsContext.Provider value={canEdit ? imageUploadSettings : null}>
                   <RichTextEditor
                     id="page-content"
                     className="textarea block w-full rounded border border-border bg-background px-4 py-3 text-foreground placeholder:text-muted focus-within:outline-2 focus-within:outline-offset-0 focus-within:outline-accent"
