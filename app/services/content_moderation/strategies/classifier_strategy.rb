@@ -69,13 +69,9 @@ class ContentModeration::Strategies::ClassifierStrategy
     "violence/graphic" => 0.9,
   }.freeze
 
-  # `max_images:` is how many images this content is allowed to spend moderation
-  # attempts on. `:all` means every image — used by pages, where the images are
-  # arbitrary URLs the seller wrote into a public document and approving the page
-  # on a subset would approve whatever the rest displays.
-  # `image_urls_are_stored:` says the URLs came out of a document we hold — a
-  # page's custom_html, a post's message — rather than being minted for this
-  # save. Nothing re-mints a stored URL, so a grant inside it cannot come back.
+  # `max_images: :all` (pages) spends an attempt on every image: a page is arbitrary seller
+  # HTML, so approving it on a subset approves whatever the rest displays. `image_urls_are_stored:`
+  # marks URLs no later save re-mints, so an expired grant inside one never comes back.
   def initialize(text:, image_urls: [], max_images: MAX_IMAGES_TO_MODERATE, image_urls_are_stored: false)
     @text = text
     @image_urls = image_urls
