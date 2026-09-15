@@ -35,4 +35,6 @@ fi
 # Boot through config/puma.rb so workers, threads and the bind come from one place.
 # `rails server -p` installs a user-level bind that outranks the file's `bind`, silently
 # dropping its `?backlog=4096` back to Puma's 1024 default.
+# Puma writes the file's `pidfile` after preloading and does not create its directory.
+mkdir -p tmp/pids
 exec bundle exec puma -C config/puma.rb
