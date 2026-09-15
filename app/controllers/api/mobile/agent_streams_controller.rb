@@ -201,6 +201,17 @@ class Api::Mobile::AgentStreamsController < Api::Mobile::BaseController
   end
 
   private
+    # Exceptions that escape the streaming thread (before_action failures, non-StandardError
+    # timeouts) are re-raised on the request thread and reported only by ActionDispatch::Executor
+    # via Rails.error, which has crashed on a nil ExecutionContext there (GUMROAD-1M0) and masked
+    # the original error. Capture it with the Sentry SDK directly first, then let it propagate.
+    def process_action(*)
+      super
+    rescue Exception => e
+      ErrorNotifier.notify(e, source: "mobile_agent_stream")
+      raise
+    end
+
     def seller
       current_resource_owner
     end

@@ -375,5 +375,14 @@ describe Api::Mobile::AgentStreamsController do
 
       expect(response).to have_http_status(:forbidden)
     end
+
+    it "captures an exception escaping the streaming thread with Sentry before re-raising it" do
+      # Rack::Timeout's exception is not a StandardError, so the action's own rescue never sees it.
+      timeout = Class.new(Exception)
+      allow(Ai::StoreAgentService).to receive(:new).and_raise(timeout, "Request ran for longer than 120000ms")
+      expect(ErrorNotifier).to receive(:notify).with(instance_of(timeout), source: "mobile_agent_stream")
+
+      expect { post :create, params: valid_params }.to raise_error(timeout)
+    end
   end
 end
