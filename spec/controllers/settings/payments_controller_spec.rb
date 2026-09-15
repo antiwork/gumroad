@@ -2518,12 +2518,14 @@ describe Settings::PaymentsController, :vcr, type: :controller, inertia: true do
         merchant_account = StripeMerchantAccountManager.create_account(user, passphrase: "1234")
         stripe_connect_account_id = merchant_account.charge_processor_merchant_id
         stub_unfinishable_review(stripe_connect_account_id)
-        expect(Stripe::AccountLink).to receive(:create).with({
-                                                             account: stripe_connect_account_id,
-                                                             refresh_url: remediation_settings_payments_url,
-                                                             return_url: verify_stripe_remediation_settings_payments_url,
-                                                             type: "account_update",
-                                                           }).and_call_original
+        expect(Stripe::AccountLink).to receive(:create).with(
+          {
+            account: stripe_connect_account_id,
+            refresh_url: remediation_settings_payments_url,
+            return_url: verify_stripe_remediation_settings_payments_url,
+            type: "account_update",
+          }
+        ).and_call_original
 
         get :remediation
 
