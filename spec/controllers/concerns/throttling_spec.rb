@@ -156,6 +156,16 @@ describe Throttling, type: :request do
       expect(ttl).to be <= 3600
     end
 
+    it "opens the counter's window with the command that creates it" do
+      # A separate INCR then EXPIRE can be split by a Redis failure, and the counter left behind
+      # never resets — every later request from that caller is refused.
+      expect(redis).not_to receive(:expire)
+
+      get "/test_throttle"
+
+      expect(redis.ttl("test_key")).to be > 0
+    end
+
     it "does not reset expiration on subsequent requests" do
       get "/test_throttle"
       initial_ttl = redis.ttl("test_key")

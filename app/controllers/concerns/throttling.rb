@@ -14,8 +14,10 @@ module Throttling
     # header and in the JSON body, because a client reading the body via fetch() can't always get
     # at the header (CORS-exposed headers) and needs the number to show a countdown.
     def throttle!(key:, limit:, period:, redis: $redis, message: nil)
-      count = redis.incr(key)
-      redis.expire(key, period.to_i) if count == 1
+      # The counter and its window are opened by one command. A separate INCR-then-EXPIRE can be
+      # split by a Redis failure, and a counter left behind without an expiry never resets, so
+      # every later request from that caller is refused.
+      count = redis.set(key, 1, ex: period.to_i, nx: true) ? 1 : redis.incr(key)
 
       if count > limit
         retry_after = ttl_to_retry_after(redis:, key:, period:)
@@ -39,8 +41,9 @@ module Throttling
     #       window is already over: the next request creates a fresh key and is allowed straight
     #       through, so the wait is zero. Reporting a full period here would tell a seller to come
     #       back in an hour when they could retry immediately.
-    #   -1  the key exists with no expiry, which should never happen (the INCR that created it also
-    #       set one) but would mean the counter never resets and the seller is locked out forever.
+    #   -1  the key exists with no expiry, which should never happen (the counter and its window are
+    #       opened together) but would mean the counter never resets and the seller is locked out
+    #       forever.
     #       Set the missing expiry so the window really does end, and report the full period, which
     #       is now accurate because we just started the clock.
     def ttl_to_retry_after(redis:, key:, period:)
