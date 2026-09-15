@@ -13,7 +13,12 @@ const ALERT_KEY = "alert";
 // dismiss timer by its delay without duplicating the literal.
 export const DISMISS_DELAY_MS = 5000;
 
-export type AlertPayload = { message: string; status: "success" | "danger" | "info" | "warning"; html?: boolean };
+export type AlertPayload = {
+  message: string;
+  status: "success" | "danger" | "info" | "warning";
+  html?: boolean;
+  position?: "top" | "bottom";
+};
 
 const ToastAlert = ({ initial }: { initial: AlertPayload | null }) => {
   const [alert, setAlert] = React.useState<AlertPayload | null>(initial);
@@ -44,6 +49,7 @@ const ToastAlert = ({ initial }: { initial: AlertPayload | null }) => {
     if (event.origin !== window.location.origin) return;
     if (typia.is<{ type: "alert"; payload: AlertPayload }>(event.data)) {
       const newAlert = event.data.payload;
+      if ((newAlert.position ?? "top") !== (alert?.position ?? "top")) isHoveringRef.current = false;
       setAlert(newAlert);
       setIsClosing(false);
       setIsVisible(true);
@@ -60,15 +66,20 @@ const ToastAlert = ({ initial }: { initial: AlertPayload | null }) => {
     // Mount-once for the initial payload, matching the previous useRunOnce contract.
   }, []);
 
+  const isBottom = alert?.position === "bottom";
+
   return (
     <div
+      key={alert?.position ?? "top"}
       data-testid="toast-alert"
       className={classNames(
-        "fixed top-4 left-1/2 z-100 w-max max-w-[calc(100vw-2rem)] rounded bg-background md:max-w-md",
-        isVisible ? "visible" : "invisible",
+        "fixed left-1/2 z-100 w-max max-w-[calc(100vw-2rem)] -translate-x-1/2 rounded bg-background md:max-w-md starting:translate-y-(--toast-offset)",
+        isBottom
+          ? "bottom-[calc(1rem+env(safe-area-inset-bottom))] [--toast-offset:calc(100%+var(--spacer-4)+env(safe-area-inset-bottom))]"
+          : "top-4 [--toast-offset:calc(-100%-var(--spacer-4))]",
+        isVisible ? "visible translate-y-0" : "invisible translate-y-(--toast-offset)",
       )}
       style={{
-        transform: `translateX(-50%) translateY(${isVisible ? 0 : "calc(-100% - var(--spacer-4))"})`,
         transition: isClosing ? "all 0.15s ease-out" : "all 0.3s ease-out 0.5s",
       }}
       onMouseEnter={() => {
@@ -102,12 +113,17 @@ const ToastAlert = ({ initial }: { initial: AlertPayload | null }) => {
 export const showAlert = (
   message: string,
   status: "success" | "error" | "info" | "warning",
-  options: { html?: boolean } = { html: false },
+  options: Pick<AlertPayload, "html" | "position"> = { html: false },
 ) => {
   window.postMessage(
     {
       type: ALERT_KEY,
-      payload: { message, status: status === "error" ? "danger" : status, html: options.html },
+      payload: {
+        message,
+        status: status === "error" ? "danger" : status,
+        html: options.html,
+        position: options.position,
+      },
     },
     window.location.origin,
   );

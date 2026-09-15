@@ -6,6 +6,29 @@ require "shared_examples/authorize_called"
 describe("Settings > Team Scenario", type: :system, js: true) do
   let(:seller) { create(:named_seller) }
 
+  def team_layout
+    page.evaluate_script(<<~JS)
+      [...document.querySelectorAll('form input, form button, form table')].map((element) => {
+        let x = 0, y = 0;
+        for (let parent = element; parent; parent = parent.offsetParent) {
+          x += parent.offsetLeft;
+          y += parent.offsetTop;
+        }
+        return [x, y, element.offsetWidth, element.offsetHeight];
+      })
+    JS
+  end
+
+  def expect_bottom_invitation_error
+    expect(page).to have_alert(text: /You've reached the limit of 10 team invitations per hour/)
+    expect(page.evaluate_script(<<~JS)).to eq(["fixed", "16px"])
+      (() => {
+        const style = getComputedStyle(document.querySelector('[data-testid=toast-alert]'));
+        return [style.position, style.bottom];
+      })()
+    JS
+  end
+
   shared_examples_for "leaves the team" do
     it "deletes membership and switches account" do
       visit settings_team_path
@@ -47,18 +70,29 @@ describe("Settings > Team Scenario", type: :system, js: true) do
         end
       end
 
-      it "shows the invitation limit and keeps the form usable" do
+      it "shows the invitation limit without moving the form and allows a successful retry" do
         10.times { TeamInvitationThrottle.check(seller.id) }
         visit settings_team_path
 
         within_section("Add team members", section_element: :section) do
           fill_in("Email", with: "new@example.com")
           select_combo_box_option("Admin", from: "Role")
+        end
+        layout = team_layout
+        click_on("Send invitation")
+        expect_bottom_invitation_error
+        expect(page).to have_button("Send invitation", disabled: false)
+        expect(team_layout).to eq(layout)
+        expect(seller.team_invitations.find_by(email: "new@example.com")).to be_nil
+
+        $redis.del(RedisKey.team_invitation_send_throttle(seller.id))
+        within_section("Add team members", section_element: :section) do
           click_on("Send invitation")
         end
-        expect(page).to have_alert(text: /You've reached the limit of 10 team invitations per hour/)
-        expect(page).to have_button("Send invitation", disabled: false)
-        expect(seller.team_invitations.find_by(email: "new@example.com")).to be_nil
+        expect(page).to have_alert(text: "Invitation sent!")
+        expect(page).not_to have_alert(text: /You've reached the limit/)
+        expect(page.evaluate_script("getComputedStyle(document.querySelector('[data-testid=toast-alert]')).top")).to eq("16px")
+        expect(seller.team_invitations.find_by(email: "new@example.com")).to be_present
       end
 
       it "submits the form and refreshes the table" do
@@ -171,18 +205,31 @@ describe("Settings > Team Scenario", type: :system, js: true) do
           team_invitation.update!(expires_at: 1.minute.ago)
         end
 
-        it "shows the invitation limit when a resend is refused" do
+        it "shows the resend limit without moving the row and allows a successful retry" do
           10.times { TeamInvitationThrottle.check(seller.id) }
           visit settings_team_path
 
-          within_section("Team members", section_element: :section) do
-            within find(:table_row, { "Member" => team_invitation.email }) do
-              select_combo_box_option("Resend invitation")
-            end
+          layout = team_layout
+          within find(:table_row, { "Member" => team_invitation.email }) do
+            select_combo_box_option("Resend invitation")
           end
-
-          expect(page).to have_alert(text: /You've reached the limit of 10 team invitations per hour/)
+          expect_bottom_invitation_error
+          expect(team_layout).to eq(layout)
           expect(team_invitation.reload).to be_expired
+          within '[data-testid="toast-alert"]' do
+            click_on "Close"
+          end
+          expect(page).not_to have_alert(text: /You've reached the limit/)
+          expect(team_layout).to eq(layout)
+
+          $redis.del(RedisKey.team_invitation_send_throttle(seller.id))
+          within find(:table_row, { "Member" => team_invitation.email }) do
+            find(:combo_box, visible: :all).find(:xpath, "..").click
+            select_combo_box_option("Resend invitation")
+          end
+          expect(page).to have_alert(text: "Invitation sent!")
+          expect(page).not_to have_alert(text: /You've reached the limit/)
+          expect(team_invitation.reload).not_to be_expired
         end
 
         it "resends invitation" do
