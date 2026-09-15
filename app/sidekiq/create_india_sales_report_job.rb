@@ -13,9 +13,8 @@ class CreateIndiaSalesReportJob
   include RecurringLockTtl
   recurring_lock_ttl max_attempt: 2.hours
 
-  # Rows are written one batch at a time: this sizes both the walk and the single flush that
-  # follows it, so the report issues one round of association loads and one write syscall per
-  # batch rather than per row.
+  # Rows are written one batch at a time: this sizes the primary-key batches each leg loads, the
+  # single flush that follows each one, and the round of association loads inside it.
   ROW_BATCH_SIZE = 1_000
   # Everything a row builder reads beyond the purchase's own columns: the chargeback predicates
   # walk the dispute rows (directly, or through the purchase's Charge) and the chargeback amounts
@@ -67,8 +66,8 @@ class CreateIndiaSalesReportJob
         # entry (below) in the month the dispute was formalized. Only legacy (pre-cutover)
         # chargebacks keep the historical drop, so already-filed months regenerate as filed.
         # See Purchase::Reportable::CHARGEBACK_REPORTING_CUTOVER for the cutover contract.
-        india_purchases(start_date, end_date).in_batches(of: ROW_BATCH_SIZE) do |batch|
-          batch.preload(*PURCHASE_PRELOADS).each do |purchase|
+        each_purchase_batch(india_purchases(start_date, end_date)) do |batch|
+          batch.each do |purchase|
             next if purchase.chargedback_not_reversed? && !purchase.chargeback_event_dated_for_tax_reporting?
 
             temp_file.write(sale_row(purchase, india_tax_rate, india_tax_rate_percentage).to_csv)
@@ -84,8 +83,8 @@ class CreateIndiaSalesReportJob
         # contributes to the report, so its refunds must not be backed out either. Refunds of
         # event-dated chargebacks ARE backed out — their sale row stays, and the chargeback
         # entry claws back only what the refund didn't (see chargeback_row).
-        india_refunds(start_date, end_date).in_batches(of: ROW_BATCH_SIZE) do |batch|
-          batch.preload(purchase: PURCHASE_PRELOADS).each do |refund|
+        each_refund_batch(india_refunds(start_date, end_date)) do |batch|
+          batch.each do |refund|
             purchase = refund.purchase
             next if purchase.chargedback_not_reversed? && !purchase.chargeback_event_dated_for_tax_reporting?
 
@@ -99,8 +98,8 @@ class CreateIndiaSalesReportJob
         # dispute-formalized timestamp, so no backfill is needed). Negative amounts, net of
         # the purchase's refunds — money already returned by a refund was relieved by the
         # refund leg and is not clawed back again.
-        india_chargebacks(start_date, end_date).in_batches(of: ROW_BATCH_SIZE) do |batch|
-          batch.preload(*PURCHASE_PRELOADS).each do |purchase|
+        each_purchase_batch(india_chargebacks(start_date, end_date)) do |batch|
+          batch.each do |purchase|
             temp_file.write(chargeback_row(purchase, india_tax_rate, india_tax_rate_percentage).to_csv)
           end
           temp_file.flush
@@ -109,8 +108,8 @@ class CreateIndiaSalesReportJob
         # Chargeback-reversal leg: every dispute won inside the report month, keyed on the
         # Dispute row's won_at (real dispute rows only — reversal dates are never
         # synthesized). Positive amounts mirroring the chargeback entry they cancel.
-        india_chargeback_reversals(start_date, end_date).in_batches(of: ROW_BATCH_SIZE) do |batch|
-          batch.preload(*PURCHASE_PRELOADS).each do |purchase|
+        each_purchase_batch(india_chargeback_reversals(start_date, end_date)) do |batch|
+          batch.each do |purchase|
             won_at = purchase.chargeback_reversal_reporting_date
             next unless won_at&.between?(start_date, end_date)
 
@@ -209,6 +208,23 @@ class CreateIndiaSalesReportJob
     # won_at per row before writing the entry.
     def india_chargeback_reversals(start_date, end_date)
       india_purchase_filters(Purchase.chargeback_reversals_for_tax_period_reporting(start_date, end_date))
+    end
+
+    # Walks a leg in primary-key batches, yielding one preloaded batch at a time. The leg's ids
+    # come from one indexed scope query; loading them by id keeps each batch bounded to
+    # ROW_BATCH_SIZE rows and keeps the output in the ascending-id order the report has always
+    # written (walking the scope in id order instead makes MySQL scan the purchases primary key
+    # for matches: one 1,000-row batch of a 4.3k-row month measured over 20s against production).
+    def each_purchase_batch(scope, &block)
+      each_batch(scope) { |slice| block.call(Purchase.where(id: slice).order(:id).preload(*PURCHASE_PRELOADS)) }
+    end
+
+    def each_refund_batch(scope, &block)
+      each_batch(scope) { |slice| block.call(Refund.where(id: slice).order(:id).preload(purchase: PURCHASE_PRELOADS)) }
+    end
+
+    def each_batch(scope)
+      scope.pluck(:id).sort.each_slice(ROW_BATCH_SIZE) { |slice| yield slice }
     end
 
     # The India-report purchase filters shared by every leg, applied to an arbitrary base

@@ -6,9 +6,8 @@ class CreateCanadaMonthlySalesReportJob
   include LongRunningJobTracking
   sidekiq_options retry: 5, queue: :default, lock: :until_executed, on_conflict: :replace
 
-  # Rows are written one batch at a time: this sizes both the walk and the single flush that
-  # follows it, so the report issues one round of association loads and one write syscall per
-  # batch rather than per row.
+  # Rows are written one batch at a time: this sizes the primary-key batches each leg loads, the
+  # single flush that follows each one, and the round of association loads inside it.
   ROW_BATCH_SIZE = 1_000
   # Everything a row builder reads beyond the purchase's own columns: the product type and TaxJar
   # rates, plus the refunds/disputes the net-of-refunds and chargeback amounts are computed from.
@@ -33,7 +32,7 @@ class CreateCanadaMonthlySalesReportJob
         # the purchase's own month while the clawback is reported by the chargeback leg
         # below. Chargebacks lost before the chargeback reporting cutover keep the legacy
         # drop so historical months regenerate as filed.
-        Purchase.successful
+        each_purchase_batch(Purchase.successful
           .not_fully_refunded_for_tax_reporting
           .not_chargedback_for_tax_reporting
           .where.not(stripe_transaction_id: nil)
@@ -41,9 +40,8 @@ class CreateCanadaMonthlySalesReportJob
           .where("(country = 'Canada') OR (country IS NULL AND ip_country = 'Canada')")
           .where("ip_country = 'Canada' OR card_country = 'CA'")
           .where(state: Compliance::Countries.subdivisions_for_select(Compliance::Countries::CAN.alpha2).map(&:first))
-          .where(charge_processor_id: [nil, *ChargeProcessor.charge_processor_ids])
-          .in_batches(of: ROW_BATCH_SIZE) do |batch|
-          batch.preload(*PURCHASE_PRELOADS).each do |purchase|
+          .where(charge_processor_id: [nil, *ChargeProcessor.charge_processor_ids])) do |batch|
+          batch.each do |purchase|
           taxjar_info = purchase.purchase_taxjar_info
 
           price_cents = purchase.price_cents_for_tax_reporting
@@ -81,7 +79,7 @@ class CreateCanadaMonthlySalesReportJob
         # refund is only reported when its purchase's sale was — or would have been — reported;
         # refunds of event-dated chargebacks ARE reported, since their sale row stays and the
         # chargeback leg claws back only what the refund didn't.
-        Refund.for_tax_period_reporting(starts_at, ends_at)
+        each_refund_batch(Refund.for_tax_period_reporting(starts_at, ends_at)
           .joins(:purchase)
           .merge(
             Purchase.successful
@@ -91,9 +89,8 @@ class CreateCanadaMonthlySalesReportJob
               .where("purchases.ip_country = 'Canada' OR purchases.card_country = 'CA'")
               .where(purchases: { state: Compliance::Countries.subdivisions_for_select(Compliance::Countries::CAN.alpha2).map(&:first) })
               .where(purchases: { charge_processor_id: [nil, *ChargeProcessor.charge_processor_ids] })
-          )
-          .in_batches(of: ROW_BATCH_SIZE) do |batch|
-          batch.preload(purchase: PURCHASE_PRELOADS).each do |refund|
+          )) do |batch|
+          batch.each do |refund|
           purchase = refund.purchase
           taxjar_info = purchase.purchase_taxjar_info
 
@@ -126,9 +123,8 @@ class CreateCanadaMonthlySalesReportJob
         # always held the processor's dispute-formalized timestamp, so no backfill is
         # needed). Amounts are net of the purchase's refunds — money already returned by a
         # refund was relieved by the refund's own reporting path and is not clawed back again.
-        canada_purchase_filters(Purchase.chargebacks_for_tax_period_reporting(starts_at, ends_at))
-          .in_batches(of: ROW_BATCH_SIZE) do |batch|
-          batch.preload(*PURCHASE_PRELOADS).each do |purchase|
+        each_purchase_batch(canada_purchase_filters(Purchase.chargebacks_for_tax_period_reporting(starts_at, ends_at))) do |batch|
+          batch.each do |purchase|
           row = chargeback_row(purchase, purchase.chargeback_date, -1)
           next unless row
 
@@ -140,9 +136,8 @@ class CreateCanadaMonthlySalesReportJob
         # Chargeback-reversal leg: disputes won during the reported month add their money
         # back as positive rows dated by the Dispute row's won_at (real dispute rows only —
         # reversal dates are never synthesized).
-        canada_purchase_filters(Purchase.chargeback_reversals_for_tax_period_reporting(starts_at, ends_at))
-          .in_batches(of: ROW_BATCH_SIZE) do |batch|
-          batch.preload(*PURCHASE_PRELOADS).each do |purchase|
+        each_purchase_batch(canada_purchase_filters(Purchase.chargeback_reversals_for_tax_period_reporting(starts_at, ends_at))) do |batch|
+          batch.each do |purchase|
           won_at = purchase.chargeback_reversal_reporting_date
           next unless won_at&.between?(starts_at, ends_at)
 
@@ -176,6 +171,23 @@ class CreateCanadaMonthlySalesReportJob
   end
 
   private
+    # Walks a leg in primary-key batches, yielding one preloaded batch at a time. The leg's ids
+    # come from one indexed scope query; loading them by id keeps each batch bounded to
+    # ROW_BATCH_SIZE rows and keeps the output in the ascending-id order the report has always
+    # written (walking the scope in id order instead makes MySQL scan the purchases primary key
+    # for matches: one 1,000-row batch of a 4.3k-row month measured over 20s against production).
+    def each_purchase_batch(scope, &block)
+      each_batch(scope) { |slice| block.call(Purchase.where(id: slice).order(:id).preload(*PURCHASE_PRELOADS)) }
+    end
+
+    def each_refund_batch(scope, &block)
+      each_batch(scope) { |slice| block.call(Refund.where(id: slice).order(:id).preload(purchase: PURCHASE_PRELOADS)) }
+    end
+
+    def each_batch(scope)
+      scope.pluck(:id).sort.each_slice(ROW_BATCH_SIZE) { |slice| yield slice }
+    end
+
     # The Canada-report purchase filters shared by the chargeback legs — the sales leg's
     # selection minus its purchase-date window: a chargeback leg belongs to the month of the
     # dispute event (or the win), not the purchase month, but it must only appear when the
