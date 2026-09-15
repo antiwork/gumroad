@@ -47,6 +47,20 @@ describe("Settings > Team Scenario", type: :system, js: true) do
         end
       end
 
+      it "shows the invitation limit and keeps the form usable" do
+        10.times { TeamInvitationThrottle.check(seller.id) }
+        visit settings_team_path
+
+        within_section("Add team members", section_element: :section) do
+          fill_in("Email", with: "new@example.com")
+          select_combo_box_option("Admin", from: "Role")
+          click_on("Send invitation")
+        end
+        expect(page).to have_alert(text: /You've reached the limit of 10 team invitations per hour/)
+        expect(page).to have_button("Send invitation", disabled: false)
+        expect(seller.team_invitations.find_by(email: "new@example.com")).to be_nil
+      end
+
       it "submits the form and refreshes the table" do
         visit settings_team_path
 
@@ -155,6 +169,20 @@ describe("Settings > Team Scenario", type: :system, js: true) do
       context "with expired invitation" do
         before do
           team_invitation.update!(expires_at: 1.minute.ago)
+        end
+
+        it "shows the invitation limit when a resend is refused" do
+          10.times { TeamInvitationThrottle.check(seller.id) }
+          visit settings_team_path
+
+          within_section("Team members", section_element: :section) do
+            within find(:table_row, { "Member" => team_invitation.email }) do
+              select_combo_box_option("Resend invitation")
+            end
+          end
+
+          expect(page).to have_alert(text: /You've reached the limit of 10 team invitations per hour/)
+          expect(team_invitation.reload).to be_expired
         end
 
         it "resends invitation" do

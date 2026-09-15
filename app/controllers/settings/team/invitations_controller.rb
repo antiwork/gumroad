@@ -1,13 +1,9 @@
 # frozen_string_literal: true
 
 class Settings::Team::InvitationsController < Sellers::BaseController
-  include Throttling
-
   skip_before_action :require_account_email, only: :accept
   before_action :set_team_invitation, only: %i[update destroy restore resend_invitation]
 
-  INVITATIONS_PER_HOUR = 10
-  INVITATIONS_PER_DAY = 50
   INVITATION_BURST_REPORT_TTL = 24.hours
 
   def create
@@ -16,11 +12,10 @@ class Settings::Team::InvitationsController < Sellers::BaseController
     team_invitation = current_seller.team_invitations.new(create_params)
     team_invitation.expires_at = TeamInvitation::ACTIVE_INTERVAL_IN_DAYS.days.from_now.at_end_of_day
 
-    # Counted only for an invitation that would really be sent, so a seller retrying a rejected
-    # payload does not spend the account's own allowance.
-    if team_invitation.valid?
-      return unless throttle_invitation_sends
+    unless team_invitation.valid?
+      return render json: { success: false, error_message: team_invitation.errors.full_messages.to_sentence }
     end
+    return unless throttle_invitation_sends
 
     if team_invitation.save
       TeamMailer.invite(team_invitation).deliver_later
@@ -132,31 +127,19 @@ class Settings::Team::InvitationsController < Sellers::BaseController
       params.require(:id)
     end
 
-    # Sends rather than rows: `resend_invitation` re-mails without inserting, and a row-only cap would
-    # leave an account's addresses blastable.
     def throttle_invitation_sends
-      return true unless current_seller
+      restriction = TeamInvitationThrottle.check(current_seller.id)
+      return true unless restriction
 
-      allowed = throttle_invitation_window("hour", INVITATIONS_PER_HOUR, 1.hour) &&
-        throttle_invitation_window("day", INVITATIONS_PER_DAY, 24.hours)
-
-      report_invitation_burst unless allowed
-      allowed
+      response.set_header("Retry-After", restriction[:retry_after])
+      render json: {
+        error: invitation_limit_message(restriction[:window], restriction[:limit], restriction[:retry_after]),
+        retry_after: restriction[:retry_after]
+      }, status: :too_many_requests
+      report_invitation_burst(restriction)
+      false
     end
 
-    # Hourly first, so a burst is cut off inside the hour rather than spending the day's allowance on
-    # requests that were already refused.
-    def throttle_invitation_window(name, limit, period)
-      throttle!(
-        key: RedisKey.team_invitation_send_throttle(current_seller.id, name),
-        limit:,
-        period:,
-        message: ->(retry_after) { invitation_limit_message(name, limit, retry_after) }
-      )
-    end
-
-    # Shown verbatim to the seller, so it names the real limit and wait; a non-positive countdown means
-    # the window ended while Redis was answering, and promising a wait there would be false.
     def invitation_limit_message(name, limit, retry_after)
       return "You can invite again now." if retry_after <= 0
 
@@ -166,9 +149,8 @@ class Settings::Team::InvitationsController < Sellers::BaseController
         "You can invite again in #{remaining} #{unit.pluralize(remaining)}."
     end
 
-    # This runs on every attempt past the limit, so one report per account per day. The refusal is
-    # already rendered: failing to report it must not turn a 429 into a 500.
-    def report_invitation_burst
+    # Notification failures must preserve the refusal response.
+    def report_invitation_burst(restriction)
       return unless $redis.set(
         RedisKey.team_invitation_burst_reported(current_seller.id),
         1,
@@ -180,7 +162,7 @@ class Settings::Team::InvitationsController < Sellers::BaseController
         "risk",
         "Team invitations rate limited",
         "Seller #{current_seller.username || current_seller.external_id} (#{current_seller.email}) was " \
-          "refused team invitations past #{INVITATIONS_PER_HOUR}/hour. Admin: #{current_seller.external_id}"
+          "refused team invitations past #{restriction[:limit]}/#{restriction[:window]}. Admin: #{current_seller.external_id}"
       )
     rescue => e
       ErrorNotifier.notify(e)
