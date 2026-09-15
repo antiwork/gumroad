@@ -3460,7 +3460,7 @@ describe Order::ChargeService, :vcr do
         }
       }
       locked_quote = Checkout::BuyerCurrencyQuote::Result.new(
-        currency: Currency::AUD,
+        currency: Currency::DKK,
         fx_rate: BigDecimal("0.65")
       )
 

@@ -505,7 +505,7 @@ describe Checkout::BuyerCurrencyQuote do
       membership = create(:subscription_product, user: seller, price_cents: 10_00, price_currency_type: Currency::USD)
       Feature.activate_user(Checkout::BuyerCurrencyEligibility::SUBSCRIPTION_FEATURE_NAME, seller)
       Feature.activate_user(StripeChargeProcessor::INDIA_CARD_MANDATE_RELIABILITY_FEATURE, seller)
-      allow_any_instance_of(described_class).to receive(:buyer_currency_for_ip).and_return(Currency::AUD)
+      allow_any_instance_of(described_class).to receive(:buyer_currency_for_ip).and_return(Currency::DKK)
       expect(StripeFxQuote).not_to receive(:create)
 
       result = described_class.create(

@@ -114,8 +114,10 @@ describe Page do
       # file over OpenAI's limit then blocked the publish for good. Asserted at
       # the save rather than on the extractor alone, because the poster has to
       # survive the sanitizer and reach the strategy for the page to publish.
-      expect(ContentModeration::Strategies::ClassifierStrategy).to receive(:new) do |text:, image_urls:, max_images:|
+      expect(ContentModeration::Strategies::ClassifierStrategy).to receive(:new) do |text:, image_urls:, max_images:, image_urls_are_stored:|
         expect(image_urls).to eq(["https://cdn.example.com/frame.jpg"])
+        # A page's custom_html is the storage, so nothing re-signs its URLs.
+        expect(image_urls_are_stored).to eq(true)
         instance_double(ContentModeration::Strategies::ClassifierStrategy,
                         perform: strategy_result.new(status: "compliant", reasoning: []))
       end

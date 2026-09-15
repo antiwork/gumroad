@@ -10403,6 +10403,63 @@ describe StripeMerchantAccountManager, :vcr do
         end
       end
 
+      describe "bank code that is one of Stripe's test routing numbers" do
+        # No code or param on this error, so only the message can classify it.
+        let(:error_message) { "Known test bank accounts cannot be used in live mode." }
+
+        before do
+          # Status and request ID decorate `to_s`, but `message` must stay raw for exact matching.
+          error = Stripe::InvalidRequestError.new(
+            error_message, nil,
+            http_status: 400,
+            http_headers: { "request-id" => "req_2610" },
+            json_body: { error: { message: error_message, type: "invalid_request_error" } },
+          )
+          expect(Stripe::Account).to receive(:update).and_raise(error)
+        end
+
+        it "emails the creator with the format rejection kind and returns invalid_bank_account" do
+          result = nil
+          expect do
+            result = subject.update_bank_account(user, passphrase: "1234")
+          end.to have_enqueued_mail(ContactingCreatorMailer, :invalid_bank_account)
+            .with(user.id, StripeMerchantAccountManager::BANK_REJECTION_KIND_FORMAT, error_message, user.active_bank_account.id)
+          expect(result).to eq(:invalid_bank_account)
+        end
+
+        it "leaves a payout note the retry loop reads as a format rejection" do
+          subject.update_bank_account(user, passphrase: "1234")
+
+          note = user.comments.with_type_payout_note.last
+          expect(note.json_data["stripe_error_message"]).to eq(error_message)
+          expect(described_class.bank_details_format_rejection_note?(note)).to be(true)
+        end
+      end
+
+      describe "a Stripe bank rejection whose wording is not the one above" do
+        # Negative control for the exact match: same shape, one character off. It must keep falling
+        # through to Sentry rather than emailing the seller a fix that cannot work.
+        let(:error_message) { "Known test bank accounts cannot be used in live mode" }
+
+        before do
+          error = Stripe::InvalidRequestError.new(
+            error_message, nil,
+            http_status: 400,
+            http_headers: { "request-id" => "req_2610" },
+            json_body: { error: { message: error_message, type: "invalid_request_error" } },
+          )
+          expect(Stripe::Account).to receive(:update).and_raise(error)
+        end
+
+        it "does not email the creator and reports the unknown error instead" do
+          result = nil
+          expect do
+            result = subject.update_bank_account(user, passphrase: "1234")
+          end.not_to have_enqueued_mail(ContactingCreatorMailer, :invalid_bank_account)
+          expect(result).to eq(:stripe_invalid_request)
+        end
+      end
+
       describe "Stripe rejects the external account with a CardError" do
         before do
           expect(Stripe::Account).to receive(:update).and_raise(Stripe::CardError.new("Your card does not support this type of purchase.", "external_account", code: "card_decline_rate_limit_exceeded"))
@@ -14620,6 +14677,119 @@ describe StripeMerchantAccountManager, :vcr do
       expect do
         described_class.handle_stripe_event(stripe_event(eventually_due: ["individual.id_number"]))
       end.not_to have_enqueued_mail(ContactingCreatorMailer, :more_kyc_needed)
+    end
+  end
+
+  # Stripe validates `company[structure]` against the ACCOUNT country, and create_account takes that
+  # country from the legal entity rather than the seller's residence.
+  describe "company hash keyed on the Stripe account country" do
+    # The file-level user carries an unpaid balance, which needs the seeded gumroad merchant
+    # account. None of these cases touch balances.
+    let(:user) { create(:user, email: "gp2609-structure@example.com", username: "gp2609structure") }
+    let(:passphrase) { GlobalConfig.get("STRONGBOX_GENERAL_PASSWORD") }
+
+    let(:uae_legal_entity) do
+      create(:user_compliance_info_uae_business, user:, business_vat_id_number: "100000000000003")
+    end
+
+    let(:uae_resident_with_us_legal_entity) do
+      create(:user_compliance_info_uae_business,
+             user:,
+             business_country: "United States",
+             business_state: "California",
+             business_city: "Burbank",
+             business_zip_code: "91506",
+             business_type: UserComplianceInfo::BusinessTypes::LLC)
+    end
+
+    it "sends the UAE structure and VAT id when the legal entity is in the UAE" do
+      company = described_class.send(:company_hash, uae_legal_entity, passphrase)[:company]
+
+      expect(company[:structure]).to eq("llc")
+      expect(company[:vat_id]).to eq("100000000000003")
+    end
+
+    it "does not send the UAE business type as the structure for a US legal entity" do
+      company = described_class.send(:company_hash, uae_resident_with_us_legal_entity, passphrase)[:company]
+
+      expect(company).not_to have_key(:structure)
+      expect(company).not_to have_key(:vat_id)
+    end
+
+    it "omits the structure from the create payload for a US legal entity" do
+      account = described_class.send(:account_hash, user, nil, uae_resident_with_us_legal_entity, passphrase:)
+
+      # create_account builds the Stripe account country from the legal entity, not the residence.
+      expect(account[:business_type]).to eq("company")
+      expect(account[:company][:address]).to include(country: "US")
+      expect(account[:company]).not_to have_key(:structure)
+      expect(account[:company]).not_to have_key(:vat_id)
+    end
+
+    it "keeps the structure in the create payload for a UAE legal entity" do
+      account = described_class.send(:account_hash, user, nil, uae_legal_entity, passphrase:)
+
+      expect(account[:company][:address]).to include(country: "AE")
+      expect(account[:company][:structure]).to eq("llc")
+      expect(account[:business_type]).to eq("company")
+    end
+
+    it "leaves a Canadian legal entity to the Canadian branch, without the UAE VAT id" do
+      canadian = create(:user_compliance_info_uae_business,
+                        user:,
+                        business_country: "Canada",
+                        business_state: "Ontario",
+                        business_city: "Toronto",
+                        business_zip_code: "M4C 1T2",
+                        business_type: "private_corporation")
+      company = described_class.send(:company_hash, canadian, passphrase)[:company]
+
+      expect(company[:structure]).to eq("private_corporation")
+      expect(company).not_to have_key(:vat_id)
+    end
+
+    describe "Japanese address blocks" do
+      let(:japanese_legal_entity) do
+        create(:user_compliance_info_business,
+               user:,
+               country: "Japan",
+               state: "東京都",
+               zip_code: "100-0000",
+               business_country: "Japan",
+               business_state: "東京都",
+               business_zip_code: "100-0000",
+               business_city: "渋谷区",
+               business_building_number: "1-1",
+               business_street_address_kanji: "神宮前",
+               business_name_kanji: "株式会社買う")
+      end
+
+      it "sends the kanji and kana blocks when the legal entity is in Japan" do
+        company = described_class.send(:company_hash, japanese_legal_entity, passphrase)[:company]
+
+        expect(company[:address_kanji]).to include(country: "JP", town: "神宮前")
+        expect(company[:address_kana]).to include(country: "JP")
+        expect(company[:name_kanji]).to eq("株式会社買う")
+      end
+
+      it "does not send them for a US legal entity, which is not a Japanese account" do
+        mixed = create(:user_compliance_info_business,
+                       user:,
+                       country: "Japan",
+                       state: "東京都",
+                       zip_code: "100-0000",
+                       business_country: "United States",
+                       business_state: "California",
+                       business_zip_code: "91506",
+                       business_city: "Burbank",
+                       business_type: UserComplianceInfo::BusinessTypes::LLC)
+        company = described_class.send(:company_hash, mixed, passphrase)[:company]
+
+        expect(company).not_to have_key(:address_kanji)
+        expect(company).not_to have_key(:address_kana)
+        expect(company).not_to have_key(:name_kanji)
+        expect(company).not_to have_key(:name_kana)
+      end
     end
   end
 end

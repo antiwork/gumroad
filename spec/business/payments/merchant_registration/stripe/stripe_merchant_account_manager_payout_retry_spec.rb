@@ -648,6 +648,38 @@ describe StripeMerchantAccountManager do
       expect(described_class.bank_rejection_kind_for(error)).to eq(StripeMerchantAccountManager::BANK_REJECTION_KIND_FORMAT)
     end
 
+    it "calls a bank code Stripe refuses as one of its own test accounts a format rejection" do
+      message = "Known test bank accounts cannot be used in live mode."
+      error = Stripe::InvalidRequestError.new(
+        message, nil,
+        http_status: 400,
+        http_headers: { "request-id" => "req_2610" },
+        json_body: { error: { message:, type: "invalid_request_error" } },
+      )
+
+      # The classifier compares `message`, which is the raw text even on a decorated error.
+      expect(error.to_s).to start_with("(Status 400)")
+      expect(described_class.bank_details_format_rejection?(error)).to be(true)
+      expect(described_class.bank_rejection_kind_for(error)).to eq(StripeMerchantAccountManager::BANK_REJECTION_KIND_FORMAT)
+    end
+
+    # Exact match on purpose: a classifier that accepted any of these near misses would email
+    # sellers about a code that is not the problem.
+    it "leaves every other rejection unclassified" do
+      [
+        "Known test bank accounts cannot be used in live mode",
+        "Known test bank account cannot be used in live mode.",
+        "Known test bank accounts cannot be used in test mode.",
+        "The bank account provided cannot be used because it is a known test bank account.",
+        "An unknown error occurred while processing this request.",
+      ].each do |message|
+        error = Stripe::InvalidRequestError.new(message, nil)
+
+        expect(described_class.bank_details_format_rejection?(error)).to be(false)
+        expect(described_class.bank_rejection_kind_for(error)).to be_nil
+      end
+    end
+
     it "leaves a directory miss unclassified so the wait-and-re-check copy is used" do
       error = error_for("We couldn't find the bank for that BIC")
 

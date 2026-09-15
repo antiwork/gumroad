@@ -26,6 +26,11 @@ module StripeMerchantAccountManager
   BANK_DETAILS_FORMAT_REJECTION_MESSAGE = /Invalid (routing|account) number/i
   BANK_DETAILS_DIRECTORY_MISS_MESSAGE = /couldn't find (the bank|that)/i
 
+  # Stripe refuses an external account built from its own published test bank details when the
+  # connected account is live. Format family — only re-entering a different code fixes it — and the
+  # error carries neither `code` nor `param`, so the message is the whole signal.
+  BANK_DETAILS_TEST_BANK_ACCOUNT_MESSAGE = "Known test bank accounts cannot be used in live mode."
+
   # Stripe refuses a specific external account outright when it's on the connected account's
   # block list ("...because it is on your block list"). Unlike a format or directory-miss
   # rejection, re-entering the same details never helps — only a DIFFERENT bank account will
@@ -1532,7 +1537,15 @@ module StripeMerchantAccountManager
     # re-type their digits would loop them forever. Terminal wins.
     return false if terminal_rejection_signals?(code:, message:)
 
+    return true if bank_details_test_bank_account_message?(message)
+
     code.to_s.in?(BANK_DETAILS_FORMAT_REJECTION_CODES) || message.match?(BANK_DETAILS_FORMAT_REJECTION_MESSAGE)
+  end
+
+  # Exact wording only: matching more loosely would pull unrelated Stripe errors into a
+  # seller-facing "re-enter your code" email.
+  def self.bank_details_test_bank_account_message?(message)
+    message.to_s.strip == BANK_DETAILS_TEST_BANK_ACCOUNT_MESSAGE
   end
 
   def self.terminal_rejection_signals?(code:, message:)
@@ -1669,6 +1682,10 @@ module StripeMerchantAccountManager
     # noise. It is matched explicitly because the error does not reliably carry a code or param
     # (gumroad-private#1476).
     return true if bank_account_blocked?(error)
+
+    # A live account sent our own published test routing number, which Stripe refuses outright.
+    # The seller clears it by entering their own code, so this is seller input, not a Sentry page.
+    return true if bank_details_test_bank_account_message?(error.message)
 
     # Stripe rejects some bank accounts with "Stripe is unable to support this bank at this
     # time." and populates neither `code` nor `param` on the error, so the checks above miss
@@ -2119,7 +2136,10 @@ module StripeMerchantAccountManager
       }
     }
 
-    if user_compliance_info.country_code == Compliance::Countries::JPN.alpha2
+    # The kanji/kana blocks below carry a hardcoded country and are only populated for a Japanese
+    # legal entity, so they follow the same account-country rule as the AE branch below.
+    if user_compliance_info.country_code == Compliance::Countries::JPN.alpha2 &&
+       user_compliance_info.legal_entity_country_code == Compliance::Countries::JPN.alpha2
       business_address_kanji = {
         line1: user_compliance_info.business_building_number,
         town: user_compliance_info.business_street_address_kanji,
@@ -2149,7 +2169,10 @@ module StripeMerchantAccountManager
                        })
     end
 
-    if user_compliance_info.country_code == Compliance::Countries::ARE.alpha2
+    # Stripe validates `company[structure]` against the account country, which create_account takes
+    # from the legal entity rather than the seller's residence.
+    if user_compliance_info.country_code == Compliance::Countries::ARE.alpha2 &&
+       user_compliance_info.legal_entity_country_code == Compliance::Countries::ARE.alpha2
       hash.deep_merge!(
         company: {
           structure: user_compliance_info.business_type,

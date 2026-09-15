@@ -1003,6 +1003,8 @@ const BankAccountSection = ({
         <div className="grid gap-2">
           {showNewBankAccount ? (
             <div className="grid gap-5 md:auto-cols-fr md:grid-flow-col">
+              {/* A placeholder must not complete the country's Stripe test routing pair: live mode
+                  refuses it outright and the seller cannot tell it apart from a real branch code. */}
               {user.country_code === "CA" ? (
                 <>
                   <Fieldset state={errorFieldNames.has("transit_number") ? "danger" : undefined}>
@@ -1234,12 +1236,12 @@ const BankAccountSection = ({
               ) : user.country_code === "VN" ? (
                 <Fieldset state={errorFieldNames.has("bank_code") ? "danger" : undefined}>
                   <FieldsetTitle>
-                    <Label htmlFor={`${uid}-bank-code`}>Bank Code</Label>
+                    <Label htmlFor={`${uid}-bank-code`}>Bank code</Label>
                   </FieldsetTitle>
                   <Input
                     type="text"
                     id={`${uid}-bank-code`}
-                    placeholder="01101100"
+                    placeholder="12345678"
                     maxLength={8}
                     required
                     disabled={isFormDisabled}
@@ -1271,7 +1273,7 @@ const BankAccountSection = ({
                   <Input
                     type="text"
                     id={`${uid}-bank-code`}
-                    placeholder="000"
+                    placeholder="123"
                     maxLength={3}
                     inputMode="numeric"
                     pattern="[0-9]{3}"
@@ -1356,7 +1358,7 @@ const BankAccountSection = ({
                     <Input
                       type="text"
                       id={`${uid}-bank-code`}
-                      placeholder="111"
+                      placeholder="123"
                       maxLength={3}
                       required
                       disabled={isFormDisabled}
@@ -1371,7 +1373,7 @@ const BankAccountSection = ({
                     <Input
                       type="text"
                       id={`${uid}-branch-code`}
-                      placeholder="00000"
+                      placeholder="12345"
                       maxLength={5}
                       required
                       disabled={isFormDisabled}
@@ -1706,7 +1708,7 @@ const BankAccountSection = ({
                   <Input
                     type="text"
                     id={`${uid}-bank-code`}
-                    placeholder="022112"
+                    placeholder="123456"
                     maxLength={6}
                     required
                     disabled={isFormDisabled}
@@ -2001,12 +2003,12 @@ const BankAccountSection = ({
               ) : user.country_code === "BD" ? (
                 <Fieldset state={errorFieldNames.has("bank_code") ? "danger" : undefined}>
                   <FieldsetTitle>
-                    <Label htmlFor={`${uid}-bank-code`}>Bank Code</Label>
+                    <Label htmlFor={`${uid}-bank-code`}>Bank code</Label>
                   </FieldsetTitle>
                   <Input
                     type="text"
                     id={`${uid}-bank-code`}
-                    placeholder="110000000"
+                    placeholder="123456789"
                     maxLength={9}
                     required
                     disabled={isFormDisabled}
@@ -2393,7 +2395,7 @@ const BankAccountSection = ({
                         <Input
                           type="text"
                           id={`${uid}-branch-code`}
-                          placeholder="123456"
+                          placeholder="234567"
                           maxLength={6}
                           required
                           disabled={isFormDisabled}

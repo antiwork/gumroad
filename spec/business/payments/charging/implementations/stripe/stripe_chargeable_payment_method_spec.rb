@@ -66,6 +66,39 @@ describe StripeChargeablePaymentMethod, :vcr do
     end
   end
 
+  describe "#card" do
+    context "with a payment method that has no card block" do
+      # Stripe::PaymentMethod (a StripeObject) raises NoMethodError for attributes absent from the
+      # payload, so an OpenStruct stub carrying `card: nil` cannot reproduce this — construct_from
+      # builds the same object shape Stripe returns for UPI/iDEAL/Link.
+      let(:stripe_payment_method_object) do
+        Stripe::PaymentMethod.construct_from(id: "pm_test_upi", type: "upi", customer: nil,
+                                             billing_details: { address: { postal_code: nil } })
+      end
+      let(:payment_method_id) { stripe_payment_method_object.id }
+      let(:chargeable) { StripeChargeablePaymentMethod.new(payment_method_id, zip_code: nil, product_permalink: "xx") }
+
+      before do
+        allow(Stripe::PaymentMethod).to receive(:retrieve).with(payment_method_id).and_return(stripe_payment_method_object)
+        chargeable.prepare!
+      end
+
+      it "returns nil instead of raising NoMethodError" do
+        expect(chargeable.card).to be_nil
+      end
+
+      it "degrades every card-derived reader to nil" do
+        expect(chargeable.funding_type).to be_nil
+        expect(chargeable.last4).to be_nil
+        expect(chargeable.expiry_month).to be_nil
+        expect(chargeable.expiry_year).to be_nil
+        expect(chargeable.country).to be_nil
+        expect(chargeable.visual).to be_nil
+        expect(chargeable.card_type).to eq(CardType::UPI)
+      end
+    end
+  end
+
   describe "#card_type" do
     context "with a non-card payment method (UPI)" do
       let(:payment_method_id) { "pm_test_upi" }

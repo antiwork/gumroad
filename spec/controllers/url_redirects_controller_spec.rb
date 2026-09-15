@@ -1145,6 +1145,429 @@ describe UrlRedirectsController, inertia: true do
 
       expect(response).to have_http_status(:success)
       expect(response.parsed_body["url"]).to be_nil
+      expect(GenerateProductFilesArchivesJob.jobs.size).to eq(0)
+    end
+
+    # The editor save soft-deletes stale folder archives inside its transaction and
+    # enqueues the rebuild after the commit. If that enqueue is lost, no row records
+    # that a rebuild is owed, and the download page polls this endpoint forever. The
+    # buyer's poll is the one request that still fires, so it re-enqueues the job.
+    context "when the requested folder has no alive archive" do
+      def folder_group(name, files, uid: SecureRandom.uuid)
+        {
+          "type" => "fileEmbedGroup",
+          "attrs" => { "name" => name, "uid" => uid },
+          "content" => files.map { |file| { "type" => "fileEmbed", "attrs" => { "id" => file.external_id, "uid" => SecureRandom.uuid } } },
+        }
+      end
+
+      let(:seller) { create(:user) }
+      let(:product) { create(:product, user: seller) }
+      let(:files) { 2.times.map { |i| create(:product_file, link: product, display_name: "File #{i}") } }
+      let(:folder_id) { SecureRandom.uuid }
+      let!(:page) { create(:rich_content, entity: product, title: "Page 1", description: [folder_group("One", files, uid: folder_id)]) }
+      let(:url_redirect) { create(:url_redirect, link: product, purchase: create(:purchase, link: product)) }
+
+      def poll_download_archive(token, folder_id)
+        get :download_archive, format: :json, params: { id: token, folder_id: }
+        expect(response).to have_http_status(:success)
+        response.parsed_body["url"]
+      end
+
+      it "enqueues the rebuild job for the product and still answers with a nil url" do
+        expect(poll_download_archive(url_redirect.token, folder_id)).to be_nil
+
+        expect(GenerateProductFilesArchivesJob.jobs.size).to eq(1)
+        expect(GenerateProductFilesArchivesJob).to have_enqueued_sidekiq_job(product.id)
+      end
+
+      it "serves the rebuilt archive on a later poll once the job has run and the zip is ready" do
+        expect(poll_download_archive(url_redirect.token, folder_id)).to be_nil
+
+        GenerateProductFilesArchivesJob.drain
+
+        archive = product.product_files_archives.folder_archives.alive.find_by(folder_id:)
+        expect(archive).to be_present
+        expect(archive.product_files.map(&:id)).to match_array(files.map(&:id))
+        # Still queueing: a second poll must not enqueue another rebuild.
+        expect(poll_download_archive(url_redirect.token, folder_id)).to be_nil
+        expect(GenerateProductFilesArchivesJob.jobs.size).to eq(0)
+
+        archive.mark_in_progress!
+        archive.mark_ready!
+
+        expect(poll_download_archive(url_redirect.token, folder_id)).to eq(url_redirect_download_archive_url(url_redirect.token, folder_id:))
+        expect(GenerateProductFilesArchivesJob.jobs.size).to eq(0)
+      end
+
+      it "enqueues for a version-level folder and the job builds the version's archive, not the product's" do
+        variant = create(:variant, variant_category: create(:variant_category, link: product), product_files: files)
+        variant_folder_id = SecureRandom.uuid
+        create(:rich_content, entity: variant, title: "Version page", description: [folder_group("Version folder", files, uid: variant_folder_id)])
+        variant_url_redirect = create(:url_redirect, link: product, purchase: create(:purchase, link: product, variant_attributes: [variant]))
+
+        expect(poll_download_archive(variant_url_redirect.token, variant_folder_id)).to be_nil
+        expect(GenerateProductFilesArchivesJob).to have_enqueued_sidekiq_job(product.id)
+
+        GenerateProductFilesArchivesJob.drain
+
+        expect(product.product_files_archives.folder_archives.alive.count).to eq(0)
+        archive = variant.product_files_archives.folder_archives.alive.find_by(folder_id: variant_folder_id)
+        expect(archive).to be_present
+        archive.mark_in_progress!
+        archive.mark_ready!
+
+        expect(poll_download_archive(variant_url_redirect.token, variant_folder_id)).to eq(url_redirect_download_archive_url(variant_url_redirect.token, folder_id: variant_folder_id))
+      end
+
+      it "does not enqueue for a folder that is not in the buyer's current content" do
+        expect(poll_download_archive(url_redirect.token, SecureRandom.uuid)).to be_nil
+
+        expect(GenerateProductFilesArchivesJob.jobs.size).to eq(0)
+      end
+
+      it "does not enqueue for a folder the job would not archive because it holds a single archivable file" do
+        page.update!(description: [folder_group("One", files.first(1), uid: folder_id)])
+
+        expect(poll_download_archive(url_redirect.token, folder_id)).to be_nil
+
+        expect(GenerateProductFilesArchivesJob.jobs.size).to eq(0)
+      end
+
+      it "does not enqueue a second rebuild while a queued archive row exists for the folder" do
+        product.product_files_archives.create!(folder_id:)
+
+        expect(poll_download_archive(url_redirect.token, folder_id)).to be_nil
+
+        expect(GenerateProductFilesArchivesJob.jobs.size).to eq(0)
+      end
+
+      it "does not retry a folder whose archive failed" do
+        product.product_files_archives.create!(folder_id:).mark_failed!
+
+        expect(poll_download_archive(url_redirect.token, folder_id)).to be_nil
+
+        expect(GenerateProductFilesArchivesJob.jobs.size).to eq(0)
+      end
+
+      it "answers with a nil url while Redis is down and enqueues on the next poll once it is back" do
+        allow(GenerateProductFilesArchivesJob).to receive(:perform_async).and_raise(Redis::CannotConnectError, "redis is down")
+        expect(ErrorNotifier).not_to receive(:notify)
+
+        expect(poll_download_archive(url_redirect.token, folder_id)).to be_nil
+        expect(GenerateProductFilesArchivesJob.jobs.size).to eq(0)
+
+        allow(GenerateProductFilesArchivesJob).to receive(:perform_async).and_call_original
+
+        expect(poll_download_archive(url_redirect.token, folder_id)).to be_nil
+        expect(GenerateProductFilesArchivesJob.jobs.size).to eq(1)
+      end
+
+      it "treats a nil jid from the job's unique lock as an already-queued rebuild, not a failure" do
+        allow(GenerateProductFilesArchivesJob).to receive(:perform_async).and_return(nil)
+        expect(ErrorNotifier).not_to receive(:notify)
+
+        expect(poll_download_archive(url_redirect.token, folder_id)).to be_nil
+      end
+
+      it "reports an unexpected enqueue error without changing the buyer's response" do
+        allow(GenerateProductFilesArchivesJob).to receive(:perform_async).and_raise(RuntimeError, "boom")
+        expect(ErrorNotifier).to receive(:notify).with(
+          instance_of(RuntimeError),
+          hash_including(product_id: product.id, url_redirect_id: url_redirect.id, folder_archive_recovery_enqueue_failed: true)
+        )
+
+        expect(poll_download_archive(url_redirect.token, folder_id)).to be_nil
+      end
+
+      it "does not enqueue for a deleted product" do
+        product.mark_deleted!
+
+        expect(poll_download_archive(url_redirect.token, folder_id)).to be_nil
+
+        expect(GenerateProductFilesArchivesJob.jobs.size).to eq(0)
+      end
+
+      it "does not enqueue for another version's folder that the buyer's purchase does not include" do
+        category = create(:variant_category, link: product)
+        bought_variant = create(:variant, variant_category: category, product_files: files)
+        other_variant = create(:variant, variant_category: category, product_files: files)
+        other_folder_id = SecureRandom.uuid
+        create(:rich_content, entity: bought_variant, title: "Bought", description: [folder_group("Bought folder", files)])
+        create(:rich_content, entity: other_variant, title: "Other", description: [folder_group("Other folder", files, uid: other_folder_id)])
+        buyer_url_redirect = create(:url_redirect, link: product, purchase: create(:purchase, link: product, variant_attributes: [bought_variant]))
+
+        expect(poll_download_archive(buyer_url_redirect.token, other_folder_id)).to be_nil
+
+        expect(GenerateProductFilesArchivesJob.jobs.size).to eq(0)
+      end
+
+      # The unique lock is disabled in test, so these exercise the cooldown alone: it is the
+      # only thing holding repeated polls once the job has started and released its lock.
+      context "cooldown" do
+        let(:cooldown_key) { UrlRedirect.folder_archive_rebuild_cooldown_key(product.id) }
+
+        it "reserves the window before the enqueue and holds repeated polls to one until it lapses" do
+          5.times { expect(poll_download_archive(url_redirect.token, folder_id)).to be_nil }
+          expect(GenerateProductFilesArchivesJob.jobs.size).to eq(1)
+          expect($redis.ttl(cooldown_key)).to be_between(1, UrlRedirect::FOLDER_ARCHIVE_REBUILD_COOLDOWN.to_i)
+
+          # The job ran without producing a row for this folder: nothing but the cooldown
+          # separates the next poll from another enqueue.
+          GenerateProductFilesArchivesJob.clear
+          3.times { expect(poll_download_archive(url_redirect.token, folder_id)).to be_nil }
+          expect(GenerateProductFilesArchivesJob.jobs.size).to eq(0)
+
+          # Redis expiry is wall-clock; the window lapsing is stood in for by deleting the key.
+          $redis.del(cooldown_key)
+          expect(poll_download_archive(url_redirect.token, folder_id)).to be_nil
+          expect(GenerateProductFilesArchivesJob.jobs.size).to eq(1)
+        end
+
+        it "releases the reservation on a nil jid or a raised enqueue, so repeated outages neither storm nor block the retry" do
+          expect(ErrorNotifier).not_to receive(:notify)
+
+          allow(GenerateProductFilesArchivesJob).to receive(:perform_async).and_return(nil)
+          expect(poll_download_archive(url_redirect.token, folder_id)).to be_nil
+          expect($redis.exists?(cooldown_key)).to be(false)
+
+          allow(GenerateProductFilesArchivesJob).to receive(:perform_async).and_raise(Redis::CannotConnectError, "redis is down")
+          3.times { expect(poll_download_archive(url_redirect.token, folder_id)).to be_nil }
+          expect(GenerateProductFilesArchivesJob.jobs.size).to eq(0)
+          expect($redis.exists?(cooldown_key)).to be(false)
+
+          allow(GenerateProductFilesArchivesJob).to receive(:perform_async).and_call_original
+          expect(poll_download_archive(url_redirect.token, folder_id)).to be_nil
+          expect(GenerateProductFilesArchivesJob.jobs.size).to eq(1)
+          expect($redis.exists?(cooldown_key)).to be(true)
+        end
+
+        # A second poll runs inside the first poll's perform_async, i.e. after the first has
+        # reserved the window but before its push has landed. A read-then-write cooldown sees
+        # no key there and enqueues a second job; the SET NX reservation turns it away.
+        it "collapses a poll that lands between another poll's reservation and its push into one enqueue" do
+          racing_poll_ran = false
+          allow(GenerateProductFilesArchivesJob).to receive(:perform_async).and_wrap_original do |original, *args|
+            unless racing_poll_ran
+              racing_poll_ran = true
+              UrlRedirect.find(url_redirect.id).folder_archive(folder_id)
+            end
+            original.call(*args)
+          end
+
+          expect(poll_download_archive(url_redirect.token, folder_id)).to be_nil
+
+          expect(racing_poll_ran).to be(true)
+          expect(GenerateProductFilesArchivesJob.jobs.size).to eq(1)
+          expect($redis.exists?(cooldown_key)).to be(true)
+        end
+
+        it "releases only its own reservation, never one a later poll has taken in the meantime" do
+          expect(ErrorNotifier).not_to receive(:notify)
+          # The reservation lapsed and a later poll re-reserved before this push reported back.
+          allow(GenerateProductFilesArchivesJob).to receive(:perform_async) do
+            $redis.set(cooldown_key, "later-poll")
+            nil
+          end
+
+          expect(poll_download_archive(url_redirect.token, folder_id)).to be_nil
+          expect($redis.get(cooldown_key)).to eq("later-poll")
+
+          $redis.del(cooldown_key)
+          allow(GenerateProductFilesArchivesJob).to receive(:perform_async) do
+            $redis.set(cooldown_key, "later-poll")
+            raise Redis::CannotConnectError, "redis is down"
+          end
+
+          expect(poll_download_archive(url_redirect.token, folder_id)).to be_nil
+          expect($redis.get(cooldown_key)).to eq("later-poll")
+        end
+
+        it "answers with a nil url and skips the enqueue while the cooldown store itself is down" do
+          allow($redis).to receive(:set).and_wrap_original do |original, *args, **kwargs|
+            raise Redis::CannotConnectError, "redis is down" if args.first == cooldown_key
+            original.call(*args, **kwargs)
+          end
+          expect(ErrorNotifier).not_to receive(:notify)
+
+          expect(poll_download_archive(url_redirect.token, folder_id)).to be_nil
+
+          expect(GenerateProductFilesArchivesJob.jobs.size).to eq(0)
+          expect($redis.exists?(cooldown_key)).to be(false)
+        end
+
+        # The documented limit of the bound: a release that cannot reach Redis leaves the
+        # reservation in place, so the retry waits out the window instead of being lost.
+        it "keeps the reservation when the release itself cannot reach Redis, so the retry waits out the window" do
+          expect(ErrorNotifier).not_to receive(:notify)
+          allow(GenerateProductFilesArchivesJob).to receive(:perform_async).and_raise(Redis::CannotConnectError, "redis is down")
+          allow($redis).to receive(:eval).and_wrap_original do |original, *args|
+            raise Redis::CannotConnectError, "redis is down" if args.last.is_a?(Hash) && args.last[:keys] == [cooldown_key]
+            original.call(*args)
+          end
+
+          expect(poll_download_archive(url_redirect.token, folder_id)).to be_nil
+          expect(GenerateProductFilesArchivesJob.jobs.size).to eq(0)
+          expect($redis.exists?(cooldown_key)).to be(true)
+
+          allow(GenerateProductFilesArchivesJob).to receive(:perform_async).and_call_original
+          allow($redis).to receive(:eval).and_call_original
+          expect(poll_download_archive(url_redirect.token, folder_id)).to be_nil
+          expect(GenerateProductFilesArchivesJob.jobs.size).to eq(0)
+
+          $redis.del(cooldown_key)
+          expect(poll_download_archive(url_redirect.token, folder_id)).to be_nil
+          expect(GenerateProductFilesArchivesJob.jobs.size).to eq(1)
+        end
+      end
+
+      # Same setup as the job spec: the initializer disables SidekiqUniqueJobs in test, so the
+      # lock middleware and its Lua scripts are run for real here, against the test Redis.
+      context "with the job's unique lock enabled" do
+        around do |example|
+          SidekiqUniqueJobs.use_config(enabled: true) do
+            Sidekiq::Testing.server_middleware { |chain| chain.add SidekiqUniqueJobs::Middleware::Server }
+            example.run
+          ensure
+            Sidekiq::Testing.server_middleware { |chain| chain.remove SidekiqUniqueJobs::Middleware::Server }
+          end
+        end
+
+        let(:cooldown_key) { UrlRedirect.folder_archive_rebuild_cooldown_key(product.id) }
+
+        def lock_key_for(job)
+          SidekiqUniqueJobs::Key.new(job["lock_digest"])
+        end
+
+        def lock_held?(key)
+          Sidekiq.redis { |conn| conn.exists(key.digest, key.locked) }.positive?
+        end
+
+        def expire_lock!(key)
+          Sidekiq.redis do |conn|
+            [key.digest, key.locked, key.info].each { |redis_key| conn.pexpire(redis_key, 1) }
+          end
+          Timeout.timeout(2) { sleep 0.005 while lock_held?(key) }
+        end
+
+        it "recovers a stranded lock from the buyer's polls once the ttl elapses, with no seller action" do
+          expect(poll_download_archive(url_redirect.token, folder_id)).to be_nil
+          job = GenerateProductFilesArchivesJob.jobs.last
+          expect(job).to be_present
+          key = lock_key_for(job)
+
+          # The lock was written; the push never reached Redis; the process died.
+          Sidekiq::Queues.delete_for(job["jid"], job["queue"], GenerateProductFilesArchivesJob.name)
+          expect(GenerateProductFilesArchivesJob.jobs).to be_empty
+          expect(lock_held?(key)).to be(true)
+
+          # Cooldown lapsed: polls now hit the stranded lock, get a nil jid, and start no cooldown.
+          $redis.del(cooldown_key)
+          3.times { expect(poll_download_archive(url_redirect.token, folder_id)).to be_nil }
+          expect(GenerateProductFilesArchivesJob.jobs).to be_empty
+          expect($redis.exists?(cooldown_key)).to be(false)
+
+          expire_lock!(key)
+
+          expect(poll_download_archive(url_redirect.token, folder_id)).to be_nil
+          expect(GenerateProductFilesArchivesJob.jobs.size).to eq(1)
+          expect($redis.exists?(cooldown_key)).to be(true)
+
+          GenerateProductFilesArchivesJob.drain
+
+          archive = Link.find(product.id).product_files_archives.folder_archives.alive.find_by(folder_id:)
+          expect(archive).to be_present
+          archive.mark_in_progress!
+          archive.mark_ready!
+
+          expect(poll_download_archive(url_redirect.token, folder_id)).to eq(url_redirect_download_archive_url(url_redirect.token, folder_id:))
+          expect(GenerateProductFilesArchivesJob.jobs.size).to eq(0)
+        end
+      end
+
+      # End to end through both controllers: the seller's save loses its enqueue, the
+      # seller never saves again, and the buyer's polls alone bring back a ready archive
+      # of the renamed folder.
+      context "after an editor save whose rebuild enqueue was lost", type: :request do
+        include Devise::Test::IntegrationHelpers
+
+        let(:editor_params) do
+          {
+            id: product.unique_permalink,
+            name: product.name,
+            description: "A description",
+            price_currency_type: "usd",
+            price_cents: product.price_cents,
+            customizable_price: false,
+            covers: [],
+            files: files.each_with_index.map { |f, i| { external_id: f.external_id, url: f.url, display_name: f.display_name, description: "", position: i } },
+            has_same_rich_content_for_all_variants: true,
+            rich_content: [{ id: page.external_id, title: page.title, description: { type: "doc", content: [folder_group("One renamed", files, uid: folder_id)] } }],
+            variants: [],
+            confirmed_removed_variant_ids: [],
+            confirmed_removed_rich_content_ids: [],
+            preserved_rich_content_ids: [page.external_id],
+            rich_content_provenance_version: 2,
+          }
+        end
+
+        # protect_from_forgery null-sessions an unverified POST, which would drop the
+        # signed-in seller. The editor save is not the subject here, so skip the check.
+        around do |example|
+          original = ActionController::Base.allow_forgery_protection
+          ActionController::Base.allow_forgery_protection = false
+          example.run
+        ensure
+          ActionController::Base.allow_forgery_protection = original
+        end
+
+        before { host! DOMAIN }
+
+        it "recovers the folder archive from the buyer's poll without a second seller save" do
+          ready_archive = product.product_files_archives.create!(folder_id:, product_files: files)
+          ready_archive.set_url_if_not_present
+          ready_archive.mark_in_progress!
+          ready_archive.mark_ready!
+          expect(product.product_files_archives.latest_ready_folder_archive(folder_id)).to eq(ready_archive)
+
+          allow(GenerateProductFilesArchivesJob).to receive(:perform_async).and_raise(Redis::CannotConnectError, "redis is down")
+          allow(ErrorNotifier).to receive(:notify)
+          sign_in seller
+          post link_path(product.unique_permalink), params: editor_params, as: :json
+
+          expect(response).to be_successful
+          expect(product.reload.rich_content_folder_name(folder_id)).to eq("One renamed")
+          expect(ready_archive.reload).not_to be_alive
+          expect(GenerateProductFilesArchivesJob.jobs.size).to eq(0)
+
+          # Redis is back. The seller does not save again.
+          allow(GenerateProductFilesArchivesJob).to receive(:perform_async).and_call_original
+          sign_out seller
+
+          get url_redirect_download_archive_path(url_redirect.token, folder_id:, format: :json)
+
+          expect(response).to have_http_status(:success)
+          expect(response.parsed_body["url"]).to be_nil
+          expect(GenerateProductFilesArchivesJob.jobs.size).to eq(1)
+          expect(GenerateProductFilesArchivesJob).to have_enqueued_sidekiq_job(product.id)
+
+          GenerateProductFilesArchivesJob.drain
+
+          rebuilt = Link.find(product.id).product_files_archives.folder_archives.alive.find_by(folder_id:)
+          expect(rebuilt).to be_present
+          expect(rebuilt.id).not_to eq(ready_archive.id)
+          rebuilt.mark_in_progress!
+          rebuilt.mark_ready!
+          expected_entries = files.map { |file| "#{folder_id}/One renamed/#{file.external_id}/#{file.display_name}" }.sort
+          expect(rebuilt.digest).to eq(Digest::SHA1.hexdigest(expected_entries.join("\n")))
+
+          get url_redirect_download_archive_path(url_redirect.token, folder_id:, format: :json)
+
+          expect(response).to have_http_status(:success)
+          expect(response.parsed_body["url"]).to eq(url_redirect_download_archive_url(url_redirect.token, folder_id:))
+          expect(GenerateProductFilesArchivesJob.jobs.size).to eq(0)
+        end
+      end
     end
 
     it "redirects to the download URL for the requested entity archive when the format is HTML" do
