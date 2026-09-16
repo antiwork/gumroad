@@ -18,22 +18,36 @@ RSpec.describe Flipper::Adapters::RedisFailOpen do
         expect(feature.enabled?).to be(true)
       end
 
-      it "defaults unread gates to off" do
+      it "raises the original error for unread gates" do
+        error = error_class.new("flag read timed out")
+        allow(inner).to receive(:get).and_raise(error)
+
+        expect { feature.enabled? }.to raise_error { |raised| expect(raised).to equal(error) }
+      end
+
+      it "returns cached disabled gates on a failed get" do
+        expect(feature.enabled?).to be(false)
         allow(inner).to receive(:get).and_raise(error_class)
 
         expect(feature.enabled?).to be(false)
       end
 
-      it "returns cached and default gates on a failed get_multi" do
+      it "returns cached gates on a failed get_multi" do
         feature.enable
         cached = adapter.get_multi([feature])
         allow(inner).to receive(:get_multi).and_raise(error_class)
 
-        expect(adapter.get_multi([feature, flipper[:unknown]])).to eq(
-          cached.merge("unknown" => adapter.default_config)
-        )
+        expect(adapter.get_multi([feature])).to eq(cached)
         allow(inner).to receive(:get).and_raise(error_class)
         expect(feature.enabled?).to be(true)
+      end
+
+      it "raises when a failed get_multi includes unread gates" do
+        feature.enable
+        adapter.get(feature)
+        allow(inner).to receive(:get_multi).and_raise(error_class)
+
+        expect { adapter.get_multi([feature, flipper[:unknown]]) }.to raise_error(error_class)
       end
 
       it "returns the last-known snapshot on a failed get_all" do
@@ -54,12 +68,29 @@ RSpec.describe Flipper::Adapters::RedisFailOpen do
         expect(adapter.features).to eq(Set[feature.key])
       end
 
-      it "returns empty collections before the first successful bulk read" do
+      it "raises before the first successful bulk read" do
+        allow(inner).to receive(:get_all).and_raise(error_class)
+        allow(inner).to receive(:features).and_raise(error_class)
+
+        expect { adapter.get_all }.to raise_error(error_class)
+        expect { adapter.features }.to raise_error(error_class)
+      end
+
+      it "returns a cached empty feature catalog" do
+        expect(adapter.get_all).to eq({})
         allow(inner).to receive(:get_all).and_raise(error_class)
         allow(inner).to receive(:features).and_raise(error_class)
 
         expect(adapter.get_all).to eq({})
         expect(adapter.features).to eq(Set.new)
+      end
+
+      it "raises when the catalog contains unread gates" do
+        feature.enable
+        adapter.features
+        allow(inner).to receive(:get_all).and_raise(error_class)
+
+        expect { adapter.get_all }.to raise_error(error_class)
       end
 
       %i[add remove clear enable disable].each do |operation|
@@ -74,6 +105,9 @@ RSpec.describe Flipper::Adapters::RedisFailOpen do
   end
 
   it "reports once per minute across features and read methods" do
+    feature.enable
+    flipper[:other].enable
+    adapter.get_all
     allow(inner).to receive(:get).and_raise(Redis::TimeoutError)
     allow(inner).to receive(:get_all).and_raise(Redis::TimeoutError)
     allow(Process).to receive(:clock_gettime).with(Process::CLOCK_MONOTONIC).and_return(100.0)
@@ -85,6 +119,7 @@ RSpec.describe Flipper::Adapters::RedisFailOpen do
   end
 
   it "reports again after the reporting interval" do
+    feature.enabled?
     allow(inner).to receive(:get).and_raise(Redis::TimeoutError)
     allow(Process).to receive(:clock_gettime).with(Process::CLOCK_MONOTONIC).and_return(100.0, 159.0, 160.0)
     expect(ErrorNotifier).to receive(:notify).twice
@@ -111,11 +146,20 @@ RSpec.describe Flipper::Adapters::RedisFailOpen do
     expect(adapter.get(feature)[:actors]).to eq(Set["User;1"])
   end
 
-  it "still returns default gates if error reporting fails" do
+  it "still returns cached gates if error reporting fails" do
+    feature.enable
+    feature.enabled?
     allow(inner).to receive(:get).and_raise(Redis::TimeoutError)
     allow(ErrorNotifier).to receive(:notify).and_raise(StandardError)
 
-    expect(feature.enabled?).to be(false)
+    expect(feature.enabled?).to be(true)
+  end
+
+  it "preserves the read error for unread gates if reporting fails" do
+    allow(inner).to receive(:get).and_raise(Redis::TimeoutError)
+    allow(ErrorNotifier).to receive(:notify).and_raise(StandardError)
+
+    expect { feature.enabled? }.to raise_error(Redis::TimeoutError)
   end
 
   it "shares fallback values and reporting across adapters in different threads" do
@@ -131,16 +175,14 @@ RSpec.describe Flipper::Adapters::RedisFailOpen do
     expect(results).to eq([true, true])
   end
 
-  it "bounds the cached gate documents and feature catalog" do
+  it "raises for evicted gates while retaining the remaining cached gates" do
     stub_const("#{described_class}::MAX_FEATURES", 2)
     %i[first second third].each { |key| flipper[key].enable }
     adapter.get_all
     allow(inner).to receive(:get).and_raise(Redis::TimeoutError)
-    allow(inner).to receive(:features).and_raise(Redis::TimeoutError)
 
-    expect(flipper[:first].enabled?).to be(false)
+    expect { flipper[:first].enabled? }.to raise_error(Redis::TimeoutError)
     expect(flipper[:third].enabled?).to be(true)
-    expect(adapter.features.size).to eq(2)
   end
 
   it "does not resurrect gates after a successful disable followed by a read failure" do
@@ -149,7 +191,7 @@ RSpec.describe Flipper::Adapters::RedisFailOpen do
     feature.disable
     allow(inner).to receive(:get).and_raise(Redis::TimeoutError)
 
-    expect(feature.enabled?).to be(false)
+    expect { feature.enabled? }.to raise_error(Redis::TimeoutError)
   end
 
   it "forgets removed features after a successful bulk refresh" do
@@ -159,7 +201,7 @@ RSpec.describe Flipper::Adapters::RedisFailOpen do
     expect(adapter.get_all).to eq({})
     allow(inner).to receive(:get).and_raise(Redis::TimeoutError)
 
-    expect(feature.enabled?).to be(false)
+    expect { feature.enabled? }.to raise_error(Redis::TimeoutError)
   end
 
   %i[get get_multi get_all].each do |operation|
@@ -181,7 +223,7 @@ RSpec.describe Flipper::Adapters::RedisFailOpen do
       reader.value
       allow(inner).to receive(:get).and_raise(Redis::TimeoutError)
 
-      expect(feature.enabled?).to be(false)
+      expect { feature.enabled? }.to raise_error(Redis::TimeoutError)
     ensure
       resume << true
       reader&.join(5)
@@ -197,18 +239,58 @@ RSpec.describe Flipper::Adapters::RedisFailOpen do
     feature.disable
     allow(inner).to receive(:get).and_raise(Redis::TimeoutError)
 
-    expect(feature.enabled?).to be(false)
+    expect { feature.enabled? }.to raise_error(Redis::TimeoutError)
   end
 
-  it "keeps bounded bulk feature names aligned with retained gates" do
+  it "raises when a bulk snapshot exceeds the cache limit" do
     stub_const("#{described_class}::MAX_FEATURES", 2)
     %i[first second third].each { |key| flipper[key].enable }
     adapter.get_all
     allow(inner).to receive(:get_all).and_raise(Redis::TimeoutError)
     allow(inner).to receive(:features).and_raise(Redis::TimeoutError)
 
-    expect(adapter.get_all.keys.to_set).to eq(adapter.features)
-    expect(adapter.get_all.transform_values { |gates| gates[:boolean] }).to eq("second" => "true", "third" => "true")
+    expect { adapter.get_all }.to raise_error(Redis::TimeoutError)
+    expect { adapter.features }.to raise_error(Redis::TimeoutError)
+  end
+
+  it "raises when a feature catalog exceeds the cache limit" do
+    stub_const("#{described_class}::MAX_FEATURES", 2)
+    %i[first second third].each { |key| flipper[key].enable }
+    adapter.features
+    allow(inner).to receive(:features).and_raise(Redis::TimeoutError)
+
+    expect { adapter.features }.to raise_error(Redis::TimeoutError)
+  end
+
+  it "does not use individual reads as a complete feature catalog" do
+    feature.enable
+    adapter.get(feature)
+    allow(inner).to receive(:features).and_raise(Redis::TimeoutError)
+    allow(inner).to receive(:get_all).and_raise(Redis::TimeoutError)
+
+    expect { adapter.features }.to raise_error(Redis::TimeoutError)
+    expect { adapter.get_all }.to raise_error(Redis::TimeoutError)
+  end
+
+  it "does not preload a catalog after its gates are evicted" do
+    stub_const("#{described_class}::MAX_FEATURES", 2)
+    feature.enable
+    adapter.get_all
+    %i[other unknown].each { |key| adapter.get(flipper[key]) }
+    allow(inner).to receive(:get_all).and_raise(Redis::TimeoutError)
+
+    expect { flipper.preload_all }.to raise_error(Redis::TimeoutError)
+  end
+
+  %i[get get_multi].each do |operation|
+    it "invalidates the catalog when #{operation} reads an unlisted feature" do
+      adapter.get_all
+      Flipper.new(inner).enable(feature.key)
+      adapter.public_send(operation, operation == :get ? feature : [feature])
+      allow(inner).to receive(:get_all).and_raise(Redis::TimeoutError)
+
+      expect { flipper.preload_all }.to raise_error(Redis::TimeoutError)
+    end
   end
 
   it "does not catch non-Redis errors" do

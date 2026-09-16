@@ -35,7 +35,7 @@ module Flipper
         raise unless READS.include?(operation)
 
         report(error)
-        @state.lock.synchronize { fallback(operation, args).deep_dup }
+        @state.lock.synchronize { fallback(operation, args, error).deep_dup }
       ensure
         invalidate(args.first) if WRITES.include?(operation)
       end
@@ -45,29 +45,32 @@ module Flipper
           case operation
           when :get
             @state.values[args.first.key] = result.deep_dup
+            @state.features = nil if @state.features && !@state.features.include?(args.first.key)
           when :get_multi
             @state.values.merge!(result.deep_dup)
+            @state.features = nil if @state.features && result.any? { |key, _| !@state.features.include?(key) }
           when :get_all
             @state.values = result.deep_dup
           when :features
-            @state.features = result.first(MAX_FEATURES).to_set
+            @state.features = result.size <= MAX_FEATURES ? result.dup : nil
             @state.values.select! { |key, _| result.include?(key) }
           end
           @state.values.shift while @state.values.size > MAX_FEATURES
-          @state.features = @state.values.keys.to_set if operation == :get_all
+          @state.features = result.size <= MAX_FEATURES ? result.keys.to_set : nil if operation == :get_all
         end
 
-        def fallback(operation, args)
+        def fallback(operation, args, error)
+          # Unknown flags can enforce tax collection or webhook verification.
           case operation
           when :get
-            @state.values.fetch(args.first.key) { default_config }
+            @state.values.fetch(args.first.key) { raise error }
           when :get_multi
-            args.first.to_h { |feature| [feature.key, @state.values.fetch(feature.key) { default_config }] }
+            args.first.to_h { |feature| [feature.key, @state.values.fetch(feature.key) { raise error }] }
           when :get_all
-            keys = @state.features || @state.values.keys
-            keys.index_with { |key| @state.values.fetch(key) { default_config } }
+            keys = @state.features || raise(error)
+            keys.index_with { |key| @state.values.fetch(key) { raise error } }
           when :features
-            @state.features || @state.values.keys.to_set
+            @state.features || raise(error)
           end
         end
 

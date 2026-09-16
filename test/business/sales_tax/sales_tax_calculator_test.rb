@@ -915,6 +915,23 @@ class SalesTaxCalculatorTest < ActiveSupport::TestCase
             Feature.activate(:collect_tax_jp)
           end
 
+          test "stops the calculation when the tax flag is unavailable" do
+            product = create_product(user: @seller)
+            hgetall = $redis.method(:hgetall)
+            read_with_timeout = lambda do |key|
+              raise Redis::TimeoutError if key == "collect_tax_jp"
+
+              hgetall.call(key)
+            end
+            ErrorNotifier.stubs(:notify)
+
+            $redis.stub(:hgetall, read_with_timeout) do
+              assert_raises(Redis::TimeoutError) do
+                SalesTaxCalculator.new(product:, price_cents: 100, buyer_location: { country: "JP" }).calculate
+              end
+            end
+          end
+
           test "assesses CT in Japan" do
             product = create_product(user: @seller)
 

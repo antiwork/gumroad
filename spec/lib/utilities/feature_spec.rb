@@ -80,12 +80,12 @@ RSpec.describe Feature do
           expect(Flipper.enabled?(feature_name)).to be(true)
         end
 
-        it "defaults an unread feature to off" do
+        it "raises when an unread feature is unavailable" do
           allow($redis).to receive(:hgetall).and_raise(error_class)
           allow(ErrorNotifier).to receive(:notify)
 
-          expect(described_class.active?(:unread_outage_feature)).to be(false)
-          expect(described_class.inactive?(:unread_outage_feature)).to be(true)
+          expect { described_class.active?(:unread_outage_feature) }.to raise_error(error_class)
+          expect { described_class.inactive?(:unread_outage_feature) }.to raise_error(error_class)
         end
       end
     end
