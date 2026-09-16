@@ -43,7 +43,15 @@ class Purchase::ReassignByEmailService
 
       original_purchase = purchase.original_purchase
       next if original_purchase.blank? || mutable_purchase_id_set.include?(original_purchase.id)
-      next unless same_requester?(original_purchase, purchase)
+
+      unless same_requester?(original_purchase, purchase)
+        # A gift the requester received legitimately sits behind someone else's original.
+        # Anything else would move the subscription while its original stays with a
+        # third address, so stop before mutating anything.
+        next if recipient_gift(purchase.subscription).present?
+
+        return Result.new(success: false, reassigned_purchase_ids: [], reason: :ambiguous_ownership, error_message: "A subscription's original purchase could not be matched to this email and requires manual review")
+      end
 
       mutable_purchases << original_purchase
       mutable_purchase_id_set.add(original_purchase.id)
@@ -95,13 +103,7 @@ class Purchase::ReassignByEmailService
 
       if purchase.save
         reassigned_purchase_ids << purchase.id
-        if transfer_subscription
-          purchase.subscription.update(user: target_user)
-          # A gifted membership without a destination account routes renewal
-          # emails through gift.giftee_email, so move that pointer with the rows.
-          gift = purchase.original_purchase.gift_given if purchase.original_purchase&.is_gift_sender_purchase?
-          gift.update(giftee_email: @to_email) if gift.present? && gift.giftee_email.to_s.casecmp?(@from_email.to_s)
-        end
+        move_subscription(purchase.subscription, target_user) if transfer_subscription
       end
     end
 
@@ -121,6 +123,28 @@ class Purchase::ReassignByEmailService
       return true if original_purchase.email.to_s.casecmp?(@from_email.to_s)
 
       purchase.purchaser_id.present? && original_purchase.purchaser_id == purchase.purchaser_id
+    end
+
+    # The gift behind a membership the requester received, or nil. Plan changes replace
+    # original_purchase with a copy that never carries the gift flag, so the gift (and
+    # Subscription#email) hang off true_original_purchase.
+    def recipient_gift(subscription)
+      @recipient_gifts ||= {}
+      @recipient_gifts.fetch(subscription.id) do
+        true_original = subscription.true_original_purchase
+        gift = true_original.gift_given if true_original&.is_gift_sender_purchase?
+        @recipient_gifts[subscription.id] = gift.present? && gift.giftee_email.to_s.casecmp?(@from_email.to_s) ? gift : nil
+      end
+    end
+
+    # A giftee without a destination account is reached only through gift.giftee_email,
+    # so the subscription and that pointer move together or not at all.
+    def move_subscription(subscription, target_user)
+      gift = recipient_gift(subscription)
+      Subscription.transaction(requires_new: true) do
+        raise ActiveRecord::Rollback if gift.present? && !gift.update(giftee_email: @to_email)
+        raise ActiveRecord::Rollback unless subscription.update(user: target_user)
+      end
     end
 
     # Returns a normalized, distinct payment-method signal for a purchase.
