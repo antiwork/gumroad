@@ -211,40 +211,51 @@ class Credit < ApplicationRecord
   def self.create_for_financing_paydown!(purchase:, amount_cents:, merchant_account:, stripe_loan_paydown_id:)
     return unless stripe_loan_paydown_id.present?
 
-    user = merchant_account.user
-    return if user.credits.where("json_data->'$.stripe_loan_paydown_id' = ?", stripe_loan_paydown_id).exists?
+    ApplicationRecord.connected_to(role: :writing) do
+      credit = merchant_account.with_lock do
+        merchant_account.user.credits.find_by("json_data->'$.stripe_loan_paydown_id' = ?", stripe_loan_paydown_id) ||
+          create!(user: merchant_account.user, amount_cents:, merchant_account:, financing_paydown_purchase: purchase, stripe_loan_paydown_id:)
+      end
+      unless credit.merchant_account_id == merchant_account.id && credit.amount_cents == amount_cents && credit.financing_paydown_purchase_id == purchase&.id
+        raise ArgumentError, "Capital deduction does not match the existing credit"
+      end
 
-    credit = new
-    credit.user = user
-    credit.amount_cents = amount_cents
-    credit.merchant_account = merchant_account
-    credit.financing_paydown_purchase = purchase
-    credit.stripe_loan_paydown_id = stripe_loan_paydown_id
-    credit.save!
+      credit.apply_financing_paydown!
+    end
+  end
 
-    balance_transaction_amount = BalanceTransaction::Amount.new(
-      currency: Currency::USD,
-      gross_cents: credit.get_usd_cents(credit.merchant_account.currency, credit.amount_cents),
-      net_cents: credit.get_usd_cents(credit.merchant_account.currency, credit.amount_cents)
-    )
+  def apply_financing_paydown!
+    ApplicationRecord.connected_to(role: :writing) do
+      transaction = with_lock do
+        raise ArgumentError, "Credit is not an automatic Capital deduction" unless stripe_loan_paydown_id.present? && financing_paydown_purchase_id.present?
+        return self if balance_id.present?
 
-    balance_transaction_holding_amount = BalanceTransaction::Amount.new(
-      currency: credit.merchant_account.currency,
-      gross_cents: credit.amount_cents,
-      net_cents: credit.amount_cents
-    )
+        # Stripe can deliver the withholding before the purchase finishes. Let the event retry.
+        raise "Capital purchase has not succeeded yet" unless financing_paydown_purchase.reload.succeeded_at.present?
 
-    balance_transaction = BalanceTransaction.create!(
-      user: credit.user,
-      merchant_account: credit.merchant_account,
-      credit:,
-      issued_amount: balance_transaction_amount,
-      holding_amount: balance_transaction_holding_amount
-    )
+        balance_transaction || BalanceTransaction.create!(
+          user:,
+          merchant_account:,
+          credit: self,
+          issued_amount: BalanceTransaction::Amount.new(
+            currency: Currency::USD,
+            gross_cents: get_usd_cents(merchant_account.currency, amount_cents),
+            net_cents: get_usd_cents(merchant_account.currency, amount_cents)
+          ),
+          holding_amount: BalanceTransaction::Amount.new(
+            currency: merchant_account.currency,
+            gross_cents: amount_cents,
+            net_cents: amount_cents
+          ),
+          update_user_balance: false
+        )
+      end
 
-    credit.balance = balance_transaction.balance
-    credit.save!
-    credit
+      # Release the Credit lock before selecting and locking a Balance.
+      transaction.update_balance!
+      update!(balance: transaction.balance)
+      self
+    end
   end
 
   def self.create_for_bank_debit_on_stripe_account!(amount_cents:, merchant_account:)

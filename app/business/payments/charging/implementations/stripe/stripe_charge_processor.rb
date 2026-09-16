@@ -1143,7 +1143,17 @@ class StripeChargeProcessor
 
     stripe_loan_paydown_id = data["id"]
     amount_cents = -data["details"]["total_amount"].to_i
-    return if merchant_account.user.credits.where("json_data->'$.stripe_loan_paydown_id' = ?", stripe_loan_paydown_id).exists?
+    existing_credit = ApplicationRecord.connected_to(role: :writing) do
+      merchant_account.user.credits.find_by("json_data->'$.stripe_loan_paydown_id' = ?", stripe_loan_paydown_id)
+    end
+    if existing_credit
+      return unless existing_credit.financing_paydown_purchase_id.present?
+
+      unless existing_credit.merchant_account_id == merchant_account.id && existing_credit.amount_cents == amount_cents
+        raise ArgumentError, "Capital event does not match the existing credit"
+      end
+      return existing_credit.apply_financing_paydown!
+    end
 
     if data["details"]["reason"] == "collection" && data["user_facing_description"] == "Forced debit from Stripe Payments"
       Credit.create_for_manual_paydown_on_stripe_loan!(amount_cents:, merchant_account:, stripe_loan_paydown_id:)

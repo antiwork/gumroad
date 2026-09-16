@@ -205,14 +205,23 @@ class BalanceTransaction < ApplicationRecord
   # Selection of a balance may be attempted multiple times in the rare case of the balance state changing between when we select and lock it and
   # it's in a state where the amounts cannot be changed. If the maximum number of attempts is exhausted, the ActiveRecord::RecordInvalid error from the attempt
   # to change the amount will be passed up.
-  def update_balance!
-    balance = find_or_create_balance
-    balance.with_lock do
-      balance.increment(:amount_cents, issued_amount_net_cents)
-      balance.increment(:holding_amount_cents, holding_amount_net_cents)
-      balance.save!
-      self.balance = balance
-      save!
+  def update_balance!(target_balance: nil)
+    balance = nil
+    ApplicationRecord.connected_to(role: :writing) do
+      return if reload.balance_id.present?
+
+      balance = target_balance || find_or_create_balance
+      balance.with_lock do
+        # Lock after the Balance, then recheck: another attempt may have applied this transaction.
+        lock!
+        next if balance_id.present?
+
+        balance.increment(:amount_cents, issued_amount_net_cents)
+        balance.increment(:holding_amount_cents, holding_amount_net_cents)
+        balance.save!
+        self.balance = balance
+        save!
+      end
     end
   rescue ActiveRecord::RecordInvalid => e
     # Saving the balance can fail if the balance's state changed between selection and locking, to a state invalid for changing the amounts.
