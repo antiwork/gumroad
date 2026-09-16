@@ -33,8 +33,7 @@ describe AutoTopUpNegativeDestinationBalancesJob do
   RATES = { "php" => "2.0", "lak" => "20000.0", "jpy" => "100.0" }.freeze
 
   def usd_for(local_cents, currency: Currency::PHP)
-    (BigDecimal(local_cents.to_s) / BigDecimal(RATES.fetch(currency.to_s.downcase)) *
-      (1 + described_class::USD_TOPUP_BUFFER_RATIO)).ceil.to_i
+    (BigDecimal(local_cents.to_s) / BigDecimal(RATES.fetch(currency.to_s.downcase))).ceil.to_i
   end
 
   before do
@@ -838,21 +837,22 @@ describe AutoTopUpNegativeDestinationBalancesJob do
     $redis.del("#{dedupe_key}:unresolved")
   end
 
-  it "sizes the USD transfer from the local hole: converted at the current rate, plus the buffer, rounded up to a whole cent" do
-    residue_row(-101) # 101 / 2.0 = 50.5 → ×1.2 = 60.6 → 61
+  it "sizes the USD transfer from the local hole at the current rate, rounded up to a whole cent" do
+    residue_row(-101) # 101 / 2.0 = 50.5 → 51
     make_payable
     Feature.activate(:auto_topup_negative_destination_balances)
 
     expect(StripeTransferInternallyToCreator).to receive(:transfer_funds_to_account).with(
-      hash_including(currency: Currency::USD, amount_cents: 61, metadata: hash_including(destination_hole_cents: 101))
+      hash_including(currency: Currency::USD, amount_cents: 51, metadata: hash_including(destination_hole_cents: 101))
     )
 
     described_class.new.perform
 
     expect(InternalNotificationWorker).to have_received(:perform_async) do |_room, subject, message|
       expect(subject).to eq("Negative destination balance top-ups")
-      expect(message).to include("FUNDED #{seller.email} — 101 php cents hole → 61 USD cents sent")
-      expect(message).to include("20% buffer")
+      expect(message).to include("FUNDED #{seller.email} — 101 php cents hole → 51 USD cents sent")
+      expect(message).to include("converted at the current rate and rounded up")
+      expect(message).not_to include("buffer")
     end
   ensure
     Feature.deactivate(:auto_topup_negative_destination_balances)
@@ -865,9 +865,9 @@ describe AutoTopUpNegativeDestinationBalancesJob do
     make_payable
     Feature.activate(:auto_topup_negative_destination_balances)
 
-    # ¥1,000 (single_unit) / 100 = 1,000 US cents → ×1.2 = 1,200; as hundredths it would be 12.
+    # ¥1,000 (single_unit) / 100 = 1,000 US cents; as hundredths it would be 10.
     expect(StripeTransferInternallyToCreator).to receive(:transfer_funds_to_account).with(
-      hash_including(currency: Currency::USD, amount_cents: 1_200)
+      hash_including(currency: Currency::USD, amount_cents: 1_000)
     )
 
     described_class.new.perform
@@ -998,6 +998,26 @@ describe AutoTopUpNegativeDestinationBalancesJob do
         expect($redis.get(dedupe_key)).to eq("10000:#{row.id}")
         expect($redis.get("#{dedupe_key}:unresolved")).to be_nil
       end
+    end
+
+    it "withholds a buffered request saved before exact sizing was enforced" do
+      legacy_request = {
+        message_why: "Reconciling negative destination ledger (gumroad-private#1903, auto top-up leg)",
+        stripe_account_id: merchant_account.charge_processor_merchant_id,
+        currency: Currency::USD,
+        amount_cents: 6_000,
+        idempotency_key: transfer_key,
+        metadata: { user_id: seller.id, merchant_account_id: merchant_account.id, reason: "negative_destination_balance_topup",
+                    destination_hole_cents: 100_00, destination_currency: "php" }
+      }
+      $redis.set(transfer_key, "retryable")
+      $redis.set(request_key, legacy_request.to_json)
+
+      expect(StripeTransferInternallyToCreator).not_to receive(:transfer_funds_to_account)
+      described_class.new.perform
+
+      expect($redis.get(dedupe_key)).to be_nil
+      expect(InternalNotificationWorker).to have_received(:perform_async).with(anything, anything, /invalid saved top-up request/)
     end
 
     it "retains the same request and error when Stripe replays an executed rejection" do

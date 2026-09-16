@@ -16,10 +16,11 @@ class AutoTopUpNegativeDestinationBalancesJob
   MAX_TOPUPS_PER_RUN = 10
 
   # Transfers are sent in USD: the platform balance holds no fundable non-USD balance, so a
-  # destination-currency transfer is rejected by Stripe. Buffer over the converted hole so FX
-  # drift cannot under-deliver (a residual negative fails the same payout guard again); any
-  # excess lands on the seller's Connect account.
-  USD_TOPUP_BUFFER_RATIO = BigDecimal("0.20")
+  # destination-currency transfer is rejected by Stripe. Fund only the current converted hole;
+  # any residual caused by later FX movement returns through the bounded top-up path instead of
+  # sending withdrawable excess to the seller's Connect account.
+  TRANSFER_MESSAGE = "Reconciling negative destination ledger (gumroad-private#1903, exact FX auto top-up)"
+  private_constant :TRANSFER_MESSAGE
 
   # A leg-two reconciliation pass can take days; this only needs to outlive the daily scan
   # cadence so a candidate isn't re-transferred before a human gets to it.
@@ -251,7 +252,7 @@ class AutoTopUpNegativeDestinationBalancesJob
         return no_rate_escalation(entry, to_transfer_cents) unless usd_amount_cents&.positive?
 
         request = {
-          message_why: "Reconciling negative destination ledger (gumroad-private#1903, auto top-up leg)",
+          message_why: TRANSFER_MESSAGE,
           stripe_account_id: entry[:merchant_account].charge_processor_merchant_id,
           currency: Currency::USD,
           amount_cents: usd_amount_cents,
@@ -343,7 +344,7 @@ class AutoTopUpNegativeDestinationBalancesJob
       return false unless request[:amount_cents].is_a?(Integer) && request[:amount_cents].positive?
       return false unless request[:currency] == Currency::USD && request[:idempotency_key] == transfer_key
       return false unless request[:stripe_account_id].is_a?(String) && request[:stripe_account_id].present?
-      return false unless request[:message_why].is_a?(String) && request[:message_why].present?
+      return false unless request[:message_why] == TRANSFER_MESSAGE
 
       metadata = request[:metadata]
       metadata.is_a?(Hash) && metadata.keys.sort == %i[destination_currency destination_hole_cents merchant_account_id reason user_id].sort &&
@@ -377,7 +378,7 @@ class AutoTopUpNegativeDestinationBalancesJob
         "#{live ? "Topped up" : "DRY RUN (auto_topup_negative_destination_balances off) — would top up"} " \
           "#{counts[:topped_up].to_i + counts[:dry_run].to_i} of #{outcomes.size} candidates processed " \
           "(#{total} payable total): #{counts[:escalate].to_i + counts[:awaiting_reconciliation].to_i} withheld for a human, #{counts[:error].to_i} errored. " \
-          "Transfers are sent in USD (local hole converted + #{(USD_TOPUP_BUFFER_RATIO * 100).to_i}% buffer, rounded up; retries reuse the original request). " \
+          "Transfers are sent in USD (the local hole is converted at the current rate and rounded up; retries reuse the original request). " \
           "Reminder: this only closes the Stripe-side gap — the internal Balance row(s) still need a human " \
           "reconciliation pass before this candidate stops re-appearing in the daily report.",
         ("" if funded.any?),
@@ -409,9 +410,8 @@ class AutoTopUpNegativeDestinationBalancesJob
       { entry:, verdict: :escalate, reason: "no usable USD exchange rate for #{currency} — cannot size the USD top-up for #{local_cents} #{currency} cents" }
     end
 
-    # Converted hole plus the buffer, rounded up once (an intermediate round could land below the
-    # buffered figure). Single-unit currencies scale as in CurrencyHelper#get_usd_cents. nil when
-    # no rate is available.
+    # Converted hole rounded up once so a fractional cent is never underfunded. Single-unit
+    # currencies scale as in CurrencyHelper#get_usd_cents. nil when no rate is available.
     def usd_topup_cents_for(local_cents, currency)
       currency = currency.to_s.downcase
       return local_cents if currency == Currency::USD
@@ -420,7 +420,7 @@ class AutoTopUpNegativeDestinationBalancesJob
       return nil unless rate.positive?
 
       usd_cents = BigDecimal(local_cents.to_s) / rate * (100 / unit_scaling_factor(currency))
-      (usd_cents * (1 + USD_TOPUP_BUFFER_RATIO)).ceil.to_i
+      usd_cents.ceil.to_i
     rescue ArgumentError, TypeError
       # BigDecimal("") / BigDecimal(nil) — an absent or malformed cached rate, not an outage.
       nil
