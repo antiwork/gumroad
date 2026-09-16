@@ -35,6 +35,15 @@ describe("request", () => {
     await expect(request({ method: "GET", accept: "json", url: "/anything" })).resolves.toMatchObject({ status: 200 });
   });
 
+  it("forwards keepalive to fetch, so a same-tab navigation cannot cancel the request", async () => {
+    const fetchMock = vi.fn((..._args: Parameters<typeof fetch>) => Promise.resolve(jsonResponse(200, { ok: true })));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await request({ method: "POST", accept: "json", url: "/anything", data: { a: 1 }, keepalive: true });
+
+    expect(fetchMock.mock.calls[0]?.[1]).toMatchObject({ keepalive: true });
+  });
+
   it("throws a plain ResponseError on 5xx", async () => {
     stubFetch(jsonResponse(500, { error: "boom" }));
 

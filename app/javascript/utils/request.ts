@@ -3,8 +3,8 @@ type RequestSettingsBase = {
   url: string;
   abortSignal?: AbortSignal | undefined;
   headers?: Record<string, string> | undefined;
-  // Fire-and-forget tracking on a link that navigates in the same tab: without this the browser
-  // cancels the POST when the new document starts loading, and the click is silently lost.
+  // Fire-and-forget tracking from a link that navigates in the same tab: without this the browser
+  // cancels the POST when the new document starts loading.
   keepalive?: boolean | undefined;
 };
 
@@ -120,6 +120,7 @@ export const request = async (settings: RequestSettings): Promise<Response> => {
       body: data,
       headers,
       signal: settings.abortSignal ?? null,
+      keepalive: settings.keepalive ?? false,
     });
     if (response.status >= 500) throw new ResponseError();
     // We rate limit some endpoints — to prevent brute force attacks (see
