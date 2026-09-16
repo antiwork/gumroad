@@ -17,7 +17,7 @@ class AutoTopUpNegativeDestinationBalancesJob
 
   # Transfers are sent in USD: the platform balance holds no fundable non-USD balance, so a
   # destination-currency transfer is rejected by Stripe. Confirm destination credit before
-  # recording funding. One correction can cover FX differences without a percentage buffer.
+  # recording funding. An FX shortfall needs human reconciliation.
   TRANSFER_MESSAGE = "Reconciling negative destination ledger (gumroad-private#1903, exact FX auto top-up)"
   private_constant :TRANSFER_MESSAGE
 
@@ -294,7 +294,7 @@ class AutoTopUpNegativeDestinationBalancesJob
       unless persist_with_retries(transfer_key)
         return { entry:, verdict: :escalate, reason: "Stripe accepted #{to_transfer_cents} cents for this account but the durable dedupe claim could not be confirmed in Redis — a human must verify the transfer with Stripe before clearing #{transfer_key} or #{unresolved_key}" }
       end
-      usd_amount_cents = complete_destination_funding(transfer, request)
+      usd_amount_cents = confirm_destination_funding(transfer, request)
       # Store the WINDOW's row ids, not the whole current_balance_ids set: a post-cutoff row
       # excluded from an in-cycle window's total must not become "funded" credit either, or a
       # later run intersecting funded_ids against a different window could count it and resend
@@ -342,29 +342,14 @@ class AutoTopUpNegativeDestinationBalancesJob
       $redis.eval(LOCK_RELEASE_SCRIPT, keys: [lock_key], argv: [lock_token]) if lock_token
     end
 
-    def complete_destination_funding(transfer, request)
+    def confirm_destination_funding(transfer, request)
       target_cents = request.fetch(:metadata).fetch(:destination_hole_cents)
       delivered_cents = destination_credit_cents(transfer, request)
       return request.fetch(:amount_cents) if delivered_cents >= target_cents
 
       remaining_cents = target_cents - delivered_cents
-      correction_cents = (BigDecimal(remaining_cents) * request.fetch(:amount_cents) / delivered_cents).ceil
-      # A correction cannot exceed the initial transfer. Large rate discrepancies need review.
-      raise "FX correction exceeds the initial transfer; #{remaining_cents} destination cents remain" if correction_cents > request.fetch(:amount_cents)
-
-      correction = request.merge(
-        amount_cents: correction_cents,
-        idempotency_key: "#{request.fetch(:idempotency_key)}:fx_correction",
-        metadata: request.fetch(:metadata).merge(destination_hole_cents: remaining_cents)
-      )
-      raise "Could not save FX correction request" unless $redis.set("#{correction.fetch(:idempotency_key)}:request", correction.to_json, nx: true)
-
-      # The original claim and account hold stay durable through both transfers and their reads.
-      correction_transfer = StripeTransferInternallyToCreator.transfer_funds_to_account(**correction)
-      remaining_cents -= destination_credit_cents(correction_transfer, correction)
-      raise "FX correction left #{remaining_cents} destination cents unfunded" if remaining_cents.positive?
-
-      request.fetch(:amount_cents) + correction_cents
+      # Another USD transfer has its own conversion rate and can over-credit the remainder.
+      raise "Stripe left #{remaining_cents} destination cents unfunded; reconcile the remaining shortfall manually"
     end
 
     def destination_credit_cents(transfer, request)
@@ -429,7 +414,7 @@ class AutoTopUpNegativeDestinationBalancesJob
           "#{counts[:topped_up].to_i + counts[:dry_run].to_i} of #{outcomes.size} candidates processed " \
           "(#{total} payable total): #{counts[:escalate].to_i + counts[:awaiting_reconciliation].to_i} withheld for a human, #{counts[:error].to_i} errored. " \
           "Transfers are sent in USD (the local hole is converted at the current rate and rounded up; retries reuse the original request). " \
-          "Live transfers require confirmed destination credit; one FX correction can cover a remaining shortfall. " \
+          "Live transfers require confirmed destination credit; remaining shortfalls require human reconciliation. " \
           "Reminder: this only closes the Stripe-side gap — the internal Balance row(s) still need a human " \
           "reconciliation pass before this candidate stops re-appearing in the daily report.",
         ("" if funded.any?),
