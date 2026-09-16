@@ -744,7 +744,13 @@ class StripeChargeProcessor
         end
       end
     end
-    return unless transfer
+    unless transfer
+      refund.with_lock do
+        refund.fee_retention_error = { class: "NoReversibleTransfer", message: "No eligible payout transfer or sale transfer older than 120 days can cover the refund fee" }
+        refund.save!
+      end
+      return
+    end
 
     refund.with_lock do
       refund.reload
