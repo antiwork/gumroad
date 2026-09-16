@@ -6354,6 +6354,26 @@ class LinksControllerConsumerTest < ActionController::TestCase
     assert_equal product.id, event.link_id
   end
 
+  # A name outside PERMITTED_NAMES is dropped when the visitor has no user_id, so the recovery
+  # click is the only funnel step we can record for a visitor we cannot identify.
+  test "POST track_user_action keeps the download-recovery click from an anonymous visitor" do
+    product = create_product
+    assert_difference -> { Event.count } => 1 do
+      post :track_user_action, params: { id: product.to_param, event_name: Event::NAME_PRODUCT_DOWNLOAD_RECOVERY_CLICK }
+    end
+    event = Event.last!
+    assert_equal "product_download_recovery_click", event.event_name
+    assert_equal product.id, event.link_id
+    assert_nil event.user_id
+  end
+
+  test "POST track_user_action drops an unpermitted event from an anonymous visitor" do
+    product = create_product
+    assert_no_difference -> { Event.count } do
+      post :track_user_action, params: { id: product.to_param, event_name: "i_want_this" }
+    end
+  end
+
   # --- create_purchase_event --------------------------------------------------
 
   test "create_purchase_event creates a purchase event" do

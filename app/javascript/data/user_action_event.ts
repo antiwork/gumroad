@@ -6,17 +6,20 @@ export const trackUserProductAction = async ({
   fromOverlay,
   wasRecommended,
   isModal = false,
+  keepalive = false,
 }: {
   name: string;
   permalink: string;
   fromOverlay?: boolean;
   wasRecommended?: boolean;
   isModal?: boolean;
+  keepalive?: boolean;
 }) =>
   request({
     method: "POST",
     url: Routes.track_user_action_link_path(permalink),
     accept: "json",
+    keepalive,
     data: {
       event_name: name,
       referrer: getReferrer(),

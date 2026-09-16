@@ -499,11 +499,6 @@ export const Product = ({
             isBundle={isBundle}
             customViewContentButtonText={product.custom_view_content_button_text}
           />
-        ) : !product.can_edit ? (
-          <LicenseKeyLookupPrompt
-            isLicensed={product.is_licensed}
-            hasDownload={!product.is_physical && product.native_type !== "call" && product.native_type !== "commission"}
-          />
         ) : null}
         {isBundle ? (
           <section className="grid gap-4 border-t border-border p-6">
@@ -712,6 +707,15 @@ export const Product = ({
               }
             }}
           />
+          {purchase === null && !product.can_edit ? (
+            <LicenseKeyLookupPrompt
+              isLicensed={product.is_licensed}
+              hasDownload={
+                !product.is_physical && product.native_type !== "call" && product.native_type !== "commission"
+              }
+              permalink={product.permalink}
+            />
+          ) : null}
           {product.sales_count !== null ? (
             <Alert role="status" variant="info">
               <strong>{product.sales_count.toLocaleString()}</strong>{" "}
@@ -905,25 +909,36 @@ const LicenseKeyRow = ({ licenseKey }: { licenseKey: string }) => (
   </CardContent>
 );
 
-const LicenseKeyLookupPrompt = ({ isLicensed, hasDownload }: { isLicensed: boolean; hasDownload: boolean }) => {
-  // Absolute root-domain URL, not a path: this section renders on the seller's subdomain
-  // and custom domain too, and /license-key-lookup is only drawn under
-  // GumroadDomainConstraint, so a relative href 404s there.
+const LicenseKeyLookupPrompt = ({
+  isLicensed,
+  hasDownload,
+  permalink,
+}: {
+  isLicensed: boolean;
+  hasDownload: boolean;
+  permalink: string;
+}) => {
+  // Absolute root-domain URL, not a path: this renders on the seller's subdomain and custom
+  // domain too, and /license-key-lookup is only drawn under GumroadDomainConstraint, so a
+  // relative href 404s there.
   const { scheme, rootDomain } = useDomains();
 
   return (
-    <section className="border-t border-border p-6">
-      <Card>
-        <CardContent asChild>
-          <li>
-            <h3 className="grow">Already bought this?</h3>
-            <NavigationButton href={Routes.license_key_lookup_url({ protocol: scheme, host: rootDomain })}>
-              {isLicensed ? "View your information" : hasDownload ? "Get your download link" : "Resend your receipt"}
-            </NavigationButton>
-          </li>
-        </CardContent>
-      </Card>
-    </section>
+    <p className="text-sm text-muted">
+      Already bought this?{" "}
+      <a
+        href={Routes.license_key_lookup_url({ protocol: scheme, host: rootDomain })}
+        onClick={() =>
+          void trackUserProductAction({
+            name: "product_download_recovery_click",
+            permalink,
+            keepalive: true,
+          }).catch(assertResponseError)
+        }
+      >
+        {isLicensed ? "View your information" : hasDownload ? "Get your download link" : "Resend your receipt"}
+      </a>
+    </p>
   );
 };
 

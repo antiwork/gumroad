@@ -3,6 +3,9 @@ type RequestSettingsBase = {
   url: string;
   abortSignal?: AbortSignal | undefined;
   headers?: Record<string, string> | undefined;
+  // Fire-and-forget tracking on a link that navigates in the same tab: without this the browser
+  // cancels the POST when the new document starts loading, and the click is silently lost.
+  keepalive?: boolean | undefined;
 };
 
 // `data?: never` on the bodyless member keeps `settings.data` readable without narrowing (TypeScript
