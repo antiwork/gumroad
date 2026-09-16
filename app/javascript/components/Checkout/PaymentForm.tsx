@@ -1952,8 +1952,9 @@ export const PaymentForm = ({
             // strands them with no way to complete checkout (see gumroad-private#927).
             if (e instanceof RecaptchaUnavailableError) {
               showAlert(RECAPTCHA_UNAVAILABLE_MESSAGE, "error");
-            } else {
-              assert(e instanceof RecaptchaCancelledError);
+            } else if (!(e instanceof RecaptchaCancelledError)) {
+              // A provider exception must not strand checkout after the wallet sheet closes.
+              showAlert("We couldn't complete the security check. Please try again to finish your purchase.", "error");
             }
             dispatch({ type: "cancel" });
           });
