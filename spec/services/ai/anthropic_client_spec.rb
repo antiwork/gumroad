@@ -1480,6 +1480,58 @@ describe Ai::AnthropicClient do
           .to include(gateway: "vercel", served_provider: "deepinfra", served_model: "deepseek/deepseek-v4.1-flash")
       end
 
+      it "reads the served provider from the streamed message_delta when no header is sent" do
+        stub_call_clock(0.0, 0.3, 1.0)
+        stream = sse(
+          ["message_start", { message: { model: "deepseek/deepseek-v4.1-flash" } }],
+          ["content_block_start", { index: 0, content_block: { type: "text" } }],
+          ["content_block_delta", { index: 0, delta: { type: "text_delta", text: "hi" } }],
+          ["message_delta", { delta: { stop_reason: "end_turn" },
+                              provider_metadata: { gateway: { routing: { resolvedProvider: "alibaba" } } } }],
+        )
+        stub_request(:post, vercel_url)
+          .to_return(status: 200, body: stream, headers: { "Content-Type" => "text/event-stream" })
+
+        client.stream_messages(system: "s", messages: [{ role: "user", content: "x" }]) { |_| }
+
+        expect(client.call_metrics.first).to include(gateway: "vercel", served_provider: "alibaba")
+      end
+
+      it "reads the served provider from a buffered body's routing metadata" do
+        stub_call_clock(0.0, 0.3, 0.6)
+        body = {
+          "model" => "deepseek/deepseek-v4.1-flash",
+          "content" => [],
+          "stop_reason" => "end_turn",
+          "provider_metadata" => { "gateway" => { "routing" => { "resolvedProvider" => "baseten" } } },
+        }
+        stub_request(:post, vercel_url)
+          .to_return(status: 200, body: body.to_json, headers: { "Content-Type" => "application/json" })
+
+        client.messages(system: "s", messages: [{ role: "user", content: "x" }])
+
+        expect(client.call_metrics.first).to include(gateway: "vercel", served_provider: "baseten")
+      end
+
+      it "prefers a response header over the body's routing metadata" do
+        stub_call_clock(0.0, 0.3, 0.6)
+        body = {
+          "model" => "deepseek/deepseek-v4.1-flash",
+          "content" => [],
+          "stop_reason" => "end_turn",
+          "provider_metadata" => { "gateway" => { "routing" => { "resolvedProvider" => "baseten" } } },
+        }
+        stub_request(:post, vercel_url).to_return(
+          status: 200,
+          body: body.to_json,
+          headers: { "Content-Type" => "application/json", "x-vercel-ai-gateway-provider" => "deepinfra" },
+        )
+
+        client.messages(system: "s", messages: [{ role: "user", content: "x" }])
+
+        expect(client.call_metrics.first).to include(served_provider: "deepinfra")
+      end
+
       it "keeps TTFT and latency on the attempt that delivered when the first attempt is retried" do
         allow(client).to receive(:sleep)
         stub_call_clock(0.0, 0.1, 0.2, 1.0)
