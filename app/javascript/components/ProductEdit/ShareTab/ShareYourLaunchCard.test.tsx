@@ -114,12 +114,20 @@ describe("ShareYourLaunchCard", () => {
     expect(screen.queryByRole("button", { name: "Post on X" })).toBeNull();
   });
 
-  it("falls back to the intent share plus Reconnect X when the token cannot write", async () => {
-    await renderCard([xChannel({ action: action({ status: "failed", error_code: "x_write_permission_missing" }) })]);
+  it("keeps the intent share and Reconnect X on a saved action that cannot write", async () => {
+    await renderCard([xChannel({ action: action({ status: "approved", error_code: "x_write_permission_missing" }) })]);
 
     expect(screen.getByText(/only allows reading/u)).toBeDefined();
     expect(screen.getByRole("link", { name: "Share on X" })).toBeDefined();
     expect(screen.getByRole("link", { name: "Reconnect X" })).toBeDefined();
+    expect(screen.getByRole("button", { name: "Post on X" })).toBeDefined();
+  });
+
+  it("tells the seller to check X when a post's result is unknown", async () => {
+    await renderCard([xChannel({ action: action({ status: "failed", error_code: "x_post_result_unknown" }) })]);
+
+    expect(screen.getByText(/couldn't confirm whether this post went through/u)).toBeDefined();
+    expect(screen.getByRole("link", { name: "Share on X" })).toBeDefined();
     expect(screen.queryByRole("button", { name: "Post on X" })).toBeNull();
   });
 

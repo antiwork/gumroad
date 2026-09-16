@@ -1360,6 +1360,7 @@ ActiveRecord::Schema[7.1].define(version: 2026_12_14_090000) do
     t.string "external_url"
     t.string "error_code"
     t.datetime "approved_at"
+    t.datetime "queued_at"
     t.datetime "posted_at"
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false

@@ -50,6 +50,16 @@ describe Marketing::Action do
       expect(other.cancel).to be(true)
       expect(other.mark_failed).to be(false)
     end
+
+    it "stamps queued_at on queue and reopens the action when the connection cannot write" do
+      action.approve!
+      action.queue!
+      expect(action.queued_at).to be_present
+
+      expect(action.require_reconnect).to be(true)
+      expect(action).to be_approved
+      expect(action).not_to be_terminal
+    end
   end
 
   describe ".find_or_create_open!" do

@@ -43,6 +43,16 @@ describe Products::MarketingActionsController do
       get :index, params: { product_id: create(:product).unique_permalink }, as: :json
       expect(response).to have_http_status(:not_found)
     end
+
+    it "404s for an unpublished product without creating an action or a launch link" do
+      product.update!(draft: true)
+
+      expect do
+        get :index, params: { product_id: product.unique_permalink }, as: :json
+      end.not_to change { [Marketing::Action.count, UtmLink.where(utm_campaign: "launch").count] }
+
+      expect(response).to have_http_status(:not_found)
+    end
   end
 
   describe "member actions" do
@@ -74,8 +84,9 @@ describe Products::MarketingActionsController do
       post :execute, params: { product_id: product.unique_permalink, id: action.external_id }, as: :json
 
       expect(response).to have_http_status(:ok)
-      expect(response.parsed_body["action"]).to include("status" => "failed", "error_code" => "x_write_permission_missing")
+      expect(response.parsed_body["action"]).to include("status" => "approved", "error_code" => "x_write_permission_missing")
       expect(response.parsed_body["intent_url"]).to include("twitter.com/intent/tweet")
+      expect(action.reload).not_to be_terminal
     end
 
     it "cancels an open action" do

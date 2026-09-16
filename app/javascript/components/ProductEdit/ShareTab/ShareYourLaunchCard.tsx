@@ -156,7 +156,7 @@ const XChannelRow = ({
         </Alert>
       ) : null}
 
-      {action.status === "failed" && action.error_code === "x_write_permission_missing" ? (
+      {action.error_code === "x_write_permission_missing" && channel.connected ? (
         <Alert role="status" variant="warning">
           <div className="grid gap-2">
             <span>
@@ -167,6 +167,13 @@ const XChannelRow = ({
               <TwitterShareButton url={action.link_url ?? ""} text={action.copy} />
               <NavigationButton href={channel.connect_path}>Reconnect X</NavigationButton>
             </div>
+          </div>
+        </Alert>
+      ) : action.error_code === "x_post_result_unknown" ? (
+        <Alert role="status" variant="warning">
+          <div className="flex flex-col justify-between gap-2 sm:flex-row">
+            <span>We couldn't confirm whether this post went through. Check your X account before posting again.</span>
+            <TwitterShareButton url={action.link_url ?? ""} text={action.copy} />
           </div>
         </Alert>
       ) : action.status === "failed" ? (

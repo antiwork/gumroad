@@ -34,11 +34,17 @@ class Marketing::Action < ApplicationRecord
     event :mark_failed do
       transition [:approved, :queued] => :failed
     end
+    # A connection that cannot write costs the seller nothing already posted, and
+    # reconnecting fixes it, so the action stays open instead of going terminal.
+    event :require_reconnect do
+      transition [:approved, :queued] => :approved
+    end
     event :cancel do
       transition [:recommended, :approved, :queued] => :cancelled
     end
 
     before_transition to: :approved, do: ->(action) { action.approved_at = Time.current }
+    before_transition to: :queued, do: ->(action) { action.queued_at = Time.current }
     before_transition to: :posted, do: ->(action) { action.posted_at = Time.current }
   end
 

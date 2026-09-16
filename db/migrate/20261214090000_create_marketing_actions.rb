@@ -14,6 +14,7 @@ class CreateMarketingActions < ActiveRecord::Migration[7.1]
       t.string :external_url
       t.string :error_code
       t.datetime :approved_at
+      t.datetime :queued_at
       t.datetime :posted_at
       t.timestamps
 

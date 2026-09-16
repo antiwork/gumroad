@@ -6,7 +6,9 @@ class Products::MarketingActionsController < Sellers::BaseController
 
   def index
     authorize Marketing::Action
-    return head :not_found unless enabled? && @product.user == current_seller
+    # Recommendations create the action and its UTM link, so drafts must not reach
+    # them even on a direct request.
+    return head :not_found unless enabled? && @product.user == current_seller && @product.published?
 
     render json: { channels: Marketing::Recommendations.new(product: @product, seller: current_seller).call }
   end

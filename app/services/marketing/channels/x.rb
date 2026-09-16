@@ -3,6 +3,10 @@
 class Marketing::Channels::X
   Result = Struct.new(:action, :intent_url, :connect_path, keyword_init: true)
 
+  # A claim older than this is an attempt whose request died mid-flight (the X call
+  # itself times out at 15s), so a later execute has to resolve it, not resend it.
+  ATTEMPT_TIMEOUT = 2.minutes
+
   def initialize(action)
     @action = action
   end
@@ -17,8 +21,8 @@ class Marketing::Channels::X
     elsif !action.link.published?
       fail_with!("product_not_published")
     elsif action.user.twitter_oauth_token.blank? || action.user.twitter_oauth_secret.blank?
-      fail_with!("x_write_permission_missing")
-    else
+      require_reconnect!
+    elsif claim!
       post!
     end
 
@@ -28,19 +32,53 @@ class Marketing::Channels::X
   private
     attr_reader :action
 
+    # Two executes of one action load separate instances, and X has no idempotency
+    # key, so the approved→queued transition under the row lock is the claim: only
+    # the request that wins it may call out.
+    def claim!
+      action.with_lock do
+        action.reload
+        next false unless action.approved? || action.queued?
+
+        if action.queued?
+          next false if in_flight?
+
+          # X may have accepted the post before the attempt was abandoned, so a
+          # resend would duplicate it. Close it and let the card say so.
+          fail_with!("x_post_result_unknown")
+          next false
+        end
+
+        action.queue!
+        true
+      end
+    end
+
+    def in_flight? = action.queued_at.present? && action.queued_at > ATTEMPT_TIMEOUT.ago
+
     def post!
-      action.queue! if action.approved?
       response = Marketing::XApi.post_tweet(user: action.user, text: action.post_text)
 
       if response.created?
         action.external_post_id = response.tweet_id
         action.external_url = "https://x.com/#{action.user.twitter_handle}/status/#{response.tweet_id}"
+        action.error_code = nil
         action.mark_posted!
       elsif response.write_forbidden?
-        fail_with!("x_write_permission_missing")
+        require_reconnect!
       else
-        fail_with!("x_api_error")
+        # Anything but a 201 leaves the post's fate unknown, and a 5xx or a dropped
+        # connection is the case where X most likely did receive it.
+        fail_with!("x_post_result_unknown")
       end
+    end
+
+    # Nothing reached X and the seller can fix this by reconnecting, so the action
+    # stays open with the reason recorded: failing it would hide the reconnect
+    # fallback until the next reload and mint a fresh recommendation every time.
+    def require_reconnect!
+      action.error_code = "x_write_permission_missing"
+      action.require_reconnect!
     end
 
     def fail_with!(code)

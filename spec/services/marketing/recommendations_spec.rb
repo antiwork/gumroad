@@ -57,4 +57,17 @@ describe Marketing::Recommendations do
     seller.update!(twitter_oauth_token: nil)
     expect(channels.first).to include(connected: false)
   end
+
+  it "keeps serving the same action, with its reason, after a connection that cannot write" do
+    action = channels.first[:action]
+    action.approve!
+    WebMock.stub_request(:post, Marketing::XApi::TWEETS_URL).to_return(status: 403, body: "{}", headers: { "Content-Type" => "application/json" })
+    Marketing::Channels::X.new(action).call
+
+    reloaded = described_class.new(product:, seller:).call.first[:action]
+
+    expect(reloaded).to eq(action)
+    expect(reloaded.error_code).to eq("x_write_permission_missing")
+    expect(reloaded).not_to be_terminal
+  end
 end

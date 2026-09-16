@@ -26,12 +26,13 @@ describe Marketing::Channels::X do
     expect(result.action).to have_attributes(external_post_id: "1790", external_url: "https://x.com/edgar/status/1790")
   end
 
-  it "marks the action failed with x_write_permission_missing on a 403 and returns the intent fallback" do
+  it "keeps the action open with the reason and returns the intent fallback when the token cannot write" do
     stub_tweets(status: 403, body: { title: "Forbidden", detail: "oauth1-permissions" })
 
     result = described_class.new(action).call
 
-    expect(result.action).to be_failed
+    expect(result.action).to be_approved
+    expect(result.action).not_to be_terminal
     expect(result.action.error_code).to eq("x_write_permission_missing")
     expect(result.intent_url).to include("twitter.com/intent/tweet").and include(CGI.escape(utm_link.short_url))
     expect(result.connect_path).to eq("/settings/social_connections")
@@ -41,6 +42,7 @@ describe Marketing::Channels::X do
     seller.update!(twitter_oauth_token: nil)
     result = described_class.new(action).call
     expect(result.action.error_code).to eq("x_write_permission_missing")
+    expect(result.action).to be_approved
     expect(WebMock).not_to have_requested(:post, Marketing::XApi::TWEETS_URL)
   end
 
@@ -65,5 +67,56 @@ describe Marketing::Channels::X do
     described_class.new(action).call
     described_class.new(action.reload).call
     expect(WebMock).to have_requested(:post, Marketing::XApi::TWEETS_URL).once
+  end
+
+  it "lets only one of two racing requests call X" do
+    stub_tweets(status: 201, body: { data: { id: "1" } })
+    other_request = Marketing::Action.find(action.id)
+
+    described_class.new(action).call
+    described_class.new(other_request).call
+
+    expect(WebMock).to have_requested(:post, Marketing::XApi::TWEETS_URL).once
+    expect(action.reload).to be_posted
+  end
+
+  it "closes an attempt that died mid-flight as an unknown result instead of resending it" do
+    action.update!(status: "queued", queued_at: 10.minutes.ago)
+
+    result = described_class.new(action).call
+
+    expect(WebMock).not_to have_requested(:post, Marketing::XApi::TWEETS_URL)
+    expect(result.action).to be_failed
+    expect(result.action.error_code).to eq("x_post_result_unknown")
+  end
+
+  it "leaves an attempt that is still in flight alone" do
+    action.update!(status: "queued", queued_at: 5.seconds.ago)
+
+    result = described_class.new(action).call
+
+    expect(WebMock).not_to have_requested(:post, Marketing::XApi::TWEETS_URL)
+    expect(result.action).to be_queued
+  end
+
+  it "records an ambiguous X response as unknown so the seller checks X before retrying" do
+    stub_tweets(status: 500, body: { title: "Internal Server Error" })
+
+    result = described_class.new(action).call
+
+    expect(result.action).to be_failed
+    expect(result.action.error_code).to eq("x_post_result_unknown")
+  end
+
+  it "clears an earlier write-permission failure once the post lands" do
+    stub_tweets(status: 403, body: {})
+    described_class.new(action).call
+    expect(action.reload.error_code).to eq("x_write_permission_missing")
+
+    stub_tweets(status: 201, body: { data: { id: "9" } })
+    result = described_class.new(action.reload).call
+
+    expect(result.action).to be_posted
+    expect(result.action.error_code).to be_nil
   end
 end
