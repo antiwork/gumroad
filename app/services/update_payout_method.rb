@@ -126,6 +126,11 @@ class UpdatePayoutMethod
       baseline_active_bank_id = user.active_bank_account&.id
       credit_card, error = prepare_credit_card
       return error if error
+    elsif bank_account_params_present? && params[:bank_account][:account_number].present?
+      # Built and checked against Stripe's directory before the lock, so a slow Stripe answer holds
+      # up this request rather than the row.
+      replacement_bank_account, error = prepare_replacement_bank_account
+      return error if error
     end
 
     user.with_lock do
@@ -135,6 +140,8 @@ class UpdatePayoutMethod
           next { error: :concurrent_payout_method_change }
         end
         process_card_params(credit_card)
+      elsif replacement_bank_account
+        process_full_bank_account_replacement(replacement_bank_account)
       elsif bank_account_params_present?
         process_bank_account_params
       elsif params[:payment_address].present?
@@ -183,9 +190,7 @@ class UpdatePayoutMethod
     def process_bank_account_params
       raise unless params[:bank_account][:type].in?(BANK_ACCOUNT_TYPES)
 
-      if params[:bank_account][:account_number].present?
-        process_full_bank_account_replacement
-      elsif params[:bank_account][:account_holder_full_name].present?
+      if params[:bank_account][:account_holder_full_name].present?
         process_holder_name_update
       else
         { success: true }
@@ -196,11 +201,15 @@ class UpdatePayoutMethod
 
     ACCOUNT_NUMBER_SEPARATOR_CHARACTERS = /[[:space:]\p{Cf}-]/
 
-    def process_full_bank_account_replacement
+    # Returns [bank_account, nil] once the new record passes our validations and Stripe's directory
+    # check, or [nil, error]. Nothing is persisted here.
+    def prepare_replacement_bank_account
+      raise unless params[:bank_account][:type].in?(BANK_ACCOUNT_TYPES)
+
       account_number = normalize_account_number(params[:bank_account][:account_number])
       account_number_confirmation = normalize_account_number(params[:bank_account][:account_number_confirmation])
-      return { error: :account_number_does_not_match } if account_number != account_number_confirmation
-      return { error: :bank_account_error, data: "Account number is too long" } if account_number.length > MAX_ENCRYPTED_FIELD_LENGTH
+      return [nil, { error: :account_number_does_not_match }] if account_number != account_number_confirmation
+      return [nil, { error: :bank_account_error, data: "Account number is too long" }] if account_number.length > MAX_ENCRYPTED_FIELD_LENGTH
 
       bank_account = BANK_ACCOUNT_TYPES[params[:bank_account][:type]][:class].new(bank_account_params_for_bank_account_type)
       bank_account.user = user
@@ -208,8 +217,15 @@ class UpdatePayoutMethod
       bank_account.account_number = account_number
       bank_account.account_number_last_four = account_number.last(4)
       bank_account.account_type = params[:bank_account][:account_type] if params[:bank_account][:account_type].present?
-      return bank_account_error_for(bank_account) unless bank_account.valid?
+      return [nil, bank_account_error_for(bank_account)] unless bank_account.valid?
 
+      rejection = BankCodeDirectoryCheck.rejection_message_for(bank_account, previous_bank_account: user.active_bank_account)
+      return [nil, { error: :bank_account_error, data: rejection, field: :bank_code }] if rejection
+
+      [bank_account, nil]
+    end
+
+    def process_full_bank_account_replacement(bank_account)
       replace_active_bank_account_with_unvalidated_delete!(bank_account)
       clear_payment_address_and_invalidation!
       { success: true }

@@ -170,6 +170,72 @@ describe UpdatePayoutMethod do
       end
     end
 
+    describe "when the country's bank code is validated by Stripe's directory" do
+      let(:user) { create(:named_user) }
+      let!(:existing_bank_account) { create(:egypt_bank_account, user:, bank_code: "QNBAEGCX", stripe_bank_account_id: "ba_123") }
+
+      def egypt_params(bank_code:)
+        ActionController::Parameters.new(
+          bank_account: {
+            type: EgyptBankAccount.name,
+            account_holder_full_name: "Named User",
+            bank_code:,
+            account_number: "EG800002000156789012345180002",
+            account_number_confirmation: "EG800002000156789012345180002",
+          }
+        )
+      end
+
+      it "saves a code Stripe resolves" do
+        expect(Stripe::Token).to receive(:create).and_return(double)
+
+        result = described_class.new(user_params: egypt_params(bank_code: "NBEGEGCX331"), seller: user).process
+
+        expect(result).to eq(success: true)
+        expect(user.reload.active_bank_account.bank_code).to eq("NBEGEGCX331")
+        expect(existing_bank_account.reload).to be_deleted
+      end
+
+      it "rejects a code Stripe cannot resolve, keeps the current account, and names the 8-character code" do
+        allow(Stripe::Token).to receive(:create).and_raise(
+          Stripe::InvalidRequestError.new("We couldn't find the bank for that BIC", "bank_account[routing_number]", code: "routing_number_invalid")
+        )
+
+        result = described_class.new(user_params: egypt_params(bank_code: "QNBAEGCX027"), seller: user).process
+
+        expect(result[:error]).to eq(:bank_account_error)
+        expect(result[:data]).to include("couldn't find a bank for the bank code QNBAEGCX027")
+        expect(result[:data]).to include("QNBAEGCX rather than QNBAEGCX027")
+        expect(user.reload.active_bank_account).to eq(existing_bank_account)
+        expect(user.bank_accounts.count).to eq(1)
+      end
+
+      it "saves when Stripe cannot be reached" do
+        allow(Stripe::Token).to receive(:create).and_raise(Stripe::APIConnectionError.new("timed out"))
+
+        result = described_class.new(user_params: egypt_params(bank_code: "QNBAEGCX027"), seller: user).process
+
+        expect(result).to eq(success: true)
+        expect(user.reload.active_bank_account.bank_code).to eq("QNBAEGCX027")
+      end
+
+      it "skips the probe when the code matches the attached account" do
+        expect(Stripe::Token).not_to receive(:create)
+
+        result = described_class.new(user_params: egypt_params(bank_code: "QNBAEGCX"), seller: user).process
+
+        expect(result).to eq(success: true)
+      end
+
+      it "does not probe a record our own validation already rejected" do
+        expect(Stripe::Token).not_to receive(:create)
+
+        result = described_class.new(user_params: egypt_params(bank_code: "qnbaegcx027"), seller: user).process
+
+        expect(result[:error]).to eq(:bank_account_error)
+      end
+    end
+
     describe "when account number exceeds maximum length" do
       let(:user) { create(:named_user) }
 
