@@ -2426,7 +2426,8 @@ describe Settings::PaymentsController, :vcr, type: :controller, inertia: true do
       expect(response).to redirect_to settings_payments_url
       expect(flash[:notice]).to be_nil
       expect(flash[:alert]).to include("Stripe has paused payouts")
-      expect(flash[:alert]).to include("contact support")
+      expect(flash[:alert]).to include("nothing for you to submit")
+      expect(flash[:alert]).not_to include("chase")
     end
 
     it "still says 'all set' when the pause came from us rather than Stripe" do
@@ -2489,6 +2490,104 @@ describe Settings::PaymentsController, :vcr, type: :controller, inertia: true do
       get :remediation
 
       expect(response.location).to match(Regexp.new("https://connect.stripe.com/setup/c/#{stripe_connect_account_id}/"))
+    end
+
+    context "when the only open requirement is a pending_verification Stripe cannot finish" do
+      def stub_unfinishable_review(stripe_connect_account_id, pending_verification: ["person_123.verification.document"],
+                                   charges_enabled: false, errors: [], current_deadline: nil)
+        allow(Stripe::Account).to receive(:retrieve).with(stripe_connect_account_id).and_return(
+          Stripe::Account.construct_from(
+            id: stripe_connect_account_id,
+            object: "account",
+            charges_enabled:,
+            requirements: {
+              "currently_due" => [],
+              "past_due" => [],
+              "eventually_due" => [],
+              "pending_verification" => pending_verification,
+              "errors" => errors,
+              "current_deadline" => current_deadline,
+            },
+            future_requirements: { "currently_due" => [], "past_due" => [], "eventually_due" => [] }
+          )
+        )
+      end
+
+      it "opens a Stripe AccountLink when a blocked review has nothing due, no errors and no deadline" do
+        # All six "due" lists empty with charges off: the redirect here is the dead end.
+        merchant_account = StripeMerchantAccountManager.create_account(user, passphrase: "1234")
+        stripe_connect_account_id = merchant_account.charge_processor_merchant_id
+        stub_unfinishable_review(stripe_connect_account_id)
+        expect(Stripe::AccountLink).to receive(:create).with(
+          {
+            account: stripe_connect_account_id,
+            refresh_url: remediation_settings_payments_url,
+            return_url: verify_stripe_remediation_settings_payments_url,
+            type: "account_update",
+          }
+        ).and_call_original
+
+        get :remediation
+
+        expect(response.location).to match(Regexp.new("https://connect.stripe.com/setup/c/#{stripe_connect_account_id}/"))
+      end
+
+      it "keeps the reassuring redirect while the account can still take payments" do
+        merchant_account = StripeMerchantAccountManager.create_account(user, passphrase: "1234")
+        stub_unfinishable_review(merchant_account.charge_processor_merchant_id, charges_enabled: true)
+        expect(Stripe::AccountLink).not_to receive(:create)
+
+        get :remediation
+
+        expect(response).to redirect_to settings_payments_url
+        expect(flash[:notice]).to eq "Thanks! You're all set."
+      end
+
+      it "keeps the reassuring redirect when Stripe reported an error on the pending requirement" do
+        merchant_account = StripeMerchantAccountManager.create_account(user, passphrase: "1234")
+        stub_unfinishable_review(merchant_account.charge_processor_merchant_id,
+                                 errors: [{ "code" => "verification_document_failed", "requirement" => "person_123.verification.document" }])
+        expect(Stripe::AccountLink).not_to receive(:create)
+
+        get :remediation
+
+        expect(response).to redirect_to settings_payments_url
+      end
+
+      it "keeps the reassuring redirect when Stripe set a deadline on the review" do
+        merchant_account = StripeMerchantAccountManager.create_account(user, passphrase: "1234")
+        stub_unfinishable_review(merchant_account.charge_processor_merchant_id, current_deadline: 1790000000)
+        expect(Stripe::AccountLink).not_to receive(:create)
+
+        get :remediation
+
+        expect(response).to redirect_to settings_payments_url
+      end
+
+      it "still opens a Stripe AccountLink while Stripe lists a due requirement" do
+        merchant_account = StripeMerchantAccountManager.create_account(user, passphrase: "1234")
+        allow(Stripe::Account).to receive(:retrieve).with(merchant_account.charge_processor_merchant_id).and_return(
+          Stripe::Account.construct_from(
+            id: merchant_account.charge_processor_merchant_id,
+            object: "account",
+            charges_enabled: false,
+            requirements: {
+              "currently_due" => ["person_123.verification.document"],
+              "past_due" => [],
+              "eventually_due" => [],
+              "pending_verification" => [],
+              "errors" => [],
+              "current_deadline" => nil,
+            },
+            future_requirements: { "currently_due" => [], "past_due" => [], "eventually_due" => [] }
+          )
+        )
+        expect(Stripe::AccountLink).to receive(:create).and_call_original
+
+        get :remediation
+
+        expect(response.location).to match(Regexp.new("https://connect.stripe.com/setup/c/#{merchant_account.charge_processor_merchant_id}/"))
+      end
     end
 
     it "falls back to the 'Thanks' redirect when Stripe::Account.retrieve raises and local has no pending requests" do
