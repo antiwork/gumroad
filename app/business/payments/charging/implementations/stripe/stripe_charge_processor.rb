@@ -743,6 +743,11 @@ class StripeChargeProcessor
           tr.present? && tr.amount - tr.amount_reversed > amount_to_reverse_for.call(tr)
         end
       end
+      unless transfer
+        # Newer accounts have sale transfers but no payout transfer or 120-day history.
+        transfers = Stripe::Transfer.list(destination: stripe_account_id, created: { 'gte': 120.days.ago.to_i }, limit: 100)
+        transfer = transfers.find { |tr| tr.amount - tr.amount_reversed > amount_to_reverse_for.call(tr) }
+      end
     end
     return unless transfer
 
