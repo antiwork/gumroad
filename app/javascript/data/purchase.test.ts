@@ -325,5 +325,6 @@ describe("createPurchasesRequestData zip_code mapping", () => {
   // Spain purchase with no code typed must leave the field unset rather than blank.
   it("leaves a Spain purchase with no postal code unset", () => {
     expect(purchaseFor({ taxCountryElection: "ES", zipCode: null }).zip_code).toBeUndefined();
+    expect(purchaseFor({ taxCountryElection: "ES", zipCode: "" }).zip_code).toBeUndefined();
   });
 });

@@ -49,7 +49,7 @@ class Purchase
     end
 
     private
-      # returns US zip code (without +4) only, otherwise nil
+      # Returns a US ZIP (without +4) or a supplied Spanish postal code.
       def best_guess_zip
         # trust the user if they provided a zip in a format we understand
         return parsed_zip_from_user_input if parsed_zip_from_user_input

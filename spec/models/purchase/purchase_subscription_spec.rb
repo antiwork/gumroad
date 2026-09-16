@@ -617,8 +617,18 @@ describe "PurchaseSubscription", :vcr do
         expect(purchase.errors).to be_empty
       end
 
+      ["3500A", ""].each do |postal_code|
+        it "still charges VAT for #{postal_code.inspect} instead of granting the postal exemption" do
+          original_purchase.update!(zip_code: postal_code)
+
+          purchase = renewal_of(subscription.reload)
+          expect(purchase.gumroad_tax_cents).to eq 210
+          expect(purchase.errors).to be_empty
+        end
+      end
+
       it "still charges VAT for a mainland postal code" do
-        original_purchase.update!(zip_code: "08001")
+        original_purchase.update!(zip_code: "28001")
 
         expect(renewal_of(subscription.reload).gumroad_tax_cents).to eq 210
       end
