@@ -305,7 +305,7 @@ class Settings::PaymentsController < Settings::BaseController
                              future_requirements["past_due"].blank? &&
                              future_requirements["eventually_due"].blank?
     if nothing_open_on_stripe
-      flash.merge!(nothing_open_flash)
+      flash.merge!(nothing_open_flash(review_still_open: stripe_review_has_no_exit?(stripe_account, requirements)))
     end
 
     safe_redirect_to settings_payments_path
@@ -522,11 +522,15 @@ class Settings::PaymentsController < Settings::BaseController
     # intervention Stripe raises and resolves out of band), and that state satisfies
     # every check above while the seller still cannot be paid. Telling them they are
     # fine is the dead end this branch exists to avoid, so the Stripe-side pause wins.
-    def nothing_open_flash
+    # Likewise on the return leg of a `stripe_review_has_no_exit?` link: the seller
+    # just came back from Stripe with that review still open.
+    def nothing_open_flash(review_still_open: false)
       if current_seller.payouts_paused_internally? &&
          current_seller.payouts_paused_by_source == User::PAYOUT_PAUSE_SOURCE_STRIPE
         { alert: "Stripe has paused payouts on your account and hasn't told us what it needs. " \
-                 "There's nothing for you to submit — please contact support and we'll chase it with Stripe." }
+                 "There's nothing for you to submit right now." }
+      elsif review_still_open
+        { alert: "Stripe is still reviewing your account. There's nothing more for you to submit right now." }
       else
         { notice: "Thanks! You're all set." }
       end
@@ -536,7 +540,7 @@ class Settings::PaymentsController < Settings::BaseController
       stripe_account = Stripe::Account.retrieve(merchant_account.charge_processor_merchant_id)
       requirements = stripe_account["requirements"] || {}
       future_requirements = stripe_account["future_requirements"] || {}
-      [
+      return true if [
         requirements["currently_due"],
         requirements["past_due"],
         requirements["eventually_due"],
@@ -544,8 +548,21 @@ class Settings::PaymentsController < Settings::BaseController
         future_requirements["past_due"],
         future_requirements["eventually_due"],
       ].any?(&:present?)
+
+      stripe_review_has_no_exit?(stripe_account, requirements)
     rescue Stripe::StripeError => e
       ErrorNotifier.notify(e, context: { user_id: current_seller.id })
       false
+    end
+
+    # A `pending_verification` entry on its own is Stripe reviewing what the seller submitted
+    # and keeps the reassuring redirect. Paired with charges disabled, empty due lists, no
+    # errors and no deadline, Stripe surfaces nothing the seller can act on from our page,
+    # so offer the `account_update` link instead.
+    def stripe_review_has_no_exit?(stripe_account, requirements)
+      requirements["pending_verification"].present? &&
+        !stripe_account["charges_enabled"] &&
+        Array(requirements["errors"]).empty? &&
+        requirements["current_deadline"].blank?
     end
 end
