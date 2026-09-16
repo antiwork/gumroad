@@ -12,8 +12,13 @@ class Onetime::ReconcileNonUsRefundFees
         account&.holder_of_funds == HolderOfFunds::STRIPE && account.country.present? &&
         account.country != Compliance::Countries::USA.alpha2
 
-      # Call directly so capped rows can reconcile without resetting their attempt history.
-      refund.recover_pending_fee_retention! if eligible && !dry_run
+      recovery_error = nil
+      begin
+        # Call directly so capped rows can reconcile without resetting their attempt history.
+        refund.recover_pending_fee_retention! if eligible && !dry_run
+      rescue StandardError => error
+        recovery_error = { "class" => error.class.name, "message" => error.message }
+      end
       refund.reload
       {
         refund_id: refund.id,
@@ -22,7 +27,7 @@ class Onetime::ReconcileNonUsRefundFees
         fee_cents: credit&.amount_cents&.abs,
         written_off_cents: refund.fee_retention_written_off_cents.to_i,
         collected_transfer: refund.debited_stripe_transfer,
-        error: refund.fee_retention_error
+        error: recovery_error || refund.fee_retention_error
       }
     end
     {

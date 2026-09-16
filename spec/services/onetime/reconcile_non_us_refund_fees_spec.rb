@@ -63,6 +63,30 @@ RSpec.describe Onetime::ReconcileNonUsRefundFees do
     expect(adjustment.holding_amount_net_cents).to eq(1330)
   end
 
+  it "reports a missing ledger debit and continues reconciling later refunds" do
+    BalanceTransaction.where(credit:).delete_all
+    later_refund = create(:refund, purchase:, retained_fee_cents: 500, fee_retention_pending: true)
+    later_credit = create(:credit, user: merchant_account.user, merchant_account:, fee_retention_refund: later_refund, amount_cents: -500)
+    BalanceTransaction.create!(user: later_credit.user, merchant_account:, credit: later_credit,
+                               issued_amount: BalanceTransaction::Amount.new(currency: "usd", gross_cents: -500, net_cents: -500),
+                               holding_amount: BalanceTransaction::Amount.new(currency: "cad", gross_cents: -665, net_cents: -665))
+    allow(Stripe::Transfer).to receive(:list).and_return([])
+    expect(Stripe::Transfer).not_to receive(:create)
+    expect(Stripe::Transfer).not_to receive(:create_reversal)
+
+    result = described_class.process(refund_ids: [refund.id, later_refund.id], dry_run: false)
+
+    expect(result).to include(pending_cents: 1000, written_off_cents: 500)
+    expect(result[:rows].first).to include(
+      refund_id: refund.id, pending: true, written_off_cents: 0,
+      error: { "class" => "RuntimeError", "message" => "Refund fee retention has no ledger debit" }
+    )
+    expect(result[:rows].last).to include(refund_id: later_refund.id, pending: false, written_off_cents: 500, error: nil)
+    expect(refund.reload.fee_retention_written_off_at).to be_nil
+    expect(BalanceTransaction.where(credit: later_credit).sum(:issued_amount_net_cents)).to eq(0)
+    expect(BalanceTransaction.where(credit: later_credit).sum(:holding_amount_net_cents)).to eq(0)
+  end
+
   it "skips US fees" do
     merchant_account.update!(country: "US")
     expect(StripeChargeProcessor).not_to receive(:debit_stripe_account_for_refund_fee)
