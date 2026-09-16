@@ -749,6 +749,7 @@ describe SettingsPresenter do
           dob_year: 0,
         },
         min_dob_year: Date.today.year - UserComplianceInfo::MINIMUM_DATE_OF_BIRTH_AGE,
+        us_business_types: UserComplianceInfo::BusinessTypes::BUSINESS_TYPES_US.map { |code, name| { code:, name: } },
         uae_business_types: UserComplianceInfo::BusinessTypes::BUSINESS_TYPES_UAE.map { |code, name| { code:, name: } },
         india_business_types: UserComplianceInfo::BusinessTypes::BUSINESS_TYPES_INDIA.map { |code, name| { code:, name: } },
         canada_business_types: UserComplianceInfo::BusinessTypes::BUSINESS_TYPES_CANADA.map { |code, name| { code:, name: } },

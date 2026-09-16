@@ -36,6 +36,15 @@ type TaxIdConfig = {
   idSuffix: string;
 };
 
+export const getBusinessTypes = (country: string | null, lists: Record<string, { code: string; name: string }[]>) =>
+  (country ? lists[country] : null) ?? [
+    { code: "llc", name: "LLC" },
+    { code: "partnership", name: "Partnership" },
+    { code: "profit", name: "Non Profit" },
+    { code: "sole_proprietorship", name: "Sole Proprietorship" },
+    { code: "corporation", name: "Corporation" },
+  ];
+
 const AccountDetailsSection = ({
   user,
   complianceInfo,
@@ -43,6 +52,7 @@ const AccountDetailsSection = ({
   isFormDisabled,
   minDobYear,
   countries,
+  usBusinessTypes,
   uaeBusinessTypes,
   indiaBusinessTypes,
   canadaBusinessTypes,
@@ -56,6 +66,7 @@ const AccountDetailsSection = ({
   isFormDisabled: boolean;
   minDobYear: number;
   countries: Record<string, string>;
+  usBusinessTypes: { code: string; name: string }[];
   uaeBusinessTypes: { code: string; name: string }[];
   indiaBusinessTypes: { code: string; name: string }[];
   canadaBusinessTypes: { code: string; name: string }[];
@@ -98,15 +109,6 @@ const AccountDetailsSection = ({
   const formatPhoneNumber = (phoneNumber: string, country_code: string | null): string => {
     const countryCode: CountryCode = typia.assert<CountryCode>(country_code);
     return parsePhoneNumberFromString(phoneNumber, countryCode)?.format("E.164") ?? phoneNumber;
-  };
-
-  const getBusinessTypes = (): { code: string; name: string }[] | null => {
-    const businessTypesMap: Record<string, { code: string; name: string }[]> = {
-      AE: uaeBusinessTypes,
-      IN: indiaBusinessTypes,
-      CA: canadaBusinessTypes,
-    };
-    return complianceInfo.business_country ? (businessTypesMap[complianceInfo.business_country] ?? null) : null;
   };
 
   const getBusinessStateConfig = (): StateConfig | PrefectureConfig | null => {
@@ -412,7 +414,17 @@ const AccountDetailsSection = ({
     return maskPrefix + lastFour;
   };
 
-  const businessTypes = getBusinessTypes();
+  const businessTypes = getBusinessTypes(complianceInfo.business_country, {
+    US: usBusinessTypes,
+    AE: uaeBusinessTypes,
+    IN: indiaBusinessTypes,
+    CA: canadaBusinessTypes,
+  });
+  const hasUnsupportedBusinessType =
+    Boolean(complianceInfo.business_type) && !businessTypes.some(({ code }) => code === complianceInfo.business_type);
+  const selectedBusinessType = businessTypes.some(({ code }) => code === complianceInfo.business_type)
+    ? complianceInfo.business_type
+    : "";
   const businessStateConfig = getBusinessStateConfig();
   const individualStateConfig = getIndividualStateConfig();
   const businessTaxIdConfig = getBusinessTaxIdConfig();
@@ -524,39 +536,28 @@ const AccountDetailsSection = ({
               <FieldsetTitle>
                 <Label htmlFor={`${uid}-business-type`}>Type</Label>
               </FieldsetTitle>
-              {businessTypes ? (
-                <Select
-                  id={`${uid}-business-type`}
-                  required={complianceInfo.is_business}
-                  disabled={isFormDisabled}
-                  aria-invalid={errorFieldNames.has("business_type")}
-                  value={complianceInfo.business_type || "Type"}
-                  onChange={(evt) => updateComplianceInfo({ business_type: evt.target.value })}
-                >
-                  <option disabled>Type</option>
-                  {businessTypes.map((businessType) => (
-                    <option key={businessType.code} value={businessType.code}>
-                      {businessType.name}
-                    </option>
-                  ))}
-                </Select>
-              ) : (
-                <Select
-                  id={`${uid}-business-type`}
-                  disabled={isFormDisabled}
-                  value={complianceInfo.business_type || "Type"}
-                  required
-                  aria-invalid={errorFieldNames.has("business_type")}
-                  onChange={(evt) => updateComplianceInfo({ business_type: evt.target.value })}
-                >
-                  <option disabled>Type</option>
-                  <option value="llc">LLC</option>
-                  <option value="partnership">Partnership</option>
-                  <option value="profit">Non Profit</option>
-                  <option value="sole_proprietorship">Sole Proprietorship</option>
-                  <option value="corporation">Corporation</option>
-                </Select>
-              )}
+              <Select
+                id={`${uid}-business-type`}
+                value={selectedBusinessType || ""}
+                disabled={isFormDisabled}
+                required={complianceInfo.is_business}
+                aria-invalid={errorFieldNames.has("business_type")}
+                onChange={(evt) => updateComplianceInfo({ business_type: evt.target.value })}
+              >
+                <option value="" disabled>
+                  Select a type
+                </option>
+                {businessTypes.map(({ code, name }) => (
+                  <option key={code} value={code}>
+                    {name}
+                  </option>
+                ))}
+              </Select>
+              {hasUnsupportedBusinessType ? (
+                <FieldsetDescription>
+                  Your saved type is no longer offered. Choose a new one before saving.
+                </FieldsetDescription>
+              ) : null}
             </Fieldset>
           </div>
           {complianceInfo.business_country === "JP" ? (
