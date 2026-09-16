@@ -1188,6 +1188,16 @@ describe "PurchaseRefunds", :vcr do
           expect(refund.business_vat_id).to eq "IE6388047V"
         end
 
+        it "marks the subscription as an exempt territory when asked, so renewals stop collecting VAT" do
+          subscription = create(:subscription, link: @product)
+          @purchase.update!(subscription:, is_original_subscription_purchase: true)
+
+          @purchase.refund_gumroad_taxes!(refunding_user_id: @product.user.id, note: "Canary Islands", vat_exempt_territory: true)
+
+          expect(subscription.reload.vat_exempt_territory?).to be(true)
+          expect(subscription.build_purchase.vat_exempt_territory?).to be(true)
+        end
+
         describe "PayPal Connect sales" do
           before do
             ZipTaxRate.find_or_create_by(country: "GB").update(combined_rate: 0.20)
