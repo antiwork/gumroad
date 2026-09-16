@@ -36,6 +36,12 @@ class Ai::StoreAgentService
   # which is most of a turn's per-call latency. Below 100%, disables it per seller; models that
   # don't reason this way keep the request they send today.
   NO_HIDDEN_REASONING_FEATURE = :store_agent_deepseek_no_hidden_reasoning
+  # DeepSeek's latency tail is calls that sit before their first token, and the generous read timeout
+  # below means a stalled attempt spends it — plus its retries — before the Opus fallback is tried.
+  # Below 100%, bounds the wait for the first output on streamed tool-loop turns.
+  TTFT_DEADLINE_FEATURE = :store_agent_deepseek_ttft_deadline
+  # Above the usual time to first token, so a healthy slow call is untouched.
+  TTFT_DEADLINE_IN_SECONDS = 15
   # Ai::AnthropicClient's READ timeout, so for the streamed reply it bounds silence between chunks
   # rather than total generation time. Deliberately generous — the client fails fast on connect
   # problems and retries transient failures itself, so a tighter cap only kills slow-but-working
@@ -812,6 +818,7 @@ class Ai::StoreAgentService
             tools: tool_schemas,
             max_tokens: truncation_retries.zero? ? MAX_REPLY_TOKENS : MAX_TRUNCATION_RETRY_TOKENS,
             **tool_loop_thinking,
+            ttft_deadline: tool_loop_ttft_deadline,
             # A corrupted tool call is recovered by replaying the turn without streaming, which
             # regenerates the reply from the start. Tool-use turns usually stream a sentence of
             # preamble first, so without a way to clear it that recovery could never run — the
@@ -1259,6 +1266,15 @@ class Ai::StoreAgentService
       # before the memoized reader would otherwise run.
       client
       @_client_model.to_s.start_with?("deepseek/") ? { thinking: { type: "disabled" } } : {}
+    end
+
+    # First-output deadline for the streamed tool loop, in the same shape as #tool_loop_thinking: nil
+    # for every other model and while the flag is off, so nothing changes about the request.
+    def tool_loop_ttft_deadline
+      return nil unless Feature.active?(TTFT_DEADLINE_FEATURE, seller)
+
+      client
+      @_client_model.to_s.start_with?("deepseek/") ? TTFT_DEADLINE_IN_SECONDS : nil
     end
 
     # Coerce the model's reply into a clean list of suggestion strings. Prefers a JSON array but

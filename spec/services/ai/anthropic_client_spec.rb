@@ -17,6 +17,12 @@ describe Ai::AnthropicClient do
     allow(GlobalConfig).to receive(:get).with("GUMHEAD_UPSTREAM_API_BASE").and_return(nil)
   end
 
+  def sse_stream(text)
+    "event: content_block_start\ndata: #{{ index: 0, content_block: { type: "text" } }.to_json}\n\n" \
+      "event: content_block_delta\ndata: #{{ index: 0, delta: { type: "text_delta", text: } }.to_json}\n\n" \
+      "event: message_delta\ndata: #{{ delta: { stop_reason: "end_turn" } }.to_json}\n\n"
+  end
+
   describe "#messages" do
     it "sends the system prompt, messages, and tools, and returns the assistant text" do
       body = { "content" => [{ "type" => "text", "text" => "You have 3 products." }], "stop_reason" => "end_turn" }
@@ -207,6 +213,161 @@ describe Ai::AnthropicClient do
         write: described_class::WRITE_TIMEOUT_IN_SECONDS,
         read: 45,
       )
+    end
+
+    it "spends the deadline once across reads and lifts it on the first delta" do
+      armed = []
+      allow(HTTP::Client).to receive(:new).and_wrap_original do |original, options|
+        opts = options.is_a?(HTTP::Options) ? options : HTTP::Options.new(options)
+        armed << opts if opts.timeout_options.key?(:first_byte_timeout)
+        original.call(opts)
+      end
+
+      stub_request(:post, url).to_return(status: 200, body: sse_stream("hi"), headers: { "Content-Type" => "text/event-stream" })
+      described_class.new(timeout: 45).stream_messages(system: "s", messages: [{ role: "user", content: "x" }], ttft_deadline: 9) { |_| }
+
+      expect(armed).not_to be_empty
+      expect(armed.map(&:timeout_class)).to all(be < HTTP::Timeout::PerOperation)
+      options = armed.last.timeout_options
+      expect(options).to include(first_byte_timeout: 9, read_timeout: 45)
+      # The stream's own first delta is what lifts the deadline for the rest of the stream.
+      expect(options[:first_byte_marker]).to be_arrived
+
+      waits = []
+      fresh_marker = options[:first_byte_marker].class.new
+      timeout = armed.last.timeout_class.new(options.merge(first_byte_marker: fresh_marker))
+      timeout.instance_variable_set(:@socket, blocking_socket(waits))
+
+      expect { timeout.readpartial(16) }.to raise_error(described_class::TtftDeadlineError)
+      expect(waits.first).to be <= 9
+      expect(waits.first).to be > 8
+
+      # A second read before any delta gets what is left of the budget, not a fresh interval.
+      sleep 0.01
+      expect { timeout.readpartial(16) }.to raise_error(described_class::TtftDeadlineError)
+      expect(waits.first - waits.last).to be > 0.005
+
+      # Past the first delta a read timeout is silence, not the deadline — a different error class.
+      fresh_marker.arrived!
+      expect { timeout.readpartial(16) }.to raise_error(an_instance_of(HTTP::TimeoutError))
+      expect(waits.last).to eq(45)
+    end
+
+    it "leaves the timeouts as they are today when no deadline is given" do
+      allow(HTTP).to receive(:timeout).and_call_original
+      armed = []
+      allow(HTTP::Client).to receive(:new).and_wrap_original do |original, options|
+        opts = options.is_a?(HTTP::Options) ? options : HTTP::Options.new(options)
+        armed << opts if opts.timeout_options.key?(:first_byte_timeout)
+        original.call(opts)
+      end
+
+      stub_request(:post, url).to_return(status: 200, body: sse_stream("hi"), headers: { "Content-Type" => "text/event-stream" })
+      described_class.new(timeout: 45).stream_messages(system: "s", messages: [{ role: "user", content: "x" }]) { |_| }
+
+      expect(HTTP).to have_received(:timeout).with(
+        connect: described_class::CONNECT_TIMEOUT_IN_SECONDS,
+        write: described_class::WRITE_TIMEOUT_IN_SECONDS,
+        read: 45,
+      )
+      expect(armed).to be_empty
+    end
+
+    # A socket that never becomes readable, so #readpartial runs its timeout path and the error
+    # names the read timeout it waited with.
+    def blocking_socket(waits)
+      io = Object.new
+      io.define_singleton_method(:wait_readable) { |seconds| waits << seconds; false }
+
+      socket = Object.new
+      socket.define_singleton_method(:to_io) { io }
+      socket.define_singleton_method(:read_nonblock) { |_size, _buffer = nil, **_options| :wait_readable }
+      socket
+    end
+  end
+
+  describe "first-byte deadline failover" do
+    let(:vercel_url) { "https://ai-gateway.vercel.sh/v1/messages" }
+    let(:vercel_client) do
+      described_class.new(timeout: 120, model: "deepseek/deepseek-v4.1-flash", fallback_model: "anthropic/claude-opus-5", gateway: :vercel)
+    end
+
+    before do
+      allow(GlobalConfig).to receive(:get).with("GUMHEAD_UPSTREAM_API_KEY").and_return("gw-test")
+      allow(GlobalConfig).to receive(:get).with("GUMHEAD_UPSTREAM_API_BASE").and_return("https://ai-gateway.vercel.sh")
+    end
+
+    it "re-issues on the fallback model when the deadline expires before any output" do
+      calls = 0
+      allow(vercel_client).to receive(:http).and_wrap_original do |original, **kwargs|
+        calls += 1
+        raise described_class::TtftDeadlineError, "Anthropic produced no output within 15s" if calls == 1
+
+        original.call(**kwargs)
+      end
+      opus = stub_request(:post, vercel_url)
+        .with(body: hash_including("model" => "anthropic/claude-opus-5"))
+        .to_return(status: 200, body: sse_stream("hi"), headers: { "Content-Type" => "text/event-stream" })
+      allow(vercel_client).to receive(:sleep)
+
+      chunks = []
+      result = vercel_client.stream_messages(system: "s", messages: [{ role: "user", content: "x" }], ttft_deadline: 15) { |text| chunks << text }
+
+      expect(chunks).to eq(["hi"])
+      expect(result.text).to eq("hi")
+      expect(opus).to have_been_requested.once
+      # The stalled attempt is what telemetry records, and no same-model retry spent the deadline again.
+      expect(vercel_client.call_metrics.first[:error]).to eq(described_class::TtftDeadlineError.name)
+      expect(vercel_client).not_to have_received(:sleep)
+    end
+
+    it "keeps the ordinary retries when the timeout is not the deadline" do
+      # WebMock's to_timeout raises the plain HTTP::TimeoutError — a connection-level failure, not
+      # the deadline-bounded read — so the same model keeps its retries.
+      deepseek = stub_request(:post, vercel_url)
+        .with(body: hash_including("model" => "deepseek/deepseek-v4.1-flash"))
+        .to_timeout
+        .then
+        .to_return(status: 200, body: sse_stream("hi"), headers: { "Content-Type" => "text/event-stream" })
+      allow(vercel_client).to receive(:sleep)
+
+      chunks = []
+      vercel_client.stream_messages(system: "s", messages: [{ role: "user", content: "x" }], ttft_deadline: 15) { |text| chunks << text }
+
+      expect(deepseek).to have_been_requested.twice
+      expect(chunks).to eq(["hi"])
+      expect(vercel_client).to have_received(:sleep).once
+    end
+
+    it "leaves the fallback replay on the ordinary timeouts" do
+      allow(HTTP).to receive(:timeout).and_call_original
+      calls = 0
+      allow(vercel_client).to receive(:http).and_wrap_original do |original, **kwargs|
+        calls += 1
+        raise described_class::TtftDeadlineError, "Anthropic produced no output within 15s" if calls == 1
+
+        original.call(**kwargs)
+      end
+      allow(vercel_client).to receive(:sleep)
+      stub_request(:post, vercel_url)
+        .to_return(status: 200, body: sse_stream("hi"), headers: { "Content-Type" => "text/event-stream" })
+
+      vercel_client.stream_messages(system: "s", messages: [{ role: "user", content: "x" }], ttft_deadline: 15) { |_| }
+
+      expect(HTTP).to have_received(:timeout).with(
+        connect: described_class::CONNECT_TIMEOUT_IN_SECONDS,
+        write: described_class::WRITE_TIMEOUT_IN_SECONDS,
+        read: 120,
+      )
+    end
+
+    it "keeps re-issuing the same model when no deadline was given" do
+      allow(client).to receive(:sleep)
+      stub_request(:post, url).to_timeout
+
+      expect { client.stream_messages(system: "s", messages: [{ role: "user", content: "x" }]) { |_| } }
+        .to raise_error(described_class::TransientError, /network error/i)
+      expect(client).to have_received(:sleep).twice
     end
   end
 
