@@ -643,7 +643,7 @@ class LinksController < ApplicationController
 
         Product::SavePostPurchaseCustomFieldsService.new(@product).perform
 
-        @product.is_licensed = @product.has_embedded_license_key?
+        @product.recompute_is_licensed!
         unless @product.is_licensed
           @product.is_multiseat_license = false
         end
