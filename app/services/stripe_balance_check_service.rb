@@ -10,10 +10,15 @@ class StripeBalanceCheckService
   # Scheduled payout jobs fire at UTC 10:00 Tuesday-Friday (config/sidekiq_schedule.yml).
   PAYOUT_RUN_HOUR_UTC = 10
   PAYOUT_RUN_WDAYS = [2, 3, 4, 5].freeze
+  # Sweeps Stripe has debited the balance for but not settled at the bank yet.
+  UNSETTLED_PAYOUT_STATUSES = %w[pending in_transit].freeze
 
   def initialize(now: Time.current)
     @now = now.utc
-    @payout_end_date = User::PayoutSchedule.next_scheduled_payout_end_date
+    # The cutoff of the cycle this check announces, not `next_scheduled_payout_end_date`: that one
+    # still points at the cycle that just paid for the rest of Friday, so after Friday's run the
+    # amount and the run dates would describe different cycles.
+    @payout_end_date = cycle_last_run_at.to_date - User::PayoutSchedule::PAYOUT_DELAY_DAYS
     @upcoming_payouts_cents = PayoutEstimates.estimate_gumroad_held_stripe_cents(@payout_end_date)
 
     balance = Stripe::Balance.retrieve
@@ -57,18 +62,26 @@ class StripeBalanceCheckService
     end
   end
 
-  # Stripe's automatic sweeps to Gumroad's bank are what drain the balance; the last day's paid total
-  # tells the reader where the money went.
+  # Stripe's automatic sweeps to Gumroad's bank are what drain the balance. A payout debits it when
+  # it is created, not when it settles, so the settled total alone does not explain a drop.
   def swept_to_bank_last_day_cents
-    @swept_to_bank_last_day_cents ||= Stripe::Payout.list(
-      created: { gte: (@now - 1.day).to_i },
-      limit: 100
-    ).auto_paging_each.sum do |payout|
-      payout.currency == Currency::USD && payout.status == "paid" ? payout.amount : 0
+    @swept_to_bank_last_day_cents ||= last_day_usd_payouts.sum { |payout| payout.status == "paid" ? payout.amount : 0 }
+  end
+
+  def sweeps_in_flight_last_day_cents
+    @sweeps_in_flight_last_day_cents ||= last_day_usd_payouts.sum do |payout|
+      UNSETTLED_PAYOUT_STATUSES.include?(payout.status) ? payout.amount : 0
     end
   end
 
   private
+    def last_day_usd_payouts
+      @last_day_usd_payouts ||= Stripe::Payout.list(
+        created: { gte: (@now - 1.day).to_i },
+        limit: 100
+      ).auto_paging_each.select { |payout| payout.currency == Currency::USD }
+    end
+
     def usd_cents(balances)
       balances.sum { |entry| entry["currency"] == Currency::USD ? entry["amount"] : 0 }
     end

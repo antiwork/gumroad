@@ -14,19 +14,20 @@ class SendStripeBalanceCheckNotificationJob
     balance_check = StripeBalanceCheckService.new
 
     was_needed = $redis.get(RedisKey.stripe_balance_topup_needed) == "true"
-    $redis.set(RedisKey.stripe_balance_topup_needed, balance_check.topup_needed?)
+    needs_topup = balance_check.topup_needed?
+    # The flag records the state the all-clear is a transition out of, and #message_for makes its own
+    # Stripe call. Build the message first so a failed one leaves the flag alone instead of consuming
+    # the transition and losing the all-clear on the retry.
+    alerting = needs_topup || was_needed
+    message = message_for(balance_check) if alerting
 
-    if balance_check.topup_needed?
-      notify(balance_check, "red")
-    elsif was_needed
-      # Yesterday's alert asked for money; say so when it's no longer needed.
-      notify(balance_check, "green")
-    end
+    $redis.set(RedisKey.stripe_balance_topup_needed, needs_topup)
+    notify(message, needs_topup ? "red" : "green") if alerting
   end
 
   private
-    def notify(balance_check, color)
-      InternalNotificationWorker.perform_async("payments", "Stripe Balance Check", message_for(balance_check), color)
+    def notify(message, color)
+      InternalNotificationWorker.perform_async("payments", "Stripe Balance Check", message, color)
     end
 
     def message_for(balance_check)
@@ -42,8 +43,9 @@ class SendStripeBalanceCheckNotificationJob
         "Stripe balance: #{formatted_dollar_amount(balance_check.current_balance_cents)} " \
         "(#{formatted_dollar_amount(balance_check.available_cents)} available + " \
         "#{formatted_dollar_amount(balance_check.pending_cents)} pending, which normally settles within a couple of business days).",
-        "Stripe paid #{formatted_dollar_amount(balance_check.swept_to_bank_last_day_cents)} out to Gumroad's bank in the last 24 hours; " \
-        "those automatic sweeps are what draw the balance down.",
+        "Stripe paid #{formatted_dollar_amount(balance_check.swept_to_bank_last_day_cents)} out to Gumroad's bank in the last " \
+        "24 hours, with #{formatted_dollar_amount(balance_check.sweeps_in_flight_last_day_cents)} more in flight; a payout " \
+        "draws the balance down when it is created, not when it settles.",
       ]
 
       if balance_check.topup_needed?

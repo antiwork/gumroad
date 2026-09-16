@@ -7,7 +7,6 @@ describe StripeBalanceCheckService do
 
   before do
     allow(PayoutEstimates).to receive(:estimate_gumroad_held_stripe_cents)
-      .with(User::PayoutSchedule.next_scheduled_payout_end_date)
       .and_return(300_000_00)
     stub_balance(available: 800_000_00, pending: 200_000_00)
     allow(Stripe::Payout).to receive(:list).and_return(double(auto_paging_each: []))
@@ -24,6 +23,21 @@ describe StripeBalanceCheckService do
 
   it "uses the Gumroad-held Stripe estimate as the upcoming payout amount" do
     expect(described_class.new(now:).upcoming_payouts_cents).to eq(300_000_00)
+  end
+
+  describe "#payout_end_date" do
+    it "is the cutoff of the cycle the announced runs pay" do
+      expect(described_class.new(now: Time.utc(2026, 9, 15, 14, 0)).payout_end_date).to eq(Date.new(2026, 9, 11)) # Tue pm
+      expect(described_class.new(now: Time.utc(2026, 9, 18, 9, 0)).payout_end_date).to eq(Date.new(2026, 9, 11))  # Fri am, run still ahead
+      expect(described_class.new(now: Time.utc(2026, 9, 18, 14, 0)).payout_end_date).to eq(Date.new(2026, 9, 18)) # Fri pm, next cycle
+      expect(described_class.new(now: Time.utc(2026, 9, 20, 14, 0)).payout_end_date).to eq(Date.new(2026, 9, 18)) # Sun
+    end
+
+    it "asks the estimate for the announced cycle after Friday's run, when the platform's own next cutoff is a week behind" do
+      expect(PayoutEstimates).to receive(:estimate_gumroad_held_stripe_cents).with(Date.new(2026, 9, 18)).and_return(300_000_00)
+
+      described_class.new(now: Time.utc(2026, 9, 18, 14, 0))
+    end
   end
 
   it "splits the USD balance into available and pending" do
@@ -81,9 +95,27 @@ describe StripeBalanceCheckService do
         Stripe::Payout.construct_from(currency: "eur", amount: 10_00, status: "paid"),
       ]
       expect(Stripe::Payout).to receive(:list).with(created: { gte: (now - 1.day).to_i }, limit: 100)
-        .and_return(double(auto_paging_each: payouts))
+        .once.and_return(double(auto_paging_each: payouts))
 
-      expect(described_class.new(now:).swept_to_bank_last_day_cents).to eq(301_513_34)
+      service = described_class.new(now:)
+      expect(service.swept_to_bank_last_day_cents).to eq(301_513_34)
+      expect(service.sweeps_in_flight_last_day_cents).to eq(0)
+    end
+
+    it "sums the last day's USD bank payouts Stripe has debited but not settled, reading the payouts once" do
+      payouts = [
+        Stripe::Payout.construct_from(currency: "usd", amount: 301_513_34, status: "paid"),
+        Stripe::Payout.construct_from(currency: "usd", amount: 500_00, status: "pending"),
+        Stripe::Payout.construct_from(currency: "usd", amount: 300_00, status: "in_transit"),
+        Stripe::Payout.construct_from(currency: "usd", amount: 10_00, status: "failed"),
+        Stripe::Payout.construct_from(currency: "eur", amount: 20_00, status: "pending"),
+      ]
+      expect(Stripe::Payout).to receive(:list).with(created: { gte: (now - 1.day).to_i }, limit: 100)
+        .once.and_return(double(auto_paging_each: payouts))
+
+      service = described_class.new(now:)
+      expect(service.sweeps_in_flight_last_day_cents).to eq(800_00)
+      expect(service.swept_to_bank_last_day_cents).to eq(301_513_34)
     end
   end
 end
