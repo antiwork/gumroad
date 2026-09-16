@@ -186,6 +186,7 @@ const renderLayout = (currentSeller: CurrentSeller) =>
             receiptEmailFrom: "seller@example.com",
             priceCheckerEnabled: false,
             customHtmlPagesEnabled: false,
+            autoMarketingEnabled: false,
             customHtmlStoreHostnames: [],
             customHtmlGlobalNavHosts: [],
             customHtmlGlobalNavPaths: [],

@@ -9,6 +9,7 @@ import { Layout, useProductUrl } from "$app/components/ProductEdit/Layout";
 import { ProductPreview } from "$app/components/ProductEdit/ProductPreview";
 import { LandingPageEditor } from "$app/components/ProductEdit/ShareTab/LandingPageEditor";
 import { ProfileSectionsEditor } from "$app/components/ProductEdit/ShareTab/ProfileSectionsEditor";
+import { ShareYourLaunchCard } from "$app/components/ProductEdit/ShareTab/ShareYourLaunchCard";
 import { TagSelector } from "$app/components/ProductEdit/ShareTab/TagSelector";
 import { TaxonomyAttributesEditor } from "$app/components/ProductEdit/ShareTab/TaxonomyAttributesEditor";
 import { TaxonomyEditor } from "$app/components/ProductEdit/ShareTab/TaxonomyEditor";
@@ -25,8 +26,16 @@ import hands from "$assets/images/illustrations/hands.png";
 export const ShareTab = () => {
   const currentSeller = useCurrentSeller();
 
-  const { product, updateProduct, profileSections, taxonomies, taxonomyAttributes, isListedOnDiscover } =
-    useProductEditContext();
+  const {
+    product,
+    uniquePermalink,
+    updateProduct,
+    profileSections,
+    taxonomies,
+    taxonomyAttributes,
+    isListedOnDiscover,
+    autoMarketingEnabled,
+  } = useProductEditContext();
 
   const url = useProductUrl();
   const checkoutUrl = useProductUrl({ wanted: true });
@@ -55,6 +64,9 @@ export const ShareTab = () => {
                 </Button>
               </CopyToClipboard>
             </ShareButtons>
+            {autoMarketingEnabled && product.is_published ? (
+              <ShareYourLaunchCard productPermalink={uniquePermalink} />
+            ) : null}
           </section>
           <LandingPageEditor />
           <ProfileSectionsEditor

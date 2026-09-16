@@ -996,6 +996,13 @@ Rails.application.routes.draw do
         resources :other_refund_policies, only: :index
         resources :remaining_call_availabilities, only: :index
         resources :available_offer_codes, only: :index
+        resources :marketing_actions, only: %i[index show] do
+          member do
+            post :approve
+            post :execute
+            post :cancel
+          end
+        end
       end
     end
 
