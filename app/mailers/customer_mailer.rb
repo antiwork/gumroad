@@ -40,9 +40,16 @@ class CustomerMailer < ApplicationMailer
     last_chargeable = @chargeables.last
     return unless claim_grouped_receipt_send(last_chargeable.orderable.email)
 
+    # CUSTOMERS_MAIL_DOMAIN is send-only, so a missing Reply-To hard-bounces the buyer's reply.
+    # One Reply-To serves the whole group, so a group spanning several support addresses goes to
+    # support instead of to whichever seller happens to be newest.
+    reply_targets = @chargeables.map(&:support_email).uniq
+    @shared_reply_target = reply_targets.one?
+
     mail(
       to: last_chargeable.orderable.email,
       from: from_email_address_with_name(last_chargeable.seller.name, "noreply@#{CUSTOMERS_MAIL_DOMAIN}"),
+      reply_to: @shared_reply_target ? reply_targets.first : SUPPORT_EMAIL,
       subject: "Receipts for Purchases",
       delivery_method_options: MailerInfo.random_delivery_method_options(domain: :customers, to: last_chargeable.orderable.email)
     )
