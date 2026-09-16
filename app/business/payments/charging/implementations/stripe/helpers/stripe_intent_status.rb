@@ -21,7 +21,6 @@ class StripeIntentStatus
   # copy-paste key, the buyer pays in their own banking app, and the intent sits in
   # requires_action until they do (or until the key expires), so a buyer who reopens the return
   # page mid-flow is a normal state rather than a misconfiguration.
-  # Stripe.js owns UPI's redirect/QR action, but its on-session result is immediate, unlike Pix.
   CLIENT_HANDLED_ACTION_TYPES = ["cashapp_handle_redirect_or_display_qr_code", "alipay_handle_redirect", "pix_display_qr_code", "upi_handle_redirect_or_display_qr_code"].freeze
   # The generic browser-redirect action. Unlike the Cash App action type above it is not
   # method-specific: many payment methods can surface it, including ones a server-confirmed
@@ -44,15 +43,8 @@ class StripeIntentStatus
   # Alipay is included because Stripe can surface either the generic redirect_to_url action or
   # its own alipay_handle_redirect type above, depending on the confirm; both are client-owned.
   CLIENT_REDIRECT_PAYMENT_METHOD_TYPES = %w[ideal bancontact klarna cashapp afterpay_clearpay affirm alipay].freeze
-  # Next-action types meaning "the buyer must now go and pay somewhere else": Stripe.js showed a QR
-  # code / copy-paste key, and the buyer pays in their own banking app (Pix). The intent
-  # legitimately stays in requires_action until they do, or until the key expires — so the browser
-  # finishing its confirm call is NOT evidence the payment failed. Finalizers must leave such a
-  # purchase in progress and report it as pending (see Purchase::FinalizeConfirmedChargeService);
-  # the payment_intent.succeeded / payment_intent.payment_failed webhooks decide the real outcome.
-  # Cash App Pay's QR action is deliberately NOT here: its QR is scanned during checkout and
-  # resolves in the same session, so a returning confirm really does mean the buyer gave up.
-  ASYNCHRONOUS_CUSTOMER_INITIATED_ACTION_TYPES = ["pix_display_qr_code"].freeze
+  # Pix and UPI buyers can still pay after the browser returns from confirmation.
+  ASYNCHRONOUS_CUSTOMER_INITIATED_ACTION_TYPES = ["pix_display_qr_code", "upi_handle_redirect_or_display_qr_code"].freeze
 
   # Sentinel returned by attempted_payment_method_type when a payment method IS attached but
   # the lookup failed (Stripe error after retries). It is deliberately distinct from nil ("no

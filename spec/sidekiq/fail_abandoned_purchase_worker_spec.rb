@@ -218,7 +218,7 @@ describe FailAbandonedPurchaseWorker, :vcr do
         end
       end
 
-      describe "abandoned client-confirm Pix charge with an outstanding QR key" do
+      describe "abandoned client-confirm charge with an outstanding QR key" do
         let(:seller) { create(:user) }
         let(:purchase) { create(:purchase_in_progress, link: create(:product, user: seller), merchant_account: create(:merchant_account, user: seller)) }
         let(:charge) { create(:charge, seller:, stripe_payment_intent_id: "pi_abandoned_pix", client_confirmed: true) }
@@ -260,6 +260,34 @@ describe FailAbandonedPurchaseWorker, :vcr do
           # the fallback for a lost webhook.
           it "cancels the intent and fails the purchase as usual" do
             stub_intent_retrieve(next_action: { type: "pix_display_qr_code", pix_display_qr_code: { expires_at: 1.minute.ago.to_i } })
+
+            described_class.new.perform(purchase.id)
+
+            expect(ChargeProcessor).to have_received(:cancel_payment_intent!)
+            expect(purchase.reload).to be_failed
+            expect(FailAbandonedPurchaseWorker.jobs.size).to eq(0)
+          end
+        end
+
+        context "when a UPI QR code is still payable" do
+          it "waits for the nested QR expiry, then cancels the intent before failing the purchase" do
+            expires_at = 15.minutes.from_now.to_i
+            stub_intent_retrieve(next_action: {
+                                   type: "upi_handle_redirect_or_display_qr_code",
+                                   upi_handle_redirect_or_display_qr_code: { qr_code: { expires_at: } }
+                                 })
+
+            described_class.new.perform(purchase.id)
+
+            expect(ChargeProcessor).not_to have_received(:cancel_payment_intent!)
+            expect(purchase.reload).to be_in_progress
+            expect(FailAbandonedPurchaseWorker.jobs.size).to eq(1)
+            job = FailAbandonedPurchaseWorker.jobs.sole
+            expect(job["args"]).to eq([purchase.id])
+            expect(Time.zone.at(job["at"])).to eq(Time.zone.at(expires_at) + 1.minute)
+
+            travel_to Time.zone.at(expires_at) + 1.minute
+            FailAbandonedPurchaseWorker.clear
 
             described_class.new.perform(purchase.id)
 
