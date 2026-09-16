@@ -2821,7 +2821,7 @@ describe Ai::StoreAgentService do
         "calls", "contract_retries", "event", "gateway", "input_tokens_sum", "latency_ms", "model",
         "model_latency_ms_sum", "outcome", "output_tokens_sum", "reasoning_tokens_sum", "requested_model",
         "served_models", "served_providers", "stop_reason", "tool_iterations", "ttft_ms_max",
-        "cache_read_tokens_sum",
+        "cache_read_tokens_sum", "latency_flags",
       )
       expect(turn_log).to include(
         "event" => "store_agent_turn",
@@ -2842,6 +2842,29 @@ describe Ai::StoreAgentService do
         "cache_read_tokens_sum" => 300,
         "served_providers" => ["deepinfra"],
       )
+    end
+
+    [false, true].product([false, true]).each do |no_hidden_reasoning, ttft_deadline|
+      it "logs the request's latency flags with no_hidden_reasoning=#{no_hidden_reasoning} and ttft_deadline=#{ttft_deadline}, resolving each once" do
+        allow(Ai::AnthropicClient).to receive(:openrouter_configured?).and_return(true)
+        Feature.activate_user(described_class::DEEPSEEK_RAMP_FEATURE, seller)
+        allow(Feature).to receive(:active?).and_call_original
+        expect(Feature).to receive(:active?).with(described_class::NO_HIDDEN_REASONING_FEATURE, seller).once.and_return(no_hidden_reasoning)
+        expect(Feature).to receive(:active?).with(described_class::TTFT_DEADLINE_FEATURE, seller).once.and_return(ttft_deadline)
+        allow(client).to receive(:messages).and_return(text_result("[]"))
+        allow(client).to receive(:stream_messages).and_return(text_result("You have 3 products."))
+
+        service.respond_streaming(messages: [{ role: "user", content: "How many products do I have?" }]) { |_event, _payload| }
+
+        expect(client).to have_received(:stream_messages).with(hash_including(ttft_deadline: ttft_deadline ? described_class::TTFT_DEADLINE_IN_SECONDS : nil))
+        if no_hidden_reasoning
+          expect(client).to have_received(:stream_messages).with(hash_including(thinking: { type: "disabled" }))
+        else
+          expect(client).to have_received(:stream_messages).with(hash_excluding(:thinking))
+        end
+        turn_log = logged_json(logger_lines).find { |line| line["event"] == "store_agent_turn" }
+        expect(turn_log.fetch("latency_flags")).to eq("no_hidden_reasoning" => no_hidden_reasoning, "ttft_deadline" => ttft_deadline)
+      end
     end
 
     it "logs the follow-up-suggestions call on its own line, tagged and excluded from the turn's rollups" do

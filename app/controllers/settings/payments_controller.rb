@@ -530,7 +530,9 @@ class Settings::PaymentsController < Settings::BaseController
         { alert: "Stripe has paused payouts on your account and hasn't told us what it needs. " \
                  "There's nothing for you to submit right now." }
       elsif review_still_open
-        { alert: "Stripe is still reviewing your account. There's nothing more for you to submit right now." }
+        # `info`, not `alert`: the seller has nothing to submit, and the red error chrome on a
+        # "nothing to do" message reads as a fault they have to fix.
+        { info: "Stripe is still reviewing your account. There's nothing more for you to submit right now." }
       else
         { notice: "Thanks! You're all set." }
       end
