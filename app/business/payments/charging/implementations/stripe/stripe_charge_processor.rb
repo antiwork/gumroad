@@ -6,6 +6,8 @@ class StripeChargeProcessor
 
   DISPLAY_NAME = "Stripe"
 
+  class NoRefundFeeTransferError < StandardError; end
+
   # https://stripe.com/docs/api/charges/object#charge_object-status
   VALID_TRANSACTION_STATUSES = %w(succeeded pending).freeze
 
@@ -735,27 +737,39 @@ class StripeChargeProcessor
                            .where(stripe_connect_account_id: stripe_account_id)
                            .order(:created_at)
                            .pluck(:stripe_internal_transfer_id)
-      transfer = transfer_ids.compact_blank.lazy
-                             .filter_map { |tr_id| Stripe::Transfer.retrieve(tr_id) rescue nil }
-                             .find { |tr| tr.amount - tr.amount_reversed > amount_to_reverse_for.call(tr) }
+      lookup_error = nil
+      transfers = transfer_ids.compact_blank.lazy.filter_map do |tr_id|
+        Stripe::Transfer.retrieve(tr_id)
+      rescue StandardError => error
+        lookup_error = error
+        nil
+      end
+      transfer = transfers.find { |tr| tr.amount - tr.amount_reversed > amount_to_reverse_for.call(tr) }
       unless transfer
-        transfers = Stripe::Transfer.list(destination: stripe_account_id, created: { 'lt': 120.days.ago.to_i }, limit: 100)
-        transfer = transfers.find do |tr|
-          tr.present? && tr.amount - tr.amount_reversed > amount_to_reverse_for.call(tr)
+        # Recent sale transfers must remain available for buyer refunds.
+        params = { destination: stripe_account_id, created: { lt: 120.days.ago.to_i }, limit: 100 }
+        loop do
+          transfers = Stripe::Transfer.list(**params)
+          transfer = transfers.find { |tr| tr.amount - tr.amount_reversed > amount_to_reverse_for.call(tr) }
+          break if transfer || transfers.count < params[:limit]
+
+          params[:starting_after] = transfers.last.id
         end
       end
     end
     unless transfer
-      refund.with_lock do
-        next if refund.debited_stripe_transfer.present? || refund.fee_retention_written_off_at.present?
-        refund.fee_retention_error = { class: "NoReversibleTransfer", message: "No eligible payout transfer or sale transfer older than 120 days can cover the refund fee" }
-        refund.save!
-      end
-      return
+      collected = adopt_existing_refund_fee_collection(credit:)
+      return collected if collected
+      raise lookup_error if lookup_error
+      # A pin can belong to an in-flight collection. Leave it for reconciliation.
+      return if already_pinned_id.present?
+
+      raise NoRefundFeeTransferError, "No reversible transfer for refund fee retention"
     end
 
     refund.with_lock do
       refund.reload
+      return if refund.fee_retention_written_off_at.present?
       return recorded_refund_fee_collection(credit:) if refund.debited_stripe_transfer.present?
       current_pin = refund.fee_retention_source_transfer
       if current_pin.present? && current_pin != observed_pin

@@ -688,7 +688,8 @@ describe "PurchaseRefunds", :vcr do
           @purchase.refund_and_save!(@user.id)
         end
         @user.reload
-        verify_balance(@user, @initial_balance - @purchase.price_cents + @purchase.fee_cents - @purchase.processor_fee_cents)
+        expect(@purchase.refunds.last.fee_retention_written_off_cents).to eq(@purchase.processor_fee_cents)
+        verify_balance(@user, @initial_balance - @purchase.price_cents + @purchase.fee_cents)
         expect(@purchase.purchase_refund_balance).to eq @balance
         @product.reload
         expect(@product.sales.paid.count).to_not eq @initial_num_paid_download
@@ -2327,7 +2328,8 @@ describe "PurchaseRefunds", :vcr do
         @no_fee_purchase.refund_and_save!(@seller.id)
       end
 
-      verify_balance(@seller.reload, @initial_balance - @no_fee_purchase.price_cents - @no_fee_purchase.processor_fee_cents)
+      expect(@no_fee_purchase.refunds.last.fee_retention_written_off_cents).to eq(@no_fee_purchase.processor_fee_cents)
+      verify_balance(@seller.reload, @initial_balance - @no_fee_purchase.price_cents)
       expect(@no_fee_purchase.purchase_refund_balance).to eq @balance
       expect(@no_fee_purchase.stripe_refunded).to be(true)
       expect(@product.sales.paid.count).to eq(@initial_num_paid_download - 1)
@@ -2581,7 +2583,8 @@ describe "PurchaseRefunds", :vcr do
         seller.reload
         affiliate_user.reload
         verify_balance(affiliate_user, 0)
-        verify_balance(seller, -(purchase.price_cents * Purchase::PROCESSOR_FEE_PER_THOUSAND / 1000.0 + Purchase::PROCESSOR_FIXED_FEE_CENTS).round)
+        expect(purchase.refunds.last.fee_retention_written_off_cents).to eq((purchase.price_cents * Purchase::PROCESSOR_FEE_PER_THOUSAND / 1000.0 + Purchase::PROCESSOR_FIXED_FEE_CENTS).round)
+        verify_balance(seller, 0)
         affiliate_balance, balance = Balance.last(2)
         expect(purchase.purchase_refund_balance).to eq balance
         expect(purchase.affiliate_credit.affiliate_credit_refund_balance).to eq affiliate_balance
@@ -2591,7 +2594,7 @@ describe "PurchaseRefunds", :vcr do
         expect(affiliate_user.balances.last.amount_cents).to eq 0
         expect(affiliate_user.balances.last.state).to eq "unpaid"
         expect(seller.balances.count).to eq 1
-        expect(seller.balances.last.amount_cents).to eq(-(purchase.price_cents * Purchase::PROCESSOR_FEE_PER_THOUSAND / 1000.0 + Purchase::PROCESSOR_FIXED_FEE_CENTS).round)
+        expect(seller.balances.last.amount_cents).to eq(0)
         expect(seller.balances.last.state).to eq "unpaid"
       end
 

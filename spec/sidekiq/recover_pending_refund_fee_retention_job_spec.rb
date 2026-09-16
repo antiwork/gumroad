@@ -5,7 +5,7 @@ require "spec_helper"
 RSpec.describe RecoverPendingRefundFeeRetentionJob, :vcr do
   let(:merchant_account) { create(:merchant_account, country: "BG", currency: "eur", charge_processor_merchant_id: "acct_fee_recovery_job") }
   let(:purchase) { create(:purchase, merchant_account:, seller: merchant_account.user, link: create(:product, user: merchant_account.user)) }
-  let(:refund) { create(:refund, purchase:, fee_retention_pending: true, retained_fee_cents: 1000) }
+  let(:refund) { create(:refund, purchase:, fee_retention_pending: true) }
   let!(:credit) { create(:credit, user: merchant_account.user, merchant_account:, fee_retention_refund: refund, amount_cents: -1000) }
   let(:transfer_group) { "refund_fee_retention_#{refund.id}" }
 
@@ -121,7 +121,8 @@ RSpec.describe RecoverPendingRefundFeeRetentionJob, :vcr do
     expect(refund.fee_retention_error["message"]).to eq(error.message)
   end
 
-  it "counts an attempt when Stripe has no transfer to collect from" do
+  it "writes off a fee once when Stripe has no safe transfer and reverses the ledger debit" do
+    refund.update!(retained_fee_cents: 1000)
     allow(Stripe::Transfer).to receive(:retrieve).with("tr_recovery_candidate")
       .and_return(double(id: "tr_recovery_candidate", amount: 5000, amount_reversed: 5000, currency: "usd"))
     allow(Stripe::Transfer).to receive(:list)
@@ -129,60 +130,82 @@ RSpec.describe RecoverPendingRefundFeeRetentionJob, :vcr do
     expect(Stripe::Transfer).not_to receive(:create)
     expect(ErrorNotifier).not_to receive(:notify)
 
+    expect { 2.times { described_class.new.perform } }.to change(BalanceTransaction, :count).by(1)
+
+    expect(refund.reload.fee_retention_pending).to be_falsey
+    expect(refund.fee_retention_recoverable).to be(false)
+    expect(refund.fee_retention_written_off_cents).to eq(1000)
+    expect(refund.fee_retention_written_off_at).to be_present
+    expect(refund.fee_retention_write_off_reason).to eq("no_reversible_transfer")
+    expect(refund.retained_fee_cents).to eq(1000)
+    expect(refund.debited_stripe_transfer).to be_nil
+    expect(refund.fee_retention_collected_cents).to be_nil
+    expect(Refund.written_off_fee_retention).to include(refund)
+    expect(BalanceTransaction.where(credit:).sum(:issued_amount_net_cents)).to eq(0)
+    expect(BalanceTransaction.where(credit:).sum(:holding_amount_net_cents)).to eq(0)
+    expect(credit.reload.amount_cents).to eq(-1000)
+  end
+
+  it "keeps a fee pending when a payout transfer lookup fails" do
+    error = Stripe::APIConnectionError.new("timeout")
+    allow(Stripe::Transfer).to receive(:retrieve).with("tr_recovery_candidate").and_raise(error)
+    allow(Stripe::Transfer).to receive(:list).with(hash_including(:destination)).and_return([])
+    expect(ErrorNotifier).to receive(:notify).with(error, context: { refund_id: refund.id, purchase_id: purchase.id })
+
     expect { described_class.new.perform }.not_to change(BalanceTransaction, :count)
 
     expect(refund.reload.fee_retention_pending).to be(true)
-    expect(refund.fee_retention_recoverable).to be(true)
-    expect(refund.fee_retention_attempts).to eq(1)
-    expect(refund.fee_retention_error).to eq(
-      "class" => "NoReversibleTransfer",
-      "message" => "No eligible payout transfer or sale transfer older than 120 days can cover the refund fee"
-    )
+    expect(refund.fee_retention_written_off_at).to be_nil
   end
 
-  it "writes off a no-transfer failure at the cap without notifying or changing balances" do
-    freeze_time
-    refund.update!(fee_retention_attempts: Refund::MAX_FEE_RETENTION_ATTEMPTS - 1)
+  it "adopts an existing debit before considering a write-off" do
     allow(Stripe::Transfer).to receive(:retrieve).with("tr_recovery_candidate")
-      .and_return(Stripe::Transfer.construct_from(id: "tr_recovery_candidate", amount: 5000, amount_reversed: 5000, currency: "usd"))
+      .and_return(double(id: "tr_recovery_candidate", amount: 5000, amount_reversed: 5000, currency: "usd"))
+    allow(Stripe::Transfer).to receive(:list).with(hash_including(:destination)).and_return([])
     expect(Stripe::Transfer).to receive(:list)
-      .with(destination: merchant_account.charge_processor_merchant_id, created: { lt: 120.days.ago.to_i }, limit: 100).and_return([])
+      .with({ transfer_group:, limit: 1 }, { stripe_account: merchant_account.charge_processor_merchant_id })
+      .and_return([double(id: "tr_existing_fee", amount: 850)])
     expect(Stripe::Transfer).not_to receive(:create)
     expect(Stripe::Transfer).not_to receive(:create_reversal)
-    expect(ErrorNotifier).not_to receive(:notify)
 
-    expect { described_class.new.perform }.not_to change(BalanceTransaction, :count)
-    expect(refund.reload.json_data["fee_retention_pending"]).to be(false)
-    expect(refund.fee_retention_recoverable).to be(false)
-    expect(refund.fee_retention_written_off_cents).to eq(1000)
-    expect(refund.fee_retention_error["class"]).to eq("NoReversibleTransfer")
-    expect(refund.fee_retention_write_off_reason).to eq("Recovery attempt limit reached")
-    expect(Time.iso8601(refund.fee_retention_written_off_at)).to be_within(2.seconds).of(Time.current)
-    expect(BalanceTransaction.where(credit:).sum(:issued_amount_net_cents)).to eq(-1000)
-    expect(BalanceTransaction.where(credit:).sum(:holding_amount_net_cents)).to eq(-800)
     described_class.new.perform
+
+    expect(refund.reload.fee_retention_pending).to be_falsey
+    expect(refund.fee_retention_written_off_at).to be_nil
+    expect(refund.debited_stripe_transfer).to eq("tr_existing_fee")
+    expect(BalanceTransaction.where(credit:).sum(:holding_amount_net_cents)).to eq(-850)
   end
 
-  it "writes off exhausted recovery without a cap notification and never retries it" do
+  it "does not write off a fee that another worker pins during the lookup" do
+    allow(Stripe::Transfer).to receive(:retrieve).with("tr_recovery_candidate")
+      .and_return(double(id: "tr_recovery_candidate", amount: 5000, amount_reversed: 5000, currency: "usd"))
+    allow(Stripe::Transfer).to receive(:list).with(hash_including(:destination)) do
+      refund.update!(fee_retention_source_transfer: "tr_concurrent")
+      []
+    end
+
+    expect { described_class.new.perform }.not_to change(BalanceTransaction, :count)
+
+    expect(refund.reload.fee_retention_pending).to be(true)
+    expect(refund.fee_retention_written_off_at).to be_nil
+  end
+
+  it "stops retrying at the attempt cap, reports once, and keeps the pending marker" do
     refund.update!(fee_retention_attempts: Refund::MAX_FEE_RETENTION_ATTEMPTS - 1)
     error = Stripe::InvalidRequestError.new("Account debit is not permitted", nil)
     expect(Stripe::Transfer).to receive(:create).once.and_raise(error)
     expect(ErrorNotifier).to receive(:notify).with(error, context: { refund_id: refund.id, purchase_id: purchase.id }).once
-    expect(ErrorNotifier).not_to receive(:notify).with(instance_of(String), anything)
+    expect(ErrorNotifier).to receive(:notify)
+      .with("Refund fee retention stopped retrying after #{Refund::MAX_FEE_RETENTION_ATTEMPTS} attempts",
+            context: hash_including(refund_id: refund.id, purchase_id: purchase.id)).once
 
-    travel_to(Time.utc(2026, 9, 16, 12)) { described_class.new.perform }
     described_class.new.perform
-    refund.recover_pending_fee_retention!
+    described_class.new.perform
 
     refund.reload
     expect(refund.fee_retention_attempts).to eq(Refund::MAX_FEE_RETENTION_ATTEMPTS)
-    expect(refund.fee_retention_pending).to be_falsey
+    expect(refund.fee_retention_pending).to be(true)
     expect(refund.fee_retention_recoverable).to be(false)
-    expect(refund.fee_retention_written_off_at).to eq("2026-09-16T12:00:00Z")
-    expect(refund.fee_retention_write_off_reason).to eq("Recovery attempt limit reached")
-    expect(refund.fee_retention_written_off_cents).to eq(1000)
-    expect(refund.fee_retention_error["message"]).to eq(error.message)
-    expect(Refund.written_off_fee_retention).to include(refund)
     expect(Refund.pending_fee_retention).not_to include(refund)
   end
 
