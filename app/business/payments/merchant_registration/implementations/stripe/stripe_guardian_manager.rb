@@ -488,9 +488,7 @@ module StripeGuardianManager
 
     apply_tax_id!(hash, guardian, account_country_code, passphrase)
 
-    if StripeBeneficialOwnersManager::COUNTRIES_REQUIRING_NATIONALITY.include?(account_country_code)
-      hash[:nationality] = guardian.nationality
-    end
+    hash[:nationality] = guardian.nationality
 
     hash.deep_values_strip!
   end

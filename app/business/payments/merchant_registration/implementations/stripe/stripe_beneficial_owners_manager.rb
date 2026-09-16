@@ -382,9 +382,7 @@ module StripeBeneficialOwnersManager
       end
     end
 
-    if COUNTRIES_REQUIRING_NATIONALITY.include?(country_code) && params[:nationality].present?
-      hash[:nationality] = params[:nationality]
-    end
+    hash[:nationality] = params[:nationality] if params[:nationality].present?
 
     if country_code == Compliance::Countries::SGP.alpha2 && action == :create
       hash[:full_name_aliases] = [""]

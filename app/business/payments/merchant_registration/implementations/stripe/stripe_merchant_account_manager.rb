@@ -2113,12 +2113,7 @@ module StripeMerchantAccountManager
         end
       end
 
-      if [Compliance::Countries::ARE.alpha2,
-          Compliance::Countries::SGP.alpha2,
-          Compliance::Countries::BGD.alpha2,
-          Compliance::Countries::PAK.alpha2].include?(legal_entity_country_code)
-        hash.deep_merge!(nationality: user_compliance_info.nationality)
-      end
+      hash.deep_merge!(nationality: user_compliance_info.nationality) if user_compliance_info.nationality.present?
 
       hash.deep_values_strip!
     end

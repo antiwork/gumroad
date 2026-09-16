@@ -74,7 +74,12 @@ class UserComplianceInfoRequest < ApplicationRecord
 
       field_provided_in_part = field_value.length < field_expected_length if field_expected_length.present?
 
-      requests = user_compliance_info.user.user_compliance_info_requests.requested.where(field_needed: field)
+      field_names = if field == UserComplianceInfoFields::Individual::NATIONALITY
+        UserComplianceInfoFields::Individual::NATIONALITY_FIELDS
+      else
+        field
+      end
+      requests = user_compliance_info.user.user_compliance_info_requests.requested.where(field_needed: field_names)
       requests = requests.only_needs_field_to_be_partially_provided if field_provided_in_part
       requests.find_each(&:mark_provided!)
     end

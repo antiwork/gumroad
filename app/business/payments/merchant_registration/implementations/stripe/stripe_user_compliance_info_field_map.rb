@@ -14,6 +14,7 @@ module StripeUserComplianceInfoFieldMap
     "individual.verification.document" => UserComplianceInfoFields::Individual::STRIPE_IDENTITY_DOCUMENT_ID,
     "individual.verification.additional_document" => UserComplianceInfoFields::Individual::STRIPE_ADDITIONAL_DOCUMENT_ID,
     "individual.verification.proof_of_liveness" => UserComplianceInfoFields::Individual::STRIPE_ENHANCED_IDENTITY_VERIFICATION,
+    "individual.nationality" => UserComplianceInfoFields::Individual::NATIONALITY,
     "company.verification.document" => UserComplianceInfoFields::Business::STRIPE_COMPANY_DOCUMENT_ID,
     "documents.company_license.files" => UserComplianceInfoFields::Business::STRIPE_COMPANY_DOCUMENT_ID,
     "documents.company_memorandum_of_association.files" => UserComplianceInfoFields::Business::MEMORANDUM_OF_ASSOCIATION,

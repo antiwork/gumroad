@@ -702,6 +702,7 @@ describe SettingsPresenter do
           individual_tax_id_last_four: nil,
           individual_tax_id_is_last_four: false,
           has_outstanding_full_ssn_requirement: false,
+          has_outstanding_nationality_requirement: false,
           business_tax_id_entered: false,
           business_tax_id_last_four: nil,
           requires_credit_card: false,
@@ -1575,6 +1576,31 @@ describe SettingsPresenter do
 
       it "is false when no TAX_ID request exists" do
         expect(presenter.payments_props[:user][:has_outstanding_full_ssn_requirement]).to be(false)
+      end
+    end
+
+    describe "has_outstanding_nationality_requirement" do
+      it "is true when Stripe's individual.nationality requirement is open" do
+        create(:user_compliance_info_request, user: seller, field_needed: UserComplianceInfoFields::Individual::NATIONALITY)
+
+        expect(presenter.payments_props[:user][:has_outstanding_nationality_requirement]).to be(true)
+      end
+
+      it "is true for an existing raw Stripe nationality request" do
+        create(:user_compliance_info_request, user: seller, field_needed: UserComplianceInfoFields::Individual::STRIPE_NATIONALITY)
+
+        expect(presenter.payments_props[:user][:has_outstanding_nationality_requirement]).to be(true)
+      end
+
+      it "is false when the nationality request was already provided" do
+        request = create(:user_compliance_info_request, user: seller, field_needed: UserComplianceInfoFields::Individual::NATIONALITY)
+        request.mark_provided!
+
+        expect(presenter.payments_props[:user][:has_outstanding_nationality_requirement]).to be(false)
+      end
+
+      it "is false when no nationality request exists" do
+        expect(presenter.payments_props[:user][:has_outstanding_nationality_requirement]).to be(false)
       end
     end
 

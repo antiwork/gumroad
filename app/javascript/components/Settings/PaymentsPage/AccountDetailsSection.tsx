@@ -434,7 +434,10 @@ const AccountDetailsSection = ({
     ? complianceInfo.business_country !== "AE"
     : complianceInfo.country !== "AE";
 
+  // Stripe's requirement set decides when it wants individual.nationality, so the field cannot
+  // be gated on the four countries it used to be hardcoded to — those keep showing it.
   const showNationalityField =
+    user.has_outstanding_nationality_requirement ||
     user.country_code === "AE" ||
     user.country_code === "SG" ||
     user.country_code === "PK" ||
