@@ -162,6 +162,55 @@ RSpec.describe Flipper::Adapters::RedisFailOpen do
     expect(feature.enabled?).to be(false)
   end
 
+  %i[get get_multi get_all].each do |operation|
+    it "does not cache an in-flight #{operation} after a concurrent disable" do
+      feature.enable
+      started = Queue.new
+      resume = Queue.new
+      allow(inner).to receive(operation).and_wrap_original do |method, *args|
+        result = method.call(*args)
+        started << true
+        resume.pop
+        result
+      end
+      args = operation == :get_all ? [] : [operation == :get ? feature : [feature]]
+      reader = Thread.new { adapter.public_send(operation, *args) }
+      expect(started.pop(timeout: 5)).to be(true)
+      feature.disable
+      resume << true
+      reader.value
+      allow(inner).to receive(:get).and_raise(Redis::TimeoutError)
+
+      expect(feature.enabled?).to be(false)
+    ensure
+      resume << true
+      reader&.join(5)
+    end
+  end
+
+  it "invalidates a read completed while a write was in flight" do
+    feature.enable
+    allow(inner).to receive(:disable).and_wrap_original do |method, *args|
+      expect(feature.enabled?).to be(true)
+      method.call(*args)
+    end
+    feature.disable
+    allow(inner).to receive(:get).and_raise(Redis::TimeoutError)
+
+    expect(feature.enabled?).to be(false)
+  end
+
+  it "keeps bounded bulk feature names aligned with retained gates" do
+    stub_const("#{described_class}::MAX_FEATURES", 2)
+    %i[first second third].each { |key| flipper[key].enable }
+    adapter.get_all
+    allow(inner).to receive(:get_all).and_raise(Redis::TimeoutError)
+    allow(inner).to receive(:features).and_raise(Redis::TimeoutError)
+
+    expect(adapter.get_all.keys.to_set).to eq(adapter.features)
+    expect(adapter.get_all.transform_values { |gates| gates[:boolean] }).to eq("second" => "true", "third" => "true")
+  end
+
   it "does not catch non-Redis errors" do
     allow(inner).to receive(:get).and_raise(ArgumentError)
 

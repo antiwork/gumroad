@@ -10,9 +10,9 @@ module Flipper
       READS = %i[get get_multi get_all features].freeze
       WRITES = %i[add remove clear enable disable import].freeze
 
-      State = Struct.new(:lock, :values, :features, :last_reported_at) do
+      State = Struct.new(:lock, :values, :features, :last_reported_at, :generation) do
         def initialize
-          super(Mutex.new, {}, nil, nil)
+          super(Mutex.new, {}, nil, nil, 0)
         end
       end
 
@@ -27,14 +27,17 @@ module Flipper
           return yield
         end
 
+        generation = @state.lock.synchronize { @state.generation }
         result = yield
-        @state.lock.synchronize { remember(operation, args, result) }
+        @state.lock.synchronize { remember(operation, args, result) if generation == @state.generation }
         result
       rescue ::Redis::BaseError, RedisClient::Error => error
         raise unless READS.include?(operation)
 
         report(error)
         @state.lock.synchronize { fallback(operation, args).deep_dup }
+      ensure
+        invalidate(args.first) if WRITES.include?(operation)
       end
 
       private
@@ -46,12 +49,12 @@ module Flipper
             @state.values.merge!(result.deep_dup)
           when :get_all
             @state.values = result.deep_dup
-            @state.features = result.keys.first(MAX_FEATURES).to_set
           when :features
             @state.features = result.first(MAX_FEATURES).to_set
             @state.values.select! { |key, _| result.include?(key) }
           end
           @state.values.shift while @state.values.size > MAX_FEATURES
+          @state.features = @state.values.keys.to_set if operation == :get_all
         end
 
         def fallback(operation, args)
@@ -70,7 +73,8 @@ module Flipper
 
         def invalidate(feature)
           @state.lock.synchronize do
-            # A timed-out write may have applied, so do not resurrect its old gates.
+            # Fence reads spanning a write, including writes whose replies time out.
+            @state.generation += 1
             if feature.respond_to?(:key)
               @state.values.delete(feature.key)
             else
