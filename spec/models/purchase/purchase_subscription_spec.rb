@@ -603,7 +603,7 @@ describe "PurchaseSubscription", :vcr do
         subscription.mark_vat_exempt_territory!
 
         purchase = renewal_of(subscription)
-        expect(purchase.vat_exempt_territory).to be(true)
+        expect(purchase.vat_exempt_territory?).to be(true)
         expect(purchase.gumroad_tax_cents).to eq 0
         expect(purchase.errors).to be_empty
       end

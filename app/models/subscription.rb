@@ -1810,7 +1810,6 @@ class Subscription < ApplicationRecord
 
     def set_vat_id_for_purchase(purchase)
       purchase.business_vat_id = business_vat_id if business_vat_id.present?
-      purchase.vat_exempt_territory = true if vat_exempt_territory?
     end
 
     def schedule_member_cancellation_workflow_jobs

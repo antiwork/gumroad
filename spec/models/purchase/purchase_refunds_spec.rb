@@ -1195,7 +1195,7 @@ describe "PurchaseRefunds", :vcr do
           @purchase.refund_gumroad_taxes!(refunding_user_id: @product.user.id, note: "Canary Islands", vat_exempt_territory: true)
 
           expect(subscription.reload.vat_exempt_territory?).to be(true)
-          expect(subscription.build_purchase.vat_exempt_territory).to be(true)
+          expect(subscription.build_purchase.vat_exempt_territory?).to be(true)
         end
 
         describe "PayPal Connect sales" do
