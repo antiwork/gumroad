@@ -15,6 +15,7 @@ class Event < ApplicationRecord
     edit_product_mobile_app
     first_purchase_on_profile_visit
     post_view
+    product_purchase_recovery_click
     product_refund_policy_fine_print_view
     purchase
     refund
