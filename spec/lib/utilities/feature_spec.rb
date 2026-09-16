@@ -66,6 +66,31 @@ RSpec.describe Feature do
     end
   end
 
+  describe "Redis outages" do
+    [RedisClient::ReadTimeoutError, Redis::TimeoutError].each do |error_class|
+      context "with #{error_class}" do
+        it "keeps the last-known enabled value through the configured adapter" do
+          described_class.activate(feature_name)
+          expect(described_class.active?(feature_name)).to be(true)
+          allow($redis).to receive(:hgetall).and_raise(error_class)
+          allow(ErrorNotifier).to receive(:notify)
+
+          expect(described_class.active?(feature_name)).to be(true)
+          expect(described_class.inactive?(feature_name)).to be(false)
+          expect(Flipper.enabled?(feature_name)).to be(true)
+        end
+
+        it "defaults an unread feature to off" do
+          allow($redis).to receive(:hgetall).and_raise(error_class)
+          allow(ErrorNotifier).to receive(:notify)
+
+          expect(described_class.active?(:unread_outage_feature)).to be(false)
+          expect(described_class.inactive?(:unread_outage_feature)).to be(true)
+        end
+      end
+    end
+  end
+
   describe "#active?" do
     context "when an actor is passed" do
       it "returns true if the feature is active for the actor" do
