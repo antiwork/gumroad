@@ -12,17 +12,17 @@ logger() {
 source .buildkite/scripts/deploy_relevance.sh
 skip_if_production_noop "deploy_production.sh"
 
-# A skipped deploy used to be indistinguishable from a deployed one on the build page: the
-# skip logs a line and exits 0, so Buildkite paints the build green while the commit never
-# shipped (gp#2635). The skip itself is deliberate and stays, and the exit code stays 0 —
-# a red build here would be noise a human has to clear. What was missing is the signal.
+# The skip is deliberate and the exit code stays 0 (a red build here is noise a human has to
+# clear), so this annotation and log line are the only signal that a commit did not ship.
 announce_skip() {
   local label="$1" reason="$2"
   logger "$label $reason — skipping deployment (commit ${BUILDKITE_COMMIT:-unknown} was NOT published)"
   if command -v buildkite-agent >/dev/null 2>&1; then
-    buildkite-agent annotate --style warning --context "deploy-skip-${label// /-}" \
+    if ! buildkite-agent annotate --style warning --context "deploy-skip-${label// /-}" \
       "$label: **deployment skipped** — $reason. Commit \`${BUILDKITE_COMMIT:-unknown}\` was not shipped; it goes out with the next push or via require-approval." \
-      2>/dev/null || true
+      2>/dev/null; then
+      logger "WARNING: could not annotate the build — this skip is only in the log above"
+    fi
   fi
   exit 0
 }
