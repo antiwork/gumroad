@@ -662,7 +662,7 @@ describe User::Stats, :vcr do
       before do
         create(:merchant_account_stripe, user: @user)
         5.times do
-          Credit.create_for_financing_paydown!(purchase: create(:purchase, link: create(:product, user: @user)), amount_cents: -250, merchant_account: @user.stripe_account, stripe_loan_paydown_id: "cptxn_12345")
+          Credit.create_for_financing_paydown!(purchase: create(:purchase, link: create(:product, user: @user)), amount_cents: -250, merchant_account: @user.stripe_account, stripe_loan_paydown_id: "cptxn_#{SecureRandom.uuid}")
           Credit.create_for_credit!(user: @user, amount_cents: 1000, crediting_user: create(:user))
           stub_const("GUMROAD_ADMIN_ID", create(:admin_user).id)
           Credit.create_for_manual_paydown_on_stripe_loan!(amount_cents: -2000, merchant_account: @user.stripe_account, stripe_loan_paydown_id: "cptxn_#{SecureRandom.uuid}")
