@@ -2023,6 +2023,57 @@ describe Order::ChargeService, :vcr do
       expect(captured_mandate.dig(:payment_method_options, :card, :mandate_options, :currency)).to eq(Currency::INR)
     end
 
+    it "re-registers a fresh setup intent when the submitted one is scoped to another Stripe account" do
+      order = create(:order)
+      merchant_account = create(:merchant_account_stripe_connect, user: seller_1)
+      purchase = create(:purchase,
+                        link: product_1,
+                        seller: seller_1,
+                        merchant_account:,
+                        purchase_state: "in_progress",
+                        is_multi_buy: true,
+                        total_transaction_cents: 10_00)
+      submitted_si_id = "seti_platform_checkout"
+      chargeable = instance_double(Chargeable, requires_mandate?: true)
+      allow(chargeable).to receive(:stripe_setup_intent_id) { submitted_si_id }
+      allow(chargeable).to receive(:stripe_setup_intent_id=) { |value| submitted_si_id = value }
+      allow(chargeable).to receive(:use_connected_account_payment_method!)
+      allow(chargeable).to receive(:respond_to?) do |method_name, *_|
+        %i[use_connected_account_payment_method! stripe_setup_intent_id= payment_method_id].include?(method_name.to_sym)
+      end
+      allow(ChargeProcessor).to receive(:get_setup_intent)
+        .with(merchant_account, "seti_platform_checkout")
+        .and_raise(ChargeProcessorInvalidRequestError.new("No such setupintent: 'seti_platform_checkout'"))
+      fresh_si = instance_double(
+        StripeSetupIntent,
+        id: "seti_connect_fresh",
+        payment_method_id: "pm_connect_fresh",
+        customer_id: nil,
+        mandate: "mandate_connect_fresh",
+        card_mandate_options: { amount: 10_00, currency: "usd" },
+        succeeded?: true,
+        requires_action?: false
+      )
+      allow(ChargeProcessor).to receive(:setup_future_charges!).and_return(fresh_si)
+      charge = instance_double(Charge, charge_intent: nil, credit_card: nil)
+      create_service = instance_double(Charge::CreateService, perform: charge)
+      allow(Charge::CreateService).to receive(:new).and_return(create_service)
+      service = described_class.new(order:, params: {})
+      allow(service).to receive(:mandate_options_for_stripe).and_return(
+        { payment_method_options: { card: { mandate_options: { amount: 10_00, currency: Currency::USD } } } }
+      )
+
+      service.send(:create_charge_for_seller_purchases, [purchase], chargeable, true, false)
+
+      expect(chargeable).to have_received(:stripe_setup_intent_id=).with(nil)
+      expect(ChargeProcessor).to have_received(:setup_future_charges!).with(
+        merchant_account,
+        chargeable,
+        mandate_options: { payment_method_options: { card: { mandate_options: { amount: 10_00, currency: Currency::USD } } } }
+      )
+      expect(purchase.reload.processor_setup_intent_id).to eq("seti_connect_fresh")
+    end
+
     it "binds the Connect payment method when reusing a shared setup intent" do
       seller_1.update!(check_merchant_account_is_linked: true)
       seller_2.update!(check_merchant_account_is_linked: true)
