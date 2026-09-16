@@ -14,7 +14,16 @@ class Marketing::Channels::X
   def call
     return result if action.posted?
 
-    if !action.approved? && !action.queued?
+    # A claimed attempt is resolved by claim! (wait while it is in flight, else close it
+    # as an unknown result). Running the preflight checks first would reopen it to
+    # :approved — require_reconnect! transitions out of :queued — and let a post that X
+    # may already have accepted be sent again.
+    if action.queued?
+      claim!
+      return result
+    end
+
+    if !action.approved?
       action.update!(error_code: "not_approved")
     elsif action.link.user_id != action.user_id
       fail_with!("product_ownership_changed")
@@ -66,9 +75,13 @@ class Marketing::Channels::X
         action.mark_posted!
       elsif response.write_forbidden?
         require_reconnect!
+      elsif response.rejected?
+        # X refused the request outright (duplicate copy, over-length text, app not
+        # enrolled). Nothing was posted and reconnecting would not change that.
+        fail_with!("x_rejected")
       else
-        # Anything but a 201 leaves the post's fate unknown, and a 5xx or a dropped
-        # connection is the case where X most likely did receive it.
+        # Anything else — a 5xx, or a nil status from a connection that died — leaves the
+        # post's fate unknown, and that is the case where X most likely did receive it.
         fail_with!("x_post_result_unknown")
       end
     end

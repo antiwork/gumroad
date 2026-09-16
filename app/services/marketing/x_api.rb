@@ -10,8 +10,18 @@ class Marketing::XApi
   Response = Struct.new(:status, :body, keyword_init: true) do
     def created? = status == 201
     def tweet_id = body.dig("data", "id")
-    # 401/403 here means the token cannot write (read-only app tier or scopes at mint time).
-    def write_forbidden? = [401, 403].include?(status)
+    # A 401 always means this token cannot authenticate. A 403 means it cannot write for
+    # OAuth 1.0a user context — read-only app tier or scopes as minted — unless X names a
+    # content refusal, since it returns 403 for duplicate copy and over-length text too.
+    def write_forbidden? = status == 401 || (status == 403 && !content_refused?)
+    # Any other 4xx is a refusal: nothing was posted, and reconnecting would not help.
+    def rejected? = status.to_i.between?(400, 499) && !write_forbidden?
+
+    private
+      # Wording X uses when it refuses the content itself rather than the token's scope.
+      CONTENT_REFUSALS = [/duplicate/i, /too long/i, /client-not-enrolled/i].freeze
+
+      def content_refused? = CONTENT_REFUSALS.any? { |pattern| body["detail"].to_s.match?(pattern) }
   end
 
   # A dropped or timed-out connection raises instead of returning a response, and X may

@@ -118,6 +118,28 @@ describe Marketing::Channels::X do
     expect(WebMock).to have_requested(:post, Marketing::XApi::TWEETS_URL).once
   end
 
+  it "resolves a claimed attempt before the credential checks, even when the token is gone" do
+    action.update!(status: "queued", queued_at: 10.minutes.ago)
+    seller.update!(twitter_oauth_token: nil, twitter_oauth_secret: nil)
+
+    result = described_class.new(action).call
+
+    expect(result.action).to be_failed
+    expect(result.action.error_code).to eq("x_post_result_unknown")
+    expect(WebMock).not_to have_requested(:post, Marketing::XApi::TWEETS_URL)
+  end
+
+  it "reports a content refusal as rejected instead of asking the seller to reconnect" do
+    stub_tweets(status: 403, body: { title: "Forbidden",
+                                     detail: "You are not allowed to create a Tweet with duplicate content." })
+
+    result = described_class.new(action).call
+
+    expect(result.action).to be_failed
+    expect(result.action.error_code).to eq("x_rejected")
+    expect(WebMock).to have_requested(:post, Marketing::XApi::TWEETS_URL).once
+  end
+
   it "clears an earlier write-permission failure once the post lands" do
     stub_tweets(status: 403, body: {})
     described_class.new(action).call
