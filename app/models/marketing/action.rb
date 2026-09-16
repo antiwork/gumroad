@@ -3,6 +3,8 @@
 class Marketing::Action < ApplicationRecord
   include ExternalId
 
+  class ConfirmationChanged < StandardError; end
+
   # Post text is copy + blank line + link; X counts every URL as 23 characters.
   X_URL_LENGTH = 23
   MAX_POST_LENGTH = 280
@@ -59,6 +61,29 @@ class Marketing::Action < ApplicationRecord
     end
   end
 
+  def approve_copy(confirmation_token: nil, **attributes)
+    with_lock do
+      verify_confirmation!(confirmation_token) if confirmation_token
+      next :claimed if queued? || posted?
+
+      self.copy = attributes[:copy] if attributes.key?(:copy)
+      next :invalid if copy_changed? && !valid?
+      next :approved if approve
+
+      :closed
+    end
+  end
+
+  def api_idempotency_key = Digest::SHA256.hexdigest(idempotency_key)
+
+  def confirmation_token
+    Digest::SHA256.hexdigest([idempotency_key, post_text, user.reload.twitter_handle].to_json)
+  end
+
+  def verify_confirmation!(token)
+    raise ConfirmationChanged, "The post changed. Review it and confirm again." unless token == confirmation_token
+  end
+
   def terminal? = TERMINAL_STATUSES.include?(status)
 
   def post_text
@@ -68,6 +93,8 @@ class Marketing::Action < ApplicationRecord
   def as_json(_options = {})
     {
       id: external_id,
+      idempotency_key: api_idempotency_key,
+      confirmation_token:,
       channel:,
       status:,
       copy:,
