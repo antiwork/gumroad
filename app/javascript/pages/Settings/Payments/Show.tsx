@@ -20,7 +20,7 @@ import { CountrySelectionModal } from "$app/components/CountrySelectionModal";
 import { PriceInput } from "$app/components/PriceInput";
 import { CreditCardForm } from "$app/components/Settings/AdvancedPage/CreditCardForm";
 import { Layout } from "$app/components/Settings/Layout";
-import AccountDetailsSection from "$app/components/Settings/PaymentsPage/AccountDetailsSection";
+import AccountDetailsSection, { getBusinessTypes } from "$app/components/Settings/PaymentsPage/AccountDetailsSection";
 import AccountStatusSection, { type AccountStatus } from "$app/components/Settings/PaymentsPage/AccountStatusSection";
 import AusBackTaxesSection, { type AusBacktaxDetails } from "$app/components/Settings/PaymentsPage/AusBackTaxesSection";
 import BankAccountSection, {
@@ -193,6 +193,7 @@ type PaymentsPageProps = {
   min_dob_year: number;
   user: User;
   compliance_info: ComplianceInfo;
+  us_business_types: { code: string; name: string }[];
   uae_business_types: { code: string; name: string }[];
   india_business_types: { code: string; name: string }[];
   canada_business_types: { code: string; name: string }[];
@@ -951,7 +952,13 @@ export default function PaymentsPage() {
       setClientErrorMessage({ message: COLOMBIA_ID_NUMBER_ERROR_MESSAGE });
     }
     if (form.data.user.is_business) {
-      if (!form.data.user.business_type) {
+      const businessTypes = getBusinessTypes(form.data.user.business_country, {
+        US: props.us_business_types,
+        AE: props.uae_business_types,
+        IN: props.india_business_types,
+        CA: props.canada_business_types,
+      });
+      if (!businessTypes.some(({ code }) => code === form.data.user.business_type)) {
         markFieldInvalid("business_type");
       }
       if (!form.data.user.business_name) {
@@ -1529,6 +1536,7 @@ export default function PaymentsPage() {
                 minDobYear={props.min_dob_year}
                 isFormDisabled={props.is_form_disabled}
                 countries={props.countries}
+                usBusinessTypes={props.us_business_types}
                 uaeBusinessTypes={props.uae_business_types}
                 indiaBusinessTypes={props.india_business_types}
                 canadaBusinessTypes={props.canada_business_types}
