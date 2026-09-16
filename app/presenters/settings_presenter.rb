@@ -639,6 +639,7 @@ class SettingsPresenter
         individual_tax_id_last_four: tax_id_last_four(user_compliance_info.individual_tax_id),
         individual_tax_id_is_last_four: tax_id_is_last_four_only?(user_compliance_info.individual_tax_id),
         has_outstanding_full_ssn_requirement: outstanding_full_ssn_requirement,
+        has_outstanding_nationality_requirement: has_outstanding_nationality_requirement?,
         business_tax_id_entered: user_compliance_info.business_tax_id.present?,
         business_tax_id_last_four: tax_id_last_four(user_compliance_info.business_tax_id),
         requires_credit_card: seller.requires_credit_card?,
@@ -669,6 +670,13 @@ class SettingsPresenter
             .requested
             .where(field_needed: UserComplianceInfoFields::Individual::TAX_ID)
             .only_needs_field_to_be_partially_provided(false)
+            .exists?
+    end
+
+    def has_outstanding_nationality_requirement?
+      seller.user_compliance_info_requests
+            .requested
+            .where(field_needed: UserComplianceInfoFields::Individual::NATIONALITY_FIELDS)
             .exists?
     end
 

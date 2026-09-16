@@ -129,6 +129,33 @@ describe UpdateUserComplianceInfo do
         expect(user.alive_user_compliance_info.id).not_to eq(compliance_info.id)
       end
 
+      it "persists nationality and submits it to Stripe" do
+        params = ActionController::Parameters.new(nationality: "GR")
+
+        expect(StripeMerchantAccountManager).to receive(:handle_new_user_compliance_info) do |new_compliance_info|
+          expect(new_compliance_info.nationality).to eq("GR")
+        end
+
+        result = described_class.new(compliance_params: params, user: user).process
+
+        expect(result[:success]).to be true
+        expect(user.reload.alive_user_compliance_info.nationality).to eq("GR")
+      end
+
+      it "marks both mapped and raw Stripe nationality requests provided" do
+        mapped_request = create(:user_compliance_info_request, user:, field_needed: UserComplianceInfoFields::Individual::NATIONALITY)
+        raw_request = create(:user_compliance_info_request, user:, field_needed: UserComplianceInfoFields::Individual::STRIPE_NATIONALITY)
+        params = ActionController::Parameters.new(nationality: "GR")
+
+        allow(StripeMerchantAccountManager).to receive(:handle_new_user_compliance_info)
+
+        result = described_class.new(compliance_params: params, user: user).process
+
+        expect(result[:success]).to be true
+        expect(mapped_request.reload.state).to eq("provided")
+        expect(raw_request.reload.state).to eq("provided")
+      end
+
       it "persists the Japanese city kana fields (city_kana and business_city_kana)" do
         params = ActionController::Parameters.new(
           city_kana: "シブヤク",

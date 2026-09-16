@@ -571,12 +571,35 @@ describe StripeMerchantAccountManager, :vcr do
           expect(person_hash).not_to have_key(:ssn_last_4)
         end
 
-        it "omits nationality because the Stripe account country (US) does not require it" do
+        it "omits nationality only because this rep has none on file" do
+          # Stripe accepts nationality for any country, so its absence here is the absent value,
+          # not the US account country.
           expect(person_hash).not_to have_key(:nationality)
         end
 
         it "still carries the rep's foreign address so Stripe knows where they live" do
           expect(person_hash[:address]).to include(country: "BD", city: "Rajshahi", postal_code: "6203")
+        end
+      end
+
+      context "with a nationality on file" do
+        let(:user_compliance_info) do
+          create(:user_compliance_info_business,
+                 user:,
+                 first_name: "Rashed",
+                 last_name: "Khan",
+                 city: "Rajshahi",
+                 state: nil,
+                 zip_code: "6203",
+                 country: "Bangladesh",
+                 nationality: "BD",
+                 individual_tax_id: "1234567890")
+        end
+
+        it "submits nationality for a US account, because Stripe decides when it wants it" do
+          person_hash = described_class.send(:person_hash, user_compliance_info, GlobalConfig.get("STRONGBOX_GENERAL_PASSWORD"))
+
+          expect(person_hash[:nationality]).to eq("BD")
         end
       end
 
@@ -726,6 +749,30 @@ describe StripeMerchantAccountManager, :vcr do
       it "submits the rep's id_number unchanged since the account is non-US" do
         person_hash = described_class.send(:person_hash, user_compliance_info, GlobalConfig.get("STRONGBOX_GENERAL_PASSWORD"))
         expect(person_hash[:id_number]).to eq("12345678901")
+      end
+    end
+
+    describe "an individual outside the four countries that used to be hardcoded (person_hash)" do
+      context "with a nationality on file" do
+        let(:user_compliance_info) do
+          create(:user_compliance_info, user:, country: "Greece", nationality: "GR")
+        end
+
+        it "submits nationality" do
+          person_hash = described_class.send(:person_hash, user_compliance_info, GlobalConfig.get("STRONGBOX_GENERAL_PASSWORD"))
+
+          expect(person_hash[:nationality]).to eq("GR")
+        end
+      end
+
+      context "with no nationality on file" do
+        let(:user_compliance_info) { create(:user_compliance_info, user:, country: "Greece") }
+
+        it "omits the key rather than sending a null Stripe rejects" do
+          person_hash = described_class.send(:person_hash, user_compliance_info, GlobalConfig.get("STRONGBOX_GENERAL_PASSWORD"))
+
+          expect(person_hash).not_to have_key(:nationality)
+        end
       end
     end
 

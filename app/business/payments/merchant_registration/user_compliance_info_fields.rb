@@ -21,6 +21,10 @@ module UserComplianceInfoFields
     VISA = "visa"
     POWER_OF_ATTORNEY = "power_of_attorney"
 
+    NATIONALITY = "nationality"
+    STRIPE_NATIONALITY = "individual.nationality"
+    NATIONALITY_FIELDS = [NATIONALITY, STRIPE_NATIONALITY].freeze
+
     module Address
       STREET = "street_address"
       CITY = "city"
@@ -79,6 +83,7 @@ module UserComplianceInfoFields
     Individual::Address::STATE,
     Individual::Address::ZIP_CODE,
     Individual::Address::COUNTRY,
+    Individual::NATIONALITY,
     Business::NAME,
     Business::TAX_ID,
     Business::STRIPE_COMPANY_DOCUMENT_ID,

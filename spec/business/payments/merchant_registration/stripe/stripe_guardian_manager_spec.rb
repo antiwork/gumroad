@@ -205,6 +205,26 @@ describe StripeGuardianManager do
       )
     end
 
+    # Nationality is optional in has_completed_info?, so the everyday case is a complete guardian with
+    # none on file. Sending the key as nil is not the same as omitting it.
+    it "omits nationality when the guardian has none on file" do
+      guardian.update!(nationality: nil)
+      compliance_info = create_compliance_info(guardian_record: guardian)
+
+      hash = described_class.send(:person_hash, guardian.reload, compliance_info, passphrase:)
+
+      expect(hash).not_to have_key(:nationality)
+    end
+
+    it "sends the nationality the guardian has on file, whatever the account country asks for" do
+      guardian.update!(nationality: "GR")
+      compliance_info = create_compliance_info(guardian_record: guardian)
+
+      hash = described_class.send(:person_hash, guardian.reload, compliance_info, passphrase:)
+
+      expect(hash[:nationality]).to eq("GR")
+    end
+
     context "when there is nothing to sync" do
       it "does nothing for a seller who is over 18" do
         create_compliance_info(birthday: 30.years.ago.to_date, guardian_record: guardian)

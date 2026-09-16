@@ -34,6 +34,7 @@ const makeUser = (countryCode: string, supportsIban = false): User => ({
   individual_tax_id_last_four: null,
   individual_tax_id_is_last_four: false,
   has_outstanding_full_ssn_requirement: false,
+  has_outstanding_nationality_requirement: false,
   business_tax_id_entered: false,
   business_tax_id_last_four: null,
   requires_credit_card: false,

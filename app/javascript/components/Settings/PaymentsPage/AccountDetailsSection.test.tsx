@@ -22,6 +22,7 @@ const makeUser = (overrides: Partial<User> = {}): User => ({
   individual_tax_id_last_four: "6789",
   individual_tax_id_is_last_four: false,
   has_outstanding_full_ssn_requirement: false,
+  has_outstanding_nationality_requirement: false,
   business_tax_id_entered: false,
   business_tax_id_last_four: null,
   requires_credit_card: false,
@@ -197,5 +198,28 @@ describe("AccountDetailsSection business type", () => {
       "corporation",
       "profit",
     ]);
+  });
+});
+
+describe("AccountDetailsSection nationality field", () => {
+  it("renders when Stripe requires individual.nationality, outside the four hardcoded countries", () => {
+    renderSection(makeUser({ country_code: "GR", has_outstanding_nationality_requirement: true }));
+
+    expect(screen.getByLabelText("Nationality")).toBeTruthy();
+  });
+
+  it("does not render when nothing is asking for it", () => {
+    renderSection(makeUser({ country_code: "GR", has_outstanding_nationality_requirement: false }));
+
+    expect(screen.queryByLabelText("Nationality")).toBeNull();
+  });
+
+  it("keeps rendering for the four countries it used to be hardcoded to", () => {
+    for (const country_code of ["AE", "SG", "PK", "BD"]) {
+      cleanup();
+      renderSection(makeUser({ country_code, has_outstanding_nationality_requirement: false }));
+
+      expect(screen.getByLabelText("Nationality")).toBeTruthy();
+    }
   });
 });
