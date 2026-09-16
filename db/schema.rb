@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.1].define(version: 2026_12_13_090000) do
+ActiveRecord::Schema[7.1].define(version: 2026_12_14_090000) do
   create_table "active_storage_attachments", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
     t.string "name", limit: 191, null: false
     t.string "record_type", limit: 191, null: false
@@ -1346,6 +1346,28 @@ ActiveRecord::Schema[7.1].define(version: 2026_12_13_090000) do
     t.index ["unique_permalink"], name: "index_links_on_unique_permalink", length: 191
     t.index ["user_id", "updated_at"], name: "index_links_on_user_id_and_updated_at"
     t.index ["user_id"], name: "index_links_on_user_id"
+  end
+
+  create_table "marketing_actions", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
+    t.bigint "user_id", null: false
+    t.bigint "link_id", null: false
+    t.bigint "utm_link_id"
+    t.string "channel", null: false
+    t.string "status", default: "recommended", null: false
+    t.string "idempotency_key", null: false
+    t.text "copy"
+    t.string "external_post_id"
+    t.string "external_url"
+    t.string "error_code"
+    t.datetime "approved_at"
+    t.datetime "posted_at"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["idempotency_key"], name: "index_marketing_actions_on_idempotency_key", unique: true
+    t.index ["link_id", "channel", "status"], name: "index_marketing_actions_on_link_id_and_channel_and_status"
+    t.index ["link_id"], name: "index_marketing_actions_on_link_id"
+    t.index ["user_id"], name: "index_marketing_actions_on_user_id"
+    t.index ["utm_link_id"], name: "index_marketing_actions_on_utm_link_id"
   end
 
   create_table "media_locations", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|

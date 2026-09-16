@@ -104,6 +104,7 @@ type Props = {
   receipt_email_from: string;
   price_checker_enabled: boolean;
   custom_html_pages_enabled: boolean;
+  auto_marketing_enabled: boolean;
   custom_html_store_hostnames: string[];
   custom_html_global_nav_hosts: string[];
   custom_html_global_nav_paths: string[];
@@ -151,6 +152,7 @@ const createContextValue = (props: Props) => ({
   receiptEmailFrom: props.receipt_email_from,
   priceCheckerEnabled: props.price_checker_enabled,
   customHtmlPagesEnabled: props.custom_html_pages_enabled,
+  autoMarketingEnabled: props.auto_marketing_enabled,
   customHtmlStoreHostnames: props.custom_html_store_hostnames,
   customHtmlGlobalNavHosts: props.custom_html_global_nav_hosts,
   customHtmlGlobalNavPaths: props.custom_html_global_nav_paths,

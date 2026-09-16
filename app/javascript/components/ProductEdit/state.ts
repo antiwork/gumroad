@@ -324,6 +324,7 @@ export const ProductEditContext = React.createContext<{
   receiptEmailFrom: string;
   priceCheckerEnabled: boolean;
   customHtmlPagesEnabled: boolean;
+  autoMarketingEnabled: boolean;
   // Hostnames this seller controls (their subdomain, their live custom domain).
   // The landing-page preview only follows a navigation request from the
   // sandboxed seller HTML when the destination is one of these.
