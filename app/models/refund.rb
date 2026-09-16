@@ -86,6 +86,10 @@ class Refund < ApplicationRecord
   attr_json_data_accessor :fee_retention_collected_cents
   attr_json_data_accessor :fee_retention_source_transfer
   attr_json_data_accessor :fee_retention_attempts
+  attr_json_data_accessor :fee_retention_written_off_cents
+  attr_json_data_accessor :fee_retention_written_off_at
+  attr_json_data_accessor :fee_retention_write_off_reason
+  attr_json_data_accessor :fee_retention_write_off_transaction_id
 
   attr_json_data_accessor :presentment_currency
   attr_json_data_accessor :presentment_amount_cents
@@ -121,6 +125,15 @@ class Refund < ApplicationRecord
   MAX_FEE_RETENTION_ATTEMPTS = 168
 
   scope :pending_fee_retention, -> { where(fee_retention_recoverable: true) }
+  scope :written_off_fee_retention, -> {
+    where("JSON_TYPE(JSON_EXTRACT(refunds.json_data, '$.fee_retention_written_off_at')) = 'STRING'")
+  }
+  scope :fee_retention_written_off_during, ->(window) {
+    written_off_fee_retention.where(
+      "refunds.json_data->>'$.fee_retention_written_off_at' >= ? AND refunds.json_data->>'$.fee_retention_written_off_at' < ?",
+      window.first.utc.iso8601, window.last.utc.iso8601
+    )
+  }
 
   def retain_fee
     yield
@@ -130,9 +143,13 @@ class Refund < ApplicationRecord
   end
 
   def record_fee_retention_failure!(error)
-    self.fee_retention_pending = true
-    self.fee_retention_error = { class: error.class.name, message: error.message }
-    save!
+    with_lock do
+      return if fee_retention_written_off_at.present?
+
+      self.fee_retention_pending = true
+      self.fee_retention_error = { class: error.class.name, message: error.message }
+      save!
+    end
     ErrorNotifier.notify(error, context: { refund_id: id, purchase_id: purchase_id })
   end
 
@@ -184,6 +201,7 @@ class Refund < ApplicationRecord
 
   private
     def sync_fee_retention_recoverable
+      self.fee_retention_pending = false if fee_retention_written_off_at.present?
       self.fee_retention_recoverable = fee_retention_pending == true && !fee_retention_attempts_exhausted?
     end
 
@@ -203,8 +221,11 @@ class Refund < ApplicationRecord
       # the buyer never received. Existing pins and grouped debits are still adopted.
       credit.fee_retention_refund = self
       lookup_failed = false
+      no_transfer = false
       retain_fee do
         StripeChargeProcessor.debit_stripe_account_for_refund_fee(credit:, collect: !terminally_failed?)
+      rescue StripeChargeProcessor::NoRefundFeeTransferError
+        no_transfer = true
       rescue *FEE_RETENTION_ERRORS
         lookup_failed = true
         raise
@@ -213,6 +234,10 @@ class Refund < ApplicationRecord
       purchase.with_lock do
         reload.lock!
         next true unless fee_retention_pending
+        if no_transfer && debited_stripe_transfer.blank? && fee_retention_source_transfer.blank?
+          write_off_fee_retention!(credit:)
+          next true
+        end
         collection_recorded = debited_stripe_transfer.present? && fee_retention_collected_cents.present?
         no_stripe_collection = credit.amount_cents.zero? || credit.merchant_account.holder_of_funds != HolderOfFunds::STRIPE
         terminal_without_collection = terminally_failed? && debited_stripe_transfer.blank? && !lookup_failed
@@ -233,6 +258,30 @@ class Refund < ApplicationRecord
         save!
         true
       end
+    end
+
+    def write_off_fee_retention!(credit:)
+      transactions = BalanceTransaction.where(credit:)
+      raise "Refund fee retention has no ledger debit" unless transactions.exists? && credit.amount_cents.negative?
+      holding_currency = transactions.distinct.pluck(:holding_amount_currency).sole
+
+      issued_gross, issued_net, holding_gross, holding_net = transactions.pick(
+        Arel.sql("SUM(issued_amount_gross_cents)"), Arel.sql("SUM(issued_amount_net_cents)"),
+        Arel.sql("SUM(holding_amount_gross_cents)"), Arel.sql("SUM(holding_amount_net_cents)")
+      )
+      adjustment = BalanceTransaction.create!(user: credit.user, merchant_account: credit.merchant_account, credit:,
+                                              issued_amount: BalanceTransaction::Amount.new(currency: Currency::USD,
+                                                                                            gross_cents: -issued_gross, net_cents: -issued_net),
+                                              holding_amount: BalanceTransaction::Amount.new(currency: holding_currency,
+                                                                                             gross_cents: -holding_gross, net_cents: -holding_net))
+      self.fee_retention_written_off_cents = credit.amount_cents.abs
+      self.fee_retention_written_off_at = Time.current.utc.iso8601
+      self.fee_retention_write_off_reason = "no_reversible_transfer"
+      self.fee_retention_write_off_transaction_id = adjustment.id
+      self.fee_retention_pending = false
+      self.fee_retention_error = nil
+      save!
+      Rails.logger.info("Refund fee retention written off #{ { refund_id: id, amount_cents: fee_retention_written_off_cents, currency: Currency::USD, reason: fee_retention_write_off_reason }.to_json }")
     end
 
     # Reports once, on the attempt that reaches the cap. A recorded Stripe collection never

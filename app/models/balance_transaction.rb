@@ -141,6 +141,11 @@ class BalanceTransaction < ApplicationRecord
   belongs_to :refund, optional: true
   belongs_to :credit, optional: true
 
+  scope :refund_fee_write_offs, -> {
+    joins(credit: :fee_retention_refund)
+      .where("balance_transactions.id = CAST(refunds.json_data->>'$.fee_retention_write_off_transaction_id' AS UNSIGNED)")
+  }
+
   # The balance_id should never be changed once it's set, but it gets set after the initial BalanceTransaction record is saved and so must be marked as mutable
   # so that it can be set after the initial save.
   attr_mutable :balance_id

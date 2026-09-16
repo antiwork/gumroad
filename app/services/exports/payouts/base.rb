@@ -78,6 +78,13 @@ class Exports::Payouts::Base
           data << summarize_failed_refund_transaction(btxn)
         end
 
+        bal.balance_transactions.refund_fee_write_offs.find_each do |btxn|
+          amount = btxn.issued_amount_net_cents / 100.0
+          @running_total += btxn.issued_amount_net_cents
+          data << ["Refund fee written off", btxn.created_at.to_date.to_s, btxn.credit.fee_retention_refund.purchase.external_id,
+                   "", "", "", "", "", "", -amount, amount]
+        end
+
         affiliate_credit_cents = calculate_affiliate_for_balance(bal)
 
         if affiliate_credit_cents != 0
