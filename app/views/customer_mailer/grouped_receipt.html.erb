@@ -1,3 +1,3 @@
 <% @chargeables.each do |chargeable| %>
-  <%= render("customer_mailer/receipt", receipt_presenter: ReceiptPresenter.new(chargeable, for_email: true, recommendations: @recommendations), chargeable: chargeable) %>
+  <%= render("customer_mailer/receipt", receipt_presenter: ReceiptPresenter.new(chargeable, for_email: @shared_reply_target, recommendations: @recommendations), chargeable: chargeable) %>
 <% end %>
