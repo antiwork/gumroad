@@ -64,6 +64,22 @@ describe SecureRedirectController, type: :controller, inertia: true do
         expect(inertia.props[:flash]).to eq({ message: "Test alert message", status: "danger" })
       end
 
+      it "includes flash info in props when present" do
+        get :new, params: {
+          encrypted_payload: encrypted_payload
+        }, flash: { info: "Test info message" }
+
+        expect(inertia.props[:flash]).to eq({ message: "Test info message", status: "info" })
+      end
+
+      it "reports the loudest status when a page carries more than one flash" do
+        get :new, params: {
+          encrypted_payload: encrypted_payload
+        }, flash: { alert: "Test alert message", info: "Test info message" }
+
+        expect(inertia.props[:flash]).to eq({ message: "Test alert message", status: "danger" })
+      end
+
       it "does not include flash in props when not present" do
         get :new, params: {
           encrypted_payload: encrypted_payload

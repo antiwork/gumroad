@@ -2763,7 +2763,8 @@ describe Settings::PaymentsController, :vcr, type: :controller, inertia: true do
 
       expect(response).to redirect_to settings_payments_url
       expect(flash[:notice]).to be_nil
-      expect(flash[:alert]).to include("Stripe is still reviewing your account")
+      expect(flash[:alert]).to be_nil
+      expect(flash[:info]).to include("Stripe is still reviewing your account")
     end
 
     it "does not show the 'Thanks' notice when Stripe still lists eventually_due requirements" do
@@ -2850,7 +2851,8 @@ describe Settings::PaymentsController, :vcr, type: :controller, inertia: true do
 
         expect(response).to redirect_to settings_payments_url
         expect(flash[:notice]).to be_nil
-        expect(flash[:alert]).to include("Stripe is still reviewing your account")
+        expect(flash[:alert]).to be_nil
+        expect(flash[:info]).to include("Stripe is still reviewing your account")
       end
 
       it "still says 'all set' once the account can take payments" do
