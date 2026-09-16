@@ -16,9 +16,8 @@ class AutoTopUpNegativeDestinationBalancesJob
   MAX_TOPUPS_PER_RUN = 10
 
   # Transfers are sent in USD: the platform balance holds no fundable non-USD balance, so a
-  # destination-currency transfer is rejected by Stripe. Fund only the current converted hole;
-  # any residual caused by later FX movement returns through the bounded top-up path instead of
-  # sending withdrawable excess to the seller's Connect account.
+  # destination-currency transfer is rejected by Stripe. Confirm destination credit before
+  # recording funding. One correction can cover FX differences without a percentage buffer.
   TRANSFER_MESSAGE = "Reconciling negative destination ledger (gumroad-private#1903, exact FX auto top-up)"
   private_constant :TRANSFER_MESSAGE
 
@@ -263,8 +262,6 @@ class AutoTopUpNegativeDestinationBalancesJob
         # Retain parameters beyond both TTLs: even a rejected request can be cached by Stripe.
         raise "Could not save top-up request" unless $redis.set(request_key, request.to_json, nx: true)
       end
-      usd_amount_cents = request.fetch(:amount_cents)
-
       # A retry marker retains the link to immutable parameters if their record is lost.
       raise "Could not claim top-up request" unless $redis.set(transfer_key, 1, ex: DEDUPE_TTL, **(claim ? { xx: true } : { nx: true }))
 
@@ -278,7 +275,8 @@ class AutoTopUpNegativeDestinationBalancesJob
       # below once the outcome (success or a safe-to-retry error) is known.
       raise "Could not mark top-up unresolved" unless $redis.set(unresolved_key, to_transfer_cents)
 
-      StripeTransferInternallyToCreator.transfer_funds_to_account(**request)
+      transfer = StripeTransferInternallyToCreator.transfer_funds_to_account(**request)
+      transfer_accepted = true
       # PERSIST (drop the 7-day TTL) the instant Stripe accepts: the vulnerable window is between
       # here and the dedupe_key write below — if the worker dies in it, the transfer_key must not
       # be free to expire and get reused once Stripe's own 24h idempotency window has also lapsed,
@@ -296,6 +294,7 @@ class AutoTopUpNegativeDestinationBalancesJob
       unless persist_with_retries(transfer_key)
         return { entry:, verdict: :escalate, reason: "Stripe accepted #{to_transfer_cents} cents for this account but the durable dedupe claim could not be confirmed in Redis — a human must verify the transfer with Stripe before clearing #{transfer_key} or #{unresolved_key}" }
       end
+      usd_amount_cents = complete_destination_funding(transfer, request)
       # Store the WINDOW's row ids, not the whole current_balance_ids set: a post-cutoff row
       # excluded from an in-cycle window's total must not become "funded" credit either, or a
       # later run intersecting funded_ids against a different window could count it and resend
@@ -304,6 +303,8 @@ class AutoTopUpNegativeDestinationBalancesJob
       $redis.del(unresolved_key)
       { entry:, verdict: :topped_up, reason: nil, amount_cents: to_transfer_cents, currency: request.fetch(:metadata).fetch(:destination_currency), usd_amount_cents: }
     rescue Stripe::InvalidRequestError, Stripe::RateLimitError => e
+      return unverified_funding(entry, transfer_key, e) if transfer_accepted
+
       # These rejected requests can be retried unchanged. An executed 400 may replay its
       # cached error; retaining its key and parameters must not turn that into a new transfer.
       begin
@@ -316,6 +317,8 @@ class AutoTopUpNegativeDestinationBalancesJob
       end
       { entry:, verdict: :error, reason: "#{e.class}: #{e.message}" }
     rescue => e
+      return unverified_funding(entry, transfer_key, e) if transfer_accepted
+
       # Everything else (timeouts, connection drops, Stripe 5xx) is ambiguous about whether
       # Stripe actually processed the transfer, so the claim stays held — same convention as
       # StripePayoutProcessor's PAYOUT_OUTCOME_UNKNOWN — and the candidate escalates to a human
@@ -337,6 +340,53 @@ class AutoTopUpNegativeDestinationBalancesJob
       { entry:, verdict: :error, reason: "#{e.class}: #{e.message}" }
     ensure
       $redis.eval(LOCK_RELEASE_SCRIPT, keys: [lock_key], argv: [lock_token]) if lock_token
+    end
+
+    def complete_destination_funding(transfer, request)
+      target_cents = request.fetch(:metadata).fetch(:destination_hole_cents)
+      delivered_cents = destination_credit_cents(transfer, request)
+      return request.fetch(:amount_cents) if delivered_cents >= target_cents
+
+      remaining_cents = target_cents - delivered_cents
+      correction_cents = (BigDecimal(remaining_cents) * request.fetch(:amount_cents) / delivered_cents).ceil
+      # A correction cannot exceed the initial transfer. Large rate discrepancies need review.
+      raise "FX correction exceeds the initial transfer; #{remaining_cents} destination cents remain" if correction_cents > request.fetch(:amount_cents)
+
+      correction = request.merge(
+        amount_cents: correction_cents,
+        idempotency_key: "#{request.fetch(:idempotency_key)}:fx_correction",
+        metadata: request.fetch(:metadata).merge(destination_hole_cents: remaining_cents)
+      )
+      raise "Could not save FX correction request" unless $redis.set("#{correction.fetch(:idempotency_key)}:request", correction.to_json, nx: true)
+
+      # The original claim and account hold stay durable through both transfers and their reads.
+      correction_transfer = StripeTransferInternallyToCreator.transfer_funds_to_account(**correction)
+      remaining_cents -= destination_credit_cents(correction_transfer, correction)
+      raise "FX correction left #{remaining_cents} destination cents unfunded" if remaining_cents.positive?
+
+      request.fetch(:amount_cents) + correction_cents
+    end
+
+    def destination_credit_cents(transfer, request)
+      raise "Transfer has no destination payment" if transfer.destination_payment.blank?
+
+      payment = Stripe::Charge.retrieve(
+        { id: transfer.destination_payment, expand: %w[balance_transaction] },
+        { stripe_account: request.fetch(:stripe_account_id) }
+      )
+      transaction = payment.balance_transaction
+      currency = request.fetch(:metadata).fetch(:destination_currency)
+      unless transaction.is_a?(Stripe::BalanceTransaction) && transaction.currency == currency && transaction.net.is_a?(Integer) && transaction.net.positive?
+        raise "Destination credit is unavailable or has an unexpected currency or amount"
+      end
+
+      # Balance#holding_amount_cents stores Stripe settlement units, including whole won.
+      transaction.net
+    end
+
+    def unverified_funding(entry, transfer_key, error)
+      { entry:, verdict: :escalate,
+        reason: "Stripe accepted a transfer but destination funding is incomplete or unverified (#{error.class}: #{error.message}) — a human must reconcile #{transfer_key} before clearing the account hold" }
     end
 
     def valid_transfer_request?(request, transfer_key, local_cents, entry)
@@ -379,6 +429,7 @@ class AutoTopUpNegativeDestinationBalancesJob
           "#{counts[:topped_up].to_i + counts[:dry_run].to_i} of #{outcomes.size} candidates processed " \
           "(#{total} payable total): #{counts[:escalate].to_i + counts[:awaiting_reconciliation].to_i} withheld for a human, #{counts[:error].to_i} errored. " \
           "Transfers are sent in USD (the local hole is converted at the current rate and rounded up; retries reuse the original request). " \
+          "Live transfers require confirmed destination credit; one FX correction can cover a remaining shortfall. " \
           "Reminder: this only closes the Stripe-side gap — the internal Balance row(s) still need a human " \
           "reconciliation pass before this candidate stops re-appearing in the daily report.",
         ("" if funded.any?),
@@ -410,8 +461,7 @@ class AutoTopUpNegativeDestinationBalancesJob
       { entry:, verdict: :escalate, reason: "no usable USD exchange rate for #{currency} — cannot size the USD top-up for #{local_cents} #{currency} cents" }
     end
 
-    # Converted hole rounded up once so a fractional cent is never underfunded. Single-unit
-    # currencies scale as in CurrencyHelper#get_usd_cents. nil when no rate is available.
+    # Destination ledger amounts use Stripe units, which differ from seller price units for KRW.
     def usd_topup_cents_for(local_cents, currency)
       currency = currency.to_s.downcase
       return local_cents if currency == Currency::USD
@@ -419,7 +469,9 @@ class AutoTopUpNegativeDestinationBalancesJob
       rate = BigDecimal(get_rate(currency).to_s)
       return nil unless rate.positive?
 
-      usd_cents = BigDecimal(local_cents.to_s) / rate * (100 / unit_scaling_factor(currency))
+      # Stripe retains two-decimal API amounts for ISK and UGX despite their ISO unit changes.
+      subunits = %w[isk ugx].include?(currency) ? 100 : StripeChargeProcessor.charge_subunit_to_unit(currency)
+      usd_cents = BigDecimal(local_cents.to_s) * 100 / rate / subunits
       usd_cents.ceil.to_i
     rescue ArgumentError, TypeError
       # BigDecimal("") / BigDecimal(nil) — an absent or malformed cached rate, not an outage.
