@@ -20,7 +20,7 @@ import { CountrySelectionModal } from "$app/components/CountrySelectionModal";
 import { PriceInput } from "$app/components/PriceInput";
 import { CreditCardForm } from "$app/components/Settings/AdvancedPage/CreditCardForm";
 import { Layout } from "$app/components/Settings/Layout";
-import AccountDetailsSection from "$app/components/Settings/PaymentsPage/AccountDetailsSection";
+import AccountDetailsSection, { getBusinessTypes } from "$app/components/Settings/PaymentsPage/AccountDetailsSection";
 import AccountStatusSection, { type AccountStatus } from "$app/components/Settings/PaymentsPage/AccountStatusSection";
 import AusBackTaxesSection, { type AusBacktaxDetails } from "$app/components/Settings/PaymentsPage/AusBackTaxesSection";
 import BankAccountSection, {
@@ -193,6 +193,7 @@ type PaymentsPageProps = {
   min_dob_year: number;
   user: User;
   compliance_info: ComplianceInfo;
+  us_business_types: { code: string; name: string }[];
   uae_business_types: { code: string; name: string }[];
   india_business_types: { code: string; name: string }[];
   canada_business_types: { code: string; name: string }[];
@@ -228,6 +229,7 @@ type PaymentsPageProps = {
   legal_guardian: LegalGuardianProps;
   errors?: {
     base?: string[];
+    field?: string;
   };
 };
 
@@ -236,10 +238,12 @@ type ErrorMessageInfo = {
   code?: string | null;
 };
 
+const isFormFieldName = (value: string): value is FormFieldName => value in FIELD_LABELS;
+
 export default function PaymentsPage() {
   const page = usePage();
   const props = typia.assert<PaymentsPageProps>(page.props);
-  const errors = typia.assert<{ base?: string[] } | undefined>(page.props.errors);
+  const errors = typia.assert<{ base?: string[]; field?: string } | undefined>(page.props.errors);
 
   const [clientErrorMessage, setClientErrorMessage] = React.useState<ErrorMessageInfo | null>(null);
   const formRef = React.useRef<HTMLDivElement & HTMLFormElement>(null);
@@ -393,11 +397,25 @@ export default function PaymentsPage() {
     setShowNewBankAccount(!props.bank_account_details.account_number_visual);
   }, [props.bank_account_details.account_number_visual]);
 
+  // A server-side rejection that names a field (the bank code Stripe's directory could not resolve)
+  // is flagged on that input like a client-side failure, and counted as a failed attempt so the
+  // scroll effect below runs again once the input carries aria-invalid.
+  React.useEffect(() => {
+    if (!errors?.field || !isFormFieldName(errors.field)) return;
+    markFieldInvalid(errors.field);
+    setFailedSaveAttempts((count) => count + 1);
+  }, [errors]);
+
   React.useEffect(() => {
     const hasServerError = Boolean(errors?.base && errors.base.length > 0);
-    // failedSaveAttempts only ever increments on a client-side validation failure, so a non-zero
-    // value here means the last press of "Update settings" was rejected before it left the browser.
+    // failedSaveAttempts increments on a client-side validation failure, or on a server error that
+    // names a field, so a non-zero value here means the last press of "Update settings" was rejected.
     if (!hasServerError && !clientErrorMessage && failedSaveAttempts === 0) return;
+    // The effect above has flagged the server-named field, but the input only carries aria-invalid
+    // after the re-render that flag causes; this effect runs again then, via failedSaveAttempts.
+    const serverNamedField = errors?.field && isFormFieldName(errors.field) ? errors.field : null;
+    const firstInvalidField = formRef.current?.querySelector<HTMLElement>('[aria-invalid="true"]');
+    if (serverNamedField && !firstInvalidField) return;
 
     // The individual checks in validateForm set a specific message for the cases they know about
     // (P.O. Box address, phone format, Kana character sets, and so on). When none of them did, fill
@@ -415,7 +433,6 @@ export default function PaymentsPage() {
     // any field clears that set (see updateComplianceInfo), which would re-run this effect with no
     // invalid field left and scroll the seller back to the top of the form mid-keystroke — away from
     // the very field the banner just told them to fill in.
-    const firstInvalidField = formRef.current?.querySelector<HTMLElement>('[aria-invalid="true"]');
     if (firstInvalidField) {
       firstInvalidField.scrollIntoView({ behavior: "smooth", block: "center" });
       firstInvalidField.focus({ preventScroll: true });
@@ -951,7 +968,13 @@ export default function PaymentsPage() {
       setClientErrorMessage({ message: COLOMBIA_ID_NUMBER_ERROR_MESSAGE });
     }
     if (form.data.user.is_business) {
-      if (!form.data.user.business_type) {
+      const businessTypes = getBusinessTypes(form.data.user.business_country, {
+        US: props.us_business_types,
+        AE: props.uae_business_types,
+        IN: props.india_business_types,
+        CA: props.canada_business_types,
+      });
+      if (!businessTypes.some(({ code }) => code === form.data.user.business_type)) {
         markFieldInvalid("business_type");
       }
       if (!form.data.user.business_name) {
@@ -1529,6 +1552,7 @@ export default function PaymentsPage() {
                 minDobYear={props.min_dob_year}
                 isFormDisabled={props.is_form_disabled}
                 countries={props.countries}
+                usBusinessTypes={props.us_business_types}
                 uaeBusinessTypes={props.uae_business_types}
                 indiaBusinessTypes={props.india_business_types}
                 canadaBusinessTypes={props.canada_business_types}

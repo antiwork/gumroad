@@ -135,6 +135,10 @@ const pageProps = (userOverrides: Partial<User> = {}, complianceOverrides: Parti
   min_dob_year: 2008,
   user: user(userOverrides),
   compliance_info: complianceInfo(complianceOverrides),
+  us_business_types: [
+    { code: "single_member_llc", name: "LLC (single member)" },
+    { code: "multi_member_llc", name: "LLC (multi-member)" },
+  ],
   uae_business_types: [],
   india_business_types: [],
   canada_business_types: [],
@@ -326,5 +330,81 @@ describe("buyer local currency description", () => {
 
     expect(screen.getByText(/Checkout still uses USD/u)).toBeTruthy();
     expect(screen.queryByText(/choose the currency they pay in/u)).toBeNull();
+  });
+});
+
+describe("business type validation", () => {
+  const business = {
+    is_business: true,
+    business_type: "llc",
+    business_country: "US",
+    business_name: "Example LLC",
+    business_street_address: "123 Main St",
+    business_city: "San Francisco",
+    business_state: "CA",
+    business_zip_code: "94103",
+    business_phone: "+14155552671",
+    job_title: "Owner",
+  };
+
+  it("blocks a legacy US LLC until the seller selects its member count", () => {
+    renderPage({ business_tax_id_entered: true }, business);
+    const select = screen.getByLabelText<HTMLSelectElement>("Type");
+    expect(select.value).toBe("");
+    save();
+    expect(select.getAttribute("aria-invalid")).toBe("true");
+    expect(screen.getByText("Please complete the required fields below: Type.")).toBeTruthy();
+    expect(mocks.put).not.toHaveBeenCalled();
+
+    fireEvent.change(select, { target: { value: "multi_member_llc" } });
+    save();
+    expect(mocks.put).toHaveBeenCalledTimes(1);
+    expect(mocks.put.mock.calls[0]?.[1]).toMatchObject({ user: { business_type: "multi_member_llc" } });
+  });
+
+  it("still accepts a generic LLC where the active country list offers it", () => {
+    renderPage({ business_tax_id_entered: true }, { ...business, business_country: "GB" });
+    save();
+    expect(mocks.put).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("server error naming a field", () => {
+  const message =
+    "Our payment partner couldn't find a bank for the bank code QNBAEGCX027. Use the 8-character SWIFT/BIC code instead: QNBAEGCX rather than QNBAEGCX027.";
+
+  const renderWithServerError = (errors: Record<string, unknown>) => {
+    mocks.usePage.mockReturnValue({
+      props: {
+        ...pageProps({ country_code: "EG", country_supports_iban: true, payout_currency: "egp" }, { country: "EG" }),
+        countries: { EG: "Egypt" },
+        bank_account_details: {
+          show_bank_account: true,
+          show_paypal: false,
+          is_a_card: false,
+          routing_number: null,
+          account_number_visual: null,
+          card: null,
+          card_data_handling_mode: null,
+          bank_account: null,
+        },
+        errors,
+      },
+    });
+    render(<PaymentsPage />);
+  };
+
+  it("shows the banner and flags the named bank-code input", () => {
+    renderWithServerError({ base: [message], field: "bank_code" });
+
+    expect(screen.getByText(message)).toBeTruthy();
+    expect(screen.getByLabelText("SWIFT / BIC Code").getAttribute("aria-invalid")).toBe("true");
+  });
+
+  it("shows only the banner when the server names no field", () => {
+    renderWithServerError({ base: [message] });
+
+    expect(screen.getByText(message)).toBeTruthy();
+    expect(screen.getByLabelText("SWIFT / BIC Code").getAttribute("aria-invalid")).toBe("false");
   });
 });

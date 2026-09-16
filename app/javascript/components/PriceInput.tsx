@@ -4,6 +4,7 @@ import * as React from "react";
 import { classNames } from "$app/utils/classNames";
 import {
   CurrencyCode,
+  findCurrencyByCode,
   formatPriceCentsWithoutCurrencySymbolAndComma,
   getLongCurrencySymbol,
   parseCurrencyUnitStringToCents,
@@ -79,7 +80,9 @@ export const PriceInput = React.forwardRef<
               onChange={currencyCodeSelector.onChange}
               options={currencyCodeSelector.options.map((currencyCode) => ({
                 id: currencyCode,
-                label: getLongCurrencySymbol(currencyCode),
+                // The bare symbol is ambiguous in the menu — SEK, NOK and DKK all render as "kr".
+                // Every other currency menu in the app labels with `displayFormat`; match it.
+                label: findCurrencyByCode(currencyCode).displayFormat,
               }))}
               // The select is invisible and stretched over the pill so the whole pill acts as the
               // hit area. CSS opacity does not block pointer events, so it needs the real

@@ -1551,6 +1551,14 @@ class Link < ApplicationRecord
     (has_product_level_rich_content? ? alive_rich_contents : alive_variants.flat_map(&:alive_rich_contents)).any?(&:has_license_key?)
   end
 
+  # The collections has_embedded_license_key? reads are stale mid-request when pages were written
+  # through another instance, so derive the flag from the stored rows instead.
+  def recompute_is_licensed!
+    alive_variants.reset
+    alive_rich_contents.reset
+    self.is_licensed = has_embedded_license_key?
+  end
+
   def has_another_collaborator?(collaborator: nil)
     query = pending_or_confirmed_collaborators.alive
     query = query.where.not(id: collaborator.id) if collaborator.present?

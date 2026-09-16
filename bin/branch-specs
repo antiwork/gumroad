@@ -193,9 +193,9 @@ FANOUT = {
   %r{\Aapp/javascript/pages/User/Passwords/} => %w[spec/requests/password_reset_spec.rb spec/requests/login_spec.rb],
   # Renderer: user/passwords_controller.rb:16 New, :39 Edit.
   %r{\Aapp/javascript/pages/UrlRedirects/DownloadPage} => DOWNLOAD_PAGE_SPECS,
-  # Renderer: url_redirects_controller.rb:107 DownloadPage. reading_spec
-  # and video_streaming_spec visit /d/:token (Watch/Read controls).
-  # Read.tsx has co-located vitest; Confirm/Stream/Expired escalate.
+  # Renderer: url_redirects_controller.rb:107 DownloadPage. reading_spec and
+  # video_streaming_spec visit /d/:token (Watch/Read controls); Read.tsx (epub
+  # reader system spec) and Confirm/Stream/Expired escalate.
   %r{\Aapp/javascript/pages/Pages/} => %w[
     spec/controllers/pages_controller_spec.rb
     spec/requests/pages_landing_embed_csp_spec.rb
@@ -260,6 +260,11 @@ ESCALATE_PATTERNS = [
   %r{\Aspec/rails_helper\.rb\z},
   %r{\Avite\.config},
   %r{\A\.github/workflows/tests\.yml\z},
+  # Escalated here rather than via the mapping gap, which is computed after the
+  # co-located-vitest shortcut: a .test.tsx beside one of these would silently
+  # drop it to the user_spec.rb floor.
+  %r{\Aapp/javascript/components/DownloadPage/(Layout|WithContent)\.tsx\z},
+  %r{\Aapp/javascript/pages/UrlRedirects/Read\.tsx\z},
 ].freeze
 
 # Paths that never affect the rspec suite.

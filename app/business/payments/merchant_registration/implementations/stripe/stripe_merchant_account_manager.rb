@@ -14,6 +14,15 @@ module StripeMerchantAccountManager
   private_constant :ACCOUNT_HOLDER_NAME_SYNC_COUNTRIES
 
   NEW_ACCOUNT_CREATION_BLOCKED_COUNTRIES = [Compliance::Countries::IND.alpha2].freeze
+  # A generic LLC does not disclose its member count; non-profit structures require a different
+  # Stripe business_type. Neither can be inferred from these legacy values.
+  US_COMPANY_STRUCTURES = {
+    UserComplianceInfo::BusinessTypes::SOLE_PROPRIETORSHIP => "sole_proprietorship",
+    UserComplianceInfo::BusinessTypes::SINGLE_MEMBER_LLC => "single_member_llc",
+    UserComplianceInfo::BusinessTypes::MULTI_MEMBER_LLC => "multi_member_llc",
+    UserComplianceInfo::BusinessTypes::CORPORATION => "private_corporation",
+    UserComplianceInfo::BusinessTypes::PARTNERSHIP => "private_partnership",
+  }.freeze
 
   BANK_SYNC_FAILURE_NOTE_PREFIX = "Stripe bank sync failed"
 
@@ -448,7 +457,7 @@ module StripeMerchantAccountManager
     if last_user_compliance_info&.is_business? && user_compliance_info.is_individual?
       # Clear structure first - Stripe rejects company[structure] when business_type is "individual"
       if last_user_compliance_info.legal_entity_country_code == Compliance::Countries::USA.alpha2 &&
-        last_user_compliance_info.business_type == UserComplianceInfo::BusinessTypes::SOLE_PROPRIETORSHIP
+        US_COMPANY_STRUCTURES.key?(last_user_compliance_info.business_type)
         Stripe::Account.update(stripe_account.id, { company: { structure: "" } })
       end
 
@@ -457,12 +466,13 @@ module StripeMerchantAccountManager
       diff_attributes[:company] = { name: user_compliance_info.first_and_last_name }
     end
 
-    # Only set structure for US accounts
+    # Only set structure for US accounts. country_code here is the legal entity's, which is the
+    # Stripe account country the structure is validated against.
     if user_compliance_info.is_business? &&
       country_code == Compliance::Countries::USA.alpha2 &&
-      user_compliance_info.business_type == UserComplianceInfo::BusinessTypes::SOLE_PROPRIETORSHIP
+      US_COMPANY_STRUCTURES.key?(user_compliance_info.business_type)
       diff_attributes[:company] ||= {}
-      diff_attributes[:company][:structure] = user_compliance_info.business_type
+      diff_attributes[:company][:structure] = US_COMPANY_STRUCTURES.fetch(user_compliance_info.business_type)
     end
 
     capabilities = Country.new(user_compliance_info.legal_entity_country_code).stripe_capabilities
@@ -2185,8 +2195,9 @@ module StripeMerchantAccountManager
           structure: user_compliance_info.business_type == "non_profit" ? "" : user_compliance_info.business_type,
         }
       )
-    elsif user_compliance_info.country_code == Compliance::Countries::USA.alpha2 && user_compliance_info.business_type == UserComplianceInfo::BusinessTypes::SOLE_PROPRIETORSHIP
-      hash[:company][:structure] = user_compliance_info.business_type
+    elsif user_compliance_info.legal_entity_country_code == Compliance::Countries::USA.alpha2 &&
+          US_COMPANY_STRUCTURES.key?(user_compliance_info.business_type)
+      hash[:company][:structure] = US_COMPANY_STRUCTURES.fetch(user_compliance_info.business_type)
     end
 
     hash

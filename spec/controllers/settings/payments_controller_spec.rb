@@ -1158,6 +1158,36 @@ describe Settings::PaymentsController, :vcr, type: :controller, inertia: true do
       end
     end
 
+    describe "egypt bank account whose code Stripe's directory cannot resolve" do
+      let(:user) { create(:user) }
+
+      before do
+        create(:user_compliance_info, user:, country: "Egypt")
+        sign_in user
+        allow(Stripe::Token).to receive(:create).and_raise(
+          Stripe::InvalidRequestError.new("We couldn't find the bank for that BIC", "bank_account[routing_number]", code: "routing_number_invalid")
+        )
+      end
+
+      it "does not save the account and tells the form which field to flag" do
+        expect do
+          put :update, params: {
+            bank_account: {
+              type: EgyptBankAccount.name,
+              bank_code: "QNBAEGCX027",
+              account_number: "EG800002000156789012345180002",
+              account_number_confirmation: "EG800002000156789012345180002",
+              account_holder_full_name: "gumbot",
+            }
+          }
+        end.not_to change(BankAccount, :count)
+
+        expect(response).to redirect_to(settings_payments_path)
+        expect(session[:inertia_errors][:base].first).to include("QNBAEGCX rather than QNBAEGCX027")
+        expect(session[:inertia_errors][:field]).to eq("bank_code")
+      end
+    end
+
     describe "ach account" do
       let(:user) { create(:user) }
       before do

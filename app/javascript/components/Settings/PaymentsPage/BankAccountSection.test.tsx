@@ -306,3 +306,15 @@ describe("BankAccountSection Indonesian bank code", () => {
     expect(pattern.test("IDR")).toBe(false);
   });
 });
+describe("BankAccountSection Egyptian bank code", () => {
+  // Egyptian banks publish an 8-char BIC and a separate branch number, and an 11-char "BIC + branch"
+  // code resolves only when Stripe's directory lists that branch. So the field advertises the 8-char
+  // form, which resolves for every bank.
+  it("advertises the 8-character BIC rather than a branch-suffixed code", () => {
+    renderForCountry("EG", true);
+    const field = screen.getByLabelText<HTMLInputElement>("SWIFT / BIC Code");
+
+    expect(field.placeholder).toBe("NBEGEGCX");
+    expect(field.placeholder).not.toHaveLength(11);
+  });
+});

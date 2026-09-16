@@ -1312,6 +1312,18 @@ describe Api::Internal::Admin::PurchasesController do
       expect(response.parsed_body).to eq({ success: false, message: "from and to emails are the same" }.as_json)
     end
 
+    it "returns 422 when a subscription's original purchase cannot be matched to the requester" do
+      subscription = create(:subscription, user: nil)
+      create(:purchase, email: "old_original@example.com", purchaser: nil, is_original_subscription_purchase: true, subscription:, merchant_account:)
+      create(:purchase, email: from_email, purchaser: nil, subscription:, merchant_account:)
+
+      post :reassign, params: { from: from_email, to: to_email }
+
+      expect(response).to have_http_status(:unprocessable_entity)
+      expect(response.parsed_body).to eq({ success: false, message: "A subscription's original purchase could not be matched to this email and requires manual review" }.as_json)
+      expect(purchase1.reload.email).to eq(from_email)
+    end
+
     it "threads confirmed_override through to the service" do
       expect(Purchase::ReassignByEmailService).to receive(:new)
         .with(from_email:, to_email:, confirmed_override: true)

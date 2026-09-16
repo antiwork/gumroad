@@ -286,7 +286,7 @@ class Order::ChargeService
   # payment_intent_mandate_invalid (gp#2437).
   def register_india_mandate_for_off_session_cart!(purchases, chargeable, merchant_account, mandate_options)
     if chargeable.stripe_setup_intent_id.present?
-      existing_si = ChargeProcessor.get_setup_intent(merchant_account, chargeable.stripe_setup_intent_id)
+      existing_si = reusable_setup_intent_for(chargeable, merchant_account)
       if existing_si.present? && (existing_si.succeeded? || existing_si.requires_action?) &&
          setup_intent_belongs_to_chargeable?(existing_si, chargeable, purchases, merchant_account) &&
          setup_intent_covers_mandate_options?(existing_si, mandate_options)
@@ -393,6 +393,16 @@ class Order::ChargeService
   rescue StandardError => e
     Rails.logger.info("SetupIntent mandate coverage check failed: #{e.class} => #{e.message}")
     false
+  end
+
+  def reusable_setup_intent_for(chargeable, merchant_account)
+    ChargeProcessor.get_setup_intent(merchant_account, chargeable.stripe_setup_intent_id)
+  rescue ChargeProcessorInvalidRequestError => e
+    Rails.logger.info(
+      "Ignoring unusable checkout SetupIntent #{chargeable.stripe_setup_intent_id} " \
+      "for #{stripe_account_key_for_merchant(merchant_account)}: #{e.message}"
+    )
+    nil
   end
 
   def bind_connect_payment_method!(chargeable, si, merchant_account)
@@ -514,7 +524,7 @@ class Order::ChargeService
           return if locked_quote == false
           setup_mandate_options = off_session_mandate_options_in_quote_currency(setup_mandate_options, locked_quote)
           if chargeable.stripe_setup_intent_id.present?
-            existing_si = ChargeProcessor.get_setup_intent(merchant_account, chargeable.stripe_setup_intent_id)
+            existing_si = reusable_setup_intent_for(chargeable, merchant_account)
             unless existing_si.present? && (existing_si.succeeded? || existing_si.requires_action?) &&
                    setup_intent_belongs_to_chargeable?(existing_si, chargeable, purchases_to_charge, merchant_account) &&
                    setup_intent_covers_mandate_options?(existing_si, setup_mandate_options)

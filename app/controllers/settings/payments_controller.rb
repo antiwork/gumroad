@@ -465,7 +465,7 @@ class Settings::PaymentsController < Settings::BaseController
                         "Another change was submitted at the same time. Please try again."
       end
 
-      redirect_with_error(error_message)
+      redirect_with_error(error_message, field: result[:field])
       false
     end
 
@@ -485,8 +485,11 @@ class Settings::PaymentsController < Settings::BaseController
       end
     end
 
-    def redirect_with_error(error_message)
-      redirect_to settings_payments_path, inertia: { errors: { base: [error_message] } }
+    # `field` names the form input the error is about, so the page can flag it and not only the banner.
+    def redirect_with_error(error_message, field: nil)
+      errors = { base: [error_message] }
+      errors[:field] = field.to_s if field.present?
+      redirect_to settings_payments_path, inertia: { errors: }
     end
 
     def authorize
