@@ -305,8 +305,14 @@ class AutoTopUpNegativeDestinationBalancesJob
     rescue Stripe::InvalidRequestError, Stripe::RateLimitError => e
       # These rejected requests can be retried unchanged. An executed 400 may replay its
       # cached error; retaining its key and parameters must not turn that into a new transfer.
-      raise "Could not retain retryable top-up request" unless $redis.set(transfer_key, "retryable")
-      $redis.del(unresolved_key) if unresolved_key
+      begin
+        raise "Could not retain retryable top-up request" unless $redis.set(transfer_key, "retryable")
+        $redis.del(unresolved_key) if unresolved_key
+      rescue => bookkeeping_error
+        # A rescue-body exception bypasses the sibling rescue and would abort the other accounts.
+        persist_with_retries(transfer_key)
+        return { entry:, verdict: :escalate, reason: "#{e.class}: #{e.message}; rejection bookkeeping failed (#{bookkeeping_error.class}: #{bookkeeping_error.message}); verify saved state at #{transfer_key} and #{unresolved_key}" }
+      end
       { entry:, verdict: :error, reason: "#{e.class}: #{e.message}" }
     rescue => e
       # Everything else (timeouts, connection drops, Stripe 5xx) is ambiguous about whether

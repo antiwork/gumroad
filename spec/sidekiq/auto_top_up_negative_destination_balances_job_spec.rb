@@ -1087,6 +1087,73 @@ describe AutoTopUpNegativeDestinationBalancesJob do
       expect(StripeTransferInternallyToCreator).to have_received(:transfer_funds_to_account).with(**JSON.parse(saved_request, symbolize_names: true)).once
     end
 
+    ["marker false", "marker raise", "marker lost acknowledgement", "cleanup raise", "cleanup lost acknowledgement", "marker and persist raise"].each do |failure|
+      it "continues later candidates and reports rejection bookkeeping failure for #{failure}" do
+        other_account = create(:merchant_account, user: seller, charge_processor_id: StripeChargeProcessor.charge_processor_id,
+                                                  charge_processor_merchant_id: "acct_later", currency: Currency::PHP, country: "PH")
+        create(:balance, user: seller, merchant_account: other_account, date: in_cycle_date,
+                         amount_cents: 0, holding_currency: Currency::PHP, holding_amount_cents: -50_00)
+        requests = []
+        allow(StripeTransferInternallyToCreator).to receive(:transfer_funds_to_account) do |**request|
+          requests << request
+          if request[:stripe_account_id] == merchant_account.charge_processor_merchant_id
+            raise Stripe::RateLimitError, "rejected request" if failure == "marker false"
+
+            raise Stripe::InvalidRequestError.new("rejected request", nil)
+          end
+        end
+        allow($redis).to receive(:set).and_call_original
+        allow($redis).to receive(:del).and_call_original
+        operation = failure.start_with?("marker") ? :set : :del
+        args = operation == :set ? [transfer_key, "retryable"] : ["#{dedupe_key}:unresolved"]
+        allow($redis).to receive(operation).with(*args).and_wrap_original do |original, *arguments|
+          if failure == "marker false"
+            false
+          else
+            original.call(*arguments) if failure.include?("lost acknowledgement")
+            raise Redis::BaseConnectionError, "bookkeeping unavailable"
+          end
+        end
+        if failure == "marker and persist raise"
+          allow($redis).to receive(:persist).and_call_original
+          allow($redis).to receive(:persist).with(transfer_key).and_raise(Redis::BaseConnectionError)
+        end
+
+        described_class.new.perform
+
+        expect(requests.map { _1[:stripe_account_id] }).to eq([merchant_account.charge_processor_merchant_id, "acct_later"])
+        expect(JSON.parse($redis.get(request_key), symbolize_names: true)).to eq(requests.first)
+        expect($redis.ttl(request_key)).to eq(-1)
+        expect($redis.get(dedupe_key)).to be_nil
+        expect($redis.get("#{dedupe_key}:lock")).to be_nil
+        expect(InternalNotificationWorker).to have_received(:perform_async).with(
+          "payouts", "Negative destination balance top-ups",
+          a_string_including("Topped up 1 of 2 candidates", "rejected request", "rejection bookkeeping failed", "FUNDED")
+        ).once
+
+        if failure == "cleanup lost acknowledgement"
+          # The deletion completed after a known rejection; only the saved request may retry.
+          expect($redis.get("#{dedupe_key}:unresolved")).to be_nil
+          expect($redis.get(transfer_key)).to eq("retryable")
+          expect($redis.ttl(transfer_key)).to eq(-1)
+          allow($redis).to receive(:del).with("#{dedupe_key}:unresolved").and_call_original
+          allow_any_instance_of(described_class).to receive(:get_rate).and_return(nil)
+          described_class.new.perform
+          expect(requests.size).to eq(3)
+          expect(requests.last).to eq(requests.first)
+        else
+          expect($redis.get("#{dedupe_key}:unresolved")).to eq("10000")
+          expect($redis.ttl("#{dedupe_key}:unresolved")).to eq(-1)
+          expect($redis.ttl(transfer_key)).to eq(-1) unless failure == "marker and persist raise"
+          saved_request = $redis.get(request_key)
+          residue_row(-25_00)
+          described_class.new.perform
+          expect(requests.size).to eq(2)
+          expect($redis.get(request_key)).to eq(saved_request)
+        end
+      end
+    end
+
     it "treats a cached success as funding and holds it through a failure to record ledger credit" do
       allow(StripeTransferInternallyToCreator).to receive(:transfer_funds_to_account) do |**request|
         expect($redis.get(request_key)).to eq(request.to_json)
