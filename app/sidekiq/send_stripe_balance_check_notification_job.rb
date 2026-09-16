@@ -14,21 +14,15 @@ class SendStripeBalanceCheckNotificationJob
     balance_check = StripeBalanceCheckService.new
 
     was_needed = $redis.get(RedisKey.stripe_balance_topup_needed) == "true"
-    $redis.set(RedisKey.stripe_balance_topup_needed, balance_check.topup_needed?)
-
-    if balance_check.topup_needed?
-      notify(balance_check, "red")
-    elsif was_needed
-      # Yesterday's alert asked for money; say so when it's no longer needed.
-      notify(balance_check, "green")
+    needs_topup = balance_check.topup_needed?
+    # Preserve the transition if message construction or enqueueing fails; a retry must still send the all-clear.
+    if needs_topup || was_needed
+      InternalNotificationWorker.perform_async("payments", "Stripe Balance Check", message_for(balance_check), needs_topup ? "red" : "green")
     end
+    $redis.set(RedisKey.stripe_balance_topup_needed, needs_topup)
   end
 
   private
-    def notify(balance_check, color)
-      InternalNotificationWorker.perform_async("payments", "Stripe Balance Check", message_for(balance_check), color)
-    end
-
     def message_for(balance_check)
       first_run = format_run(balance_check.next_payout_run_at)
       last_run = format_run(balance_check.cycle_last_run_at)
@@ -42,8 +36,10 @@ class SendStripeBalanceCheckNotificationJob
         "Stripe balance: #{formatted_dollar_amount(balance_check.current_balance_cents)} " \
         "(#{formatted_dollar_amount(balance_check.available_cents)} available + " \
         "#{formatted_dollar_amount(balance_check.pending_cents)} pending, which normally settles within a couple of business days).",
-        "Stripe paid #{formatted_dollar_amount(balance_check.swept_to_bank_last_day_cents)} out to Gumroad's bank in the last 24 hours; " \
-        "those automatic sweeps are what draw the balance down.",
+        "Of Stripe's USD bank payouts created in the last 24 hours, " \
+        "#{formatted_dollar_amount(balance_check.swept_to_bank_last_day_cents)} has reached the bank and " \
+        "#{formatted_dollar_amount(balance_check.sweeps_in_flight_last_day_cents)} is still in flight. " \
+        "A payout draws the Stripe balance down when it is created, not when it settles.",
       ]
 
       if balance_check.topup_needed?
