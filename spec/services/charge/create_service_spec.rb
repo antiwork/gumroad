@@ -1090,6 +1090,41 @@ describe Charge::CreateService, :vcr do
       expect(purchase.has_payment_network_error?).to eq(true)
     end
 
+    it "records the seller's account as the cause when Stripe refuses the destination transfer" do
+      order = create(:order)
+      merchant_account = create(:merchant_account_stripe_connect, user: seller_1)
+      chargeable = instance_double(Chargeable, fingerprint: "card_fp")
+      purchase = create(:purchase,
+                        link: product_1,
+                        seller: seller_1,
+                        merchant_account:,
+                        purchase_state: "in_progress",
+                        total_transaction_cents: 10_00)
+      # A destination charge is refused when the destination account cannot receive the
+      # transfer. That is the seller's account state, not a malformed request of ours, so it
+      # must not sit in the bucket a malformed-request regression is supposed to stand out in.
+      stripe_error = Stripe::InvalidRequestError.new("Invalid request.", nil, code: "insufficient_capabilities_for_transfer")
+      allow(ChargeProcessor).to receive(:create_payment_intent_or_charge!)
+        .and_raise(ChargeProcessorInvalidRequestError.new(original_error: stripe_error))
+
+      Charge::CreateService.new(order:,
+                                seller: seller_1,
+                                merchant_account:,
+                                chargeable:,
+                                purchases: [purchase],
+                                amount_cents: 10_00,
+                                gumroad_amount_cents: 3_00,
+                                setup_future_charges: false,
+                                off_session: false,
+                                statement_description: seller_1.name_or_username,
+                                params: {}).perform
+
+      expect(purchase.error_code).to eq(PurchaseErrorCode::PROCESSOR_MERCHANT_CANNOT_RECEIVE_TRANSFERS)
+      expect(purchase.stripe_error_code).to eq("insufficient_capabilities_for_transfer")
+      # The buyer is no longer told to just try again; the cause is not on their side.
+      expect(purchase.errors[:base].join).to include("isn't able to accept payments")
+    end
+
     it "records the settlement-currency mismatch and asks the buyer to re-quote when Stripe rejects the FX quote at intent create" do
       order = create(:order)
       merchant_account = create(:merchant_account_stripe_connect, user: seller_1)

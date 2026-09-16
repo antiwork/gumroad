@@ -255,6 +255,29 @@ describe Order::PreparePaymentIntentService, :vcr do
       end
     end
 
+    context "when Stripe refuses the destination transfer as an insufficient capability" do
+      before { create(:merchant_account, user: seller) }
+
+      it "names the seller's account as the cause and does not ask the buyer to retry" do
+        order, params = build_order
+        stripe_error = Stripe::InvalidRequestError.new(
+          "Invalid request.", nil, code: "insufficient_capabilities_for_transfer"
+        )
+        allow(Stripe::ConfirmationToken).to receive(:retrieve).and_raise(stripe_error)
+
+        responses = described_class.new(order:, params:, confirmation_token: "ctoken_test").perform
+
+        expect(responses["unique-id-0"][:success]).to eq(false)
+        purchase = order.purchases.first.reload
+        expect(purchase).to be_failed
+        expect(purchase.error_code).to eq(PurchaseErrorCode::PROCESSOR_MERCHANT_CANNOT_RECEIVE_TRANSFERS)
+        expect(purchase.stripe_error_code).to eq("insufficient_capabilities_for_transfer")
+        # The client-confirm route must carry the named copy itself: the caller's generic fill
+        # only writes when `errors` is empty, so relying on it leaves the buyer told to retry.
+        expect(responses["unique-id-0"][:error_message]).to include("isn't able to accept payments")
+      end
+    end
+
     context "when Stripe is unreachable during the ConfirmationToken retrieve" do
       before { create(:merchant_account, user: seller) }
 
