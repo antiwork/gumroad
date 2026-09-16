@@ -3,12 +3,18 @@
 class EgyptBankAccount < BankAccount
   BANK_ACCOUNT_TYPE = "EG"
 
-  BANK_CODE_FORMAT_REGEX = /^([a-zA-Z]){4}([a-zA-Z]){2}([0-9a-zA-Z]){2}([0-9a-zA-Z]{3})?$/
+  # Stripe rejects a lowercase EG routing number outright ("Invalid routing number"), but whether an
+  # 11-char branch code resolves is a per-BIC question only its own directory answers (NBEGEGCX331
+  # does, QNBAEGCX027 does not), so the case is all this can enforce.
+  BANK_CODE_FORMAT_REGEX = /^[A-Z]{6}[A-Z0-9]{2}(?:[A-Z0-9]{3})?$/
   private_constant :BANK_CODE_FORMAT_REGEX
 
   alias_attribute :bank_code, :bank_number
 
-  validate :validate_bank_code
+  # Only on write: thousands of live rows predate this rule, and re-validating them would abort
+  # unrelated saves — including the mark_deleted! a payout-method switch performs after the Stripe
+  # account is already gone.
+  validate :validate_bank_code, if: -> { new_record? || will_save_change_to_bank_number? }
   validate :validate_account_number
 
   def routing_number
@@ -42,7 +48,7 @@ class EgyptBankAccount < BankAccount
   private
     def validate_bank_code
       return if BANK_CODE_FORMAT_REGEX.match?(bank_code)
-      errors.add :base, "The bank code is invalid."
+      errors.add :base, "Enter your bank's SWIFT/BIC code in capitals: 8 characters, or 11 including the branch code (for example NBEGEGCX)."
     end
 
     def validate_account_number
