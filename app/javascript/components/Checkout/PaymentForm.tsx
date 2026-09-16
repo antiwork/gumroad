@@ -890,6 +890,10 @@ const CreditCardContent = ({
         });
         if (tokenResult.status === "error") {
           setCardError(true);
+          // Stripe handles inline validation and wallet-dismissal errors itself.
+          if (tokenResult.stripe_error.type !== "validation_error" && tokenResult.stripe_error.message) {
+            showAlert(tokenResult.stripe_error.message, "error");
+          }
           return dispatch({ type: "cancel" });
         }
         // A wallet paid through the Payment Element: adopt the wallet sheet's billing address as
