@@ -114,25 +114,34 @@ export const useSectionImageUploadSettings = () => {
       isUploading: imagesUploading.size > 0,
       onUpload: (file: File) => {
         setImagesUploading((prev) => new Set(prev).add(file));
+        // Stay uploading until the CDN URL resolves, not just until the blob lands: the editor keeps
+        // the local blob: preview until then, and the sanitizer drops blob: srcs — a save in that
+        // window persists the page without the image.
+        const settled = () =>
+          setImagesUploading((prev) => {
+            const updated = new Set(prev);
+            updated.delete(file);
+            return updated;
+          });
         return new Promise<string>((resolve, reject) => {
           const upload = new DirectUpload(file, Routes.rails_direct_uploads_path());
           upload.create((error, blob) => {
-            setImagesUploading((prev) => {
-              const updated = new Set(prev);
-              updated.delete(file);
-              return updated;
-            });
-
-            if (error) reject(error);
-            else
+            if (error) {
+              settled();
+              reject(error);
+            } else
               request({
                 method: "GET",
                 accept: "json",
                 url: Routes.s3_utility_cdn_url_for_blob_path({ key: blob.key }),
               })
                 .then((response) => response.json())
-                .then((data) => resolve(typia.assert<{ url: string }>(data).url))
+                .then((data) => {
+                  settled();
+                  resolve(typia.assert<{ url: string }>(data).url);
+                })
                 .catch((e: unknown) => {
+                  settled();
                   assertResponseError(e);
                   reject(e);
                 });

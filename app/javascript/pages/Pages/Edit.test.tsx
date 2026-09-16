@@ -13,14 +13,19 @@ import { assertDefined } from "$app/utils/assert";
 // `SSR` and Rails' js-routes `Routes` are vite/app globals vitest does not have.
 vi.stubGlobal("SSR", false);
 vi.stubGlobal("Routes", new Proxy({}, { get: () => () => "#" }));
-vi.stubGlobal("fetch", () =>
-  Promise.resolve(
+// The CDN URL lookup is what the save guard has to cover, so it can be held open: the window
+// between "blob uploaded" and "CDN URL resolved" is the one the local blob: preview survives.
+const cdn = vi.hoisted((): { hold: boolean; release: (() => void)[] } => ({ hold: false, release: [] }));
+vi.stubGlobal("fetch", () => {
+  const response = () =>
     new Response(JSON.stringify({ url: "https://cdn.example/image.png" }), {
       status: 200,
       headers: { "Content-Type": "application/json" },
-    }),
-  ),
-);
+    });
+  if (!cdn.hold) return Promise.resolve(response());
+
+  return new Promise<Response>((resolve) => cdn.release.push(() => resolve(response())));
+});
 // Mirrors PagePolicy#create?, which the page editor reads as its edit permission.
 const canEdit = vi.hoisted(() => ({ current: true }));
 vi.mock("$app/components/LoggedInUser", () => ({
@@ -83,6 +88,8 @@ const settleUpload = (blob = { key: "blob-key" }) => {
 
 beforeEach(() => {
   uploads.pending.length = 0;
+  cdn.hold = false;
+  cdn.release.length = 0;
   patch.mockClear();
 });
 
@@ -131,5 +138,27 @@ describe("PagesEdit", () => {
     fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
     expect(patch).toHaveBeenCalledTimes(1);
     expect(patch.mock.calls[0]?.[1]).toMatchObject({ content: expect.stringContaining("https://cdn.example") });
+  });
+
+  it("holds the save until an uploaded image has its CDN URL, not just its blob", async () => {
+    const { container } = renderEditor();
+    cdn.hold = true;
+    pasteImage(container);
+    await waitFor(() => expect(uploads.pending).toHaveLength(1));
+
+    // The blob is up, but the editor still shows the local preview: saving now would persist a
+    // blob: src, which the sanitizer strips.
+    settleUpload();
+    await waitFor(() => expect(cdn.release).toHaveLength(1));
+
+    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+    expect(patch).not.toHaveBeenCalled();
+
+    cdn.release.forEach((release) => release());
+    await waitFor(() =>
+      expect(container.querySelector("img")?.getAttribute("src")).toBe("https://cdn.example/image.png"),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+    expect(patch).toHaveBeenCalledTimes(1);
   });
 });
