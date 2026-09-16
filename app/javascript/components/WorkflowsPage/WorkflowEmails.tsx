@@ -329,7 +329,7 @@ const WorkflowEmails = ({ context, workflow }: WorkflowEmailsProps) => {
                               onDelete={() => setDeletingEmailId(email.id)}
                               onChange={(value) => updateEmail(email.id, value)}
                               onSendPreviewEmail={() => handleSave({ sendPreviewForEmailId: email.id })}
-                              isSaving={form.processing}
+                              isSaving={form.processing || imageSettings.isUploading}
                               hasUploadingImages={
                                 imageSettings.isUploading ? email.message.includes('src="blob:') : false
                               }

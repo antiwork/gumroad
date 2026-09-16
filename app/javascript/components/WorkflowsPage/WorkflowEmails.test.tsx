@@ -142,6 +142,8 @@ const pasteImage = (container: HTMLElement) =>
   });
 
 const saveDisabled = () => screen.getByRole<HTMLButtonElement>("button", { name: "Save changes" }).disabled;
+// The row's Preview Email button also saves every message, so it has to follow the same guard.
+const previewDisabled = () => screen.getByRole<HTMLButtonElement>("button", { name: "Preview Email" }).disabled;
 
 beforeEach(() => {
   uploads.pending.length = 0;
@@ -156,6 +158,7 @@ describe("WorkflowEmails", () => {
     const { container } = renderEditor();
     fireEvent.click(screen.getByRole("button", { name: "Edit" }));
     expect(saveDisabled()).toBe(false);
+    expect(previewDisabled()).toBe(false);
 
     cdn.hold = true;
     pasteImage(container);
@@ -167,11 +170,13 @@ describe("WorkflowEmails", () => {
     assertDefined(uploads.pending.shift())(null, { key: "blob-key" });
     await waitFor(() => expect(cdn.release).toHaveLength(1));
     expect(saveDisabled()).toBe(true);
+    expect(previewDisabled()).toBe(true);
 
     cdn.release.forEach((release) => release());
     await waitFor(() =>
       expect(container.querySelector("img")?.getAttribute("src")).toBe("https://cdn.example/image.png"),
     );
     expect(saveDisabled()).toBe(false);
+    expect(previewDisabled()).toBe(false);
   });
 });

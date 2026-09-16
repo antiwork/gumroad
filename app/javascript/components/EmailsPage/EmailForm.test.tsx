@@ -51,18 +51,21 @@ vi.mock("@rails/activestorage", () => ({
     }
   },
 }));
+const post = vi.hoisted(() => vi.fn((_url: string, options?: { onFinish?: () => void }) => options?.onFinish?.()));
 vi.mock("@inertiajs/react", () => ({
   Link: ({ href, children }: { href: string; children?: React.ReactNode }) => <a href={href}>{children}</a>,
   usePage: () => ({ url: "/emails/new", props: {} }),
   router: { visit: () => {}, on: () => () => {} },
-  useForm: (initial: Record<string, unknown>) => {
+  useForm: (initial: { installment: { name: string; message: string } }) => {
     const [data, setDataState] = React.useState(initial);
     return {
       data,
-      setData: (key: string, value: unknown) => setDataState((prev) => ({ ...prev, [key]: value })),
+      // Inertia's setData takes a dotted path (`installment.name`).
+      setData: (key: string, value: string) =>
+        setDataState((prev) => ({ installment: { ...prev.installment, [key.replace("installment.", "")]: value } })),
       processing: false,
       transform: () => {},
-      post: () => {},
+      post,
       put: () => {},
     };
   },
@@ -137,11 +140,31 @@ beforeEach(() => {
   uploads.pending.length = 0;
   cdn.hold = false;
   cdn.release.length = 0;
+  post.mockClear();
 });
 
 afterEach(cleanup);
 
 describe("EmailForm", () => {
+  it("does not let the publish countdown save while an image is still uploading", async () => {
+    const { container } = renderForm();
+    fireEvent.change(screen.getByPlaceholderText("Title"), { target: { value: "Hello" } });
+    // The countdown starts while nothing is uploading, so the Publish controls are enabled.
+    fireEvent.click(screen.getByRole("button", { name: "Publish" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Publish now" }));
+    await screen.findByText(/Publishing in/u);
+
+    // An image pasted mid-countdown is still on its blob: src when the countdown fires `save`.
+    cdn.hold = true;
+    pasteImage(container);
+    await waitFor(() => expect(uploads.pending).toHaveLength(1));
+    assertDefined(uploads.pending.shift())(null, { key: "blob-key" });
+    await waitFor(() => expect(cdn.release).toHaveLength(1));
+
+    await waitFor(() => expect(screen.queryByText(/Publishing in/u)).toBeNull(), { timeout: 4000 });
+    expect(post).not.toHaveBeenCalled();
+  });
+
   it("keeps Save disabled until an uploaded image has its CDN URL, not just its blob", async () => {
     const { container } = renderForm();
     expect(saveDisabled()).toBe(false);

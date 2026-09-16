@@ -323,6 +323,10 @@ export const EmailForm = ({ context, installment, singleCustomerRecipient = null
   const [invalidFields, setInvalidFields] = React.useState(new Set<InvalidFieldName>());
   const { appDomain } = useDomains();
   const imageSettings = useSectionImageUploadSettings();
+  // The publish countdown calls `save` from a closure captured when it started, so it reads the
+  // upload state through a ref rather than the render it was created in.
+  const imagesUploadingRef = React.useRef(false);
+  imagesUploadingRef.current = imageSettings.isUploading;
   const { evaporateUploader, s3UploadConfig } = useConfigureEvaporate({
     aws_access_key_id: context.aws_access_key_id,
     s3_url: context.s3_url,
@@ -713,6 +717,13 @@ export const EmailForm = ({ context, installment, singleCustomerRecipient = null
 
   const save = asyncVoid(async (action: SaveAction = "save") => {
     await Promise.resolve();
+    // Every save path funnels through here, including the countdown, which bypasses the disabled
+    // buttons; a save while an image still has a blob: src would persist the email without it.
+    if (imagesUploadingRef.current) {
+      finishPublishing();
+      showAlert("Please wait for your images to finish uploading.", "error");
+      return;
+    }
     if (!validate(action)) return;
 
     form.transform(() => buildPayload(action));
