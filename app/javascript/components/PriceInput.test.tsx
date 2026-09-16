@@ -107,4 +107,25 @@ describe("PriceInput", () => {
 
     expect(screen.getByLabelText<HTMLSelectElement>("Currency")).toBe(currencySelect());
   });
+
+  // SEK, NOK and DKK share "kr" as their symbol, so labelling the menu by symbol alone made the
+  // three options indistinguishable. The menu carries the name; the pill next to the amount does
+  // not need one.
+  it("labels currency options with the currency name, not just the symbol", () => {
+    render(
+      <PriceInput
+        currencyCode="sek"
+        cents={300}
+        ariaLabel="Amount"
+        onChange={() => {}}
+        currencyCodeSelector={{ options: ["sek", "nok", "dkk"], onChange: () => {} }}
+      />,
+    );
+
+    expect(Array.from(currencySelect().options).map((option) => option.textContent)).toEqual([
+      "kr (Swedish Krona)",
+      "kr (Norwegian Krone)",
+      "kr (Danish Krone)",
+    ]);
+  });
 });
