@@ -219,6 +219,18 @@ describe ForeignWebhooksController do
     end
 
     context "with missing headers" do
+      it "does not enqueue unsigned events when the enforcement flag is unavailable" do
+        allow(Feature).to receive(:active?).with(:verify_sendgrid_webhook_signatures).and_call_original
+        Feature.activate(:verify_sendgrid_webhook_signatures)
+        allow($redis).to receive(:hgetall).and_call_original
+        allow($redis).to receive(:hgetall).with("verify_sendgrid_webhook_signatures").and_raise(Redis::TimeoutError)
+        allow(ErrorNotifier).to receive(:notify)
+        request.headers["X-Twilio-Email-Event-Webhook-Signature"] = nil
+
+        expect { post :sendgrid, body: raw_body, as: :json }.to raise_error(Redis::TimeoutError)
+        expect(HandleSendgridEventJob.jobs.size).to eq(0)
+      end
+
       it "returns 500 so SendGrid retries when signature header is missing" do
         request.headers["X-Twilio-Email-Event-Webhook-Signature"] = nil
         expect(ErrorNotifier).to receive(:notify).with("Error verifying SendGrid webhook: Missing signature")
