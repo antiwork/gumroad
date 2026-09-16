@@ -971,7 +971,7 @@ class Order::PreparePaymentIntentService
       # the one case that actually IS "Stripe unavailable", so it keeps that code.
       if e.is_a?(ChargeProcessorInvalidRequestError)
         purchases_to_charge.each do |purchase|
-          purchase.error_code = PurchaseErrorCode::PROCESSOR_INVALID_REQUEST if purchase.error_code.blank?
+          purchase.error_code = PurchaseErrorCode.for_processor_error(e.processor_error_code) if purchase.error_code.blank?
           purchase.stripe_error_code = e.processor_error_code if purchase.stripe_error_code.blank?
         end
       elsif e.is_a?(ChargeProcessorUnavailableError)
