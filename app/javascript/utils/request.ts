@@ -3,6 +3,7 @@ type RequestSettingsBase = {
   url: string;
   abortSignal?: AbortSignal | undefined;
   headers?: Record<string, string> | undefined;
+  keepalive?: boolean | undefined;
 };
 
 // `data?: never` on the bodyless member keeps `settings.data` readable without narrowing (TypeScript
@@ -117,6 +118,7 @@ export const request = async (settings: RequestSettings): Promise<Response> => {
       body: data,
       headers,
       signal: settings.abortSignal ?? null,
+      keepalive: settings.keepalive ?? defaults.keepalive ?? false,
     });
     if (response.status >= 500) throw new ResponseError();
     // We rate limit some endpoints — to prevent brute force attacks (see

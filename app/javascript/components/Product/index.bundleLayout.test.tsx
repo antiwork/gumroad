@@ -1,7 +1,9 @@
 // @vitest-environment happy-dom
-import { cleanup, render, screen, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import * as React from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+
+import { trackUserProductAction } from "$app/data/user_action_event";
 
 import { Product, type Product as ProductData } from "$app/components/Product";
 import type { PriceSelection } from "$app/components/Product/ConfigurationSelector";
@@ -17,7 +19,7 @@ vi.stubGlobal("Routes", {
 vi.mock("$app/utils/classNames", () => ({
   classNames: (...xs: unknown[]) => xs.filter((x): x is string => typeof x === "string" && x.length > 0).join(" "),
 }));
-vi.mock("$app/data/user_action_event", () => ({ trackUserProductAction: vi.fn() }));
+vi.mock("$app/data/user_action_event", () => ({ trackUserProductAction: vi.fn().mockResolvedValue(undefined) }));
 vi.mock("$app/data/view_event", () => ({ incrementProductViews: vi.fn() }));
 vi.mock("$app/utils/user_analytics", () => ({
   startTrackingForSeller: vi.fn(),
@@ -68,6 +70,7 @@ vi.mock("$app/components/Product/ShareSection", () => ({ ShareSection: () => nul
 
 afterEach(() => {
   cleanup();
+  vi.clearAllMocks();
 });
 
 const selection: PriceSelection = {
@@ -149,6 +152,34 @@ const product: ProductData = {
 };
 
 describe("product page recovery prompt", () => {
+  it("places recovery after the main purchase button", () => {
+    render(<Product product={product} purchase={null} selection={selection} disableAnalytics />);
+
+    const purchaseButton = screen.getByRole("link", { name: "I want this!" });
+    const recoveryLink = screen.getByRole("link", { name: "Get your download link" });
+    expect(purchaseButton.compareDocumentPosition(recoveryLink) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0);
+    expect(purchaseButton.closest("section")).toBe(recoveryLink.closest("section"));
+  });
+
+  it("tracks recovery without blocking navigation", () => {
+    render(<Product product={product} purchase={null} selection={selection} />);
+
+    const recoveryLink = screen.getByRole("link", { name: "Get your download link" });
+    expect(fireEvent.click(recoveryLink)).toBe(true);
+    expect(trackUserProductAction).toHaveBeenCalledExactlyOnceWith({
+      name: "product_purchase_recovery_click",
+      permalink: product.permalink,
+      keepalive: true,
+    });
+  });
+
+  it("does not track recovery in a preview with analytics disabled", () => {
+    render(<Product product={product} purchase={null} selection={selection} disableAnalytics />);
+
+    fireEvent.click(screen.getByRole("link", { name: "Get your download link" }));
+    expect(trackUserProductAction).not.toHaveBeenCalled();
+  });
+
   it.each([
     [false, false, "Get your download link"],
     [true, false, "View your information"],
