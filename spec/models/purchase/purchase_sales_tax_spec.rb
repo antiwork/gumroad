@@ -240,6 +240,28 @@ describe "PurchaseSalesTax", :vcr do
           end
         end
 
+        describe "Spain with a Canary Islands postal code" do
+          before(:context) do
+            @tax_country = "ES"
+            @buyer_zip = "35001"
+
+            @purchase_country = "Spain"
+            @purchase_chargeable_country = "ES"
+            @purchase_ip_country = "Spain"
+
+            @purchase_transaction_amount = 10_00
+            @amount_for_gumroad_cents = @fee_cents
+          end
+
+          after(:context) { @buyer_zip = nil }
+
+          it "is outside the EU VAT area, so no VAT is applied" do
+            expect(@purchase.was_purchase_taxable).to be(false)
+            expect(@purchase.gumroad_tax_cents).to eq(0)
+            expect(@purchase.total_transaction_cents).to eq(10_00)
+          end
+        end
+
         describe "IP address in EU , card country in EU, country != either and in EU" do
           before(:context) do
             @tax_country = "ES"

@@ -607,6 +607,21 @@ describe "PurchaseSubscription", :vcr do
         expect(purchase.gumroad_tax_cents).to eq 0
         expect(purchase.errors).to be_empty
       end
+
+      it "charges no VAT once the subscriber saves a Canary Islands postal code" do
+        original_purchase.update!(zip_code: "35001")
+
+        purchase = renewal_of(subscription.reload)
+        expect(purchase.zip_code).to eq "35001"
+        expect(purchase.gumroad_tax_cents).to eq 0
+        expect(purchase.errors).to be_empty
+      end
+
+      it "still charges VAT for a mainland postal code" do
+        original_purchase.update!(zip_code: "08001")
+
+        expect(renewal_of(subscription.reload).gumroad_tax_cents).to eq 210
+      end
     end
   end
 end

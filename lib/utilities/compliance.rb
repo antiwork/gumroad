@@ -19,4 +19,12 @@ module Compliance
   }.freeze
 
   VAT_EXEMPT_REGIONS = ["Canarias", "Canary Islands"].freeze
+  # Spanish postal-code prefixes outside the EU VAT area: Las Palmas (35), Santa Cruz de
+  # Tenerife (38), Ceuta (51), Melilla (52).
+  ES_VAT_EXEMPT_POSTAL_PREFIXES = %w[35 38 51 52].freeze
+
+  def self.es_postal_code_vat_exempt?(postal_code)
+    digits = postal_code.to_s.strip
+    digits.match?(/\A\d{5}\z/) && ES_VAT_EXEMPT_POSTAL_PREFIXES.include?(digits[0, 2])
+  end
 end

@@ -426,7 +426,7 @@ const SharedInputs = () => {
           }}
         >
           <CountryInput />
-          {state.country === "US" ? <ZipCodeInput /> : null}
+          {state.country === "US" || state.country === "ES" ? <ZipCodeInput /> : null}
           {state.country === "CA" ? <StateInput /> : null}
         </div>
       ) : null}

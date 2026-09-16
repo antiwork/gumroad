@@ -1378,7 +1378,10 @@ export const reduceCheckoutState = produce((state: State, action: Action) => {
         // submits the current zip — so even a partial edit (or clearing the field) leaves the
         // loaded quote stale relative to what will be charged. The 300ms refetch debounce
         // already absorbs individual keystrokes.
-        ("zipCode" in action && action.zipCode !== state.zipCode && state.country === "US") ||
+        // Spain: a Canary Islands / Ceuta / Melilla postal code removes VAT, so the quote is stale too.
+        ("zipCode" in action &&
+          action.zipCode !== state.zipCode &&
+          (state.country === "US" || state.country === "ES")) ||
         ("state" in action && action.state !== state.state && state.country === "CA") ||
         ("vatId" in action && action.vatId !== state.vatId) ||
         ("gift" in action && action.gift?.type !== state.gift?.type) ||
