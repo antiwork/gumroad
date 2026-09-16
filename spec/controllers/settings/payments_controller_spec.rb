@@ -2726,11 +2726,14 @@ describe Settings::PaymentsController, :vcr, type: :controller, inertia: true do
       sign_in user
     end
 
-    it "redirects to the payments settings page" do
+    it "redirects to the payments settings page without saying 'all set' while Stripe is still verifying the new account" do
+      # The recorded account is fresh: charges off, every due list empty, only pending_verification
+      # populated. That is the state the remediation link is offered for, so the return leg must not reassure.
       get :verify_stripe_remediation
 
       expect(response).to redirect_to settings_payments_url
-      expect(flash[:notice]).to eq("Thanks! You're all set.")
+      expect(flash[:notice]).to be_nil
+      expect(flash[:alert]).to include("Stripe is still reviewing your account")
     end
 
     it "does not show the 'Thanks' notice when Stripe still lists eventually_due requirements" do
@@ -2785,6 +2788,60 @@ describe Settings::PaymentsController, :vcr, type: :controller, inertia: true do
       expect(response).to redirect_to settings_payments_url
       expect(flash[:notice]).to be_nil
       expect(flash[:alert]).to include("Stripe has paused payouts")
+    end
+
+    context "when Stripe still shows the pending-only review that opened the remediation link" do
+      # The review state is stubbed, so a factory account is enough and no Stripe call is recorded.
+      let!(:stripe_connect_account_id) { create(:merchant_account, user:).charge_processor_merchant_id }
+
+      def stub_pending_only_review(charges_enabled:, pending_verification: ["person_123.verification.document"])
+        allow(Stripe::Account).to receive(:retrieve).with(stripe_connect_account_id).and_return(
+          Stripe::Account.construct_from(
+            id: stripe_connect_account_id,
+            object: "account",
+            charges_enabled:,
+            requirements: {
+              "currently_due" => [],
+              "past_due" => [],
+              "eventually_due" => [],
+              "pending_verification" => pending_verification,
+              "errors" => [],
+              "current_deadline" => nil,
+            },
+            future_requirements: { "currently_due" => [], "past_due" => [], "eventually_due" => [] }
+          )
+        )
+      end
+
+      it "does not say 'all set' while charges stay disabled with nothing due" do
+        stub_pending_only_review(charges_enabled: false)
+
+        get :verify_stripe_remediation
+
+        expect(response).to redirect_to settings_payments_url
+        expect(flash[:notice]).to be_nil
+        expect(flash[:alert]).to include("Stripe is still reviewing your account")
+      end
+
+      it "still says 'all set' once the account can take payments" do
+        stub_pending_only_review(charges_enabled: true)
+
+        get :verify_stripe_remediation
+
+        expect(response).to redirect_to settings_payments_url
+        expect(flash[:alert]).to be_nil
+        expect(flash[:notice]).to eq("Thanks! You're all set.")
+      end
+
+      it "still says 'all set' when nothing is pending even though charges are off" do
+        stub_pending_only_review(charges_enabled: false, pending_verification: [])
+
+        get :verify_stripe_remediation
+
+        expect(response).to redirect_to settings_payments_url
+        expect(flash[:alert]).to be_nil
+        expect(flash[:notice]).to eq("Thanks! You're all set.")
+      end
     end
   end
 end
