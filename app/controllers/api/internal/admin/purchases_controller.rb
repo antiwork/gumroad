@@ -465,6 +465,7 @@ class Api::Internal::Admin::PurchasesController < Api::Internal::Admin::BaseCont
       when :no_changes then :unprocessable_entity
       when :locked then :unprocessable_entity
       when :fingerprint_anomaly then :unprocessable_entity
+      when :ambiguous_ownership then :unprocessable_entity
       end
     end
 end
