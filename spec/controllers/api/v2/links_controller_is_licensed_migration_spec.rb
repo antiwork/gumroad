@@ -2,11 +2,8 @@
 
 require "spec_helper"
 
-# `is_licensed` is derived from the embedded License key block, but the update
-# recomputed it from the product's loaded rich-content associations. Switching a
-# product between shared and per-version content writes pages through those same
-# loaded collections, so the recompute could read the pre-move rows and clear the
-# flag while the block was still there — after which no purchase got a license key.
+# Switching a product between shared and per-version content writes pages through the loaded
+# rich-content associations, which the recompute must therefore not read (Link#recompute_is_licensed!).
 describe Api::V2::LinksController do
   before do
     @user = create(:user)

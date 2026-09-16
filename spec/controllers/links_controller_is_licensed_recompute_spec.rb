@@ -2,10 +2,8 @@
 
 require "spec_helper"
 
-# `is_licensed` is derived from the embedded License key block. The editor save
-# recomputes it from the product's loaded rich-content associations, so a save
-# that moves pages between the product and its versions has to read the stored
-# rows (see Link#recompute_is_licensed!).
+# A save that moves pages between the product and its versions leaves the loaded rich-content
+# associations pre-write, so the recompute reads the stored rows (Link#recompute_is_licensed!).
 describe LinksController, type: :controller do
   let(:seller) { create(:user) }
   let(:product) { create(:product, user: seller) }
