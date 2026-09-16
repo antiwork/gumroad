@@ -4,14 +4,14 @@ require "spec_helper"
 
 RSpec.describe "Launch card holdout", type: :system, js: true do
   let(:seller) { create(:named_seller) }
-  let(:product) { create(:product, user: seller) }
+  let!(:product) { create(:product, user: seller) }
 
   [false, true].each do |holdout|
     it "#{holdout ? 'hides' : 'shows'} the card for a #{holdout ? 'holdout' : 'treatment'} seller at full rollout" do
       create(:marketing_holdout_assignment, user: seller, marketing_holdout: holdout)
       Feature.activate_percentage(:auto_marketing, 100)
       Feature.activate_user(:auto_marketing, seller)
-      login_as(seller)
+      login_as(seller, scope: :user)
       visit "#{edit_link_path(product.unique_permalink)}/share"
 
       expect(page).to have_button("Copy checkout URL")
