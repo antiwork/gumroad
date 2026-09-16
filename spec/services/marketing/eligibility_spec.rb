@@ -39,6 +39,14 @@ RSpec.describe Marketing::Eligibility do
     expect(described_class.enabled_for?(seller)).to eq(true)
   end
 
+  it "preserves global flag inspection without a seller" do
+    expect(Feature.active?(:auto_marketing)).to eq(false)
+    Feature.activate(:auto_marketing)
+    expect(Feature.active?(:auto_marketing)).to eq(true)
+    expect(Feature.inactive?(:auto_marketing)).to eq(false)
+    expect(Marketing::HoldoutAssignment.count).to eq(0)
+  end
+
   it "fails closed without a persisted seller" do
     Feature.activate(:auto_marketing)
     expect(described_class.enabled_for?(nil)).to eq(false)
