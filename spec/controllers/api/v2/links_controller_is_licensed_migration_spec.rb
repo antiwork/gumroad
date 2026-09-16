@@ -2,8 +2,6 @@
 
 require "spec_helper"
 
-# Regression coverage for gumroad-private#2679.
-#
 # `is_licensed` is derived from the embedded License key block, but the update
 # recomputed it from the product's loaded rich-content associations. Switching a
 # product between shared and per-version content writes pages through those same

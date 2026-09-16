@@ -1551,10 +1551,9 @@ class Link < ApplicationRecord
     (has_product_level_rich_content? ? alive_rich_contents : alive_variants.flat_map(&:alive_rich_contents)).any?(&:has_license_key?)
   end
 
-  # The loaded collections has_embedded_license_key? reads can be stale mid-request: a save that
-  # writes version pages through another instance leaves them holding the pre-write rows, so the
-  # flag is cleared while the block is still there and later buyers get no key. Derive from the
-  # stored rows instead.
+  # The loaded collections has_embedded_license_key? reads can be stale mid-request: a save that writes
+  # version pages through another instance leaves them pre-write, clearing the flag while the block is
+  # still in the content. Derive from the stored rows instead.
   def recompute_is_licensed!
     alive_variants.reset
     alive_rich_contents.reset
