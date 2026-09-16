@@ -341,6 +341,23 @@ describe("PaymentForm validation-failure feedback", () => {
     expect(scrollIntoView).not.toHaveBeenCalled();
   });
 
+  // Canary Islands / Ceuta / Melilla buyers are outside the EU VAT area; the postal code is the
+  // buyer's own signal that the server honours over the connection's geolocation.
+  const paidState = (overrides: Partial<State>) => {
+    const base = state(overrides);
+    return { ...base, products: base.products.map((product) => ({ ...product, price: 1000, requirePayment: true })) };
+  };
+
+  it("asks Spanish buyers for a postal code, like US buyers", () => {
+    renderPaymentForm(paidState({ country: "ES" }));
+    expect(screen.getByLabelText("Postal")).toBeTruthy();
+  });
+
+  it("does not ask other EU buyers for a postal code", () => {
+    renderPaymentForm(paidState({ country: "DE" }));
+    expect(screen.queryByLabelText("Postal")).toBeNull();
+  });
+
   it("declares off-session future use for the recurring UPI client-confirm lane", () => {
     type ClientConfirmPayment = Extract<CheckoutPaymentConfig, { integration: "payment_element_client_confirm" }>;
     const checkoutPayment: ClientConfirmPayment = {

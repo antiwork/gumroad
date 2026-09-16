@@ -1127,4 +1127,20 @@ describe Compliance do
       "US_WY",
     ]
   end
+
+  describe ".es_postal_code_vat_exempt?" do
+    it "is true for Las Palmas, Santa Cruz de Tenerife, Ceuta and Melilla codes" do
+      %w[35000 35001 38001 38999 51001 52001 52080].each { expect(described_class.es_postal_code_vat_exempt?(_1)).to be(true) }
+    end
+
+    it "is false for mainland, malformed and blank codes" do
+      ["08001", "28001", "34999", "39000", "3500", "350000", "35", "3500A", " 35001x", nil, "", "   "].each do |code|
+        expect(described_class.es_postal_code_vat_exempt?(code)).to be(false)
+      end
+    end
+
+    it "tolerates surrounding whitespace" do
+      expect(described_class.es_postal_code_vat_exempt?(" 38400 ")).to be(true)
+    end
+  end
 end

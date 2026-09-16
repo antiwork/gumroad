@@ -324,6 +324,11 @@ export const createPurchasesRequestData = (
     purchase.country = payload.shippingInfo.country;
   } else if (payload.taxCountryElection === "US") {
     purchase.zip_code = payload.zipCode || "";
+  } else if (payload.taxCountryElection === "ES" && payload.zipCode) {
+    // A Spanish postal code is what exempts a Canary Islands / Ceuta / Melilla buyer from VAT, and
+    // the surcharge quote was already priced with it. Only set it when the buyer supplied one: an
+    // empty string would beat the geoip fallback in Purchase#zip_code_from_geoip (`zip_code ||= …`).
+    purchase.zip_code = payload.zipCode;
   } else if (payload.taxCountryElection === "CA") {
     purchase.state = payload.state || "";
   }
