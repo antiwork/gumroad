@@ -882,6 +882,7 @@ describe AutoTopUpNegativeDestinationBalancesJob do
     before do
       make_payable
       Feature.activate(:auto_topup_negative_destination_balances)
+      allow_any_instance_of(described_class).to receive(:sleep)
     end
 
     after do
@@ -933,6 +934,27 @@ describe AutoTopUpNegativeDestinationBalancesJob do
       end
     end
 
+    it "confirms credit when the balance transaction appears on the third read" do
+      reads = 0
+      allow(Stripe::Charge).to receive(:retrieve) do |params, _options|
+        reads += 1
+        reads < 3 ? Stripe::Charge.construct_from(balance_transaction: nil) : @destination_payments.fetch(params.fetch(:id))
+      end
+      job = described_class.new
+      allow(job).to receive(:sleep) do
+        expect($redis.get("#{dedupe_key}:unresolved")).to eq("10000")
+        expect($redis.ttl(transfer_key)).to eq(-1)
+      end
+
+      job.perform
+
+      expect(job).to have_received(:sleep).with(2).twice
+      expect(Stripe::Charge).to have_received(:retrieve).exactly(3).times
+      expect(StripeTransferInternallyToCreator).to have_received(:transfer_funds_to_account).once
+      expect($redis.get(dedupe_key)).to eq("10000:#{row.id}")
+      expect($redis.get("#{dedupe_key}:unresolved")).to be_nil
+    end
+
     [nil, "txn_pending", { object: "balance_transaction", currency: "eur", net: 10000 },
      { object: "balance_transaction", currency: "php", net: 0 }].each do |transaction|
       it "holds the account when destination credit is #{transaction.inspect}" do
@@ -940,6 +962,7 @@ describe AutoTopUpNegativeDestinationBalancesJob do
 
         described_class.new.perform
 
+        expect(Stripe::Charge).to have_received(:retrieve).exactly(transaction.nil? ? 3 : 1).times
         expect(StripeTransferInternallyToCreator).to have_received(:transfer_funds_to_account).once
         expect($redis.get(dedupe_key)).to be_nil
         expect($redis.get("#{dedupe_key}:unresolved")).to eq("10000")

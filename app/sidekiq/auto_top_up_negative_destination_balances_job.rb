@@ -355,11 +355,16 @@ class AutoTopUpNegativeDestinationBalancesJob
     def destination_credit_cents(transfer, request)
       raise "Transfer has no destination payment" if transfer.destination_payment.blank?
 
-      payment = Stripe::Charge.retrieve(
-        { id: transfer.destination_payment, expand: %w[balance_transaction] },
-        { stripe_account: request.fetch(:stripe_account_id) }
-      )
-      transaction = payment.balance_transaction
+      transaction = nil
+      3.times do |attempt|
+        payment = Stripe::Charge.retrieve(
+          { id: transfer.destination_payment, expand: %w[balance_transaction] },
+          { stripe_account: request.fetch(:stripe_account_id) }
+        )
+        transaction = payment.balance_transaction
+        break if transaction.present? || attempt == 2
+        sleep(2)
+      end
       currency = request.fetch(:metadata).fetch(:destination_currency)
       unless transaction.is_a?(Stripe::BalanceTransaction) && transaction.currency == currency && transaction.net.is_a?(Integer) && transaction.net.positive?
         raise "Destination credit is unavailable or has an unexpected currency or amount"
