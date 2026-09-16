@@ -2,16 +2,13 @@
 
 # Asks Stripe whether it can resolve a new bank account's routing number before we store it.
 #
-# For most countries our format regex is the whole story, but some bank codes are validated by
-# Stripe against a per-entry directory, and which entries exist is not a shape: Stripe's EG
-# directory resolves NBEGEGCX331 and refuses QNBAEGCX027 (gumroad-private#2638). A code it cannot
-# resolve saves fine on our side and then never attaches, so every payout skips with "bank account
-# was not correctly set up" and the seller is never told why. Tokenising the details is
-# side-effect-free (no account, no external account) and answers the question at save time.
+# Some countries' bank codes are validated by Stripe against a per-entry directory, and which
+# entries exist is not a shape our regex can express. A code it cannot resolve saves fine here and
+# then never attaches, so payouts skip with nothing shown to the seller. Tokenising the details is
+# side-effect-free and answers the question at save time.
 #
-# Fail-open by design: only a rejection Stripe attributes to the routing number blocks the save.
-# Anything else — timeouts, 5xx, rate limits, an unexpected error shape — is logged and the save
-# proceeds exactly as it does today, so a Stripe blip cannot lock every seller out of the form.
+# Fail-open: only a rejection Stripe attributes to the routing number blocks the save. Anything
+# else is logged and the save proceeds, so a Stripe blip cannot lock every seller out of the form.
 class BankCodeDirectoryCheck
   # Opt-in per country. Add a class here only after probing that Stripe's directory (not its format
   # check) is the layer that refuses real seller input for that country.

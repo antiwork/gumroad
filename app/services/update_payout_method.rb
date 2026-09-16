@@ -121,6 +121,7 @@ class UpdatePayoutMethod
 
   def process
     credit_card = nil
+    replacement_bank_account = nil
     baseline_active_bank_id = nil
     if params[:card]
       baseline_active_bank_id = user.active_bank_account&.id
@@ -129,19 +130,18 @@ class UpdatePayoutMethod
     elsif bank_account_params_present? && params[:bank_account][:account_number].present?
       # Built and checked against Stripe's directory before the lock, so a slow Stripe answer holds
       # up this request rather than the row.
+      baseline_active_bank_id = user.active_bank_account&.id
       replacement_bank_account, error = prepare_replacement_bank_account
       return error if error
     end
 
     user.with_lock do
-      if credit_card
+      if credit_card || replacement_bank_account
         if user.active_bank_account&.id != baseline_active_bank_id
-          discard_prepared_credit_card!(credit_card)
+          discard_prepared_credit_card!(credit_card) if credit_card
           next { error: :concurrent_payout_method_change }
         end
-        process_card_params(credit_card)
-      elsif replacement_bank_account
-        process_full_bank_account_replacement(replacement_bank_account)
+        credit_card ? process_card_params(credit_card) : process_full_bank_account_replacement(replacement_bank_account)
       elsif bank_account_params_present?
         process_bank_account_params
       elsif params[:payment_address].present?

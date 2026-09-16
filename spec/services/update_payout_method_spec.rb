@@ -234,6 +234,21 @@ describe UpdatePayoutMethod do
 
         expect(result[:error]).to eq(:bank_account_error)
       end
+
+      it "does not overwrite a payout method saved while Stripe was being asked" do
+        concurrent_account = nil
+        allow(Stripe::Token).to receive(:create) do
+          existing_bank_account.mark_deleted!
+          concurrent_account = create(:egypt_bank_account, user:, bank_code: "CIBEEGCX")
+          double
+        end
+
+        result = described_class.new(user_params: egypt_params(bank_code: "NBEGEGCX331"), seller: user).process
+
+        expect(result).to eq(error: :concurrent_payout_method_change)
+        expect(user.reload.active_bank_account).to eq(concurrent_account)
+        expect(user.bank_accounts.alive.count).to eq(1)
+      end
     end
 
     describe "when account number exceeds maximum length" do
