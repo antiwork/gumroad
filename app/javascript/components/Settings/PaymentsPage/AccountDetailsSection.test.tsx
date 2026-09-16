@@ -174,8 +174,15 @@ describe("AccountDetailsSection business type", () => {
     const select = screen.getByLabelText<HTMLSelectElement>("Type");
     expect(optionValues()).not.toContain(business_type);
     expect(select.value).toBe("");
-    expect(select.selectedOptions[0]?.text).toBe("Type");
+    expect(select.selectedOptions[0]?.text).toBe("Select a type");
     expect(select.validity.valueMissing).toBe(true);
+    expect(screen.getByText("Your saved type is no longer offered. Choose a new one before saving.")).toBeTruthy();
+  });
+
+  it("does not explain a dropped type when the saved type is still an option", () => {
+    renderSection(makeUser(), { is_business: true, business_country: "US", business_type: "single_member_llc" });
+
+    expect(screen.queryByText("Your saved type is no longer offered. Choose a new one before saving.")).toBeNull();
   });
 
   it("does not repeat a saved type that is already an option", () => {

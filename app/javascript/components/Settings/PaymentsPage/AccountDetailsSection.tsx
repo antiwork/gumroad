@@ -420,6 +420,8 @@ const AccountDetailsSection = ({
     IN: indiaBusinessTypes,
     CA: canadaBusinessTypes,
   });
+  const hasUnsupportedBusinessType =
+    Boolean(complianceInfo.business_type) && !businessTypes.some(({ code }) => code === complianceInfo.business_type);
   const selectedBusinessType = businessTypes.some(({ code }) => code === complianceInfo.business_type)
     ? complianceInfo.business_type
     : "";
@@ -543,7 +545,7 @@ const AccountDetailsSection = ({
                 onChange={(evt) => updateComplianceInfo({ business_type: evt.target.value })}
               >
                 <option value="" disabled>
-                  Type
+                  Select a type
                 </option>
                 {businessTypes.map(({ code, name }) => (
                   <option key={code} value={code}>
@@ -551,6 +553,11 @@ const AccountDetailsSection = ({
                   </option>
                 ))}
               </Select>
+              {hasUnsupportedBusinessType ? (
+                <FieldsetDescription>
+                  Your saved type is no longer offered. Choose a new one before saving.
+                </FieldsetDescription>
+              ) : null}
             </Fieldset>
           </div>
           {complianceInfo.business_country === "JP" ? (
