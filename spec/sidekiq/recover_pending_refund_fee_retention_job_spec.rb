@@ -171,8 +171,6 @@ RSpec.describe RecoverPendingRefundFeeRetentionJob, :vcr do
     expect(ErrorNotifier).not_to receive(:notify).with(instance_of(String), anything)
 
     travel_to(Time.utc(2026, 9, 16, 12)) { described_class.new.perform }
-    described_class.new.perform
-    refund.recover_pending_fee_retention!
 
     refund.reload
     expect(refund.fee_retention_attempts).to eq(Refund::MAX_FEE_RETENTION_ATTEMPTS)
@@ -184,6 +182,9 @@ RSpec.describe RecoverPendingRefundFeeRetentionJob, :vcr do
     expect(refund.fee_retention_error["message"]).to eq(error.message)
     expect(Refund.written_off_fee_retention).to include(refund)
     expect(Refund.pending_fee_retention).not_to include(refund)
+    described_class.new.perform
+    refund.recover_pending_fee_retention!
+    expect(refund.reload.fee_retention_written_off_at).to eq("2026-09-16T12:00:00Z")
   end
 
   it "clears a pending marker when the debit was already recorded" do
