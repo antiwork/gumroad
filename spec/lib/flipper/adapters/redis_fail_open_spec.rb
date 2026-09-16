@@ -111,6 +111,57 @@ RSpec.describe Flipper::Adapters::RedisFailOpen do
     expect(adapter.get(feature)[:actors]).to eq(Set["User;1"])
   end
 
+  it "still returns default gates if error reporting fails" do
+    allow(inner).to receive(:get).and_raise(Redis::TimeoutError)
+    allow(ErrorNotifier).to receive(:notify).and_raise(StandardError)
+
+    expect(feature.enabled?).to be(false)
+  end
+
+  it "shares fallback values and reporting across adapters in different threads" do
+    state = described_class::State.new
+    first = described_class.new(inner, state:)
+    second = described_class.new(inner, state:)
+    feature.enable
+    first.get(feature)
+    allow(inner).to receive(:get).and_raise(Redis::TimeoutError)
+    expect(ErrorNotifier).to receive(:notify).once
+
+    results = [first, second].map { |reader| Thread.new { Flipper.new(reader).enabled?(feature.key) } }.map(&:value)
+    expect(results).to eq([true, true])
+  end
+
+  it "bounds the cached gate documents and feature catalog" do
+    stub_const("#{described_class}::MAX_FEATURES", 2)
+    %i[first second third].each { |key| flipper[key].enable }
+    adapter.get_all
+    allow(inner).to receive(:get).and_raise(Redis::TimeoutError)
+    allow(inner).to receive(:features).and_raise(Redis::TimeoutError)
+
+    expect(flipper[:first].enabled?).to be(false)
+    expect(flipper[:third].enabled?).to be(true)
+    expect(adapter.features.size).to eq(2)
+  end
+
+  it "does not resurrect gates after a successful disable followed by a read failure" do
+    feature.enable
+    feature.enabled?
+    feature.disable
+    allow(inner).to receive(:get).and_raise(Redis::TimeoutError)
+
+    expect(feature.enabled?).to be(false)
+  end
+
+  it "forgets removed features after a successful bulk refresh" do
+    feature.enable
+    adapter.get_all
+    inner.remove(feature)
+    expect(adapter.get_all).to eq({})
+    allow(inner).to receive(:get).and_raise(Redis::TimeoutError)
+
+    expect(feature.enabled?).to be(false)
+  end
+
   it "does not catch non-Redis errors" do
     allow(inner).to receive(:get).and_raise(ArgumentError)
 

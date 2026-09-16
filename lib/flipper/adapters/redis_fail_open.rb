@@ -89,6 +89,9 @@ module Flipper
             end
           end
           ErrorNotifier.notify(error, context: { adapter: self.class.name }) if notify
+        rescue StandardError
+          # Reporting must not turn a degraded flag read back into a failed request.
+          nil
         end
     end
   end
