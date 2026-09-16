@@ -488,7 +488,10 @@ module StripeGuardianManager
 
     apply_tax_id!(hash, guardian, account_country_code, passphrase)
 
-    hash[:nationality] = guardian.nationality
+    # has_completed_info? does not require nationality, so a complete guardian can have none. The key
+    # has to be absent rather than nil here: deep_values_strip! strips strings and leaves nils alone,
+    # so an unconditional assignment sends Stripe a null it rejects and stalls the sync.
+    hash[:nationality] = guardian.nationality if guardian.nationality.present?
 
     hash.deep_values_strip!
   end
