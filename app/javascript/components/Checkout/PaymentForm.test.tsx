@@ -1,4 +1,5 @@
 // @vitest-environment happy-dom
+import type { Stripe, StripeElements } from "@stripe/stripe-js";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import * as React from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -9,6 +10,7 @@ import {
   type CheckoutPaymentConfig,
   type State,
 } from "$app/components/Checkout/payment";
+import type { PaymentElementController } from "$app/components/Checkout/PaymentElementInput";
 import { PaymentForm } from "$app/components/Checkout/PaymentForm";
 import { LoggedInUserProvider } from "$app/components/LoggedInUser";
 import { showAlert } from "$app/components/server-components/Alert";
@@ -17,9 +19,11 @@ vi.stubGlobal("Routes", new Proxy({}, { get: () => () => "#" }));
 vi.stubGlobal("SSR", false);
 
 const paymentElementInputRender = vi.hoisted<{
+  controller: PaymentElementController | null;
   setupFutureUsage: "off_session" | undefined;
   walletsEnabled: boolean | undefined;
 }>(() => ({
+  controller: null,
   setupFutureUsage: undefined,
   walletsEnabled: undefined,
 }));
@@ -69,10 +73,15 @@ vi.mock("$app/components/Checkout/PaymentElementInput", () => ({
   PaymentElementInput: ({
     setupFutureUsage,
     walletsEnabled,
+    onReady,
   }: {
     setupFutureUsage?: "off_session" | undefined;
     walletsEnabled: boolean;
+    onReady: (controller: PaymentElementController | null) => void;
   }) => {
+    React.useEffect(() => {
+      if (paymentElementInputRender.controller) onReady(paymentElementInputRender.controller);
+    }, [onReady]);
     paymentElementInputRender.setupFutureUsage = setupFutureUsage;
     paymentElementInputRender.walletsEnabled = walletsEnabled;
     return null;
@@ -218,6 +227,8 @@ describe("PaymentForm validation-failure feedback", () => {
 
   beforeEach(() => {
     scrollIntoView.mockClear();
+    vi.mocked(showAlert).mockClear();
+    paymentElementInputRender.controller = null;
     paymentElementInputRender.setupFutureUsage = undefined;
     paymentElementInputRender.walletsEnabled = undefined;
     paypalMock.buttonsConfig = null;
@@ -373,6 +384,113 @@ describe("PaymentForm validation-failure feedback", () => {
     const base = state(overrides);
     return { ...base, products: base.products.map((product) => ({ ...product, price: 1000, requirePayment: true })) };
   };
+
+  describe("client-confirm token errors", () => {
+    const message =
+      "We are experiencing issues connecting to our payments provider. Please check your internet connection.";
+    const renderClientConfirm = () => {
+      const submit = vi.fn().mockResolvedValue({});
+      const createConfirmationToken = vi.fn().mockResolvedValue({ error: { type: "api_connection_error", message } });
+      const stripe: Stripe = Object.create(null);
+      stripe.createConfirmationToken = createConfirmationToken;
+      const elements: StripeElements = Object.create(null);
+      elements.submit = submit;
+      paymentElementInputRender.controller = { stripe, elements, mountCurrency: "usd" };
+      const initial = paidState({
+        fullName: "Buyer",
+        zipCode: "10001",
+        customFieldValues: { "field-1": "Nick" },
+        checkoutPayment: {
+          integration: "payment_element_client_confirm",
+          fallback_reason: null,
+          recurring_upi_registration: false,
+          disable_wallets: false,
+          request_apple_pay_merchant_tokens: false,
+          payment_element_wallets: true,
+          flat_payment_methods: true,
+          elements_options: {
+            stripe_elements_mode: "payment",
+            currency: "usd",
+            buyer_currency_presentment: false,
+            presentment_amount_cents: null,
+            listed_currency_display: null,
+            payment_method_types: ["card"],
+            payment_method_list_token: null,
+            stripe_link_enabled: false,
+            stripe_connect_account_id: null,
+          },
+        },
+      });
+      if (initial.surcharges.type !== "loaded") throw new Error("Expected loaded surcharges");
+      initial.surcharges.result.subtotal = 1000;
+      const harness: CheckoutHarness = { dispatch: vi.fn(), actions: [] };
+      render(<StatefulPaymentForm initial={initial} harness={harness} />);
+      const pay = () => {
+        fireEvent.click(screen.getByRole("button", { name: "Pay" }));
+        // Checkout normally advances the offer pipeline before PaymentForm validates.
+        harness.dispatch({ type: "validate" });
+      };
+      return { submit, createConfirmationToken, harness, pay };
+    };
+
+    it("displays the SDK message after token creation fails and permits a fresh retry", async () => {
+      const { submit, createConfirmationToken, harness, pay } = renderClientConfirm();
+      pay();
+      await waitFor(() => expect(harness.actions).toContainEqual({ type: "cancel" }));
+      expect(createConfirmationToken).toHaveBeenCalledTimes(1);
+      expect(showAlert).toHaveBeenCalledExactlyOnceWith(message, "error");
+      expect(screen.getByRole("button", { name: "Pay" })).toHaveProperty("disabled", false);
+
+      createConfirmationToken.mockResolvedValueOnce({
+        confirmationToken: { id: "ctoken_retry", payment_method_preview: { card: { country: "US" } } },
+      });
+      pay();
+      await waitFor(() =>
+        expect(harness.actions).toContainEqual({
+          type: "set-payment-method",
+          paymentMethod: expect.objectContaining({ confirmationTokenId: "ctoken_retry" }),
+        }),
+      );
+      expect(submit).toHaveBeenCalledTimes(2);
+      expect(createConfirmationToken).toHaveBeenCalledTimes(2);
+      expect(showAlert).toHaveBeenCalledTimes(1);
+    });
+
+    it("leaves field validation messages to Stripe's inline UI", async () => {
+      const { submit, createConfirmationToken, harness, pay } = renderClientConfirm();
+      submit.mockResolvedValueOnce({
+        error: { type: "validation_error", code: "incomplete_number", message: "Your card number is incomplete." },
+      });
+      pay();
+      await waitFor(() => expect(harness.actions).toContainEqual({ type: "cancel" }));
+      expect(submit).toHaveBeenCalledTimes(1);
+      expect(createConfirmationToken).not.toHaveBeenCalled();
+      expect(showAlert).not.toHaveBeenCalled();
+    });
+
+    it("keeps the wallet submit's incomplete-validation cancellation quiet", async () => {
+      const { submit, createConfirmationToken, harness, pay } = renderClientConfirm();
+      // Stripe's wallet-dismissal branch localizes an incomplete input-validation error.
+      submit.mockResolvedValueOnce({
+        error: { type: "validation_error", code: "incomplete", message: "Your payment information is incomplete." },
+      });
+      pay();
+      await waitFor(() => expect(harness.actions).toContainEqual({ type: "cancel" }));
+      expect(submit).toHaveBeenCalledTimes(1);
+      expect(createConfirmationToken).not.toHaveBeenCalled();
+      expect(showAlert).not.toHaveBeenCalled();
+      expect(screen.getByRole("button", { name: "Pay" })).toHaveProperty("disabled", false);
+    });
+
+    it("does not invent a message for a token error without one", async () => {
+      const { createConfirmationToken, harness, pay } = renderClientConfirm();
+      createConfirmationToken.mockResolvedValueOnce({ error: { type: "api_error" } });
+      pay();
+      await waitFor(() => expect(harness.actions).toContainEqual({ type: "cancel" }));
+      expect(createConfirmationToken).toHaveBeenCalledTimes(1);
+      expect(showAlert).not.toHaveBeenCalled();
+    });
+  });
 
   it("asks Spanish buyers for a postal code, like US buyers", () => {
     renderPaymentForm(paidState({ country: "ES" }));
