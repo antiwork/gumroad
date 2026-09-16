@@ -33,6 +33,21 @@ describe StripeBalanceCheckService do
       expect(described_class.new(now: Time.utc(2026, 9, 20, 14, 0)).payout_end_date).to eq(Date.new(2026, 9, 18)) # Sun
     end
 
+    it "switches cycles exactly at Friday's 10:00 UTC run" do
+      expect(described_class.new(now: Time.utc(2026, 9, 18, 9, 59, 59)).payout_end_date).to eq(Date.new(2026, 9, 11))
+      service = described_class.new(now: Time.utc(2026, 9, 18, 10))
+      expect(service.payout_end_date).to eq(Date.new(2026, 9, 18))
+      expect(service.next_payout_run_at).to eq(Time.utc(2026, 9, 22, 10))
+    end
+
+    it "uses UTC even when the caller and application use another timezone" do
+      Time.use_zone("America/Los_Angeles") do
+        service = described_class.new(now: Time.zone.local(2026, 12, 18, 2))
+        expect(service.payout_end_date).to eq(Date.new(2026, 12, 18))
+        expect(service.next_payout_run_at).to eq(Time.utc(2026, 12, 22, 10))
+      end
+    end
+
     it "asks the estimate for the announced cycle after Friday's run, when the platform's own next cutoff is a week behind" do
       expect(PayoutEstimates).to receive(:estimate_gumroad_held_stripe_cents).with(Date.new(2026, 9, 18)).and_return(300_000_00)
 
@@ -88,6 +103,12 @@ describe StripeBalanceCheckService do
   end
 
   describe "#swept_to_bank_last_day_cents" do
+    it "returns zero for empty payout pages" do
+      service = described_class.new(now:)
+      expect(service.swept_to_bank_last_day_cents).to eq(0)
+      expect(service.sweeps_in_flight_last_day_cents).to eq(0)
+    end
+
     it "sums the last day's USD bank payouts, counting only paid ones" do
       payouts = [
         Stripe::Payout.construct_from(currency: "usd", amount: 301_513_34, status: "paid"),
@@ -109,6 +130,7 @@ describe StripeBalanceCheckService do
         Stripe::Payout.construct_from(currency: "usd", amount: 300_00, status: "in_transit"),
         Stripe::Payout.construct_from(currency: "usd", amount: 10_00, status: "failed"),
         Stripe::Payout.construct_from(currency: "eur", amount: 20_00, status: "pending"),
+        Stripe::Payout.construct_from(currency: "usd", amount: 40_00, status: "canceled"),
       ]
       expect(Stripe::Payout).to receive(:list).with(created: { gte: (now - 1.day).to_i }, limit: 100)
         .once.and_return(double(auto_paging_each: payouts))

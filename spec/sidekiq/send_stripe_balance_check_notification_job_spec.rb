@@ -35,7 +35,7 @@ describe SendStripeBalanceCheckNotificationJob do
         expect(message).to include("Seller payouts for balances up to September 11 need $300,000")
         expect(message).to include("between the next run (Wednesday, September 16 at 10:00 UTC (6:00 AM ET)) and the last run of the cycle (Friday, September 18 at 10:00 UTC (6:00 AM ET)).")
         expect(message).to include("Stripe balance: $200,000 ($150,000 available + $50,000 pending, which normally settles")
-        expect(message).to include("Stripe paid $301,513.34 out to Gumroad's bank in the last 24 hours, with $12,000 more in flight")
+        expect(message).to include("Of Stripe's USD bank payouts created in the last 24 hours, $301,513.34 has reached the bank and $12,000 is still in flight.")
         expect(message).to include("A top-up of $100,000 is needed, ideally before Wednesday, September 16 at 10:00 UTC (6:00 AM ET) and no later than Friday, September 18 at 10:00 UTC (6:00 AM ET). Nothing tops up automatically")
         expect($redis.get(RedisKey.stripe_balance_topup_needed)).to eq("true")
       end
@@ -62,6 +62,21 @@ describe SendStripeBalanceCheckNotificationJob do
 
         expect(InternalNotificationWorker).to have_enqueued_sidekiq_job("payments", "Stripe Balance Check", kind_of(String), "green")
         expect(InternalNotificationWorker.jobs.last["args"][2]).to include("No top-up needed: the balance now covers the cycle. Nothing to do.")
+        expect($redis.get(RedisKey.stripe_balance_topup_needed)).to eq("false")
+      end
+
+      it "preserves the all-clear until enqueueing succeeds" do
+        $redis.set(RedisKey.stripe_balance_topup_needed, true)
+        allow(InternalNotificationWorker).to receive(:perform_async).and_raise(Redis::CannotConnectError)
+
+        expect { described_class.new.perform }.to raise_error(Redis::CannotConnectError)
+        expect($redis.get(RedisKey.stripe_balance_topup_needed)).to eq("true")
+        expect(InternalNotificationWorker.jobs.size).to eq(0)
+
+        allow(InternalNotificationWorker).to receive(:perform_async).and_call_original
+        described_class.new.perform
+
+        expect(InternalNotificationWorker).to have_enqueued_sidekiq_job("payments", "Stripe Balance Check", kind_of(String), "green")
         expect($redis.get(RedisKey.stripe_balance_topup_needed)).to eq("false")
       end
 
