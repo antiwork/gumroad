@@ -33,10 +33,15 @@ module InertiaRendering
   end
 
   private
-    def inertia_flash_props
-      return if (flash_message = flash[:alert] || flash[:warning] || flash[:notice]).blank?
+    # Precedence, loudest first: a page can carry more than one of these and the status the
+    # seller sees has to be the one they must act on.
+    FLASH_STATUSES = { alert: "danger", warning: "warning", info: "info", notice: "success" }.freeze
 
-      { message: flash_message, status: flash[:alert] ? "danger" : flash[:warning] ? "warning" : "success" }
+    def inertia_flash_props
+      key = FLASH_STATUSES.keys.find { |candidate| flash[candidate].present? }
+      return if key.blank?
+
+      { message: flash[key], status: FLASH_STATUSES[key] }
     end
 
     def inertia_errors(model)
