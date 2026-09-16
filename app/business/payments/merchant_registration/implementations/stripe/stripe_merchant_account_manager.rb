@@ -14,11 +14,8 @@ module StripeMerchantAccountManager
   private_constant :ACCOUNT_HOLDER_NAME_SYNC_COUNTRIES
 
   NEW_ACCOUNT_CREATION_BLOCKED_COUNTRIES = [Compliance::Countries::IND.alpha2].freeze
-  # Our business types → Stripe's US `company[structure]` values
-  # (https://docs.stripe.com/connect/identity-verification#business-structure). Stripe validates the
-  # field against the account country, so this is only applied to a US legal entity. Types missing
-  # here send no structure and Stripe asks for it: the generic `llc` saved before the US list split
-  # it by member count, and `profit`, whose Stripe structures need `business_type: non_profit`.
+  # A generic LLC does not disclose its member count; non-profit structures require a different
+  # Stripe business_type. Neither can be inferred from these legacy values.
   US_COMPANY_STRUCTURES = {
     UserComplianceInfo::BusinessTypes::SOLE_PROPRIETORSHIP => "sole_proprietorship",
     UserComplianceInfo::BusinessTypes::SINGLE_MEMBER_LLC => "single_member_llc",

@@ -35,9 +35,7 @@ module UserComplianceInfo::BusinessTypes
     }
   end
 
-  # Stripe's US `company[structure]` separates single- from multi-member LLCs, so the US list asks
-  # for that instead of the generic `llc`. Rows saved as `llc` before this list existed still work;
-  # they send no structure (see StripeMerchantAccountManager::US_COMPANY_STRUCTURES).
+  # Stripe requires LLC member count; legacy `llc` rows must be reselected by the seller.
   BUSINESS_TYPES_US = {
     SOLE_PROPRIETORSHIP => "Sole Proprietorship",
     SINGLE_MEMBER_LLC => "LLC (single member)",

@@ -367,7 +367,6 @@ describe("Payments Settings Scenario", type: :system, js: true) do
 
       choose("Business")
       fill_in("Legal business name", with: "Acme")
-      # The US list splits LLC by member count; "LLC" alone substring-matches both options.
       select("LLC (single member)", from: "Type")
       find_field("Address", match: :first).set("123 North street")
       find_field("City", match: :first).set("Barnesville")
