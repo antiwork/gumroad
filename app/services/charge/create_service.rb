@@ -111,11 +111,8 @@ class Charge::CreateService
       return nil
     end
 
-    # The processor rejected our request — a deterministic failure, not an outage. The intent was
-    # never created, so the outcome is known. A cause we have named gets its own code (see
-    # PurchaseErrorCode.for_processor_error); everything unnamed keeps PROCESSOR_INVALID_REQUEST
-    # so a genuine malformed-request regression still stands out against a near-zero baseline
-    # instead of hiding inside Stripe-outage noise. Retry behavior is unchanged.
+    # A named cause gets its own code; everything unnamed keeps PROCESSOR_INVALID_REQUEST so a
+    # real malformed-request regression still stands out. Retry behavior is unchanged.
     logger.error "Charge processor error: #{e.message} in charge: #{charge.external_id}"
     purchases.each do |purchase|
       purchase.error_code = PurchaseErrorCode.for_processor_error(e.processor_error_code)

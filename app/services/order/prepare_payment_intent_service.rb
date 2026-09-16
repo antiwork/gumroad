@@ -971,7 +971,14 @@ class Order::PreparePaymentIntentService
       # the one case that actually IS "Stripe unavailable", so it keeps that code.
       if e.is_a?(ChargeProcessorInvalidRequestError)
         purchases_to_charge.each do |purchase|
-          purchase.error_code = PurchaseErrorCode.for_processor_error(e.processor_error_code) if purchase.error_code.blank?
+          error_code = PurchaseErrorCode.for_processor_error(e.processor_error_code)
+          purchase.error_code = error_code if purchase.error_code.blank?
+          # A named cause gets its copy here, before the caller's generic fill runs — it only
+          # fills `errors` when empty, so leaving this out would keep telling the buyer to
+          # retry a failure that is not theirs. An unnamed rejection stays untouched so the
+          # generic copy and the existing behaviour are unchanged.
+          message = PurchaseErrorCode.buyer_facing_message(error_code)
+          purchase.errors.add(:base, message) unless message == PurchaseErrorCode::GENERIC_PROCESSOR_FAILURE_MESSAGE
           purchase.stripe_error_code = e.processor_error_code if purchase.stripe_error_code.blank?
         end
       elsif e.is_a?(ChargeProcessorUnavailableError)
@@ -1381,20 +1388,24 @@ class Order::PreparePaymentIntentService
     # ConfirmationToken retrieve), classify the failure the same way StripeErrorHandler
     # would so the recorded code means the same thing everywhere: invalid request =
     # deterministic bug on our side, connection failure = Stripe actually unreachable.
-    # Runs before fail_purchases_with, which only fills error_code when blank.
+    # Runs before fail_purchases_with, which only fills error_code when blank and only
+    # writes a message when `errors` is empty.
     def stamp_stripe_error_details(error)
       error_code, stripe_error_code =
         case error
         when Stripe::InvalidRequestError
-          [PurchaseErrorCode::PROCESSOR_INVALID_REQUEST, error.code]
+          [PurchaseErrorCode.for_processor_error(error.code), error.code]
         when Stripe::APIConnectionError, Stripe::APIError
           [PurchaseErrorCode::STRIPE_UNAVAILABLE, nil]
         end
       return if error_code.nil?
 
+      message = PurchaseErrorCode.buyer_facing_message(error_code)
+
       purchases_to_charge.each do |purchase|
         purchase.error_code = error_code if purchase.error_code.blank?
         purchase.stripe_error_code = stripe_error_code if stripe_error_code.present? && purchase.stripe_error_code.blank?
+        purchase.errors.add(:base, message) unless message == PurchaseErrorCode::GENERIC_PROCESSOR_FAILURE_MESSAGE
       end
     end
 
