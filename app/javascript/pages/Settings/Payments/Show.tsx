@@ -1590,3 +1590,5 @@ export default function PaymentsPage() {
     </Layout>
   );
 }
+
+// Capture-only cache bust: regenerate Typia after imported SettingPage changed.

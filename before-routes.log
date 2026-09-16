@@ -1,0 +1,11 @@
+DEPRECATION WARNING: ActiveSupport::Configurable is deprecated without replacement, and will be removed in Rails 8.2.
+
+You can emulate the previous behavior with `class_attribute`.
+ (called from Kernel#require at /private/tmp/wt_2609_before_astra_20260915/config/boot.rb:18)
+[test-redis-isolation] slot 0 → Redis databases 14, 15, 16, 17 on localhost:17609
+sidekiq-pro is not installed
+DEPRECATION WARNING: Setting action_controller.escape_json_responses = true is deprecated and will have no effect in Rails 8.2. Set it to `false`, or remove the config. (called from Kernel#require at /private/tmp/wt_2609_before_astra_20260915/config/boot.rb:18)
+DEPRECATION WARNING: resource received a hash argument only. Please use a keyword instead. Support to hash argument will be removed in Rails 8.2. (called from block (2 levels) in <main> at /private/tmp/wt_2609_before_astra_20260915/config/routes.rb:584)
+DEPRECATION WARNING: resource received a hash argument path. Please use a keyword instead. Support to hash argument will be removed in Rails 8.2. (called from block (2 levels) in <main> at /private/tmp/wt_2609_before_astra_20260915/config/routes.rb:584)
+DEPRECATION WARNING: resource received a hash argument path_names. Please use a keyword instead. Support to hash argument will be removed in Rails 8.2. (called from block (2 levels) in <main> at /private/tmp/wt_2609_before_astra_20260915/config/routes.rb:584)
+DEPRECATION WARNING: resource received a hash argument controller. Please use a keyword instead. Support to hash argument will be removed in Rails 8.2. (called from block (2 levels) in <main> at /private/tmp/wt_2609_before_astra_20260915/config/routes.rb:584)
