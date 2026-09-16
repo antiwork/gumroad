@@ -821,7 +821,8 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         end
 
         visit settings_payments_path
-        expect(page).to have_select("Type", selected: "Type")
+        expect(page).to have_select("Type", selected: "Select a type")
+        expect(page).to have_text("Your saved type is no longer offered. Choose a new one before saving.")
         click_on("Update settings")
         expect(page).to have_text("Please complete the required fields below: Type.")
         expect(@user.reload.alive_user_compliance_info.business_type).to eq("llc")
