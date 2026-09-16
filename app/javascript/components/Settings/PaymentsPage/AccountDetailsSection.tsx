@@ -1299,22 +1299,25 @@ const AccountDetailsSection = ({
           <FieldsetTitle>
             <Label htmlFor={`${uid}-nationality`}>Nationality</Label>
           </FieldsetTitle>
-          <div>
-            <Select
-              id={`${uid}-nationality`}
-              disabled={isFormDisabled}
-              aria-invalid={errorFieldNames.has("nationality")}
-              value={complianceInfo.nationality || "Nationality"}
-              onChange={(evt) => updateComplianceInfo({ nationality: evt.target.value })}
-            >
-              <option disabled>Nationality</option>
-              {Object.entries(countries).map(([code, name]) => (
-                <option key={code} value={code} disabled={name.includes("(not supported)")}>
-                  {name}
-                </option>
-              ))}
-            </Select>
-          </div>
+          {/* No wrapper div: a plain block around the Select keeps its `inline-grid`
+              root at content width, so the control renders narrower than the fields
+              beside it. As a direct child of the flex column it stretches like they do. */}
+          <Select
+            id={`${uid}-nationality`}
+            disabled={isFormDisabled}
+            aria-invalid={errorFieldNames.has("nationality")}
+            value={complianceInfo.nationality || ""}
+            onChange={(evt) => updateComplianceInfo({ nationality: evt.target.value })}
+          >
+            <option value="" disabled>
+              Select country
+            </option>
+            {Object.entries(countries).map(([code, name]) => (
+              <option key={code} value={code} disabled={name.includes("(not supported)")}>
+                {name}
+              </option>
+            ))}
+          </Select>
         </Fieldset>
       ) : null}
       {needsIndividualTaxId && individualTaxIdConfig ? (
