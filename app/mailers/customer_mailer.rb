@@ -43,6 +43,9 @@ class CustomerMailer < ApplicationMailer
     mail(
       to: last_chargeable.orderable.email,
       from: from_email_address_with_name(last_chargeable.seller.name, "noreply@#{CUSTOMERS_MAIL_DOMAIN}"),
+      # CUSTOMERS_MAIL_DOMAIN is send-only, so without a Reply-To a buyer's reply
+      # hard-bounces and the message is lost silently.
+      reply_to: last_chargeable.support_email,
       subject: "Receipts for Purchases",
       delivery_method_options: MailerInfo.random_delivery_method_options(domain: :customers, to: last_chargeable.orderable.email)
     )

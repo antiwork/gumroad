@@ -1504,6 +1504,22 @@ describe CustomerMailer do
       expect(mail.subject).to eq("Receipts for Purchases")
     end
 
+    it "sets Reply-To to the product's support email" do
+      product.update!(support_email: "product-support@example.com")
+
+      mail = CustomerMailer.grouped_receipt(purchases.map(&:id))
+
+      expect(mail[:reply_to].value).to eq("product-support@example.com")
+    end
+
+    it "falls back to the seller's support email when the product has none" do
+      seller.update!(support_email: "seller-support@example.com")
+
+      mail = CustomerMailer.grouped_receipt(purchases.map(&:id))
+
+      expect(mail[:reply_to].value).to eq("seller-support@example.com")
+    end
+
     it "keeps recommendations enabled by default" do
       purchase = purchases.first
       expect(RecommendedProducts::CheckoutService).to receive(:fetch_for_receipt).with(
