@@ -86,6 +86,9 @@ class Refund < ApplicationRecord
   attr_json_data_accessor :fee_retention_collected_cents
   attr_json_data_accessor :fee_retention_source_transfer
   attr_json_data_accessor :fee_retention_attempts
+  attr_json_data_accessor :fee_retention_written_off_at
+  attr_json_data_accessor :fee_retention_write_off_reason
+  attr_json_data_accessor :fee_retention_written_off_cents
 
   attr_json_data_accessor :presentment_currency
   attr_json_data_accessor :presentment_amount_cents
@@ -115,12 +118,19 @@ class Refund < ApplicationRecord
                           Stripe::AuthenticationError, Stripe::PermissionError, Stripe::RateLimitError,
                           Stripe::IdempotencyError].freeze
 
-  # One week of hourly runs: a Stripe-held account with no reversible transfer yet gets its
-  # next payout transfer inside this window. At the cap the row keeps fee_retention_pending
-  # for visibility but leaves fee_retention_recoverable.
+  # Leave a week for a reversible payout transfer to arrive before writing off the fee.
   MAX_FEE_RETENTION_ATTEMPTS = 168
 
   scope :pending_fee_retention, -> { where(fee_retention_recoverable: true) }
+  scope :written_off_fee_retention, -> {
+    where("JSON_TYPE(JSON_EXTRACT(refunds.json_data, '$.fee_retention_written_off_at')) = 'STRING'")
+  }
+  scope :fee_retention_written_off_during, ->(window) {
+    written_off_fee_retention.where(
+      "refunds.json_data->>'$.fee_retention_written_off_at' >= ? AND refunds.json_data->>'$.fee_retention_written_off_at' < ?",
+      window.first.utc.iso8601, window.last.utc.iso8601
+    )
+  }
 
   def retain_fee
     yield
@@ -150,6 +160,17 @@ class Refund < ApplicationRecord
       raise
     end
     count_fee_retention_attempt! unless collected
+  end
+
+  def write_off_fee_retention!
+    purchase.with_lock do
+      reload.lock!
+      return unless fee_retention_pending && fee_retention_attempts_exhausted?
+      return if debited_stripe_transfer.present? || fee_retention_written_off_at.present?
+
+      record_fee_retention_write_off
+      save!
+    end
   end
 
   def fee_retention_attempts_exhausted?
@@ -184,6 +205,7 @@ class Refund < ApplicationRecord
 
   private
     def sync_fee_retention_recoverable
+      self.fee_retention_pending = false if fee_retention_written_off_at.present?
       self.fee_retention_recoverable = fee_retention_pending == true && !fee_retention_attempts_exhausted?
     end
 
@@ -235,23 +257,23 @@ class Refund < ApplicationRecord
       end
     end
 
-    # Reports once, on the attempt that reaches the cap. A recorded Stripe collection never
-    # counts: the money already moved, so the settlement lookup must keep retrying until
-    # the ledger is reconciled.
+    # A recorded Stripe collection must keep retrying settlement, never become a write-off.
     def count_fee_retention_attempt!
-      exhausted = purchase.with_lock do
+      purchase.with_lock do
         reload.lock!
-        next false unless fee_retention_pending
-        next false if debited_stripe_transfer.present?
+        next unless fee_retention_pending
+        next if debited_stripe_transfer.present?
         self.fee_retention_attempts = fee_retention_attempts.to_i + 1
+        record_fee_retention_write_off if fee_retention_attempts_exhausted?
         save!
-        fee_retention_attempts == MAX_FEE_RETENTION_ATTEMPTS
       end
-      return unless exhausted
+    end
 
-      message = "Refund fee retention stopped retrying after #{MAX_FEE_RETENTION_ATTEMPTS} attempts"
-      Rails.logger.error("#{message} (refund_id=#{id})")
-      ErrorNotifier.notify(message, context: { refund_id: id, purchase_id:, fee_retention_error: })
+    def record_fee_retention_write_off
+      self.fee_retention_pending = false
+      self.fee_retention_written_off_at = Time.current.utc.iso8601
+      self.fee_retention_write_off_reason = "Recovery attempt limit reached"
+      self.fee_retention_written_off_cents = retained_fee_cents.to_i
     end
 
     def assign_product

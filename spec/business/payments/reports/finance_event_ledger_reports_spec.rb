@@ -14,6 +14,27 @@ describe FinanceEventLedgerReports do
   end
 
   describe ".daily_report" do
+    it "reports write-offs on their recorded UTC day, independently of refund and cash events" do
+      travel_to(Time.utc(2026, 9, 20, 12)) do
+        purchase = create(:purchase)
+        old_refund = create(:refund, purchase:, created_at: Time.utc(2026, 8, 1),
+                                     fee_retention_written_off_at: "2026-09-16T00:00:00Z", fee_retention_written_off_cents: 125)
+        create(:refund, purchase:, fee_retention_written_off_at: "2026-09-16T23:59:59Z", fee_retention_written_off_cents: 422)
+        create(:refund, purchase:, fee_retention_written_off_at: "2026-09-17T00:00:00Z", fee_retention_written_off_cents: 100)
+        create(:refund, purchase:, fee_retention_pending: true, retained_fee_cents: 900)
+        create(:refund, purchase:, debited_stripe_transfer: "tr_collected", fee_retention_collected_cents: 900)
+        create(:refund, purchase:, fee_retention_written_off_at: nil)
+
+        report = described_class.daily_report(Date.new(2026, 9, 16))
+        expect(report["refund_fee_write_offs"]).to eq("count" => 2, "total_cents" => 547, "currency" => "usd")
+        expect(described_class.daily_report(Date.new(2026, 9, 17))["refund_fee_write_offs"]).to eq("count" => 1, "total_cents" => 100, "currency" => "usd")
+        expect(described_class.daily_report(Date.new(2026, 9, 15))["refund_fee_write_offs"]).to eq("count" => 0, "total_cents" => 0, "currency" => "usd")
+        expect(Refund.written_off_fee_retention.count).to eq(3)
+        old_refund.update!(retained_fee_cents: 999, status: "failed")
+        expect(described_class.daily_report(Date.new(2026, 9, 16))).to eq(report)
+      end
+    end
+
     it "raises unless the requested day has fully ended" do
       travel_to(Time.utc(2026, 7, 15, 12)) do
         expect { described_class.daily_report(Date.new(2026, 7, 15)) }.to raise_error(ArgumentError, /completed UTC day/)

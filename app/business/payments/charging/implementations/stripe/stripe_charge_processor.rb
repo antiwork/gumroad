@@ -692,6 +692,7 @@ class StripeChargeProcessor
     return unless credit.merchant_account.holder_of_funds == HolderOfFunds::STRIPE
     refund = credit.fee_retention_refund
     return if refund.blank?
+    return if refund.fee_retention_written_off_at.present?
     return recorded_refund_fee_collection(credit:) if refund.debited_stripe_transfer.present?
     return adopt_existing_refund_fee_collection(credit:) unless collect
     # US Gumroad-managed accounts cannot reverse payout transfers; collect with the same
@@ -746,6 +747,7 @@ class StripeChargeProcessor
     end
     unless transfer
       refund.with_lock do
+        next if refund.debited_stripe_transfer.present? || refund.fee_retention_written_off_at.present?
         refund.fee_retention_error = { class: "NoReversibleTransfer", message: "No eligible payout transfer or sale transfer older than 120 days can cover the refund fee" }
         refund.save!
       end

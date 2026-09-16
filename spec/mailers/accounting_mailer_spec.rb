@@ -75,6 +75,7 @@ describe AccountingMailer, :vcr do
         create(:merchant_account, user: nil) if MerchantAccount.gumroad(StripeChargeProcessor.charge_processor_id).nil?
         purchase = create(:purchase, created_at: Time.utc(2026, 7, 7, 10), succeeded_at: Time.utc(2026, 7, 7, 10))
 
+        create(:refund, purchase:, fee_retention_written_off_at: "2026-07-07T12:00:00Z", fee_retention_written_off_cents: 422)
         email = AccountingMailer.daily_finance_ledger_report(Date.new(2026, 7, 7))
 
         expect(email.subject).to include("Daily Finance Ledger Report – 2026-07-07")
@@ -91,6 +92,8 @@ describe AccountingMailer, :vcr do
 
         html_body = email.body.parts.find { |part| part.content_type.include?("html") }.body.to_s
         expect(html_body).to include("Daily Finance Ledger Report")
+        expect(html_body).to include("Refund fees written off: 1 refunds", "$4.22 USD", "not additional cash refunds")
+        expect(report["refund_fee_write_offs"]).to eq("count" => 1, "total_cents" => 422, "currency" => "usd")
         expect(html_body).to include("attached")
       end
     end
