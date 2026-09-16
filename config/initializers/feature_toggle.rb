@@ -1,7 +1,11 @@
 # frozen_string_literal: true
 
+require_relative "../../lib/flipper/adapters/redis_fail_open"
+
+# Flipper builds a DSL per thread; fallback values and reporting are shared per process.
+redis_flag_state = Flipper::Adapters::RedisFailOpen::State.new
 Flipper.configure do |config|
-  config.adapter { Flipper::Adapters::Redis.new($redis) }
+  config.adapter { Flipper::Adapters::RedisFailOpen.new(Flipper::Adapters::Redis.new($redis), state: redis_flag_state) }
 end
 
 # Gumhead beta membership is a User flag bit, not per-actor enablement:
