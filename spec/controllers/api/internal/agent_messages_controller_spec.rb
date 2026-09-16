@@ -81,6 +81,20 @@ describe Api::Internal::AgentMessagesController do
         )
       end
 
+      it "stores the server telemetry id beside the proposal without exposing it in the response" do
+        telemetry_turn_id = "d56f4b58-8676-4213-9238-d3b77846d5ab"
+        result = store_agent_turn(reply: "You have 3 products.", proposed_action: nil).merge(telemetry_turn_id:)
+        service_double = instance_double(Ai::StoreAgentService, respond: result)
+        allow(Ai::StoreAgentService).to receive(:new).and_return(service_double)
+
+        post :create, params: valid_params.merge(telemetry_turn_id: "untrusted-client-value"), format: :json
+
+        expect(response).to be_successful
+        message = seller.ai_conversations.sole.ai_messages.last
+        expect(message.metadata.fetch("telemetry_turn_id")).to eq(telemetry_turn_id)
+        expect(response.parsed_body).not_to have_key("telemetry_turn_id")
+      end
+
       it "creates a conversation titled from the first user message and persists both turns" do
         service_double = instance_double(Ai::StoreAgentService)
         allow(Ai::StoreAgentService).to receive(:new).and_return(service_double)

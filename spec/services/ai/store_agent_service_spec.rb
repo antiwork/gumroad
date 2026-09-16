@@ -2117,7 +2117,8 @@ describe Ai::StoreAgentService do
       # suggestions LLM call and before any trailing event is written to the (possibly already
       # dead) client socket — so callers can persist it no matter what happens afterwards.
       expect(order).to eq([:reply_complete, :turn_ready, :suggestions_call, :suggestions])
-      expect(completed_turn).to eq(
+      expect(completed_turn).to match(
+        telemetry_turn_id: a_string_matching(/\A[0-9a-f-]{36}\z/),
         outcome: "reply_only",
         reply: "Here are your numbers.",
         proposed_action: nil,
@@ -2520,6 +2521,7 @@ describe Ai::StoreAgentService do
 
       expect(completed_turns).to contain_exactly(
         {
+          telemetry_turn_id: a_string_matching(/\A[0-9a-f-]{36}\z/),
           outcome: "reply_only",
           reply: described_class::NOTHING_STAGED_REPLY,
           proposed_action: nil,
@@ -2808,6 +2810,16 @@ describe Ai::StoreAgentService do
       allow(client).to receive(:gateway_name).and_return("vercel")
     end
 
+    it "joins each completed turn to its returned result with a unique telemetry id" do
+      allow(client).to receive(:messages).and_return(text_result("You have 3 products."))
+      turns = 2.times.map { service.respond(messages: [{ role: "user", content: "How many products?" }]) }
+      ids = logged_json(logger_lines).filter_map { |line| line.fetch("telemetry_turn_id") if line["event"] == "store_agent_turn" }
+
+      expect(ids).to eq(turns.map { |turn| turn.fetch(:telemetry_turn_id) })
+      expect(ids.uniq.size).to eq(2)
+      expect(ids).to all(match(/\A[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}\z/))
+    end
+
     it "logs every pre-existing turn key unchanged, plus the calls and their rollups" do
       allow(client).to receive(:messages).and_return(text_result("You have 3 products."))
       allow(client).to receive(:call_metrics).and_return([call_metric])
@@ -2821,7 +2833,7 @@ describe Ai::StoreAgentService do
         "calls", "contract_retries", "event", "gateway", "input_tokens_sum", "latency_ms", "model",
         "model_latency_ms_sum", "outcome", "output_tokens_sum", "reasoning_tokens_sum", "requested_model",
         "served_models", "served_providers", "stop_reason", "tool_iterations", "ttft_ms_max",
-        "cache_read_tokens_sum", "latency_flags",
+        "cache_read_tokens_sum", "latency_flags", "telemetry_turn_id",
       )
       expect(turn_log).to include(
         "event" => "store_agent_turn",
@@ -2854,8 +2866,11 @@ describe Ai::StoreAgentService do
         allow(client).to receive(:messages).and_return(text_result("[]"))
         allow(client).to receive(:stream_messages).and_return(text_result("You have 3 products."))
 
-        service.respond_streaming(messages: [{ role: "user", content: "How many products do I have?" }]) { |_event, _payload| }
+        persisted_turn = nil
+        turn = service.respond_streaming(messages: [{ role: "user", content: "How many products do I have?" }], on_reply_complete: ->(completed) { persisted_turn = completed }) { |_event, _payload| }
 
+        expect(turn.fetch(:telemetry_turn_id)).to eq(persisted_turn.fetch(:telemetry_turn_id))
+        expect(logged_json(logger_lines).find { |line| line["event"] == "store_agent_turn" }.fetch("telemetry_turn_id")).to eq(turn.fetch(:telemetry_turn_id))
         expect(client).to have_received(:stream_messages).with(hash_including(ttft_deadline: ttft_deadline ? described_class::TTFT_DEADLINE_IN_SECONDS : nil))
         if no_hidden_reasoning
           expect(client).to have_received(:stream_messages).with(hash_including(thinking: { type: "disabled" }))
