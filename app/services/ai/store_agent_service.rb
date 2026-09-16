@@ -948,6 +948,7 @@ class Ai::StoreAgentService
         contract_retries: @turn_contract_retries,
         contract_failure: @turn_contract_failure,
         latency_ms:,
+        latency_flags:,
       }.compact
       # The call fields are added after compressing so they are always present: a reader must be able
       # to tell "no call reported this" (null) from "not instrumented" (absent key).
@@ -1256,11 +1257,19 @@ class Ai::StoreAgentService
       { thinking: { type: "disabled" } }
     end
 
+    # Keep request options and telemetry on the same snapshot, even if a flag changes mid-turn.
+    def latency_flags
+      @latency_flags ||= {
+        no_hidden_reasoning: Feature.active?(NO_HIDDEN_REASONING_FEATURE, seller),
+        ttft_deadline: Feature.active?(TTFT_DEADLINE_FEATURE, seller),
+      }.freeze
+    end
+
     # Per-turn thinking override for the tool loop, which spends real tokens on reasoning it never
     # reads. Flag-gated per seller so it reverts without a deploy, and empty otherwise so every
     # other model's request body is byte-identical to today's.
     def tool_loop_thinking
-      return {} unless Feature.active?(NO_HIDDEN_REASONING_FEATURE, seller)
+      return {} unless latency_flags[:no_hidden_reasoning]
 
       # Resolving `client` here is what sets @_client_model, and callers splat this into the request
       # before the memoized reader would otherwise run.
@@ -1271,7 +1280,7 @@ class Ai::StoreAgentService
     # First-output deadline for the streamed tool loop, in the same shape as #tool_loop_thinking: nil
     # for every other model and while the flag is off, so nothing changes about the request.
     def tool_loop_ttft_deadline
-      return nil unless Feature.active?(TTFT_DEADLINE_FEATURE, seller)
+      return nil unless latency_flags[:ttft_deadline]
 
       client
       @_client_model.to_s.start_with?("deepseek/") ? TTFT_DEADLINE_IN_SECONDS : nil
