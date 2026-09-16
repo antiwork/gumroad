@@ -1013,7 +1013,7 @@ describe("Product Edit Scenario", type: :system, js: true) do
           visit edit_link_path(product.unique_permalink)
 
           select "£", from: "Currency", visible: false
-          expect(page).to have_select("Currency", selected: "£", visible: false)
+          expect(page).to have_select("Currency", selected: "£ (British Pounds)", visible: false)
 
           click_on "Save changes"
           expect(page).to have_alert(text: "The following offer code has currency mismatch with this product: usd. Please update it or it will not work at checkout.")
@@ -1028,7 +1028,7 @@ describe("Product Edit Scenario", type: :system, js: true) do
       visit edit_link_path(product.unique_permalink)
 
       select "£", from: "Currency", visible: false
-      expect(page).to have_select("Currency", selected: "£", visible: false)
+      expect(page).to have_select("Currency", selected: "£ (British Pounds)", visible: false)
 
       click_on "Save changes"
       wait_for_ajax

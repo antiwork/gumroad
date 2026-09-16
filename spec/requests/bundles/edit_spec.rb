@@ -169,7 +169,7 @@ describe("Bundle edit page", type: :system, js: true) do
     expect(bundle.price_cents).to eq(200)
 
     visit edit_bundle_product_path(bundle.external_id)
-    expect(page).to have_select("Currency", selected: "€", visible: :all)
+    expect(page).to have_select("Currency", selected: "€ (Euro)", visible: :all)
     in_preview { expect(page).to have_selector("[itemprop='price']", text: "€2") }
   end
 
