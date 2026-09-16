@@ -139,7 +139,7 @@ If you previously ran this script via `GUMROAD_DEPLOYMENT_DIR` and `.env.aws`, r
 .claude/skills/gumroad-prod-console/scripts/setup.sh ~/path/to/.env.aws
 ```
 
-The helper will also offer to append `export AWS_PROFILE=gumroad-prod` to your shell profile — say yes and reload the shell. After this, `gumroad-deployment` is no longer required to run the skill.
+The helper will also offer to append `export AWS_PROFILE=gumroad-prod` to your shell profile — say yes and reload the shell. After this, `gumroad-private` is no longer required to run the skill.
 
 ## Configuration (self-hosters)
 

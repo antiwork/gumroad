@@ -1,7 +1,7 @@
 #!/bin/bash
-# One-time setup: migrate AWS credentials from gumroad-deployment/nomad/.env.aws
+# One-time setup: migrate AWS credentials from the deployment repo's nomad/.env.aws
 # into an AWS CLI profile, so prod_query.sh can use the standard credential chain
-# and no longer depends on the gumroad-deployment repo.
+# and no longer depends on that repo being checked out.
 #
 # Usage:
 #   ./setup.sh                       # reads from default .env.aws location
@@ -9,7 +9,15 @@
 set -e
 
 PROFILE="${AWS_PROFILE_NAME:-gumroad-prod}"
-ENV_FILE="${1:-${GUMROAD_DEPLOYMENT_DIR:-$HOME/Documents/GitHub/gumroad-deployment}/nomad/.env.aws}"
+# .env.aws now lives in the gumroad-private monorepo under deployment/. GUMROAD_DEPLOYMENT_DIR
+# still wins so an existing gumroad-deployment clone keeps working.
+if [ -n "$1" ]; then
+  ENV_FILE="$1"
+elif [ -n "$GUMROAD_DEPLOYMENT_DIR" ]; then
+  ENV_FILE="$GUMROAD_DEPLOYMENT_DIR/nomad/.env.aws"
+else
+  ENV_FILE="${GUMROAD_PRIVATE_DIR:-$HOME/Documents/GitHub/gumroad-private}/deployment/nomad/.env.aws"
+fi
 
 if [ ! -f "$ENV_FILE" ]; then
   echo "Error: can't find $ENV_FILE" >&2
