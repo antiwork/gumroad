@@ -952,30 +952,47 @@ check(
 )
 
 check(
-  "components/DownloadPage/Layout escalates (UrlRedirects pages render it)",
+  "components/DownloadPage/Layout escalates even with a co-located vitest",
   base_files: {
     "spec/requests/download_page/download_page_spec.rb" => SPEC_STUB,
     "app/javascript/components/DownloadPage/Layout.tsx" => "old",
+    "app/javascript/components/DownloadPage/Layout.test.tsx" => "old test",
   },
   head_files: { "app/javascript/components/DownloadPage/Layout.tsx" => "new" },
   expect_escalate: true,
 )
 
 check(
-  "components/DownloadPage/WithContent escalates (its exports reach ProductEdit/ContentTab)",
+  "components/DownloadPage/WithContent escalates even with a co-located vitest",
   base_files: {
     "spec/requests/download_page/download_page_spec.rb" => SPEC_STUB,
     "app/javascript/components/DownloadPage/WithContent.tsx" => "old",
+    "app/javascript/components/DownloadPage/WithContent.test.tsx" => "old test",
   },
   head_files: { "app/javascript/components/DownloadPage/WithContent.tsx" => "new" },
   expect_escalate: true,
 )
 
 check(
-  "pages/UrlRedirects/Read still escalates (EPUB reader is not download_page)",
-  base_files: { "app/javascript/pages/UrlRedirects/Read.tsx" => "old" },
+  "pages/UrlRedirects/Read escalates even with its co-located vitest",
+  base_files: {
+    "app/javascript/pages/UrlRedirects/Read.tsx" => "old",
+    "app/javascript/pages/UrlRedirects/Read.test.tsx" => "old test",
+  },
   head_files: { "app/javascript/pages/UrlRedirects/Read.tsx" => "new" },
   expect_escalate: true,
+)
+
+# The escalation above must not spread: a module with no mapping and a
+# co-located vitest is still covered by vitest alone (lint_js runs npm test).
+check(
+  "a leaf component with a co-located vitest still rides the vitest shortcut",
+  base_files: {
+    "app/javascript/components/TipButton/TipButton.tsx" => "old",
+    "app/javascript/components/TipButton/TipButton.test.tsx" => "old test",
+  },
+  head_files: { "app/javascript/components/TipButton/TipButton.tsx" => "new" },
+  expect_escalate: false,
 )
 
 check(
