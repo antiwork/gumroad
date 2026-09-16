@@ -644,7 +644,8 @@ class StripeChargeProcessor
       charge: charge_id
     }
     params[:amount] = amount_cents if amount_cents.present?
-    params[:reason] = REFUND_REASON_FRAUDULENT if is_for_fraud.present?
+    # Stripe adds fraudulent refunds to Radar's blocklists, including shared test cards.
+    params[:reason] = REFUND_REASON_FRAUDULENT if is_for_fraud.present? && stripe_charge.livemode
 
     # For Stripe-Connect:
     # Charges (which have a destination):

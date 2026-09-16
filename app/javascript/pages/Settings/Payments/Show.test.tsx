@@ -368,3 +368,43 @@ describe("business type validation", () => {
     expect(mocks.put).toHaveBeenCalledTimes(1);
   });
 });
+
+describe("server error naming a field", () => {
+  const message =
+    "Our payment partner couldn't find a bank for the bank code QNBAEGCX027. Use the 8-character SWIFT/BIC code instead: QNBAEGCX rather than QNBAEGCX027.";
+
+  const renderWithServerError = (errors: Record<string, unknown>) => {
+    mocks.usePage.mockReturnValue({
+      props: {
+        ...pageProps({ country_code: "EG", country_supports_iban: true, payout_currency: "egp" }, { country: "EG" }),
+        countries: { EG: "Egypt" },
+        bank_account_details: {
+          show_bank_account: true,
+          show_paypal: false,
+          is_a_card: false,
+          routing_number: null,
+          account_number_visual: null,
+          card: null,
+          card_data_handling_mode: null,
+          bank_account: null,
+        },
+        errors,
+      },
+    });
+    render(<PaymentsPage />);
+  };
+
+  it("shows the banner and flags the named bank-code input", () => {
+    renderWithServerError({ base: [message], field: "bank_code" });
+
+    expect(screen.getByText(message)).toBeTruthy();
+    expect(screen.getByLabelText("SWIFT / BIC Code").getAttribute("aria-invalid")).toBe("true");
+  });
+
+  it("shows only the banner when the server names no field", () => {
+    renderWithServerError({ base: [message] });
+
+    expect(screen.getByText(message)).toBeTruthy();
+    expect(screen.getByLabelText("SWIFT / BIC Code").getAttribute("aria-invalid")).toBe("false");
+  });
+});
