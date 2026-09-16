@@ -1206,7 +1206,7 @@ describe Api::Internal::Admin::PurchasesController do
       end
 
       it "refunds taxes and returns the serialized purchase" do
-        expect(purchase).to receive(:refund_gumroad_taxes!).with(refunding_user_id: admin_user.id, note: "tax adjustment", business_vat_id: "VAT123").and_return(true)
+        expect(purchase).to receive(:refund_gumroad_taxes!).with(refunding_user_id: admin_user.id, note: "tax adjustment", business_vat_id: "VAT123", vat_exempt_territory: false).and_return(true)
 
         post :refund_taxes, params: params.merge(note: "tax adjustment", business_vat_id: "VAT123")
 
@@ -1216,6 +1216,14 @@ describe Api::Internal::Admin::PurchasesController do
           "message" => "Successfully refunded taxes for purchase number #{purchase.external_id_numeric}"
         )
         expect(response.parsed_body["purchase"]).to include("id" => purchase.external_id_numeric.to_s)
+      end
+
+      it "passes the exempt-territory marker through" do
+        expect(purchase).to receive(:refund_gumroad_taxes!).with(refunding_user_id: admin_user.id, note: nil, business_vat_id: nil, vat_exempt_territory: true).and_return(true)
+
+        post :refund_taxes, params: params.merge(vat_exempt_territory: "true")
+
+        expect(response).to have_http_status(:ok)
       end
 
       it "returns 422 with the purchase error when refund_gumroad_taxes! fails" do

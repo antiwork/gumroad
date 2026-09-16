@@ -54,6 +54,7 @@ class Subscription < ApplicationRecord
             7 => :is_installment_plan,
             8 => :renewal_disabled_due_to_indian_card_mandate,
             9 => :indian_card_mandate_requires_reauthorization,
+            10 => :vat_exempt_territory,
             :column => "flags",
             :flag_query_mode => :bit_operator,
             check_for_column: false
@@ -1381,6 +1382,10 @@ class Subscription < ApplicationRecord
     update!(business_vat_id: vat_id) if vat_id.present? && business_vat_id.blank?
   end
 
+  def mark_vat_exempt_territory!
+    update!(vat_exempt_territory: true) unless vat_exempt_territory?
+  end
+
   def last_resubscribed_at
     if defined?(@_last_resubscribed_at)
       @_last_resubscribed_at
@@ -1805,6 +1810,7 @@ class Subscription < ApplicationRecord
 
     def set_vat_id_for_purchase(purchase)
       purchase.business_vat_id = business_vat_id if business_vat_id.present?
+      purchase.vat_exempt_territory = true if vat_exempt_territory?
     end
 
     def schedule_member_cancellation_workflow_jobs

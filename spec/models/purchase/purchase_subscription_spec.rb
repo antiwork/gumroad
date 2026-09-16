@@ -577,5 +577,36 @@ describe "PurchaseSubscription", :vcr do
         end
       end
     end
+
+    describe "VAT-exempt territory on a renewal" do
+      let(:product) { create(:membership_product_with_preset_tiered_pricing, recurrence_price_values: [{ monthly: { enabled: true, price: 10 } }, { monthly: { enabled: true, price: 20 } }]) }
+      let(:original_purchase) do
+        create(:membership_purchase, link: product, price_cents: 1000, country: "Spain", ip_country: "Spain", ip_address: "83.48.106.100")
+      end
+      let(:subscription) { original_purchase.subscription }
+
+      before { create(:zip_tax_rate, country: "ES", state: nil, zip_code: nil, combined_rate: 0.21, is_seller_responsible: false) }
+
+      def renewal_of(subscription)
+        purchase = subscription.build_purchase
+        purchase.purchase_state = "in_progress"
+        purchase.skip_preparing_for_charge = true
+        purchase.process!
+        purchase
+      end
+
+      it "charges Spanish VAT from the checkout IP by default" do
+        expect(renewal_of(subscription).gumroad_tax_cents).to eq 210
+      end
+
+      it "charges no VAT once the subscription is marked as an exempt territory" do
+        subscription.mark_vat_exempt_territory!
+
+        purchase = renewal_of(subscription)
+        expect(purchase.vat_exempt_territory).to be(true)
+        expect(purchase.gumroad_tax_cents).to eq 0
+        expect(purchase.errors).to be_empty
+      end
+    end
   end
 end

@@ -227,6 +227,9 @@ class SalesTaxCalculator
       return unless tax_rate
       if Compliance::Countries::EU_VAT_APPLICABLE_COUNTRY_CODES.include?(tax_rate.country)
         if tax_rate.country == "ES"
+          # Set by the subscription when support has confirmed the buyer is in an exempt territory;
+          # renewals reuse the checkout IP, so geocoding it again would repeat the original mistake.
+          return true if buyer_location[:vat_exempt_territory]
           if buyer_location[:ip_address] && (geocode = GEOIP.city(buyer_location[:ip_address]) rescue nil)
             geocode.country.iso_code == "ES" &&
               geocode.subdivisions.collect(&:name).any? { |division_name| Compliance::VAT_EXEMPT_REGIONS.include?(division_name) }

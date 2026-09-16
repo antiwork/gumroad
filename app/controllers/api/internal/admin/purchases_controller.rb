@@ -109,7 +109,7 @@ class Api::Internal::Admin::PurchasesController < Api::Internal::Admin::BaseCont
     end
 
     record_admin_write(action: "purchases.refund_taxes", target: purchase) do
-      if purchase.refund_gumroad_taxes!(refunding_user_id: current_admin_actor_id, note: params[:note], business_vat_id: params[:business_vat_id])
+      if purchase.refund_gumroad_taxes!(refunding_user_id: current_admin_actor_id, note: params[:note], business_vat_id: params[:business_vat_id], vat_exempt_territory: ActiveModel::Type::Boolean.new.cast(params[:vat_exempt_territory]) || false)
         render json: {
           success: true,
           message: "Successfully refunded taxes for purchase number #{purchase.external_id_numeric}",

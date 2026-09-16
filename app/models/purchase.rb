@@ -651,7 +651,7 @@ class Purchase < ApplicationRecord
             check_for_column: false
 
   attr_accessor :chargeable, :card_data_handling_error, :save_card, :price_range, :friend_actions,
-                :discount_code, :purchaser_plugins, :is_automatic_charge, :sales_tax_country_code_election, :business_vat_id,
+                :discount_code, :purchaser_plugins, :is_automatic_charge, :sales_tax_country_code_election, :business_vat_id, :vat_exempt_territory,
                 :save_shipping_address, :flow_of_funds, :prorated_discount_price_cents,
                 :original_variant_attributes, :original_price, :is_updated_original_subscription_purchase,
                 :is_applying_plan_change, :setup_intent, :charge_intent, :setup_future_charges, :skip_preparing_for_charge,
@@ -4081,6 +4081,7 @@ class Purchase < ApplicationRecord
         country:,
         state: info[:state],
         ip_address:,
+        vat_exempt_territory:,
       },
       buyer_vat_id:,
       from_discover: was_discover_fee_charged?
@@ -5386,7 +5387,7 @@ class Purchase < ApplicationRecord
                                           price_cents:,
                                           shipping_cents: shipping_cents.to_i,
                                           quantity:,
-                                          buyer_location: { postal_code:, country: country_code, state:, ip_address: },
+                                          buyer_location: { postal_code:, country: country_code, state:, ip_address:, vat_exempt_territory: },
                                           buyer_vat_id: business_vat_id,
                                           from_discover: was_product_recommended)
 
