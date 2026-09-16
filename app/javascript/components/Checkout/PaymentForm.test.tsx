@@ -11,6 +11,7 @@ import {
 } from "$app/components/Checkout/payment";
 import { PaymentForm } from "$app/components/Checkout/PaymentForm";
 import { LoggedInUserProvider } from "$app/components/LoggedInUser";
+import { showAlert } from "$app/components/server-components/Alert";
 
 vi.stubGlobal("Routes", new Proxy({}, { get: () => () => "#" }));
 vi.stubGlobal("SSR", false);
@@ -77,8 +78,9 @@ vi.mock("$app/components/Checkout/PaymentElementInput", () => ({
     return null;
   },
 }));
+const executeRecaptcha = vi.hoisted(() => vi.fn());
 vi.mock("$app/components/useRecaptcha", () => ({
-  useRecaptcha: () => ({ execute: vi.fn(), container: null }),
+  useRecaptcha: () => ({ execute: executeRecaptcha, container: null }),
   RecaptchaDisclosure: () => null,
   RECAPTCHA_UNAVAILABLE_MESSAGE: "unavailable",
   RecaptchaUnavailableError: class extends Error {},
@@ -246,6 +248,30 @@ describe("PaymentForm validation-failure feedback", () => {
     Element.prototype.scrollIntoView = scrollIntoView;
   });
   afterEach(cleanup);
+
+  it("shows an error and resets checkout when the post-wallet security check rejects unexpectedly", async () => {
+    executeRecaptcha.mockRejectedValueOnce(new Error("provider failure"));
+    const dispatch = vi.fn();
+    const initial = state({
+      recaptchaKey: "test-key",
+      paymentMethod: "stripePaymentRequest",
+      status: { type: "captcha", paymentMethod: { type: "not-applicable" } },
+    });
+    render(
+      <LoggedInUserProvider value={null}>
+        <StateContext.Provider value={[initial, dispatch]}>
+          <PaymentForm />
+        </StateContext.Provider>
+      </LoggedInUserProvider>,
+    );
+
+    await waitFor(() => expect(dispatch).toHaveBeenCalledWith({ type: "cancel" }));
+    expect(showAlert).toHaveBeenCalledWith(
+      "We couldn't complete the security check. Please try again to finish your purchase.",
+      "error",
+    );
+    expect(dispatch).not.toHaveBeenCalledWith(expect.objectContaining({ type: "set-recaptcha-response" }));
+  });
 
   it("offers a working retry after price refresh fails without enabling payment", () => {
     const s = state();
