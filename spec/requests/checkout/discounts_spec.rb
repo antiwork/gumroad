@@ -442,7 +442,7 @@ describe("Checkout discounts page", type: :system, js: true) do
           within_modal "Discount" do
             click_on "Edit"
           end
-          expect(page).to have_select("Currency", selected: "£", visible: false)
+          expect(page).to have_select("Currency", selected: "£ (British Pounds)", visible: false)
 
           expect(OfferCode.last.currency_type).to eq("gbp")
         end

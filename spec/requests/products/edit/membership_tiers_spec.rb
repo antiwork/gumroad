@@ -500,7 +500,7 @@ describe("Product Edit Memberships", type: :system, js: true) do
 
           # The selector drives the single product-wide currency, so the other tier follows.
           within tier_rows[1] do
-            expect(page).to have_select("Currency", selected: "€", visible: false)
+            expect(page).to have_select("Currency", selected: "€ (Euro)", visible: false)
           end
 
           save_change
