@@ -3,10 +3,11 @@ import { cleanup, render, screen, within } from "@testing-library/react";
 import * as React from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { trackUserProductAction } from "$app/data/user_action_event";
+
 import { Product, type Product as ProductData } from "$app/components/Product";
 import type { PriceSelection } from "$app/components/Product/ConfigurationSelector";
 import { Layout } from "$app/components/Product/Layout";
-import { trackUserProductAction } from "$app/data/user_action_event";
 
 vi.stubGlobal("SSR", false);
 vi.stubGlobal("Routes", {
