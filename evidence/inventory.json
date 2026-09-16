@@ -1,0 +1,98 @@
+[
+  {
+    "name": "before-desktop-light.png",
+    "dimensions": [
+      2880,
+      1800
+    ],
+    "sha256": "118843ea80d6a17ca99ee7e35eeb47e0a29bcf76cada9d143d58464c70d5b578"
+  },
+  {
+    "name": "after-desktop-light.png",
+    "dimensions": [
+      2880,
+      1800
+    ],
+    "sha256": "8152b9dfb373f490a63e02ae18acc5a40d984dfed6795e4a0bcd3004221acb74"
+  },
+  {
+    "name": "after-selected-desktop-light.png",
+    "dimensions": [
+      2880,
+      1800
+    ],
+    "sha256": "deaafe4daa9376483852dd99e8aa936a0b73719b212d61bac76440aeed67cb59"
+  },
+  {
+    "name": "before-desktop-dark.png",
+    "dimensions": [
+      2880,
+      1800
+    ],
+    "sha256": "ba457f22d760ade4c2a02aedf3c8613c959b8fc4dcbe4c243d534dd6de0bf57b"
+  },
+  {
+    "name": "after-desktop-dark.png",
+    "dimensions": [
+      2880,
+      1800
+    ],
+    "sha256": "cc044bec3f588997f1834f9f0677da9158d87ab0fbd1295a94f6ccf56b8401e3"
+  },
+  {
+    "name": "after-selected-desktop-dark.png",
+    "dimensions": [
+      2880,
+      1800
+    ],
+    "sha256": "a989bb20c344ff41268153f9a95a72bed411a402deb465213cebb0d6859e8b7c"
+  },
+  {
+    "name": "before-mobile-light.png",
+    "dimensions": [
+      750,
+      1334
+    ],
+    "sha256": "134d2eac7d73f6dae2255c6e1938f009a77e9798e6245c97f702fce38f66f653"
+  },
+  {
+    "name": "after-mobile-light.png",
+    "dimensions": [
+      750,
+      1334
+    ],
+    "sha256": "0f6b4c46504d8842fa0bb0b15075634f91b3a907bf5b86a0f01508c92e101c85"
+  },
+  {
+    "name": "after-selected-mobile-light.png",
+    "dimensions": [
+      750,
+      1334
+    ],
+    "sha256": "64cd6dcebfe75e8369049e95e47e1bae2fd2fdabfe2ae6481be2f94710c7998d"
+  },
+  {
+    "name": "before-mobile-dark.png",
+    "dimensions": [
+      750,
+      1334
+    ],
+    "sha256": "a91d683270eba9cacbe542351f393d0e0607bde46bb3e222263df8ee74b94dfd"
+  },
+  {
+    "name": "after-mobile-dark.png",
+    "dimensions": [
+      750,
+      1334
+    ],
+    "sha256": "1638bd0768734df4e72ad5c02abb5d59c4a822999a0b5109a54c423797d91ba2"
+  },
+  {
+    "name": "after-selected-mobile-dark.png",
+    "dimensions": [
+      750,
+      1334
+    ],
+    "sha256": "ae94b259d09c72a4368faa4b79aa033a90c24558e423874a920060b477b1c265"
+  }
+]

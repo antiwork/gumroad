@@ -1,0 +1,62 @@
+[
+  {
+    "id": "PRRT_kwDOOTOY0s6ittH7",
+    "isResolved": false,
+    "comments": {
+      "nodes": [
+        {
+          "databaseId": 4020621272,
+          "body": "<a href=\"#\"><img alt=\"P1\" src=\"https://greptile-static-assets.s3.amazonaws.com/badges/p1.svg?v=9\" align=\"top\"></a> Existing US companies can still have `business_type: \"llc\"`. The new list has no matching option, so the controlled `Select` appears blank while the form state stays truthy. The save check accepts `llc`, and `US_COMPANY_STRUCTURES` sends no structure. Treat a value missing from the active list as unset and require the seller to choose the LLC member count.\n\n<details><summary>Prompt To Fix With AI</summary>\n\n`````markdown\nThis is a comment left during a code review.\nPath: app/javascript/components/Settings/PaymentsPage/AccountDetailsSection.tsx\nLine: 110\n\nComment:\nExisting US companies can still have `business_type: \"llc\"`. The new list has no matching option, so the controlled `Select` appears blank while the form state stays truthy. The save check accepts `llc`, and `US_COMPANY_STRUCTURES` sends no structure. Treat a value missing from the active list as unset and require the seller to choose the LLC member count.\n\n---\n\nFor each issue above, determine whether it is valid and should be fixed. If so, fix it directly.\n`````\n</details>",
+          "author": {
+            "login": "greptile-apps"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "id": "PRRT_kwDOOTOY0s6ittIE",
+    "isResolved": false,
+    "comments": {
+      "nodes": [
+        {
+          "databaseId": 4020621284,
+          "body": "<a href=\"#\"><img alt=\"P2\" src=\"https://greptile-static-assets.s3.amazonaws.com/badges/p2.svg?v=9\" align=\"top\"></a> This changes the business-type dropdown sellers see, but the PR description has no before/after visual proof. The contribution guide requires a video for product changes, with desktop, mobile, light, and dark coverage where it applies. Add that proof before merge.\n\n**Context Used:** CLAUDE.md ([source](https://github.com/antiwork/gumroad/blob/main/CLAUDE.md))\n\n<details><summary>Prompt To Fix With AI</summary>\n\n`````markdown\nThis is a comment left during a code review.\nPath: app/modules/user_compliance_info/business_types.rb\nLine: 41-47\n\nComment:\nThis changes the business-type dropdown sellers see, but the PR description has no before/after visual proof. The contribution guide requires a video for product changes, with desktop, mobile, light, and dark coverage where it applies. Add that proof before merge.\n\n**Context Used:** CLAUDE.md ([source](https://github.com/antiwork/gumroad/blob/main/CLAUDE.md))\n\n---\n\nFor each issue above, determine whether it is valid and should be fixed. If so, fix it directly.\n`````\n</details>\n\nNote: If this suggestion doesn't match your team's coding style, reply to this and let me know. I'll remember it for next time!",
+          "author": {
+            "login": "greptile-apps"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "id": "PRRT_kwDOOTOY0s6ittIK",
+    "isResolved": false,
+    "comments": {
+      "nodes": [
+        {
+          "databaseId": 4020621294,
+          "body": "<a href=\"#\"><img alt=\"P2\" src=\"https://greptile-static-assets.s3.amazonaws.com/badges/p2.svg?v=9\" align=\"top\"></a> The code-comment guide says comments should stay around three lines and only keep the non-obvious reason. This five-line block repeats the country check and excluded keys that the constant and branches already show. Trim it to the Stripe-specific reason for the mapping.\n\n**Context Used:** CLAUDE.md ([source](https://github.com/antiwork/gumroad/blob/main/CLAUDE.md))\n\n<details><summary>Prompt To Fix With AI</summary>\n\n`````markdown\nThis is a comment left during a code review.\nPath: app/business/payments/merchant_registration/implementations/stripe/stripe_merchant_account_manager.rb\nLine: 17-21\n\nComment:\nThe code-comment guide says comments should stay around three lines and only keep the non-obvious reason. This five-line block repeats the country check and excluded keys that the constant and branches already show. Trim it to the Stripe-specific reason for the mapping.\n\n**Context Used:** CLAUDE.md ([source](https://github.com/antiwork/gumroad/blob/main/CLAUDE.md))\n\n---\n\nFor each issue above, determine whether it is valid and should be fixed. If so, fix it directly.\n`````\n</details>\n\nNote: If this suggestion doesn't match your team's coding style, reply to this and let me know. I'll remember it for next time!",
+          "author": {
+            "login": "greptile-apps"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "id": "PRRT_kwDOOTOY0s6iuXV3",
+    "isResolved": false,
+    "comments": {
+      "nodes": [
+        {
+          "databaseId": 4020883607,
+          "body": "<a href=\"#\"><img alt=\"P2\" src=\"https://greptile-static-assets.s3.amazonaws.com/badges/p2.svg?v=9\" align=\"top\"></a> This comment repeats what the next `select` call shows. The code-comment guide says to keep only a non-obvious reason, ordering rule, or trap. Remove it.\n\n**Context Used:** CLAUDE.md ([source](https://app.greptile.com/gumroad/github/antiwork/gumroad/-/custom-context?memory=92ae6ee4-a48d-4ad1-b597-c3b48ab7a848))\n\n<details><summary>Prompt To Fix With AI</summary>\n\n`````markdown\nThis is a comment left during a code review.\nPath: spec/requests/settings/payments_spec.rb\nLine: 370\n\nComment:\nThis comment repeats what the next `select` call shows. The code-comment guide says to keep only a non-obvious reason, ordering rule, or trap. Remove it.\n\n**Context Used:** CLAUDE.md ([source](https://app.greptile.com/gumroad/github/antiwork/gumroad/-/custom-context?memory=92ae6ee4-a48d-4ad1-b597-c3b48ab7a848))\n\n---\n\nFor each issue above, determine whether it is valid and should be fixed. If so, fix it directly.\n`````\n</details>\n\nNote: If this suggestion doesn't match your team's coding style, reply to this and let me know. I'll remember it for next time!",
+          "author": {
+            "login": "greptile-apps"
+          }
+        }
+      ]
+    }
+  }
+]

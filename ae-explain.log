@@ -1,0 +1,7 @@
+Completed 1.1 KiB/1.1 KiB (6.7 KiB/s) with 1 file(s) remainingupload: ../../../tmp/console-audit-20260916T030106Z-1fea8e9b.json to s3://gumroad-logs/gumclaw/production-console-access/2026/09/16/20260916T030106Z-1fea8e9b.json
+=== request_id: 20260916T030106Z-1fea8e9b  status: ok  5000ms  replica_lag=2s  host=DATABASE_WORKER_REPLICA1_HOST ===
+Using cached instance 10.1.32.57 (29s old)
+Connecting to 10.1.32.57 via bastion-production.gumroad.net...
+AE2609_EXPLAIN [{"id":1,"select_type":"SIMPLE","table":"uci","partitions":null,"type":"ALL","possible_keys":"index_user_compliance_info_on_user_id","key":null,"key_len":null,"ref":null,"rows":16316994,"filtered":0.09,"Extra":"Using where"},{"id":1,"select_type":"SIMPLE","table":"u","partitions":null,"type":"eq_ref","possible_keys":"PRIMARY","key":"PRIMARY","key_len":"8","ref":"gumroad_production.uci.user_id","rows":1,"filtered":10.0,"Extra":"Using where"},{"id":1,"select_type":"SIMPLE","table":"newer","partitions":null,"type":"ref","possible_keys":"PRIMARY,index_user_compliance_info_on_user_id","key":"index_user_compliance_info_on_user_id","key_len":"5","ref":"gumroad_production.uci.user_id","rows":2,"filtered":100.0,"Extra":"Using where; Not exists"}]
+Pseudo-terminal will not be allocated because stdin is not a terminal.
+Warning: Permanently added '10.1.32.57' (ECDSA) to the list of known hosts.

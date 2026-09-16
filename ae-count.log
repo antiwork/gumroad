@@ -1,0 +1,7 @@
+Completed 1.4 KiB/1.4 KiB (7.8 KiB/s) with 1 file(s) remainingupload: ../../../tmp/console-audit-20260916T030137Z-dfb1990e.json to s3://gumroad-logs/gumclaw/production-console-access/2026/09/16/20260916T030137Z-dfb1990e.json
+=== request_id: 20260916T030137Z-dfb1990e  status: ok  18000ms  replica_lag=1s  host=DATABASE_WORKER_REPLICA1_HOST ===
+Using cached instance 10.1.32.57 (26s old)
+Connecting to 10.1.32.57 via bastion-production.gumroad.net...
+AE2609_COUNT [{"current_accounts":22,"with_live_stripe":18}]
+Pseudo-terminal will not be allocated because stdin is not a terminal.
+Warning: Permanently added '10.1.32.57' (ECDSA) to the list of known hosts.

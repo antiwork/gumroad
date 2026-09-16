@@ -1,0 +1,37 @@
+  📂 10 files changed (HEAD vs main)
+  🧠 Opus planning test execution... done
+  ⚡ Risk: high — Changes Stripe merchant account structure mapping for US business types, adds new business type constants (SINGLE_MEMBER_LLC, MULTI_MEMBER_LLC), and modifies the payments settings UI validation—touching payment onboarding flows critical to seller compliance.
+
+  ═══════════════════════════════════════════════════
+    TEST CONFIDENCE
+  ───────────────────────────────────────────────────
+   80%  ←  4 tests
+          business/payments/merchant_registration/stripe/stripe_merchant_account_manager_spec.rb
+          app/javascript/components/Settings/PaymentsPage/AccountDetailsSection.test.tsx
+          app/javascript/pages/Settings/Payments/Show.test.tsx
+          presenters/settings_presenter_spec.rb
+   95%  ←  5 tests
+          requests/settings/payments_spec.rb
+          models/user_compliance_info_spec.rb
+          services/update_user_compliance_info_spec.rb
+          business/payments/merchant_registration/stripe/stripe_merchant_account_manager_guardian_wiring_spec.rb
+          business/payments/merchant_registration/stripe/stripe_merchant_account_manager_rejection_message_spec.rb
+   99%  ←  11 tests
+          business/payments/merchant_registration/stripe/stripe_beneficial_owners_manager_spec.rb
+          business/payments/merchant_registration/stripe/stripe_merchant_account_manager_debit_card_payout_spec.rb
+          business/payments/merchant_registration/stripe/stripe_merchant_account_manager_payout_retry_spec.rb
+          business/payments/merchant_registration/stripe/stripe_merchant_account_manager_rejection_note_lifecycle_spec.rb
+          requests/settings/payments_account_status_spec.rb
+          requests/settings/legal_guardian_spec.rb
+          requests/settings/astra_2609_capture_spec.rb
+          controllers/settings/payments_controller_spec.rb
+          policies/settings/payments/user_policy_spec.rb
+          sidekiq/create_stripe_merchant_account_worker_spec.rb
+          sidekiq/handle_new_user_compliance_info_worker_spec.rb
+   100%  ←  remaining tests
+  ═══════════════════════════════════════════════════
+
+  🟨🟨🟨🟨🟨🟨🟨🟨🟨🟨⬜⬜⬜⬜⬜⬜⬜⬜⬜⬜⬜⬜⬜⬜⬜⬜⬜⬜⬜⬜⬜⬜⬜⬜⬜⬜⬜⬜⬜⬜  →80%  1/4  177s  🟨🟨🟨🟨🟨🟨🟨🟨🟨🟨🟨🟨🟨🟨🟨🟨🟨🟨🟨🟨⬜⬜⬜⬜⬜⬜⬜⬜⬜⬜⬜⬜⬜⬜⬜⬜⬜⬜⬜⬜  →80%  2/4  185s  🟨🟨🟨🟨🟨🟨🟨🟨🟨🟨🟨🟨🟨🟨🟨🟨🟨🟨🟨🟨🟨🟨🟨🟨🟨🟨🟨🟨🟨🟨⬜⬜⬜⬜⬜⬜⬜⬜⬜⬜  →80%  3/4  204s[K  🟨🟨🟨🟨🟨🟨🟨🟨🟨🟨🟨🟨🟨🟨🟨🟨🟨🟨🟨🟨🟨🟨🟨🟨🟨🟨🟨🟨🟨🟨⬜⬜⬜⬜⬜⬜⬜⬜⬜⬜  →80%  3/4  275s  🔍 verifying presenters/settings_presenter_spec.rb on merge-base...[K  🟨🟨🟨🟨🟨🟨🟨🟨🟨🟨🟨🟨🟨🟨🟨🟨🟨🟨🟨🟨🟨🟨🟨🟨🟨🟨🟨🟨🟨🟨🟨🟨🟨🟨🟨🟨🟨🟨🟨🟨  →80%  4/4  364s  ⚠ confirmed pre-existing: presenters/settings_presenter_spec.rb
+
+  ✅ 80% — 4 tests — 364s
+[K  ⬜⬜⬜⬜⬜⬜⬜⬜⬜⬜⬜⬜⬜⬜⬜⬜⬜⬜⬜⬜⬜⬜⬜⬜⬜⬜⬜⬜⬜⬜⬜⬜⬜⬜⬜⬜⬜⬜⬜⬜  →95%  0/5  1400s  🔍 verifying requests/settings/payments_spec.rb on merge-base...

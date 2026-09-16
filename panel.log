@@ -1,0 +1,31 @@
+autoreview target: branch
+branch: detached
+reviewers: codex model=gpt-6-astra thinking=high, claude model=claude-fable-5-1
+tools: on
+web_search: on
+ref: origin/main
+trufflehog: clean (9.7s)
+bundle: 30937 bytes; review passes: 1
+codex thread: 01a0a831-b199-7600-a71e-8a4587391a75
+codex turn started
+claude turn started
+codex activity: 1 hidden tool/status events
+{
+  "findings": [],
+  "overall_correctness": "patch is correct",
+  "overall_explanation": "No actionable P0 or P1 defect is demonstrated by the supplied bundle. Rendering and save validation share the active business-type list, unsupported legacy values require reselection, both LLC tax-export mappings are added, and presenter props are wired through. The unchanged country_code assignment inside _update_account is not included, so it could not be independently traced. This assessment is limited to the provided diff; tests were not run.",
+  "overall_confidence": 0.87
+}
+codex usage: input_tokens=21538 cached_input_tokens=0 output_tokens=763 reasoning_output_tokens=631
+claude activity: 15 hidden tool/status events
+claude activity: 17 hidden tool/status events
+claude activity: 17 hidden tool/status events
+claude activity: 17 hidden tool/status events
+claude activity: 2 hidden tool/status events
+I'll review the bundle for the seven checks, then verify one unverifiable point (the `country_code` assignment in `_update_account`) against the public upstream source.
+claude activity: 9 hidden tool/status events
+claude activity: 22 hidden tool/status events
+claude usage: input_tokens=114 cache_read_input_tokens=47564 cache_creation_input_tokens=28745 output_tokens=8460 cost_usd=0.852507
+autoreview panel clean: no accepted/actionable findings reported
+overall: patch is correct (0.87)
+Panel review complete. claude model=claude-fable-5-1: 0 finding(s), codex model=gpt-6-astra thinking=high: 0 finding(s).

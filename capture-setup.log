@@ -1,0 +1,9 @@
+DEPRECATION WARNING: ActiveSupport::Configurable is deprecated without replacement, and will be removed in Rails 8.2.
+
+You can emulate the previous behavior with `class_attribute`.
+ (called from Kernel#require at /private/tmp/wt_2609_astra_20260915/config/boot.rb:18)
+[test-redis-isolation] no free Redis database block on localhost:6379 (16 databases = 0 concurrent runs); falling back to the shared databases in .env.test.
+[test-redis-isolation] Concurrent runs will flush each other's keys mid-test. Start Redis with more databases (docker/docker-compose-local.yml passes --databases 64), or free a slot: a spring server holds its lease until `bin/spring stop`, so idle checkouts keep one.
+sidekiq-pro is not installed
+DEPRECATION WARNING: Setting action_controller.escape_json_responses = true is deprecated and will have no effect in Rails 8.2. Set it to `false`, or remove the config. (called from Kernel#require at /private/tmp/wt_2609_astra_20260915/config/boot.rb:18)
+Created database 'gumroad_test_astra2609'

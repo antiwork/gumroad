@@ -1,0 +1,60 @@
+DEPRECATION WARNING: ActiveSupport::Configurable is deprecated without replacement, and will be removed in Rails 8.2.
+
+You can emulate the previous behavior with `class_attribute`.
+ (called from Kernel#require at /private/tmp/wt_2609_astra_20260915/config/boot.rb:18)
+[test-redis-isolation] slot 0 → Redis databases 14, 15, 16, 17 on localhost:17609
+sidekiq-pro is not installed
+DEPRECATION WARNING: Setting action_controller.escape_json_responses = true is deprecated and will have no effect in Rails 8.2. Set it to `false`, or remove the config. (called from Kernel#require at /private/tmp/wt_2609_astra_20260915/config/boot.rb:18)
+Run options: include {full_description: /(?-mix:US\ company\ structure)|(?-mix:company\ hash\ keyed\ on\ the\ Stripe\ account\ country)/}
+warning: 299 Elasticsearch-7.17.25-f9b6b57d1d0f76e2d14291c04fb50abeb642cfbf "Elasticsearch built-in security features are not enabled. Without authentication, your cluster could be accessible to anyone. See https://www.elastic.co/guide/en/elasticsearch/reference/7.17/security-minimal-setup.html to enable security."
+warning: 299 Elasticsearch-7.17.25-f9b6b57d1d0f76e2d14291c04fb50abeb642cfbf "Elasticsearch built-in security features are not enabled. Without authentication, your cluster could be accessible to anyone. See https://www.elastic.co/guide/en/elasticsearch/reference/7.17/security-minimal-setup.html to enable security."
+[ES] Recreating index link-test (model: Link), because its settings or mappings changed. If you modified them, please remember to write a migration to update the index in development/staging/production environments.
+warning: 299 Elasticsearch-7.17.25-f9b6b57d1d0f76e2d14291c04fb50abeb642cfbf "Elasticsearch built-in security features are not enabled. Without authentication, your cluster could be accessible to anyone. See https://www.elastic.co/guide/en/elasticsearch/reference/7.17/security-minimal-setup.html to enable security."
+warning: 299 Elasticsearch-7.17.25-f9b6b57d1d0f76e2d14291c04fb50abeb642cfbf "Elasticsearch built-in security features are not enabled. Without authentication, your cluster could be accessible to anyone. See https://www.elastic.co/guide/en/elasticsearch/reference/7.17/security-minimal-setup.html to enable security."
+[ES] Recreating index balance-test (model: Balance), because its settings or mappings changed. If you modified them, please remember to write a migration to update the index in development/staging/production environments.
+warning: 299 Elasticsearch-7.17.25-f9b6b57d1d0f76e2d14291c04fb50abeb642cfbf "Elasticsearch built-in security features are not enabled. Without authentication, your cluster could be accessible to anyone. See https://www.elastic.co/guide/en/elasticsearch/reference/7.17/security-minimal-setup.html to enable security."
+warning: 299 Elasticsearch-7.17.25-f9b6b57d1d0f76e2d14291c04fb50abeb642cfbf "Elasticsearch built-in security features are not enabled. Without authentication, your cluster could be accessible to anyone. See https://www.elastic.co/guide/en/elasticsearch/reference/7.17/security-minimal-setup.html to enable security."
+[ES] Recreating index purchase-test (model: Purchase), because its settings or mappings changed. If you modified them, please remember to write a migration to update the index in development/staging/production environments.
+warning: 299 Elasticsearch-7.17.25-f9b6b57d1d0f76e2d14291c04fb50abeb642cfbf "Elasticsearch built-in security features are not enabled. Without authentication, your cluster could be accessible to anyone. See https://www.elastic.co/guide/en/elasticsearch/reference/7.17/security-minimal-setup.html to enable security."
+warning: 299 Elasticsearch-7.17.25-f9b6b57d1d0f76e2d14291c04fb50abeb642cfbf "Elasticsearch built-in security features are not enabled. Without authentication, your cluster could be accessible to anyone. See https://www.elastic.co/guide/en/elasticsearch/reference/7.17/security-minimal-setup.html to enable security."
+[ES] Recreating index installment-test (model: Installment), because its settings or mappings changed. If you modified them, please remember to write a migration to update the index in development/staging/production environments.
+warning: 299 Elasticsearch-7.17.25-f9b6b57d1d0f76e2d14291c04fb50abeb642cfbf "Elasticsearch built-in security features are not enabled. Without authentication, your cluster could be accessible to anyone. See https://www.elastic.co/guide/en/elasticsearch/reference/7.17/security-minimal-setup.html to enable security."
+warning: 299 Elasticsearch-7.17.25-f9b6b57d1d0f76e2d14291c04fb50abeb642cfbf "Elasticsearch built-in security features are not enabled. Without authentication, your cluster could be accessible to anyone. See https://www.elastic.co/guide/en/elasticsearch/reference/7.17/security-minimal-setup.html to enable security."
+[ES] Recreating index confirmedfollowerevent-test (model: ConfirmedFollowerEvent), because its settings or mappings changed. If you modified them, please remember to write a migration to update the index in development/staging/production environments.
+warning: 299 Elasticsearch-7.17.25-f9b6b57d1d0f76e2d14291c04fb50abeb642cfbf "Elasticsearch built-in security features are not enabled. Without authentication, your cluster could be accessible to anyone. See https://www.elastic.co/guide/en/elasticsearch/reference/7.17/security-minimal-setup.html to enable security."
+warning: 299 Elasticsearch-7.17.25-f9b6b57d1d0f76e2d14291c04fb50abeb642cfbf "Elasticsearch built-in security features are not enabled. Without authentication, your cluster could be accessible to anyone. See https://www.elastic.co/guide/en/elasticsearch/reference/7.17/security-minimal-setup.html to enable security."
+[ES] Recreating index productpageview-test (model: ProductPageView), because its settings or mappings changed. If you modified them, please remember to write a migration to update the index in development/staging/production environments.
+warning: 299 Elasticsearch-7.17.25-f9b6b57d1d0f76e2d14291c04fb50abeb642cfbf "Elasticsearch built-in security features are not enabled. Without authentication, your cluster could be accessible to anyone. See https://www.elastic.co/guide/en/elasticsearch/reference/7.17/security-minimal-setup.html to enable security."
+warning: 299 Elasticsearch-7.17.25-f9b6b57d1d0f76e2d14291c04fb50abeb642cfbf "Elasticsearch built-in security features are not enabled. Without authentication, your cluster could be accessible to anyone. See https://www.elastic.co/guide/en/elasticsearch/reference/7.17/security-minimal-setup.html to enable security."
+[ES] Recreating index audiencemember-test (model: AudienceMember), because its settings or mappings changed. If you modified them, please remember to write a migration to update the index in development/staging/production environments.
+warning: 299 Elasticsearch-7.17.25-f9b6b57d1d0f76e2d14291c04fb50abeb642cfbf "Elasticsearch built-in security features are not enabled. Without authentication, your cluster could be accessible to anyone. See https://www.elastic.co/guide/en/elasticsearch/reference/7.17/security-minimal-setup.html to enable security."
+warning: 299 Elasticsearch-7.17.25-f9b6b57d1d0f76e2d14291c04fb50abeb642cfbf "Elasticsearch built-in security features are not enabled. Without authentication, your cluster could be accessible to anyone. See https://www.elastic.co/guide/en/elasticsearch/reference/7.17/security-minimal-setup.html to enable security."
+StripeMerchantAccountManager: 2026-09-16T03:12:04.847Z pid=95266 tid=1xsq INFO: Sidekiq 7.3.4 connecting to Redis with options {size: 10, pool_name: "internal", url: "redis://localhost:17609/15"}
+................... [3.28s]
+
+
+Top 10 slowest examples (2.08 seconds, 43.2% of total time):
+  StripeMerchantAccountManager company hash keyed on the Stripe account country sends the UAE structure and VAT id when the legal entity is in the UAE
+    0.45591 seconds ./spec/business/payments/merchant_registration/stripe/stripe_merchant_account_manager_spec.rb:14705
+  StripeMerchantAccountManager US company structure update_account sends the mapped structure for a non-resident seller's US company
+    0.3274 seconds ./spec/business/payments/merchant_registration/stripe/stripe_merchant_account_manager_spec.rb:14883
+  StripeMerchantAccountManager US company structure update_account clears the structure before a US company with a mapped structure becomes an individual
+    0.26956 seconds ./spec/business/payments/merchant_registration/stripe/stripe_merchant_account_manager_spec.rb:14903
+  StripeMerchantAccountManager company hash keyed on the Stripe account country does not send the UAE business type as the structure for a US legal entity
+    0.1733 seconds ./spec/business/payments/merchant_registration/stripe/stripe_merchant_account_manager_spec.rb:14712
+  StripeMerchantAccountManager company hash keyed on the Stripe account country omits the structure from the create payload for a US legal entity
+    0.15225 seconds ./spec/business/payments/merchant_registration/stripe/stripe_merchant_account_manager_spec.rb:14719
+  StripeMerchantAccountManager company hash keyed on the Stripe account country leaves a Canadian legal entity to the Canadian branch, without the UAE VAT id
+    0.142 seconds ./spec/business/payments/merchant_registration/stripe/stripe_merchant_account_manager_spec.rb:14737
+  StripeMerchantAccountManager company hash keyed on the Stripe account country Japanese address blocks does not send them for a US legal entity, which is not a Japanese account
+    0.14126 seconds ./spec/business/payments/merchant_registration/stripe/stripe_merchant_account_manager_spec.rb:14775
+  StripeMerchantAccountManager company hash keyed on the Stripe account country Japanese address blocks sends the kanji and kana blocks when the legal entity is in Japan
+    0.14028 seconds ./spec/business/payments/merchant_registration/stripe/stripe_merchant_account_manager_spec.rb:14767
+  StripeMerchantAccountManager US company structure maps sole_proprietorship to sole_proprietorship for a US legal entity
+    0.13926 seconds ./spec/business/payments/merchant_registration/stripe/stripe_merchant_account_manager_spec.rb:14814
+  StripeMerchantAccountManager US company structure maps single_member_llc to single_member_llc for a US legal entity
+    0.1382 seconds ./spec/business/payments/merchant_registration/stripe/stripe_merchant_account_manager_spec.rb:14814
+
+Finished in 4.81 seconds (files took 4.99 seconds to load)
+19 examples, 0 failures
+

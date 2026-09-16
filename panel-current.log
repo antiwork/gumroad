@@ -1,0 +1,39 @@
+autoreview target: branch
+branch: detached
+reviewers: codex model=gpt-6-astra thinking=high, claude model=claude-fable-5-1
+tools: on
+web_search: on
+ref: origin/main
+trufflehog: clean (6.3s)
+bundle: 32902 bytes; review passes: 1
+claude turn started
+codex thread: 01a0a852-0ad0-7482-8a46-af85f05ba4ef
+codex turn started
+codex activity: 1 hidden tool/status events
+{
+  "findings": [],
+  "overall_correctness": "patch is correct",
+  "overall_explanation": "No actionable P0/P1 defect is demonstrated by the supplied bundle. Rendering and save validation share the active business-type list, unsupported legacy values require explicit reselection, and both LLC tax mappings and presenter props are included. The unchanged assignment of country_code in _update_account is outside the bundle, so it could not be independently traced. No files were modified or tests run.",
+  "overall_confidence": 0.86
+}
+codex usage: input_tokens=22089 cached_input_tokens=0 output_tokens=640 reasoning_output_tokens=516
+claude activity: 14 hidden tool/status events
+claude activity: 16 hidden tool/status events
+claude activity: 17 hidden tool/status events
+claude activity: 16 hidden tool/status events
+claude activity: 16 hidden tool/status events
+claude activity: 5 hidden tool/status events
+I'll review the bundle against the seven checks in the prompt, tracing the Ruby structure mapping, the shared frontend list/validation, and the new specs.
+
+**Backend (StripeMerchantAccountManager, BusinessTypes, presenter).** The new `US_COMPANY_STRUCTURES` map uses valid Stripe US `company.structure` values and deliberately omits generic `llc` and `profit`. The clearing branch on the business-to-individual switch and the create-path `company_hash` branch both key on `legal_entity_country_code`. The update path keeps `country_code`, and its assignment is outside the bundle, but the new `update_account` spec with a UAE-residence factory and a US business country asserts `structure: "single_member_llc"`, so a residence-based value would fail that spec. `payable_type_map` gains `LLC_SINGLE` and `LLC_PARTNER` entries, `all` gains both codes, and the presenter and its spec add `us_business_types` together.
+
+**Frontend (AccountDetailsSection, Show).** `getBusinessTypes` is now the single source for both rendering and submit validation, so the select and the save gate cannot disagree. A saved code absent from the active list renders the disabled empty placeholder, sets `validity.valueMissing`, and `Show.tsx` blocks the PUT until a listed code is chosen. Nothing is auto-rewritten. The GB test confirms the generic list still accepts `llc`.
+
+**Specs.** The Vitest cases assert the empty selection, the aria-invalid flag, the blocked PUT, and the successful PUT after choosing `multi_member_llc`. Reverting the `some()` check to the old truthiness check would let the legacy `llc` pass and fail the first Show test. The system spec covers the same flow end to end. No PNGs or PII appear in the diff.
+
+I found no defect at P0 or P1.
+claude activity: 2 hidden tool/status events
+claude usage: input_tokens=2 cache_read_input_tokens=4070 cache_creation_input_tokens=16762 output_tokens=9364 cost_usd=0.691965
+autoreview panel clean: no accepted/actionable findings reported
+overall: patch is correct (0.86)
+Panel review complete. claude model=claude-fable-5-1: 0 finding(s), codex model=gpt-6-astra thinking=high: 0 finding(s).

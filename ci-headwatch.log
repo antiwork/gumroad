@@ -1,0 +1,4158 @@
+Refreshing run status every 60 seconds. Press Ctrl+C to quit.
+
+* fix/us-company-structure-mapping Tests antiwork/gumroad#7686 · 35052947395
+Triggered via push about 8 minutes ago
+
+JOBS
+✓ CI Gate in 6s (ID 104657101949)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Run true
+  ✓ Complete runner
+  ✓ Complete job
+✓ Lint JS/TS in 6m8s (ID 104657149942)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Run actions/checkout@v4
+  ✓ Run actions/setup-node@v4
+  ✓ Run npm ci
+  ✓ Run npm run lint-fast
+  ✓ Run npm test
+  ✓ Post Run actions/setup-node@v4
+  ✓ Post Run actions/checkout@v4
+  ✓ Complete runner
+  ✓ Complete job
+✓ Lint Ruby in 1m21s (ID 104657149948)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Run actions/checkout@v4
+  ✓ Run ruby/setup-ruby@v1
+  ✓ Run bundle exec rubocop --format github
+  ✓ Post Run actions/checkout@v4
+  ✓ Complete runner
+  ✓ Complete job
+* Test Minitest 1 (ID 104657149949)
+  ✓ Set up job
+  ✓ Initialize containers
+  ✓ Run actions/checkout@v4
+  ✓ Set up Ruby
+  ✓ Prepare test database
+  ✓ Login to Docker Hub
+  ✓ Start MinIO (S3-compatible object storage)
+  ✓ Wait for Elasticsearch
+  * Run Minitest
+  * Post Run actions/checkout@v4
+  * Stop containers
+* Test Minitest 0 (ID 104657149953)
+  ✓ Set up job
+  ✓ Initialize containers
+  ✓ Run actions/checkout@v4
+  ✓ Set up Ruby
+  ✓ Prepare test database
+  ✓ Login to Docker Hub
+  ✓ Start MinIO (S3-compatible object storage)
+  ✓ Wait for Elasticsearch
+  * Run Minitest
+  * Post Run actions/checkout@v4
+  * Stop containers
+✓ Build images in 6m0s (ID 104657149961)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  ✓ Build and push base image
+  ✓ Compute content-addressed test image tag
+  ✓ Set up Docker Buildx
+  ✓ Restore asset precompile cache
+  ✓ Build and push test image
+  ✓ Post Restore asset precompile cache
+  ✓ Post Set up Docker Buildx
+  ✓ Post Check out repository
+  ✓ Complete runner
+  ✓ Complete job
+✓ Typecheck TS in 1m46s (ID 104657149981)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Run actions/checkout@v4
+  ✓ Run ruby/setup-ruby@v1
+  ✓ Run actions/setup-node@v4
+  ✓ Run npm ci
+  ✓ Run bundle exec rails js:export
+  ✓ Run npm run typecheck
+  ✓ Post Run actions/setup-node@v4
+  ✓ Post Run actions/checkout@v4
+  ✓ Complete runner
+  ✓ Complete job
+✓ Run scope in 7s (ID 104657150002)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Run if [ "$GITHUB_EVENT_NAME" = "push" ] && [ "$GITHUB_REF" = "refs/heads/main" ]; then
+  ✓ Complete runner
+  ✓ Complete job
+✓ Migration versions in 1m11s (ID 104657150034)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Run actions/checkout@v4
+  ✓ Check migration versions against the base branch
+  ✓ Self-test the checker
+  ✓ Self-test the branch-specs selector
+  ✓ Self-test reuse-full-suite
+  ✓ Post Run actions/checkout@v4
+  ✓ Complete runner
+  ✓ Complete job
+- Reuse full suite in 0s (ID 104657150836)
+- Compute relevant specs (ID 104657200114)
+* Test Fast 7 (ID 104658304884)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  * Start services and pull test image
+  * Wait for services and prepare test database
+  * Run tests
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Fast 8 (ID 104658304889)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  * Start services and pull test image
+  * Wait for services and prepare test database
+  * Run tests
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Fast 4 (ID 104658304891)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  * Start services and pull test image
+  * Wait for services and prepare test database
+  * Run tests
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Fast 13 (ID 104658304896)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  * Start services and pull test image
+  * Wait for services and prepare test database
+  * Run tests
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Fast 0 (ID 104658304897)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  * Start services and pull test image
+  * Wait for services and prepare test database
+  * Run tests
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Fast 1 (ID 104658304901)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  * Start services and pull test image
+  * Wait for services and prepare test database
+  * Run tests
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Fast 9 (ID 104658304902)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  * Start services and pull test image
+  * Wait for services and prepare test database
+  * Run tests
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Fast 11 (ID 104658304912)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  * Start services and pull test image
+  * Wait for services and prepare test database
+  * Run tests
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Fast 2 (ID 104658304913)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  * Start services and pull test image
+  * Wait for services and prepare test database
+  * Run tests
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Fast 5 (ID 104658304918)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  * Start services and pull test image
+  * Wait for services and prepare test database
+  * Run tests
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Fast 16 (ID 104658304922)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  * Start services and pull test image
+  * Wait for services and prepare test database
+  * Run tests
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Fast 10 (ID 104658304935)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  * Start services and pull test image
+  * Wait for services and prepare test database
+  * Run tests
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Fast 6 (ID 104658304949)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  * Start services and pull test image
+  * Wait for services and prepare test database
+  * Run tests
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Fast 15 (ID 104658304958)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  * Start services and pull test image
+  * Wait for services and prepare test database
+  * Run tests
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Fast 3 (ID 104658304960)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  * Start services and pull test image
+  * Wait for services and prepare test database
+  * Run tests
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Fast 14 (ID 104658304971)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  * Start services and pull test image
+  * Wait for services and prepare test database
+  * Run tests
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Fast 12 (ID 104658304989)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  * Start services and pull test image
+  * Wait for services and prepare test database
+  * Run tests
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Fast 17 (ID 104658305091)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  * Start services and pull test image
+  * Wait for services and prepare test database
+  * Run tests
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Slow 5 (ID 104658305218)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  * Start services and pull test image
+  * Wait for services and prepare test database
+  * Run tests
+  * Archive capybara artifacts
+  * Archive test logs
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Slow 7 (ID 104658305269)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  * Start services and pull test image
+  * Wait for services and prepare test database
+  * Run tests
+  * Archive capybara artifacts
+  * Archive test logs
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Slow 9 (ID 104658305274)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  * Start services and pull test image
+  * Wait for services and prepare test database
+  * Run tests
+  * Archive capybara artifacts
+  * Archive test logs
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Slow 4 (ID 104658305276)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  * Start services and pull test image
+  * Wait for services and prepare test database
+  * Run tests
+  * Archive capybara artifacts
+  * Archive test logs
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Slow 11 (ID 104658305291)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  * Start services and pull test image
+  * Wait for services and prepare test database
+  * Run tests
+  * Archive capybara artifacts
+  * Archive test logs
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Slow 3 (ID 104658305300)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  * Start services and pull test image
+  * Wait for services and prepare test database
+  * Run tests
+  * Archive capybara artifacts
+  * Archive test logs
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Slow 1 (ID 104658305307)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  * Start services and pull test image
+  * Wait for services and prepare test database
+  * Run tests
+  * Archive capybara artifacts
+  * Archive test logs
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Slow 14 (ID 104658305334)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  * Start services and pull test image
+  * Wait for services and prepare test database
+  * Run tests
+  * Archive capybara artifacts
+  * Archive test logs
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Slow 26 (ID 104658305336)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  * Start services and pull test image
+  * Wait for services and prepare test database
+  * Run tests
+  * Archive capybara artifacts
+  * Archive test logs
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Slow 17 (ID 104658305338)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  * Start services and pull test image
+  * Wait for services and prepare test database
+  * Run tests
+  * Archive capybara artifacts
+  * Archive test logs
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Slow 15 (ID 104658305342)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  * Start services and pull test image
+  * Wait for services and prepare test database
+  * Run tests
+  * Archive capybara artifacts
+  * Archive test logs
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Slow 29 (ID 104658305348)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  * Start services and pull test image
+  * Wait for services and prepare test database
+  * Run tests
+  * Archive capybara artifacts
+  * Archive test logs
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Slow 8 (ID 104658305349)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  * Start services and pull test image
+  * Wait for services and prepare test database
+  * Run tests
+  * Archive capybara artifacts
+  * Archive test logs
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Slow 2 (ID 104658305350)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  * Start services and pull test image
+  * Wait for services and prepare test database
+  * Run tests
+  * Archive capybara artifacts
+  * Archive test logs
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Slow 6 (ID 104658305353)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  * Start services and pull test image
+  * Wait for services and prepare test database
+  * Run tests
+  * Archive capybara artifacts
+  * Archive test logs
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Slow 10 (ID 104658305354)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  * Start services and pull test image
+  * Wait for services and prepare test database
+  * Run tests
+  * Archive capybara artifacts
+  * Archive test logs
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Slow 23 (ID 104658305357)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  * Start services and pull test image
+  * Wait for services and prepare test database
+  * Run tests
+  * Archive capybara artifacts
+  * Archive test logs
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Slow 12 (ID 104658305363)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  * Start services and pull test image
+  * Wait for services and prepare test database
+  * Run tests
+  * Archive capybara artifacts
+  * Archive test logs
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Slow 16 (ID 104658305368)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  * Start services and pull test image
+  * Wait for services and prepare test database
+  * Run tests
+  * Archive capybara artifacts
+  * Archive test logs
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Slow 27 (ID 104658305371)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  * Start services and pull test image
+  * Wait for services and prepare test database
+  * Run tests
+  * Archive capybara artifacts
+  * Archive test logs
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Slow 37 (ID 104658305372)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  * Start services and pull test image
+  * Wait for services and prepare test database
+  * Run tests
+  * Archive capybara artifacts
+  * Archive test logs
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Slow 30 (ID 104658305375)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  * Start services and pull test image
+  * Wait for services and prepare test database
+  * Run tests
+  * Archive capybara artifacts
+  * Archive test logs
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Slow 24 (ID 104658305380)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  * Start services and pull test image
+  * Wait for services and prepare test database
+  * Run tests
+  * Archive capybara artifacts
+  * Archive test logs
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Slow 36 (ID 104658305381)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  * Start services and pull test image
+  * Wait for services and prepare test database
+  * Run tests
+  * Archive capybara artifacts
+  * Archive test logs
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Slow 32 (ID 104658305382)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  * Start services and pull test image
+  * Wait for services and prepare test database
+  * Run tests
+  * Archive capybara artifacts
+  * Archive test logs
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Slow 31 (ID 104658305383)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  * Start services and pull test image
+  * Wait for services and prepare test database
+  * Run tests
+  * Archive capybara artifacts
+  * Archive test logs
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Slow 0 (ID 104658305399)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  * Start services and pull test image
+  * Wait for services and prepare test database
+  * Run tests
+  * Archive capybara artifacts
+  * Archive test logs
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Slow 13 (ID 104658305400)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  * Start services and pull test image
+  * Wait for services and prepare test database
+  * Run tests
+  * Archive capybara artifacts
+  * Archive test logs
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Slow 22 (ID 104658305402)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  * Start services and pull test image
+  * Wait for services and prepare test database
+  * Run tests
+  * Archive capybara artifacts
+  * Archive test logs
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Slow 39 (ID 104658305404)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  * Start services and pull test image
+  * Wait for services and prepare test database
+  * Run tests
+  * Archive capybara artifacts
+  * Archive test logs
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Slow 25 (ID 104658305412)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  * Start services and pull test image
+  * Wait for services and prepare test database
+  * Run tests
+  * Archive capybara artifacts
+  * Archive test logs
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Slow 33 (ID 104658305417)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  * Start services and pull test image
+  * Wait for services and prepare test database
+  * Run tests
+  * Archive capybara artifacts
+  * Archive test logs
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Slow 18 (ID 104658305425)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  * Start services and pull test image
+  * Wait for services and prepare test database
+  * Run tests
+  * Archive capybara artifacts
+  * Archive test logs
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Slow 19 (ID 104658305426)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  * Start services and pull test image
+  * Wait for services and prepare test database
+  * Run tests
+  * Archive capybara artifacts
+  * Archive test logs
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Slow 21 (ID 104658305429)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  * Start services and pull test image
+  * Wait for services and prepare test database
+  * Run tests
+  * Archive capybara artifacts
+  * Archive test logs
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Slow 48 (ID 104658305435)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  * Start services and pull test image
+  * Wait for services and prepare test database
+  * Run tests
+  * Archive capybara artifacts
+  * Archive test logs
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Slow 20 (ID 104658305444)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  * Start services and pull test image
+  * Wait for services and prepare test database
+  * Run tests
+  * Archive capybara artifacts
+  * Archive test logs
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Slow 28 (ID 104658305452)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  * Start services and pull test image
+  * Wait for services and prepare test database
+  * Run tests
+  * Archive capybara artifacts
+  * Archive test logs
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Slow 47 (ID 104658305463)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  * Start services and pull test image
+  * Wait for services and prepare test database
+  * Run tests
+  * Archive capybara artifacts
+  * Archive test logs
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Slow 49 (ID 104658305473)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  * Start services and pull test image
+  * Wait for services and prepare test database
+  * Run tests
+  * Archive capybara artifacts
+  * Archive test logs
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Slow 41 (ID 104658305481)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  * Start services and pull test image
+  * Wait for services and prepare test database
+  * Run tests
+  * Archive capybara artifacts
+  * Archive test logs
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Slow 46 (ID 104658305492)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  * Start services and pull test image
+  * Wait for services and prepare test database
+  * Run tests
+  * Archive capybara artifacts
+  * Archive test logs
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Slow 42 (ID 104658305493)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  * Start services and pull test image
+  * Wait for services and prepare test database
+  * Run tests
+  * Archive capybara artifacts
+  * Archive test logs
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Slow 35 (ID 104658305504)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  * Start services and pull test image
+  * Wait for services and prepare test database
+  * Run tests
+  * Archive capybara artifacts
+  * Archive test logs
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Slow 44 (ID 104658305505)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  * Start services and pull test image
+  * Wait for services and prepare test database
+  * Run tests
+  * Archive capybara artifacts
+  * Archive test logs
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Slow 43 (ID 104658305549)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  * Start services and pull test image
+  * Wait for services and prepare test database
+  * Run tests
+  * Archive capybara artifacts
+  * Archive test logs
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Slow 34 (ID 104658305557)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  * Start services and pull test image
+  * Wait for services and prepare test database
+  * Run tests
+  * Archive capybara artifacts
+  * Archive test logs
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Slow 40 (ID 104658305558)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  * Start services and pull test image
+  * Wait for services and prepare test database
+  * Run tests
+  * Archive capybara artifacts
+  * Archive test logs
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Slow 38 (ID 104658305573)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  * Start services and pull test image
+  * Wait for services and prepare test database
+  * Run tests
+  * Archive capybara artifacts
+  * Archive test logs
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Slow 45 (ID 104658305579)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  * Start services and pull test image
+  * Wait for services and prepare test database
+  * Run tests
+  * Archive capybara artifacts
+  * Archive test logs
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+- Test Relevant ${{ matrix.ci_node_index }}${{ (((github.event_name == 'pull_request_target') && (github.event.pull_request.head.repo.full_name == github.repository) && ' (internal PR noop)') || '') }} in 0s (ID 104658306326)
+
+ANNOTATIONS
+! Node.js 20 is deprecated. The following actions target Node.js 20 but are being forced to run on Node.js 24: actions/checkout@v4, actions/setup-node@v4. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
+Lint JS/TS: .github#2
+
+! Node.js 20 is deprecated. The following actions target Node.js 20 but are being forced to run on Node.js 24: actions/checkout@v4. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
+Lint Ruby: .github#2
+
+! Node.js 20 is deprecated. The following actions target Node.js 20 but are being forced to run on Node.js 24: actions/cache@v4, actions/checkout@v4, nick-fields/retry@v3. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
+Build images: .github#4
+
+! Node.js 20 is deprecated. The following actions target Node.js 20 but are being forced to run on Node.js 24: actions/checkout@v4, actions/setup-node@v4. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
+Typecheck TS: .github#2
+
+! Node.js 20 is deprecated. The following actions target Node.js 20 but are being forced to run on Node.js 24: actions/checkout@v4. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
+Migration versions: .github#2
+
+Refreshing run status every 60 seconds. Press Ctrl+C to quit.
+
+* fix/us-company-structure-mapping Tests antiwork/gumroad#7686 · 35052947395
+Triggered via push about 9 minutes ago
+
+JOBS
+✓ CI Gate in 6s (ID 104657101949)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Run true
+  ✓ Complete runner
+  ✓ Complete job
+✓ Lint JS/TS in 6m8s (ID 104657149942)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Run actions/checkout@v4
+  ✓ Run actions/setup-node@v4
+  ✓ Run npm ci
+  ✓ Run npm run lint-fast
+  ✓ Run npm test
+  ✓ Post Run actions/setup-node@v4
+  ✓ Post Run actions/checkout@v4
+  ✓ Complete runner
+  ✓ Complete job
+✓ Lint Ruby in 1m21s (ID 104657149948)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Run actions/checkout@v4
+  ✓ Run ruby/setup-ruby@v1
+  ✓ Run bundle exec rubocop --format github
+  ✓ Post Run actions/checkout@v4
+  ✓ Complete runner
+  ✓ Complete job
+✓ Test Minitest 1 in 8m36s (ID 104657149949)
+  ✓ Set up job
+  ✓ Initialize containers
+  ✓ Run actions/checkout@v4
+  ✓ Set up Ruby
+  ✓ Prepare test database
+  ✓ Login to Docker Hub
+  ✓ Start MinIO (S3-compatible object storage)
+  ✓ Wait for Elasticsearch
+  ✓ Run Minitest
+  ✓ Post Run actions/checkout@v4
+  ✓ Stop containers
+  ✓ Complete job
+✓ Test Minitest 0 in 8m37s (ID 104657149953)
+  ✓ Set up job
+  ✓ Initialize containers
+  ✓ Run actions/checkout@v4
+  ✓ Set up Ruby
+  ✓ Prepare test database
+  ✓ Login to Docker Hub
+  ✓ Start MinIO (S3-compatible object storage)
+  ✓ Wait for Elasticsearch
+  ✓ Run Minitest
+  ✓ Post Run actions/checkout@v4
+  ✓ Stop containers
+  ✓ Complete job
+✓ Build images in 6m0s (ID 104657149961)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  ✓ Build and push base image
+  ✓ Compute content-addressed test image tag
+  ✓ Set up Docker Buildx
+  ✓ Restore asset precompile cache
+  ✓ Build and push test image
+  ✓ Post Restore asset precompile cache
+  ✓ Post Set up Docker Buildx
+  ✓ Post Check out repository
+  ✓ Complete runner
+  ✓ Complete job
+✓ Typecheck TS in 1m46s (ID 104657149981)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Run actions/checkout@v4
+  ✓ Run ruby/setup-ruby@v1
+  ✓ Run actions/setup-node@v4
+  ✓ Run npm ci
+  ✓ Run bundle exec rails js:export
+  ✓ Run npm run typecheck
+  ✓ Post Run actions/setup-node@v4
+  ✓ Post Run actions/checkout@v4
+  ✓ Complete runner
+  ✓ Complete job
+✓ Run scope in 7s (ID 104657150002)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Run if [ "$GITHUB_EVENT_NAME" = "push" ] && [ "$GITHUB_REF" = "refs/heads/main" ]; then
+  ✓ Complete runner
+  ✓ Complete job
+✓ Migration versions in 1m11s (ID 104657150034)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Run actions/checkout@v4
+  ✓ Check migration versions against the base branch
+  ✓ Self-test the checker
+  ✓ Self-test the branch-specs selector
+  ✓ Self-test reuse-full-suite
+  ✓ Post Run actions/checkout@v4
+  ✓ Complete runner
+  ✓ Complete job
+- Reuse full suite in 0s (ID 104657150836)
+- Compute relevant specs (ID 104657200114)
+* Test Fast 7 (ID 104658304884)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  ✓ Start services and pull test image
+  ✓ Wait for services and prepare test database
+  * Run tests
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Fast 8 (ID 104658304889)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  ✓ Start services and pull test image
+  ✓ Wait for services and prepare test database
+  * Run tests
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Fast 4 (ID 104658304891)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  ✓ Start services and pull test image
+  ✓ Wait for services and prepare test database
+  * Run tests
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Fast 13 (ID 104658304896)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  ✓ Start services and pull test image
+  ✓ Wait for services and prepare test database
+  * Run tests
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Fast 0 (ID 104658304897)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  ✓ Start services and pull test image
+  ✓ Wait for services and prepare test database
+  * Run tests
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Fast 1 (ID 104658304901)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  ✓ Start services and pull test image
+  ✓ Wait for services and prepare test database
+  * Run tests
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Fast 9 (ID 104658304902)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  * Start services and pull test image
+  * Wait for services and prepare test database
+  * Run tests
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Fast 11 (ID 104658304912)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  * Start services and pull test image
+  * Wait for services and prepare test database
+  * Run tests
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Fast 2 (ID 104658304913)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  * Start services and pull test image
+  * Wait for services and prepare test database
+  * Run tests
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Fast 5 (ID 104658304918)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  * Start services and pull test image
+  * Wait for services and prepare test database
+  * Run tests
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Fast 16 (ID 104658304922)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  ✓ Start services and pull test image
+  ✓ Wait for services and prepare test database
+  * Run tests
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Fast 10 (ID 104658304935)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  ✓ Start services and pull test image
+  ✓ Wait for services and prepare test database
+  * Run tests
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Fast 6 (ID 104658304949)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  * Start services and pull test image
+  * Wait for services and prepare test database
+  * Run tests
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Fast 15 (ID 104658304958)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  ✓ Start services and pull test image
+  ✓ Wait for services and prepare test database
+  * Run tests
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Fast 3 (ID 104658304960)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  * Start services and pull test image
+  * Wait for services and prepare test database
+  * Run tests
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Fast 14 (ID 104658304971)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  ✓ Start services and pull test image
+  ✓ Wait for services and prepare test database
+  * Run tests
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Fast 12 (ID 104658304989)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  * Start services and pull test image
+  * Wait for services and prepare test database
+  * Run tests
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Fast 17 (ID 104658305091)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  * Start services and pull test image
+  * Wait for services and prepare test database
+  * Run tests
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Slow 5 (ID 104658305218)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  ✓ Start services and pull test image
+  ✓ Wait for services and prepare test database
+  * Run tests
+  * Archive capybara artifacts
+  * Archive test logs
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Slow 7 (ID 104658305269)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  * Start services and pull test image
+  * Wait for services and prepare test database
+  * Run tests
+  * Archive capybara artifacts
+  * Archive test logs
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Slow 9 (ID 104658305274)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  * Start services and pull test image
+  * Wait for services and prepare test database
+  * Run tests
+  * Archive capybara artifacts
+  * Archive test logs
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Slow 4 (ID 104658305276)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  ✓ Start services and pull test image
+  ✓ Wait for services and prepare test database
+  * Run tests
+  * Archive capybara artifacts
+  * Archive test logs
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Slow 11 (ID 104658305291)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  * Start services and pull test image
+  * Wait for services and prepare test database
+  * Run tests
+  * Archive capybara artifacts
+  * Archive test logs
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Slow 3 (ID 104658305300)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  * Start services and pull test image
+  * Wait for services and prepare test database
+  * Run tests
+  * Archive capybara artifacts
+  * Archive test logs
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Slow 1 (ID 104658305307)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  * Start services and pull test image
+  * Wait for services and prepare test database
+  * Run tests
+  * Archive capybara artifacts
+  * Archive test logs
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Slow 14 (ID 104658305334)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  * Start services and pull test image
+  * Wait for services and prepare test database
+  * Run tests
+  * Archive capybara artifacts
+  * Archive test logs
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Slow 26 (ID 104658305336)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  * Start services and pull test image
+  * Wait for services and prepare test database
+  * Run tests
+  * Archive capybara artifacts
+  * Archive test logs
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Slow 17 (ID 104658305338)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  * Start services and pull test image
+  * Wait for services and prepare test database
+  * Run tests
+  * Archive capybara artifacts
+  * Archive test logs
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Slow 15 (ID 104658305342)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  ✓ Start services and pull test image
+  ✓ Wait for services and prepare test database
+  * Run tests
+  * Archive capybara artifacts
+  * Archive test logs
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Slow 29 (ID 104658305348)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  * Start services and pull test image
+  * Wait for services and prepare test database
+  * Run tests
+  * Archive capybara artifacts
+  * Archive test logs
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Slow 8 (ID 104658305349)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  * Start services and pull test image
+  * Wait for services and prepare test database
+  * Run tests
+  * Archive capybara artifacts
+  * Archive test logs
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Slow 2 (ID 104658305350)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  * Start services and pull test image
+  * Wait for services and prepare test database
+  * Run tests
+  * Archive capybara artifacts
+  * Archive test logs
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Slow 6 (ID 104658305353)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  ✓ Start services and pull test image
+  ✓ Wait for services and prepare test database
+  * Run tests
+  * Archive capybara artifacts
+  * Archive test logs
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Slow 10 (ID 104658305354)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  * Start services and pull test image
+  * Wait for services and prepare test database
+  * Run tests
+  * Archive capybara artifacts
+  * Archive test logs
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Slow 23 (ID 104658305357)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  * Start services and pull test image
+  * Wait for services and prepare test database
+  * Run tests
+  * Archive capybara artifacts
+  * Archive test logs
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Slow 12 (ID 104658305363)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  * Start services and pull test image
+  * Wait for services and prepare test database
+  * Run tests
+  * Archive capybara artifacts
+  * Archive test logs
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Slow 16 (ID 104658305368)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  * Start services and pull test image
+  * Wait for services and prepare test database
+  * Run tests
+  * Archive capybara artifacts
+  * Archive test logs
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Slow 27 (ID 104658305371)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  * Start services and pull test image
+  * Wait for services and prepare test database
+  * Run tests
+  * Archive capybara artifacts
+  * Archive test logs
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Slow 37 (ID 104658305372)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  * Start services and pull test image
+  * Wait for services and prepare test database
+  * Run tests
+  * Archive capybara artifacts
+  * Archive test logs
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Slow 30 (ID 104658305375)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  * Start services and pull test image
+  * Wait for services and prepare test database
+  * Run tests
+  * Archive capybara artifacts
+  * Archive test logs
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Slow 24 (ID 104658305380)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  * Start services and pull test image
+  * Wait for services and prepare test database
+  * Run tests
+  * Archive capybara artifacts
+  * Archive test logs
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Slow 36 (ID 104658305381)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  ✓ Start services and pull test image
+  ✓ Wait for services and prepare test database
+  * Run tests
+  * Archive capybara artifacts
+  * Archive test logs
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Slow 32 (ID 104658305382)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  * Start services and pull test image
+  * Wait for services and prepare test database
+  * Run tests
+  * Archive capybara artifacts
+  * Archive test logs
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Slow 31 (ID 104658305383)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  * Start services and pull test image
+  * Wait for services and prepare test database
+  * Run tests
+  * Archive capybara artifacts
+  * Archive test logs
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Slow 0 (ID 104658305399)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  * Start services and pull test image
+  * Wait for services and prepare test database
+  * Run tests
+  * Archive capybara artifacts
+  * Archive test logs
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Slow 13 (ID 104658305400)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  * Start services and pull test image
+  * Wait for services and prepare test database
+  * Run tests
+  * Archive capybara artifacts
+  * Archive test logs
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Slow 22 (ID 104658305402)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  ✓ Start services and pull test image
+  ✓ Wait for services and prepare test database
+  * Run tests
+  * Archive capybara artifacts
+  * Archive test logs
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Slow 39 (ID 104658305404)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  * Start services and pull test image
+  * Wait for services and prepare test database
+  * Run tests
+  * Archive capybara artifacts
+  * Archive test logs
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Slow 25 (ID 104658305412)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  * Start services and pull test image
+  * Wait for services and prepare test database
+  * Run tests
+  * Archive capybara artifacts
+  * Archive test logs
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Slow 33 (ID 104658305417)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  * Start services and pull test image
+  * Wait for services and prepare test database
+  * Run tests
+  * Archive capybara artifacts
+  * Archive test logs
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Slow 18 (ID 104658305425)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  * Start services and pull test image
+  * Wait for services and prepare test database
+  * Run tests
+  * Archive capybara artifacts
+  * Archive test logs
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Slow 19 (ID 104658305426)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  * Start services and pull test image
+  * Wait for services and prepare test database
+  * Run tests
+  * Archive capybara artifacts
+  * Archive test logs
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Slow 21 (ID 104658305429)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  ✓ Start services and pull test image
+  ✓ Wait for services and prepare test database
+  * Run tests
+  * Archive capybara artifacts
+  * Archive test logs
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Slow 48 (ID 104658305435)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  * Start services and pull test image
+  * Wait for services and prepare test database
+  * Run tests
+  * Archive capybara artifacts
+  * Archive test logs
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Slow 20 (ID 104658305444)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  * Start services and pull test image
+  * Wait for services and prepare test database
+  * Run tests
+  * Archive capybara artifacts
+  * Archive test logs
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Slow 28 (ID 104658305452)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  * Start services and pull test image
+  * Wait for services and prepare test database
+  * Run tests
+  * Archive capybara artifacts
+  * Archive test logs
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Slow 47 (ID 104658305463)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  ✓ Start services and pull test image
+  ✓ Wait for services and prepare test database
+  * Run tests
+  * Archive capybara artifacts
+  * Archive test logs
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Slow 49 (ID 104658305473)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  * Start services and pull test image
+  * Wait for services and prepare test database
+  * Run tests
+  * Archive capybara artifacts
+  * Archive test logs
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Slow 41 (ID 104658305481)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  * Start services and pull test image
+  * Wait for services and prepare test database
+  * Run tests
+  * Archive capybara artifacts
+  * Archive test logs
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Slow 46 (ID 104658305492)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  * Start services and pull test image
+  * Wait for services and prepare test database
+  * Run tests
+  * Archive capybara artifacts
+  * Archive test logs
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Slow 42 (ID 104658305493)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  * Start services and pull test image
+  * Wait for services and prepare test database
+  * Run tests
+  * Archive capybara artifacts
+  * Archive test logs
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Slow 35 (ID 104658305504)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  * Start services and pull test image
+  * Wait for services and prepare test database
+  * Run tests
+  * Archive capybara artifacts
+  * Archive test logs
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Slow 44 (ID 104658305505)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  * Start services and pull test image
+  * Wait for services and prepare test database
+  * Run tests
+  * Archive capybara artifacts
+  * Archive test logs
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Slow 43 (ID 104658305549)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  * Start services and pull test image
+  * Wait for services and prepare test database
+  * Run tests
+  * Archive capybara artifacts
+  * Archive test logs
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Slow 34 (ID 104658305557)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  * Start services and pull test image
+  * Wait for services and prepare test database
+  * Run tests
+  * Archive capybara artifacts
+  * Archive test logs
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Slow 40 (ID 104658305558)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  * Start services and pull test image
+  * Wait for services and prepare test database
+  * Run tests
+  * Archive capybara artifacts
+  * Archive test logs
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Slow 38 (ID 104658305573)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  * Start services and pull test image
+  * Wait for services and prepare test database
+  * Run tests
+  * Archive capybara artifacts
+  * Archive test logs
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Slow 45 (ID 104658305579)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  * Start services and pull test image
+  * Wait for services and prepare test database
+  * Run tests
+  * Archive capybara artifacts
+  * Archive test logs
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+- Test Relevant ${{ matrix.ci_node_index }}${{ (((github.event_name == 'pull_request_target') && (github.event.pull_request.head.repo.full_name == github.repository) && ' (internal PR noop)') || '') }} in 0s (ID 104658306326)
+
+ANNOTATIONS
+! Node.js 20 is deprecated. The following actions target Node.js 20 but are being forced to run on Node.js 24: actions/checkout@v4, actions/setup-node@v4. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
+Lint JS/TS: .github#2
+
+! Node.js 20 is deprecated. The following actions target Node.js 20 but are being forced to run on Node.js 24: actions/checkout@v4. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
+Lint Ruby: .github#2
+
+! Node.js 20 is deprecated. The following actions target Node.js 20 but are being forced to run on Node.js 24: actions/cache@v4, actions/checkout@v4, nick-fields/retry@v3. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
+Build images: .github#4
+
+! Node.js 20 is deprecated. The following actions target Node.js 20 but are being forced to run on Node.js 24: actions/checkout@v4, actions/setup-node@v4. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
+Typecheck TS: .github#2
+
+! Node.js 20 is deprecated. The following actions target Node.js 20 but are being forced to run on Node.js 24: actions/checkout@v4. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
+Migration versions: .github#2
+
+Refreshing run status every 60 seconds. Press Ctrl+C to quit.
+
+* fix/us-company-structure-mapping Tests antiwork/gumroad#7686 · 35052947395
+Triggered via push about 10 minutes ago
+
+JOBS
+✓ CI Gate in 6s (ID 104657101949)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Run true
+  ✓ Complete runner
+  ✓ Complete job
+✓ Lint JS/TS in 6m8s (ID 104657149942)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Run actions/checkout@v4
+  ✓ Run actions/setup-node@v4
+  ✓ Run npm ci
+  ✓ Run npm run lint-fast
+  ✓ Run npm test
+  ✓ Post Run actions/setup-node@v4
+  ✓ Post Run actions/checkout@v4
+  ✓ Complete runner
+  ✓ Complete job
+✓ Lint Ruby in 1m21s (ID 104657149948)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Run actions/checkout@v4
+  ✓ Run ruby/setup-ruby@v1
+  ✓ Run bundle exec rubocop --format github
+  ✓ Post Run actions/checkout@v4
+  ✓ Complete runner
+  ✓ Complete job
+✓ Test Minitest 1 in 8m36s (ID 104657149949)
+  ✓ Set up job
+  ✓ Initialize containers
+  ✓ Run actions/checkout@v4
+  ✓ Set up Ruby
+  ✓ Prepare test database
+  ✓ Login to Docker Hub
+  ✓ Start MinIO (S3-compatible object storage)
+  ✓ Wait for Elasticsearch
+  ✓ Run Minitest
+  ✓ Post Run actions/checkout@v4
+  ✓ Stop containers
+  ✓ Complete job
+✓ Test Minitest 0 in 8m37s (ID 104657149953)
+  ✓ Set up job
+  ✓ Initialize containers
+  ✓ Run actions/checkout@v4
+  ✓ Set up Ruby
+  ✓ Prepare test database
+  ✓ Login to Docker Hub
+  ✓ Start MinIO (S3-compatible object storage)
+  ✓ Wait for Elasticsearch
+  ✓ Run Minitest
+  ✓ Post Run actions/checkout@v4
+  ✓ Stop containers
+  ✓ Complete job
+✓ Build images in 6m0s (ID 104657149961)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  ✓ Build and push base image
+  ✓ Compute content-addressed test image tag
+  ✓ Set up Docker Buildx
+  ✓ Restore asset precompile cache
+  ✓ Build and push test image
+  ✓ Post Restore asset precompile cache
+  ✓ Post Set up Docker Buildx
+  ✓ Post Check out repository
+  ✓ Complete runner
+  ✓ Complete job
+✓ Typecheck TS in 1m46s (ID 104657149981)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Run actions/checkout@v4
+  ✓ Run ruby/setup-ruby@v1
+  ✓ Run actions/setup-node@v4
+  ✓ Run npm ci
+  ✓ Run bundle exec rails js:export
+  ✓ Run npm run typecheck
+  ✓ Post Run actions/setup-node@v4
+  ✓ Post Run actions/checkout@v4
+  ✓ Complete runner
+  ✓ Complete job
+✓ Run scope in 7s (ID 104657150002)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Run if [ "$GITHUB_EVENT_NAME" = "push" ] && [ "$GITHUB_REF" = "refs/heads/main" ]; then
+  ✓ Complete runner
+  ✓ Complete job
+✓ Migration versions in 1m11s (ID 104657150034)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Run actions/checkout@v4
+  ✓ Check migration versions against the base branch
+  ✓ Self-test the checker
+  ✓ Self-test the branch-specs selector
+  ✓ Self-test reuse-full-suite
+  ✓ Post Run actions/checkout@v4
+  ✓ Complete runner
+  ✓ Complete job
+- Reuse full suite in 0s (ID 104657150836)
+- Compute relevant specs (ID 104657200114)
+* Test Fast 7 (ID 104658304884)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  ✓ Start services and pull test image
+  ✓ Wait for services and prepare test database
+  * Run tests
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Fast 8 (ID 104658304889)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  ✓ Start services and pull test image
+  ✓ Wait for services and prepare test database
+  * Run tests
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Fast 4 (ID 104658304891)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  ✓ Start services and pull test image
+  ✓ Wait for services and prepare test database
+  * Run tests
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Fast 13 (ID 104658304896)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  ✓ Start services and pull test image
+  ✓ Wait for services and prepare test database
+  * Run tests
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Fast 0 (ID 104658304897)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  ✓ Start services and pull test image
+  ✓ Wait for services and prepare test database
+  * Run tests
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Fast 1 (ID 104658304901)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  ✓ Start services and pull test image
+  ✓ Wait for services and prepare test database
+  * Run tests
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Fast 9 (ID 104658304902)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  ✓ Start services and pull test image
+  ✓ Wait for services and prepare test database
+  * Run tests
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Fast 11 (ID 104658304912)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  ✓ Start services and pull test image
+  ✓ Wait for services and prepare test database
+  * Run tests
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Fast 2 (ID 104658304913)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  ✓ Start services and pull test image
+  ✓ Wait for services and prepare test database
+  * Run tests
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Fast 5 (ID 104658304918)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  ✓ Start services and pull test image
+  ✓ Wait for services and prepare test database
+  * Run tests
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Fast 16 (ID 104658304922)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  ✓ Start services and pull test image
+  ✓ Wait for services and prepare test database
+  * Run tests
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Fast 10 (ID 104658304935)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  ✓ Start services and pull test image
+  ✓ Wait for services and prepare test database
+  * Run tests
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Fast 6 (ID 104658304949)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  ✓ Start services and pull test image
+  ✓ Wait for services and prepare test database
+  * Run tests
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Fast 15 (ID 104658304958)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  ✓ Start services and pull test image
+  ✓ Wait for services and prepare test database
+  * Run tests
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Fast 3 (ID 104658304960)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  ✓ Start services and pull test image
+  ✓ Wait for services and prepare test database
+  * Run tests
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Fast 14 (ID 104658304971)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  ✓ Start services and pull test image
+  ✓ Wait for services and prepare test database
+  * Run tests
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Fast 12 (ID 104658304989)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  ✓ Start services and pull test image
+  ✓ Wait for services and prepare test database
+  * Run tests
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Fast 17 (ID 104658305091)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  * Start services and pull test image
+  * Wait for services and prepare test database
+  * Run tests
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Slow 5 (ID 104658305218)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  ✓ Start services and pull test image
+  ✓ Wait for services and prepare test database
+  * Run tests
+  * Archive capybara artifacts
+  * Archive test logs
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Slow 7 (ID 104658305269)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  ✓ Start services and pull test image
+  ✓ Wait for services and prepare test database
+  * Run tests
+  * Archive capybara artifacts
+  * Archive test logs
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Slow 9 (ID 104658305274)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  ✓ Start services and pull test image
+  ✓ Wait for services and prepare test database
+  * Run tests
+  * Archive capybara artifacts
+  * Archive test logs
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Slow 4 (ID 104658305276)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  ✓ Start services and pull test image
+  ✓ Wait for services and prepare test database
+  * Run tests
+  * Archive capybara artifacts
+  * Archive test logs
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Slow 11 (ID 104658305291)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  ✓ Start services and pull test image
+  ✓ Wait for services and prepare test database
+  * Run tests
+  * Archive capybara artifacts
+  * Archive test logs
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Slow 3 (ID 104658305300)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  ✓ Start services and pull test image
+  ✓ Wait for services and prepare test database
+  * Run tests
+  * Archive capybara artifacts
+  * Archive test logs
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Slow 1 (ID 104658305307)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  ✓ Start services and pull test image
+  ✓ Wait for services and prepare test database
+  * Run tests
+  * Archive capybara artifacts
+  * Archive test logs
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Slow 14 (ID 104658305334)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  ✓ Start services and pull test image
+  ✓ Wait for services and prepare test database
+  * Run tests
+  * Archive capybara artifacts
+  * Archive test logs
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Slow 26 (ID 104658305336)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  ✓ Start services and pull test image
+  ✓ Wait for services and prepare test database
+  * Run tests
+  * Archive capybara artifacts
+  * Archive test logs
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Slow 17 (ID 104658305338)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  ✓ Start services and pull test image
+  ✓ Wait for services and prepare test database
+  * Run tests
+  * Archive capybara artifacts
+  * Archive test logs
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Slow 15 (ID 104658305342)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  ✓ Start services and pull test image
+  ✓ Wait for services and prepare test database
+  * Run tests
+  * Archive capybara artifacts
+  * Archive test logs
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Slow 29 (ID 104658305348)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  ✓ Start services and pull test image
+  ✓ Wait for services and prepare test database
+  * Run tests
+  * Archive capybara artifacts
+  * Archive test logs
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Slow 8 (ID 104658305349)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  ✓ Start services and pull test image
+  ✓ Wait for services and prepare test database
+  * Run tests
+  * Archive capybara artifacts
+  * Archive test logs
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Slow 2 (ID 104658305350)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  ✓ Start services and pull test image
+  ✓ Wait for services and prepare test database
+  * Run tests
+  * Archive capybara artifacts
+  * Archive test logs
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Slow 6 (ID 104658305353)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  ✓ Start services and pull test image
+  ✓ Wait for services and prepare test database
+  * Run tests
+  * Archive capybara artifacts
+  * Archive test logs
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Slow 10 (ID 104658305354)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  ✓ Start services and pull test image
+  ✓ Wait for services and prepare test database
+  * Run tests
+  * Archive capybara artifacts
+  * Archive test logs
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Slow 23 (ID 104658305357)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  ✓ Start services and pull test image
+  ✓ Wait for services and prepare test database
+  * Run tests
+  * Archive capybara artifacts
+  * Archive test logs
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Slow 12 (ID 104658305363)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  ✓ Start services and pull test image
+  ✓ Wait for services and prepare test database
+  * Run tests
+  * Archive capybara artifacts
+  * Archive test logs
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Slow 16 (ID 104658305368)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  ✓ Start services and pull test image
+  ✓ Wait for services and prepare test database
+  * Run tests
+  * Archive capybara artifacts
+  * Archive test logs
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Slow 27 (ID 104658305371)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  * Start services and pull test image
+  * Wait for services and prepare test database
+  * Run tests
+  * Archive capybara artifacts
+  * Archive test logs
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Slow 37 (ID 104658305372)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  ✓ Start services and pull test image
+  ✓ Wait for services and prepare test database
+  * Run tests
+  * Archive capybara artifacts
+  * Archive test logs
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Slow 30 (ID 104658305375)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  ✓ Start services and pull test image
+  ✓ Wait for services and prepare test database
+  * Run tests
+  * Archive capybara artifacts
+  * Archive test logs
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Slow 24 (ID 104658305380)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  ✓ Start services and pull test image
+  ✓ Wait for services and prepare test database
+  * Run tests
+  * Archive capybara artifacts
+  * Archive test logs
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Slow 36 (ID 104658305381)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  ✓ Start services and pull test image
+  ✓ Wait for services and prepare test database
+  * Run tests
+  * Archive capybara artifacts
+  * Archive test logs
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Slow 32 (ID 104658305382)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  ✓ Start services and pull test image
+  ✓ Wait for services and prepare test database
+  * Run tests
+  * Archive capybara artifacts
+  * Archive test logs
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Slow 31 (ID 104658305383)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  ✓ Start services and pull test image
+  ✓ Wait for services and prepare test database
+  * Run tests
+  * Archive capybara artifacts
+  * Archive test logs
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Slow 0 (ID 104658305399)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  ✓ Start services and pull test image
+  ✓ Wait for services and prepare test database
+  * Run tests
+  * Archive capybara artifacts
+  * Archive test logs
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Slow 13 (ID 104658305400)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  ✓ Start services and pull test image
+  ✓ Wait for services and prepare test database
+  * Run tests
+  * Archive capybara artifacts
+  * Archive test logs
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Slow 22 (ID 104658305402)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  ✓ Start services and pull test image
+  ✓ Wait for services and prepare test database
+  * Run tests
+  * Archive capybara artifacts
+  * Archive test logs
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Slow 39 (ID 104658305404)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  ✓ Start services and pull test image
+  ✓ Wait for services and prepare test database
+  * Run tests
+  * Archive capybara artifacts
+  * Archive test logs
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Slow 25 (ID 104658305412)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  ✓ Start services and pull test image
+  ✓ Wait for services and prepare test database
+  * Run tests
+  * Archive capybara artifacts
+  * Archive test logs
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Slow 33 (ID 104658305417)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  ✓ Start services and pull test image
+  ✓ Wait for services and prepare test database
+  * Run tests
+  * Archive capybara artifacts
+  * Archive test logs
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Slow 18 (ID 104658305425)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  ✓ Start services and pull test image
+  ✓ Wait for services and prepare test database
+  * Run tests
+  * Archive capybara artifacts
+  * Archive test logs
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Slow 19 (ID 104658305426)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  ✓ Start services and pull test image
+  ✓ Wait for services and prepare test database
+  * Run tests
+  * Archive capybara artifacts
+  * Archive test logs
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Slow 21 (ID 104658305429)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  ✓ Start services and pull test image
+  ✓ Wait for services and prepare test database
+  * Run tests
+  * Archive capybara artifacts
+  * Archive test logs
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Slow 48 (ID 104658305435)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  ✓ Start services and pull test image
+  ✓ Wait for services and prepare test database
+  * Run tests
+  * Archive capybara artifacts
+  * Archive test logs
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Slow 20 (ID 104658305444)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  ✓ Start services and pull test image
+  ✓ Wait for services and prepare test database
+  * Run tests
+  * Archive capybara artifacts
+  * Archive test logs
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Slow 28 (ID 104658305452)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  ✓ Start services and pull test image
+  ✓ Wait for services and prepare test database
+  * Run tests
+  * Archive capybara artifacts
+  * Archive test logs
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Slow 47 (ID 104658305463)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  ✓ Start services and pull test image
+  ✓ Wait for services and prepare test database
+  * Run tests
+  * Archive capybara artifacts
+  * Archive test logs
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Slow 49 (ID 104658305473)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  ✓ Start services and pull test image
+  ✓ Wait for services and prepare test database
+  * Run tests
+  * Archive capybara artifacts
+  * Archive test logs
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Slow 41 (ID 104658305481)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  ✓ Start services and pull test image
+  ✓ Wait for services and prepare test database
+  * Run tests
+  * Archive capybara artifacts
+  * Archive test logs
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Slow 46 (ID 104658305492)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  ✓ Start services and pull test image
+  ✓ Wait for services and prepare test database
+  * Run tests
+  * Archive capybara artifacts
+  * Archive test logs
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Slow 42 (ID 104658305493)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  ✓ Start services and pull test image
+  ✓ Wait for services and prepare test database
+  * Run tests
+  * Archive capybara artifacts
+  * Archive test logs
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Slow 35 (ID 104658305504)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  ✓ Start services and pull test image
+  * Wait for services and prepare test database
+  * Run tests
+  * Archive capybara artifacts
+  * Archive test logs
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Slow 44 (ID 104658305505)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  ✓ Start services and pull test image
+  ✓ Wait for services and prepare test database
+  * Run tests
+  * Archive capybara artifacts
+  * Archive test logs
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Slow 43 (ID 104658305549)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  * Start services and pull test image
+  * Wait for services and prepare test database
+  * Run tests
+  * Archive capybara artifacts
+  * Archive test logs
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Slow 34 (ID 104658305557)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  ✓ Start services and pull test image
+  ✓ Wait for services and prepare test database
+  * Run tests
+  * Archive capybara artifacts
+  * Archive test logs
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Slow 40 (ID 104658305558)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  ✓ Start services and pull test image
+  ✓ Wait for services and prepare test database
+  * Run tests
+  * Archive capybara artifacts
+  * Archive test logs
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Slow 38 (ID 104658305573)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  ✓ Start services and pull test image
+  ✓ Wait for services and prepare test database
+  * Run tests
+  * Archive capybara artifacts
+  * Archive test logs
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Slow 45 (ID 104658305579)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  ✓ Start services and pull test image
+  * Wait for services and prepare test database
+  * Run tests
+  * Archive capybara artifacts
+  * Archive test logs
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+- Test Relevant ${{ matrix.ci_node_index }}${{ (((github.event_name == 'pull_request_target') && (github.event.pull_request.head.repo.full_name == github.repository) && ' (internal PR noop)') || '') }} in 0s (ID 104658306326)
+
+ANNOTATIONS
+! Node.js 20 is deprecated. The following actions target Node.js 20 but are being forced to run on Node.js 24: actions/checkout@v4, actions/setup-node@v4. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
+Lint JS/TS: .github#2
+
+! Node.js 20 is deprecated. The following actions target Node.js 20 but are being forced to run on Node.js 24: actions/checkout@v4. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
+Lint Ruby: .github#2
+
+! Node.js 20 is deprecated. The following actions target Node.js 20 but are being forced to run on Node.js 24: actions/cache@v4, actions/checkout@v4, nick-fields/retry@v3. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
+Build images: .github#4
+
+! Node.js 20 is deprecated. The following actions target Node.js 20 but are being forced to run on Node.js 24: actions/checkout@v4, actions/setup-node@v4. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
+Typecheck TS: .github#2
+
+! Node.js 20 is deprecated. The following actions target Node.js 20 but are being forced to run on Node.js 24: actions/checkout@v4. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
+Migration versions: .github#2
+
+Refreshing run status every 60 seconds. Press Ctrl+C to quit.
+
+* fix/us-company-structure-mapping Tests antiwork/gumroad#7686 · 35052947395
+Triggered via push about 11 minutes ago
+
+JOBS
+✓ CI Gate in 6s (ID 104657101949)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Run true
+  ✓ Complete runner
+  ✓ Complete job
+✓ Lint JS/TS in 6m8s (ID 104657149942)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Run actions/checkout@v4
+  ✓ Run actions/setup-node@v4
+  ✓ Run npm ci
+  ✓ Run npm run lint-fast
+  ✓ Run npm test
+  ✓ Post Run actions/setup-node@v4
+  ✓ Post Run actions/checkout@v4
+  ✓ Complete runner
+  ✓ Complete job
+✓ Lint Ruby in 1m21s (ID 104657149948)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Run actions/checkout@v4
+  ✓ Run ruby/setup-ruby@v1
+  ✓ Run bundle exec rubocop --format github
+  ✓ Post Run actions/checkout@v4
+  ✓ Complete runner
+  ✓ Complete job
+✓ Test Minitest 1 in 8m36s (ID 104657149949)
+  ✓ Set up job
+  ✓ Initialize containers
+  ✓ Run actions/checkout@v4
+  ✓ Set up Ruby
+  ✓ Prepare test database
+  ✓ Login to Docker Hub
+  ✓ Start MinIO (S3-compatible object storage)
+  ✓ Wait for Elasticsearch
+  ✓ Run Minitest
+  ✓ Post Run actions/checkout@v4
+  ✓ Stop containers
+  ✓ Complete job
+✓ Test Minitest 0 in 8m37s (ID 104657149953)
+  ✓ Set up job
+  ✓ Initialize containers
+  ✓ Run actions/checkout@v4
+  ✓ Set up Ruby
+  ✓ Prepare test database
+  ✓ Login to Docker Hub
+  ✓ Start MinIO (S3-compatible object storage)
+  ✓ Wait for Elasticsearch
+  ✓ Run Minitest
+  ✓ Post Run actions/checkout@v4
+  ✓ Stop containers
+  ✓ Complete job
+✓ Build images in 6m0s (ID 104657149961)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  ✓ Build and push base image
+  ✓ Compute content-addressed test image tag
+  ✓ Set up Docker Buildx
+  ✓ Restore asset precompile cache
+  ✓ Build and push test image
+  ✓ Post Restore asset precompile cache
+  ✓ Post Set up Docker Buildx
+  ✓ Post Check out repository
+  ✓ Complete runner
+  ✓ Complete job
+✓ Typecheck TS in 1m46s (ID 104657149981)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Run actions/checkout@v4
+  ✓ Run ruby/setup-ruby@v1
+  ✓ Run actions/setup-node@v4
+  ✓ Run npm ci
+  ✓ Run bundle exec rails js:export
+  ✓ Run npm run typecheck
+  ✓ Post Run actions/setup-node@v4
+  ✓ Post Run actions/checkout@v4
+  ✓ Complete runner
+  ✓ Complete job
+✓ Run scope in 7s (ID 104657150002)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Run if [ "$GITHUB_EVENT_NAME" = "push" ] && [ "$GITHUB_REF" = "refs/heads/main" ]; then
+  ✓ Complete runner
+  ✓ Complete job
+✓ Migration versions in 1m11s (ID 104657150034)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Run actions/checkout@v4
+  ✓ Check migration versions against the base branch
+  ✓ Self-test the checker
+  ✓ Self-test the branch-specs selector
+  ✓ Self-test reuse-full-suite
+  ✓ Post Run actions/checkout@v4
+  ✓ Complete runner
+  ✓ Complete job
+- Reuse full suite in 0s (ID 104657150836)
+- Compute relevant specs (ID 104657200114)
+* Test Fast 7 (ID 104658304884)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  ✓ Start services and pull test image
+  ✓ Wait for services and prepare test database
+  * Run tests
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Fast 8 (ID 104658304889)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  ✓ Start services and pull test image
+  ✓ Wait for services and prepare test database
+  * Run tests
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Fast 4 (ID 104658304891)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  ✓ Start services and pull test image
+  ✓ Wait for services and prepare test database
+  * Run tests
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Fast 13 (ID 104658304896)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  ✓ Start services and pull test image
+  ✓ Wait for services and prepare test database
+  * Run tests
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Fast 0 (ID 104658304897)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  ✓ Start services and pull test image
+  ✓ Wait for services and prepare test database
+  * Run tests
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Fast 1 (ID 104658304901)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  ✓ Start services and pull test image
+  ✓ Wait for services and prepare test database
+  * Run tests
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Fast 9 (ID 104658304902)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  ✓ Start services and pull test image
+  ✓ Wait for services and prepare test database
+  * Run tests
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Fast 11 (ID 104658304912)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  ✓ Start services and pull test image
+  ✓ Wait for services and prepare test database
+  * Run tests
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Fast 2 (ID 104658304913)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  ✓ Start services and pull test image
+  ✓ Wait for services and prepare test database
+  * Run tests
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Fast 5 (ID 104658304918)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  ✓ Start services and pull test image
+  ✓ Wait for services and prepare test database
+  * Run tests
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Fast 16 (ID 104658304922)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  ✓ Start services and pull test image
+  ✓ Wait for services and prepare test database
+  * Run tests
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Fast 10 (ID 104658304935)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  ✓ Start services and pull test image
+  ✓ Wait for services and prepare test database
+  * Run tests
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Fast 6 (ID 104658304949)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  ✓ Start services and pull test image
+  ✓ Wait for services and prepare test database
+  * Run tests
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Fast 15 (ID 104658304958)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  ✓ Start services and pull test image
+  ✓ Wait for services and prepare test database
+  * Run tests
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Fast 3 (ID 104658304960)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  ✓ Start services and pull test image
+  ✓ Wait for services and prepare test database
+  * Run tests
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Fast 14 (ID 104658304971)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  ✓ Start services and pull test image
+  ✓ Wait for services and prepare test database
+  * Run tests
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Fast 12 (ID 104658304989)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  ✓ Start services and pull test image
+  ✓ Wait for services and prepare test database
+  * Run tests
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Fast 17 (ID 104658305091)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  ✓ Start services and pull test image
+  ✓ Wait for services and prepare test database
+  * Run tests
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Slow 5 (ID 104658305218)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  ✓ Start services and pull test image
+  ✓ Wait for services and prepare test database
+  * Run tests
+  * Archive capybara artifacts
+  * Archive test logs
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Slow 7 (ID 104658305269)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  ✓ Start services and pull test image
+  ✓ Wait for services and prepare test database
+  * Run tests
+  * Archive capybara artifacts
+  * Archive test logs
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Slow 9 (ID 104658305274)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  ✓ Start services and pull test image
+  ✓ Wait for services and prepare test database
+  * Run tests
+  * Archive capybara artifacts
+  * Archive test logs
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Slow 4 (ID 104658305276)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  ✓ Start services and pull test image
+  ✓ Wait for services and prepare test database
+  * Run tests
+  * Archive capybara artifacts
+  * Archive test logs
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Slow 11 (ID 104658305291)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  ✓ Start services and pull test image
+  ✓ Wait for services and prepare test database
+  * Run tests
+  * Archive capybara artifacts
+  * Archive test logs
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Slow 3 (ID 104658305300)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  ✓ Start services and pull test image
+  ✓ Wait for services and prepare test database
+  * Run tests
+  * Archive capybara artifacts
+  * Archive test logs
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Slow 1 (ID 104658305307)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  ✓ Start services and pull test image
+  ✓ Wait for services and prepare test database
+  * Run tests
+  * Archive capybara artifacts
+  * Archive test logs
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Slow 14 (ID 104658305334)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  ✓ Start services and pull test image
+  ✓ Wait for services and prepare test database
+  * Run tests
+  * Archive capybara artifacts
+  * Archive test logs
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Slow 26 (ID 104658305336)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  ✓ Start services and pull test image
+  ✓ Wait for services and prepare test database
+  * Run tests
+  * Archive capybara artifacts
+  * Archive test logs
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Slow 17 (ID 104658305338)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  ✓ Start services and pull test image
+  ✓ Wait for services and prepare test database
+  * Run tests
+  * Archive capybara artifacts
+  * Archive test logs
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Slow 15 (ID 104658305342)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  ✓ Start services and pull test image
+  ✓ Wait for services and prepare test database
+  * Run tests
+  * Archive capybara artifacts
+  * Archive test logs
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Slow 29 (ID 104658305348)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  ✓ Start services and pull test image
+  ✓ Wait for services and prepare test database
+  * Run tests
+  * Archive capybara artifacts
+  * Archive test logs
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Slow 8 (ID 104658305349)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  ✓ Start services and pull test image
+  ✓ Wait for services and prepare test database
+  * Run tests
+  * Archive capybara artifacts
+  * Archive test logs
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Slow 2 (ID 104658305350)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  ✓ Start services and pull test image
+  ✓ Wait for services and prepare test database
+  * Run tests
+  * Archive capybara artifacts
+  * Archive test logs
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Slow 6 (ID 104658305353)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  ✓ Start services and pull test image
+  ✓ Wait for services and prepare test database
+  * Run tests
+  * Archive capybara artifacts
+  * Archive test logs
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Slow 10 (ID 104658305354)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  ✓ Start services and pull test image
+  ✓ Wait for services and prepare test database
+  * Run tests
+  * Archive capybara artifacts
+  * Archive test logs
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Slow 23 (ID 104658305357)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  ✓ Start services and pull test image
+  ✓ Wait for services and prepare test database
+  * Run tests
+  * Archive capybara artifacts
+  * Archive test logs
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Slow 12 (ID 104658305363)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  ✓ Start services and pull test image
+  ✓ Wait for services and prepare test database
+  * Run tests
+  * Archive capybara artifacts
+  * Archive test logs
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Slow 16 (ID 104658305368)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  ✓ Start services and pull test image
+  ✓ Wait for services and prepare test database
+  * Run tests
+  * Archive capybara artifacts
+  * Archive test logs
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Slow 27 (ID 104658305371)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  ✓ Start services and pull test image
+  ✓ Wait for services and prepare test database
+  * Run tests
+  * Archive capybara artifacts
+  * Archive test logs
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Slow 37 (ID 104658305372)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  ✓ Start services and pull test image
+  ✓ Wait for services and prepare test database
+  * Run tests
+  * Archive capybara artifacts
+  * Archive test logs
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Slow 30 (ID 104658305375)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  ✓ Start services and pull test image
+  ✓ Wait for services and prepare test database
+  * Run tests
+  * Archive capybara artifacts
+  * Archive test logs
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Slow 24 (ID 104658305380)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  ✓ Start services and pull test image
+  ✓ Wait for services and prepare test database
+  * Run tests
+  * Archive capybara artifacts
+  * Archive test logs
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Slow 36 (ID 104658305381)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  ✓ Start services and pull test image
+  ✓ Wait for services and prepare test database
+  * Run tests
+  * Archive capybara artifacts
+  * Archive test logs
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Slow 32 (ID 104658305382)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  ✓ Start services and pull test image
+  ✓ Wait for services and prepare test database
+  * Run tests
+  * Archive capybara artifacts
+  * Archive test logs
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Slow 31 (ID 104658305383)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  ✓ Start services and pull test image
+  ✓ Wait for services and prepare test database
+  * Run tests
+  * Archive capybara artifacts
+  * Archive test logs
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Slow 0 (ID 104658305399)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  ✓ Start services and pull test image
+  ✓ Wait for services and prepare test database
+  * Run tests
+  * Archive capybara artifacts
+  * Archive test logs
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Slow 13 (ID 104658305400)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  ✓ Start services and pull test image
+  ✓ Wait for services and prepare test database
+  * Run tests
+  * Archive capybara artifacts
+  * Archive test logs
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Slow 22 (ID 104658305402)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  ✓ Start services and pull test image
+  ✓ Wait for services and prepare test database
+  * Run tests
+  * Archive capybara artifacts
+  * Archive test logs
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Slow 39 (ID 104658305404)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  ✓ Start services and pull test image
+  ✓ Wait for services and prepare test database
+  * Run tests
+  * Archive capybara artifacts
+  * Archive test logs
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Slow 25 (ID 104658305412)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  ✓ Start services and pull test image
+  ✓ Wait for services and prepare test database
+  * Run tests
+  * Archive capybara artifacts
+  * Archive test logs
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Slow 33 (ID 104658305417)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  ✓ Start services and pull test image
+  ✓ Wait for services and prepare test database
+  * Run tests
+  * Archive capybara artifacts
+  * Archive test logs
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Slow 18 (ID 104658305425)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  ✓ Start services and pull test image
+  ✓ Wait for services and prepare test database
+  * Run tests
+  * Archive capybara artifacts
+  * Archive test logs
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Slow 19 (ID 104658305426)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  ✓ Start services and pull test image
+  ✓ Wait for services and prepare test database
+  * Run tests
+  * Archive capybara artifacts
+  * Archive test logs
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Slow 21 (ID 104658305429)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  ✓ Start services and pull test image
+  ✓ Wait for services and prepare test database
+  * Run tests
+  * Archive capybara artifacts
+  * Archive test logs
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Slow 48 (ID 104658305435)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  ✓ Start services and pull test image
+  ✓ Wait for services and prepare test database
+  * Run tests
+  * Archive capybara artifacts
+  * Archive test logs
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Slow 20 (ID 104658305444)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  ✓ Start services and pull test image
+  ✓ Wait for services and prepare test database
+  * Run tests
+  * Archive capybara artifacts
+  * Archive test logs
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Slow 28 (ID 104658305452)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  ✓ Start services and pull test image
+  ✓ Wait for services and prepare test database
+  * Run tests
+  * Archive capybara artifacts
+  * Archive test logs
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Slow 47 (ID 104658305463)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  ✓ Start services and pull test image
+  ✓ Wait for services and prepare test database
+  * Run tests
+  * Archive capybara artifacts
+  * Archive test logs
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Slow 49 (ID 104658305473)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  ✓ Start services and pull test image
+  ✓ Wait for services and prepare test database
+  * Run tests
+  * Archive capybara artifacts
+  * Archive test logs
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Slow 41 (ID 104658305481)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  ✓ Start services and pull test image
+  ✓ Wait for services and prepare test database
+  * Run tests
+  * Archive capybara artifacts
+  * Archive test logs
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Slow 46 (ID 104658305492)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  ✓ Start services and pull test image
+  ✓ Wait for services and prepare test database
+  * Run tests
+  * Archive capybara artifacts
+  * Archive test logs
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Slow 42 (ID 104658305493)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  ✓ Start services and pull test image
+  ✓ Wait for services and prepare test database
+  * Run tests
+  * Archive capybara artifacts
+  * Archive test logs
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Slow 35 (ID 104658305504)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  ✓ Start services and pull test image
+  ✓ Wait for services and prepare test database
+  * Run tests
+  * Archive capybara artifacts
+  * Archive test logs
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Slow 44 (ID 104658305505)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  ✓ Start services and pull test image
+  ✓ Wait for services and prepare test database
+  * Run tests
+  * Archive capybara artifacts
+  * Archive test logs
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Slow 43 (ID 104658305549)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  ✓ Start services and pull test image
+  ✓ Wait for services and prepare test database
+  * Run tests
+  * Archive capybara artifacts
+  * Archive test logs
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Slow 34 (ID 104658305557)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  ✓ Start services and pull test image
+  ✓ Wait for services and prepare test database
+  * Run tests
+  * Archive capybara artifacts
+  * Archive test logs
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Slow 40 (ID 104658305558)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  ✓ Start services and pull test image
+  ✓ Wait for services and prepare test database
+  * Run tests
+  * Archive capybara artifacts
+  * Archive test logs
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Slow 38 (ID 104658305573)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  ✓ Start services and pull test image
+  ✓ Wait for services and prepare test database
+  * Run tests
+  * Archive capybara artifacts
+  * Archive test logs
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+* Test Slow 45 (ID 104658305579)
+  ✓ Set up job
+  ✓ Set up runner
+  ✓ Check out repository
+  ✓ Login to Docker Hub
+  ✓ Start services and pull test image
+  ✓ Wait for services and prepare test database
+  * Run tests
+  * Archive capybara artifacts
+  * Archive test logs
+  * Archive flaky specs log
+  * Clean up
+  * Post Check out repository
+  * Complete runner
+- Test Relevant ${{ matrix.ci_node_index }}${{ (((github.event_name == 'pull_request_target') && (github.event.pull_request.head.repo.full_name == github.repository) && ' (internal PR noop)') || '') }} in 0s (ID 104658306326)
+
+ANNOTATIONS
+! Node.js 20 is deprecated. The following actions target Node.js 20 but are being forced to run on Node.js 24: actions/checkout@v4, actions/setup-node@v4. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
+Lint JS/TS: .github#2
+
+! Node.js 20 is deprecated. The following actions target Node.js 20 but are being forced to run on Node.js 24: actions/checkout@v4. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
+Lint Ruby: .github#2
+
+! Node.js 20 is deprecated. The following actions target Node.js 20 but are being forced to run on Node.js 24: actions/cache@v4, actions/checkout@v4, nick-fields/retry@v3. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
+Build images: .github#4
+
+! Node.js 20 is deprecated. The following actions target Node.js 20 but are being forced to run on Node.js 24: actions/checkout@v4, actions/setup-node@v4. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
+Typecheck TS: .github#2
+
+! Node.js 20 is deprecated. The following actions target Node.js 20 but are being forced to run on Node.js 24: actions/checkout@v4. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
+Migration versions: .github#2
+

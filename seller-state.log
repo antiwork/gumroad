@@ -1,0 +1,17 @@
+Completed 1.1 KiB/1.1 KiB (5.9 KiB/s) with 1 file(s) remainingupload: ../../../tmp/console-audit-20260916T030443Z-791167b1.json to s3://gumroad-logs/gumclaw/production-console-access/2026/09/16/20260916T030443Z-791167b1.json
+=== request_id: 20260916T030443Z-791167b1  status: error  5000ms  replica_lag=0s  host=DATABASE_WORKER_REPLICA1_HOST ===
+Using cached instance 10.1.32.57 (83s old)
+Connecting to 10.1.32.57 via bastion-production.gumroad.net...
+Pseudo-terminal will not be allocated because stdin is not a terminal.
+Warning: Permanently added '10.1.32.57' (ECDSA) to the list of known hosts.
+NoMethodError: undefined method 'has_payout_info?' for an instance of User
+/bundle_path/ruby/3.4.0/gems/activemodel-8.1.3.1/lib/active_model/attribute_methods.rb:512:in 'ActiveModel::AttributeMethods#method_missing'
+/bundle_path/ruby/3.4.0/gems/activerecord-8.1.3.1/lib/active_record/attribute_methods.rb:495:in 'ActiveRecord::AttributeMethods#method_missing'
+(eval at /tmp/gumclaw-runner/loop.rb:99):9:in '<main>'
+/tmp/gumclaw-runner/loop.rb:99:in 'Kernel#eval'
+/tmp/gumclaw-runner/loop.rb:99:in 'block (3 levels) in <main>'
+/bundle_path/ruby/3.4.0/gems/timeout-0.6.1/lib/timeout.rb:296:in 'block in Timeout.timeout'
+/bundle_path/ruby/3.4.0/gems/timeout-0.6.1/lib/timeout.rb:38:in 'Timeout::Error.handle_timeout'
+/bundle_path/ruby/3.4.0/gems/timeout-0.6.1/lib/timeout.rb:306:in 'Timeout.timeout'
+/tmp/gumclaw-runner/loop.rb:99:in 'block (2 levels) in <main>'
+/tmp/gumclaw-runner/loop.rb:86:in 'Kernel#fork'

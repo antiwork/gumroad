@@ -1,0 +1,31 @@
+autoreview target: branch
+branch: detached
+reviewers: codex model=gpt-6-astra thinking=high, claude model=claude-fable-5-1
+tools: on
+web_search: on
+ref: origin/main
+trufflehog: clean (7.6s)
+bundle: 32754 bytes; review passes: 1
+codex thread: 01a0a843-d25b-7203-b90f-bca5eb77187a
+codex turn started
+claude turn started
+codex activity: 1 hidden tool/status events
+{
+  "findings": [],
+  "overall_correctness": "patch is correct",
+  "overall_explanation": "No actionable P0 or P1 defects are established by the supplied bundle. Rendering and save validation share the active business-type list, unsupported saved values render unselected, and the new LLC codes have tax-export mappings and presenter wiring. The unchanged assignment of country_code in _update_account is not included, so that specific trace could not be independently verified. Tests were reviewed but not executed.",
+  "overall_confidence": 0.86
+}
+codex usage: input_tokens=21974 cached_input_tokens=0 output_tokens=629 reasoning_output_tokens=503
+claude activity: 14 hidden tool/status events
+claude activity: 17 hidden tool/status events
+claude activity: 16 hidden tool/status events
+claude activity: 17 hidden tool/status events
+claude activity: 6 hidden tool/status events
+I'll review the bundle for correctness of the US business-type/Stripe structure change, then quickly confirm Stripe's accepted US `company.structure` values.
+claude activity: 7 hidden tool/status events
+claude activity: 23 hidden tool/status events
+claude usage: input_tokens=114 cache_read_input_tokens=49192 cache_creation_input_tokens=29867 output_tokens=8754 cost_usd=0.885034
+autoreview panel clean: no accepted/actionable findings reported
+overall: patch is correct (0.86)
+Panel review complete. claude model=claude-fable-5-1: 0 finding(s), codex model=gpt-6-astra thinking=high: 0 finding(s).

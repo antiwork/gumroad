@@ -1,0 +1,87 @@
+DEPRECATION WARNING: ActiveSupport::Configurable is deprecated without replacement, and will be removed in Rails 8.2.
+
+You can emulate the previous behavior with `class_attribute`.
+ (called from Kernel#require at /private/tmp/wt_2609_astra_20260915/config/boot.rb:18)
+[test-redis-isolation] no free Redis database block on localhost:6379 (16 databases = 0 concurrent runs); falling back to the shared databases in .env.test.
+[test-redis-isolation] Concurrent runs will flush each other's keys mid-test. Start Redis with more databases (docker/docker-compose-local.yml passes --databases 64), or free a slot: a spring server holds its lease until `bin/spring stop`, so idle checkouts keep one.
+sidekiq-pro is not installed
+DEPRECATION WARNING: Setting action_controller.escape_json_responses = true is deprecated and will have no effect in Rails 8.2. Set it to `false`, or remove the config. (called from Kernel#require at /private/tmp/wt_2609_astra_20260915/config/boot.rb:18)
+Run options: exclude {benchmark: true}
+warning: 299 Elasticsearch-7.17.25-f9b6b57d1d0f76e2d14291c04fb50abeb642cfbf "Elasticsearch built-in security features are not enabled. Without authentication, your cluster could be accessible to anyone. See https://www.elastic.co/guide/en/elasticsearch/reference/7.17/security-minimal-setup.html to enable security."
+warning: 299 Elasticsearch-7.17.25-f9b6b57d1d0f76e2d14291c04fb50abeb642cfbf "Elasticsearch built-in security features are not enabled. Without authentication, your cluster could be accessible to anyone. See https://www.elastic.co/guide/en/elasticsearch/reference/7.17/security-minimal-setup.html to enable security."
+[ES] Recreating index link-test (model: Link), because its settings or mappings changed. If you modified them, please remember to write a migration to update the index in development/staging/production environments.
+warning: 299 Elasticsearch-7.17.25-f9b6b57d1d0f76e2d14291c04fb50abeb642cfbf "Elasticsearch built-in security features are not enabled. Without authentication, your cluster could be accessible to anyone. See https://www.elastic.co/guide/en/elasticsearch/reference/7.17/security-minimal-setup.html to enable security."
+warning: 299 Elasticsearch-7.17.25-f9b6b57d1d0f76e2d14291c04fb50abeb642cfbf "Elasticsearch built-in security features are not enabled. Without authentication, your cluster could be accessible to anyone. See https://www.elastic.co/guide/en/elasticsearch/reference/7.17/security-minimal-setup.html to enable security."
+[ES] Recreating index balance-test (model: Balance), because its settings or mappings changed. If you modified them, please remember to write a migration to update the index in development/staging/production environments.
+warning: 299 Elasticsearch-7.17.25-f9b6b57d1d0f76e2d14291c04fb50abeb642cfbf "Elasticsearch built-in security features are not enabled. Without authentication, your cluster could be accessible to anyone. See https://www.elastic.co/guide/en/elasticsearch/reference/7.17/security-minimal-setup.html to enable security."
+warning: 299 Elasticsearch-7.17.25-f9b6b57d1d0f76e2d14291c04fb50abeb642cfbf "Elasticsearch built-in security features are not enabled. Without authentication, your cluster could be accessible to anyone. See https://www.elastic.co/guide/en/elasticsearch/reference/7.17/security-minimal-setup.html to enable security."
+[ES] Recreating index purchase-test (model: Purchase), because its settings or mappings changed. If you modified them, please remember to write a migration to update the index in development/staging/production environments.
+warning: 299 Elasticsearch-7.17.25-f9b6b57d1d0f76e2d14291c04fb50abeb642cfbf "Elasticsearch built-in security features are not enabled. Without authentication, your cluster could be accessible to anyone. See https://www.elastic.co/guide/en/elasticsearch/reference/7.17/security-minimal-setup.html to enable security."
+warning: 299 Elasticsearch-7.17.25-f9b6b57d1d0f76e2d14291c04fb50abeb642cfbf "Elasticsearch built-in security features are not enabled. Without authentication, your cluster could be accessible to anyone. See https://www.elastic.co/guide/en/elasticsearch/reference/7.17/security-minimal-setup.html to enable security."
+[ES] Recreating index installment-test (model: Installment), because its settings or mappings changed. If you modified them, please remember to write a migration to update the index in development/staging/production environments.
+warning: 299 Elasticsearch-7.17.25-f9b6b57d1d0f76e2d14291c04fb50abeb642cfbf "Elasticsearch built-in security features are not enabled. Without authentication, your cluster could be accessible to anyone. See https://www.elastic.co/guide/en/elasticsearch/reference/7.17/security-minimal-setup.html to enable security."
+warning: 299 Elasticsearch-7.17.25-f9b6b57d1d0f76e2d14291c04fb50abeb642cfbf "Elasticsearch built-in security features are not enabled. Without authentication, your cluster could be accessible to anyone. See https://www.elastic.co/guide/en/elasticsearch/reference/7.17/security-minimal-setup.html to enable security."
+[ES] Recreating index confirmedfollowerevent-test (model: ConfirmedFollowerEvent), because its settings or mappings changed. If you modified them, please remember to write a migration to update the index in development/staging/production environments.
+warning: 299 Elasticsearch-7.17.25-f9b6b57d1d0f76e2d14291c04fb50abeb642cfbf "Elasticsearch built-in security features are not enabled. Without authentication, your cluster could be accessible to anyone. See https://www.elastic.co/guide/en/elasticsearch/reference/7.17/security-minimal-setup.html to enable security."
+warning: 299 Elasticsearch-7.17.25-f9b6b57d1d0f76e2d14291c04fb50abeb642cfbf "Elasticsearch built-in security features are not enabled. Without authentication, your cluster could be accessible to anyone. See https://www.elastic.co/guide/en/elasticsearch/reference/7.17/security-minimal-setup.html to enable security."
+[ES] Recreating index productpageview-test (model: ProductPageView), because its settings or mappings changed. If you modified them, please remember to write a migration to update the index in development/staging/production environments.
+warning: 299 Elasticsearch-7.17.25-f9b6b57d1d0f76e2d14291c04fb50abeb642cfbf "Elasticsearch built-in security features are not enabled. Without authentication, your cluster could be accessible to anyone. See https://www.elastic.co/guide/en/elasticsearch/reference/7.17/security-minimal-setup.html to enable security."
+warning: 299 Elasticsearch-7.17.25-f9b6b57d1d0f76e2d14291c04fb50abeb642cfbf "Elasticsearch built-in security features are not enabled. Without authentication, your cluster could be accessible to anyone. See https://www.elastic.co/guide/en/elasticsearch/reference/7.17/security-minimal-setup.html to enable security."
+[ES] Recreating index audiencemember-test (model: AudienceMember), because its settings or mappings changed. If you modified them, please remember to write a migration to update the index in development/staging/production environments.
+warning: 299 Elasticsearch-7.17.25-f9b6b57d1d0f76e2d14291c04fb50abeb642cfbf "Elasticsearch built-in security features are not enabled. Without authentication, your cluster could be accessible to anyone. See https://www.elastic.co/guide/en/elasticsearch/reference/7.17/security-minimal-setup.html to enable security."
+warning: 299 Elasticsearch-7.17.25-f9b6b57d1d0f76e2d14291c04fb50abeb642cfbf "Elasticsearch built-in security features are not enabled. Without authentication, your cluster could be accessible to anyone. See https://www.elastic.co/guide/en/elasticsearch/reference/7.17/security-minimal-setup.html to enable security."
+Astra 2609 capture: 2026-09-16T03:02:06.276Z pid=79318 tid=1kza INFO: Sidekiq 7.3.4 connecting to Redis with options {size: 10, pool_name: "internal", url: "redis://localhost:6379/11"}
+DEPRECATION WARNING: resource received a hash argument only. Please use a keyword instead. Support to hash argument will be removed in Rails 8.2. (called from block (2 levels) in <main> at /private/tmp/wt_2609_astra_20260915/config/routes.rb:584)
+DEPRECATION WARNING: resource received a hash argument path. Please use a keyword instead. Support to hash argument will be removed in Rails 8.2. (called from block (2 levels) in <main> at /private/tmp/wt_2609_astra_20260915/config/routes.rb:584)
+DEPRECATION WARNING: resource received a hash argument path_names. Please use a keyword instead. Support to hash argument will be removed in Rails 8.2. (called from block (2 levels) in <main> at /private/tmp/wt_2609_astra_20260915/config/routes.rb:584)
+DEPRECATION WARNING: resource received a hash argument controller. Please use a keyword instead. Support to hash argument will be removed in Rails 8.2. (called from block (2 levels) in <main> at /private/tmp/wt_2609_astra_20260915/config/routes.rb:584)
+Capybara starting Puma...
+* Version 6.4.3, codename: The Eagle of Durango
+* Min threads: 0, max threads: 4
+* Listening on http://127.0.0.1:31337
+F [14.3s]
+
+
+Failures:
+
+  1) Astra 2609 capture captures business type
+     Failure/Error: 
+       Timeout.timeout(Capybara.default_max_wait_time) do
+         sleep 0.05 until page.evaluate_script(<<~JS)
+           (function() {
+             var app = document.getElementById('app');
+             if (!app) return true;
+             return app.children.length > 0;
+           })()
+         JS
+       end
+
+     Timeout::Error:
+       execution expired
+
+     [Screenshot Image]: /private/tmp/wt_2609_astra_20260915/tmp/capybara/failures_r_spec_example_groups_astra2609_capture_captures_business_type_496.png 
+
+     # ./spec/support/capybara_helpers.rb:46:in 'CapybaraHelpers#visit'
+     # ./spec/requests/settings/astra_2609_capture_spec.rb:13:in 'block (2 levels) in <main>'
+     # ./spec/spec_helper.rb:448:in 'block (2 levels) in <top (required)>'
+     # ./spec/spec_helper.rb:420:in 'block (3 levels) in <top (required)>'
+     # ./app/modules/product/creation_limit.rb:14:in 'Product::CreationLimit::ClassMethods#bypass_product_creation_limit'
+     # ./spec/spec_helper.rb:419:in 'block (2 levels) in <top (required)>'
+     # ./spec/spec_helper.rb:412:in 'block (2 levels) in <top (required)>'
+     # ------------------
+     # --- Caused by: ---
+     # Timeout::ExitException:
+     #   execution expired
+     #   ./spec/support/capybara_helpers.rb:47:in 'block in CapybaraHelpers#visit'
+
+Top 1 slowest examples (14.3 seconds, 12.5% of total time):
+  Astra 2609 capture captures business type
+    14.3 seconds ./spec/requests/settings/astra_2609_capture_spec.rb:7
+
+Finished in 1 minute 54.33 seconds (files took 7.37 seconds to load)
+1 example, 1 failure
+
+Failed examples:
+
+rspec ./spec/requests/settings/astra_2609_capture_spec.rb:7 # Astra 2609 capture captures business type
+

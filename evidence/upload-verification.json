@@ -1,0 +1,67 @@
+[
+  {
+    "name": "before-desktop-light.png",
+    "ok": true,
+    "bytes": 178589
+  },
+  {
+    "name": "after-desktop-light.png",
+    "ok": true,
+    "bytes": 179302
+  },
+  {
+    "name": "after-selected-desktop-light.png",
+    "ok": true,
+    "bytes": 180852
+  },
+  {
+    "name": "before-desktop-dark.png",
+    "ok": true,
+    "bytes": 176161
+  },
+  {
+    "name": "after-desktop-dark.png",
+    "ok": true,
+    "bytes": 176850
+  },
+  {
+    "name": "after-selected-desktop-dark.png",
+    "ok": true,
+    "bytes": 179520
+  },
+  {
+    "name": "before-mobile-light.png",
+    "ok": true,
+    "bytes": 57019
+  },
+  {
+    "name": "after-mobile-light.png",
+    "ok": true,
+    "bytes": 57711
+  },
+  {
+    "name": "after-selected-mobile-light.png",
+    "ok": true,
+    "bytes": 59952
+  },
+  {
+    "name": "before-mobile-dark.png",
+    "ok": true,
+    "bytes": 56639
+  },
+  {
+    "name": "after-mobile-dark.png",
+    "ok": true,
+    "bytes": 57350
+  },
+  {
+    "name": "after-selected-mobile-dark.png",
+    "ok": true,
+    "bytes": 59696
+  },
+  {
+    "name": "captured-state-walkthrough.mp4",
+    "ok": true,
+    "bytes": 255512
+  }
+]

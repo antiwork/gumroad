@@ -1,0 +1,6 @@
+{
+  "findings": [],
+  "overall_correctness": "patch is correct",
+  "overall_explanation": "Panel review complete. claude model=claude-fable-5-1: 0 finding(s), codex model=gpt-6-astra thinking=high: 0 finding(s).",
+  "overall_confidence": 0.87
+}

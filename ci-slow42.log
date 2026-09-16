@@ -1,0 +1,1749 @@
+﻿2026-09-16T03:16:42.2534578Z Current runner version: '2.337.0'
+2026-09-16T03:16:42.2541193Z Runner name: 'grdp21276evp6h5d3b65t6wpxp'
+2026-09-16T03:16:42.2542011Z Runner group name: 'Default'
+2026-09-16T03:16:42.2542854Z Machine name: 'vmjvbhnw'
+2026-09-16T03:16:42.2580271Z ##[group]Operating System
+2026-09-16T03:16:42.2580913Z Ubuntu
+2026-09-16T03:16:42.2581465Z 24.04.4
+2026-09-16T03:16:42.2581967Z LTS
+2026-09-16T03:16:42.2582472Z ##[endgroup]
+2026-09-16T03:16:42.2582996Z ##[group]Runner Image
+2026-09-16T03:16:42.2583601Z Image: ubuntu-24.04
+2026-09-16T03:16:42.2584117Z Version: 20260901.1.0
+2026-09-16T03:16:42.2584993Z Included Software: https://github.com/ubicloud/runner-images/blob/ubuntu24/20260901.1/images/ubuntu/Ubuntu2404-Readme.md
+2026-09-16T03:16:42.2586251Z Image Release: https://github.com/ubicloud/runner-images/releases/tag/ubuntu24%2F20260901.1
+2026-09-16T03:16:42.2587242Z ##[endgroup]
+2026-09-16T03:16:42.2587793Z ##[group]Ubicloud Managed Runner
+2026-09-16T03:16:42.2588832Z Name: grdp21276evp6h5d3b65t6wpxp
+2026-09-16T03:16:42.2589547Z Label: ubicloud-standard-4
+2026-09-16T03:16:42.2590119Z VM Family: standard
+2026-09-16T03:16:42.2590670Z Arch: x64
+2026-09-16T03:16:42.2591163Z Image: github-ubuntu-2404
+2026-09-16T03:16:42.2591798Z VM Host: vh663c92p30e4ghn6rxhq6abft
+2026-09-16T03:16:42.2592407Z VM Pool: 
+2026-09-16T03:16:42.2592887Z Location: github-runners
+2026-09-16T03:16:42.2593451Z Datacenter: FSN1-DC24
+2026-09-16T03:16:42.2594028Z Project: pjxqmxw3k4p21jp6kzakayj1k9
+2026-09-16T03:16:42.2594860Z Console URL: https://console.ubicloud.com/project/pjxqmxw3k4p21jp6kzakayj1k9/github
+2026-09-16T03:16:42.2595715Z ##[endgroup]
+2026-09-16T03:16:42.2596771Z ##[group]GITHUB_TOKEN Permissions
+2026-09-16T03:16:42.2598713Z Contents: read
+2026-09-16T03:16:42.2599208Z Metadata: read
+2026-09-16T03:16:42.2599824Z ##[endgroup]
+2026-09-16T03:16:42.2601695Z Secret source: Actions
+2026-09-16T03:16:42.2602794Z Cache mode: write
+2026-09-16T03:16:42.2603561Z Prepare workflow directory
+2026-09-16T03:16:42.3289759Z Prepare all required actions
+2026-09-16T03:16:42.3343158Z Getting action download info
+2026-09-16T03:16:42.7720096Z Download action repository 'actions/checkout@v4' (SHA:11d5960a326750d5838078e36cf38b85af677262)
+2026-09-16T03:16:42.9176288Z Download action repository 'nick-fields/retry@v3' (SHA:ce71cc2ab81d554ebbe88c79ab5975992d79ba08)
+2026-09-16T03:16:43.2211741Z Download action repository 'actions/upload-artifact@v4' (SHA:ea165f8d65b6e75b540449e92b4886f43607fa02)
+2026-09-16T03:16:43.5256836Z Complete job name: Test Slow 42
+2026-09-16T03:16:43.5778578Z A job started hook has been configured by the self-hosted runner administrator
+2026-09-16T03:16:43.5942205Z ##[group]Run '/home/runner/actions-runner/start-hook.sh'
+2026-09-16T03:16:43.5998255Z shell: /usr/bin/bash --noprofile --norc -e -o pipefail {0}
+2026-09-16T03:16:43.5999053Z ##[endgroup]
+2026-09-16T03:16:43.6679691Z Node 20 is being deprecated. This workflow is running with Node 24 by default. If you need to temporarily use Node 20, you can set the ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION=true environment variable. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
+2026-09-16T03:16:43.6686030Z ##[group]Run actions/checkout@v4
+2026-09-16T03:16:43.6686494Z with:
+2026-09-16T03:16:43.6686876Z   ref: 2450f08d24207ef6748d2df38003a3c80c4ba115
+2026-09-16T03:16:43.6687450Z   persist-credentials: false
+2026-09-16T03:16:43.6687870Z   repository: antiwork/gumroad
+2026-09-16T03:16:43.6690987Z   token: ***
+2026-09-16T03:16:43.6691344Z   ssh-strict: true
+2026-09-16T03:16:43.6691695Z   ssh-user: git
+2026-09-16T03:16:43.6692053Z   clean: true
+2026-09-16T03:16:43.6692421Z   sparse-checkout-cone-mode: true
+2026-09-16T03:16:43.6692836Z   fetch-depth: 1
+2026-09-16T03:16:43.6693181Z   fetch-tags: false
+2026-09-16T03:16:43.6693596Z   show-progress: true
+2026-09-16T03:16:43.6693964Z   lfs: false
+2026-09-16T03:16:43.6694305Z   submodules: false
+2026-09-16T03:16:43.6694668Z   set-safe-directory: true
+2026-09-16T03:16:43.6695075Z   allow-unsafe-pr-checkout: false
+2026-09-16T03:16:43.6695723Z env:
+2026-09-16T03:16:43.6696090Z   COMPOSE_PROJECT_NAME: web_35050714980_1_slow_42
+2026-09-16T03:16:43.6696567Z   WEB_REPO: antiwork/gumroad-web
+2026-09-16T03:16:43.6697046Z ##[endgroup]
+2026-09-16T03:16:44.3332214Z Syncing repository: antiwork/gumroad
+2026-09-16T03:16:44.3334260Z ##[group]Getting Git version info
+2026-09-16T03:16:44.3335278Z Working directory is '/home/runner/work/gumroad/gumroad'
+2026-09-16T03:16:44.3336915Z [command]/usr/bin/git version
+2026-09-16T03:16:44.3589279Z git version 2.55.0
+2026-09-16T03:16:44.3592735Z ##[endgroup]
+2026-09-16T03:16:44.3600745Z Temporarily overriding HOME='/home/runner/work/_temp/164d49d7-0e7e-4f34-92be-b119148ac751' before making global git config changes
+2026-09-16T03:16:44.3603316Z Adding repository directory to the temporary git global config as a safe directory
+2026-09-16T03:16:44.3638250Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/gumroad/gumroad
+2026-09-16T03:16:44.3696012Z Deleting the contents of '/home/runner/work/gumroad/gumroad'
+2026-09-16T03:16:44.3725607Z ##[group]Initializing the repository
+2026-09-16T03:16:44.3729069Z [command]/usr/bin/git init /home/runner/work/gumroad/gumroad
+2026-09-16T03:16:44.3993004Z hint: Using 'master' as the name for the initial branch. This default branch name
+2026-09-16T03:16:44.4000541Z hint: will change to "main" in Git 3.0. To configure the initial branch name
+2026-09-16T03:16:44.4009018Z hint: to use in all of your new repositories, which will suppress this warning,
+2026-09-16T03:16:44.4010675Z hint: call:
+2026-09-16T03:16:44.4011600Z hint:
+2026-09-16T03:16:44.4028598Z hint: 	git config --global init.defaultBranch <name>
+2026-09-16T03:16:44.4029938Z hint:
+2026-09-16T03:16:44.4031203Z hint: Names commonly chosen instead of 'master' are 'main', 'trunk' and
+2026-09-16T03:16:44.4033080Z hint: 'development'. The just-created branch can be renamed via this command:
+2026-09-16T03:16:44.4034571Z hint:
+2026-09-16T03:16:44.4035395Z hint: 	git branch -m <name>
+2026-09-16T03:16:44.4036380Z hint:
+2026-09-16T03:16:44.4037705Z hint: Disable this message with "git config set advice.defaultBranchName false"
+2026-09-16T03:16:44.4039720Z Initialized empty Git repository in /home/runner/work/gumroad/gumroad/.git/
+2026-09-16T03:16:44.4042748Z [command]/usr/bin/git remote add origin https://github.com/antiwork/gumroad
+2026-09-16T03:16:44.4058922Z ##[endgroup]
+2026-09-16T03:16:44.4060333Z ##[group]Disabling automatic garbage collection
+2026-09-16T03:16:44.4061706Z [command]/usr/bin/git config --local gc.auto 0
+2026-09-16T03:16:44.4125532Z ##[endgroup]
+2026-09-16T03:16:44.4126916Z ##[group]Setting up auth
+2026-09-16T03:16:44.4128539Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+2026-09-16T03:16:44.4202928Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+2026-09-16T03:16:44.5003652Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+2026-09-16T03:16:44.5036927Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+2026-09-16T03:16:44.5347205Z [command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+2026-09-16T03:16:44.5416583Z [command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+2026-09-16T03:16:44.5696551Z [command]/usr/bin/git config --local http.https://github.com/.extraheader AUTHORIZATION: basic ***
+2026-09-16T03:16:44.5745783Z ##[endgroup]
+2026-09-16T03:16:44.5747509Z ##[group]Fetching the repository
+2026-09-16T03:16:44.5753955Z [command]/usr/bin/git -c protocol.version=2 fetch --no-tags --prune --no-recurse-submodules --depth=1 origin 2450f08d24207ef6748d2df38003a3c80c4ba115
+2026-09-16T03:16:55.0117410Z From https://github.com/antiwork/gumroad
+2026-09-16T03:16:55.0118080Z  * branch            2450f08d24207ef6748d2df38003a3c80c4ba115 -> FETCH_HEAD
+2026-09-16T03:16:55.0119364Z ##[endgroup]
+2026-09-16T03:16:55.0119747Z ##[group]Determining the checkout info
+2026-09-16T03:16:55.0121056Z ##[endgroup]
+2026-09-16T03:16:55.0126049Z [command]/usr/bin/git sparse-checkout disable
+2026-09-16T03:16:55.0175088Z [command]/usr/bin/git config --local --unset-all extensions.worktreeConfig
+2026-09-16T03:16:55.0210345Z ##[group]Checking out the ref
+2026-09-16T03:16:55.0221744Z [command]/usr/bin/git checkout --progress --force 2450f08d24207ef6748d2df38003a3c80c4ba115
+2026-09-16T03:16:56.0450405Z Updating files:  73% (8518/11521)
+2026-09-16T03:16:56.0540896Z Updating files:  74% (8526/11521)
+2026-09-16T03:16:56.0656914Z Updating files:  75% (8641/11521)
+2026-09-16T03:16:56.1186793Z Updating files:  76% (8756/11521)
+2026-09-16T03:16:56.1279850Z Updating files:  77% (8872/11521)
+2026-09-16T03:16:56.1843878Z Updating files:  78% (8987/11521)
+2026-09-16T03:16:56.1919365Z Updating files:  79% (9102/11521)
+2026-09-16T03:16:56.1986130Z Updating files:  80% (9217/11521)
+2026-09-16T03:16:56.2073108Z Updating files:  81% (9333/11521)
+2026-09-16T03:16:56.2162562Z Updating files:  82% (9448/11521)
+2026-09-16T03:16:56.2247114Z Updating files:  83% (9563/11521)
+2026-09-16T03:16:56.2305101Z Updating files:  84% (9678/11521)
+2026-09-16T03:16:56.2376278Z Updating files:  85% (9793/11521)
+2026-09-16T03:16:56.2453994Z Updating files:  86% (9909/11521)
+2026-09-16T03:16:56.2552440Z Updating files:  87% (10024/11521)
+2026-09-16T03:16:56.2655878Z Updating files:  88% (10139/11521)
+2026-09-16T03:16:56.2755174Z Updating files:  89% (10254/11521)
+2026-09-16T03:16:56.2805576Z Updating files:  90% (10369/11521)
+2026-09-16T03:16:56.2908139Z Updating files:  91% (10485/11521)
+2026-09-16T03:16:56.2992640Z Updating files:  92% (10600/11521)
+2026-09-16T03:16:56.3087684Z Updating files:  93% (10715/11521)
+2026-09-16T03:16:56.3156744Z Updating files:  94% (10830/11521)
+2026-09-16T03:16:56.3250446Z Updating files:  95% (10945/11521)
+2026-09-16T03:16:56.3342013Z Updating files:  96% (11061/11521)
+2026-09-16T03:16:56.3444624Z Updating files:  97% (11176/11521)
+2026-09-16T03:16:56.3555042Z Updating files:  98% (11291/11521)
+2026-09-16T03:16:56.3655677Z Updating files:  99% (11406/11521)
+2026-09-16T03:16:56.3662126Z Updating files: 100% (11521/11521)
+2026-09-16T03:16:56.3666768Z Updating files: 100% (11521/11521), done.
+2026-09-16T03:16:56.3803629Z Note: switching to '2450f08d24207ef6748d2df38003a3c80c4ba115'.
+2026-09-16T03:16:56.3808278Z 
+2026-09-16T03:16:56.3813161Z You are in 'detached HEAD' state. You can look around, make experimental
+2026-09-16T03:16:56.3818412Z changes and commit them, and you can discard any commits you make in this
+2026-09-16T03:16:56.3823894Z state without impacting any branches by switching back to a branch.
+2026-09-16T03:16:56.3829854Z 
+2026-09-16T03:16:56.3834270Z If you want to create a new branch to retain commits you create, you may
+2026-09-16T03:16:56.3836649Z do so (now or later) by using -c with the switch command. Example:
+2026-09-16T03:16:56.3838350Z 
+2026-09-16T03:16:56.3838638Z   git switch -c <new-branch-name>
+2026-09-16T03:16:56.3839470Z 
+2026-09-16T03:16:56.3839571Z Or undo this operation with:
+2026-09-16T03:16:56.3839711Z 
+2026-09-16T03:16:56.3839786Z   git switch -
+2026-09-16T03:16:56.3839900Z 
+2026-09-16T03:16:56.3840097Z Turn off this advice by setting config variable advice.detachedHead to false
+2026-09-16T03:16:56.3840341Z 
+2026-09-16T03:16:56.3840537Z HEAD is now at 2450f08 Require a supported business type before saving payout settings
+2026-09-16T03:16:56.3878564Z ##[endgroup]
+2026-09-16T03:16:56.3934794Z [command]/usr/bin/git log -1 --format=%H
+2026-09-16T03:16:56.3974272Z 2450f08d24207ef6748d2df38003a3c80c4ba115
+2026-09-16T03:16:56.3975353Z ##[group]Removing auth
+2026-09-16T03:16:56.3987512Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+2026-09-16T03:16:56.4021935Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+2026-09-16T03:16:56.4275062Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+2026-09-16T03:16:56.4308364Z http.https://github.com/.extraheader
+2026-09-16T03:16:56.4321530Z [command]/usr/bin/git config --local --unset-all http.https://github.com/.extraheader
+2026-09-16T03:16:56.4395297Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+2026-09-16T03:16:56.4618086Z [command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+2026-09-16T03:16:56.4648795Z [command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+2026-09-16T03:16:56.4893623Z ##[endgroup]
+2026-09-16T03:16:56.5066671Z Node 20 is being deprecated. This workflow is running with Node 24 by default. If you need to temporarily use Node 20, you can set the ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION=true environment variable. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
+2026-09-16T03:16:56.5067875Z ##[group]Run nick-fields/retry@v3
+2026-09-16T03:16:56.5068231Z with:
+2026-09-16T03:16:56.5068399Z   timeout_seconds: 120
+2026-09-16T03:16:56.5068582Z   max_attempts: 3
+2026-09-16T03:16:56.5068752Z   retry_wait_seconds: 10
+2026-09-16T03:16:56.5069076Z   command: echo "$DOCKERHUB_PASSWORD" | docker login -u "$DOCKERHUB_USERNAME" --password-stdin
+2026-09-16T03:16:56.5069429Z   polling_interval_seconds: 1
+2026-09-16T03:16:56.5069628Z   warning_on_retry: true
+2026-09-16T03:16:56.5069815Z   continue_on_error: false
+2026-09-16T03:16:56.5069999Z env:
+2026-09-16T03:16:56.5070181Z   COMPOSE_PROJECT_NAME: web_35050714980_1_slow_42
+2026-09-16T03:16:56.5070479Z   WEB_REPO: antiwork/gumroad-web
+2026-09-16T03:16:56.5070963Z   DOCKERHUB_USERNAME: ***
+2026-09-16T03:16:56.5071177Z   DOCKERHUB_PASSWORD: ***
+2026-09-16T03:16:56.5071357Z ##[endgroup]
+2026-09-16T03:16:56.5615804Z ##[group]Attempt 1
+2026-09-16T03:16:57.5946949Z 
+2026-09-16T03:16:57.5948209Z WARNING! Your credentials are stored unencrypted in '/home/runner/.docker/config.json'.
+2026-09-16T03:16:57.5948720Z Configure a credential helper to remove this warning. See
+2026-09-16T03:16:57.5949085Z https://docs.docker.com/go/credential-store/
+2026-09-16T03:16:57.5949311Z 
+2026-09-16T03:16:57.5949384Z Login Succeeded
+2026-09-16T03:16:58.5691772Z Command completed after 1 attempt(s).
+2026-09-16T03:16:58.5692659Z ##[endgroup]
+2026-09-16T03:16:58.5796136Z Node 20 is being deprecated. This workflow is running with Node 24 by default. If you need to temporarily use Node 20, you can set the ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION=true environment variable. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
+2026-09-16T03:16:58.5797092Z ##[group]Run nick-fields/retry@v3
+2026-09-16T03:16:58.5797295Z with:
+2026-09-16T03:16:58.5797455Z   timeout_minutes: 5
+2026-09-16T03:16:58.5797631Z   max_attempts: 3
+2026-09-16T03:16:58.5797811Z   retry_wait_seconds: 5
+2026-09-16T03:16:58.5798656Z   command: docker pull --quiet $WEB_REPO:test-94608ce811784afd4c9deb1e9fbe30efde8ca980 &
+PULL_PID=$!
+docker compose -f docker/docker-compose-test-and-ci.yml up -d
+COMPOSE_EXIT=$?
+wait $PULL_PID
+PULL_EXIT=$?
+exit $((COMPOSE_EXIT + PULL_EXIT))
+
+2026-09-16T03:16:58.5799368Z   polling_interval_seconds: 1
+2026-09-16T03:16:58.5799576Z   warning_on_retry: true
+2026-09-16T03:16:58.5799800Z   continue_on_error: false
+2026-09-16T03:16:58.5799986Z env:
+2026-09-16T03:16:58.5800166Z   COMPOSE_PROJECT_NAME: web_35050714980_1_slow_42
+2026-09-16T03:16:58.5800419Z   WEB_REPO: antiwork/gumroad-web
+2026-09-16T03:16:58.5800625Z   COMPOSE_HTTP_TIMEOUT: 300
+2026-09-16T03:16:58.5800955Z ##[endgroup]
+2026-09-16T03:16:58.6732985Z ##[group]Attempt 1
+2026-09-16T03:16:59.5612491Z  elasticsearch Pulling 
+2026-09-16T03:16:59.5613290Z  createbuckets Pulling 
+2026-09-16T03:16:59.5613668Z  db_test Pulling 
+2026-09-16T03:16:59.5613850Z  redis Pulling 
+2026-09-16T03:16:59.5614025Z  dynamodb Pulling 
+2026-09-16T03:16:59.5614372Z  copyfixturefiles Pulling 
+2026-09-16T03:16:59.5614575Z  memcached Pulling 
+2026-09-16T03:16:59.5614751Z  minio Pulling 
+2026-09-16T03:17:01.3244306Z  5492e2c54ded Pulling fs layer 
+2026-09-16T03:17:01.3245348Z  08c29fec86bc Pulling fs layer 
+2026-09-16T03:17:01.3245636Z  4f4fb700ef54 Pulling fs layer 
+2026-09-16T03:17:01.3245856Z  e656f1d2b55e Pulling fs layer 
+2026-09-16T03:17:01.3246123Z  4f4fb700ef54 Waiting 
+2026-09-16T03:17:01.3246312Z  5492e2c54ded Waiting 
+2026-09-16T03:17:01.3246529Z  08c29fec86bc Waiting 
+2026-09-16T03:17:01.3246712Z  e656f1d2b55e Waiting 
+2026-09-16T03:17:01.3378547Z  75f829a71a1c Pulling fs layer 
+2026-09-16T03:17:01.3379259Z  2dd8aabff665 Pulling fs layer 
+2026-09-16T03:17:01.3383328Z  fd17121b3976 Pulling fs layer 
+2026-09-16T03:17:01.3387153Z  a19cf707b4fd Pulling fs layer 
+2026-09-16T03:17:01.3387392Z  4ccdd8a52dc0 Pulling fs layer 
+2026-09-16T03:17:01.3387615Z  d018d3fc07a4 Pulling fs layer 
+2026-09-16T03:17:01.3387814Z  70f1e3a1960a Pulling fs layer 
+2026-09-16T03:17:01.3388137Z  75f829a71a1c Waiting 
+2026-09-16T03:17:01.3388314Z  2dd8aabff665 Waiting 
+2026-09-16T03:17:01.3388484Z  fd17121b3976 Waiting 
+2026-09-16T03:17:01.3388659Z  a19cf707b4fd Waiting 
+2026-09-16T03:17:01.3388833Z  4ccdd8a52dc0 Waiting 
+2026-09-16T03:17:01.3388999Z  d018d3fc07a4 Waiting 
+2026-09-16T03:17:01.3389171Z  8f58f7e426fa Pulling fs layer 
+2026-09-16T03:17:01.3389384Z  817feb91b55c Pulling fs layer 
+2026-09-16T03:17:01.3398612Z  70f1e3a1960a Waiting 
+2026-09-16T03:17:01.3398824Z  8f58f7e426fa Waiting 
+2026-09-16T03:17:01.3399015Z  817feb91b55c Waiting 
+2026-09-16T03:17:01.3531160Z  6310eb16bf42 Pulling fs layer 
+2026-09-16T03:17:01.3551213Z  b564688b1072 Pulling fs layer 
+2026-09-16T03:17:01.3551744Z  6221ee17f501 Pulling fs layer 
+2026-09-16T03:17:01.3617140Z  6cfae3da9f7b Pulling fs layer 
+2026-09-16T03:17:01.3617832Z  591a7e3cd179 Pulling fs layer 
+2026-09-16T03:17:01.3618197Z  42ff75ca70cd Pulling fs layer 
+2026-09-16T03:17:01.3618411Z  6310eb16bf42 Waiting 
+2026-09-16T03:17:01.3618594Z  b564688b1072 Waiting 
+2026-09-16T03:17:01.3618764Z  6221ee17f501 Waiting 
+2026-09-16T03:17:01.3618935Z  6cfae3da9f7b Waiting 
+2026-09-16T03:17:01.3619111Z  591a7e3cd179 Waiting 
+2026-09-16T03:17:01.3619283Z  42ff75ca70cd Waiting 
+2026-09-16T03:17:01.5620716Z  8740c948ffd4 Pulling fs layer 
+2026-09-16T03:17:01.5621032Z  a2271c958e57 Pulling fs layer 
+2026-09-16T03:17:01.5621267Z  495af11a3eac Pulling fs layer 
+2026-09-16T03:17:01.5621769Z  20d8f888dfb3 Pulling fs layer 
+2026-09-16T03:17:01.5621981Z  43f7f644570b Pulling fs layer 
+2026-09-16T03:17:01.5622264Z  95e0e23bb0c6 Pulling fs layer 
+2026-09-16T03:17:01.5622453Z  8740c948ffd4 Waiting 
+2026-09-16T03:17:01.5622629Z  a2271c958e57 Waiting 
+2026-09-16T03:17:01.5622820Z  495af11a3eac Waiting 
+2026-09-16T03:17:01.5622986Z  20d8f888dfb3 Waiting 
+2026-09-16T03:17:01.5623153Z  43f7f644570b Waiting 
+2026-09-16T03:17:01.5623334Z  95e0e23bb0c6 Waiting 
+2026-09-16T03:17:01.5807696Z  328ba678bf27 Pulling fs layer 
+2026-09-16T03:17:01.5859726Z  f3f5ff008d73 Pulling fs layer 
+2026-09-16T03:17:01.5860013Z  dd7054d6d0c7 Pulling fs layer 
+2026-09-16T03:17:01.5860225Z  70b5d4e8750e Pulling fs layer 
+2026-09-16T03:17:01.5860430Z  cdc4a7b43bdd Pulling fs layer 
+2026-09-16T03:17:01.5860632Z  3e9c0b61a8f3 Pulling fs layer 
+2026-09-16T03:17:01.5860820Z  806a08b6c085 Pulling fs layer 
+2026-09-16T03:17:01.5861014Z  021b2cebd832 Pulling fs layer 
+2026-09-16T03:17:01.5861239Z  ad31ba45b26b Pulling fs layer 
+2026-09-16T03:17:01.5861436Z  0d4c2bd59d1c Pulling fs layer 
+2026-09-16T03:17:01.5861628Z  148dcef42e3b Pulling fs layer 
+2026-09-16T03:17:01.5861824Z  328ba678bf27 Waiting 
+2026-09-16T03:17:01.5862001Z  f3f5ff008d73 Waiting 
+2026-09-16T03:17:01.5862257Z  dd7054d6d0c7 Waiting 
+2026-09-16T03:17:01.5862662Z  70b5d4e8750e Waiting 
+2026-09-16T03:17:01.5862848Z  cdc4a7b43bdd Waiting 
+2026-09-16T03:17:01.5863019Z  3e9c0b61a8f3 Waiting 
+2026-09-16T03:17:01.5863189Z  806a08b6c085 Waiting 
+2026-09-16T03:17:01.5863362Z  021b2cebd832 Waiting 
+2026-09-16T03:17:01.5863527Z  ad31ba45b26b Waiting 
+2026-09-16T03:17:01.5863692Z  0d4c2bd59d1c Waiting 
+2026-09-16T03:17:01.5863858Z  148dcef42e3b Waiting 
+2026-09-16T03:17:01.6407797Z  b83ce1c86227 Pulling fs layer 
+2026-09-16T03:17:01.6410041Z  4a93952ab9ce Pulling fs layer 
+2026-09-16T03:17:01.6410350Z  b268f447c871 Pulling fs layer 
+2026-09-16T03:17:01.6410577Z  f29310fc4a8a Pulling fs layer 
+2026-09-16T03:17:01.6410780Z  9404e0df6bd3 Pulling fs layer 
+2026-09-16T03:17:01.6411019Z  b7c1efd1d2b4 Pulling fs layer 
+2026-09-16T03:17:01.6411219Z  b83ce1c86227 Waiting 
+2026-09-16T03:17:01.6411402Z  4a93952ab9ce Waiting 
+2026-09-16T03:17:01.6411582Z  b268f447c871 Waiting 
+2026-09-16T03:17:01.6411747Z  f29310fc4a8a Waiting 
+2026-09-16T03:17:01.6411931Z  9404e0df6bd3 Waiting 
+2026-09-16T03:17:01.6412119Z  b7c1efd1d2b4 Waiting 
+2026-09-16T03:17:01.6917088Z  b83ce1c86227 Pulling fs layer 
+2026-09-16T03:17:01.6919399Z  f94d28849fa3 Pulling fs layer 
+2026-09-16T03:17:01.6920423Z  81260b173076 Pulling fs layer 
+2026-09-16T03:17:01.6921030Z  f9c0805c25ee Pulling fs layer 
+2026-09-16T03:17:01.6928321Z  1008deaf6ec4 Pulling fs layer 
+2026-09-16T03:17:01.6928710Z  71e9fc939447 Pulling fs layer 
+2026-09-16T03:17:01.6929038Z  c1bc68842c41 Pulling fs layer 
+2026-09-16T03:17:01.6929362Z  0288b5a0d7e7 Pulling fs layer 
+2026-09-16T03:17:01.6929669Z  34013573f278 Pulling fs layer 
+2026-09-16T03:17:01.6929982Z  b83ce1c86227 Waiting 
+2026-09-16T03:17:01.6930253Z  f94d28849fa3 Waiting 
+2026-09-16T03:17:01.6930599Z  81260b173076 Waiting 
+2026-09-16T03:17:01.6930918Z  f9c0805c25ee Waiting 
+2026-09-16T03:17:01.6931221Z  1008deaf6ec4 Waiting 
+2026-09-16T03:17:01.6931480Z  71e9fc939447 Waiting 
+2026-09-16T03:17:01.6931751Z  c1bc68842c41 Waiting 
+2026-09-16T03:17:01.6932057Z  0288b5a0d7e7 Waiting 
+2026-09-16T03:17:01.6932430Z  34013573f278 Waiting 
+2026-09-16T03:17:01.8899785Z  b83ce1c86227 Pulling fs layer 
+2026-09-16T03:17:01.8918676Z  4a93952ab9ce Pulling fs layer 
+2026-09-16T03:17:01.8919493Z  b268f447c871 Pulling fs layer 
+2026-09-16T03:17:01.8919724Z  f29310fc4a8a Pulling fs layer 
+2026-09-16T03:17:01.8919922Z  9404e0df6bd3 Pulling fs layer 
+2026-09-16T03:17:01.8920115Z  b7c1efd1d2b4 Pulling fs layer 
+2026-09-16T03:17:01.8920308Z  b7c1efd1d2b4 Waiting 
+2026-09-16T03:17:01.8920492Z  4a93952ab9ce Waiting 
+2026-09-16T03:17:01.8920661Z  b83ce1c86227 Waiting 
+2026-09-16T03:17:01.8920823Z  f29310fc4a8a Waiting 
+2026-09-16T03:17:01.8920988Z  b268f447c871 Waiting 
+2026-09-16T03:17:01.8921394Z  9404e0df6bd3 Waiting 
+2026-09-16T03:17:07.5086266Z  5492e2c54ded Downloading [>                                                  ]  540.1kB/54.57MB
+2026-09-16T03:17:07.6166696Z  5492e2c54ded Downloading [===========>                                       ]  12.98MB/54.57MB
+2026-09-16T03:17:07.6168792Z  08c29fec86bc Downloading [>                                                  ]  538.8kB/133.9MB
+2026-09-16T03:17:07.6268604Z  4f4fb700ef54 Downloading [==================================================>]      32B/32B
+2026-09-16T03:17:07.6269211Z  4f4fb700ef54 Verifying Checksum 
+2026-09-16T03:17:07.6269713Z  4f4fb700ef54 Download complete 
+2026-09-16T03:17:07.7158162Z  5492e2c54ded Downloading [============================>                      ]  31.36MB/54.57MB
+2026-09-16T03:17:07.7158928Z  08c29fec86bc Downloading [====>                                              ]  12.93MB/133.9MB
+2026-09-16T03:17:07.8210241Z  5492e2c54ded Downloading [===============================================>   ]   51.9MB/54.57MB
+2026-09-16T03:17:07.8211731Z  08c29fec86bc Downloading [===========>                                       ]   30.7MB/133.9MB
+2026-09-16T03:17:07.8325832Z  5492e2c54ded Verifying Checksum 
+2026-09-16T03:17:07.8326189Z  5492e2c54ded Download complete 
+2026-09-16T03:17:07.9355956Z  08c29fec86bc Downloading [=============>                                     ]  37.16MB/133.9MB
+2026-09-16T03:17:07.9595001Z  5492e2c54ded Extracting [>                                                  ]  557.1kB/54.57MB
+2026-09-16T03:17:08.0391105Z  08c29fec86bc Downloading [=====================>                             ]  56.55MB/133.9MB
+2026-09-16T03:17:08.0637822Z  e656f1d2b55e Downloading [>                                                  ]  507.3kB/50.55MB
+2026-09-16T03:17:08.1397279Z  08c29fec86bc Downloading [==========================>                        ]  72.17MB/133.9MB
+2026-09-16T03:17:08.1461580Z  5492e2c54ded Extracting [=>                                                 ]  1.114MB/54.57MB
+2026-09-16T03:17:08.1679519Z  e656f1d2b55e Downloading [===>                                               ]  3.047MB/50.55MB
+2026-09-16T03:17:08.2376054Z  08c29fec86bc Downloading [===============================>                   ]   85.1MB/133.9MB
+2026-09-16T03:17:08.2550246Z  75f829a71a1c Downloading [>                                                  ]    529kB/75.86MB
+2026-09-16T03:17:08.2815529Z  e656f1d2b55e Downloading [=======>                                           ]  7.618MB/50.55MB
+2026-09-16T03:17:08.2821558Z  5492e2c54ded Extracting [==>                                                ]  2.228MB/54.57MB
+2026-09-16T03:17:08.3557399Z  08c29fec86bc Downloading [=====================================>             ]   99.1MB/133.9MB
+2026-09-16T03:17:08.3570009Z  75f829a71a1c Downloading [==>                                                ]  3.743MB/75.86MB
+2026-09-16T03:17:08.3779269Z  e656f1d2b55e Downloading [=============>                                     ]   13.2MB/50.55MB
+2026-09-16T03:17:08.4310690Z  5492e2c54ded Extracting [===>                                               ]  3.342MB/54.57MB
+2026-09-16T03:17:08.4659183Z  75f829a71a1c Downloading [===========>                                       ]  17.09MB/75.86MB
+2026-09-16T03:17:08.4791494Z  e656f1d2b55e Downloading [===================>                               ]  19.81MB/50.55MB
+2026-09-16T03:17:08.5537407Z  08c29fec86bc Downloading [======================================>            ]  101.8MB/133.9MB
+2026-09-16T03:17:08.5618907Z  75f829a71a1c Downloading [===================>                               ]  29.33MB/75.86MB
+2026-09-16T03:17:08.5957844Z  e656f1d2b55e Downloading [==================================>                ]  34.54MB/50.55MB
+2026-09-16T03:17:08.6703658Z  5492e2c54ded Extracting [====>                                              ]  4.456MB/54.57MB
+2026-09-16T03:17:08.6706210Z  75f829a71a1c Downloading [=========================>                         ]  39.43MB/75.86MB
+2026-09-16T03:17:08.6838483Z  e656f1d2b55e Downloading [==============================================>    ]  46.73MB/50.55MB
+2026-09-16T03:17:08.7303794Z  e656f1d2b55e Verifying Checksum 
+2026-09-16T03:17:08.7305941Z  e656f1d2b55e Download complete 
+2026-09-16T03:17:08.7740385Z  75f829a71a1c Downloading [====================================>              ]   55.9MB/75.86MB
+2026-09-16T03:17:08.8452787Z  08c29fec86bc Downloading [========================================>          ]  107.7MB/133.9MB
+2026-09-16T03:17:08.8456251Z  75f829a71a1c Verifying Checksum 
+2026-09-16T03:17:08.8456480Z  75f829a71a1c Download complete 
+2026-09-16T03:17:08.9565697Z  08c29fec86bc Downloading [=================================================> ]    132MB/133.9MB
+2026-09-16T03:17:08.9765785Z  08c29fec86bc Verifying Checksum 
+2026-09-16T03:17:08.9767439Z  08c29fec86bc Download complete 
+2026-09-16T03:17:08.9934585Z  5492e2c54ded Extracting [====>                                              ]  5.014MB/54.57MB
+2026-09-16T03:17:09.0381166Z  75f829a71a1c Extracting [>                                                  ]  557.1kB/75.86MB
+2026-09-16T03:17:09.0936429Z  2dd8aabff665 Downloading [==================>                                ]   3.57kB/9.462kB
+2026-09-16T03:17:09.0937249Z  2dd8aabff665 Downloading [==================================================>]  9.462kB/9.462kB
+2026-09-16T03:17:09.0957702Z  2dd8aabff665 Verifying Checksum 
+2026-09-16T03:17:09.0958987Z  2dd8aabff665 Download complete 
+2026-09-16T03:17:09.2082917Z  75f829a71a1c Extracting [>                                                  ]  1.114MB/75.86MB
+2026-09-16T03:17:09.2337775Z  5492e2c54ded Extracting [=====>                                             ]  5.571MB/54.57MB
+2026-09-16T03:17:09.2338395Z  fd17121b3976 Downloading [>                                                  ]  81.35kB/7.239MB
+2026-09-16T03:17:09.3234568Z  75f829a71a1c Extracting [=>                                                 ]  2.228MB/75.86MB
+2026-09-16T03:17:09.3242063Z  fd17121b3976 Verifying Checksum 
+2026-09-16T03:17:09.3242643Z  fd17121b3976 Download complete 
+2026-09-16T03:17:09.3428110Z  a19cf707b4fd Downloading [==================================================>]  2.283kB/2.283kB
+2026-09-16T03:17:09.3431024Z  a19cf707b4fd Download complete 
+2026-09-16T03:17:09.3653642Z  5492e2c54ded Extracting [======>                                            ]  6.685MB/54.57MB
+2026-09-16T03:17:09.4135361Z  75f829a71a1c Extracting [==>                                                ]  3.342MB/75.86MB
+2026-09-16T03:17:09.4701470Z  5492e2c54ded Extracting [=======>                                           ]  7.799MB/54.57MB
+2026-09-16T03:17:09.4937422Z  4ccdd8a52dc0 Downloading [>                                                  ]  540.7kB/308.1MB
+2026-09-16T03:17:09.5715132Z  75f829a71a1c Extracting [===>                                               ]  5.014MB/75.86MB
+2026-09-16T03:17:09.5922797Z  5492e2c54ded Extracting [========>                                          ]  8.913MB/54.57MB
+2026-09-16T03:17:09.6034311Z  4ccdd8a52dc0 Downloading [==>                                                ]  15.66MB/308.1MB
+2026-09-16T03:17:09.6738941Z  75f829a71a1c Extracting [====>                                              ]  6.128MB/75.86MB
+2026-09-16T03:17:09.6983757Z  4ccdd8a52dc0 Downloading [====>                                              ]  28.09MB/308.1MB
+2026-09-16T03:17:09.7100589Z  d018d3fc07a4 Downloading [==================================================>]     281B/281B
+2026-09-16T03:17:09.7101627Z  d018d3fc07a4 Verifying Checksum 
+2026-09-16T03:17:09.7102115Z  d018d3fc07a4 Download complete 
+2026-09-16T03:17:09.7330030Z  70f1e3a1960a Downloading [==================================================>]  1.722kB/1.722kB
+2026-09-16T03:17:09.7338412Z  70f1e3a1960a Download complete 
+2026-09-16T03:17:09.7430259Z  5492e2c54ded Extracting [=========>                                         ]  10.03MB/54.57MB
+2026-09-16T03:17:09.7740639Z  75f829a71a1c Extracting [====>                                              ]  7.242MB/75.86MB
+2026-09-16T03:17:09.8047469Z  4ccdd8a52dc0 Downloading [========>                                          ]  49.67MB/308.1MB
+2026-09-16T03:17:09.8856892Z  5492e2c54ded Extracting [==========>                                        ]  11.14MB/54.57MB
+2026-09-16T03:17:09.9580140Z  4ccdd8a52dc0 Downloading [===========>                                       ]  69.57MB/308.1MB
+2026-09-16T03:17:09.9634450Z  75f829a71a1c Extracting [=====>                                             ]  8.913MB/75.86MB
+2026-09-16T03:17:09.9917822Z  5492e2c54ded Extracting [==========>                                        ]   11.7MB/54.57MB
+2026-09-16T03:17:10.0494128Z  4ccdd8a52dc0 Downloading [===============>                                   ]  92.68MB/308.1MB
+2026-09-16T03:17:10.0937041Z  75f829a71a1c Extracting [======>                                            ]  10.03MB/75.86MB
+2026-09-16T03:17:10.0967180Z  5492e2c54ded Extracting [===========>                                       ]  12.81MB/54.57MB
+2026-09-16T03:17:10.1027775Z  8f58f7e426fa Downloading [==================================================>]  2.062kB/2.062kB
+2026-09-16T03:17:10.1028612Z  817feb91b55c Downloading [====>                                              ]  16.38kB/200.6kB
+2026-09-16T03:17:10.1048327Z  8f58f7e426fa Download complete 
+2026-09-16T03:17:10.1256157Z  817feb91b55c Downloading [==================================================>]  200.6kB/200.6kB
+2026-09-16T03:17:10.1263107Z  817feb91b55c Verifying Checksum 
+2026-09-16T03:17:10.1263658Z  817feb91b55c Download complete 
+2026-09-16T03:17:10.1517188Z  4ccdd8a52dc0 Downloading [==================>                                ]  115.3MB/308.1MB
+2026-09-16T03:17:10.1977425Z  75f829a71a1c Extracting [=======>                                           ]  11.14MB/75.86MB
+2026-09-16T03:17:10.2449074Z  5492e2c54ded Extracting [=============>                                     ]  14.48MB/54.57MB
+2026-09-16T03:17:10.2522003Z  4ccdd8a52dc0 Downloading [=====================>                             ]  132.5MB/308.1MB
+2026-09-16T03:17:10.3038329Z  75f829a71a1c Extracting [========>                                          ]  12.81MB/75.86MB
+2026-09-16T03:17:10.3510681Z  4ccdd8a52dc0 Downloading [=========================>                         ]  158.4MB/308.1MB
+2026-09-16T03:17:10.3781710Z  5492e2c54ded Extracting [==============>                                    ]  16.15MB/54.57MB
+2026-09-16T03:17:10.4050443Z  75f829a71a1c Extracting [=========>                                         ]  15.04MB/75.86MB
+2026-09-16T03:17:10.4517567Z  4ccdd8a52dc0 Downloading [============================>                      ]  176.7MB/308.1MB
+2026-09-16T03:17:10.4827788Z  b564688b1072 Downloading [==================================================>]   1.11kB/1.11kB
+2026-09-16T03:17:10.4828584Z  b564688b1072 Verifying Checksum 
+2026-09-16T03:17:10.4828819Z  b564688b1072 Download complete 
+2026-09-16T03:17:10.4890351Z  6310eb16bf42 Downloading [>                                                  ]  310.7kB/29.79MB
+2026-09-16T03:17:10.4948680Z  5492e2c54ded Extracting [================>                                  ]  18.38MB/54.57MB
+2026-09-16T03:17:10.5102546Z  75f829a71a1c Extracting [===========>                                       ]  17.27MB/75.86MB
+2026-09-16T03:17:10.5534945Z  4ccdd8a52dc0 Downloading [===============================>                   ]  195.6MB/308.1MB
+2026-09-16T03:17:10.5895006Z  6310eb16bf42 Downloading [==============================>                    ]  18.37MB/29.79MB
+2026-09-16T03:17:10.6011789Z  5492e2c54ded Extracting [=================>                                 ]   19.5MB/54.57MB
+2026-09-16T03:17:10.6537032Z  6310eb16bf42 Verifying Checksum 
+2026-09-16T03:17:10.6564669Z  6310eb16bf42 Download complete 
+2026-09-16T03:17:10.6565100Z  4ccdd8a52dc0 Downloading [===================================>               ]  218.8MB/308.1MB
+2026-09-16T03:17:10.7417160Z  75f829a71a1c Extracting [============>                                      ]  18.94MB/75.86MB
+2026-09-16T03:17:10.7677148Z  4ccdd8a52dc0 Downloading [======================================>            ]  239.9MB/308.1MB
+2026-09-16T03:17:10.8585916Z  5492e2c54ded Extracting [===================>                               ]  21.17MB/54.57MB
+2026-09-16T03:17:10.8588444Z  6221ee17f501 Downloading [=>                                                 ]  3.529kB/136.7kB
+2026-09-16T03:17:10.8606314Z  6310eb16bf42 Extracting [>                                                  ]  327.7kB/29.79MB
+2026-09-16T03:17:10.8626047Z  4ccdd8a52dc0 Downloading [==========================================>        ]  263.1MB/308.1MB
+2026-09-16T03:17:10.8629460Z  6221ee17f501 Downloading [==================================================>]  136.7kB/136.7kB
+2026-09-16T03:17:10.8630756Z  6221ee17f501 Verifying Checksum 
+2026-09-16T03:17:10.8631920Z  6221ee17f501 Download complete 
+2026-09-16T03:17:10.9122322Z  75f829a71a1c Extracting [=============>                                     ]  20.05MB/75.86MB
+2026-09-16T03:17:10.9642003Z  4ccdd8a52dc0 Downloading [==============================================>    ]  284.1MB/308.1MB
+2026-09-16T03:17:10.9704418Z  6310eb16bf42 Extracting [==>                                                ]  1.311MB/29.79MB
+2026-09-16T03:17:11.0271553Z  5492e2c54ded Extracting [====================>                              ]  22.28MB/54.57MB
+2026-09-16T03:17:11.0426478Z  6cfae3da9f7b Downloading [>                                                  ]   32.2kB/2.286MB
+2026-09-16T03:17:11.0738192Z  4ccdd8a52dc0 Downloading [================================================>  ]  297.6MB/308.1MB
+2026-09-16T03:17:11.0985841Z  6cfae3da9f7b Downloading [==================================================>]  2.286MB/2.286MB
+2026-09-16T03:17:11.0987060Z  6cfae3da9f7b Verifying Checksum 
+2026-09-16T03:17:11.0987284Z  6cfae3da9f7b Download complete 
+2026-09-16T03:17:11.1153245Z  4ccdd8a52dc0 Verifying Checksum 
+2026-09-16T03:17:11.1153670Z  4ccdd8a52dc0 Download complete 
+2026-09-16T03:17:11.1154100Z  75f829a71a1c Extracting [=============>                                     ]  20.61MB/75.86MB
+2026-09-16T03:17:11.1154579Z  6310eb16bf42 Extracting [====>                                              ]  2.621MB/29.79MB
+2026-09-16T03:17:11.1268690Z  5492e2c54ded Extracting [====================>                              ]  22.84MB/54.57MB
+2026-09-16T03:17:11.2335021Z  591a7e3cd179 Downloading [==================================================>]     284B/284B
+2026-09-16T03:17:11.2335390Z  591a7e3cd179 Verifying Checksum 
+2026-09-16T03:17:11.2335820Z  591a7e3cd179 Download complete 
+2026-09-16T03:17:11.2336115Z  5492e2c54ded Extracting [=====================>                             ]  23.95MB/54.57MB
+2026-09-16T03:17:11.2468967Z  6310eb16bf42 Extracting [=======>                                           ]  4.588MB/29.79MB
+2026-09-16T03:17:11.2802301Z  75f829a71a1c Extracting [=============>                                     ]  21.17MB/75.86MB
+2026-09-16T03:17:11.3387392Z  5492e2c54ded Extracting [======================>                            ]  25.07MB/54.57MB
+2026-09-16T03:17:11.3473215Z  6310eb16bf42 Extracting [=========>                                         ]  5.898MB/29.79MB
+2026-09-16T03:17:11.4053564Z  75f829a71a1c Extracting [===============>                                   ]  22.84MB/75.86MB
+2026-09-16T03:17:11.4542825Z  42ff75ca70cd Downloading [==================================================>]     122B/122B
+2026-09-16T03:17:11.4543214Z  42ff75ca70cd Verifying Checksum 
+2026-09-16T03:17:11.4543467Z  42ff75ca70cd Download complete 
+2026-09-16T03:17:11.4543780Z  6310eb16bf42 Extracting [===========>                                       ]  6.881MB/29.79MB
+2026-09-16T03:17:11.4673915Z  5492e2c54ded Extracting [========================>                          ]  26.74MB/54.57MB
+2026-09-16T03:17:11.5013060Z  8740c948ffd4 Downloading [>                                                  ]  326.6kB/31.4MB
+2026-09-16T03:17:11.5148517Z  75f829a71a1c Extracting [================>                                  ]  24.51MB/75.86MB
+2026-09-16T03:17:11.5682677Z  6310eb16bf42 Extracting [=============>                                     ]  8.192MB/29.79MB
+2026-09-16T03:17:11.5878883Z  5492e2c54ded Extracting [=========================>                         ]  27.85MB/54.57MB
+2026-09-16T03:17:11.5997581Z  a2271c958e57 Downloading [==================================================>]  1.732kB/1.732kB
+2026-09-16T03:17:11.6036379Z  a2271c958e57 Verifying Checksum 
+2026-09-16T03:17:11.6036844Z  a2271c958e57 Download complete 
+2026-09-16T03:17:11.6047194Z  8740c948ffd4 Downloading [===========================>                       ]  17.07MB/31.4MB
+2026-09-16T03:17:11.6569651Z  8740c948ffd4 Verifying Checksum 
+2026-09-16T03:17:11.6573059Z  8740c948ffd4 Download complete 
+2026-09-16T03:17:11.6696784Z  75f829a71a1c Extracting [================>                                  ]  25.62MB/75.86MB
+2026-09-16T03:17:11.6759322Z  6310eb16bf42 Extracting [===============>                                   ]  9.175MB/29.79MB
+2026-09-16T03:17:11.7380054Z  8740c948ffd4 Extracting [>                                                  ]  327.7kB/31.4MB
+2026-09-16T03:17:11.7591479Z  5492e2c54ded Extracting [==========================>                        ]  28.97MB/54.57MB
+2026-09-16T03:17:11.7812689Z  6310eb16bf42 Extracting [=================>                                 ]  10.16MB/29.79MB
+2026-09-16T03:17:11.8083772Z  495af11a3eac Downloading [>                                                  ]  16.38kB/1.411MB
+2026-09-16T03:17:11.8182892Z  75f829a71a1c Extracting [=================>                                 ]  26.74MB/75.86MB
+2026-09-16T03:17:11.8527035Z  495af11a3eac Verifying Checksum 
+2026-09-16T03:17:11.8543273Z  495af11a3eac Download complete 
+2026-09-16T03:17:11.9217738Z  6310eb16bf42 Extracting [==================>                                ]  11.14MB/29.79MB
+2026-09-16T03:17:11.9219276Z  5492e2c54ded Extracting [===========================>                       ]  30.08MB/54.57MB
+2026-09-16T03:17:11.9248529Z  75f829a71a1c Extracting [==================>                                ]  27.85MB/75.86MB
+2026-09-16T03:17:11.9572657Z  20d8f888dfb3 Downloading [>                                                  ]  97.69kB/9.574MB
+2026-09-16T03:17:11.9644416Z  8740c948ffd4 Extracting [====>                                              ]  2.949MB/31.4MB
+2026-09-16T03:17:12.0246037Z  43f7f644570b Downloading [==================================================>]     133B/133B
+2026-09-16T03:17:12.0246596Z  43f7f644570b Verifying Checksum 
+2026-09-16T03:17:12.0246817Z  43f7f644570b Download complete 
+2026-09-16T03:17:12.0323215Z  20d8f888dfb3 Verifying Checksum 
+2026-09-16T03:17:12.0324299Z  20d8f888dfb3 Download complete 
+2026-09-16T03:17:12.0367161Z  6310eb16bf42 Extracting [====================>                              ]  12.45MB/29.79MB
+2026-09-16T03:17:12.0681680Z  8740c948ffd4 Extracting [=======>                                           ]  4.588MB/31.4MB
+2026-09-16T03:17:12.0814554Z  75f829a71a1c Extracting [===================>                               ]  29.52MB/75.86MB
+2026-09-16T03:17:12.1422762Z  6310eb16bf42 Extracting [=======================>                           ]  13.76MB/29.79MB
+2026-09-16T03:17:12.1621400Z  5492e2c54ded Extracting [============================>                      ]   31.2MB/54.57MB
+2026-09-16T03:17:12.1932885Z  75f829a71a1c Extracting [====================>                              ]  30.64MB/75.86MB
+2026-09-16T03:17:12.2019112Z  95e0e23bb0c6 Downloading [==================================================>]     575B/575B
+2026-09-16T03:17:12.2019755Z  95e0e23bb0c6 Verifying Checksum 
+2026-09-16T03:17:12.2019979Z  95e0e23bb0c6 Download complete 
+2026-09-16T03:17:12.2123034Z  8740c948ffd4 Extracting [==========>                                        ]  6.554MB/31.4MB
+2026-09-16T03:17:12.2771103Z  6310eb16bf42 Extracting [=========================>                         ]   15.4MB/29.79MB
+2026-09-16T03:17:12.2926003Z  5492e2c54ded Extracting [=============================>                     ]  31.75MB/54.57MB
+2026-09-16T03:17:12.3183315Z  75f829a71a1c Extracting [=====================>                             ]  32.31MB/75.86MB
+2026-09-16T03:17:12.3292079Z  8740c948ffd4 Extracting [=============>                                     ]  8.192MB/31.4MB
+2026-09-16T03:17:12.3895918Z  6310eb16bf42 Extracting [===========================>                       ]  16.38MB/29.79MB
+2026-09-16T03:17:12.3979045Z  f3f5ff008d73 Downloading [==================================================>]     886B/886B
+2026-09-16T03:17:12.3981687Z  f3f5ff008d73 Verifying Checksum 
+2026-09-16T03:17:12.3981916Z  f3f5ff008d73 Download complete 
+2026-09-16T03:17:12.4057862Z  328ba678bf27 Downloading [>                                                  ]  458.2kB/44.56MB
+2026-09-16T03:17:12.4309464Z  8740c948ffd4 Extracting [================>                                  ]  10.16MB/31.4MB
+2026-09-16T03:17:12.4310095Z  75f829a71a1c Extracting [======================>                            ]  33.98MB/75.86MB
+2026-09-16T03:17:12.5066097Z  6310eb16bf42 Extracting [============================>                      ]  17.04MB/29.79MB
+2026-09-16T03:17:12.5092333Z  328ba678bf27 Downloading [====================>                              ]  17.84MB/44.56MB
+2026-09-16T03:17:12.5290233Z  5492e2c54ded Extracting [=============================>                     ]  32.31MB/54.57MB
+2026-09-16T03:17:12.5339856Z  75f829a71a1c Extracting [=======================>                           ]  35.09MB/75.86MB
+2026-09-16T03:17:12.5537532Z  8740c948ffd4 Extracting [=================>                                 ]  11.14MB/31.4MB
+2026-09-16T03:17:12.5875265Z  dd7054d6d0c7 Downloading [>                                                  ]  16.38kB/982.8kB
+2026-09-16T03:17:12.6109845Z  328ba678bf27 Downloading [============================================>      ]  39.67MB/44.56MB
+2026-09-16T03:17:12.6160098Z  dd7054d6d0c7 Verifying Checksum 
+2026-09-16T03:17:12.6160444Z  dd7054d6d0c7 Download complete 
+2026-09-16T03:17:12.6178951Z  6310eb16bf42 Extracting [==============================>                    ]  18.02MB/29.79MB
+2026-09-16T03:17:12.6237821Z  328ba678bf27 Verifying Checksum 
+2026-09-16T03:17:12.6255647Z  328ba678bf27 Download complete 
+2026-09-16T03:17:12.6643335Z  8740c948ffd4 Extracting [===================>                               ]  12.45MB/31.4MB
+2026-09-16T03:17:12.6678740Z  75f829a71a1c Extracting [========================>                          ]  36.77MB/75.86MB
+2026-09-16T03:17:12.7285813Z  5492e2c54ded Extracting [==============================>                    ]  33.42MB/54.57MB
+2026-09-16T03:17:12.7343325Z  6310eb16bf42 Extracting [==================================>                ]  20.32MB/29.79MB
+2026-09-16T03:17:12.7612324Z  328ba678bf27 Extracting [>                                                  ]  458.8kB/44.56MB
+2026-09-16T03:17:12.7678649Z  70b5d4e8750e Downloading [>                                                  ]  49.15kB/4.608MB
+2026-09-16T03:17:12.7873730Z  75f829a71a1c Extracting [=========================>                         ]  38.99MB/75.86MB
+2026-09-16T03:17:12.8116078Z  8740c948ffd4 Extracting [=====================>                             ]  13.43MB/31.4MB
+2026-09-16T03:17:12.8354172Z  70b5d4e8750e Verifying Checksum 
+2026-09-16T03:17:12.8354862Z  70b5d4e8750e Download complete 
+2026-09-16T03:17:12.8384168Z  5492e2c54ded Extracting [===============================>                   ]  34.54MB/54.57MB
+2026-09-16T03:17:12.8516167Z  6310eb16bf42 Extracting [===================================>               ]   21.3MB/29.79MB
+2026-09-16T03:17:12.8830451Z  328ba678bf27 Extracting [==>                                                ]  1.835MB/44.56MB
+2026-09-16T03:17:12.9249619Z  8740c948ffd4 Extracting [======================>                            ]  14.09MB/31.4MB
+2026-09-16T03:17:12.9294441Z  75f829a71a1c Extracting [==========================>                        ]  40.11MB/75.86MB
+2026-09-16T03:17:12.9551936Z  6310eb16bf42 Extracting [====================================>              ]  21.95MB/29.79MB
+2026-09-16T03:17:12.9951284Z  328ba678bf27 Extracting [===>                                               ]  3.211MB/44.56MB
+2026-09-16T03:17:12.9954321Z  3e9c0b61a8f3 Downloading [==================================================>]     334B/334B
+2026-09-16T03:17:12.9954761Z  cdc4a7b43bdd Downloading [==================================================>]  2.629kB/2.629kB
+2026-09-16T03:17:12.9955089Z  3e9c0b61a8f3 Verifying Checksum 
+2026-09-16T03:17:12.9955308Z  3e9c0b61a8f3 Download complete 
+2026-09-16T03:17:12.9955611Z  cdc4a7b43bdd Verifying Checksum 
+2026-09-16T03:17:12.9955818Z  cdc4a7b43bdd Download complete 
+2026-09-16T03:17:13.0045833Z  5492e2c54ded Extracting [================================>                  ]  35.09MB/54.57MB
+2026-09-16T03:17:13.0475721Z  8740c948ffd4 Extracting [=======================>                           ]  14.75MB/31.4MB
+2026-09-16T03:17:13.0805405Z  6310eb16bf42 Extracting [======================================>            ]  22.94MB/29.79MB
+2026-09-16T03:17:13.0887030Z  328ba678bf27 Extracting [=====>                                             ]  4.588MB/44.56MB
+2026-09-16T03:17:13.1100713Z  75f829a71a1c Extracting [==========================>                        ]  40.67MB/75.86MB
+2026-09-16T03:17:13.1375797Z  5492e2c54ded Extracting [================================>                  ]  35.65MB/54.57MB
+2026-09-16T03:17:13.1649229Z  8740c948ffd4 Extracting [========================>                          ]   15.4MB/31.4MB
+2026-09-16T03:17:13.1778300Z  6310eb16bf42 Extracting [========================================>          ]  23.92MB/29.79MB
+2026-09-16T03:17:13.2011785Z  328ba678bf27 Extracting [=======>                                           ]  6.423MB/44.56MB
+2026-09-16T03:17:13.2280895Z  806a08b6c085 Downloading [>                                                  ]  525.7kB/56.2MB
+2026-09-16T03:17:13.2341559Z  75f829a71a1c Extracting [===========================>                       ]  42.34MB/75.86MB
+2026-09-16T03:17:13.2427710Z  5492e2c54ded Extracting [=================================>                 ]  36.21MB/54.57MB
+2026-09-16T03:17:13.2781324Z  8740c948ffd4 Extracting [=========================>                         ]  16.06MB/31.4MB
+2026-09-16T03:17:13.3263120Z  806a08b6c085 Downloading [==============>                                    ]  16.46MB/56.2MB
+2026-09-16T03:17:13.3510369Z  6310eb16bf42 Extracting [==========================================>        ]  25.23MB/29.79MB
+2026-09-16T03:17:13.3729627Z  021b2cebd832 Downloading [==================================================>]     319B/319B
+2026-09-16T03:17:13.3740156Z  021b2cebd832 Verifying Checksum 
+2026-09-16T03:17:13.3740406Z  021b2cebd832 Download complete 
+2026-09-16T03:17:13.3772546Z  ad31ba45b26b Downloading [>                                                  ]  503.2kB/50.17MB
+2026-09-16T03:17:13.3980401Z  328ba678bf27 Extracting [=======>                                           ]  6.881MB/44.56MB
+2026-09-16T03:17:13.4352051Z  8740c948ffd4 Extracting [==========================>                        ]  16.38MB/31.4MB
+2026-09-16T03:17:13.4352783Z  75f829a71a1c Extracting [============================>                      ]  43.45MB/75.86MB
+2026-09-16T03:17:13.4353306Z  806a08b6c085 Downloading [=============================>                     ]   33.4MB/56.2MB
+2026-09-16T03:17:13.4518585Z  5492e2c54ded Extracting [=================================>                 ]  36.77MB/54.57MB
+2026-09-16T03:17:13.4788772Z  6310eb16bf42 Extracting [==========================================>        ]  25.56MB/29.79MB
+2026-09-16T03:17:13.4813992Z  ad31ba45b26b Downloading [=============>                                     ]  13.76MB/50.17MB
+2026-09-16T03:17:13.5363759Z  806a08b6c085 Downloading [===============================================>   ]  53.05MB/56.2MB
+2026-09-16T03:17:13.5414146Z  328ba678bf27 Extracting [=========>                                         ]  8.258MB/44.56MB
+2026-09-16T03:17:13.5470053Z  806a08b6c085 Verifying Checksum 
+2026-09-16T03:17:13.5473735Z  806a08b6c085 Download complete 
+2026-09-16T03:17:13.5710448Z  5492e2c54ded Extracting [==================================>                ]  37.32MB/54.57MB
+2026-09-16T03:17:13.5763190Z  75f829a71a1c Extracting [=============================>                     ]  44.56MB/75.86MB
+2026-09-16T03:17:13.5852611Z  ad31ba45b26b Downloading [===================================>               ]  35.21MB/50.17MB
+2026-09-16T03:17:13.6009994Z  8740c948ffd4 Extracting [===========================>                       ]  17.37MB/31.4MB
+2026-09-16T03:17:13.6696196Z  ad31ba45b26b Verifying Checksum 
+2026-09-16T03:17:13.6702210Z  ad31ba45b26b Download complete 
+2026-09-16T03:17:13.6815162Z  75f829a71a1c Extracting [==============================>                    ]  46.24MB/75.86MB
+2026-09-16T03:17:13.7024805Z  8740c948ffd4 Extracting [===============================>                   ]  19.66MB/31.4MB
+2026-09-16T03:17:13.7311740Z  328ba678bf27 Extracting [===========>                                       ]  10.09MB/44.56MB
+2026-09-16T03:17:13.7385984Z  5492e2c54ded Extracting [===================================>               ]  38.44MB/54.57MB
+2026-09-16T03:17:13.7387059Z  0d4c2bd59d1c Downloading [==================================================>]  5.391kB/5.391kB
+2026-09-16T03:17:13.7394929Z  0d4c2bd59d1c Verifying Checksum 
+2026-09-16T03:17:13.7399060Z  0d4c2bd59d1c Download complete 
+2026-09-16T03:17:13.8155119Z  8740c948ffd4 Extracting [=================================>                 ]   21.3MB/31.4MB
+2026-09-16T03:17:13.8318538Z  328ba678bf27 Extracting [============>                                      ]  11.47MB/44.56MB
+2026-09-16T03:17:13.8455390Z  75f829a71a1c Extracting [===============================>                   ]  47.91MB/75.86MB
+2026-09-16T03:17:13.8724537Z  6310eb16bf42 Extracting [===========================================>       ]  26.21MB/29.79MB
+2026-09-16T03:17:13.9170471Z  148dcef42e3b Downloading [==================================================>]     121B/121B
+2026-09-16T03:17:13.9206096Z  148dcef42e3b Verifying Checksum 
+2026-09-16T03:17:13.9250722Z  148dcef42e3b Download complete 
+2026-09-16T03:17:13.9251062Z  8740c948ffd4 Extracting [====================================>              ]  22.94MB/31.4MB
+2026-09-16T03:17:13.9540434Z  328ba678bf27 Extracting [==============>                                    ]  12.85MB/44.56MB
+2026-09-16T03:17:13.9608061Z  5492e2c54ded Extracting [====================================>              ]  39.55MB/54.57MB
+2026-09-16T03:17:13.9663314Z  75f829a71a1c Extracting [===============================>                   ]  48.46MB/75.86MB
+2026-09-16T03:17:13.9799860Z  6310eb16bf42 Extracting [==============================================>    ]  27.53MB/29.79MB
+2026-09-16T03:17:14.0352964Z  8740c948ffd4 Extracting [=======================================>           ]  24.58MB/31.4MB
+2026-09-16T03:17:14.0599077Z  b83ce1c86227 Downloading [>                                                  ]  75.93kB/7.241MB
+2026-09-16T03:17:14.0599554Z  b83ce1c86227 Downloading [>                                                  ]  75.93kB/7.241MB
+2026-09-16T03:17:14.0600545Z  b83ce1c86227 Downloading [>                                                  ]  75.93kB/7.241MB
+2026-09-16T03:17:14.0637779Z  328ba678bf27 Extracting [================>                                  ]  14.68MB/44.56MB
+2026-09-16T03:17:14.1043469Z  5492e2c54ded Extracting [=====================================>             ]  40.67MB/54.57MB
+2026-09-16T03:17:14.1206513Z  b83ce1c86227 Verifying Checksum 
+2026-09-16T03:17:14.1208665Z  b83ce1c86227 Verifying Checksum 
+2026-09-16T03:17:14.1209514Z  b83ce1c86227 Verifying Checksum 
+2026-09-16T03:17:14.1209804Z  b83ce1c86227 Download complete 
+2026-09-16T03:17:14.1210224Z  b83ce1c86227 Download complete 
+2026-09-16T03:17:14.1210624Z  b83ce1c86227 Download complete 
+2026-09-16T03:17:14.1241861Z  b83ce1c86227 Extracting [>                                                  ]   98.3kB/7.241MB
+2026-09-16T03:17:14.1254125Z  b83ce1c86227 Extracting [>                                                  ]   98.3kB/7.241MB
+2026-09-16T03:17:14.1254671Z  75f829a71a1c Extracting [================================>                  ]  49.02MB/75.86MB
+2026-09-16T03:17:14.1255170Z  b83ce1c86227 Extracting [>                                                  ]   98.3kB/7.241MB
+2026-09-16T03:17:14.1584122Z  6310eb16bf42 Extracting [===============================================>   ]  28.51MB/29.79MB
+2026-09-16T03:17:14.1703015Z  8740c948ffd4 Extracting [=========================================>         ]  25.89MB/31.4MB
+2026-09-16T03:17:14.1768404Z  328ba678bf27 Extracting [==================>                                ]  16.06MB/44.56MB
+2026-09-16T03:17:14.2858294Z  8740c948ffd4 Extracting [==========================================>        ]  26.54MB/31.4MB
+2026-09-16T03:17:14.2923143Z  328ba678bf27 Extracting [===================>                               ]  16.97MB/44.56MB
+2026-09-16T03:17:14.2990804Z  b268f447c871 Downloading [==>                                                ]  3.429kB/70.45kB
+2026-09-16T03:17:14.2991523Z  b268f447c871 Downloading [==>                                                ]  3.429kB/70.45kB
+2026-09-16T03:17:14.3334040Z  b268f447c871 Downloading [==================================================>]  70.45kB/70.45kB
+2026-09-16T03:17:14.3337363Z  b268f447c871 Downloading [==================================================>]  70.45kB/70.45kB
+2026-09-16T03:17:14.3337700Z  b268f447c871 Verifying Checksum 
+2026-09-16T03:17:14.3338030Z  b268f447c871 Download complete 
+2026-09-16T03:17:14.3338244Z  b268f447c871 Verifying Checksum 
+2026-09-16T03:17:14.3338447Z  b268f447c871 Download complete 
+2026-09-16T03:17:14.3615909Z  6310eb16bf42 Extracting [================================================>  ]  28.84MB/29.79MB
+2026-09-16T03:17:14.3865072Z  5492e2c54ded Extracting [======================================>            ]  42.34MB/54.57MB
+2026-09-16T03:17:14.3993815Z  328ba678bf27 Extracting [====================>                              ]  18.35MB/44.56MB
+2026-09-16T03:17:14.4062553Z  b83ce1c86227 Extracting [==>                                                ]  294.9kB/7.241MB
+2026-09-16T03:17:14.4079849Z  b83ce1c86227 Extracting [==>                                                ]  294.9kB/7.241MB
+2026-09-16T03:17:14.4096338Z  b83ce1c86227 Extracting [==>                                                ]  294.9kB/7.241MB
+2026-09-16T03:17:14.4349206Z  8740c948ffd4 Extracting [============================================>      ]  27.85MB/31.4MB
+2026-09-16T03:17:14.4568703Z  75f829a71a1c Extracting [================================>                  ]  49.58MB/75.86MB
+2026-09-16T03:17:14.4647035Z  f29310fc4a8a Downloading [==============>                                    ]  3.452kB/11.87kB
+2026-09-16T03:17:14.4647562Z  f29310fc4a8a Downloading [==================================================>]  11.87kB/11.87kB
+2026-09-16T03:17:14.4648141Z  f29310fc4a8a Downloading [==============>                                    ]  3.452kB/11.87kB
+2026-09-16T03:17:14.4648548Z  f29310fc4a8a Downloading [==================================================>]  11.87kB/11.87kB
+2026-09-16T03:17:14.4648862Z  f29310fc4a8a Verifying Checksum 
+2026-09-16T03:17:14.4649076Z  f29310fc4a8a Verifying Checksum 
+2026-09-16T03:17:14.4649303Z  f29310fc4a8a Download complete 
+2026-09-16T03:17:14.4649506Z  f29310fc4a8a Download complete 
+2026-09-16T03:17:14.5098225Z  b83ce1c86227 Extracting [==========>                                        ]  1.475MB/7.241MB
+2026-09-16T03:17:14.5133786Z  b83ce1c86227 Extracting [==========>                                        ]  1.475MB/7.241MB
+2026-09-16T03:17:14.5134300Z  b83ce1c86227 Extracting [==========>                                        ]  1.475MB/7.241MB
+2026-09-16T03:17:14.5220396Z  328ba678bf27 Extracting [=====================>                             ]  19.27MB/44.56MB
+2026-09-16T03:17:14.5372670Z  5492e2c54ded Extracting [=======================================>           ]  43.45MB/54.57MB
+2026-09-16T03:17:14.5578463Z  8740c948ffd4 Extracting [=============================================>     ]  28.51MB/31.4MB
+2026-09-16T03:17:14.5765121Z  75f829a71a1c Extracting [=================================>                 ]  50.14MB/75.86MB
+2026-09-16T03:17:14.6182580Z  b83ce1c86227 Extracting [==============>                                    ]  2.064MB/7.241MB
+2026-09-16T03:17:14.6191513Z  b83ce1c86227 Extracting [==============>                                    ]  2.064MB/7.241MB
+2026-09-16T03:17:14.6192646Z  b83ce1c86227 Extracting [==============>                                    ]  2.064MB/7.241MB
+2026-09-16T03:17:14.6579798Z  328ba678bf27 Extracting [======================>                            ]  20.19MB/44.56MB
+2026-09-16T03:17:14.6688144Z  5492e2c54ded Extracting [========================================>          ]  44.01MB/54.57MB
+2026-09-16T03:17:14.6793847Z  6310eb16bf42 Extracting [================================================>  ]  29.16MB/29.79MB
+2026-09-16T03:17:14.6956378Z  9404e0df6bd3 Downloading [>                                                  ]  116.9kB/11.19MB
+2026-09-16T03:17:14.6957672Z  9404e0df6bd3 Downloading [>                                                  ]  116.9kB/11.19MB
+2026-09-16T03:17:14.7218701Z  b83ce1c86227 Extracting [=====================>                             ]  3.047MB/7.241MB
+2026-09-16T03:17:14.7229719Z  b83ce1c86227 Extracting [=====================>                             ]  3.047MB/7.241MB
+2026-09-16T03:17:14.7238542Z  b83ce1c86227 Extracting [=====================>                             ]  3.047MB/7.241MB
+2026-09-16T03:17:14.7875591Z  75f829a71a1c Extracting [=================================>                 ]  51.25MB/75.86MB
+2026-09-16T03:17:14.7917532Z  6310eb16bf42 Extracting [=================================================> ]  29.49MB/29.79MB
+2026-09-16T03:17:14.8041643Z  5492e2c54ded Extracting [========================================>          ]  44.56MB/54.57MB
+2026-09-16T03:17:14.8137512Z  9404e0df6bd3 Downloading [===============================>                   ]  7.007MB/11.19MB
+2026-09-16T03:17:14.8143224Z  9404e0df6bd3 Downloading [===============================>                   ]  7.007MB/11.19MB
+2026-09-16T03:17:14.8144033Z  4a93952ab9ce Downloading [=>                                                 ]  3.449kB/129.9kB
+2026-09-16T03:17:14.8146695Z  4a93952ab9ce Downloading [=>                                                 ]  3.449kB/129.9kB
+2026-09-16T03:17:14.8337205Z  328ba678bf27 Extracting [=======================>                           ]   21.1MB/44.56MB
+2026-09-16T03:17:14.8578282Z  4a93952ab9ce Downloading [==================================================>]  129.9kB/129.9kB
+2026-09-16T03:17:14.8578684Z  9404e0df6bd3 Verifying Checksum 
+2026-09-16T03:17:14.8578899Z  9404e0df6bd3 Download complete 
+2026-09-16T03:17:14.8579115Z  4a93952ab9ce Verifying Checksum 
+2026-09-16T03:17:14.8579322Z  4a93952ab9ce Download complete 
+2026-09-16T03:17:14.8579642Z  4a93952ab9ce Downloading [==================================================>]  129.9kB/129.9kB
+2026-09-16T03:17:14.8579955Z  9404e0df6bd3 Verifying Checksum 
+2026-09-16T03:17:14.8580152Z  9404e0df6bd3 Download complete 
+2026-09-16T03:17:14.8580342Z  4a93952ab9ce Verifying Checksum 
+2026-09-16T03:17:14.8580545Z  4a93952ab9ce Download complete 
+2026-09-16T03:17:14.8580822Z  b83ce1c86227 Extracting [=========================>                         ]  3.736MB/7.241MB
+2026-09-16T03:17:14.8581200Z  b83ce1c86227 Extracting [=========================>                         ]  3.736MB/7.241MB
+2026-09-16T03:17:14.8581554Z  b83ce1c86227 Extracting [=========================>                         ]  3.736MB/7.241MB
+2026-09-16T03:17:14.8581935Z  b7c1efd1d2b4 Downloading [>                                                  ]  116.9kB/11.19MB
+2026-09-16T03:17:14.8582305Z  b7c1efd1d2b4 Downloading [>                                                  ]  116.9kB/11.19MB
+2026-09-16T03:17:14.9155532Z  5492e2c54ded Extracting [=========================================>         ]  45.12MB/54.57MB
+2026-09-16T03:17:14.9425957Z  328ba678bf27 Extracting [========================>                          ]  22.02MB/44.56MB
+2026-09-16T03:17:14.9459462Z  b7c1efd1d2b4 Verifying Checksum 
+2026-09-16T03:17:14.9460001Z  b7c1efd1d2b4 Download complete 
+2026-09-16T03:17:14.9461738Z  b7c1efd1d2b4 Verifying Checksum 
+2026-09-16T03:17:14.9462901Z  b7c1efd1d2b4 Download complete 
+2026-09-16T03:17:14.9589699Z  8740c948ffd4 Extracting [=============================================>     ]  28.84MB/31.4MB
+2026-09-16T03:17:14.9591130Z  b83ce1c86227 Extracting [===============================>                   ]  4.522MB/7.241MB
+2026-09-16T03:17:14.9598048Z  b83ce1c86227 Extracting [===============================>                   ]  4.522MB/7.241MB
+2026-09-16T03:17:14.9632022Z  b83ce1c86227 Extracting [===============================>                   ]  4.522MB/7.241MB
+2026-09-16T03:17:15.0158471Z  75f829a71a1c Extracting [==================================>                ]  51.81MB/75.86MB
+2026-09-16T03:17:15.0300711Z  5492e2c54ded Extracting [=========================================>         ]  45.68MB/54.57MB
+2026-09-16T03:17:15.0448248Z  328ba678bf27 Extracting [=========================>                         ]  22.94MB/44.56MB
+2026-09-16T03:17:15.0690424Z  b83ce1c86227 Extracting [==========================================>        ]  6.193MB/7.241MB
+2026-09-16T03:17:15.0690869Z  b83ce1c86227 Extracting [==========================================>        ]  6.193MB/7.241MB
+2026-09-16T03:17:15.0691253Z  6310eb16bf42 Extracting [==================================================>]  29.79MB/29.79MB
+2026-09-16T03:17:15.0691614Z  b83ce1c86227 Extracting [==========================================>        ]  6.193MB/7.241MB
+2026-09-16T03:17:15.1883626Z  5492e2c54ded Extracting [==========================================>        ]  46.24MB/54.57MB
+2026-09-16T03:17:15.2052513Z  75f829a71a1c Extracting [==================================>                ]  52.36MB/75.86MB
+2026-09-16T03:17:15.2175968Z  328ba678bf27 Extracting [==========================>                        ]  23.86MB/44.56MB
+2026-09-16T03:17:15.2178331Z  f94d28849fa3 Downloading [>                                                  ]  32.08kB/1.637MB
+2026-09-16T03:17:15.2433255Z  81260b173076 Downloading [=>                                                 ]  3.429kB/122.7kB
+2026-09-16T03:17:15.2626516Z  81260b173076 Downloading [==================================================>]  122.7kB/122.7kB
+2026-09-16T03:17:15.2631013Z  81260b173076 Verifying Checksum 
+2026-09-16T03:17:15.2633288Z  81260b173076 Download complete 
+2026-09-16T03:17:15.2633550Z  6310eb16bf42 Pull complete 
+2026-09-16T03:17:15.2633819Z  f94d28849fa3 Verifying Checksum 
+2026-09-16T03:17:15.2634038Z  f94d28849fa3 Download complete 
+2026-09-16T03:17:15.3240463Z  5492e2c54ded Extracting [==========================================>        ]  46.79MB/54.57MB
+2026-09-16T03:17:15.3241701Z  b83ce1c86227 Extracting [============================================>      ]  6.488MB/7.241MB
+2026-09-16T03:17:15.3242093Z  b83ce1c86227 Extracting [============================================>      ]  6.488MB/7.241MB
+2026-09-16T03:17:15.3242473Z  b83ce1c86227 Extracting [============================================>      ]  6.488MB/7.241MB
+2026-09-16T03:17:15.3267033Z  b564688b1072 Extracting [==================================================>]   1.11kB/1.11kB
+2026-09-16T03:17:15.3267484Z  b564688b1072 Extracting [==================================================>]   1.11kB/1.11kB
+2026-09-16T03:17:15.3267866Z  328ba678bf27 Extracting [===========================>                       ]  24.77MB/44.56MB
+2026-09-16T03:17:15.3321775Z  f9c0805c25ee Downloading [>                                                  ]    398kB/39.45MB
+2026-09-16T03:17:15.3503849Z  8740c948ffd4 Extracting [===============================================>   ]  29.82MB/31.4MB
+2026-09-16T03:17:15.3668836Z  75f829a71a1c Extracting [==================================>                ]  52.92MB/75.86MB
+2026-09-16T03:17:15.4447568Z  f9c0805c25ee Downloading [=========================>                         ]  19.97MB/39.45MB
+2026-09-16T03:17:15.4510375Z  5492e2c54ded Extracting [===========================================>       ]  47.35MB/54.57MB
+2026-09-16T03:17:15.4635906Z  328ba678bf27 Extracting [============================>                      ]  25.69MB/44.56MB
+2026-09-16T03:17:15.4636486Z  b83ce1c86227 Extracting [==============================================>    ]  6.685MB/7.241MB
+2026-09-16T03:17:15.4645898Z  b83ce1c86227 Extracting [==============================================>    ]  6.685MB/7.241MB
+2026-09-16T03:17:15.4648017Z  b83ce1c86227 Extracting [==============================================>    ]  6.685MB/7.241MB
+2026-09-16T03:17:15.5272132Z  b83ce1c86227 Extracting [==================================================>]  7.241MB/7.241MB
+2026-09-16T03:17:15.5272838Z  b83ce1c86227 Extracting [==================================================>]  7.241MB/7.241MB
+2026-09-16T03:17:15.5273300Z  b83ce1c86227 Extracting [==================================================>]  7.241MB/7.241MB
+2026-09-16T03:17:15.5335265Z  75f829a71a1c Extracting [===================================>               ]  53.48MB/75.86MB
+2026-09-16T03:17:15.5428726Z  f9c0805c25ee Downloading [============================================>      ]  34.75MB/39.45MB
+2026-09-16T03:17:15.5762627Z  f9c0805c25ee Verifying Checksum 
+2026-09-16T03:17:15.5774876Z  f9c0805c25ee Download complete 
+2026-09-16T03:17:15.6301231Z  328ba678bf27 Extracting [==============================>                    ]  27.07MB/44.56MB
+2026-09-16T03:17:15.6790764Z  1008deaf6ec4 Downloading [>                                                  ]  116.9kB/11.19MB
+2026-09-16T03:17:15.6872470Z  5492e2c54ded Extracting [============================================>      ]  48.46MB/54.57MB
+2026-09-16T03:17:15.7071606Z  b83ce1c86227 Pull complete 
+2026-09-16T03:17:15.7072194Z  b83ce1c86227 Pull complete 
+2026-09-16T03:17:15.7075071Z  b83ce1c86227 Pull complete 
+2026-09-16T03:17:15.7135505Z  328ba678bf27 Extracting [===============================>                   ]  27.98MB/44.56MB
+2026-09-16T03:17:15.7351678Z  75f829a71a1c Extracting [===================================>               ]  54.03MB/75.86MB
+2026-09-16T03:17:15.7545123Z  4a93952ab9ce Extracting [============>                                      ]  32.77kB/129.9kB
+2026-09-16T03:17:15.7546813Z  4a93952ab9ce Extracting [============>                                      ]  32.77kB/129.9kB
+2026-09-16T03:17:15.7547705Z  f94d28849fa3 Extracting [=>                                                 ]  32.77kB/1.637MB
+2026-09-16T03:17:15.7584489Z  4a93952ab9ce Extracting [==================================================>]  129.9kB/129.9kB
+2026-09-16T03:17:15.7584924Z  4a93952ab9ce Extracting [==================================================>]  129.9kB/129.9kB
+2026-09-16T03:17:15.7585326Z  8740c948ffd4 Extracting [================================================>  ]  30.15MB/31.4MB
+2026-09-16T03:17:15.7823133Z  1008deaf6ec4 Downloading [=================================>                 ]  7.488MB/11.19MB
+2026-09-16T03:17:15.8055737Z  1008deaf6ec4 Verifying Checksum 
+2026-09-16T03:17:15.8056382Z  1008deaf6ec4 Download complete 
+2026-09-16T03:17:15.8063311Z  5492e2c54ded Extracting [============================================>      ]  49.02MB/54.57MB
+2026-09-16T03:17:15.8487566Z  f94d28849fa3 Extracting [=======>                                           ]  229.4kB/1.637MB
+2026-09-16T03:17:15.8944272Z  328ba678bf27 Extracting [================================>                  ]  29.36MB/44.56MB
+2026-09-16T03:17:15.9474468Z  c1bc68842c41 Downloading [>                                                  ]  3.448kB/180.3kB
+2026-09-16T03:17:15.9687212Z  f94d28849fa3 Extracting [================================================>  ]  1.573MB/1.637MB
+2026-09-16T03:17:15.9709820Z  75f829a71a1c Extracting [===================================>               ]  54.59MB/75.86MB
+2026-09-16T03:17:15.9711773Z  c1bc68842c41 Downloading [==================================================>]  180.3kB/180.3kB
+2026-09-16T03:17:15.9713014Z  c1bc68842c41 Verifying Checksum 
+2026-09-16T03:17:15.9713237Z  c1bc68842c41 Download complete 
+2026-09-16T03:17:15.9713530Z  f94d28849fa3 Extracting [==================================================>]  1.637MB/1.637MB
+2026-09-16T03:17:15.9821433Z  f94d28849fa3 Extracting [==================================================>]  1.637MB/1.637MB
+2026-09-16T03:17:15.9853378Z  5492e2c54ded Extracting [=============================================>     ]  50.14MB/54.57MB
+2026-09-16T03:17:16.0204806Z  328ba678bf27 Extracting [==================================>                ]  30.74MB/44.56MB
+2026-09-16T03:17:16.0999882Z  75f829a71a1c Extracting [====================================>              ]  55.71MB/75.86MB
+2026-09-16T03:17:16.1383026Z  328ba678bf27 Extracting [=====================================>             ]  33.03MB/44.56MB
+2026-09-16T03:17:16.1592002Z  5492e2c54ded Extracting [==============================================>    ]  50.69MB/54.57MB
+2026-09-16T03:17:16.1602216Z  0288b5a0d7e7 Downloading [==============>                                    ]   3.45kB/11.88kB
+2026-09-16T03:17:16.1603941Z  0288b5a0d7e7 Downloading [==================================================>]  11.88kB/11.88kB
+2026-09-16T03:17:16.1616553Z  0288b5a0d7e7 Verifying Checksum 
+2026-09-16T03:17:16.1622038Z  0288b5a0d7e7 Download complete 
+2026-09-16T03:17:16.2105014Z  75f829a71a1c Extracting [=====================================>             ]  57.38MB/75.86MB
+2026-09-16T03:17:16.2605290Z  328ba678bf27 Extracting [======================================>            ]  34.41MB/44.56MB
+2026-09-16T03:17:16.2703192Z  5492e2c54ded Extracting [================================================>  ]  52.92MB/54.57MB
+2026-09-16T03:17:16.3157544Z  75f829a71a1c Extracting [======================================>            ]  58.49MB/75.86MB
+2026-09-16T03:17:16.3398163Z  34013573f278 Downloading [==================================================>]     496B/496B
+2026-09-16T03:17:16.3404672Z  34013573f278 Verifying Checksum 
+2026-09-16T03:17:16.3419295Z  34013573f278 Download complete 
+2026-09-16T03:17:16.3785212Z  71e9fc939447 Downloading [>                                                  ]  32.06kB/2.402MB
+2026-09-16T03:17:16.3955524Z  328ba678bf27 Extracting [=======================================>           ]  34.87MB/44.56MB
+2026-09-16T03:17:16.4282931Z  8740c948ffd4 Extracting [================================================>  ]  30.47MB/31.4MB
+2026-09-16T03:17:16.4286726Z  71e9fc939447 Verifying Checksum 
+2026-09-16T03:17:16.4286953Z  71e9fc939447 Download complete 
+2026-09-16T03:17:16.4631113Z  75f829a71a1c Extracting [======================================>            ]  59.05MB/75.86MB
+2026-09-16T03:17:16.5513945Z  328ba678bf27 Extracting [========================================>          ]  35.78MB/44.56MB
+2026-09-16T03:17:16.5517450Z  5492e2c54ded Extracting [================================================>  ]  53.48MB/54.57MB
+2026-09-16T03:17:16.5804855Z  75f829a71a1c Extracting [=======================================>           ]  60.16MB/75.86MB
+2026-09-16T03:17:16.6374352Z  8740c948ffd4 Extracting [=================================================> ]  31.13MB/31.4MB
+2026-09-16T03:17:16.6624595Z  328ba678bf27 Extracting [===========================================>       ]  38.54MB/44.56MB
+2026-09-16T03:17:16.7310522Z  75f829a71a1c Extracting [========================================>          ]  61.83MB/75.86MB
+2026-09-16T03:17:16.7974449Z  8740c948ffd4 Extracting [==================================================>]   31.4MB/31.4MB
+2026-09-16T03:17:16.8135317Z  328ba678bf27 Extracting [=============================================>     ]  40.37MB/44.56MB
+2026-09-16T03:17:16.8330229Z  75f829a71a1c Extracting [=========================================>         ]   63.5MB/75.86MB
+2026-09-16T03:17:16.9669975Z  328ba678bf27 Extracting [==============================================>    ]  41.29MB/44.56MB
+2026-09-16T03:17:17.0081875Z  75f829a71a1c Extracting [==========================================>        ]  65.18MB/75.86MB
+2026-09-16T03:17:17.0298158Z  8740c948ffd4 Pull complete 
+2026-09-16T03:17:17.0552084Z  a2271c958e57 Extracting [==================================================>]  1.732kB/1.732kB
+2026-09-16T03:17:17.0554231Z  a2271c958e57 Extracting [==================================================>]  1.732kB/1.732kB
+2026-09-16T03:17:17.1497270Z  5492e2c54ded Extracting [=================================================> ]  54.03MB/54.57MB
+2026-09-16T03:17:17.1897146Z  328ba678bf27 Extracting [==============================================>    ]  41.75MB/44.56MB
+2026-09-16T03:17:17.1993965Z  5492e2c54ded Extracting [==================================================>]  54.57MB/54.57MB
+2026-09-16T03:17:17.2028745Z  5492e2c54ded Extracting [==================================================>]  54.57MB/54.57MB
+2026-09-16T03:17:17.2270741Z  75f829a71a1c Extracting [===========================================>       ]  66.29MB/75.86MB
+2026-09-16T03:17:17.3230780Z  5492e2c54ded Pull complete 
+2026-09-16T03:17:17.3570107Z  75f829a71a1c Extracting [============================================>      ]  66.85MB/75.86MB
+2026-09-16T03:17:17.5054546Z  08c29fec86bc Extracting [>                                                  ]  557.1kB/133.9MB
+2026-09-16T03:17:17.9582458Z  75f829a71a1c Extracting [============================================>      ]   67.4MB/75.86MB
+2026-09-16T03:17:18.1087748Z  75f829a71a1c Extracting [============================================>      ]  67.96MB/75.86MB
+2026-09-16T03:17:18.1136406Z  328ba678bf27 Extracting [================================================>  ]  43.12MB/44.56MB
+2026-09-16T03:17:18.1462419Z  08c29fec86bc Extracting [>                                                  ]  1.671MB/133.9MB
+2026-09-16T03:17:18.2510101Z  08c29fec86bc Extracting [==>                                                ]  6.685MB/133.9MB
+2026-09-16T03:17:18.2555976Z  328ba678bf27 Extracting [================================================>  ]  43.58MB/44.56MB
+2026-09-16T03:17:18.3381300Z  328ba678bf27 Extracting [==================================================>]  44.56MB/44.56MB
+2026-09-16T03:17:18.3591227Z  08c29fec86bc Extracting [===>                                               ]   9.47MB/133.9MB
+2026-09-16T03:17:18.4644407Z  328ba678bf27 Pull complete 
+2026-09-16T03:17:18.5007646Z  f3f5ff008d73 Extracting [==================================================>]     886B/886B
+2026-09-16T03:17:18.5015149Z  f3f5ff008d73 Extracting [==================================================>]     886B/886B
+2026-09-16T03:17:18.5030612Z  75f829a71a1c Extracting [=============================================>     ]  69.07MB/75.86MB
+2026-09-16T03:17:18.5114876Z  08c29fec86bc Extracting [====>                                              ]  11.14MB/133.9MB
+2026-09-16T03:17:18.6313699Z  f3f5ff008d73 Pull complete 
+2026-09-16T03:17:18.6315417Z  08c29fec86bc Extracting [====>                                              ]  12.81MB/133.9MB
+2026-09-16T03:17:18.6594048Z  dd7054d6d0c7 Extracting [=>                                                 ]  32.77kB/982.8kB
+2026-09-16T03:17:18.7600692Z  dd7054d6d0c7 Extracting [================>                                  ]  327.7kB/982.8kB
+2026-09-16T03:17:18.7689062Z  08c29fec86bc Extracting [=====>                                             ]  14.48MB/133.9MB
+2026-09-16T03:17:18.7937019Z  dd7054d6d0c7 Extracting [==================================================>]  982.8kB/982.8kB
+2026-09-16T03:17:18.8234543Z  dd7054d6d0c7 Pull complete 
+2026-09-16T03:17:18.8333102Z  70b5d4e8750e Extracting [>                                                  ]  65.54kB/4.608MB
+2026-09-16T03:17:18.9121470Z  08c29fec86bc Extracting [======>                                            ]  16.15MB/133.9MB
+2026-09-16T03:17:18.9349123Z  70b5d4e8750e Extracting [=====>                                             ]  524.3kB/4.608MB
+2026-09-16T03:17:19.0474562Z  08c29fec86bc Extracting [=======>                                           ]  18.94MB/133.9MB
+2026-09-16T03:17:19.0574406Z  70b5d4e8750e Extracting [================>                                  ]  1.507MB/4.608MB
+2026-09-16T03:17:19.1514517Z  75f829a71a1c Extracting [=============================================>     ]  69.63MB/75.86MB
+2026-09-16T03:17:19.1822032Z  08c29fec86bc Extracting [========>                                          ]  22.28MB/133.9MB
+2026-09-16T03:17:19.1823839Z  70b5d4e8750e Extracting [=============================>                     ]  2.687MB/4.608MB
+2026-09-16T03:17:19.2827748Z  70b5d4e8750e Extracting [==================================================>]  4.608MB/4.608MB
+2026-09-16T03:17:19.2879791Z  08c29fec86bc Extracting [========>                                          ]  23.95MB/133.9MB
+2026-09-16T03:17:19.2938446Z  75f829a71a1c Extracting [==============================================>    ]  70.75MB/75.86MB
+2026-09-16T03:17:19.3929707Z  08c29fec86bc Extracting [=========>                                         ]  26.18MB/133.9MB
+2026-09-16T03:17:19.3983016Z  75f829a71a1c Extracting [===============================================>   ]  72.42MB/75.86MB
+2026-09-16T03:17:19.4971127Z  08c29fec86bc Extracting [==========>                                        ]  28.41MB/133.9MB
+2026-09-16T03:17:19.5075410Z  75f829a71a1c Extracting [================================================>  ]  74.09MB/75.86MB
+2026-09-16T03:17:19.6078872Z  75f829a71a1c Extracting [==================================================>]  75.86MB/75.86MB
+2026-09-16T03:17:19.6266437Z  08c29fec86bc Extracting [===========>                                       ]  31.75MB/133.9MB
+2026-09-16T03:17:19.7313551Z  08c29fec86bc Extracting [============>                                      ]  33.98MB/133.9MB
+2026-09-16T03:17:19.8443860Z  08c29fec86bc Extracting [=============>                                     ]  36.77MB/133.9MB
+2026-09-16T03:17:19.9744706Z  08c29fec86bc Extracting [==============>                                    ]  38.99MB/133.9MB
+2026-09-16T03:17:20.0890819Z  08c29fec86bc Extracting [===============>                                   ]  41.22MB/133.9MB
+2026-09-16T03:17:20.1882927Z  08c29fec86bc Extracting [================>                                  ]  42.89MB/133.9MB
+2026-09-16T03:17:20.2284566Z  75f829a71a1c Pull complete 
+2026-09-16T03:17:20.2489708Z  2dd8aabff665 Extracting [==================================================>]  9.462kB/9.462kB
+2026-09-16T03:17:20.2490472Z  2dd8aabff665 Extracting [==================================================>]  9.462kB/9.462kB
+2026-09-16T03:17:20.3021313Z  08c29fec86bc Extracting [================>                                  ]  44.56MB/133.9MB
+2026-09-16T03:17:20.3459001Z  2dd8aabff665 Pull complete 
+2026-09-16T03:17:20.3740297Z  fd17121b3976 Extracting [>                                                  ]   98.3kB/7.239MB
+2026-09-16T03:17:20.4212253Z  08c29fec86bc Extracting [=================>                                 ]  46.24MB/133.9MB
+2026-09-16T03:17:20.4882740Z  fd17121b3976 Extracting [======>                                            ]    983kB/7.239MB
+2026-09-16T03:17:20.5341961Z  08c29fec86bc Extracting [==================>                                ]  48.46MB/133.9MB
+2026-09-16T03:17:20.5889147Z  fd17121b3976 Extracting [=======================>                           ]  3.441MB/7.239MB
+2026-09-16T03:17:20.6414705Z  08c29fec86bc Extracting [==================>                                ]  50.14MB/133.9MB
+2026-09-16T03:17:20.7004380Z  fd17121b3976 Extracting [========================================>          ]    5.8MB/7.239MB
+2026-09-16T03:17:20.7745828Z  fd17121b3976 Extracting [==================================================>]  7.239MB/7.239MB
+2026-09-16T03:17:20.7751624Z  08c29fec86bc Extracting [===================>                               ]  51.81MB/133.9MB
+2026-09-16T03:17:20.8876660Z  08c29fec86bc Extracting [===================>                               ]  52.92MB/133.9MB
+2026-09-16T03:17:21.0313905Z  08c29fec86bc Extracting [====================>                              ]  55.15MB/133.9MB
+2026-09-16T03:17:21.1346503Z  08c29fec86bc Extracting [=====================>                             ]  57.38MB/133.9MB
+2026-09-16T03:17:21.2566209Z  08c29fec86bc Extracting [=====================>                             ]  58.49MB/133.9MB
+2026-09-16T03:17:21.3715261Z  08c29fec86bc Extracting [======================>                            ]  60.72MB/133.9MB
+2026-09-16T03:17:21.4916358Z  08c29fec86bc Extracting [=======================>                           ]   63.5MB/133.9MB
+2026-09-16T03:17:21.6029176Z  08c29fec86bc Extracting [=========================>                         ]   67.4MB/133.9MB
+2026-09-16T03:17:21.7096906Z  08c29fec86bc Extracting [==========================>                        ]  70.19MB/133.9MB
+2026-09-16T03:17:21.8152845Z  08c29fec86bc Extracting [============================>                      ]  76.32MB/133.9MB
+2026-09-16T03:17:21.9245585Z  08c29fec86bc Extracting [===============================>                   ]  83.56MB/133.9MB
+2026-09-16T03:17:22.0309416Z  08c29fec86bc Extracting [=================================>                 ]  90.24MB/133.9MB
+2026-09-16T03:17:22.1346233Z  08c29fec86bc Extracting [===================================>               ]  96.37MB/133.9MB
+2026-09-16T03:17:22.2418931Z  08c29fec86bc Extracting [======================================>            ]  102.5MB/133.9MB
+2026-09-16T03:17:22.3430885Z  08c29fec86bc Extracting [=======================================>           ]  105.3MB/133.9MB
+2026-09-16T03:17:22.4492415Z  08c29fec86bc Extracting [=========================================>         ]  110.3MB/133.9MB
+2026-09-16T03:17:22.5557651Z  08c29fec86bc Extracting [==========================================>        ]  114.8MB/133.9MB
+2026-09-16T03:17:22.6691735Z  08c29fec86bc Extracting [============================================>      ]  118.7MB/133.9MB
+2026-09-16T03:17:22.8024750Z  08c29fec86bc Extracting [============================================>      ]  119.2MB/133.9MB
+2026-09-16T03:17:22.9226322Z  08c29fec86bc Extracting [=============================================>     ]  122.6MB/133.9MB
+2026-09-16T03:17:23.0375793Z  08c29fec86bc Extracting [==============================================>    ]  124.2MB/133.9MB
+2026-09-16T03:17:23.1777227Z  08c29fec86bc Extracting [==============================================>    ]  124.8MB/133.9MB
+2026-09-16T03:17:23.3051059Z  08c29fec86bc Extracting [===============================================>   ]    127MB/133.9MB
+2026-09-16T03:17:23.4073635Z  08c29fec86bc Extracting [================================================>  ]  129.8MB/133.9MB
+2026-09-16T03:17:24.2024569Z  4a93952ab9ce Pull complete 
+2026-09-16T03:17:24.2025710Z  4a93952ab9ce Pull complete 
+2026-09-16T03:17:24.2090819Z  a2271c958e57 Pull complete 
+2026-09-16T03:17:24.2114254Z  70b5d4e8750e Pull complete 
+2026-09-16T03:17:24.2114689Z  b564688b1072 Pull complete 
+2026-09-16T03:17:24.2115028Z  fd17121b3976 Pull complete 
+2026-09-16T03:17:24.2115441Z  f94d28849fa3 Pull complete 
+2026-09-16T03:17:24.2217056Z  b268f447c871 Extracting [=======================>                           ]  32.77kB/70.45kB
+2026-09-16T03:17:24.2217676Z  b268f447c871 Extracting [==================================================>]  70.45kB/70.45kB
+2026-09-16T03:17:24.2219703Z  b268f447c871 Extracting [=======================>                           ]  32.77kB/70.45kB
+2026-09-16T03:17:24.2221702Z  b268f447c871 Extracting [==================================================>]  70.45kB/70.45kB
+2026-09-16T03:17:24.2255390Z  b268f447c871 Extracting [==================================================>]  70.45kB/70.45kB
+2026-09-16T03:17:24.2275220Z  b268f447c871 Extracting [==================================================>]  70.45kB/70.45kB
+2026-09-16T03:17:24.2411197Z  495af11a3eac Extracting [=>                                                 ]  32.77kB/1.411MB
+2026-09-16T03:17:24.2559770Z  a19cf707b4fd Extracting [==================================================>]  2.283kB/2.283kB
+2026-09-16T03:17:24.2586740Z  a19cf707b4fd Extracting [==================================================>]  2.283kB/2.283kB
+2026-09-16T03:17:24.2746159Z  cdc4a7b43bdd Extracting [==================================================>]  2.629kB/2.629kB
+2026-09-16T03:17:24.2775963Z  cdc4a7b43bdd Extracting [==================================================>]  2.629kB/2.629kB
+2026-09-16T03:17:24.2796242Z  81260b173076 Extracting [=============>                                     ]  32.77kB/122.7kB
+2026-09-16T03:17:24.2797030Z  6221ee17f501 Extracting [===========>                                       ]  32.77kB/136.7kB
+2026-09-16T03:17:24.2830189Z  81260b173076 Extracting [==================================================>]  122.7kB/122.7kB
+2026-09-16T03:17:24.2891330Z  81260b173076 Extracting [==================================================>]  122.7kB/122.7kB
+2026-09-16T03:17:24.2929241Z  6221ee17f501 Extracting [==================================================>]  136.7kB/136.7kB
+2026-09-16T03:17:24.3264716Z  b268f447c871 Pull complete 
+2026-09-16T03:17:24.3268849Z  b268f447c871 Pull complete 
+2026-09-16T03:17:24.3361008Z  f29310fc4a8a Extracting [==================================================>]  11.87kB/11.87kB
+2026-09-16T03:17:24.3361788Z  f29310fc4a8a Extracting [==================================================>]  11.87kB/11.87kB
+2026-09-16T03:17:24.3366869Z  f29310fc4a8a Extracting [==================================================>]  11.87kB/11.87kB
+2026-09-16T03:17:24.3371433Z  f29310fc4a8a Extracting [==================================================>]  11.87kB/11.87kB
+2026-09-16T03:17:24.4256052Z  81260b173076 Pull complete 
+2026-09-16T03:17:24.4553718Z  cdc4a7b43bdd Pull complete 
+2026-09-16T03:17:24.4578502Z  08c29fec86bc Extracting [=================================================> ]    132MB/133.9MB
+2026-09-16T03:17:24.4665016Z  3e9c0b61a8f3 Extracting [==================================================>]     334B/334B
+2026-09-16T03:17:24.4665494Z  3e9c0b61a8f3 Extracting [==================================================>]     334B/334B
+2026-09-16T03:17:24.4737306Z  f29310fc4a8a Pull complete 
+2026-09-16T03:17:24.4810165Z  f29310fc4a8a Pull complete 
+2026-09-16T03:17:24.4935867Z  9404e0df6bd3 Extracting [>                                                  ]  131.1kB/11.19MB
+2026-09-16T03:17:24.4936603Z  9404e0df6bd3 Extracting [>                                                  ]  131.1kB/11.19MB
+2026-09-16T03:17:24.5135766Z  495af11a3eac Extracting [=========>                                         ]  262.1kB/1.411MB
+2026-09-16T03:17:24.5824439Z  f9c0805c25ee Extracting [>                                                  ]    426kB/39.45MB
+2026-09-16T03:17:24.5940732Z  9404e0df6bd3 Extracting [====>                                              ]  917.5kB/11.19MB
+2026-09-16T03:17:24.5947327Z  9404e0df6bd3 Extracting [====>                                              ]  917.5kB/11.19MB
+2026-09-16T03:17:24.6561909Z  3e9c0b61a8f3 Pull complete 
+2026-09-16T03:17:24.6925062Z  f9c0805c25ee Extracting [==>                                                ]   2.13MB/39.45MB
+2026-09-16T03:17:24.6971614Z  9404e0df6bd3 Extracting [=========>                                         ]  2.097MB/11.19MB
+2026-09-16T03:17:24.6972236Z  9404e0df6bd3 Extracting [=========>                                         ]  2.097MB/11.19MB
+2026-09-16T03:17:24.7282558Z  495af11a3eac Extracting [=======================================>           ]  1.114MB/1.411MB
+2026-09-16T03:17:24.7982464Z  495af11a3eac Extracting [==================================================>]  1.411MB/1.411MB
+2026-09-16T03:17:24.8159703Z  f9c0805c25ee Extracting [===>                                               ]  2.982MB/39.45MB
+2026-09-16T03:17:24.8219347Z  9404e0df6bd3 Extracting [==============>                                    ]  3.277MB/11.19MB
+2026-09-16T03:17:24.8221867Z  9404e0df6bd3 Extracting [==============>                                    ]  3.277MB/11.19MB
+2026-09-16T03:17:24.8328176Z  806a08b6c085 Extracting [>                                                  ]  557.1kB/56.2MB
+2026-09-16T03:17:24.9228675Z  9404e0df6bd3 Extracting [================>                                  ]  3.801MB/11.19MB
+2026-09-16T03:17:24.9316898Z  9404e0df6bd3 Extracting [================>                                  ]  3.801MB/11.19MB
+2026-09-16T03:17:24.9323861Z  f9c0805c25ee Extracting [====>                                              ]  3.834MB/39.45MB
+2026-09-16T03:17:24.9523706Z  806a08b6c085 Extracting [=>                                                 ]  1.671MB/56.2MB
+2026-09-16T03:17:24.9899339Z  a19cf707b4fd Pull complete 
+2026-09-16T03:17:25.0023327Z  6221ee17f501 Pull complete 
+2026-09-16T03:17:25.0187493Z  6cfae3da9f7b Extracting [>                                                  ]  32.77kB/2.286MB
+2026-09-16T03:17:25.0295407Z  9404e0df6bd3 Extracting [=====================>                             ]   4.85MB/11.19MB
+2026-09-16T03:17:25.0296083Z  9404e0df6bd3 Extracting [=====================>                             ]   4.85MB/11.19MB
+2026-09-16T03:17:25.0719723Z  f9c0805c25ee Extracting [======>                                            ]  5.112MB/39.45MB
+2026-09-16T03:17:25.0729387Z  806a08b6c085 Extracting [==>                                                ]  2.785MB/56.2MB
+2026-09-16T03:17:25.1290846Z  4ccdd8a52dc0 Extracting [>                                                  ]  557.1kB/308.1MB
+2026-09-16T03:17:25.1483491Z  6cfae3da9f7b Extracting [=====>                                             ]  262.1kB/2.286MB
+2026-09-16T03:17:25.1696047Z  9404e0df6bd3 Extracting [=========================>                         ]  5.636MB/11.19MB
+2026-09-16T03:17:25.1696494Z  9404e0df6bd3 Extracting [=========================>                         ]  5.636MB/11.19MB
+2026-09-16T03:17:25.2241172Z  806a08b6c085 Extracting [===>                                               ]  3.899MB/56.2MB
+2026-09-16T03:17:25.2405680Z  f9c0805c25ee Extracting [=======>                                           ]  5.964MB/39.45MB
+2026-09-16T03:17:25.2488273Z  6cfae3da9f7b Extracting [================>                                  ]  753.7kB/2.286MB
+2026-09-16T03:17:25.2573418Z  4ccdd8a52dc0 Extracting [>                                                  ]  3.342MB/308.1MB
+2026-09-16T03:17:25.2747204Z  495af11a3eac Pull complete 
+2026-09-16T03:17:25.2788801Z  9404e0df6bd3 Extracting [==========================>                        ]  6.029MB/11.19MB
+2026-09-16T03:17:25.2797038Z  9404e0df6bd3 Extracting [==========================>                        ]  6.029MB/11.19MB
+2026-09-16T03:17:25.2949472Z  20d8f888dfb3 Extracting [>                                                  ]   98.3kB/9.574MB
+2026-09-16T03:17:25.3492439Z  806a08b6c085 Extracting [====>                                              ]  5.571MB/56.2MB
+2026-09-16T03:17:25.3502135Z  6cfae3da9f7b Extracting [=======================================>           ]  1.802MB/2.286MB
+2026-09-16T03:17:25.3631445Z  4ccdd8a52dc0 Extracting [=>                                                 ]  6.685MB/308.1MB
+2026-09-16T03:17:25.3827295Z  f9c0805c25ee Extracting [========>                                          ]  6.816MB/39.45MB
+2026-09-16T03:17:25.3982802Z  9404e0df6bd3 Extracting [=============================>                     ]  6.554MB/11.19MB
+2026-09-16T03:17:25.3983289Z  9404e0df6bd3 Extracting [=============================>                     ]  6.554MB/11.19MB
+2026-09-16T03:17:25.4192182Z  20d8f888dfb3 Extracting [=>                                                 ]  294.9kB/9.574MB
+2026-09-16T03:17:25.4609769Z  806a08b6c085 Extracting [=====>                                             ]  6.685MB/56.2MB
+2026-09-16T03:17:25.4703045Z  4ccdd8a52dc0 Extracting [=>                                                 ]  8.913MB/308.1MB
+2026-09-16T03:17:25.4866813Z  6cfae3da9f7b Extracting [===========================================>       ]  1.999MB/2.286MB
+2026-09-16T03:17:25.4895253Z  08c29fec86bc Extracting [=================================================> ]  132.6MB/133.9MB
+2026-09-16T03:17:25.4968628Z  f9c0805c25ee Extracting [=========>                                         ]  7.668MB/39.45MB
+2026-09-16T03:17:25.5068803Z  9404e0df6bd3 Extracting [================================>                  ]   7.34MB/11.19MB
+2026-09-16T03:17:25.5069904Z  9404e0df6bd3 Extracting [================================>                  ]   7.34MB/11.19MB
+2026-09-16T03:17:25.5237568Z  20d8f888dfb3 Extracting [=========>                                         ]  1.868MB/9.574MB
+2026-09-16T03:17:25.5632951Z  6cfae3da9f7b Extracting [==================================================>]  2.286MB/2.286MB
+2026-09-16T03:17:25.5786258Z  6cfae3da9f7b Extracting [==================================================>]  2.286MB/2.286MB
+2026-09-16T03:17:25.5806943Z  4ccdd8a52dc0 Extracting [=>                                                 ]  11.14MB/308.1MB
+2026-09-16T03:17:25.6125559Z  806a08b6c085 Extracting [======>                                            ]  7.799MB/56.2MB
+2026-09-16T03:17:25.6256867Z  20d8f888dfb3 Extracting [===============>                                   ]  3.047MB/9.574MB
+2026-09-16T03:17:25.6258280Z  9404e0df6bd3 Extracting [==================================>                ]  7.733MB/11.19MB
+2026-09-16T03:17:25.6259326Z  9404e0df6bd3 Extracting [==================================>                ]  7.733MB/11.19MB
+2026-09-16T03:17:25.6574494Z  f9c0805c25ee Extracting [===========>                                       ]  8.946MB/39.45MB
+2026-09-16T03:17:25.6850401Z  4ccdd8a52dc0 Extracting [==>                                                ]  12.81MB/308.1MB
+2026-09-16T03:17:25.7461373Z  20d8f888dfb3 Extracting [==================>                                ]  3.637MB/9.574MB
+2026-09-16T03:17:25.7531888Z  9404e0df6bd3 Extracting [======================================>            ]  8.651MB/11.19MB
+2026-09-16T03:17:25.7655416Z  9404e0df6bd3 Extracting [======================================>            ]  8.651MB/11.19MB
+2026-09-16T03:17:25.7897637Z  4ccdd8a52dc0 Extracting [==>                                                ]  13.93MB/308.1MB
+2026-09-16T03:17:25.8123410Z  f9c0805c25ee Extracting [===========>                                       ]  9.372MB/39.45MB
+2026-09-16T03:17:25.8347249Z  6cfae3da9f7b Pull complete 
+2026-09-16T03:17:25.8356429Z  20d8f888dfb3 Extracting [====================>                              ]  3.932MB/9.574MB
+2026-09-16T03:17:25.8624579Z  9404e0df6bd3 Extracting [===========================================>       ]  9.699MB/11.19MB
+2026-09-16T03:17:25.8625681Z  9404e0df6bd3 Extracting [===========================================>       ]  9.699MB/11.19MB
+2026-09-16T03:17:25.8720229Z  806a08b6c085 Extracting [=======>                                           ]  8.913MB/56.2MB
+2026-09-16T03:17:25.8944091Z  591a7e3cd179 Extracting [==================================================>]     284B/284B
+2026-09-16T03:17:25.8944529Z  591a7e3cd179 Extracting [==================================================>]     284B/284B
+2026-09-16T03:17:25.9002650Z  4ccdd8a52dc0 Extracting [==>                                                ]  15.04MB/308.1MB
+2026-09-16T03:17:25.9451782Z  20d8f888dfb3 Extracting [========================>                          ]  4.719MB/9.574MB
+2026-09-16T03:17:25.9702595Z  f9c0805c25ee Extracting [============>                                      ]  10.22MB/39.45MB
+2026-09-16T03:17:25.9703417Z  9404e0df6bd3 Extracting [==============================================>    ]  10.35MB/11.19MB
+2026-09-16T03:17:25.9705000Z  9404e0df6bd3 Extracting [==============================================>    ]  10.35MB/11.19MB
+2026-09-16T03:17:26.0002781Z  806a08b6c085 Extracting [========>                                          ]   9.47MB/56.2MB
+2026-09-16T03:17:26.0223123Z  4ccdd8a52dc0 Extracting [==>                                                ]  16.71MB/308.1MB
+2026-09-16T03:17:26.0478375Z  20d8f888dfb3 Extracting [=============================>                     ]  5.702MB/9.574MB
+2026-09-16T03:17:26.0542339Z  08c29fec86bc Extracting [=================================================> ]  133.1MB/133.9MB
+2026-09-16T03:17:26.0831995Z  9404e0df6bd3 Extracting [================================================>  ]  10.88MB/11.19MB
+2026-09-16T03:17:26.0832710Z  9404e0df6bd3 Extracting [================================================>  ]  10.88MB/11.19MB
+2026-09-16T03:17:26.0890486Z  591a7e3cd179 Pull complete 
+2026-09-16T03:17:26.1252230Z  f9c0805c25ee Extracting [==============>                                    ]  11.08MB/39.45MB
+2026-09-16T03:17:26.1258772Z  4ccdd8a52dc0 Extracting [==>                                                ]  18.38MB/308.1MB
+2026-09-16T03:17:26.1334960Z  42ff75ca70cd Extracting [==================================================>]     122B/122B
+2026-09-16T03:17:26.1349043Z  42ff75ca70cd Extracting [==================================================>]     122B/122B
+2026-09-16T03:17:26.1476628Z  806a08b6c085 Extracting [========>                                          ]  10.03MB/56.2MB
+2026-09-16T03:17:26.1477396Z  20d8f888dfb3 Extracting [======================================>            ]  7.373MB/9.574MB
+2026-09-16T03:17:26.1480003Z  9404e0df6bd3 Extracting [==================================================>]  11.19MB/11.19MB
+2026-09-16T03:17:26.1480424Z  9404e0df6bd3 Extracting [==================================================>]  11.19MB/11.19MB
+2026-09-16T03:17:26.1716685Z  08c29fec86bc Extracting [==================================================>]  133.9MB/133.9MB
+2026-09-16T03:17:26.2453049Z  4ccdd8a52dc0 Extracting [===>                                               ]   19.5MB/308.1MB
+2026-09-16T03:17:26.2454536Z  f9c0805c25ee Extracting [===============>                                   ]  12.35MB/39.45MB
+2026-09-16T03:17:26.2727004Z  20d8f888dfb3 Extracting [===========================================>       ]  8.356MB/9.574MB
+2026-09-16T03:17:26.2866233Z  806a08b6c085 Extracting [==========>                                        ]   11.7MB/56.2MB
+2026-09-16T03:17:26.3578377Z  4ccdd8a52dc0 Extracting [===>                                               ]   23.4MB/308.1MB
+2026-09-16T03:17:26.3585789Z  f9c0805c25ee Extracting [=================>                                 ]  14.06MB/39.45MB
+2026-09-16T03:17:26.4173865Z  806a08b6c085 Extracting [===========>                                       ]  13.37MB/56.2MB
+2026-09-16T03:17:26.4608201Z  f9c0805c25ee Extracting [===================>                               ]  15.34MB/39.45MB
+2026-09-16T03:17:26.4655742Z  4ccdd8a52dc0 Extracting [====>                                              ]  26.18MB/308.1MB
+2026-09-16T03:17:26.4872939Z  20d8f888dfb3 Extracting [================================================>  ]  9.339MB/9.574MB
+2026-09-16T03:17:26.5592769Z  806a08b6c085 Extracting [============>                                      ]  14.48MB/56.2MB
+2026-09-16T03:17:26.5694447Z  20d8f888dfb3 Extracting [==================================================>]  9.574MB/9.574MB
+2026-09-16T03:17:26.5746516Z  f9c0805c25ee Extracting [===================>                               ]  15.76MB/39.45MB
+2026-09-16T03:17:26.5764464Z  4ccdd8a52dc0 Extracting [====>                                              ]  28.41MB/308.1MB
+2026-09-16T03:17:26.5938045Z  08c29fec86bc Pull complete 
+2026-09-16T03:17:26.5968155Z  9404e0df6bd3 Pull complete 
+2026-09-16T03:17:26.5968538Z  9404e0df6bd3 Pull complete 
+2026-09-16T03:17:26.6109572Z  42ff75ca70cd Pull complete 
+2026-09-16T03:17:26.6259500Z  4f4fb700ef54 Extracting [==================================================>]      32B/32B
+2026-09-16T03:17:26.6271995Z  b7c1efd1d2b4 Extracting [>                                                  ]  131.1kB/11.19MB
+2026-09-16T03:17:26.6275803Z  b7c1efd1d2b4 Extracting [>                                                  ]  131.1kB/11.19MB
+2026-09-16T03:17:26.6276211Z  4f4fb700ef54 Extracting [==================================================>]      32B/32B
+2026-09-16T03:17:26.6593369Z  memcached Pulled 
+2026-09-16T03:17:26.6612815Z  4f4fb700ef54 Pull complete 
+2026-09-16T03:17:26.6884476Z  f9c0805c25ee Extracting [====================>                              ]  16.19MB/39.45MB
+2026-09-16T03:17:26.6899042Z  4ccdd8a52dc0 Extracting [====>                                              ]  30.08MB/308.1MB
+2026-09-16T03:17:26.6923352Z  806a08b6c085 Extracting [=============>                                     ]   15.6MB/56.2MB
+2026-09-16T03:17:26.7372293Z  b7c1efd1d2b4 Extracting [========>                                          ]  1.835MB/11.19MB
+2026-09-16T03:17:26.7373233Z  b7c1efd1d2b4 Extracting [========>                                          ]  1.835MB/11.19MB
+2026-09-16T03:17:26.7501898Z  20d8f888dfb3 Pull complete 
+2026-09-16T03:17:26.7504379Z  e656f1d2b55e Extracting [>                                                  ]  524.3kB/50.55MB
+2026-09-16T03:17:26.7525821Z  43f7f644570b Extracting [==================================================>]     133B/133B
+2026-09-16T03:17:26.7551244Z  43f7f644570b Extracting [==================================================>]     133B/133B
+2026-09-16T03:17:26.7935818Z  43f7f644570b Pull complete 
+2026-09-16T03:17:26.7983028Z  f9c0805c25ee Extracting [======================>                            ]  17.47MB/39.45MB
+2026-09-16T03:17:26.8009186Z  4ccdd8a52dc0 Extracting [=====>                                             ]  32.87MB/308.1MB
+2026-09-16T03:17:26.8123705Z  95e0e23bb0c6 Extracting [==================================================>]     575B/575B
+2026-09-16T03:17:26.8126057Z  95e0e23bb0c6 Extracting [==================================================>]     575B/575B
+2026-09-16T03:17:26.8375146Z  b7c1efd1d2b4 Extracting [==============>                                    ]  3.146MB/11.19MB
+2026-09-16T03:17:26.8376045Z  b7c1efd1d2b4 Extracting [==============>                                    ]  3.146MB/11.19MB
+2026-09-16T03:17:26.8493613Z  806a08b6c085 Extracting [==============>                                    ]  16.71MB/56.2MB
+2026-09-16T03:17:26.8579241Z  e656f1d2b55e Extracting [==>                                                ]  2.621MB/50.55MB
+2026-09-16T03:17:26.9110410Z  4ccdd8a52dc0 Extracting [=====>                                             ]  34.54MB/308.1MB
+2026-09-16T03:17:26.9118346Z  f9c0805c25ee Extracting [=======================>                           ]  18.74MB/39.45MB
+2026-09-16T03:17:26.9421876Z  b7c1efd1d2b4 Extracting [===================>                               ]  4.325MB/11.19MB
+2026-09-16T03:17:26.9430866Z  b7c1efd1d2b4 Extracting [===================>                               ]  4.325MB/11.19MB
+2026-09-16T03:17:26.9502390Z  95e0e23bb0c6 Pull complete 
+2026-09-16T03:17:26.9586930Z  e656f1d2b55e Extracting [====>                                              ]  4.194MB/50.55MB
+2026-09-16T03:17:26.9787721Z  806a08b6c085 Extracting [===============>                                   ]  17.83MB/56.2MB
+2026-09-16T03:17:26.9842702Z  redis Pulled 
+2026-09-16T03:17:27.0202586Z  f9c0805c25ee Extracting [===========================>                       ]  21.73MB/39.45MB
+2026-09-16T03:17:27.0369623Z  4ccdd8a52dc0 Extracting [======>                                            ]  38.99MB/308.1MB
+2026-09-16T03:17:27.0439762Z  b7c1efd1d2b4 Extracting [============================>                      ]  6.423MB/11.19MB
+2026-09-16T03:17:27.0444931Z  b7c1efd1d2b4 Extracting [============================>                      ]  6.423MB/11.19MB
+2026-09-16T03:17:27.0749426Z  e656f1d2b55e Extracting [=========>                                         ]  9.437MB/50.55MB
+2026-09-16T03:17:27.1349489Z  806a08b6c085 Extracting [=================>                                 ]   19.5MB/56.2MB
+2026-09-16T03:17:27.1395279Z  f9c0805c25ee Extracting [==============================>                    ]  23.86MB/39.45MB
+2026-09-16T03:17:27.1424317Z  4ccdd8a52dc0 Extracting [=======>                                           ]  45.12MB/308.1MB
+2026-09-16T03:17:27.1477394Z  b7c1efd1d2b4 Extracting [=========================================>         ]  9.175MB/11.19MB
+2026-09-16T03:17:27.1478304Z  b7c1efd1d2b4 Extracting [=========================================>         ]  9.175MB/11.19MB
+2026-09-16T03:17:27.1859889Z  e656f1d2b55e Extracting [============>                                      ]  13.11MB/50.55MB
+2026-09-16T03:17:27.2204222Z  b7c1efd1d2b4 Extracting [==================================================>]  11.19MB/11.19MB
+2026-09-16T03:17:27.2221978Z  b7c1efd1d2b4 Extracting [==================================================>]  11.19MB/11.19MB
+2026-09-16T03:17:27.2395226Z  f9c0805c25ee Extracting [===================================>               ]  27.69MB/39.45MB
+2026-09-16T03:17:27.2451092Z  4ccdd8a52dc0 Extracting [========>                                          ]  50.69MB/308.1MB
+2026-09-16T03:17:27.2529813Z  806a08b6c085 Extracting [==================>                                ]  21.17MB/56.2MB
+2026-09-16T03:17:27.2933683Z  e656f1d2b55e Extracting [=================>                                 ]  17.83MB/50.55MB
+2026-09-16T03:17:27.3568885Z  f9c0805c25ee Extracting [=====================================>             ]  29.39MB/39.45MB
+2026-09-16T03:17:27.3624353Z  4ccdd8a52dc0 Extracting [========>                                          ]  54.03MB/308.1MB
+2026-09-16T03:17:27.4053938Z  e656f1d2b55e Extracting [====================>                              ]  20.97MB/50.55MB
+2026-09-16T03:17:27.4146131Z  806a08b6c085 Extracting [====================>                              ]  22.84MB/56.2MB
+2026-09-16T03:17:27.4638738Z  4ccdd8a52dc0 Extracting [=========>                                         ]  57.38MB/308.1MB
+2026-09-16T03:17:27.5084030Z  e656f1d2b55e Extracting [========================>                          ]  24.64MB/50.55MB
+2026-09-16T03:17:27.5257334Z  f9c0805c25ee Extracting [======================================>            ]  30.24MB/39.45MB
+2026-09-16T03:17:27.5388623Z  806a08b6c085 Extracting [=====================>                             ]  23.95MB/56.2MB
+2026-09-16T03:17:27.5724398Z  4ccdd8a52dc0 Extracting [=========>                                         ]  60.72MB/308.1MB
+2026-09-16T03:17:27.6148966Z  e656f1d2b55e Extracting [============================>                      ]  28.31MB/50.55MB
+2026-09-16T03:17:27.6279411Z  f9c0805c25ee Extracting [========================================>          ]  31.95MB/39.45MB
+2026-09-16T03:17:27.6367820Z  806a08b6c085 Extracting [======================>                            ]  25.62MB/56.2MB
+2026-09-16T03:17:27.6783067Z  4ccdd8a52dc0 Extracting [===========>                                       ]  67.96MB/308.1MB
+2026-09-16T03:17:27.7272497Z  e656f1d2b55e Extracting [=================================>                 ]  34.08MB/50.55MB
+2026-09-16T03:17:27.7419940Z  f9c0805c25ee Extracting [============================================>      ]  35.36MB/39.45MB
+2026-09-16T03:17:27.7527114Z  806a08b6c085 Extracting [=========================>                         ]  28.41MB/56.2MB
+2026-09-16T03:17:27.7812379Z  4ccdd8a52dc0 Extracting [===========>                                       ]  72.97MB/308.1MB
+2026-09-16T03:17:27.8338456Z  e656f1d2b55e Extracting [======================================>            ]   38.8MB/50.55MB
+2026-09-16T03:17:27.8575584Z  806a08b6c085 Extracting [===========================>                       ]  30.64MB/56.2MB
+2026-09-16T03:17:27.8639086Z  f9c0805c25ee Extracting [================================================>  ]  37.91MB/39.45MB
+2026-09-16T03:17:27.9037600Z  4ccdd8a52dc0 Extracting [============>                                      ]  77.43MB/308.1MB
+2026-09-16T03:17:27.9431283Z  e656f1d2b55e Extracting [========================================>          ]  40.89MB/50.55MB
+2026-09-16T03:17:27.9668828Z  806a08b6c085 Extracting [============================>                      ]  31.75MB/56.2MB
+2026-09-16T03:17:27.9990999Z  f9c0805c25ee Extracting [=================================================> ]  39.19MB/39.45MB
+2026-09-16T03:17:28.0226238Z  4ccdd8a52dc0 Extracting [============>                                      ]  79.66MB/308.1MB
+2026-09-16T03:17:28.0226936Z  f9c0805c25ee Extracting [==================================================>]  39.45MB/39.45MB
+2026-09-16T03:17:28.0615797Z  e656f1d2b55e Extracting [==========================================>        ]  42.47MB/50.55MB
+2026-09-16T03:17:28.0938593Z  806a08b6c085 Extracting [=============================>                     ]  33.42MB/56.2MB
+2026-09-16T03:17:28.1441314Z  4ccdd8a52dc0 Extracting [=============>                                     ]     83MB/308.1MB
+2026-09-16T03:17:28.1603583Z  e656f1d2b55e Extracting [============================================>      ]  44.56MB/50.55MB
+2026-09-16T03:17:28.2191299Z  806a08b6c085 Extracting [===============================>                   ]  35.65MB/56.2MB
+2026-09-16T03:17:28.2447258Z  4ccdd8a52dc0 Extracting [==============>                                    ]   86.9MB/308.1MB
+2026-09-16T03:17:28.2693460Z  e656f1d2b55e Extracting [==============================================>    ]  47.19MB/50.55MB
+2026-09-16T03:17:28.3321179Z  806a08b6c085 Extracting [=================================>                 ]  37.32MB/56.2MB
+2026-09-16T03:17:28.3639601Z  4ccdd8a52dc0 Extracting [==============>                                    ]   90.8MB/308.1MB
+2026-09-16T03:17:28.4138619Z  e656f1d2b55e Extracting [=================================================> ]  50.33MB/50.55MB
+2026-09-16T03:17:28.4364854Z  e656f1d2b55e Extracting [==================================================>]  50.55MB/50.55MB
+2026-09-16T03:17:28.4590614Z  b7c1efd1d2b4 Pull complete 
+2026-09-16T03:17:28.4590912Z  b7c1efd1d2b4 Pull complete 
+2026-09-16T03:17:28.4919076Z  4ccdd8a52dc0 Extracting [===============>                                   ]  93.03MB/308.1MB
+2026-09-16T03:17:28.5006737Z  806a08b6c085 Extracting [==================================>                ]  38.99MB/56.2MB
+2026-09-16T03:17:28.5275386Z  e656f1d2b55e Pull complete 
+2026-09-16T03:17:28.5467809Z  createbuckets Pulled 
+2026-09-16T03:17:28.5652385Z  copyfixturefiles Pulled 
+2026-09-16T03:17:28.6544348Z  806a08b6c085 Extracting [===================================>               ]  40.11MB/56.2MB
+2026-09-16T03:17:28.7500212Z  4ccdd8a52dc0 Extracting [===============>                                   ]   94.7MB/308.1MB
+2026-09-16T03:17:28.7642222Z  806a08b6c085 Extracting [====================================>              ]  41.22MB/56.2MB
+2026-09-16T03:17:28.7736445Z  dynamodb Pulled 
+2026-09-16T03:17:28.8170258Z  f9c0805c25ee Pull complete 
+2026-09-16T03:17:28.8236942Z  1008deaf6ec4 Extracting [>                                                  ]  131.1kB/11.19MB
+2026-09-16T03:17:28.8713700Z  4ccdd8a52dc0 Extracting [===============>                                   ]  97.48MB/308.1MB
+2026-09-16T03:17:28.8791511Z  806a08b6c085 Extracting [======================================>            ]  43.45MB/56.2MB
+2026-09-16T03:17:28.9242562Z  1008deaf6ec4 Extracting [=========>                                         ]  2.097MB/11.19MB
+2026-09-16T03:17:28.9956657Z  4ccdd8a52dc0 Extracting [================>                                  ]  99.71MB/308.1MB
+2026-09-16T03:17:29.0125781Z  806a08b6c085 Extracting [========================================>          ]  45.12MB/56.2MB
+2026-09-16T03:17:29.0310809Z  1008deaf6ec4 Extracting [==================>                                ]  4.063MB/11.19MB
+2026-09-16T03:17:29.0958813Z  4ccdd8a52dc0 Extracting [================>                                  ]  100.8MB/308.1MB
+2026-09-16T03:17:29.1404171Z  1008deaf6ec4 Extracting [============================>                      ]  6.291MB/11.19MB
+2026-09-16T03:17:29.1823489Z  806a08b6c085 Extracting [========================================>          ]  45.68MB/56.2MB
+2026-09-16T03:17:29.2054045Z  4ccdd8a52dc0 Extracting [================>                                  ]  103.1MB/308.1MB
+2026-09-16T03:17:29.2437187Z  1008deaf6ec4 Extracting [=============================================>     ]  10.22MB/11.19MB
+2026-09-16T03:17:29.2808871Z  1008deaf6ec4 Extracting [==================================================>]  11.19MB/11.19MB
+2026-09-16T03:17:29.2825464Z  806a08b6c085 Extracting [=========================================>         ]  46.24MB/56.2MB
+2026-09-16T03:17:29.3077037Z  4ccdd8a52dc0 Extracting [================>                                  ]  104.2MB/308.1MB
+2026-09-16T03:17:29.3950331Z  806a08b6c085 Extracting [==========================================>        ]  47.35MB/56.2MB
+2026-09-16T03:17:29.4622273Z  4ccdd8a52dc0 Extracting [=================>                                 ]  106.4MB/308.1MB
+2026-09-16T03:17:29.5334146Z  806a08b6c085 Extracting [===========================================>       ]  49.02MB/56.2MB
+2026-09-16T03:17:29.5662992Z  4ccdd8a52dc0 Extracting [=================>                                 ]  107.5MB/308.1MB
+2026-09-16T03:17:29.6706357Z  806a08b6c085 Extracting [=============================================>     ]  51.25MB/56.2MB
+2026-09-16T03:17:29.6816096Z  4ccdd8a52dc0 Extracting [=================>                                 ]  110.3MB/308.1MB
+2026-09-16T03:17:29.7066053Z  1008deaf6ec4 Pull complete 
+2026-09-16T03:17:29.7092686Z  71e9fc939447 Extracting [>                                                  ]  32.77kB/2.402MB
+2026-09-16T03:17:29.7730962Z  71e9fc939447 Extracting [==================================================>]  2.402MB/2.402MB
+2026-09-16T03:17:29.7733855Z  806a08b6c085 Extracting [===============================================>   ]  53.48MB/56.2MB
+2026-09-16T03:17:29.8341576Z  4ccdd8a52dc0 Extracting [==================>                                ]  113.6MB/308.1MB
+2026-09-16T03:17:29.9326942Z  806a08b6c085 Extracting [================================================>  ]  54.59MB/56.2MB
+2026-09-16T03:17:29.9457322Z  4ccdd8a52dc0 Extracting [==================>                                ]  115.9MB/308.1MB
+2026-09-16T03:17:29.9985439Z  71e9fc939447 Pull complete 
+2026-09-16T03:17:30.0046717Z  c1bc68842c41 Extracting [=========>                                         ]  32.77kB/180.3kB
+2026-09-16T03:17:30.0226500Z  c1bc68842c41 Extracting [==================================================>]  180.3kB/180.3kB
+2026-09-16T03:17:30.0227685Z  c1bc68842c41 Extracting [==================================================>]  180.3kB/180.3kB
+2026-09-16T03:17:30.0583092Z  4ccdd8a52dc0 Extracting [===================>                               ]  118.1MB/308.1MB
+2026-09-16T03:17:30.0667541Z  806a08b6c085 Extracting [==================================================>]   56.2MB/56.2MB
+2026-09-16T03:17:30.1306337Z  806a08b6c085 Pull complete 
+2026-09-16T03:17:30.1387804Z  021b2cebd832 Extracting [==================================================>]     319B/319B
+2026-09-16T03:17:30.1388926Z  021b2cebd832 Extracting [==================================================>]     319B/319B
+2026-09-16T03:17:30.1611195Z  c1bc68842c41 Pull complete 
+2026-09-16T03:17:30.1650946Z  0288b5a0d7e7 Extracting [==================================================>]  11.88kB/11.88kB
+2026-09-16T03:17:30.1667800Z  021b2cebd832 Pull complete 
+2026-09-16T03:17:30.1679103Z  0288b5a0d7e7 Extracting [==================================================>]  11.88kB/11.88kB
+2026-09-16T03:17:30.1765467Z  4ccdd8a52dc0 Extracting [===================>                               ]  119.8MB/308.1MB
+2026-09-16T03:17:30.2377601Z  0288b5a0d7e7 Pull complete 
+2026-09-16T03:17:30.2461043Z  ad31ba45b26b Extracting [>                                                  ]  524.3kB/50.17MB
+2026-09-16T03:17:30.2634526Z  34013573f278 Extracting [==================================================>]     496B/496B
+2026-09-16T03:17:30.2663565Z  34013573f278 Extracting [==================================================>]     496B/496B
+2026-09-16T03:17:30.2939914Z  4ccdd8a52dc0 Extracting [===================>                               ]  121.4MB/308.1MB
+2026-09-16T03:17:30.3717075Z  34013573f278 Pull complete 
+2026-09-16T03:17:30.3852911Z  ad31ba45b26b Extracting [==>                                                ]  2.621MB/50.17MB
+2026-09-16T03:17:30.4248262Z  minio Pulled 
+2026-09-16T03:17:30.4303701Z  4ccdd8a52dc0 Extracting [===================>                               ]  123.1MB/308.1MB
+2026-09-16T03:17:30.4858359Z  ad31ba45b26b Extracting [=====>                                             ]  5.243MB/50.17MB
+2026-09-16T03:17:30.5366254Z  4ccdd8a52dc0 Extracting [====================>                              ]  125.9MB/308.1MB
+2026-09-16T03:17:30.5945635Z  ad31ba45b26b Extracting [========>                                          ]  8.913MB/50.17MB
+2026-09-16T03:17:30.6421612Z  4ccdd8a52dc0 Extracting [====================>                              ]  129.2MB/308.1MB
+2026-09-16T03:17:30.7002621Z  ad31ba45b26b Extracting [=============>                                     ]  13.11MB/50.17MB
+2026-09-16T03:17:30.7489964Z  4ccdd8a52dc0 Extracting [=====================>                             ]  133.1MB/308.1MB
+2026-09-16T03:17:30.8005772Z  ad31ba45b26b Extracting [================>                                  ]  16.25MB/50.17MB
+2026-09-16T03:17:30.8594748Z  4ccdd8a52dc0 Extracting [======================>                            ]  138.1MB/308.1MB
+2026-09-16T03:17:30.9610386Z  ad31ba45b26b Extracting [=================>                                 ]  17.83MB/50.17MB
+2026-09-16T03:17:30.9676562Z  4ccdd8a52dc0 Extracting [======================>                            ]  141.5MB/308.1MB
+2026-09-16T03:17:31.0717461Z  4ccdd8a52dc0 Extracting [=======================>                           ]  144.3MB/308.1MB
+2026-09-16T03:17:31.0849472Z  ad31ba45b26b Extracting [===================>                               ]   19.4MB/50.17MB
+2026-09-16T03:17:31.1804752Z  4ccdd8a52dc0 Extracting [========================>                          ]  148.7MB/308.1MB
+2026-09-16T03:17:31.2702846Z  ad31ba45b26b Extracting [===================>                               ]  19.92MB/50.17MB
+2026-09-16T03:17:31.2822591Z  4ccdd8a52dc0 Extracting [========================>                          ]  153.7MB/308.1MB
+2026-09-16T03:17:31.3902320Z  4ccdd8a52dc0 Extracting [=========================>                         ]  159.9MB/308.1MB
+2026-09-16T03:17:31.5063159Z  4ccdd8a52dc0 Extracting [===========================>                       ]  171.6MB/308.1MB
+2026-09-16T03:17:31.5065525Z  ad31ba45b26b Extracting [====================>                              ]  20.45MB/50.17MB
+2026-09-16T03:17:31.5983663Z  4ccdd8a52dc0 Extracting [=============================>                     ]  183.3MB/308.1MB
+2026-09-16T03:17:31.7027448Z  4ccdd8a52dc0 Extracting [================================>                  ]  198.9MB/308.1MB
+2026-09-16T03:17:31.7328336Z  ad31ba45b26b Extracting [====================>                              ]  20.97MB/50.17MB
+2026-09-16T03:17:31.8043061Z  4ccdd8a52dc0 Extracting [==================================>                ]  210.6MB/308.1MB
+2026-09-16T03:17:31.9059005Z  ad31ba45b26b Extracting [=====================>                             ]   21.5MB/50.17MB
+2026-09-16T03:17:31.9078515Z  4ccdd8a52dc0 Extracting [===================================>               ]  219.5MB/308.1MB
+2026-09-16T03:17:32.0127185Z  4ccdd8a52dc0 Extracting [====================================>              ]  225.6MB/308.1MB
+2026-09-16T03:17:32.1159824Z  ad31ba45b26b Extracting [=====================>                             ]  22.02MB/50.17MB
+2026-09-16T03:17:32.1164045Z  4ccdd8a52dc0 Extracting [=====================================>             ]  231.7MB/308.1MB
+2026-09-16T03:17:32.2167253Z  4ccdd8a52dc0 Extracting [=======================================>           ]  241.2MB/308.1MB
+2026-09-16T03:17:32.3247478Z  4ccdd8a52dc0 Extracting [========================================>          ]  249.6MB/308.1MB
+2026-09-16T03:17:32.3566641Z  ad31ba45b26b Extracting [======================>                            ]  22.54MB/50.17MB
+2026-09-16T03:17:32.4291628Z  4ccdd8a52dc0 Extracting [=========================================>         ]  257.9MB/308.1MB
+2026-09-16T03:17:32.5301297Z  4ccdd8a52dc0 Extracting [===========================================>       ]  265.7MB/308.1MB
+2026-09-16T03:17:32.5571684Z  ad31ba45b26b Extracting [======================>                            ]  23.07MB/50.17MB
+2026-09-16T03:17:32.6350217Z  4ccdd8a52dc0 Extracting [============================================>      ]  275.2MB/308.1MB
+2026-09-16T03:17:32.7429749Z  4ccdd8a52dc0 Extracting [=============================================>     ]  281.3MB/308.1MB
+2026-09-16T03:17:32.8574294Z  4ccdd8a52dc0 Extracting [==============================================>    ]  286.3MB/308.1MB
+2026-09-16T03:17:32.9142393Z  ad31ba45b26b Extracting [=======================>                           ]  23.59MB/50.17MB
+2026-09-16T03:17:32.9682022Z  4ccdd8a52dc0 Extracting [===============================================>   ]  290.2MB/308.1MB
+2026-09-16T03:17:33.0679001Z  4ccdd8a52dc0 Extracting [================================================>  ]  296.4MB/308.1MB
+2026-09-16T03:17:33.1767404Z  4ccdd8a52dc0 Extracting [=================================================> ]  304.7MB/308.1MB
+2026-09-16T03:17:33.2043208Z  ad31ba45b26b Extracting [========================>                          ]  24.12MB/50.17MB
+2026-09-16T03:17:33.2090658Z  4ccdd8a52dc0 Extracting [==================================================>]  308.1MB/308.1MB
+2026-09-16T03:17:33.5132904Z  ad31ba45b26b Extracting [========================>                          ]  24.64MB/50.17MB
+2026-09-16T03:17:33.8856609Z  ad31ba45b26b Extracting [=========================>                         ]  25.17MB/50.17MB
+2026-09-16T03:17:34.1964112Z  ad31ba45b26b Extracting [=========================>                         ]  25.69MB/50.17MB
+2026-09-16T03:17:34.6110621Z  ad31ba45b26b Extracting [==========================>                        ]  26.21MB/50.17MB
+2026-09-16T03:17:34.9853559Z  ad31ba45b26b Extracting [==========================>                        ]  26.74MB/50.17MB
+2026-09-16T03:17:35.4849747Z  ad31ba45b26b Extracting [===========================>                       ]  27.26MB/50.17MB
+2026-09-16T03:17:35.9023213Z  ad31ba45b26b Extracting [============================>                      ]  28.31MB/50.17MB
+2026-09-16T03:17:36.1029436Z  ad31ba45b26b Extracting [=============================>                     ]  29.36MB/50.17MB
+2026-09-16T03:17:36.2003397Z  ad31ba45b26b Extracting [=============================>                     ]  29.88MB/50.17MB
+2026-09-16T03:17:36.3339977Z  ad31ba45b26b Extracting [==============================>                    ]  30.41MB/50.17MB
+2026-09-16T03:17:36.4403553Z  ad31ba45b26b Extracting [==============================>                    ]  30.93MB/50.17MB
+2026-09-16T03:17:36.5833989Z  ad31ba45b26b Extracting [===============================>                   ]  31.46MB/50.17MB
+2026-09-16T03:17:36.6892267Z  ad31ba45b26b Extracting [===============================>                   ]  31.98MB/50.17MB
+2026-09-16T03:17:36.8912579Z  ad31ba45b26b Extracting [================================>                  ]  33.03MB/50.17MB
+2026-09-16T03:17:37.0660833Z  ad31ba45b26b Extracting [===================================>               ]  35.13MB/50.17MB
+2026-09-16T03:17:37.0946911Z  4ccdd8a52dc0 Pull complete 
+2026-09-16T03:17:37.0967308Z  d018d3fc07a4 Extracting [==================================================>]     281B/281B
+2026-09-16T03:17:37.1006865Z  d018d3fc07a4 Extracting [==================================================>]     281B/281B
+2026-09-16T03:17:37.1545042Z  d018d3fc07a4 Pull complete 
+2026-09-16T03:17:37.2051719Z  70f1e3a1960a Extracting [==================================================>]  1.722kB/1.722kB
+2026-09-16T03:17:37.2052166Z  70f1e3a1960a Extracting [==================================================>]  1.722kB/1.722kB
+2026-09-16T03:17:37.3418709Z  ad31ba45b26b Extracting [====================================>              ]  36.18MB/50.17MB
+2026-09-16T03:17:37.3558972Z  70f1e3a1960a Pull complete 
+2026-09-16T03:17:37.3882340Z  8f58f7e426fa Extracting [==================================================>]  2.062kB/2.062kB
+2026-09-16T03:17:37.3883630Z  8f58f7e426fa Extracting [==================================================>]  2.062kB/2.062kB
+2026-09-16T03:17:37.5359980Z  ad31ba45b26b Extracting [====================================>              ]   36.7MB/50.17MB
+2026-09-16T03:17:37.6689198Z  ad31ba45b26b Extracting [=====================================>             ]  37.22MB/50.17MB
+2026-09-16T03:17:37.7485062Z  8f58f7e426fa Pull complete 
+2026-09-16T03:17:37.7558520Z  817feb91b55c Extracting [========>                                          ]  32.77kB/200.6kB
+2026-09-16T03:17:37.7661974Z  817feb91b55c Extracting [==================================================>]  200.6kB/200.6kB
+2026-09-16T03:17:37.7689251Z  817feb91b55c Extracting [==================================================>]  200.6kB/200.6kB
+2026-09-16T03:17:37.8151691Z  817feb91b55c Pull complete 
+2026-09-16T03:17:37.8597451Z  elasticsearch Pulled 
+2026-09-16T03:17:37.9191728Z  ad31ba45b26b Extracting [======================================>            ]  38.27MB/50.17MB
+2026-09-16T03:17:38.1315772Z  ad31ba45b26b Extracting [======================================>            ]   38.8MB/50.17MB
+2026-09-16T03:17:38.2464578Z  ad31ba45b26b Extracting [=======================================>           ]  39.85MB/50.17MB
+2026-09-16T03:17:38.4544829Z  ad31ba45b26b Extracting [=========================================>         ]  41.94MB/50.17MB
+2026-09-16T03:17:38.5746220Z  ad31ba45b26b Extracting [==========================================>        ]  42.99MB/50.17MB
+2026-09-16T03:17:38.6825092Z  ad31ba45b26b Extracting [============================================>      ]  44.56MB/50.17MB
+2026-09-16T03:17:38.7914863Z  ad31ba45b26b Extracting [===============================================>   ]  47.71MB/50.17MB
+2026-09-16T03:17:38.8643493Z  ad31ba45b26b Extracting [==================================================>]  50.17MB/50.17MB
+2026-09-16T03:17:39.6055865Z  ad31ba45b26b Pull complete 
+2026-09-16T03:17:39.6133753Z  0d4c2bd59d1c Extracting [==================================================>]  5.391kB/5.391kB
+2026-09-16T03:17:39.6143377Z  0d4c2bd59d1c Extracting [==================================================>]  5.391kB/5.391kB
+2026-09-16T03:17:39.6611867Z  0d4c2bd59d1c Pull complete 
+2026-09-16T03:17:39.6660702Z  148dcef42e3b Extracting [==================================================>]     121B/121B
+2026-09-16T03:17:39.6665994Z  148dcef42e3b Extracting [==================================================>]     121B/121B
+2026-09-16T03:17:39.7041237Z  148dcef42e3b Pull complete 
+2026-09-16T03:17:39.7287651Z  db_test Pulled 
+2026-09-16T03:17:39.7323337Z  Network web_35050714980_1_slow_42_default  Creating
+2026-09-16T03:17:39.8050464Z  Network web_35050714980_1_slow_42_default  Created
+2026-09-16T03:17:39.8051732Z  Volume "web_35050714980_1_slow_42_minio_data"  Creating
+2026-09-16T03:17:39.8074109Z  Volume "web_35050714980_1_slow_42_minio_data"  Created
+2026-09-16T03:17:39.8149573Z  Volume "web_35050714980_1_slow_42_redis_data"  Creating
+2026-09-16T03:17:39.8153562Z  Volume "web_35050714980_1_slow_42_redis_data"  Created
+2026-09-16T03:17:39.8190972Z  Container web_35050714980_1_slow_42-memcached-1  Creating
+2026-09-16T03:17:39.8191610Z  Container web_35050714980_1_slow_42-db_test-1  Creating
+2026-09-16T03:17:39.8195621Z  Container web_35050714980_1_slow_42-redis-1  Creating
+2026-09-16T03:17:39.8199235Z  Container web_35050714980_1_slow_42-dynamodb-1  Creating
+2026-09-16T03:17:39.8199613Z  Container web_35050714980_1_slow_42-elasticsearch-1  Creating
+2026-09-16T03:17:39.8199923Z  Container web_35050714980_1_slow_42-minio-1  Creating
+2026-09-16T03:17:39.9394157Z  Container web_35050714980_1_slow_42-minio-1  Created
+2026-09-16T03:17:39.9395481Z  Container web_35050714980_1_slow_42-createbuckets-1  Creating
+2026-09-16T03:17:39.9395800Z  Container web_35050714980_1_slow_42-db_test-1  Created
+2026-09-16T03:17:39.9435475Z  Container web_35050714980_1_slow_42-memcached-1  Created
+2026-09-16T03:17:39.9526064Z  Container web_35050714980_1_slow_42-elasticsearch-1  Created
+2026-09-16T03:17:39.9553328Z  Container web_35050714980_1_slow_42-dynamodb-1  Created
+2026-09-16T03:17:39.9623496Z  Container web_35050714980_1_slow_42-redis-1  Created
+2026-09-16T03:17:40.0081031Z  Container web_35050714980_1_slow_42-createbuckets-1  Created
+2026-09-16T03:17:40.0081515Z  Container web_35050714980_1_slow_42-copyfixturefiles-1  Creating
+2026-09-16T03:17:40.0747777Z  Container web_35050714980_1_slow_42-copyfixturefiles-1  Created
+2026-09-16T03:17:40.0776060Z  Container web_35050714980_1_slow_42-minio-1  Starting
+2026-09-16T03:17:40.0776426Z  Container web_35050714980_1_slow_42-db_test-1  Starting
+2026-09-16T03:17:40.0776717Z  Container web_35050714980_1_slow_42-redis-1  Starting
+2026-09-16T03:17:40.0780634Z  Container web_35050714980_1_slow_42-elasticsearch-1  Starting
+2026-09-16T03:17:40.0781273Z  Container web_35050714980_1_slow_42-dynamodb-1  Starting
+2026-09-16T03:17:40.0781880Z  Container web_35050714980_1_slow_42-memcached-1  Starting
+2026-09-16T03:17:40.7675864Z  Container web_35050714980_1_slow_42-redis-1  Started
+2026-09-16T03:17:40.7982592Z  Container web_35050714980_1_slow_42-memcached-1  Started
+2026-09-16T03:17:40.8338571Z  Container web_35050714980_1_slow_42-minio-1  Started
+2026-09-16T03:17:40.8339854Z  Container web_35050714980_1_slow_42-minio-1  Waiting
+2026-09-16T03:17:40.8371885Z  Container web_35050714980_1_slow_42-dynamodb-1  Started
+2026-09-16T03:17:40.8372844Z  Container web_35050714980_1_slow_42-db_test-1  Started
+2026-09-16T03:17:40.8374627Z  Container web_35050714980_1_slow_42-elasticsearch-1  Started
+2026-09-16T03:17:46.3567531Z  Container web_35050714980_1_slow_42-minio-1  Healthy
+2026-09-16T03:17:46.3568277Z  Container web_35050714980_1_slow_42-createbuckets-1  Starting
+2026-09-16T03:17:46.8461423Z  Container web_35050714980_1_slow_42-createbuckets-1  Started
+2026-09-16T03:17:46.8566413Z  Container web_35050714980_1_slow_42-createbuckets-1  Waiting
+2026-09-16T03:17:51.6738690Z  Container web_35050714980_1_slow_42-createbuckets-1  Exited
+2026-09-16T03:17:51.6739124Z  Container web_35050714980_1_slow_42-copyfixturefiles-1  Starting
+2026-09-16T03:17:51.9839968Z  Container web_35050714980_1_slow_42-copyfixturefiles-1  Started
+2026-09-16T03:20:30.4949979Z docker.io/antiwork/gumroad-web:test-94608ce811784afd4c9deb1e9fbe30efde8ca980
+2026-09-16T03:20:30.9159883Z Command completed after 1 attempt(s).
+2026-09-16T03:20:30.9162088Z ##[endgroup]
+2026-09-16T03:20:30.9288219Z Node 20 is being deprecated. This workflow is running with Node 24 by default. If you need to temporarily use Node 20, you can set the ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION=true environment variable. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
+2026-09-16T03:20:30.9289176Z ##[group]Run nick-fields/retry@v3
+2026-09-16T03:20:30.9289383Z with:
+2026-09-16T03:20:30.9289549Z   timeout_minutes: 5
+2026-09-16T03:20:30.9289730Z   max_attempts: 3
+2026-09-16T03:20:30.9289902Z   retry_wait_seconds: 10
+2026-09-16T03:20:30.9291633Z   command: IMG=$WEB_REPO:test-94608ce811784afd4c9deb1e9fbe30efde8ca980
+NET=web_35050714980_1_slow_42_default
+# Restore the baked test database dump (seconds) instead of
+# re-running db:prepare via Rails; ES/minio waits run in parallel.
+(
+  docker run --rm --entrypoint="" --network $NET $IMG docker/ci/wait_on_connection.sh db_test 3306 \
+    && docker/ci/restore_test_db.sh $NET $IMG
+) &
+DB_PID=$!
+docker run --rm --entrypoint="" --network $NET $IMG docker/ci/wait_on_connection.sh elasticsearch 9200 &
+ES_PID=$!
+docker run --rm --entrypoint="" --network $NET $IMG docker/ci/wait_on_connection.sh minio 9000 &
+MINIO_PID=$!
+wait $DB_PID || exit 1
+wait $ES_PID || exit 1
+wait $MINIO_PID || exit 1
+
+2026-09-16T03:20:30.9293390Z   polling_interval_seconds: 1
+2026-09-16T03:20:30.9293598Z   warning_on_retry: true
+2026-09-16T03:20:30.9293786Z   continue_on_error: false
+2026-09-16T03:20:30.9293966Z env:
+2026-09-16T03:20:30.9294143Z   COMPOSE_PROJECT_NAME: web_35050714980_1_slow_42
+2026-09-16T03:20:30.9294391Z   WEB_REPO: antiwork/gumroad-web
+2026-09-16T03:20:30.9294590Z ##[endgroup]
+2026-09-16T03:20:31.0016357Z ##[group]Attempt 1
+2026-09-16T03:20:31.3997010Z Waiting for db_test:3306...
+2026-09-16T03:20:31.4057630Z db_test:3306 is available
+2026-09-16T03:20:31.4188961Z Waiting for minio:9000...
+2026-09-16T03:20:31.4220870Z minio:9000 is available
+2026-09-16T03:20:31.5050442Z Waiting for elasticsearch:9200...
+2026-09-16T03:20:31.5329545Z elasticsearch:9200 is available
+2026-09-16T03:20:31.5329846Z Waiting for Elasticsearch cluster health...
+2026-09-16T03:20:31.6352260Z Elasticsearch cluster is ready
+2026-09-16T03:20:31.7688986Z Restoring baked test database dump (44K)...
+2026-09-16T03:20:33.5318867Z Test database restored from baked dump
+2026-09-16T03:20:34.0074365Z Command completed after 1 attempt(s).
+2026-09-16T03:20:34.0076841Z ##[endgroup]
+2026-09-16T03:20:34.0215167Z ##[group]Run mkdir -p ./capybara-artifacts
+2026-09-16T03:20:34.0215903Z [36;1mmkdir -p ./capybara-artifacts[0m
+2026-09-16T03:20:34.0216484Z [36;1mchmod 777 ./capybara-artifacts[0m
+2026-09-16T03:20:34.0217032Z [36;1mmkdir -p ./test-logs[0m
+2026-09-16T03:20:34.0217530Z [36;1mchmod 777 ./test-logs[0m
+2026-09-16T03:20:34.0218651Z [36;1mdocker run --rm --entrypoint="" --network web_35050714980_1_slow_42_default \[0m
+2026-09-16T03:20:34.0219608Z [36;1m  -v "$(pwd)/capybara-artifacts:/app/tmp/capybara" \[0m
+2026-09-16T03:20:34.0220669Z [36;1m  -v "$(pwd)/test-logs:/app/log" \[0m
+2026-09-16T03:20:34.0221233Z [36;1m  -e RUBY_YJIT_ENABLE \[0m
+2026-09-16T03:20:34.0221802Z [36;1m  -e KNAPSACK_PRO_TEST_SUITE_TOKEN_RSPEC \[0m
+2026-09-16T03:20:34.0222425Z [36;1m  -e KNAPSACK_PRO_CI_NODE_TOTAL \[0m
+2026-09-16T03:20:34.0222978Z [36;1m  -e KNAPSACK_PRO_CI_NODE_INDEX \[0m
+2026-09-16T03:20:34.0223509Z [36;1m  -e KNAPSACK_PRO_LOG_LEVEL \[0m
+2026-09-16T03:20:34.0224298Z [36;1m  -e KNAPSACK_PRO_RSPEC_SPLIT_BY_TEST_EXAMPLES \[0m
+2026-09-16T03:20:34.0224961Z [36;1m  -e KNAPSACK_PRO_TEST_FILE_PATTERN \[0m
+2026-09-16T03:20:34.0225547Z [36;1m  -e KNAPSACK_PRO_COMMIT_HASH \[0m
+2026-09-16T03:20:34.0226097Z [36;1m  -e KNAPSACK_PRO_BRANCH \[0m
+2026-09-16T03:20:34.0226642Z [36;1m  -e KNAPSACK_PRO_CI_NODE_BUILD_ID \[0m
+2026-09-16T03:20:34.0227255Z [36;1m  -e KNAPSACK_PRO_CI_NODE_RETRY_COUNT \[0m
+2026-09-16T03:20:34.0227843Z [36;1m  -e KNAPSACK_PRO_PROJECT_DIR \[0m
+2026-09-16T03:20:34.0228695Z [36;1m  -e KNAPSACK_PRO_FIXED_QUEUE_SPLIT \[0m
+2026-09-16T03:20:34.0229243Z [36;1m  -e CI \[0m
+2026-09-16T03:20:34.0229662Z [36;1m  -e IN_DOCKER \[0m
+2026-09-16T03:20:34.0230282Z [36;1m  $WEB_REPO:test-94608ce811784afd4c9deb1e9fbe30efde8ca980 \[0m
+2026-09-16T03:20:34.0231788Z [36;1m  /usr/local/bin/gosu app bundle exec rake "knapsack_pro:queue:rspec[--format RSpec::Github::Formatter --tag ~skip --format progress]"[0m
+2026-09-16T03:20:34.0309168Z shell: /usr/bin/bash -e {0}
+2026-09-16T03:20:34.0309670Z env:
+2026-09-16T03:20:34.0310133Z   COMPOSE_PROJECT_NAME: web_35050714980_1_slow_42
+2026-09-16T03:20:34.0310737Z   WEB_REPO: antiwork/gumroad-web
+2026-09-16T03:20:34.0311224Z   RUBY_YJIT_ENABLE: 1
+2026-09-16T03:20:34.0311993Z   KNAPSACK_PRO_TEST_SUITE_TOKEN_RSPEC: ***
+2026-09-16T03:20:34.0312557Z   KNAPSACK_PRO_CI_NODE_TOTAL: 50
+2026-09-16T03:20:34.0313047Z   KNAPSACK_PRO_CI_NODE_INDEX: 42
+2026-09-16T03:20:34.0313536Z   KNAPSACK_PRO_LOG_LEVEL: info
+2026-09-16T03:20:34.0314202Z   KNAPSACK_PRO_RSPEC_SPLIT_BY_TEST_EXAMPLES: true
+2026-09-16T03:20:34.0314922Z   KNAPSACK_PRO_TEST_FILE_PATTERN: spec/requests/**/*_spec.rb
+2026-09-16T03:20:34.0315697Z   KNAPSACK_PRO_COMMIT_HASH: 2450f08d24207ef6748d2df38003a3c80c4ba115
+2026-09-16T03:20:34.0316466Z   KNAPSACK_PRO_BRANCH: fix/us-company-structure-mapping
+2026-09-16T03:20:34.0317109Z   KNAPSACK_PRO_CI_NODE_BUILD_ID: 35050714980
+2026-09-16T03:20:34.0317657Z   KNAPSACK_PRO_CI_NODE_RETRY_COUNT: 1
+2026-09-16T03:20:34.0318422Z   KNAPSACK_PRO_PROJECT_DIR: /app
+2026-09-16T03:20:34.0318929Z   KNAPSACK_PRO_FIXED_QUEUE_SPLIT: true
+2026-09-16T03:20:34.0319416Z   CI: true
+2026-09-16T03:20:34.0319808Z   IN_DOCKER: true
+2026-09-16T03:20:34.0320214Z ##[endgroup]
+2026-09-16T03:20:37.7501991Z DEPRECATION WARNING: ActiveSupport::Configurable is deprecated without replacement, and will be removed in Rails 8.2.
+2026-09-16T03:20:37.7502392Z 
+2026-09-16T03:20:37.7502560Z You can emulate the previous behavior with `class_attribute`.
+2026-09-16T03:20:37.7502873Z  (called from Kernel#require at /app/config/boot.rb:18)
+2026-09-16T03:20:39.1980091Z [test-redis-isolation] slot 0 → Redis databases 4, 5, 6, 7 on redis:6379
+2026-09-16T03:20:42.2380026Z DEPRECATION WARNING: ActiveSupport::Configurable is deprecated without replacement, and will be removed in Rails 8.2.
+2026-09-16T03:20:42.2380806Z 
+2026-09-16T03:20:42.2381089Z You can emulate the previous behavior with `class_attribute`.
+2026-09-16T03:20:42.2381721Z  (called from Kernel#require at /app/config/boot.rb:18)
+2026-09-16T03:20:43.4726946Z [test-redis-isolation] slot 1 → Redis databases 12, 13, 14, 15 on redis:6379
+2026-09-16T03:20:44.2458910Z sidekiq-pro is not installed
+2026-09-16T03:20:44.6037380Z DEPRECATION WARNING: Setting action_controller.escape_json_responses = true is deprecated and will have no effect in Rails 8.2. Set it to `false`, or remove the config. (called from Kernel#require at /app/config/boot.rb:18)
+2026-09-16T03:20:45.0076093Z DEPRECATION WARNING: resource received a hash argument only. Please use a keyword instead. Support to hash argument will be removed in Rails 8.2. (called from block (2 levels) in <main> at /app/config/routes.rb:584)
+2026-09-16T03:20:45.0077727Z DEPRECATION WARNING: resource received a hash argument path. Please use a keyword instead. Support to hash argument will be removed in Rails 8.2. (called from block (2 levels) in <main> at /app/config/routes.rb:584)
+2026-09-16T03:20:45.0079001Z DEPRECATION WARNING: resource received a hash argument path_names. Please use a keyword instead. Support to hash argument will be removed in Rails 8.2. (called from block (2 levels) in <main> at /app/config/routes.rb:584)
+2026-09-16T03:20:45.0080071Z DEPRECATION WARNING: resource received a hash argument controller. Please use a keyword instead. Support to hash argument will be removed in Rails 8.2. (called from block (2 levels) in <main> at /app/config/routes.rb:584)
+2026-09-16T03:20:45.9355198Z DEPRECATION WARNING: Setting action_controller.escape_json_responses = true is deprecated and will have no effect in Rails 8.2. Set it to `false`, or remove the config. (called from Kernel#require at /app/config/boot.rb:18)
+2026-09-16T03:20:52.9495414Z DEPRECATION WARNING: resource received a hash argument only. Please use a keyword instead. Support to hash argument will be removed in Rails 8.2. (called from block (2 levels) in <main> at /app/config/routes.rb:584)
+2026-09-16T03:20:52.9498569Z DEPRECATION WARNING: resource received a hash argument path. Please use a keyword instead. Support to hash argument will be removed in Rails 8.2. (called from block (2 levels) in <main> at /app/config/routes.rb:584)
+2026-09-16T03:20:52.9501279Z DEPRECATION WARNING: resource received a hash argument path_names. Please use a keyword instead. Support to hash argument will be removed in Rails 8.2. (called from block (2 levels) in <main> at /app/config/routes.rb:584)
+2026-09-16T03:20:52.9503823Z DEPRECATION WARNING: resource received a hash argument controller. Please use a keyword instead. Support to hash argument will be removed in Rails 8.2. (called from block (2 levels) in <main> at /app/config/routes.rb:584)
+2026-09-16T03:20:55.5361566Z ProductCustomDomainScenario: 2026-09-16T03:20:55.535Z pid=28 tid=3xg INFO: Sidekiq 7.3.4 connecting to Redis with options {size: 10, pool_name: "internal", url: "redis://redis:6379/13"}
+2026-09-16T03:20:56.5292210Z Capybara starting Puma...
+2026-09-16T03:20:56.5292516Z * Version 6.4.3, codename: The Eagle of Durango
+2026-09-16T03:20:56.5292774Z * Min threads: 0, max threads: 4
+2026-09-16T03:20:56.5295323Z * Listening on http://127.0.0.1:31337
+2026-09-16T03:21:09.3402166Z . [13.82s]
+2026-09-16T03:22:07.8431616Z Sign up after purchase: .... [58.5s]
+2026-09-16T03:22:07.8459838Z I, [2026-09-16T03:22:07.845425 #28]  INFO -- knapsack_pro: To retry the last batch of tests fetched from the Queue API, please run the following command on your machine:
+2026-09-16T03:22:07.8461005Z I, [2026-09-16T03:22:07.845712 #28]  INFO -- knapsack_pro: bundle exec rspec --format RSpec::Github::Formatter --tag ~skip --format progress --default-path spec "spec/requests/product_custom_domain_spec.rb[1:3:2]" "spec/requests/purchases/product/signup_after_purchase_spec.rb"
+2026-09-16T03:22:16.9367051Z UTM links: . [8.91s]
+2026-09-16T03:22:24.7247647Z ProductShowScenario: . [7.79s]
+2026-09-16T03:22:24.7283308Z I, [2026-09-16T03:22:24.727949 #28]  INFO -- knapsack_pro: To retry the last batch of tests fetched from the Queue API, please run the following command on your machine:
+2026-09-16T03:22:24.7284726Z I, [2026-09-16T03:22:24.727985 #28]  INFO -- knapsack_pro: bundle exec rspec --format RSpec::Github::Formatter --tag ~skip --format progress --default-path spec "spec/requests/analytics/utm_links_spec.rb[1:2:4]" "spec/requests/products/show/show_spec.rb[1:7]"
+2026-09-16T03:22:36.5587688Z Product Page - Later country tax scenarios: . [11.62s]
+2026-09-16T03:22:36.5648488Z Product Page - Tax Scenarios: ****************************************************************************************************
+2026-09-16T03:22:36.5649126Z Product Page - Tax Scenarios sales tax price modifiers re-evaluates price and tax when an offer code is applied - code in url
+2026-09-16T03:22:36.5649998Z ./spec/requests/purchases/product/taxes_spec.rb:108
+2026-09-16T03:22:36.5650258Z VCR recording: false
+2026-09-16T03:22:36.5650606Z VCR name: ShippingScenarios/re-evaluates price and tax when an offer code is applied - code in url
+2026-09-16T03:22:36.5651042Z ****************************************************************************************************
+2026-09-16T03:22:46.8350020Z . [10.27s]
+2026-09-16T03:22:46.8441175Z I, [2026-09-16T03:22:46.843638 #28]  INFO -- knapsack_pro: To retry the last batch of tests fetched from the Queue API, please run the following command on your machine:
+2026-09-16T03:22:46.8445462Z I, [2026-09-16T03:22:46.843809 #28]  INFO -- knapsack_pro: bundle exec rspec --format RSpec::Github::Formatter --tag ~skip --format progress --default-path spec "spec/requests/purchases/product/taxes_later_countries_spec.rb[1:12:6]" "spec/requests/purchases/product/taxes_spec.rb[1:1:2:2]"
+2026-09-16T03:23:11.5136340Z Checkout with Payment Request API: ......... [24.51s]
+2026-09-16T03:23:31.8816969Z Main Settings Scenario: ..................... [20.37s]
+2026-09-16T03:23:31.8870481Z I, [2026-09-16T03:23:31.886497 #28]  INFO -- knapsack_pro: To retry the last batch of tests fetched from the Queue API, please run the following command on your machine:
+2026-09-16T03:23:31.8871710Z I, [2026-09-16T03:23:31.886532 #28]  INFO -- knapsack_pro: bundle exec rspec --format RSpec::Github::Formatter --tag ~skip --format progress --default-path spec "spec/requests/checkout/apple_google_pay_spec.rb" "spec/requests/settings/main_spec.rb"
+2026-09-16T03:23:48.5564583Z Product Page - Collect-tax country scenarios: .. [16.52s]
+2026-09-16T03:23:57.2779666Z Dashboard - Mobile Table Labels: . [8.72s]
+2026-09-16T03:23:57.2901144Z I, [2026-09-16T03:23:57.289627 #28]  INFO -- knapsack_pro: To retry the last batch of tests fetched from the Queue API, please run the following command on your machine:
+2026-09-16T03:23:57.2902573Z I, [2026-09-16T03:23:57.289683 #28]  INFO -- knapsack_pro: bundle exec rspec --format RSpec::Github::Formatter --tag ~skip --format progress --default-path spec "spec/requests/purchases/product/taxes_collect_tax_countries_spec.rb[1:8:2:1]" "spec/requests/dashboard_mobile_table_spec.rb" "spec/requests/purchases/product/taxes_collect_tax_countries_spec.rb[1:14:1:1]"
+2026-09-16T03:24:01.9310325Z ProductShowScenario: . [4.43s]
+2026-09-16T03:24:04.9826416Z UTM links: NOTE: Please consider using an interaction method other than .hover to ensure proper accessibility
+2026-09-16T03:24:05.4043029Z NOTE: Please consider using an interaction method other than .hover to ensure proper accessibility
+2026-09-16T03:24:05.9790183Z . [4.04s]
+2026-09-16T03:24:11.9210484Z Payments Settings Scenario: . [5.94s]
+2026-09-16T03:24:11.9323691Z I, [2026-09-16T03:24:11.931600 #28]  INFO -- knapsack_pro: To retry the last batch of tests fetched from the Queue API, please run the following command on your machine:
+2026-09-16T03:24:11.9334887Z I, [2026-09-16T03:24:11.931640 #28]  INFO -- knapsack_pro: bundle exec rspec --format RSpec::Github::Formatter --tag ~skip --format progress --default-path spec "spec/requests/products/show/show_spec.rb[1:14:1]" "spec/requests/analytics/utm_links_spec.rb[1:1:1:4:1]" "spec/requests/settings/payments_spec.rb[1:3:63:1]"
+2026-09-16T03:24:12.1073339Z /app/spec/support/stripe_account_stub_helper.rb:4: warning: already initialized constant STRIPE_STUB_POSTAL_CODE_PATTERNS
+2026-09-16T03:24:12.1074402Z /app/spec/support/stripe_account_stub_helper.rb:4: warning: previous definition of STRIPE_STUB_POSTAL_CODE_PATTERNS was here
+2026-09-16T03:24:15.9838449Z ProductShowScenario: . [3.85s]
+2026-09-16T03:24:23.0023073Z Balance Pages Scenario: .. [7.02s]
+2026-09-16T03:24:35.7919254Z Payments Settings Scenario: 
+2026-09-16T03:24:35.7919594Z 1st Try error in ./spec/requests/settings/payments_spec.rb:800:
+2026-09-16T03:24:35.7920161Z expected to find visible alert with text "Thanks! You're all set." but there were no matches. Also found "", which matched the selector but not all filters. 
+2026-09-16T03:24:35.7952708Z 
+2026-09-16T03:24:35.7953187Z RSpec::Retry: 2nd try ./spec/requests/settings/payments_spec.rb:800
+2026-09-16T03:24:48.3612068Z 
+2026-09-16T03:24:48.3612786Z 2nd Try error in ./spec/requests/settings/payments_spec.rb:800:
+2026-09-16T03:24:48.3613577Z expected to find visible alert with text "Thanks! You're all set." but there were no matches. Also found "", which matched the selector but not all filters. 
+2026-09-16T03:24:48.3615731Z RSpec::Retry: 3rd try ./spec/requests/settings/payments_spec.rb:800
+2026-09-16T03:25:02.1274007Z 
+2026-09-16T03:25:02.1310348Z ##[error]Payments Settings Scenario Payout Information Collection US business with EIN already saved, editing non-EIN fields saves changes without rejecting the saved EIN
+
+Failure/Error: expect(page).to have_alert(text: "Thanks! You're all set.")
+  expected to find visible alert with text "Thanks! You're all set." but there were no matches. Also found "", which matched the selector but not all filters. 
+
+[Screenshot Image]: /app/tmp/capybara/failures_r_spec_example_groups_payments_settings_scenario_payout_information_collection_us_business_with_ein_already_saved_editing_non_ein_fields_saves_changes_without_rejecting_the_saved_ein_656.png 
+
+
+2026-09-16T03:25:02.1341600Z F [39.13s]
+2026-09-16T03:25:02.1406288Z I, [2026-09-16T03:25:02.140064 #28]  INFO -- knapsack_pro: To retry the last batch of tests fetched from the Queue API, please run the following command on your machine:
+2026-09-16T03:25:02.1409875Z I, [2026-09-16T03:25:02.140105 #28]  INFO -- knapsack_pro: bundle exec rspec --format RSpec::Github::Formatter --tag ~skip --format progress --default-path spec "spec/requests/products/show/show_spec.rb[1:26:1:3]" "spec/requests/balance_pages_spec.rb[1:1:3:6:7:1:1]" "spec/requests/settings/payments_spec.rb[1:3:15:1]" "spec/requests/balance_pages_spec.rb[1:1:4:2:1]"
+2026-09-16T03:25:02.2769319Z 
+2026-09-16T03:25:02.2792435Z 
+2026-09-16T03:25:02.2793209Z Failures:
+2026-09-16T03:25:02.2793983Z 
+2026-09-16T03:25:02.2795657Z   1) Payments Settings Scenario Payout Information Collection US business with EIN already saved, editing non-EIN fields saves changes without rejecting the saved EIN
+2026-09-16T03:25:02.2797329Z      Failure/Error: expect(page).to have_alert(text: "Thanks! You're all set.")
+2026-09-16T03:25:02.2799073Z        expected to find visible alert with text "Thanks! You're all set." but there were no matches. Also found "", which matched the selector but not all filters. 
+2026-09-16T03:25:02.2800118Z 
+2026-09-16T03:25:02.2801603Z      [Screenshot Image]: /app/tmp/capybara/failures_r_spec_example_groups_payments_settings_scenario_payout_information_collection_us_business_with_ein_already_saved_editing_non_ein_fields_saves_changes_without_rejecting_the_saved_ein_656.png 
+2026-09-16T03:25:02.2804011Z 
+2026-09-16T03:25:02.2804019Z 
+2026-09-16T03:25:02.2804751Z      # ./spec/requests/settings/payments_spec.rb:807:in 'block (4 levels) in <main>'
+2026-09-16T03:25:02.2805873Z      # ./spec/spec_helper.rb:448:in 'block (2 levels) in <main>'
+2026-09-16T03:25:02.2806611Z      # ./spec/spec_helper.rb:420:in 'block (3 levels) in <main>'
+2026-09-16T03:25:02.2807792Z      # ./app/modules/product/creation_limit.rb:14:in 'Product::CreationLimit::ClassMethods#bypass_product_creation_limit'
+2026-09-16T03:25:02.2809101Z      # ./spec/spec_helper.rb:419:in 'block (2 levels) in <main>'
+2026-09-16T03:25:02.2810246Z      # ./spec/spec_helper.rb:412:in 'block (2 levels) in <main>'
+2026-09-16T03:25:02.2810943Z      # ./spec/spec_helper.rb:274:in 'block (2 levels) in <main>'
+2026-09-16T03:25:02.2812396Z      # /bundle_path/ruby/3.4.0/gems/knapsack_pro-10.0.1/lib/knapsack_pro/adapters/rspec_adapter.rb:124:in 'block (2 levels) in KnapsackPro::Adapters::RSpecAdapter#ensure_no_focus!'
+2026-09-16T03:25:02.2814806Z      # /bundle_path/ruby/3.4.0/gems/webmock-3.23.1/lib/webmock/rspec.rb:39:in 'block (2 levels) in <main>'
+2026-09-16T03:25:02.2816049Z      # /bundle_path/ruby/3.4.0/gems/rspec-retry-0.6.2/lib/rspec/retry.rb:124:in 'block in RSpec::Retry#run'
+2026-09-16T03:25:02.2817507Z      # /bundle_path/ruby/3.4.0/gems/rspec-retry-0.6.2/lib/rspec/retry.rb:110:in 'RSpec::Retry#run'
+2026-09-16T03:25:02.2822275Z      # /bundle_path/ruby/3.4.0/gems/rspec-retry-0.6.2/lib/rspec_ext/rspec_ext.rb:12:in 'RSpec::Core::Example::Procsy#run_with_retry'
+2026-09-16T03:25:02.2823995Z      # /bundle_path/ruby/3.4.0/gems/rspec-retry-0.6.2/lib/rspec/retry.rb:37:in 'block (2 levels) in RSpec::Retry.setup'
+2026-09-16T03:25:02.2825942Z      # /bundle_path/ruby/3.4.0/gems/knapsack_pro-10.0.1/lib/knapsack_pro/extensions/rspec_extension.rb:98:in 'block (4 levels) in KnapsackPro::Extensions::RSpecExtension::Runner#knapsack__run_specs'
+2026-09-16T03:25:02.2827776Z      # /bundle_path/ruby/3.4.0/gems/knapsack_pro-10.0.1/lib/knapsack_pro/extensions/rspec_extension.rb:96:in 'Array#map'
+2026-09-16T03:25:02.2829855Z      # /bundle_path/ruby/3.4.0/gems/knapsack_pro-10.0.1/lib/knapsack_pro/extensions/rspec_extension.rb:96:in 'block (3 levels) in KnapsackPro::Extensions::RSpecExtension::Runner#knapsack__run_specs'
+2026-09-16T03:25:02.2831983Z      # /bundle_path/ruby/3.4.0/gems/knapsack_pro-10.0.1/lib/knapsack_pro/runners/queue/rspec_runner.rb:94:in 'block in KnapsackPro::Runners::Queue::RSpecRunner#with_batch'
+2026-09-16T03:25:02.2834639Z      # /bundle_path/ruby/3.4.0/gems/knapsack_pro-10.0.1/lib/knapsack_pro/runners/queue/rspec_runner.rb:80:in 'KnapsackPro::Runners::Queue::RSpecRunner#with_batch'
+2026-09-16T03:25:02.2836863Z      # /bundle_path/ruby/3.4.0/gems/knapsack_pro-10.0.1/lib/knapsack_pro/extensions/rspec_extension.rb:93:in 'block (2 levels) in KnapsackPro::Extensions::RSpecExtension::Runner#knapsack__run_specs'
+2026-09-16T03:25:02.2839330Z      # /bundle_path/ruby/3.4.0/gems/knapsack_pro-10.0.1/lib/knapsack_pro/extensions/rspec_extension.rb:92:in 'block in KnapsackPro::Extensions::RSpecExtension::Runner#knapsack__run_specs'
+2026-09-16T03:25:02.2841440Z      # /bundle_path/ruby/3.4.0/gems/knapsack_pro-10.0.1/lib/knapsack_pro/extensions/rspec_extension.rb:91:in 'KnapsackPro::Extensions::RSpecExtension::Runner#knapsack__run_specs'
+2026-09-16T03:25:02.2844581Z      # /bundle_path/ruby/3.4.0/gems/knapsack_pro-10.0.1/lib/knapsack_pro/runners/queue/rspec_runner.rb:55:in 'KnapsackPro::Runners::Queue::RSpecRunner#run'
+2026-09-16T03:25:02.2846387Z      # /bundle_path/ruby/3.4.0/gems/knapsack_pro-10.0.1/lib/knapsack_pro/runners/queue/rspec_runner.rb:20:in 'KnapsackPro::Runners::Queue::RSpecRunner.run'
+2026-09-16T03:25:02.2848166Z      # /bundle_path/ruby/3.4.0/gems/knapsack_pro-10.0.1/lib/tasks/queue/rspec.rake:13:in 'block (3 levels) in <main>'
+2026-09-16T03:25:02.2849428Z      # /bundle_path/ruby/3.4.0/gems/rake-13.2.1/lib/rake/task.rb:279:in 'block in Rake::Task#execute'
+2026-09-16T03:25:02.2850464Z      # /bundle_path/ruby/3.4.0/gems/rake-13.2.1/lib/rake/task.rb:279:in 'Array#each'
+2026-09-16T03:25:02.2851453Z      # /bundle_path/ruby/3.4.0/gems/rake-13.2.1/lib/rake/task.rb:279:in 'Rake::Task#execute'
+2026-09-16T03:25:02.2854442Z      # /bundle_path/ruby/3.4.0/gems/rake-13.2.1/lib/rake/task.rb:219:in 'block in Rake::Task#invoke_with_call_chain'
+2026-09-16T03:25:02.2855643Z      # /bundle_path/ruby/3.4.0/gems/rake-13.2.1/lib/rake/task.rb:199:in 'Monitor#synchronize'
+2026-09-16T03:25:02.2856755Z      # /bundle_path/ruby/3.4.0/gems/rake-13.2.1/lib/rake/task.rb:199:in 'Rake::Task#invoke_with_call_chain'
+2026-09-16T03:25:02.2858441Z      # /bundle_path/ruby/3.4.0/gems/rake-13.2.1/lib/rake/task.rb:188:in 'Rake::Task#invoke'
+2026-09-16T03:25:02.2859687Z      # /bundle_path/ruby/3.4.0/gems/rake-13.2.1/lib/rake/application.rb:188:in 'Rake::Application#invoke_task'
+2026-09-16T03:25:02.2861065Z      # /bundle_path/ruby/3.4.0/gems/rake-13.2.1/lib/rake/application.rb:138:in 'block (2 levels) in Rake::Application#top_level'
+2026-09-16T03:25:02.2862271Z      # /bundle_path/ruby/3.4.0/gems/rake-13.2.1/lib/rake/application.rb:138:in 'Array#each'
+2026-09-16T03:25:02.2863559Z      # /bundle_path/ruby/3.4.0/gems/rake-13.2.1/lib/rake/application.rb:138:in 'block in Rake::Application#top_level'
+2026-09-16T03:25:02.2865118Z      # /bundle_path/ruby/3.4.0/gems/rake-13.2.1/lib/rake/application.rb:147:in 'Rake::Application#run_with_threads'
+2026-09-16T03:25:02.2866368Z      # /bundle_path/ruby/3.4.0/gems/rake-13.2.1/lib/rake/application.rb:132:in 'Rake::Application#top_level'
+2026-09-16T03:25:02.2867579Z      # /bundle_path/ruby/3.4.0/gems/rake-13.2.1/lib/rake/application.rb:83:in 'block in Rake::Application#run'
+2026-09-16T03:25:02.2869209Z      # /bundle_path/ruby/3.4.0/gems/rake-13.2.1/lib/rake/application.rb:214:in 'Rake::Application#standard_exception_handling'
+2026-09-16T03:25:02.2870487Z      # /bundle_path/ruby/3.4.0/gems/rake-13.2.1/lib/rake/application.rb:80:in 'Rake::Application#run'
+2026-09-16T03:25:02.2871500Z      # /bundle_path/ruby/3.4.0/gems/rake-13.2.1/exe/rake:27:in '<top (required)>'
+2026-09-16T03:25:02.2872041Z 
+2026-09-16T03:25:02.2872345Z Top 10 slowest examples (149.81 seconds, 60.2% of total time):
+2026-09-16T03:25:02.2873879Z   Payments Settings Scenario Payout Information Collection US business with EIN already saved, editing non-EIN fields saves changes without rejecting the saved EIN
+2026-09-16T03:25:02.2875276Z     37.98 seconds ./spec/requests/settings/payments_spec.rb:800
+2026-09-16T03:25:02.2876259Z   Sign up after purchase when password is invalid shows an error message for compromised passwords
+2026-09-16T03:25:02.2877427Z     18.24 seconds ./spec/requests/purchases/product/signup_after_purchase_spec.rb:36
+2026-09-16T03:25:02.2878716Z   Sign up after purchase when password is valid creates the account and saves payment method
+2026-09-16T03:25:02.2879751Z     14.56 seconds ./spec/requests/purchases/product/signup_after_purchase_spec.rb:18
+2026-09-16T03:25:02.2881152Z   ProductCustomDomainScenario when there is a discount code applies the discount code when the URL contains both the discount code and the product
+2026-09-16T03:25:02.2882431Z     13.82 seconds ./spec/requests/product_custom_domain_spec.rb:45
+2026-09-16T03:25:02.2883507Z   Sign up after purchase when password is invalid allows to fix a validation error and submit again
+2026-09-16T03:25:02.2884584Z     12.92 seconds ./spec/requests/purchases/product/signup_after_purchase_spec.rb:68
+2026-09-16T03:25:02.2885636Z   Sign up after purchase when password is invalid shows an error message for passwords too short
+2026-09-16T03:25:02.2886675Z     12.78 seconds ./spec/requests/purchases/product/signup_after_purchase_spec.rb:57
+2026-09-16T03:25:02.2888229Z   Product Page - Later country tax scenarios country change scenarios allows the purchase when none of the mismatching countries are EU
+2026-09-16T03:25:02.2889579Z     11.62 seconds ./spec/requests/purchases/product/taxes_later_countries_spec.rb:1257
+2026-09-16T03:25:02.2891058Z   Product Page - Tax Scenarios sales tax price modifiers re-evaluates price and tax when an offer code is applied - code in url
+2026-09-16T03:25:02.2892273Z     10.27 seconds ./spec/requests/purchases/product/taxes_spec.rb:108
+2026-09-16T03:25:02.2893563Z   UTM links sale attribution does not attribute a purchase to a UTM link when the latest visit is outside the attribution window
+2026-09-16T03:25:02.2894721Z     8.91 seconds ./spec/requests/analytics/utm_links_spec.rb:819
+2026-09-16T03:25:02.2895727Z   Dashboard - Mobile Table Labels shows correct labels with proper data types in the best selling table
+2026-09-16T03:25:02.2896735Z     8.72 seconds ./spec/requests/dashboard_mobile_table_spec.rb:26
+2026-09-16T03:25:02.2897496Z 
+2026-09-16T03:25:02.2897704Z Top 10 slowest example groups:
+2026-09-16T03:25:02.2898417Z   Payments Settings Scenario
+2026-09-16T03:25:02.2899177Z     39.13 seconds average (39.13 seconds / 1 example) ./spec/requests/settings/payments_spec.rb:6
+2026-09-16T03:25:02.2899976Z   Sign up after purchase
+2026-09-16T03:25:02.2900882Z     14.63 seconds average (58.5 seconds / 4 examples) ./spec/requests/purchases/product/signup_after_purchase_spec.rb:5
+2026-09-16T03:25:02.2901842Z   ProductCustomDomainScenario
+2026-09-16T03:25:02.2902939Z     13.82 seconds average (13.82 seconds / 1 example) ./spec/requests/product_custom_domain_spec.rb:5
+2026-09-16T03:25:02.2903818Z   Product Page - Later country tax scenarios
+2026-09-16T03:25:02.2904765Z     11.62 seconds average (11.62 seconds / 1 example) ./spec/requests/purchases/product/taxes_later_countries_spec.rb:5
+2026-09-16T03:25:02.2905713Z   Product Page - Tax Scenarios
+2026-09-16T03:25:02.2906497Z     10.27 seconds average (10.27 seconds / 1 example) ./spec/requests/purchases/product/taxes_spec.rb:5
+2026-09-16T03:25:02.2907299Z   UTM links
+2026-09-16T03:25:02.2908229Z     8.91 seconds average (8.91 seconds / 1 example) ./spec/requests/analytics/utm_links_spec.rb:7
+2026-09-16T03:25:02.2909067Z   Dashboard - Mobile Table Labels
+2026-09-16T03:25:02.2909853Z     8.72 seconds average (8.72 seconds / 1 example) ./spec/requests/dashboard_mobile_table_spec.rb:5
+2026-09-16T03:25:02.2910721Z   Product Page - Collect-tax country scenarios
+2026-09-16T03:25:02.2911746Z     8.26 seconds average (16.52 seconds / 2 examples) ./spec/requests/purchases/product/taxes_collect_tax_countries_spec.rb:5
+2026-09-16T03:25:02.2912839Z   ProductShowScenario
+2026-09-16T03:25:02.2913548Z     7.79 seconds average (7.79 seconds / 1 example) ./spec/requests/products/show/show_spec.rb:7
+2026-09-16T03:25:02.2914339Z   Payments Settings Scenario
+2026-09-16T03:25:02.2915065Z     5.94 seconds average (5.94 seconds / 1 example) ./spec/requests/settings/payments_spec.rb:6
+2026-09-16T03:25:02.2915678Z 
+2026-09-16T03:25:02.2916025Z Finished in 4 minutes 8.7 seconds (files took 12.87 seconds to load)
+2026-09-16T03:25:02.2916678Z 49 examples, 1 failure
+2026-09-16T03:25:02.2916938Z 
+2026-09-16T03:25:02.2917107Z Failed examples:
+2026-09-16T03:25:02.2917345Z 
+2026-09-16T03:25:02.2918890Z rspec ./spec/requests/settings/payments_spec.rb:800 # Payments Settings Scenario Payout Information Collection US business with EIN already saved, editing non-EIN fields saves changes without rejecting the saved EIN
+2026-09-16T03:25:02.2920297Z 
+2026-09-16T03:25:02.2921132Z I, [2026-09-16T03:25:02.285181 #28]  INFO -- knapsack_pro: To retry all the tests assigned to this CI node, please run the following command on your machine:
+2026-09-16T03:25:02.2929228Z I, [2026-09-16T03:25:02.285243 #28]  INFO -- knapsack_pro: bundle exec rspec --format RSpec::Github::Formatter --tag ~skip --format progress --default-path spec "spec/requests/product_custom_domain_spec.rb[1:3:2]" "spec/requests/purchases/product/signup_after_purchase_spec.rb" "spec/requests/analytics/utm_links_spec.rb[1:2:4]" "spec/requests/products/show/show_spec.rb[1:7]" "spec/requests/purchases/product/taxes_later_countries_spec.rb[1:12:6]" "spec/requests/purchases/product/taxes_spec.rb[1:1:2:2]" "spec/requests/checkout/apple_google_pay_spec.rb" "spec/requests/settings/main_spec.rb" "spec/requests/purchases/product/taxes_collect_tax_countries_spec.rb[1:8:2:1]" "spec/requests/dashboard_mobile_table_spec.rb" "spec/requests/purchases/product/taxes_collect_tax_countries_spec.rb[1:14:1:1]" "spec/requests/products/show/show_spec.rb[1:14:1]" "spec/requests/analytics/utm_links_spec.rb[1:1:1:4:1]" "spec/requests/settings/payments_spec.rb[1:3:63:1]" "spec/requests/products/show/show_spec.rb[1:26:1:3]" "spec/requests/balance_pages_spec.rb[1:1:3:6:7:1:1]" "spec/requests/settings/payments_spec.rb[1:3:15:1]" "spec/requests/balance_pages_spec.rb[1:1:4:2:1]"
+2026-09-16T03:25:03.9552948Z ##[error]Process completed with exit code 1.
+2026-09-16T03:25:03.9645820Z Node 20 is being deprecated. This workflow is running with Node 24 by default. If you need to temporarily use Node 20, you can set the ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION=true environment variable. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
+2026-09-16T03:25:03.9646796Z ##[group]Run actions/upload-artifact@v4
+2026-09-16T03:25:03.9647007Z with:
+2026-09-16T03:25:03.9647200Z   name: capybara-screenshots-slow-42-attempt-1
+2026-09-16T03:25:03.9647452Z   path: ./capybara-artifacts/*.png
+2026-09-16T03:25:03.9647871Z   retention-days: 7
+2026-09-16T03:25:03.9648190Z   if-no-files-found: ignore
+2026-09-16T03:25:03.9648377Z   compression-level: 6
+2026-09-16T03:25:03.9648576Z   overwrite: false
+2026-09-16T03:25:03.9648751Z   include-hidden-files: false
+2026-09-16T03:25:03.9648935Z env:
+2026-09-16T03:25:03.9649242Z   COMPOSE_PROJECT_NAME: web_35050714980_1_slow_42
+2026-09-16T03:25:03.9649513Z   WEB_REPO: antiwork/gumroad-web
+2026-09-16T03:25:03.9649711Z ##[endgroup]
+2026-09-16T03:25:04.1251947Z (node:6581) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+2026-09-16T03:25:04.1252567Z (Use `node --trace-deprecation ...` to show where the warning was created)
+2026-09-16T03:25:04.1350861Z With the provided path, there will be 1 file uploaded
+2026-09-16T03:25:04.1366206Z Artifact name is valid!
+2026-09-16T03:25:04.1368441Z Root directory input is valid!
+2026-09-16T03:25:04.6244974Z Beginning upload of artifact content to blob storage
+2026-09-16T03:25:04.6749235Z (node:6581) [DEP0169] DeprecationWarning: `url.parse()` behavior is not standardized and prone to errors that have security implications. Use the WHATWG URL API instead. CVEs are not issued for `url.parse()` vulnerabilities.
+2026-09-16T03:25:05.3114743Z Uploaded bytes 62335
+2026-09-16T03:25:05.4190429Z Finished uploading artifact content to blob storage!
+2026-09-16T03:25:05.4194326Z SHA256 digest of uploaded artifact zip is 9b49cc55558b9637e9365bf77adbee44d03c3e4ebaffaa55b22a0e23e11c1661
+2026-09-16T03:25:05.4196612Z Finalizing artifact upload
+2026-09-16T03:25:05.6943575Z Artifact capybara-screenshots-slow-42-attempt-1.zip successfully finalized. Artifact ID 10429685153
+2026-09-16T03:25:05.6946242Z Artifact capybara-screenshots-slow-42-attempt-1 has been successfully uploaded! Final size is 62335 bytes. Artifact ID is 10429685153
+2026-09-16T03:25:05.6948918Z Artifact download URL: https://github.com/antiwork/gumroad/actions/runs/35050714980/artifacts/10429685153
+2026-09-16T03:25:05.7144263Z Node 20 is being deprecated. This workflow is running with Node 24 by default. If you need to temporarily use Node 20, you can set the ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION=true environment variable. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
+2026-09-16T03:25:05.7145351Z ##[group]Run actions/upload-artifact@v4
+2026-09-16T03:25:05.7145583Z with:
+2026-09-16T03:25:05.7145763Z   name: test-logs-slow-42-attempt-1
+2026-09-16T03:25:05.7145992Z   path: ./test-logs/test.log
+2026-09-16T03:25:05.7146194Z   retention-days: 7
+2026-09-16T03:25:05.7146381Z   if-no-files-found: ignore
+2026-09-16T03:25:05.7146580Z   compression-level: 6
+2026-09-16T03:25:05.7146763Z   overwrite: false
+2026-09-16T03:25:05.7146951Z   include-hidden-files: false
+2026-09-16T03:25:05.7147145Z env:
+2026-09-16T03:25:05.7147333Z   COMPOSE_PROJECT_NAME: web_35050714980_1_slow_42
+2026-09-16T03:25:05.7147581Z   WEB_REPO: antiwork/gumroad-web
+2026-09-16T03:25:05.7147835Z ##[endgroup]
+2026-09-16T03:25:05.9099367Z (node:6593) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+2026-09-16T03:25:05.9099952Z (Use `node --trace-deprecation ...` to show where the warning was created)
+2026-09-16T03:25:05.9176682Z With the provided path, there will be 1 file uploaded
+2026-09-16T03:25:05.9177128Z Artifact name is valid!
+2026-09-16T03:25:05.9177349Z Root directory input is valid!
+2026-09-16T03:25:06.3934373Z Beginning upload of artifact content to blob storage
+2026-09-16T03:25:06.4389326Z (node:6593) [DEP0169] DeprecationWarning: `url.parse()` behavior is not standardized and prone to errors that have security implications. Use the WHATWG URL API instead. CVEs are not issued for `url.parse()` vulnerabilities.
+2026-09-16T03:25:07.0587098Z Uploaded bytes 68247
+2026-09-16T03:25:07.1687169Z Finished uploading artifact content to blob storage!
+2026-09-16T03:25:07.1687722Z SHA256 digest of uploaded artifact zip is 14b69317ab0a636077de41195d51374eb68305f4c762fcc739b47f6a31dabffd
+2026-09-16T03:25:07.1690195Z Finalizing artifact upload
+2026-09-16T03:25:07.4537695Z Artifact test-logs-slow-42-attempt-1.zip successfully finalized. Artifact ID 10429546076
+2026-09-16T03:25:07.4539601Z Artifact test-logs-slow-42-attempt-1 has been successfully uploaded! Final size is 68247 bytes. Artifact ID is 10429546076
+2026-09-16T03:25:07.4548461Z Artifact download URL: https://github.com/antiwork/gumroad/actions/runs/35050714980/artifacts/10429546076
+2026-09-16T03:25:07.4727825Z Node 20 is being deprecated. This workflow is running with Node 24 by default. If you need to temporarily use Node 20, you can set the ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION=true environment variable. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
+2026-09-16T03:25:07.4728933Z ##[group]Run actions/upload-artifact@v4
+2026-09-16T03:25:07.4729155Z with:
+2026-09-16T03:25:07.4729341Z   name: flaky-specs-slow-42-attempt-1
+2026-09-16T03:25:07.4729593Z   path: ./test-logs/flaky_specs.log
+2026-09-16T03:25:07.4729817Z   retention-days: 14
+2026-09-16T03:25:07.4730008Z   if-no-files-found: ignore
+2026-09-16T03:25:07.4730216Z   compression-level: 6
+2026-09-16T03:25:07.4730406Z   overwrite: false
+2026-09-16T03:25:07.4730607Z   include-hidden-files: false
+2026-09-16T03:25:07.4730807Z env:
+2026-09-16T03:25:07.4730998Z   COMPOSE_PROJECT_NAME: web_35050714980_1_slow_42
+2026-09-16T03:25:07.4731281Z   WEB_REPO: antiwork/gumroad-web
+2026-09-16T03:25:07.4731529Z ##[endgroup]
+2026-09-16T03:25:07.6727548Z (node:6606) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+2026-09-16T03:25:07.6728327Z (Use `node --trace-deprecation ...` to show where the warning was created)
+2026-09-16T03:25:07.6769277Z With the provided path, there will be 1 file uploaded
+2026-09-16T03:25:07.6772500Z Artifact name is valid!
+2026-09-16T03:25:07.6772743Z Root directory input is valid!
+2026-09-16T03:25:08.1396174Z Beginning upload of artifact content to blob storage
+2026-09-16T03:25:08.1526736Z (node:6606) [DEP0169] DeprecationWarning: `url.parse()` behavior is not standardized and prone to errors that have security implications. Use the WHATWG URL API instead. CVEs are not issued for `url.parse()` vulnerabilities.
+2026-09-16T03:25:08.5668343Z Uploaded bytes 538
+2026-09-16T03:25:08.6762010Z Finished uploading artifact content to blob storage!
+2026-09-16T03:25:08.6763270Z SHA256 digest of uploaded artifact zip is f42381f1609ef5494c960ad8a701d7cc28cd481355a66e42fb195fd2157d4647
+2026-09-16T03:25:08.6764275Z Finalizing artifact upload
+2026-09-16T03:25:08.9569672Z Artifact flaky-specs-slow-42-attempt-1.zip successfully finalized. Artifact ID 10429436535
+2026-09-16T03:25:08.9571234Z Artifact flaky-specs-slow-42-attempt-1 has been successfully uploaded! Final size is 538 bytes. Artifact ID is 10429436535
+2026-09-16T03:25:08.9572909Z Artifact download URL: https://github.com/antiwork/gumroad/actions/runs/35050714980/artifacts/10429436535
+2026-09-16T03:25:08.9776825Z ##[group]Run docker compose -f docker/docker-compose-test-and-ci.yml down -v 2>/dev/null || true
+2026-09-16T03:25:08.9777387Z [36;1mdocker compose -f docker/docker-compose-test-and-ci.yml down -v 2>/dev/null || true[0m
+2026-09-16T03:25:08.9777860Z [36;1mdocker rm -f $(docker ps -aq -f name=web_35050714980_1_slow_42) 2>/dev/null || true[0m
+2026-09-16T03:25:08.9778477Z [36;1mdocker volume rm $(docker volume ls -q -f name=web_35050714980_1_slow_42) 2>/dev/null || true[0m
+2026-09-16T03:25:08.9778918Z [36;1mdocker network rm web_35050714980_1_slow_42_default 2>/dev/null || true[0m
+2026-09-16T03:25:08.9811676Z shell: /usr/bin/bash -e {0}
+2026-09-16T03:25:08.9811895Z env:
+2026-09-16T03:25:08.9812106Z   COMPOSE_PROJECT_NAME: web_35050714980_1_slow_42
+2026-09-16T03:25:08.9812375Z   WEB_REPO: antiwork/gumroad-web
+2026-09-16T03:25:08.9812593Z ##[endgroup]
+2026-09-16T03:25:11.2146510Z Node 20 is being deprecated. This workflow is running with Node 24 by default. If you need to temporarily use Node 20, you can set the ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION=true environment variable. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
+2026-09-16T03:25:11.2147588Z Post job cleanup.
+2026-09-16T03:25:11.2936552Z [command]/usr/bin/git version
+2026-09-16T03:25:11.2936853Z git version 2.55.0
+2026-09-16T03:25:11.2999175Z Temporarily overriding HOME='/home/runner/work/_temp/5cfadc8a-e9f2-40be-ac00-8310b77f68af' before making global git config changes
+2026-09-16T03:25:11.3003414Z Adding repository directory to the temporary git global config as a safe directory
+2026-09-16T03:25:11.3004020Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/gumroad/gumroad
+2026-09-16T03:25:11.3045552Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+2026-09-16T03:25:11.3069923Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+2026-09-16T03:25:11.3329130Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+2026-09-16T03:25:11.3358571Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+2026-09-16T03:25:11.3666521Z [command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+2026-09-16T03:25:11.3700189Z [command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+2026-09-16T03:25:11.4046274Z A job completed hook has been configured by the self-hosted runner administrator
+2026-09-16T03:25:11.4090382Z ##[group]Run '/home/runner/actions-runner/complete-hook.sh'
+2026-09-16T03:25:11.4120187Z shell: /usr/bin/bash --noprofile --norc -e -o pipefail {0}
+2026-09-16T03:25:11.4120677Z ##[endgroup]
+2026-09-16T03:25:11.4277592Z Cleaning up orphan processes
+2026-09-16T03:25:11.5344700Z ##[warning]Node.js 20 is deprecated. The following actions target Node.js 20 but are being forced to run on Node.js 24: actions/checkout@v4, actions/upload-artifact@v4, nick-fields/retry@v3. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
