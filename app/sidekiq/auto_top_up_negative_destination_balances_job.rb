@@ -362,7 +362,7 @@ class AutoTopUpNegativeDestinationBalancesJob
           { stripe_account: request.fetch(:stripe_account_id) }
         )
         transaction = payment.balance_transaction
-        break if transaction.present? || attempt == 2
+        break if transaction.is_a?(Stripe::BalanceTransaction) || attempt == 2
         sleep(2)
       end
       currency = request.fetch(:metadata).fetch(:destination_currency)

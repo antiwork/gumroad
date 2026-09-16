@@ -934,25 +934,27 @@ describe AutoTopUpNegativeDestinationBalancesJob do
       end
     end
 
-    it "confirms credit when the balance transaction appears on the third read" do
-      reads = 0
-      allow(Stripe::Charge).to receive(:retrieve) do |params, _options|
-        reads += 1
-        reads < 3 ? Stripe::Charge.construct_from(balance_transaction: nil) : @destination_payments.fetch(params.fetch(:id))
-      end
-      job = described_class.new
-      allow(job).to receive(:sleep) do
-        expect($redis.get("#{dedupe_key}:unresolved")).to eq("10000")
-        expect($redis.ttl(transfer_key)).to eq(-1)
-      end
+    [nil, "txn_pending"].each do |pending_transaction|
+      it "confirms credit when #{pending_transaction.inspect} expands on the third read" do
+        reads = 0
+        allow(Stripe::Charge).to receive(:retrieve) do |params, _options|
+          reads += 1
+          reads < 3 ? Stripe::Charge.construct_from(balance_transaction: pending_transaction) : @destination_payments.fetch(params.fetch(:id))
+        end
+        job = described_class.new
+        allow(job).to receive(:sleep) do
+          expect($redis.get("#{dedupe_key}:unresolved")).to eq("10000")
+          expect($redis.ttl(transfer_key)).to eq(-1)
+        end
 
-      job.perform
+        job.perform
 
-      expect(job).to have_received(:sleep).with(2).twice
-      expect(Stripe::Charge).to have_received(:retrieve).exactly(3).times
-      expect(StripeTransferInternallyToCreator).to have_received(:transfer_funds_to_account).once
-      expect($redis.get(dedupe_key)).to eq("10000:#{row.id}")
-      expect($redis.get("#{dedupe_key}:unresolved")).to be_nil
+        expect(job).to have_received(:sleep).with(2).twice
+        expect(Stripe::Charge).to have_received(:retrieve).exactly(3).times
+        expect(StripeTransferInternallyToCreator).to have_received(:transfer_funds_to_account).once
+        expect($redis.get(dedupe_key)).to eq("10000:#{row.id}")
+        expect($redis.get("#{dedupe_key}:unresolved")).to be_nil
+      end
     end
 
     [nil, "txn_pending", { object: "balance_transaction", currency: "eur", net: 10000 },
@@ -962,7 +964,7 @@ describe AutoTopUpNegativeDestinationBalancesJob do
 
         described_class.new.perform
 
-        expect(Stripe::Charge).to have_received(:retrieve).exactly(transaction.nil? ? 3 : 1).times
+        expect(Stripe::Charge).to have_received(:retrieve).exactly(transaction.is_a?(Hash) ? 1 : 3).times
         expect(StripeTransferInternallyToCreator).to have_received(:transfer_funds_to_account).once
         expect($redis.get(dedupe_key)).to be_nil
         expect($redis.get("#{dedupe_key}:unresolved")).to eq("10000")
