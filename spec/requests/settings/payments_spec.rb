@@ -790,6 +790,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
           create(
             :user_compliance_info_business,
             user: @user,
+            business_type: UserComplianceInfo::BusinessTypes::SINGLE_MEMBER_LLC,
             business_phone: "+15052426789",
             phone: "+15022541982",
             birthday: Date.new(1980, 1, 1),
@@ -809,6 +810,27 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         compliance_info = @user.reload.alive_user_compliance_info
         expect(compliance_info.business_street_address).to eq("456 Updated Business Lane")
         expect(compliance_info.business_tax_id.decrypt("1234")).to eq("000000000")
+      end
+      it "requires a legacy LLC to choose its member count before saving" do
+        previous_info = @user.alive_user_compliance_info
+        legacy_info = previous_info.dup
+        legacy_info.business_type = UserComplianceInfo::BusinessTypes::LLC
+        ActiveRecord::Base.transaction do
+          previous_info.mark_deleted!
+          legacy_info.save!
+        end
+
+        visit settings_payments_path
+        expect(page).to have_select("Type", selected: "Type")
+        click_on("Update settings")
+        expect(page).to have_text("Please complete the required fields below: Type.")
+        expect(@user.reload.alive_user_compliance_info.business_type).to eq("llc")
+
+        select "LLC (multi-member)", from: "Type"
+        click_on("Update settings")
+        expect(page).to have_alert(text: "Thanks! You're all set.")
+        expect(@user.reload.alive_user_compliance_info.business_type).to eq("multi_member_llc")
+        expect(@user.alive_user_compliance_info.business_tax_id.decrypt("1234")).to eq("000000000")
       end
     end
 
