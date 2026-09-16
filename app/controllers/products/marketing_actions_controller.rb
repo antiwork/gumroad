@@ -74,7 +74,7 @@ class Products::MarketingActionsController < Sellers::BaseController
   end
 
   private
-    def enabled? = Feature.active?(:auto_marketing, current_seller)
+    def enabled? = Marketing::Eligibility.enabled_for?(current_seller)
 
     # Nested member routes put the action id in :id, so the concern's :id-first lookup does not apply.
     def fetch_product

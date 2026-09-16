@@ -36,10 +36,12 @@ module Feature
   end
 
   def active?(feature_name, actor = nil)
+    return Marketing::Eligibility.enabled_for?(actor) if feature_name.to_sym == :auto_marketing
+
     Flipper.enabled?(feature_name, actor)
   end
 
   def inactive?(feature_name, actor = nil)
-    !Flipper.enabled?(feature_name, actor)
+    !active?(feature_name, actor)
   end
 end

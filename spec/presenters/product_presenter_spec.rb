@@ -719,10 +719,24 @@ describe ProductPresenter do
     end
 
     context "when the auto_marketing feature flag is enabled for the seller" do
-      before { Feature.activate_user(:auto_marketing, product.user) }
+      let(:holdout) { false }
+
+      before do
+        create(:marketing_holdout_assignment, user: product.user, marketing_holdout: holdout)
+        Feature.activate_user(:auto_marketing, product.user)
+      end
 
       it "exposes auto_marketing_enabled: true in edit_props" do
         expect(presenter.edit_props[:auto_marketing_enabled]).to eq(true)
+      end
+
+      context "when the seller is in the holdout" do
+        let(:holdout) { true }
+
+        it "never exposes the launch card even at 100 percent with an actor override" do
+          Feature.activate_percentage(:auto_marketing, 100)
+          expect(presenter.edit_props[:auto_marketing_enabled]).to eq(false)
+        end
       end
     end
 
