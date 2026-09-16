@@ -2564,7 +2564,7 @@ describe Settings::PaymentsController, :vcr, type: :controller, inertia: true do
         expect(response).to redirect_to settings_payments_url
       end
 
-      it "keeps the reassuring redirect while Stripe still lists a due requirement" do
+      it "still opens a Stripe AccountLink while Stripe lists a due requirement" do
         merchant_account = StripeMerchantAccountManager.create_account(user, passphrase: "1234")
         allow(Stripe::Account).to receive(:retrieve).with(merchant_account.charge_processor_merchant_id).and_return(
           Stripe::Account.construct_from(
