@@ -43,7 +43,7 @@ const ownerWithoutIdNumber = {
   requirements_currently_due: ["dob.day", "dob.month", "dob.year", "address.line1", "relationship.title"],
 };
 
-const renderSection = (owners: unknown[]) => {
+const renderSection = (owners: unknown[], defaultCountry = "GB") => {
   vi.stubGlobal(
     "fetch",
     vi.fn(() =>
@@ -57,9 +57,9 @@ const renderSection = (owners: unknown[]) => {
   );
   return render(
     <BeneficialOwnersSection
-      countries={{ GB: "United Kingdom" }}
+      countries={{ GB: "United Kingdom", AE: "United Arab Emirates" }}
       states={{ us: [], ca: [], au: [], mx: [], ae: [], ir: [], br: [], jp: [] }}
-      defaultCountry="GB"
+      defaultCountry={defaultCountry}
       minDobYear={1900}
       isFormDisabled={false}
     />,
@@ -88,5 +88,22 @@ describe("BeneficialOwnersSection ID number requirement", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Add beneficial owner" }));
 
     await waitFor(() => expect(idNumberInput().hasAttribute("required")).toBe(true));
+  });
+});
+
+describe("BeneficialOwnersSection nationality note", () => {
+  // The select silently omits four nationalities; without this the owner cannot tell that from a bug.
+  it("says why the sanctioned nationalities are missing when the field is shown", async () => {
+    renderSection([], "AE");
+    fireEvent.click(await screen.findByRole("button", { name: "Add beneficial owner" }));
+
+    expect(await screen.findByText(/Nationals of Cuba, Iran, North Korea and Syria/u)).toBeTruthy();
+  });
+
+  it("does not carry the note for a country that does not ask for nationality", async () => {
+    renderSection([], "GB");
+    fireEvent.click(await screen.findByRole("button", { name: "Add beneficial owner" }));
+
+    expect(screen.queryByText(/Nationals of Cuba/u)).toBeNull();
   });
 });

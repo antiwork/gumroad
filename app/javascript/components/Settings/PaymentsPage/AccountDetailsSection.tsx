@@ -1318,6 +1318,9 @@ const AccountDetailsSection = ({
               </option>
             ))}
           </Select>
+          <FieldsetDescription>
+            Nationals of Cuba, Iran, North Korea and Syria cannot be verified, so their nationalities are not listed.
+          </FieldsetDescription>
         </Fieldset>
       ) : null}
       {needsIndividualTaxId && individualTaxIdConfig ? (

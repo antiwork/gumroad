@@ -222,4 +222,21 @@ describe("AccountDetailsSection nationality field", () => {
       expect(screen.getByLabelText("Nationality")).toBeTruthy();
     }
   });
+
+  // The select silently omits four nationalities; without this the seller cannot tell that from a bug.
+  it("says why the sanctioned nationalities are missing", () => {
+    renderSection(makeUser({ country_code: "AE" }));
+
+    expect(
+      screen.getByText(
+        "Nationals of Cuba, Iran, North Korea and Syria cannot be verified, so their nationalities are not listed.",
+      ),
+    ).toBeTruthy();
+  });
+
+  it("does not carry the note when the field is not rendered", () => {
+    renderSection(makeUser({ country_code: "GR", has_outstanding_nationality_requirement: false }));
+
+    expect(screen.queryByText(/Nationals of Cuba/u)).toBeNull();
+  });
 });
