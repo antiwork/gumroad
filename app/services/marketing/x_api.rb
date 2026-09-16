@@ -14,6 +14,13 @@ class Marketing::XApi
     def write_forbidden? = [401, 403].include?(status)
   end
 
+  # A dropped or timed-out connection raises instead of returning a response, and X may
+  # have accepted the tweet before it died, so it is reported with a nil status: the
+  # caller treats every non-201 as an unknown result rather than retrying it.
+  NETWORK_ERRORS = [
+    Timeout::Error, EOFError, SocketError, SystemCallError, OpenSSL::SSL::SSLError,
+  ].freeze
+
   def self.post_tweet(user:, text:)
     header = SimpleOAuth::Header.new(:post, TWEETS_URL, {},
                                      consumer_key: TWITTER_APP_ID, consumer_secret: TWITTER_APP_SECRET,
@@ -22,5 +29,7 @@ class Marketing::XApi
                                          headers: { "Authorization" => header.to_s, "Content-Type" => "application/json" },
                                          timeout: 15)
     Response.new(status: response.code, body: response.parsed_response.is_a?(Hash) ? response.parsed_response : {})
+  rescue *NETWORK_ERRORS
+    Response.new(status: nil, body: {})
   end
 end

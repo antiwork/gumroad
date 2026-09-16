@@ -24,15 +24,28 @@ class Products::MarketingActionsController < Sellers::BaseController
     authorize @action
     return head :not_found unless enabled?
 
-    @action.copy = params[:copy] if params.key?(:copy)
-    if @action.copy_changed? && !@action.valid?
-      return render json: { success: false, error: @action.errors.full_messages.to_sentence }, status: :unprocessable_entity
-    end
-    unless @action.approve
-      return render json: { success: false, error: "This post can no longer be changed." }, status: :unprocessable_entity
+    # Same row lock as the executor's claim: without it a second request can approve
+    # from a stale instance after the first one has already claimed and posted.
+    outcome = @action.with_lock do
+      # The attempt is already claimed, so the copy is frozen — but the client's
+      # approve-then-execute sequence has to keep going, or a stuck attempt dead-ends.
+      next :claimed if @action.queued?
+
+      @action.copy = params[:copy] if params.key?(:copy)
+      next :invalid if @action.copy_changed? && !@action.valid?
+      next :approved if @action.approve
+
+      :closed
     end
 
-    render json: @action
+    case outcome
+    when :invalid
+      render json: { success: false, error: @action.errors.full_messages.to_sentence }, status: :unprocessable_entity
+    when :closed
+      render json: { success: false, error: "This post can no longer be changed." }, status: :unprocessable_entity
+    else
+      render json: @action
+    end
   end
 
   def execute
@@ -49,7 +62,11 @@ class Products::MarketingActionsController < Sellers::BaseController
     authorize @action
     return head :not_found unless enabled?
 
-    unless @action.cancel
+    # with_lock reloads under the row lock, so a cancellation that arrives after the
+    # executor's claim sees :queued and is refused instead of overwriting it.
+    cancelled = @action.with_lock { @action.cancel }
+
+    unless cancelled
       return render json: { success: false, error: "This post can no longer be cancelled." }, status: :unprocessable_entity
     end
 

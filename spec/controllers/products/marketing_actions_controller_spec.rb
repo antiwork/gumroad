@@ -94,6 +94,31 @@ describe Products::MarketingActionsController do
       expect(action.reload).to be_cancelled
     end
 
+    it "refuses to cancel an action the executor has claimed" do
+      action.update!(status: "queued", queued_at: Time.current)
+
+      post :cancel, params: { product_id: product.unique_permalink, id: action.external_id }, as: :json
+
+      expect(response).to have_http_status(:unprocessable_entity)
+      expect(action.reload).to be_queued
+    end
+
+    it "keeps a claimed action's copy frozen and still lets the client resolve the attempt" do
+      action.update!(status: "queued", queued_at: 10.minutes.ago)
+
+      post :approve, params: { product_id: product.unique_permalink, id: action.external_id, copy: "Edited" }, as: :json
+
+      expect(response).to have_http_status(:ok)
+      expect(action.reload).to be_queued
+      expect(action.copy).to eq("Original")
+
+      post :execute, params: { product_id: product.unique_permalink, id: action.external_id }, as: :json
+
+      expect(response).to have_http_status(:ok)
+      expect(response.parsed_body["action"]).to include("status" => "failed", "error_code" => "x_post_result_unknown")
+      expect(WebMock).not_to have_requested(:post, Marketing::XApi::TWEETS_URL)
+    end
+
     it "forbids another seller's team" do
       other_product = create(:product)
       other_action = create(:marketing_action, user: other_product.user, link: other_product, copy: "x")

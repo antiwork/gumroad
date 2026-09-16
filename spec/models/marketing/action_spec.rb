@@ -43,12 +43,20 @@ describe Marketing::Action do
       expect(action.cancel).to be(false)
     end
 
-    it "fails from approved or queued and cancels from anything open" do
+    it "fails from approved or queued and cancels anything not yet claimed" do
       action.approve!
       expect(action.mark_failed).to be(true)
       other = create(:marketing_action, user: seller, link: product)
       expect(other.cancel).to be(true)
       expect(other.mark_failed).to be(false)
+    end
+
+    it "refuses to cancel an action the executor has claimed" do
+      action.approve!
+      action.queue!
+
+      expect(action.cancel).to be(false)
+      expect(action).to be_queued
     end
 
     it "stamps queued_at on queue and reopens the action when the connection cannot write" do

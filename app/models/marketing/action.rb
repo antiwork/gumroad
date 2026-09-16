@@ -40,7 +40,9 @@ class Marketing::Action < ApplicationRecord
       transition [:approved, :queued] => :approved
     end
     event :cancel do
-      transition [:recommended, :approved, :queued] => :cancelled
+      # Not from :queued: the claim has already been committed and the outbound call
+      # cannot be recalled, so a cancellation there would only hide a post that still lands.
+      transition [:recommended, :approved] => :cancelled
     end
 
     before_transition to: :approved, do: ->(action) { action.approved_at = Time.current }

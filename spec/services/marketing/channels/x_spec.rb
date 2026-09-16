@@ -108,6 +108,16 @@ describe Marketing::Channels::X do
     expect(result.action.error_code).to eq("x_post_result_unknown")
   end
 
+  it "records a dropped or timed-out connection as unknown instead of raising" do
+    WebMock.stub_request(:post, Marketing::XApi::TWEETS_URL).to_timeout
+
+    result = described_class.new(action).call
+
+    expect(result.action).to be_failed
+    expect(result.action.error_code).to eq("x_post_result_unknown")
+    expect(WebMock).to have_requested(:post, Marketing::XApi::TWEETS_URL).once
+  end
+
   it "clears an earlier write-permission failure once the post lands" do
     stub_tweets(status: 403, body: {})
     described_class.new(action).call
