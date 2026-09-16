@@ -3,7 +3,7 @@
 #
 # A skipped deploy must leave a Buildkite annotation naming the reason and the commit, and
 # must still exit 0 — the skip is deliberate, so the build stays green; only the signal was
-# missing. Extracts the two functions under test from the real script (no copy to drift) and
+# missing. Extracts the functions under test from the real script (no copy to drift) and
 # drives them with a stubbed curl / buildkite-agent.
 set -uo pipefail
 
@@ -11,20 +11,36 @@ SCRIPT="$(cd "$(dirname "$0")/.." && pwd)/.buildkite/scripts/deploy_production.s
 [ -f "$SCRIPT" ] || { echo "FAIL: $SCRIPT not found"; exit 1; }
 
 HARNESS=$(mktemp)
-python3 - "$SCRIPT" "$HARNESS" <<'PY'
+# One start..end span would also swallow the top-level lines between the functions (the
+# relevance guard), and the test would then execute them: `skip_if_production_noop` is a
+# no-op only while BUILDKITE_BRANCH is unset, and sourcing the relevance script needs the
+# repo root as cwd. Extract each function on its own so the harness is just what it says.
+if ! python3 - "$SCRIPT" "$HARNESS" <<'PY'
 import pathlib, sys
+
+FUNCTIONS = ("logger", "announce_skip", "wait_for_healthcheck")
+
+def body(src, name):
+    start = next(i for i, line in enumerate(src) if line.startswith(f"{name}() {{"))
+    depth = 0
+    for i in range(start, len(src)):
+        depth += src[i].count("{") - src[i].count("}")
+        if depth == 0 and i > start:
+            return src[start:i + 1]
+    raise SystemExit(f"could not find the end of {name}")
+
 src = pathlib.Path(sys.argv[1]).read_text().splitlines()
-start = next(i for i, l in enumerate(src) if l.startswith("logger() {"))
-w = next(i for i, l in enumerate(src) if l.startswith("wait_for_healthcheck() {"))
-depth, end = 0, None
-for i in range(w, len(src)):
-    depth += src[i].count("{") - src[i].count("}")
-    if depth == 0 and i > w:
-        end = i
-        break
-assert end, "could not find the end of wait_for_healthcheck"
-pathlib.Path(sys.argv[2]).write_text("\n".join(src[start:end + 1]) + "\n")
+extracted = [line for name in FUNCTIONS for line in body(src, name)]
+pathlib.Path(sys.argv[2]).write_text("\n".join(extracted) + "\n")
 PY
+then
+  echo "FAIL: could not extract the functions under test from $SCRIPT"
+  exit 1
+fi
+grep -qE 'skip_if_production_noop|deploy_relevance' "$HARNESS" && {
+  echo "FAIL: harness picked up production-only lines from $SCRIPT"
+  exit 1
+}
 
 BIN=$(mktemp -d)
 export ANN_FILE=$(mktemp) STUB_STATUS=200
