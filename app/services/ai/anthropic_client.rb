@@ -197,75 +197,73 @@ class Ai::AnthropicClient
   def stream_messages(system:, messages:, tools: nil, max_tokens: DEFAULT_MAX_TOKENS, thinking: nil, ttft_deadline: nil, on_discard_streamed_text: nil, &on_text)
     yielded_any = false
 
-    begin
-      with_vercel_model_fallback(yielded: -> { yielded_any }) do
-        # The replay is the model we failed over TO; bounding its first output too would only move
-        # the deadline onto the path that exists to be fast.
-        deadline = @using_fallback_model ? nil : ttft_deadline
-        first_byte_marker = FirstByteMarker.new if deadline.present?
-        deadline_stalled = false
+    with_vercel_model_fallback(yielded: -> { yielded_any }) do
+      # The replay is the model we failed over TO; bounding its first output too would only move
+      # the deadline onto the path that exists to be fast.
+      deadline = @using_fallback_model ? nil : ttft_deadline
+      first_byte_marker = FirstByteMarker.new if deadline.present?
+      deadline_stalled = false
 
-        body = request_body(system:, messages:, tools:, max_tokens:, stream: true, thinking:)
-        with_retries(retryable: -> { !yielded_any && !deadline_stalled }, streamed: true) do |trace|
-          text = +""
-          blocks = {}
-          stop_reason = nil
+      body = request_body(system:, messages:, tools:, max_tokens:, stream: true, thinking:)
+      with_retries(retryable: -> { !yielded_any && !deadline_stalled }, streamed: true) do |trace|
+        text = +""
+        blocks = {}
+        stop_reason = nil
 
-          response = http(ttft_deadline: deadline, first_byte_marker:).post(api_url, json: body)
-          trace.response = response
-          raise_for_status!(response, kind: "stream")
+        response = http(ttft_deadline: deadline, first_byte_marker:).post(api_url, json: body)
+        trace.response = response
+        raise_for_status!(response, kind: "stream")
 
-          each_sse_event(response.body) do |event, data|
-            case event
-            when "message_start"
-              # Only stream event that names the model actually serving — fallbacks are invisible otherwise.
-              trace.usage = usage_from(data.dig("message", "usage"))
-              trace.provider_hint = provider_hint_from(data["message"])
-              log_served_model(data.dig("message", "model"))
-            when "content_block_start"
-              index = data["index"]
-              block = data["content_block"] || {}
-              if block["type"] == "tool_use"
-                blocks[index] = { type: "tool_use", id: block["id"], name: block["name"], json: +"" }
-              else
-                blocks[index] = { type: "text" }
-              end
-            when "content_block_delta"
-              first_byte_marker&.arrived!
-              mark_first_byte!(trace)
-              delta = data["delta"] || {}
-              case delta["type"]
-              when "text_delta"
-                chunk = delta["text"].to_s
-                next if chunk.empty?
-                text << chunk
-                yielded_any = true
-                on_text&.call(chunk)
-              when "input_json_delta"
-                index = data["index"]
-                blocks[index][:json] << delta["partial_json"].to_s if blocks[index]
-              end
-            when "message_delta"
-              # Output tokens arrive here and are cumulative; keep the input/cache counts from message_start.
-              trace.usage.merge!(usage_from(data["usage"]))
-              stop_reason = data.dig("delta", "stop_reason") || stop_reason
-            when "error"
-              raise embedded_error(data, kind: "stream")
+        each_sse_event(response.body) do |event, data|
+          case event
+          when "message_start"
+            # Only stream event that names the model actually serving — fallbacks are invisible otherwise.
+            trace.usage = usage_from(data.dig("message", "usage"))
+            trace.provider_hint = provider_hint_from(data["message"])
+            log_served_model(data.dig("message", "model"))
+          when "content_block_start"
+            index = data["index"]
+            block = data["content_block"] || {}
+            if block["type"] == "tool_use"
+              blocks[index] = { type: "tool_use", id: block["id"], name: block["name"], json: +"" }
+            else
+              blocks[index] = { type: "text" }
             end
+          when "content_block_delta"
+            first_byte_marker&.arrived!
+            mark_first_byte!(trace)
+            delta = data["delta"] || {}
+            case delta["type"]
+            when "text_delta"
+              chunk = delta["text"].to_s
+              next if chunk.empty?
+              text << chunk
+              yielded_any = true
+              on_text&.call(chunk)
+            when "input_json_delta"
+              index = data["index"]
+              blocks[index][:json] << delta["partial_json"].to_s if blocks[index]
+            end
+          when "message_delta"
+            # Output tokens arrive here and are cumulative; keep the input/cache counts from message_start.
+            trace.usage.merge!(usage_from(data["usage"]))
+            stop_reason = data.dig("delta", "stop_reason") || stop_reason
+          when "error"
+            raise embedded_error(data, kind: "stream")
           end
-
-          Result.new(text:, tool_uses: assemble_tool_uses(blocks, stop_reason:), stop_reason:)
-        rescue TtftDeadlineError
-          # The attempt produced nothing. Retrying the model that stalled spends the deadline again,
-          # so veto the retry and let #with_vercel_model_fallback re-issue on the fallback model.
-          deadline_stalled = true
-          raise
-        rescue HTTP::Error => e
-          raise TransientError, "Anthropic network error: #{e.message}"
         end
+
+        Result.new(text:, tool_uses: assemble_tool_uses(blocks, stop_reason:), stop_reason:)
+      rescue TtftDeadlineError
+        # The attempt produced nothing. Retrying the model that stalled spends the deadline again,
+        # so veto the retry and let #with_vercel_model_fallback re-issue on the fallback model.
+        deadline_stalled = true
+        raise
+      rescue HTTP::Error => e
+        raise TransientError, "Anthropic network error: #{e.message}"
       end
     rescue UnreadableToolCallError => e
-      # Streamed retries exhausted on a lossy channel; only a buffered replay can recover.
+      # Keep recovery inside the model fallback so its gateway and credentials remain selected.
       # Discard already-yielded text first or the replay doubles the reply on screen.
       raise if yielded_any && on_discard_streamed_text.nil?
 
@@ -535,7 +533,7 @@ class Ai::AnthropicClient
       body[:tools] = cacheable_tools(tools) if tools.present?
       # OpenRouter's Anthropic-compatible endpoint accepts a `fallbacks` list. Anthropic rejects
       # the unknown parameter; Vercel uses providerOptions.gateway.models instead.
-      body[:fallbacks] = [{ model: fallback_model }] if openrouter?
+      body[:fallbacks] = [{ model: fallback_model }] if openrouter? && !@using_fallback_model
       if vercel? && !@using_fallback_model && fallback_model.present?
         body[:providerOptions] = { gateway: { models: [fallback_model] } }
       end
@@ -623,6 +621,7 @@ class Ai::AnthropicClient
     def resolved_gateway
       case @preferred_gateway
       when :vercel
+        return :openrouter if @using_fallback_model && self.class.openrouter_configured?
         return :vercel if vercel_configured?
         return :openrouter if self.class.openrouter_configured?
 
@@ -671,8 +670,8 @@ class Ai::AnthropicClient
       @using_fallback_model ? fallback_model : model
     end
 
-    # Vercel failover is providerOptions.gateway.models; if that still errors, replay once on the
-    # fallback model. StoreAgentService memoizes this client — do not leave the replay flag set.
+    # Use OpenRouter for the replay when configured so a Vercel billing failure cannot block both models.
+    # StoreAgentService memoizes this client; restore the primary route after each call.
     def with_vercel_model_fallback(yielded: -> { false })
       yield
     rescue Error => e
@@ -680,13 +679,13 @@ class Ai::AnthropicClient
       raise if yielded.call
       raise unless vercel? && !@using_fallback_model && fallback_model.present? && fallback_model != model
 
-      Rails.logger.warn(
-        "Anthropic Vercel primary failed (#{e.class}: #{e.message}); " \
-        "replaying fallback requested=#{model} gateway=#{gateway_name}"
-      )
       previous = @using_fallback_model
       @using_fallback_model = true
       begin
+        Rails.logger.warn(
+          "Anthropic Vercel primary failed (#{e.class}: #{e.message}); " \
+          "replaying fallback requested=#{model} gateway=#{gateway_name}"
+        )
         yield
       ensure
         @using_fallback_model = previous

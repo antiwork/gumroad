@@ -624,7 +624,115 @@ describe Ai::AnthropicClient do
       expect(client.gateway_name).to eq("openrouter")
     end
 
-    it "replays the Opus fallback model on the same Vercel URL after a non-retryable error" do
+    context "when OpenRouter is configured" do
+      let(:credit_error) { { status: 402, body: { error: { message: "A positive credit balance is required" } }.to_json } }
+      let(:reply) { { "model" => "anthropic/claude-opus-5", "content" => [{ "type" => "text", "text" => "ok" }], "stop_reason" => "end_turn" } }
+
+      before do
+        allow(GlobalConfig).to receive(:get).with("OPENROUTER_API_KEY").and_return("sk-or-test")
+      end
+
+      it "uses OpenRouter credentials and format for the fallback, then restores Vercel for the next call" do
+        allow(Rails.logger).to receive(:warn)
+        primary = stub_request(:post, vercel_url)
+          .with(headers: { "x-api-key" => "sk-vercel-test" }, body: hash_including("model" => "deepseek/deepseek-v4.1-flash"))
+          .to_return(credit_error, { status: 200, body: reply.merge("model" => "deepseek/deepseek-v4.1-flash").to_json, headers: { "Content-Type" => "application/json" } })
+        captured = nil
+        fallback = stub_request(:post, openrouter_url)
+          .with(headers: { "x-api-key" => "sk-or-test" }) { |request| captured = JSON.parse(request.body); true }
+          .to_return(status: 200, body: reply.to_json, headers: { "Content-Type" => "application/json" })
+
+        result = client.messages(system: "s", messages: [{ role: "user", content: "x" }], thinking: { type: "disabled" })
+
+        expect(result.text).to eq("ok")
+        expect(captured["model"]).to eq("anthropic/claude-opus-5")
+        expect(captured.keys).not_to include("providerOptions", "fallbacks", "thinking")
+        expect(client.call_metrics.map { |call| call.slice(:gateway, :status) }).to eq(
+          [{ gateway: "vercel", status: 402 }, { gateway: "openrouter", status: 200 }]
+        )
+        expect(Rails.logger).to have_received(:warn).with(a_string_matching(/replaying fallback.*gateway=openrouter/))
+
+        expect(client.messages(system: "s", messages: [{ role: "user", content: "y" }]).text).to eq("ok")
+        expect(primary).to have_been_requested.twice
+        expect(fallback).to have_been_requested.once
+        expect(client.gateway_name).to eq("vercel")
+      end
+
+      it "streams the OpenRouter fallback when Vercel rejects a request for insufficient credits" do
+        primary = stub_request(:post, vercel_url).to_return(credit_error)
+        fallback = stub_request(:post, openrouter_url)
+          .with(headers: { "x-api-key" => "sk-or-test" }, body: hash_including("model" => "anthropic/claude-opus-5", "stream" => true))
+          .to_return(status: 200, body: sse_stream("ok"), headers: { "Content-Type" => "text/event-stream" })
+        chunks = []
+
+        result = client.stream_messages(system: "s", messages: [{ role: "user", content: "x" }]) { |text| chunks << text }
+
+        expect(result.text).to eq("ok")
+        expect(result.stop_reason).to eq("end_turn")
+        expect(chunks).to eq(["ok"])
+        expect(primary).to have_been_requested.once
+        expect(fallback).to have_been_requested.once
+        expect(client.call_metrics.map { |call| call[:gateway] }).to eq(%w[vercel openrouter])
+      end
+
+      it "keeps unreadable stream recovery on OpenRouter before restoring the primary gateway" do
+        allow(client).to receive(:sleep)
+        primary = stub_request(:post, vercel_url).to_return(credit_error)
+        corrupted = [
+          ["content_block_start", { index: 0, content_block: { type: "tool_use", id: "toolu_1", name: "api_read" } }],
+          ["content_block_delta", { index: 0, delta: { type: "input_json_delta", partial_json: "not-json" } }],
+          ["message_delta", { delta: { stop_reason: "tool_use" } }],
+        ].map { |event, data| "event: #{event}\ndata: #{data.to_json}\n\n" }.join
+        streamed = stub_request(:post, openrouter_url)
+          .with(headers: { "x-api-key" => "sk-or-test" }, body: hash_including("model" => "anthropic/claude-opus-5", "stream" => true))
+          .to_return(status: 200, body: corrupted, headers: { "Content-Type" => "text/event-stream" })
+        buffered = stub_request(:post, openrouter_url)
+          .with(headers: { "x-api-key" => "sk-or-test" }, body: hash_including("model" => "anthropic/claude-opus-5", "stream" => false))
+          .to_return(status: 200, body: reply.to_json, headers: { "Content-Type" => "application/json" })
+        chunks = []
+
+        result = client.stream_messages(system: "s", messages: [{ role: "user", content: "x" }]) { |text| chunks << text }
+
+        expect(result.text).to eq("ok")
+        expect(chunks).to eq(["ok"])
+        expect(primary).to have_been_requested.once
+        expect(streamed).to have_been_requested.times(described_class::MAX_ATTEMPTS)
+        expect(buffered).to have_been_requested.once
+        expect(client.call_metrics.map { |call| call[:gateway] }).to eq(%w[vercel openrouter openrouter])
+        expect(client.gateway_name).to eq("vercel")
+      end
+
+      it "raises an OpenRouter failure once and restores the primary gateway" do
+        primary = stub_request(:post, vercel_url).to_return(credit_error)
+        fallback = stub_request(:post, openrouter_url)
+          .to_return(status: 401, body: { error: { message: "Invalid OpenRouter key" } }.to_json)
+
+        expect { client.messages(system: "s", messages: [{ role: "user", content: "x" }]) }
+          .to raise_error(described_class::Error, /Invalid OpenRouter key/)
+
+        expect(primary).to have_been_requested.once
+        expect(fallback).to have_been_requested.once
+        expect(client.gateway_name).to eq("vercel")
+      end
+
+      it "does not replay on OpenRouter after streaming text to the caller" do
+        stream = "event: content_block_start\ndata: #{{ index: 0, content_block: { type: "text" } }.to_json}\n\n" \
+                 "event: content_block_delta\ndata: #{{ index: 0, delta: { type: "text_delta", text: "partial" } }.to_json}\n\n" \
+                 "event: error\ndata: #{{ error: { type: "api_error", message: "Interrupted" } }.to_json}\n\n"
+        primary = stub_request(:post, vercel_url)
+          .to_return(status: 200, body: stream, headers: { "Content-Type" => "text/event-stream" })
+        chunks = []
+
+        expect { client.stream_messages(system: "s", messages: [{ role: "user", content: "x" }]) { |text| chunks << text } }
+          .to raise_error(described_class::TransientError, /Interrupted/)
+
+        expect(chunks).to eq(["partial"])
+        expect(primary).to have_been_requested.once
+        expect(WebMock).not_to have_requested(:post, openrouter_url)
+      end
+    end
+
+    it "replays the Opus fallback on Vercel when OpenRouter is not configured" do
       stub_request(:post, vercel_url)
         .with { |request| JSON.parse(request.body)["model"] == "deepseek/deepseek-v4.1-flash" }
         .to_return(status: 400, body: { error: { message: "unavailable" } }.to_json)
