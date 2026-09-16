@@ -418,7 +418,7 @@ class Purchase
     end
   end
 
-  def refund_gumroad_taxes!(refunding_user_id:, note: nil, business_vat_id: nil)
+  def refund_gumroad_taxes!(refunding_user_id:, note: nil, business_vat_id: nil, vat_exempt_territory: false)
     gumroad_tax_refundable_cents = self.gumroad_tax_refundable_cents
     if stripe_refunded || gumroad_tax_refundable_cents <= 0
       # Populate a user-facing message so callers that render errors.full_messages
@@ -498,6 +498,7 @@ class Purchase
         # Store VAT ID on subscription so future recurring charges are automatically VAT-exempt.
         # Use the pre-reload instance: callers may hold it and read business_vat_id in memory.
         subscription_to_update&.update_business_vat_id!(business_vat_id) if business_vat_id.present?
+        subscription_to_update&.mark_vat_exempt_territory! if vat_exempt_territory
       end
       true
     rescue ChargeProcessorAlreadyRefundedError => e

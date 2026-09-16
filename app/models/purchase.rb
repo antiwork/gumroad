@@ -4066,6 +4066,12 @@ class Purchase < ApplicationRecord
     get_usd_cents(displayed_currency, displayed_price_cents, rate: fixed_rate)
   end
 
+  # Read from the subscription, not an in-memory attribute, so reloaded purchases (receipt
+  # previews, mandate caps) see the same exemption the renewal charge will.
+  def vat_exempt_territory?
+    subscription&.vat_exempt_territory? == true
+  end
+
   def indian_card_mandate_amount_for_billing_info(billing_info, price_cents, buyer_vat_id: business_vat_id)
     info = billing_info.to_h.symbolize_keys
     country = Compliance::Countries.find_by_name(info[:country])&.alpha2 || info[:country]
@@ -4081,6 +4087,7 @@ class Purchase < ApplicationRecord
         country:,
         state: info[:state],
         ip_address:,
+        **vat_exempt_territory_location,
       },
       buyer_vat_id:,
       from_discover: was_discover_fee_charged?
@@ -5362,6 +5369,10 @@ class Purchase < ApplicationRecord
       GUMROAD_FLAT_FEE_PER_THOUSAND
     end
 
+    def vat_exempt_territory_location
+      vat_exempt_territory? ? { vat_exempt_territory: true } : {}
+    end
+
     def calculate_taxes
       return unless self.price_cents
       return if price_cents == 0
@@ -5386,7 +5397,7 @@ class Purchase < ApplicationRecord
                                           price_cents:,
                                           shipping_cents: shipping_cents.to_i,
                                           quantity:,
-                                          buyer_location: { postal_code:, country: country_code, state:, ip_address: },
+                                          buyer_location: { postal_code:, country: country_code, state:, ip_address:, **vat_exempt_territory_location },
                                           buyer_vat_id: business_vat_id,
                                           from_discover: was_product_recommended)
 
