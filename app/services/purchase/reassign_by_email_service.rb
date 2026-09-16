@@ -33,19 +33,29 @@ class Purchase::ReassignByEmailService
 
     purchase_id_set = purchases.map(&:id).to_set
 
-    # Every purchase this service may mutate, including original subscription
-    # purchases that are not themselves matched by from_email but get reassigned
-    # alongside a recurring charge.
+    # Unmatched originals swept along with a recurring charge count toward the
+    # fingerprint guard; a third party's original (gift sender) stays put and does not.
     mutable_purchases = purchases.dup
     mutable_purchase_id_set = purchase_id_set.dup
+    sweepable_original_purchase_ids = Set.new
     purchases.each do |purchase|
       next unless purchase.subscription.present? && !purchase.is_original_subscription_purchase?
 
       original_purchase = purchase.original_purchase
-      if original_purchase.present? && !mutable_purchase_id_set.include?(original_purchase.id)
-        mutable_purchases << original_purchase
-        mutable_purchase_id_set.add(original_purchase.id)
+      next if original_purchase.blank? || mutable_purchase_id_set.include?(original_purchase.id)
+
+      unless same_requester?(original_purchase, purchase)
+        # A gift the requester received legitimately sits behind someone else's original.
+        # Anything else would move the subscription while its original stays with a
+        # third address, so stop before mutating anything.
+        next if recipient_gift(purchase.subscription).present?
+
+        return Result.new(success: false, reassigned_purchase_ids: [], reason: :ambiguous_ownership, error_message: "A subscription's original purchase could not be matched to this email and requires manual review")
       end
+
+      mutable_purchases << original_purchase
+      mutable_purchase_id_set.add(original_purchase.id)
+      sweepable_original_purchase_ids.add(original_purchase.id)
     end
 
     if mutable_purchases.any?(&:is_reassignment_locked?)
@@ -61,6 +71,8 @@ class Purchase::ReassignByEmailService
 
     target_user = User.alive.by_email(@to_email).first
     reassigned_purchase_ids = []
+    pending_original_ids = sweepable_original_purchase_ids.dup
+    moved_original_ids = Set.new
 
     purchases.each do |purchase|
       purchase.email = @to_email
@@ -70,10 +82,20 @@ class Purchase::ReassignByEmailService
       # again, so clear the flag as part of the reassignment.
       purchase.is_deleted_by_buyer = false
 
-      if purchase.subscription.present? && !purchase.is_original_subscription_purchase? && !purchase_id_set.include?(purchase.original_purchase.id)
-        if purchase.original_purchase.update(email: @to_email, purchaser_id: target_user&.id, is_deleted_by_buyer: false)
-          reassigned_purchase_ids << purchase.original_purchase.id if purchase.original_purchase.saved_changes?
-          purchase.subscription.update(user: target_user)
+      transfer_subscription = purchase.subscription.present?
+      if transfer_subscription && !purchase.is_original_subscription_purchase?
+        original_purchase = purchase.original_purchase
+        if pending_original_ids.delete?(original_purchase.id) && original_purchase.update(email: @to_email, purchaser_id: target_user&.id, is_deleted_by_buyer: false)
+          moved_original_ids.add(original_purchase.id)
+          reassigned_purchase_ids << original_purchase.id if original_purchase.saved_changes?
+        end
+
+        # Several recurring rows can share one original: the subscription follows a swept
+        # original only once it actually moved, and a matched original moves it from its own row.
+        if sweepable_original_purchase_ids.include?(original_purchase.id)
+          transfer_subscription = moved_original_ids.include?(original_purchase.id)
+        elsif purchase_id_set.include?(original_purchase.id)
+          transfer_subscription = false
         end
       end
 
@@ -81,9 +103,7 @@ class Purchase::ReassignByEmailService
 
       if purchase.save
         reassigned_purchase_ids << purchase.id
-        if purchase.is_original_subscription_purchase? && purchase.subscription.present?
-          purchase.subscription.update(user: target_user)
-        end
+        move_subscription(purchase.subscription, target_user) if transfer_subscription
       end
     end
 
@@ -97,6 +117,36 @@ class Purchase::ReassignByEmailService
   end
 
   private
+    # A gift sender's original sits behind the giftee's membership with a different
+    # email and card, so only sweep an unmatched original owned by the same requester.
+    def same_requester?(original_purchase, purchase)
+      return true if original_purchase.email.to_s.casecmp?(@from_email.to_s)
+
+      purchase.purchaser_id.present? && original_purchase.purchaser_id == purchase.purchaser_id
+    end
+
+    # The gift behind a membership the requester received, or nil. Plan changes replace
+    # original_purchase with a copy that never carries the gift flag, so the gift (and
+    # Subscription#email) hang off true_original_purchase.
+    def recipient_gift(subscription)
+      @recipient_gifts ||= {}
+      @recipient_gifts.fetch(subscription.id) do
+        true_original = subscription.true_original_purchase
+        gift = true_original.gift_given if true_original&.is_gift_sender_purchase?
+        @recipient_gifts[subscription.id] = gift.present? && gift.giftee_email.to_s.casecmp?(@from_email.to_s) ? gift : nil
+      end
+    end
+
+    # A giftee without a destination account is reached only through gift.giftee_email,
+    # so the subscription and that pointer move together or not at all.
+    def move_subscription(subscription, target_user)
+      gift = recipient_gift(subscription)
+      Subscription.transaction(requires_new: true) do
+        raise ActiveRecord::Rollback if gift.present? && !gift.update(giftee_email: @to_email)
+        raise ActiveRecord::Rollback unless subscription.update(user: target_user)
+      end
+    end
+
     # Returns a normalized, distinct payment-method signal for a purchase.
     # Card purchases collapse to the card's last 4 digits; non-card processors
     # (e.g. PayPal) store an email or other token in card_visual, so fall back to
