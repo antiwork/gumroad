@@ -118,8 +118,8 @@ class Ai::AnthropicClient
   )
   private_constant :CallTrace
 
-  # Neither gateway documents a stable header naming the upstream that served a request, so try the
-  # known names in order and fall back to the body's `provider` field.
+  # Header names to try before the body paths in #provider_hint_from. Vercel's live responses carry
+  # none of them, so on that gateway the provider is only ever in the body.
   PROVIDER_HEADER_NAMES = %w[
     x-vercel-ai-gateway-provider
     x-vercel-ai-provider
@@ -247,6 +247,8 @@ class Ai::AnthropicClient
           when "message_delta"
             # Output tokens arrive here and are cumulative; keep the input/cache counts from message_start.
             trace.usage.merge!(usage_from(data["usage"]))
+            # Vercel's routing metadata rides only on this event, so message_start cannot set it.
+            trace.provider_hint ||= provider_hint_from(data)
             stop_reason = data.dig("delta", "stop_reason") || stop_reason
           when "error"
             raise embedded_error(data, kind: "stream")
@@ -441,16 +443,18 @@ class Ai::AnthropicClient
       header.presence || trace.provider_hint.presence
     end
 
-    # OpenRouter names the serving upstream in the body; Vercel's Anthropic-compatible responses do
-    # not carry it today, which is why the headers above are the primary source.
+    # OpenRouter names the serving upstream in the body's `provider`; Vercel carries it in
+    # `provider_metadata.gateway.routing` (no header on either path today).
     def provider_hint_from(body)
       return unless body.is_a?(Hash)
 
       provider = body["provider"]
       case provider
-      when String then provider.presence
-      when Hash then (provider["name"] || provider["slug"] || provider["provider"]).presence
+      when String then return provider.presence
+      when Hash then return (provider["name"] || provider["slug"] || provider["provider"]).presence
       end
+
+      body.dig("provider_metadata", "gateway", "routing", "resolvedProvider").presence
     end
 
     # Buffered bodies carry `usage` one level down; the streamed path merges message_start and
