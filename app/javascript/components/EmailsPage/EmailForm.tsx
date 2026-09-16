@@ -1,19 +1,16 @@
 import { ChevronDown, Envelope, Eye, FileDetail, X } from "@boxicons/react";
 import { Link, router, useForm, usePage } from "@inertiajs/react";
-import { DirectUpload } from "@rails/activestorage";
 import { Editor, JSONContent } from "@tiptap/core";
 import { addHours, format, startOfDay, startOfHour } from "date-fns";
 import React from "react";
-import typia from "typia";
 
 import { sendSingleCustomerEmail } from "$app/data/customers";
 import { AudienceType, getRecipientCount, InstallmentFormContext, Installment } from "$app/data/installments";
 import { type EmailTab, TYPE_TO_TAB } from "$app/data/installments";
 import { assertDefined } from "$app/utils/assert";
 import Countdown from "$app/utils/countdown";
-import { ALLOWED_EXTENSIONS } from "$app/utils/file";
 import { asyncVoid } from "$app/utils/promise";
-import { AbortError, assertResponseError, request } from "$app/utils/request";
+import { AbortError, assertResponseError } from "$app/utils/request";
 
 import { Button } from "$app/components/Button";
 import { useCurrentSeller } from "$app/components/CurrentSeller";
@@ -31,6 +28,7 @@ import { EvaporateUploaderProvider } from "$app/components/EvaporateUploader";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { Popover, PopoverAnchor, PopoverContent, PopoverTrigger } from "$app/components/Popover";
 import { PriceInput } from "$app/components/PriceInput";
+import { useSectionImageUploadSettings } from "$app/components/Profile/EditSections";
 import {
   ImageUploadSettingsContext,
   RichTextEditor,
@@ -323,42 +321,8 @@ export const EmailForm = ({ context, installment, singleCustomerRecipient = null
   const afterDateRef = React.useRef<HTMLInputElement>(null);
   const publishDateRef = React.useRef<HTMLInputElement>(null);
   const [invalidFields, setInvalidFields] = React.useState(new Set<InvalidFieldName>());
-  const [imagesUploading, setImagesUploading] = React.useState<Set<File>>(new Set());
   const { appDomain } = useDomains();
-  const imageSettings = React.useMemo(
-    () => ({
-      onUpload: (file: File) => {
-        setImagesUploading((prev) => new Set(prev).add(file));
-        return new Promise<string>((resolve, reject) => {
-          const upload = new DirectUpload(file, Routes.rails_direct_uploads_path());
-          upload.create((error, blob) => {
-            setImagesUploading((prev) => {
-              const updated = new Set(prev);
-              updated.delete(file);
-              return updated;
-            });
-
-            if (error) reject(error);
-            // Fetch the CDN URL for the image
-            else
-              request({
-                method: "GET",
-                accept: "json",
-                url: Routes.s3_utility_cdn_url_for_blob_path({ key: blob.key }),
-              })
-                .then((response) => response.json())
-                .then((data) => resolve(typia.assert<{ url: string }>(data).url))
-                .catch((e: unknown) => {
-                  assertResponseError(e);
-                  reject(e);
-                });
-          });
-        });
-      },
-      allowedExtensions: ALLOWED_EXTENSIONS,
-    }),
-    [],
-  );
+  const imageSettings = useSectionImageUploadSettings();
   const { evaporateUploader, s3UploadConfig } = useConfigureEvaporate({
     aws_access_key_id: context.aws_access_key_id,
     s3_url: context.s3_url,
@@ -812,7 +776,7 @@ export const EmailForm = ({ context, installment, singleCustomerRecipient = null
     form.processing ||
     isPublishing ||
     isSendingSingleRecipient ||
-    imagesUploading.size > 0 ||
+    imageSettings.isUploading ||
     files.some((file) => isFileUploading(file) || file.subtitle_files.some(isFileUploading));
 
   const getCancelPath = () => {

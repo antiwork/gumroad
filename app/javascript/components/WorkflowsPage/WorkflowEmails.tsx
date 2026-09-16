@@ -1,6 +1,5 @@
 import { ArrowLeft, ChevronDown, ChevronUp, Clock, Envelope, Eye, Trash, XSquare } from "@boxicons/react";
 import { Link, useForm } from "@inertiajs/react";
-import { DirectUpload } from "@rails/activestorage";
 import { findChildren, Node as TiptapNode } from "@tiptap/core";
 import { Plugin } from "@tiptap/pm/state";
 import { EditorContent, NodeViewProps, NodeViewWrapper, ReactNodeViewRenderer } from "@tiptap/react";
@@ -18,9 +17,7 @@ import {
 } from "$app/types/workflow";
 import { assert, assertDefined } from "$app/utils/assert";
 import { classNames } from "$app/utils/classNames";
-import { ALLOWED_EXTENSIONS } from "$app/utils/file";
 import GuidGenerator from "$app/utils/guid_generator";
-import { assertResponseError, request } from "$app/utils/request";
 
 import { Button, NavigationButton } from "$app/components/Button";
 import { CartItem, CartItemList, CartItemMain, CartItemMedia, CartItemTitle } from "$app/components/CartItemList";
@@ -39,6 +36,7 @@ import { EvaporateUploaderProvider } from "$app/components/EvaporateUploader";
 import { Logo } from "$app/components/Logo";
 import { Modal } from "$app/components/Modal";
 import { NumberInput } from "$app/components/NumberInput";
+import { useSectionImageUploadSettings } from "$app/components/Profile/EditSections";
 import { ImageUploadSettingsContext, RichTextEditor, useRichTextEditor } from "$app/components/RichTextEditor";
 import { S3UploadConfigProvider } from "$app/components/S3UploadConfig";
 import { Separator } from "$app/components/Separator";
@@ -122,41 +120,7 @@ const WorkflowEmails = ({ context, workflow }: WorkflowEmailsProps) => {
       setInvalidFields((prev) => prev.filter((invalidField) => !(invalidField.emailId === id)));
     }
   };
-  const [imagesUploading, setImagesUploading] = React.useState<Set<File>>(new Set());
-  const imageSettings = React.useMemo(
-    () => ({
-      onUpload: (file: File) => {
-        setImagesUploading((prev) => new Set(prev).add(file));
-        return new Promise<string>((resolve, reject) => {
-          const upload = new DirectUpload(file, Routes.rails_direct_uploads_path());
-          upload.create((error, blob) => {
-            setImagesUploading((prev) => {
-              const updated = new Set(prev);
-              updated.delete(file);
-              return updated;
-            });
-
-            if (error) reject(error);
-            // Fetch the CDN URL for the image
-            else
-              request({
-                method: "GET",
-                accept: "json",
-                url: Routes.s3_utility_cdn_url_for_blob_path({ key: blob.key }),
-              })
-                .then((response) => response.json())
-                .then((data) => resolve(typia.assert<{ url: string }>(data).url))
-                .catch((e: unknown) => {
-                  assertResponseError(e);
-                  reject(e);
-                });
-          });
-        });
-      },
-      allowedExtensions: ALLOWED_EXTENSIONS,
-    }),
-    [],
-  );
+  const imageSettings = useSectionImageUploadSettings();
   const { evaporateUploader, s3UploadConfig } = useConfigureEvaporate({
     aws_access_key_id: context.aws_access_key_id,
     s3_url: context.s3_url,
@@ -260,7 +224,7 @@ const WorkflowEmails = ({ context, workflow }: WorkflowEmailsProps) => {
 
   const isBusy =
     form.processing ||
-    imagesUploading.size > 0 ||
+    imageSettings.isUploading ||
     files.some((file) => isFileUploading(file) || file.subtitle_files.some((subtitle) => isFileUploading(subtitle)));
   const sortedEmails = sortEmailsByDelayedDeliveryTime(emails);
 
@@ -366,7 +330,9 @@ const WorkflowEmails = ({ context, workflow }: WorkflowEmailsProps) => {
                               onChange={(value) => updateEmail(email.id, value)}
                               onSendPreviewEmail={() => handleSave({ sendPreviewForEmailId: email.id })}
                               isSaving={form.processing}
-                              hasUploadingImages={imagesUploading.size > 0 && email.message.includes('src="blob:')}
+                              hasUploadingImages={
+                                imageSettings.isUploading ? email.message.includes('src="blob:') : false
+                              }
                             />
                           ))}
                         </Rows>
