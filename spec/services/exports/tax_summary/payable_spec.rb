@@ -84,4 +84,27 @@ describe Exports::TaxSummary::Payable, :vcr do
       expect(csv).to be_nil
     end
   end
+
+  describe "Business Type column" do
+    let(:year) { 2019 }
+    let(:user) { create(:user) }
+
+    before do
+      create_payment_with_purchase(user, Date.new(year))
+    end
+
+    {
+      UserComplianceInfo::BusinessTypes::LLC => "LLC_PARTNER",
+      UserComplianceInfo::BusinessTypes::SINGLE_MEMBER_LLC => "LLC_PARTNER",
+      UserComplianceInfo::BusinessTypes::MULTI_MEMBER_LLC => "LLC_PARTNER",
+    }.each do |business_type, payable_type|
+      it "writes #{payable_type} for a #{business_type} business" do
+        create(:user_compliance_info_business, user:, business_type:)
+
+        parsed_csv = CSV.parse(Exports::TaxSummary::Payable.new(user:, year:).perform)
+        expect(parsed_csv[0][14]).to eq("Business Type")
+        expect(parsed_csv[1][14]).to eq(payable_type)
+      end
+    end
+  end
 end

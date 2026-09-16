@@ -111,14 +111,12 @@ class Charge::CreateService
       return nil
     end
 
-    # The processor rejected our request as malformed — a deterministic failure on our side,
-    # not an outage. The intent was never created, so the outcome is known. Record it under its
-    # own code so a code regression shows up in monitoring instead of hiding inside
-    # Stripe-outage noise. Retry behavior is unchanged.
+    # A named cause gets its own code; everything unnamed keeps PROCESSOR_INVALID_REQUEST so a
+    # real malformed-request regression still stands out. Retry behavior is unchanged.
     logger.error "Charge processor error: #{e.message} in charge: #{charge.external_id}"
     purchases.each do |purchase|
-      purchase.errors.add :base, "There is a temporary problem, please try again (your card was not charged)."
-      purchase.error_code = PurchaseErrorCode::PROCESSOR_INVALID_REQUEST
+      purchase.error_code = PurchaseErrorCode.for_processor_error(e.processor_error_code)
+      purchase.errors.add :base, PurchaseErrorCode.buyer_facing_message(purchase.error_code)
       purchase.stripe_error_code = e.processor_error_code if purchase.stripe_error_code.blank?
     end
     nil

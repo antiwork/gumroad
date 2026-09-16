@@ -189,7 +189,7 @@ describe Purchase::FinalizeConfirmedChargeService do
       end
     end
 
-    context "when the intent is waiting on an asynchronous customer-initiated payment (Pix)" do
+    context "when the intent is waiting on an asynchronous customer-initiated payment" do
       let(:purchase) { create(:purchase_in_progress) }
 
       # Real StripeChargeIntent rather than a double: the pending-vs-failed routing hangs on how
@@ -206,6 +206,16 @@ describe Purchase::FinalizeConfirmedChargeService do
 
       it "keeps a Pix purchase in progress and reports pending — the buyer can still pay the QR key in their banking app" do
         charge_intent = stripe_charge_intent(next_action_type: "pix_display_qr_code", payment_method_types: ["pix"])
+
+        result = described_class.new(purchase:, charge_intent:).perform
+
+        expect(result).to eq(:pending)
+        expect(purchase.reload.stripe_status).to eq(StripeIntentStatus::REQUIRES_ACTION)
+        expect(purchase).to be_in_progress
+      end
+
+      it "keeps a UPI purchase pending while the buyer can still approve payment" do
+        charge_intent = stripe_charge_intent(next_action_type: "upi_handle_redirect_or_display_qr_code", payment_method_types: ["upi"])
 
         result = described_class.new(purchase:, charge_intent:).perform
 

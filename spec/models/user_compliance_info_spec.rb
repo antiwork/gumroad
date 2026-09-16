@@ -380,9 +380,25 @@ describe UserComplianceInfo do
     end
 
     describe "llc" do
-      let(:user_compliance_info) { create(:user_compliance_info_business) }
+      let(:user_compliance_info) { create(:user_compliance_info_business, business_type: UserComplianceInfo::BusinessTypes::LLC) }
 
       it "returns LLC_PARTNER type" do
+        expect(user_compliance_info.legal_entity_payable_business_type).to eq("LLC_PARTNER")
+      end
+    end
+
+    describe "single_member_llc" do
+      let(:user_compliance_info) { create(:user_compliance_info_business, business_type: UserComplianceInfo::BusinessTypes::SINGLE_MEMBER_LLC) }
+
+      it "returns the same LLC_PARTNER type as the generic llc" do
+        expect(user_compliance_info.legal_entity_payable_business_type).to eq("LLC_PARTNER")
+      end
+    end
+
+    describe "multi_member_llc" do
+      let(:user_compliance_info) { create(:user_compliance_info_business, business_type: UserComplianceInfo::BusinessTypes::MULTI_MEMBER_LLC) }
+
+      it "returns the same LLC_PARTNER type as the generic llc" do
         expect(user_compliance_info.legal_entity_payable_business_type).to eq("LLC_PARTNER")
       end
     end

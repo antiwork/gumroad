@@ -20,6 +20,10 @@ module PurchaseErrorCode
   # regression apart from Stripe being down (a regression shows up as a spike in this
   # code against a near-zero baseline, instead of hiding inside outage noise).
   PROCESSOR_INVALID_REQUEST = "processor_invalid_request"
+  # Seller-specific and deterministic: no request we build avoids it while the account is in
+  # that state, and the remedy is an account action rather than a deploy. Split out of
+  # PROCESSOR_INVALID_REQUEST so that bucket keeps meaning "our request was malformed".
+  PROCESSOR_MERCHANT_CANNOT_RECEIVE_TRANSFERS = "processor_merchant_cannot_receive_transfers"
   PROCESSING_ERROR = "processing_error"
   HIGH_PROXY_SCORE_AND_ADDITIONAL_CONTRIBUTION = "high_proxy_score_can_only_buy_once"
   BUYER_CHARGED_BACK = "buyer_has_charged_back"
@@ -259,6 +263,7 @@ module PurchaseErrorCode
                                                     STRIPE_UNAVAILABLE,
                                                     PAYPAL_UNAVAILABLE,
                                                     PROCESSOR_INVALID_REQUEST,
+                                                    PROCESSOR_MERCHANT_CANNOT_RECEIVE_TRANSFERS,
                                                     PROCESSING_ERROR,
                                                     CREDIT_CARD_NOT_PROVIDED,
                                                     INDIA_CARD_MANDATE_MISSING,
@@ -267,6 +272,29 @@ module PurchaseErrorCode
                                                   ])
 
   UNBLOCK_BUYER_ERROR_CODES = FRAUD_RELATED_ERROR_CODES + [TEMPORARILY_BLOCKED_EMAIL_ADDRESS]
+
+  GENERIC_PROCESSOR_FAILURE_MESSAGE = "There is a temporary problem, please try again (your card was not charged)."
+
+  # Only codes whose cause we have named. An unnamed rejection must keep wearing the generic
+  # label, or the next regression is indistinguishable from these.
+  PROCESSOR_ERROR_CODE_MAP = {
+    "insufficient_capabilities_for_transfer" => PROCESSOR_MERCHANT_CANNOT_RECEIVE_TRANSFERS,
+  }.freeze
+
+  def self.for_processor_error(processor_error_code)
+    PROCESSOR_ERROR_CODE_MAP.fetch(processor_error_code.to_s, PROCESSOR_INVALID_REQUEST)
+  end
+
+  # Deliberately never names the seller's compliance state: it is their private business, and
+  # the buyer's next action is the same either way.
+  BUYER_MESSAGES_BY_ERROR_CODE = {
+    PROCESSOR_MERCHANT_CANNOT_RECEIVE_TRANSFERS =>
+      "This creator isn't able to accept payments right now. Your card was not charged — please try again later.",
+  }.freeze
+
+  def self.buyer_facing_message(error_code)
+    BUYER_MESSAGES_BY_ERROR_CODE.fetch(error_code, GENERIC_PROCESSOR_FAILURE_MESSAGE)
+  end
 
   def self.customer_error_message(error = nil)
     error || "Your card was declined. Please try a different card or contact your bank."
@@ -279,7 +307,11 @@ module PurchaseErrorCode
     # be fixed (these usually come from a short-lived deploy bug), so retrying lets renewals
     # self-heal once the bug is reverted instead of terminating subscriptions. Tightening the
     # retry policy is a separate decision from the observability split this code exists for.
-    error_code == STRIPE_UNAVAILABLE || error_code == PAYPAL_UNAVAILABLE || error_code == PROCESSING_ERROR || error_code == PROCESSOR_INVALID_REQUEST
+    #
+    # PROCESSOR_MERCHANT_CANNOT_RECEIVE_TRANSFERS too: the account state changes, not our code,
+    # and a renewal that self-heals beats a subscription terminated while the seller is blocked.
+    error_code == STRIPE_UNAVAILABLE || error_code == PAYPAL_UNAVAILABLE || error_code == PROCESSING_ERROR ||
+      error_code == PROCESSOR_INVALID_REQUEST || error_code == PROCESSOR_MERCHANT_CANNOT_RECEIVE_TRANSFERS
   end
 
   def self.is_error_retryable?(error_code)

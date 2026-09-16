@@ -107,8 +107,8 @@ describe Purchase::Risk do
       end
 
       it "still adds the chargeback error for multiple old unreversed chargebacks" do
-        create(:purchase, link: product, email: "test@example.com", chargeback_date: 2.years.ago)
-        create(:purchase, link: product, email: "test@example.com", chargeback_date: 3.years.ago)
+        create(:purchase, link: product, email: "test@example.com", chargeback_date: 2.years.ago, stripe_transaction_id: "ch_first")
+        create(:purchase, link: product, email: "test@example.com", chargeback_date: 3.years.ago, stripe_transaction_id: "ch_second")
 
         expect { new_purchase.send(:check_for_past_chargebacks) }
           .to change { new_purchase.error_code }.from(nil).to(PurchaseErrorCode::BUYER_CHARGED_BACK)
