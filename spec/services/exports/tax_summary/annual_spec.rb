@@ -121,4 +121,25 @@ describe Exports::TaxSummary::Annual, :vcr do
       end
     end
   end
+
+  describe "Business Type column" do
+    let(:year) { 2019 }
+    let(:user) { create(:user) }
+
+    before do
+      create_payment_with_purchase(user, Date.new(year, 6, 1))
+      stub_const("User::Taxation::MIN_SALE_AMOUNT_FOR_1099_K_FEDERAL_FILING", 10)
+      stub_const("User::Taxation::MIN_SALE_COUNT_FOR_1099_K_FEDERAL_FILING", 1)
+    end
+
+    it "writes the generic LLC type for a member-count LLC" do
+      create(:user_compliance_info_business, user:, business_type: UserComplianceInfo::BusinessTypes::SINGLE_MEMBER_LLC)
+
+      URI.open(described_class.new(year:).perform) do |f|
+        parsed_csv = CSV.parse f.read
+        expect(parsed_csv[0][14]).to eq("Business Type")
+        expect(parsed_csv[1][14]).to eq("LLC_PARTNER")
+      end
+    end
+  end
 end

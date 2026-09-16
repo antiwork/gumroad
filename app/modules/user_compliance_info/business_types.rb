@@ -24,9 +24,10 @@ module UserComplianceInfo::BusinessTypes
 
   # https://payable.com/taxes/part-2-how-to-set-up-a-full-form-import-1099-misc-1099-k
   # ‘INDIVIDUAL’, ‘CORPORATION’, ‘LLC_SINGLE’, LLC_C_CORP’, ‘LLC_S_CORP’, ‘LLC_PARTNER’, ‘C_CORP’, ‘S_CORP’, ‘PARTNERSHIP’, ’NON_PROFIT’.
+  # Keep member-count LLC types compatible with the legacy generic LLC export classification.
   def payable_type_map
     { LLC => "LLC_PARTNER",
-      SINGLE_MEMBER_LLC => "LLC_SINGLE",
+      SINGLE_MEMBER_LLC => "LLC_PARTNER",
       MULTI_MEMBER_LLC => "LLC_PARTNER",
       PARTNERSHIP => "PARTNERSHIP",
       NON_PROFIT => "NON_PROFIT",

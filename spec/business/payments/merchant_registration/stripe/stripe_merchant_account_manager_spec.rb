@@ -10009,7 +10009,7 @@ describe StripeMerchantAccountManager, :vcr do
           let(:user_compliance_info_1) { create(:user_compliance_info_business, user:, business_type: UserComplianceInfo::BusinessTypes::SOLE_PROPRIETORSHIP) }
           let(:user_compliance_info_2) { create(:user_compliance_info_business, user:, business_type: UserComplianceInfo::BusinessTypes::CORPORATION) }
 
-          it "sets the structure to nil in company params" do
+          it "sends the corporation structure with the company params" do
             original_stripe_account_retrieve = Stripe::Account.method(:retrieve)
             expect(Stripe::Account).to receive(:retrieve).with(merchant_account.charge_processor_merchant_id) do |*args|
               stripe_account = original_stripe_account_retrieve.call(*args)
@@ -10030,6 +10030,7 @@ describe StripeMerchantAccountManager, :vcr do
               user.stripe_account.charge_processor_merchant_id,
               hash_including(
                 company: hash_including(
+                  structure: "private_corporation",
                   directors_provided: true,
                   executives_provided: true
                 )
