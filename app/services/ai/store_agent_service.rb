@@ -919,8 +919,10 @@ class Ai::StoreAgentService
 
     def turn_result(reply:, proposed_action:)
       outcome = proposed_action ? TURN_OUTCOME_PROPOSAL_READY : TURN_OUTCOME_REPLY_ONLY
-      log_turn_metrics(outcome:)
+      telemetry_turn_id = SecureRandom.uuid
+      log_turn_metrics(outcome:, telemetry_turn_id:)
       {
+        telemetry_turn_id:,
         outcome:,
         reply:,
         proposed_action: proposed_action&.as_json,
@@ -932,12 +934,13 @@ class Ai::StoreAgentService
     # retries, and latency are the signals the ramp's pass bar checks each step against. The
     # upstream calls ride along, since turn latency alone cannot say which request stalled. Every
     # pre-existing key keeps its name and meaning.
-    def log_turn_metrics(outcome:)
+    def log_turn_metrics(outcome:, telemetry_turn_id:)
       latency_ms = @turn_started_at ? ((Process.clock_gettime(Process::CLOCK_MONOTONIC) - @turn_started_at) * 1000).round : nil
       calls = call_metrics(purpose: "turn")
       @logged_turn_call_count = calls.length
       payload = {
         event: "store_agent_turn",
+        telemetry_turn_id:,
         model: @_client_model,
         requested_model: @_client_model,
         served_models: (@_client.respond_to?(:served_models) ? Array(@_client.served_models).uniq : []),

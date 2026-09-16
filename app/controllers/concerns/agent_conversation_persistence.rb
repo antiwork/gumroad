@@ -217,6 +217,7 @@ module AgentConversationPersistence
       metadata = {
         proposed_action: result[:proposed_action],
         objects: result[:objects].presence,
+        telemetry_turn_id: result[:telemetry_turn_id],
         client_turn_id:,
       }.compact
       conversation.ai_messages.create!(role: "assistant", content: result[:reply].to_s, metadata: metadata.presence)
