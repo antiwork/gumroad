@@ -14,8 +14,8 @@ module StripeMerchantAccountManager
   private_constant :ACCOUNT_HOLDER_NAME_SYNC_COUNTRIES
 
   NEW_ACCOUNT_CREATION_BLOCKED_COUNTRIES = [Compliance::Countries::IND.alpha2].freeze
-  # A generic LLC does not disclose its member count; non-profit structures require a different
-  # Stripe business_type. Neither can be inferred from these legacy values.
+  # Stripe US `company[structure]` values, applied only to a US legal entity. Types missing here
+  # (the legacy generic `llc`, and `profit`, which needs `business_type: non_profit`) send none.
   US_COMPANY_STRUCTURES = {
     UserComplianceInfo::BusinessTypes::SOLE_PROPRIETORSHIP => "sole_proprietorship",
     UserComplianceInfo::BusinessTypes::SINGLE_MEMBER_LLC => "single_member_llc",
