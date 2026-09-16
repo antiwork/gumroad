@@ -55,7 +55,7 @@ class Api::V2::VariantsController < Api::V2::BaseController
         Product::SavePostPurchaseCustomFieldsService.new(@product).perform
 
         @product.reload
-        @product.is_licensed = @product.has_embedded_license_key?
+        @product.recompute_is_licensed!
         @product.is_multiseat_license = false if !@product.is_licensed
         @product.content_updated_at = Time.current
         @product.save!

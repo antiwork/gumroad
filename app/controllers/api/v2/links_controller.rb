@@ -199,7 +199,7 @@ class Api::V2::LinksController < Api::V2::BaseController
         end
         process_rich_content(@product, permitted_rich_content)
         Product::SavePostPurchaseCustomFieldsService.new(@product).perform
-        @product.is_licensed = @product.has_embedded_license_key?
+        @product.recompute_is_licensed!
         @product.is_multiseat_license = false if !@product.is_licensed
         @product.save!
       end
@@ -546,7 +546,7 @@ class Api::V2::LinksController < Api::V2::BaseController
 
         if rich_content_or_flag_changed
           Product::SavePostPurchaseCustomFieldsService.new(@product).perform
-          @product.is_licensed = @product.has_embedded_license_key?
+          @product.recompute_is_licensed!
           @product.is_multiseat_license = false if !@product.is_licensed
           @product.save!
         end
