@@ -136,9 +136,7 @@ describe Settings::Team::InvitationsController do
       end
     end
 
-    # Every account in the 62-account relay ring (gp#2762) was `not_reviewed` with zero products. A real new team
-    # is one or two people, so an unreviewed seller gets a small fixed total and the per-window allowance waits
-    # for review.
+    # The per-window allowance is for reviewed sellers; an unreviewed one hits the total cap below first.
     context "when the seller has not been reviewed" do
       def post_invitation(email)
         post :create, params: { team_invitation: { email:, role: "admin" } }, as: :json
@@ -180,6 +178,24 @@ describe Settings::Team::InvitationsController do
         expect do
           (TeamInvitationThrottle::UNREVIEWED_TOTAL_LIMIT + 1).times { |index| post_invitation("member#{index}@example.com") }
         end.to change { seller.team_invitations.count }.by(TeamInvitationThrottle::UNREVIEWED_TOTAL_LIMIT + 1)
+      end
+
+      it "holds the seller's row lock across the lifetime count and the insert" do
+        expect_any_instance_of(User).to receive(:with_lock).at_least(:once).and_call_original
+
+        post_invitation("locked@example.com")
+        expect(response.parsed_body["success"]).to eq(true)
+      end
+
+      it "re-reads the seller's activity under the row lock" do
+        # Suspend at the moment the lock is taken, which is after the before_action allowed the request.
+        allow_any_instance_of(User).to receive(:with_lock).and_wrap_original do |original, *args, &block|
+          seller.update_column(:user_risk_state, "suspended_for_fraud")
+          original.call(*args, &block)
+        end
+
+        expect { post_invitation("late@example.com") }.not_to change { seller.team_invitations.count }
+        expect(response).to have_http_status(:forbidden)
       end
     end
 
