@@ -46,6 +46,15 @@ class Marketing::Action < ApplicationRecord
       # cannot be recalled, so a cancellation there would only hide a post that still lands.
       transition [:recommended, :approved] => :cancelled
     end
+    # A gate the seller can still clear (lifetime sales, a completed payout). Blocking
+    # stays open rather than terminal: a closed row would mint a fresh action, and a
+    # fresh reason, on every later look at the card.
+    event :mark_blocked do
+      transition [:recommended, :approved] => :blocked
+    end
+    event :clear_block do
+      transition blocked: :recommended
+    end
 
     before_transition to: :approved, do: ->(action) { action.approved_at = Time.current }
     before_transition to: :queued, do: ->(action) { action.queued_at = Time.current }

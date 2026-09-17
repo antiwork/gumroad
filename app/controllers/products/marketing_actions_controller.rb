@@ -4,6 +4,8 @@ class Products::MarketingActionsController < Sellers::BaseController
   before_action :fetch_product
   before_action :fetch_action, only: %i[show approve execute cancel]
 
+  rescue_from Marketing::Channels::Email::Unavailable, with: ->(error) { render json: { success: false, error: error.message }, status: :unprocessable_entity }
+
   def index
     authorize Marketing::Action
     # Recommendations create the action and its UTM link, so drafts must not reach
@@ -44,7 +46,7 @@ class Products::MarketingActionsController < Sellers::BaseController
     return render json: { success: false, error: "This channel is coming soon." }, status: :unprocessable_entity unless Marketing::Channel.live?(@action.channel)
 
     result = Marketing::Channel.executor_for(@action.channel).new(@action).call
-    render json: { action: result.action, intent_url: result.intent_url, connect_path: result.connect_path }
+    render json: result.to_h
   end
 
   def cancel

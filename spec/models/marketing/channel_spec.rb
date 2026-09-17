@@ -20,6 +20,7 @@ describe Marketing::Channel do
       "instagram" => "instagram",
       "youtube" => "youtube",
       "tiktok" => "tiktok",
+      "email" => "email",
       described_class::ABANDONED_CART => described_class::ABANDONED_CART,
     )
   end

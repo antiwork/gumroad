@@ -1,4 +1,4 @@
-import { Instagram, Tiktok, TwitterX, Youtube } from "@boxicons/react";
+import { Envelope, Instagram, Tiktok, TwitterX, Youtube } from "@boxicons/react";
 import * as React from "react";
 
 import {
@@ -9,6 +9,7 @@ import {
   type MarketingAction,
   type MarketingChannel,
 } from "$app/data/marketing_actions";
+import { formatPriceCentsWithCurrencySymbol } from "$app/utils/currency";
 import { assertResponseError } from "$app/utils/request";
 
 import { Button, NavigationButton } from "$app/components/Button";
@@ -19,6 +20,53 @@ import { Alert } from "$app/components/ui/Alert";
 import { Card, CardContent } from "$app/components/ui/Card";
 import { Pill } from "$app/components/ui/Pill";
 import { Textarea } from "$app/components/ui/Textarea";
+
+const CHANNEL_ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
+  x: TwitterX,
+  instagram: Instagram,
+  youtube: Youtube,
+  tiktok: Tiktok,
+  email: Envelope,
+};
+
+const EMAIL_DRAFT_STATE_LABELS: Record<NonNullable<MarketingChannel["draft"]>["state"], string> = {
+  draft: "Draft",
+  scheduled: "Scheduled",
+  published: "Published",
+  sending: "Sending",
+  waiting: "Waiting",
+  incomplete: "Incomplete",
+  sent: "Send complete",
+};
+
+// Blast completion records processing by the email provider, not inbox delivery.
+const EMAIL_DRAFT_SUMMARY: Record<NonNullable<MarketingChannel["draft"]>["state"], (subject: string) => string> = {
+  draft: () => "Launch email drafted for your saved audience.",
+  scheduled: (subject) => `Your launch email about ${subject} is scheduled for your audience.`,
+  published: (subject) => `Your launch post about ${subject} is published.`,
+  sending: (subject) => `Your launch email about ${subject} is being processed. Check delivery details in Emails.`,
+  waiting: (subject) =>
+    `Your launch email about ${subject} is waiting to be processed. Check delivery details in Emails.`,
+  incomplete: (subject) =>
+    `Your launch email about ${subject} has not finished processing. Check delivery details in Emails.`,
+  sent: (subject) => `Email processing is complete for ${subject}. Check delivery details in Emails.`,
+};
+
+const pluralize = (count: number, singular: string, plural: string) => (count === 1 ? singular : plural);
+
+// One line, naming the product once: the card already sits on the product's own page.
+const draftSummary = (counts: NonNullable<MarketingChannel["counts"]>) => {
+  const segments = [
+    `${counts.customers} past ${pluralize(counts.customers, "customer", "customers")}`,
+    `${counts.followers} ${pluralize(counts.followers, "follower", "followers")}`,
+  ];
+  if (counts.affiliates > 0)
+    segments.push(`${counts.affiliates} ${pluralize(counts.affiliates, "affiliate", "affiliates")}`);
+  return `Launch email drafted for ${counts.total} ${pluralize(counts.total, "person", "people")} (${segments.join(", ")}) in the draft's saved audience.`;
+};
+
+const formatUSD = (cents: number) =>
+  formatPriceCentsWithCurrencySymbol("usd", cents, { symbolFormat: "short", noCentsIfWhole: true });
 
 export const ShareYourLaunchCard = ({ productPermalink }: { productPermalink: string }) => (
   <LaunchComposer key={productPermalink} productPermalink={productPermalink} />
@@ -51,10 +99,12 @@ const LaunchComposer = ({ productPermalink }: { productPermalink: string }) => {
     };
   }, [productPermalink]);
 
-  const liveChannels = channels?.filter((channel) => channel.live && channel.action) ?? [];
+  const liveChannels =
+    channels?.filter((channel) => channel.live && channel.action && channel.channel !== "email") ?? [];
+  const emailChannel = channels?.find((channel) => channel.channel === "email" && channel.live && channel.action);
   const channel = liveChannels.find((item) => item.channel === selectedChannel) ?? liveChannels[0];
   const action = channel?.action;
-  if (!channel || !action) return null;
+  if ((!channel || !action) && !emailChannel) return null;
 
   return (
     <section className="grid gap-4">
@@ -63,53 +113,111 @@ const LaunchComposer = ({ productPermalink }: { productPermalink: string }) => {
         <p className="text-muted">Review your post before sharing it.</p>
       </header>
       <Card>
-        {liveChannels.length > 1 ? (
-          <CardContent details>
-            <fieldset>
-              <legend className="mb-2">Post to</legend>
-              <div className="flex flex-wrap gap-2">
-                {liveChannels.map((item) => (
-                  <label key={item.channel} className="cursor-pointer">
-                    <input
-                      type="radio"
-                      name={destinationId}
-                      value={item.channel}
-                      checked={channel.channel === item.channel}
-                      onChange={() => setSelectedChannel(item.channel)}
-                      disabled={busy}
-                      className="peer sr-only"
-                    />
-                    <span className="flex min-h-11 items-center gap-2 rounded border border-border px-3 peer-checked:bg-foreground peer-checked:text-background peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-accent peer-disabled:cursor-not-allowed">
-                      <NetworkIcon channel={item.channel} />
-                      {item.label}
-                    </span>
-                  </label>
-                ))}
-              </div>
-            </fieldset>
-          </CardContent>
+        {channel && action ? (
+          <>
+            {liveChannels.length > 1 ? (
+              <CardContent details>
+                <fieldset>
+                  <legend className="mb-2">Post to</legend>
+                  <div className="flex flex-wrap gap-2">
+                    {liveChannels.map((item) => (
+                      <label key={item.channel} className="cursor-pointer">
+                        <input
+                          type="radio"
+                          name={destinationId}
+                          value={item.channel}
+                          checked={channel.channel === item.channel}
+                          onChange={() => setSelectedChannel(item.channel)}
+                          disabled={busy}
+                          className="peer sr-only"
+                        />
+                        <span className="flex min-h-11 items-center gap-2 rounded border border-border px-3 peer-checked:bg-foreground peer-checked:text-background peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-accent peer-disabled:cursor-not-allowed">
+                          <NetworkIcon channel={item.channel} />
+                          {item.label}
+                        </span>
+                      </label>
+                    ))}
+                  </div>
+                </fieldset>
+              </CardContent>
+            ) : null}
+            <ChannelComposer
+              key={action.id}
+              channel={channel}
+              action={action}
+              copy={drafts[action.id] ?? action.copy}
+              onCopyChange={(copy) => setDrafts((previous) => ({ ...previous, [action.id]: copy }))}
+              showNetworkName={liveChannels.length === 1}
+              productPermalink={productPermalink}
+              busy={busy}
+              onBusyChange={setBusy}
+              onChange={(updatedAction) =>
+                setChannels(
+                  (previous) =>
+                    previous?.map((item) =>
+                      item.channel === channel.channel ? { ...item, action: updatedAction } : item,
+                    ) ?? null,
+                )
+              }
+            />
+          </>
         ) : null}
-        <ChannelComposer
-          key={action.id}
-          channel={channel}
-          action={action}
-          copy={drafts[action.id] ?? action.copy}
-          onCopyChange={(copy) => setDrafts((previous) => ({ ...previous, [action.id]: copy }))}
-          showNetworkName={liveChannels.length === 1}
-          productPermalink={productPermalink}
-          busy={busy}
-          onBusyChange={setBusy}
-          onChange={(updatedAction) =>
-            setChannels(
-              (previous) =>
-                previous?.map((item) =>
-                  item.channel === channel.channel ? { ...item, action: updatedAction } : item,
-                ) ?? null,
-            )
-          }
-        />
+        {emailChannel ? <EmailChannelRow channel={emailChannel} /> : null}
       </Card>
     </section>
+  );
+};
+
+const ChannelIcon = ({ channel, className }: { channel: string; className: string }) => {
+  const Icon = CHANNEL_ICONS[channel];
+  return Icon ? <Icon className={className} /> : null;
+};
+
+const EmailChannelRow = ({ channel }: { channel: MarketingChannel }) => {
+  const counts = channel.counts;
+  const draft = channel.draft;
+
+  return (
+    <CardContent details className="grid gap-4">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex items-center gap-3">
+          <ChannelIcon channel="email" className="size-6" />
+          <span className="font-semibold">{channel.label}</span>
+        </div>
+        {draft ? <Pill size="small">{EMAIL_DRAFT_STATE_LABELS[draft.state]}</Pill> : null}
+      </div>
+
+      {channel.eligible === false ? (
+        <Alert role="status">
+          <span>
+            {channel.blocked_reason}
+            {channel.requirements &&
+            channel.requirements.sales_cents_total < channel.requirements.min_sales_cents_required
+              ? ` You're at ${formatUSD(channel.requirements.sales_cents_total)} of ${formatUSD(channel.requirements.min_sales_cents_required)} in sales.`
+              : null}
+          </span>
+        </Alert>
+      ) : channel.declined ? (
+        <Alert role="status">
+          <span>You deleted the launch email for this product, so we won&apos;t create another one.</span>
+        </Alert>
+      ) : draft ? (
+        <>
+          <span>
+            {draft.state === "draft" && counts ? draftSummary(counts) : EMAIL_DRAFT_SUMMARY[draft.state](draft.subject)}
+          </span>
+          <div className="flex flex-wrap gap-2">
+            <NavigationButton href={draft.edit_url}>
+              {draft.state === "draft" ? "Review the draft" : "Open in Emails"}
+            </NavigationButton>
+          </div>
+        </>
+      ) : (
+        <Alert role="status">
+          <span>We couldn&apos;t prepare the draft. You can still write one yourself in Emails.</span>
+        </Alert>
+      )}
+    </CardContent>
   );
 };
 
@@ -156,7 +264,7 @@ const ChannelComposer = ({
       const approved = await approveMarketingAction(productPermalink, action.id, edited ? copy : undefined);
       onChange(approved);
       const result = await executeMarketingAction(productPermalink, action.id);
-      setIntentUrl(result.intent_url);
+      setIntentUrl(result.intent_url ?? undefined);
       onChange(result.action);
       setConfirming(false);
       if (result.action.status === "posted") showAlert(`Posted on ${channel.label}!`, "success");

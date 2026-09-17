@@ -68,6 +68,20 @@ describe Marketing::Action do
       expect(action).to be_approved
       expect(action).not_to be_terminal
     end
+
+    it "blocks on a seller gate the action can outlive, and stays open while blocked" do
+      expect(action.mark_blocked).to be(true)
+      expect(action).to be_blocked
+      expect(action).not_to be_terminal
+
+      expect(action.clear_block).to be(true)
+      expect(action).to be_recommended
+    end
+
+    it "refuses to clear a block on an action that is not blocked" do
+      expect(action.clear_block).to be(false)
+      expect(action).to be_recommended
+    end
   end
 
   describe ".find_or_create_open!" do
@@ -81,6 +95,16 @@ describe Marketing::Action do
       third = described_class.find_or_create_open!(user: seller, link: product, channel: "x") { |a| a.copy = "New" }
       expect(third).not_to eq(first)
       expect(described_class.open.where(link: product).count).to eq(1)
+    end
+
+    it "reuses a blocked action, so a gate that is still unmet does not mint a second row" do
+      blocked = described_class.find_or_create_open!(user: seller, link: product, channel: "email") { |a| a.copy = "Hi" }
+      blocked.mark_blocked!
+
+      again = described_class.find_or_create_open!(user: seller, link: product, channel: "email") { |a| a.copy = "Other" }
+
+      expect(again).to eq(blocked)
+      expect(described_class.where(link: product, channel: "email").count).to eq(1)
     end
   end
 

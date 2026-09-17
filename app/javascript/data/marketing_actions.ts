@@ -5,7 +5,10 @@ import { request, ResponseError } from "$app/utils/request";
 export type MarketingAction = {
   id: string;
   channel: string;
-  status: "recommended" | "approved" | "queued" | "posted" | "failed" | "cancelled";
+  // Every status the API can return: the state machine's states, plus `blocked` for a
+  // channel whose gate the seller has not cleared yet. typia validates this at runtime,
+  // so a state missing here makes the whole recommendations payload unusable.
+  status: "recommended" | "approved" | "queued" | "posted" | "failed" | "cancelled" | "blocked";
   copy: string;
   post_text: string;
   link_url: string | null;
@@ -24,6 +27,22 @@ export type MarketingChannel = {
   connect_path?: string;
   intent_url?: string;
   action?: MarketingAction;
+  // The email channel prepares a draft instead of posting, so the card shows either the
+  // reason the seller cannot email yet or the draft's state and reach.
+  eligible?: boolean;
+  blocked_reason?: string | null;
+  requirements?: { sales_cents_total: number; min_sales_cents_required: number };
+  counts?: { customers: number; followers: number; affiliates: number; total: number };
+  // The seller deleted the draft we made, which is the only way to decline this channel.
+  declined?: boolean;
+  draft?: MarketingEmailDraft | null;
+};
+
+export type MarketingEmailDraft = {
+  id: string;
+  subject: string;
+  state: "draft" | "scheduled" | "published" | "sending" | "waiting" | "incomplete" | "sent";
+  edit_url: string;
 };
 
 type ErrorResponse = { success: false; error: string };
@@ -64,7 +83,12 @@ export const executeMarketingAction = async (productId: string, id: string) => {
     data: {},
   });
   return parse(response, (json) =>
-    typia.assert<{ action: MarketingAction; intent_url: string; connect_path: string }>(json),
+    typia.assert<{
+      action: MarketingAction;
+      intent_url: string | null;
+      connect_path: string | null;
+      edit_url?: string | null;
+    }>(json),
   );
 };
 
