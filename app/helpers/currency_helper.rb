@@ -18,9 +18,15 @@ module CurrencyHelper
     end
   end
 
-  # The last rate this process successfully read, per currency. Rates are money: during a
-  # Redis stall a stale-but-real rate is safe and an invented one is not. Held on the module
-  # rather than the helper instance because helpers are rebuilt on every request.
+  # The last rate this process successfully read, per currency, with the monotonic instant it was
+  # read. Rates are money: during a Redis stall a stale-but-real rate is safe and an invented one
+  # is not. Held on the module rather than the helper instance because helpers are rebuilt on every
+  # request.
+  #
+  # Bounded in AGE as well as in size. `UpdateCurrenciesWorker` replaces every rate in Redis hourly
+  # (the `update_currencies` cron), so a remembered rate older than one refresh cycle is not "last
+  # known" any more — it is just stale, and the request should fail rather than price off it.
+  MAX_RATE_AGE = 1.hour
   MAX_REMEMBERED_RATES = 1_000
   LAST_KNOWN_RATES = {}
   LAST_KNOWN_RATES_LOCK = Mutex.new
@@ -28,17 +34,23 @@ module CurrencyHelper
   def self.remember_rate(formatted_currency, rate)
     value = rate.to_s
     return value unless value.to_f > 0
+    observed_at = Process.clock_gettime(Process::CLOCK_MONOTONIC)
     LAST_KNOWN_RATES_LOCK.synchronize do
       if LAST_KNOWN_RATES.size < MAX_REMEMBERED_RATES || LAST_KNOWN_RATES.key?(formatted_currency)
-        LAST_KNOWN_RATES[formatted_currency] = value
+        LAST_KNOWN_RATES[formatted_currency] = [value, observed_at]
       end
     end
     value
   end
 
   def self.last_known_rate(formatted_currency)
-    rate = LAST_KNOWN_RATES_LOCK.synchronize { LAST_KNOWN_RATES[formatted_currency] }
-    rate if rate && rate.to_f > 0
+    remembered = LAST_KNOWN_RATES_LOCK.synchronize { LAST_KNOWN_RATES[formatted_currency] }
+    return nil if remembered.nil?
+
+    value, observed_at = remembered
+    return nil if Process.clock_gettime(Process::CLOCK_MONOTONIC) - observed_at > MAX_RATE_AGE.to_f
+
+    value if value.to_f > 0
   end
 
   def currency_namespace

@@ -35,6 +35,16 @@ describe CurrencyHelper do
 
         expect { get_rate("NZD") }.to raise_error(CurrencyHelper::RateUnavailable, /NZD/)
       end
+
+      it "refuses a remembered rate older than one refresh cycle" do
+        # Rates are replaced in Redis hourly, so a rate older than that is stale, not last known.
+        stale_at = Process.clock_gettime(Process::CLOCK_MONOTONIC) - (CurrencyHelper::MAX_RATE_AGE + 60)
+        CurrencyHelper::LAST_KNOWN_RATES["JPY"] = ["78.3932", stale_at]
+
+        allow(self).to receive(:currency_namespace).and_raise(Redis::TimeoutError.new("Waited 1.0 seconds"))
+
+        expect { get_rate("JPY") }.to raise_error(CurrencyHelper::RateUnavailable, /JPY/)
+      end
     end
   end
 
