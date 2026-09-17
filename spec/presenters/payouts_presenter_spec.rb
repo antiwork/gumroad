@@ -90,6 +90,34 @@ describe PayoutsPresenter do
       expect(instance.instant_payout_data).to be_nil
     end
 
+    it "enables the instant option and daily frequency only once a Connect-only seller is seasoned" do
+      user = create(:compliant_user)
+      create(:user_compliance_info, user:)
+      create(:payment_completed, user:)
+      # A migrated seller: Connect routing is what makes their connected account the payout
+      # destination.
+      Feature.activate_user(:merchant_migration, user)
+      account = create(:merchant_account_stripe_connect, user:, created_at: 59.days.ago)
+      bank_account = create(:ach_account, user:)
+      allow(user).to receive(:active_bank_account).and_return(bank_account)
+      allow(bank_account).to receive(:supports_instant_payouts?).and_return(true)
+      allow(user).to receive(:instantly_payable_unpaid_balance_cents).and_return(1000)
+      allow(user).to receive(:instant_payout_unsettled_balance_cents).and_return(0)
+      allow(user).to receive(:instantly_payable_unpaid_balances).and_return([])
+      payouts = described_class.new(seller: user)
+      settings = SettingsPresenter.new(pundit_user: SellerContext.new(user:, seller: user))
+
+      expect(user.stripe_account).to be_nil
+      expect(payouts.instant_payout_data).to be_nil
+      expect(settings.payments_props[:payout_frequency_daily_supported]).to eq(false)
+
+      account.update!(created_at: 60.days.ago)
+      user.reload
+
+      expect(payouts.instant_payout_data).to include(payable_amount_cents: 1000)
+      expect(settings.payments_props[:payout_frequency_daily_supported]).to eq(true)
+    end
+
     it "returns instant payout details when supported" do
       user = create(:user, user_risk_state: "compliant")
       instance = described_class.new(seller: user)

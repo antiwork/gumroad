@@ -104,6 +104,16 @@ describe StripeBeneficialOwnersManager do
       expect(result.last[:requirements_currently_due]).to eq(["verification.document"])
     end
 
+    it "exposes Stripe's document alternative for a personal tax ID requirement" do
+      alternative = { original_fields_due: ["id_number"], alternative_fields_due: ["verification.document"] }
+      representative_person.requirements = { currently_due: ["id_number"], alternatives: [alternative] }
+      allow(Stripe::Account).to receive(:list_persons).and_return({ "data" => [representative_person, other_owner_person] })
+
+      result = described_class.list(user)
+      expect(result.first[:requirements_alternatives]).to eq([alternative])
+      expect(result.last[:requirements_alternatives]).to eq([])
+    end
+
     it "returns the lone representative when no other owners exist" do
       allow(Stripe::Account).to receive(:list_persons).and_return({ "data" => [representative_person] })
       result = described_class.list(user)

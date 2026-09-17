@@ -32,12 +32,16 @@ class Marketing::Recommendations
     attr_reader :product, :seller
 
     def x_entry
+      seller.reload
+      action = action_for("x")
+      # Keep the displayed account and token on the same snapshot through serialization.
+      action.user = seller
       {
         connected: seller.twitter_oauth_token.present? && seller.twitter_oauth_secret.present?,
         handle: seller.twitter_handle,
         connect_path: Rails.application.routes.url_helpers.settings_social_connections_path,
-        intent_url: intent_url(action_for("x")),
-        action: action_for("x"),
+        intent_url: intent_url(action),
+        action:,
       }
     end
 

@@ -24,19 +24,7 @@ class Products::MarketingActionsController < Sellers::BaseController
     authorize @action
     return head :not_found unless enabled?
 
-    # Same row lock as the executor's claim: without it a second request can approve
-    # from a stale instance after the first one has already claimed and posted.
-    outcome = @action.with_lock do
-      # The attempt is already claimed, so the copy is frozen — but the client's
-      # approve-then-execute sequence has to keep going, or a stuck attempt dead-ends.
-      next :claimed if @action.queued?
-
-      @action.copy = params[:copy] if params.key?(:copy)
-      next :invalid if @action.copy_changed? && !@action.valid?
-      next :approved if @action.approve
-
-      :closed
-    end
+    outcome = @action.approve_copy_from_web(**params.permit(:copy).to_h.symbolize_keys)
 
     case outcome
     when :invalid

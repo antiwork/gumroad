@@ -3,6 +3,8 @@
 class Marketing::Action < ApplicationRecord
   include ExternalId
 
+  class ConfirmationChanged < StandardError; end
+
   # Post text is copy + blank line + link; X counts every URL as 23 characters.
   X_URL_LENGTH = 23
   MAX_POST_LENGTH = 280
@@ -68,6 +70,29 @@ class Marketing::Action < ApplicationRecord
     end
   end
 
+  def approve_copy(confirmation_token:, **attributes)
+    with_lock do
+      verify_confirmation!(confirmation_token)
+      apply_copy_approval(**attributes)
+    end
+  end
+
+  # The session-authenticated web flow confirms through its own approval UI.
+  def approve_copy_from_web(**attributes)
+    with_lock { apply_copy_approval(**attributes) }
+  end
+
+  def api_idempotency_key = Digest::SHA256.hexdigest(idempotency_key)
+
+  def confirmation_token
+    Digest::SHA256.hexdigest([idempotency_key, post_text, user.twitter_handle].to_json)
+  end
+
+  def verify_confirmation!(token)
+    user.reload
+    raise ConfirmationChanged, "The post changed. Review it and confirm again." unless token.is_a?(String) && token.present? && token == confirmation_token
+  end
+
   def terminal? = TERMINAL_STATUSES.include?(status)
 
   def post_text
@@ -77,6 +102,8 @@ class Marketing::Action < ApplicationRecord
   def as_json(_options = {})
     {
       id: external_id,
+      idempotency_key: api_idempotency_key,
+      confirmation_token:,
       channel:,
       status:,
       copy:,
@@ -90,6 +117,16 @@ class Marketing::Action < ApplicationRecord
   end
 
   private
+    def apply_copy_approval(**attributes)
+      return :claimed if queued? || posted?
+
+      self.copy = attributes[:copy] if attributes.key?(:copy)
+      return :invalid if copy_changed? && !valid?
+      return :approved if approve
+
+      :closed
+    end
+
     def set_idempotency_key
       self.idempotency_key ||= "#{user_id}:#{link_id}:#{channel}:#{SecureRandom.hex(8)}"
     end

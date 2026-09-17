@@ -108,6 +108,46 @@ describe Marketing::Action do
     end
   end
 
+  describe "#approve_copy" do
+    [nil, [], ["token"], { value: "token" }, "", " "].each do |token|
+      it "requires a nonempty scalar confirmation token (#{token.inspect})" do
+        action = create(:marketing_action, user: seller, link: product)
+        original = action.attributes
+        expect { action.approve_copy(confirmation_token: token, copy: "Changed") }.to raise_error(Marketing::Action::ConfirmationChanged)
+        expect(action.reload.attributes).to eq(original)
+      end
+    end
+
+    it "reloads a stale instance before freezing a claimed post" do
+      action = create(:marketing_action, user: seller, link: product, copy: "Original")
+      stale = described_class.find(action.id)
+      action.approve!
+      action.queue!
+
+      expect(stale.approve_copy(confirmation_token: stale.confirmation_token, copy: "Changed")).to eq(:claimed)
+      expect(action.reload.copy).to eq("Original")
+      expect(action).to be_queued
+    end
+
+    it "reuses the idempotency key after repeated approvals" do
+      action = create(:marketing_action, user: seller, link: product)
+      key = action.api_idempotency_key
+      2.times { expect(action.approve_copy(confirmation_token: action.confirmation_token)).to eq(:approved) }
+      expect(action.reload.api_idempotency_key).to eq(key)
+      expect(action.as_json[:idempotency_key]).not_to include(":")
+    end
+
+    it "returns a posted action without changing its copy or approval" do
+      action = create(:marketing_action, user: seller, link: product)
+      action.approve!
+      action.queue!
+      action.mark_posted!
+      original = action.attributes
+      expect(action.approve_copy(confirmation_token: action.confirmation_token, copy: "Changed")).to eq(:claimed)
+      expect(action.reload.attributes).to eq(original)
+    end
+  end
+
   describe "#post_text" do
     it "appends the tagged short link after a blank line" do
       utm_link = create(:utm_link, seller:, target_resource_type: :product_page, target_resource_id: product.id)

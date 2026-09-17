@@ -46,7 +46,7 @@ Explain the reasoning behind your changes, not just the change itself. Describe 
 - Break up big 1k+ line PRs into smaller PRs (100 loc)
 - **Must**: Include a video for every PR. For user-facing changes, show before/after with light/dark mode and mobile/desktop. For non-user-facing changes, record a short walkthrough of the relevant existing functionality to demonstrate understanding and confirm nothing broke. Exception: PRs that only touch documentation or agent skill files need no video — the diff is the reviewable artifact.
 - Include updates to any tests, especially end-to-end tests!
-- Deploy the app to a preview URL and include QA steps
+- Boot the branch locally and include QA steps with local-app evidence; preview deploys are optional
 
 ### PR description structure
 

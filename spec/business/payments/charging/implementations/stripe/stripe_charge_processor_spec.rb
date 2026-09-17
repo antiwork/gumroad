@@ -4216,6 +4216,13 @@ describe StripeChargeProcessor, :vcr do
         transfer_reversal
       end
 
+      # Stripe list endpoints return a ListObject, not an Array. Anything stubbing
+      # Stripe::Transfer.list must go through here, or the spec certifies a contract
+      # production never sees.
+      def stripe_transfer_page(rows)
+        Stripe::ListObject.construct_from(data: rows, has_more: false, url: "/v1/transfers")
+      end
+
       it "converts the owed USD amount into the transfer's currency when reversing a non-USD internal transfer" do
         create(:payment_completed, user: @cad_merchant_account.user,
                                    stripe_connect_account_id: @cad_merchant_account.charge_processor_merchant_id,
@@ -4273,8 +4280,10 @@ describe StripeChargeProcessor, :vcr do
       it "reports no safe transfer without reversing recent sale transfers" do
         refund = create(:refund)
         credit = create(:credit, user: @cad_merchant_account.user, amount_cents: -1000, merchant_account: @cad_merchant_account, fee_retention_refund: refund)
+        allow(Stripe::Transfer).to receive(:list).and_raise("unexpected Stripe::Transfer.list arguments")
         expect(Stripe::Transfer).to receive(:list)
-          .with(destination: @cad_merchant_account.charge_processor_merchant_id, created: { lt: kind_of(Integer) }, limit: 100).and_return([])
+          .with(destination: @cad_merchant_account.charge_processor_merchant_id, created: { lt: kind_of(Integer) }, limit: 100)
+          .and_return(stripe_transfer_page([]))
         expect(Stripe::Transfer).to receive(:list)
           .with({ transfer_group: "refund_fee_retention_#{refund.id}", limit: 1 }, { stripe_account: @cad_merchant_account.charge_processor_merchant_id }).and_return([])
         expect(Stripe::Transfer).not_to receive(:create_reversal)
@@ -4292,14 +4301,15 @@ describe StripeChargeProcessor, :vcr do
           cutoff = 120.days.ago.to_i
           exhausted = Array.new(100) { |index| double(id: "tr_exhausted_#{index}", amount: 1000, amount_reversed: 1000, currency: "cad") }
           candidate = double(id: "tr_old_sale", amount: 2000, amount_reversed: 0, currency: "cad")
+          allow(Stripe::Transfer).to receive(:list).and_raise("unexpected Stripe::Transfer.list arguments")
           expect(Stripe::Transfer).to receive(:list)
             .with(destination: @cad_merchant_account.charge_processor_merchant_id, created: { lt: cutoff }, limit: 100) do
             travel 2.seconds
-            exhausted
+            stripe_transfer_page(exhausted)
           end
           expect(Stripe::Transfer).to receive(:list)
             .with(destination: @cad_merchant_account.charge_processor_merchant_id, created: { lt: cutoff }, limit: 100, starting_after: "tr_exhausted_99")
-            .and_return([candidate])
+            .and_return(stripe_transfer_page([candidate]))
           reversal = stub_reversal_follow_up_calls(transfer_reversal_id: "trr_old_sale", net: -1330)
           expect(Stripe::Transfer).to receive(:create_reversal)
             .with("tr_old_sale", { amount: 1330, metadata: { refund_id: refund.id.to_s } },
@@ -4307,7 +4317,35 @@ describe StripeChargeProcessor, :vcr do
 
           expect(described_class.debit_stripe_account_for_refund_fee(credit:)).to eq(1330)
           expect(refund.reload.fee_retention_source_transfer).to eq("tr_old_sale")
+          expect(refund.debited_stripe_transfer).to eq("trr_old_sale")
+          expect(refund.fee_retention_collected_cents).to eq(1330)
+          expect(refund.fee_retention_written_off_at).to be_nil
           expect(described_class.debit_stripe_account_for_refund_fee(credit:)).to eq(1330)
+        end
+      end
+
+      it "reports no safe transfer after exhausting later pages whose remaining amount equals the converted fee" do
+        travel_to(Time.current) do
+          refund = create(:refund)
+          credit = create(:credit, user: @cad_merchant_account.user, amount_cents: -1000, merchant_account: @cad_merchant_account, fee_retention_refund: refund)
+          params = { destination: @cad_merchant_account.charge_processor_merchant_id, created: { lt: 120.days.ago.to_i }, limit: 100 }
+          exhausted = Array.new(100) { |index| double(id: "tr_exhausted_#{index}", amount: 2330, amount_reversed: 1000, currency: "cad") }
+          empty_page = stripe_transfer_page([])
+          allow(Stripe::Transfer).to receive(:list).and_raise("unexpected Stripe::Transfer.list arguments")
+          expect(Stripe::Transfer).to receive(:list).with(params).once.ordered.and_return(stripe_transfer_page(exhausted))
+          expect(Stripe::Transfer).to receive(:list).with(params.merge(starting_after: "tr_exhausted_99")).once.ordered.and_return(empty_page)
+          expect(Stripe::Transfer).to receive(:list)
+            .with({ transfer_group: "refund_fee_retention_#{refund.id}", limit: 1 }, { stripe_account: @cad_merchant_account.charge_processor_merchant_id })
+            .once.ordered.and_return(empty_page)
+          expect(Stripe::Transfer).not_to receive(:create_reversal)
+          expect(Stripe::Transfer).not_to receive(:create)
+
+          expect { described_class.debit_stripe_account_for_refund_fee(credit:) }
+            .to raise_error(described_class::NoRefundFeeTransferError)
+          expect(refund.reload.fee_retention_source_transfer).to be_nil
+          expect(refund.debited_stripe_transfer).to be_nil
+          expect(refund.fee_retention_collected_cents).to be_nil
+          expect(refund.fee_retention_written_off_at).to be_nil
         end
       end
 

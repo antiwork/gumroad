@@ -71,7 +71,10 @@ class Commission < ApplicationRecord
       completion_purchase.process!
 
       if completion_purchase.errors.present?
-        raise ActiveRecord::RecordInvalid.new(completion_purchase)
+        # mark_failed! in the ensure below re-saves the purchase, and that save clears the
+        # errors its validators added — so carry them here or the seller only sees a generic toast.
+        completion_purchase.errors.full_messages.each { |message| errors.add(:base, message) }
+        raise ActiveRecord::RecordInvalid.new(self)
       end
 
       self.completion_purchase = completion_purchase
