@@ -14,15 +14,11 @@ module Marketing::Channel
   # toggle drives a Workflow, so it has no place in the posting picker and no executor.
   # It is the same channel as the workflow's own recipient type; a spec pins the two.
   ABANDONED_CART = "abandoned_cart"
-  # Pinned so the value never depends on how many posting channels exist: a channel added
-  # to ALL later takes its own slot and cannot repoint rows already written as 5.
-  ABANDONED_CART_VALUE = 5
 
-  # name => persisted enum value for marketing_actions.channel. Posting channels are
-  # appended to ALL and keep the slot they were assigned, so the picker order above is
-  # also the enum order.
+  # name => persisted marketing_actions.channel value. The column is a string, so the value
+  # is the channel name and a channel can be added anywhere without moving existing rows.
   def self.action_channels
-    ALL.keys.each_with_index.to_h.merge(ABANDONED_CART => ABANDONED_CART_VALUE)
+    ALL.keys.index_by(&:itself).merge(ABANDONED_CART => ABANDONED_CART)
   end
 
   # A channel that is not a posting channel (abandoned cart) has no entry here, and both

@@ -20,7 +20,7 @@ class Marketing::AbandonedCart
   # gets it, and the delay the existing cart workflow uses.
   def state
     {
-      available:,
+      available: available?,
       blocked_reason:,
       enabled:,
       # A workflow that reaches this product but is not scoped to it is the account-wide

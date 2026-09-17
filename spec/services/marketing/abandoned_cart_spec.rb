@@ -35,7 +35,7 @@ describe Marketing::AbandonedCart do
         expect { cart.enable }.to change { workflows.published.count }.from(0).to(1)
 
         workflow = workflows.sole
-        expect(workflow).to be_published
+        expect(workflow.published_at).to be_present
         expect(workflow.bought_products).to eq([product.unique_permalink])
         expect(workflow.abandoned_cart_products(only_product_and_variant_ids: true).map(&:first)).to eq([product.id])
 
@@ -78,7 +78,7 @@ describe Marketing::AbandonedCart do
 
         cart.enable
 
-        expect(other.reload).to be_published
+        expect(other.reload.published_at).to be_present
         expect(workflows.count).to eq(2)
         expect(described_class.new(product:, seller:).covering_workflow).not_to eq(other)
       end
@@ -87,7 +87,7 @@ describe Marketing::AbandonedCart do
         expect(seller.eligible_to_send_emails?).to eq(false)
         expect(seller.eligible_for_abandoned_cart_workflows?).to eq(true)
 
-        expect(cart.enable).to be_published
+        expect(cart.enable.published_at).to be_present
         expect(cart.state).to include(enabled: true)
       end
 
@@ -95,7 +95,7 @@ describe Marketing::AbandonedCart do
         workflow = cart.enable
 
         expect(workflow.installments.alive.sole).to be_abandoned_cart_type
-        expect(workflow).to be_published
+        expect(workflow.published_at).to be_present
       end
     end
 
@@ -106,7 +106,7 @@ describe Marketing::AbandonedCart do
 
         expect { cart.pause }.to change { workflows.published.count }.from(1).to(0)
 
-        expect(workflow.reload).not_to be_published
+        expect(workflow.reload.published_at).to be_nil
         expect(workflow.deleted_at).to be_nil
         expect(installment.reload).to be_present
         expect(installment.deleted_at).to be_nil
@@ -118,7 +118,7 @@ describe Marketing::AbandonedCart do
         cart.pause
 
         expect { cart.enable }.not_to change { workflows.count }
-        expect(workflow.reload).to be_published
+        expect(workflow.reload.published_at).to be_present
       end
 
       it "does nothing when cart recovery was never on" do
