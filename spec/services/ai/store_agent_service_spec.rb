@@ -290,6 +290,66 @@ describe Ai::StoreAgentService do
       end
     end
 
+    context "bounded discount cards through the real v2 API" do
+      let!(:product) { create(:product, user: seller, price_currency_type: "eur") }
+      let!(:codes) { Array.new(25) { |i| create(:offer_code, code: "BOUND#{i}", created_at: i.minutes.ago, user: seller, products: [product], currency_type: "eur", amount_cents: 500) } }
+      let(:read_input) { { "endpoint" => "list_offer_codes", "path_params" => { "link_id" => product.external_id } } }
+      let(:enrichment_queries) { [] }
+      let(:enriched_codes) { [] }
+
+      before do
+        allow(Ai::StoreAgentApiClient).to receive(:new).and_call_original
+        allow(Ai::StoreAgentObjectFormatter).to receive(:from_response).and_wrap_original do |original, *args, **kwargs|
+          ActiveSupport::Notifications.subscribed(->(*event) { enrichment_queries << event.last[:sql] }, "sql.active_record") do
+            ActiveSupport::Notifications.subscribed(->(*event) { enriched_codes << event.last[:record_count] if event.last[:class_name] == "OfferCode" }, "instantiation.active_record") do
+              original.call(*args, **kwargs)
+            end
+          end
+        end
+      end
+
+      it "batches only the displayed codes while preserving the full API result for the model" do
+        calls = 0
+        model_response = nil
+        allow(client).to receive(:messages) do |**args|
+          calls += 1
+          if calls == 1
+            tool_result("api_read", read_input)
+          else
+            model_response = captured_tool_result(args)
+            text_result("Here are your codes.")
+          end
+        end
+        result = service.respond(messages: [{ role: "user", content: "List my codes." }])
+        expect(model_response.fetch("offer_codes").size).to eq(25)
+        expect(result[:objects].size).to eq(20)
+        expect(enrichment_queries.grep(/SELECT .*FROM `offer_codes`/).size).to eq(1)
+        expect(enriched_codes.sum).to eq(20)
+        expect(enrichment_queries.grep(/SELECT .*FROM `links`/).size).to eq(20)
+      end
+
+      it "uses the remaining budget after duplicate cards and stops enrichment once full" do
+        service.instance_variable_set(:@objects, [])
+        service.instance_variable_set(:@completed_read_targets, {})
+        first = Ai::StoreAgentObjectFormatter.from_response(Ai::StoreAgentApiCatalog.find("list_offer_codes"), { "offer_codes" => product.product_and_universal_offer_codes.first(19).map { |code| code.as_json_for_api.stringify_keys } }, seller:)
+        service.instance_variable_set(:@objects, first)
+        enrichment_queries.clear
+        response, = service.send(:run_api_read, read_input)
+        objects = service.send(:deduped_objects)
+        expect(response.fetch("offer_codes").size).to eq(25)
+        expect(objects.size).to eq(20)
+        expect(objects.first(19)).to eq(first)
+        code_queries = enrichment_queries.grep(/SELECT .*FROM `offer_codes`/)
+        expect(code_queries.size).to eq(20)
+        expect(code_queries).to all(match(/LIMIT 1|`id` = /))
+        enrichment_queries.clear
+        response, = service.send(:run_api_read, read_input)
+        expect(response.fetch("offer_codes").size).to eq(25)
+        expect(service.send(:deduped_objects)).to eq(objects)
+        expect(enrichment_queries).to be_empty
+      end
+    end
+
     context "hidden reasoning on the tool loop" do
       let(:calls) { [] }
 
