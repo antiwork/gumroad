@@ -5757,14 +5757,15 @@ class Purchase < ApplicationRecord
         "in_progress"
       ]
 
-      # Physical first except upgrades: a physical membership upgrade is a
-      # same-link charge the updater fires on purpose, not an accidental retry.
+      # Upgrades keep the short window: a membership upgrade is a same-link charge the
+      # subscription updater fires on purpose, not an accidental retry. Everything else that
+      # can repeat on one link gets the confirmation window: a buyer resubmitting after a
+      # checkout error has to read the banner and recover the form first, which takes minutes
+      # rather than the seconds the short window allowed.
       last_allowed_purchase_at = if is_upgrade_purchase?
         10.seconds.ago
-      elsif link.is_physical
+      elsif link.is_physical || link.quantity_enabled || link.is_licensed
         2.hours.ago
-      elsif link.quantity_enabled || link.is_licensed
-        10.seconds.ago
       else
         3.minutes.ago
       end
