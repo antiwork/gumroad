@@ -31,7 +31,7 @@ describe Products::MarketingActionsController do
 
       expect(response).to have_http_status(:ok)
       channels = response.parsed_body["channels"]
-      expect(channels.map { _1["channel"] }).to eq(%w[x instagram youtube tiktok])
+      expect(channels.map { _1["channel"] }).to eq(%w[x instagram youtube tiktok email])
       expect(channels.first).to include("live" => true, "connected" => true, "handle" => "seller")
       expect(channels.first["action"]).to include("status" => "recommended")
       expect(channels.second).to include("live" => false)
@@ -56,6 +56,43 @@ describe Products::MarketingActionsController do
       end.not_to change { [Marketing::Action.count, UtmLink.where(utm_campaign: "launch").count] }
 
       expect(response).to have_http_status(:not_found)
+    end
+
+    context "when the seller can send emails" do
+      before do
+        create(:payment_completed, user: seller)
+        allow_any_instance_of(User).to receive(:sales_cents_total).and_return(Installment::MINIMUM_SALES_CENTS_VALUE)
+      end
+
+      it "prepares one launch email draft and reports what it would reach" do
+        expect do
+          get :index, params: { product_id: product.unique_permalink }, as: :json
+        end.to change { seller.installments.alive.count }.by(1)
+
+        email = response.parsed_body["channels"].find { _1["channel"] == "email" }
+        expect(email).to include("eligible" => true, "blocked_reason" => nil)
+        expect(email["counts"]).to eq("customers" => 0, "followers" => 0, "total" => 0)
+        expect(email["draft"]).to include("subject" => product.name, "state" => "draft")
+
+        draft = Installment.find_by_external_id(email["draft"]["id"])
+        expect(draft).to have_attributes(installment_type: Installment::AUDIENCE_TYPE,
+                                         not_bought_products: [product.unique_permalink],
+                                         published_at: nil)
+        expect(draft.ready_to_publish?).to eq(false)
+        expect(SendPostBlastEmailsJob.jobs).to be_empty
+        expect(PostEmailBlast.count).to eq(0)
+      end
+    end
+
+    it "reports the gate reason and drafts nothing for a seller who cannot email yet" do
+      expect do
+        get :index, params: { product_id: product.unique_permalink }, as: :json
+      end.not_to change { Installment.count }
+
+      email = response.parsed_body["channels"].find { _1["channel"] == "email" }
+      expect(email).to include("eligible" => false, "draft" => nil)
+      expect(email["blocked_reason"]).to be_present
+      expect(email["action"]).to include("status" => "blocked", "error_code" => "email_eligibility_not_met")
     end
   end
 

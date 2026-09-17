@@ -42,6 +42,19 @@ const comingSoon: MarketingChannel[] = [
   { channel: "tiktok", label: "TikTok", live: false },
 ];
 
+const emailChannel = (overrides: Partial<MarketingChannel> = {}): MarketingChannel => ({
+  channel: "email",
+  label: "Email",
+  live: true,
+  eligible: true,
+  blocked_reason: null,
+  requirements: { sales_cents_total: 12_000, min_sales_cents_required: 10_000 },
+  counts: { customers: 12, followers: 4, total: 16 },
+  draft: { id: "draft1", subject: "Gumstein Letters", state: "draft", edit_url: "/emails/draft1/edit" },
+  action: action({ channel: "email" }),
+  ...overrides,
+});
+
 const xChannel = (overrides: Partial<MarketingChannel> = {}): MarketingChannel => ({
   channel: "x",
   label: "X",
@@ -136,5 +149,40 @@ describe("ShareYourLaunchCard", () => {
     const { container } = render(<ShareYourLaunchCard productPermalink="abc" />);
     await waitFor(() => expect(fetchMarketingRecommendations).toHaveBeenCalled());
     expect(container.textContent).toBe("");
+  });
+
+  it("shows the drafted launch email with what it reaches and a link to the draft", async () => {
+    await renderCard([xChannel(), ...comingSoon, emailChannel()]);
+
+    expect(screen.getByText(/We drafted an email about Gumstein Letters/u)).toBeDefined();
+    expect(screen.getByText(/12 past customers and 4 followers would get it \(16 people\)/u)).toBeDefined();
+    expect(screen.getByText("Draft")).toBeDefined();
+    expect(screen.getByRole("link", { name: "Review the draft" })).toHaveProperty(
+      "href",
+      expect.stringContaining("/emails/draft1/edit"),
+    );
+  });
+
+  it("shows the gate reason instead of a draft for a seller who cannot email yet", async () => {
+    await renderCard([
+      xChannel(),
+      emailChannel({
+        eligible: false,
+        draft: null,
+        blocked_reason: "You can email your customers once you've made at least $100 in sales and received a payout.",
+      }),
+    ]);
+
+    expect(
+      screen.getByText(/You can email your customers once you've made at least \$100 in sales and received a payout\./u),
+    ).toBeDefined();
+    expect(screen.queryByRole("link", { name: "Review the draft" })).toBeNull();
+  });
+
+  it("labels a launch email the seller has already scheduled", async () => {
+    await renderCard([emailChannel({ draft: { id: "draft1", subject: "Gumstein Letters", state: "scheduled", edit_url: "/emails/draft1/edit" } })]);
+
+    expect(screen.getByText("Scheduled")).toBeDefined();
+    expect(screen.getByRole("link", { name: "Open in Emails" })).toBeDefined();
   });
 });

@@ -1,4 +1,4 @@
-import { Instagram, Tiktok, TwitterX, Youtube } from "@boxicons/react";
+import { Envelope, Instagram, Tiktok, TwitterX, Youtube } from "@boxicons/react";
 import * as React from "react";
 
 import {
@@ -25,6 +25,13 @@ const CHANNEL_ICONS: Record<string, React.ComponentType<{ className?: string }>>
   instagram: Instagram,
   youtube: Youtube,
   tiktok: Tiktok,
+  email: Envelope,
+};
+
+const EMAIL_DRAFT_STATE_LABELS: Record<NonNullable<MarketingChannel["draft"]>["state"], string> = {
+  draft: "Draft",
+  scheduled: "Scheduled",
+  sent: "Sent",
 };
 
 export const ShareYourLaunchCard = ({ productPermalink }: { productPermalink: string }) => {
@@ -48,21 +55,30 @@ export const ShareYourLaunchCard = ({ productPermalink }: { productPermalink: st
         <p className="text-muted">Tell people about it. Nothing is posted until you confirm.</p>
       </header>
       <Card>
-        {channels.map((channel) =>
-          channel.live && channel.action ? (
-            <XChannelRow
-              key={channel.channel}
-              channel={channel}
-              action={channel.action}
-              productPermalink={productPermalink}
-              onChange={(action) =>
-                setChannels((prev) => prev?.map((c) => (c.channel === channel.channel ? { ...c, action } : c)) ?? null)
-              }
-            />
-          ) : (
-            <ComingSoonRow key={channel.channel} channel={channel} />
-          ),
-        )}
+        {channels.map((channel) => {
+          if (!channel.live || !channel.action) return <ComingSoonRow key={channel.channel} channel={channel} />;
+
+          if (channel.channel === "email") return <EmailChannelRow key={channel.channel} channel={channel} />;
+
+          if (channel.channel === "x")
+            return (
+              <XChannelRow
+                key={channel.channel}
+                channel={channel}
+                action={channel.action}
+                productPermalink={productPermalink}
+                onChange={(action) =>
+                  setChannels(
+                    (prev) => prev?.map((c) => (c.channel === channel.channel ? { ...c, action } : c)) ?? null,
+                  )
+                }
+              />
+            );
+
+          // A live channel with no row of its own: render nothing rather than claim it is
+          // coming soon.
+          return null;
+        })}
       </Card>
     </section>
   );
@@ -83,6 +99,52 @@ const ComingSoonRow = ({ channel }: { channel: MarketingChannel }) => (
     <Button disabled>Post on {channel.label}</Button>
   </CardContent>
 );
+
+const EmailChannelRow = ({ channel }: { channel: MarketingChannel }) => {
+  const counts = channel.counts;
+  const draft = channel.draft;
+
+  return (
+    <CardContent details className="grid gap-4">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex items-center gap-3">
+          <ChannelIcon channel="email" className="size-6" />
+          <span className="font-semibold">{channel.label}</span>
+        </div>
+        {draft ? <Pill size="small">{EMAIL_DRAFT_STATE_LABELS[draft.state]}</Pill> : null}
+      </div>
+
+      {channel.eligible === false ? (
+        <Alert role="status">
+          <span>{channel.blocked_reason}</span>
+        </Alert>
+      ) : draft ? (
+        <>
+          <span>
+            We drafted an email about {draft.subject} for your past customers and followers. Nothing is sent until you
+            send it.
+          </span>
+          {counts ? (
+            <small className="text-muted">
+              {counts.customers} past {counts.customers === 1 ? "customer" : "customers"} and {counts.followers}{" "}
+              {counts.followers === 1 ? "follower" : "followers"} would get it ({counts.total} people), leaving out
+              everyone who already bought this product.
+            </small>
+          ) : null}
+          <div className="flex flex-wrap gap-2">
+            <NavigationButton href={draft.edit_url}>
+              {draft.state === "draft" ? "Review the draft" : "Open in Emails"}
+            </NavigationButton>
+          </div>
+        </>
+      ) : (
+        <Alert role="status">
+          <span>We couldn&apos;t prepare the draft. You can still write one yourself in Emails.</span>
+        </Alert>
+      )}
+    </CardContent>
+  );
+};
 
 const XChannelRow = ({
   channel,

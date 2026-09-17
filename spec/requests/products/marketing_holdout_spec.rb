@@ -18,10 +18,13 @@ RSpec.describe "Launch card holdout", type: :system, js: true do
       if holdout
         expect(page).not_to have_text("Share your launch")
         expect(Marketing::Action.where(user: seller).count).to eq(0)
+        expect(Installment.where(seller:).count).to eq(0)
       else
         expect(page).to have_text("Share your launch")
         expect(page).to have_text("Connect X")
-        expect(Marketing::Action.where(user: seller).count).to eq(1)
+        # One action per live channel, and the email one carries the reason its draft is missing.
+        expect(Marketing::Action.where(user: seller).count).to eq(2)
+        expect(page).to have_text("You can email your customers once you've made at least $100 in sales and received a payout.")
       end
     end
   end

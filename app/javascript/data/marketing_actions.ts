@@ -24,6 +24,20 @@ export type MarketingChannel = {
   connect_path?: string;
   intent_url?: string;
   action?: MarketingAction;
+  // The email channel prepares a draft instead of posting, so the card shows either the
+  // reason the seller cannot email yet or the draft's state and reach.
+  eligible?: boolean;
+  blocked_reason?: string | null;
+  requirements?: { sales_cents_total: number; min_sales_cents_required: number };
+  counts?: { customers: number; followers: number; total: number };
+  draft?: MarketingEmailDraft | null;
+};
+
+export type MarketingEmailDraft = {
+  id: string;
+  subject: string;
+  state: "draft" | "scheduled" | "sent";
+  edit_url: string;
 };
 
 type ErrorResponse = { success: false; error: string };
