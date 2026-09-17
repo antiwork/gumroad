@@ -435,12 +435,15 @@ class Payouts
     end
   end
 
+  # Raised, with nothing claimed, when a single-payment caller meets a seller who needs several.
+  class MultiplePayoutGroupsError < StandardError; end
+
   def self.create_payment(date, processor_type, user, payout_type: Payouts::PAYOUT_TYPE_STANDARD)
-    create_payments(date, processor_type, user, payout_type:).first
+    create_payments(date, processor_type, user, payout_type:, single_group: true).first
   end
 
   # Claim and persist every group before preparation can move money at Stripe.
-  def self.create_payments(date, processor_type, user, payout_type: Payouts::PAYOUT_TYPE_STANDARD)
+  def self.create_payments(date, processor_type, user, payout_type: Payouts::PAYOUT_TYPE_STANDARD, single_group: false)
     payout_processor = ::PayoutProcessorType.get(processor_type)
     # Unrestricted claims are dated before the claim so a hold landing mid-run cannot post-date
     # hold_started_at; claims made under the hold are dated now so they count in the reserve base.
@@ -455,13 +458,20 @@ class Payouts
         [[nil, nil, balances]]
       end
 
-      payout_groups.filter_map do |merchant_account, payout_currency, group_balances|
-        if group_balances.sum(&:amount_cents) <= 0
-          Rails.logger.info("Payouts: Negative balance for #{user.id}")
-          group_balances.each(&:mark_unpaid!)
-          next
-        end
+      # Debt is judged on the seller's whole ledger, not per group: a refund owed in one currency
+      # cannot be netted against a payout in another, so a seller who nets to zero or carries a
+      # negative group is not paid anything until the debt clears.
+      if balances.sum(&:amount_cents) <= 0 ||
+          (payout_groups.size > 1 && payout_groups.any? { |_, _, group_balances| group_balances.sum(&:amount_cents) <= 0 })
+        Rails.logger.info("Payouts: Negative balance for #{user.id}")
+        balances.each(&:mark_unpaid!)
+        next []
+      end
 
+      # Raising here rolls the claim back, so the caller never sees a subset of prepared Payments.
+      raise MultiplePayoutGroupsError, "user #{user.id} needs #{payout_groups.size} payouts" if single_group && payout_groups.size > 1
+
+      payout_groups.map do |merchant_account, payout_currency, group_balances|
         payment = Payment.create!(
           user:,
           balances: group_balances,

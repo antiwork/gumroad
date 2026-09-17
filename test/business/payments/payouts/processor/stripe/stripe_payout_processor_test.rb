@@ -3803,6 +3803,29 @@ class StripePayoutProcessorTest < ActiveSupport::TestCase
     assert_equal "failed", payment.state
   end
 
+  test "prepare_payment_and_set_amount fails a balance still parked on a replaced Stripe account instead of paying through it" do
+    user = create_user
+    old_account = create_merchant_account(user:, currency: Currency::VND, country: "VN")
+    old_account.update!(charge_processor_deleted_at: Time.current, deleted_at: Time.current)
+    live_account = create_merchant_account(user:, currency: Currency::USD, country: "US")
+    stale_balance = create_balance(user:, merchant_account: old_account, date: Date.today - 1, state: "processing",
+                                   amount_cents: 20_00, holding_currency: Currency::VND, holding_amount_cents: 500_000)
+    payment = create_payment(user:, currency: nil, amount_cents: nil)
+    payment.balances << stale_balance
+    StripePayoutProcessor.expects(:pay_out_currencies).never
+    Stripe::Transfer.expects(:create).never
+
+    groups = StripePayoutProcessor.payout_groups(user, [stale_balance])
+    assert_equal [live_account.id], groups.map { |(account, _currency, _balances)| account.id }
+
+    account, currency, balances = groups.first
+    errors = StripePayoutProcessor.prepare_payment_and_set_amount(payment, balances, account, currency)
+
+    assert_match(/holding_currency that does not match the payout currency/, errors.first)
+    assert_equal Payment::FailureReason::CURRENCY_MISMATCH, payment.reload.failure_reason
+    assert_equal "failed", payment.state
+  end
+
   test ".perform_payment names the seller's bank account as the payout destination when the currencies match" do
     setup_perform_payment_error_case
     Stripe::Payout.expects(:create).with do |params, _opts|

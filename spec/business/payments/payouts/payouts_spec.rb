@@ -921,6 +921,40 @@ describe Payouts do
 
       expect(described_class.create_payments(payout_date.to_s, PayoutProcessorType::STRIPE, user)).to eq([])
     end
+
+    it "pays nothing while one currency group carries a debt, so a positive group cannot outrun the seller's net ledger" do
+      allow(StripePayoutProcessor).to receive(:is_balance_payable).and_return(true)
+      expect(StripePayoutProcessor).not_to receive(:prepare_payment_and_set_amount)
+      create(:balance, user:, merchant_account:, date: payout_date - 2, amount_cents: -3_00,
+                       holding_currency: Currency::EUR, holding_amount_cents: -2_60)
+
+      expect do
+        expect(described_class.create_payments(payout_date.to_s, PayoutProcessorType::STRIPE, user)).to eq([])
+      end.not_to change(Payment, :count)
+      expect(user.balances.reload.map(&:state).uniq).to eq(["unpaid"])
+    end
+
+    it "pays nothing when the seller nets to zero or less across groups" do
+      allow(StripePayoutProcessor).to receive(:is_balance_payable).and_return(true)
+      expect(StripePayoutProcessor).not_to receive(:prepare_payment_and_set_amount)
+      create(:balance, user:, merchant_account:, date: payout_date - 2, amount_cents: -10_00,
+                       holding_currency: Currency::EUR, holding_amount_cents: -8_70)
+
+      expect(described_class.create_payments(payout_date.to_s, PayoutProcessorType::STRIPE, user)).to eq([])
+      expect(user.balances.reload.map(&:state).uniq).to eq(["unpaid"])
+    end
+
+    it "refuses the single-payment entry point for a seller who needs several, leaving the claim untouched" do
+      allow(StripePayoutProcessor).to receive(:is_balance_payable).and_return(true)
+      expect(StripePayoutProcessor).not_to receive(:prepare_payment_and_set_amount)
+      create(:balance, user:, merchant_account:, date: payout_date - 2, amount_cents: 33_12,
+                       holding_currency: Currency::EUR, holding_amount_cents: 4_303)
+
+      expect do
+        described_class.create_payment(payout_date.to_s, PayoutProcessorType::STRIPE, user)
+      end.to raise_error(Payouts::MultiplePayoutGroupsError).and not_change(Payment, :count)
+      expect(user.balances.reload.map(&:state).uniq).to eq(["unpaid"])
+    end
   end
 
   describe ".create_payments_for_balances_up_to_date_for_bank_account_types" do

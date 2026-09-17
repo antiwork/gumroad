@@ -210,10 +210,13 @@ class StripePayoutProcessor
     merchant_account, balances_held_by_gumroad, balances_held_by_stripe = get_payout_details(user, balances)
     groups = {}
 
+    # Every Stripe-held group pays out through the account the user-level lookup picked; a balance
+    # still parked on a replaced account keeps its own group so preparation fails it as a mismatch
+    # instead of paying through an account Gumroad considers closed.
     balances_held_by_stripe
       .group_by { |balance| [balance.merchant_account_id, balance.holding_currency.to_s] }
       .each do |(merchant_account_id, currency), stripe_balances|
-        groups[[merchant_account_id, currency]] = [stripe_balances.first.merchant_account, currency, stripe_balances]
+        groups[[merchant_account_id, currency]] = [merchant_account, currency, stripe_balances]
       end
 
     if balances_held_by_gumroad.present?
@@ -276,7 +279,9 @@ class StripePayoutProcessor
     payout_currency = payout_currency.to_s
 
     # A currency mismatch would turn nominal cents into a different amount of money.
-    mismatched_stripe_balances = balances_held_by_stripe.reject { |b| b.holding_currency.to_s == payout_currency }
+    mismatched_stripe_balances = balances_held_by_stripe.reject do |b|
+      b.holding_currency.to_s == payout_currency && b.merchant_account_id == merchant_account.id
+    end
     unpayable_stripe_balances = (balances_held_by_stripe - mismatched_stripe_balances)
       .reject { |b| pay_out_currency?(b.merchant_account, b.holding_currency) }
     mismatched_gumroad_balances = balances_held_by_gumroad.reject { |b| b.holding_currency == Currency::USD }
