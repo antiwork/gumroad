@@ -131,6 +131,7 @@ describe Products::MarketingAbandonedCartsController do
       put :update, params: { product_id: product.unique_permalink, enabled: true }, as: :json
 
       expect(seller.reload.eligible_to_send_emails?).to eq(false)
+      expect(response).to have_http_status(:ok), "status #{response.status}: #{response.body.to_s[0, 200]}"
       expect(response.parsed_body).to include("enabled" => true)
     end
   end

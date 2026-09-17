@@ -22,7 +22,7 @@ class Marketing::AbandonedCart
     {
       available: available?,
       blocked_reason:,
-      enabled:,
+      enabled: enabled?,
       # A workflow that reaches this product but is not scoped to it is the account-wide
       # default, and the toggle then controls cart recovery for every product — the card
       # has to say so rather than let a product view imply a product-scoped switch.
@@ -37,12 +37,17 @@ class Marketing::AbandonedCart
   # published, not a second one beside it.
   def enable
     return :blocked unless available?
-    return workflow if enabled?
 
-    existing = covering_workflow
-    return publish(existing) if existing
-
-    create_and_publish
+    result = if enabled?
+      workflow
+    elsif (existing = covering_workflow)
+      publish(existing)
+    else
+      create_and_publish
+    end
+    # The memo describes the world before this call, and the caller reads `state` next.
+    @covering_workflow = nil
+    result
   end
 
   # Pausing is the workflow's own publish state: the workflow and its email are kept, so
@@ -52,6 +57,7 @@ class Marketing::AbandonedCart
     return if workflow.nil? || !enabled?
 
     workflow.unpublish!
+    @covering_workflow = nil
     workflow
   end
 

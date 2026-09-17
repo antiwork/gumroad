@@ -7,14 +7,16 @@ class Products::MarketingAbandonedCartsController < Sellers::BaseController
   before_action :fetch_product
 
   def show
-    authorize Marketing::Action
+    # The record here is the class, not an action row: the permission is the role-based one
+    # the launch card uses, plus the ownership check below.
+    authorize Marketing::Action, :index?
     return head :not_found unless enabled? && own_product? && @product.published?
 
     render json: cart.state
   end
 
   def update
-    authorize Marketing::Action
+    authorize Marketing::Action, :index?
     return head :not_found unless enabled? && own_product? && @product.published?
 
     # One control with two states: the request carries the state it wants rather than
