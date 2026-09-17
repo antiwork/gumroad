@@ -69,9 +69,9 @@ describe PayoutUsersService, :vcr do
     it "processes payments for all users even if there are exceptions in the process" do
       # Make processing the first user ID raise an exception
       allow(User).to receive(:find).and_call_original
-      allow(Payouts).to receive(:create_payment).and_call_original
+      allow(Payouts).to receive(:create_payments).and_call_original
       allow(User).to receive(:find).with(user1.id).and_return(user1)
-      allow(Payouts).to receive(:create_payment).with(payout_date.to_s, payout_processor_type, user1, payout_type: Payouts::PAYOUT_TYPE_STANDARD)
+      allow(Payouts).to receive(:create_payments).with(payout_date.to_s, payout_processor_type, user1, payout_type: Payouts::PAYOUT_TYPE_STANDARD)
                                                 .and_raise(StandardError)
 
       service_object = described_class.new(date_string: payout_date.to_s, processor_type: payout_processor_type,

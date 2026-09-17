@@ -763,10 +763,12 @@ describe Payouts do
     let(:payout_date) { Date.today - 1 }
     let(:user) { create(:user) }
     let!(:merchant_account) { create(:merchant_account, user:) }
+    # Named so the nested `.create_payments` group can opt out: its fixtures hold one currency per
+    # account, and the default USD balance here would be a second group there.
+    let!(:default_balance) { create(:balance, user:, merchant_account:, date: payout_date - 1, amount_cents: 10_00) }
 
     before do
       create(:ach_account, user:)
-      create(:balance, user:, merchant_account:, date: payout_date - 1, amount_cents: 10_00)
     end
 
     it "marks the payment as processing when preparation succeeds" do
@@ -853,6 +855,7 @@ describe Payouts do
       let(:payout_date) { Date.today - 1 }
       let(:user) { create(:user) }
       let!(:merchant_account) { create(:merchant_account, user:, currency: Currency::HUF) }
+      let!(:default_balance) { nil }
 
       before do
         create(:ach_account, user:)

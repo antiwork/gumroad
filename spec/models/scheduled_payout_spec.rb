@@ -184,13 +184,13 @@ describe ScheduledPayout do
         allow(StripePayoutProcessor).to receive(:cross_border_payout?).and_return(false)
       end
 
-      it "creates a payment via Payouts.create_payment and marks as executed" do
+      it "creates a payment via Payouts.create_payments and marks as executed" do
         payment = instance_double(Payment, failed?: false, reload: nil)
         allow(payment).to receive(:reload).and_return(payment)
         processor = class_double(StripePayoutProcessor, process_payments: nil)
-        expect(Payouts).to receive(:create_payment)
+        expect(Payouts).to receive(:create_payments)
           .with(Date.yesterday.to_s, user.current_payout_processor, user)
-          .and_return([payment, nil])
+          .and_return([[payment, nil]])
         expect(PayoutProcessorType).to receive(:get).with(user.current_payout_processor).and_return(processor)
         expect(processor).to receive(:process_payments).with([payment])
 
@@ -205,9 +205,9 @@ describe ScheduledPayout do
         payment = instance_double(Payment, failed?: false, reload: nil)
         allow(payment).to receive(:reload).and_return(payment)
         processor = class_double(StripePayoutProcessor, process_payments: nil)
-        expect(Payouts).to receive(:create_payment)
+        expect(Payouts).to receive(:create_payments)
           .with(Date.yesterday.to_s, PayoutProcessorType::STRIPE, user)
-          .and_return([payment, nil])
+          .and_return([[payment, nil]])
         expect(PayoutProcessorType).to receive(:get).with(PayoutProcessorType::STRIPE).and_return(processor)
         expect(processor).to receive(:process_payments).with([payment])
 
@@ -221,9 +221,9 @@ describe ScheduledPayout do
         payment = instance_double(Payment, failed?: false, reload: nil)
         allow(payment).to receive(:reload).and_return(payment)
         processor = class_double(StripePayoutProcessor, process_payments: nil)
-        expect(Payouts).to receive(:create_payment)
+        expect(Payouts).to receive(:create_payments)
           .with(Date.yesterday.to_s, user.current_payout_processor, user)
-          .and_return([payment, nil])
+          .and_return([[payment, nil]])
         expect(PayoutProcessorType).to receive(:get).with(user.current_payout_processor).and_return(processor)
         expect(processor).to receive(:process_payments).with([payment])
 
@@ -238,9 +238,9 @@ describe ScheduledPayout do
                                            errors: double(full_messages: ["Stripe rate limited"]))
         allow(payment).to receive(:reload) { allow(payment).to receive(:failed?).and_return(true); payment }
         processor = class_double(StripePayoutProcessor, process_payments: nil)
-        allow(Payouts).to receive(:create_payment)
+        allow(Payouts).to receive(:create_payments)
           .with(Date.yesterday.to_s, user.current_payout_processor, user)
-          .and_return([payment, nil])
+          .and_return([[payment, nil]])
         allow(PayoutProcessorType).to receive(:get).with(user.current_payout_processor).and_return(processor)
 
         expect { scheduled_payout.execute! }.to raise_error(RuntimeError, /Payout failed: Stripe rate limited/)
@@ -252,9 +252,9 @@ describe ScheduledPayout do
                                            errors: double(full_messages: ["Missing Stripe capabilities"]))
         allow(payment).to receive(:reload) { allow(payment).to receive(:failed?).and_return(true); payment }
         processor = class_double(StripePayoutProcessor, process_payments: nil)
-        allow(Payouts).to receive(:create_payment)
+        allow(Payouts).to receive(:create_payments)
           .with(Date.yesterday.to_s, user.current_payout_processor, user)
-          .and_return([payment, nil])
+          .and_return([[payment, nil]])
         allow(PayoutProcessorType).to receive(:get).with(user.current_payout_processor).and_return(processor)
 
         expect(scheduled_payout.execute!).to eq(:flagged)
@@ -266,9 +266,9 @@ describe ScheduledPayout do
         # Same terminal-vs-requeueable distinction as the processing-failure branch, but for a
         # payment already failed() by Payouts.create_payment itself (before process_payments).
         payment = instance_double(Payment, failed?: true, failure_reason: Payment::FailureReason::PROCESSOR_RATE_LIMITED)
-        allow(Payouts).to receive(:create_payment)
+        allow(Payouts).to receive(:create_payments)
           .with(Date.yesterday.to_s, user.current_payout_processor, user)
-          .and_return([payment, ["Stripe rate limited"]])
+          .and_return([[payment, ["Stripe rate limited"]]])
         expect(PayoutProcessorType).not_to receive(:get)
 
         expect { scheduled_payout.execute! }.to raise_error(RuntimeError, /Payout failed: Stripe rate limited/)
@@ -276,9 +276,9 @@ describe ScheduledPayout do
       end
 
       it "flags the payout for review when no payable balance is available" do
-        allow(Payouts).to receive(:create_payment)
+        allow(Payouts).to receive(:create_payments)
           .with(Date.yesterday.to_s, user.current_payout_processor, user)
-          .and_return([nil, nil])
+          .and_return([[nil, nil]])
 
         expect(scheduled_payout.execute!).to eq(:flagged)
         expect(scheduled_payout.reload.status).to eq("flagged")
@@ -287,9 +287,9 @@ describe ScheduledPayout do
 
       it "flags without raising when the payment failed during preparation for a non-requeueable reason" do
         payment = instance_double(Payment, failed?: true, failure_reason: Payment::FailureReason::CANNOT_PAY)
-        allow(Payouts).to receive(:create_payment)
+        allow(Payouts).to receive(:create_payments)
           .with(Date.yesterday.to_s, user.current_payout_processor, user)
-          .and_return([payment, ["Cannot process payout: no valid merchant account found for user."]])
+          .and_return([[payment, ["Cannot process payout: no valid merchant account found for user."]]])
         expect(PayoutProcessorType).not_to receive(:get)
 
         expect(scheduled_payout.execute!).to eq(:flagged)
@@ -298,9 +298,9 @@ describe ScheduledPayout do
       end
 
       it "flags without raising when create_payment returns errors" do
-        allow(Payouts).to receive(:create_payment)
+        allow(Payouts).to receive(:create_payments)
           .with(Date.yesterday.to_s, user.current_payout_processor, user)
-          .and_return([nil, ["Stripe account not connected"]])
+          .and_return([[nil, ["Stripe account not connected"]]])
 
         expect(scheduled_payout.execute!).to eq(:flagged)
         expect(scheduled_payout.reload.status).to eq("flagged")
@@ -314,9 +314,9 @@ describe ScheduledPayout do
       it "defers the bank payout instead of processing it immediately" do
         scheduled_payout.update!(processor: PayoutProcessorType::STRIPE)
         payment = instance_double(Payment, id: 9876, blank?: false, failed?: false)
-        allow(Payouts).to receive(:create_payment)
+        allow(Payouts).to receive(:create_payments)
           .with(Date.yesterday.to_s, PayoutProcessorType::STRIPE, user)
-          .and_return([payment, nil])
+          .and_return([[payment, nil]])
         allow(StripePayoutProcessor).to receive(:cross_border_payout?).with(payment).and_return(true)
         processor = class_double(StripePayoutProcessor)
         allow(PayoutProcessorType).to receive(:get).and_return(processor)
@@ -334,7 +334,7 @@ describe ScheduledPayout do
       let(:scheduled_payout) { create(:scheduled_payout, user: user, action: "payout", scheduled_at: 1.day.ago, payout_amount_cents: 150_000) }
 
       it "flags for review instead of executing" do
-        expect(Payouts).not_to receive(:create_payment)
+        expect(Payouts).not_to receive(:create_payments)
 
         scheduled_payout.execute!
 
