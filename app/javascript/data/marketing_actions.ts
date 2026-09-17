@@ -5,7 +5,10 @@ import { request, ResponseError } from "$app/utils/request";
 export type MarketingAction = {
   id: string;
   channel: string;
-  status: "recommended" | "approved" | "queued" | "posted" | "failed" | "cancelled";
+  // Every status the API can return: the state machine's states, plus `blocked` for a
+  // channel whose gate the seller has not cleared yet. typia validates this at runtime,
+  // so a state missing here makes the whole recommendations payload unusable.
+  status: "recommended" | "approved" | "queued" | "posted" | "failed" | "cancelled" | "blocked";
   copy: string;
   post_text: string;
   link_url: string | null;
