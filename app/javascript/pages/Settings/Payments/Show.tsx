@@ -11,6 +11,7 @@ import type { ComplianceInfo, PayoutMethod, FormFieldName, User, PayoutDebitCard
 import { COLOMBIA_ID_NUMBER_ERROR_MESSAGE, isValidColombiaIdNumber } from "$app/utils/colombiaIdNumbers";
 import { formatPriceCentsWithCurrencySymbol, formatPriceCentsWithoutCurrencySymbol } from "$app/utils/currency";
 import { accountNumberFormatError } from "$app/utils/payoutAccountNumbers";
+import { normalizeUsTaxId, personalTaxIdError, usesUsTaxId } from "$app/utils/personalTaxId";
 import { countryRequiresPostalCode } from "$app/utils/postalCodes";
 import { asyncVoid } from "$app/utils/promise";
 
@@ -267,6 +268,7 @@ export default function PaymentsPage() {
   const [isUpdateCountryConfirmed, setIsUpdateCountryConfirmed] = React.useState(false);
   const [isPayoutMethodChangeConfirmed, setIsPayoutMethodChangeConfirmed] = React.useState(false);
   const [saveCounter, setSaveCounter] = React.useState(0);
+  const [hasIdDocumentAlternative, setHasIdDocumentAlternative] = React.useState(false);
 
   const form = useForm<{
     user: ComplianceInfo;
@@ -913,6 +915,11 @@ export default function PaymentsPage() {
     ) {
       markFieldInvalid("individual_tax_id");
     }
+    const taxIdError = personalTaxIdError(form.data.user, props.user, form.data.user.individual_tax_id ?? "");
+    if (taxIdError) {
+      markFieldInvalid("individual_tax_id");
+      setClientErrorMessage({ message: taxIdError });
+    }
     // Stripe's id_number requirement follows the account country — business_country for
     // businesses (same rule as the Peru DNI check below).
     const ssnRequirementCountry = form.data.user.is_business ? form.data.user.business_country : form.data.user.country;
@@ -1158,7 +1165,12 @@ export default function PaymentsPage() {
 
     form.transform((data) => {
       const transformed: Record<string, unknown> = {
-        user: data.user,
+        user: {
+          ...data.user,
+          ...(usesUsTaxId(data.user, props.user) && data.user.individual_tax_id
+            ? { individual_tax_id: normalizeUsTaxId(data.user.individual_tax_id) }
+            : {}),
+        },
         payouts_paused_by_user: data.payouts_paused_by_user,
         payout_threshold_cents: data.payout_threshold_cents,
         payout_frequency: data.payout_frequency,
@@ -1559,6 +1571,7 @@ export default function PaymentsPage() {
                 states={props.states}
                 errorFieldNames={errorFieldNames}
                 saveCounter={saveCounter}
+                hasIdDocumentAlternative={hasIdDocumentAlternative}
               />
             ) : (
               <StripeConnectSection
@@ -1583,6 +1596,7 @@ export default function PaymentsPage() {
               countries={props.countries}
               states={props.states}
               defaultCountry={form.data.user.business_country ?? form.data.user.country}
+              onIdDocumentAlternativeChange={setHasIdDocumentAlternative}
               minDobYear={props.min_dob_year}
               isFormDisabled={props.is_form_disabled}
             />

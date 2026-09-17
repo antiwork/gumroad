@@ -1195,14 +1195,38 @@ class User < ApplicationRecord
   # since a country/payout-method change retires one row and creates another —
   # reading only the live row would restart the clock on a longtime seller.
   def stripe_accounts_seasoned_for_instant_payouts?
-    managed_account = stripe_account
-    return false if managed_account.nil?
+    resolvable_destinations = instant_payout_destination_accounts
+    return false if resolvable_destinations.empty?
 
-    [managed_account, stripe_connect_account].compact.all? do |account|
-      seasoned_for_instant_payouts?(account)
+    # The managed and the connected account both have to season even when only one of them is where
+    # the next payout would land, because get_payout_details picks between them per payout.
+    accounts = ([stripe_account, stripe_connect_account] + resolvable_destinations).compact.uniq
+    accounts.all? do |account|
+      # A held-balance destination can be an account that was retired after the funds landed on it,
+      # and paying into it fails rather than seasoning into a working destination.
+      account.active? && seasoned_for_instant_payouts?(account)
     end
   end
   private :stripe_accounts_seasoned_for_instant_payouts?
+
+  # Every account StripePayoutProcessor.get_payout_details could resolve to: it branches on whether
+  # Stripe still holds any of the seller's balances, so both branches are candidates. The
+  # held-balance branch can only differ from the managed account when there is none, so the balance
+  # read stays off the path where a managed account already answers it.
+  def instant_payout_destination_accounts
+    [
+      StripePayoutProcessor.destination_merchant_account(self, []),
+      stripe_account || StripePayoutProcessor.destination_merchant_account(self, stripe_held_unpaid_balances),
+    ].compact.uniq
+  end
+  private :instant_payout_destination_accounts
+
+  def stripe_held_unpaid_balances
+    balances.unpaid.includes(:merchant_account).select do |balance|
+      balance.merchant_account&.holder_of_funds == HolderOfFunds::STRIPE
+    end
+  end
+  private :stripe_held_unpaid_balances
 
   def seasoned_for_instant_payouts?(account)
     cutoff = MIN_ACCOUNT_AGE_FOR_INSTANT_PAYOUTS.ago

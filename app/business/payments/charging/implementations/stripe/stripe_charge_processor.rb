@@ -749,11 +749,12 @@ class StripeChargeProcessor
         # Recent sale transfers must remain available for buyer refunds.
         params = { destination: stripe_account_id, created: { lt: 120.days.ago.to_i }, limit: 100 }
         loop do
-          transfers = Stripe::Transfer.list(**params)
-          transfer = transfers.find { |tr| tr.amount - tr.amount_reversed > amount_to_reverse_for.call(tr) }
-          break if transfer || transfers.count < params[:limit]
+          # Stripe list pages are ListObjects: the rows are on #data, and Enumerable has no #last.
+          page = Stripe::Transfer.list(**params)
+          transfer = page.find { |tr| tr.amount - tr.amount_reversed > amount_to_reverse_for.call(tr) }
+          break if transfer || page.count < params[:limit]
 
-          params[:starting_after] = transfers.last.id
+          params[:starting_after] = page.data.last.id
         end
       end
     end

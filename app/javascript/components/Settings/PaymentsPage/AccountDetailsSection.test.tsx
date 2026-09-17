@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import * as React from "react";
 import { afterEach, describe, expect, it } from "vitest";
 
@@ -84,7 +84,74 @@ const renderSection = (user: User, complianceOverrides: Partial<ComplianceInfo> 
     />,
   );
 
+describe("AccountDetailsSection foreign representative tax ID", () => {
+  it("renders a generic field for an unmapped representative country on a US business", () => {
+    renderSection(makeUser({ individual_tax_id_entered: false }), {
+      is_business: true,
+      business_country: "US",
+      country: "DZ",
+    });
+    expect(screen.getByLabelText<HTMLInputElement>("Personal tax ID").disabled).toBe(false);
+    expect(screen.getByText(/US ITIN or SSN \(9 digits\)/u)).toBeTruthy();
+    expect(screen.getByText(/upload a passport/u)).toBeTruthy();
+  });
+
+  it("keeps a mapped foreign-ID field's existing length behavior", () => {
+    renderSection(makeUser({ individual_tax_id_entered: false }), {
+      is_business: true,
+      business_country: "US",
+      country: "BO",
+    });
+    const input = screen.getByLabelText<HTMLInputElement>("Cédula de Identidad (CI)");
+    expect([input.minLength, input.maxLength]).toEqual([8, 8]);
+    fireEvent.change(input, { target: { value: "12345678" } });
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  it("keeps the mapped Canadian field unchanged", () => {
+    renderSection(makeUser({ individual_tax_id_entered: false }), {
+      is_business: true,
+      business_country: "US",
+      country: "CA",
+    });
+    const input = screen.getByLabelText<HTMLInputElement>("Social Insurance Number");
+    expect([input.placeholder, input.minLength, input.maxLength]).toEqual(["•••••••••", 9, 9]);
+    expect(screen.queryByLabelText("Personal tax ID")).toBeNull();
+  });
+
+  it.each(["1234", "12345678", "1234567890", "abcdefghi"])(
+    "shows an inline error for invalid US tax ID %s",
+    (value) => {
+      renderSection(makeUser({ individual_tax_id_entered: false }), {
+        is_business: true,
+        business_country: "US",
+        country: "DZ",
+      });
+      const input = screen.getByLabelText("Personal tax ID");
+      fireEvent.change(input, { target: { value } });
+      expect(screen.getByRole("alert").textContent).toBe("Enter a 9-digit US ITIN or SSN.");
+      expect(input.getAttribute("aria-invalid")).toBe("true");
+      fireEvent.change(input, { target: { value: "000000000" } });
+      expect(screen.queryByRole("alert")).toBeNull();
+    },
+  );
+
+  it("does not show a fallback when no country requires an ID", () => {
+    renderSection(makeUser(), { country: "DZ" });
+    expect(screen.queryByLabelText("Personal tax ID")).toBeNull();
+  });
+});
+
 describe("AccountDetailsSection SSN field", () => {
+  it("accepts only four digits on the permitted US-resident last-four path", () => {
+    renderSection(makeUser({ individual_tax_id_entered: false }));
+    const input = screen.getByLabelText("Last 4 digits of SSN");
+    fireEvent.change(input, { target: { value: "000" } });
+    expect(screen.getByRole("alert").textContent).toBe("Enter the last 4 digits of your SSN.");
+    fireEvent.change(input, { target: { value: "0000" } });
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
   it("renders the masked completed display when the full SSN is already on file", () => {
     renderSection(
       makeUser({

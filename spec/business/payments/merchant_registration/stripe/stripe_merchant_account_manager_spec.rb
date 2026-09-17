@@ -541,6 +541,35 @@ describe StripeMerchantAccountManager, :vcr do
       end
     end
 
+    describe "US LLC with an Algerian representative (person_hash)" do
+      let(:user) { create(:user, email: "representative@example.com") }
+      let(:compliance_info) do
+        create(:user_compliance_info_business, user:, country: "Algeria", business_country: "United States",
+                                               business_type: "single_member_llc", individual_tax_id: tax_id)
+      end
+      let(:person) { described_class.send(:person_hash, compliance_info, GlobalConfig.get("STRONGBOX_GENERAL_PASSWORD")) }
+
+      context "with a nine-digit ITIN" do
+        let(:tax_id) { "000000000" }
+
+        it "forwards id_number regardless of the representative country" do
+          expect(person[:address][:country]).to eq("DZ")
+          expect(person[:id_number]).to eq(tax_id)
+          expect(person).not_to have_key(:ssn_last_4)
+        end
+      end
+
+      context "with four digits" do
+        let(:tax_id) { "0000" }
+
+        it "never forwards ssn_last_4 for a non-US resident" do
+          expect(person[:address][:country]).to eq("DZ")
+          expect(person).not_to have_key(:ssn_last_4)
+          expect(person).not_to have_key(:id_number)
+        end
+      end
+    end
+
     describe "US business with a foreign-resident representative (person_hash)" do
       # Regression coverage for gumroad-private#441: a US LLC with a Bangladesh-resident
       # representative could not save settings because we sent the rep's foreign national ID

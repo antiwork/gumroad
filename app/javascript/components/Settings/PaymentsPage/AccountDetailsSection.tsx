@@ -4,7 +4,12 @@ import * as React from "react";
 import typia from "typia";
 
 import type { ComplianceInfo, FormFieldName, User } from "$app/types/payments";
-import { COLOMBIA_ID_MAX_INPUT_LENGTH, COLOMBIA_ID_MIN_DIGITS } from "$app/utils/colombiaIdNumbers";
+import {
+  getIndividualTaxIdConfig,
+  PERSONAL_ID_NUMBER_CONFIG,
+  personalTaxIdError,
+  type TaxIdConfig,
+} from "$app/utils/personalTaxId";
 import { countryRequiresPostalCode } from "$app/utils/postalCodes";
 
 import { Button } from "$app/components/Button";
@@ -25,14 +30,6 @@ type StateConfig = {
 type PrefectureConfig = {
   states: { value: string; label: string; kana: string }[];
   label: string;
-  idSuffix: string;
-};
-
-type TaxIdConfig = {
-  label: string;
-  placeholder: string;
-  minLength?: number;
-  maxLength?: number;
   idSuffix: string;
 };
 
@@ -59,6 +56,7 @@ const AccountDetailsSection = ({
   states,
   errorFieldNames,
   saveCounter,
+  hasIdDocumentAlternative = false,
 }: {
   user: User;
   complianceInfo: ComplianceInfo;
@@ -82,15 +80,21 @@ const AccountDetailsSection = ({
   };
   errorFieldNames: Set<FormFieldName>;
   saveCounter: number;
+  hasIdDocumentAlternative?: boolean;
 }) => {
   const uid = React.useId();
   const [isEditingIndividualTaxId, setIsEditingIndividualTaxId] = React.useState(false);
   const [isEditingBusinessTaxId, setIsEditingBusinessTaxId] = React.useState(false);
+  const [individualTaxIdInput, setIndividualTaxIdInput] = React.useState("");
+  const individualTaxIdValidationError = personalTaxIdError(complianceInfo, user, individualTaxIdInput);
   const [showIndividualTaxId, setShowIndividualTaxId] = React.useState(false);
   const [showBusinessTaxId, setShowBusinessTaxId] = React.useState(false);
 
   React.useEffect(() => {
-    if (user.individual_tax_id_entered) setIsEditingIndividualTaxId(false);
+    if (user.individual_tax_id_entered) {
+      setIsEditingIndividualTaxId(false);
+      setIndividualTaxIdInput("");
+    }
     if (user.business_tax_id_entered) setIsEditingBusinessTaxId(false);
   }, [saveCounter]);
 
@@ -179,172 +183,6 @@ const AccountDetailsSection = ({
     };
   };
 
-  const getIndividualTaxIdConfig = (): TaxIdConfig | null => {
-    if (complianceInfo.country === "US") {
-      return user.need_full_ssn
-        ? {
-            label: "Social Security Number",
-            placeholder: "•••-••-••••",
-            minLength: 9,
-            maxLength: 11,
-            idSuffix: "social-security-number-full",
-          }
-        : {
-            label: "Last 4 digits of SSN",
-            placeholder: "••••",
-            minLength: 4,
-            maxLength: 4,
-            idSuffix: "social-security-number",
-          };
-    }
-
-    const configs: Record<string, TaxIdConfig> = {
-      CA: {
-        label: "Social Insurance Number",
-        placeholder: "•••••••••",
-        minLength: 9,
-        maxLength: 9,
-        idSuffix: "social-insurance-number",
-      },
-      CO: {
-        // Colombia issues two personal IDs: the Cédula de Ciudadanía to citizens and the Cédula de
-        // Extranjería to foreign residents. Both are sent to Stripe as the generic
-        // individual.id_number, so both are accepted — the label has to say so, otherwise a foreign
-        // resident reads "Cédula de Ciudadanía" and concludes their ID cannot be used.
-        label: "Cédula de Ciudadanía (CC) or Cédula de Extranjería (CE)",
-        placeholder: "1234567890",
-        minLength: COLOMBIA_ID_MIN_DIGITS,
-        maxLength: COLOMBIA_ID_MAX_INPUT_LENGTH,
-        idSuffix: "colombia-id-number",
-      },
-      UY: {
-        label: "Cédula de Identidad (CI)",
-        placeholder: "1.123.123-1",
-        minLength: 11,
-        maxLength: 11,
-        idSuffix: "uruguay-id-number",
-      },
-      HK: {
-        label: "Hong Kong ID Number",
-        placeholder: "123456789",
-        minLength: 8,
-        maxLength: 9,
-        idSuffix: "hong-kong-id-number",
-      },
-      SG: {
-        label: "NRIC number / FIN",
-        placeholder: "S1234567A",
-        minLength: 9,
-        // No maxLength on purpose: the validation tolerates spaces/dashes inside a
-        // pasted NRIC ("S 1234567 - A"), so a browser length cap would silently
-        // truncate those pastes. The inline regex and the server-side check in
-        // UpdateUserComplianceInfo enforce the actual format.
-        idSuffix: "singapore-id-number",
-      },
-      AE: {
-        label: "Emirates ID",
-        placeholder: "123456789123456",
-        minLength: 15,
-        maxLength: 15,
-        idSuffix: "uae-id-number",
-      },
-      MX: {
-        label: "Personal RFC",
-        placeholder: "1234567891234",
-        minLength: 13,
-        maxLength: 13,
-        idSuffix: "mexico-id-number",
-      },
-      KZ: {
-        label: "Individual identification number (IIN)",
-        placeholder: "123456789",
-        minLength: 9,
-        maxLength: 12,
-        idSuffix: "kazakhstan-id-number",
-      },
-      AR: {
-        label: "CUIL",
-        placeholder: "12-12345678-1",
-        minLength: 13,
-        maxLength: 13,
-        idSuffix: "argentina-id-number",
-      },
-      PE: { label: "DNI number", placeholder: "12345678-9", minLength: 10, maxLength: 10, idSuffix: "peru-id-number" },
-      PK: {
-        label: "National Identity Card Number (SNIC or CNIC)",
-        placeholder: "•••••••••",
-        minLength: 13,
-        maxLength: 13,
-        idSuffix: "snic",
-      },
-      CR: {
-        label: "Tax Identification Number",
-        placeholder: "1234567890",
-        minLength: 9,
-        maxLength: 12,
-        idSuffix: "costa-rica-id-number",
-      },
-      CL: {
-        label: "Rol Único Tributario (RUT)",
-        placeholder: "123456789",
-        minLength: 8,
-        maxLength: 9,
-        idSuffix: "chile-id-number",
-      },
-      DO: {
-        label: "Cédula de identidad y electoral (CIE)",
-        placeholder: "123-1234567-1",
-        minLength: 13,
-        maxLength: 13,
-        idSuffix: "dominican-republic-id-number",
-      },
-      BO: {
-        label: "Cédula de Identidad (CI)",
-        placeholder: "12345678",
-        minLength: 8,
-        maxLength: 8,
-        idSuffix: "bolivia-id-number",
-      },
-      PY: {
-        label: "Cédula de Identidad (CI)",
-        placeholder: "1234567",
-        minLength: 7,
-        maxLength: 7,
-        idSuffix: "paraguay-id-number",
-      },
-      BD: {
-        label: "Personal ID number",
-        placeholder: "123456789",
-        minLength: 1,
-        maxLength: 20,
-        idSuffix: "bangladesh-id-number",
-      },
-      MZ: {
-        label: "Mozambique Taxpayer Single ID Number (NUIT)",
-        placeholder: "123456789",
-        minLength: 9,
-        maxLength: 9,
-        idSuffix: "mozambique-id-number",
-      },
-      GT: {
-        label: "Número de Identificación Tributaria (NIT)",
-        placeholder: "1234567-8",
-        minLength: 8,
-        maxLength: 12,
-        idSuffix: "guatemala-id-number",
-      },
-      BR: {
-        label: "Cadastro de Pessoas Físicas (CPF)",
-        placeholder: "123.456.789-00",
-        minLength: 11,
-        maxLength: 14,
-        idSuffix: "brazil-id-number",
-      },
-    };
-
-    return complianceInfo.country ? (configs[complianceInfo.country] ?? null) : null;
-  };
-
   const isPrefectureConfig = (config: StateConfig | PrefectureConfig): config is PrefectureConfig =>
     "value" in (config.states[0] || {});
 
@@ -428,7 +266,7 @@ const AccountDetailsSection = ({
   const businessStateConfig = getBusinessStateConfig();
   const individualStateConfig = getIndividualStateConfig();
   const businessTaxIdConfig = getBusinessTaxIdConfig();
-  const individualTaxIdConfig = getIndividualTaxIdConfig();
+  const individualTaxIdConfig = getIndividualTaxIdConfig(complianceInfo, user);
 
   const showAccountTypeSection = complianceInfo.is_business
     ? complianceInfo.business_country !== "AE"
@@ -1324,11 +1162,33 @@ const AccountDetailsSection = ({
         </Fieldset>
       ) : null}
       {needsIndividualTaxId && individualTaxIdConfig ? (
-        <Fieldset state={errorFieldNames.has("individual_tax_id") ? "danger" : undefined}>
+        <Fieldset
+          state={errorFieldNames.has("individual_tax_id") || individualTaxIdValidationError ? "danger" : undefined}
+        >
           <div>
             <FieldsetTitle>
               <Label htmlFor={`${uid}-${individualTaxIdConfig.idSuffix}`}>{individualTaxIdConfig.label}</Label>
             </FieldsetTitle>
+            {individualTaxIdConfig === PERSONAL_ID_NUMBER_CONFIG &&
+            complianceInfo.is_business &&
+            complianceInfo.business_country === "US" ? (
+              <FieldsetDescription className="text-muted">
+                To verify this US company's representative, enter a US ITIN or SSN (9 digits) if you have one.
+                {!hasIdDocumentAlternative
+                  ? " If you have neither, use Stripe's verification link to upload a passport when offered."
+                  : null}
+              </FieldsetDescription>
+            ) : null}
+            {hasIdDocumentAlternative && !isFormDisabled ? (
+              <FieldsetDescription className="text-muted">
+                <a href={Routes.remediation_settings_payments_path()}>
+                  {complianceInfo.country !==
+                  (complianceInfo.is_business ? complianceInfo.business_country : complianceInfo.country)
+                    ? "Upload a passport via Stripe instead"
+                    : "Upload an identity document via Stripe instead"}
+                </a>
+              </FieldsetDescription>
+            ) : null}
             {user.individual_tax_id_entered && !isEditingIndividualTaxId && !mustReenterFullSsn ? (
               <div className="flex flex-col gap-2">
                 <div className="flex items-center gap-2">
@@ -1372,9 +1232,18 @@ const AccountDetailsSection = ({
                   placeholder={individualTaxIdConfig.placeholder}
                   required={!user.individual_tax_id_entered || mustReenterFullSsn}
                   disabled={isFormDisabled}
-                  aria-invalid={errorFieldNames.has("individual_tax_id")}
-                  onChange={(evt) => updateComplianceInfo({ individual_tax_id: evt.target.value })}
+                  aria-invalid={errorFieldNames.has("individual_tax_id") || !!individualTaxIdValidationError}
+                  aria-describedby={individualTaxIdValidationError ? `${uid}-tax-id-error` : undefined}
+                  onChange={(evt) => {
+                    updateComplianceInfo({ individual_tax_id: evt.target.value });
+                    setIndividualTaxIdInput(evt.target.value);
+                  }}
                 />
+                {individualTaxIdValidationError ? (
+                  <FieldsetDescription id={`${uid}-tax-id-error`} role="alert">
+                    {individualTaxIdValidationError}
+                  </FieldsetDescription>
+                ) : null}
                 {mustReenterFullSsn ? (
                   <div className="small">
                     Our payments provider now requires your full 9-digit Social Security Number. Please re-enter it to

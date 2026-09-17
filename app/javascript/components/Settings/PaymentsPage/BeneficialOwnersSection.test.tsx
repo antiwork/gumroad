@@ -3,6 +3,8 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import * as React from "react";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
+import { stripeRequirementLabel } from "$app/utils/personalTaxId";
+
 import BeneficialOwnersSection from "$app/components/Settings/PaymentsPage/BeneficialOwnersSection";
 
 beforeAll(() => {
@@ -68,6 +70,48 @@ const renderSection = (owners: unknown[], defaultCountry = "GB") => {
 
 // GB has no country-specific config, so the field carries the fallback "Personal ID number" label.
 const idNumberInput = () => screen.getByLabelText("Personal ID number");
+
+describe("Stripe requirement labels", () => {
+  it("does not repeat a title that is already listed as a role", async () => {
+    renderSection([
+      {
+        ...ownerWithoutIdNumber,
+        relationship: {
+          ...ownerWithoutIdNumber.relationship,
+          director: false,
+          executive: false,
+          title: "Owner",
+          percent_ownership: 100,
+        },
+      },
+    ]);
+    expect(await screen.findByText("Owner · 100%")).toBeTruthy();
+    expect(screen.queryByText("Owner · 100% · Owner")).toBeNull();
+  });
+
+  it.each([
+    ["id_number", "Personal tax ID"],
+    ["verification.document", "Identity document"],
+    ["ssn_last_4", "Last 4 of SSN"],
+    ["dob.day", "Date of birth"],
+    ["dob.month", "Date of birth"],
+    ["dob.year", "Date of birth"],
+    ["address.line1", "Address"],
+    ["address.postal_code", "Address"],
+    ["relationship.title", "Relationship title"],
+    ["verification.additional_document", "Verification additional document"],
+  ])("labels %s as %s", (key, label) => expect(stripeRequirementLabel(key)).toBe(label));
+
+  it("renders human labels without duplicate date-of-birth or address requirements", async () => {
+    renderSection([
+      {
+        ...ownerWithoutIdNumber,
+        requirements_currently_due: ["id_number", "dob.day", "dob.month", "address.line1", "address.city"],
+      },
+    ]);
+    expect(await screen.findByText("Stripe needs: Personal tax ID, Date of birth, Address")).toBeTruthy();
+  });
+});
 
 describe("BeneficialOwnersSection ID number requirement", () => {
   // The server requires an ID number only when creating an owner

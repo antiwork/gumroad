@@ -371,6 +371,47 @@ describe Commission, :vcr do
       end
     end
 
+    # Repricing the variant row itself — unlike the sibling contexts above, where the updater
+    # service replaces the variant and the purchase keeps its original price.
+    context "when the version price is raised after the deposit purchase" do
+      let!(:product) { create(:commission_product, price_cents: 1000, customizable_price: true) }
+      let!(:category) { create(:variant_category, link: product, title: "Version") }
+      let!(:variant) { create(:variant, variant_category: category, price_difference_cents: 1000) }
+      let!(:deposit_purchase) { create(:commission_deposit_purchase, link: product, variant_attributes: [variant]) }
+      let!(:commission) { create(:commission, status: Commission::STATUS_IN_PROGRESS, deposit_purchase:) }
+
+      before { attach_commission_file(commission) }
+
+      it "charges the balance the deposit fixed" do
+        expect(deposit_purchase.price_cents).to eq(1000)
+
+        variant.update!(price_difference_cents: 3000)
+
+        expect { commission.create_completion_purchase! }.to change { Purchase.count }.by(1)
+
+        completion_purchase = commission.reload.completion_purchase
+        expect(completion_purchase).to be_successful
+        expect(completion_purchase.price_cents).to eq(1000)
+        expect(commission.status).to eq(Commission::STATUS_COMPLETED)
+      end
+    end
+
+    context "when the completion purchase fails validation" do
+      let(:commission) { create(:commission, status: Commission::STATUS_IN_PROGRESS) }
+
+      before { attach_commission_file(commission) }
+
+      it "raises the validator's message rather than a generic one" do
+        allow_any_instance_of(Purchase).to receive(:charge!) do |completion_purchase|
+          completion_purchase.errors.add(:base, "Please enter an amount greater than or equal to the minimum.")
+        end
+
+        expect { commission.create_completion_purchase! }.to raise_error(ActiveRecord::RecordInvalid) { |error|
+          expect(error.record.errors.full_messages).to eq(["Please enter an amount greater than or equal to the minimum."])
+        }
+      end
+    end
+
     context "when the deposit purchase used a discount code" do
       let!(:product) { create(:commission_product, price_cents: 2000) }
       let!(:offer_code) { create(:offer_code, products: [product], amount_cents: 1000) }

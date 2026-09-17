@@ -7,6 +7,7 @@ import {
   COLOMBIA_ID_NUMBER_ERROR_MESSAGE,
   isValidColombiaIdNumber,
 } from "$app/utils/colombiaIdNumbers";
+import { PERSONAL_ID_NUMBER_CONFIG, stripeRequirementLabel, type TaxIdConfig } from "$app/utils/personalTaxId";
 import { countryRequiresPostalCode } from "$app/utils/postalCodes";
 import { request, ResponseError } from "$app/utils/request";
 
@@ -76,6 +77,7 @@ type BeneficialOwner = {
   nationality: string | null;
   verification_status: string | null;
   requirements_currently_due: string[];
+  requirements_alternatives?: { original_fields_due: string[]; alternative_fields_due: string[] }[];
 };
 
 const NATIONALITY_REQUIRED_COUNTRIES = ["AE", "SG", "BD", "PK"];
@@ -133,14 +135,6 @@ const STATE_LIST_LABEL: Record<string, string> = {
   IE: "County",
 };
 
-type TaxIdConfig = {
-  label: string;
-  placeholder: string;
-  minLength?: number;
-  maxLength?: number;
-  idSuffix: string;
-};
-
 const FALLBACK_TAX_ID_CONFIG: TaxIdConfig = {
   label: "Personal ID number",
   placeholder: "Government-issued ID number",
@@ -153,12 +147,6 @@ const SSN_LAST_4_CONFIG: TaxIdConfig = {
   minLength: 4,
   maxLength: 4,
   idSuffix: "social-security-number",
-};
-
-const PERSONAL_ID_NUMBER_CONFIG: TaxIdConfig = {
-  label: "Personal ID number",
-  placeholder: "Government-issued ID number",
-  idSuffix: "personal-id-number",
 };
 
 const TAX_ID_CONFIGS: Record<string, TaxIdConfig> = {
@@ -422,12 +410,14 @@ const BeneficialOwnersSection = ({
   defaultCountry,
   minDobYear,
   isFormDisabled,
+  onIdDocumentAlternativeChange,
 }: {
   countries: Record<string, string>;
   states: StatesByCountry;
   defaultCountry: string | null;
   minDobYear: number;
   isFormDisabled: boolean;
+  onIdDocumentAlternativeChange?: (available: boolean) => void;
 }) => {
   const [owners, setOwners] = React.useState<BeneficialOwner[]>([]);
   const [isLoading, setIsLoading] = React.useState(true);
@@ -469,6 +459,21 @@ const BeneficialOwnersSection = ({
   React.useEffect(() => {
     void refresh();
   }, [refresh]);
+
+  React.useEffect(() => {
+    onIdDocumentAlternativeChange?.(
+      owners.some(
+        (owner) =>
+          owner.relationship.representative &&
+          owner.requirements_currently_due.includes("id_number") &&
+          owner.requirements_alternatives?.some(
+            (alternative) =>
+              alternative.original_fields_due.includes("id_number") &&
+              alternative.alternative_fields_due.includes("verification.document"),
+          ),
+      ),
+    );
+  }, [owners, onIdDocumentAlternativeChange]);
 
   const openCreate = () => {
     setEditState({ mode: "create" });
@@ -638,11 +643,15 @@ const BeneficialOwnersSection = ({
                   <span className="text-sm text-muted">
                     {ownerRole(owner)}
                     {owner.relationship.percent_ownership != null ? ` · ${owner.relationship.percent_ownership}%` : ""}
-                    {owner.relationship.title ? ` · ${owner.relationship.title}` : ""}
+                    {owner.relationship.title &&
+                    !ownerRole(owner).toLowerCase().split(", ").includes(owner.relationship.title.trim().toLowerCase())
+                      ? ` · ${owner.relationship.title}`
+                      : ""}
                   </span>
                   {owner.requirements_currently_due.length > 0 ? (
                     <span className="text-sm text-warning">
-                      Stripe needs: {owner.requirements_currently_due.join(", ")}
+                      Stripe needs:{" "}
+                      {[...new Set(owner.requirements_currently_due.map(stripeRequirementLabel))].join(", ")}
                     </span>
                   ) : null}
                 </div>
