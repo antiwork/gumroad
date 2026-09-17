@@ -60,6 +60,8 @@ describe("CartRecoveryCard", () => {
       expect(screen.getByRole("switch", { name: "Abandoned cart email" })).toHaveProperty("checked", true),
     );
     expect(screen.queryByText(/Nothing is sent until/u)).toBeNull();
+    // The button below carries the destination; the sentence does not repeat it.
+    expect(screen.queryByText(/edit the email in Workflows/u)).toBeNull();
     expect(screen.getByRole("link", { name: "Open in Workflows" })).toHaveProperty(
       "href",
       expect.stringContaining("/workflows/wf1/emails"),
@@ -81,12 +83,10 @@ describe("CartRecoveryCard", () => {
   });
 
   it("shows the reason and a disabled toggle for a seller who cannot use it yet", async () => {
-    await renderCard(
-      state({ available: false, blocked_reason: "Abandoned cart email turns on after your first payout." }),
-    );
+    await renderCard(state({ available: false, blocked_reason: "Turns on after your first payout." }));
 
     expect(screen.getByRole("status").tagName).toBe("P");
-    expect(screen.getByRole("status").textContent).toBe("Abandoned cart email turns on after your first payout.");
+    expect(screen.getByRole("status").textContent).toBe("Turns on after your first payout.");
     expect(screen.getByRole("switch", { name: "Abandoned cart email" })).toHaveProperty("disabled", true);
   });
 

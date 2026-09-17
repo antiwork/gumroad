@@ -151,7 +151,7 @@ describe Marketing::AbandonedCart do
       expect { cart.enable }.not_to change { [workflows.count, Installment.count] }
       expect(cart.enable).to eq(:blocked)
       expect(cart.state).to include(available: false, enabled: false)
-      expect(cart.state[:blocked_reason]).to eq("Abandoned cart email turns on after your first payout.")
+      expect(cart.state[:blocked_reason]).to eq("Turns on after your first payout.")
     end
 
     it "does not need eligibility to pause something already published" do

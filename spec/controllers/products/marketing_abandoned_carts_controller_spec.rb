@@ -145,7 +145,7 @@ describe Products::MarketingAbandonedCartsController do
       end.not_to change { workflows.count }
 
       expect(response).to have_http_status(:unprocessable_entity)
-      expect(response.parsed_body["error"]).to eq("Abandoned cart email turns on after your first payout.")
+      expect(response.parsed_body["error"]).to eq("Turns on after your first payout.")
     end
 
     it "reports the reason on the card" do
