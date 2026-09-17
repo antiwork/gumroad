@@ -23,6 +23,7 @@ class Products::MarketingActionsController < Sellers::BaseController
   def approve
     authorize @action
     return head :not_found unless enabled?
+    return cart_recovery_receipt if @action.abandoned_cart?
 
     outcome = @action.approve_copy_from_web(**params.permit(:copy).to_h.symbolize_keys)
 
@@ -49,6 +50,7 @@ class Products::MarketingActionsController < Sellers::BaseController
   def cancel
     authorize @action
     return head :not_found unless enabled?
+    return cart_recovery_receipt if @action.abandoned_cart?
 
     # with_lock reloads under the row lock, so a cancellation that arrives after the
     # executor's claim sees :queued and is refused instead of overwriting it.
@@ -62,6 +64,10 @@ class Products::MarketingActionsController < Sellers::BaseController
   end
 
   private
+    def cart_recovery_receipt
+      render json: { success: false, error: "Use the product Share page or Workflows to change abandoned cart emails." }, status: :unprocessable_entity
+    end
+
     def enabled? = Marketing::Eligibility.enabled_for?(current_seller)
 
     # Nested member routes put the action id in :id, so the concern's :id-first lookup does not apply.

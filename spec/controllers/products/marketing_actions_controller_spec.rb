@@ -172,4 +172,18 @@ describe Products::MarketingActionsController do
       expect(response).to have_http_status(:not_found)
     end
   end
+
+  %i[approve cancel].each do |operation|
+    it "rejects #{operation} on a cart receipt without changing its workflow or history" do
+      create(:payment_completed, user: seller)
+      workflow = Marketing::AbandonedCart.new(product:, seller:).enable
+      receipt = create(:marketing_action, user: seller, link: product, channel: "abandoned_cart", status: "approved")
+      original = receipt.attributes
+      post operation, params: { product_id: product.unique_permalink, id: receipt.external_id, copy: "Different receipt text" }, as: :json
+      expect(response).to have_http_status(:unprocessable_entity)
+      expect(response.parsed_body["error"]).to include("Workflows")
+      expect(receipt.reload.attributes).to eq(original)
+      expect(workflow.reload.published_at).to be_present
+    end
+  end
 end

@@ -10,15 +10,16 @@ import { CartRecoveryCard } from "$app/components/ProductEdit/ShareTab/CartRecov
 import { showAlert } from "$app/components/server-components/Alert";
 
 const fetchCartRecovery = vi.fn<(id: string) => Promise<MarketingCartRecovery>>();
-const updateCartRecovery = vi.fn<(id: string, enabled: boolean) => Promise<MarketingCartRecovery>>();
+const updateCartRecovery = vi.fn<(id: string, enabled: boolean, token?: string) => Promise<MarketingCartRecovery>>();
 vi.mock("$app/data/marketing_cart_recovery", () => ({
   fetchCartRecovery: (id: string) => fetchCartRecovery(id),
-  updateCartRecovery: (id: string, enabled: boolean) => updateCartRecovery(id, enabled),
+  updateCartRecovery: (id: string, enabled: boolean, token?: string) => updateCartRecovery(id, enabled, token),
 }));
 vi.mock("$app/components/server-components/Alert", () => ({ showAlert: vi.fn() }));
 
 const workflow = { name: "Cart reminder", url: "/workflows/wf1/emails", scope: "Field Notes Workbook", enabled: true };
 const state = (overrides: Partial<MarketingCartRecovery> = {}): MarketingCartRecovery => ({
+  activation_token: "reviewed-token",
   available: true,
   blocked_reason: null,
   enabled: false,
@@ -83,7 +84,7 @@ describe("CartRecoveryCard", () => {
     expect(toggle()).toHaveProperty("disabled", false);
     expect(screen.getByRole("link", { name: "Edit email" })).toBeDefined();
     fireEvent.click(toggle());
-    await waitFor(() => expect(updateCartRecovery).toHaveBeenCalledWith("abc", false));
+    await waitFor(() => expect(updateCartRecovery).toHaveBeenCalledWith("abc", false, "reviewed-token"));
     await waitFor(() => expect(toggle()).toHaveProperty("checked", false));
     expect(toggle()).toHaveProperty("disabled", true);
   });
@@ -133,5 +134,22 @@ describe("CartRecoveryCard", () => {
     finish(state({ subject: "Old product" }));
     await waitFor(() => expect(screen.queryByText("Old product")).toBeNull());
     expect(screen.getByText("Current product")).toBeDefined();
+  });
+
+  it("discloses the daily schedule and existing carts before activation", async () => {
+    await renderCard(state());
+    expect(screen.getByText(/14:00 UTC/u).textContent).toContain("at least 24 hours");
+    expect(screen.getByText(/past month/u)).toBeDefined();
+  });
+
+  it("sends the reviewed token and reloads an obsolete preview after rejection", async () => {
+    await renderCard(state());
+    fetchCartRecovery.mockResolvedValue(state({ subject: "Updated email", activation_token: "new-token" }));
+    updateCartRecovery.mockRejectedValue(new ResponseError("Review the updated email."));
+    fireEvent.click(toggle());
+    await waitFor(() => expect(updateCartRecovery).toHaveBeenCalledWith("abc", true, "reviewed-token"));
+    await waitFor(() => expect(fetchCartRecovery).toHaveBeenCalledTimes(2));
+    expect(screen.getByText("Updated email")).toBeDefined();
+    expect(toggle()).toHaveProperty("checked", false);
   });
 });
