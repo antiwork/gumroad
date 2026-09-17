@@ -105,7 +105,7 @@ class UpdateUserComplianceInfo
       old_compliance_info.reload if old_compliance_info.persisted? && encrypted_compliance_info_params_present?
       unless compliance_info_changed
         UserComplianceInfoRequest.handle_new_user_compliance_info(old_compliance_info)
-        return { success: true }
+        return { success: true } unless old_compliance_info.nationality_resubmission_required?
       end
 
       peru_dni_error = peru_individual_dni_error(old_compliance_info)
@@ -117,7 +117,9 @@ class UpdateUserComplianceInfo
       colombia_id_error = colombia_individual_id_error(old_compliance_info)
       return { success: false, error_message: colombia_id_error } if colombia_id_error
 
-      saved, new_compliance_info = if encrypted_compliance_info_params_present?
+      saved, new_compliance_info = if !compliance_info_changed
+        [true, old_compliance_info]
+      elsif encrypted_compliance_info_params_present?
         dup_and_save_compliance_info(old_compliance_info)
       else
         old_compliance_info.dup_and_save do |new_compliance_info|

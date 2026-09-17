@@ -431,6 +431,8 @@ module StripeMerchantAccountManager
     if last_attributes[:individual].present?
       last_attributes[:individual][:email] = nil
       last_attributes[:individual][:phone] = nil
+      # Older payloads suppressed nationality even when the compliance record already contained it.
+      last_attributes[:individual].delete(:nationality) if user_compliance_info.nationality_resubmission_required?
       last_attributes[:individual][:relationship] = nil if user_compliance_info.country_code == Compliance::Countries::CAN.alpha2
     end
     if last_attributes[:company].present?
