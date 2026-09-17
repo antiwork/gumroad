@@ -3737,10 +3737,55 @@ describe User, :vcr do
       expect(user.reload.eligible_for_instant_payouts?).to eq(false)
     end
 
-    it "returns false for a Stripe Connect seller, whose account #stripe_account never returns" do
-      merchant_account.update!(json_data: { meta: { stripe_connect: "true" } })
+    context "when the seller only has a connected Stripe account" do
+      before do
+        # A migrated seller: Connect routing is what makes their connected account the payout
+        # destination, and #stripe_account never returns for them again.
+        Feature.activate_user(:merchant_migration, user)
+      end
+      after { Feature.deactivate_user(:merchant_migration, user) }
 
-      expect(user.reload.eligible_for_instant_payouts?).to eq(false)
+      let!(:merchant_account) do
+        create(:merchant_account_stripe_connect, user:, created_at: 90.days.ago)
+      end
+
+      it "returns true when the connected account is seasoned" do
+        expect(user.stripe_account).to be_nil
+        expect(StripePayoutProcessor.get_payout_details(user, []).first).to eq(merchant_account)
+        expect(user.eligible_for_instant_payouts?).to eq(true)
+      end
+
+      it "returns false while the connected account is younger than 60 days" do
+        merchant_account.update!(created_at: 59.days.ago)
+
+        expect(user.reload.eligible_for_instant_payouts?).to eq(false)
+      end
+
+      it "returns false when Connect routing is disabled" do
+        allow(user).to receive(:has_stripe_account_connected?).and_return(false)
+
+        expect(StripePayoutProcessor.get_payout_details(user, []).first).to be_nil
+        expect(user.eligible_for_instant_payouts?).to eq(false)
+      end
+
+      [:deleted_at, :charge_processor_deleted_at].each do |retirement_attribute|
+        it "returns false when a Stripe-held balance routes to an account with #{retirement_attribute}" do
+          retired_account = create(:merchant_account, user:, created_at: 90.days.ago, retirement_attribute => Time.current)
+          balance = create(:balance, user:, merchant_account: retired_account)
+
+          expect(user.stripe_account).to be_nil
+          expect(retired_account.holder_of_funds).to eq(HolderOfFunds::STRIPE)
+          expect(StripePayoutProcessor.get_payout_details(user, [balance]).first).to eq(retired_account)
+          expect(user.eligible_for_instant_payouts?).to eq(false)
+        end
+      end
+
+      it "does not block on a retired account whose balance was already paid" do
+        retired_account = create(:merchant_account, user:, created_at: 90.days.ago, deleted_at: Time.current)
+        create(:balance, user:, merchant_account: retired_account, state: "paid")
+
+        expect(user.eligible_for_instant_payouts?).to eq(true)
+      end
     end
 
     it "returns false for a seller paid through PayPal, with no Stripe account to season" do

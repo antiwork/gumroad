@@ -136,16 +136,23 @@ class StripePayoutProcessor
     balances_held_by_gumroad = balances_by_holder_of_funds[HolderOfFunds::GUMROAD] || []
     balances_held_by_stripe = balances_by_holder_of_funds[HolderOfFunds::STRIPE] || []
 
+    merchant_account = destination_merchant_account(user, balances_held_by_stripe)
+
+    return merchant_account, balances_held_by_gumroad, balances_held_by_stripe
+  end
+
+  # Public: The merchant account a payout for this user is created on. Extracted so eligibility
+  # (User#stripe_accounts_seasoned_for_instant_payouts?) asks the same question instead of a second
+  # copy of the rule.
+  def self.destination_merchant_account(user, balances_held_by_stripe)
     # Prefer the connected Stripe standard account once there's nothing left on the custom
     # connect account; balances_held_by_stripe drains to zero over time as new sales route
     # directly to the standard account.
-    merchant_account = if user.has_stripe_account_connected? && balances_held_by_stripe.blank?
+    if user.has_stripe_account_connected? && balances_held_by_stripe.blank?
       user.stripe_connect_account
     else
       user.stripe_account || balances_held_by_stripe[0]&.merchant_account
     end
-
-    return merchant_account, balances_held_by_gumroad, balances_held_by_stripe
   end
 
   def self.instantly_payable_amount_cents_on_stripe(user)
