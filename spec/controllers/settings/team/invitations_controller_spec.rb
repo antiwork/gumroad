@@ -180,10 +180,26 @@ describe Settings::Team::InvitationsController do
         end.to change { seller.team_invitations.count }.by(TeamInvitationThrottle::UNREVIEWED_TOTAL_LIMIT + 1)
       end
 
-      it "holds the seller's row lock across the lifetime count and the insert" do
-        expect_any_instance_of(User).to receive(:with_lock).at_least(:once).and_call_original
+      it "runs the lifetime count and the insert inside the seller's row lock" do
+        locked = false
+        allow_any_instance_of(User).to receive(:with_lock).and_wrap_original do |original, *args, &block|
+          locked = true
+          begin
+            original.call(*args, &block)
+          ensure
+            locked = false
+          end
+        end
+        allow(TeamInvitationThrottle).to receive(:unreviewed_limit_reached?).and_wrap_original do |original, *args|
+          expect(locked).to eq(true)
+          original.call(*args)
+        end
+        allow_any_instance_of(TeamInvitation).to receive(:save).and_wrap_original do |original, *args|
+          expect(locked).to eq(true)
+          original.call(*args)
+        end
 
-        post_invitation("locked@example.com")
+        post_invitation("inside-lock@example.com")
         expect(response.parsed_body["success"]).to eq(true)
       end
 
