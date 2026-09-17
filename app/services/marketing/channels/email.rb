@@ -1,9 +1,6 @@
 # frozen_string_literal: true
 
-# The email channel executes nothing outbound: the launch email is prepared as a draft
-# Installment and the seller sends it from the Emails tab, so "execute" only reports
-# where the draft lives. It keeps the same result shape as the X executor so the shared
-# API can render either channel without a special case.
+# Sends nothing outbound: "execute" only reports where the draft Installment lives.
 class Marketing::Channels::Email
   Result = Struct.new(:action, :intent_url, :connect_path, :edit_url, keyword_init: true)
 
