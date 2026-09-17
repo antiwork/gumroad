@@ -1414,7 +1414,7 @@ class Ai::StoreAgentService
       result = api_client.get(path, params)
       record_successful_read(endpoint:, expanded_path: path, result:)
       # Collect any renderable objects from the response so the chat can show them inline as cards.
-      @objects.concat(Ai::StoreAgentObjectFormatter.from_response(endpoint, result)) if @objects
+      @objects.concat(Ai::StoreAgentObjectFormatter.from_response(endpoint, result, seller:)) if @objects
       [result, nil]
     rescue ArgumentError => e
       # Missing/blank path param (e.g. the model forgot the product id).

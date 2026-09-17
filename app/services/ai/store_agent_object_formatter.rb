@@ -13,9 +13,8 @@
 #     copy:     String | nil,                # the most useful thing to copy (the url, or an id)
 #   }
 #
-# We only surface fields the API already exposes for this seller, so this can never leak more than
-# the endpoint itself returns. Unknown shapes fall back to a generic object so nothing crashes; the
-# model's prose still carries the answer even when we can't build a rich card.
+# Discount currency and coverage come from the seller's record because v2 omits them.
+# Unknown shapes are skipped; the model's prose still carries the answer.
 module Ai::StoreAgentObjectFormatter
   module_function
 
@@ -23,7 +22,7 @@ module Ai::StoreAgentObjectFormatter
   # @param endpoint [Ai::StoreAgentApiCatalog::Endpoint]
   # @param response [Hash] parsed JSON body from StoreAgentApiClient
   # @return [Array<Hash>] zero or more display objects
-  def from_response(endpoint, response)
+  def from_response(endpoint, response, seller: nil)
     return [] unless response.is_a?(Hash)
     # Never build cards from an error envelope.
     return [] if response["success"] == false
@@ -34,9 +33,9 @@ module Ai::StoreAgentObjectFormatter
     when "get_product", "create_product", "update_product", "enable_product", "disable_product"
       [product(response["product"] || response)].compact
     when "list_offer_codes"
-      Array(response["offer_codes"] || response["products"]).filter_map { |o| discount(o) }
+      Array(response["offer_codes"] || response["products"]).filter_map { |o| discount(o, seller:) }
     when "get_offer_code", "create_offer_code", "update_offer_code"
-      [discount(response["offer_code"] || response)].compact
+      [discount(response["offer_code"] || response, seller:)].compact
     when "list_sales"
       Array(response["sales"]).filter_map { |s| sale(s) }
     when "get_sale", "refund_sale", "mark_sale_as_shipped"
@@ -83,16 +82,28 @@ module Ai::StoreAgentObjectFormatter
     }
   end
 
-  def discount(json)
+  def discount(json, seller: nil)
     return nil unless json.is_a?(Hash) && (json["name"] || json["id"])
-    amount = json["percent_off"].present? ? "#{json['percent_off']}% off" : (json["amount_cents"].present? ? "#{money(json['amount_cents'])} off" : nil)
+    code = seller.offer_codes.alive.find_by_external_id(json["id"]) if seller && json["id"].present?
+    currency = code&.currency_type
+    amount = if json["percent_off"].present?
+      "#{json['percent_off']}% off"
+    elsif json["amount_cents"].present? && currency.present?
+      "#{MoneyFormatter.format(json['amount_cents'], currency, no_cents_if_whole: true)} off"
+    end
+    coverage = if code
+      if code.universal? && code.excluded_product_ids.empty?
+        currency.present? ? "All #{currency.upcase}-priced products" : "All products"
+      else
+        code.applicable_products.map(&:name).to_sentence.presence || "No products"
+      end
+    end
     {
       type: "discount",
       title: json["name"].to_s, # the API returns the code as `name`
       subtitle: amount,
       fields: compact_fields([
-                               ["Amount", amount],
-                               ["Applies to", json["universal"] ? "All products" : "Selected products"],
+                               ["Applies to", coverage],
                                ["Times used", json["times_used"]],
                                ["Max uses", json["max_purchase_count"]],
                              ]),

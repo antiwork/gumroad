@@ -47,15 +47,87 @@ describe Ai::StoreAgentObjectFormatter do
     end
 
     it "builds a discount card and copies the code" do
-      response = { "success" => true, "offer_code" => { "id" => "o1", "name" => "LAUNCH25", "percent_off" => 25, "universal" => true, "times_used" => 3 } }
+      code = create(:percentage_offer_code, universal: true, products: [], currency_type: nil, amount_percentage: 25)
+      response = { "success" => true, "offer_code" => code.as_json_for_api.stringify_keys.merge("name" => "LAUNCH25", "times_used" => 3) }
 
-      card = described_class.from_response(catalog.find("create_offer_code"), response).first
+      card = described_class.from_response(catalog.find("create_offer_code"), response, seller: code.user).first
 
       expect(card[:type]).to eq("discount")
       expect(card[:title]).to eq("LAUNCH25")
       expect(card[:subtitle]).to eq("25% off")
       expect(card[:copy]).to eq("LAUNCH25")
       expect(card[:fields]).to include({ label: "Applies to", value: "All products" }, { label: "Times used", value: "3" })
+    end
+
+    context "discount result details" do
+      let(:seller) { create(:user) }
+      let(:product) { create(:product, user: seller, name: "EUR guide", price_currency_type: "eur", price_cents: 2000) }
+      let(:code) { create(:offer_code, user: seller, products: [product], amount_percentage: nil, amount_cents: 500, currency_type: "eur") }
+
+      def card_for(response, owner: seller)
+        described_class.from_response(catalog.find("get_offer_code"), { "offer_code" => response }, seller: owner).sole
+      end
+
+      it "renders the stored currency once and names the scoped products" do
+        card = card_for(code.as_json_for_api.stringify_keys)
+
+        expect(card[:subtitle]).to eq("€5 off")
+        expect(card[:fields]).to include({ label: "Applies to", value: "EUR guide" })
+        expect(card[:fields].pluck(:label)).not_to include("Amount")
+      end
+
+      it "names every selected product rather than just the queried product" do
+        second = create(:product, user: seller, name: "EUR workbook", price_currency_type: "eur", price_cents: 2000)
+        code.products << second
+
+        expect(card_for(code.as_json_for_api.stringify_keys)[:fields]).to include({ label: "Applies to", value: "EUR guide and EUR workbook" })
+      end
+
+      it "does not describe excluded products as covered by a universal code" do
+        code.update!(universal: true, products: [], excluded_products: [product])
+        included = create(:product, user: seller, name: "EUR workbook", price_currency_type: "eur", price_cents: 2000)
+        expect(code.applicable_products).to contain_exactly(included)
+
+        expect(card_for(code.as_json_for_api.stringify_keys)[:fields]).to include({ label: "Applies to", value: "EUR workbook" })
+      end
+
+      it "uses the currency's subunit for fixed amounts" do
+        yen_product = create(:product, user: seller, price_currency_type: "jpy", price_cents: 2000)
+        yen_code = create(:offer_code, user: seller, products: [yen_product], currency_type: "jpy", amount_cents: 500)
+
+        expect(card_for(yen_code.as_json_for_api.stringify_keys)[:subtitle]).to eq("¥500 off")
+      end
+
+      it "omits unverified fixed amount and coverage when the record is missing" do
+        response = code.as_json_for_api.stringify_keys
+        code.mark_deleted!
+        card = card_for(response)
+
+        expect(card[:subtitle]).to be_nil
+        expect(card[:fields].pluck(:label)).not_to include("Amount", "Applies to")
+        expect(card[:copy]).to eq(code.code)
+      end
+
+      it "does not resolve another seller's discount" do
+        card = card_for(code.as_json_for_api.stringify_keys, owner: create(:user))
+
+        expect(card[:subtitle]).to be_nil
+        expect(card[:fields].pluck(:label)).not_to include("Amount", "Applies to")
+      end
+
+      it "omits currency and coverage when seller context is absent" do
+        card = card_for(code.as_json_for_api.stringify_keys, owner: nil)
+
+        expect(card[:subtitle]).to be_nil
+        expect(card[:fields].pluck(:label)).not_to include("Amount", "Applies to")
+      end
+
+      it "retains a percentage once without guessing missing coverage" do
+        card = card_for({ "name" => "PERCENT", "percent_off" => 15 })
+
+        expect(card[:subtitle]).to eq("15% off")
+        expect(card[:fields].pluck(:label)).not_to include("Amount", "Applies to")
+      end
     end
 
     it "returns [] for an endpoint with no renderable shape" do

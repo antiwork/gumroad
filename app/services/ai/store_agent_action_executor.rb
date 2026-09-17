@@ -88,7 +88,7 @@ class Ai::StoreAgentActionExecutor
       api_success = response["success"]
 
       if api_success == true || (api_success.nil? && status.between?(200, 299))
-        object = Ai::StoreAgentObjectFormatter.from_response(endpoint, response).first
+        object = Ai::StoreAgentObjectFormatter.from_response(endpoint, response, seller:).first
         success(response["message"].presence || "Done: #{endpoint.summary}", object:)
       elsif status == 401 || status == 403
         # Every response interpreted here arrived after `api_client.write` dispatched the nested

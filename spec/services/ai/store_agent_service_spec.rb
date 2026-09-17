@@ -235,6 +235,61 @@ describe Ai::StoreAgentService do
       end
     end
 
+    context "discount result cards through the real v2 API" do
+      let!(:usd_product) { create(:product, user: seller, name: "USD guide", price_currency_type: "usd", price_cents: 2000) }
+      let!(:eur_product) { create(:product, user: seller, name: "EUR guide", price_currency_type: "eur", price_cents: 2000) }
+      let!(:other_usd_product) { create(:product, user: seller, name: "USD workbook", price_currency_type: "usd", price_cents: 2000) }
+      let(:executor) { Ai::StoreAgentActionExecutor.new(seller:, pundit_user:) }
+
+      before { allow(Ai::StoreAgentApiClient).to receive(:new).and_call_original }
+
+      [
+        ["usd", "cents", true, "$5 off", "All USD-priced products"],
+        ["eur", "cents", true, "€5 off", "All EUR-priced products"],
+        ["usd", "percent", true, "15% off", "All products"],
+        ["eur", "cents", false, "€5 off", "EUR guide"],
+        ["usd", "cents", false, "$5 off", "USD guide"],
+        ["eur", "percent", false, "15% off", "EUR guide"],
+      ].each do |currency, offer_type, universal, amount, coverage|
+        it "keeps #{currency} #{offer_type} universal=#{universal} truthful across create, get, list and update", :aggregate_failures do
+          product = currency == "usd" ? usd_product : eur_product
+          path_params = { "link_id" => product.external_id }
+          body = { "name" => "RESULT", "amount_off" => offer_type == "percent" ? 15 : 500, "offer_type" => offer_type, "universal" => universal }
+          created = executor.execute(type: "api_write", params: { "endpoint" => "create_offer_code", "path_params" => path_params, "params" => body })
+          expect(created[:success]).to be(true), created.inspect
+          code = seller.offer_codes.sole
+          expected_products = if !universal
+            [product]
+          elsif offer_type == "percent"
+            [usd_product, eur_product, other_usd_product]
+          else
+            [usd_product, eur_product, other_usd_product].select { |item| item.price_currency_type == currency }
+          end
+          expect(code.applicable_products).to match_array(expected_products)
+          cards = [created.fetch(:object)]
+          path_params["id"] = code.external_id
+          %w[get_offer_code list_offer_codes].each do |endpoint|
+            allow(client).to receive(:messages).and_return(
+              tool_result("api_read", { "endpoint" => endpoint, "path_params" => path_params }),
+              text_result("Here is your discount."),
+            )
+            result = service.respond(messages: [{ role: "user", content: "Show my discount." }])
+            cards << result.fetch(:objects).sole
+          end
+          updated = executor.execute(type: "api_write", params: { "endpoint" => "update_offer_code", "path_params" => path_params, "params" => { "max_purchase_count" => 10 } })
+          expect(updated[:success]).to be(true), updated.inspect
+          cards << updated.fetch(:object)
+          expect(code.reload.max_purchase_count).to eq(10)
+          expect(code.applicable_products).to match_array(expected_products)
+          cards.each do |card|
+            expect(card[:subtitle]).to eq(amount)
+            expect(card[:fields]).to include({ label: "Applies to", value: coverage })
+            expect(card[:fields].pluck(:label)).not_to include("Amount")
+          end
+        end
+      end
+    end
+
     context "hidden reasoning on the tool loop" do
       let(:calls) { [] }
 
