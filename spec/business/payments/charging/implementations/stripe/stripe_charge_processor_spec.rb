@@ -4280,6 +4280,7 @@ describe StripeChargeProcessor, :vcr do
       it "reports no safe transfer without reversing recent sale transfers" do
         refund = create(:refund)
         credit = create(:credit, user: @cad_merchant_account.user, amount_cents: -1000, merchant_account: @cad_merchant_account, fee_retention_refund: refund)
+        allow(Stripe::Transfer).to receive(:list).and_raise("unexpected Stripe::Transfer.list arguments")
         expect(Stripe::Transfer).to receive(:list)
           .with(destination: @cad_merchant_account.charge_processor_merchant_id, created: { lt: kind_of(Integer) }, limit: 100)
           .and_return(stripe_transfer_page([]))
@@ -4300,6 +4301,7 @@ describe StripeChargeProcessor, :vcr do
           cutoff = 120.days.ago.to_i
           exhausted = Array.new(100) { |index| double(id: "tr_exhausted_#{index}", amount: 1000, amount_reversed: 1000, currency: "cad") }
           candidate = double(id: "tr_old_sale", amount: 2000, amount_reversed: 0, currency: "cad")
+          allow(Stripe::Transfer).to receive(:list).and_raise("unexpected Stripe::Transfer.list arguments")
           expect(Stripe::Transfer).to receive(:list)
             .with(destination: @cad_merchant_account.charge_processor_merchant_id, created: { lt: cutoff }, limit: 100) do
             travel 2.seconds
