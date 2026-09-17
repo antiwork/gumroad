@@ -977,10 +977,40 @@ RSpec.describe ContentModeration::ModerateRecordService, :vcr do
         expect(result.reasons).to eq(["spam: reads like a sales pitch and lacks coherent prose"])
       end
 
-      it "still blocks a post, which has no deliverable of its own" do
+      it "still blocks a post from a seller with no products and no sales, which has no deliverable of its own" do
         post = create(:installment, seller: seller, name: "Post", message: "<p>Body</p>")
+        expect(seller.links.alive).to be_empty
 
         expect(described_class.check(post, :post).passed).to eq(false)
+      end
+
+      # A draft is not a storefront: the carve-out is for sellers who already have an
+      # audience, and `alive` alone counts a product that was never published.
+      it "still blocks a post when the seller's only product is an unpublished draft" do
+        create(:product, user: seller, draft: true)
+        post = create(:installment, seller: seller, name: "Post", message: "<p>Body</p>")
+
+        expect(seller.links.alive.not_draft).to be_empty
+        expect(described_class.check(post, :post).passed).to eq(false)
+      end
+
+      # The seller is writing to their own audience, so the flag stays as a review note
+      # (gumroad-private#2755).
+      it "publishes a post with a review note when the seller has a live storefront" do
+        ContentModerationAdminCommentJob.clear
+        create(:product, user: seller)
+        post = create(:installment, seller: seller, name: "Update", message: "<p>New version. Get it here.</p>")
+
+        result = described_class.check(post, :post)
+
+        expect(result.passed).to eq(true)
+        expect(result.reasons).to eq([])
+        contents = ContentModerationAdminCommentJob.jobs.map { |j| j["args"].second }
+        expect(contents).to contain_exactly(
+          a_string_including("flagged but did not block").and(
+            a_string_including("not blocked: seller has a live storefront")
+          )
+        )
       end
 
       it "still blocks on a non-spam reason flagged alongside the spam one" do
