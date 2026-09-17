@@ -55,7 +55,7 @@ class Api::V2::MarketingActionsController < Api::V2::BaseController
 
   private
     def require_auto_marketing
-      head :not_found unless Feature.active?(:auto_marketing, current_resource_owner)
+      head :not_found unless Marketing::Eligibility.enabled_for?(current_resource_owner)
     end
 
     def fetch_marketing_product

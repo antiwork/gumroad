@@ -11,6 +11,23 @@ describe Api::V2::MarketingActionsController do
 
   before { Feature.activate_user(:auto_marketing, seller) }
 
+  describe "eligibility" do
+    it "refuses a holdout seller on every endpoint" do
+      create(:marketing_holdout_assignment, user: seller, marketing_holdout: true)
+
+      get :recommendations, params: { access_token: token.token, product_id: product.external_id }
+      expect(response).to have_http_status(:not_found)
+
+      post :create, params: { access_token: token.token, product_id: product.external_id, channel: "x" }
+      expect(response).to have_http_status(:not_found)
+
+      post :approve, params: member_params
+      expect(response).to have_http_status(:not_found)
+      expect(action.reload).to be_recommended
+      expect(WebMock).not_to have_requested(:post, Marketing::XApi::TWEETS_URL)
+    end
+  end
+
   describe "recommendations and creation" do
     it "returns the existing recommendation, tagged link, and opaque idempotency key" do
       params = { access_token: token.token, product_id: product.external_id }

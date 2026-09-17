@@ -1,6 +1,6 @@
 # Marketing API v2
 
-All endpoints use the same `edit_emails` OAuth authorization as `/v2/emails` (including the legacy `account` fallback). The seller must have `auto_marketing` enabled; otherwise every endpoint returns HTTP 404. Products and actions are scoped to the token's seller. No scheduler or marketing state lives in the client.
+All endpoints use the same `edit_emails` OAuth authorization as `/v2/emails` (including the legacy `account` fallback). The seller must pass the same `Marketing::Eligibility` gate the product page uses — `auto_marketing` enabled and not in the holdout; otherwise every endpoint returns HTTP 404. Products and actions are scoped to the token's seller. No scheduler or marketing state lives in the client.
 
 ## Endpoints
 
