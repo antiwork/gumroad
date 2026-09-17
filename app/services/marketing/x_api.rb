@@ -19,9 +19,8 @@ class Marketing::XApi
 
     private
       # Wording X uses when it refuses the request itself rather than the token's scope.
-      # The cause is machine-readable in `reason` and prose in `detail`; an app that is not
-      # attached to a Project reports reason "client-not-enrolled" with a detail that never
-      # repeats that phrase, so matching detail alone offers a reconnect that cannot fix it.
+      # X names this cause in `reason`, not the prose `detail`, so matching detail alone
+      # routes an un-enrolled app to a reconnect that cannot fix it.
       REFUSALS = [/duplicate/i, /too long/i, /client-not-enrolled/i].freeze
 
       def refused_outright? = REFUSALS.any? { |pattern| "#{body["reason"]} #{body["detail"]}".match?(pattern) }
