@@ -5,11 +5,9 @@ class TeamMailer < ApplicationMailer
 
   layout "layouts/email"
 
-  # The inviter writes their own display name, and this email goes to someone who may never have heard of
-  # them or of Gumroad. A ring of throwaway accounts put a fake bank-charge notice and a callback number in
-  # the name and sent 504k of these (gp#2762). So the subject is ours, and the name only appears once the
-  # seller has been reviewed; until then the inviter is identified by their email, which they cannot write
-  # scam copy into.
+  # The inviter writes their own display name, and this email reaches someone who may never have
+  # heard of them. The subject and the fallback identity are ours; the name reaches the body only
+  # once the seller has been reviewed, since the name is where the scam copy goes.
   def invite(team_invitation)
     @team_invitation = team_invitation
     @seller = team_invitation.seller

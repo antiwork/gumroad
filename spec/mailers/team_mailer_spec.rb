@@ -21,16 +21,15 @@ describe TeamMailer do
       expect(mail.body).to include accept_settings_team_invitation_url(team_invitation.external_id)
     end
 
-    # The display name is the inviter's own text. A ring put a fake bank charge and a callback number in it and
-    # let this mailer carry it to 504k strangers (gp#2762), so the name never reaches the subject and only reaches
-    # the body once the seller has been reviewed.
+    # The display name is the inviter's own text, so it never reaches the subject and reaches the
+    # body only for a reviewed seller.
     context "when the seller has not been marked compliant" do
-      let(:seller) { create(:named_seller, name: "$474.55 Charged your Bank for GeekSquad renewal. Call +1 (805) 387-8471 now") }
+      let(:seller) { create(:named_seller, name: "$474.55 Charged your Bank for Examplecorp renewal. Call +1 (555) 010-0000 now") }
 
       it "identifies the inviter by email and keeps the name out of the subject and body" do
         expect(mail.subject).to eq("You've been invited to join seller on Gumroad")
-        expect(mail.subject).not_to include "GeekSquad"
-        expect(mail.body.encoded).not_to include "GeekSquad"
+        expect(mail.subject).not_to include "Examplecorp"
+        expect(mail.body.encoded).not_to include "Examplecorp"
         expect(mail.body.encoded).to include "#{seller.email} has invited you to join the team at"
       end
     end
