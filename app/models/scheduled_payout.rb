@@ -68,20 +68,24 @@ class ScheduledPayout < ApplicationRecord
     if process_payout
       begin
         payout_processor_type = processor.presence || user.current_payout_processor
-        payment, payment_errors = Payouts.create_payment(
+        payments = Payouts.create_payments(
           Date.yesterday.to_s,
           payout_processor_type,
           user
         )
 
-        if payment.blank?
+        if payments.empty? || payments.all? { |payment, _| payment.blank? }
           # No payable balance — retrying won't conjure one, so flag instead of retrying forever
           # (same trap #6028 fixed for this exit specifically).
           update!(status: "flagged", executed_at: nil)
           return :flagged
         end
 
-        if payment.failed?
+        # A seller can need more than one payment (one per currency group), and each is prepared
+        # independently, so every failure is judged on its own reason.
+        payments.each do |payment, payment_errors|
+          next unless payment&.failed?
+
           if Payment::FailureReason::REQUEUEABLE_REASONS.include?(payment.failure_reason)
             raise "Payout failed: #{payment_errors&.join(", ") || "Payment failed during preparation"}"
           end
@@ -92,16 +96,20 @@ class ScheduledPayout < ApplicationRecord
           return :flagged
         end
 
-        if StripePayoutProcessor.cross_border_payout?(payment)
-          # Funds transferred into a cross-border Connect account settle ~24h later. Defer the bank
-          # payout (matching the automated payout path) instead of running it now — otherwise it
-          # fails with balance_insufficient and reverses the transfer, losing the FX spread.
-          ProcessPaymentWorker.perform_in(StripePayoutProcessor::CROSS_BORDER_PAYOUT_DELAY, payment.id)
-        else
-          PayoutProcessorType.get(payout_processor_type).process_payments([payment])
-          payment.reload
+        payments.each do |payment, _payment_errors|
+          next if payment.blank? || payment.failed?
 
-          if payment.failed?
+          if StripePayoutProcessor.cross_border_payout?(payment)
+            # Funds transferred into a cross-border Connect account settle ~24h later. Defer the bank
+            # payout (matching the automated payout path) instead of running it now — otherwise it
+            # fails with balance_insufficient and reverses the transfer, losing the FX spread.
+            ProcessPaymentWorker.perform_in(StripePayoutProcessor::CROSS_BORDER_PAYOUT_DELAY, payment.id)
+          else
+            PayoutProcessorType.get(payout_processor_type).process_payments([payment])
+            payment.reload
+
+            next unless payment.failed?
+
             if Payment::FailureReason::REQUEUEABLE_REASONS.include?(payment.failure_reason)
               raise "Payout failed: #{payment.errors.full_messages.first || "Payment processing failed"}"
             end

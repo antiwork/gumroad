@@ -34,18 +34,18 @@ class PayoutUsersService
         payout_period_end_date = instantly_payable_balances.sort_by(&:date).last.date.to_s
       end
 
-      payment, payment_errors = Payouts.create_payment(payout_period_end_date, processor_type, user, payout_type:)
-
-      if payment_errors.blank? && payment.present?
-        # Money transferred to a cross-border-payouts Stripe Connect a/c becomes payable after 24 hours,
-        # so schedule those payouts later instead of processing them immediately.
-        if StripePayoutProcessor.cross_border_payout?(payment)
-          cross_border_payments << payment
+      Payouts.create_payments(payout_period_end_date, processor_type, user, payout_type:).each do |payment, payment_errors|
+        if payment_errors.blank? && payment.present?
+          # Money transferred to a cross-border-payouts Stripe Connect a/c becomes payable after 24 hours,
+          # so schedule those payouts later instead of processing them immediately.
+          if StripePayoutProcessor.cross_border_payout?(payment)
+            cross_border_payments << payment
+          else
+            payments << payment
+          end
         else
-          payments << payment
+          Rails.logger.info("Payouts: Create payment errors for user with id: #{user_id} #{payment_errors.inspect}")
         end
-      else
-        Rails.logger.info("Payouts: Create payment errors for user with id: #{user_id} #{payment_errors.inspect}")
       end
     rescue => e
       Rails.logger.error "Error in PayoutUsersService creating payment for user ID #{user_id} => #{e.class.name}: #{e.message}"

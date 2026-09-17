@@ -436,6 +436,17 @@ class Payouts
   end
 
   def self.create_payment(date, processor_type, user, payout_type: Payouts::PAYOUT_TYPE_STANDARD)
+    payments = create_payments(date, processor_type, user, payout_type:)
+    payments.first || [nil, []]
+  end
+
+  # Public: Creates the seller's Payment(s) for one payout attempt.
+  #
+  # One Payment per (connected account, payout currency) group: a connected account holds a separate
+  # Stripe balance per currency, and a payout can only move the balance of its own currency, so a
+  # seller holding two currencies needs two Payments (see StripePayoutProcessor.payout_groups).
+  # Returns an array of [payment, payment_errors] pairs, in group order.
+  def self.create_payments(date, processor_type, user, payout_type: Payouts::PAYOUT_TYPE_STANDARD)
     payout_processor = ::PayoutProcessorType.get(processor_type)
     # claimed_at stamps unrestricted claims so a hold landing after the claim, before save!, is
     # not dated after hold_started_at (7f3d021b). The claim decides under with_lock (reload) so a
@@ -443,47 +454,64 @@ class Payouts
     # dated now so the 75% counts in the reserve base.
     claimed_at = Time.current
     balances, under_reserve = mark_balances_processing(date, processor_type, user, payout_type:)
-    balance_cents = balances.sum(&:amount_cents)
+    return [] if balances.empty?
 
-    if balance_cents <= 0
-      Rails.logger.info("Payouts: Negative balance for #{user.id}")
-      balances.each(&:mark_unpaid!)
-      return nil
+    groups = if payout_processor.respond_to?(:payout_groups)
+      payout_processor.payout_groups(user, balances)
+    else
+      # Processors that hold one currency per account don't group; preparation picks the destination.
+      [[nil, nil, balances]]
     end
 
-    payment = Payment.new(
-      user:,
-      balances:,
-      processor: processor_type,
-      processor_fee_cents: 0,
-      payout_period_end_date: date,
-      payout_type:,
-      created_at: under_reserve ? Time.current : claimed_at,
-      # TODO: Refactor PayPal to be a type of bank account rather than being a field on user.
-      payment_address: (user.paypal_payout_email if processor_type == ::PayoutProcessorType::PAYPAL),
-      bank_account: (user.active_bank_account if processor_type != ::PayoutProcessorType::PAYPAL)
-    )
-    begin
-      payment.save!
-    rescue => save_error
-      # A claimed row with no Payment would inflate the reserve base forever while never
-      # crediting the payout minimum. Return them to unpaid atomically — a loop interrupted
-      # partway would strand the tail as exactly the orphans this unwind exists to prevent.
-      begin
-        ActiveRecord::Base.transaction { balances.each(&:mark_unpaid!) }
-      rescue => unwind_error
-        ErrorNotifier.notify(unwind_error, user_id: user.id, balance_ids: balances.map(&:id))
+    groups.filter_map do |merchant_account, payout_currency, group_balances|
+      balance_cents = group_balances.sum(&:amount_cents)
+
+      if balance_cents <= 0
+        Rails.logger.info("Payouts: Negative balance for #{user.id}")
+        group_balances.each(&:mark_unpaid!)
+        next
       end
-      raise save_error
+
+      payment = Payment.new(
+        user:,
+        balances: group_balances,
+        processor: processor_type,
+        processor_fee_cents: 0,
+        payout_period_end_date: date,
+        payout_type:,
+        created_at: under_reserve ? Time.current : claimed_at,
+        # TODO: Refactor PayPal to be a type of bank account rather than being a field on user.
+        payment_address: (user.paypal_payout_email if processor_type == ::PayoutProcessorType::PAYPAL),
+        bank_account: (user.active_bank_account if processor_type != ::PayoutProcessorType::PAYPAL)
+      )
+      begin
+        payment.save!
+      rescue => save_error
+        # A claimed row with no Payment would inflate the reserve base forever while never
+        # crediting the payout minimum. Return them to unpaid atomically — a loop interrupted
+        # partway would strand the tail as exactly the orphans this unwind exists to prevent.
+        begin
+          ActiveRecord::Base.transaction { group_balances.each(&:mark_unpaid!) }
+        rescue => unwind_error
+          ErrorNotifier.notify(unwind_error, user_id: user.id, balance_ids: group_balances.map(&:id))
+        end
+        raise save_error
+      end
+      payment_errors = if payout_processor.respond_to?(:payout_groups)
+        payout_processor.prepare_payment_and_set_amount(
+          payment, group_balances, merchant_account, payout_currency
+        )
+      else
+        payout_processor.prepare_payment_and_set_amount(payment, group_balances)
+      end
+      # The payout processor can mark the payment as failed while preparing it (for example when
+      # no valid merchant account exists, or a balance's holding currency does not match the payout
+      # destination). A failed payment cannot transition to processing, so only mark it processing
+      # when preparation left it in a payable state — otherwise return the failed payment along
+      # with the preparation errors and let the caller handle it.
+      payment.mark_processing! unless payment.failed?
+      [payment, payment_errors]
     end
-    payment_errors = payout_processor.prepare_payment_and_set_amount(payment, balances)
-    # The payout processor can mark the payment as failed while preparing it (for example when
-    # no valid merchant account exists, or a balance's holding currency does not match the payout
-    # destination). A failed payment cannot transition to processing, so only mark it processing
-    # when preparation left it in a payable state — otherwise return the failed payment along
-    # with the preparation errors and let the caller handle it.
-    payment.mark_processing! unless payment.failed?
-    [payment, payment_errors]
   end
 
   def self.under_chargeback_rate_reserve?(user, payout_type:)
