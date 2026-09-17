@@ -2414,7 +2414,11 @@ module StripeMerchantAccountManager
     end
 
     user.user_compliance_info_requests.requested.find_each do |user_compliance_info|
-      still_needed = fields_needed.map { |name_and_options| name_and_options[0] }.include?(user_compliance_info.field_needed)
+      field_needed = user_compliance_info.field_needed
+      if stripe_account["business_type"] == "individual" && field_needed == UserComplianceInfoFields::Individual::STRIPE_NATIONALITY
+        field_needed = UserComplianceInfoFields::Individual::NATIONALITY
+      end
+      still_needed = fields_needed.map { |name_and_options| name_and_options[0] }.include?(field_needed)
       still_needed ||= stripe_risk_fields_needed.include?(user_compliance_info.field_needed)
       user_compliance_info.mark_provided! unless still_needed
     end

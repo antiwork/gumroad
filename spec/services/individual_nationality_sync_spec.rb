@@ -32,6 +32,24 @@ describe "Individual nationality synchronization" do
     context "with an outstanding #{field} request" do
       let!(:request) { create(:user_compliance_info_request, user:, field_needed: field) }
 
+      it "keeps the request pending through Stripe synchronization until nationality is cleared" do
+        StripeMerchantAccountManager.handle_stripe_info_requirements("evt_nationality_due", stripe_account, {})
+
+        canonical_request = user.user_compliance_info_requests.requested.find_by!(field_needed: "nationality")
+        expect { expect(save_details(nationality: "GR")[:success]).to be(true) }.not_to change(UserComplianceInfo, :count)
+        expect(Stripe::Account).to have_received(:update).with(stripe_account.id, hash_including(individual: hash_including(nationality: "GR")))
+        expect(user.reload.alive_user_compliance_info.nationality).to eq("GR")
+        expect(canonical_request.reload.state).to eq("requested")
+        expect(request.reload.state).to eq("requested")
+
+        stripe_account.requirements.currently_due = []
+        StripeMerchantAccountManager.handle_stripe_info_requirements("evt_nationality_resolved", stripe_account, {})
+
+        expect(request.reload.state).to eq("provided")
+        expect(canonical_request.reload.state).to eq("provided")
+        expect(compliance_info.nationality_resubmission_required?).to be(false)
+      end
+
       it "resends an unchanged saved nationality through account payload diffing" do
         StripeMerchantAccountManager.handle_new_user_compliance_info(compliance_info)
 
