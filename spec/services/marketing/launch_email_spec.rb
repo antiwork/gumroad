@@ -121,6 +121,16 @@ describe Marketing::LaunchEmail do
       expect(launch_email.installment.not_bought_products).to be_blank
     end
 
+    it "still recognises the draft the seller moved to another audience type" do
+      draft = launch_email.installment
+      # The editor's audience selector persists as installment_type, so "Customers only" is no
+      # longer an audience-type email. Matching on the type would lose the draft and mint a twin.
+      draft.update!(installment_type: Installment::SELLER_TYPE)
+
+      expect(launch_email.installment).to eq(draft)
+      expect(seller.installments.alive.count).to eq(1)
+    end
+
     it "does not touch an email the seller has already scheduled" do
       draft = launch_email.installment
       draft.update!(ready_to_publish: true)

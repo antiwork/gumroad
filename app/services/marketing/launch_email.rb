@@ -73,7 +73,6 @@ class Marketing::LaunchEmail
     # message bodies included — into memory on a GET the frontend fires on mount.
     def drafts
       @drafts ||= seller.installments
-                        .where(installment_type: Installment::AUDIENCE_TYPE)
                         .where("json_data LIKE ?", "%#{LAUNCH_PRODUCT_KEY}%")
                         .select { launch_draft?(_1) }
                         .to_a
