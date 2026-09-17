@@ -85,6 +85,22 @@ describe BankAccount do
           bank_account.supports_instant_payouts?
         end
       end
+
+      context "when stripe says the external account does not exist" do
+        before do
+          allow(Stripe::Account).to receive(:retrieve_external_account)
+            .and_raise(Stripe::InvalidRequestError.new("No such external account: 'ba_456'", "external_account"))
+        end
+
+        it "returns false" do
+          expect(bank_account.supports_instant_payouts?).to be false
+        end
+
+        it "does not notify the error tracker" do
+          expect(ErrorNotifier).not_to receive(:notify)
+          bank_account.supports_instant_payouts?
+        end
+      end
     end
   end
 
