@@ -150,8 +150,7 @@ class StripePayoutProcessor
       receivable = Stripe::Account.list_external_accounts(stripe_account_id, { limit: 100 })
         .map { |external_account| external_account.currency.to_s }
       held = Stripe::Balance.retrieve({}, { stripe_account: stripe_account_id }).available
-        .select { |balance| balance.amount.positive? }
-        .map { |balance| balance.currency.to_s }
+        .filter_map { |balance| balance.currency.to_s if balance.amount.positive? }
       receivable & held
     rescue Stripe::StripeError
       # A currency we cannot prove is payable stays unpaid and rolls into the next run, rather than
@@ -597,11 +596,14 @@ class StripePayoutProcessor
                                                        # 2 keys (`payment` and `bank_account`) already added above so allow max - 2 more keys
                                                        max_key_length: StripeMetadata::STRIPE_METADATA_MAX_KEYS_LENGTH - 2))
     }
-    # Name the seller's bank account only when it is the account Stripe would use anyway. A payout in
-    # a currency that bank record isn't in (an `eur` balance on a seller whose Gumroad bank account
-    # is `huf`) has to reach the account's own bank account for that currency, which is what Stripe
-    # pays when no destination is given; naming the mismatched one is refused.
-    if bank_account.present? && (bank_account.currency.blank? || bank_account.currency.to_s == payment.currency.to_s)
+    # Name the seller's bank account only when the payout is in the connected account's own currency,
+    # which is the one its BankAccount record is known to describe. A foreign-currency group (an `eur`
+    # holding on a `huf` account, see gumroad-private#2693) has to reach the account's own bank leg for
+    # that currency instead, which is what Stripe pays when no destination is given; naming the `huf`
+    # record there is refused. Compare against the account's currency and not the record's: an ACH-type
+    # record reports `usd` whatever country it is in, so a `cad` payout on that country's own managed
+    # account would otherwise silently lose its destination.
+    if bank_account.present? && payment.currency.to_s == merchant_account.currency.to_s
       params[:destination] = bank_account.stripe_external_account_id
     end
     params.merge!(method: payment.payout_type) if payment.payout_type.present?

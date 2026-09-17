@@ -3699,10 +3699,10 @@ class StripePayoutProcessorTest < ActiveSupport::TestCase
     merchant_account = create_merchant_account(currency: Currency::HUF)
     StripePayoutProcessor.pay_out_currencies_cache.clear
     Stripe::Account.expects(:list_external_accounts).once.returns([
-      Stripe::BankAccount.construct_from(object: "bank_account", currency: "eur"),
-      Stripe::BankAccount.construct_from(object: "bank_account", currency: "usd"),
-      Stripe::BankAccount.construct_from(object: "bank_account", currency: "huf")
-    ])
+                                                                    Stripe::BankAccount.construct_from(object: "bank_account", currency: "eur"),
+                                                                    Stripe::BankAccount.construct_from(object: "bank_account", currency: "usd"),
+                                                                    Stripe::BankAccount.construct_from(object: "bank_account", currency: "huf")
+                                                                  ])
     Stripe::Balance.expects(:retrieve).once.returns(
       Stripe::Balance.construct_from(object: "balance",
                                      available: [
