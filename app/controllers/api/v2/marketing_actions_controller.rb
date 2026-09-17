@@ -28,6 +28,8 @@ class Api::V2::MarketingActionsController < Api::V2::BaseController
   end
 
   def approve
+    return marketing_error("Use the product Share page or Workflows to change abandoned cart emails.") if @marketing_action.abandoned_cart?
+
     outcome = @marketing_action.approve_copy(confirmation_token: params[:confirmation_token], **params.permit(:copy).to_h.symbolize_keys)
     case outcome
     when :invalid
@@ -47,6 +49,8 @@ class Api::V2::MarketingActionsController < Api::V2::BaseController
   end
 
   def cancel
+    return marketing_error("Use the product Share page or Workflows to change abandoned cart emails.") if @marketing_action.abandoned_cart?
+
     cancelled = @marketing_action.with_lock { @marketing_action.cancelled? || @marketing_action.cancel }
     return marketing_error("This post can no longer be cancelled.") unless cancelled
 

@@ -22,6 +22,8 @@ describe Products::MarketingAbandonedCartsController do
     Feature.activate_user(:auto_marketing, seller)
   end
 
+  def activation_token = Marketing::AbandonedCart.new(product:, seller:).state[:activation_token]
+
   def workflows = seller.workflows.alive.abandoned_cart_type
 
   describe "#show" do
@@ -80,7 +82,7 @@ describe Products::MarketingAbandonedCartsController do
 
     it "creates and publishes the cart workflow for the product, and records the action once" do
       expect do
-        put :update, params: { product_id: product.unique_permalink, enabled: true }, as: :json
+        put :update, params: { product_id: product.unique_permalink, enabled: true, activation_token: activation_token }, as: :json
       end.to change { workflows.published.count }.from(0).to(1)
 
       expect(response).to have_http_status(:ok)
@@ -96,16 +98,16 @@ describe Products::MarketingAbandonedCartsController do
     end
 
     it "keeps one action row when the seller turns it on again" do
-      put :update, params: { product_id: product.unique_permalink, enabled: true }, as: :json
+      put :update, params: { product_id: product.unique_permalink, enabled: true, activation_token: activation_token }, as: :json
       put :update, params: { product_id: product.unique_permalink, enabled: false }, as: :json
 
       expect do
-        put :update, params: { product_id: product.unique_permalink, enabled: true }, as: :json
+        put :update, params: { product_id: product.unique_permalink, enabled: true, activation_token: activation_token }, as: :json
       end.not_to change { Marketing::Action.where(link: product).count }
     end
 
     it "turns it off again without deleting the workflow or its email" do
-      put :update, params: { product_id: product.unique_permalink, enabled: true }, as: :json
+      put :update, params: { product_id: product.unique_permalink, enabled: true, activation_token: activation_token }, as: :json
       workflow = workflows.sole
       installment = workflow.installments.alive.sole
 
@@ -120,10 +122,10 @@ describe Products::MarketingAbandonedCartsController do
     end
 
     it "does not create a second workflow for a product that already has one" do
-      put :update, params: { product_id: product.unique_permalink, enabled: true }, as: :json
+      put :update, params: { product_id: product.unique_permalink, enabled: true, activation_token: activation_token }, as: :json
 
       expect do
-        put :update, params: { product_id: product.unique_permalink, enabled: true }, as: :json
+        put :update, params: { product_id: product.unique_permalink, enabled: true, activation_token: activation_token }, as: :json
       end.not_to change { workflows.count }
     end
 
@@ -139,7 +141,7 @@ describe Products::MarketingAbandonedCartsController do
     end
 
     it "lets a seller below the email gate turn cart recovery on" do
-      put :update, params: { product_id: product.unique_permalink, enabled: true }, as: :json
+      put :update, params: { product_id: product.unique_permalink, enabled: true, activation_token: activation_token }, as: :json
 
       expect(seller.reload.eligible_to_send_emails?).to eq(false)
       expect(response).to have_http_status(:ok), "status #{response.status}: #{response.body.to_s[0, 200]}"
@@ -152,7 +154,7 @@ describe Products::MarketingAbandonedCartsController do
 
     it "refuses with the reason instead of creating a workflow" do
       expect do
-        put :update, params: { product_id: product.unique_permalink, enabled: true }, as: :json
+        put :update, params: { product_id: product.unique_permalink, enabled: true, activation_token: activation_token }, as: :json
       end.not_to change { workflows.count }
 
       expect(response).to have_http_status(:unprocessable_entity)
@@ -179,9 +181,30 @@ describe Products::MarketingAbandonedCartsController do
       expect(response).to have_http_status(:not_found)
 
       expect do
-        put :update, params: { product_id: product.unique_permalink, enabled: true }, as: :json
+        put :update, params: { product_id: product.unique_permalink, enabled: true, activation_token: activation_token }, as: :json
       end.not_to change { [workflows.count, Marketing::Action.count] }
       expect(response).to have_http_status(:not_found)
     end
+  end
+
+  it "rejects activation without a reviewed token and creates no receipt" do
+    expect do
+      put :update, params: { product_id: product.unique_permalink, enabled: true }, as: :json
+    end.not_to change { [Workflow.count, Marketing::Action.count] }
+    expect(response).to have_http_status(:conflict)
+  end
+
+  it "rejects stale email approval without publishing or recording a receipt" do
+    cart = Marketing::AbandonedCart.new(product:, seller:)
+    workflow = cart.enable
+    cart.pause
+    reviewed_token = activation_token
+    workflow.installments.sole.update!(message: "Changed since preview")
+    expect do
+      put :update, params: { product_id: product.unique_permalink, enabled: true, activation_token: reviewed_token }, as: :json
+    end.not_to change(Marketing::Action, :count)
+    expect(response).to have_http_status(:conflict)
+    expect(response.parsed_body["error"]).to include("Review")
+    expect(workflow.reload.published_at).to be_nil
   end
 end

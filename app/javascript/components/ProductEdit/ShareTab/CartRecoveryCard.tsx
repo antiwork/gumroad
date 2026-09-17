@@ -66,10 +66,16 @@ export const CartRecoveryCard = ({ productPermalink }: { productPermalink: strin
   const setEnabled = async (enabled: boolean) => {
     setBusy(true);
     try {
-      setState(await updateCartRecovery(productPermalink, enabled));
+      setState(await updateCartRecovery(productPermalink, enabled, state?.activation_token));
     } catch (e) {
       assertResponseError(e);
       showAlert(e.message, "error");
+      try {
+        setState(await fetchCartRecovery(productPermalink));
+      } catch {
+        setState(null);
+        setFailed(true);
+      }
     } finally {
       setBusy(false);
     }
@@ -122,7 +128,8 @@ export const CartRecoveryCard = ({ productPermalink }: { productPermalink: strin
           ) : state.can_toggle ? (
             <>
               <p id={`${switchId}-description`}>
-                Email buyers {state.delay_hours} hours after they leave this product in their cart.
+                Reminders are scheduled daily at 14:00 UTC for carts inactive for at least {state.delay_hours} hours.
+                Enabling also includes eligible unsent carts from the past month.
               </p>
               {!state.available ? (
                 <p role="status" className="text-muted">
