@@ -2,6 +2,7 @@
 
 class Api::V2::MarketingActionsController < Api::V2::BaseController
   before_action { doorkeeper_authorize! :edit_emails }
+  before_action { require_oauth_scope! :edit_emails }
   before_action :require_auto_marketing
   before_action :fetch_marketing_product, only: %i[recommendations create]
   before_action :fetch_marketing_action, only: %i[show approve execute cancel]
