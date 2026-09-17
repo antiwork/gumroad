@@ -14,6 +14,8 @@ class Api::V2::MarketingActionsController < Api::V2::BaseController
   end
 
   def create
+    return marketing_error("Unknown marketing channel.") unless Marketing::Channel::ALL.key?(params[:channel])
+
     return marketing_error("This channel is coming soon.") unless Marketing::Channel.live?(params[:channel])
 
     entry = Marketing::Recommendations.new(product: @product, seller: current_resource_owner).call.find { _1[:channel] == params[:channel] }
@@ -26,7 +28,7 @@ class Api::V2::MarketingActionsController < Api::V2::BaseController
   end
 
   def approve
-    outcome = @marketing_action.approve_copy(**params.permit(:copy, :confirmation_token).to_h.symbolize_keys)
+    outcome = @marketing_action.approve_copy(confirmation_token: params[:confirmation_token], **params.permit(:copy).to_h.symbolize_keys)
     case outcome
     when :invalid
       marketing_error(@marketing_action.errors.full_messages.to_sentence)
@@ -68,7 +70,7 @@ class Api::V2::MarketingActionsController < Api::V2::BaseController
     end
 
     def verify_idempotency_key
-      if %w[approve execute].include?(action_name) && params[:confirmation_token].blank?
+      if %w[approve execute].include?(action_name) && !(params[:confirmation_token].is_a?(String) && params[:confirmation_token].present?)
         return marketing_error("Review the action and supply its confirmation_token.")
       end
 
@@ -78,7 +80,7 @@ class Api::V2::MarketingActionsController < Api::V2::BaseController
     end
 
     def render_action(**extra)
-      render_response(true, { marketing_action: @marketing_action, handle: current_resource_owner.twitter_handle }.merge(extra))
+      render_response(true, { marketing_action: @marketing_action, handle: @marketing_action.user.twitter_handle }.merge(extra))
     end
 
     def marketing_error(message)

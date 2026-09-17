@@ -24,7 +24,7 @@ class Products::MarketingActionsController < Sellers::BaseController
     authorize @action
     return head :not_found unless enabled?
 
-    outcome = @action.approve_copy(**params.permit(:copy).to_h.symbolize_keys)
+    outcome = @action.approve_copy_from_web(**params.permit(:copy).to_h.symbolize_keys)
 
     case outcome
     when :invalid

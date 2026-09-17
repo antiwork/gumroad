@@ -85,13 +85,22 @@ describe Marketing::Action do
   end
 
   describe "#approve_copy" do
+    [nil, [], ["token"], { value: "token" }, "", " "].each do |token|
+      it "requires a nonempty scalar confirmation token (#{token.inspect})" do
+        action = create(:marketing_action, user: seller, link: product)
+        original = action.attributes
+        expect { action.approve_copy(confirmation_token: token, copy: "Changed") }.to raise_error(Marketing::Action::ConfirmationChanged)
+        expect(action.reload.attributes).to eq(original)
+      end
+    end
+
     it "reloads a stale instance before freezing a claimed post" do
       action = create(:marketing_action, user: seller, link: product, copy: "Original")
       stale = described_class.find(action.id)
       action.approve!
       action.queue!
 
-      expect(stale.approve_copy(copy: "Changed")).to eq(:claimed)
+      expect(stale.approve_copy(confirmation_token: stale.confirmation_token, copy: "Changed")).to eq(:claimed)
       expect(action.reload.copy).to eq("Original")
       expect(action).to be_queued
     end
@@ -99,7 +108,7 @@ describe Marketing::Action do
     it "reuses the idempotency key after repeated approvals" do
       action = create(:marketing_action, user: seller, link: product)
       key = action.api_idempotency_key
-      2.times { expect(action.approve_copy).to eq(:approved) }
+      2.times { expect(action.approve_copy(confirmation_token: action.confirmation_token)).to eq(:approved) }
       expect(action.reload.api_idempotency_key).to eq(key)
       expect(action.as_json[:idempotency_key]).not_to include(":")
     end
@@ -110,7 +119,7 @@ describe Marketing::Action do
       action.queue!
       action.mark_posted!
       original = action.attributes
-      expect(action.approve_copy(copy: "Changed")).to eq(:claimed)
+      expect(action.approve_copy(confirmation_token: action.confirmation_token, copy: "Changed")).to eq(:claimed)
       expect(action.reload.attributes).to eq(original)
     end
   end

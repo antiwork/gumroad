@@ -26,6 +26,40 @@ describe Api::V2::MarketingActionsController do
       expect(response.parsed_body.fetch("marketing_action")).to eq(entry.fetch("action"))
     end
 
+    it "keeps the recommendation account and token together across reconnect during serialization" do
+      expected_token = nil
+      allow_any_instance_of(Marketing::Recommendations).to receive(:call).and_wrap_original do |original|
+        entries = original.call
+        expected_token = entries.first.fetch(:action).confirmation_token
+        User.find(seller.id).update!(twitter_handle: "reconnected")
+        entries
+      end
+
+      get :recommendations, params: { access_token: token.token, product_id: product.external_id }
+      entry = response.parsed_body.fetch("channels").first
+      expect(entry.fetch("handle")).to eq("seller")
+      expect(entry.dig("action", "confirmation_token")).to eq(expected_token)
+      recommended_action = Marketing::Action.find_by_external_id(entry.dig("action", "id"))
+      original = recommended_action.attributes
+
+      post :approve, params: { access_token: token.token, id: entry.dig("action", "id"),
+                               idempotency_key: entry.dig("action", "idempotency_key"),
+                               confirmation_token: entry.dig("action", "confirmation_token") }
+      expect(response).to have_http_status(:unprocessable_entity)
+      expect(recommended_action.reload.attributes).to eq(original)
+      expect(WebMock).not_to have_requested(:post, Marketing::XApi::TWEETS_URL)
+    end
+
+    [nil, "", "unknown"].each do |channel|
+      it "rejects #{channel.inspect} channel without creating records" do
+        params = { access_token: token.token, product_id: product.external_id }
+        params[:channel] = channel unless channel.nil?
+        expect { post :create, params: params }.not_to change { [Marketing::Action.count, UtmLink.count] }
+        expect(response).to have_http_status(:unprocessable_entity)
+        expect(response.parsed_body).to eq("success" => false, "message" => "Unknown marketing channel.")
+      end
+    end
+
     it "accepts a product permalink" do
       get :recommendations, params: { access_token: token.token, product_id: product.unique_permalink }
       expect(response).to have_http_status(:ok)
@@ -121,6 +155,18 @@ describe Api::V2::MarketingActionsController do
   end
 
   %i[approve execute].each do |operation|
+    [[], ["token"], { value: "token" }, "", " "].each do |invalid_token|
+      it "rejects #{invalid_token.inspect} confirmation token for #{operation} without changing state" do
+        action.approve! if operation == :execute
+        original = action.attributes
+        post operation, params: member_params.merge(confirmation_token: invalid_token, copy: "Unapproved change"), as: :json
+        expect(response).to have_http_status(:unprocessable_entity)
+        expect(response.parsed_body).to eq("success" => false, "message" => "Review the action and supply its confirmation_token.")
+        expect(action.reload.attributes).to eq(original)
+        expect(WebMock).not_to have_requested(:post, Marketing::XApi::TWEETS_URL)
+      end
+    end
+
     it "rejects a missing confirmation token for #{operation}" do
       post operation, params: member_params.except(:confirmation_token)
       expect(response).to have_http_status(:unprocessable_entity)
@@ -145,6 +191,30 @@ describe Api::V2::MarketingActionsController do
       expect(response).to have_http_status(:unprocessable_entity)
       expect(WebMock).not_to have_requested(:post, Marketing::XApi::TWEETS_URL)
     end
+  end
+
+  it "does not replace the approved account token after reconnect before serialization" do
+    params = member_params.merge(copy: "Reviewed edit")
+    expected_token = nil
+    allow_any_instance_of(Marketing::Action).to receive(:approve_copy).and_wrap_original do |original, **attributes|
+      outcome = original.call(**attributes)
+      expected_token = original.receiver.confirmation_token
+      User.find(seller.id).update!(twitter_handle: "reconnected")
+      outcome
+    end
+
+    post :approve, params: params
+    expect(response).to have_http_status(:ok)
+    body = response.parsed_body
+    expect(body.fetch("handle")).to eq("seller")
+    expect(body.dig("marketing_action", "confirmation_token")).to eq(expected_token)
+    expect(body.dig("marketing_action", "copy")).to eq("Reviewed edit")
+    original = action.reload.attributes
+
+    post :execute, params: params.merge(confirmation_token: body.dig("marketing_action", "confirmation_token"))
+    expect(response).to have_http_status(:unprocessable_entity)
+    expect(action.reload.attributes).to eq(original)
+    expect(WebMock).not_to have_requested(:post, Marketing::XApi::TWEETS_URL)
   end
 
   it "does not execute without approval" do
