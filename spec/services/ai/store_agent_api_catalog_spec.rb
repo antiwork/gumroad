@@ -62,6 +62,15 @@ describe Ai::StoreAgentApiCatalog do
     end
   end
 
+  describe "discount eligibility" do
+    it "distinguishes product coverage from subscriber redemption without inventing an API parameter" do
+      endpoint = described_class.find("create_offer_code")
+      expect(endpoint.summary).to include("universal controls product coverage, not buyer eligibility")
+      expect(endpoint.summary).to include("cannot enforce subscriber-only redemption")
+      expect(endpoint.params).not_to include("subscriber_only", "audience")
+    end
+  end
+
   describe "resource subscription endpoints" do
     it "allows listing and deletion but not webhook creation" do
       expect(described_class.find("list_resource_subscriptions")).to be_present

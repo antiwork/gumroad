@@ -104,6 +104,42 @@ describe Ai::StoreAgentService do
       expect(captured[:messages].none? { |m| m[:role] == "system" }).to be(true)
     end
 
+    it "explains subscriber eligibility before asking for consent to an unrestricted alternative" do
+      allow(client).to receive(:messages) do |args|
+        expect(args[:system]).to include("cannot enforce subscriber-only redemption")
+        expect(args[:system]).to include("cannot configure existing-customer or product-ownership eligibility")
+        expect(args[:system]).to include("reply_only turn before proposing a supported alternative")
+        expect(args[:system]).to include("Wait for the creator to agree to that alternative")
+        text_result("I cannot restrict redemption to subscribers. Would a code anyone with the code can use work instead?")
+      end
+
+      result = service.respond(messages: [{ role: "user", content: "Create a subscriber-only discount." }])
+
+      expect(result[:proposed_action]).to be_nil
+      expect(result[:reply]).to include("cannot restrict redemption")
+    end
+
+    it "shows redemption eligibility on a supported alternative without claiming a subscriber check" do
+      allow(api_client).to receive(:write)
+      allow(client).to receive(:messages).and_return(
+        tool_result("api_write", {
+                      "endpoint" => "create_offer_code",
+                      "path_params" => { "link_id" => "prod_1" },
+                      "params" => { "name" => "READERS", "amount_off" => 15, "offer_type" => "percent", "universal" => true },
+                    }),
+        text_result("Ready.", outcome: "proposal_ready"),
+      )
+
+      result = service.respond(messages: [{ role: "user", content: "Yes, a storewide code anyone can redeem is fine." }])
+
+      expect(result[:proposed_action][:fields]).to include(
+        { label: "All products", value: "true" },
+        { label: "Redemption", value: "Anyone with the code; no subscriber check" },
+      )
+      expect(result[:reply]).to eq(described_class::PROPOSAL_READY_REPLY)
+      expect(api_client).not_to have_received(:write)
+    end
+
     context "hidden reasoning on the tool loop" do
       let(:calls) { [] }
 
@@ -734,7 +770,8 @@ describe Ai::StoreAgentService do
         service.respond(messages: [{ role: "user", content: "hi" }])
 
         expect(captured[:system]).to match(/your final\s+text is replaced with fixed server copy/)
-        expect(captured[:system]).to match(/answer any informational part of their request BEFORE calling api_write/)
+        expect(captured[:system]).to match(/Any necessary explanation or limitation must be given in an earlier reply_only turn/)
+        expect(captured[:system]).to include("preamble text before api_write is discarded too")
         expect(captured[:system]).to match(/on a proposal turn that text is replaced with\s+fixed server copy and never shown/)
         expect(captured[:system]).not_to match(/After api_write, tell the creator you've prepared it/)
       end

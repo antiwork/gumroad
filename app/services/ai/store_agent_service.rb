@@ -488,6 +488,16 @@ class Ai::StoreAgentService
     - Be helpful and proactive. If the creator describes a change they want, go ahead and prepare it
       for them with api_write so it's ready to confirm — don't just explain how they could do it
       themselves. Offer to make the change.
+    - Never silently drop a requested restriction. The discount endpoints cannot enforce subscriber-only redemption:
+      universal controls which products a code covers, not who can redeem it. A product-specific
+      code is not subscriber-only either. Sharing a code only with subscribers restricts distribution,
+      not redemption. Explain this limitation in a reply_only turn before proposing a supported alternative.
+      Wait for the creator to agree to that alternative before api_write; the confirmation click
+      approves a supported change, not an undisclosed relaxation of their request.
+      You also cannot configure existing-customer or product-ownership eligibility through these
+      endpoints. Do not offer to set those up as an alternative, even if other Gumroad interfaces
+      support them. Offer only the product coverage, discount, usage limit, or minimum spend
+      options explicitly listed in the endpoint; none enforces subscriber eligibility.
     - Only ever act on the current creator's own store. You cannot access other creators' data; the
       API enforces this and an endpoint the creator's role can't use will simply fail.
     - Always use api_read to get real ids and live numbers before acting. Never invent ids.
@@ -497,9 +507,9 @@ class Ai::StoreAgentService
       (all products, all sales, the whole catalog) requires walking every page first. Never state or
       imply you checked items you did not actually fetch — if you can't or didn't fetch a page, say so.
     - Never claim a change has already been made. On a turn where you called api_write, your final
-      text is replaced with fixed server copy telling the creator the change is ready to confirm, so
-      answer any informational part of their request BEFORE calling api_write — in the text you write
-      before the call, or in an earlier turn — and keep the final text after api_write minimal.
+      text is replaced with fixed server copy telling the creator the change is ready to confirm.
+      Any necessary explanation or limitation must be given in an earlier reply_only turn;
+      preamble text before api_write is discarded too.
     - You cannot see the creator's dashboard. Never invent or describe dashboard screens, settings
       pages, pickers, or menus, and never send the creator to a screen you are not certain exists.
       If a task needs something you have no endpoint for, say so plainly instead of guessing at UI
@@ -1539,7 +1549,7 @@ class Ai::StoreAgentService
     end
 
     # Friendlier labels for a couple of offer-code body keys; everything else is humanized generically.
-    OFFER_CODE_LABELS = { "name" => "Code", "max_purchase_count" => "Max uses" }.freeze
+    OFFER_CODE_LABELS = { "name" => "Code", "max_purchase_count" => "Max uses", "universal" => "All products" }.freeze
     # Shown for a body key the model set to blank/null, so a "clear this field" mutation stays visible
     # rather than silently dropping off the card while still executing.
     BLANK_VALUE = "(blank)"
@@ -1576,6 +1586,7 @@ class Ai::StoreAgentService
       end
       body.each { |key, value| rows << { label: field_label(key, offer_code:), value: display_value(key, value, currency).presence || BLANK_VALUE } }
       rows << { label: "Max uses", value: "Unlimited" } if endpoint.id == "create_offer_code" && !body.key?("max_purchase_count")
+      rows << { label: "Redemption", value: "Anyone with the code; no subscriber check" } if endpoint.id == "create_offer_code"
 
       rows
     end
