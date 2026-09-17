@@ -129,6 +129,14 @@ describe Api::V2::MarketingActionsController do
         expect(response).to have_http_status(:forbidden)
       end
 
+      it "rejects a broad account-only token" do
+        token.update!(scopes: "account")
+        process operation, method:, params: params
+        expect(response).to have_http_status(:forbidden)
+        expect(action.reload).to be_recommended
+        expect(WebMock).not_to have_requested(:post, Marketing::XApi::TWEETS_URL)
+      end
+
       it "rejects missing authentication" do
         process operation, method:, params: params.except(:access_token)
         expect(response).to have_http_status(:unauthorized)
