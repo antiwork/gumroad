@@ -2743,8 +2743,8 @@ class PurchaseTest < ActiveSupport::TestCase
   end
 
   # context "purchasing licensed products"
-  # 99 seconds is the gap between the two successful charges in the report: a buyer reading a
-  # checkout error banner and resubmitting, not a same-second double submit.
+  # A minute apart is a buyer reading a checkout error banner and resubmitting, not a
+  # same-second double submit.
   test "not_double_charged purchasing licensed products requires confirmation when retried a minute later" do
     product = create_product(is_licensed: true)
     ip = unique_ip
