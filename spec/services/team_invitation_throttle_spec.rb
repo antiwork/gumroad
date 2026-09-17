@@ -78,4 +78,38 @@ describe TeamInvitationThrottle do
     10.times { described_class.check(seller_id) }
     expect(described_class.check(seller_id + 1)).to be_nil
   end
+
+  describe ".trusted_sender?" do
+    it "trusts only a compliant seller whose account is active" do
+      expect(described_class.trusted_sender?(create(:user))).to eq(false)
+      expect(described_class.trusted_sender?(create(:user, user_risk_state: "compliant"))).to eq(true)
+      expect(described_class.trusted_sender?(create(:tos_user))).to eq(false)
+
+      # Suspension does not reset the risk state, and deletion does not touch it.
+      once_compliant = create(:user, user_risk_state: "compliant")
+      once_compliant.update_column(:user_risk_state, "suspended_for_fraud")
+      expect(described_class.trusted_sender?(once_compliant)).to eq(false)
+
+      deleted = create(:user, user_risk_state: "compliant", deleted_at: Time.current)
+      expect(described_class.trusted_sender?(deleted)).to eq(false)
+    end
+  end
+
+  describe ".unreviewed_limit_reached?" do
+    it "caps an unreviewed seller by total invitations, counting revoked ones" do
+      seller = create(:user)
+      expect(described_class.unreviewed_limit_reached?(seller)).to eq(false)
+
+      described_class::UNREVIEWED_TOTAL_LIMIT.times do |index|
+        create(:team_invitation, seller:, email: "member#{index}@example.com", deleted_at: index.zero? ? Time.current : nil)
+      end
+      expect(described_class.unreviewed_limit_reached?(seller)).to eq(true)
+    end
+
+    it "never caps a trusted seller" do
+      seller = create(:user, user_risk_state: "compliant")
+      (described_class::UNREVIEWED_TOTAL_LIMIT + 1).times { |index| create(:team_invitation, seller:, email: "member#{index}@example.com") }
+      expect(described_class.unreviewed_limit_reached?(seller)).to eq(false)
+    end
+  end
 end

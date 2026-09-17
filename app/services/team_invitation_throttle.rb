@@ -3,6 +3,13 @@
 class TeamInvitationThrottle
   LIMITS = { "hour" => [10, 1.hour], "day" => [50, 24.hours] }.freeze
 
+  # A seller we have not positively reviewed gets this many invitations in total, not per window.
+  # The mailer puts the inviter's identity in front of a stranger from our own sending domain, and
+  # every ring that abused it sat in `not_reviewed` with zero products: 62 accounts sent 504k
+  # invitations (gp#2762) and the per-window cap alone still let each fresh account send 60 a day.
+  # A real new team is one or two people; anything past that waits for review.
+  UNREVIEWED_TOTAL_LIMIT = 3
+
   # Check both windows and reserve a send atomically. Redis supplies the clock for every app process.
   CHECK_SCRIPT = <<~LUA
     local time = redis.call("TIME")
@@ -34,5 +41,20 @@ class TeamInvitationThrottle
       argv: [SecureRandom.uuid, LIMITS.values.map(&:last).max.to_i, *LIMITS.flat_map { |name, (count, period)| [name, count, period.to_i] }]
     )
     { window:, limit:, retry_after: } if window
+  end
+
+  # Only a reviewed, active seller is trusted with the per-window allowance. Suspending an account
+  # does not reset `user_risk_state`, so a seller marked compliant before being shut down still
+  # reads `compliant?`; the activity check is what closes that gap.
+  def self.trusted_sender?(seller)
+    seller.compliant? && seller.account_active?
+  end
+
+  # Revoked invitations still count: revoking and re-inviting is how an abuser would otherwise
+  # recycle the allowance.
+  def self.unreviewed_limit_reached?(seller)
+    return false if trusted_sender?(seller)
+
+    seller.team_invitations.count >= UNREVIEWED_TOTAL_LIMIT
   end
 end

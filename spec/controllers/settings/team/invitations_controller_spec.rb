@@ -52,6 +52,9 @@ describe Settings::Team::InvitationsController do
     end
 
     context "when invitation sends are limited" do
+      # The per-window allowance is for reviewed sellers; an unreviewed one hits the total cap below first.
+      let(:seller) { create(:named_seller, user_risk_state: "compliant") }
+
       def post_invitation(email)
         post :create, params: { team_invitation: { email:, role: "admin" } }, as: :json
       end
@@ -130,6 +133,67 @@ describe Settings::Team::InvitationsController do
           3.times { |index| post_invitation("teammate#{index}@example.com") }
         end.to change { seller.team_invitations.count }.by(3)
         expect(response.parsed_body["success"]).to eq(true)
+      end
+    end
+
+    # Every account in the 62-account relay ring (gp#2762) was `not_reviewed` with zero products. A real new team
+    # is one or two people, so an unreviewed seller gets a small fixed total and the per-window allowance waits
+    # for review.
+    context "when the seller has not been reviewed" do
+      def post_invitation(email)
+        post :create, params: { team_invitation: { email:, role: "admin" } }, as: :json
+      end
+
+      it "allows the total cap and then refuses without creating an invitation or enqueueing an email" do
+        expect(seller.user_risk_state).to eq("not_reviewed")
+
+        expect do
+          TeamInvitationThrottle::UNREVIEWED_TOTAL_LIMIT.times { |index| post_invitation("member#{index}@example.com") }
+        end.to change { seller.team_invitations.count }.by(TeamInvitationThrottle::UNREVIEWED_TOTAL_LIMIT)
+        expect(response.parsed_body["success"]).to eq(true)
+
+        expect(TeamMailer).not_to receive(:invite)
+        expect(InternalNotificationWorker).to receive(:perform_async)
+          .with("risk", "Team invitations rate limited", /past #{TeamInvitationThrottle::UNREVIEWED_TOTAL_LIMIT}\/account/o).once
+        expect do
+          post_invitation("one-too-many@example.com")
+        end.not_to change { seller.team_invitations.count }
+
+        expect(response).to be_successful
+        expect(response.parsed_body["success"]).to eq(false)
+        expect(response.parsed_body["error_message"]).to include("up to #{TeamInvitationThrottle::UNREVIEWED_TOTAL_LIMIT} team invitations while the account is being reviewed")
+      end
+
+      it "counts revoked invitations toward the cap" do
+        TeamInvitationThrottle::UNREVIEWED_TOTAL_LIMIT.times { |index| post_invitation("member#{index}@example.com") }
+        seller.team_invitations.each(&:update_as_deleted!)
+
+        expect do
+          post_invitation("recycled@example.com")
+        end.not_to change { seller.team_invitations.count }
+        expect(response.parsed_body["success"]).to eq(false)
+      end
+
+      it "does not cap a seller who was marked compliant" do
+        seller.update!(user_risk_state: "compliant")
+
+        expect do
+          (TeamInvitationThrottle::UNREVIEWED_TOTAL_LIMIT + 1).times { |index| post_invitation("member#{index}@example.com") }
+        end.to change { seller.team_invitations.count }.by(TeamInvitationThrottle::UNREVIEWED_TOTAL_LIMIT + 1)
+      end
+    end
+
+    context "when the seller is suspended" do
+      before { seller.update_column(:user_risk_state, "suspended_for_tos_violation") }
+
+      it "refuses without creating an invitation or enqueueing an email" do
+        expect(TeamMailer).not_to receive(:invite)
+        expect do
+          post :create, params: { team_invitation: { email: "member@example.com", role: "admin" } }, as: :json
+        end.not_to change { seller.team_invitations.count }
+
+        expect(response).to have_http_status(:forbidden)
+        expect(response.parsed_body["error_message"]).to eq("Your account can't send team invitations right now.")
       end
     end
   end
@@ -418,6 +482,7 @@ describe Settings::Team::InvitationsController do
     end
 
     it "shares the send allowance with new invitations and refuses resends without changing expiry" do
+      seller.update!(user_risk_state: "compliant")
       10.times do |index|
         post :create, params: { team_invitation: { email: "new#{index}@example.com", role: "admin" } }, as: :json
       end
@@ -430,6 +495,17 @@ describe Settings::Team::InvitationsController do
 
       expect(response).to have_http_status(:too_many_requests)
       expect(response.parsed_body["error"]).to include("limit of 10 team invitations per hour")
+    end
+
+    it "refuses resends from a suspended seller without extending expiry" do
+      seller.update_column(:user_risk_state, "suspended_for_tos_violation")
+
+      expect(TeamMailer).not_to receive(:invite)
+      expect do
+        put :resend_invitation, params: { id: team_invitation.external_id }, as: :json
+      end.not_to change { team_invitation.reload.expires_at }
+
+      expect(response).to have_http_status(:forbidden)
     end
   end
 end
