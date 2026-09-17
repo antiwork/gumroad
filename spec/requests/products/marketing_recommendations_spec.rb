@@ -105,7 +105,7 @@ RSpec.describe "Marketing recommendations" do
       expect(email).to include("eligible" => false, "draft" => nil)
       expect(email["blocked_reason"]).to eq("You can email your customers once you've made at least $100 in sales and received a payout.")
       expect(email["requirements"]).to eq("sales_cents_total" => 0,
-                                         "min_sales_cents_required" => Installment::MINIMUM_SALES_CENTS_VALUE)
+                                          "min_sales_cents_required" => Installment::MINIMUM_SALES_CENTS_VALUE)
       expect(email["action"]).to include("status" => "blocked", "error_code" => "email_eligibility_not_met")
     end
   end

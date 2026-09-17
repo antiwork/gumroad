@@ -174,13 +174,19 @@ describe("ShareYourLaunchCard", () => {
     ]);
 
     expect(
-      screen.getByText(/You can email your customers once you've made at least \$100 in sales and received a payout\./u),
+      screen.getByText(
+        /You can email your customers once you've made at least \$100 in sales and received a payout\./u,
+      ),
     ).toBeDefined();
     expect(screen.queryByRole("link", { name: "Review the draft" })).toBeNull();
   });
 
   it("labels a launch email the seller has already scheduled", async () => {
-    await renderCard([emailChannel({ draft: { id: "draft1", subject: "Gumstein Letters", state: "scheduled", edit_url: "/emails/draft1/edit" } })]);
+    await renderCard([
+      emailChannel({
+        draft: { id: "draft1", subject: "Gumstein Letters", state: "scheduled", edit_url: "/emails/draft1/edit" },
+      }),
+    ]);
 
     expect(screen.getByText("Scheduled")).toBeDefined();
     expect(screen.getByRole("link", { name: "Open in Emails" })).toBeDefined();
