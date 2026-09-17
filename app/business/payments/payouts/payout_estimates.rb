@@ -66,8 +66,14 @@ module PayoutEstimates
 
   private_class_method
   def self.get_balances(date, processor_type, user)
-    user.unpaid_balances_up_to_date(date).select do |balance|
-      ::PayoutProcessorType.get(processor_type).is_balance_payable(balance)
+    processor = ::PayoutProcessorType.get(processor_type)
+    balances = user.unpaid_balances_up_to_date(date).select do |balance|
+      processor.is_balance_payable(balance)
     end
+    # The estimate has to agree with what a payout run pays, or the payout page shows money the run
+    # then excludes — same single-currency-group rule the run applies before claiming.
+    return balances unless processor.respond_to?(:balances_for_single_payout_currency)
+
+    processor.balances_for_single_payout_currency(user, balances)
   end
 end

@@ -281,7 +281,146 @@ class StripePayoutProcessorTest < ActiveSupport::TestCase
   test "is_balance_payable balance is associated with a Creators' merchant account but in the wrong currency for some reason returns false" do
     merchant_account = create_merchant_account(currency: Currency::USD)
     balance = create_balance(merchant_account:, currency: Currency::CAD)
+    # Nothing behind the CAD row at the account, so it stays the mislabelled-balance bug class
+    # rather than becoming payable just because the currency differs.
+    StripePayoutProcessor.stubs(:stripe_balance_currencies).with(merchant_account).returns([Currency::USD])
     assert_equal false, StripePayoutProcessor.is_balance_payable(balance)
+  end
+
+  # A Stripe-held balance is stamped with the currency Stripe credited the connected account, which
+  # need not be the account's own payout currency — a `huf` account in Hungary holding the EUR its
+  # EUR-priced sales settled in. Those rows were unpayable forever before this.
+  test "is_balance_payable a huf account holding a eur balance returns true" do
+    user = create_user
+    merchant_account = create_merchant_account(user:, currency: Currency::HUF, country: "HU")
+    balance = create_balance(user:, merchant_account:, currency: Currency::USD, holding_currency: Currency::EUR)
+    stripe_balance_currencies_stub(merchant_account, eur: 438_520, huf: 0)
+    assert_equal true, StripePayoutProcessor.is_balance_payable(balance)
+  end
+
+  test "is_balance_payable a currency the account has already paid out returns false" do
+    user = create_user
+    merchant_account = create_merchant_account(user:, currency: Currency::HUF, country: "HU")
+    balance = create_balance(user:, merchant_account:, currency: Currency::USD, holding_currency: Currency::EUR)
+    stripe_balance_currencies_stub(merchant_account, eur: 0, huf: 1_772_490)
+    assert_equal false, StripePayoutProcessor.is_balance_payable(balance)
+  end
+
+  test "is_balance_payable falls back to the account currency when the Stripe balance cannot be read" do
+    user = create_user
+    merchant_account = create_merchant_account(user:, currency: Currency::HUF, country: "HU")
+    eur_balance = create_balance(user:, merchant_account:, currency: Currency::USD, holding_currency: Currency::EUR)
+    huf_balance = create_balance(user:, merchant_account:, currency: Currency::USD, holding_currency: Currency::HUF)
+    Stripe::Balance.stubs(:retrieve).raises(Stripe::APIConnectionError.new("Connection refused"))
+
+    # Fail closed: an unreadable balance must never make an unbacked row look payable.
+    assert_equal false, StripePayoutProcessor.is_balance_payable(eur_balance)
+    assert_equal true, StripePayoutProcessor.is_balance_payable(huf_balance)
+  end
+
+  # ---------------------------------------------------------------------------
+  # balances_for_single_payout_currency
+  # ---------------------------------------------------------------------------
+  test "balances_for_single_payout_currency pays the group with the oldest unpaid row and leaves the rest for a later run" do
+    user = create_user
+    merchant_account = create_merchant_account(user:, currency: Currency::HUF, country: "HU")
+    eur_balance = create_balance(user:, merchant_account:, currency: Currency::USD, amount_cents: 5_120_81, holding_currency: Currency::EUR, holding_amount_cents: 441_391, date: Date.today - 3)
+    huf_balance = create_balance(user:, merchant_account:, currency: Currency::USD, amount_cents: 502_70, holding_currency: Currency::HUF, holding_amount_cents: 178_000, date: Date.today)
+
+    assert_equal [eur_balance], StripePayoutProcessor.balances_for_single_payout_currency(user, [huf_balance, eur_balance])
+  end
+
+  test "balances_for_single_payout_currency alternates: the group left behind is the older one next run" do
+    user = create_user
+    merchant_account = create_merchant_account(user:, currency: Currency::HUF, country: "HU")
+    eur_balance = create_balance(user:, merchant_account:, currency: Currency::USD, holding_currency: Currency::EUR, holding_amount_cents: 441_391, date: Date.today - 3)
+    huf_balance = create_balance(user:, merchant_account:, currency: Currency::USD, holding_currency: Currency::HUF, holding_amount_cents: 178_000, date: Date.today - 1)
+
+    # Whichever balance is older wins, so a small group cannot wait behind a larger one forever.
+    assert_equal [huf_balance], StripePayoutProcessor.balances_for_single_payout_currency(user, [eur_balance, huf_balance])
+  end
+
+  test "balances_for_single_payout_currency leaves a seller holding one currency alone" do
+    user = create_user
+    merchant_account = create_merchant_account(user:, currency: Currency::USD)
+    first = create_balance(user:, merchant_account:, holding_currency: Currency::USD, holding_amount_cents: 100_00)
+    second = create_balance(user:, merchant_account:, holding_currency: Currency::USD, holding_amount_cents: 200_00)
+
+    assert_equal [first, second], StripePayoutProcessor.balances_for_single_payout_currency(user, [first, second])
+  end
+
+  test "balances_for_single_payout_currency leaves Gumroad-held balances out when the group is not the account currency" do
+    user = create_user
+    merchant_account = create_merchant_account(user:, currency: Currency::HUF, country: "HU")
+    gumroad_balance = create_balance(user:, merchant_account: MerchantAccount.gumroad(StripeChargeProcessor.charge_processor_id), holding_currency: Currency::USD, holding_amount_cents: 100_00)
+    eur_balance = create_balance(user:, merchant_account:, currency: Currency::USD, holding_currency: Currency::EUR, holding_amount_cents: 441_391)
+    huf_balance = create_balance(user:, merchant_account:, currency: Currency::USD, holding_currency: Currency::HUF, holding_amount_cents: 178_000)
+
+    # Gumroad-held funds are transferred into the account and paid out in its own currency, so they
+    # cannot ride an all-EUR payout.
+    assert_equal [eur_balance], StripePayoutProcessor.balances_for_single_payout_currency(user, [gumroad_balance, eur_balance, huf_balance])
+  end
+
+  # ---------------------------------------------------------------------------
+  # destination_external_account_id
+  # ---------------------------------------------------------------------------
+  test "destination_external_account_id picks the bank leg in the payout currency" do
+    user = create_user
+    merchant_account = create_merchant_account(user:, currency: Currency::HUF, country: "HU")
+    payment = create_payment(user:, currency: Currency::EUR, processor: PayoutProcessorType::STRIPE,
+                             stripe_connect_account_id: merchant_account.charge_processor_merchant_id)
+    payment.stubs(:bank_account).returns(stub(stripe_external_account_id: "ba_huf"))
+    Stripe::Account.stubs(:retrieve).returns(
+      Stripe::Account.construct_from(id: merchant_account.charge_processor_merchant_id,
+                                     external_accounts: { data: [{ id: "ba_huf", currency: "huf" }, { id: "ba_eur", currency: "eur" }] })
+    )
+
+    assert_equal "ba_eur", StripePayoutProcessor.destination_external_account_id(payment)
+  end
+
+  test "destination_external_account_id leaves a payout in the account currency alone" do
+    user = create_user
+    merchant_account = create_merchant_account(user:, currency: Currency::HUF, country: "HU")
+    payment = create_payment(user:, currency: Currency::HUF, processor: PayoutProcessorType::STRIPE,
+                             stripe_connect_account_id: merchant_account.charge_processor_merchant_id)
+    payment.stubs(:bank_account).returns(stub(stripe_external_account_id: "ba_huf"))
+    Stripe::Account.expects(:retrieve).never
+
+    assert_equal "ba_huf", StripePayoutProcessor.destination_external_account_id(payment)
+  end
+
+  # ---------------------------------------------------------------------------
+  # prepare_payment_and_set_amount (multi-currency)
+  # ---------------------------------------------------------------------------
+  test "prepare_payment_and_set_amount pays a eur-held balance on a huf account in eur" do
+    user = create_user
+    merchant_account = create_merchant_account(user:, currency: Currency::HUF, country: "HU")
+    eur_balance = create_balance(user:, merchant_account:, currency: Currency::USD, amount_cents: 5_120_81, holding_currency: Currency::EUR, holding_amount_cents: 441_391)
+    @payment = create_payment(user:, currency: nil, amount_cents: nil)
+    @payment.balances << eur_balance
+    StripePayoutProcessor.stubs(:get_payout_details).returns([merchant_account, [], [eur_balance]])
+    stripe_balance_currencies_stub(merchant_account, eur: 438_520, huf: 0, eur_pending: 2_871)
+
+    assert_equal [], StripePayoutProcessor.prepare_payment_and_set_amount(@payment, [eur_balance])
+    assert_equal Currency::EUR, @payment.currency
+    assert_equal 441_391, @payment.amount_cents
+    assert_equal merchant_account.charge_processor_merchant_id, @payment.stripe_connect_account_id
+  end
+
+  test "prepare_payment_and_set_amount still fails a balance set spanning currencies with CURRENCY_MISMATCH" do
+    user = create_user
+    merchant_account = create_merchant_account(user:, currency: Currency::HUF, country: "HU")
+    eur_balance = create_balance(user:, merchant_account:, currency: Currency::USD, holding_currency: Currency::EUR, holding_amount_cents: 100_00)
+    huf_balance = create_balance(user:, merchant_account:, currency: Currency::USD, holding_currency: Currency::HUF, holding_amount_cents: 200_00)
+    @payment = create_payment(user:, currency: nil, amount_cents: nil)
+    StripePayoutProcessor.stubs(:get_payout_details).returns([merchant_account, [], [eur_balance, huf_balance]])
+    stripe_balance_currencies_stub(merchant_account, eur: 100_00, huf: 200_00)
+
+    errors = StripePayoutProcessor.prepare_payment_and_set_amount(@payment, [eur_balance, huf_balance])
+
+    assert @payment.failed?
+    assert_equal Payment::FailureReason::CURRENCY_MISMATCH, @payment.failure_reason
+    assert_includes errors.first, "holding_currency"
   end
 
   # ---------------------------------------------------------------------------
@@ -2824,6 +2963,49 @@ class StripePayoutProcessorTest < ActiveSupport::TestCase
     assert_equal "completed", payment.reload.state
   end
 
+  # A payout is created in the currency the money is held in, which for a huf account holding EUR is
+  # not the account's own payout currency. The account-currency test this replaced skipped every such
+  # payout, leaving the payment in `processing` until SyncStuckPayoutsJob caught it a day later.
+  test "handle_stripe_event payouts a eur payout on a huf account completes the eur payment" do
+    user = create_user
+    create_merchant_account(user:, charge_processor_id: StripeChargeProcessor.charge_processor_id,
+                            charge_processor_merchant_id: STRIPE_CONNECT_ACCOUNT_ID, currency: Currency::HUF, country: "HU")
+    payment = create_stripe_payout_payment(user:, currency: Currency::EUR)
+    object = payout_event_object(payment_external_id: payment.external_id, currency: Currency::EUR)
+    event = build_stripe_event(type: "payout.paid", object:)
+    Stripe::Payout.stubs(:retrieve).with(STRIPE_TRANSFER_ID, anything).returns(object)
+
+    StripePayoutProcessor.handle_stripe_event(event, stripe_connect_account_id: STRIPE_CONNECT_ACCOUNT_ID)
+
+    assert_equal "completed", payment.reload.state
+  end
+
+  test "handle_stripe_event payouts a payout booked outside the payout run completes the matching payment" do
+    create_merchant_account(charge_processor_merchant_id: STRIPE_CONNECT_ACCOUNT_ID)
+    payment = create_stripe_payout_payment
+    # No `metadata.payment` — an operator releasing a stranded balance from the console books the
+    # payout by hand. The (account, payout id) match is the association; a missing key must not raise.
+    object = payout_event_object
+    event = build_stripe_event(type: "payout.paid", object:)
+    Stripe::Payout.stubs(:retrieve).with(STRIPE_TRANSFER_ID, anything).returns(object)
+
+    StripePayoutProcessor.handle_stripe_event(event, stripe_connect_account_id: STRIPE_CONNECT_ACCOUNT_ID)
+
+    assert_equal "completed", payment.reload.state
+  end
+
+  test "handle_stripe_event payouts a payout in a currency the payment does not carry is ignored" do
+    create_merchant_account(charge_processor_merchant_id: STRIPE_CONNECT_ACCOUNT_ID)
+    payment = create_stripe_payout_payment(currency: Currency::USD)
+    object = payout_event_object(payment_external_id: payment.external_id, currency: Currency::EUR)
+    event = build_stripe_event(type: "payout.paid", object:)
+    Stripe::Payout.stubs(:retrieve).with(STRIPE_TRANSFER_ID, anything).returns(object)
+
+    StripePayoutProcessor.handle_stripe_event(event, stripe_connect_account_id: STRIPE_CONNECT_ACCOUNT_ID)
+
+    assert_equal "processing", payment.reload.state
+  end
+
   test "handle_stripe_event payouts when event is about a payout we issued to a creator payout.paid payout does match a payment payment was already marked as failed does not change the state" do
     create_merchant_account(charge_processor_merchant_id: STRIPE_CONNECT_ACCOUNT_ID)
     payment = create_stripe_payout_payment
@@ -3727,6 +3909,19 @@ class StripePayoutProcessorTest < ActiveSupport::TestCase
       Stripe::Balance.stubs(:retrieve).returns(
         Stripe::Balance.construct_from(object: "balance", available: [{ amount: available, currency: }], pending: [{ amount: pending, currency: }])
       )
+    end
+
+    # The connected account's Stripe balance, as `is_balance_payable` and the destination drift guard
+    # both read it: one entry per currency the account can hold money in.
+    def stripe_balance_currencies_stub(merchant_account, eur: 0, huf: 0, usd: 0, eur_pending: 0)
+      Stripe::Balance.stubs(:retrieve).returns(
+        Stripe::Balance.construct_from(
+          object: "balance",
+          available: [{ amount: huf, currency: "huf" }, { amount: eur, currency: "eur" }, { amount: usd, currency: "usd" }],
+          pending: [{ amount: eur_pending, currency: "eur" }]
+        )
+      )
+      merchant_account
     end
 
     def setup_balance_transaction_nil

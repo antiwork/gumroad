@@ -515,6 +515,13 @@ class Payouts
   def self.select_and_claim_payable_balances(date, processor_type, user, payout_type:, under_reserve:)
     unpaid_balances = user.unpaid_balances_up_to_date(date)
     payable_balances = payable_balances_for_processor(user, unpaid_balances, processor_type)
+    # One payout per currency per run: a processor whose rail pays out in a single currency picks the
+    # group it can pay now and leaves the rest `unpaid` for a later run (see
+    # StripePayoutProcessor.balances_for_single_payout_currency).
+    payout_processor = ::PayoutProcessorType.get(processor_type)
+    if payout_processor.respond_to?(:balances_for_single_payout_currency)
+      payable_balances = payout_processor.balances_for_single_payout_currency(user, payable_balances)
+    end
     minimum_cents = payout_type == Payouts::PAYOUT_TYPE_INSTANT ? StripePayoutProcessor::MINIMUM_INSTANT_PAYOUT_AMOUNT_CENTS : user.minimum_payout_amount_cents
     if under_reserve
       # The reserve chooses a global oldest-row prefix before each processor intersects it
