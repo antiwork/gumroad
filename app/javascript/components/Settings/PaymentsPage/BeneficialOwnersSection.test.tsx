@@ -72,6 +72,23 @@ const renderSection = (owners: unknown[], defaultCountry = "GB") => {
 const idNumberInput = () => screen.getByLabelText("Personal ID number");
 
 describe("Stripe requirement labels", () => {
+  it("does not repeat a title that is already listed as a role", async () => {
+    renderSection([
+      {
+        ...ownerWithoutIdNumber,
+        relationship: {
+          ...ownerWithoutIdNumber.relationship,
+          director: false,
+          executive: false,
+          title: "Owner",
+          percent_ownership: 100,
+        },
+      },
+    ]);
+    expect(await screen.findByText("Owner · 100%")).toBeTruthy();
+    expect(screen.queryByText("Owner · 100% · Owner")).toBeNull();
+  });
+
   it.each([
     ["id_number", "Personal tax ID"],
     ["verification.document", "Identity document"],

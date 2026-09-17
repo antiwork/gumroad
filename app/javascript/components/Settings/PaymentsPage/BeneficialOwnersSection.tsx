@@ -643,7 +643,10 @@ const BeneficialOwnersSection = ({
                   <span className="text-sm text-muted">
                     {ownerRole(owner)}
                     {owner.relationship.percent_ownership != null ? ` · ${owner.relationship.percent_ownership}%` : ""}
-                    {owner.relationship.title ? ` · ${owner.relationship.title}` : ""}
+                    {owner.relationship.title &&
+                    !ownerRole(owner).toLowerCase().split(", ").includes(owner.relationship.title.trim().toLowerCase())
+                      ? ` · ${owner.relationship.title}`
+                      : ""}
                   </span>
                   {owner.requirements_currently_due.length > 0 ? (
                     <span className="text-sm text-warning">

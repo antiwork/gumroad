@@ -1334,13 +1334,15 @@ const AccountDetailsSection = ({
             {individualTaxIdConfig === PERSONAL_ID_NUMBER_CONFIG &&
             complianceInfo.is_business &&
             complianceInfo.business_country === "US" ? (
-              <FieldsetDescription>
-                To verify this US company's representative, enter a US ITIN or SSN (9 digits) if you have one. If you
-                have neither, use Stripe's verification link to upload a passport when offered.
+              <FieldsetDescription className="text-muted">
+                To verify this US company's representative, enter a US ITIN or SSN (9 digits) if you have one.
+                {!hasIdDocumentAlternative
+                  ? " If you have neither, use Stripe's verification link to upload a passport when offered."
+                  : null}
               </FieldsetDescription>
             ) : null}
             {hasIdDocumentAlternative && !isFormDisabled ? (
-              <FieldsetDescription>
+              <FieldsetDescription className="text-muted">
                 <a href={Routes.remediation_settings_payments_path()}>
                   {complianceInfo.country !==
                   (complianceInfo.is_business ? complianceInfo.business_country : complianceInfo.country)
