@@ -7,6 +7,7 @@ export type MarketingCartRecovery = {
   blocked_reason: string | null;
   enabled: boolean;
   can_toggle: boolean;
+  activation_token: string;
   subject: string;
   message: string | null;
   delay_hours: number;
@@ -32,12 +33,12 @@ export const fetchCartRecovery = async (productId: string) => {
   return parse(response);
 };
 
-export const updateCartRecovery = async (productId: string, enabled: boolean) => {
+export const updateCartRecovery = async (productId: string, enabled: boolean, activationToken?: string) => {
   const response = await request({
     url: Routes.product_marketing_abandoned_cart_path(productId, "json"),
     method: "PUT",
     accept: "json",
-    data: { enabled },
+    data: { enabled, activation_token: activationToken },
   });
   return parse(response);
 };

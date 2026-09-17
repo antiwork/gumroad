@@ -199,4 +199,73 @@ describe Marketing::AbandonedCart do
       expect { cart.pause }.not_to change { workflows.count }
     end
   end
+
+  describe "reviewed activation" do
+    before { create(:payment_completed, user: seller) }
+
+    def paused_workflow
+      workflow = cart.enable
+      cart.pause
+      workflow
+    end
+
+    it "returns a stable token with the saved preview" do
+      workflow = paused_workflow
+      snapshot = cart.state
+      expect(snapshot[:activation_token]).to match(/\A[0-9a-f]{64}\z/)
+      expect(described_class.new(product:, seller:).state[:activation_token]).to eq(snapshot[:activation_token])
+      expect(cart.enable(expected_activation_token: snapshot[:activation_token])).to eq(workflow)
+    end
+
+    %i[name message].each do |field|
+      it "rejects a saved #{field} changed after preview" do
+        workflow = paused_workflow
+        token = cart.state[:activation_token]
+        workflow.installments.sole.update!(field => "Changed after review")
+        expect(cart.enable(expected_activation_token: token)).to eq(:stale)
+        expect(workflow.reload.published_at).to be_nil
+      end
+    end
+
+    it "rejects a different workflow after the reviewed filter no longer covers this product" do
+      workflow = paused_workflow
+      token = cart.state[:activation_token]
+      workflow.update!(bought_products: [other_product.unique_permalink])
+      expect { expect(cart.enable(expected_activation_token: token)).to eq(:stale) }.not_to change(Workflow, :count)
+      expect(workflow.reload.published_at).to be_nil
+    end
+
+    it "rejects a deleted and replaced email even when its text is identical" do
+      workflow = paused_workflow
+      token = cart.state[:activation_token]
+      email = workflow.installments.sole
+      email.mark_deleted!
+      workflow.installments.create!(name: email.name, message: email.message, installment_type: email.installment_type, seller:, send_emails: true)
+      expect(cart.enable(expected_activation_token: token)).to eq(:stale)
+      expect(workflow.reload.published_at).to be_nil
+    end
+
+    it "keeps preview content and token on the same email snapshot" do
+      workflow = paused_workflow
+      original = described_class.new(product:, seller:).state
+      allow_any_instance_of(Installment).to receive(:message_with_inline_abandoned_cart_products).and_wrap_original do |method, **args|
+        Installment.find(workflow.installments.sole.id).update!(message: "New saved content")
+        method.call(**args)
+      end
+      snapshot = cart.state
+      expect(snapshot[:message]).to eq(original[:message])
+      expect(snapshot[:activation_token]).to eq(original[:activation_token])
+      expect(cart.enable(expected_activation_token: snapshot[:activation_token])).to eq(:stale)
+    end
+
+    it "canonicalizes saved filter ordering without losing filter changes" do
+      workflow = paused_workflow
+      workflow.update!(bought_products: [product.unique_permalink, other_product.unique_permalink])
+      first = described_class.new(product:, seller:).state[:activation_token]
+      workflow.update!(bought_products: [other_product.unique_permalink, product.unique_permalink])
+      expect(described_class.new(product:, seller:).state[:activation_token]).to eq(first)
+      workflow.update!(not_bought_products: [other_product.unique_permalink])
+      expect(described_class.new(product:, seller:).state[:activation_token]).not_to eq(first)
+    end
+  end
 end

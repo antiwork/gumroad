@@ -11,12 +11,13 @@ class Marketing::AbandonedCart
 
   def state
     workflow = covering_workflow
-    email = workflow&.installments&.alive&.first
+    email = workflow && installments_for(workflow).first
     {
       available: available?,
       blocked_reason:,
       enabled: enabled?,
       can_toggle: can_toggle?,
+      activation_token: activation_token(workflow),
       subject: email&.subject || DefaultAbandonedCartWorkflowGeneratorService::DEFAULT_NAME,
       message: can_toggle? ? preview_message(workflow, email) : nil,
       delay_hours: DefaultAbandonedCartWorkflowGeneratorService::DELAY_HOURS,
@@ -31,29 +32,22 @@ class Marketing::AbandonedCart
     }
   end
 
-  def enable
+  def enable(expected_activation_token: nil)
     return :blocked unless available?
 
-    # The lookup and creation share a lock so concurrent requests cannot create duplicate reminders.
-    product.with_lock do
-      @covering_workflows = nil
-      return :blocked unless can_toggle?
+    with_toggleable_workflow do |workflow|
+      next workflow if workflow&.published_at.present?
+      next :stale if expected_activation_token && expected_activation_token != activation_token(workflow)
 
-      workflow = covering_workflow || create_workflow
+      workflow ||= create_workflow
       workflow.publish!
-      @covering_workflows = nil
       workflow
     end
   end
 
   def pause
-    product.with_lock do
-      @covering_workflows = nil
-      return :blocked unless can_toggle?
-
-      workflow = covering_workflow
+    with_toggleable_workflow do |workflow|
       workflow&.unpublish!
-      @covering_workflows = nil
       workflow
     end
   end
@@ -70,6 +64,50 @@ class Marketing::AbandonedCart
   private
     attr_reader :product, :seller
 
+    def with_toggleable_workflow
+      # Product locking serializes creation; editors instead lock the workflow and its emails.
+      product.with_lock do
+        clear_preview
+        next :blocked unless can_toggle?
+
+        workflow = covering_workflow
+        if workflow
+          workflow.with_lock do
+            @preview_installments = { workflow.id => workflow.installments.alive.order(:id).lock.to_a }
+            next :stale unless workflow.alive? && workflow.abandoned_cart_type? && can_toggle?
+
+            yield workflow
+          end
+        else
+          yield nil
+        end
+      end
+    ensure
+      clear_preview
+    end
+
+    def clear_preview
+      @covering_workflows = nil
+      @preview_installments = nil
+    end
+
+    def installments_for(workflow)
+      @preview_installments ||= {}
+      @preview_installments[workflow.id] ||= workflow.installments.alive.order(:id).to_a
+    end
+
+    # Bind consent to saved targeting and raw content, not rendered catalog/asset data.
+    def activation_token(workflow)
+      Digest::SHA256.hexdigest({
+        product_id: product.id,
+        workflow_id: workflow&.id,
+        filters: %i[bought_products bought_variants not_bought_products not_bought_variants].map do |filter|
+          Array(workflow&.public_send(filter)).sort
+        end,
+        emails: workflow ? installments_for(workflow).map { [_1.id, _1.name, _1.message] } : [[nil, DefaultAbandonedCartWorkflowGeneratorService::DEFAULT_NAME, default_message]],
+      }.to_json)
+    end
+
     def can_toggle?
       return true if covering_workflows.empty?
       return false unless covering_workflows.one?
@@ -77,7 +115,7 @@ class Marketing::AbandonedCart
       workflow = covering_workflows.sole
       workflow.bought_products == [product.unique_permalink] &&
         workflow.bought_variants.blank? && workflow.not_bought_products.blank? && workflow.not_bought_variants.blank? &&
-        workflow.installments.alive.one?
+        installments_for(workflow).one?
     end
 
     def workflow_scope(workflow)

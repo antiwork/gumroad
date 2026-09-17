@@ -15,13 +15,15 @@ class Products::MarketingAbandonedCartsController < Sellers::BaseController
     return head :not_found unless enabled? && own_product? && @product.published?
 
     if ActiveModel::Type::Boolean.new.cast(params[:enabled])
-      outcome = cart.enable
+      outcome = cart.enable(expected_activation_token: params[:activation_token].to_s)
       return blocked if outcome == :blocked
+      return stale_preview if outcome == :stale
 
       record_action
     else
       outcome = cart.pause
       return blocked if outcome == :blocked
+      return stale_preview if outcome == :stale
     end
 
     render json: cart.state
@@ -34,6 +36,10 @@ class Products::MarketingAbandonedCartsController < Sellers::BaseController
 
     def blocked
       render json: { success: false, error: cart.state[:blocked_reason] }, status: :unprocessable_entity
+    end
+
+    def stale_preview
+      render json: { success: false, error: "Cart recovery changed. Review the updated email and try again." }, status: :conflict
     end
 
     def record_action
