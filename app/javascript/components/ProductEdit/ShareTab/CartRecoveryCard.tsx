@@ -1,11 +1,7 @@
 import { CartPlus } from "@boxicons/react";
 import * as React from "react";
 
-import {
-  fetchCartRecovery,
-  updateCartRecovery,
-  type MarketingCartRecovery,
-} from "$app/data/marketing_cart_recovery";
+import { fetchCartRecovery, updateCartRecovery, type MarketingCartRecovery } from "$app/data/marketing_cart_recovery";
 import { assertResponseError } from "$app/utils/request";
 
 import { NavigationButton } from "$app/components/Button";
@@ -71,8 +67,8 @@ export const CartRecoveryCard = ({ productPermalink }: { productPermalink: strin
           {state.available ? (
             <>
               <span>
-                Anyone who leaves this product in their cart gets &ldquo;{state.subject}&rdquo; {state.delay_hours} hours
-                later. You can edit the email in Workflows.
+                Anyone who leaves this product in their cart gets &ldquo;{state.subject}&rdquo; {state.delay_hours}{" "}
+                hours later. You can edit the email in Workflows.
               </span>
               {state.account_wide ? (
                 <small className="text-muted">

@@ -75,7 +75,9 @@ describe("CartRecoveryCard", () => {
   });
 
   it("shows the reason and a disabled toggle for a seller who cannot use it yet", async () => {
-    await renderCard(state({ available: false, blocked_reason: "Cart reminders turn on once you've received your first payout." }));
+    await renderCard(
+      state({ available: false, blocked_reason: "Cart reminders turn on once you've received your first payout." }),
+    );
 
     expect(screen.getByText("Cart reminders turn on once you've received your first payout.")).toBeDefined();
     expect(screen.getByRole("switch", { name: "Recover abandoned carts" })).toHaveProperty("disabled", true);
