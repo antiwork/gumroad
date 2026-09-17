@@ -817,6 +817,30 @@ describe Workflow::SaveInstallmentsService do
       )
     end
 
+    it "reports an error instead of raising when the delay overflows the column" do
+      # 1000 months: 2_629_746_000 seconds, past the 4-byte limit of delayed_delivery_time.
+      params[:installments] = [default_installment_params.merge(id: SecureRandom.uuid, time_duration: 1000, time_period: "month")]
+      service = described_class.new(seller:, params:, workflow:, preview_email_recipient:)
+      result = nil
+
+      expect { result = service.process }.to_not change { workflow.installments.count }
+      expect(result.first).to be(false)
+      expect(result.last.full_messages).to eq(["Delayed delivery time is too large"])
+      expect(service.saved_installments).to be_empty
+    end
+
+    it "reports an error instead of raising when the delay is negative" do
+      # -1000 months: -2_629_746_000 seconds, below the 4-byte minimum of delayed_delivery_time.
+      params[:installments] = [default_installment_params.merge(id: SecureRandom.uuid, time_duration: -1000, time_period: "month")]
+      service = described_class.new(seller:, params:, workflow:, preview_email_recipient:)
+      result = nil
+
+      expect { result = service.process }.to_not change { workflow.installments.count }
+      expect(result.first).to be(false)
+      expect(result.last.full_messages).to eq(["Delayed delivery time must not be negative"])
+      expect(service.saved_installments).to be_empty
+    end
+
     it "does not save installments if there are errors" do
       params[:installments] = [default_installment_params.merge(id: SecureRandom.uuid, message: "")]
       service = described_class.new(seller:, params:, workflow:, preview_email_recipient:)

@@ -323,5 +323,26 @@ describe InstallmentRule do
         expect(post_rule.errors.full_messages).to include("Please select a date and time in the future.")
       end
     end
+
+    describe "delayed_delivery_time_must_fit_the_column" do
+      it "allows a delay at either end of the column range" do
+        expect(build(:installment_rule, delayed_delivery_time: 0)).to be_valid
+        expect(build(:installment_rule, delayed_delivery_time: described_class::MAX_DELAY_SECONDS)).to be_valid
+      end
+
+      it "rejects a delay past the column limit" do
+        post_rule = build(:installment_rule, delayed_delivery_time: described_class::MAX_DELAY_SECONDS + 1)
+
+        expect(post_rule).not_to be_valid
+        expect(post_rule.errors.full_messages).to include("Delayed delivery time is too large")
+      end
+
+      it "rejects a negative delay" do
+        post_rule = build(:installment_rule, delayed_delivery_time: -(2**31))
+
+        expect(post_rule).not_to be_valid
+        expect(post_rule.errors.full_messages).to include("Delayed delivery time must not be negative")
+      end
+    end
   end
 end

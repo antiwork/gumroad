@@ -65,6 +65,30 @@ describe Workflows::EmailsController, type: :controller, inertia: true do
       expect(flash[:notice]).to eq(Workflows::EmailsController::FLASH_CHANGES_SAVED)
     end
 
+    it "redirects with an error instead of raising when the delay is too large to store" do
+      # 1000 months = 2_629_746_000 seconds, past the 4-byte limit of the rule's delayed_delivery_time.
+      patch :update, params: {
+        workflow_id: workflow.external_id,
+        workflow: {
+          send_to_past_customers: false,
+          save_action_name: "save",
+          installments: [{
+            id: SecureRandom.uuid,
+            name: "Test Email",
+            message: "<p>Test message</p>",
+            time_period: "month",
+            time_duration: 1000,
+            send_preview_email: false,
+            files: []
+          }]
+        }
+      }
+
+      expect(response).to redirect_to(workflow_emails_path(workflow.external_id))
+      expect(flash[:alert]).to eq("Delayed delivery time is too large")
+      expect(workflow.installments.count).to eq(0)
+    end
+
     it "redirects with published message when save_action_name is save_and_publish" do
       allow_any_instance_of(Workflow::SaveInstallmentsService).to receive(:process).and_return([true, nil])
 
