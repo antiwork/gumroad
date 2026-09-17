@@ -3,7 +3,7 @@
 class Settings::Team::InvitationsController < Sellers::BaseController
   skip_before_action :require_account_email, only: :accept
   before_action :set_team_invitation, only: %i[update destroy restore resend_invitation]
-  # Suspension does not log the seller out, and until now it did not stop them sending mail either.
+  # Suspension does not log the seller out, so sending mail needs its own check.
   before_action :refuse_inactive_sender, only: %i[create resend_invitation]
 
   INVITATION_BURST_REPORT_TTL = 24.hours
@@ -19,18 +19,24 @@ class Settings::Team::InvitationsController < Sellers::BaseController
     unless team_invitation.valid?
       return render json: { success: false, error_message: team_invitation.errors.full_messages.to_sentence }
     end
-    if TeamInvitationThrottle.unreviewed_limit_reached?(current_seller)
-      report_invitation_burst(window: "account", limit: TeamInvitationThrottle::UNREVIEWED_TOTAL_LIMIT)
-      # Same shape as a validation failure so the settings page shows the message instead of its generic error.
-      return render json: { success: false, error_message: UNREVIEWED_LIMIT_MESSAGE }
-    end
-    return unless throttle_invitation_sends
+    # The unreviewed cap counts existing invitations and then inserts one, so both run under the
+    # seller's row lock: concurrent requests otherwise each read a count below the limit and all get
+    # through. Suspension is re-read here because it does not roll back a request already in flight.
+    current_seller.with_lock do
+      return refuse_inactive_sender unless current_seller.account_active?
+      if TeamInvitationThrottle.unreviewed_limit_reached?(current_seller)
+        report_invitation_burst(window: "account", limit: TeamInvitationThrottle::UNREVIEWED_TOTAL_LIMIT)
+        # Same shape as a validation failure so the settings page shows the message instead of its generic error.
+        return render json: { success: false, error_message: UNREVIEWED_LIMIT_MESSAGE }
+      end
+      return unless throttle_invitation_sends
 
-    if team_invitation.save
-      TeamMailer.invite(team_invitation).deliver_later
-      render json: { success: true }
-    else
-      render json: { success: false, error_message: team_invitation.errors.full_messages.to_sentence }
+      if team_invitation.save
+        TeamMailer.invite(team_invitation).deliver_later
+        render json: { success: true }
+      else
+        render json: { success: false, error_message: team_invitation.errors.full_messages.to_sentence }
+      end
     end
   end
 
