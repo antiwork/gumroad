@@ -189,6 +189,24 @@ describe("ShareYourLaunchCard", () => {
     ]);
 
     expect(screen.getByText("Scheduled")).toBeDefined();
+    expect(screen.getByText(/Your launch email about Gumstein Letters is scheduled/u)).toBeDefined();
+    expect(screen.queryByText(/Nothing is sent until you send it/u)).toBeNull();
+    expect(screen.queryByText(/would get it/u)).toBeNull();
+    expect(screen.getByRole("link", { name: "Open in Emails" })).toBeDefined();
+  });
+
+  it("acknowledges a submitted email without presenting today's audience as delivered recipients", async () => {
+    await renderCard([
+      emailChannel({
+        draft: { id: "draft1", subject: "Gumstein Letters", state: "sent", edit_url: "/emails/draft1/edit" },
+      }),
+    ]);
+
+    expect(screen.getByText("Sent")).toBeDefined();
+    expect(screen.getByText(/You submitted your launch email about Gumstein Letters/u)).toBeDefined();
+    expect(screen.getByText(/Check its delivery status in Emails/u)).toBeDefined();
+    expect(screen.queryByText(/Nothing is sent until you send it/u)).toBeNull();
+    expect(screen.queryByText(/would get it/u)).toBeNull();
     expect(screen.getByRole("link", { name: "Open in Emails" })).toBeDefined();
   });
 
