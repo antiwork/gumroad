@@ -100,12 +100,19 @@ class ContentModeration::Strategies::PromptStrategy
       compliant unless paired with classic MLM red flags (multi-level downline
       structures, guaranteed returns, "no selling required", recruitment over
       product sales).
-    - Announcement emails promoting the creator's own new release — a new
-      YouTube video, song, episode, stream, or product drop — with short
-      call-to-action lines like "Watch HERE", "Go watch, like and comment",
-      "Listen now", or "Get it here". A brief email whose entire point is one
-      or two links to the creator's new content is normal creator marketing,
-      not spam, even when it contains little other text.
+    - Announcement emails and posts promoting the creator's own new release or
+      update — a new YouTube video, song, episode, stream, mod or software
+      update, or product drop — with short call-to-action lines like
+      "Watch HERE", "Go watch, like and comment", "Listen now", or "Get it
+      here". A brief email or post whose entire point is one or two links to
+      the creator's own content is normal creator marketing, not spam, even
+      when it contains little other text. Links to the creator's own Gumroad
+      product page, YouTube channel, Discord, Facebook group, or other
+      community are part of that announcement, not off-topic promotion.
+    - A post or email is NOT a product listing. Never flag one for lacking a
+      product description, for not describing what is sold, or for reading
+      "like marketing rather than a product listing"; a subscriber update has
+      no obligation to describe a product.
 
     - Sales-pitch voice on an info product: an ALL-CAPS headline, that same
       headline repeated in the description, a list of benefit or outcome bullets

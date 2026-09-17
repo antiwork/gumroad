@@ -977,10 +977,31 @@ RSpec.describe ContentModeration::ModerateRecordService, :vcr do
         expect(result.reasons).to eq(["spam: reads like a sales pitch and lacks coherent prose"])
       end
 
-      it "still blocks a post, which has no deliverable of its own" do
+      it "still blocks a post from a seller with no products and no sales, which has no deliverable of its own" do
         post = create(:installment, seller: seller, name: "Post", message: "<p>Body</p>")
+        expect(seller.links.alive).to be_empty
 
         expect(described_class.check(post, :post).passed).to eq(false)
+      end
+
+      # An update announcement from a seller with a live storefront kept getting blocked as
+      # "promotional" (gumroad-private#2755). The seller is writing to their own audience; the
+      # flag stays as a review note.
+      it "publishes a post with a review note when the seller has a live storefront" do
+        ContentModerationAdminCommentJob.clear
+        create(:product, user: seller)
+        post = create(:installment, seller: seller, name: "Update", message: "<p>New version. Get it here.</p>")
+
+        result = described_class.check(post, :post)
+
+        expect(result.passed).to eq(true)
+        expect(result.reasons).to eq([])
+        contents = ContentModerationAdminCommentJob.jobs.map { |j| j["args"].second }
+        expect(contents).to contain_exactly(
+          a_string_including("flagged but did not block").and(
+            a_string_including("not blocked: seller has a live storefront")
+          )
+        )
       end
 
       it "still blocks on a non-spam reason flagged alongside the spam one" do

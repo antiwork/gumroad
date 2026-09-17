@@ -248,17 +248,20 @@ class ContentModeration::ModerateRecordService
 
     # Spam preset keys on info-product STYLE, not actual spam. A listing that
     # delivers something publishes with a review note; empty ones still block
-    # (gumroad-private#1358). Pages use the seller's storefront as stand-in;
-    # posts have no deliverable, so a spam flag always blocks.
+    # (gumroad-private#1358). Pages and posts use the seller's storefront as
+    # stand-in: a seller with live products or real sales is writing to an
+    # audience they already have, and the preset kept blocking their ordinary
+    # update announcements (gumroad-private#2755). A post from an account that
+    # has never sold or listed anything still blocks.
     def spam_flag_should_not_block?
-      return seller_has_storefront? if entity_type == :page
+      return seller_has_storefront? if entity_type.in?(%i[page post])
 
       entity_type == :product && product_has_substantive_deliverable?
     end
 
     # Why an admin is reading a downgraded spam flag rather than a block.
     def spam_downgrade_note_reason
-      entity_type == :page ? "not blocked: seller has a live storefront" : "not blocked: listing has content attached"
+      entity_type.in?(%i[page post]) ? "not blocked: seller has a live storefront" : "not blocked: listing has content attached"
     end
 
     # Kept to two indexed existence checks: this runs inside a save.
