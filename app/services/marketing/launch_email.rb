@@ -1,15 +1,13 @@
 # frozen_string_literal: true
 
-# The launch email for one product: a single draft Installment addressed to the seller's
-# whole audience (past customers, followers and affiliates), excluding buyers of the new
-# product. The seller edits, schedules and sends it from the Emails tab; nothing here sends.
+# One draft audience Installment for a product's launch, addressed to past customers, followers
+# and affiliates but not the product's own buyers. Nothing here sends or schedules it.
 class Marketing::LaunchEmail
-  # Both markers ride in the draft's json_data, which holds many independent keys and is
-  # merged per key on save, so they cost no extra column.
+  # json_data is merged per key on save, so these markers cost no extra column.
   WRITTEN_COPY_DIGEST_KEY = "marketing_launch_written_copy_digest"
-  # The digest of the copy we last wrote is what tells "we wrote this" from "the seller rewrote
-  # it"; the product id marks the row as this product's launch draft, which the product filter
-  # alone cannot, since it also matches an audience email the seller wrote themselves.
+  # The digest separates our copy from the seller's rewrite; the product id separates this
+  # product's launch draft from an audience email the seller wrote themselves. The product
+  # filter alone cannot do that.
   LAUNCH_PRODUCT_KEY = "marketing_launch_product_id"
 
   def initialize(product:, seller:, utm_link:)
@@ -18,14 +16,12 @@ class Marketing::LaunchEmail
     @utm_link = utm_link
   end
 
-  # The draft for this product, created on first call and reused after that. Returns
-  # nil for a seller who cannot send emails yet — the caller surfaces the gate reason
-  # instead of a draft that could not be sent.
+  # The draft for this product, created on first call and reused after that. Nil for a seller
+  # who cannot send emails yet, so the caller surfaces the gate reason.
   def installment
     return unless seller.eligible_to_send_emails?
 
-    # Serialized on the product: two overlapping card loads must not both miss the draft and
-    # mint one each.
+    # Serialized on the product: two overlapping card loads must not both mint a draft.
     product.with_lock do
       # Re-read under the lock: the counts may have been asked for before it was taken.
       @drafts = nil
@@ -35,19 +31,17 @@ class Marketing::LaunchEmail
       @existing = existing ? refresh(existing) : create_draft
     end
   rescue ActiveRecord::RecordInvalid => e
-    # The gate is not the only refusal a draft can hit: `send_emails` also caps a seller
-    # below the sales threshold at 100 recipients, which reaches team members whose own
-    # sales are low. Report no draft instead of failing the card with a 500.
+    # The gate is not the only refusal: `send_emails` also caps a seller below the sales
+    # threshold at 100 recipients, team members included. Report no draft, not a 500.
     Rails.logger.info("Marketing::LaunchEmail skipped product #{product.id}: #{e.message}")
     nil
   end
 
-  # Deleting the draft in the Emails tab is the only way to say no to the email channel — the
-  # row has no dismiss control — so a deleted draft is never replaced.
+  # The Emails tab delete is the only way to refuse the channel (the row has no dismiss
+  # control), so a deleted draft is never replaced.
   def declined? = drafts.any?(&:deleted?) && existing.nil?
 
-  # What the draft would reach today, per segment. `total` is the draft's own count, so
-  # the card and the Emails tab cannot disagree.
+  # `total` is the draft's own count, so the card and the Emails tab cannot disagree.
   def recipient_counts
     { customers: count_for("customer"), followers: count_for("follower"), affiliates: count_for("affiliate"), total: total_count }
   end
@@ -66,9 +60,9 @@ class Marketing::LaunchEmail
   private
     attr_reader :product, :seller, :utm_link
 
-    # Matched by our marker alone (never name, message or filters, which the seller may edit), and
-    # the marker doubles as the SQL prefilter so a card load never pulls the seller's whole email
-    # history into memory.
+    # Matched by our marker alone, never name, message or filters, which the seller may edit.
+    # The marker doubles as the SQL prefilter so a card load never deserializes the whole
+    # email history.
     def drafts
       @drafts ||= seller.installments
                         .where("json_data LIKE ?", "%#{LAUNCH_PRODUCT_KEY}%")
@@ -81,9 +75,8 @@ class Marketing::LaunchEmail
     # The product filter is not re-read: the seller may retarget the draft in the Emails tab.
     def launch_draft?(installment) = installment.json_data[LAUNCH_PRODUCT_KEY].to_i == product.id
 
-    # A draft the seller has already scheduled or sent is theirs; so is one they rewrote.
-    # Only a draft still holding our own copy is refreshed, so a second publish updates the
-    # launch copy without discarding their work.
+    # A draft the seller scheduled, sent or rewrote is theirs; only one still holding our own
+    # copy is refreshed, so re-publishing does not discard their work.
     def refresh(installment)
       # The product lock serializes card loads, but the Emails editor writes this row.
       installment.with_lock do
@@ -98,9 +91,9 @@ class Marketing::LaunchEmail
       installment
     end
 
-    # Whether the draft still holds exactly the copy we last wrote. Comparing against the
-    # product instead would call every untouched draft edited the moment its description
-    # changes, which is the case a refresh exists for.
+    # Compares against the copy we last wrote. Comparing against the product instead would
+    # call every draft edited the moment its description changes, which is the case a
+    # refresh exists for.
     def untouched?(installment) =
       installment.json_data[WRITTEN_COPY_DIGEST_KEY] == Digest::SHA256.hexdigest(installment.message.to_s)
 
