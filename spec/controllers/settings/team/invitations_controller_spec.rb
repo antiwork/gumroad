@@ -390,6 +390,24 @@ describe Settings::Team::InvitationsController do
       end
     end
 
+    it "re-checks the seller inside the acceptance transaction, not when the link is read" do
+      invitation = team_invitation
+      # Suspend the seller after the eligibility check has passed but before the transaction body,
+      # which is the window the check would otherwise leave open.
+      allow_any_instance_of(User).to receive(:with_lock).and_wrap_original do |original, *args, &block|
+        User.where(id: seller.id).update_all(user_risk_state: "suspended_for_fraud", updated_at: Time.current)
+        original.call(*args, &block)
+      end
+
+      expect do
+        get :accept, params: { id: invitation.external_id }
+      end.to not_change { seller.seller_memberships.count }
+        .and not_change { user.user_memberships.count }
+        .and not_change { invitation.reload.accepted_at }
+
+      expect(flash[:alert]).to eq("Invitation link is invalid. Please contact the account owner.")
+    end
+
     context "when the seller is Gumroad" do
       let(:seller) { create(:named_seller, email: ApplicationMailer::ADMIN_EMAIL) }
 

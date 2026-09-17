@@ -42,7 +42,7 @@ class TeamInvitation < ApplicationRecord
   end
 
   def matches_owner_email?
-    email.downcase == seller.email.downcase
+    email.downcase == seller.email&.downcase
   end
 
   def single_mailbox_email?

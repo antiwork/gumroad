@@ -76,6 +76,21 @@ describe TeamMailer do
       end
     end
 
+    it "does not deliver a queued invitation once the seller takes the recipient address" do
+      mail.deliver_later
+      seller.update_columns(email:)
+
+      expect do
+        perform_enqueued_jobs(only: described_class.delivery_job)
+      end.not_to change(ActionMailer::Base.deliveries, :count)
+    end
+
+    it "still builds an invitation when the seller has no email on file" do
+      User.where(id: seller.id).update_all(email: nil)
+
+      expect(mail.message).not_to be_a(ActionMailer::Base::NullMail)
+    end
+
     it "refreshes a cached seller from the primary before building an invitation" do
       team_invitation.seller
       User.find(seller.id).update!(user_risk_state: "suspended_for_fraud")

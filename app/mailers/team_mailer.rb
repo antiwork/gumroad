@@ -13,6 +13,8 @@ class TeamMailer < ApplicationMailer
     return unless team_invitation&.seller&.account_active?
     return if team_invitation.deleted? || team_invitation.accepted? || team_invitation.expired?
     return unless team_invitation.single_mailbox_email?
+    # Acceptance deletes an invitation addressed to the owner's own mailbox, so never send it.
+    return if team_invitation.matches_owner_email?
 
     @team_invitation = team_invitation
     @subject = "Gumroad team invitation"

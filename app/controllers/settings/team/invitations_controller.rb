@@ -84,15 +84,24 @@ class Settings::Team::InvitationsController < Sellers::BaseController
     else
       team_membership = nil
       logged_in_user.with_lock do
+        # The eligibility check above reads an unlocked seller; re-read it here so a suspension
+        # landing between the check and the grant cannot hand out membership on an inactive account.
+        seller = User.lock.find_by(id: team_invitation.seller_id)
+        next unless seller&.account_active?
+
         team_invitation.update_as_accepted!(deleted_at: Time.current)
         logged_in_user.create_owner_membership_if_needed!
         logged_in_user.update!(is_team_member: true) if team_invitation.from_gumroad_account?
-        team_membership = team_invitation.seller.seller_memberships.create!(user: logged_in_user, role: team_invitation.role)
+        team_membership = seller.seller_memberships.create!(user: logged_in_user, role: team_invitation.role)
         TeamMailer.invitation_accepted(team_membership).deliver_later
       end
 
-      switch_seller_account(team_membership)
-      flash[:notice] = "Welcome to the team at #{team_membership.seller.username}!"
+      if team_membership
+        switch_seller_account(team_membership)
+        flash[:notice] = "Welcome to the team at #{team_membership.seller.username}!"
+      else
+        flash[:alert] = "Invitation link is invalid. Please contact the account owner."
+      end
     end
 
     redirect_to dashboard_url
