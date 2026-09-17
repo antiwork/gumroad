@@ -648,9 +648,8 @@ RSpec.describe ContentModeration::Strategies::PromptStrategy, :vcr do
       expect(described_class::SPAM_RULES).to include("SAME call-to-action repeated many")
     end
 
-    # A seller's update post was blocked nine times for "lacking a product description" and
-    # linking their own Discord/Facebook (gumroad-private#2755): the model was grading a post
-    # as a listing. Pin the wording that stops that.
+    # Pin the wording that stops the model grading a post as a listing
+    # (gumroad-private#2755).
     it "tells the model a post is not a listing and own-community links are part of an announcement" do
       expect(described_class::SPAM_RULES).to include("A post or email is NOT a product listing")
       expect(described_class::SPAM_RULES).to match(/Never flag one for lacking a\s+product description/)

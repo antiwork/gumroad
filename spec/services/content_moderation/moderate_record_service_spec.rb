@@ -984,9 +984,18 @@ RSpec.describe ContentModeration::ModerateRecordService, :vcr do
         expect(described_class.check(post, :post).passed).to eq(false)
       end
 
-      # An update announcement from a seller with a live storefront kept getting blocked as
-      # "promotional" (gumroad-private#2755). The seller is writing to their own audience; the
-      # flag stays as a review note.
+      # A draft is not a storefront: the carve-out is for sellers who already have an
+      # audience, and `alive` alone counts a product that was never published.
+      it "still blocks a post when the seller's only product is an unpublished draft" do
+        create(:product, user: seller, draft: true)
+        post = create(:installment, seller: seller, name: "Post", message: "<p>Body</p>")
+
+        expect(seller.links.alive.not_draft).to be_empty
+        expect(described_class.check(post, :post).passed).to eq(false)
+      end
+
+      # The seller is writing to their own audience, so the flag stays as a review note
+      # (gumroad-private#2755).
       it "publishes a post with a review note when the seller has a live storefront" do
         ContentModerationAdminCommentJob.clear
         create(:product, user: seller)
