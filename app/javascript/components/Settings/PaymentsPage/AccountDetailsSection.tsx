@@ -5,6 +5,7 @@ import typia from "typia";
 
 import type { ComplianceInfo, FormFieldName, User } from "$app/types/payments";
 import { COLOMBIA_ID_MAX_INPUT_LENGTH, COLOMBIA_ID_MIN_DIGITS } from "$app/utils/colombiaIdNumbers";
+import { PERSONAL_ID_NUMBER_CONFIG, personalTaxIdError, type TaxIdConfig } from "$app/utils/personalTaxId";
 import { countryRequiresPostalCode } from "$app/utils/postalCodes";
 
 import { Button } from "$app/components/Button";
@@ -25,14 +26,6 @@ type StateConfig = {
 type PrefectureConfig = {
   states: { value: string; label: string; kana: string }[];
   label: string;
-  idSuffix: string;
-};
-
-type TaxIdConfig = {
-  label: string;
-  placeholder: string;
-  minLength?: number;
-  maxLength?: number;
   idSuffix: string;
 };
 
@@ -59,6 +52,7 @@ const AccountDetailsSection = ({
   states,
   errorFieldNames,
   saveCounter,
+  hasIdDocumentAlternative = false,
 }: {
   user: User;
   complianceInfo: ComplianceInfo;
@@ -82,15 +76,21 @@ const AccountDetailsSection = ({
   };
   errorFieldNames: Set<FormFieldName>;
   saveCounter: number;
+  hasIdDocumentAlternative?: boolean;
 }) => {
   const uid = React.useId();
   const [isEditingIndividualTaxId, setIsEditingIndividualTaxId] = React.useState(false);
   const [isEditingBusinessTaxId, setIsEditingBusinessTaxId] = React.useState(false);
+  const [individualTaxIdInput, setIndividualTaxIdInput] = React.useState("");
+  const individualTaxIdValidationError = personalTaxIdError(complianceInfo, user, individualTaxIdInput);
   const [showIndividualTaxId, setShowIndividualTaxId] = React.useState(false);
   const [showBusinessTaxId, setShowBusinessTaxId] = React.useState(false);
 
   React.useEffect(() => {
-    if (user.individual_tax_id_entered) setIsEditingIndividualTaxId(false);
+    if (user.individual_tax_id_entered) {
+      setIsEditingIndividualTaxId(false);
+      setIndividualTaxIdInput("");
+    }
     if (user.business_tax_id_entered) setIsEditingBusinessTaxId(false);
   }, [saveCounter]);
 
@@ -179,7 +179,7 @@ const AccountDetailsSection = ({
     };
   };
 
-  const getIndividualTaxIdConfig = (): TaxIdConfig | null => {
+  const getIndividualTaxIdConfig = (): TaxIdConfig => {
     if (complianceInfo.country === "US") {
       return user.need_full_ssn
         ? {
@@ -342,7 +342,7 @@ const AccountDetailsSection = ({
       },
     };
 
-    return complianceInfo.country ? (configs[complianceInfo.country] ?? null) : null;
+    return (complianceInfo.country ? configs[complianceInfo.country] : null) ?? PERSONAL_ID_NUMBER_CONFIG;
   };
 
   const isPrefectureConfig = (config: StateConfig | PrefectureConfig): config is PrefectureConfig =>
@@ -1324,11 +1324,31 @@ const AccountDetailsSection = ({
         </Fieldset>
       ) : null}
       {needsIndividualTaxId && individualTaxIdConfig ? (
-        <Fieldset state={errorFieldNames.has("individual_tax_id") ? "danger" : undefined}>
+        <Fieldset
+          state={errorFieldNames.has("individual_tax_id") || individualTaxIdValidationError ? "danger" : undefined}
+        >
           <div>
             <FieldsetTitle>
               <Label htmlFor={`${uid}-${individualTaxIdConfig.idSuffix}`}>{individualTaxIdConfig.label}</Label>
             </FieldsetTitle>
+            {individualTaxIdConfig === PERSONAL_ID_NUMBER_CONFIG &&
+            complianceInfo.is_business &&
+            complianceInfo.business_country === "US" ? (
+              <FieldsetDescription>
+                To verify this US company's representative, enter a US ITIN or SSN (9 digits) if you have one. If you
+                have neither, use Stripe's verification link to upload a passport when offered.
+              </FieldsetDescription>
+            ) : null}
+            {hasIdDocumentAlternative && !isFormDisabled ? (
+              <FieldsetDescription>
+                <a href={Routes.remediation_settings_payments_path()}>
+                  {complianceInfo.country !==
+                  (complianceInfo.is_business ? complianceInfo.business_country : complianceInfo.country)
+                    ? "Upload a passport via Stripe instead"
+                    : "Upload an identity document via Stripe instead"}
+                </a>
+              </FieldsetDescription>
+            ) : null}
             {user.individual_tax_id_entered && !isEditingIndividualTaxId && !mustReenterFullSsn ? (
               <div className="flex flex-col gap-2">
                 <div className="flex items-center gap-2">
@@ -1372,9 +1392,18 @@ const AccountDetailsSection = ({
                   placeholder={individualTaxIdConfig.placeholder}
                   required={!user.individual_tax_id_entered || mustReenterFullSsn}
                   disabled={isFormDisabled}
-                  aria-invalid={errorFieldNames.has("individual_tax_id")}
-                  onChange={(evt) => updateComplianceInfo({ individual_tax_id: evt.target.value })}
+                  aria-invalid={errorFieldNames.has("individual_tax_id") || !!individualTaxIdValidationError}
+                  aria-describedby={individualTaxIdValidationError ? `${uid}-tax-id-error` : undefined}
+                  onChange={(evt) => {
+                    updateComplianceInfo({ individual_tax_id: evt.target.value });
+                    setIndividualTaxIdInput(evt.target.value);
+                  }}
                 />
+                {individualTaxIdValidationError ? (
+                  <FieldsetDescription id={`${uid}-tax-id-error`} role="alert">
+                    {individualTaxIdValidationError}
+                  </FieldsetDescription>
+                ) : null}
                 {mustReenterFullSsn ? (
                   <div className="small">
                     Our payments provider now requires your full 9-digit Social Security Number. Please re-enter it to

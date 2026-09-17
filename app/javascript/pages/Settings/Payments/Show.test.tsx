@@ -202,6 +202,86 @@ const typeSsn = (value: string) => {
   fireEvent.change(screen.getByLabelText("Social Security Number"), { target: { value } });
 };
 
+describe("US company representative tax ID", () => {
+  const business = {
+    is_business: true,
+    business_country: "US",
+    country: "DZ",
+    business_type: "single_member_llc",
+    business_name: "Test LLC",
+    business_street_address: "1 Main St",
+    business_city: "San Francisco",
+    business_state: "CA",
+    business_zip_code: "94103",
+    business_phone: "+14155552671",
+    job_title: "Owner",
+    phone: "+213551234567",
+  };
+  it.each(["1234", "12345678", "1234567890", "abcdefghi"])("blocks submission of %s", (value) => {
+    renderPage({ individual_tax_id_entered: false }, business);
+    fireEvent.change(screen.getByLabelText("Personal tax ID"), { target: { value } });
+    save();
+    expect(mocks.put).not.toHaveBeenCalled();
+    expect(screen.getAllByText("Enter a 9-digit US ITIN or SSN.").length).toBeGreaterThan(0);
+  });
+
+  it("submits a nine-digit ITIN for the foreign representative", () => {
+    renderPage({ individual_tax_id_entered: false, business_tax_id_entered: true }, business);
+    fireEvent.change(screen.getByLabelText("Personal tax ID"), { target: { value: "000000000" } });
+    save();
+    expect(mocks.put).toHaveBeenCalled();
+  });
+
+  it.each([true, false])("shows the document CTA only when Stripe offers that alternative: %s", async (offered) => {
+    const props = { ...pageProps({ individual_tax_id_entered: false }, business), can_manage_beneficial_owners: true };
+    mocks.usePage.mockReturnValue({ props });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        async () =>
+          new Response(
+            JSON.stringify({
+              beneficial_owners: [
+                {
+                  id: "person_test",
+                  first_name: "Test",
+                  last_name: "Representative",
+                  email: null,
+                  phone: null,
+                  dob: null,
+                  address: { country: "DZ" },
+                  relationship: {
+                    representative: true,
+                    owner: true,
+                    director: false,
+                    executive: false,
+                    title: "Owner",
+                    percent_ownership: 100,
+                  },
+                  id_number_provided: false,
+                  ssn_last_4_provided: false,
+                  nationality: null,
+                  verification_status: "unverified",
+                  requirements_currently_due: ["id_number"],
+                  requirements_alternatives: offered
+                    ? [{ original_fields_due: ["id_number"], alternative_fields_due: ["verification.document"] }]
+                    : [],
+                },
+              ],
+            }),
+            { status: 200, headers: { "content-type": "application/json" } },
+          ),
+      ),
+    );
+    render(<PaymentsPage />);
+    await screen.findByText("Stripe needs: Personal tax ID");
+    const link = screen.queryByRole("link", { name: "Upload a passport via Stripe instead" });
+    if (offered) expect(link?.getAttribute("href")).toBe("/remediation_settings_payments");
+    else expect(link).toBeNull();
+    vi.unstubAllGlobals();
+  });
+});
+
 describe("full-SSN re-entry validation", () => {
   it("blocks saving when Stripe requires the full SSN and only last-4 is on file", () => {
     renderPage({

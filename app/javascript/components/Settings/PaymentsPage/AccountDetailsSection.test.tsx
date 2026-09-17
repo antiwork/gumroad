@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import * as React from "react";
 import { afterEach, describe, expect, it } from "vitest";
 
@@ -83,6 +83,52 @@ const renderSection = (user: User, complianceOverrides: Partial<ComplianceInfo> 
       saveCounter={0}
     />,
   );
+
+describe("AccountDetailsSection foreign representative tax ID", () => {
+  it("renders a generic field for an unmapped representative country on a US business", () => {
+    renderSection(makeUser({ individual_tax_id_entered: false }), {
+      is_business: true,
+      business_country: "US",
+      country: "DZ",
+    });
+    expect(screen.getByLabelText<HTMLInputElement>("Personal tax ID").disabled).toBe(false);
+    expect(screen.getByText(/US ITIN or SSN \(9 digits\)/u)).toBeTruthy();
+    expect(screen.getByText(/upload a passport/u)).toBeTruthy();
+  });
+
+  it("keeps the mapped Canadian field unchanged", () => {
+    renderSection(makeUser({ individual_tax_id_entered: false }), {
+      is_business: true,
+      business_country: "US",
+      country: "CA",
+    });
+    const input = screen.getByLabelText<HTMLInputElement>("Social Insurance Number");
+    expect([input.placeholder, input.minLength, input.maxLength]).toEqual(["•••••••••", 9, 9]);
+    expect(screen.queryByLabelText("Personal tax ID")).toBeNull();
+  });
+
+  it.each(["1234", "12345678", "1234567890", "abcdefghi"])(
+    "shows an inline error for invalid US tax ID %s",
+    (value) => {
+      renderSection(makeUser({ individual_tax_id_entered: false }), {
+        is_business: true,
+        business_country: "US",
+        country: "DZ",
+      });
+      const input = screen.getByLabelText("Personal tax ID");
+      fireEvent.change(input, { target: { value } });
+      expect(screen.getByRole("alert").textContent).toBe("Enter a 9-digit US ITIN or SSN.");
+      expect(input.getAttribute("aria-invalid")).toBe("true");
+      fireEvent.change(input, { target: { value: "000000000" } });
+      expect(screen.queryByRole("alert")).toBeNull();
+    },
+  );
+
+  it("does not show a fallback when no country requires an ID", () => {
+    renderSection(makeUser(), { country: "DZ" });
+    expect(screen.queryByLabelText("Personal tax ID")).toBeNull();
+  });
+});
 
 describe("AccountDetailsSection SSN field", () => {
   it("renders the masked completed display when the full SSN is already on file", () => {

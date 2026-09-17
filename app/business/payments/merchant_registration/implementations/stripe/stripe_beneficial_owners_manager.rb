@@ -276,6 +276,7 @@ module StripeBeneficialOwnersManager
       address_kana: data[:address_kana] || {},
       verification_status: data.dig(:verification, :status),
       requirements_currently_due: data.dig(:requirements, :currently_due) || [],
+      requirements_alternatives: data.dig(:requirements, :alternatives) || [],
     }
   end
   private_class_method :serialize
