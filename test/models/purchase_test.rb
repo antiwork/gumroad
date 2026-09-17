@@ -2743,19 +2743,72 @@ class PurchaseTest < ActiveSupport::TestCase
   end
 
   # context "purchasing licensed products"
-  test "not_double_charged purchasing licensed products prohibits double-charges within 10 seconds" do
+  # A minute apart is a buyer reading a checkout error banner and resubmitting, not a
+  # same-second double submit.
+  test "not_double_charged purchasing licensed products requires confirmation when retried a minute later" do
     product = create_product(is_licensed: true)
     ip = unique_ip
-    create_purchase(link: product, seller: product.user, ip_address: ip, email: "bob@gumroad.com", created_at: 8.seconds.ago)
+    create_purchase(link: product, seller: product.user, ip_address: ip, email: "bob@gumroad.com", created_at: 99.seconds.ago)
     purchase2 = build_purchase(link: product, ip_address: ip, email: "bob@gumroad.com")
     assert_not purchase2.valid?
+    assert_equal PurchaseErrorCode::DUPLICATE_PURCHASE_CONFIRMATION_REQUIRED, purchase2.error_code
     assert_equal ["You have already paid for this product. It has been emailed to you. Do you want to buy it again?"], purchase2.errors[:base]
   end
 
-  test "not_double_charged purchasing licensed products allows double-charges after 10 seconds" do
+  test "not_double_charged purchasing licensed products allows a confirmed repeat within 2 hours" do
     product = create_product(is_licensed: true)
     ip = unique_ip
-    create_purchase(link: product, seller: product.user, ip_address: ip, email: "bob@gumroad.com", created_at: 11.seconds.ago)
+    create_purchase(link: product, seller: product.user, ip_address: ip, email: "bob@gumroad.com", created_at: 90.minutes.ago)
+    purchase2 = build_purchase(link: product, ip_address: ip, email: "bob@gumroad.com")
+    purchase2.confirmed_duplicate_purchase = true
+    assert purchase2.valid?
+  end
+
+  test "not_double_charged purchasing licensed products requires confirmation just inside 2 hours" do
+    travel_to(Time.current)
+    product = create_product(is_licensed: true)
+    ip = unique_ip
+    create_purchase(link: product, seller: product.user, ip_address: ip, email: "bob@gumroad.com", created_at: 119.minutes.ago)
+    purchase2 = build_purchase(link: product, ip_address: ip, email: "bob@gumroad.com")
+    assert_not purchase2.valid?
+    assert_equal PurchaseErrorCode::DUPLICATE_PURCHASE_CONFIRMATION_REQUIRED, purchase2.error_code
+  end
+
+  test "not_double_charged purchasing licensed products allows double-charges after 2 hours" do
+    travel_to(Time.current)
+    product = create_product(is_licensed: true)
+    ip = unique_ip
+    create_purchase(link: product, seller: product.user, ip_address: ip, email: "bob@gumroad.com", created_at: 121.minutes.ago)
+    purchase2 = build_purchase(link: product, ip_address: ip, email: "bob@gumroad.com")
+    assert purchase2.valid?
+  end
+
+  # context "purchasing quantity-enabled products"
+  test "not_double_charged purchasing quantity-enabled products requires confirmation when retried a minute later" do
+    product = create_product(quantity_enabled: true)
+    assert product.quantity_enabled
+    assert_not product.is_physical
+    ip = unique_ip
+    create_purchase(link: product, seller: product.user, ip_address: ip, email: "bob@gumroad.com", created_at: 99.seconds.ago)
+    purchase2 = build_purchase(link: product, ip_address: ip, email: "bob@gumroad.com")
+    assert_not purchase2.valid?
+    assert_equal PurchaseErrorCode::DUPLICATE_PURCHASE_CONFIRMATION_REQUIRED, purchase2.error_code
+  end
+
+  test "not_double_charged purchasing quantity-enabled products allows a confirmed repeat within 2 hours" do
+    product = create_product(quantity_enabled: true)
+    ip = unique_ip
+    create_purchase(link: product, seller: product.user, ip_address: ip, email: "bob@gumroad.com", created_at: 90.minutes.ago)
+    purchase2 = build_purchase(link: product, ip_address: ip, email: "bob@gumroad.com")
+    purchase2.confirmed_duplicate_purchase = true
+    assert purchase2.valid?
+  end
+
+  test "not_double_charged purchasing quantity-enabled products allows double-charges after 2 hours" do
+    travel_to(Time.current)
+    product = create_product(quantity_enabled: true)
+    ip = unique_ip
+    create_purchase(link: product, seller: product.user, ip_address: ip, email: "bob@gumroad.com", created_at: 121.minutes.ago)
     purchase2 = build_purchase(link: product, ip_address: ip, email: "bob@gumroad.com")
     assert purchase2.valid?
   end
