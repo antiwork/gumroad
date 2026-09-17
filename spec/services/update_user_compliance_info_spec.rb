@@ -142,7 +142,7 @@ describe UpdateUserComplianceInfo do
         expect(user.reload.alive_user_compliance_info.nationality).to eq("GR")
       end
 
-      it "marks both mapped and raw Stripe nationality requests provided" do
+      it "keeps mapped and raw individual nationality requests open until Stripe resolves them" do
         mapped_request = create(:user_compliance_info_request, user:, field_needed: UserComplianceInfoFields::Individual::NATIONALITY)
         raw_request = create(:user_compliance_info_request, user:, field_needed: UserComplianceInfoFields::Individual::STRIPE_NATIONALITY)
         params = ActionController::Parameters.new(nationality: "GR")
@@ -152,8 +152,8 @@ describe UpdateUserComplianceInfo do
         result = described_class.new(compliance_params: params, user: user).process
 
         expect(result[:success]).to be true
-        expect(mapped_request.reload.state).to eq("provided")
-        expect(raw_request.reload.state).to eq("provided")
+        expect(mapped_request.reload.state).to eq("requested")
+        expect(raw_request.reload.state).to eq("requested")
       end
 
       it "persists the Japanese city kana fields (city_kana and business_city_kana)" do

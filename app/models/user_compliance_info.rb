@@ -86,6 +86,11 @@ class UserComplianceInfo < ApplicationRecord
     !is_business?
   end
 
+  def nationality_resubmission_required?
+    is_individual? && nationality.present? &&
+      user.user_compliance_info_requests.requested.where(field_needed: UserComplianceInfoFields::Individual::NATIONALITY_FIELDS).exists?
+  end
+
   # Public: Returns if the UserComplianceInfo record has all it's critical compliance related fields completed, these are:
   # Individual: First Name, Last Name, Address, DOB
   # Business: First Name, Last Name, Address, DOB, Business Name, Business Type, Business Address
