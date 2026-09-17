@@ -109,4 +109,31 @@ RSpec.describe ScheduledPayout do
     expect(user.balances.unpaid.ids).to contain_exactly(huf_balance.id, eur_balance.id)
     expect(scheduled_payout.reload).to be_pending
   end
+
+  it "pays the healthy currency when a foreign sale and its refund leave that group netting zero" do
+    allow(StripePayoutProcessor).to receive(:pay_out_currencies).and_return([])
+    eur_refund = create(:balance, user:, merchant_account:, date: 2.days.ago.to_date,
+                                  amount_cents: -100_00, holding_currency: Currency::EUR, holding_amount_cents: -90_00)
+    expect(Stripe::Payout).to receive(:create).with(hash_including(currency: Currency::HUF), anything).once
+
+    payments = PayoutUsersService.new(date_string: Date.yesterday.to_s, processor_type: PayoutProcessorType::STRIPE, user_ids: user.id).process
+
+    expect(eur_balance.reload).to be_unpaid
+    expect(eur_refund.reload).to be_unpaid
+    expect(payments).to eq([huf_balance.reload.payments.sole])
+  end
+
+  it "blocks every group when the seller really owes money in one of the currencies" do
+    allow(StripePayoutProcessor).to receive(:pay_out_currencies).and_return([])
+    create(:balance, user:, merchant_account:, date: 2.days.ago.to_date,
+                     amount_cents: -150_00, holding_currency: Currency::EUR, holding_amount_cents: -135_00)
+    expect(Stripe::Payout).not_to receive(:create)
+
+    payments = PayoutUsersService.new(date_string: Date.yesterday.to_s, processor_type: PayoutProcessorType::STRIPE, user_ids: user.id).process
+
+    expect(payments).to eq([])
+    expect(user.balances.processing.count).to eq(0)
+    expect(huf_balance.reload).to be_unpaid
+    expect(eur_balance.reload).to be_unpaid
+  end
 end

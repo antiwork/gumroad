@@ -463,12 +463,26 @@ class Payouts
       # Debt is judged on the seller's whole ledger, not per group: a refund owed in one currency
       # cannot be netted against a payout in another, so a seller who nets to zero or carries a
       # negative group is not paid anything until the debt clears.
-      if balances.sum(&:amount_cents) <= 0 ||
-          (payout_groups.size > 1 && payout_groups.any? { |_, _, group_balances| group_balances.sum(&:amount_cents) <= 0 })
+      # Read that ledger off every unpaid balance rather than the claim: `is_balance_payable` keeps a
+      # negative foreign row for a currency Stripe is holding nothing in, so a sale and its refund
+      # there would otherwise sum to a pure debt and block the seller's other groups.
+      ledger = balances + user.unpaid_balances_up_to_date(date).to_a
+      if ledger.sum(&:amount_cents) <= 0 ||
+          (payout_groups.size > 1 && payout_groups.any? { |_, _, group_balances| group_ledger_cents(ledger, group_balances).negative? })
         Rails.logger.info("Payouts: Negative balance for #{user.id}")
         balances.each(&:mark_unpaid!)
         next []
       end
+
+      # A group the claim left non-positive has nothing to send; releasing it keeps a zero- (or
+      # negative-) amount payout off the processor.
+      payout_groups = payout_groups.reject do |_, _, group_balances|
+        next false if group_balances.sum(&:amount_cents).positive?
+
+        group_balances.each(&:mark_unpaid!)
+        true
+      end
+      next [] if payout_groups.empty?
 
       if retrying && processor_type == PayoutProcessorType::STRIPE
         counts = RequeueTransientlyFailedPayoutsJob.failure_counts(date, user_id: user.id)
@@ -604,6 +618,19 @@ class Payouts
     end
   end
   private_class_method :payable_balances_for_processor
+
+  # Cents the seller is up or down in one payout group's currency, across every unpaid balance in
+  # that account and currency — including the rows the claim could not take.
+  def self.group_ledger_cents(ledger, group_balances)
+    sample = group_balances.first
+    ledger.sum do |balance|
+      next 0 unless balance.merchant_account_id == sample.merchant_account_id &&
+                    balance.holding_currency.to_s == sample.holding_currency.to_s
+
+      balance.amount_cents
+    end
+  end
+  private_class_method :group_ledger_cents
 
   def self.chargeback_rate_reserve_payable_balances(user, balances)
     ::PayoutProcessorType.all.flat_map do |processor_type|
