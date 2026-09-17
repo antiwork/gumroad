@@ -5,6 +5,42 @@ module CurrencyHelper
   # Note: To reference a currency in code, use Currency::[3-char-ref].
   # e.g. Currency::USD, Currency::CAD
 
+  # RedisClient::Error is not a subclass of Redis::BaseError, so a connection-level failure
+  # raised by the underlying client escapes a Redis::BaseError-only rescue.
+  REDIS_TRANSPORT_ERRORS = [Redis::BaseError, RedisClient::Error].freeze
+
+  # Raised when a rate is needed, Redis cannot be read, and this process has never seen the
+  # currency's rate. Callers that price money turn it into a failed request rather than a
+  # substituted rate.
+  class RateUnavailable < StandardError
+    def initialize(currency_type)
+      super("No known #{currency_type} exchange rate and Redis could not be read; refusing to price with a substituted rate.")
+    end
+  end
+
+  # The last rate this process successfully read, per currency. Rates are money: during a
+  # Redis stall a stale-but-real rate is safe and an invented one is not. Held on the module
+  # rather than the helper instance because helpers are rebuilt on every request.
+  MAX_REMEMBERED_RATES = 1_000
+  LAST_KNOWN_RATES = {}
+  LAST_KNOWN_RATES_LOCK = Mutex.new
+
+  def self.remember_rate(formatted_currency, rate)
+    value = rate.to_s
+    return value unless value.to_f > 0
+    LAST_KNOWN_RATES_LOCK.synchronize do
+      if LAST_KNOWN_RATES.size < MAX_REMEMBERED_RATES || LAST_KNOWN_RATES.key?(formatted_currency)
+        LAST_KNOWN_RATES[formatted_currency] = value
+      end
+    end
+    value
+  end
+
+  def self.last_known_rate(formatted_currency)
+    rate = LAST_KNOWN_RATES_LOCK.synchronize { LAST_KNOWN_RATES[formatted_currency] }
+    rate if rate && rate.to_f > 0
+  end
+
   def currency_namespace
     Redis::Namespace.new(:currencies, redis: $redis)
   end
@@ -38,17 +74,22 @@ module CurrencyHelper
     currency_namespace.get(currency_type.to_s)
   end
 
+  # Rates are money, so a stalled Redis read must never invent one: serve the last rate this
+  # process really read for the currency, and if it has never read one, raise rather than
+  # price off a substituted value. The surcharge path turns that into a 503.
   def get_rate(currency_type)
     return "1.0" if currency_type.to_s == "usd" # Getting around an open exchange jankiness
     formatted_currency = currency_type.to_s.upcase
     rate = currency_namespace.get(formatted_currency.to_s)
     if rate && rate.to_f > 0
-      rate.to_f.to_s
+      CurrencyHelper.remember_rate(formatted_currency, rate).to_f.to_s
     else
       new_rate = query_rate(formatted_currency)
       currency_namespace.set(formatted_currency.to_s, new_rate)
-      new_rate.to_f.to_s
+      CurrencyHelper.remember_rate(formatted_currency, new_rate).to_f.to_s
     end
+  rescue *REDIS_TRANSPORT_ERRORS
+    CurrencyHelper.last_known_rate(formatted_currency) || raise(RateUnavailable.new(formatted_currency))
   end
 
   # Cache-only counterpart to get_rate: never falls through to a live
@@ -57,8 +98,13 @@ module CurrencyHelper
   # miss. Rates are kept warm by UpdateCurrenciesWorker.
   def cached_rate(currency_type)
     return "1.0" if currency_type.to_s == "usd"
-    rate = currency_namespace.get(currency_type.to_s.upcase)
-    rate.to_f > 0 ? rate.to_f.to_s : nil
+    formatted_currency = currency_type.to_s.upcase
+    rate = currency_namespace.get(formatted_currency)
+    rate.to_f > 0 ? CurrencyHelper.remember_rate(formatted_currency, rate).to_f.to_s : nil
+  rescue *REDIS_TRANSPORT_ERRORS
+    # Callers already treat "no rate" as "omit the price", so a stalled read degrades to the
+    # same omission instead of failing the product page.
+    nil
   end
 
   def buyer_currency_for_ip(ip)

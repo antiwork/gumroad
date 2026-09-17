@@ -12,9 +12,45 @@ describe CurrencyHelper do
   end
 
   describe "#get_rate" do
+    # The per-process rate memory is what makes a stall survivable; flush it so each example
+    # starts from what this process has actually read.
+    before { CurrencyHelper::LAST_KNOWN_RATES.clear }
+
     it "returns the correct value" do
       expect(get_rate("JPY")).to eq "78.3932"
       expect(get_rate("GBP")).to eq "0.652571"
+    end
+
+    context "when the Redis read stalls" do
+      it "serves the last rate this process read instead of failing" do
+        expect(get_rate("JPY")).to eq "78.3932"
+
+        allow(self).to receive(:currency_namespace).and_raise(Redis::TimeoutError.new("Waited 1.0 seconds"))
+
+        expect(get_rate("JPY")).to eq "78.3932"
+      end
+
+      it "raises instead of substituting a rate the process has never read" do
+        allow(self).to receive(:currency_namespace).and_raise(RedisClient::Error.new("Waited 1.0 seconds"))
+
+        expect { get_rate("NZD") }.to raise_error(CurrencyHelper::RateUnavailable, /NZD/)
+      end
+    end
+  end
+
+  describe "#cached_rate" do
+    before { CurrencyHelper::LAST_KNOWN_RATES.clear }
+
+    it "returns the cached rate" do
+      currency_namespace.set("JPY", "78.3932")
+
+      expect(cached_rate("JPY")).to eq "78.3932"
+    end
+
+    it "degrades to nil when the Redis read stalls, the same as an unset currency" do
+      allow(self).to receive(:currency_namespace).and_raise(Redis::TimeoutError.new("Waited 1.0 seconds"))
+
+      expect(cached_rate("JPY")).to be_nil
     end
   end
 

@@ -29,6 +29,24 @@ describe Api::Internal::MobileMinimumVersionsController do
         expect(body["minimum_version"]).to be_nil
         expect(body["minimum_update_created_at"]).to be_nil
       end
+
+      it "degrades to nil values instead of failing when Redis stalls" do
+        $redis.set(RedisKey.mobile_minimum_version, "2026.03.01")
+        $redis.set(RedisKey.mobile_minimum_update_created_at, "2026-03-12")
+        # Only the two keys this endpoint reads stall; a blanket `$redis.get` stub would also take
+        # out the subdomain redirect that runs earlier in the request.
+        allow($redis).to receive(:get).and_call_original
+        [RedisKey.mobile_minimum_version, RedisKey.mobile_minimum_update_created_at].each do |key|
+          allow($redis).to receive(:get).with(key).and_raise(Redis::TimeoutError.new("Waited 1.0 seconds"))
+        end
+
+        get :show, params: { access_token: access_token.token }
+
+        expect(response).to be_successful
+        body = response.parsed_body
+        expect(body["minimum_version"]).to be_nil
+        expect(body["minimum_update_created_at"]).to be_nil
+      end
     end
 
     context "without access token" do
