@@ -40,8 +40,8 @@ describe("CartRecoveryCard", () => {
   it("shows what the email says and when it goes out before the seller enables it", async () => {
     await renderCard(state());
 
-    expect(screen.getByText(/Anyone who leaves this product in their cart gets/u).textContent).toContain(
-      "“You left something in your cart” 24 hours later",
+    expect(screen.getByText(/Turn this on to send/u).textContent).toContain(
+      "“You left something in your cart” to anyone who leaves this product in their cart, 24 hours later",
     );
     expect(screen.queryByText("Off")).toBeNull();
     expect(screen.queryByText("On")).toBeNull();
@@ -82,13 +82,11 @@ describe("CartRecoveryCard", () => {
 
   it("shows the reason and a disabled toggle for a seller who cannot use it yet", async () => {
     await renderCard(
-      state({ available: false, blocked_reason: "Cart reminders turn on once you've received your first payout." }),
+      state({ available: false, blocked_reason: "Abandoned cart email turns on after your first payout." }),
     );
 
     expect(screen.getByRole("status").tagName).toBe("P");
-    expect(screen.getByRole("status").textContent).toBe(
-      "Cart reminders turn on once you've received your first payout.",
-    );
+    expect(screen.getByRole("status").textContent).toBe("Abandoned cart email turns on after your first payout.");
     expect(screen.getByRole("switch", { name: "Abandoned cart email" })).toHaveProperty("disabled", true);
   });
 

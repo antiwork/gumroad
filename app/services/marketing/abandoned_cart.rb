@@ -93,7 +93,7 @@ class Marketing::AbandonedCart
       return if available?
       return "Your account can't send emails while it's suspended." if seller.suspended?
 
-      "Cart reminders turn on once you've received your first payout."
+      "Abandoned cart email turns on after your first payout."
     end
 
     def default_message

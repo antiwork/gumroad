@@ -50,8 +50,11 @@ export const CartRecoveryCard = ({ productPermalink }: { productPermalink: strin
           {state.available ? (
             <>
               <span>
-                Anyone who leaves this product in their cart gets &ldquo;{state.subject}&rdquo; {state.delay_hours}{" "}
-                hours later. You can edit the email in Workflows.
+                {state.enabled ? "Sending" : "Turn this on to send"} &ldquo;{state.subject}&rdquo; to anyone who leaves
+                this product in their cart, {state.delay_hours} hours later.{" "}
+                {state.workflow_url
+                  ? "You can edit the email in Workflows."
+                  : "Once enabled, you can edit the email in Workflows."}
               </span>
               {state.account_wide ? (
                 <small className="text-muted">

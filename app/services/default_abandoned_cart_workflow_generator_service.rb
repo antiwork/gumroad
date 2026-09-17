@@ -3,7 +3,7 @@
 class DefaultAbandonedCartWorkflowGeneratorService
   include Rails.application.routes.url_helpers
 
-  WORKFLOW_NAME = "Abandoned cart"
+  WORKFLOW_NAME = "Abandoned cart email"
   DEFAULT_NAME = "You left something in your cart"
   DELAY_HOURS = InstallmentRule::ABANDONED_CART_DELAYED_DELIVERY_TIME_IN_SECONDS / 1.hour
 
