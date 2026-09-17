@@ -123,7 +123,7 @@ class CreateUsStateMonthlySalesReportsJob
           city_tax_rate,
           Money.new(amount_not_collected_by_gumroad).format(no_cents_if_whole: false, symbol: false),
           purchase.link.native_type,
-          Link::NATIVE_TYPES_TO_TAX_CODE[purchase.link.native_type],
+          purchase.link.taxjar_product_tax_code,
         ].to_csv)
 
         price_dollars = price_cents / 100.0
@@ -142,7 +142,7 @@ class CreateUsStateMonthlySalesReportsJob
                                               transaction_date: purchase.created_at.iso8601,
                                               destination:,
                                               quantity: purchase.quantity,
-                                              product_tax_code: Link::NATIVE_TYPES_TO_TAX_CODE[purchase.link.native_type],
+                                              product_tax_code: purchase.link.taxjar_product_tax_code,
                                               amount_dollars:,
                                               shipping_dollars:,
                                               sales_tax_dollars:,
@@ -196,7 +196,7 @@ class CreateUsStateMonthlySalesReportsJob
         state: subdivision.code
       }
 
-      product_tax_code = Link::NATIVE_TYPES_TO_TAX_CODE[purchase.link.native_type]
+      product_tax_code = purchase.link.taxjar_product_tax_code
       quantity = purchase.quantity
       unit_price_dollars = price_cents / 100.0 / quantity
       shipping_dollars = purchase.shipping_cents / 100.0

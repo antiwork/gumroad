@@ -83,7 +83,7 @@ class SalesTaxCalculator
         state:
       }
 
-      product_tax_code = Link::NATIVE_TYPES_TO_TAX_CODE[product.native_type]
+      product_tax_code = product.taxjar_product_tax_code
 
       unit_price_dollars = price_cents / 100.0 / quantity
       shipping_dollars = shipping_cents / 100.0
