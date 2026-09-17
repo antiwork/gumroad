@@ -1,13 +1,14 @@
 # frozen_string_literal: true
 
 class PayoutUsersService
-  attr_reader :date, :processor_type, :user_ids, :payout_type
+  attr_reader :date, :processor_type, :user_ids, :payout_type, :retrying
 
-  def initialize(date_string:, processor_type:, user_ids:, payout_type: Payouts::PAYOUT_TYPE_STANDARD)
+  def initialize(date_string:, processor_type:, user_ids:, payout_type: Payouts::PAYOUT_TYPE_STANDARD, retrying: false)
     @date = date_string
     @processor_type = processor_type
     @user_ids = Array.wrap(user_ids)
     @payout_type = payout_type
+    @retrying = retrying
   end
 
   def process
@@ -34,7 +35,8 @@ class PayoutUsersService
         payout_period_end_date = instantly_payable_balances.sort_by(&:date).last.date.to_s
       end
 
-      Payouts.create_payments(payout_period_end_date, processor_type, user, payout_type:).each do |payment, payment_errors|
+      options = retrying ? { retrying: true } : {}
+      Payouts.create_payments(payout_period_end_date, processor_type, user, payout_type:, **options).each do |payment, payment_errors|
         if payment_errors.blank? && payment.present?
           # Money transferred to a cross-border-payouts Stripe Connect a/c becomes payable after 24 hours,
           # so schedule those payouts later instead of processing them immediately.

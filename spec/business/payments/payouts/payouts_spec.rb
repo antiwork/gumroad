@@ -863,6 +863,22 @@ describe Payouts do
                        holding_currency: Currency::HUF, holding_amount_cents: 15_209_249)
     end
 
+    it "leaves a foreign group's bank unknown when preparation fails before setting payout fields" do
+      allow(StripePayoutProcessor).to receive(:pay_out_currencies).and_return([Currency::EUR])
+      allow(StripePayoutProcessor).to receive(:prepare_payment_and_set_amount).and_raise(Stripe::APIConnectionError.new("connection refused"))
+      allow(ErrorNotifier).to receive(:notify)
+      create(:balance, user:, merchant_account:, date: payout_date - 2, amount_cents: 33_12,
+                       holding_currency: Currency::EUR, holding_amount_cents: 4_303)
+
+      pairs = described_class.create_payments(payout_date.to_s, PayoutProcessorType::STRIPE, user)
+
+      foreign_payment = pairs.map(&:first).find { |payment| payment.balances.first.holding_currency == Currency::EUR }
+      expect(foreign_payment.reload).to be_failed
+      expect(foreign_payment.bank_account).to be_nil
+      expect(foreign_payment.currency).to eq(Currency::EUR)
+      expect(foreign_payment.stripe_connect_account_id).to eq(merchant_account.charge_processor_merchant_id)
+    end
+
     it "creates one payment per currency group so a seller holding two currencies is paid both" do
       allow(StripePayoutProcessor).to receive(:is_balance_payable).and_return(true)
       allow(StripePayoutProcessor).to receive(:prepare_payment_and_set_amount) do |payment, balances, _account, payout_currency|

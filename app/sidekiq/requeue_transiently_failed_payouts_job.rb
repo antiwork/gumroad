@@ -20,9 +20,7 @@ class RequeueTransientlyFailedPayoutsJob
   include RecurringLockTtl
   recurring_lock_ttl max_attempt: 1.hour
 
-  # Two requeues per payout period. A seller who keeps hitting transient failures is no longer
-  # looking like a burst we can wait out, and reissuing all week only produces more failed rows;
-  # past the cap the payout waits for its next scheduled slot and the exhaustion is reported.
+  # Repeated transient failures stop retrying this currency/account group until its next period.
   MAX_REQUEUE_ATTEMPTS = 2
 
   # Comfortably longer than a payout period, so every daily run against one period sees the marker.
@@ -41,15 +39,14 @@ class RequeueTransientlyFailedPayoutsJob
     # nothing has failed on yet.
     payout_period_end_date = User::PayoutSchedule.manual_payout_end_date
 
-    failures_by_user = Payment.failed
-                              .reorder(nil)
-                              .processed_by(PayoutProcessorType::STRIPE)
-                              .where(failure_reason: Payment::FailureReason::REQUEUEABLE_REASONS, payout_period_end_date:)
-                              .group(:user_id)
-                              .count
-    return if failures_by_user.empty?
+    counts = self.class.failure_counts(payout_period_end_date)
+    return if counts.empty?
 
-    user_ids, exhausted_user_ids = failures_by_user.keys.partition { |user_id| failures_by_user[user_id] <= MAX_REQUEUE_ATTEMPTS }
+    eligible, exhausted = counts.keys.partition do |user_id, account_id, currency|
+      self.class.retryable_group?(counts, user_id, account_id, currency)
+    end
+    user_ids = eligible.map(&:first).uniq
+    exhausted_user_ids = exhausted.map(&:first).uniq
 
     # Report each exhausted seller once per payout period. Counting cannot dedupe this: once a
     # seller is over the cap the job stops requeueing them, so their failure count stops growing and
@@ -59,7 +56,7 @@ class RequeueTransientlyFailedPayoutsJob
     end
     if newly_exhausted.present?
       ErrorNotifier.notify(
-        "Payouts: #{newly_exhausted.size} seller(s) hit #{MAX_REQUEUE_ATTEMPTS} transient payout failures for #{payout_period_end_date} and will wait for their next scheduled payout",
+        "Payouts: #{newly_exhausted.size} seller(s) hit #{MAX_REQUEUE_ATTEMPTS} transient payout failures for #{payout_period_end_date}; exhausted currency/account groups will wait for their next scheduled payout",
         payout_period_end_date: payout_period_end_date.to_s,
         user_ids: newly_exhausted
       )
@@ -89,5 +86,38 @@ class RequeueTransientlyFailedPayoutsJob
     )
 
     Rails.logger.info("REQUEUE TRANSIENTLY FAILED PAYOUTS: #{payout_period_end_date} (Finished)")
+  end
+
+  def self.failure_counts(date, user_id: nil)
+    failures = Payment.failed.reorder(nil).processed_by(PayoutProcessorType::STRIPE)
+      .where(failure_reason: Payment::FailureReason::REQUEUEABLE_REASONS, payout_period_end_date: date)
+    failures = failures.where(user_id:) if user_id
+
+    failures.includes(:user, balances: :merchant_account).each_with_object(Hash.new(0)) do |payment, counts|
+      groups = if payment.stripe_connect_account_id.present? && payment.currency.present?
+        [[payment.stripe_connect_account_id, payment.currency]]
+      elsif payment.balances.present?
+        # Older preparation failures may predate both fields, but retain the claimed balances.
+        StripePayoutProcessor.payout_groups(payment.user, payment.balances).map do |account, currency, balances|
+          [group_account_id(account, balances), currency]
+        end
+      else
+        [[payment.stripe_connect_account_id.presence, payment.currency.presence]]
+      end
+      groups.uniq.each { |account_id, currency| counts[[payment.user_id, account_id, currency]] += 1 }
+    end
+  end
+
+  def self.group_account_id(merchant_account, balances)
+    # A replaced account's balances remain a separate group even when preparation rejects them.
+    stripe_balance = balances.find { |balance| balance.merchant_account.holder_of_funds == HolderOfFunds::STRIPE }
+    (stripe_balance&.merchant_account || merchant_account)&.charge_processor_merchant_id
+  end
+
+  def self.retryable_group?(counts, user_id, account_id, currency)
+    # Unidentifiable legacy attempts still consume the single-currency seller's allowance.
+    keys = [[account_id, currency], [nil, currency], [account_id, nil], [nil, nil]].uniq
+    attempts = keys.sum { |account, group_currency| counts.fetch([user_id, account, group_currency], 0) }
+    attempts.between?(1, MAX_REQUEUE_ATTEMPTS)
   end
 end

@@ -388,13 +388,15 @@ class Payouts
     date_string = date.to_s
     if perform_async
       payout_processor = ::PayoutProcessorType.get(processor_type)
-      payout_processor.enqueue_payments(user_ids_to_pay, date_string)
+      options = processor_type == PayoutProcessorType::STRIPE && retrying ? { retrying: true } : {}
+      payout_processor.enqueue_payments(user_ids_to_pay, date_string, **options)
     else
       payments = []
       user_ids_to_pay.each do |user_id|
         payments << PayoutUsersService.new(date_string:,
                                            processor_type:,
-                                           user_ids: user_id).process
+                                           user_ids: user_id,
+                                           retrying:).process
       end
       payments.compact
     end
@@ -443,7 +445,7 @@ class Payouts
   end
 
   # Claim and persist every group before preparation can move money at Stripe.
-  def self.create_payments(date, processor_type, user, payout_type: Payouts::PAYOUT_TYPE_STANDARD, single_group: false)
+  def self.create_payments(date, processor_type, user, payout_type: Payouts::PAYOUT_TYPE_STANDARD, single_group: false, retrying: false)
     payout_processor = ::PayoutProcessorType.get(processor_type)
     # Unrestricted claims are dated before the claim so a hold landing mid-run cannot post-date
     # hold_started_at; claims made under the hold are dated now so they count in the reserve base.
@@ -468,10 +470,24 @@ class Payouts
         next []
       end
 
+      if retrying && processor_type == PayoutProcessorType::STRIPE
+        counts = RequeueTransientlyFailedPayoutsJob.failure_counts(date, user_id: user.id)
+        payout_groups = payout_groups.select do |merchant_account, payout_currency, group_balances|
+          account_id = RequeueTransientlyFailedPayoutsJob.group_account_id(merchant_account, group_balances)
+          eligible = RequeueTransientlyFailedPayoutsJob.retryable_group?(counts, user.id, account_id, payout_currency)
+          group_balances.each(&:mark_unpaid!) unless eligible
+          eligible
+        end
+      end
+
       # Raising here rolls the claim back, so the caller never sees a subset of prepared Payments.
       raise MultiplePayoutGroupsError, "user #{user.id} needs #{payout_groups.size} payouts" if single_group && payout_groups.size > 1
 
       payout_groups.map do |merchant_account, payout_currency, group_balances|
+        bank_account = user.active_bank_account unless processor_type == PayoutProcessorType::PAYPAL
+        if processor_type == PayoutProcessorType::STRIPE && (merchant_account.nil? || payout_currency != merchant_account.currency.to_s)
+          bank_account = nil
+        end
         payment = Payment.create!(
           user:,
           balances: group_balances,
@@ -481,7 +497,9 @@ class Payouts
           payout_type:,
           created_at: under_reserve ? Time.current : claimed_at,
           payment_address: (user.paypal_payout_email if processor_type == ::PayoutProcessorType::PAYPAL),
-          bank_account: (user.active_bank_account if processor_type != ::PayoutProcessorType::PAYPAL)
+          currency: payout_currency || Currency::USD,
+          stripe_connect_account_id: merchant_account&.charge_processor_merchant_id,
+          bank_account:
         )
         [payment, merchant_account, payout_currency, group_balances]
       end

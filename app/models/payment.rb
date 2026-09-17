@@ -33,6 +33,7 @@ class Payment < ApplicationRecord
   attr_json_data_accessor :arrival_date
   attr_json_data_accessor :payout_type
   attr_json_data_accessor :gumroad_fee_cents
+  attr_json_data_accessor :stripe_payout_destination_id
   attr_json_data_accessor :error_message
 
   # Payment state transitions:
@@ -464,6 +465,10 @@ class Payment < ApplicationRecord
       if bank_account_id.present?
         destination = "bank account"
         payouts_to_destination = user.payments.where(bank_account_id:)
+      elsif processor == PayoutProcessorType::STRIPE && stripe_payout_destination_id.present?
+        destination = "bank account"
+        payouts_to_destination = user.payments.where(processor:, stripe_connect_account_id:)
+          .where("json_data->>'$.stripe_payout_destination_id' = ?", stripe_payout_destination_id)
       elsif processor == PayoutProcessorType::PAYPAL && payment_address.present?
         destination = "PayPal account"
         payouts_to_destination = user.payments.where(processor: PayoutProcessorType::PAYPAL, payment_address:)

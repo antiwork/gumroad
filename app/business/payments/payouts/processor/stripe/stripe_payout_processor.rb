@@ -272,6 +272,7 @@ class StripePayoutProcessor
     merchant_account ||= destination_account
 
     if merchant_account.nil?
+      payment.bank_account = nil
       payment.mark_failed!
       return ["Cannot process payout: no valid merchant account found for user."]
     end
@@ -283,6 +284,7 @@ class StripePayoutProcessor
     payout_currency = payout_currency.presence ||
       (stripe_currencies.size == 1 ? stripe_currencies.first : merchant_account.currency.to_s)
     payout_currency = payout_currency.to_s
+    payment.bank_account = nil if payout_currency != merchant_account.currency.to_s
 
     # A currency mismatch would turn nominal cents into a different amount of money.
     mismatched_stripe_balances = balances_held_by_stripe.reject do |b|
@@ -530,9 +532,11 @@ class StripePayoutProcessor
   end
   private_class_method :retired_account_balances_hint
 
-  def self.enqueue_payments(user_ids, date_string, payout_type: Payouts::PAYOUT_TYPE_STANDARD)
+  def self.enqueue_payments(user_ids, date_string, payout_type: Payouts::PAYOUT_TYPE_STANDARD, retrying: false)
     user_ids.each do |user_id|
-      PayoutUsersWorker.perform_async(date_string, PayoutProcessorType::STRIPE, user_id, payout_type)
+      args = [date_string, PayoutProcessorType::STRIPE, user_id, payout_type]
+      args << true if retrying
+      PayoutUsersWorker.perform_async(*args)
     end
   end
 
@@ -588,6 +592,9 @@ class StripePayoutProcessor
     end
 
     # Transfer the payout amount from the creators Stripe account to their bank account.
+    # ACH records can report USD even for non-USD accounts; compare the merchant currency.
+    foreign_currency = payment.currency.to_s != merchant_account.currency.to_s
+    payment.bank_account = nil if foreign_currency
     bank_account = payment.bank_account
     params = {
       amount: amount_cents,
@@ -596,18 +603,14 @@ class StripePayoutProcessor
       description: payment.external_id,
       metadata: {
         payment: payment.external_id,
-        bank_account: bank_account.external_id
-      }.merge(StripeMetadata.build_metadata_large_list(payment.balances.map(&:external_id),
-                                                       key: :balances,
-                                                       separator: ",",
-                                                       # 2 keys (`payment` and `bank_account`) already added above so allow max - 2 more keys
-                                                       max_key_length: StripeMetadata::STRIPE_METADATA_MAX_KEYS_LENGTH - 2))
+        bank_account: bank_account&.external_id
+      }.compact.merge(StripeMetadata.build_metadata_large_list(payment.balances.map(&:external_id),
+                                                               key: :balances,
+                                                               separator: ",",
+                                                               # Reserve keys for payment and the optional bank account.
+                                                               max_key_length: StripeMetadata::STRIPE_METADATA_MAX_KEYS_LENGTH - 2))
     }
-    # Only name the bank account for the connected account's own currency; a foreign-currency group
-    # reaches that currency's bank leg via Stripe's default, and naming the mismatched record is
-    # refused. Compare the account's currency, not the record's: ACH-type records report `usd`
-    # regardless of country.
-    if bank_account.present? && payment.currency.to_s == merchant_account.currency.to_s
+    if bank_account.present?
       params[:destination] = bank_account.stripe_external_account_id
     end
     params.merge!(method: payment.payout_type) if payment.payout_type.present?
@@ -615,6 +618,15 @@ class StripePayoutProcessor
     # connection loss here is NOT the same as one raised while building the request above.
     payout_requested = true
     stripe_payout = Stripe::Payout.create(params, { stripe_account: payment.stripe_connect_account_id })
+    if foreign_currency
+      destination = stripe_payout[:destination]
+      payment.stripe_payout_destination_id = destination.is_a?(String) ? destination : destination&.id
+      # Stripe chooses the foreign currency's bank. Never substitute the seller's active bank.
+      payment.bank_account = if payment.stripe_payout_destination_id.present?
+        payment.user.bank_accounts.find_by(stripe_connect_account_id: payment.stripe_connect_account_id,
+                                           stripe_bank_account_id: payment.stripe_payout_destination_id)
+      end
+    end
     payment.stripe_transfer_id = stripe_payout.id
     payment.arrival_date = stripe_payout.arrival_date
     payment.gumroad_fee_cents = stripe_payout.application_fee_amount if payment.payout_type == Payouts::PAYOUT_TYPE_INSTANT
