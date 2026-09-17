@@ -13,17 +13,19 @@
 #     copy:     String | nil,                # the most useful thing to copy (the url, or an id)
 #   }
 #
-# We only surface fields the API already exposes for this seller, so this can never leak more than
-# the endpoint itself returns. Unknown shapes fall back to a generic object so nothing crashes; the
-# model's prose still carries the answer even when we can't build a rich card.
+# Discount currency and coverage come from the seller's record because v2 omits them.
+# Unknown shapes are skipped; the model's prose still carries the answer.
 module Ai::StoreAgentObjectFormatter
+  MAX_PRODUCT_NAMES = 3
+
   module_function
 
   # Pull display objects out of one API response for a given catalog endpoint.
   # @param endpoint [Ai::StoreAgentApiCatalog::Endpoint]
   # @param response [Hash] parsed JSON body from StoreAgentApiClient
   # @return [Array<Hash>] zero or more display objects
-  def from_response(endpoint, response)
+  def from_response(endpoint, response, seller: nil, limit: nil, existing_objects: [])
+    return [] if limit == 0
     return [] unless response.is_a?(Hash)
     # Never build cards from an error envelope.
     return [] if response["success"] == false
@@ -34,9 +36,9 @@ module Ai::StoreAgentObjectFormatter
     when "get_product", "create_product", "update_product", "enable_product", "disable_product"
       [product(response["product"] || response)].compact
     when "list_offer_codes"
-      Array(response["offer_codes"] || response["products"]).filter_map { |o| discount(o) }
+      discounts(Array(response["offer_codes"] || response["products"]), seller:, limit:, existing_objects:)
     when "get_offer_code", "create_offer_code", "update_offer_code"
-      [discount(response["offer_code"] || response)].compact
+      discounts([response["offer_code"] || response], seller:, limit:, existing_objects:)
     when "list_sales"
       Array(response["sales"]).filter_map { |s| sale(s) }
     when "get_sale", "refund_sale", "mark_sale_as_shipped"
@@ -83,16 +85,70 @@ module Ai::StoreAgentObjectFormatter
     }
   end
 
-  def discount(json)
+  def discounts(items, seller:, limit:, existing_objects:)
+    limit ||= items.size
+    candidates = items.lazy.select { |item| item.is_a?(Hash) && (item["name"] || item["id"]) }.uniq.to_enum
+    cards = []
+    details = {}
+    # Only complete cards define duplicates; keep looking until the unique display budget is full.
+    while cards.size < limit
+      batch = []
+      (limit - cards.size).times do
+        item = begin
+          candidates.next
+        rescue StopIteration
+          nil
+        end
+        break unless item
+        batch << item
+      end
+      break if batch.empty?
+
+      ids = batch.filter_map { |item| item["id"].presence }.uniq.reject { |id| details.key?(id) }
+      codes = seller ? seller.offer_codes.alive.by_external_ids(ids).index_by(&:external_id) : {}
+      ids.each do |id|
+        code = codes[id]
+        details[id] = [code&.currency_type, code ? discount_coverage(code, seller:) : nil]
+      end
+      batch.each do |item|
+        currency, coverage = details[item["id"]]
+        card = discount(item, currency:, coverage:)
+        cards << card unless existing_objects.include?(card) || cards.include?(card)
+      end
+    end
+    cards
+  end
+
+  def discount_coverage(code, seller:)
+    if code.universal?
+      return code.currency_type.present? ? "All #{code.currency_type.upcase}-priced products" : "All products" unless code.excluded_products.exists?
+
+      products = seller.links.alive
+      products = products.where(price_currency_type: code.currency_type) if code.currency_type.present?
+      # Keep exclusions in SQL rather than loading every excluded product ID.
+      products = products.where.not(id: code.excluded_products.select(:id))
+    else
+      products = code.products
+    end
+    names = products.limit(MAX_PRODUCT_NAMES + 1).map(&:name)
+    return (names.first(MAX_PRODUCT_NAMES) + ["more"]).to_sentence if names.size > MAX_PRODUCT_NAMES
+
+    names.to_sentence.presence || "No products"
+  end
+
+  def discount(json, currency: nil, coverage: nil)
     return nil unless json.is_a?(Hash) && (json["name"] || json["id"])
-    amount = json["percent_off"].present? ? "#{json['percent_off']}% off" : (json["amount_cents"].present? ? "#{money(json['amount_cents'])} off" : nil)
+    amount = if json["percent_off"].present?
+      "#{json['percent_off']}% off"
+    elsif json["amount_cents"].present? && currency.present?
+      "#{MoneyFormatter.format(json['amount_cents'], currency, no_cents_if_whole: true)} off"
+    end
     {
       type: "discount",
       title: json["name"].to_s, # the API returns the code as `name`
       subtitle: amount,
       fields: compact_fields([
-                               ["Amount", amount],
-                               ["Applies to", json["universal"] ? "All products" : "Selected products"],
+                               ["Applies to", coverage],
                                ["Times used", json["times_used"]],
                                ["Max uses", json["max_purchase_count"]],
                              ]),
