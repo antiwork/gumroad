@@ -159,7 +159,7 @@ describe Marketing::LaunchEmail do
   end
 
   describe "#recipient_counts" do
-    it "counts customers and followers separately, both excluding the new product's buyers" do
+    it "counts customers, followers and affiliates separately, both excluding the new product's buyers" do
       expect(AudienceMember).to receive(:filter_count)
         .with(seller_id: seller.id, params: { type: "customer", not_bought_product_ids: [product.id] })
         .and_return(4)
@@ -167,10 +167,13 @@ describe Marketing::LaunchEmail do
         .with(seller_id: seller.id, params: { type: "follower", not_bought_product_ids: [product.id] })
         .and_return(2)
       expect(AudienceMember).to receive(:filter_count)
+        .with(seller_id: seller.id, params: { type: "affiliate", not_bought_product_ids: [product.id] })
+        .and_return(1)
+      expect(AudienceMember).to receive(:filter_count)
         .with(seller_id: seller.id, params: { not_bought_product_ids: [product.id] })
         .and_return(7)
 
-      expect(launch_email.recipient_counts).to eq(customers: 4, followers: 2, total: 7)
+      expect(launch_email.recipient_counts).to eq(customers: 4, followers: 2, affiliates: 1, total: 7)
     end
 
     it "takes the total from the draft itself once it exists" do
@@ -178,7 +181,7 @@ describe Marketing::LaunchEmail do
       allow(AudienceMember).to receive(:filter_count).and_return(1)
       allow_any_instance_of(Installment).to receive(:audience_members_count).and_return(9)
 
-      expect(launch_email.recipient_counts).to eq(customers: 1, followers: 1, total: 9)
+      expect(launch_email.recipient_counts).to eq(customers: 1, followers: 1, affiliates: 1, total: 9)
     end
   end
 end

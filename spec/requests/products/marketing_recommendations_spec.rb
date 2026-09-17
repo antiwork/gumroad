@@ -53,7 +53,7 @@ RSpec.describe "Marketing recommendations" do
     email = email_channel
 
     expect(email).to include("eligible" => true, "live" => true, "blocked_reason" => nil)
-    expect(email["counts"]).to eq("customers" => 1, "followers" => 1, "total" => 2)
+    expect(email["counts"]).to eq("customers" => 1, "followers" => 1, "affiliates" => 0, "total" => 2)
     expect(email["draft"]).to include("subject" => "Gumstein Letters", "state" => "draft")
 
     draft = Installment.find_by_external_id(email["draft"]["id"])

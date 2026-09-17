@@ -49,7 +49,7 @@ const emailChannel = (overrides: Partial<MarketingChannel> = {}): MarketingChann
   eligible: true,
   blocked_reason: null,
   requirements: { sales_cents_total: 12_000, min_sales_cents_required: 10_000 },
-  counts: { customers: 12, followers: 4, total: 16 },
+  counts: { customers: 12, followers: 4, affiliates: 0, total: 16 },
   draft: { id: "draft1", subject: "Gumstein Letters", state: "draft", edit_url: "/emails/draft1/edit" },
   action: action({ channel: "email" }),
   ...overrides,
@@ -166,6 +166,16 @@ describe("ShareYourLaunchCard", () => {
       "href",
       expect.stringContaining("/emails/draft1/edit"),
     );
+  });
+
+  it("names affiliates in the draft summary only when the audience has any", async () => {
+    await renderCard([emailChannel({ counts: { customers: 2, followers: 1, affiliates: 3, total: 6 } })]);
+
+    expect(
+      screen.getByText(
+        /Launch email drafted for 6 people \(2 past customers, 1 follower, 3 affiliates\) who haven't bought it yet\./u,
+      ),
+    ).toBeDefined();
   });
 
   it("shows the gate reason instead of a draft for a seller who cannot email yet", async () => {

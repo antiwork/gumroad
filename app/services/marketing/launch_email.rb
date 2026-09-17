@@ -1,8 +1,8 @@
 # frozen_string_literal: true
 
-# The launch email for one product: a single draft Installment addressed to the
-# seller's past customers and followers, excluding buyers of the new product. The
-# seller edits, schedules and sends it from the Emails tab; nothing here sends.
+# The launch email for one product: a single draft Installment addressed to the seller's
+# whole audience (past customers, followers and affiliates), excluding buyers of the new
+# product. The seller edits, schedules and sends it from the Emails tab; nothing here sends.
 class Marketing::LaunchEmail
   # Both markers ride in the draft's json_data, which holds many independent keys and is
   # merged per key on save, so they cost no extra column.
@@ -49,7 +49,7 @@ class Marketing::LaunchEmail
   # What the draft would reach today, per segment. `total` is the draft's own count, so
   # the card and the Emails tab cannot disagree.
   def recipient_counts
-    { customers: count_for("customer"), followers: count_for("follower"), total: total_count }
+    { customers: count_for("customer"), followers: count_for("follower"), affiliates: count_for("affiliate"), total: total_count }
   end
 
   def self.copy_for(product) = Marketing::Recommendations.copy_for(product)
@@ -66,11 +66,9 @@ class Marketing::LaunchEmail
   private
     attr_reader :product, :seller, :utm_link
 
-    # Ours is matched by our own marker alone, never by name, message or filters: the seller may
-    # edit all three, and a renamed, rewritten or re-targeted draft must still be recognised as
-    # this product's launch email instead of a second draft being minted beside it. The marker is
-    # also the SQL prefilter, so a look at the card cannot pull a seller's whole email history —
-    # message bodies included — into memory on a GET the frontend fires on mount.
+    # Matched by our marker alone (never name, message or filters, which the seller may edit), and
+    # the marker doubles as the SQL prefilter so a card load never pulls the seller's whole email
+    # history into memory.
     def drafts
       @drafts ||= seller.installments
                         .where("json_data LIKE ?", "%#{LAUNCH_PRODUCT_KEY}%")
@@ -80,9 +78,7 @@ class Marketing::LaunchEmail
 
     def existing = @existing ||= drafts.select(&:alive?).max_by(&:id)
 
-    # The marker alone identifies ours: the product filter is set at create and re-read nowhere,
-    # because the seller retargets the draft's audience in the Emails tab — which is where the
-    # card sends them — and requiring it to still match would drop the draft and mint a twin.
+    # The product filter is not re-read: the seller may retarget the draft in the Emails tab.
     def launch_draft?(installment) = installment.json_data[LAUNCH_PRODUCT_KEY].to_i == product.id
 
     # A draft the seller has already scheduled or sent is theirs; so is one they rewrote.

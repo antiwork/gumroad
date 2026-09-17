@@ -71,7 +71,7 @@ describe Products::MarketingActionsController do
 
         email = response.parsed_body["channels"].find { _1["channel"] == "email" }
         expect(email).to include("eligible" => true, "blocked_reason" => nil)
-        expect(email["counts"]).to eq("customers" => 0, "followers" => 0, "total" => 0)
+        expect(email["counts"]).to eq("customers" => 0, "followers" => 0, "affiliates" => 0, "total" => 0)
         expect(email["draft"]).to include("subject" => product.name, "state" => "draft")
         # The action's channel is read back off the row, so this proves what was persisted.
         expect(email["action"]).to include("channel" => "email")

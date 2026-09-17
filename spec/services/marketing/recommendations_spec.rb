@@ -98,7 +98,7 @@ describe Marketing::Recommendations do
 
       it "reports the draft's state, per-segment counts and the Emails link" do
         expect(email_entry).to include(eligible: true, blocked_reason: nil, live: true, label: "Email")
-        expect(email_entry[:counts]).to eq(customers: 0, followers: 0, total: 0)
+        expect(email_entry[:counts]).to eq(customers: 0, followers: 0, affiliates: 0, total: 0)
         expect(email_entry[:draft]).to include(subject: "Gumstein Letters", state: "draft")
         expect(email_entry[:draft][:edit_url]).to include("/emails/#{email_entry[:draft][:id]}/edit")
       end

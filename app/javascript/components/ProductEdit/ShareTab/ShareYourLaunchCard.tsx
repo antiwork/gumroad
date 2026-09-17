@@ -39,16 +39,23 @@ const EMAIL_DRAFT_STATE_LABELS: Record<NonNullable<MarketingChannel["draft"]>["s
 // scheduled one is queued, and a submitted one is out of their hands — "sent" would claim a
 // delivery we do not observe, so the Open in Emails button is the only pointer to delivery status.
 const EMAIL_DRAFT_SUMMARY: Record<NonNullable<MarketingChannel["draft"]>["state"], (subject: string) => string> = {
-  draft: () => "Launch email drafted for your past customers and followers who haven't bought it yet.",
-  scheduled: (subject) => `Your launch email about ${subject} is scheduled for your past customers and followers.`,
+  draft: () => "Launch email drafted for your audience who haven't bought it yet.",
+  scheduled: (subject) => `Your launch email about ${subject} is scheduled for your audience.`,
   sent: (subject) => `You submitted your launch email about ${subject}.`,
 };
 
 const pluralize = (count: number, singular: string, plural: string) => (count === 1 ? singular : plural);
 
 // One line, naming the product once: the card already sits on the product's own page.
-const draftSummary = (counts: NonNullable<MarketingChannel["counts"]>) =>
-  `Launch email drafted for ${counts.total} ${pluralize(counts.total, "person", "people")} (${counts.customers} past ${pluralize(counts.customers, "customer", "customers")}, ${counts.followers} ${pluralize(counts.followers, "follower", "followers")}) who haven't bought it yet.`;
+const draftSummary = (counts: NonNullable<MarketingChannel["counts"]>) => {
+  const segments = [
+    `${counts.customers} past ${pluralize(counts.customers, "customer", "customers")}`,
+    `${counts.followers} ${pluralize(counts.followers, "follower", "followers")}`,
+  ];
+  if (counts.affiliates > 0)
+    segments.push(`${counts.affiliates} ${pluralize(counts.affiliates, "affiliate", "affiliates")}`);
+  return `Launch email drafted for ${counts.total} ${pluralize(counts.total, "person", "people")} (${segments.join(", ")}) who haven't bought it yet.`;
+};
 
 const formatUSD = (cents: number) =>
   formatPriceCentsWithCurrencySymbol("usd", cents, { symbolFormat: "short", noCentsIfWhole: true });
