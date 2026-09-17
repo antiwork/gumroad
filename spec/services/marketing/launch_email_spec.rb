@@ -141,6 +141,44 @@ describe Marketing::LaunchEmail do
       expect(draft.ready_to_publish?).to eq(true)
     end
 
+    %i[edit schedule publish].each do |seller_action|
+      it "preserves a seller #{seller_action} saved after the launch draft was loaded" do
+        draft = launch_email.installment
+        original_message = draft.message
+        product.update!(description: "<p>Changed during the seller's save.</p>")
+
+        allow(launch_email).to receive(:refresh).and_wrap_original do |refresh, stale_draft|
+          params = ActionController::Parameters.new(
+            installment: {
+              name: "Seller subject", message: seller_action == :edit ? "<p>Seller copy.</p>" : original_message,
+              installment_type: Installment::AUDIENCE_TYPE, send_emails: seller_action != :publish,
+              shown_on_profile: seller_action == :publish, not_bought_products: [],
+            },
+            to_be_published_at: seller_action == :schedule ? 1.day.from_now.to_s : nil,
+            publish: seller_action == :publish,
+          )
+          save = SaveInstallmentService.new(seller:, installment: Installment.find(draft.id), params:, preview_email_recipient: seller)
+          expect(save.process).to eq(true), save.error
+          refresh.call(stale_draft)
+        end
+
+        result = launch_email.installment
+
+        expect(result.id).to eq(draft.id)
+        expect(result.reload.message).to eq(seller_action == :edit ? "<p>Seller copy.</p>" : original_message)
+        expect(result.name).to eq("Seller subject")
+        expect(result.not_bought_products).to be_blank
+        expect(result.ready_to_publish?).to eq(seller_action == :schedule)
+        expect(result.published_at.present?).to eq(seller_action == :publish)
+        if seller_action == :schedule
+          expect(result.installment_rule.to_be_published_at).to be > Time.current
+          expect(PublishScheduledPostJob.jobs.size).to eq(1)
+        end
+        expect(result.blasts).to be_empty
+        expect(SendPostBlastEmailsJob.jobs).to be_empty
+      end
+    end
+
     it "drafts nothing for a seller who cannot send emails yet" do
       allow(seller).to receive(:sales_cents_total).and_return(0)
 
@@ -174,6 +212,49 @@ describe Marketing::LaunchEmail do
         .and_return(7)
 
       expect(launch_email.recipient_counts).to eq(customers: 4, followers: 2, affiliates: 1, total: 7)
+    end
+
+    context "with saved draft filters", :elasticsearch_wait_for_refresh do
+      let!(:draft) { launch_email.installment }
+
+      before do
+        create(:audience_member, seller:, purchases: [{ product_id: product.id, price_cents: 500 }], follower: {})
+        create(:audience_member, seller:, purchases: [{ product_id: product.id, price_cents: 200 }])
+        create(:audience_member, seller:, follower: {})
+        create(:audience_member, seller:, affiliates: [{ product_id: product.id }])
+        index_model_records(AudienceMember)
+      end
+
+      it "counts launch buyers after the seller removes the exclusion" do
+        draft.update!(not_bought_products: [])
+
+        counts = described_class.new(product:, seller:, utm_link:).recipient_counts
+
+        expect(counts).to eq(customers: 2, followers: 2, affiliates: 1, total: 4)
+        expect(counts[:total]).to eq(draft.audience_members_count)
+      end
+
+      it "applies saved purchase and amount filters to every segment" do
+        draft.update!(not_bought_products: [], bought_products: [product.unique_permalink], paid_more_than_cents: 300)
+
+        counts = described_class.new(product:, seller:, utm_link:).recipient_counts
+
+        expect(counts).to eq(customers: 1, followers: 1, affiliates: 0, total: 1)
+        expect(counts[:total]).to eq(draft.audience_members_count)
+      end
+
+      { Installment::SELLER_TYPE => { customers: 2, followers: 0, affiliates: 0, total: 2 },
+        Installment::FOLLOWER_TYPE => { customers: 0, followers: 2, affiliates: 0, total: 2 },
+        Installment::AFFILIATE_TYPE => { customers: 0, followers: 0, affiliates: 1, total: 1 } }.each do |type, expected|
+        it "keeps segment counts inside the saved #{type} audience" do
+          draft.update!(not_bought_products: [], installment_type: type)
+
+          counts = described_class.new(product:, seller:, utm_link:).recipient_counts
+
+          expect(counts).to eq(expected)
+          expect(counts[:total]).to eq(draft.audience_members_count)
+        end
+      end
     end
 
     it "takes the total from the draft itself once it exists" do

@@ -85,14 +85,16 @@ class Marketing::LaunchEmail
     # Only a draft still holding our own copy is refreshed, so a second publish updates the
     # launch copy without discarding their work.
     def refresh(installment)
-      return installment if installment.published_at.present? || installment.ready_to_publish?
-      return installment unless untouched?(installment)
+      # The product lock serializes card loads, but the Emails editor writes this row.
+      installment.with_lock do
+        next if installment.published_at.present? || installment.ready_to_publish?
+        next unless untouched?(installment)
 
-      # The subject is left as it stands: a seller who renamed the draft renamed it on
-      # purpose, and the body is the part that has to follow the product.
-      installment.message = message
-      installment.json_data[WRITTEN_COPY_DIGEST_KEY] = written_copy_digest
-      installment.save!
+        # Preserve the seller's subject while refreshing the generated body.
+        installment.message = message
+        installment.json_data[WRITTEN_COPY_DIGEST_KEY] = written_copy_digest
+        installment.save!
+      end
       installment
     end
 
@@ -130,7 +132,10 @@ class Marketing::LaunchEmail
     end
 
     def count_for(type)
-      AudienceMember.filter_count(seller_id: seller.id, params: not_bought_filter.merge(type:))
+      filters = existing ? existing.audience_members_filter_params : not_bought_filter
+      return 0 if filters[:type].present? && filters[:type] != type
+
+      AudienceMember.filter_count(seller_id: seller.id, params: filters.merge(type:))
     end
 
     def total_count

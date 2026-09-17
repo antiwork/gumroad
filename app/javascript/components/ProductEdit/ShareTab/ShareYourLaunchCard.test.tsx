@@ -156,7 +156,7 @@ describe("ShareYourLaunchCard", () => {
 
     expect(
       screen.getByText(
-        /Launch email drafted for 16 people \(12 past customers, 4 followers\) who haven't bought it yet\./u,
+        /Launch email drafted for 16 people \(12 past customers, 4 followers\) in the draft's saved audience\./u,
       ),
     ).toBeDefined();
     expect(screen.queryByText(/We drafted an email/u)).toBeNull();
@@ -173,9 +173,25 @@ describe("ShareYourLaunchCard", () => {
 
     expect(
       screen.getByText(
-        /Launch email drafted for 6 people \(2 past customers, 1 follower, 3 affiliates\) who haven't bought it yet\./u,
+        /Launch email drafted for 6 people \(2 past customers, 1 follower, 3 affiliates\) in the draft's saved audience\./u,
       ),
     ).toBeDefined();
+  });
+
+  it("does not claim a purchase exclusion when the draft audience can be retargeted", async () => {
+    await renderCard([emailChannel({ counts: { customers: 2, followers: 0, affiliates: 0, total: 2 } })]);
+
+    expect(screen.getByText(/in the draft's saved audience/u)).toBeDefined();
+    expect(screen.queryByText(/haven't bought/u)).toBeNull();
+  });
+
+  it("uses neutral audience copy when counts are unavailable", async () => {
+    const channel = emailChannel();
+    delete channel.counts;
+    await renderCard([channel]);
+
+    expect(screen.getByText("Launch email drafted for your saved audience.")).toBeDefined();
+    expect(screen.queryByText(/haven't bought/u)).toBeNull();
   });
 
   it("shows the gate reason instead of a draft for a seller who cannot email yet", async () => {

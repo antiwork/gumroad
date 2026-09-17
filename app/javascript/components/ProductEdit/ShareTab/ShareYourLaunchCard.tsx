@@ -39,7 +39,7 @@ const EMAIL_DRAFT_STATE_LABELS: Record<NonNullable<MarketingChannel["draft"]>["s
 // scheduled one is queued, and a submitted one is out of their hands — "sent" would claim a
 // delivery we do not observe, so the Open in Emails button is the only pointer to delivery status.
 const EMAIL_DRAFT_SUMMARY: Record<NonNullable<MarketingChannel["draft"]>["state"], (subject: string) => string> = {
-  draft: () => "Launch email drafted for your audience who haven't bought it yet.",
+  draft: () => "Launch email drafted for your saved audience.",
   scheduled: (subject) => `Your launch email about ${subject} is scheduled for your audience.`,
   sent: (subject) => `You submitted your launch email about ${subject}.`,
 };
@@ -54,7 +54,7 @@ const draftSummary = (counts: NonNullable<MarketingChannel["counts"]>) => {
   ];
   if (counts.affiliates > 0)
     segments.push(`${counts.affiliates} ${pluralize(counts.affiliates, "affiliate", "affiliates")}`);
-  return `Launch email drafted for ${counts.total} ${pluralize(counts.total, "person", "people")} (${segments.join(", ")}) who haven't bought it yet.`;
+  return `Launch email drafted for ${counts.total} ${pluralize(counts.total, "person", "people")} (${segments.join(", ")}) in the draft's saved audience.`;
 };
 
 const formatUSD = (cents: number) =>

@@ -63,6 +63,22 @@ RSpec.describe "Marketing recommendations" do
     expect(draft.ready_to_publish?).to eq(false)
   end
 
+  it "reports every count from the seller's retargeted draft" do
+    email = email_channel
+    draft = Installment.find_by_external_id(email["draft"]["id"])
+    draft.update!(not_bought_products: [], installment_type: Installment::SELLER_TYPE)
+    create(:purchase, seller:, link: product, email: "launch-buyer@example.com")
+    create(:active_follower, user: seller, email: "follower@example.com")
+    index_audience
+
+    email = email_channel
+
+    expect(email["draft"]["id"]).to eq(draft.external_id)
+    expect(email["counts"]).to eq("customers" => 1, "followers" => 0, "affiliates" => 0, "total" => 1)
+    expect(draft.reload.not_bought_products).to be_blank
+    expect(SendPostBlastEmailsJob.jobs).to be_empty
+  end
+
   it "drafts one email per product and never sends it" do
     expect { email_channel }.to change { seller.installments.alive.count }.by(1)
     expect { email_channel }.not_to change { seller.installments.alive.count }
