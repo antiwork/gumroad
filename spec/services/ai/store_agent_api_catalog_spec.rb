@@ -63,10 +63,9 @@ describe Ai::StoreAgentApiCatalog do
   end
 
   describe "discount eligibility" do
-    it "distinguishes product coverage from subscriber redemption without inventing an API parameter" do
+    it "keeps the display summary concise without inventing eligibility parameters" do
       endpoint = described_class.find("create_offer_code")
-      expect(endpoint.summary).to include("universal controls product coverage, not buyer eligibility")
-      expect(endpoint.summary).to include("cannot enforce subscriber-only redemption")
+      expect(endpoint.summary).to eq("Create a discount code.")
       expect(endpoint.params).not_to include("subscriber_only", "audience")
     end
   end

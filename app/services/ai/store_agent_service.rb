@@ -489,7 +489,9 @@ class Ai::StoreAgentService
       for them with api_write so it's ready to confirm — don't just explain how they could do it
       themselves. Offer to make the change.
     - Never silently drop a requested restriction. The discount endpoints cannot enforce subscriber-only redemption:
-      universal controls which products a code covers, not who can redeem it. A product-specific
+      universal controls which products a code covers, not who can redeem it. Universal percentage codes
+      cover all products; universal fixed-amount codes cover only products priced in the target
+      product's currency. A product-specific
       code is not subscriber-only either. Sharing a code only with subscribers restricts distribution,
       not redemption. Explain this limitation in a reply_only turn before proposing a supported alternative.
       Wait for the creator to agree to that alternative before api_write; the confirmation click
@@ -1549,7 +1551,7 @@ class Ai::StoreAgentService
     end
 
     # Friendlier labels for a couple of offer-code body keys; everything else is humanized generically.
-    OFFER_CODE_LABELS = { "name" => "Code", "max_purchase_count" => "Max uses", "universal" => "All products" }.freeze
+    OFFER_CODE_LABELS = { "name" => "Code", "max_purchase_count" => "Max uses" }.freeze
     # Shown for a body key the model set to blank/null, so a "clear this field" mutation stays visible
     # rather than silently dropping off the card while still executing.
     BLANK_VALUE = "(blank)"
@@ -1575,16 +1577,39 @@ class Ai::StoreAgentService
                  product&.price_currency_type ||
                  (seller.currency_type if endpoint.id == "create_product")
 
+      # Form encoding turns boolean true into "true"; other truthy values do not enable universal.
+      universal_offer_code = endpoint.id == "create_offer_code" && body["universal"].to_s == "true"
+      if universal_offer_code
+        coverage = if body["offer_type"] == "percent"
+          "All products"
+        elsif currency
+          "All #{currency.upcase}-priced products"
+        else
+          "Products priced in the target product's currency"
+        end
+      end
+
       # Target identity (path params are validated non-blank) — names the record being changed.
-      rows = path_params.filter_map { |key, value| preview_field(path_label(endpoint, key), path_value(endpoint, key, value, product)) }
+      rows = path_params.filter_map do |key, value|
+        label = universal_offer_code && key == "link_id" ? "Product" : path_label(endpoint, key)
+        preview_field(label, path_value(endpoint, key, value, product))
+      end
 
       # Body keys are intentional mutations, so each gets a row even when blank (a blank renders as
       # "(blank)") — otherwise a destructive clear like description: "" would execute invisibly. The
       # discount amount + type collapse into one readable row; both are still represented.
       if body.key?("amount_off") || body.key?("offer_type")
-        rows << { label: "Discount", value: discount_amount(body.delete("amount_off"), body.delete("offer_type"), currency).presence || BLANK_VALUE }
+        offer_type = body["offer_type"]
+        body.delete("offer_type") if %w[percent cents].include?(offer_type)
+        rows << { label: "Discount", value: discount_amount(body.delete("amount_off"), offer_type, currency).presence || BLANK_VALUE }
       end
-      body.each { |key, value| rows << { label: field_label(key, offer_code:), value: display_value(key, value, currency).presence || BLANK_VALUE } }
+      body.each do |key, value|
+        rows << if universal_offer_code && key == "universal"
+          { label: "Applies to", value: coverage }
+        else
+          { label: field_label(key, offer_code:), value: display_value(key, value, currency).presence || BLANK_VALUE }
+        end
+      end
       rows << { label: "Max uses", value: "Unlimited" } if endpoint.id == "create_offer_code" && !body.key?("max_purchase_count")
       rows << { label: "Redemption", value: "Anyone with the code; no subscriber check" } if endpoint.id == "create_offer_code"
 

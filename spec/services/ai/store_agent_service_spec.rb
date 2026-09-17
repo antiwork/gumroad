@@ -107,6 +107,9 @@ describe Ai::StoreAgentService do
     it "explains subscriber eligibility before asking for consent to an unrestricted alternative" do
       allow(client).to receive(:messages) do |args|
         expect(args[:system]).to include("cannot enforce subscriber-only redemption")
+        expect(args[:system]).to include("universal controls which products a code covers, not who can redeem it")
+        expect(args[:system]).to include("Universal percentage codes")
+        expect(args[:system]).to include("universal fixed-amount codes cover only products priced in the target")
         expect(args[:system]).to include("cannot configure existing-customer or product-ownership eligibility")
         expect(args[:system]).to include("reply_only turn before proposing a supported alternative")
         expect(args[:system]).to include("Wait for the creator to agree to that alternative")
@@ -133,11 +136,103 @@ describe Ai::StoreAgentService do
       result = service.respond(messages: [{ role: "user", content: "Yes, a storewide code anyone can redeem is fine." }])
 
       expect(result[:proposed_action][:fields]).to include(
-        { label: "All products", value: "true" },
+        { label: "Applies to", value: "All products" },
         { label: "Redemption", value: "Anyone with the code; no subscriber check" },
       )
       expect(result[:reply]).to eq(described_class::PROPOSAL_READY_REPLY)
       expect(api_client).not_to have_received(:write)
+    end
+
+    context "discount coverage through the real v2 API" do
+      let!(:usd_product) { create(:product, user: seller, name: "USD guide", price_currency_type: "usd", price_cents: 1000) }
+      let!(:eur_product) { create(:product, user: seller, name: "EUR guide", price_currency_type: "eur", price_cents: 1000) }
+      let!(:other_usd_product) { create(:product, user: seller, name: "USD workbook", price_currency_type: "usd", price_cents: 1000) }
+
+      before { allow(Ai::StoreAgentApiClient).to receive(:new).and_call_original }
+
+      [
+        ["usd", "cents", true, "All USD-priced products"],
+        ["eur", "cents", "true", "All EUR-priced products"],
+        ["usd", "percent", true, "All products"],
+        ["eur", "percent", "true", "All products"],
+        ["usd", "cents", false, nil],
+        ["eur", "percent", "false", nil],
+      ].each do |currency, offer_type, universal, coverage|
+        it "matches #{currency} #{offer_type} coverage for universal=#{universal.inspect} to the saved code" do
+          product = currency == "usd" ? usd_product : eur_product
+          body = { "name" => "COVERAGE", "amount_off" => 15, "offer_type" => offer_type, "universal" => universal }
+          allow(client).to receive(:messages).and_return(
+            tool_result("api_write", { "endpoint" => "create_offer_code", "path_params" => { "link_id" => product.external_id }, "params" => body }),
+            text_result("Ready.", outcome: "proposal_ready"),
+          )
+
+          result = nil
+          expect do
+            result = service.respond(messages: [{ role: "user", content: "Create this discount anyone with the code can redeem." }])
+          end.not_to change(OfferCode, :count)
+          action = result.fetch(:proposed_action)
+          expect(action[:params]["params"]).to eq(body)
+          expect(action[:fields]).to include({ label: "Redemption", value: "Anyone with the code; no subscriber check" })
+          if coverage
+            expect(action[:fields]).to include({ label: "Product", value: "#{product.name} (#{product.external_id})" })
+            expect(action[:fields].select { |field| field[:label] == "Applies to" }).to eq([{ label: "Applies to", value: coverage }])
+          else
+            expect(action[:fields]).to include({ label: "Applies to", value: "#{product.name} (#{product.external_id})" }, { label: "Universal", value: "false" })
+          end
+
+          expect(action[:title]).to eq("Create a discount code.")
+          execution = Ai::StoreAgentActionExecutor.new(seller:, pundit_user:).execute(type: action[:type], params: action[:params])
+          expect(execution[:success]).to be(true), execution.inspect
+          expect(execution[:message]).to eq("Done: Create a discount code.")
+          code = seller.offer_codes.sole
+          expected_products = if !coverage
+            [product]
+          elsif offer_type == "percent"
+            [usd_product, eur_product, other_usd_product]
+          else
+            [usd_product, eur_product, other_usd_product].select { |item| item.price_currency_type == currency }
+          end
+          expect(code.applicable_products).to match_array(expected_products)
+          [usd_product, eur_product, other_usd_product].each do |item|
+            applies = expected_products.include?(item)
+            expect(code.applicable?(item)).to eq(applies)
+            expect(item.find_offer_code(code: code.code)).to eq(applies ? code : nil)
+            expect(item.find_offer_code_by_external_id(code.external_id)).to eq(applies ? code : nil)
+            expect(item.product_and_universal_offer_codes.include?(code)).to eq(applies)
+          end
+        end
+      end
+
+      ["TRUE", "1", [true], { "value" => true }, nil].each do |universal|
+        it "keeps non-enabling universal input #{universal.inspect} visible" do
+          body = { "name" => "RAW", "amount_off" => 15, "offer_type" => "cents", "universal" => universal }
+          allow(client).to receive(:messages).and_return(
+            tool_result("api_write", { "endpoint" => "create_offer_code", "path_params" => { "link_id" => usd_product.external_id }, "params" => body }),
+            text_result("Ready.", outcome: "proposal_ready"),
+          )
+          action = service.respond(messages: [{ role: "user", content: "Create this discount." }]).fetch(:proposed_action)
+          value = universal.nil? ? "(blank)" : (universal.is_a?(String) ? universal : universal.to_json)
+          expect(action[:fields]).to include({ label: "Universal", value: })
+          expect(action[:fields]).to include({ label: "Applies to", value: "#{usd_product.name} (#{usd_product.external_id})" })
+          execution = Ai::StoreAgentActionExecutor.new(seller:, pundit_user:).execute(type: action[:type], params: action[:params])
+          expect(execution[:success]).to be(true), execution.inspect
+          expect(seller.offer_codes.sole.applicable_products).to contain_exactly(usd_product)
+        end
+      end
+
+      it "preserves an unrecognized offer type while describing the API's fixed-amount fallback" do
+        body = { "name" => "RAWTYPE", "amount_off" => 15, "offer_type" => ["percent"], "universal" => true }
+        allow(client).to receive(:messages).and_return(
+          tool_result("api_write", { "endpoint" => "create_offer_code", "path_params" => { "link_id" => usd_product.external_id }, "params" => body }),
+          text_result("Ready.", outcome: "proposal_ready"),
+        )
+        action = service.respond(messages: [{ role: "user", content: "Create this discount." }]).fetch(:proposed_action)
+        expect(action[:fields]).to include({ label: "Offer type", value: '["percent"]' }, { label: "Applies to", value: "All USD-priced products" })
+        expect(action[:params]["params"]).to eq(body)
+        execution = Ai::StoreAgentActionExecutor.new(seller:, pundit_user:).execute(type: action[:type], params: action[:params])
+        expect(execution[:success]).to be(true), execution.inspect
+        expect(seller.offer_codes.sole.applicable_products).to contain_exactly(usd_product, other_usd_product)
+      end
     end
 
     context "hidden reasoning on the tool loop" do
