@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require "spec_helper"
+require "timeout"
 require "shared_examples/sellers_base_controller_concern"
 require "shared_examples/authorize_called"
 
@@ -394,7 +395,7 @@ describe Settings::Team::InvitationsController do
       invitation = team_invitation
       # Suspend the seller after the eligibility check has passed but before the transaction body,
       # which is the window the check would otherwise leave open.
-      allow_any_instance_of(User).to receive(:with_lock).and_wrap_original do |original, *args, &block|
+      allow(User).to receive(:transaction).and_wrap_original do |original, *args, &block|
         User.where(id: seller.id).update_all(user_risk_state: "suspended_for_fraud", updated_at: Time.current)
         original.call(*args, &block)
       end
@@ -559,7 +560,7 @@ describe Settings::Team::InvitationsController do
           .and not_change { ActiveJob::Base.queue_adapter.enqueued_jobs.size }
           .and not_change { $redis.zcard(RedisKey.team_invitation_send_throttle(seller.id)) }
 
-        expect(response).to be_successful
+        expect(response).to have_http_status(:unprocessable_entity)
         expect(response.parsed_body).to eq("success" => false, "error_message" => "Email is invalid")
       end
     end
@@ -578,5 +579,140 @@ describe Settings::Team::InvitationsController do
       expect(response).to have_http_status(:too_many_requests)
       expect(response.parsed_body["error"]).to include("limit of 10 team invitations per hour")
     end
+  end
+end
+
+describe Settings::Team::InvitationsController, "reciprocal acceptance" do
+  # Worker connections need committed fixtures; cleanup is scoped to these two users.
+  self.use_transactional_tests = false
+
+  before do
+    Rails.application.routes_reloader.execute_unless_loaded
+    @users = 2.times.map { |index| create(:user, email: "reciprocal#{index}@example.com") }
+    @invitations = @users.each_with_index.map do |user, index|
+      create(:team_invitation, seller: @users[1 - index], email: user.email)
+    end
+  end
+
+  after do
+    user_ids = @users.map(&:id)
+    TeamInvitation.where(seller_id: user_ids).delete_all
+    TeamMembership.where(user_id: user_ids).or(TeamMembership.where(seller_id: user_ids)).delete_all
+    Affiliate.where(affiliate_user_id: user_ids).delete_all
+    RefundPolicy.where(seller_id: user_ids).delete_all
+    User.where(id: user_ids).delete_all
+  end
+
+  it "accepts both invitations while the reciprocal request waits on a user row lock" do
+    enqueued_jobs_before = ActiveJob::Base.queue_adapter.enqueued_jobs.size
+    first_lock = Queue.new
+    release_first = Queue.new
+    second_connection_id = Queue.new
+    results = Queue.new
+    errors = Queue.new
+    first_request = nil
+    second_request = nil
+
+    # Pause after the first locking query until the reciprocal request reaches a real MySQL lock wait.
+    subscriber = ActiveSupport::Notifications.subscribe("sql.active_record") do |_name, _start, _finish, _id, payload|
+      next unless Thread.current[:first_reciprocal_acceptance]
+      next unless payload[:sql].include?("FROM `users`") && payload[:sql].include?("FOR UPDATE")
+
+      Thread.current[:first_reciprocal_acceptance] = false
+      first_lock << true
+      release_first.pop
+    end
+
+    first_request = Thread.new do
+      ActiveRecord::Base.connection_pool.with_connection do
+        Thread.current[:first_reciprocal_acceptance] = true
+        results << accept_invitation(@users.first, @invitations.first)
+      rescue StandardError => error
+        errors << error
+      ensure
+        Thread.current[:first_reciprocal_acceptance] = false
+        first_lock << true
+      end
+    end
+    Timeout.timeout(10) { first_lock.pop }
+    raise errors.pop unless errors.empty?
+
+    second_request = Thread.new do
+      ActiveRecord::Base.connection_pool.with_connection do |connection|
+        second_connection_id << connection.select_value("SELECT CONNECTION_ID()")
+        results << accept_invitation(@users.last, @invitations.last)
+      rescue StandardError => error
+        errors << error
+      end
+    end
+    process_id = Timeout.timeout(10) { second_connection_id.pop }
+    Timeout.timeout(10) do
+      loop do
+        waiting = ActiveRecord::Base.connection.select_value(<<~SQL.squish)
+          SELECT COUNT(*)
+          FROM performance_schema.data_lock_waits AS lock_waits
+          INNER JOIN performance_schema.data_locks AS requested_lock
+            ON requested_lock.ENGINE_LOCK_ID = lock_waits.REQUESTING_ENGINE_LOCK_ID
+          INNER JOIN performance_schema.threads AS requesting_thread
+            ON requesting_thread.THREAD_ID = lock_waits.REQUESTING_THREAD_ID
+          WHERE requesting_thread.PROCESSLIST_ID = #{process_id.to_i}
+            AND requested_lock.OBJECT_SCHEMA = DATABASE()
+            AND requested_lock.OBJECT_NAME = 'users'
+        SQL
+        break if waiting.to_i.positive?
+
+        sleep 0.01
+      end
+    end
+
+    expect(results).to be_empty
+    release_first << true
+    [first_request, second_request].each { expect(_1.join(10)).to be_present }
+
+    raise errors.pop unless errors.empty?
+    expect(results.size).to eq(2)
+    expect(ActiveJob::Base.queue_adapter.enqueued_jobs.drop(enqueued_jobs_before).map { |job| job[:args].first(2) }).to eq(
+      [["TeamMailer", "invitation_accepted"], ["TeamMailer", "invitation_accepted"]]
+    )
+    2.times do
+      status, notice = results.pop
+      expect(status).to eq(302)
+      expect(notice).to start_with("Welcome to the team at ")
+    end
+    @invitations.each do |invitation|
+      expect(invitation.reload).to be_accepted
+      expect(invitation).to be_deleted
+    end
+    @users.each_with_index do |user, index|
+      expect(user.user_memberships.pluck(:seller_id, :role)).to contain_exactly(
+        [user.id, TeamMembership::ROLE_OWNER],
+        [@users[1 - index].id, @invitations[index].role]
+      )
+      expect(user.reload.is_team_member).to eq(false)
+    end
+  ensure
+    ActiveSupport::Notifications.unsubscribe(subscriber) if subscriber
+    release_first << true
+    [first_request, second_request].compact.each do |thread|
+      next if thread.join(1)
+
+      thread.kill
+      thread.join
+    end
+  end
+
+  def accept_invitation(user, invitation)
+    request = ActionController::TestRequest.create(described_class)
+    request.host = DOMAIN
+    request.env["devise.mapping"] = Devise.mappings[:user]
+    request.env["warden"] = Warden::Proxy.new(request.env, Warden::Manager.new(nil) { |config| config.merge!(Devise.warden_config) })
+    request.env["warden"].set_user(User.find(user.id), scope: :user, store: false, run_callbacks: false)
+    request.set_header("REQUEST_METHOD", "GET")
+    request.path_parameters = { controller: "settings/team/invitations", action: "accept", id: invitation.external_id }
+    controller = described_class.new
+    controller.set_request!(request)
+    controller.set_response!(ActionDispatch::TestResponse.new)
+    controller.process(:accept)
+    [controller.response.status, controller.flash[:notice]]
   end
 end

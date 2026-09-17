@@ -83,10 +83,11 @@ class Settings::Team::InvitationsController < Sellers::BaseController
       flash[:alert] = alert_message
     else
       team_membership = nil
-      logged_in_user.with_lock do
-        # The eligibility check above reads an unlocked seller; re-read it here so a suspension
-        # landing between the check and the grant cannot hand out membership on an inactive account.
-        seller = User.lock.find_by(id: team_invitation.seller_id)
+      User.transaction do
+        # Reciprocal invitations must acquire both user locks in the same order.
+        users = User.where(id: [logged_in_user.id, team_invitation.seller_id]).order(:id).lock.index_by(&:id)
+        logged_in_user.lock!
+        seller = users[team_invitation.seller_id]
         next unless seller&.account_active?
 
         team_invitation.update_as_accepted!(deleted_at: Time.current)
@@ -110,7 +111,7 @@ class Settings::Team::InvitationsController < Sellers::BaseController
   def resend_invitation
     authorize [:settings, :team, @team_invitation]
     unless @team_invitation.single_mailbox_email?
-      return render json: { success: false, error_message: "Email is invalid" }
+      return render json: { success: false, error_message: "Email is invalid" }, status: :unprocessable_entity
     end
     return unless throttle_invitation_sends
 
