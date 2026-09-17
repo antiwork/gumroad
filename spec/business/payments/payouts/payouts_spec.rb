@@ -463,7 +463,7 @@ describe Payouts do
       end
     end
 
-    describe "instant payouts with settling funds" do
+    describe "instant payouts with an ineligible balance" do
       let(:settling_seller) { create(:compliant_user) }
 
       before do
@@ -472,12 +472,12 @@ describe Payouts do
         allow(settling_seller).to receive(:unpaid_balance_cents_up_to_date).and_return(200_00)
       end
 
-      it "returns false and adds a settling funds note when add_comment is true" do
+      it "returns false and adds an eligibility note without a settlement estimate when add_comment is true" do
         expect(described_class.is_user_payable(settling_seller, payout_date, payout_type: Payouts::PAYOUT_TYPE_INSTANT, add_comment: true)).to be(false)
 
         date = Time.current.to_fs(:formatted_date_full_month)
         expect(settling_seller.comments.with_type_payout_note.last.content).to eq(
-          "Instant Payout on #{date} was skipped because funds are still settling. This should resolve within 1-2 days."
+          "Instant Payout on #{date} was skipped because the unpaid balance is not currently eligible for an instant payout."
         )
       end
 

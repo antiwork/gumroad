@@ -34,8 +34,8 @@
 # second reversal is not booked as a new event. This has no supported processor flow
 # today; the parallel-run reconciliation against the monthly reports would surface it.
 module FinanceEventLedgerReports
-  # Version 2 adds the refund_reversals compensating event.
-  REPORT_VERSION = 2
+  # Version 3 adds informational refund-fee write-offs, separate from cash events.
+  REPORT_VERSION = 3
 
   # Bounds the funds-received scan via the indexed (purchase_state, created_at) columns:
   # `purchases` has no standalone succeeded_at index and the table is too large to add
@@ -82,6 +82,11 @@ module FinanceEventLedgerReports
       "date" => date.iso8601,
       "window_start" => window.first.iso8601,
       "window_end" => window.last.iso8601,
+      "refund_fee_write_offs" => {
+        "count" => Refund.fee_retention_written_off_during(window).count,
+        "total_cents" => Refund.fee_retention_written_off_during(window).sum("CAST(refunds.json_data->>'$.fee_retention_written_off_cents' AS SIGNED)").to_i,
+        "currency" => "usd",
+      },
       "processors" => processor_filters.map do |name, filter|
         {
           "processor" => name,

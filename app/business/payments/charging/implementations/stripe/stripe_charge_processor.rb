@@ -6,6 +6,8 @@ class StripeChargeProcessor
 
   DISPLAY_NAME = "Stripe"
 
+  class NoRefundFeeTransferError < StandardError; end
+
   # https://stripe.com/docs/api/charges/object#charge_object-status
   VALID_TRANSACTION_STATUSES = %w(succeeded pending).freeze
 
@@ -692,6 +694,7 @@ class StripeChargeProcessor
     return unless credit.merchant_account.holder_of_funds == HolderOfFunds::STRIPE
     refund = credit.fee_retention_refund
     return if refund.blank?
+    return if refund.fee_retention_written_off_at.present?
     return recorded_refund_fee_collection(credit:) if refund.debited_stripe_transfer.present?
     return adopt_existing_refund_fee_collection(credit:) unless collect
     # US Gumroad-managed accounts cannot reverse payout transfers; collect with the same
@@ -734,20 +737,39 @@ class StripeChargeProcessor
                            .where(stripe_connect_account_id: stripe_account_id)
                            .order(:created_at)
                            .pluck(:stripe_internal_transfer_id)
-      transfer = transfer_ids.compact_blank.lazy
-                             .filter_map { |tr_id| Stripe::Transfer.retrieve(tr_id) rescue nil }
-                             .find { |tr| tr.amount - tr.amount_reversed > amount_to_reverse_for.call(tr) }
+      lookup_error = nil
+      transfers = transfer_ids.compact_blank.lazy.filter_map do |tr_id|
+        Stripe::Transfer.retrieve(tr_id)
+      rescue StandardError => error
+        lookup_error = error
+        nil
+      end
+      transfer = transfers.find { |tr| tr.amount - tr.amount_reversed > amount_to_reverse_for.call(tr) }
       unless transfer
-        transfers = Stripe::Transfer.list(destination: stripe_account_id, created: { 'lt': 120.days.ago.to_i }, limit: 100)
-        transfer = transfers.find do |tr|
-          tr.present? && tr.amount - tr.amount_reversed > amount_to_reverse_for.call(tr)
+        # Recent sale transfers must remain available for buyer refunds.
+        params = { destination: stripe_account_id, created: { lt: 120.days.ago.to_i }, limit: 100 }
+        loop do
+          transfers = Stripe::Transfer.list(**params)
+          transfer = transfers.find { |tr| tr.amount - tr.amount_reversed > amount_to_reverse_for.call(tr) }
+          break if transfer || transfers.count < params[:limit]
+
+          params[:starting_after] = transfers.last.id
         end
       end
     end
-    return unless transfer
+    unless transfer
+      collected = adopt_existing_refund_fee_collection(credit:)
+      return collected if collected
+      raise lookup_error if lookup_error
+      # A pin can belong to an in-flight collection. Leave it for reconciliation.
+      return if already_pinned_id.present?
+
+      raise NoRefundFeeTransferError, "No reversible transfer for refund fee retention"
+    end
 
     refund.with_lock do
       refund.reload
+      return if refund.fee_retention_written_off_at.present?
       return recorded_refund_fee_collection(credit:) if refund.debited_stripe_transfer.present?
       current_pin = refund.fee_retention_source_transfer
       if current_pin.present? && current_pin != observed_pin
@@ -1143,7 +1165,17 @@ class StripeChargeProcessor
 
     stripe_loan_paydown_id = data["id"]
     amount_cents = -data["details"]["total_amount"].to_i
-    return if merchant_account.user.credits.where("json_data->'$.stripe_loan_paydown_id' = ?", stripe_loan_paydown_id).exists?
+    existing_credit = ApplicationRecord.connected_to(role: :writing) do
+      merchant_account.user.credits.find_by("json_data->'$.stripe_loan_paydown_id' = ?", stripe_loan_paydown_id)
+    end
+    if existing_credit
+      return unless existing_credit.financing_paydown_purchase_id.present?
+
+      unless existing_credit.merchant_account_id == merchant_account.id && existing_credit.amount_cents == amount_cents
+        raise ArgumentError, "Capital event does not match the existing credit"
+      end
+      return existing_credit.apply_financing_paydown!
+    end
 
     if data["details"]["reason"] == "collection" && data["user_facing_description"] == "Forced debit from Stripe Payments"
       Credit.create_for_manual_paydown_on_stripe_loan!(amount_cents:, merchant_account:, stripe_loan_paydown_id:)

@@ -2,10 +2,10 @@
 
 class HealthcheckController < ApplicationController
   # The blue/green deploy gates on this action: Consul polls it through nginx and the
-  # cluster only receives traffic once it answers 200 (the `web` check in
-  # gumroad-deployment's web_server_{blue,green}.nomad.erb). So it must answer whenever
-  # nginx and Puma are serving and depend on nothing else -- a 500 here reads as "not
-  # ready" and stalls the deploy.
+  # cluster only receives traffic once it answers 200 (the `web` check in gumroad-private's
+  # deployment/nomad/production/web_server_{blue,green}.nomad.erb). So it must answer
+  # whenever nginx and Puma are serving and depend on nothing else -- a 500 here reads as
+  # "not ready" and stalls the deploy.
   #
   # redirect_to_custom_subdomain breaks that: it reads Rails.cache and falls through to
   # Redis on a miss, and the production cache is namespaced by REVISION, so every deploy

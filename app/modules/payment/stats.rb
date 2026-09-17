@@ -17,6 +17,11 @@ module Payment::Stats
     # Then deduct the (refunded amount - refunded affiliate commission - refunded fees) for refunds in this payout period where we waived our fee for the refund.
     refund_amounts_with_fee_waived.each { |link, refund_amount| revenue_by_link[link] -= refund_amount }
 
+    BalanceTransaction.refund_fee_write_offs.where(balance_id: balances.select(:id))
+      .group("refunds.link_id").sum("balance_transactions.issued_amount_net_cents").each do |product_id, amount|
+      revenue_by_link[product_id] += amount
+    end
+
     revenue_by_link
   end
 

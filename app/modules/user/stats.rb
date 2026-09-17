@@ -316,7 +316,9 @@ module User::Stats
     refunded_fee += refunded_sales_fee_not_waived.joins(:effective_refunds).sum("refunds.fee_cents - COALESCE(refunds.json_data->'$.retained_fee_cents', 0)")
     disputed_sales = sales.where("purchase_chargeback_balance_id IN (?)", balance_ids)
     disputed_fee = disputed_sales.sum(:fee_cents) - disputed_sales.joins(:effective_refunds).sum("refunds.fee_cents")
-    refunded_fee + disputed_fee
+    written_off_fee = BalanceTransaction.refund_fee_write_offs.where(user: self, balance_id: balance_ids)
+      .sum("balance_transactions.issued_amount_net_cents")
+    refunded_fee + disputed_fee + written_off_fee
   end
 
   def taxes_cents_for_balances(balance_ids)
@@ -785,7 +787,10 @@ module User::Stats
     refunded_fee += refunded_sales_fee_not_waived.joins(:effective_refunds).sum("refunds.fee_cents - COALESCE(refunds.json_data->'$.retained_fee_cents', 0)")
     disputed_sales = sales.was_discover_fee_charged.where("purchase_chargeback_balance_id IN (?)", balance_ids)
     disputed_fee = disputed_sales.sum(:fee_cents) - disputed_sales.joins(:effective_refunds).sum("refunds.fee_cents")
-    refunded_fee + disputed_fee
+    written_off_fee = BalanceTransaction.refund_fee_write_offs.where(user: self, balance_id: balance_ids)
+      .joins(credit: { fee_retention_refund: :purchase }).merge(Purchase.was_discover_fee_charged)
+      .sum("balance_transactions.issued_amount_net_cents")
+    refunded_fee + disputed_fee + written_off_fee
   end
 
   def direct_fees_cents_for_balances(balance_ids)
@@ -800,7 +805,10 @@ module User::Stats
     refunded_fee += refunded_sales_fee_not_waived.joins(:effective_refunds).sum("refunds.fee_cents - COALESCE(refunds.json_data->'$.retained_fee_cents', 0)")
     disputed_sales = sales.not_was_discover_fee_charged.where("purchase_chargeback_balance_id IN (?)", balance_ids)
     disputed_fee = disputed_sales.sum(:fee_cents) - disputed_sales.joins(:effective_refunds).sum("refunds.fee_cents")
-    refunded_fee + disputed_fee
+    written_off_fee = BalanceTransaction.refund_fee_write_offs.where(user: self, balance_id: balance_ids)
+      .joins(credit: { fee_retention_refund: :purchase }).merge(Purchase.not_was_discover_fee_charged)
+      .sum("balance_transactions.issued_amount_net_cents")
+    refunded_fee + disputed_fee + written_off_fee
   end
 
   def discover_sales_count_for_balances(balance_ids)

@@ -121,7 +121,8 @@ RSpec.describe RecoverPendingRefundFeeRetentionJob, :vcr do
     expect(refund.fee_retention_error["message"]).to eq(error.message)
   end
 
-  it "counts an attempt when Stripe has no transfer to collect from" do
+  it "writes off a fee once when Stripe has no safe transfer and reverses the ledger debit" do
+    refund.update!(retained_fee_cents: 1000)
     allow(Stripe::Transfer).to receive(:retrieve).with("tr_recovery_candidate")
       .and_return(double(id: "tr_recovery_candidate", amount: 5000, amount_reversed: 5000, currency: "usd"))
     allow(Stripe::Transfer).to receive(:list)
@@ -129,11 +130,64 @@ RSpec.describe RecoverPendingRefundFeeRetentionJob, :vcr do
     expect(Stripe::Transfer).not_to receive(:create)
     expect(ErrorNotifier).not_to receive(:notify)
 
+    expect { 2.times { described_class.new.perform } }.to change(BalanceTransaction, :count).by(1)
+
+    expect(refund.reload.fee_retention_pending).to be_falsey
+    expect(refund.fee_retention_recoverable).to be(false)
+    expect(refund.fee_retention_written_off_cents).to eq(1000)
+    expect(refund.fee_retention_written_off_at).to be_present
+    expect(refund.fee_retention_write_off_reason).to eq("no_reversible_transfer")
+    expect(refund.retained_fee_cents).to eq(1000)
+    expect(refund.debited_stripe_transfer).to be_nil
+    expect(refund.fee_retention_collected_cents).to be_nil
+    expect(Refund.written_off_fee_retention).to include(refund)
+    expect(BalanceTransaction.where(credit:).sum(:issued_amount_net_cents)).to eq(0)
+    expect(BalanceTransaction.where(credit:).sum(:holding_amount_net_cents)).to eq(0)
+    expect(credit.reload.amount_cents).to eq(-1000)
+  end
+
+  it "keeps a fee pending when a payout transfer lookup fails" do
+    error = Stripe::APIConnectionError.new("timeout")
+    allow(Stripe::Transfer).to receive(:retrieve).with("tr_recovery_candidate").and_raise(error)
+    allow(Stripe::Transfer).to receive(:list).with(hash_including(:destination)).and_return([])
+    expect(ErrorNotifier).to receive(:notify).with(error, context: { refund_id: refund.id, purchase_id: purchase.id })
+
     expect { described_class.new.perform }.not_to change(BalanceTransaction, :count)
 
     expect(refund.reload.fee_retention_pending).to be(true)
-    expect(refund.fee_retention_recoverable).to be(true)
-    expect(refund.fee_retention_attempts).to eq(1)
+    expect(refund.fee_retention_written_off_at).to be_nil
+  end
+
+  it "adopts an existing debit before considering a write-off" do
+    allow(Stripe::Transfer).to receive(:retrieve).with("tr_recovery_candidate")
+      .and_return(double(id: "tr_recovery_candidate", amount: 5000, amount_reversed: 5000, currency: "usd"))
+    allow(Stripe::Transfer).to receive(:list).with(hash_including(:destination)).and_return([])
+    expect(Stripe::Transfer).to receive(:list)
+      .with({ transfer_group:, limit: 1 }, { stripe_account: merchant_account.charge_processor_merchant_id })
+      .and_return([double(id: "tr_existing_fee", amount: 850)])
+    expect(Stripe::Transfer).not_to receive(:create)
+    expect(Stripe::Transfer).not_to receive(:create_reversal)
+
+    described_class.new.perform
+
+    expect(refund.reload.fee_retention_pending).to be_falsey
+    expect(refund.fee_retention_written_off_at).to be_nil
+    expect(refund.debited_stripe_transfer).to eq("tr_existing_fee")
+    expect(BalanceTransaction.where(credit:).sum(:holding_amount_net_cents)).to eq(-850)
+  end
+
+  it "does not write off a fee that another worker pins during the lookup" do
+    allow(Stripe::Transfer).to receive(:retrieve).with("tr_recovery_candidate")
+      .and_return(double(id: "tr_recovery_candidate", amount: 5000, amount_reversed: 5000, currency: "usd"))
+    allow(Stripe::Transfer).to receive(:list).with(hash_including(:destination)) do
+      refund.update!(fee_retention_source_transfer: "tr_concurrent")
+      []
+    end
+
+    expect { described_class.new.perform }.not_to change(BalanceTransaction, :count)
+
+    expect(refund.reload.fee_retention_pending).to be(true)
+    expect(refund.fee_retention_written_off_at).to be_nil
   end
 
   it "stops retrying at the attempt cap, reports once, and keeps the pending marker" do

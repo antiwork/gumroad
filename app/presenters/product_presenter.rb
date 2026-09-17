@@ -369,7 +369,7 @@ class ProductPresenter
       receipt_email_from: "#{from_email_address_name(product.user.name.to_s)} <noreply@#{CUSTOMERS_MAIL_DOMAIN}>",
       price_checker_enabled: Feature.active?(:price_checker, product.user),
       custom_html_pages_enabled: Feature.active?(:custom_html_pages, product.user),
-      auto_marketing_enabled: Feature.active?(:auto_marketing, product.user),
+      auto_marketing_enabled: Marketing::Eligibility.enabled_for?(product.user),
       # Hostnames the landing-page preview will follow a "navigate here" request
       # to. Same list the public wrapper enforces (User#custom_html_store_hostnames),
       # so seller HTML previewed in the editor can't open an arbitrary site.

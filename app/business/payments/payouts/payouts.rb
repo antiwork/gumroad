@@ -161,7 +161,7 @@ class Payouts
       # Same $1 Instant floor as the processor — a $60 settled leftover with $100+ still
       # unpaid is payable now, not a settling skip. Weekly/monthly/quarterly keep MIN_AMOUNT_CENTS.
       if amount_payable < minimum_payout_amount_cents && add_comment && user.unpaid_balance_cents_up_to_date(date) >= minimum_payout_amount_cents
-        user.add_payout_note(content: "Instant Payout on #{payout_date} was skipped because funds are still settling. This should resolve within 1-2 days.")
+        user.add_payout_note(content: "Instant Payout on #{payout_date} was skipped because the unpaid balance is not currently eligible for an instant payout.")
         return false
       end
     end

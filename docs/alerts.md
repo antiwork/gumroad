@@ -2,7 +2,7 @@
 
 Check to see if certain EC2 instances are unhealthy by [listing all the individual EC2 instances matching the blue|green clusters](https://console.aws.amazon.com/ec2/v2/home?region=us-east-1#Instances:search=blue%7Cgreen;sort=tag:Name) and clicking monitoring.
 
-Recycle the unhealthy instances by [terminating them](https://console.aws.amazon.com/ec2/v2/home?region=us-east-1#Instances:sort=tag:Name) (50% first, then the other 50% after five minutes). Note: **Make sure not to terminate steward instances**. Please follow [these steps](https://github.com/antiwork/infrastructure/blob/master/docs/upgrading_stewards.md) to recycle steward instances.
+Recycle the unhealthy instances by [terminating them](https://console.aws.amazon.com/ec2/v2/home?region=us-east-1#Instances:sort=tag:Name) (50% first, then the other 50% after five minutes). Note: **Make sure not to terminate steward instances**. Please follow [these steps](https://github.com/antiwork/gumroad-private/blob/main/infrastructure/docs/upgrading_stewards.md) to recycle steward instances.
 
 You can look into container statistics with Hashi-UI. Please follow these steps to access it:
 

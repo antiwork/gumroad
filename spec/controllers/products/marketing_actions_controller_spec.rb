@@ -9,10 +9,14 @@ describe Products::MarketingActionsController do
 
   let(:seller) { create(:named_seller, twitter_handle: "seller", twitter_oauth_token: "tok", twitter_oauth_secret: "sec") }
   let(:product) { create(:product, user: seller) }
+  let(:holdout) { false }
 
   include_context "with user signed in as admin for seller"
 
-  before { Feature.activate_user(:auto_marketing, seller) }
+  before do
+    create(:marketing_holdout_assignment, user: seller, marketing_holdout: holdout)
+    Feature.activate_user(:auto_marketing, seller)
+  end
 
   describe "#index" do
     it_behaves_like "authorize called for action", :get, :index do
@@ -52,6 +56,31 @@ describe Products::MarketingActionsController do
       end.not_to change { [Marketing::Action.count, UtmLink.where(utm_campaign: "launch").count] }
 
       expect(response).to have_http_status(:not_found)
+    end
+  end
+
+  context "when the seller is held out" do
+    let(:holdout) { true }
+
+    before { Feature.activate_percentage(:auto_marketing, 100) }
+
+    it "404s on recommendations without creating marketing records" do
+      expect do
+        get :index, params: { product_id: product.unique_permalink }, as: :json
+      end.not_to change { [Marketing::Action.count, UtmLink.count] }
+      expect(response).to have_http_status(:not_found)
+    end
+
+    %i[show approve execute cancel].each do |endpoint|
+      it "404s on #{endpoint} without changing an existing action or sending a post" do
+        action = create(:marketing_action, user: seller, link: product, status: "approved", approved_at: Time.current)
+        original = action.attributes
+        public_send(endpoint == :show ? :get : :post, endpoint, params: { product_id: product.unique_permalink, id: action.external_id }, as: :json)
+
+        expect(response).to have_http_status(:not_found)
+        expect(action.reload.attributes).to eq(original)
+        expect(WebMock).not_to have_requested(:post, Marketing::XApi::TWEETS_URL)
+      end
     end
   end
 

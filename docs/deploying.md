@@ -198,7 +198,7 @@ Deployments are removed automatically when the associated branch is deleted in t
 
 ### Rails console on a preview app
 
-Preview apps have Rails console access — see [Connect to Rails console](https://github.com/antiwork/gumroad-deployment/blob/main/docs/ssh.md#connect-to-rails-console) in the deployment repo. The `console.sh` script there resolves the preview instance from the `BRANCH=<branch name>` environment variable (it falls back to the deployment repo's own checked-out branch, so always set it explicitly) and opens `rails c` in the running container. It also supports `COMMAND=...` for one-shot commands — the value is executed directly as the container command, so it must be a runnable program like `bundle exec rake "..."`, not a bare Ruby snippet — and a standalone `-w` flag for a writable database connection (the default is a read-only replica).
+Preview apps have Rails console access — see [Connect to Rails console](https://github.com/antiwork/gumroad-private/blob/main/deployment/docs/ssh.md#connect-to-rails-console) in `gumroad-private`. The `console.sh` script there resolves the preview instance from the `BRANCH=<branch name>` environment variable (it falls back to `gumroad-private`'s own checked-out branch, so always set it explicitly) and opens `rails c` in the running container. It also supports `COMMAND=...` for one-shot commands — the value is executed directly as the container command, so it must be a runnable program like `bundle exec rake "..."`, not a bare Ruby snippet — and a standalone `-w` flag for a writable database connection (the default is a read-only replica).
 
 ### Seeding QA state with `preview_qa` rake tasks
 

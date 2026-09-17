@@ -890,6 +890,10 @@ const CreditCardContent = ({
         });
         if (tokenResult.status === "error") {
           setCardError(true);
+          // Stripe handles inline validation and wallet-dismissal errors itself.
+          if (tokenResult.stripe_error.type !== "validation_error" && tokenResult.stripe_error.message) {
+            showAlert(tokenResult.stripe_error.message, "error");
+          }
           return dispatch({ type: "cancel" });
         }
         // A wallet paid through the Payment Element: adopt the wallet sheet's billing address as
@@ -1952,8 +1956,9 @@ export const PaymentForm = ({
             // strands them with no way to complete checkout (see gumroad-private#927).
             if (e instanceof RecaptchaUnavailableError) {
               showAlert(RECAPTCHA_UNAVAILABLE_MESSAGE, "error");
-            } else {
-              assert(e instanceof RecaptchaCancelledError);
+            } else if (!(e instanceof RecaptchaCancelledError)) {
+              // A provider exception must not strand checkout after the wallet sheet closes.
+              showAlert("We couldn't complete the security check. Please try again to finish your purchase.", "error");
             }
             dispatch({ type: "cancel" });
           });

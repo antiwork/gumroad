@@ -1,4 +1,7 @@
 <%= header_section("Daily Finance Ledger Report", @report["date"]) %>
 <div>
+  <p>Refund fees written off: <%= @report.fetch("refund_fee_write_offs").fetch("count") %> refunds,
+    <%= Money.new(@report.fetch("refund_fee_write_offs").fetch("total_cents"), "USD").format %> USD.
+    These are uncollected fees, not additional cash refunds.</p>
   <p>The finance event ledger for <%= @report["date"] %> is attached as a JSON file.</p>
 </div>

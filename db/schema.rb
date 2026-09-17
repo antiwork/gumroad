@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.1].define(version: 2026_12_14_090000) do
+ActiveRecord::Schema[7.1].define(version: 2026_12_14_090001) do
   create_table "active_storage_attachments", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
     t.string "name", limit: 191, null: false
     t.string "record_type", limit: 191, null: false
@@ -1369,6 +1369,14 @@ ActiveRecord::Schema[7.1].define(version: 2026_12_14_090000) do
     t.index ["link_id"], name: "index_marketing_actions_on_link_id"
     t.index ["user_id"], name: "index_marketing_actions_on_user_id"
     t.index ["utm_link_id"], name: "index_marketing_actions_on_utm_link_id"
+  end
+
+  create_table "marketing_holdout_assignments", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
+    t.bigint "user_id", null: false
+    t.string "prior_sales_bucket", null: false
+    t.boolean "marketing_holdout", null: false
+    t.datetime "marketing_holdout_assigned_at", null: false
+    t.index ["user_id"], name: "index_marketing_holdout_assignments_on_user_id", unique: true
   end
 
   create_table "media_locations", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
