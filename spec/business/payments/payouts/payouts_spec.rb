@@ -950,6 +950,62 @@ describe Payouts do
       expect(user.balances.reload.map(&:state).uniq).to eq(["unpaid"])
     end
 
+    context "with mixed source accounts in the group ledger" do
+      before do
+        allow(StripePayoutProcessor).to receive(:pay_out_currencies).and_return([Currency::EUR])
+        allow(StripePayoutProcessor).to receive(:prepare_payment_and_set_amount).and_return([])
+      end
+
+      it "blocks a Stripe credit merged with larger Gumroad-held debt even when another currency is positive" do
+        merchant_account.update!(currency: Currency::USD)
+        user.balances.sole.update!(amount_cents: 100_00, holding_currency: Currency::USD, holding_amount_cents: 100_00)
+        create(:balance, user:, date: payout_date - 2, amount_cents: -200_00)
+        create(:balance, user:, merchant_account:, date: payout_date - 3, amount_cents: 300_00,
+                         holding_currency: Currency::EUR, holding_amount_cents: 270_00)
+
+        expect do
+          expect(described_class.create_payments(payout_date.to_s, PayoutProcessorType::STRIPE, user)).to eq([])
+        end.not_to change(Payment, :count)
+
+        expect(StripePayoutProcessor).not_to have_received(:prepare_payment_and_set_amount)
+        expect(user.balances.reload.map(&:state).uniq).to eq(["unpaid"])
+      end
+
+      [Currency::USD, Currency::HUF].each do |home_currency|
+        it "nets Gumroad-held credit against Stripe debt in the #{home_currency} home group using USD ledger amounts" do
+          merchant_account.update!(currency: home_currency)
+          stripe_debt = user.balances.sole
+          stripe_debt.update!(amount_cents: -100_00, holding_currency: home_currency,
+                              holding_amount_cents: home_currency == Currency::USD ? -100_00 : -35_000_00)
+          gumroad_credit = create(:balance, user:, date: payout_date - 2, amount_cents: 200_00)
+          foreign_credit = create(:balance, user:, merchant_account:, date: payout_date - 3, amount_cents: 300_00,
+                                            holding_currency: Currency::EUR, holding_amount_cents: 270_00)
+
+          pairs = described_class.create_payments(payout_date.to_s, PayoutProcessorType::STRIPE, user)
+
+          expect(pairs.map { |payment, _| [payment.currency, payment.balances.ids.sort] }).to contain_exactly(
+            [home_currency, [stripe_debt.id, gumroad_credit.id].sort], [Currency::EUR, [foreign_credit.id]]
+          )
+          expect(pairs.map(&:last)).to eq([[], []])
+          expect(user.balances.reload.map(&:state).uniq).to eq(["processing"])
+        end
+      end
+
+      it "does not offset a group's debt with the same currency on another Stripe account" do
+        other_account = create(:merchant_account, user:, currency: Currency::HUF)
+        create(:balance, user:, merchant_account:, date: payout_date - 2, amount_cents: -100_00,
+                         holding_currency: Currency::EUR, holding_amount_cents: -90_00)
+        create(:balance, user:, merchant_account: other_account, date: payout_date - 3, amount_cents: 200_00,
+                         holding_currency: Currency::EUR, holding_amount_cents: 180_00)
+
+        expect(described_class.create_payments(payout_date.to_s, PayoutProcessorType::STRIPE, user)).to eq([])
+
+        expect(StripePayoutProcessor).not_to have_received(:prepare_payment_and_set_amount)
+        expect(user.payments.count).to eq(0)
+        expect(user.balances.reload.map(&:state).uniq).to eq(["unpaid"])
+      end
+    end
+
     it "pays nothing when the seller nets to zero or less across groups" do
       allow(StripePayoutProcessor).to receive(:is_balance_payable).and_return(true)
       expect(StripePayoutProcessor).not_to receive(:prepare_payment_and_set_amount)

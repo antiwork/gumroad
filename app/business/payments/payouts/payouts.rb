@@ -619,13 +619,12 @@ class Payouts
   end
   private_class_method :payable_balances_for_processor
 
-  # Cents the seller is up or down in one payout group's currency, across every unpaid balance in
-  # that account and currency — including the rows the claim could not take.
+  # A home-currency group can also contain Gumroad-held USD balances. Include every source pair,
+  # including unclaimed rows, while keeping the total in USD ledger cents.
   def self.group_ledger_cents(ledger, group_balances)
-    sample = group_balances.first
+    source_keys = group_balances.map { |balance| [balance.merchant_account_id, balance.holding_currency.to_s] }.to_set
     ledger.sum do |balance|
-      next 0 unless balance.merchant_account_id == sample.merchant_account_id &&
-                    balance.holding_currency.to_s == sample.holding_currency.to_s
+      next 0 unless source_keys.include?([balance.merchant_account_id, balance.holding_currency.to_s])
 
       balance.amount_cents
     end
