@@ -7,6 +7,7 @@ import { useCurrentSeller } from "$app/components/CurrentSeller";
 import { useDiscoverUrl } from "$app/components/DomainSettings";
 import { Layout, useProductUrl } from "$app/components/ProductEdit/Layout";
 import { ProductPreview } from "$app/components/ProductEdit/ProductPreview";
+import { CartRecoveryCard } from "$app/components/ProductEdit/ShareTab/CartRecoveryCard";
 import { LandingPageEditor } from "$app/components/ProductEdit/ShareTab/LandingPageEditor";
 import { ProfileSectionsEditor } from "$app/components/ProductEdit/ShareTab/ProfileSectionsEditor";
 import { ShareYourLaunchCard } from "$app/components/ProductEdit/ShareTab/ShareYourLaunchCard";
@@ -65,7 +66,10 @@ export const ShareTab = () => {
               </CopyToClipboard>
             </ShareButtons>
             {autoMarketingEnabled && product.is_published ? (
-              <ShareYourLaunchCard productPermalink={uniquePermalink} />
+              <>
+                <ShareYourLaunchCard productPermalink={uniquePermalink} />
+                <CartRecoveryCard productPermalink={uniquePermalink} />
+              </>
             ) : null}
           </section>
           <LandingPageEditor />

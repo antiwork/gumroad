@@ -1003,6 +1003,7 @@ Rails.application.routes.draw do
             post :cancel
           end
         end
+        resource :marketing_abandoned_cart, only: %i[show update], controller: "marketing_abandoned_carts"
       end
     end
 

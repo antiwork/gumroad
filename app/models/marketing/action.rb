@@ -14,7 +14,7 @@ class Marketing::Action < ApplicationRecord
   belongs_to :link
   belongs_to :utm_link, optional: true
 
-  enum :channel, Marketing::Channel::ALL.keys.index_by(&:itself), validate: true
+  enum :channel, Marketing::Channel.action_channels, validate: true
 
   before_validation :set_idempotency_key, on: :create
 
