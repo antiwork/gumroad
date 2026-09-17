@@ -763,10 +763,12 @@ describe Payouts do
     let(:payout_date) { Date.today - 1 }
     let(:user) { create(:user) }
     let!(:merchant_account) { create(:merchant_account, user:) }
+    # Named so the nested `.create_payments` group can opt out: its fixtures hold one currency per
+    # account, and the default USD balance here would be a second group there.
+    let!(:default_balance) { create(:balance, user:, merchant_account:, date: payout_date - 1, amount_cents: 10_00) }
 
     before do
       create(:ach_account, user:)
-      create(:balance, user:, merchant_account:, date: payout_date - 1, amount_cents: 10_00)
     end
 
     it "marks the payment as processing when preparation succeeds" do
@@ -847,6 +849,240 @@ describe Payouts do
       expect(marked.map(&:id)).to eq([second.id])
       expect(first.reload).to be_processing
       expect(second.reload).to be_processing
+    end
+  end
+
+  describe ".create_payments" do
+    let(:payout_date) { Date.today - 1 }
+    let(:user) { create(:user) }
+    let!(:merchant_account) { create(:merchant_account, user:, currency: Currency::HUF) }
+
+    before do
+      create(:ach_account, user:)
+      create(:balance, user:, merchant_account:, date: payout_date - 1, amount_cents: 10_00,
+                       holding_currency: Currency::HUF, holding_amount_cents: 15_209_249)
+    end
+
+    it "leaves a foreign group's bank unknown when preparation fails before setting payout fields" do
+      allow(StripePayoutProcessor).to receive(:pay_out_currencies).and_return([Currency::EUR])
+      allow(StripePayoutProcessor).to receive(:prepare_payment_and_set_amount).and_raise(Stripe::APIConnectionError.new("connection refused"))
+      allow(ErrorNotifier).to receive(:notify)
+      create(:balance, user:, merchant_account:, date: payout_date - 2, amount_cents: 33_12,
+                       holding_currency: Currency::EUR, holding_amount_cents: 4_303)
+
+      pairs = described_class.create_payments(payout_date.to_s, PayoutProcessorType::STRIPE, user)
+
+      foreign_payment = pairs.map(&:first).find { |payment| payment.balances.first.holding_currency == Currency::EUR }
+      expect(foreign_payment.reload).to be_failed
+      expect(foreign_payment.bank_account).to be_nil
+      expect(foreign_payment.currency).to eq(Currency::EUR)
+      expect(foreign_payment.stripe_connect_account_id).to eq(merchant_account.charge_processor_merchant_id)
+    end
+
+    it "creates one payment per currency group so a seller holding two currencies is paid both" do
+      allow(StripePayoutProcessor).to receive(:is_balance_payable).and_return(true)
+      allow(StripePayoutProcessor).to receive(:prepare_payment_and_set_amount) do |payment, balances, _account, payout_currency|
+        payment.currency = payout_currency
+        payment.amount_cents = balances.sum(&:holding_amount_cents)
+        []
+      end
+      eur_balance = create(:balance, user:, merchant_account:, date: payout_date - 2, amount_cents: 33_12,
+                                     holding_currency: Currency::EUR, holding_amount_cents: 4_303)
+
+      pairs = described_class.create_payments(payout_date.to_s, PayoutProcessorType::STRIPE, user)
+
+      expect(pairs.size).to eq(2)
+      expect(pairs.map { |payment, _errors| payment.currency }).to contain_exactly(Currency::HUF, Currency::EUR)
+      expect(pairs.flat_map { |payment, _| payment.balances.map(&:id) }).to contain_exactly(
+        user.balances.find_by(holding_currency: Currency::HUF).id, eur_balance.id
+      )
+      expect(pairs.map { |payment, _errors| payment.state }.uniq).to eq(["processing"])
+    end
+
+    it "keeps the single-payment path for a seller holding one currency" do
+      allow(StripePayoutProcessor).to receive(:is_balance_payable).and_return(true)
+      allow(StripePayoutProcessor).to receive(:prepare_payment_and_set_amount) do |payment, balances, _account, payout_currency|
+        payment.currency = payout_currency
+        payment.amount_cents = balances.sum(&:holding_amount_cents)
+        []
+      end
+
+      pairs = described_class.create_payments(payout_date.to_s, PayoutProcessorType::STRIPE, user)
+
+      expect(pairs.size).to eq(1)
+      payment, errors = pairs.first
+      expect(errors).to eq([])
+      expect(payment.currency).to eq(Currency::HUF)
+      expect(payment.balances.count).to eq(1)
+    end
+
+    it "fails a group whose preparation raises so its claimed balances go back to unpaid" do
+      allow(StripePayoutProcessor).to receive(:is_balance_payable).and_return(true)
+      allow(StripePayoutProcessor).to receive(:prepare_payment_and_set_amount)
+        .and_raise(Stripe::APIConnectionError.new("connection refused"))
+      allow(ErrorNotifier).to receive(:notify)
+
+      pairs = described_class.create_payments(payout_date.to_s, PayoutProcessorType::STRIPE, user)
+
+      expect(pairs.size).to eq(1)
+      payment, errors = pairs.first
+      expect(payment).to be_failed
+      expect(payment.failure_reason).to eq(Payment::FailureReason::PROCESSOR_UNAVAILABLE)
+      expect(errors).to eq(["connection refused"])
+      expect(user.balances.reload.map(&:state).uniq).to eq(["unpaid"])
+    end
+
+    it "returns an empty array when there is nothing payable" do
+      allow(StripePayoutProcessor).to receive(:is_balance_payable).and_return(false)
+
+      expect(described_class.create_payments(payout_date.to_s, PayoutProcessorType::STRIPE, user)).to eq([])
+    end
+
+    it "pays nothing while one currency group carries a debt, so a positive group cannot outrun the seller's net ledger" do
+      allow(StripePayoutProcessor).to receive(:is_balance_payable).and_return(true)
+      expect(StripePayoutProcessor).not_to receive(:prepare_payment_and_set_amount)
+      create(:balance, user:, merchant_account:, date: payout_date - 2, amount_cents: -3_00,
+                       holding_currency: Currency::EUR, holding_amount_cents: -2_60)
+
+      expect do
+        expect(described_class.create_payments(payout_date.to_s, PayoutProcessorType::STRIPE, user)).to eq([])
+      end.not_to change(Payment, :count)
+      expect(user.balances.reload.map(&:state).uniq).to eq(["unpaid"])
+    end
+
+    context "with mixed source accounts in the group ledger" do
+      before do
+        allow(StripePayoutProcessor).to receive(:pay_out_currencies).and_return([Currency::EUR])
+        allow(StripePayoutProcessor).to receive(:prepare_payment_and_set_amount).and_return([])
+      end
+
+      it "blocks a Stripe credit merged with larger Gumroad-held debt even when another currency is positive" do
+        merchant_account.update!(currency: Currency::USD)
+        user.balances.sole.update!(amount_cents: 100_00, holding_currency: Currency::USD, holding_amount_cents: 100_00)
+        create(:balance, user:, date: payout_date - 2, amount_cents: -200_00)
+        create(:balance, user:, merchant_account:, date: payout_date - 3, amount_cents: 300_00,
+                         holding_currency: Currency::EUR, holding_amount_cents: 270_00)
+
+        expect do
+          expect(described_class.create_payments(payout_date.to_s, PayoutProcessorType::STRIPE, user)).to eq([])
+        end.not_to change(Payment, :count)
+
+        expect(StripePayoutProcessor).not_to have_received(:prepare_payment_and_set_amount)
+        expect(user.balances.reload.map(&:state).uniq).to eq(["unpaid"])
+      end
+
+      [Currency::USD, Currency::HUF].each do |home_currency|
+        it "nets Gumroad-held credit against Stripe debt in the #{home_currency} home group using USD ledger amounts" do
+          merchant_account.update!(currency: home_currency)
+          stripe_debt = user.balances.sole
+          stripe_debt.update!(amount_cents: -100_00, holding_currency: home_currency,
+                              holding_amount_cents: home_currency == Currency::USD ? -100_00 : -35_000_00)
+          gumroad_credit = create(:balance, user:, date: payout_date - 2, amount_cents: 200_00)
+          foreign_credit = create(:balance, user:, merchant_account:, date: payout_date - 3, amount_cents: 300_00,
+                                            holding_currency: Currency::EUR, holding_amount_cents: 270_00)
+
+          pairs = described_class.create_payments(payout_date.to_s, PayoutProcessorType::STRIPE, user)
+
+          expect(pairs.map { |payment, _| [payment.currency, payment.balances.ids.sort] }).to contain_exactly(
+            [home_currency, [stripe_debt.id, gumroad_credit.id].sort], [Currency::EUR, [foreign_credit.id]]
+          )
+          expect(pairs.map(&:last)).to eq([[], []])
+          expect(user.balances.reload.map(&:state).uniq).to eq(["processing"])
+        end
+      end
+
+      it "does not offset a group's debt with the same currency on another Stripe account" do
+        other_account = create(:merchant_account, user:, currency: Currency::HUF)
+        create(:balance, user:, merchant_account:, date: payout_date - 2, amount_cents: -100_00,
+                         holding_currency: Currency::EUR, holding_amount_cents: -90_00)
+        create(:balance, user:, merchant_account: other_account, date: payout_date - 3, amount_cents: 200_00,
+                         holding_currency: Currency::EUR, holding_amount_cents: 180_00)
+
+        expect(described_class.create_payments(payout_date.to_s, PayoutProcessorType::STRIPE, user)).to eq([])
+
+        expect(StripePayoutProcessor).not_to have_received(:prepare_payment_and_set_amount)
+        expect(user.payments.count).to eq(0)
+        expect(user.balances.reload.map(&:state).uniq).to eq(["unpaid"])
+      end
+    end
+
+    context "with debt sources excluded from the claim" do
+      before do
+        user.balances.sole.update!(amount_cents: 200_00, holding_currency: Currency::EUR, holding_amount_cents: 180_00)
+        allow(StripePayoutProcessor).to receive(:pay_out_currencies).and_return([Currency::EUR, Currency::GBP])
+        allow(StripePayoutProcessor).to receive(:prepare_payment_and_set_amount).and_return([])
+      end
+
+      [nil, Currency::GBP, Currency::HUF].each do |additional_currency|
+        it "blocks filtered Gumroad debt with EUR#{additional_currency ? " and #{additional_currency}" : ' alone'} claimed" do
+          create(:balance, user:, date: payout_date - 2, amount_cents: -50_00)
+          if additional_currency
+            create(:balance, user:, merchant_account:, date: payout_date - 3, amount_cents: 25_00,
+                             holding_currency: additional_currency, holding_amount_cents: 25_00)
+          end
+
+          expect do
+            expect(described_class.create_payments(payout_date.to_s, PayoutProcessorType::STRIPE, user)).to eq([])
+          end.not_to change(Payment, :count)
+
+          expect(StripePayoutProcessor).not_to have_received(:prepare_payment_and_set_amount)
+          expect(user.balances.reload.map(&:state).uniq).to eq(["unpaid"])
+        end
+      end
+
+      [0, 1].each do |remaining_cents|
+        it "allows EUR when filtered Gumroad sales and refunds net to #{remaining_cents} cents" do
+          eur_credit = user.balances.sole
+          gumroad_credit = create(:balance, user:, date: payout_date - 2, amount_cents: 50_00)
+          gumroad_refund = create(:balance, user:, date: payout_date - 3, amount_cents: -50_00 + remaining_cents)
+
+          pairs = described_class.create_payments(payout_date.to_s, PayoutProcessorType::STRIPE, user)
+
+          expect(pairs.map { |payment, _| [payment.currency, payment.balances.ids] }).to eq([[Currency::EUR, [eur_credit.id]]])
+          expect(pairs.sole.last).to eq([])
+          expect(eur_credit.reload).to be_processing
+          expect(gumroad_credit.reload).to be_unpaid
+          expect(gumroad_refund.reload).to be_unpaid
+        end
+      end
+    end
+
+    it "pays nothing when the seller nets to zero or less across groups" do
+      allow(StripePayoutProcessor).to receive(:is_balance_payable).and_return(true)
+      expect(StripePayoutProcessor).not_to receive(:prepare_payment_and_set_amount)
+      create(:balance, user:, merchant_account:, date: payout_date - 2, amount_cents: -10_00,
+                       holding_currency: Currency::EUR, holding_amount_cents: -8_70)
+
+      expect(described_class.create_payments(payout_date.to_s, PayoutProcessorType::STRIPE, user)).to eq([])
+      expect(user.balances.reload.map(&:state).uniq).to eq(["unpaid"])
+    end
+
+    it "refuses the single-payment entry point for a seller who needs several, leaving the claim untouched" do
+      allow(StripePayoutProcessor).to receive(:is_balance_payable).and_return(true)
+      expect(StripePayoutProcessor).not_to receive(:prepare_payment_and_set_amount)
+      create(:balance, user:, merchant_account:, date: payout_date - 2, amount_cents: 33_12,
+                       holding_currency: Currency::EUR, holding_amount_cents: 4_303)
+
+      expect do
+        described_class.create_payment(payout_date.to_s, PayoutProcessorType::STRIPE, user)
+      end.to raise_error(Payouts::MultiplePayoutGroupsError).and not_change(Payment, :count)
+      expect(user.balances.reload.map(&:state).uniq).to eq(["unpaid"])
+    end
+
+    it "pays nothing when the debt sits in a currency the account cannot pay out right now" do
+      # A currency with negative Stripe availability is absent from `pay_out_currencies`, so without
+      # admitting the debt row the GBP claim would never be seen and the HUF/EUR credit groups would
+      # be paid out against it.
+      allow(StripePayoutProcessor).to receive(:pay_out_currencies).and_return([Currency::EUR])
+      create(:balance, user:, merchant_account:, date: payout_date - 2, amount_cents: 33_12,
+                       holding_currency: Currency::EUR, holding_amount_cents: 4_303)
+      create(:balance, user:, merchant_account:, date: payout_date - 3, amount_cents: -20_00,
+                       holding_currency: Currency::GBP, holding_amount_cents: -15_00)
+      expect(StripePayoutProcessor).not_to receive(:prepare_payment_and_set_amount)
+
+      expect(described_class.create_payments(payout_date.to_s, PayoutProcessorType::STRIPE, user)).to eq([])
+      expect(user.payments.count).to eq(0)
+      expect(user.balances.reload.map(&:state).uniq).to eq(["unpaid"])
     end
   end
 

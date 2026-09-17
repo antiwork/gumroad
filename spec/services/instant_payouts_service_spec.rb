@@ -188,7 +188,7 @@ describe InstantPayoutsService, :vcr do
         allow(StripePayoutProcessor).to receive(:instantly_payable_amount_cents_on_stripe).and_return(1000_00)
         allow_any_instance_of(User).to receive(:instant_payouts_supported?).and_return(true)
         create(:balance, holding_amount_cents: 1000_00, user: seller, date: Date.yesterday)
-        allow(Payouts).to receive(:create_payment).and_return([payment, []])
+        allow(Payouts).to receive(:create_payments).and_return([[payment, []]])
         allow(StripePayoutProcessor).to receive(:process_payments)
       end
 

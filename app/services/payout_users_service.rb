@@ -1,22 +1,37 @@
 # frozen_string_literal: true
 
 class PayoutUsersService
-  attr_reader :date, :processor_type, :user_ids, :payout_type
+  attr_reader :date, :processor_type, :user_ids, :payout_type, :retrying
 
-  def initialize(date_string:, processor_type:, user_ids:, payout_type: Payouts::PAYOUT_TYPE_STANDARD)
+  def initialize(date_string:, processor_type:, user_ids:, payout_type: Payouts::PAYOUT_TYPE_STANDARD, retrying: false)
     @date = date_string
     @processor_type = processor_type
     @user_ids = Array.wrap(user_ids)
     @payout_type = payout_type
+    @retrying = retrying
   end
 
   def process
     payments, cross_border_payments = create_payments
 
-    PayoutProcessorType.get(processor_type).process_payments(payments) if payments.present?
+    # Every payment is already `processing` and this worker has retries disabled, so one failed
+    # enqueue or dispatch must not skip the rest of the batch.
+    first_error = nil
     cross_border_payments.each do |payment|
       ProcessPaymentWorker.perform_in(StripePayoutProcessor::CROSS_BORDER_PAYOUT_DELAY, payment.id)
+    rescue => e
+      ErrorNotifier.notify(e, payment_id: payment.id)
+      first_error ||= e
     end
+
+    if payments.present?
+      begin
+        PayoutProcessorType.get(processor_type).process_payments(payments)
+      rescue => e
+        first_error ||= e
+      end
+    end
+    raise first_error if first_error
 
     payments + cross_border_payments
   end
@@ -34,18 +49,19 @@ class PayoutUsersService
         payout_period_end_date = instantly_payable_balances.sort_by(&:date).last.date.to_s
       end
 
-      payment, payment_errors = Payouts.create_payment(payout_period_end_date, processor_type, user, payout_type:)
-
-      if payment_errors.blank? && payment.present?
-        # Money transferred to a cross-border-payouts Stripe Connect a/c becomes payable after 24 hours,
-        # so schedule those payouts later instead of processing them immediately.
-        if StripePayoutProcessor.cross_border_payout?(payment)
-          cross_border_payments << payment
+      options = retrying ? { retrying: true } : {}
+      Payouts.create_payments(payout_period_end_date, processor_type, user, payout_type:, **options).each do |payment, payment_errors|
+        if payment_errors.blank? && payment.present?
+          # Money transferred to a cross-border-payouts Stripe Connect a/c becomes payable after 24 hours,
+          # so schedule those payouts later instead of processing them immediately.
+          if StripePayoutProcessor.cross_border_payout?(payment)
+            cross_border_payments << payment
+          else
+            payments << payment
+          end
         else
-          payments << payment
+          Rails.logger.info("Payouts: Create payment errors for user with id: #{user_id} #{payment_errors.inspect}")
         end
-      else
-        Rails.logger.info("Payouts: Create payment errors for user with id: #{user_id} #{payment_errors.inspect}")
       end
     rescue => e
       Rails.logger.error "Error in PayoutUsersService creating payment for user ID #{user_id} => #{e.class.name}: #{e.message}"

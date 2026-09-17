@@ -68,48 +68,72 @@ class ScheduledPayout < ApplicationRecord
     if process_payout
       begin
         payout_processor_type = processor.presence || user.current_payout_processor
-        payment, payment_errors = Payouts.create_payment(
+        payments = Payouts.create_payments(
           Date.yesterday.to_s,
           payout_processor_type,
           user
         )
 
-        if payment.blank?
+        if payments.empty? || payments.all? { |payment, _| payment.blank? }
           # No payable balance — retrying won't conjure one, so flag instead of retrying forever
           # (same trap #6028 fixed for this exit specifically).
           update!(status: "flagged", executed_at: nil)
           return :flagged
         end
 
-        if payment.failed?
-          if Payment::FailureReason::REQUEUEABLE_REASONS.include?(payment.failure_reason)
-            raise "Payout failed: #{payment_errors&.join(", ") || "Payment failed during preparation"}"
-          end
+        # Judge failures only after dispatching healthy siblings.
+        requeueable_error = nil
+        terminal_failure = false
+        payable_payments = []
+        dispatch_error = nil
 
-          # A non-requeueable preparation failure (no merchant account, currency mismatch,
-          # destination-ledger drift) needs a human to act — retrying tomorrow can't fix it.
-          update!(status: "flagged", executed_at: nil)
-          return :flagged
-        end
-
-        if StripePayoutProcessor.cross_border_payout?(payment)
-          # Funds transferred into a cross-border Connect account settle ~24h later. Defer the bank
-          # payout (matching the automated payout path) instead of running it now — otherwise it
-          # fails with balance_insufficient and reverses the transfer, losing the FX spread.
-          ProcessPaymentWorker.perform_in(StripePayoutProcessor::CROSS_BORDER_PAYOUT_DELAY, payment.id)
-        else
-          PayoutProcessorType.get(payout_processor_type).process_payments([payment])
-          payment.reload
+        payments.each do |payment, payment_errors|
+          next if payment.blank?
 
           if payment.failed?
             if Payment::FailureReason::REQUEUEABLE_REASONS.include?(payment.failure_reason)
-              raise "Payout failed: #{payment.errors.full_messages.first || "Payment processing failed"}"
+              requeueable_error ||= payment_errors&.join(", ") || "Payment failed during preparation"
+            else
+              # A non-requeueable preparation failure (no merchant account, currency mismatch,
+              # destination-ledger drift) needs a human to act — retrying tomorrow can't fix it.
+              terminal_failure = true
             end
-
-            # Same terminal-vs-requeueable distinction as the preparation-failure branch above.
-            update!(status: "flagged", executed_at: nil)
-            return :flagged
+          else
+            payable_payments << payment
           end
+        end
+
+        payable_payments.each do |payment|
+          if StripePayoutProcessor.cross_border_payout?(payment)
+            # Funds transferred into a cross-border Connect account settle ~24h later. Defer the bank
+            # payout (matching the automated payout path) instead of running it now — otherwise it
+            # fails with balance_insufficient and reverses the transfer, losing the FX spread.
+            ProcessPaymentWorker.perform_in(StripePayoutProcessor::CROSS_BORDER_PAYOUT_DELAY, payment.id)
+          else
+            PayoutProcessorType.get(payout_processor_type).process_payments([payment])
+            payment.reload
+
+            next unless payment.failed?
+
+            if Payment::FailureReason::REQUEUEABLE_REASONS.include?(payment.failure_reason)
+              requeueable_error ||= payment.errors.full_messages.first || "Payment processing failed"
+            else
+              # Same terminal-vs-requeueable distinction as the preparation failures above.
+              terminal_failure = true
+            end
+          end
+        rescue => error
+          ErrorNotifier.notify(error, payment_id: payment.id)
+          dispatch_error ||= error
+        end
+
+        raise dispatch_error if dispatch_error
+
+        raise "Payout failed: #{requeueable_error}" if requeueable_error.present?
+
+        if terminal_failure
+          update!(status: "flagged", executed_at: nil)
+          return :flagged
         end
       rescue => e
         update!(status: "pending", executed_at: nil)

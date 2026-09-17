@@ -192,6 +192,99 @@ describe RequeueTransientlyFailedPayoutsJob do
       expect(seller.reload.unpaid_balance_cents).to eq(0)
     end
 
+    context "with sibling payout groups" do
+      before do
+        allow(Stripe::Account).to receive(:list_external_accounts).and_return(
+          ["usd", "eur", "gbp"].map { |currency| Stripe::BankAccount.construct_from(currency:) }
+        )
+        StripePayoutProcessor.pay_out_currencies_cache.clear
+        allow(Stripe::Balance).to receive(:retrieve).and_return(
+          Stripe::Balance.construct_from(object: "balance", available: ["usd", "eur", "gbp"].map { |currency| { currency:, amount: 500_00 } }, pending: [])
+        )
+        allow(ErrorNotifier).to receive(:notify)
+      end
+
+      def group_balance(currency)
+        seller.balances.find_by(holding_currency: currency) ||
+          create(:balance, user: seller, merchant_account:, date: payout_period_end_date - 3,
+                           amount_cents: 500_00, holding_currency: currency, holding_amount_cents: 500_00)
+      end
+
+      def fail_group(currency, count, incomplete: false)
+        balance = group_balance(currency)
+        count.times do
+          create_transient_failure(user: seller, balances: [balance], currency: incomplete ? nil : currency,
+                                   stripe_connect_account_id: incomplete ? nil : merchant_account.charge_processor_merchant_id)
+        end
+      end
+
+      it "retries three first-attempt groups without sharing their budgets" do
+        ["usd", "eur", "gbp"].each { |currency| fail_group(currency, 1) }
+
+        expect do
+          described_class.new.perform
+          PayoutUsersWorker.drain
+        end.to change { seller.payments.count }.by(3)
+        expect(seller.payments.processing.pluck(:currency)).to contain_exactly("usd", "eur", "gbp")
+        expect(Stripe::Payout).to have_received(:create).exactly(3).times
+      end
+
+      [false, true].each do |incomplete|
+        it "retries only the fresh group when its sibling is exhausted (incomplete preparation: #{incomplete})" do
+          fail_group("usd", 3, incomplete:)
+          fail_group("eur", 1, incomplete:)
+
+          expect do
+            described_class.new.perform
+            PayoutUsersWorker.drain
+          end.to change { seller.payments.count }.by(1)
+          expect(seller.payments.processing.pluck(:currency)).to eq(["eur"])
+          expect(group_balance("usd").reload).to be_unpaid
+          expect(group_balance("eur").reload).to be_processing
+          expect(Stripe::Payout).to have_received(:create).with(hash_including(currency: "eur"), anything).once
+        end
+      end
+
+      it "keeps the same currency's retry budget separate across Stripe accounts" do
+        3.times do
+          create_transient_failure(user: seller, currency: "usd", stripe_connect_account_id: "acct_retired")
+        end
+        fail_group("usd", 1)
+
+        expect do
+          described_class.new.perform
+          PayoutUsersWorker.drain
+        end.to change { seller.payments.count }.by(1)
+        expect_completed_payout(seller, amount_cents: 500_00)
+      end
+
+      it "recovers an incomplete failure's original Stripe account without retrying its exhausted balances" do
+        retired_account = create(:merchant_account, user: seller, charge_processor_merchant_id: "acct_retired", deleted_at: Time.current)
+        retired_balance = create(:balance, user: seller, merchant_account: retired_account, date: payout_period_end_date - 3, amount_cents: 500_00)
+        3.times do
+          create_transient_failure(user: seller, balances: [retired_balance], currency: nil, stripe_connect_account_id: nil)
+        end
+        fail_group("usd", 1)
+
+        expect do
+          described_class.new.perform
+          PayoutUsersWorker.drain
+        end.to change { seller.payments.count }.by(1)
+        expect_completed_payout(seller, amount_cents: 500_00)
+        expect(retired_balance.reload).to be_unpaid
+      end
+
+      it "rechecks the group's budget when an already queued retry executes" do
+        fail_group("usd", 1)
+        described_class.new.perform
+        fail_group("usd", 2)
+
+        expect { PayoutUsersWorker.drain }.not_to change { seller.payments.count }
+        expect(group_balance("usd").reload).to be_unpaid
+        expect(Stripe::Payout).not_to have_received(:create)
+      end
+    end
+
     context "when the seller's cadence pushes their cycle weeks past this batch" do
       # `around`, not `travel_to` inside the example, so the shared `before` hook (which seeds
       # a balance from `payout_period_end_date`) and this example's own period computation read

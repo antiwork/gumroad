@@ -25,6 +25,11 @@ class StripePayoutProcessor
   # immediately.
   CROSS_BORDER_PAYOUT_DELAY = 25.hours
 
+  # How long a connected account's payable-currency set (see `pay_out_currencies`) is reused before
+  # asking Stripe again. Long enough that one payout run pays one API round-trip per account, short
+  # enough that a balance drained by an earlier payout in the same run isn't still called payable.
+  PAY_OUT_CURRENCIES_CACHE_TTL = 10.minutes
+
   def self.is_user_payable(user, amount_payable_usd_cents, add_comment: false, from_admin: false, payout_type: Payouts::PAYOUT_TYPE_STANDARD)
     payout_date = Time.current.to_fs(:formatted_date_full_month)
 
@@ -104,12 +109,63 @@ class StripePayoutProcessor
   def self.is_balance_payable(balance)
     case balance.merchant_account.holder_of_funds
     when HolderOfFunds::STRIPE
-      balance.holding_currency == balance.merchant_account.currency
+      # A debt has to reach the seller-level check in `Payouts.create_payments` even in a currency
+      # this account cannot pay out right now: `pay_out_currencies` lists only currencies Stripe
+      # reports a POSITIVE balance in, so without this a negative foreign-currency row is filtered
+      # out of the claim and a credit group in another currency is released against an invisible
+      # debt. Measured on the USD ledger (`amount_cents`), which is what that check sums; a negative
+      # holding with a whole USD ledger is the drift guard's business, not this one's.
+      balance.amount_cents.negative? || pay_out_currency?(balance.merchant_account, balance.holding_currency)
     when HolderOfFunds::GUMROAD
       true
     else
       false
     end
+  end
+
+  # Unsupported currencies stay unpaid rather than creating a payout Stripe will reject.
+  def self.pay_out_currency?(merchant_account, currency)
+    currency = currency.to_s
+    return false if currency.blank?
+    return true if currency == merchant_account.currency.to_s
+
+    pay_out_currencies(merchant_account).include?(currency)
+  end
+
+  # Currencies a connected account can pay out right now: it holds a positive Stripe balance in
+  # them AND has a bank account there to receive them. Memoised for PAY_OUT_CURRENCIES_CACHE_TTL so
+  # one payout run asks Stripe once per account, not once per balance.
+  def self.pay_out_currencies(merchant_account)
+    stripe_account_id = merchant_account.charge_processor_merchant_id
+    return [] if stripe_account_id.blank?
+
+    cached = pay_out_currencies_cache[stripe_account_id]
+    return cached[:currencies] if cached.present? && cached[:fetched_at] > PAY_OUT_CURRENCIES_CACHE_TTL.ago
+
+    currencies = begin
+      receivable = Stripe::Account.list_external_accounts(stripe_account_id, { limit: 100 })
+        .map { |external_account| external_account.currency.to_s }
+      held = Stripe::Balance.retrieve({}, { stripe_account: stripe_account_id }).available
+        .filter_map { |balance| balance.currency.to_s if balance.amount.positive? }
+      receivable & held
+    rescue Stripe::StripeError
+      # A currency we cannot prove is payable stays unpaid and rolls into the next run, rather than
+      # producing a payout Stripe will reject and a failure email for the seller.
+      []
+    rescue StandardError => e
+      # Anything else reaching the client (bad credentials, an unmocked HTTP layer in specs, a bug in
+      # the probe itself) must not fail the whole payout run for the seller: same safe direction as
+      # above, but logged loudly because this class of error is not expected.
+      Rails.logger.warn("StripePayoutProcessor: payable-currency probe failed for #{stripe_account_id}: #{e.class}: #{e.message}")
+      []
+    end
+
+    pay_out_currencies_cache[stripe_account_id] = { currencies:, fetched_at: Time.current }
+    currencies
+  end
+
+  def self.pay_out_currencies_cache
+    @pay_out_currencies_cache ||= {}
   end
 
   # Public: Aggregate-level filter run after `is_balance_payable`. Drops Gumroad-held USD balances
@@ -155,6 +211,36 @@ class StripePayoutProcessor
     end
   end
 
+  # Never sum cents held in different currencies or on different Stripe accounts.
+  def self.payout_groups(user, balances)
+    merchant_account, balances_held_by_gumroad, balances_held_by_stripe = get_payout_details(user, balances)
+    groups = {}
+
+    # Every Stripe-held group pays out through the account the user-level lookup picked; a balance
+    # still parked on a replaced account keeps its own group so preparation fails it as a mismatch
+    # instead of paying through an account Gumroad considers closed.
+    balances_held_by_stripe
+      .group_by { |balance| [balance.merchant_account_id, balance.holding_currency.to_s] }
+      .each do |(merchant_account_id, currency), stripe_balances|
+        groups[[merchant_account_id, currency]] = [merchant_account, currency, stripe_balances]
+      end
+
+    if balances_held_by_gumroad.present?
+      # Gumroad-held funds are transferred into the connected account in USD and then paid out in
+      # that account's own currency, so they belong to the group for that account and currency.
+      # With no merchant account to pay into they still get a group, so preparation fails that
+      # Payment and returns the claimed balances to `unpaid` instead of dropping them silently.
+      key = merchant_account.present? ? [merchant_account.id, merchant_account.currency.to_s] : [nil, nil]
+      if groups.key?(key)
+        groups[key][2].concat(balances_held_by_gumroad)
+      else
+        groups[key] = [merchant_account, merchant_account&.currency&.to_s, balances_held_by_gumroad]
+      end
+    end
+
+    groups.values
+  end
+
   def self.instantly_payable_amount_cents_on_stripe(user)
     active_bank_account = user.active_bank_account
     return 0 if active_bank_account.blank?
@@ -176,25 +262,44 @@ class StripePayoutProcessor
   #   * Setting the currency.
   #   * Setting the amount_cents.
   # Returns an array of errors.
-  def self.prepare_payment_and_set_amount(payment, balances)
+  def self.prepare_payment_and_set_amount(payment, balances, merchant_account = nil, payout_currency = nil)
     failed = false
     failure_reason = nil
     transfer_requested = false
-    merchant_account, balances_held_by_gumroad, balances_held_by_stripe = get_payout_details(payment.user, balances)
+    destination_account, balances_held_by_gumroad, balances_held_by_stripe = get_payout_details(payment.user, balances)
+    # Callers that already grouped the balances (see `payout_groups`) pass the group's own account;
+    # everything else keeps the destination the user-level lookup picked.
+    merchant_account ||= destination_account
 
     if merchant_account.nil?
+      payment.bank_account = nil
       payment.mark_failed!
       return ["Cannot process payout: no valid merchant account found for user."]
     end
 
-    # Refuse to sum `holding_amount_cents` across balances whose `holding_currency` differs from the
-    # destination it will be summed into. Without this guard, a stale foreign-currency balance (e.g. a
-    # VND-denominated row carried in from a closed merchant account) gets added to a USD payout as if its
-    # cents were USD cents, silently corrupting the wire amount.
-    mismatched_stripe_balances = balances_held_by_stripe.reject { |b| b.holding_currency == merchant_account.currency }
+    # The payout can only move the balances of one currency: a Stripe payout is created in a single
+    # currency and Stripe's account balance is per currency, so cents of two currencies can never be
+    # summed into one wire amount.
+    stripe_currencies = balances_held_by_stripe.map { |b| b.holding_currency.to_s }.uniq
+    payout_currency = payout_currency.presence ||
+      (stripe_currencies.size == 1 ? stripe_currencies.first : merchant_account.currency.to_s)
+    payout_currency = payout_currency.to_s
+    payment.bank_account = nil if payout_currency != merchant_account.currency.to_s
+
+    # A currency mismatch would turn nominal cents into a different amount of money.
+    mismatched_stripe_balances = balances_held_by_stripe.reject do |b|
+      b.holding_currency.to_s == payout_currency && b.merchant_account_id == merchant_account.id
+    end
+    unpayable_stripe_balances = (balances_held_by_stripe - mismatched_stripe_balances)
+      .reject { |b| pay_out_currency?(b.merchant_account, b.holding_currency) }
     mismatched_gumroad_balances = balances_held_by_gumroad.reject { |b| b.holding_currency == Currency::USD }
-    if mismatched_stripe_balances.any? || mismatched_gumroad_balances.any?
-      mismatched_ids = (mismatched_stripe_balances + mismatched_gumroad_balances).map(&:id)
+    if balances_held_by_gumroad.any? && payout_currency != merchant_account.currency.to_s
+      # Gumroad-held funds reach the seller as a USD transfer into the connected account and are then
+      # paid out in that account's currency, so they cannot ride a payout made in another currency.
+      mismatched_gumroad_balances += balances_held_by_gumroad
+    end
+    if mismatched_stripe_balances.any? || unpayable_stripe_balances.any? || mismatched_gumroad_balances.any?
+      mismatched_ids = (mismatched_stripe_balances + unpayable_stripe_balances + mismatched_gumroad_balances).map(&:id)
       message = "Cannot process payout: balances #{mismatched_ids} have holding_currency that does not match the payout currency."
       payment.error_message = message.truncate(1000)
       payment.mark_failed!(Payment::FailureReason::CURRENCY_MISMATCH)
@@ -202,10 +307,10 @@ class StripePayoutProcessor
     end
 
     payment.stripe_connect_account_id = merchant_account.charge_processor_merchant_id
-    payment.currency = merchant_account.currency
+    payment.currency = payout_currency
     payment.amount_cents = 0
 
-    drift_error, drift_failure_reason = destination_balance_drift_error(merchant_account, balances_held_by_stripe)
+    drift_error, drift_failure_reason = destination_balance_drift_error(merchant_account, balances_held_by_stripe, payout_currency:)
     if drift_error
       payment.error_message = drift_error.truncate(1000)
       payment.mark_failed!(drift_failure_reason)
@@ -308,6 +413,15 @@ class StripePayoutProcessor
     failure_reason = Payment::FailureReason::PROCESSOR_UNAVAILABLE
     payment.error_message = "#{e.class.name}: #{e.message}".truncate(1000)
     raise
+  rescue StandardError => e
+    failed = true
+    failure_reason = if transfer_requested && payment.stripe_internal_transfer_id.nil?
+      Payment::FailureReason::PAYOUT_OUTCOME_UNKNOWN
+    else
+      Payment::FailureReason::PROCESSOR_UNAVAILABLE
+    end
+    payment.error_message = "#{e.class.name}: #{e.message}".truncate(1000)
+    raise
   ensure
     if failed
       payment.mark_failed!(failure_reason)
@@ -321,10 +435,13 @@ class StripePayoutProcessor
   # that otherwise compounds the gap each cycle. Pending is included so settling funds (the typical
   # 2-7 day post-charge window) are not flagged as drift — only truly missing funds are.
   # Returns `[message, failure_reason]`, or nil when the destination is coherent.
-  def self.destination_balance_drift_error(merchant_account, balances_held_by_stripe)
+  def self.destination_balance_drift_error(merchant_account, balances_held_by_stripe, payout_currency: nil)
     return nil unless merchant_account.is_a_gumroad_managed_stripe_account?
     return nil if balances_held_by_stripe.empty?
 
+    # The group's balances are all held in one currency (see `prepare_payment_and_set_amount`), which
+    # is the balance this payout drains — not necessarily the account's own currency.
+    destination_currency = (payout_currency.presence || merchant_account.currency).to_s
     expected_destination_cents = balances_held_by_stripe.sum(&:holding_amount_cents)
 
     # A negative destination total is drift only when the USD ledger DISAGREES with it: FX residue
@@ -337,7 +454,7 @@ class StripePayoutProcessor
     if expected_destination_cents.negative? && !usd_ledger_cents.negative?
       message = "Destination ledger is negative on #{merchant_account.charge_processor_merchant_id}: " \
                 "balances held at Stripe sum to #{expected_destination_cents} " \
-                "#{merchant_account.currency} cents while their USD ledger reads #{usd_ledger_cents} " \
+                "#{destination_currency} cents while their USD ledger reads #{usd_ledger_cents} " \
                 "cents, across #{balances_held_by_stripe.size} " \
                 "balance#{"s" if balances_held_by_stripe.size != 1} " \
                 "(#{negative_balance_ids(balances_held_by_stripe).join(", ")}). Paying out would subtract " \
@@ -352,10 +469,9 @@ class StripePayoutProcessor
     # KRW: Gumroad stores 100 subunits while Stripe reports single-unit, so the raw cents comparison
     # is off by 100x and would always flag drift for healthy accounts. Skipping is safer than
     # encoding the divergence here; revisit if KRW sellers report stuck payouts.
-    return nil if merchant_account.currency.to_s == Currency::KRW
+    return nil if destination_currency == Currency::KRW
 
     stripe_balance = Stripe::Balance.retrieve({}, { stripe_account: merchant_account.charge_processor_merchant_id })
-    destination_currency = merchant_account.currency.to_s
     available_cents = stripe_balance.available&.find { |b| b.currency == destination_currency }&.amount || 0
     # Clamp at zero: Connect balances can report negative `pending` when reversals/refunds/disputes
     # exceed inbound settling funds. Subtracting that from `available_cents` would block payouts that
@@ -416,16 +532,23 @@ class StripePayoutProcessor
   end
   private_class_method :retired_account_balances_hint
 
-  def self.enqueue_payments(user_ids, date_string, payout_type: Payouts::PAYOUT_TYPE_STANDARD)
+  def self.enqueue_payments(user_ids, date_string, payout_type: Payouts::PAYOUT_TYPE_STANDARD, retrying: false)
     user_ids.each do |user_id|
-      PayoutUsersWorker.perform_async(date_string, PayoutProcessorType::STRIPE, user_id, payout_type)
+      args = [date_string, PayoutProcessorType::STRIPE, user_id, payout_type]
+      args << true if retrying
+      PayoutUsersWorker.perform_async(*args)
     end
   end
 
   def self.process_payments(payments)
+    first_error = nil
     payments.each do |payment|
       perform_payment(payment)
+    rescue => error
+      ErrorNotifier.notify(error, payment_id: payment.id)
+      first_error ||= error
     end
+    raise first_error if first_error
   end
 
   # Public: A payout to a Gumroad-managed Stripe account in a country that only supports cross-border
@@ -469,26 +592,41 @@ class StripePayoutProcessor
     end
 
     # Transfer the payout amount from the creators Stripe account to their bank account.
+    # ACH records can report USD even for non-USD accounts; compare the merchant currency.
+    foreign_currency = payment.currency.to_s != merchant_account.currency.to_s
+    payment.bank_account = nil if foreign_currency
+    bank_account = payment.bank_account
     params = {
       amount: amount_cents,
       currency: payment.currency,
-      destination: payment.bank_account.stripe_external_account_id,
       statement_descriptor: "Gumroad",
       description: payment.external_id,
       metadata: {
         payment: payment.external_id,
-        bank_account: payment.bank_account.external_id
-      }.merge(StripeMetadata.build_metadata_large_list(payment.balances.map(&:external_id),
-                                                       key: :balances,
-                                                       separator: ",",
-                                                       # 2 keys (`payment` and `bank_account`) already added above so allow max - 2 more keys
-                                                       max_key_length: StripeMetadata::STRIPE_METADATA_MAX_KEYS_LENGTH - 2))
+        bank_account: bank_account&.external_id
+      }.compact.merge(StripeMetadata.build_metadata_large_list(payment.balances.map(&:external_id),
+                                                               key: :balances,
+                                                               separator: ",",
+                                                               # Reserve keys for payment and the optional bank account.
+                                                               max_key_length: StripeMetadata::STRIPE_METADATA_MAX_KEYS_LENGTH - 2))
     }
+    if bank_account.present?
+      params[:destination] = bank_account.stripe_external_account_id
+    end
     params.merge!(method: payment.payout_type) if payment.payout_type.present?
     # Past this point a bank payout may exist at Stripe even if we never see the response, so a
     # connection loss here is NOT the same as one raised while building the request above.
     payout_requested = true
     stripe_payout = Stripe::Payout.create(params, { stripe_account: payment.stripe_connect_account_id })
+    if foreign_currency
+      destination = stripe_payout[:destination]
+      payment.stripe_payout_destination_id = destination.is_a?(String) ? destination : destination&.id
+      # Stripe chooses the foreign currency's bank. Never substitute the seller's active bank.
+      payment.bank_account = if payment.stripe_payout_destination_id.present?
+        payment.user.bank_accounts.find_by(stripe_connect_account_id: payment.stripe_connect_account_id,
+                                           stripe_bank_account_id: payment.stripe_payout_destination_id)
+      end
+    end
     payment.stripe_transfer_id = stripe_payout.id
     payment.arrival_date = stripe_payout.arrival_date
     payment.gumroad_fee_cents = stripe_payout.application_fee_amount if payment.payout_type == Payouts::PAYOUT_TYPE_INSTANT
@@ -687,9 +825,13 @@ class StripePayoutProcessor
     stripe_payout = Stripe::Payout.retrieve(stripe_payout_id, { stripe_account: stripe_connect_account_id })
 
     merchant_account = MerchantAccount.find_by(charge_processor_merchant_id: stripe_connect_account_id)
-    return if merchant_account.blank? || merchant_account.is_a_stripe_connect_account? || merchant_account.currency != stripe_payout["currency"]
+    return if merchant_account.blank? || merchant_account.is_a_stripe_connect_account?
 
     if stripe_payout["automatic"]
+      # Automatic payouts are Stripe's own on-schedule transfers, which we only reconcile when they
+      # move the account's own currency (Gumroad-created payouts always carry a Payment below).
+      return if merchant_account.currency != stripe_payout["currency"]
+
       if stripe_payout["amount"] >= 0
         # Ignore events about automatic on-schedule payouts (not triggered by Gumroad). Ref: https://github.com/gumroad/web/issues/16938
         Rails.logger.info("Ignoring automatic payout event #{stripe_event_id} for stripe account #{stripe_connect_account_id}")
@@ -712,7 +854,11 @@ class StripePayoutProcessor
                 .processed_by(PayoutProcessorType::STRIPE)
                 .find_by(stripe_connect_account_id:, stripe_transfer_id: stripe_payout_id)
       raise "Stripe Event #{stripe_event_id}: payout does not match any payment." if payment.nil?
-      raise "Stripe Event #{stripe_event_id}: payout mismatches on payment ID." if payment.external_id != stripe_payout["metadata"]["payment"]
+      # A Gumroad-created payout carries the currency of the Payment it was created for, which is not
+      # necessarily the connected account's own currency (see gumroad-private#2693).
+      raise "Stripe Event #{stripe_event_id}: payout currency does not match payment #{payment.id}." if payment.currency.to_s != stripe_payout["currency"].to_s
+      payment_metadata_id = stripe_payout["metadata"]["payment"]
+      raise "Stripe Event #{stripe_event_id}: payout mismatches on payment ID." if payment_metadata_id.present? && payment.external_id != payment_metadata_id
 
       if is_payout_reversal
         reversing_payout_id = event_object["id"]

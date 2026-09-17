@@ -27,19 +27,23 @@ class InstantPayoutsService
       batches.last << balance
     end.then do |batches|
       results = batches.map do |batch|
-        payment, payment_errors = Payouts.create_payment(
+        payments = Payouts.create_payments(
           batch.last.date,
           PayoutProcessorType::STRIPE,
           seller,
           payout_type: Payouts::PAYOUT_TYPE_INSTANT
         )
 
-        if payment.present? && payment_errors.blank?
+        outcomes = payments.map do |payment, payment_errors|
+          next false unless payment.present? && payment_errors.blank?
+
           StripePayoutProcessor.process_payments([payment])
-          { success: !payment.failed? }
-        else
-          { success: false }
+          !payment.failed?
+        rescue => error
+          ErrorNotifier.notify(error, payment_id: payment.id)
+          false
         end
+        { success: outcomes.present? && outcomes.all? }
       end
 
       if results.all? { |result| result[:success] }

@@ -388,13 +388,15 @@ class Payouts
     date_string = date.to_s
     if perform_async
       payout_processor = ::PayoutProcessorType.get(processor_type)
-      payout_processor.enqueue_payments(user_ids_to_pay, date_string)
+      options = processor_type == PayoutProcessorType::STRIPE && retrying ? { retrying: true } : {}
+      payout_processor.enqueue_payments(user_ids_to_pay, date_string, **options)
     else
       payments = []
       user_ids_to_pay.each do |user_id|
         payments << PayoutUsersService.new(date_string:,
                                            processor_type:,
-                                           user_ids: user_id).process
+                                           user_ids: user_id,
+                                           retrying:).process
       end
       payments.compact
     end
@@ -435,55 +437,109 @@ class Payouts
     end
   end
 
+  # Raised, with nothing claimed, when a single-payment caller meets a seller who needs several.
+  class MultiplePayoutGroupsError < StandardError; end
+
   def self.create_payment(date, processor_type, user, payout_type: Payouts::PAYOUT_TYPE_STANDARD)
+    create_payments(date, processor_type, user, payout_type:, single_group: true).first
+  end
+
+  # Claim and persist every group before preparation can move money at Stripe.
+  def self.create_payments(date, processor_type, user, payout_type: Payouts::PAYOUT_TYPE_STANDARD, single_group: false, retrying: false)
     payout_processor = ::PayoutProcessorType.get(processor_type)
-    # claimed_at stamps unrestricted claims so a hold landing after the claim, before save!, is
-    # not dated after hold_started_at (7f3d021b). The claim decides under with_lock (reload) so a
-    # cross-process hold before selection cannot pay 100%. Claims that ran under the hold are
-    # dated now so the 75% counts in the reserve base.
+    # Unrestricted claims are dated before the claim so a hold landing mid-run cannot post-date
+    # hold_started_at; claims made under the hold are dated now so they count in the reserve base.
     claimed_at = Time.current
-    balances, under_reserve = mark_balances_processing(date, processor_type, user, payout_type:)
-    balance_cents = balances.sum(&:amount_cents)
+    groups = ActiveRecord::Base.transaction(requires_new: true) do
+      balances, under_reserve = mark_balances_processing(date, processor_type, user, payout_type:)
+      next [] if balances.empty?
 
-    if balance_cents <= 0
-      Rails.logger.info("Payouts: Negative balance for #{user.id}")
-      balances.each(&:mark_unpaid!)
-      return nil
-    end
-
-    payment = Payment.new(
-      user:,
-      balances:,
-      processor: processor_type,
-      processor_fee_cents: 0,
-      payout_period_end_date: date,
-      payout_type:,
-      created_at: under_reserve ? Time.current : claimed_at,
-      # TODO: Refactor PayPal to be a type of bank account rather than being a field on user.
-      payment_address: (user.paypal_payout_email if processor_type == ::PayoutProcessorType::PAYPAL),
-      bank_account: (user.active_bank_account if processor_type != ::PayoutProcessorType::PAYPAL)
-    )
-    begin
-      payment.save!
-    rescue => save_error
-      # A claimed row with no Payment would inflate the reserve base forever while never
-      # crediting the payout minimum. Return them to unpaid atomically — a loop interrupted
-      # partway would strand the tail as exactly the orphans this unwind exists to prevent.
-      begin
-        ActiveRecord::Base.transaction { balances.each(&:mark_unpaid!) }
-      rescue => unwind_error
-        ErrorNotifier.notify(unwind_error, user_id: user.id, balance_ids: balances.map(&:id))
+      payout_groups = if payout_processor.respond_to?(:payout_groups)
+        payout_processor.payout_groups(user, balances)
+      else
+        [[nil, nil, balances]]
       end
-      raise save_error
+
+      # Eligibility can exclude entire debt sources or one side of a sale/refund pair.
+      # Judge the complete ledger using the same account/currency grouping as the payout.
+      ledger = balances + user.unpaid_balances_up_to_date(date).to_a
+      ledger_groups = if payout_processor.respond_to?(:payout_groups)
+        payout_processor.payout_groups(user, ledger)
+      else
+        [[nil, nil, ledger]]
+      end
+      if ledger.sum(&:amount_cents) <= 0 ||
+          ledger_groups.any? { |_, _, group_balances| group_balances.sum(&:amount_cents).negative? }
+        Rails.logger.info("Payouts: Negative balance for #{user.id}")
+        balances.each(&:mark_unpaid!)
+        next []
+      end
+
+      # A group the claim left non-positive has nothing to send; releasing it keeps a zero- (or
+      # negative-) amount payout off the processor.
+      payout_groups = payout_groups.reject do |_, _, group_balances|
+        next false if group_balances.sum(&:amount_cents).positive?
+
+        group_balances.each(&:mark_unpaid!)
+        true
+      end
+      next [] if payout_groups.empty?
+
+      if retrying && processor_type == PayoutProcessorType::STRIPE
+        counts = RequeueTransientlyFailedPayoutsJob.failure_counts(date, user_id: user.id)
+        payout_groups = payout_groups.select do |merchant_account, payout_currency, group_balances|
+          account_id = RequeueTransientlyFailedPayoutsJob.group_account_id(merchant_account, group_balances)
+          eligible = RequeueTransientlyFailedPayoutsJob.retryable_group?(counts, user.id, account_id, payout_currency)
+          group_balances.each(&:mark_unpaid!) unless eligible
+          eligible
+        end
+      end
+
+      # Raising here rolls the claim back, so the caller never sees a subset of prepared Payments.
+      raise MultiplePayoutGroupsError, "user #{user.id} needs #{payout_groups.size} payouts" if single_group && payout_groups.size > 1
+
+      payout_groups.map do |merchant_account, payout_currency, group_balances|
+        bank_account = user.active_bank_account unless processor_type == PayoutProcessorType::PAYPAL
+        if processor_type == PayoutProcessorType::STRIPE && (merchant_account.nil? || payout_currency != merchant_account.currency.to_s)
+          bank_account = nil
+        end
+        payment = Payment.create!(
+          user:,
+          balances: group_balances,
+          processor: processor_type,
+          processor_fee_cents: 0,
+          payout_period_end_date: date,
+          payout_type:,
+          created_at: under_reserve ? Time.current : claimed_at,
+          payment_address: (user.paypal_payout_email if processor_type == ::PayoutProcessorType::PAYPAL),
+          currency: payout_currency || Currency::USD,
+          stripe_connect_account_id: merchant_account&.charge_processor_merchant_id,
+          bank_account:
+        )
+        [payment, merchant_account, payout_currency, group_balances]
+      end
     end
-    payment_errors = payout_processor.prepare_payment_and_set_amount(payment, balances)
-    # The payout processor can mark the payment as failed while preparing it (for example when
-    # no valid merchant account exists, or a balance's holding currency does not match the payout
-    # destination). A failed payment cannot transition to processing, so only mark it processing
-    # when preparation left it in a payable state — otherwise return the failed payment along
-    # with the preparation errors and let the caller handle it.
-    payment.mark_processing! unless payment.failed?
-    [payment, payment_errors]
+
+    groups.map do |payment, merchant_account, payout_currency, group_balances|
+      payment_errors = if payout_processor.respond_to?(:payout_groups)
+        payout_processor.prepare_payment_and_set_amount(payment, group_balances, merchant_account, payout_currency)
+      else
+        payout_processor.prepare_payment_and_set_amount(payment, group_balances)
+      end
+      payment.mark_processing! unless payment.failed?
+      [payment, payment_errors]
+    rescue => error
+      # The processor owns transfer reversal and unknown-outcome holds; do not overwrite its reason.
+      unless payment.failed?
+        payment.error_message = "#{error.class}: #{error.message}".truncate(1000)
+        payment.mark_failed!(Payment::FailureReason::PROCESSOR_UNAVAILABLE)
+        if processor_type == PayoutProcessorType::STRIPE
+          StripePayoutProcessor.reverse_internal_transfer_or_hold_payouts!(payment, payment.failure_reason)
+        end
+      end
+      ErrorNotifier.notify(error, payment_id: payment.id)
+      [payment, [error.message]]
+    end
   end
 
   def self.under_chargeback_rate_reserve?(user, payout_type:)
