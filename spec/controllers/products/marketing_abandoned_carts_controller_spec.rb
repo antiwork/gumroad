@@ -40,10 +40,10 @@ describe Products::MarketingAbandonedCartsController do
       expect(response.parsed_body).to include(
         "available" => true,
         "enabled" => false,
-        "account_wide" => false,
+        "can_toggle" => true,
         "subject" => "You left something in your cart",
         "delay_hours" => 24,
-        "workflow_url" => nil,
+        "workflows" => [],
       )
     end
 
@@ -84,11 +84,11 @@ describe Products::MarketingAbandonedCartsController do
       end.to change { workflows.published.count }.from(0).to(1)
 
       expect(response).to have_http_status(:ok)
-      expect(response.parsed_body).to include("enabled" => true, "account_wide" => false)
+      expect(response.parsed_body).to include("enabled" => true, "can_toggle" => true)
 
       workflow = workflows.sole
       expect(workflow.bought_products).to eq([product.unique_permalink])
-      expect(response.parsed_body["workflow_url"]).to eq(workflow_emails_path(workflow.external_id))
+      expect(response.parsed_body["workflows"].sole["url"]).to eq(workflow_emails_path(workflow.external_id))
 
       action = Marketing::Action.where(user: seller, link: product, channel: "abandoned_cart").sole
       expect(action).to be_approved
@@ -127,6 +127,17 @@ describe Products::MarketingAbandonedCartsController do
       end.not_to change { workflows.count }
     end
 
+    it "refuses to pause a shared workflow through a direct request" do
+      DefaultAbandonedCartWorkflowGeneratorService.new(seller:).generate
+      workflow = workflows.published.sole
+
+      put :update, params: { product_id: product.unique_permalink, enabled: false }, as: :json
+
+      expect(response).to have_http_status(:unprocessable_entity)
+      expect(response.parsed_body["error"]).to eq("Manage shared or overlapping reminders in Workflows.")
+      expect(workflow.reload.published_at).to be_present
+    end
+
     it "lets a seller below the email gate turn cart recovery on" do
       put :update, params: { product_id: product.unique_permalink, enabled: true }, as: :json
 
@@ -145,7 +156,7 @@ describe Products::MarketingAbandonedCartsController do
       end.not_to change { workflows.count }
 
       expect(response).to have_http_status(:unprocessable_entity)
-      expect(response.parsed_body["error"]).to eq("Turns on after your first payout.")
+      expect(response.parsed_body["error"]).to eq("Available after your first payout.")
     end
 
     it "reports the reason on the card" do

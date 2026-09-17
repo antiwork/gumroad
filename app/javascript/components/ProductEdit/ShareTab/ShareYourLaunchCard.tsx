@@ -20,97 +20,135 @@ import { Card, CardContent } from "$app/components/ui/Card";
 import { Pill } from "$app/components/ui/Pill";
 import { Textarea } from "$app/components/ui/Textarea";
 
-const CHANNEL_ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
-  x: TwitterX,
-  instagram: Instagram,
-  youtube: Youtube,
-  tiktok: Tiktok,
+export const ShareYourLaunchCard = ({ productPermalink }: { productPermalink: string }) => (
+  <LaunchComposer key={productPermalink} productPermalink={productPermalink} />
+);
+
+const NetworkIcon = ({ channel }: { channel: string }) => {
+  const Icon = { x: TwitterX, instagram: Instagram, youtube: Youtube, tiktok: Tiktok }[channel];
+  return Icon ? <Icon className="size-5 shrink-0" aria-hidden="true" /> : null;
 };
 
-export const ShareYourLaunchCard = ({ productPermalink }: { productPermalink: string }) => {
+const LaunchComposer = ({ productPermalink }: { productPermalink: string }) => {
   const [channels, setChannels] = React.useState<MarketingChannel[] | null>(null);
+  const [selectedChannel, setSelectedChannel] = React.useState<string | null>(null);
+  const [drafts, setDrafts] = React.useState<Record<string, string>>({});
+  const [busy, setBusy] = React.useState(false);
+  const destinationId = React.useId();
 
   React.useEffect(() => {
+    let current = true;
     void fetchMarketingRecommendations(productPermalink)
-      .then(setChannels)
+      .then((result) => {
+        if (current) setChannels(result);
+      })
       .catch((e: unknown) => {
         assertResponseError(e);
-        setChannels([]);
+        if (current) setChannels([]);
       });
+    return () => {
+      current = false;
+    };
   }, [productPermalink]);
 
-  if (channels === null || channels.length === 0) return null;
+  const liveChannels = channels?.filter((channel) => channel.live && channel.action) ?? [];
+  const channel = liveChannels.find((item) => item.channel === selectedChannel) ?? liveChannels[0];
+  const action = channel?.action;
+  if (!channel || !action) return null;
 
   return (
     <section className="grid gap-4">
       <header>
         <h2>Share your launch</h2>
-        <p className="text-muted">Tell people about it. Nothing is posted until you confirm.</p>
+        <p className="text-muted">Review your post before sharing it.</p>
       </header>
       <Card>
-        {channels.map((channel) =>
-          channel.live && channel.action ? (
-            <XChannelRow
-              key={channel.channel}
-              channel={channel}
-              action={channel.action}
-              productPermalink={productPermalink}
-              onChange={(action) =>
-                setChannels((prev) => prev?.map((c) => (c.channel === channel.channel ? { ...c, action } : c)) ?? null)
-              }
-            />
-          ) : (
-            <ComingSoonRow key={channel.channel} channel={channel} />
-          ),
-        )}
+        {liveChannels.length > 1 ? (
+          <CardContent details>
+            <fieldset>
+              <legend className="mb-2">Post to</legend>
+              <div className="flex flex-wrap gap-2">
+                {liveChannels.map((item) => (
+                  <label key={item.channel} className="cursor-pointer">
+                    <input
+                      type="radio"
+                      name={destinationId}
+                      value={item.channel}
+                      checked={channel.channel === item.channel}
+                      onChange={() => setSelectedChannel(item.channel)}
+                      disabled={busy}
+                      className="peer sr-only"
+                    />
+                    <span className="flex min-h-11 items-center gap-2 rounded border border-border px-3 peer-checked:bg-foreground peer-checked:text-background peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-accent peer-disabled:cursor-not-allowed">
+                      <NetworkIcon channel={item.channel} />
+                      {item.label}
+                    </span>
+                  </label>
+                ))}
+              </div>
+            </fieldset>
+          </CardContent>
+        ) : null}
+        <ChannelComposer
+          key={action.id}
+          channel={channel}
+          action={action}
+          copy={drafts[action.id] ?? action.copy}
+          onCopyChange={(copy) => setDrafts((previous) => ({ ...previous, [action.id]: copy }))}
+          showNetworkName={liveChannels.length === 1}
+          productPermalink={productPermalink}
+          busy={busy}
+          onBusyChange={setBusy}
+          onChange={(updatedAction) =>
+            setChannels(
+              (previous) =>
+                previous?.map((item) =>
+                  item.channel === channel.channel ? { ...item, action: updatedAction } : item,
+                ) ?? null,
+            )
+          }
+        />
       </Card>
     </section>
   );
 };
 
-const ChannelIcon = ({ channel, className }: { channel: string; className: string }) => {
-  const Icon = CHANNEL_ICONS[channel];
-  return Icon ? <Icon className={className} /> : null;
-};
-
-const ComingSoonRow = ({ channel }: { channel: MarketingChannel }) => (
-  <CardContent aria-disabled="true" className="text-muted">
-    <div className="flex items-center gap-3">
-      <ChannelIcon channel={channel.channel} className="size-6" />
-      <span className="font-semibold">{channel.label}</span>
-      <Pill size="small">Coming soon</Pill>
-    </div>
-    <Button disabled>Post on {channel.label}</Button>
-  </CardContent>
-);
-
-const XChannelRow = ({
+const ChannelComposer = ({
   channel,
   action,
   productPermalink,
   onChange,
+  copy,
+  onCopyChange,
+  showNetworkName,
+  busy,
+  onBusyChange,
 }: {
   channel: MarketingChannel;
   action: MarketingAction;
   productPermalink: string;
   onChange: (action: MarketingAction) => void;
+  copy: string;
+  onCopyChange: (copy: string) => void;
+  showNetworkName: boolean;
+  busy: boolean;
+  onBusyChange: (busy: boolean) => void;
 }) => {
-  const [copy, setCopy] = React.useState(action.copy);
   const [confirming, setConfirming] = React.useState(false);
-  const [busy, setBusy] = React.useState(false);
   const [intentUrl, setIntentUrl] = React.useState<string | undefined>(channel.intent_url);
   const edited = copy !== action.copy;
   const terminal = action.status === "posted" || action.status === "failed" || action.status === "cancelled";
 
   const run = async (fn: () => Promise<void>) => {
-    setBusy(true);
+    onBusyChange(true);
     try {
       await fn();
     } catch (e) {
       assertResponseError(e);
       showAlert(e.message, "error");
+    } finally {
+      onBusyChange(false);
     }
-    setBusy(false);
   };
 
   const confirmAndPost = () =>
@@ -121,27 +159,33 @@ const XChannelRow = ({
       setIntentUrl(result.intent_url);
       onChange(result.action);
       setConfirming(false);
-      if (result.action.status === "posted") showAlert("Posted on X!", "success");
+      if (result.action.status === "posted") showAlert(`Posted on ${channel.label}!`, "success");
     });
 
   return (
     <CardContent details className="grid gap-4">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="flex items-center gap-3">
-          <ChannelIcon channel="x" className="size-6" />
-          <span className="font-semibold">{channel.label}</span>
-          {channel.connected && channel.handle ? (
-            <span className="text-muted">posting as @{channel.handle}</span>
+      {showNetworkName || (channel.connected && channel.handle) || terminal ? (
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex items-center gap-3">
+            {showNetworkName ? (
+              <>
+                <NetworkIcon channel={channel.channel} />
+                <span className="font-semibold">{channel.label}</span>
+              </>
+            ) : null}
+            {channel.connected && channel.handle ? (
+              <span className="text-muted">Posting as @{channel.handle}</span>
+            ) : null}
+          </div>
+          {action.status === "posted" ? (
+            <Pill color="success" size="small">
+              Posted
+            </Pill>
+          ) : action.status === "cancelled" ? (
+            <Pill size="small">Cancelled</Pill>
           ) : null}
         </div>
-        {action.status === "posted" ? (
-          <Pill color="success" size="small">
-            Posted
-          </Pill>
-        ) : action.status === "cancelled" ? (
-          <Pill size="small">Cancelled</Pill>
-        ) : null}
-      </div>
+      ) : null}
 
       {action.status === "posted" ? (
         <Alert role="status" variant="success">
@@ -149,7 +193,7 @@ const XChannelRow = ({
             <span>Your launch post is live.</span>
             {action.external_url ? (
               <a href={action.external_url} target="_blank" rel="noreferrer">
-                View post on X
+                View post on {channel.label}
               </a>
             ) : null}
           </div>
@@ -180,7 +224,7 @@ const XChannelRow = ({
         <Alert role="status" variant="danger">
           <div className="flex flex-col justify-between gap-2 sm:flex-row">
             <span>The post didn't go through ({action.error_code}). You can still post it yourself.</span>
-            <TwitterShareButton url={action.link_url ?? ""} text={action.copy} />
+            {channel.channel === "x" ? <TwitterShareButton url={action.link_url ?? ""} text={action.copy} /> : null}
           </div>
         </Alert>
       ) : null}
@@ -192,20 +236,19 @@ const XChannelRow = ({
             <Textarea
               id={`marketing-copy-${action.id}`}
               value={copy}
-              onChange={(e) => setCopy(e.target.value)}
+              onChange={(e) => onCopyChange(e.target.value)}
               maxLength={255}
               rows={3}
             />
             <small className="text-muted">
-              Your tagged link{action.link_url ? ` (${action.link_url})` : ""} is added below the text so you can see
-              which sales came from this post.
+              Your product link is added automatically. Sales from this post appear in your analytics.
             </small>
           </fieldset>
 
           {channel.connected ? (
             <div className="flex flex-wrap gap-2">
               <Button color="primary" disabled={busy || copy.trim() === ""} onClick={() => setConfirming(true)}>
-                Post on X
+                Post on {channel.label}
               </Button>
               <Button
                 disabled={busy}
@@ -219,17 +262,16 @@ const XChannelRow = ({
               </Button>
             </div>
           ) : (
-            <Alert role="status">
-              <div className="flex flex-col justify-between gap-2 sm:flex-row">
-                <span>Connect your X account to let Gumroad post this for you.</span>
-                <div className="flex flex-wrap gap-2">
-                  <NavigationButton color="primary" href={channel.connect_path}>
-                    Connect X
-                  </NavigationButton>
-                  {intentUrl ? <TwitterShareButton url={action.link_url ?? ""} text={copy} /> : null}
-                </div>
-              </div>
-            </Alert>
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+              {channel.channel === "x" && intentUrl ? (
+                <TwitterShareButton url={action.link_url ?? ""} text={copy}>
+                  Continue on X
+                </TwitterShareButton>
+              ) : null}
+              <a href={channel.connect_path} className="flex min-h-11 items-center">
+                Connect {channel.label} for direct posting
+              </a>
+            </div>
           )}
         </>
       ) : null}
@@ -237,8 +279,11 @@ const XChannelRow = ({
       {confirming ? (
         <Modal
           open
-          onClose={() => setConfirming(false)}
-          title="Post on X?"
+          onClose={() => {
+            if (!busy) setConfirming(false);
+          }}
+          allowClose={!busy}
+          title={`Post on ${channel.label}?`}
           footer={
             <>
               <Button disabled={busy} onClick={() => setConfirming(false)}>

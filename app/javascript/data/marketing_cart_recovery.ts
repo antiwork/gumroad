@@ -6,21 +6,21 @@ export type MarketingCartRecovery = {
   available: boolean;
   blocked_reason: string | null;
   enabled: boolean;
-  account_wide: boolean;
+  can_toggle: boolean;
   subject: string;
+  message: string | null;
   delay_hours: number;
-  workflow_url: string | null;
+  workflows: { name: string; url: string; scope: string; enabled: boolean }[];
 };
 
 type ErrorResponse = { success: false; error: string };
 
 const parse = async (response: Response): Promise<MarketingCartRecovery> => {
-  const json: unknown = await response.json();
   if (!response.ok) {
-    const error = typia.is<ErrorResponse>(json) ? json.error : undefined;
-    throw new ResponseError(error);
+    const json: unknown = await response.json().catch(() => null);
+    throw new ResponseError(typia.is<ErrorResponse>(json) ? json.error : undefined);
   }
-  return typia.assert<MarketingCartRecovery>(json);
+  return typia.assert<MarketingCartRecovery>(await response.json());
 };
 
 export const fetchCartRecovery = async (productId: string) => {
@@ -32,8 +32,6 @@ export const fetchCartRecovery = async (productId: string) => {
   return parse(response);
 };
 
-// The wanted state travels with the request, so a second tap on a stale card cannot undo
-// the first.
 export const updateCartRecovery = async (productId: string, enabled: boolean) => {
   const response = await request({
     url: Routes.product_marketing_abandoned_cart_path(productId, "json"),

@@ -17,15 +17,25 @@ describe Marketing::AbandonedCart do
     before { create(:payment_completed, user: seller) }
 
     describe "#state" do
+      it "previews the saved subject and body after an email edit" do
+        workflow = cart.enable
+        workflow.installments.alive.sole.update!(name: "Your workbook is waiting", message: "<p>Return to your workbook.</p>")
+        cart.pause
+
+        expect(cart.state).to include(subject: "Your workbook is waiting", message: "<p>Return to your workbook.</p>")
+        cart.enable
+        expect(workflow.installments.alive.sole.reload.name).to eq("Your workbook is waiting")
+      end
+
       it "describes the email and the delay before anything is turned on" do
-        expect(cart.state).to eq(
+        expect(cart.state).to include(
           available: true,
           blocked_reason: nil,
           enabled: false,
-          account_wide: false,
+          can_toggle: true,
           subject: "You left something in your cart",
           delay_hours: 24,
-          workflow_url: nil,
+          workflows: [],
         )
       end
     end
@@ -56,19 +66,20 @@ describe Marketing::AbandonedCart do
         expect { described_class.new(product:, seller:).enable }
           .not_to change { [workflows.count, Installment.count] }
         expect(described_class.new(product:, seller:).enable).to eq(first)
-        expect(cart.state).to include(enabled: true, account_wide: false)
+        expect(cart.state).to include(enabled: true, can_toggle: true)
       end
 
-      it "reuses the account-wide cart workflow the seller already has, and says so" do
+      it "leaves an account-wide workflow under Workflows control" do
         DefaultAbandonedCartWorkflowGeneratorService.new(seller:).generate
-        default_workflow = workflows.published.sole
+        workflow = workflows.published.sole
 
-        expect { described_class.new(product:, seller:).enable }
-          .not_to change { [workflows.count, Installment.count] }
-
-        state = described_class.new(product:, seller:).state
-        expect(state).to include(enabled: true, account_wide: true)
-        expect(state[:workflow_url]).to eq(workflow_emails_path(default_workflow.external_id))
+        expect(cart.enable).to eq(:blocked)
+        expect(cart.pause).to eq(:blocked)
+        expect(workflow.reload.published_at).to be_present
+        expect(cart.state).to include(enabled: true, can_toggle: false)
+        expect(cart.state[:workflows]).to contain_exactly(
+          name: workflow.name, url: workflow_emails_path(workflow.external_id), scope: "All products", enabled: true
+        )
       end
 
       it "leaves a workflow that covers a different product alone" do
@@ -125,21 +136,38 @@ describe Marketing::AbandonedCart do
         expect { cart.pause }.not_to change { [workflows.count, Installment.count] }
       end
 
-      it "pauses every published workflow that reaches the product" do
-        DefaultAbandonedCartWorkflowGeneratorService.new(seller:).generate
-        account_wide = workflows.published.sole
-        # A second one the seller added by hand in Workflows, scoped to the same product.
-        scoped = create(:workflow, seller:, link: nil, workflow_type: Workflow::ABANDONED_CART_TYPE,
-                                   bought_products: [product.unique_permalink])
-        scoped.publish!
+      it "does not pause overlapping workflows" do
+        scoped = cart.enable
+        other = create(:workflow, seller:, link: nil, workflow_type: Workflow::ABANDONED_CART_TYPE,
+                                  bought_products: [product.unique_permalink])
+        other.publish!
 
-        expect(workflows.published.count).to eq(2)
-        expect(cart.state).to include(enabled: true, account_wide: true)
-        expect { cart.pause }.to change { workflows.published.count }.from(2).to(0)
+        expect(cart.pause).to eq(:blocked)
+        expect(scoped.reload.published_at).to be_present
+        expect(other.reload.published_at).to be_present
+        expect(cart.state).to include(enabled: true, can_toggle: false)
+      end
 
-        expect(account_wide.reload.published_at).to be_nil
-        expect(scoped.reload.published_at).to be_nil
-        expect(cart.state).to include(enabled: false)
+      it "does not enable or pause a workflow that covers another product" do
+        workflow = cart.enable
+        workflow.update!(bought_products: [product.unique_permalink, other_product.unique_permalink])
+
+        expect(cart.pause).to eq(:blocked)
+        expect(workflow.reload.published_at).to be_present
+        workflow.unpublish!
+        expect(cart.enable).to eq(:blocked)
+        expect(workflow.reload.published_at).to be_nil
+        expect(cart.state[:workflows].sole[:scope]).to include(product.name, other_product.name)
+      end
+
+      it "keeps filtered versions under Workflows control" do
+        workflow = cart.enable
+        variant = create(:variant, variant_category: create(:variant_category, link: product))
+        workflow.update!(not_bought_variants: [variant.external_id])
+
+        expect(cart.pause).to eq(:blocked)
+        expect(cart.state[:can_toggle]).to eq(false)
+        expect(cart.state[:workflows].sole[:scope]).to start_with("Selected versions of")
       end
     end
   end
@@ -151,12 +179,14 @@ describe Marketing::AbandonedCart do
       expect { cart.enable }.not_to change { [workflows.count, Installment.count] }
       expect(cart.enable).to eq(:blocked)
       expect(cart.state).to include(available: false, enabled: false)
-      expect(cart.state[:blocked_reason]).to eq("Turns on after your first payout.")
+      expect(cart.state[:blocked_reason]).to eq("Available after your first payout.")
     end
 
     it "does not need eligibility to pause something already published" do
-      workflow = create(:workflow, seller:, link: nil, workflow_type: Workflow::ABANDONED_CART_TYPE)
-      workflow.publish!
+      payment = create(:payment_completed, user: seller)
+      workflow = cart.enable
+      payment.destroy!
+      seller.reload
 
       expect(cart).not_to be_available
       expect { cart.pause }.to change { workflows.published.count }.from(1).to(0)

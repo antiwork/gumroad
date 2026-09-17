@@ -7,9 +7,6 @@ class DefaultAbandonedCartWorkflowGeneratorService
   DEFAULT_NAME = "You left something in your cart"
   DELAY_HOURS = InstallmentRule::ABANDONED_CART_DELAYED_DELIVERY_TIME_IN_SECONDS / 1.hour
 
-  # The standard cart reminder. The launch card's one-tap toggle writes the same email, so
-  # the copy lives here once; `checkout_url` is passed in because the body needs the
-  # absolute URL the reader follows.
   def self.default_message(checkout_url:)
     "<p>When you're ready to buy, <a href=\"#{checkout_url}\" target=\"_blank\" rel=\"noopener noreferrer nofollow\">complete checking out</a>.</p><#{Installment::PRODUCT_LIST_PLACEHOLDER_TAG_NAME} />"
   end

@@ -1,12 +1,5 @@
 # frozen_string_literal: true
 
-# The launch card's one-tap abandoned-cart workflow. Abandoned-cart email is the one
-# automation a seller without a completed payout cannot use, and it is the channel
-# exempt from the lifetime-sales half of the email gate.
-#
-# The workflow is seller-level — its recipient type is "abandoned_cart", not "product" —
-# and the scheduler matches a carted product to a workflow through the workflow's own
-# product filters, so "for this product" means a filter that covers exactly this product.
 class Marketing::AbandonedCart
   def initialize(product:, seller:)
     @product = product
@@ -14,64 +7,57 @@ class Marketing::AbandonedCart
   end
 
   def available? = seller.eligible_for_abandoned_cart_workflows?
-  def enabled? = enabled_workflow.present?
+  def enabled? = covering_workflows.any?(&:published_at)
 
-  # What the seller sees before they touch the toggle: the email they are turning on, who
-  # gets it, and the delay the existing cart workflow uses.
   def state
+    workflow = covering_workflow
+    email = workflow&.installments&.alive&.first
     {
       available: available?,
       blocked_reason:,
       enabled: enabled?,
-      # A covering workflow that is not scoped to a product is the account-wide default, and
-      # the toggle then controls cart recovery for every product — the card has to say so
-      # rather than let a product view imply a product-scoped switch.
-      account_wide: covering_workflows.any? { account_wide?(_1) },
-      subject: DefaultAbandonedCartWorkflowGeneratorService::DEFAULT_NAME,
+      can_toggle: can_toggle?,
+      subject: email&.subject || DefaultAbandonedCartWorkflowGeneratorService::DEFAULT_NAME,
+      message: can_toggle? ? preview_message(workflow, email) : nil,
       delay_hours: DefaultAbandonedCartWorkflowGeneratorService::DELAY_HOURS,
-      workflow_url: workflow_url,
+      workflows: covering_workflows.map do |record|
+        {
+          name: record.name,
+          url: Rails.application.routes.url_helpers.workflow_emails_path(record.external_id),
+          scope: workflow_scope(record),
+          enabled: record.published_at.present?,
+        }
+      end,
     }
   end
 
-  # Idempotent: a seller who already has a workflow covering this product gets that one
-  # published, not a second one beside it.
   def enable
     return :blocked unless available?
 
-    # Serialized on the product: two taps must not both miss the covering lookup and create a
-    # workflow each, which the cart email scheduler would then send from both.
-    result = nil
+    # The lookup and creation share a lock so concurrent requests cannot create duplicate reminders.
     product.with_lock do
       @covering_workflows = nil
-      result = if (already = enabled_workflow)
-        already
-      elsif (existing = covering_workflow)
-        publish(existing)
-      else
-        create_and_publish
-      end
+      return :blocked unless can_toggle?
+
+      workflow = covering_workflow || create_workflow
+      workflow.publish!
+      @covering_workflows = nil
+      workflow
     end
-    # The memo describes the world before this call, and the caller reads `state` next.
-    @covering_workflows = nil
-    result
   end
 
-  # Turning cart recovery off covers EVERY published workflow that reaches the product, since
-  # the scheduler sends from all of them and pausing one would leave the others emailing after
-  # the seller switched the card off. Eligibility is deliberately not re-checked: a seller who
-  # became ineligible (suspended, payout reversed) must still be able to stop live emails.
   def pause
-    published = covering_workflows.select(&:published_at)
-    return if published.empty?
+    product.with_lock do
+      @covering_workflows = nil
+      return :blocked unless can_toggle?
 
-    published.each(&:unpublish!)
-    @covering_workflows = nil
-    published.last
+      workflow = covering_workflow
+      workflow&.unpublish!
+      @covering_workflows = nil
+      workflow
+    end
   end
 
-  # Every alive abandoned-cart workflow of the seller that reaches this product, oldest first.
-  # The workflow answers coverage itself, through the same rule the cart email scheduler uses,
-  # so the two cannot disagree about which products a workflow covers.
   def covering_workflows
     @covering_workflows ||= seller.workflows.alive.abandoned_cart_type.select do |workflow|
       workflow.abandoned_cart_products(only_product_and_variant_ids: true)
@@ -79,21 +65,36 @@ class Marketing::AbandonedCart
     end.sort_by(&:id)
   end
 
-  # The one the toggle reports on: a published covering workflow if there is one, else the newest.
-  def covering_workflow = enabled_workflow || covering_workflows.last
+  def covering_workflow = covering_workflows.last
 
   private
     attr_reader :product, :seller
 
-    def enabled_workflow = covering_workflows.reverse.find(&:published_at)
+    def can_toggle?
+      return true if covering_workflows.empty?
+      return false unless covering_workflows.one?
 
-    def account_wide?(workflow) = workflow.bought_products.blank? && workflow.bought_variants.blank?
+      workflow = covering_workflows.sole
+      workflow.bought_products == [product.unique_permalink] &&
+        workflow.bought_variants.blank? && workflow.not_bought_products.blank? && workflow.not_bought_variants.blank? &&
+        workflow.installments.alive.one?
+    end
+
+    def workflow_scope(workflow)
+      if workflow.bought_products.blank? && workflow.bought_variants.blank? && workflow.not_bought_products.blank? && workflow.not_bought_variants.blank?
+        return "All products"
+      end
+
+      names = workflow.abandoned_cart_products.map { _1[:name] }.to_sentence
+      workflow.bought_variants.present? || workflow.not_bought_variants.present? ? "Selected versions of #{names}" : names
+    end
 
     def blocked_reason
+      return "Manage shared or overlapping reminders in Workflows." unless can_toggle?
       return if available?
       return "Your account can't send emails while it's suspended." if seller.suspended?
 
-      "Turns on after your first payout."
+      "Available after your first payout."
     end
 
     def default_message
@@ -102,38 +103,26 @@ class Marketing::AbandonedCart
       )
     end
 
-    def workflow_url
-      workflow = covering_workflow
-      return if workflow.nil?
-
-      Rails.application.routes.url_helpers.workflow_emails_path(workflow.external_id)
+    def preview_message(workflow, email)
+      workflow ||= seller.workflows.abandoned_cart_type.new(bought_products: [product.unique_permalink])
+      email ||= seller.installments.new(message: default_message)
+      email.message_with_inline_abandoned_cart_products(products: workflow.abandoned_cart_products)
     end
 
-    def publish(workflow)
-      workflow.publish!
-      workflow
-    end
-
-    def create_and_publish
-      workflow = nil
-      ActiveRecord::Base.transaction do
-        workflow = seller.workflows.abandoned_cart_type.create!(
-          name: DefaultAbandonedCartWorkflowGeneratorService::WORKFLOW_NAME,
-          bought_products: [product.unique_permalink],
-        )
-        workflow.installments.create!(
-          name: DefaultAbandonedCartWorkflowGeneratorService::DEFAULT_NAME,
-          message: default_message,
-          installment_type: workflow.workflow_type,
-          json_data: workflow.json_data,
-          seller_id: workflow.seller_id,
-          send_emails: true,
-        ).create_installment_rule!(time_period: InstallmentRule::HOUR,
-                                   delayed_delivery_time: InstallmentRule::ABANDONED_CART_DELAYED_DELIVERY_TIME_IN_SECONDS)
-        # publish! refuses a non-abandoned-cart workflow for a seller below the email gate,
-        # so this only succeeds because the workflow carries the abandoned-cart exemption.
-        workflow.publish!
-      end
+    def create_workflow
+      workflow = seller.workflows.abandoned_cart_type.create!(
+        name: DefaultAbandonedCartWorkflowGeneratorService::WORKFLOW_NAME,
+        bought_products: [product.unique_permalink],
+      )
+      workflow.installments.create!(
+        name: DefaultAbandonedCartWorkflowGeneratorService::DEFAULT_NAME,
+        message: default_message,
+        installment_type: workflow.workflow_type,
+        json_data: workflow.json_data,
+        seller_id: workflow.seller_id,
+        send_emails: true,
+      ).create_installment_rule!(time_period: InstallmentRule::HOUR,
+                                 delayed_delivery_time: InstallmentRule::ABANDONED_CART_DELAYED_DELIVERY_TIME_IN_SECONDS)
       workflow
     end
 end
