@@ -201,4 +201,59 @@ describe Products::MarketingActionsController do
       expect(response).to have_http_status(:not_found)
     end
   end
+  describe "email execution" do
+    let(:action) { create(:marketing_action, user: seller, link: product, channel: "email") }
+    let(:email_params) { { product_id: product.unique_permalink, id: action.external_id } }
+
+    before do
+      create(:payment_completed, user: seller)
+      allow_any_instance_of(User).to receive(:sales_cents_total).and_return(Installment::MINIMUM_SALES_CENTS_VALUE)
+    end
+
+    it "returns the same draft edit URL on retries without sending" do
+      2.times do
+        post :execute, params: email_params, as: :json
+        expect(response).to have_http_status(:ok)
+        draft = seller.installments.sole
+        expect(response.parsed_body).to include("edit_url" => edit_email_path(draft.external_id), "intent_url" => nil, "connect_path" => nil)
+        expect(draft).to have_attributes(published_at: nil, ready_to_publish: false)
+      end
+      expect(PostEmailBlast.count).to eq(0)
+      expect(SendPostBlastEmailsJob.jobs.size).to eq(0)
+    end
+
+    %w[cancelled unpublished].each do |state|
+      it "rejects a #{state} email action without preparing a draft" do
+        params = email_params
+        state == "cancelled" ? action.cancel! : product.update!(draft: true)
+
+        expect { post :execute, params:, as: :json }.not_to change(Installment, :count)
+        expect(response).to have_http_status(:unprocessable_entity)
+        expect(response.parsed_body).to include("success" => false, "error" => "This launch email is no longer available.")
+        expect(SendPostBlastEmailsJob.jobs.size).to eq(0)
+      end
+    end
+
+    context "when held out" do
+      let(:holdout) { true }
+
+      it "refuses a held-out seller without creating a draft" do
+        expect { post :execute, params: email_params, as: :json }.not_to change(Installment, :count)
+        expect(response).to have_http_status(:not_found)
+      end
+    end
+
+    it "refuses when the feature is disabled without creating a draft" do
+      Feature.deactivate_user(:auto_marketing, seller)
+      expect { post :execute, params: email_params, as: :json }.not_to change(Installment, :count)
+      expect(response).to have_http_status(:not_found)
+    end
+
+    it "keeps the email eligibility gate" do
+      allow_any_instance_of(User).to receive(:sales_cents_total).and_return(0)
+      expect { post :execute, params: email_params, as: :json }.not_to change(Installment, :count)
+      expect(response).to have_http_status(:ok)
+      expect(response.parsed_body).to include("edit_url" => nil)
+    end
+  end
 end

@@ -234,9 +234,9 @@ describe("ShareYourLaunchCard", () => {
       }),
     ]);
 
-    expect(screen.getByText("Sent")).toBeDefined();
-    expect(screen.getByText(/You submitted your launch email about Gumstein Letters\./u)).toBeDefined();
-    expect(screen.queryByText(/Check its delivery status/u)).toBeNull();
+    expect(screen.getByText("Send complete")).toBeDefined();
+    expect(screen.getByText(/Email processing is complete for Gumstein Letters\./u)).toBeDefined();
+    expect(screen.getByText(/Check delivery details in Emails/u)).toBeDefined();
     expect(screen.queryByText(/Nothing is sent until you send it/u)).toBeNull();
     expect(screen.queryByText(/unique recipients/u)).toBeNull();
     expect(screen.getByRole("link", { name: "Open in Emails" })).toBeDefined();
@@ -247,5 +247,20 @@ describe("ShareYourLaunchCard", () => {
 
     expect(screen.getByText(/You deleted the launch email for this product/u)).toBeDefined();
     expect(screen.queryByText(/We couldn't prepare the draft/u)).toBeNull();
+  });
+  it.each([
+    ["published", "Published", "Your launch post about Gumstein Letters is published."],
+    ["sending", "Sending", "Your launch email about Gumstein Letters is being processed."],
+    ["waiting", "Waiting", "Your launch email about Gumstein Letters is waiting to be processed."],
+    ["incomplete", "Incomplete", "Your launch email about Gumstein Letters has not finished processing."],
+  ] as const)("shows truthful %s email state", async (state, label, summary) => {
+    await renderCard([
+      emailChannel({ draft: { id: "draft1", subject: "Gumstein Letters", state, edit_url: "/emails/draft1/edit" } }),
+    ]);
+    expect(screen.getByText(label)).toBeDefined();
+    expect(screen.getByText(summary, { exact: false })).toBeDefined();
+    expect(screen.queryByText("Sent")).toBeNull();
+    expect(screen.queryByText(/delivered|inbox/u)).toBeNull();
+    expect(screen.getByRole("link", { name: "Open in Emails" })).toBeDefined();
   });
 });

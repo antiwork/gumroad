@@ -32,16 +32,24 @@ const CHANNEL_ICONS: Record<string, React.ComponentType<{ className?: string }>>
 const EMAIL_DRAFT_STATE_LABELS: Record<NonNullable<MarketingChannel["draft"]>["state"], string> = {
   draft: "Draft",
   scheduled: "Scheduled",
-  sent: "Sent",
+  published: "Published",
+  sending: "Sending",
+  waiting: "Waiting",
+  incomplete: "Incomplete",
+  sent: "Send complete",
 };
 
-// The row's summary is the seller's status line, so it follows the state: a draft awaits them, a
-// scheduled one is queued, and a submitted one is out of their hands — "sent" would claim a
-// delivery we do not observe, so the Open in Emails button is the only pointer to delivery status.
+// Blast completion records processing by the email provider, not inbox delivery.
 const EMAIL_DRAFT_SUMMARY: Record<NonNullable<MarketingChannel["draft"]>["state"], (subject: string) => string> = {
   draft: () => "Launch email drafted for your saved audience.",
   scheduled: (subject) => `Your launch email about ${subject} is scheduled for your audience.`,
-  sent: (subject) => `You submitted your launch email about ${subject}.`,
+  published: (subject) => `Your launch post about ${subject} is published.`,
+  sending: (subject) => `Your launch email about ${subject} is being processed. Check delivery details in Emails.`,
+  waiting: (subject) =>
+    `Your launch email about ${subject} is waiting to be processed. Check delivery details in Emails.`,
+  incomplete: (subject) =>
+    `Your launch email about ${subject} has not finished processing. Check delivery details in Emails.`,
+  sent: (subject) => `Email processing is complete for ${subject}. Check delivery details in Emails.`,
 };
 
 const pluralize = (count: number, singular: string, plural: string) => (count === 1 ? singular : plural);
@@ -208,7 +216,7 @@ const XChannelRow = ({
       const approved = await approveMarketingAction(productPermalink, action.id, edited ? copy : undefined);
       onChange(approved);
       const result = await executeMarketingAction(productPermalink, action.id);
-      setIntentUrl(result.intent_url);
+      setIntentUrl(result.intent_url ?? undefined);
       onChange(result.action);
       setConfirming(false);
       if (result.action.status === "posted") showAlert("Posted on X!", "success");

@@ -7,7 +7,7 @@ class Api::V2::MarketingActionsController < Api::V2::BaseController
   before_action :fetch_marketing_action, only: %i[show approve execute cancel]
   before_action :verify_idempotency_key, only: %i[approve execute cancel]
 
-  rescue_from Marketing::Action::ConfirmationChanged, with: ->(error) { marketing_error(error.message) }
+  rescue_from Marketing::Action::ConfirmationChanged, Marketing::Channels::Email::Unavailable, with: ->(error) { marketing_error(error.message) }
 
   def recommendations
     render_response(true, channels: Marketing::Recommendations.new(product: @product, seller: current_resource_owner).call)
@@ -43,7 +43,7 @@ class Api::V2::MarketingActionsController < Api::V2::BaseController
     return marketing_error("This channel is coming soon.") unless Marketing::Channel.live?(@marketing_action.channel)
 
     result = Marketing::Channel.executor_for(@marketing_action.channel).new(@marketing_action, confirmation_token: params[:confirmation_token]).call
-    render_action(intent_url: result.intent_url, connect_path: result.connect_path)
+    render_action(**result.to_h.except(:action))
   end
 
   def cancel

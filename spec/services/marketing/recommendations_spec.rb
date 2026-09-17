@@ -174,4 +174,48 @@ describe Marketing::Recommendations do
       end
     end
   end
+  describe "email publication and delivery state" do
+    let(:draft) { Marketing::LaunchEmail.new(product:, seller:, utm_link: nil).installment }
+
+    before do
+      create(:payment_completed, user: seller)
+      allow(seller).to receive(:sales_cents_total).and_return(Installment::MINIMUM_SALES_CENTS_VALUE)
+    end
+
+    def email_state
+      described_class.new(product:, seller:).call.find { _1[:channel] == "email" }.dig(:draft, :state)
+    end
+
+    it "reports a real profile-only publication as published, never sent" do
+      service = SaveInstallmentService.new(seller:, installment: draft, preview_email_recipient: seller,
+                                           params: ActionController::Parameters.new(installment: { installment_type: Installment::AUDIENCE_TYPE, send_emails: false, shown_on_profile: true }, publish: true))
+      expect(service.process).to eq(true)
+      expect(draft.reload).to be_published
+      expect(draft.blasts.count).to eq(0)
+      expect(SendPostBlastEmailsJob.jobs.size).to eq(0)
+      expect(email_state).to eq("published")
+    end
+
+    it "reports a requested blast as processing, not sent" do
+      service = SaveInstallmentService.new(seller:, installment: draft, preview_email_recipient: seller,
+                                           params: ActionController::Parameters.new(installment: { installment_type: Installment::AUDIENCE_TYPE, send_emails: true }, publish: true))
+      expect(service.process).to eq(true)
+      expect(draft.blasts.sole).to have_attributes(started_at: nil, completed_at: nil, delivery_count: 0)
+      expect(SendPostBlastEmailsJob.jobs.size).to eq(1)
+      expect(email_state).to eq("sending")
+    end
+
+    %w[sent waiting incomplete].each do |state|
+      it "uses the existing #{state} blast state instead of publication time" do
+        draft.update!(published_at: Time.current)
+        blast = draft.blasts.create!(requested_at: 2.days.ago)
+        case state
+        when "sent" then blast.update!(completed_at: Time.current)
+        when "waiting" then $redis.set(RedisKey.blast_quota_deferred_until(blast.id), 1.hour.from_now.iso8601)
+        end
+        expect(email_state).to eq(state)
+        expect(SendPostBlastEmailsJob.jobs.size).to eq(0)
+      end
+    end
+  end
 end

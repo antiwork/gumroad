@@ -41,7 +41,7 @@ export type MarketingChannel = {
 export type MarketingEmailDraft = {
   id: string;
   subject: string;
-  state: "draft" | "scheduled" | "sent";
+  state: "draft" | "scheduled" | "published" | "sending" | "waiting" | "incomplete" | "sent";
   edit_url: string;
 };
 
@@ -83,7 +83,12 @@ export const executeMarketingAction = async (productId: string, id: string) => {
     data: {},
   });
   return parse(response, (json) =>
-    typia.assert<{ action: MarketingAction; intent_url: string; connect_path: string }>(json),
+    typia.assert<{
+      action: MarketingAction;
+      intent_url: string | null;
+      connect_path: string | null;
+      edit_url?: string | null;
+    }>(json),
   );
 };
 

@@ -25,3 +25,9 @@ Validation failures return HTTP 422 with `{success: false, message: "..."}`. Mis
 4. Offer cancellation before execution via `POST /v2/marketing_actions/:action_id/cancel`, with `idempotency_key`.
 
 The companion CLI exposes `marketing recommend`, `approve`, `schedule`, `cancel`, and `status`. `schedule` invokes the immediate execute endpoint; it does not accept a future date. Merge and deploy this Rails API before merging/releasing the CLI. Gumhead consumes these calls; this change does not modify Gumhead.
+
+## Launch email drafts
+
+The live `email` channel prepares a draft for the seller's saved audience. Email execute returns `edit_url` (or `null` when no draft can be prepared), with `intent_url` and `connect_path` set to `null`. It never sends or schedules email; the seller reviews and publishes or schedules in Emails. Cancelled actions and unpublished products return 422 without preparing a draft. Deleting the launch draft continues to decline its recreation.
+
+The recommendation's `draft.state` is `draft`, `scheduled`, or `published` when there is no regular blast. A published draft with a requested regular blast uses that blast's existing `sending`, `waiting`, `incomplete`, or `sent` status. `published` does not mean emailed; `sent` means processing is complete, not confirmed inbox delivery. Open Emails for delivery details.

@@ -98,7 +98,12 @@ class Marketing::Recommendations
     end
 
     def email_state(installment)
-      return "sent" if installment.published_at.present?
+      if installment.published_at.present?
+        blast = installment.latest_regular_blast
+        return blast.delivery_status if blast&.requested_at.present?
+
+        return "published"
+      end
       return "scheduled" if installment.ready_to_publish?
 
       "draft"
