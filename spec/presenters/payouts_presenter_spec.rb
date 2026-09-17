@@ -94,6 +94,9 @@ describe PayoutsPresenter do
       user = create(:compliant_user)
       create(:user_compliance_info, user:)
       create(:payment_completed, user:)
+      # A migrated seller: Connect routing is what makes their connected account the payout
+      # destination.
+      Feature.activate_user(:merchant_migration, user)
       account = create(:merchant_account_stripe_connect, user:, created_at: 59.days.ago)
       bank_account = create(:ach_account, user:)
       allow(user).to receive(:active_bank_account).and_return(bank_account)

@@ -3738,6 +3738,13 @@ describe User, :vcr do
     end
 
     context "when the seller only has a connected Stripe account" do
+      before do
+        # A migrated seller: Connect routing is what makes their connected account the payout
+        # destination, and #stripe_account never returns for them again.
+        Feature.activate_user(:merchant_migration, user)
+      end
+      after { Feature.deactivate_user(:merchant_migration, user) }
+
       let!(:merchant_account) do
         create(:merchant_account_stripe_connect, user:, created_at: 90.days.ago)
       end
