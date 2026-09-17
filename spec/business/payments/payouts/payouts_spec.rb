@@ -955,6 +955,22 @@ describe Payouts do
       end.to raise_error(Payouts::MultiplePayoutGroupsError).and not_change(Payment, :count)
       expect(user.balances.reload.map(&:state).uniq).to eq(["unpaid"])
     end
+
+    it "pays nothing when the debt sits in a currency the account cannot pay out right now" do
+      # A currency with negative Stripe availability is absent from `pay_out_currencies`, so without
+      # admitting the debt row the GBP claim would never be seen and the HUF/EUR credit groups would
+      # be paid out against it.
+      allow(StripePayoutProcessor).to receive(:pay_out_currencies).and_return([Currency::EUR])
+      create(:balance, user:, merchant_account:, date: payout_date - 2, amount_cents: 33_12,
+                       holding_currency: Currency::EUR, holding_amount_cents: 4_303)
+      create(:balance, user:, merchant_account:, date: payout_date - 3, amount_cents: -20_00,
+                       holding_currency: Currency::GBP, holding_amount_cents: -15_00)
+      expect(StripePayoutProcessor).not_to receive(:prepare_payment_and_set_amount)
+
+      expect(described_class.create_payments(payout_date.to_s, PayoutProcessorType::STRIPE, user)).to eq([])
+      expect(user.payments.count).to eq(0)
+      expect(user.balances.reload.map(&:state).uniq).to eq(["unpaid"])
+    end
   end
 
   describe ".create_payments_for_balances_up_to_date_for_bank_account_types" do

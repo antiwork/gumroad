@@ -3,6 +3,21 @@
 require "spec_helper"
 
 describe StripePayoutProcessor do
+  describe ".is_balance_payable" do
+    it "admits a debt held in a currency the account cannot pay out right now" do
+      seller = create(:user)
+      merchant_account = create(:merchant_account, user: seller, currency: Currency::HUF)
+      allow(described_class).to receive(:pay_out_currencies).and_return([Currency::EUR])
+      debt = create(:balance, user: seller, merchant_account:, amount_cents: -20_00,
+                              holding_currency: Currency::GBP, holding_amount_cents: -15_00)
+      credit = create(:balance, user: seller, merchant_account:, amount_cents: 33_12,
+                                holding_currency: Currency::EUR, holding_amount_cents: 4_303)
+
+      expect(described_class.is_balance_payable(debt)).to be(true)
+      expect(described_class.is_balance_payable(credit)).to be(true)
+    end
+  end
+
   describe ".perform_payment" do
     it "continues payout recovery when the recommendation refresh cannot be enqueued" do
       seller = create(:user, payment_address: nil)
