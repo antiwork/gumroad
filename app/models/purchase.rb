@@ -1922,7 +1922,9 @@ class Purchase < ApplicationRecord
   def minimum_paid_price_cents
     return 0 if is_gift_receiver_purchase
     return perceived_price_cents if perceived_price_cents.present? && is_applying_plan_change
-    if perceived_price_cents.present? && is_commission_completion_purchase? && once_per_cart_fixed_offer_code?
+    # The balance is fixed by the deposit the buyer already paid, so a later change to the
+    # live version price must not raise the floor and strand the completion.
+    if perceived_price_cents.present? && is_commission_completion_purchase?
       return [perceived_price_cents.to_i - tip&.value_cents.to_i, 0].max
     end
 
