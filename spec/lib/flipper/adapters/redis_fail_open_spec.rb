@@ -110,6 +110,7 @@ RSpec.describe Flipper::Adapters::RedisFailOpen do
     adapter.get_all
     allow(inner).to receive(:get).and_raise(Redis::TimeoutError)
     allow(inner).to receive(:get_all).and_raise(Redis::TimeoutError)
+    allow(Process).to receive(:clock_gettime).and_call_original
     allow(Process).to receive(:clock_gettime).with(Process::CLOCK_MONOTONIC).and_return(100.0)
     expect(ErrorNotifier).to receive(:notify).once
 
@@ -121,6 +122,7 @@ RSpec.describe Flipper::Adapters::RedisFailOpen do
   it "reports again after the reporting interval" do
     feature.enabled?
     allow(inner).to receive(:get).and_raise(Redis::TimeoutError)
+    allow(Process).to receive(:clock_gettime).and_call_original
     allow(Process).to receive(:clock_gettime).with(Process::CLOCK_MONOTONIC).and_return(100.0, 159.0, 160.0)
     expect(ErrorNotifier).to receive(:notify).twice
 

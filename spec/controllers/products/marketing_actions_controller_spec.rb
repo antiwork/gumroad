@@ -187,6 +187,16 @@ describe Products::MarketingActionsController do
       expect(WebMock).not_to have_requested(:post, Marketing::XApi::TWEETS_URL)
     end
 
+    it "refuses to execute an action on a channel that is not a posting channel" do
+      cart_action = create(:marketing_action, user: seller, link: product, channel: "abandoned_cart", copy: "Cart reminder")
+      cart_action.approve!
+
+      post :execute, params: { product_id: product.unique_permalink, id: cart_action.external_id }, as: :json
+
+      expect(response).to have_http_status(:unprocessable_entity)
+      expect(cart_action.reload).to be_approved
+    end
+
     it "forbids another seller's team" do
       other_product = create(:product)
       other_action = create(:marketing_action, user: other_product.user, link: other_product, copy: "x")

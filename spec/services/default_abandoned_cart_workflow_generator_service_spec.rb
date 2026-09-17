@@ -17,7 +17,7 @@ describe DefaultAbandonedCartWorkflowGeneratorService do
         end.to change { seller.workflows.abandoned_cart_type.published.count }.from(0).to(1)
 
         workflow = seller.workflows.abandoned_cart_type.published.sole
-        expect(workflow.name).to eq("Abandoned cart")
+        expect(workflow.name).to eq("Abandoned cart email")
         expect(workflow.bought_products).to be_nil
         expect(workflow.bought_variants).to be_nil
         installment = workflow.installments.alive.sole

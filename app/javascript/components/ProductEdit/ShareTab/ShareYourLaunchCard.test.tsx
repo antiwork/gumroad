@@ -77,26 +77,49 @@ describe("ShareYourLaunchCard", () => {
   beforeEach(() => vi.clearAllMocks());
   afterEach(() => cleanup());
 
-  it("renders X live and the other channels disabled with a Coming soon badge", async () => {
+  it("keeps the email draft outside the posting selector while switching social destinations", async () => {
+    await renderCard([
+      xChannel(),
+      xChannel({ channel: "instagram", label: "Instagram", action: action({ id: "ig1", channel: "instagram" }) }),
+      emailChannel(),
+    ]);
+
+    expect(screen.getByRole("link", { name: "Review the draft" }).getAttribute("href")).toBe("/emails/draft1/edit");
+    expect(screen.queryByRole("radio", { name: "Email" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Post on Email" })).toBeNull();
+    fireEvent.change(screen.getByLabelText("Post text"), { target: { value: "Edited X draft" } });
+    fireEvent.click(screen.getByRole("radio", { name: "Instagram" }));
+    expect(screen.getByRole("link", { name: "Review the draft" })).toBeDefined();
+    fireEvent.click(screen.getByRole("radio", { name: "X" }));
+    expect(screen.getByLabelText("Post text")).toHaveProperty("value", "Edited X draft");
+    expect(approveMarketingAction).not.toHaveBeenCalled();
+    expect(executeMarketingAction).not.toHaveBeenCalled();
+  });
+
+  it("shows only available posting channels", async () => {
     await renderCard([xChannel(), ...comingSoon]);
 
-    expect(screen.getByText("posting as @edgar")).toBeDefined();
+    expect(screen.getByText("Posting as @edgar")).toBeDefined();
     expect(screen.getByRole("button", { name: "Post on X" })).not.toHaveProperty("disabled", true);
-    expect(screen.getAllByText("Coming soon")).toHaveLength(3);
+    expect(screen.queryByText("Coming soon")).toBeNull();
     for (const label of ["Instagram", "YouTube", "TikTok"]) {
-      expect(screen.getByRole("button", { name: `Post on ${label}` })).toHaveProperty("disabled", true);
+      expect(screen.queryByRole("button", { name: `Post on ${label}` })).toBeNull();
     }
   });
 
-  it("shows a Connect X CTA and the post-yourself fallback when X is not connected", async () => {
+  it("offers manual sharing and a separate account connection when X is disconnected", async () => {
     await renderCard([xChannel({ connected: false, handle: null }), ...comingSoon]);
 
-    expect(screen.getByRole("link", { name: "Connect X" })).toHaveProperty(
+    expect(screen.getByRole("link", { name: "Connect X for direct posting" })).toHaveProperty(
       "href",
       expect.stringContaining("/settings/social_connections"),
     );
-    expect(screen.getByRole("link", { name: "Share on X" })).toBeDefined();
+    expect(screen.getByRole("link", { name: "Continue on X" })).toBeDefined();
     expect(screen.queryByRole("button", { name: "Post on X" })).toBeNull();
+    fireEvent.change(screen.getByLabelText("Post text"), { target: { value: "Edited launch text" } });
+    expect(screen.getByRole("link", { name: "Continue on X" }).getAttribute("href")).toContain(
+      "Edited%20launch%20text",
+    );
   });
 
   it("asks for explicit confirmation showing the exact text, account and link, then approves and executes", async () => {
@@ -142,6 +165,78 @@ describe("ShareYourLaunchCard", () => {
     expect(screen.getByText(/couldn't confirm whether this post went through/u)).toBeDefined();
     expect(screen.getByRole("link", { name: "Share on X" })).toBeDefined();
     expect(screen.queryByRole("button", { name: "Post on X" })).toBeNull();
+  });
+
+  it("keeps one composer and restores each destination draft", async () => {
+    const instagram = xChannel({
+      channel: "instagram",
+      label: "Instagram",
+      handle: "fieldnotes",
+      action: action({ id: "ig1", channel: "instagram", copy: "Instagram draft" }),
+    });
+    await renderCard([xChannel(), instagram, ...comingSoon.slice(1)]);
+    fireEvent.change(screen.getByLabelText("Post text"), { target: { value: "Edited X draft" } });
+    fireEvent.click(screen.getByRole("radio", { name: "Instagram" }));
+    expect(screen.getAllByRole("textbox")).toHaveLength(1);
+    expect(screen.getByLabelText("Post text")).toHaveProperty("value", "Instagram draft");
+    fireEvent.change(screen.getByLabelText("Post text"), { target: { value: "Edited Instagram draft" } });
+    fireEvent.click(screen.getByRole("radio", { name: "X" }));
+    expect(screen.getByLabelText("Post text")).toHaveProperty("value", "Edited X draft");
+    fireEvent.click(screen.getByRole("radio", { name: "Instagram" }));
+    expect(screen.getByLabelText("Post text")).toHaveProperty("value", "Edited Instagram draft");
+    expect(screen.getByText("Posting as @fieldnotes")).toBeDefined();
+    expect(screen.queryByRole("radio", { name: "YouTube" })).toBeNull();
+  });
+
+  it("confirms and posts only the selected destination draft", async () => {
+    const instagramAction = action({ id: "ig1", channel: "instagram", copy: "Instagram draft" });
+    await renderCard([xChannel(), xChannel({ channel: "instagram", label: "Instagram", action: instagramAction })]);
+    fireEvent.click(screen.getByRole("radio", { name: "Instagram" }));
+    fireEvent.change(screen.getByLabelText("Post text"), { target: { value: "Edited Instagram draft" } });
+    let finishPosting: ((value: Awaited<ReturnType<typeof executeMarketingAction>>) => void) | undefined;
+    approveMarketingAction.mockResolvedValue({
+      ...instagramAction,
+      status: "approved",
+      copy: "Edited Instagram draft",
+    });
+    executeMarketingAction.mockReturnValue(
+      new Promise((resolve) => {
+        finishPosting = resolve;
+      }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Post on Instagram" }));
+    expect(screen.getByRole("dialog").textContent).toContain("Post on Instagram?");
+    expect(executeMarketingAction).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Post now" }));
+    await waitFor(() => expect(executeMarketingAction).toHaveBeenCalledWith("abc", "ig1"));
+    expect(approveMarketingAction).toHaveBeenCalledWith("abc", "ig1", "Edited Instagram draft");
+    expect(screen.getByRole("radio", { name: "X", hidden: true })).toHaveProperty("disabled", true);
+    act(() =>
+      finishPosting?.({
+        action: { ...instagramAction, status: "posted", external_url: "https://instagram.com/p/example" },
+        intent_url: "",
+        connect_path: "",
+      }),
+    );
+    expect(await screen.findByRole("link", { name: "View post on Instagram" })).toBeDefined();
+    fireEvent.click(screen.getByRole("radio", { name: "X" }));
+    expect(screen.getByRole("button", { name: "Post on X" })).toBeDefined();
+  });
+
+  it("does not restore another product's channels or drafts after a late response", async () => {
+    let finishFirst: ((channels: MarketingChannel[]) => void) | undefined;
+    fetchMarketingRecommendations.mockReturnValueOnce(
+      new Promise((resolve) => {
+        finishFirst = resolve;
+      }),
+    );
+    const { rerender } = render(<ShareYourLaunchCard productPermalink="first" />);
+    fetchMarketingRecommendations.mockResolvedValueOnce([xChannel({ action: action({ copy: "Second product" }) })]);
+    rerender(<ShareYourLaunchCard productPermalink="second" />);
+    await screen.findByDisplayValue("Second product");
+    await act(() => Promise.resolve(finishFirst?.([xChannel()])));
+    expect(screen.getByLabelText("Post text")).toHaveProperty("value", "Second product");
+    expect(screen.queryByRole("radio")).toBeNull();
   });
 
   it("renders nothing when the endpoint returns no channels", async () => {
