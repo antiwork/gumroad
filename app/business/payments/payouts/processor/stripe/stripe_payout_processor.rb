@@ -646,7 +646,7 @@ class StripePayoutProcessor
       Payment::FailureReason::DEBIT_CARD_LIMIT
     when /insufficient funds in (your )?Stripe account/i
       Payment::FailureReason::INSUFFICIENT_FUNDS
-    when /has been deleted and can no longer be used/
+    when *BankAccount::STALE_EXTERNAL_ACCOUNT_MESSAGES
       Payment::FailureReason::BANK_ACCOUNT_NOT_FOUND_AT_STRIPE
     when /\AAttempting to create a transfer of [a-z]{3} to a destination that supports [a-z]{3}\.\z/
       Payment::FailureReason::DESTINATION_CURRENCY_MISMATCH

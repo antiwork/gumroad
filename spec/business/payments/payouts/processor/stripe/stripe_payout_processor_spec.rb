@@ -45,6 +45,21 @@ describe StripePayoutProcessor do
     end
   end
 
+  describe ".stripe_invalid_request_error_failure_reason" do
+    it "maps both Stripe wordings for a bank account we can no longer reference to the same reason" do
+      deleted = Stripe::InvalidRequestError.new(
+        "The bank account ba_missing has been deleted and can no longer be used.",
+        "external_account"
+      )
+      missing = Stripe::InvalidRequestError.new("No such external account: 'ba_missing'", "external_account")
+
+      expect(described_class.send(:stripe_invalid_request_error_failure_reason, deleted))
+        .to eq(Payment::FailureReason::BANK_ACCOUNT_NOT_FOUND_AT_STRIPE)
+      expect(described_class.send(:stripe_invalid_request_error_failure_reason, missing))
+        .to eq(Payment::FailureReason::BANK_ACCOUNT_NOT_FOUND_AT_STRIPE)
+    end
+  end
+
   describe ".reverse_internal_transfer_or_hold_payouts!" do
     it "notifies once for a reverse failure after a successful hold" do
       payment = create(:payment, processor: PayoutProcessorType::STRIPE,
