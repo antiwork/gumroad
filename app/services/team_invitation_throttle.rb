@@ -3,11 +3,9 @@
 class TeamInvitationThrottle
   LIMITS = { "hour" => [10, 1.hour], "day" => [50, 24.hours] }.freeze
 
-  # A seller we have not positively reviewed gets this many invitations in total, not per window.
-  # The mailer puts the inviter's identity in front of a stranger from our own sending domain, and
-  # every ring that abused it sat in `not_reviewed` with zero products: 62 accounts sent 504k
-  # invitations (gp#2762) and the per-window cap alone still let each fresh account send 60 a day.
-  # A real new team is one or two people; anything past that waits for review.
+  # A seller we have not reviewed gets this many invitations in total, revoked ones included. The
+  # mailer carries the inviter's identity to strangers from our own sending domain, so an account
+  # that has not been reviewed waits for review rather than for the next window.
   UNREVIEWED_TOTAL_LIMIT = 3
 
   # Check both windows and reserve a send atomically. Redis supplies the clock for every app process.
