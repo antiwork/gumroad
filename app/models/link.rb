@@ -89,19 +89,21 @@ class Link < ApplicationRecord
   SERVICE_TYPES = [NATIVE_TYPE_COMMISSION, NATIVE_TYPE_CALL, NATIVE_TYPE_COFFEE].freeze
   LEGACY_TYPES = ["podcast", "newsletter", "audiobook"].freeze
   TAXJAR_SAAS_TAX_CODE = "30070"
-  SOFTWARE_DISCOVER_TAXONOMY_SLUG = "software-and-plugins"
 
-  def taxjar_product_tax_code
+  # Callers classifying many links in one run pass `software_and_plugins_taxonomy_ids`
+  # (Taxonomy.software_and_plugins_subtree_ids) so the subtree is looked up once per run rather
+  # than once per link.
+  def taxjar_product_tax_code(software_and_plugins_taxonomy_ids: nil)
     native_code = NATIVE_TYPES_TO_TAX_CODE[native_type]
-    return TAXJAR_SAAS_TAX_CODE if native_code == "31000" && software_discover_taxonomy?
+    return TAXJAR_SAAS_TAX_CODE if native_code == "31000" && software_discover_taxonomy?(software_and_plugins_taxonomy_ids:)
 
     native_code
   end
 
-  def software_discover_taxonomy?
-    return false if taxonomy.blank?
+  def software_discover_taxonomy?(software_and_plugins_taxonomy_ids: nil)
+    return false if taxonomy_id.blank?
 
-    taxonomy.self_and_ancestors.any? { |node| node.slug == SOFTWARE_DISCOVER_TAXONOMY_SLUG }
+    (software_and_plugins_taxonomy_ids || Taxonomy.software_and_plugins_subtree_ids).include?(taxonomy_id)
   end
 
   DEFAULT_BOOSTED_DISCOVER_FEE_PER_THOUSAND = 300

@@ -38,4 +38,23 @@ describe Link, "#taxjar_product_tax_code" do
 
     expect(product.taxjar_product_tax_code).to eq("31000")
   end
+
+  # The sales-tax reports and uploads classify a whole month of purchases, so they resolve the
+  # subtree once and pass it in. That path must not touch the taxonomy tables per link.
+  it "classifies many links from one subtree lookup" do
+    products = create_list(:product, 3, native_type: "digital", taxonomy: wordpress)
+    subtree_ids = Taxonomy.software_and_plugins_subtree_ids
+
+    taxonomy_queries = 0
+    subscriber = ->(_name, _started, _finished, _id, payload) do
+      taxonomy_queries += 1 if payload[:sql].match?(/taxonomy_hierarchies|taxonomies/)
+    end
+
+    codes = ActiveSupport::Notifications.subscribed(subscriber, "sql.active_record") do
+      products.map { _1.taxjar_product_tax_code(software_and_plugins_taxonomy_ids: subtree_ids) }
+    end
+
+    expect(codes).to eq(["30070"] * 3)
+    expect(taxonomy_queries).to eq(0)
+  end
 end

@@ -54,7 +54,7 @@ class CreateCanadaMonthlySalesReportJob
               purchase.created_at.strftime("%m/%d/%Y"),
               ISO3166::Country["CA"].subdivisions[purchase.state]&.name,
               purchase.link.native_type,
-              purchase.link.taxjar_product_tax_code,
+              taxjar_product_tax_code_for(purchase.link),
               taxjar_info&.gst_tax_rate,
               taxjar_info&.pst_tax_rate,
               taxjar_info&.qst_tax_rate,
@@ -99,7 +99,7 @@ class CreateCanadaMonthlySalesReportJob
               refund.created_at.strftime("%m/%d/%Y"),
               ISO3166::Country["CA"].subdivisions[purchase.state]&.name,
               purchase.link.native_type,
-              purchase.link.taxjar_product_tax_code,
+              taxjar_product_tax_code_for(purchase.link),
               taxjar_info&.gst_tax_rate,
               taxjar_info&.pst_tax_rate,
               taxjar_info&.qst_tax_rate,
@@ -171,6 +171,13 @@ class CreateCanadaMonthlySalesReportJob
   end
 
   private
+    # The product tax code for a reported row. The software-and-plugins subtree is resolved once
+    # for the whole run: per-link resolution would add an ancestry query per purchase.
+    def taxjar_product_tax_code_for(link)
+      @software_and_plugins_taxonomy_ids ||= Taxonomy.software_and_plugins_subtree_ids
+      link.taxjar_product_tax_code(software_and_plugins_taxonomy_ids: @software_and_plugins_taxonomy_ids)
+    end
+
     # Walks a leg in primary-key batches, yielding one preloaded batch at a time. Each batch is
     # loaded back through the leg's own scope so its filters still hold at read time; the id order
     # is applied after the walk because walking a filtered scope in id order scans the primary key.
@@ -221,7 +228,7 @@ class CreateCanadaMonthlySalesReportJob
         event_date.strftime("%m/%d/%Y"),
         ISO3166::Country["CA"].subdivisions[purchase.state]&.name,
         purchase.link.native_type,
-        purchase.link.taxjar_product_tax_code,
+        taxjar_product_tax_code_for(purchase.link),
         taxjar_info&.gst_tax_rate,
         taxjar_info&.pst_tax_rate,
         taxjar_info&.qst_tax_rate,

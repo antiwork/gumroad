@@ -201,7 +201,7 @@ class UsStateSalesTaxUploader
         purchase:,
         destination:,
         quantity: purchase.quantity,
-        product_tax_code: purchase.link.taxjar_product_tax_code,
+        product_tax_code: taxjar_product_tax_code_for(purchase.link),
         amount_dollars:,
         shipping_dollars:,
         sales_tax_dollars:,
@@ -236,7 +236,7 @@ class UsStateSalesTaxUploader
         purchase:,
         destination: destination_for(subdivision:, zip_code:),
         quantity: purchase.quantity,
-        product_tax_code: purchase.link.taxjar_product_tax_code,
+        product_tax_code: taxjar_product_tax_code_for(purchase.link),
         amount_dollars:,
         sales_tax_dollars:,
         unit_price_dollars: amount_dollars / purchase.quantity
@@ -276,7 +276,7 @@ class UsStateSalesTaxUploader
           transaction_date: purchase.chargeback_date.iso8601,
           destination: destination_for(subdivision:, zip_code:),
           quantity: purchase.quantity,
-          product_tax_code: purchase.link.taxjar_product_tax_code,
+          product_tax_code: taxjar_product_tax_code_for(purchase.link),
           amount_dollars:,
           sales_tax_dollars:,
           unit_price_dollars: amount_dollars / purchase.quantity
@@ -325,7 +325,7 @@ class UsStateSalesTaxUploader
           transaction_date: won_at.iso8601,
           destination: destination_for(subdivision:, zip_code:),
           quantity: purchase.quantity,
-          product_tax_code: purchase.link.taxjar_product_tax_code,
+          product_tax_code: taxjar_product_tax_code_for(purchase.link),
           amount_dollars:,
           shipping_dollars: 0,
           sales_tax_dollars:,
@@ -341,6 +341,13 @@ class UsStateSalesTaxUploader
   end
 
   private
+    # The product tax code for a pushed transaction. The software-and-plugins subtree is resolved
+    # once per run: per-link resolution would add an ancestry query per purchase.
+    def taxjar_product_tax_code_for(link)
+      @software_and_plugins_taxonomy_ids ||= Taxonomy.software_and_plugins_subtree_ids
+      link.taxjar_product_tax_code(software_and_plugins_taxonomy_ids: @software_and_plugins_taxonomy_ids)
+    end
+
     def gross_purchase?(purchase)
       purchase.created_at >= REFUND_REPORTING_CUTOVER.beginning_of_day
     end
