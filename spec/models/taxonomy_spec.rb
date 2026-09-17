@@ -3,6 +3,20 @@
 require "spec_helper"
 
 describe Taxonomy do
+  describe ".software_and_plugins_subtree_ids" do
+    let(:software_development) { Taxonomy.find_or_create_by!(slug: "software-development") }
+    let(:software_and_plugins) { Taxonomy.find_or_create_by!(slug: "software-and-plugins", parent: software_development) }
+    let(:wordpress) { Taxonomy.find_or_create_by!(slug: "wordpress", parent: software_and_plugins) }
+
+    it "covers the node itself and its descendants" do
+      expect(Taxonomy.software_and_plugins_subtree_ids).to include(software_and_plugins.id, wordpress.id)
+    end
+
+    it "excludes taxonomies outside the subtree" do
+      expect(Taxonomy.software_and_plugins_subtree_ids).not_to include(software_development.id)
+    end
+  end
+
   describe "validations" do
     describe "slug presence validation" do
       context "when slug is present" do

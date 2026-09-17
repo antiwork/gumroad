@@ -123,7 +123,7 @@ class CreateUsStateMonthlySalesReportsJob
           city_tax_rate,
           Money.new(amount_not_collected_by_gumroad).format(no_cents_if_whole: false, symbol: false),
           purchase.link.native_type,
-          Link::NATIVE_TYPES_TO_TAX_CODE[purchase.link.native_type],
+          taxjar_product_tax_code_for(purchase.link),
         ].to_csv)
 
         price_dollars = price_cents / 100.0
@@ -142,7 +142,7 @@ class CreateUsStateMonthlySalesReportsJob
                                               transaction_date: purchase.created_at.iso8601,
                                               destination:,
                                               quantity: purchase.quantity,
-                                              product_tax_code: Link::NATIVE_TYPES_TO_TAX_CODE[purchase.link.native_type],
+                                              product_tax_code: taxjar_product_tax_code_for(purchase.link),
                                               amount_dollars:,
                                               shipping_dollars:,
                                               sales_tax_dollars:,
@@ -178,6 +178,13 @@ class CreateUsStateMonthlySalesReportsJob
   end
 
   private
+    # The product tax code for a reported row. The software-and-plugins subtree is resolved once
+    # for the whole run: per-link resolution would add an ancestry query per purchase.
+    def taxjar_product_tax_code_for(link)
+      @software_and_plugins_taxonomy_ids ||= Taxonomy.software_and_plugins_subtree_ids
+      link.taxjar_product_tax_code(software_and_plugins_taxonomy_ids: @software_and_plugins_taxonomy_ids)
+    end
+
     def fetch_taxjar_info(purchase:, subdivision:, zip_code:, price_cents:)
       origin = {
         country: GumroadAddress::COUNTRY.alpha2,
@@ -196,7 +203,7 @@ class CreateUsStateMonthlySalesReportsJob
         state: subdivision.code
       }
 
-      product_tax_code = Link::NATIVE_TYPES_TO_TAX_CODE[purchase.link.native_type]
+      product_tax_code = taxjar_product_tax_code_for(purchase.link)
       quantity = purchase.quantity
       unit_price_dollars = price_cents / 100.0 / quantity
       shipping_dollars = purchase.shipping_cents / 100.0
