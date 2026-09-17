@@ -38,8 +38,7 @@ const EMAIL_DRAFT_STATE_LABELS: Record<NonNullable<MarketingChannel["draft"]>["s
 // scheduled one is queued, and a submitted one is out of their hands — "sent" would claim a
 // delivery we do not observe, so it points at the Emails tab for that.
 const EMAIL_DRAFT_SUMMARY: Record<NonNullable<MarketingChannel["draft"]>["state"], (subject: string) => string> = {
-  draft: (subject) =>
-    `We drafted an email about ${subject} for your past customers and followers. Nothing is sent until you send it.`,
+  draft: (subject) => `We drafted an email about ${subject} for your past customers and followers.`,
   scheduled: (subject) => `Your launch email about ${subject} is scheduled for your past customers and followers.`,
   sent: (subject) => `You submitted your launch email about ${subject}. Check its delivery status in Emails.`,
 };

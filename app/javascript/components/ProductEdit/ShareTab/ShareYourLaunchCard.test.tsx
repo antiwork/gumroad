@@ -155,6 +155,7 @@ describe("ShareYourLaunchCard", () => {
     await renderCard([xChannel(), ...comingSoon, emailChannel()]);
 
     expect(screen.getByText(/We drafted an email about Gumstein Letters/u)).toBeDefined();
+    expect(screen.queryByText(/Nothing is sent until you send it/u)).toBeNull();
     expect(screen.getByText(/12 past customers and 4 followers would get it \(16 people\)/u)).toBeDefined();
     expect(screen.getByText("Draft")).toBeDefined();
     expect(screen.getByRole("link", { name: "Review the draft" })).toHaveProperty(
