@@ -1,7 +1,5 @@
 # frozen_string_literal: true
 
-# Per-channel readiness. Flipping a channel live is adding its executor and
-# setting `live: true` here; the picker renders non-live channels as "Coming soon".
 module Marketing::Channel
   ALL = {
     "x" => { label: "X", live: true, executor: "Marketing::Channels::X" },
@@ -10,7 +8,13 @@ module Marketing::Channel
     "tiktok" => { label: "TikTok", live: false },
   }.freeze
 
-  def self.live?(channel) = ALL.fetch(channel.to_s).fetch(:live)
+  ABANDONED_CART = "abandoned_cart"
+
+  def self.action_channels
+    ALL.keys.index_by(&:itself).merge(ABANDONED_CART => ABANDONED_CART)
+  end
+
+  def self.live?(channel) = ALL.fetch(channel.to_s) { {} }.fetch(:live, false)
 
   def self.executor_for(channel) = ALL.fetch(channel.to_s).fetch(:executor).constantize
 end

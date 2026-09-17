@@ -3,8 +3,15 @@ import * as React from "react";
 
 import { NavigationButton } from "$app/components/Button";
 
-// if true
-export const TwitterShareButton = ({ url, text = "Join me on @Gumroad!" }: { url: string; text?: string }) => {
+export const TwitterShareButton = ({
+  url,
+  text = "Join me on @Gumroad!",
+  children = "Share on X",
+}: {
+  url: string;
+  text?: string;
+  children?: React.ReactNode;
+}) => {
   const shareUrl = `https://twitter.com/intent/tweet?url=${encodeURIComponent(url)}&text=${encodeURIComponent(text)}`;
 
   const handleClick = (ev: React.MouseEvent<HTMLAnchorElement>) => {
@@ -20,7 +27,7 @@ export const TwitterShareButton = ({ url, text = "Join me on @Gumroad!" }: { url
   return (
     <NavigationButton color="twitter" onClick={handleClick} href={shareUrl} target="_blank" rel="noopener noreferrer">
       <TwitterX pack="brands" className="size-5" />
-      Share on X
+      {children}
     </NavigationButton>
   );
 };
