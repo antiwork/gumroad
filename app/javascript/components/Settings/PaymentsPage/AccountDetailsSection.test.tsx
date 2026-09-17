@@ -96,6 +96,18 @@ describe("AccountDetailsSection foreign representative tax ID", () => {
     expect(screen.getByText(/upload a passport/u)).toBeTruthy();
   });
 
+  it("keeps a mapped foreign-ID field's existing length behavior", () => {
+    renderSection(makeUser({ individual_tax_id_entered: false }), {
+      is_business: true,
+      business_country: "US",
+      country: "BO",
+    });
+    const input = screen.getByLabelText<HTMLInputElement>("Cédula de Identidad (CI)");
+    expect([input.minLength, input.maxLength]).toEqual([8, 8]);
+    fireEvent.change(input, { target: { value: "12345678" } });
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
   it("keeps the mapped Canadian field unchanged", () => {
     renderSection(makeUser({ individual_tax_id_entered: false }), {
       is_business: true,
@@ -131,6 +143,15 @@ describe("AccountDetailsSection foreign representative tax ID", () => {
 });
 
 describe("AccountDetailsSection SSN field", () => {
+  it("accepts only four digits on the permitted US-resident last-four path", () => {
+    renderSection(makeUser({ individual_tax_id_entered: false }));
+    const input = screen.getByLabelText("Last 4 digits of SSN");
+    fireEvent.change(input, { target: { value: "000" } });
+    expect(screen.getByRole("alert").textContent).toBe("Enter the last 4 digits of your SSN.");
+    fireEvent.change(input, { target: { value: "0000" } });
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
   it("renders the masked completed display when the full SSN is already on file", () => {
     renderSection(
       makeUser({

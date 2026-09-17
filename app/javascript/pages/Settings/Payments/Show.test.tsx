@@ -225,12 +225,20 @@ describe("US company representative tax ID", () => {
     expect(screen.getAllByText("Enter a 9-digit US ITIN or SSN.").length).toBeGreaterThan(0);
   });
 
-  it("submits a nine-digit ITIN for the foreign representative", () => {
-    renderPage({ individual_tax_id_entered: false, business_tax_id_entered: true }, business);
-    fireEvent.change(screen.getByLabelText("Personal tax ID"), { target: { value: "000000000" } });
-    save();
-    expect(mocks.put).toHaveBeenCalled();
-  });
+  it.each(["000000000", "000-00-0000", "000 00 0000"])(
+    "submits nine digits for the foreign representative's formatted ITIN %s",
+    (value) => {
+      renderPage({ individual_tax_id_entered: false, business_tax_id_entered: true }, business);
+      fireEvent.change(screen.getByLabelText("Personal tax ID"), { target: { value } });
+      save();
+      expect(mocks.put).toHaveBeenCalledWith(
+        "/settings_payments",
+        expect.objectContaining({
+          user: expect.objectContaining({ individual_tax_id: "000000000" }),
+        }),
+      );
+    },
+  );
 
   it.each([true, false])("shows the document CTA only when Stripe offers that alternative: %s", async (offered) => {
     const props = { ...pageProps({ individual_tax_id_entered: false }, business), can_manage_beneficial_owners: true };

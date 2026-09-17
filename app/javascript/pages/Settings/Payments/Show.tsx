@@ -11,7 +11,7 @@ import type { ComplianceInfo, PayoutMethod, FormFieldName, User, PayoutDebitCard
 import { COLOMBIA_ID_NUMBER_ERROR_MESSAGE, isValidColombiaIdNumber } from "$app/utils/colombiaIdNumbers";
 import { formatPriceCentsWithCurrencySymbol, formatPriceCentsWithoutCurrencySymbol } from "$app/utils/currency";
 import { accountNumberFormatError } from "$app/utils/payoutAccountNumbers";
-import { personalTaxIdError } from "$app/utils/personalTaxId";
+import { normalizeUsTaxId, personalTaxIdError, usesUsTaxId } from "$app/utils/personalTaxId";
 import { countryRequiresPostalCode } from "$app/utils/postalCodes";
 import { asyncVoid } from "$app/utils/promise";
 
@@ -1165,7 +1165,12 @@ export default function PaymentsPage() {
 
     form.transform((data) => {
       const transformed: Record<string, unknown> = {
-        user: data.user,
+        user: {
+          ...data.user,
+          ...(usesUsTaxId(data.user, props.user) && data.user.individual_tax_id
+            ? { individual_tax_id: normalizeUsTaxId(data.user.individual_tax_id) }
+            : {}),
+        },
         payouts_paused_by_user: data.payouts_paused_by_user,
         payout_threshold_cents: data.payout_threshold_cents,
         payout_frequency: data.payout_frequency,
