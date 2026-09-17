@@ -9,6 +9,7 @@ import {
   type MarketingAction,
   type MarketingChannel,
 } from "$app/data/marketing_actions";
+import { formatPriceCentsWithCurrencySymbol } from "$app/utils/currency";
 import { assertResponseError } from "$app/utils/request";
 
 import { Button, NavigationButton } from "$app/components/Button";
@@ -36,12 +37,21 @@ const EMAIL_DRAFT_STATE_LABELS: Record<NonNullable<MarketingChannel["draft"]>["s
 
 // The row's summary is the seller's status line, so it follows the state: a draft awaits them, a
 // scheduled one is queued, and a submitted one is out of their hands — "sent" would claim a
-// delivery we do not observe, so it points at the Emails tab for that.
+// delivery we do not observe, so the Open in Emails button is the only pointer to delivery status.
 const EMAIL_DRAFT_SUMMARY: Record<NonNullable<MarketingChannel["draft"]>["state"], (subject: string) => string> = {
-  draft: (subject) => `We drafted an email about ${subject}.`,
+  draft: () => "Launch email drafted for your past customers and followers who haven't bought it yet.",
   scheduled: (subject) => `Your launch email about ${subject} is scheduled for your past customers and followers.`,
-  sent: (subject) => `You submitted your launch email about ${subject}. Check its delivery status in Emails.`,
+  sent: (subject) => `You submitted your launch email about ${subject}.`,
 };
+
+const pluralize = (count: number, singular: string, plural: string) => (count === 1 ? singular : plural);
+
+// One line, naming the product once: the card already sits on the product's own page.
+const draftSummary = (counts: NonNullable<MarketingChannel["counts"]>) =>
+  `Launch email drafted for ${counts.total} ${pluralize(counts.total, "person", "people")} (${counts.customers} past ${pluralize(counts.customers, "customer", "customers")}, ${counts.followers} ${pluralize(counts.followers, "follower", "followers")}) who haven't bought it yet.`;
+
+const formatUSD = (cents: number) =>
+  formatPriceCentsWithCurrencySymbol("usd", cents, { symbolFormat: "short", noCentsIfWhole: true });
 
 export const ShareYourLaunchCard = ({ productPermalink }: { productPermalink: string }) => {
   const [channels, setChannels] = React.useState<MarketingChannel[] | null>(null);
@@ -125,7 +135,13 @@ const EmailChannelRow = ({ channel }: { channel: MarketingChannel }) => {
 
       {channel.eligible === false ? (
         <Alert role="status">
-          <span>{channel.blocked_reason}</span>
+          <span>
+            {channel.blocked_reason}
+            {channel.requirements &&
+            channel.requirements.sales_cents_total < channel.requirements.min_sales_cents_required
+              ? ` You're at ${formatUSD(channel.requirements.sales_cents_total)} of ${formatUSD(channel.requirements.min_sales_cents_required)} in sales.`
+              : null}
+          </span>
         </Alert>
       ) : channel.declined ? (
         <Alert role="status">
@@ -133,14 +149,9 @@ const EmailChannelRow = ({ channel }: { channel: MarketingChannel }) => {
         </Alert>
       ) : draft ? (
         <>
-          <span>{EMAIL_DRAFT_SUMMARY[draft.state](draft.subject)}</span>
-          {counts && draft.state === "draft" ? (
-            <small className="text-muted">
-              {counts.total} unique {counts.total === 1 ? "recipient" : "recipients"} ({counts.customers} past{" "}
-              {counts.customers === 1 ? "customer" : "customers"}, {counts.followers}{" "}
-              {counts.followers === 1 ? "follower" : "followers"}), excluding buyers of this product.
-            </small>
-          ) : null}
+          <span>
+            {draft.state === "draft" && counts ? draftSummary(counts) : EMAIL_DRAFT_SUMMARY[draft.state](draft.subject)}
+          </span>
           <div className="flex flex-wrap gap-2">
             <NavigationButton href={draft.edit_url}>
               {draft.state === "draft" ? "Review the draft" : "Open in Emails"}

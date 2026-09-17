@@ -154,9 +154,13 @@ describe("ShareYourLaunchCard", () => {
   it("shows the drafted launch email with what it reaches and a link to the draft", async () => {
     await renderCard([xChannel(), ...comingSoon, emailChannel()]);
 
-    expect(screen.getByText(/We drafted an email about Gumstein Letters/u)).toBeDefined();
-    expect(screen.queryByText(/Nothing is sent until you send it/u)).toBeNull();
-    expect(screen.getByText(/16 unique recipients \(12 past customers, 4 followers\)/u)).toBeDefined();
+    expect(
+      screen.getByText(
+        /Launch email drafted for 16 people \(12 past customers, 4 followers\) who haven't bought it yet\./u,
+      ),
+    ).toBeDefined();
+    expect(screen.queryByText(/We drafted an email/u)).toBeNull();
+    expect(screen.queryByText(/excluding buyers of this product/u)).toBeNull();
     expect(screen.getByText("Draft")).toBeDefined();
     expect(screen.getByRole("link", { name: "Review the draft" })).toHaveProperty(
       "href",
@@ -171,12 +175,13 @@ describe("ShareYourLaunchCard", () => {
         eligible: false,
         draft: null,
         blocked_reason: "You can email your customers once you've made at least $100 in sales and received a payout.",
+        requirements: { sales_cents_total: 4_000, min_sales_cents_required: 10_000 },
       }),
     ]);
 
     expect(
       screen.getByText(
-        /You can email your customers once you've made at least \$100 in sales and received a payout\./u,
+        /You can email your customers once you've made at least \$100 in sales and received a payout\. You're at \$40 of \$100 in sales\./u,
       ),
     ).toBeDefined();
     expect(screen.queryByRole("link", { name: "Review the draft" })).toBeNull();
@@ -204,8 +209,8 @@ describe("ShareYourLaunchCard", () => {
     ]);
 
     expect(screen.getByText("Sent")).toBeDefined();
-    expect(screen.getByText(/You submitted your launch email about Gumstein Letters/u)).toBeDefined();
-    expect(screen.getByText(/Check its delivery status in Emails/u)).toBeDefined();
+    expect(screen.getByText(/You submitted your launch email about Gumstein Letters\./u)).toBeDefined();
+    expect(screen.queryByText(/Check its delivery status/u)).toBeNull();
     expect(screen.queryByText(/Nothing is sent until you send it/u)).toBeNull();
     expect(screen.queryByText(/unique recipients/u)).toBeNull();
     expect(screen.getByRole("link", { name: "Open in Emails" })).toBeDefined();
