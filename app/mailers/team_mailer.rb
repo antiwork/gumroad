@@ -5,13 +5,18 @@ class TeamMailer < ApplicationMailer
 
   layout "layouts/email"
 
+  # The inviter writes their own display name, and this email goes to someone who may never have heard of
+  # them or of Gumroad. A ring of throwaway accounts put a fake bank-charge notice and a callback number in
+  # the name and sent 504k of these (gp#2762). So the subject is ours, and the name only appears once the
+  # seller has been reviewed; until then the inviter is identified by their email, which they cannot write
+  # scam copy into.
   def invite(team_invitation)
     @team_invitation = team_invitation
     @seller = team_invitation.seller
-    @seller_name = sanitize(team_invitation.seller.display_name)
-    @seller_email = team_invitation.seller.email
-    @seller_username = team_invitation.seller.username
-    @subject = "#{@seller_name} has invited you to join #{@seller_username}"
+    @seller_email = @seller.email
+    @seller_username = @seller.username
+    @seller_name = TeamInvitationThrottle.trusted_sender?(@seller) ? sanitize(@seller.display_name) : @seller_email
+    @subject = "You've been invited to join #{@seller_username} on Gumroad"
 
     mail(
       from: NOREPLY_EMAIL_WITH_NAME,

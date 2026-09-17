@@ -12,7 +12,7 @@
   </p>
 </div>
 <div>
-  <p><%= @seller_name %> (<%= @seller_email %>) has invited you to join the team at <%= link_to @seller_username, @seller.subdomain_with_protocol, target: "_blank" %> with the role of <%= @team_invitation.role.humanize %>.</p>
+  <p><%= @seller_name %><%= " (#{@seller_email})" if @seller_name != @seller_email %> has invited you to join the team at <%= link_to @seller_username, @seller.subdomain_with_protocol, target: "_blank" %> with the role of <%= @team_invitation.role.humanize %>.</p>
   <p>
     <strong>This invitation will expire in <%= (@team_invitation.expires_at.to_date - Time.current.to_date).to_i %> days.</strong>
   </p>
@@ -36,6 +36,6 @@
     <strong>Invitation expired?</strong>
   </p>
   <p>
-    Contact <%= @seller_name %> (<%= link_to @seller_email, "mailto:#{@seller_email}" %>) by replying to this email to receive a new invitation.
+    Contact <%= link_to @seller_email, "mailto:#{@seller_email}" %> by replying to this email to receive a new invitation.
   </p>
 </div>
