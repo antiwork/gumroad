@@ -30,7 +30,7 @@ const state = (overrides: Partial<MarketingCartRecovery> = {}): MarketingCartRec
 const renderCard = async (recovery: MarketingCartRecovery) => {
   fetchCartRecovery.mockResolvedValue(recovery);
   render(<CartRecoveryCard productPermalink="abc" />);
-  await screen.findByText("Cart recovery");
+  await screen.findByRole("heading", { name: "Abandoned cart email" });
 };
 
 describe("CartRecoveryCard", () => {
@@ -43,8 +43,9 @@ describe("CartRecoveryCard", () => {
     expect(screen.getByText(/Anyone who leaves this product in their cart gets/u).textContent).toContain(
       "“You left something in your cart” 24 hours later",
     );
-    expect(screen.getByText("Off")).toBeDefined();
-    expect(screen.getByRole("switch", { name: "Recover abandoned carts" })).toHaveProperty("checked", false);
+    expect(screen.queryByText("Off")).toBeNull();
+    expect(screen.queryByText("On")).toBeNull();
+    expect(screen.getByRole("switch", { name: "Abandoned cart email" })).toHaveProperty("checked", false);
     expect(screen.queryByRole("link", { name: "Open in Workflows" })).toBeNull();
   });
 
@@ -52,10 +53,13 @@ describe("CartRecoveryCard", () => {
     await renderCard(state());
     updateCartRecovery.mockResolvedValue(state({ enabled: true, workflow_url: "/workflows/wf1/emails" }));
 
-    fireEvent.click(screen.getByRole("switch", { name: "Recover abandoned carts" }));
+    fireEvent.click(screen.getByRole("switch", { name: "Abandoned cart email" }));
 
     await waitFor(() => expect(updateCartRecovery).toHaveBeenCalledWith("abc", true));
-    await screen.findByText("On");
+    await waitFor(() =>
+      expect(screen.getByRole("switch", { name: "Abandoned cart email" })).toHaveProperty("checked", true),
+    );
+    expect(screen.queryByText(/Nothing is sent until/u)).toBeNull();
     expect(screen.getByRole("link", { name: "Open in Workflows" })).toHaveProperty(
       "href",
       expect.stringContaining("/workflows/wf1/emails"),
@@ -66,10 +70,12 @@ describe("CartRecoveryCard", () => {
     await renderCard(state({ enabled: true, workflow_url: "/workflows/wf1/emails" }));
     updateCartRecovery.mockResolvedValue(state({ enabled: false, workflow_url: "/workflows/wf1/emails" }));
 
-    fireEvent.click(screen.getByRole("switch", { name: "Recover abandoned carts" }));
+    fireEvent.click(screen.getByRole("switch", { name: "Abandoned cart email" }));
 
     await waitFor(() => expect(updateCartRecovery).toHaveBeenCalledWith("abc", false));
-    await screen.findByText("Off");
+    await waitFor(() =>
+      expect(screen.getByRole("switch", { name: "Abandoned cart email" })).toHaveProperty("checked", false),
+    );
     // The workflow is paused, not deleted, so it is still there to edit.
     expect(screen.getByRole("link", { name: "Open in Workflows" })).toBeDefined();
   });
@@ -79,8 +85,11 @@ describe("CartRecoveryCard", () => {
       state({ available: false, blocked_reason: "Cart reminders turn on once you've received your first payout." }),
     );
 
-    expect(screen.getByText("Cart reminders turn on once you've received your first payout.")).toBeDefined();
-    expect(screen.getByRole("switch", { name: "Recover abandoned carts" })).toHaveProperty("disabled", true);
+    expect(screen.getByRole("status").tagName).toBe("P");
+    expect(screen.getByRole("status").textContent).toBe(
+      "Cart reminders turn on once you've received your first payout.",
+    );
+    expect(screen.getByRole("switch", { name: "Abandoned cart email" })).toHaveProperty("disabled", true);
   });
 
   it("renders nothing when the endpoint refuses the seller", async () => {

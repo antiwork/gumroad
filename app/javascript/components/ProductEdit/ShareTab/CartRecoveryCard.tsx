@@ -1,4 +1,3 @@
-import { CartPlus } from "@boxicons/react";
 import * as React from "react";
 
 import { fetchCartRecovery, updateCartRecovery, type MarketingCartRecovery } from "$app/data/marketing_cart_recovery";
@@ -6,9 +5,7 @@ import { assertResponseError } from "$app/utils/request";
 
 import { NavigationButton } from "$app/components/Button";
 import { showAlert } from "$app/components/server-components/Alert";
-import { Alert } from "$app/components/ui/Alert";
 import { Card, CardContent } from "$app/components/ui/Card";
-import { Pill } from "$app/components/ui/Pill";
 import { Switch } from "$app/components/ui/Switch";
 
 export const CartRecoveryCard = ({ productPermalink }: { productPermalink: string }) => {
@@ -38,29 +35,15 @@ export const CartRecoveryCard = ({ productPermalink }: { productPermalink: strin
 
   return (
     <section className="grid gap-4">
-      <header>
-        <h2>Cart recovery</h2>
-        <p className="text-muted">Bring back buyers who almost checked out. Nothing is sent until you turn this on.</p>
-      </header>
       <Card>
         <CardContent details className="grid gap-4">
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <div className="flex items-center gap-3">
-              <CartPlus className="size-6" />
-              <span className="font-semibold">Abandoned cart email</span>
-              {state.enabled ? (
-                <Pill color="success" size="small">
-                  On
-                </Pill>
-              ) : (
-                <Pill size="small">Off</Pill>
-              )}
-            </div>
+            <h2>Abandoned cart email</h2>
             <Switch
               checked={state.enabled}
               disabled={busy || !state.available}
               onChange={(event) => void setEnabled(event.target.checked)}
-              label="Recover abandoned carts"
+              aria-label="Abandoned cart email"
             />
           </div>
 
@@ -83,9 +66,9 @@ export const CartRecoveryCard = ({ productPermalink }: { productPermalink: strin
               ) : null}
             </>
           ) : (
-            <Alert role="status">
-              <span>{state.blocked_reason}</span>
-            </Alert>
+            <p role="status" className="text-muted">
+              {state.blocked_reason}
+            </p>
           )}
         </CardContent>
       </Card>
