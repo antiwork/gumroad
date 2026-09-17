@@ -117,17 +117,7 @@ class StripePayoutProcessor
     end
   end
 
-  # Public: Whether the connected account can actually pay funds out in `currency`.
-  #
-  # A Stripe account holds a separate balance per currency and Stripe settles a destination charge
-  # in the currency the buyer was charged in, so an account whose own currency is `huf` can still
-  # hold real `eur` money (gumroad-private#2693). Payouts need both sides to line up: Stripe rejects
-  # a payout in a currency the account holds no funds in, and one with no bank account to receive it.
-  # Requiring both keeps a balance we cannot pay `unpaid` (it rolls forward, as before) instead of
-  # creating a payout Stripe rejects.
-  #
-  # The account's own currency is answered without a Stripe call — that's the overwhelmingly common
-  # path — and anything else comes from `pay_out_currencies`.
+  # Unsupported currencies stay unpaid rather than creating a payout Stripe will reject.
   def self.pay_out_currency?(merchant_account, currency)
     currency = currency.to_s
     return false if currency.blank?
@@ -215,12 +205,7 @@ class StripePayoutProcessor
     end
   end
 
-  # Public: Splits claimed balances into one payout group per destination account and currency.
-  #
-  # A connected account holds a separate Stripe balance per currency, and a Stripe payout moves the
-  # balance of one currency only, so a seller holding two currencies needs two Payments: summing
-  # their cents into one `amount_cents` would wire the wrong amount (gumroad-private#2693).
-  # Returns `[[merchant_account, payout_currency, balances], ...]`.
+  # Never sum cents held in different currencies or on different Stripe accounts.
   def self.payout_groups(user, balances)
     merchant_account, balances_held_by_gumroad, balances_held_by_stripe = get_payout_details(user, balances)
     groups = {}
@@ -231,14 +216,16 @@ class StripePayoutProcessor
         groups[[merchant_account_id, currency]] = [stripe_balances.first.merchant_account, currency, stripe_balances]
       end
 
-    if balances_held_by_gumroad.present? && merchant_account.present?
+    if balances_held_by_gumroad.present?
       # Gumroad-held funds are transferred into the connected account in USD and then paid out in
       # that account's own currency, so they belong to the group for that account and currency.
-      key = [merchant_account.id, merchant_account.currency.to_s]
+      # With no merchant account to pay into they still get a group, so preparation fails that
+      # Payment and returns the claimed balances to `unpaid` instead of dropping them silently.
+      key = merchant_account.present? ? [merchant_account.id, merchant_account.currency.to_s] : [nil, nil]
       if groups.key?(key)
         groups[key][2].concat(balances_held_by_gumroad)
       else
-        groups[key] = [merchant_account, merchant_account.currency.to_s, balances_held_by_gumroad]
+        groups[key] = [merchant_account, merchant_account&.currency&.to_s, balances_held_by_gumroad]
       end
     end
 
@@ -288,12 +275,7 @@ class StripePayoutProcessor
       (stripe_currencies.size == 1 ? stripe_currencies.first : merchant_account.currency.to_s)
     payout_currency = payout_currency.to_s
 
-    # Refuse to sum `holding_amount_cents` across balances whose `holding_currency` differs from the
-    # destination it will be summed into. Without this guard, a stale foreign-currency balance (e.g. a
-    # VND-denominated row carried in from a closed merchant account) gets added to a USD payout as if its
-    # cents were USD cents, silently corrupting the wire amount. The second half rejects a balance whose
-    # own account has no rail for its own currency: paying it would fail at Stripe, and repeated payout
-    # failures pause the seller, so those rows belong back in `unpaid` for the next run.
+    # A currency mismatch would turn nominal cents into a different amount of money.
     mismatched_stripe_balances = balances_held_by_stripe.reject { |b| b.holding_currency.to_s == payout_currency }
     unpayable_stripe_balances = (balances_held_by_stripe - mismatched_stripe_balances)
       .reject { |b| pay_out_currency?(b.merchant_account, b.holding_currency) }
@@ -418,6 +400,15 @@ class StripePayoutProcessor
     failure_reason = Payment::FailureReason::PROCESSOR_UNAVAILABLE
     payment.error_message = "#{e.class.name}: #{e.message}".truncate(1000)
     raise
+  rescue StandardError => e
+    failed = true
+    failure_reason = if transfer_requested && payment.stripe_internal_transfer_id.nil?
+      Payment::FailureReason::PAYOUT_OUTCOME_UNKNOWN
+    else
+      Payment::FailureReason::PROCESSOR_UNAVAILABLE
+    end
+    payment.error_message = "#{e.class.name}: #{e.message}".truncate(1000)
+    raise
   ensure
     if failed
       payment.mark_failed!(failure_reason)
@@ -535,9 +526,14 @@ class StripePayoutProcessor
   end
 
   def self.process_payments(payments)
+    first_error = nil
     payments.each do |payment|
       perform_payment(payment)
+    rescue => error
+      ErrorNotifier.notify(error, payment_id: payment.id)
+      first_error ||= error
     end
+    raise first_error if first_error
   end
 
   # Public: A payout to a Gumroad-managed Stripe account in a country that only supports cross-border
@@ -596,13 +592,10 @@ class StripePayoutProcessor
                                                        # 2 keys (`payment` and `bank_account`) already added above so allow max - 2 more keys
                                                        max_key_length: StripeMetadata::STRIPE_METADATA_MAX_KEYS_LENGTH - 2))
     }
-    # Name the seller's bank account only when the payout is in the connected account's own currency,
-    # which is the one its BankAccount record is known to describe. A foreign-currency group (an `eur`
-    # holding on a `huf` account, see gumroad-private#2693) has to reach the account's own bank leg for
-    # that currency instead, which is what Stripe pays when no destination is given; naming the `huf`
-    # record there is refused. Compare against the account's currency and not the record's: an ACH-type
-    # record reports `usd` whatever country it is in, so a `cad` payout on that country's own managed
-    # account would otherwise silently lose its destination.
+    # Only name the bank account for the connected account's own currency; a foreign-currency group
+    # reaches that currency's bank leg via Stripe's default, and naming the mismatched record is
+    # refused. Compare the account's currency, not the record's: ACH-type records report `usd`
+    # regardless of country.
     if bank_account.present? && payment.currency.to_s == merchant_account.currency.to_s
       params[:destination] = bank_account.stripe_external_account_id
     end

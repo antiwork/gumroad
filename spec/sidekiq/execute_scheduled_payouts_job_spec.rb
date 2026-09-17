@@ -46,7 +46,7 @@ describe ExecuteScheduledPayoutsJob do
       suspended_user = create(:user, user_risk_state: "suspended_for_fraud")
       succeeding_payout = create(:scheduled_payout, user: suspended_user, action: "refund", scheduled_at: 1.day.ago, created_by: create(:user))
 
-      allow(Payouts).to receive(:create_payment).and_raise(StandardError, "test error")
+      allow(Payouts).to receive(:create_payments).and_raise(StandardError, "test error")
 
       described_class.new.perform
 

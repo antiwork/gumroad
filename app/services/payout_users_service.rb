@@ -13,10 +13,10 @@ class PayoutUsersService
   def process
     payments, cross_border_payments = create_payments
 
-    PayoutProcessorType.get(processor_type).process_payments(payments) if payments.present?
     cross_border_payments.each do |payment|
       ProcessPaymentWorker.perform_in(StripePayoutProcessor::CROSS_BORDER_PAYOUT_DELAY, payment.id)
     end
+    PayoutProcessorType.get(processor_type).process_payments(payments) if payments.present?
 
     payments + cross_border_payments
   end

@@ -146,6 +146,7 @@ describe StripeBalanceEnforcer do
     def balance_moving_entry_points
       [
         "Payouts.create_payment",
+        "Payouts.create_payments",
         "create_payments_for_balances",
         "StripeTransferInternallyToCreator",
         "StripeTransferExternallyToGumroad",

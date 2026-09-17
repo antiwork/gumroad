@@ -3746,6 +3746,21 @@ class StripePayoutProcessorTest < ActiveSupport::TestCase
     assert_equal [eur_balance], eur_group[2]
   end
 
+  test "payout_groups keeps a group for the seller's Gumroad-held balances when there is no merchant account to pay into" do
+    user = create_user
+    gumroad_balance = create_balance(user:, merchant_account: MerchantAccount.gumroad(StripeChargeProcessor.charge_processor_id),
+                                     holding_currency: Currency::USD, holding_amount_cents: 100_00)
+    StripePayoutProcessor.stubs(:get_payout_details).returns([nil, [gumroad_balance], []])
+
+    groups = StripePayoutProcessor.payout_groups(user, [gumroad_balance])
+
+    assert_equal 1, groups.size
+    account, currency, balances = groups.first
+    assert_nil account
+    assert_nil currency
+    assert_equal [gumroad_balance], balances
+  end
+
   test "prepare_payment_and_set_amount pays a huf account's eur-held balance in eur" do
     user = create_user
     merchant_account = create_merchant_account(user:, charge_processor_id: StripeChargeProcessor.charge_processor_id, currency: Currency::HUF, country: "HU")

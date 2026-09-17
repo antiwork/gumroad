@@ -81,24 +81,29 @@ class ScheduledPayout < ApplicationRecord
           return :flagged
         end
 
-        # A seller can need more than one payment (one per currency group), and each is prepared
-        # independently, so every failure is judged on its own reason.
+        # Judge failures only after dispatching healthy siblings.
+        requeueable_error = nil
+        terminal_failure = false
+        payable_payments = []
+        dispatch_error = nil
+
         payments.each do |payment, payment_errors|
-          next unless payment&.failed?
+          next if payment.blank?
 
-          if Payment::FailureReason::REQUEUEABLE_REASONS.include?(payment.failure_reason)
-            raise "Payout failed: #{payment_errors&.join(", ") || "Payment failed during preparation"}"
+          if payment.failed?
+            if Payment::FailureReason::REQUEUEABLE_REASONS.include?(payment.failure_reason)
+              requeueable_error ||= payment_errors&.join(", ") || "Payment failed during preparation"
+            else
+              # A non-requeueable preparation failure (no merchant account, currency mismatch,
+              # destination-ledger drift) needs a human to act — retrying tomorrow can't fix it.
+              terminal_failure = true
+            end
+          else
+            payable_payments << payment
           end
-
-          # A non-requeueable preparation failure (no merchant account, currency mismatch,
-          # destination-ledger drift) needs a human to act — retrying tomorrow can't fix it.
-          update!(status: "flagged", executed_at: nil)
-          return :flagged
         end
 
-        payments.each do |payment, _payment_errors|
-          next if payment.blank? || payment.failed?
-
+        payable_payments.each do |payment|
           if StripePayoutProcessor.cross_border_payout?(payment)
             # Funds transferred into a cross-border Connect account settle ~24h later. Defer the bank
             # payout (matching the automated payout path) instead of running it now — otherwise it
@@ -111,13 +116,24 @@ class ScheduledPayout < ApplicationRecord
             next unless payment.failed?
 
             if Payment::FailureReason::REQUEUEABLE_REASONS.include?(payment.failure_reason)
-              raise "Payout failed: #{payment.errors.full_messages.first || "Payment processing failed"}"
+              requeueable_error ||= payment.errors.full_messages.first || "Payment processing failed"
+            else
+              # Same terminal-vs-requeueable distinction as the preparation failures above.
+              terminal_failure = true
             end
-
-            # Same terminal-vs-requeueable distinction as the preparation-failure branch above.
-            update!(status: "flagged", executed_at: nil)
-            return :flagged
           end
+        rescue => error
+          ErrorNotifier.notify(error, payment_id: payment.id)
+          dispatch_error ||= error
+        end
+
+        raise dispatch_error if dispatch_error
+
+        raise "Payout failed: #{requeueable_error}" if requeueable_error.present?
+
+        if terminal_failure
+          update!(status: "flagged", executed_at: nil)
+          return :flagged
         end
       rescue => e
         update!(status: "pending", executed_at: nil)

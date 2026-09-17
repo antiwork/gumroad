@@ -278,7 +278,7 @@ describe ScheduledPayout do
       it "flags the payout for review when no payable balance is available" do
         allow(Payouts).to receive(:create_payments)
           .with(Date.yesterday.to_s, user.current_payout_processor, user)
-          .and_return([[nil, nil]])
+          .and_return([])
 
         expect(scheduled_payout.execute!).to eq(:flagged)
         expect(scheduled_payout.reload.status).to eq("flagged")
@@ -297,7 +297,24 @@ describe ScheduledPayout do
         expect(scheduled_payout.executed_at).to be_nil
       end
 
-      it "flags without raising when create_payment returns errors" do
+      it "still processes the seller's healthy currency group when another group failed, and flags the payout" do
+        healthy_payment = instance_double(Payment, failed?: false)
+        allow(healthy_payment).to receive(:reload).and_return(healthy_payment)
+        failed_payment = instance_double(Payment, failed?: true,
+                                                  failure_reason: Payment::FailureReason::CURRENCY_MISMATCH)
+        processor = class_double(StripePayoutProcessor, process_payments: nil)
+        expect(Payouts).to receive(:create_payments)
+          .with(Date.yesterday.to_s, user.current_payout_processor, user)
+          .and_return([[failed_payment, ["Cannot process payout: balances [1] have holding_currency that does not match the payout currency."]],
+                       [healthy_payment, []]])
+        expect(PayoutProcessorType).to receive(:get).with(user.current_payout_processor).and_return(processor)
+        expect(processor).to receive(:process_payments).with([healthy_payment])
+
+        expect(scheduled_payout.execute!).to eq(:flagged)
+        expect(scheduled_payout.reload.status).to eq("flagged")
+      end
+
+      it "flags without raising when create_payments returns a payment-level error" do
         allow(Payouts).to receive(:create_payments)
           .with(Date.yesterday.to_s, user.current_payout_processor, user)
           .and_return([[nil, ["Stripe account not connected"]]])

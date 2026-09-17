@@ -850,61 +850,76 @@ describe Payouts do
       expect(first.reload).to be_processing
       expect(second.reload).to be_processing
     end
+  end
 
-    describe ".create_payments" do
-      let(:payout_date) { Date.today - 1 }
-      let(:user) { create(:user) }
-      let!(:merchant_account) { create(:merchant_account, user:, currency: Currency::HUF) }
-      let!(:default_balance) { nil }
+  describe ".create_payments" do
+    let(:payout_date) { Date.today - 1 }
+    let(:user) { create(:user) }
+    let!(:merchant_account) { create(:merchant_account, user:, currency: Currency::HUF) }
 
-      before do
-        create(:ach_account, user:)
-        create(:balance, user:, merchant_account:, date: payout_date - 1, amount_cents: 10_00,
-                         holding_currency: Currency::HUF, holding_amount_cents: 15_209_249)
+    before do
+      create(:ach_account, user:)
+      create(:balance, user:, merchant_account:, date: payout_date - 1, amount_cents: 10_00,
+                       holding_currency: Currency::HUF, holding_amount_cents: 15_209_249)
+    end
+
+    it "creates one payment per currency group so a seller holding two currencies is paid both" do
+      allow(StripePayoutProcessor).to receive(:is_balance_payable).and_return(true)
+      allow(StripePayoutProcessor).to receive(:prepare_payment_and_set_amount) do |payment, balances, _account, payout_currency|
+        payment.currency = payout_currency
+        payment.amount_cents = balances.sum(&:holding_amount_cents)
+        []
+      end
+      eur_balance = create(:balance, user:, merchant_account:, date: payout_date - 2, amount_cents: 33_12,
+                                     holding_currency: Currency::EUR, holding_amount_cents: 4_303)
+
+      pairs = described_class.create_payments(payout_date.to_s, PayoutProcessorType::STRIPE, user)
+
+      expect(pairs.size).to eq(2)
+      expect(pairs.map { |payment, _errors| payment.currency }).to contain_exactly(Currency::HUF, Currency::EUR)
+      expect(pairs.flat_map { |payment, _| payment.balances.map(&:id) }).to contain_exactly(
+        user.balances.find_by(holding_currency: Currency::HUF).id, eur_balance.id
+      )
+      expect(pairs.map { |payment, _errors| payment.state }.uniq).to eq(["processing"])
+    end
+
+    it "keeps the single-payment path for a seller holding one currency" do
+      allow(StripePayoutProcessor).to receive(:is_balance_payable).and_return(true)
+      allow(StripePayoutProcessor).to receive(:prepare_payment_and_set_amount) do |payment, balances, _account, payout_currency|
+        payment.currency = payout_currency
+        payment.amount_cents = balances.sum(&:holding_amount_cents)
+        []
       end
 
-      it "creates one payment per currency group so a seller holding two currencies is paid both" do
-        allow(StripePayoutProcessor).to receive(:is_balance_payable).and_return(true)
-        allow(StripePayoutProcessor).to receive(:prepare_payment_and_set_amount) do |payment, balances, _account, payout_currency|
-          payment.currency = payout_currency
-          payment.amount_cents = balances.sum(&:holding_amount_cents)
-          []
-        end
-        eur_balance = create(:balance, user:, merchant_account:, date: payout_date - 2, amount_cents: 33_12,
-                                       holding_currency: Currency::EUR, holding_amount_cents: 4_303)
+      pairs = described_class.create_payments(payout_date.to_s, PayoutProcessorType::STRIPE, user)
 
-        pairs = described_class.create_payments(payout_date.to_s, PayoutProcessorType::STRIPE, user)
+      expect(pairs.size).to eq(1)
+      payment, errors = pairs.first
+      expect(errors).to eq([])
+      expect(payment.currency).to eq(Currency::HUF)
+      expect(payment.balances.count).to eq(1)
+    end
 
-        expect(pairs.size).to eq(2)
-        expect(pairs.map { |payment, _errors| payment.currency }).to contain_exactly(Currency::HUF, Currency::EUR)
-        expect(pairs.flat_map { |payment, _| payment.balances.map(&:id) }).to contain_exactly(
-          user.balances.find_by(holding_currency: Currency::HUF).id, eur_balance.id
-        )
-        expect(pairs.map { |payment, _errors| payment.state }.uniq).to eq(["processing"])
-      end
+    it "fails a group whose preparation raises so its claimed balances go back to unpaid" do
+      allow(StripePayoutProcessor).to receive(:is_balance_payable).and_return(true)
+      allow(StripePayoutProcessor).to receive(:prepare_payment_and_set_amount)
+        .and_raise(Stripe::APIConnectionError.new("connection refused"))
+      allow(ErrorNotifier).to receive(:notify)
 
-      it "keeps the single-payment path for a seller holding one currency" do
-        allow(StripePayoutProcessor).to receive(:is_balance_payable).and_return(true)
-        allow(StripePayoutProcessor).to receive(:prepare_payment_and_set_amount) do |payment, balances, _account, payout_currency|
-          payment.currency = payout_currency
-          payment.amount_cents = balances.sum(&:holding_amount_cents)
-          []
-        end
+      pairs = described_class.create_payments(payout_date.to_s, PayoutProcessorType::STRIPE, user)
 
-        pairs = described_class.create_payments(payout_date.to_s, PayoutProcessorType::STRIPE, user)
+      expect(pairs.size).to eq(1)
+      payment, errors = pairs.first
+      expect(payment).to be_failed
+      expect(payment.failure_reason).to eq(Payment::FailureReason::PROCESSOR_UNAVAILABLE)
+      expect(errors).to eq(["connection refused"])
+      expect(user.balances.reload.map(&:state).uniq).to eq(["unpaid"])
+    end
 
-        expect(pairs.size).to eq(1)
-        payment, errors = pairs.first
-        expect(errors).to eq([])
-        expect(payment.currency).to eq(Currency::HUF)
-        expect(payment.balances.count).to eq(1)
-      end
+    it "returns an empty array when there is nothing payable" do
+      allow(StripePayoutProcessor).to receive(:is_balance_payable).and_return(false)
 
-      it "returns an empty array when there is nothing payable" do
-        allow(StripePayoutProcessor).to receive(:is_balance_payable).and_return(false)
-
-        expect(described_class.create_payments(payout_date.to_s, PayoutProcessorType::STRIPE, user)).to eq([])
-      end
+      expect(described_class.create_payments(payout_date.to_s, PayoutProcessorType::STRIPE, user)).to eq([])
     end
   end
 
