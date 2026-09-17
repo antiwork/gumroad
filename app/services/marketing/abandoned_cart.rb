@@ -14,7 +14,7 @@ class Marketing::AbandonedCart
   end
 
   def available? = seller.eligible_for_abandoned_cart_workflows?
-  def enabled? = covering_workflow&.published_at.present?
+  def enabled? = enabled_workflow.present?
 
   # What the seller sees before they touch the toggle: the email they are turning on, who
   # gets it, and the delay the existing cart workflow uses.
@@ -23,10 +23,10 @@ class Marketing::AbandonedCart
       available: available?,
       blocked_reason:,
       enabled: enabled?,
-      # A workflow that reaches this product but is not scoped to it is the account-wide
-      # default, and the toggle then controls cart recovery for every product — the card
-      # has to say so rather than let a product view imply a product-scoped switch.
-      account_wide: workflow.present? && workflow.bought_products.blank? && workflow.bought_variants.blank?,
+      # A covering workflow that is not scoped to a product is the account-wide default, and
+      # the toggle then controls cart recovery for every product — the card has to say so
+      # rather than let a product view imply a product-scoped switch.
+      account_wide: covering_workflows.any? { account_wide?(_1) },
       subject: DefaultAbandonedCartWorkflowGeneratorService::DEFAULT_NAME,
       delay_hours: DefaultAbandonedCartWorkflowGeneratorService::DELAY_HOURS,
       workflow_url: workflow_url,
@@ -38,43 +38,56 @@ class Marketing::AbandonedCart
   def enable
     return :blocked unless available?
 
-    result = if enabled?
-      workflow
-    elsif (existing = covering_workflow)
-      publish(existing)
-    else
-      create_and_publish
+    # Serialized on the product: two taps must not both miss the covering lookup and create a
+    # workflow each, which the cart email scheduler would then send from both.
+    result = nil
+    product.with_lock do
+      @covering_workflows = nil
+      result = if (already = enabled_workflow)
+        already
+      elsif (existing = covering_workflow)
+        publish(existing)
+      else
+        create_and_publish
+      end
     end
     # The memo describes the world before this call, and the caller reads `state` next.
-    @covering_workflow = nil
+    @covering_workflows = nil
     result
   end
 
-  # Pausing is the workflow's own publish state: the workflow and its email are kept, so
-  # the seller can turn it back on or edit it in Workflows.
+  # Turning cart recovery off covers EVERY published workflow that reaches the product, since
+  # the scheduler sends from all of them and pausing one would leave the others emailing after
+  # the seller switched the card off. Eligibility is deliberately not re-checked: a seller who
+  # became ineligible (suspended, payout reversed) must still be able to stop live emails.
   def pause
-    return :blocked unless available?
-    return if workflow.nil? || !enabled?
+    published = covering_workflows.select(&:published_at)
+    return if published.empty?
 
-    workflow.unpublish!
-    @covering_workflow = nil
-    workflow
+    published.each(&:unpublish!)
+    @covering_workflows = nil
+    published.last
   end
 
-  # The seller's abandoned-cart workflow that reaches this product, if there is one. The
-  # workflow answers this itself, through the same rule the cart email scheduler uses, so
-  # the two cannot disagree about which products a workflow covers.
-  def covering_workflow
-    @covering_workflow ||= seller.workflows.alive.abandoned_cart_type.filter_map do |workflow|
-      workflow if workflow.abandoned_cart_products(only_product_and_variant_ids: true)
-                       .any? { |product_id, _variant_ids| product_id == product.id }
-    end.max_by(&:id)
+  # Every alive abandoned-cart workflow of the seller that reaches this product, oldest first.
+  # The workflow answers coverage itself, through the same rule the cart email scheduler uses,
+  # so the two cannot disagree about which products a workflow covers.
+  def covering_workflows
+    @covering_workflows ||= seller.workflows.alive.abandoned_cart_type.select do |workflow|
+      workflow.abandoned_cart_products(only_product_and_variant_ids: true)
+              .any? { |product_id, _variant_ids| product_id == product.id }
+    end.sort_by(&:id)
   end
+
+  # The one the toggle reports on: a published covering workflow if there is one, else the newest.
+  def covering_workflow = enabled_workflow || covering_workflows.last
 
   private
     attr_reader :product, :seller
 
-    def workflow = covering_workflow
+    def enabled_workflow = covering_workflows.reverse.find(&:published_at)
+
+    def account_wide?(workflow) = workflow.bought_products.blank? && workflow.bought_variants.blank?
 
     def blocked_reason
       return if available?
@@ -90,7 +103,7 @@ class Marketing::AbandonedCart
     end
 
     def workflow_url
-      workflow = self.workflow
+      workflow = covering_workflow
       return if workflow.nil?
 
       Rails.application.routes.url_helpers.workflow_emails_path(workflow.external_id)

@@ -124,6 +124,23 @@ describe Marketing::AbandonedCart do
       it "does nothing when cart recovery was never on" do
         expect { cart.pause }.not_to change { [workflows.count, Installment.count] }
       end
+
+      it "pauses every published workflow that reaches the product" do
+        DefaultAbandonedCartWorkflowGeneratorService.new(seller:).generate
+        account_wide = workflows.published.sole
+        # A second one the seller added by hand in Workflows, scoped to the same product.
+        scoped = create(:workflow, seller:, link: nil, workflow_type: Workflow::ABANDONED_CART_TYPE,
+                                   bought_products: [product.unique_permalink])
+        scoped.publish!
+
+        expect(workflows.published.count).to eq(2)
+        expect(cart.state).to include(enabled: true, account_wide: true)
+        expect { cart.pause }.to change { workflows.published.count }.from(2).to(0)
+
+        expect(account_wide.reload.published_at).to be_nil
+        expect(scoped.reload.published_at).to be_nil
+        expect(cart.state).to include(enabled: false)
+      end
     end
   end
 
@@ -137,8 +154,19 @@ describe Marketing::AbandonedCart do
       expect(cart.state[:blocked_reason]).to eq("Cart reminders turn on once you've received your first payout.")
     end
 
-    it "refuses to pause anything" do
-      expect(cart.pause).to eq(:blocked)
+    it "does not need eligibility to pause something already published" do
+      workflow = create(:workflow, seller:, link: nil, workflow_type: Workflow::ABANDONED_CART_TYPE)
+      workflow.publish!
+
+      expect(cart).not_to be_available
+      expect { cart.pause }.to change { workflows.published.count }.from(1).to(0)
+
+      expect(workflow.reload.published_at).to be_nil
+      expect(cart.state).to include(available: false, enabled: false)
+    end
+
+    it "pauses nothing when there is nothing published" do
+      expect { cart.pause }.not_to change { workflows.count }
     end
   end
 end
