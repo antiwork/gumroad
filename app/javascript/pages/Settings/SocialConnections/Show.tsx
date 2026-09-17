@@ -85,10 +85,11 @@ export default function SocialConnectionsPage() {
       connected: twitter_connected,
       handle: twitter_connected ? twitter_handle : null,
       legacyHandle: twitter_connected ? null : twitter_handle,
+      // x_auth_access_type caps the OAuth grant, so sending "read" here yields a token that
+      // cannot post. The sign-in button in SocialAuth.tsx still sends it, and should.
       connectHref: Routes.user_twitter_omniauth_authorize_path({
         social_connect_return,
         state: "link_twitter_account",
-        x_auth_access_type: "read",
       }),
       disconnect: disconnect(unlinkTwitter),
     },

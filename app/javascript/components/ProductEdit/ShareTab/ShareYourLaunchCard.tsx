@@ -313,7 +313,8 @@ const ChannelComposer = ({
           <div className="grid gap-2">
             <span>
               Gumroad can't post for you yet: your connected X account only allows reading. Post it yourself, or
-              reconnect X to let Gumroad post for you.
+              reconnect X to let Gumroad post for you. X now asks you to select “I trust this app” before it enables the
+              Authorize button.
             </span>
             <div className="flex flex-wrap gap-2">
               <TwitterShareButton url={action.link_url ?? ""} text={action.copy} />
