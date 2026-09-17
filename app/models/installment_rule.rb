@@ -203,9 +203,13 @@ class InstallmentRule < ApplicationRecord
     end
 
     def delayed_delivery_time_must_fit_the_column
-      return if delayed_delivery_time.nil? || delayed_delivery_time <= MAX_DELAY_SECONDS
+      return if delayed_delivery_time.nil?
 
-      errors.add(:delayed_delivery_time, "is too large")
+      if delayed_delivery_time.negative?
+        errors.add(:delayed_delivery_time, "must not be negative")
+      elsif delayed_delivery_time > MAX_DELAY_SECONDS
+        errors.add(:delayed_delivery_time, "is too large")
+      end
     end
 
     def to_be_published_at_must_exist_for_non_workflow_posts
