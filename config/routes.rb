@@ -137,6 +137,15 @@ Rails.application.routes.draw do
           post "custom_html/edit", action: :edit_custom_html
         end
       end
+      get "products/:product_id/marketing/recommendations", to: "marketing_actions#recommendations"
+      post "products/:product_id/marketing_actions", to: "marketing_actions#create"
+      resources :marketing_actions, only: [:show] do
+        member do
+          post :approve
+          post :execute
+          post :cancel
+        end
+      end
       resources :upsells, only: [:index, :show, :create, :update, :destroy]
       resources :utm_links, only: [:index, :show, :create, :update, :destroy] do
         member do

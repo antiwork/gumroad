@@ -50,6 +50,7 @@ describe Marketing::Recommendations do
     first = channels.first[:action]
     second = described_class.new(product:, seller:).call.first[:action]
     expect(second).to eq(first)
+    expect(second.as_json[:idempotency_key]).to eq(first.as_json[:idempotency_key])
     expect(UtmLink.where(seller:, utm_source: "x", utm_campaign: "launch").count).to eq(1)
   end
 

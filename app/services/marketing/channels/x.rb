@@ -7,8 +7,9 @@ class Marketing::Channels::X
   # itself times out at 15s), so a later execute has to resolve it, not resend it.
   ATTEMPT_TIMEOUT = 2.minutes
 
-  def initialize(action)
+  def initialize(action, confirmation_token: nil)
     @action = action
+    @confirmation_token = confirmation_token
   end
 
   def call
@@ -58,6 +59,7 @@ class Marketing::Channels::X
           next false
         end
 
+        action.verify_confirmation!(@confirmation_token) if @confirmation_token
         action.queue!
         true
       end
