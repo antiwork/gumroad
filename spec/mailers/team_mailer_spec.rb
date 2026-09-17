@@ -132,6 +132,28 @@ describe TeamMailer do
       expect(mail.body).to include "Accept invitation"
       expect(mail.body).to include accept_settings_team_invitation_url(team_invitation.external_id)
     end
+
+    %w[not_reviewed compliant].each do |state|
+      context "when the seller is #{state}" do
+        let(:seller) { create(:named_seller, user_risk_state: state, name: "Unrequested charge notice", username: "billingcallback") }
+
+        it "keeps seller identity out of the subject, body, and reply address" do
+          expect(mail.subject).to eq("Gumroad team invitation")
+          expect(mail.body.decoded).not_to include(seller.name, seller.username, seller.email)
+          expect(mail.reply_to).to eq([ApplicationMailer::NOREPLY_EMAIL])
+        end
+      end
+    end
+
+    context "when a compliant seller has since been suspended" do
+      let(:seller) { create(:named_seller, user_risk_state: "compliant") }
+
+      before { seller.update_column(:user_risk_state, "suspended_for_tos_violation") }
+
+      it "does not build an invitation" do
+        expect(mail.message).to be_a(ActionMailer::Base::NullMail)
+      end
+    end
   end
 
   describe "#invitation_accepted" do

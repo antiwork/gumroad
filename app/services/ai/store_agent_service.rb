@@ -488,6 +488,18 @@ class Ai::StoreAgentService
     - Be helpful and proactive. If the creator describes a change they want, go ahead and prepare it
       for them with api_write so it's ready to confirm — don't just explain how they could do it
       themselves. Offer to make the change.
+    - Never silently drop a requested restriction. The discount endpoints cannot enforce subscriber-only redemption:
+      universal controls which products a code covers, not who can redeem it. Universal percentage codes
+      cover all products; universal fixed-amount codes cover only products priced in the target
+      product's currency. A product-specific
+      code is not subscriber-only either. Sharing a code only with subscribers restricts distribution,
+      not redemption. Explain this limitation in a reply_only turn before proposing a supported alternative.
+      Wait for the creator to agree to that alternative before api_write; the confirmation click
+      approves a supported change, not an undisclosed relaxation of their request.
+      You also cannot configure existing-customer or product-ownership eligibility through these
+      endpoints. Do not offer to set those up as an alternative, even if other Gumroad interfaces
+      support them. Offer only the product coverage, discount, usage limit, or minimum spend
+      options explicitly listed in the endpoint; none enforces subscriber eligibility.
     - Only ever act on the current creator's own store. You cannot access other creators' data; the
       API enforces this and an endpoint the creator's role can't use will simply fail.
     - Always use api_read to get real ids and live numbers before acting. Never invent ids.
@@ -497,9 +509,9 @@ class Ai::StoreAgentService
       (all products, all sales, the whole catalog) requires walking every page first. Never state or
       imply you checked items you did not actually fetch — if you can't or didn't fetch a page, say so.
     - Never claim a change has already been made. On a turn where you called api_write, your final
-      text is replaced with fixed server copy telling the creator the change is ready to confirm, so
-      answer any informational part of their request BEFORE calling api_write — in the text you write
-      before the call, or in an earlier turn — and keep the final text after api_write minimal.
+      text is replaced with fixed server copy telling the creator the change is ready to confirm.
+      Any necessary explanation or limitation must be given in an earlier reply_only turn;
+      preamble text before api_write is discarded too.
     - You cannot see the creator's dashboard. Never invent or describe dashboard screens, settings
       pages, pickers, or menus, and never send the creator to a screen you are not certain exists.
       If a task needs something you have no endpoint for, say so plainly instead of guessing at UI
@@ -1402,7 +1414,10 @@ class Ai::StoreAgentService
       result = api_client.get(path, params)
       record_successful_read(endpoint:, expanded_path: path, result:)
       # Collect any renderable objects from the response so the chat can show them inline as cards.
-      @objects.concat(Ai::StoreAgentObjectFormatter.from_response(endpoint, result)) if @objects
+      if @objects && @objects.size < MAX_DISPLAY_OBJECTS
+        objects = Ai::StoreAgentObjectFormatter.from_response(endpoint, result, seller:, limit: MAX_DISPLAY_OBJECTS - @objects.size, existing_objects: @objects)
+        @objects = (@objects + objects).uniq.first(MAX_DISPLAY_OBJECTS)
+      end
       [result, nil]
     rescue ArgumentError => e
       # Missing/blank path param (e.g. the model forgot the product id).
@@ -1565,17 +1580,41 @@ class Ai::StoreAgentService
                  product&.price_currency_type ||
                  (seller.currency_type if endpoint.id == "create_product")
 
+      # Form encoding turns boolean true into "true"; other truthy values do not enable universal.
+      universal_offer_code = endpoint.id == "create_offer_code" && body["universal"].to_s == "true"
+      if universal_offer_code
+        coverage = if body["offer_type"] == "percent"
+          "All products"
+        elsif currency
+          "All #{currency.upcase}-priced products"
+        else
+          "Products priced in the target product's currency"
+        end
+      end
+
       # Target identity (path params are validated non-blank) — names the record being changed.
-      rows = path_params.filter_map { |key, value| preview_field(path_label(endpoint, key), path_value(endpoint, key, value, product)) }
+      rows = path_params.filter_map do |key, value|
+        label = universal_offer_code && key == "link_id" ? "Product" : path_label(endpoint, key)
+        preview_field(label, path_value(endpoint, key, value, product))
+      end
 
       # Body keys are intentional mutations, so each gets a row even when blank (a blank renders as
       # "(blank)") — otherwise a destructive clear like description: "" would execute invisibly. The
       # discount amount + type collapse into one readable row; both are still represented.
       if body.key?("amount_off") || body.key?("offer_type")
-        rows << { label: "Discount", value: discount_amount(body.delete("amount_off"), body.delete("offer_type"), currency).presence || BLANK_VALUE }
+        offer_type = body["offer_type"]
+        body.delete("offer_type") if %w[percent cents].include?(offer_type)
+        rows << { label: "Discount", value: discount_amount(body.delete("amount_off"), offer_type, currency).presence || BLANK_VALUE }
       end
-      body.each { |key, value| rows << { label: field_label(key, offer_code:), value: display_value(key, value, currency).presence || BLANK_VALUE } }
+      body.each do |key, value|
+        rows << if universal_offer_code && key == "universal"
+          { label: "Applies to", value: coverage }
+        else
+          { label: field_label(key, offer_code:), value: display_value(key, value, currency).presence || BLANK_VALUE }
+        end
+      end
       rows << { label: "Max uses", value: "Unlimited" } if endpoint.id == "create_offer_code" && !body.key?("max_purchase_count")
+      rows << { label: "Redemption", value: "Anyone with the code; no subscriber check" } if endpoint.id == "create_offer_code"
 
       rows
     end

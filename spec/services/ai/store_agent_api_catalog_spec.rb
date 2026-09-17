@@ -62,6 +62,14 @@ describe Ai::StoreAgentApiCatalog do
     end
   end
 
+  describe "discount eligibility" do
+    it "keeps the display summary concise without inventing eligibility parameters" do
+      endpoint = described_class.find("create_offer_code")
+      expect(endpoint.summary).to eq("Create a discount code.")
+      expect(endpoint.params).not_to include("subscriber_only", "audience")
+    end
+  end
+
   describe "resource subscription endpoints" do
     it "allows listing and deletion but not webhook creation" do
       expect(described_class.find("list_resource_subscriptions")).to be_present
