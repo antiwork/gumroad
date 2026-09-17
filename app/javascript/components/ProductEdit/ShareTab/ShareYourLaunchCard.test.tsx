@@ -156,7 +156,7 @@ describe("ShareYourLaunchCard", () => {
 
     expect(screen.getByText(/We drafted an email about Gumstein Letters/u)).toBeDefined();
     expect(screen.queryByText(/Nothing is sent until you send it/u)).toBeNull();
-    expect(screen.getByText(/12 past customers and 4 followers would get it \(16 people\)/u)).toBeDefined();
+    expect(screen.getByText(/16 unique recipients \(12 past customers, 4 followers\)/u)).toBeDefined();
     expect(screen.getByText("Draft")).toBeDefined();
     expect(screen.getByRole("link", { name: "Review the draft" })).toHaveProperty(
       "href",
@@ -192,7 +192,7 @@ describe("ShareYourLaunchCard", () => {
     expect(screen.getByText("Scheduled")).toBeDefined();
     expect(screen.getByText(/Your launch email about Gumstein Letters is scheduled/u)).toBeDefined();
     expect(screen.queryByText(/Nothing is sent until you send it/u)).toBeNull();
-    expect(screen.queryByText(/would get it/u)).toBeNull();
+    expect(screen.queryByText(/unique recipients/u)).toBeNull();
     expect(screen.getByRole("link", { name: "Open in Emails" })).toBeDefined();
   });
 
@@ -207,7 +207,7 @@ describe("ShareYourLaunchCard", () => {
     expect(screen.getByText(/You submitted your launch email about Gumstein Letters/u)).toBeDefined();
     expect(screen.getByText(/Check its delivery status in Emails/u)).toBeDefined();
     expect(screen.queryByText(/Nothing is sent until you send it/u)).toBeNull();
-    expect(screen.queryByText(/would get it/u)).toBeNull();
+    expect(screen.queryByText(/unique recipients/u)).toBeNull();
     expect(screen.getByRole("link", { name: "Open in Emails" })).toBeDefined();
   });
 

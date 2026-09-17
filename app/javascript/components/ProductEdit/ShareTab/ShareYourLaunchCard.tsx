@@ -38,7 +38,7 @@ const EMAIL_DRAFT_STATE_LABELS: Record<NonNullable<MarketingChannel["draft"]>["s
 // scheduled one is queued, and a submitted one is out of their hands — "sent" would claim a
 // delivery we do not observe, so it points at the Emails tab for that.
 const EMAIL_DRAFT_SUMMARY: Record<NonNullable<MarketingChannel["draft"]>["state"], (subject: string) => string> = {
-  draft: (subject) => `We drafted an email about ${subject} for your past customers and followers.`,
+  draft: (subject) => `We drafted an email about ${subject}.`,
   scheduled: (subject) => `Your launch email about ${subject} is scheduled for your past customers and followers.`,
   sent: (subject) => `You submitted your launch email about ${subject}. Check its delivery status in Emails.`,
 };
@@ -136,9 +136,9 @@ const EmailChannelRow = ({ channel }: { channel: MarketingChannel }) => {
           <span>{EMAIL_DRAFT_SUMMARY[draft.state](draft.subject)}</span>
           {counts && draft.state === "draft" ? (
             <small className="text-muted">
-              {counts.customers} past {counts.customers === 1 ? "customer" : "customers"} and {counts.followers}{" "}
-              {counts.followers === 1 ? "follower" : "followers"} would get it ({counts.total} people), leaving out
-              everyone who already bought this product.
+              {counts.total} unique {counts.total === 1 ? "recipient" : "recipients"} ({counts.customers} past{" "}
+              {counts.customers === 1 ? "customer" : "customers"}, {counts.followers}{" "}
+              {counts.followers === 1 ? "follower" : "followers"}), excluding buyers of this product.
             </small>
           ) : null}
           <div className="flex flex-wrap gap-2">
