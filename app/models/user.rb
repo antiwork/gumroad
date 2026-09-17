@@ -1195,14 +1195,36 @@ class User < ApplicationRecord
   # since a country/payout-method change retires one row and creates another —
   # reading only the live row would restart the clock on a longtime seller.
   def stripe_accounts_seasoned_for_instant_payouts?
-    managed_account = stripe_account
-    return false if managed_account.nil?
+    destination_accounts = instant_payout_destination_accounts
+    return false if destination_accounts.empty?
 
-    [managed_account, stripe_connect_account].compact.all? do |account|
-      seasoned_for_instant_payouts?(account)
+    destination_accounts.all? do |account|
+      # A held-balance account can be a retired one, which would fail the payout rather than
+      # season into a working destination.
+      account.active? && seasoned_for_instant_payouts?(account)
     end
   end
   private :stripe_accounts_seasoned_for_instant_payouts?
+
+  # Every account StripePayoutProcessor.get_payout_details could pay to, across both balance states
+  # it branches on. The held-balance arm only matters without a managed account: when there is one,
+  # the payout lands on it or on the connected account.
+  def instant_payout_destination_accounts
+    accounts = [StripePayoutProcessor.destination_merchant_account(self, [])]
+    if stripe_account.nil?
+      accounts << StripePayoutProcessor.destination_merchant_account(self, stripe_held_unpaid_balances)
+    end
+
+    accounts.compact.uniq
+  end
+  private :instant_payout_destination_accounts
+
+  def stripe_held_unpaid_balances
+    balances.unpaid.includes(:merchant_account).select do |balance|
+      balance.merchant_account&.holder_of_funds == HolderOfFunds::STRIPE
+    end
+  end
+  private :stripe_held_unpaid_balances
 
   def seasoned_for_instant_payouts?(account)
     cutoff = MIN_ACCOUNT_AGE_FOR_INSTANT_PAYOUTS.ago
