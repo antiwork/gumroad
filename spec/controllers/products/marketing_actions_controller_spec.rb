@@ -73,6 +73,8 @@ describe Products::MarketingActionsController do
         expect(email).to include("eligible" => true, "blocked_reason" => nil)
         expect(email["counts"]).to eq("customers" => 0, "followers" => 0, "total" => 0)
         expect(email["draft"]).to include("subject" => product.name, "state" => "draft")
+        # The action's channel is read back off the row, so this proves what was persisted.
+        expect(email["action"]).to include("channel" => "email")
 
         draft = Installment.find_by_external_id(email["draft"]["id"])
         expect(draft).to have_attributes(installment_type: Installment::AUDIENCE_TYPE,

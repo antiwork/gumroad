@@ -3,8 +3,8 @@
 # Per-channel readiness. Flipping a channel live is adding its executor and
 # setting `live: true` here; the picker renders non-live channels as "Coming soon".
 #
-# The key order IS Marketing::Action's channel enum (it is built from these keys), so
-# new channels are appended: inserting one would silently repoint existing rows.
+# The persisted `marketing_actions.channel` value is the key itself (a string column), so a
+# channel can be added anywhere without repointing rows that already exist.
 module Marketing::Channel
   ALL = {
     "x" => { label: "X", live: true, executor: "Marketing::Channels::X" },
