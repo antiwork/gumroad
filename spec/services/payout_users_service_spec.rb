@@ -94,6 +94,95 @@ describe PayoutUsersService, :vcr do
     end
   end
 
+  describe "#process dispatch", :freeze_time do
+    let(:service) do
+      described_class.new(date_string: payout_date.to_s, processor_type: PayoutProcessorType::STRIPE, user_ids: user1.id)
+    end
+    let(:payments) { create_list(:payment, 2, user: user1, processor: PayoutProcessorType::STRIPE) }
+    let(:cross_border_payments) { create_list(:payment, 3, user: user1, processor: PayoutProcessorType::STRIPE) }
+
+    before do
+      (payments + cross_border_payments).each do |payment|
+        payment.balances << create(:balance, user: user1, state: "processing")
+      end
+      allow(service).to receive(:create_payments).and_return([payments, cross_border_payments])
+      allow(StripePayoutProcessor).to receive(:perform_payment)
+      allow(ErrorNotifier).to receive(:notify)
+    end
+
+    [0, 1].each do |failed_index|
+      [false, true].each do |accepted_before_error|
+        it "attempts every sibling when delayed payment #{failed_index + 1} raises #{accepted_before_error ? 'after' : 'before'} enqueue", :aggregate_failures do
+          failed_payment = cross_border_payments[failed_index]
+          error = IOError.new("Lost enqueue connection")
+          allow(ProcessPaymentWorker).to receive(:perform_in).and_wrap_original do |original, delay, payment_id|
+            if payment_id == failed_payment.id
+              original.call(delay, payment_id) if accepted_before_error
+              raise error
+            end
+            original.call(delay, payment_id)
+          end
+
+          expect { service.process }.to raise_error(error)
+
+          cross_border_payments.each do |payment|
+            expect(ProcessPaymentWorker).to have_received(:perform_in).with(25.hours, payment.id).once
+          end
+          payments.each { |payment| expect(StripePayoutProcessor).to have_received(:perform_payment).with(payment).once }
+          expect(ErrorNotifier).to have_received(:notify).with(error, payment_id: failed_payment.id).once
+          queued_payments = accepted_before_error ? cross_border_payments : cross_border_payments - [failed_payment]
+          expect(ProcessPaymentWorker.jobs.map { |job| job["args"].sole }).to match_array(queued_payments.map(&:id))
+          (payments + cross_border_payments).each do |payment|
+            expect(payment.reload.state).to eq("processing")
+            expect(payment.balances.pluck(:state)).to eq(["processing"])
+          end
+        end
+      end
+    end
+
+    it "reports multiple delayed and ordinary dispatch failures and raises the first error", :aggregate_failures do
+      errors = [IOError.new("First enqueue failed"), IOError.new("Second enqueue failed")]
+      dispatch_error = StandardError.new("Ordinary dispatch failed")
+      allow(ProcessPaymentWorker).to receive(:perform_in).and_call_original
+      cross_border_payments.first(2).zip(errors).each do |payment, error|
+        allow(ProcessPaymentWorker).to receive(:perform_in).with(25.hours, payment.id).and_raise(error)
+      end
+      allow(StripePayoutProcessor).to receive(:perform_payment).with(payments.first).and_raise(dispatch_error)
+
+      expect { service.process }.to raise_error(errors.first)
+
+      cross_border_payments.first(2).zip(errors).each do |payment, error|
+        expect(ErrorNotifier).to have_received(:notify).with(error, payment_id: payment.id).once
+      end
+      expect(ProcessPaymentWorker).to have_enqueued_sidekiq_job(cross_border_payments.last.id).in(25.hours)
+      expect(ErrorNotifier).to have_received(:notify).with(dispatch_error, payment_id: payments.first.id).once
+      expect(StripePayoutProcessor).to have_received(:perform_payment).with(payments.last).once
+    end
+
+    it "still raises ordinary dispatch errors after scheduling all delayed payments" do
+      error = StandardError.new("Ordinary dispatch failed")
+      allow(StripePayoutProcessor).to receive(:perform_payment).with(payments.first).and_raise(error)
+
+      expect { service.process }.to raise_error(error)
+
+      cross_border_payments.each do |payment|
+        expect(ProcessPaymentWorker).to have_enqueued_sidekiq_job(payment.id).in(25.hours)
+      end
+      expect(ErrorNotifier).to have_received(:notify).with(error, payment_id: payments.first.id).once
+      expect(StripePayoutProcessor).to have_received(:perform_payment).with(payments.last).once
+    end
+
+    it "returns ordinary and delayed payments after successful dispatch" do
+      expect(service.process).to eq(payments + cross_border_payments)
+
+      cross_border_payments.each do |payment|
+        expect(ProcessPaymentWorker).to have_enqueued_sidekiq_job(payment.id).in(25.hours)
+      end
+      payments.each { |payment| expect(StripePayoutProcessor).to have_received(:perform_payment).with(payment).once }
+      expect(ErrorNotifier).not_to have_received(:notify)
+    end
+  end
+
   describe "PayoutUsersService#create_payments" do
     before do
       allow(Stripe::Balance).to receive(:retrieve).and_call_original
