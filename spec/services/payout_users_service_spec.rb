@@ -119,6 +119,25 @@ describe PayoutUsersService, :vcr do
     end
   end
 
+  describe "PayoutUsersService#process" do
+    it "dispatches the non-cross-border payments when a cross-border enqueue raises" do
+      cross_border1 = instance_double(Payment, id: 1)
+      cross_border2 = instance_double(Payment, id: 2)
+      normal = instance_double(Payment, id: 3)
+
+      service_object = described_class.new(date_string: payout_date.to_s, processor_type: PayoutProcessorType::STRIPE,
+                                           user_ids: [user1.id, user2.id])
+      allow(service_object).to receive(:create_payments).and_return([[normal], [cross_border1, cross_border2]])
+      allow(ProcessPaymentWorker).to receive(:perform_in).and_raise(StandardError.new("redis down"))
+      allow(StripePayoutProcessor).to receive(:process_payments)
+
+      expect { service_object.process }.to raise_error(StandardError, "redis down")
+
+      expect(ProcessPaymentWorker).to have_received(:perform_in).twice
+      expect(StripePayoutProcessor).to have_received(:process_payments).with([normal])
+    end
+  end
+
   context "when the processor_type is 'STRIPE'" do
     let!(:payout_processor_type) { PayoutProcessorType::STRIPE }
     let(:merchant_account1) { StripeMerchantAccountManager.create_account(user1.reload, passphrase: "1234") }

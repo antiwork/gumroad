@@ -14,10 +14,24 @@ class PayoutUsersService
   def process
     payments, cross_border_payments = create_payments
 
+    # Every payment is already `processing` and this worker has retries disabled, so one failed
+    # enqueue or dispatch must not skip the rest of the batch.
+    first_error = nil
     cross_border_payments.each do |payment|
       ProcessPaymentWorker.perform_in(StripePayoutProcessor::CROSS_BORDER_PAYOUT_DELAY, payment.id)
+    rescue => e
+      ErrorNotifier.notify(e, payment_id: payment.id)
+      first_error ||= e
     end
-    PayoutProcessorType.get(processor_type).process_payments(payments) if payments.present?
+
+    if payments.present?
+      begin
+        PayoutProcessorType.get(processor_type).process_payments(payments)
+      rescue => e
+        first_error ||= e
+      end
+    end
+    raise first_error if first_error
 
     payments + cross_border_payments
   end
