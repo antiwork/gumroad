@@ -1006,6 +1006,47 @@ describe Payouts do
       end
     end
 
+    context "with debt sources excluded from the claim" do
+      before do
+        user.balances.sole.update!(amount_cents: 200_00, holding_currency: Currency::EUR, holding_amount_cents: 180_00)
+        allow(StripePayoutProcessor).to receive(:pay_out_currencies).and_return([Currency::EUR, Currency::GBP])
+        allow(StripePayoutProcessor).to receive(:prepare_payment_and_set_amount).and_return([])
+      end
+
+      [nil, Currency::GBP, Currency::HUF].each do |additional_currency|
+        it "blocks filtered Gumroad debt with EUR#{additional_currency ? " and #{additional_currency}" : ' alone'} claimed" do
+          create(:balance, user:, date: payout_date - 2, amount_cents: -50_00)
+          if additional_currency
+            create(:balance, user:, merchant_account:, date: payout_date - 3, amount_cents: 25_00,
+                             holding_currency: additional_currency, holding_amount_cents: 25_00)
+          end
+
+          expect do
+            expect(described_class.create_payments(payout_date.to_s, PayoutProcessorType::STRIPE, user)).to eq([])
+          end.not_to change(Payment, :count)
+
+          expect(StripePayoutProcessor).not_to have_received(:prepare_payment_and_set_amount)
+          expect(user.balances.reload.map(&:state).uniq).to eq(["unpaid"])
+        end
+      end
+
+      [0, 1].each do |remaining_cents|
+        it "allows EUR when filtered Gumroad sales and refunds net to #{remaining_cents} cents" do
+          eur_credit = user.balances.sole
+          gumroad_credit = create(:balance, user:, date: payout_date - 2, amount_cents: 50_00)
+          gumroad_refund = create(:balance, user:, date: payout_date - 3, amount_cents: -50_00 + remaining_cents)
+
+          pairs = described_class.create_payments(payout_date.to_s, PayoutProcessorType::STRIPE, user)
+
+          expect(pairs.map { |payment, _| [payment.currency, payment.balances.ids] }).to eq([[Currency::EUR, [eur_credit.id]]])
+          expect(pairs.sole.last).to eq([])
+          expect(eur_credit.reload).to be_processing
+          expect(gumroad_credit.reload).to be_unpaid
+          expect(gumroad_refund.reload).to be_unpaid
+        end
+      end
+    end
+
     it "pays nothing when the seller nets to zero or less across groups" do
       allow(StripePayoutProcessor).to receive(:is_balance_payable).and_return(true)
       expect(StripePayoutProcessor).not_to receive(:prepare_payment_and_set_amount)

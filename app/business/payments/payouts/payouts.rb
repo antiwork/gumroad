@@ -460,15 +460,16 @@ class Payouts
         [[nil, nil, balances]]
       end
 
-      # Debt is judged on the seller's whole ledger, not per group: a refund owed in one currency
-      # cannot be netted against a payout in another, so a seller who nets to zero or carries a
-      # negative group is not paid anything until the debt clears.
-      # Read that ledger off every unpaid balance rather than the claim: `is_balance_payable` keeps a
-      # negative foreign row for a currency Stripe is holding nothing in, so a sale and its refund
-      # there would otherwise sum to a pure debt and block the seller's other groups.
+      # Eligibility can exclude entire debt sources or one side of a sale/refund pair.
+      # Judge the complete ledger using the same account/currency grouping as the payout.
       ledger = balances + user.unpaid_balances_up_to_date(date).to_a
+      ledger_groups = if payout_processor.respond_to?(:payout_groups)
+        payout_processor.payout_groups(user, ledger)
+      else
+        [[nil, nil, ledger]]
+      end
       if ledger.sum(&:amount_cents) <= 0 ||
-          (payout_groups.size > 1 && payout_groups.any? { |_, _, group_balances| group_ledger_cents(ledger, group_balances).negative? })
+          ledger_groups.any? { |_, _, group_balances| group_balances.sum(&:amount_cents).negative? }
         Rails.logger.info("Payouts: Negative balance for #{user.id}")
         balances.each(&:mark_unpaid!)
         next []
@@ -618,18 +619,6 @@ class Payouts
     end
   end
   private_class_method :payable_balances_for_processor
-
-  # A home-currency group can also contain Gumroad-held USD balances. Include every source pair,
-  # including unclaimed rows, while keeping the total in USD ledger cents.
-  def self.group_ledger_cents(ledger, group_balances)
-    source_keys = group_balances.map { |balance| [balance.merchant_account_id, balance.holding_currency.to_s] }.to_set
-    ledger.sum do |balance|
-      next 0 unless source_keys.include?([balance.merchant_account_id, balance.holding_currency.to_s])
-
-      balance.amount_cents
-    end
-  end
-  private_class_method :group_ledger_cents
 
   def self.chargeback_rate_reserve_payable_balances(user, balances)
     ::PayoutProcessorType.all.flat_map do |processor_type|
