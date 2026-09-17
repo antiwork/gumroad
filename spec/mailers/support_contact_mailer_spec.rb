@@ -50,7 +50,12 @@ describe SupportContactMailer do
     end
 
     it "mints a distinct Message-ID per submission" do
-      ids = Array.new(3) { build.message_id }
+      # Mail only adds the Message-ID in ready_to_send!, i.e. at delivery.
+      ids = Array.new(3) do
+        mail = build
+        mail.message.ready_to_send!
+        mail.message_id
+      end
 
       expect(ids.uniq.size).to eq(3)
       expect(ids).to all(be_present)
