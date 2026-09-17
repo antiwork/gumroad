@@ -109,6 +109,18 @@ describe Marketing::LaunchEmail do
       expect(draft.reload.name).to eq("A subject of my own")
     end
 
+    it "still recognises the draft after the seller retargets its audience" do
+      draft = launch_email.installment
+      # The card links straight to the Emails editor, where removing the "has not bought"
+      # exclusion is the obvious edit. Matching on the product filter as well would lose the
+      # draft here and mint a second launch email beside it.
+      draft.update!(not_bought_products: [])
+
+      expect(launch_email.installment).to eq(draft)
+      expect(seller.installments.alive.count).to eq(1)
+      expect(launch_email.installment.not_bought_products).to be_blank
+    end
+
     it "does not touch an email the seller has already scheduled" do
       draft = launch_email.installment
       draft.update!(ready_to_publish: true)

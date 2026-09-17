@@ -66,11 +66,11 @@ class Marketing::LaunchEmail
   private
     attr_reader :product, :seller, :utm_link
 
-    # Ours is matched by our own marker, never by name or message: the seller may edit both, and a
-    # renamed or rewritten draft must still be recognised as this product's launch email instead
-    # of a second draft being minted beside it. The marker is also the SQL prefilter, so a look
-    # at the card cannot pull a seller's whole email history — message bodies included — into
-    # memory on a GET the frontend fires on mount.
+    # Ours is matched by our own marker alone, never by name, message or filters: the seller may
+    # edit all three, and a renamed, rewritten or re-targeted draft must still be recognised as
+    # this product's launch email instead of a second draft being minted beside it. The marker is
+    # also the SQL prefilter, so a look at the card cannot pull a seller's whole email history —
+    # message bodies included — into memory on a GET the frontend fires on mount.
     def drafts
       @drafts ||= seller.installments
                         .where(installment_type: Installment::AUDIENCE_TYPE)
@@ -81,10 +81,10 @@ class Marketing::LaunchEmail
 
     def existing = @existing ||= drafts.select(&:alive?).max_by(&:id)
 
-    def launch_draft?(installment)
-      installment.json_data[LAUNCH_PRODUCT_KEY].to_i == product.id &&
-        installment.not_bought_products == [product.unique_permalink]
-    end
+    # The marker alone identifies ours: the product filter is set at create and re-read nowhere,
+    # because the seller retargets the draft's audience in the Emails tab — which is where the
+    # card sends them — and requiring it to still match would drop the draft and mint a twin.
+    def launch_draft?(installment) = installment.json_data[LAUNCH_PRODUCT_KEY].to_i == product.id
 
     # A draft the seller has already scheduled or sent is theirs; so is one they rewrote.
     # Only a draft still holding our own copy is refreshed, so a second publish updates the
