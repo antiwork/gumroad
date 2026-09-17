@@ -103,9 +103,22 @@ describe Marketing::Recommendations do
         expect(email_entry[:draft][:edit_url]).to include("/emails/#{email_entry[:draft][:id]}/edit")
       end
 
-      it "shares one tagged launch link with the X post" do
-        expect(email_entry[:action].utm_link).to eq(channels.first[:action].utm_link)
-        expect(UtmLink.where(seller:, utm_campaign: "launch").count).to eq(1)
+      it "tags the draft's link as email rather than reusing the X post's" do
+        expect(email_entry[:action].utm_link).to have_attributes(
+          utm_source: "email", utm_medium: "email", utm_campaign: "launch"
+        )
+        expect(email_entry[:action].utm_link).not_to eq(channels.first[:action].utm_link)
+        expect(UtmLink.where(seller:, utm_campaign: "launch").count).to eq(2)
+      end
+
+      it "reports a deleted draft as declined and does not build another" do
+        Installment.find_by_external_id(email_entry[:draft][:id]).mark_deleted!
+
+        again = described_class.new(product:, seller:).call.find { _1[:channel] == "email" }
+
+        expect(again[:draft]).to be_nil
+        expect(again[:declined]).to eq(true)
+        expect(Installment.where(seller:, installment_type: Installment::AUDIENCE_TYPE).count).to eq(1)
       end
 
       it "reuses the same draft and action on repeat calls" do

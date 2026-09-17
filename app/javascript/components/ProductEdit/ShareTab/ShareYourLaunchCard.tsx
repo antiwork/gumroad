@@ -118,6 +118,10 @@ const EmailChannelRow = ({ channel }: { channel: MarketingChannel }) => {
         <Alert role="status">
           <span>{channel.blocked_reason}</span>
         </Alert>
+      ) : channel.declined ? (
+        <Alert role="status">
+          <span>You deleted the launch email for this product, so we won&apos;t create another one.</span>
+        </Alert>
       ) : draft ? (
         <>
           <span>

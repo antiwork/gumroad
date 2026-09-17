@@ -26,7 +26,14 @@ class Marketing::LaunchEmail
 
     # Serialized on the product: two overlapping card loads must not both miss the draft and
     # mint one each.
-    product.with_lock { existing ? refresh(existing) : create_draft }
+    product.with_lock do
+      # Re-read under the lock: the counts may have been asked for before it was taken.
+      @drafts = nil
+      @existing = nil
+      next nil if declined?
+
+      @existing = existing ? refresh(existing) : create_draft
+    end
   rescue ActiveRecord::RecordInvalid => e
     # The gate is not the only refusal a draft can hit: `send_emails` also caps a seller
     # below the sales threshold at 100 recipients, which reaches team members whose own
@@ -34,6 +41,10 @@ class Marketing::LaunchEmail
     Rails.logger.info("Marketing::LaunchEmail skipped product #{product.id}: #{e.message}")
     nil
   end
+
+  # Deleting the draft in the Emails tab is the only way to say no to the email channel — the
+  # row has no dismiss control — so a deleted draft is never replaced.
+  def declined? = drafts.any?(&:deleted?) && existing.nil?
 
   # What the draft would reach today, per segment. `total` is the draft's own count, so
   # the card and the Emails tab cannot disagree.
@@ -57,13 +68,18 @@ class Marketing::LaunchEmail
 
     # Ours is matched by our own marker, never by name or message: the seller may edit both, and a
     # renamed or rewritten draft must still be recognised as this product's launch email instead
-    # of a second draft being minted beside it.
-    def existing
-      @existing ||= seller.installments.alive
-                          .where(installment_type: Installment::AUDIENCE_TYPE)
-                          .select { launch_draft?(_1) }
-                          .max_by(&:id)
+    # of a second draft being minted beside it. The marker is also the SQL prefilter, so a look
+    # at the card cannot pull a seller's whole email history — message bodies included — into
+    # memory on a GET the frontend fires on mount.
+    def drafts
+      @drafts ||= seller.installments
+                        .where(installment_type: Installment::AUDIENCE_TYPE)
+                        .where("json_data LIKE ?", "%#{LAUNCH_PRODUCT_KEY}%")
+                        .select { launch_draft?(_1) }
+                        .to_a
     end
+
+    def existing = @existing ||= drafts.select(&:alive?).max_by(&:id)
 
     def launch_draft?(installment)
       installment.json_data[LAUNCH_PRODUCT_KEY].to_i == product.id &&

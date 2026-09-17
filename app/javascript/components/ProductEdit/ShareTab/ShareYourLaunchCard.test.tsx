@@ -191,4 +191,11 @@ describe("ShareYourLaunchCard", () => {
     expect(screen.getByText("Scheduled")).toBeDefined();
     expect(screen.getByRole("link", { name: "Open in Emails" })).toBeDefined();
   });
+
+  it("says the deleted launch email will not be rebuilt", async () => {
+    await renderCard([xChannel(), emailChannel({ declined: true, draft: null })]);
+
+    expect(screen.getByText(/You deleted the launch email for this product/u)).toBeDefined();
+    expect(screen.queryByText(/We couldn't prepare the draft/u)).toBeNull();
+  });
 });

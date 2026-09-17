@@ -5,9 +5,6 @@
 # invented claims), plus the disabled "Coming soon" channels.
 class Marketing::Recommendations
   SENTENCE_BOUNDARY = /(?<=[.!?])\s+/
-  # Every live channel shares the launch's tagged link rather than minting its own, so
-  # the launch's sales attribute to one UtmLink instead of being split across sources.
-  LAUNCH_UTM_SOURCE = "x"
   EMAIL_GATE_ERROR = "email_eligibility_not_met"
 
   def initialize(product:, seller:)
@@ -70,7 +67,7 @@ class Marketing::Recommendations
       action.approve! if action.recommended? && draft.present? && email_state(draft) != "draft"
 
       { eligible: true, blocked_reason: nil, requirements: email_requirements, counts:,
-        draft: email_draft_payload(draft), action: }
+        declined: launch_email.declined?, draft: email_draft_payload(draft), action: }
     end
 
     def email_requirements
@@ -108,14 +105,17 @@ class Marketing::Recommendations
 
       @actions[channel] = Marketing::Action.find_or_create_open!(user: seller, link: product, channel:) do |action|
         action.copy = self.class.copy_for(product)
-        action.utm_link = launch_utm_link(LAUNCH_UTM_SOURCE)
+        action.utm_link = launch_utm_link(channel)
       end
     end
 
-    def launch_utm_link(source)
+    # One tagged link per channel, so the seller's analytics can tell the launch email's clicks
+    # from the post's. They share `utm_campaign`, so the launch still reads as one campaign.
+    def launch_utm_link(channel)
       attrs = { seller:, target_resource_type: "product_page", target_resource_id: product.id,
-                utm_source: source, utm_medium: "social", utm_campaign: "launch" }
-      UtmLink.alive.find_by(attrs) || UtmLink.create!(attrs.merge(title: "#{product.name} — #{source} launch"))
+                utm_source: channel, utm_medium: channel == "email" ? "email" : "social",
+                utm_campaign: "launch" }
+      UtmLink.alive.find_by(attrs) || UtmLink.create!(attrs.merge(title: "#{product.name} — #{channel} launch"))
     end
 
     def intent_url(action)

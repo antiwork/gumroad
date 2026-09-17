@@ -74,6 +74,15 @@ describe Marketing::LaunchEmail do
       expect(described_class.new(product:, seller:, utm_link:).installment).to eq(draft)
     end
 
+    it "does not replace a draft the seller deleted" do
+      draft = launch_email.installment
+      draft.mark_deleted!
+
+      expect { launch_email.installment }.not_to change { Installment.count }
+      expect(launch_email.installment).to be_nil
+      expect(launch_email).to be_declined
+    end
+
     it "refreshes the copy of an untouched draft when the product changes" do
       draft = launch_email.installment
       product.update!(description: "<p>A brand new first sentence. Ignored second.</p>")
@@ -118,7 +127,7 @@ describe Marketing::LaunchEmail do
     end
 
     it "reports no draft instead of raising when the installment cannot be saved" do
-      installments = double(alive: Installment.none)
+      installments = double(alive: Installment.none, where: Installment.none)
       allow(installments).to receive(:new)
         .and_raise(ActiveRecord::RecordInvalid.new(Installment.new))
       allow(seller).to receive(:installments).and_return(installments)

@@ -33,6 +33,8 @@ export type MarketingChannel = {
   blocked_reason?: string | null;
   requirements?: { sales_cents_total: number; min_sales_cents_required: number };
   counts?: { customers: number; followers: number; total: number };
+  // The seller deleted the draft we made, which is the only way to decline this channel.
+  declined?: boolean;
   draft?: MarketingEmailDraft | null;
 };
 
