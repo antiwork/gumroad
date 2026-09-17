@@ -50,6 +50,20 @@ describe Settings::Team::TeamInvitationPolicy do
     end
   end
 
+  permissions :create?, :resend_invitation? do
+    it "denies an inactive seller even when the owner or an admin has permission" do
+      seller.update!(deleted_at: Time.current)
+      [seller, admin_for_seller].each do |user|
+        expect(subject).not_to permit(SellerContext.new(user:, seller:), TeamInvitation)
+      end
+    end
+
+    it "allows an active seller that has not been reviewed" do
+      expect(seller.user_risk_state).to eq("not_reviewed")
+      expect(subject).to permit(SellerContext.new(user: seller, seller:), TeamInvitation)
+    end
+  end
+
   permissions :accept? do
     it "grants access to owner" do
       seller_context = SellerContext.new(user: seller, seller:)

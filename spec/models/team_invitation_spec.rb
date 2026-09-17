@@ -40,6 +40,40 @@ describe TeamInvitation do
       expect(team_invitation.email).to eq("member@example.com")
     end
 
+    context "with a single bare mailbox" do
+      [
+        "member@example.com",
+        '"member"@example.com',
+        '"member one"@example.com',
+        '"member,one"@example.com',
+        '"member<one;two>"@example.com'
+      ].each do |email|
+        it "accepts #{email.inspect}" do
+          expect(build(:team_invitation, seller:, email:)).to be_valid
+        end
+      end
+    end
+
+    context "without a single bare mailbox" do
+      [
+        '"Synthetic notice" <member@example.com>, "sink"@example.net',
+        '"member"@example.com, "sink"@example.com',
+        '"Synthetic notice" <member@example.com>',
+        "Members:member@example.com;",
+        "<member@example.com>",
+        "member@example.com (notice)",
+        '"member"@"sink"@example.com',
+        '"member" "sink"@example.com'
+      ].each do |email|
+        it "rejects #{email.inspect}" do
+          invitation = build(:team_invitation, seller:, email:)
+
+          expect(invitation).not_to be_valid
+          expect(invitation.errors.full_messages).to eq(["Email is invalid"])
+        end
+      end
+    end
+
     context "with deleted record" do
       let(:team_invitation) { create(:team_invitation, seller:) }
 

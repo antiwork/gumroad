@@ -69,7 +69,7 @@ class Settings::Team::InvitationsController < Sellers::BaseController
       alert_message = "Invitation link has expired. Please contact the account owner."
     elsif team_invitation.accepted?
       alert_message = "Invitation has already been accepted."
-    elsif team_invitation.deleted?
+    elsif team_invitation.deleted? || !team_invitation.seller&.account_active?
       alert_message = "Invitation link is invalid. Please contact the account owner."
     elsif team_invitation.matches_owner_email?
       # It can happen if the owner sends an invitation, and then changes their email address to the same email used
@@ -100,6 +100,9 @@ class Settings::Team::InvitationsController < Sellers::BaseController
 
   def resend_invitation
     authorize [:settings, :team, @team_invitation]
+    unless @team_invitation.single_mailbox_email?
+      return render json: { success: false, error_message: "Email is invalid" }
+    end
     return unless throttle_invitation_sends
 
     @team_invitation.update!(

@@ -6,17 +6,21 @@ class TeamMailer < ApplicationMailer
   layout "layouts/email"
 
   def invite(team_invitation)
+    # Delayed jobs must not use stale invitation or seller state from a replica.
+    team_invitation = ApplicationRecord.connected_to(role: :writing) do
+      TeamInvitation.includes(:seller).find_by(id: team_invitation.id)
+    end
+    return unless team_invitation&.seller&.account_active?
+    return if team_invitation.deleted? || team_invitation.accepted? || team_invitation.expired?
+    return unless team_invitation.single_mailbox_email?
+
     @team_invitation = team_invitation
-    @seller = team_invitation.seller
-    @seller_name = sanitize(team_invitation.seller.display_name)
-    @seller_email = team_invitation.seller.email
-    @seller_username = team_invitation.seller.username
-    @subject = "#{@seller_name} has invited you to join #{@seller_username}"
+    @subject = "Gumroad team invitation"
 
     mail(
       from: NOREPLY_EMAIL_WITH_NAME,
       to: @team_invitation.email,
-      reply_to: @seller.email,
+      reply_to: NOREPLY_EMAIL,
       subject: @subject
     )
   end

@@ -11,6 +11,63 @@ describe Settings::Team::InvitationsController do
 
   include_context "with user signed in as admin for seller"
 
+  %w[suspended_for_fraud suspended_for_tos_violation].each do |state|
+    context "when the seller is #{state}" do
+      before { seller.update!(user_risk_state: state) }
+
+      it "refuses an active admin's new invitations for the suspended seller" do
+        expect do
+          post :create, params: { team_invitation: { email: "member@example.com", role: "admin" } }, as: :json
+        end.to not_change { seller.team_invitations.count }
+          .and not_change { ActiveJob::Base.queue_adapter.enqueued_jobs.size }
+          .and not_change { $redis.zcard(RedisKey.team_invitation_send_throttle(seller.id)) }
+
+        expect(response).to have_http_status(:unauthorized)
+        expect(response.parsed_body["success"]).to eq(false)
+      end
+
+      it "refuses an active admin's resends without extending expiry" do
+        invitation = create(:team_invitation, seller:, expires_at: 1.day.ago)
+        expect do
+          put :resend_invitation, params: { id: invitation.external_id }, as: :json
+        end.to not_change { invitation.reload.expires_at }
+          .and not_change { ActiveJob::Base.queue_adapter.enqueued_jobs.size }
+
+        expect(response).to have_http_status(:unauthorized)
+        expect(response.parsed_body["success"]).to eq(false)
+      end
+    end
+  end
+
+  %w[suspended_for_fraud suspended_for_tos_violation deleted].each do |state|
+    it "refuses new and resend requests by a #{state} owner" do
+      invitation = create(:team_invitation, seller:, expires_at: 1.day.ago)
+      seller.update!(state == "deleted" ? { deleted_at: Time.current } : { user_risk_state: state })
+      sign_in seller
+
+      expect do
+        post :create, params: { team_invitation: { email: "member@example.com", role: "admin" } }, as: :json
+        expect(response.parsed_body["success"]).to eq(false)
+        put :resend_invitation, params: { id: invitation.external_id }, as: :json
+        expect(response.parsed_body["success"]).to eq(false)
+      end.to not_change { seller.team_invitations.count }
+        .and not_change { invitation.reload.expires_at }
+        .and not_change { ActiveJob::Base.queue_adapter.enqueued_jobs.size }
+    end
+  end
+
+  it "does not resend for a deleted seller through an active admin's stale account cookie" do
+    invitation = create(:team_invitation, seller:)
+    seller.update!(deleted_at: Time.current)
+
+    expect do
+      put :resend_invitation, params: { id: invitation.external_id }, as: :json
+    end.not_to change { ActiveJob::Base.queue_adapter.enqueued_jobs.size }
+
+    expect_404_response(response)
+    expect(controller.current_seller).to eq(user_with_role_for_seller)
+  end
+
   describe "POST create" do
     it_behaves_like "authorize called for action", :post, :create do
       let(:policy_klass) { Settings::Team::TeamInvitationPolicy }
@@ -34,6 +91,34 @@ describe Settings::Team::InvitationsController do
         expect(team_invitation.email).to eq("member@example.com")
         expect(team_invitation.role_admin?).to eq(true)
         expect(team_invitation.expires_at).not_to be(nil)
+      end
+    end
+
+    it "creates an invitation for a quoted local-part mailbox" do
+      email = '"member,one"@example.com'
+
+      expect do
+        post :create, params: { team_invitation: { email:, role: "admin" } }, as: :json
+      end.to change { seller.team_invitations.count }.by(1)
+        .and change { ActiveJob::Base.queue_adapter.enqueued_jobs.size }.by(1)
+
+      expect(response.parsed_body["success"]).to eq(true)
+      expect(seller.team_invitations.last.email).to eq(email)
+    end
+
+    [
+      '"Synthetic notice" <member@example.com>, "sink"@example.net',
+      '"member"@"sink"@example.com'
+    ].each do |email|
+      it "refuses a non-mailbox #{email.inspect} without reserving a send" do
+        expect do
+          post :create, params: { team_invitation: { email:, role: "admin" } }, as: :json
+        end.to not_change { seller.team_invitations.count }
+          .and not_change { ActiveJob::Base.queue_adapter.enqueued_jobs.size }
+          .and not_change { $redis.zcard(RedisKey.team_invitation_send_throttle(seller.id)) }
+
+        expect(response).to be_successful
+        expect(response.parsed_body).to eq("success" => false, "error_message" => "Email is invalid")
       end
     end
 
@@ -184,6 +269,16 @@ describe Settings::Team::InvitationsController do
       expect(team_invitation.reload.deleted?).to eq(true)
     end
 
+    it "allows deleting a legacy invitation with a recipient list" do
+      team_invitation.update_columns(email: '"Synthetic notice" <member@example.com>, "sink"@example.net')
+
+      delete :destroy, params: { id: team_invitation.external_id }, as: :json
+
+      expect(response).to be_successful
+      expect(response.parsed_body["success"]).to eq(true)
+      expect(team_invitation.reload).to be_deleted
+    end
+
     context "with record belonging to other seller" do
       let(:team_invitation) { create(:team_invitation) }
 
@@ -277,6 +372,22 @@ describe Settings::Team::InvitationsController do
       expect(cookies.encrypted[:current_seller_id]). to eq(seller.id)
       expect(response).to redirect_to(dashboard_url)
       expect(flash[:notice]).to eq("Welcome to the team at seller!")
+    end
+
+    %w[suspended_for_fraud suspended_for_tos_violation deleted].each do |state|
+      it "does not accept an invitation from a #{state} seller" do
+        team_invitation
+        seller.update!(state == "deleted" ? { deleted_at: Time.current } : { user_risk_state: state })
+
+        expect do
+          get :accept, params: { id: team_invitation.external_id }
+        end.to not_change { seller.seller_memberships.count }
+          .and not_change { team_invitation.reload.accepted_at }
+          .and not_change { ActiveJob::Base.queue_adapter.enqueued_jobs.size }
+
+        expect(response).to redirect_to(dashboard_url)
+        expect(flash[:alert]).to eq("Invitation link is invalid. Please contact the account owner.")
+      end
     end
 
     context "when the seller is Gumroad" do
@@ -415,6 +526,24 @@ describe Settings::Team::InvitationsController do
       expect(team_invitation.reload.expires_at).to be_within(1.second).of(
         TeamInvitation::ACTIVE_INTERVAL_IN_DAYS.days.from_now.at_end_of_day
       )
+    end
+
+    [
+      '"Synthetic notice" <member@example.com>, "sink"@example.net',
+      '"member"@"sink"@example.com'
+    ].each do |email|
+      it "refuses resending a legacy non-mailbox #{email.inspect} without extending expiry" do
+        team_invitation.update_columns(email:)
+
+        expect do
+          put :resend_invitation, params: { id: team_invitation.external_id }, as: :json
+        end.to not_change { team_invitation.reload.expires_at }
+          .and not_change { ActiveJob::Base.queue_adapter.enqueued_jobs.size }
+          .and not_change { $redis.zcard(RedisKey.team_invitation_send_throttle(seller.id)) }
+
+        expect(response).to be_successful
+        expect(response.parsed_body).to eq("success" => false, "error_message" => "Email is invalid")
+      end
     end
 
     it "shares the send allowance with new invitations and refuses resends without changing expiry" do
