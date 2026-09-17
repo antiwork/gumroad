@@ -7,6 +7,9 @@
 class SupportContactMailer < ApplicationMailer
   layout "layouts/email"
 
+  # The sender is always noreply@gumroad.com, so Gmail threads on subject alone;
+  # a fixed subject merged unrelated submissions into one conversation. The
+  # submitter plus a per-submission token keep each message separate.
   def contact_form(email:, category:, message:, user_id: nil, referrer_path: nil)
     @email = email
     @category = category
@@ -16,6 +19,12 @@ class SupportContactMailer < ApplicationMailer
 
     mail to: SUPPORT_EMAIL,
          reply_to: email,
-         subject: "Help Center contact form: #{category}"
+         subject: contact_form_subject(email:, category:)
   end
+
+  private
+    def contact_form_subject(email:, category:)
+      submitter = email.to_s.tr("\r\n", " ").strip
+      "Help Center contact form: #{category} - #{submitter} [#{SecureRandom.hex(4)}]"
+    end
 end
