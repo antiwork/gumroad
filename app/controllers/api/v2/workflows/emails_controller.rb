@@ -4,7 +4,7 @@ class Api::V2::Workflows::EmailsController < Api::V2::BaseController
   include InstallmentRuleHelper
 
   DELAY_UNITS = [InstallmentRule::HOUR, InstallmentRule::DAY, InstallmentRule::WEEK, InstallmentRule::MONTH].freeze
-  MAX_DELAY_SECONDS = (2**31) - 1
+  MAX_DELAY_SECONDS = InstallmentRule::MAX_DELAY_SECONDS
   WRITE_PARAMS = %i[subject body delay_amount delay_unit].freeze
   WORKFLOW_STATE_PARAMS = %i[publish unpublish draft state published_at save_action_name send_to_past_customers].freeze
 
