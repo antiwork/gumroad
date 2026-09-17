@@ -1412,7 +1412,7 @@ class Subscription < ApplicationRecord
 
   def send_restart_notifications!(reason = nil)
     CustomerMailer.subscription_restarted(id, reason).deliver_later(queue: "critical")
-    ContactingCreatorMailer.subscription_restarted(id).deliver_later(queue: "critical")
+    ContactingCreatorMailer.subscription_restarted(id).deliver_later(queue: "critical") if seller.enable_payment_email?
     send_restarted_notification_webhook
   end
 
