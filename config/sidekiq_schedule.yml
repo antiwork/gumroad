@@ -406,6 +406,11 @@ requeue_transiently_failed_payouts:
   description: Re-issue payouts that failed on a processor rate limit or an unreachable processor
 
 # Weekly (Non-Payouts)
+marketing_weekly_metrics_report:
+  cron: "0 12 * * 1" # UTC 12:00 Monday
+  class: Marketing::WeeklyMetricsReportJob
+  queue: low
+  description: Snapshot the five marketing holdout read-outs for both frozen sales cohorts
 reindex_recommendable_products:
   cron: "0 15 * * 0" # UTC 15:00 SUN
   class: ReindexRecommendableProductsWorker

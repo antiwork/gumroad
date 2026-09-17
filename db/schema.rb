@@ -1379,6 +1379,16 @@ ActiveRecord::Schema[7.1].define(version: 2026_12_14_090001) do
     t.index ["user_id"], name: "index_marketing_holdout_assignments_on_user_id", unique: true
   end
 
+  create_table "marketing_metrics_snapshots", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
+    t.datetime "window_start", null: false
+    t.datetime "window_end", null: false
+    t.string "cohort", null: false
+    t.json "metrics", null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["window_start", "window_end", "cohort"], name: "index_marketing_metrics_snapshots_on_window_and_cohort", unique: true
+  end
+
   create_table "media_locations", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
     t.bigint "product_file_id", null: false
     t.bigint "url_redirect_id", null: false
