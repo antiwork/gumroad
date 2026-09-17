@@ -9,12 +9,17 @@ describe Api::V2::MarketingActionsController do
   let(:action) { create(:marketing_action, user: seller, link: product) }
   let(:member_params) { { access_token: token.token, id: action.external_id, idempotency_key: action.api_idempotency_key, confirmation_token: action.confirmation_token } }
 
-  before { Feature.activate_user(:auto_marketing, seller) }
+  let(:holdout) { false }
+
+  before do
+    create(:marketing_holdout_assignment, user: seller, marketing_holdout: holdout)
+    Feature.activate_user(:auto_marketing, seller)
+  end
 
   describe "eligibility" do
-    it "refuses a holdout seller on every endpoint" do
-      create(:marketing_holdout_assignment, user: seller, marketing_holdout: true)
+    let(:holdout) { true }
 
+    it "refuses a holdout seller on every endpoint" do
       get :recommendations, params: { access_token: token.token, product_id: product.external_id }
       expect(response).to have_http_status(:not_found)
 
