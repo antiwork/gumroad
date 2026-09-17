@@ -11,17 +11,19 @@ class Marketing::XApi
     def created? = status == 201
     def tweet_id = body.dig("data", "id")
     # A 401 always means this token cannot authenticate. A 403 means it cannot write for
-    # OAuth 1.0a user context — read-only app tier or scopes as minted — unless X names a
-    # content refusal, since it returns 403 for duplicate copy and over-length text too.
-    def write_forbidden? = status == 401 || (status == 403 && !content_refused?)
+    # OAuth 1.0a user context — read-only app tier or scopes as minted — unless X refused
+    # the request outright, since it returns 403 for duplicate copy and over-length text too.
+    def write_forbidden? = status == 401 || (status == 403 && !refused_outright?)
     # Any other 4xx is a refusal: nothing was posted, and reconnecting would not help.
     def rejected? = status.to_i.between?(400, 499) && !write_forbidden?
 
     private
-      # Wording X uses when it refuses the content itself rather than the token's scope.
-      CONTENT_REFUSALS = [/duplicate/i, /too long/i, /client-not-enrolled/i].freeze
+      # Wording X uses when it refuses the request itself rather than the token's scope.
+      # X names this cause in `reason`, not the prose `detail`, so matching detail alone
+      # routes an un-enrolled app to a reconnect that cannot fix it.
+      REFUSALS = [/duplicate/i, /too long/i, /client-not-enrolled/i].freeze
 
-      def content_refused? = CONTENT_REFUSALS.any? { |pattern| body["detail"].to_s.match?(pattern) }
+      def refused_outright? = REFUSALS.any? { |pattern| "#{body["reason"]} #{body["detail"]}".match?(pattern) }
   end
 
   # A dropped or timed-out connection raises instead of returning a response, and X may

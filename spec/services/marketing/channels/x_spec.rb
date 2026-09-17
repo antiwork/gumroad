@@ -27,7 +27,10 @@ describe Marketing::Channels::X do
   end
 
   it "keeps the action open with the reason and returns the intent fallback when the token cannot write" do
-    stub_tweets(status: 403, body: { title: "Forbidden", detail: "oauth1-permissions" })
+    stub_tweets(status: 403, body: { title: "Forbidden",
+                                     type: "https://api.x.com/2/problems/oauth1-permissions",
+                                     detail: "Your client app is not configured with the appropriate " \
+                                             "oauth1 app permissions for this endpoint." })
 
     result = described_class.new(action).call
 
@@ -138,6 +141,21 @@ describe Marketing::Channels::X do
     expect(result.action).to be_failed
     expect(result.action.error_code).to eq("x_rejected")
     expect(WebMock).to have_requested(:post, Marketing::XApi::TWEETS_URL).once
+  end
+
+  it "fails an app that is not attached to a Project as rejected instead of promising a reconnect" do
+    # X names the cause in `reason`; the detail is prose that never repeats that phrase.
+    stub_tweets(status: 403, body: { title: "Client Forbidden",
+                                     type: "https://api.twitter.com/2/problems/client-forbidden",
+                                     reason: "client-not-enrolled",
+                                     detail: "When authenticating requests to the Twitter API v2 endpoints, " \
+                                             "you must use keys and tokens from a Twitter developer App that " \
+                                             "is attached to a Project." })
+
+    result = described_class.new(action).call
+
+    expect(result.action).to be_failed
+    expect(result.action.error_code).to eq("x_rejected")
   end
 
   it "clears an earlier write-permission failure once the post lands" do
