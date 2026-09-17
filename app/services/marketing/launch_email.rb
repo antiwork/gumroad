@@ -4,10 +4,13 @@
 # seller's past customers and followers, excluding buyers of the new product. The
 # seller edits, schedules and sends it from the Emails tab; nothing here sends.
 class Marketing::LaunchEmail
-  # Stamped into the draft's json_data: the digest of the copy we last wrote, so a later
-  # look can tell "we wrote this" from "the seller rewrote it". json_data holds many
-  # independent keys and is merged per key on save, so this one costs no extra column.
+  # Both markers ride in the draft's json_data, which holds many independent keys and is
+  # merged per key on save, so they cost no extra column.
   WRITTEN_COPY_DIGEST_KEY = "marketing_launch_written_copy_digest"
+  # The digest of the copy we last wrote is what tells "we wrote this" from "the seller rewrote
+  # it"; the product id marks the row as this product's launch draft, which the product filter
+  # alone cannot, since it also matches an audience email the seller wrote themselves.
+  LAUNCH_PRODUCT_KEY = "marketing_launch_product_id"
 
   def initialize(product:, seller:, utm_link:)
     @product = product
@@ -21,7 +24,9 @@ class Marketing::LaunchEmail
   def installment
     return unless seller.eligible_to_send_emails?
 
-    existing ? refresh(existing) : create_draft
+    # Serialized on the product: two overlapping card loads must not both miss the draft and
+    # mint one each.
+    product.with_lock { existing ? refresh(existing) : create_draft }
   rescue ActiveRecord::RecordInvalid => e
     # The gate is not the only refusal a draft can hit: `send_emails` also caps a seller
     # below the sales threshold at 100 recipients, which reaches team members whose own
@@ -50,17 +55,19 @@ class Marketing::LaunchEmail
   private
     attr_reader :product, :seller, :utm_link
 
-    # `not_bought_products` is the durable marker for "the launch email of this product".
-    # It holds the permalink, which Link#set_unique_permalink assigns once at create and
-    # never regenerates, so a rename does not orphan the draft. Matching on the filter
-    # rather than the name or message is deliberate: the seller may edit both, and a
-    # renamed or rewritten draft must still be recognised as this product's launch email
-    # instead of a second draft being minted beside it.
+    # Ours is matched by our own marker, never by name or message: the seller may edit both, and a
+    # renamed or rewritten draft must still be recognised as this product's launch email instead
+    # of a second draft being minted beside it.
     def existing
       @existing ||= seller.installments.alive
                           .where(installment_type: Installment::AUDIENCE_TYPE)
-                          .select { _1.not_bought_products == [product.unique_permalink] }
+                          .select { launch_draft?(_1) }
                           .max_by(&:id)
+    end
+
+    def launch_draft?(installment)
+      installment.json_data[LAUNCH_PRODUCT_KEY].to_i == product.id &&
+        installment.not_bought_products == [product.unique_permalink]
     end
 
     # A draft the seller has already scheduled or sent is theirs; so is one they rewrote.
@@ -94,6 +101,7 @@ class Marketing::LaunchEmail
       # Both markers live in json_data and the filter accessor rewrites that key wholesale,
       # so they are set on the record instead of being passed together as attributes.
       installment.json_data[WRITTEN_COPY_DIGEST_KEY] = written_copy_digest
+      installment.json_data[LAUNCH_PRODUCT_KEY] = product.id
       installment.not_bought_products = [product.unique_permalink]
       installment.save!
       installment

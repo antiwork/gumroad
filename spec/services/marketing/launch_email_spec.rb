@@ -62,6 +62,18 @@ describe Marketing::LaunchEmail do
       expect(seller.installments.alive.count).to eq(1)
     end
 
+    it "does not adopt an audience email the seller wrote with the same product exclusion" do
+      theirs = create(:audience_installment, seller:)
+      theirs.not_bought_products = [product.unique_permalink]
+      theirs.save!
+
+      draft = launch_email.installment
+
+      expect(draft).not_to eq(theirs)
+      expect(draft.json_data[described_class::LAUNCH_PRODUCT_KEY]).to eq(product.id)
+      expect(described_class.new(product:, seller:, utm_link:).installment).to eq(draft)
+    end
+
     it "refreshes the copy of an untouched draft when the product changes" do
       draft = launch_email.installment
       product.update!(description: "<p>A brand new first sentence. Ignored second.</p>")
