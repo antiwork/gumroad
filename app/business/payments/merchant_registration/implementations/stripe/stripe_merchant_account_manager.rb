@@ -460,6 +460,7 @@ module StripeMerchantAccountManager
       # Clear structure first - Stripe rejects company[structure] when business_type is "individual"
       if last_user_compliance_info.legal_entity_country_code == Compliance::Countries::USA.alpha2 &&
         US_COMPANY_STRUCTURES.key?(last_user_compliance_info.business_type)
+        on_provider_mutation&.call
         Stripe::Account.update(stripe_account.id, { company: { structure: "" } })
       end
 
@@ -553,8 +554,7 @@ module StripeMerchantAccountManager
     switching_to_individual = !user_compliance_info.is_business? && last_user_compliance_info&.is_business?
     obsolete_representative_note_ids = switching_to_individual ? identity_rejection_note_ids(user, scope: :representative) : []
 
-    # Everything above only reads; this call is the first thing that can reach Stripe, so the
-    # caller must stop treating a later failure as a pure read failure.
+    # Mark before sending: a failed response can hide a successful Stripe update.
     on_provider_mutation&.call
     account_update = update_account_attributes(user, stripe_account, diff_attributes, notify:, legal_entity_country: country_code)
     updated_stripe_account = account_update.stripe_account

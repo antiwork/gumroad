@@ -1190,6 +1190,31 @@ describe UpdateUserComplianceInfo, "Stripe failure after a partial update" do
     @user.destroy!
   end
 
+  it "commits the revision when the structure clear reaches Stripe but its response is lost" do
+    provider_error = Stripe::APIConnectionError.new("Synthetic provider failure")
+    submitted_revision_id = nil
+    allow(Stripe::Account).to receive(:update).with(@stripe_account.id, { company: { structure: "" } }) do
+      @stripe_account.company.structure = nil
+      submitted_revision_id = @user.reload.alive_user_compliance_info.id
+      raise provider_error
+    end
+
+    expect do
+      described_class.new(compliance_params: ActionController::Parameters.new(is_business: false, first_name: "Updated"), user: @user).process
+    end.to raise_error { |error| expect(error).to equal(provider_error) }
+
+    committed = Thread.new do
+      ActiveRecord::Base.connection_pool.with_connection do
+        User.find(@user.id).alive_user_compliance_info.attributes.slice("id", "first_name", "is_business")
+      end
+    end.value
+    expect(committed).to include("id" => submitted_revision_id, "first_name" => "Updated", "is_business" => false)
+    expect(@compliance_info.reload).to be_deleted
+    expect(@user.user_compliance_infos.alive.count).to eq(1)
+    expect(@stripe_account.company.structure).to be_nil
+    expect(Stripe::Account).to have_received(:update).once
+  end
+
   [Stripe::APIConnectionError, Stripe::AuthenticationError, Stripe::RateLimitError].each do |error_class|
     it "commits the revision before propagating #{error_class.name} without releasing the lock during Stripe work" do
       provider_error = error_class.new("Synthetic provider failure")
@@ -1255,6 +1280,34 @@ describe UpdateUserComplianceInfo, "Stripe failure before the first provider wri
     @user.destroy!
   end
 
+  it "rolls the revision back when reading owners fails before the account update" do
+    saved, @compliance_info = @compliance_info.dup_and_save { |info| info.is_business = false }
+    expect(saved).to be true
+    stripe_account = Stripe::Account.construct_from(
+      id: @merchant_account.charge_processor_merchant_id,
+      country: "US",
+      capabilities: {},
+      metadata: { user_compliance_info_id: @compliance_info.external_id }
+    )
+    provider_error = Stripe::APIConnectionError.new("Synthetic provider failure")
+    allow(Stripe::Account).to receive(:retrieve).and_return(stripe_account)
+    allow(Stripe::Account).to receive(:list_persons).and_raise(provider_error)
+
+    expect do
+      described_class.new(compliance_params: ActionController::Parameters.new(is_business: true, first_name: "Updated"), user: @user).process
+    end.to raise_error { |error| expect(error).to equal(provider_error) }
+
+    committed = Thread.new do
+      ActiveRecord::Base.connection_pool.with_connection do
+        User.find(@user.id).alive_user_compliance_info.attributes.slice("id", "first_name", "is_business")
+      end
+    end.value
+    expect(committed).to include("id" => @compliance_info.id, "first_name" => @original_first_name, "is_business" => false)
+    expect(@compliance_info.reload).not_to be_deleted
+    expect(Stripe::Account).to have_received(:list_persons).once
+    expect(Stripe::Account).not_to have_received(:update)
+  end
+
   [Stripe::APIConnectionError, Stripe::AuthenticationError, Stripe::RateLimitError].each do |error_class|
     it "rolls the submitted revision back when #{error_class.name} arrives before any provider write" do
       provider_error = error_class.new("Synthetic provider failure")
@@ -1273,6 +1326,22 @@ describe UpdateUserComplianceInfo, "Stripe failure before the first provider wri
       expect(committed).to include("id" => @compliance_info.id, "first_name" => @original_first_name, "is_business" => true)
       expect(@compliance_info.reload).not_to be_deleted
       expect(Stripe::Account).not_to have_received(:update)
+
+      stripe_account = Stripe::Account.construct_from(
+        id: @merchant_account.charge_processor_merchant_id,
+        country: "US",
+        capabilities: {},
+        metadata: { user_compliance_info_id: @compliance_info.external_id },
+        company: { structure: "single_member_llc" }
+      )
+      allow(Stripe::Account).to receive(:retrieve).and_return(stripe_account)
+      allow(Stripe::Account).to receive(:update).and_return(stripe_account)
+
+      expect(described_class.new(compliance_params: params, user: @user).process).to eq(success: true)
+      expect(@user.reload.alive_user_compliance_info.first_name).to eq("Updated")
+      expect(@compliance_info.reload).to be_deleted
+      expect(Stripe::Account).to have_received(:update).with(stripe_account.id, hash_including(individual: hash_including(first_name: "Updated")))
+      expect(Stripe::Account).to have_received(:update).twice
     end
   end
 end
