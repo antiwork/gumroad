@@ -33,7 +33,6 @@ class Onetime::NotifyMarketingXReconnectBacklog
         enqueued += 1
         next if @dry_run
 
-        claim_seller_remainder(action)
         SendMarketingXReconnectEmailJob.perform_async(action.id)
       end
     end
@@ -41,13 +40,4 @@ class Onetime::NotifyMarketingXReconnectBacklog
     Rails.logger.info("NotifyMarketingXReconnectBacklog: #{enqueued} sellers from #{scanned} actions#{' (dry run)' if @dry_run}")
     { sellers: enqueued, actions_scanned: scanned }
   end
-
-  private
-    # One email per seller, and the Set that enforces it dies with the process. Closing the
-    # seller's other stuck actions here is what keeps a rerun from mailing them again.
-    def claim_seller_remainder(action)
-      Marketing::Action.alive_for_reconnect_notice
-                       .where(user_id: action.user_id).where.not(id: action.id)
-                       .update_all(reconnect_notified_at: Time.current)
-    end
 end

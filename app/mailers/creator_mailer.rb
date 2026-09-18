@@ -71,8 +71,6 @@ class CreatorMailer < ApplicationMailer
   # Links to the product's Share tab, not Settings, so the post is in front of the seller
   # when they return from reconnecting.
   def marketing_x_reconnect(marketing_action_id:)
-    # Not alive_for_reconnect_notice: the job claims reconnect_notified_at before enqueuing
-    # this, so that scope is already empty. What matters is the seller has not since resolved it.
     @action = Marketing::Action.awaiting_reconnect.find_by(id: marketing_action_id)
     return if @action.nil?
 

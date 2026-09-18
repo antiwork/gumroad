@@ -4,19 +4,20 @@ class SendMarketingXReconnectEmailJob
   include Sidekiq::Job
   sidekiq_options queue: :low, lock: :until_executed
 
-  # Enqueue first, record second, both under the row lock. Recording first would strand the
-  # seller for good if the worker died before the enqueue: the retry would see the claim and
-  # exit. This way the worst case is a duplicate nudge, which beats silence. Concurrent jobs
-  # serialize on the lock, so the second one finds the claim and sends nothing.
   def perform(marketing_action_id)
     action = Marketing::Action.find_by(id: marketing_action_id)
     return if action.nil?
 
-    action.with_lock do
-      next unless Marketing::Action.alive_for_reconnect_notice.exists?(id: action.id)
+    action.user.with_lock do
+      actions = Marketing::Action.alive_for_reconnect_notice.where(user_id: action.user_id).order(:id).lock.to_a
+      next if actions.empty?
 
-      CreatorMailer.marketing_x_reconnect(marketing_action_id: action.id).deliver_later
-      action.update!(reconnect_notified_at: Time.current)
+      # Keep selection and delivery together: cancelling one product must not consume its siblings.
+      # A crash after delivery but before commit can repeat the email on retry.
+      delivered = CreatorMailer.marketing_x_reconnect(marketing_action_id: actions.first.id).deliver_now
+      next unless delivered.is_a?(Mail::Message)
+
+      Marketing::Action.where(id: actions.map(&:id)).update_all(reconnect_notified_at: Time.current)
     end
   end
 end

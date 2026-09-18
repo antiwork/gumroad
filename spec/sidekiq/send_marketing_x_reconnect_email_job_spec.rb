@@ -15,7 +15,7 @@ describe SendMarketingXReconnectEmailJob do
   it "mails the seller and records that it did" do
     expect do
       described_class.new.perform(action.id)
-    end.to have_enqueued_mail(CreatorMailer, :marketing_x_reconnect).with(marketing_action_id: action.id)
+    end.to change { ActionMailer::Base.deliveries.size }.by(1)
 
     expect(action.reload.reconnect_notified_at).to be_present
   end
@@ -26,7 +26,7 @@ describe SendMarketingXReconnectEmailJob do
 
     expect do
       described_class.new.perform(action.id)
-    end.not_to have_enqueued_mail(CreatorMailer, :marketing_x_reconnect)
+    end.not_to change { ActionMailer::Base.deliveries.size }
 
     expect(action.reload.reconnect_notified_at).to eq(first_notified_at)
   end
@@ -36,7 +36,7 @@ describe SendMarketingXReconnectEmailJob do
 
     expect do
       described_class.new.perform(action.id)
-    end.not_to have_enqueued_mail(CreatorMailer, :marketing_x_reconnect)
+    end.not_to change { ActionMailer::Base.deliveries.size }
 
     expect(action.reload.reconnect_notified_at).to be_nil
   end
@@ -47,32 +47,43 @@ describe SendMarketingXReconnectEmailJob do
 
     expect do
       described_class.new.perform(action.id)
-    end.not_to have_enqueued_mail(CreatorMailer, :marketing_x_reconnect)
+    end.not_to change { ActionMailer::Base.deliveries.size }
   end
 
-  # Recording before the enqueue would strand the seller as notified and unmailed if the
-  # worker died in between.
-  it "records nothing when the delivery cannot be enqueued" do
-    mail = double
-    allow(mail).to receive(:deliver_later).and_raise(Redis::CannotConnectError)
-    allow(CreatorMailer).to receive(:marketing_x_reconnect).and_return(mail)
+  it "leaves the notice pending when delivery fails and sends it on retry" do
+    allow_any_instance_of(Mail::TestMailer).to receive(:deliver!).and_raise(Net::ReadTimeout)
 
-    expect { described_class.new.perform(action.id) }.to raise_error(Redis::CannotConnectError)
+    expect { described_class.new.perform(action.id) }.to raise_error(Net::ReadTimeout)
     expect(action.reload.reconnect_notified_at).to be_nil
-  end
 
-  it "mails on the retry that follows a failed enqueue" do
-    mail = double
-    allow(mail).to receive(:deliver_later).and_raise(Redis::CannotConnectError)
-    allow(CreatorMailer).to receive(:marketing_x_reconnect).and_return(mail)
-    expect { described_class.new.perform(action.id) }.to raise_error(Redis::CannotConnectError)
-
-    allow(CreatorMailer).to receive(:marketing_x_reconnect).and_call_original
+    allow_any_instance_of(Mail::TestMailer).to receive(:deliver!).and_call_original
     expect do
       described_class.new.perform(action.id)
-    end.to have_enqueued_mail(CreatorMailer, :marketing_x_reconnect).with(marketing_action_id: action.id)
+    end.to change { ActionMailer::Base.deliveries.size }.by(1)
 
     expect(action.reload.reconnect_notified_at).to be_present
+  end
+
+  it "leaves interrupted delivery recoverable" do
+    allow_any_instance_of(Mail::TestMailer).to receive(:deliver!).and_raise(Sidekiq::Shutdown)
+
+    expect { described_class.new.perform(action.id) }.to raise_error(Sidekiq::Shutdown)
+    expect(action.reload.reconnect_notified_at).to be_nil
+
+    allow_any_instance_of(Mail::TestMailer).to receive(:deliver!).and_call_original
+    expect do
+      described_class.new.perform(action.id)
+    end.to change { ActionMailer::Base.deliveries.size }.by(1)
+  end
+
+  it "does not consume an action when the mailer skips an invalid recipient" do
+    seller.update_columns(email: "invalid", unconfirmed_email: nil)
+
+    expect do
+      described_class.new.perform(action.id)
+    end.not_to change { ActionMailer::Base.deliveries.size }
+
+    expect(action.reload.reconnect_notified_at).to be_nil
   end
 
   it "ignores an action that no longer exists" do

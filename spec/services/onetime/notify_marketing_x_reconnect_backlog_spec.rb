@@ -3,6 +3,7 @@
 require "spec_helper"
 
 describe Onetime::NotifyMarketingXReconnectBacklog do
+  include ActiveJob::TestHelper
   def stuck_action(seller:, product: nil)
     product ||= create(:product, user: seller)
     create(:marketing_action, user: seller, link: product, copy: "New thing").tap do |action|
@@ -27,18 +28,98 @@ describe Onetime::NotifyMarketingXReconnectBacklog do
     expect { described_class.process }.to change { SendMarketingXReconnectEmailJob.jobs.size }.by(1)
   end
 
-  # The in-process Set dies with the run, so the seller's other stuck actions have to be
-  # closed in the database or a rerun mails them again.
-  it "closes the seller's other stuck actions so a rerun does not mail them again" do
+  it "marks the seller's stuck actions after delivery so a rerun does not mail them again" do
     first = stuck_action(seller:)
     second = stuck_action(seller:)
 
     expect { described_class.process }.to change { SendMarketingXReconnectEmailJob.jobs.size }.by(1)
 
-    expect(second.reload.reconnect_notified_at).to be_present
-    expect(first.reload.reconnect_notified_at).to be_nil # claimed by the job it was queued for
+    expect(second.reload.reconnect_notified_at).to be_nil
+    expect(first.reload.reconnect_notified_at).to be_nil
 
+    expect { SendMarketingXReconnectEmailJob.drain }.to change { ActionMailer::Base.deliveries.size }.by(1)
+    expect(first.reload.reconnect_notified_at).to be_present
+    expect(second.reload.reconnect_notified_at).to be_present
+    expect { described_class.process }.not_to change { SendMarketingXReconnectEmailJob.jobs.size }
+  end
+
+  it "reselects a stuck product when the selected action is cancelled before delivery" do
+    first = stuck_action(seller:)
+    second = stuck_action(seller:)
+    described_class.process
+    first.cancel!
+
+    expect do
+      perform_enqueued_jobs { SendMarketingXReconnectEmailJob.drain }
+    end.to change { ActionMailer::Base.deliveries.size }.by(1)
+
+    expect(ActionMailer::Base.deliveries.last.body.encoded).to include("/products/#{second.link.unique_permalink}/edit/share")
+    expect(first.reload.reconnect_notified_at).to be_nil
+    expect(second.reload.reconnect_notified_at).to be_present
+    expect { described_class.process }.not_to change { SendMarketingXReconnectEmailJob.jobs.size }
+  end
+
+  it "keeps siblings recoverable when the selected action is deleted" do
+    first = stuck_action(seller:)
+    second = stuck_action(seller:)
+    described_class.process
+    first.destroy!
     SendMarketingXReconnectEmailJob.drain
+    described_class.process
+
+    expect do
+      perform_enqueued_jobs { SendMarketingXReconnectEmailJob.drain }
+    end.to change { ActionMailer::Base.deliveries.size }.by(1)
+    expect(second.reload.reconnect_notified_at).to be_present
+  end
+
+  it "leaves every action pending when enqueue fails" do
+    first = stuck_action(seller:)
+    second = stuck_action(seller:)
+    allow(SendMarketingXReconnectEmailJob).to receive(:perform_async).and_raise(Redis::CannotConnectError)
+
+    expect { described_class.process }.to raise_error(Redis::CannotConnectError)
+    expect(first.reload.reconnect_notified_at).to be_nil
+    expect(second.reload.reconnect_notified_at).to be_nil
+
+    allow(SendMarketingXReconnectEmailJob).to receive(:perform_async).and_call_original
+    first.cancel!
+    described_class.process
+    expect do
+      perform_enqueued_jobs { SendMarketingXReconnectEmailJob.drain }
+    end.to change { ActionMailer::Base.deliveries.size }.by(1)
+  end
+
+  it "retries delivery without consuming siblings" do
+    first = stuck_action(seller:)
+    second = stuck_action(seller:)
+    described_class.process
+    allow_any_instance_of(Mail::TestMailer).to receive(:deliver!).and_raise(Net::ReadTimeout)
+
+    expect { SendMarketingXReconnectEmailJob.drain }.to raise_error(Net::ReadTimeout)
+    expect(first.reload.reconnect_notified_at).to be_nil
+    expect(second.reload.reconnect_notified_at).to be_nil
+
+    allow_any_instance_of(Mail::TestMailer).to receive(:deliver!).and_call_original
+    first.cancel!
+    described_class.process
+    expect do
+      SendMarketingXReconnectEmailJob.drain
+    end.to change { ActionMailer::Base.deliveries.size }.by(1)
+    expect(second.reload.reconnect_notified_at).to be_present
+  end
+
+  it "deduplicates pending runs across batches even if the first selected action changes" do
+    first = stuck_action(seller:)
+    second = stuck_action(seller:)
+    described_class.process(batch_size: 1)
+    first.cancel!
+    described_class.process(batch_size: 1)
+
+    expect do
+      perform_enqueued_jobs { SendMarketingXReconnectEmailJob.drain }
+    end.to change { ActionMailer::Base.deliveries.size }.by(1)
+    expect(second.reload.reconnect_notified_at).to be_present
     expect { described_class.process }.not_to change { SendMarketingXReconnectEmailJob.jobs.size }
   end
 
@@ -66,10 +147,13 @@ describe Onetime::NotifyMarketingXReconnectBacklog do
   end
 
   it "enqueues nothing on a dry run but still reports the count" do
-    stuck_action(seller:)
+    first = stuck_action(seller:)
+    second = stuck_action(seller:)
 
     result = nil
     expect { result = described_class.process(dry_run: true) }.not_to change { SendMarketingXReconnectEmailJob.jobs.size }
     expect(result[:sellers]).to eq(1)
+    expect(first.reload.reconnect_notified_at).to be_nil
+    expect(second.reload.reconnect_notified_at).to be_nil
   end
 end
