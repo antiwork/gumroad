@@ -1201,6 +1201,20 @@ describe User, :vcr do
 
           expect(staff_user.reload).to be_is_team_member
         end
+
+        it "closes the account anyway when a member's after_update callback raises" do
+          create(:team_membership, user: staff_user, seller: gumroad_account)
+          # Any `flags` change fires clear_products_cache, which reaches for a cache/queue that can
+          # be down; a raise there must not roll back the closure transaction.
+          allow_any_instance_of(User).to receive(:clear_products_cache).and_wrap_original do |original, *args|
+            raise "cache backend down" if original.receiver.id == staff_user.id
+            original.call(*args)
+          end
+
+          expect(gumroad_account.deactivate!).to eq(true)
+
+          expect(staff_user.reload).not_to be_is_team_member
+        end
       end
     end
 

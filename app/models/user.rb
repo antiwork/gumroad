@@ -852,21 +852,19 @@ class User < ApplicationRecord
     end
   end
 
-  # Closure revokes only the mobile application's tokens (see invalidate_active_sessions!), and
-  # is_team_member? is the authorization input for the staff surfaces — impersonation, the admin
-  # console, Rack::MiniProfiler, ActionCable — so a surviving token would keep reaching them as a
-  # closed account. Mirrors Settings::Team::MembersController#destroy, which clears the flag when a
-  # Gumroad-team membership is removed; members of a closed Gumroad account lose it with the account.
+  # Closure revokes only the mobile app's tokens, so a surviving one keeps reaching the staff
+  # surfaces is_team_member? gates. Mirrors Settings::Team::MembersController#destroy, including
+  # clearing it for the members when the Gumroad account itself closes.
   def clear_team_member_flags!
     staff_users = gumroad_account? ? seller_memberships.not_deleted.includes(:user).map(&:user) : []
     staff_users << self
 
     staff_users.compact.uniq.each do |staff_user|
       next unless staff_user.is_team_member?
-      # Validation is skipped on purpose: a row failing an unrelated validation must not roll back
-      # account closure, and the flag is written on its own.
       staff_user.is_team_member = false
-      staff_user.save!(validate: false)
+      # Not save!: a `flags` change fires clear_products_cache, and that callback must not be able
+      # to roll back the closure transaction.
+      staff_user.update_columns(flags: staff_user.flags)
     end
   end
 

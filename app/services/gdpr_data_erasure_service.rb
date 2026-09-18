@@ -31,9 +31,8 @@ class GdprDataErasureService
 
     ActiveRecord::Base.transaction do
       @products_deleted = deactivate_account!
-      # Outside deactivate_account! because that returns early for an account already closed before
-      # this cleanup existed, and before the anonymize below, which overwrites the email
-      # gumroad_account? reads.
+      # Outside deactivate_account!, which returns early for an already-closed account, and before
+      # the anonymize that overwrites the email gumroad_account? reads.
       @user.clear_team_member_flags!
       anonymized_email = anonymize_user_pii!
       anonymize_compliance_info!
