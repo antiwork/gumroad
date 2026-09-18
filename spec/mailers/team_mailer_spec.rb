@@ -119,6 +119,7 @@ describe TeamMailer do
       expect(mail.body.decoded).not_to include(seller.name, seller.username, seller.email)
       expect(mail.body.decoded).to include("not a purchase receipt or a charge notice")
       expect(mail.body.decoded).to include("If you are not expecting an invitation, please ignore this email.")
+      expect(mail.body.decoded).to include("ask the account owner to send a new invitation.")
       expect(mail.body.decoded).to have_link("Accept invitation", href: accept_settings_team_invitation_url(team_invitation.external_id, email:))
     end
 
