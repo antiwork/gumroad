@@ -368,6 +368,10 @@ class CustomerSurchargeController < ApplicationController
     end
 
     def calculate_surcharges(product, quantity, price, subscription_id: nil, recommended_by: nil, rate: :unset)
+      # Clients that serialize numbers as strings send quantity as "3"; the shipping and tax math
+      # below compares and multiplies it, so normalize it the same way item[:price] is.
+      quantity = quantity.to_i if quantity.is_a?(String)
+
       if subscription_id.present?
         subscription = Subscription.find_by_external_id(subscription_id)
         return nil unless subscription&.original_purchase.present?

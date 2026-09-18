@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1240" height="470" viewBox="0 0 1240 470" font-family="SFMono-Regular, Menlo, Consolas, monospace">
+  <rect width="1240" height="470" fill="#1b1f24"/>
+  <rect x="0" y="0" width="1240" height="34" fill="#2d333b"/>
+  <circle cx="20" cy="17" r="6" fill="#ff5f56"/>
+  <circle cx="42" cy="17" r="6" fill="#ffbd2e"/>
+  <circle cx="64" cy="17" r="6" fill="#27c93f"/>
+  <text x="90" y="22" fill="#adbac7" font-size="13">tip_cents string coercion — red/green proof (GUMROAD-1NR)</text>
+
+  <text x="24" y="66" fill="#768390" font-size="13">$ DISABLE_SPRING=1 bundle exec rspec spec/services/purchase/create_service_spec.rb:582 spec/services/purchase/create_service_spec.rb:600</text>
+
+  <text x="24" y="106" fill="#f47067" font-size="14" font-weight="bold">RED — origin/main (unmodified), 2 examples, 2 failures</text>
+  <text x="40" y="132" fill="#e6edf3" font-size="13">1) accepts a tip_cents the client serialized as a string</text>
+  <text x="56" y="154" fill="#f47067" font-size="13">ArgumentError: comparison of String with 0 failed</text>
+  <text x="56" y="176" fill="#adbac7" font-size="13"># ./app/services/purchase/create_service.rb:145:in 'Comparable#&gt;'</text>
+  <text x="56" y="198" fill="#adbac7" font-size="13"># ./app/services/purchase/create_service.rb:145:in 'Purchase::CreateService#perform'</text>
+  <text x="40" y="224" fill="#e6edf3" font-size="13">2) treats a string tip_cents of "0" as no tip</text>
+  <text x="56" y="246" fill="#f47067" font-size="13">ArgumentError: comparison of String with 0 failed  (same frame)</text>
+
+  <text x="24" y="288" fill="#57ab5a" font-size="14" font-weight="bold">GREEN — branch (fix applied), 2 examples, 0 failures</text>
+  <text x="40" y="314" fill="#e6edf3" font-size="13">accepts a tip_cents the client serialized as a string  →  purchase.tip.value_cents == 100</text>
+  <text x="40" y="336" fill="#e6edf3" font-size="13">treats a string tip_cents of "0" as no tip             →  purchase.tip is nil, error is nil</text>
+
+  <text x="24" y="378" fill="#768390" font-size="13">Baseline check — the same two examples were run with create_service.rb reverted to</text>
+  <text x="24" y="398" fill="#768390" font-size="13">origin/main; the spec file's own charge-path examples (spec:4707, spec:4749) fail</text>
+  <text x="24" y="418" fill="#768390" font-size="13">identically at base and at head with NoMethodError: undefined method 'charge_processor_id'</text>
+  <text x="24" y="438" fill="#768390" font-size="13">for nil — pre-existing environment state (unseeded merchant account), not this diff.</text>
+</svg>
