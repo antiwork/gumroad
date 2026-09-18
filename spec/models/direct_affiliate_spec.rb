@@ -116,6 +116,16 @@ describe DirectAffiliate do
 
       expect(described_class.removed_at_request.find(affiliate.id).removed_at_request).to be true
     end
+
+    it "records `removed_at_request` on a row that no longer passes today's validations" do
+      affiliate = create(:direct_affiliate)
+      affiliate.update_columns(affiliate_basis_points: 0)
+      expect(affiliate).not_to be_valid
+
+      affiliate.mark_removed_at_request!
+
+      expect(affiliate.reload.removed_at_request).to be true
+    end
   end
 
   describe "#reassignment_blocked?" do

@@ -154,11 +154,12 @@ class DirectAffiliate < Affiliate
     product_affiliates.find_by(link_id: product_id)&.affiliate_basis_points || affiliate_basis_points
   end
 
-  # Set when the affiliation was ended because the person asked us to, rather than because the
-  # seller chose to. It stays on the removed row, so a later re-add is distinguishable from a
-  # first-time add and mails nothing: the person asked not to be contacted about this seller again.
+  # Set when the affiliation was ended because the person asked us to, not because the seller chose
+  # to: it stays on the removed row, so a later re-add mails nothing and reads as a repeat request.
+  # Skips validations like the removal itself — a legacy row failing today's rules would raise.
   def mark_removed_at_request!
-    update!(removed_at_request: true)
+    self.class.where(id:).update_all(self.class.set_removed_at_request_sql)
+    reload
   end
 
   def reassignment_blocked?
