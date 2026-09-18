@@ -798,12 +798,9 @@ it("ignores a second toolbar pick while a mixed pick is still snapshotting", asy
   }
 });
 
-// A phone shows the page list behind a "Table of contents" summary row, and that row
-// used to render INSIDE the ReactSortable. react-sortablejs reorders `list` — which
-// holds only the pages — by SortableJS's RAW child index, so one extra child shifted
-// every page index by one: a drop resolved to no page, the app threw
-// "Cannot read properties of undefined (reading 'id')", and the order snapped back.
-// See https://github.com/antiwork/gumroad-private/issues/2760
+// The mobile summary row used to sit INSIDE the Sortable, which indexes `list` (pages only) by
+// raw child index — one extra child shifted every page, so a drop resolved to no page and the
+// order snapped back (gumroad-private#2760).
 it("keeps the mobile page-list summary row out of the Sortable's container", async () => {
   viewport.isDesktop = false;
   const product = buildProduct([
@@ -814,21 +811,20 @@ it("keeps the mobile page-list summary row out of the Sortable's container", asy
   render(<ContentTabContent selectedVariantId="variant-paid" />);
   await act(async () => {});
 
-  // Collapsed on a phone the Sortable has nothing to render, so no container exists.
+  // Collapsed on a phone the summary row is the whole list, and nothing is sortable yet.
   const summaryButton = [...document.querySelectorAll("button")].find((button) =>
     button.textContent?.includes("Table of contents:"),
   );
-  expect(summaryButton).toBeDefined();
-  expect(document.querySelector('[role="tablist"]')).toBeNull();
+  if (!summaryButton) throw new Error("no mobile summary row rendered");
+  expect(document.querySelector('[role="tab"]')).toBeNull();
 
   await act(async () => {
-    fireEvent.click(summaryButton!);
+    fireEvent.click(summaryButton);
   });
 
-  const list = document.querySelector('[role="tablist"]');
-  expect(list).not.toBeNull();
-  // The pin: the summary row is still rendered, just not as a child of the sortable.
-  expect(document.body.textContent).toContain("Table of contents:");
-  expect(list?.textContent).not.toContain("Table of contents:");
-  expect(list?.querySelectorAll('[role="tab"]')).toHaveLength(2);
+  // The pin: the container SortableJS indexes holds pages and nothing else.
+  const sortableContainer = document.querySelector('[role="tab"]')?.parentElement;
+  expect(sortableContainer?.textContent).not.toContain("Table of contents:");
+  expect(sortableContainer?.querySelectorAll('[role="tab"]')).toHaveLength(2);
+  expect(document.querySelector('[role="tablist"]')?.textContent).toContain("Table of contents:");
 });

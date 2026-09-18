@@ -42,23 +42,19 @@ const renderHandle = () => {
 };
 
 describe("PageTab move handle on touch devices", () => {
-  // The ContentTab Sortable is bound with `handle="[aria-grabbed]"`, so this element is the
-  // only place a drag can begin. It used to be `visibility: hidden` until hover, and a hidden
-  // element cannot be a touch target at all, so the drag never started on a phone.
-  // See https://github.com/antiwork/gumroad-private/issues/2760
+  // The Sortable is bound with `handle="[aria-grabbed]"`, so this element is the only place a
+  // drag can begin (gumroad-private#2760).
   it("marks the handle with the attribute the Sortable's handle selector matches", () => {
     expect(renderHandle().matches("[aria-grabbed]")).toBe(true);
   });
 
-  // `pointer-coarse:visible` is Tailwind's `@media (pointer: coarse)` variant — the same
-  // device signal the dashboard already uses for affordances that cannot rely on hover.
-  it("shows the handle without hover on a coarse pointer", () => {
+  // happy-dom loads no Tailwind CSS, so these examples pin the class contract only — the media
+  // query and its precedence are measured in a browser (see this PR's QA section).
+  it("puts the handle on Tailwind's coarse-pointer variant", () => {
     expect(renderHandle().classList.contains("pointer-coarse:visible")).toBe(true);
   });
 
-  // Desktop stays hover-only: a mouse pointer can still hover the row, and showing the handle
-  // permanently there would change the row's resting appearance.
-  it("keeps the handle hover-only on fine pointers", () => {
+  it("keeps the fine-pointer path hover-only", () => {
     const handle = renderHandle();
 
     expect(handle.classList.contains("invisible")).toBe(true);

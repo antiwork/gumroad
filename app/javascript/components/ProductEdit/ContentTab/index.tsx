@@ -1071,13 +1071,12 @@ export const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: st
             !isDesktop && !showPageList ? null : (
               <div className="flex flex-col gap-4">
                 {showPageList ? (
-                  <>
-                    {/* The mobile summary row stays OUT of the Sortable: react-sortablejs maps
-                        SortableJS's raw child indices onto `list`, which holds only the pages, so
-                        one extra child shifts every index and a drop resolves to no page at all.
-                        Desktop renders no summary row, so its markup is unchanged. */}
+                  <PageList>
+                    {/* react-sortablejs indexes `list` — pages only — by SortableJS's raw child
+                        index, so a non-page child of the sortable shifts every page index and a
+                        drop resolves to none (gumroad-private#2760). */}
                     {isDesktop ? null : (
-                      <PageListItem asChild className="tailwind-override rounded-sm border bg-background text-left">
+                      <PageListItem asChild className="tailwind-override text-left">
                         <button className="cursor-pointer all-unset" onClick={() => setPagesExpanded(!pagesExpanded)}>
                           <span className="flex-1">
                             <strong>Table of contents:</strong> {titleWithFallback(selectedPage?.title)}
@@ -1088,10 +1087,12 @@ export const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: st
                       </PageListItem>
                     )}
                     {isDesktop || pagesExpanded ? (
+                      // The chrome lives on the PageList box the summary row shares; on mobile
+                      // `border-t` keeps the first page row separated from the summary row.
                       <ReactSortable
                         draggable="[role=tab]"
                         handle="[aria-grabbed]"
-                        tag={PageList}
+                        className={isDesktop ? undefined : "border-t"}
                         list={pages.map((page) => ({ ...page, id: page.id }))}
                         setList={reorderPages}
                       >
@@ -1164,7 +1165,7 @@ export const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: st
                         </>
                       </ReactSortable>
                     ) : null}
-                  </>
+                  </PageList>
                 ) : null}
                 {isDesktop ? (
                   <>
