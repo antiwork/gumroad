@@ -352,6 +352,10 @@ class ProductPresenter
       successful_sales_count: product.successful_sales_count,
       ratings: product.rating_stats,
       seller: UserPresenter.new(user:).author_byline_props,
+      # The external id the editor must key uploads with: the S3 signature endpoint authorizes
+      # against `current_seller`, which for a collaborator is their own account, not the owner
+      # named in the byline above. Keys built from the owner's id are rejected (gp#2775).
+      current_seller_external_id: (pundit_user&.seller || product.user).external_id,
       existing_files:,
       s3_url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}",
       aws_key: AWS_ACCESS_KEY,

@@ -295,6 +295,9 @@ export const ProductEditContext = React.createContext<{
   successfulSalesCount: number;
   ratings: RatingsWithPercentages;
   seller: Seller;
+  // The external id the S3 signature endpoint authorizes, so uploads are keyed under the
+  // account doing the editing rather than under `seller` (the product owner).
+  currentSellerExternalId: string;
   existingFiles: ExistingFileEntry[];
   setExistingFiles: React.Dispatch<React.SetStateAction<ExistingFileEntry[]>>;
   awsKey: string;

@@ -1356,7 +1356,7 @@ export const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: st
 
 //TODO inline this once all the crazy providers are gone
 export const ContentTab = () => {
-  const { id, awsKey, s3Url, seller, product, updateProduct, uniquePermalink, variantIdMappings } =
+  const { id, awsKey, s3Url, currentSellerExternalId, product, updateProduct, uniquePermalink, variantIdMappings } =
     useProductEditContext();
   const [rawSelectedVariantId, setSelectedVariantId] = React.useState(product.variants[0]?.id ?? null);
   // A successful save swaps the client-generated ids of variants created this
@@ -1408,7 +1408,9 @@ export const ContentTab = () => {
   const { evaporateUploader, s3UploadConfig } = useConfigureEvaporate({
     aws_access_key_id: awsKey,
     s3_url: s3Url,
-    user_id: seller.id,
+    // The signature endpoint authorizes against the account doing the editing, so the key has to
+    // be namespaced by that id — the product owner's fails for a collaborator (gp#2775).
+    user_id: currentSellerExternalId,
   });
 
   const loadedPostsData = React.useRef(

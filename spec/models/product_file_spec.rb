@@ -667,6 +667,20 @@ describe ProductFile do
       expect(@product_file.s3_extension).to eq("")
       expect(@product_file.s3_display_extension).to eq("")
     end
+
+    it "reads the file name when the key is namespaced by the owning seller's external id" do
+      @product_file.update!(url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachments/#{@product_file.user.external_id}/43a5363194e74e9ee75b6203eaea6705/original/black/white.mp4")
+
+      expect(@product_file.s3_filename).to eq("black/white.mp4")
+    end
+
+    # A collaborator's uploads are namespaced by their own external id, not the product owner's.
+    it "reads the file name when the key is namespaced by another account's external id" do
+      collaborator = create(:user)
+      @product_file.update!(url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachments/#{collaborator.external_id}/43a5363194e74e9ee75b6203eaea6705/original/black/white.mp4")
+
+      expect(@product_file.s3_filename).to eq("black/white.mp4")
+    end
   end
 
   describe "#delete!" do
