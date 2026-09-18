@@ -4066,6 +4066,88 @@ describe Api::Internal::Admin::UsersController do
     include_examples "checks expected_email for user mutation", :unwatch, build_user: -> { user = create(:user); create(:watched_user, user:); user }
   end
 
+  describe "POST restore_bank_payout_rail" do
+    let(:user) { create(:named_user) }
+    let(:merchant_account) { create(:merchant_account, user:, country: "IN") }
+
+    def strip_bank_rail!(user)
+      merchant_account = user.merchant_accounts.stripe.alive.first || create(:merchant_account, user:, country: "IN")
+      create(:user_compliance_info, user:, country: "India") if user.alive_user_compliance_info.nil?
+      create(:indian_bank_account, user:, stripe_connect_account_id: merchant_account.charge_processor_merchant_id)
+      params = ActionController::Parameters.new(payment_address: "paypal@example.com", confirm_bank_rail_loss: "true")
+      expect(UpdatePayoutMethod.new(user_params: params, seller: user.reload).process).to eq(success: true)
+      allow(Stripe::Account).to receive(:retrieve).with(merchant_account.charge_processor_merchant_id)
+        .and_return(Stripe::Account.construct_from(id: merchant_account.charge_processor_merchant_id, country: "IN", payouts_enabled: true))
+      user.reload
+    end
+
+    include_examples "admin api authorization required", :post, :restore_bank_payout_rail
+
+    it "returns bad request when user_id is missing" do
+      post :restore_bank_payout_rail
+
+      expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body["message"]).to eq(user_id_required_message)
+    end
+
+    it "restores the bank rail, clears the PayPal address and records the note" do
+      merchant_account
+      strip_bank_rail!(user)
+      expect(user.active_bank_account).to be_nil
+
+      expect do
+        post :restore_bank_payout_rail, params: { user_id: user.external_id, note: "Restored per support ticket" }
+      end.to change { user.comments.reload.count }.by(1)
+
+      expect(response).to have_http_status(:ok)
+      expect(response.parsed_body).to include("success" => true, "status" => "bank_payout_rail_restored", "merchant_account_id" => merchant_account.charge_processor_merchant_id)
+      user.reload
+      expect(user.active_bank_account).to be_present
+      expect(user.stripe_account).to eq(merchant_account)
+      expect(user.payment_address).to be_blank
+    end
+
+    it "returns 422 without restoring a rail from a different country" do
+      merchant_account
+      strip_bank_rail!(user)
+      merchant_account.update!(country: "US")
+
+      post :restore_bank_payout_rail, params: { user_id: user.external_id }
+
+      expect(response).to have_http_status(:unprocessable_entity)
+      expect(response.parsed_body["message"]).to eq("The removed bank rail does not match the seller's current country")
+      expect(user.reload.active_bank_account).to be_nil
+      expect(merchant_account.reload).to be_deleted
+      expect(user.payment_address).to eq("paypal@example.com")
+    end
+
+    it "returns 422 when the user still has an active bank account" do
+      create(:user_compliance_info, user:, country: "India")
+      create(:indian_bank_account, user:)
+
+      post :restore_bank_payout_rail, params: { user_id: user.external_id }
+
+      expect(response).to have_http_status(:unprocessable_entity)
+      expect(response.parsed_body["message"]).to eq("User already has an active bank account")
+    end
+
+    it "returns 422 for an invalid note without restoring anything" do
+      merchant_account
+      strip_bank_rail!(user)
+
+      post :restore_bank_payout_rail, params: { user_id: user.external_id, note: "x" * 10_001 }
+
+      expect(response).to have_http_status(:unprocessable_entity)
+      user.reload
+      expect(user.active_bank_account).to be_nil
+      expect(user.payment_address).to eq("paypal@example.com")
+    end
+
+    include_examples "requires user_id for user mutation", :restore_bank_payout_rail
+    include_examples "supports user lookup by user_id", :restore_bank_payout_rail, build_user: -> { user = create(:named_user); strip_bank_rail!(user) }
+    include_examples "checks expected_email for user mutation", :restore_bank_payout_rail, build_user: -> { user = create(:named_user); strip_bank_rail!(user) }
+  end
+
   describe "POST update_watch" do
     let(:user) { create(:user) }
 

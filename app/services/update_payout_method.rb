@@ -259,6 +259,10 @@ class UpdatePayoutMethod
       if PaypalPayoutProcessor.terminal_failure_for_payout_email?(user, payment_address)
         return { error: :paypal_address_permanently_refused }
       end
+      # Irreversible where the rail cannot be re-created; the seller has to confirm it.
+      if user.paypal_switch_loses_bank_rail? && !bank_rail_loss_confirmed?
+        return { error: :paypal_switch_loses_bank_rail }
+      end
 
       user.payment_address = payment_address
       # The seller has chosen a payout method, so the record of the one we removed has done its job.
@@ -332,6 +336,10 @@ class UpdatePayoutMethod
 
     def paypal_payouts_supported?
       user.can_setup_paypal_payouts? || switching_to_uae_individual_account?
+    end
+
+    def bank_rail_loss_confirmed?
+      ActiveModel::Type::Boolean.new.cast(params[:confirm_bank_rail_loss]) == true
     end
 
     def switching_to_uae_individual_account?

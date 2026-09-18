@@ -211,6 +211,7 @@ type PaymentsPageProps = {
   saved_card: SavedCreditCard | null;
   formatted_balance_to_forfeit_on_country_change: string | null;
   formatted_balance_to_forfeit_on_payout_method_change: string | null;
+  paypal_switch_loses_bank_rail: boolean;
   payouts_paused_internally: boolean;
   payouts_paused_by: "stripe" | "admin" | "system" | "user" | null;
   payout_reserve_percent?: number | null;
@@ -1168,7 +1169,7 @@ export default function PaymentsPage() {
     } else if (
       selectedPayoutMethod === "paypal" &&
       props.bank_account_details.account_number_visual !== null &&
-      props.formatted_balance_to_forfeit_on_payout_method_change !== null &&
+      (props.formatted_balance_to_forfeit_on_payout_method_change !== null || props.paypal_switch_loses_bank_rail) &&
       !isPayoutMethodChangeConfirmed
     ) {
       setShowPayoutMethodChangeConfirmationModal(true);
@@ -1203,6 +1204,8 @@ export default function PaymentsPage() {
         transformed.card = cardData;
       } else if (selectedPayoutMethod === "paypal") {
         transformed.payment_address = data.payment_address;
+        // The server refuses a rail-losing switch without this (UpdatePayoutMethod).
+        if (props.paypal_switch_loses_bank_rail) transformed.confirm_bank_rail_loss = isPayoutMethodChangeConfirmed;
       }
 
       return transformed;
@@ -1292,6 +1295,7 @@ export default function PaymentsPage() {
       {showPayoutMethodChangeConfirmationModal ? (
         <ConfirmBalanceForfeitOnPayoutMethodChangeModal
           balance={props.formatted_balance_to_forfeit_on_payout_method_change}
+          losesBankRail={props.paypal_switch_loses_bank_rail}
           open={showPayoutMethodChangeConfirmationModal}
           onConfirm={confirmPayoutMethodChange}
           onClose={cancelPayoutMethodChange}

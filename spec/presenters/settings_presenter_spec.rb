@@ -767,6 +767,7 @@ describe SettingsPresenter do
         saved_card: nil,
         formatted_balance_to_forfeit_on_country_change: nil,
         formatted_balance_to_forfeit_on_payout_method_change: nil,
+        paypal_switch_loses_bank_rail: false,
         account_status: {
           show_section: false,
           is_suspended: false,

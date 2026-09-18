@@ -593,6 +593,41 @@ class Api::Internal::Admin::UsersController < Api::Internal::Admin::BaseControll
     end
   end
 
+  def restore_bank_payout_rail
+    user = find_internal_admin_user_for_write_or_render
+    return unless user
+
+    record_admin_write(action: "users.restore_bank_payout_rail", target: user) do
+      # Validated first so a bad note cannot leave a committed restore behind a 422.
+      note = build_admin_note(user, params[:note]) if params[:note].present?
+      return render_invalid_comment(note) if note&.invalid?
+
+      result = RestoreBankPayoutRail.new(user:).process
+      unless result.success
+        message = case result.error
+                  when :payout_rail_changed then "Payout details changed during the restore; please try again"
+                  when :incompatible_bank_rail then "The removed bank rail does not match the seller's current country"
+                  when :rail_recreatable then "This seller can add a bank account themselves; no restore needed"
+                  when :bank_account_already_active then "User already has an active bank account"
+                  when :no_deleted_bank_account then "No removed bank account to restore"
+                  when :no_deleted_merchant_account then "No removed Stripe account matches the bank account"
+                  when :not_removed_by_paypal_switch then "The bank account was not removed by a PayPal switch"
+                  when :stripe_account_unavailable then "The Stripe account is closed or cannot receive payouts"
+        end
+        return render json: { success: false, message: }, status: :unprocessable_entity
+      end
+
+      note&.save!
+
+      render json: internal_admin_user_success_payload(user, {
+                                                         status: "bank_payout_rail_restored",
+                                                         message: "Bank payouts restored",
+                                                         bank_account: { id: result.bank_account.external_id, account_number_visual: result.bank_account.account_number_visual },
+                                                         merchant_account_id: result.merchant_account.charge_processor_merchant_id,
+                                                       })
+    end
+  end
+
   private
     def affiliates_scope(user, direction)
       column = direction == "granted" ? :seller_id : :affiliate_user_id

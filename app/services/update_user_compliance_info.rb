@@ -82,81 +82,102 @@ class UpdateUserComplianceInfo
   ENCRYPTED_COMPLIANCE_INFO_FIELDS = %i[individual_tax_id business_tax_id].freeze
 
   def process
-    if compliance_params.present?
-      po_box_error = po_box_error_message
-      return { success: false, error_message: po_box_error } if po_box_error.present?
+    stripe_error = nil
+    provider_mutated = false
+    result = user.with_lock do
+      @current_compliance_info = nil
+      process_locked { provider_mutated = true }
+    rescue Stripe::StripeError => error
+      # Nothing reached the provider, so roll back and let the retry re-send. Past the first
+      # write the revision must stay: Stripe cannot be rolled back, and the unchanged retry
+      # path never re-sends.
+      raise error unless provider_mutated
 
-      japan_city_error = japan_city_error_message
-      return { success: false, error_message: japan_city_error } if japan_city_error.present?
-
-      ENCRYPTED_FIELD_LABELS.each do |field, label|
-        value = compliance_params[field]
-        next if value.blank?
-        if value.to_s.length > MAX_ENCRYPTED_FIELD_LENGTH
-          return { success: false, error_message: "#{label} is too long" }
-        end
-      end
-
-      birthday_error = invalid_birthday_error
-      return { success: false, error_message: birthday_error } if birthday_error
-
-      old_compliance_info = current_compliance_info
-      compliance_info_changed = compliance_info_changed?(old_compliance_info)
-      old_compliance_info.reload if old_compliance_info.persisted? && encrypted_compliance_info_params_present?
-      unless compliance_info_changed
-        UserComplianceInfoRequest.handle_new_user_compliance_info(old_compliance_info)
-        return { success: true } unless old_compliance_info.nationality_resubmission_required?
-      end
-
-      peru_dni_error = peru_individual_dni_error(old_compliance_info)
-      return { success: false, error_message: peru_dni_error } if peru_dni_error
-
-      singapore_nric_error = singapore_individual_nric_error(old_compliance_info)
-      return { success: false, error_message: singapore_nric_error } if singapore_nric_error
-
-      colombia_id_error = colombia_individual_id_error(old_compliance_info)
-      return { success: false, error_message: colombia_id_error } if colombia_id_error
-
-      saved, new_compliance_info = if !compliance_info_changed
-        [true, old_compliance_info]
-      elsif encrypted_compliance_info_params_present?
-        dup_and_save_compliance_info(old_compliance_info)
-      else
-        old_compliance_info.dup_and_save do |new_compliance_info|
-          assign_compliance_params(new_compliance_info)
-        end
-      end
-
-      return { success: false, error_message: new_compliance_info.errors.full_messages.to_sentence } unless saved
-
-      if new_compliance_info.is_business && new_compliance_info.legal_entity_country_code == "US" &&
-          submitted_tax_id_for(:business_tax_id).present? && new_compliance_info.business_tax_id.length != 9
-        return { success: false, error_message: "US business tax IDs (EIN) must have 9 digits." }
-      end
-
-      begin
-        StripeMerchantAccountManager.handle_new_user_compliance_info(new_compliance_info)
-      rescue Stripe::InvalidRequestError => e
-        if e.code == "postal_code_invalid"
-          country = new_compliance_info.legal_entity_country
-          weeks = RetryStripeRejectedPayoutSetupsJob::RETRY_WINDOW_WEEKS
-          return { success: false, error_message: "We couldn't verify the postal code you entered for #{country}. Please double-check it — but if you're sure it's correct (for example, a newly built address), you don't need to do anything. New postal codes can take a few days to a few weeks to reach our payment partner's records, so we'll automatically re-check yours once a week for up to #{weeks} weeks, and only reach out if we still can't verify it." }
-        end
-
-        # Every other Stripe rejection used to end here with the message handed to the seller
-        # and nothing kept on our side, while the half-built merchant account was rolled back.
-        # That left sellers who cannot complete payout setup undiagnosable from support tooling:
-        # the only trace was a merchant-account row created and soft-deleted in the same second,
-        # with no error code and no indication of which field Stripe objected to. Record the
-        # code and param first so the next person looking at the account can see the actual
-        # cause instead of reproducing the failure to find it.
-        StripeMerchantAccountManager.record_account_rejection_note(new_compliance_info.user, e)
-        return { success: false, error_message: e.message.split("Please contact us").first.strip }
-      end
+      stripe_error = error
     end
+    raise stripe_error if stripe_error
 
-    { success: true }
+    result
   end
+
+  private
+    def process_locked(&on_provider_mutation)
+      if compliance_params.present?
+        po_box_error = po_box_error_message
+        return { success: false, error_message: po_box_error } if po_box_error.present?
+
+        japan_city_error = japan_city_error_message
+        return { success: false, error_message: japan_city_error } if japan_city_error.present?
+
+        ENCRYPTED_FIELD_LABELS.each do |field, label|
+          value = compliance_params[field]
+          next if value.blank?
+          if value.to_s.length > MAX_ENCRYPTED_FIELD_LENGTH
+            return { success: false, error_message: "#{label} is too long" }
+          end
+        end
+
+        birthday_error = invalid_birthday_error
+        return { success: false, error_message: birthday_error } if birthday_error
+
+        old_compliance_info = current_compliance_info
+        compliance_info_changed = compliance_info_changed?(old_compliance_info)
+        old_compliance_info.reload if old_compliance_info.persisted? && encrypted_compliance_info_params_present?
+        unless compliance_info_changed
+          UserComplianceInfoRequest.handle_new_user_compliance_info(old_compliance_info)
+          return { success: true } unless old_compliance_info.nationality_resubmission_required?
+        end
+
+        peru_dni_error = peru_individual_dni_error(old_compliance_info)
+        return { success: false, error_message: peru_dni_error } if peru_dni_error
+
+        singapore_nric_error = singapore_individual_nric_error(old_compliance_info)
+        return { success: false, error_message: singapore_nric_error } if singapore_nric_error
+
+        colombia_id_error = colombia_individual_id_error(old_compliance_info)
+        return { success: false, error_message: colombia_id_error } if colombia_id_error
+
+        saved = false
+        new_compliance_info = nil
+        # A rejected revision must roll back its deletion of the old revision,
+        # even inside the user lock's transaction.
+        ActiveRecord::Base.transaction(requires_new: true) do
+          saved, new_compliance_info = if !compliance_info_changed
+            [true, old_compliance_info]
+          elsif encrypted_compliance_info_params_present?
+            dup_and_save_compliance_info(old_compliance_info)
+          else
+            old_compliance_info.dup_and_save do |new_compliance_info|
+              assign_compliance_params(new_compliance_info)
+            end
+          end
+          raise ActiveRecord::Rollback unless saved
+        end
+
+        return { success: false, error_message: new_compliance_info.errors.full_messages.to_sentence } unless saved
+
+        if new_compliance_info.is_business && new_compliance_info.legal_entity_country_code == "US" &&
+            submitted_tax_id_for(:business_tax_id).present? && new_compliance_info.business_tax_id.length != 9
+          return { success: false, error_message: "US business tax IDs (EIN) must have 9 digits." }
+        end
+
+        begin
+          StripeMerchantAccountManager.handle_new_user_compliance_info(new_compliance_info, on_provider_mutation:)
+        rescue Stripe::InvalidRequestError => e
+          if e.code == "postal_code_invalid"
+            country = new_compliance_info.legal_entity_country
+            weeks = RetryStripeRejectedPayoutSetupsJob::RETRY_WINDOW_WEEKS
+            return { success: false, error_message: "We couldn't verify the postal code you entered for #{country}. Please double-check it — but if you're sure it's correct (for example, a newly built address), you don't need to do anything. New postal codes can take a few days to a few weeks to reach our payment partner's records, so we'll automatically re-check yours once a week for up to #{weeks} weeks, and only reach out if we still can't verify it." }
+          end
+
+          # Preserve rejection details so support can diagnose payout setup failures.
+          StripeMerchantAccountManager.record_account_rejection_note(new_compliance_info.user, e)
+          return { success: false, error_message: e.message.split("Please contact us").first.strip }
+        end
+      end
+
+      { success: true }
+    end
 
   private
     def assign_compliance_params(new_compliance_info)

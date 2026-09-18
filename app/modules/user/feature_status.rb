@@ -60,7 +60,18 @@ class User
     end
 
     def can_setup_bank_payouts?
-      active_bank_account.present? || (native_payouts_supported? && !signed_up_from_india?) || signed_up_from_united_arab_emirates?
+      active_bank_account.present? || can_create_bank_payout_rail?
+    end
+
+    # False for India: Stripe refuses new IND accounts, so an existing rail is the only one the
+    # seller will ever have.
+    def can_create_bank_payout_rail?
+      (native_payouts_supported? && !signed_up_from_india?) || signed_up_from_united_arab_emirates?
+    end
+
+    # A PayPal save deletes the bank rail; where it cannot be re-created the save is irreversible.
+    def paypal_switch_loses_bank_rail?
+      active_bank_account.present? && !active_bank_account.is_a?(CardBankAccount) && !can_create_bank_payout_rail?
     end
 
     def can_setup_paypal_payouts?

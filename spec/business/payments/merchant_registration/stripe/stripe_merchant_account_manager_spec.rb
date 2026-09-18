@@ -13723,7 +13723,7 @@ describe StripeMerchantAccountManager, :vcr do
         before { merchant_account }
 
         it "calls update account for the user" do
-          expect(subject).to receive(:update_account).with(user, passphrase: "1234", notify: true, force_address_resync: false)
+          expect(subject).to receive(:update_account).with(user, passphrase: "1234", notify: true, force_address_resync: false, on_provider_mutation: nil)
           subject.handle_new_user_compliance_info(user_compliance_info)
         end
       end

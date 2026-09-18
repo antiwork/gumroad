@@ -461,6 +461,8 @@ class Settings::PaymentsController < Settings::BaseController
                         "PayPal payouts are not supported in your country."
                       when :paypal_address_permanently_refused
                         "PayPal won't accept payouts to that account. Please use a different PayPal account."
+                      when :paypal_switch_loses_bank_rail
+                        "Switching to PayPal permanently removes bank payouts for your account. Please confirm the change to continue."
                       when :concurrent_payout_method_change
                         "Another change was submitted at the same time. Please try again."
       end
