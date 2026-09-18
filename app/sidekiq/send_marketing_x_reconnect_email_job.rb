@@ -1,6 +1,8 @@
 # frozen_string_literal: true
 
 class SendMarketingXReconnectEmailJob
+  class NewEligibleActionsError < StandardError; end
+
   include Sidekiq::Job
   # Keyed on the seller, not the action: one notice covers every product they have blocked,
   # so two blocked products must not mail them twice.
@@ -17,7 +19,12 @@ class SendMarketingXReconnectEmailJob
     # it would block approve, cancel and post until SMTP times out. An action that leaves the
     # scope mid-send makes the mailer decline, so fall through to the next one rather than
     # finishing with the seller unnotified.
-    return unless pending_ids.any? { deliver(_1) }
+    unless pending_ids.any? { deliver(_1) }
+      # New candidates may have had their enqueue suppressed by this job's lock.
+      # Sidekiq retries after the unique middleware releases that lock.
+      raise NewEligibleActionsError if eligible_for(seller).where.not(id: pending_ids).exists?
+      return
+    end
 
     # Re-scan rather than settle the ids captured before delivery. A product cancelled mid-send
     # drops out of the scope and is not consumed, and one that failed mid-send is covered by the

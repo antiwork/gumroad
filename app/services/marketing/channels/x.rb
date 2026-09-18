@@ -96,7 +96,7 @@ class Marketing::Channels::X
       action.require_reconnect!
       # The card reaches only a seller who returns to the product; a CLI or agent attempt
       # would otherwise leave no trace. The job's claim keeps a retry from mailing twice.
-      SendMarketingXReconnectEmailJob.perform_async(action.user_id)
+      EnqueueMarketingXReconnectEmailJob.perform_async(action.user_id)
     end
 
     def fail_with!(code)
