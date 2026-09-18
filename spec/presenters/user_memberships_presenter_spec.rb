@@ -50,6 +50,35 @@ describe UserMembershipsPresenter do
     end
   end
 
+  it "hides deleted sellers while preserving membership data, ordering, roles and restoration" do
+    team_membership_one.update!(last_accessed_at: 1.hour.ago)
+    team_membership_two.update!(role: TeamMembership::ROLE_SUPPORT, last_accessed_at: 2.hours.ago)
+    deleted_membership = create(:team_membership, user:, deleted_at: Time.current)
+    brand = create(:user, name: "Synthetic brand")
+    brand_membership = create(:team_membership, user:, seller: brand, last_accessed_at: Time.current)
+    original_attributes = brand_membership.attributes
+    brand.deactivate!
+
+    props = UserMembershipsPresenter.new(pundit_user:).props
+
+    expect(props).to eq([
+                          expected_memberships(team_membership_one, has_some_read_only_access: false, is_selected: true),
+                          expected_memberships(team_membership_two, has_some_read_only_access: true),
+                          expected_memberships(team_membership_owner, has_some_read_only_access: false),
+                        ])
+    expect(brand_membership.reload.attributes).to eq(original_attributes)
+
+    brand.reactivate!
+    restored_context = SellerContext.new(user: User.find(user.id), seller: seller_one)
+    restored_props = UserMembershipsPresenter.new(pundit_user: restored_context).props
+
+    expect(restored_props).to eq([
+                                   expected_memberships(brand_membership, has_some_read_only_access: false),
+                                   *props,
+                                 ])
+    expect(deleted_membership.reload).to be_deleted
+  end
+
   def expected_memberships(team_membership, has_some_read_only_access:, is_selected: false)
     seller = team_membership.seller
     {

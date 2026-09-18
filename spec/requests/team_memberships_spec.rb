@@ -32,6 +32,30 @@ describe "Team Memberships", type: :system, js: true do
           expect(page).to have_text("Products")
         end
 
+        it "hides a deleted brand and lists it again after restoration" do
+          brand = create(:user, name: "Synthetic brand")
+          membership = create(:team_membership, user:, seller: brand)
+          brand.deactivate!
+
+          visit products_path
+
+          within "nav[aria-label='Main']" do
+            toggle_disclosure("Gum")
+            expect(page).to have_selector("[role='menuitemradio']", text: "Gum")
+            expect(page).to have_selector("[role='menuitemradio']", text: "Joe")
+            expect(page).not_to have_selector("[role='menuitemradio']", text: "Synthetic brand")
+          end
+          expect(membership.reload).not_to be_deleted
+
+          brand.reactivate!
+          page.refresh
+
+          within "nav[aria-label='Main']" do
+            toggle_disclosure("Gum")
+            expect(page).to have_selector("[role='menuitemradio']", text: "Synthetic brand")
+          end
+        end
+
         context "accessing a restricted page" do
           it "redirects to the dashboard" do
             visit settings_password_path
