@@ -104,6 +104,24 @@ describe SendMarketingXReconnectEmailJob do
     expect(sibling.reload.reconnect_notified_at).to be_nil
   end
 
+  # Its own enqueue is dropped by this job's uniqueness lock, so the re-scan is the only
+  # thing that keeps it from sitting eligible with nothing queued to pick it up.
+  it "covers a product that fails while the mail is being delivered" do
+    latecomer = nil
+    allow_any_instance_of(Mail::TestMailer).to receive(:deliver!).and_wrap_original do |original, *args|
+      latecomer ||= create(:marketing_action, user: seller, link: create(:product, user: seller), copy: "Late").tap do |a|
+        a.approve!
+        a.update!(error_code: Marketing::Action::X_WRITE_PERMISSION_MISSING)
+      end
+      original.call(*args)
+    end
+
+    expect { described_class.new.perform(seller.id) }.to change { ActionMailer::Base.deliveries.size }.by(1)
+
+    expect(action.reload.reconnect_notified_at).to be_present
+    expect(latecomer.reload.reconnect_notified_at).to be_present
+  end
+
   it "ignores a seller that no longer exists" do
     expect { described_class.new.perform(-1) }.not_to raise_error
   end

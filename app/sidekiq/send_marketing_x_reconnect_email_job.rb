@@ -19,10 +19,11 @@ class SendMarketingXReconnectEmailJob
     # finishing with the seller unnotified.
     return unless pending_ids.any? { deliver(_1) }
 
-    # Re-read rather than trust the ids: a product cancelled mid-send must not be consumed.
-    seller.with_lock do
-      eligible_for(seller).where(id: pending_ids).update_all(reconnect_notified_at: Time.current)
-    end
+    # Re-scan rather than settle the ids captured before delivery. A product cancelled mid-send
+    # drops out of the scope and is not consumed, and one that failed mid-send is covered by the
+    # mail just sent — its own enqueue was discarded by this job's uniqueness lock, so leaving it
+    # eligible would strand it with nothing queued to pick it up.
+    seller.with_lock { eligible_for(seller).update_all(reconnect_notified_at: Time.current) }
   end
 
   private
