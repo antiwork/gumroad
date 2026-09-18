@@ -7,14 +7,23 @@ import { Label } from "$app/components/ui/Label";
 
 type Props = {
   balance: string | null;
+  // The seller's country cannot re-create a bank rail once the switch deletes it (India).
+  losesBankRail?: boolean;
   open: boolean;
   onClose: () => void;
   onConfirm: () => void;
 };
 
-export const ConfirmBalanceForfeitOnPayoutMethodChangeModal = ({ balance, open, onClose, onConfirm }: Props) => {
+export const ConfirmBalanceForfeitOnPayoutMethodChangeModal = ({
+  balance,
+  losesBankRail = false,
+  open,
+  onClose,
+  onConfirm,
+}: Props) => {
   const [confirmText, setConfirmText] = React.useState("");
-  const isConfirmEnabled = !balance || confirmText.trim().toLowerCase() === "i understand";
+  const requiresTypedConfirmation = Boolean(balance) || losesBankRail;
+  const isConfirmEnabled = !requiresTypedConfirmation || confirmText.trim().toLowerCase() === "i understand";
 
   return (
     <div>
@@ -25,20 +34,36 @@ export const ConfirmBalanceForfeitOnPayoutMethodChangeModal = ({ balance, open, 
         footer={
           <>
             <Button onClick={onClose}>Cancel</Button>
-            <Button onClick={onConfirm} color={balance ? "danger" : "primary"} disabled={!isConfirmEnabled}>
+            <Button
+              onClick={onConfirm}
+              color={requiresTypedConfirmation ? "danger" : "primary"}
+              disabled={!isConfirmEnabled}
+            >
               Confirm
             </Button>
           </>
         }
       >
         <h4>
-          {balance ? (
+          {requiresTypedConfirmation ? (
             <>
-              Due to limitations with our payments provider, changing payout method from bank account to PayPal means
-              that you will have to forfeit your existing balance of <b>{balance}</b>.<br />
-              <br />
-              Please confirm that you're okay forfeiting your balance by typing <b>"I understand"</b> below and clicking{" "}
-              <b>Confirm</b>.
+              {balance ? (
+                <>
+                  Due to limitations with our payments provider, changing payout method from bank account to PayPal
+                  means that you will have to forfeit your existing balance of <b>{balance}</b>.
+                  <br />
+                  <br />
+                </>
+              ) : null}
+              {losesBankRail ? (
+                <>
+                  Bank account payouts are no longer available for new setups in your country. If you switch to PayPal,
+                  your bank account will be removed and <b>you will not be able to switch back</b>.
+                  <br />
+                  <br />
+                </>
+              ) : null}
+              Please confirm that you understand by typing <b>"I understand"</b> below and clicking <b>Confirm</b>.
               <div className="mt-4">
                 <Label htmlFor="confirmation-input" className="sr-only">
                   Type "I understand" to confirm

@@ -159,6 +159,7 @@ const pageProps = (userOverrides: Partial<User> = {}, complianceOverrides: Parti
   saved_card: null,
   formatted_balance_to_forfeit_on_country_change: null,
   formatted_balance_to_forfeit_on_payout_method_change: null,
+  paypal_switch_loses_bank_rail: false,
   payouts_paused_internally: false,
   payouts_paused_by: null,
   account_status: {
@@ -589,5 +590,65 @@ describe("server error naming a field", () => {
 
     expect(screen.getByText(message)).toBeTruthy();
     expect(screen.getByLabelText("SWIFT / BIC Code").getAttribute("aria-invalid")).toBe("false");
+  });
+});
+
+describe("switching to PayPal where the bank rail cannot be re-created", () => {
+  // An India seller with a live bank account: the save deletes it and Stripe refuses a new IND
+  // account, so the confirmation must fire even with nothing forfeitable.
+  const renderIndiaSeller = (paypal_switch_loses_bank_rail: boolean) => {
+    mocks.usePage.mockReturnValue({
+      props: {
+        ...pageProps({ country_code: "IN", payout_currency: "inr" }, { country: "IN" }),
+        countries: { IN: "India" },
+        paypal_switch_loses_bank_rail,
+        paypal_address: null,
+        bank_account_details: {
+          show_bank_account: true,
+          show_paypal: true,
+          is_a_card: false,
+          routing_number: "HDFC0004051",
+          account_number_visual: "******6789",
+          card: null,
+          card_data_handling_mode: null,
+          bank_account: null,
+        },
+      },
+    });
+    render(<PaymentsPage />);
+    fireEvent.click(screen.getByRole("radio", { name: "PayPal" }));
+    fireEvent.change(screen.getByLabelText("PayPal Email"), { target: { value: "paypal@example.com" } });
+  };
+
+  it("opens the typed confirmation instead of saving, then saves with the confirmation flag", () => {
+    renderIndiaSeller(true);
+    save();
+
+    expect(mocks.put).not.toHaveBeenCalled();
+    expect(screen.getByText(/you will not be able to switch back/u)).toBeTruthy();
+    const confirm = screen.getByRole("button", { name: "Confirm" });
+    expect(confirm.hasAttribute("disabled")).toBe(true);
+
+    fireEvent.change(screen.getByLabelText('Type "I understand" to confirm'), { target: { value: "I understand" } });
+    expect(confirm.hasAttribute("disabled")).toBe(false);
+    fireEvent.click(confirm);
+
+    expect(mocks.put).toHaveBeenCalledWith(
+      "/settings_payments",
+      expect.objectContaining({ payment_address: "paypal@example.com", confirm_bank_rail_loss: true }),
+    );
+  });
+
+  it("saves straight away where the rail can be re-created", () => {
+    renderIndiaSeller(false);
+    save();
+
+    expect(screen.queryByText(/you will not be able to switch back/u)).toBeNull();
+    expect(mocks.put).toHaveBeenCalledTimes(1);
+    expect(mocks.put).toHaveBeenCalledWith(
+      "/settings_payments",
+      expect.objectContaining({ payment_address: "paypal@example.com" }),
+    );
+    expect(JSON.stringify(mocks.put.mock.calls[0])).not.toContain("confirm_bank_rail_loss");
   });
 });

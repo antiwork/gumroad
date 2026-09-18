@@ -354,6 +354,56 @@ describe UpdatePayoutMethod do
       end
     end
 
+    describe "saving a PayPal address when the bank rail cannot be re-created" do
+      let(:user) { create(:named_user) }
+      let(:params) { ActionController::Parameters.new(payment_address: "paypal@example.com") }
+
+      before do
+        user.update!(payment_address: "")
+        create(:user_compliance_info, user:, country: "India")
+        create(:indian_bank_account, user:)
+        create(:merchant_account, user:)
+      end
+
+      # Stripe refuses new IND accounts, so without confirmation this save would strip a rail the
+      # seller can never rebuild (gumroad-private#2774).
+      it "is refused, and the bank rail is left alone" do
+        result = described_class.new(user_params: params, seller: user).process
+
+        expect(result).to eq(error: :paypal_switch_loses_bank_rail)
+        expect(user.reload.payment_address).to be_blank
+        expect(user.active_bank_account).to be_present
+        expect(user.stripe_account).to be_present
+      end
+
+      it "goes through once the seller confirms" do
+        params = ActionController::Parameters.new(payment_address: "paypal@example.com", confirm_bank_rail_loss: "true")
+
+        result = described_class.new(user_params: params, seller: user).process
+
+        expect(result).to eq(success: true)
+        expect(user.reload.payment_address).to eq("paypal@example.com")
+        expect(user.active_bank_account).to be_nil
+        expect(user.stripe_account).to be_nil
+      end
+
+      # Egypt offers both rails (`can_setup_paypal_payouts?` lists it) and Stripe can rebuild the
+      # bank rail there, so the switch is an ordinary save.
+      it "needs no confirmation where the country can re-create the rail" do
+        user.alive_user_compliance_info.mark_deleted!
+        user.bank_accounts.alive.each(&:mark_deleted!)
+        create(:user_compliance_info, user:, country: "Egypt")
+        create(:egypt_bank_account, user:)
+        user.reload
+        expect(user.paypal_switch_loses_bank_rail?).to be(false)
+
+        result = described_class.new(user_params: params, seller: user).process
+
+        expect(result).to eq(success: true)
+        expect(user.reload.payment_address).to eq("paypal@example.com")
+      end
+    end
+
     describe "saving a PayPal address PayPal has permanently refused" do
       let(:user) { create(:named_user) }
       let(:params) { ActionController::Parameters.new(payment_address: "refused@example.com") }

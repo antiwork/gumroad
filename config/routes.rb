@@ -498,6 +498,7 @@ Rails.application.routes.draw do
               post :watch
               post :update_watch
               post :unwatch
+              post :restore_bank_payout_rail
             end
           end
 

@@ -593,6 +593,37 @@ class Api::Internal::Admin::UsersController < Api::Internal::Admin::BaseControll
     end
   end
 
+  # Puts back the bank rail a PayPal switch deleted, for sellers whose country cannot re-create one
+  # (India). See RestoreBankPayoutRail.
+  def restore_bank_payout_rail
+    user = find_internal_admin_user_for_write_or_render
+    return unless user
+
+    record_admin_write(action: "users.restore_bank_payout_rail", target: user) do
+      result = RestoreBankPayoutRail.new(user:).process
+      unless result.success
+        message = case result.error
+                  when :bank_account_already_active then "User already has an active bank account"
+                  when :no_deleted_bank_account then "No removed bank account to restore"
+                  when :no_deleted_merchant_account then "No removed Stripe account matches the bank account"
+                  when :stripe_account_unavailable then "The Stripe account no longer exists"
+        end
+        return render json: { success: false, message: }, status: :unprocessable_entity
+      end
+
+      note = build_admin_note(user, params[:note]) if params[:note].present?
+      return render_invalid_comment(note) if note&.invalid?
+      note&.save!
+
+      render json: internal_admin_user_success_payload(user, {
+                                                         status: "bank_payout_rail_restored",
+                                                         message: "Bank payouts restored",
+                                                         bank_account: { id: result.bank_account.external_id, account_number_visual: result.bank_account.account_number_visual },
+                                                         merchant_account_id: result.merchant_account.charge_processor_merchant_id,
+                                                       })
+    end
+  end
+
   private
     def affiliates_scope(user, direction)
       column = direction == "granted" ? :seller_id : :affiliate_user_id

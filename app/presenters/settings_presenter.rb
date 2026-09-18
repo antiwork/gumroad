@@ -267,6 +267,7 @@ class SettingsPresenter
       saved_card: CheckoutPresenter.saved_card(seller.credit_card),
       formatted_balance_to_forfeit_on_country_change: seller.formatted_balance_to_forfeit(:country_change),
       formatted_balance_to_forfeit_on_payout_method_change: seller.formatted_balance_to_forfeit(:payout_method_change),
+      paypal_switch_loses_bank_rail: seller.paypal_switch_loses_bank_rail?,
       payouts_paused_internally: seller.payouts_paused_internally?,
       payouts_paused_by: seller.payouts_paused_by_source,
       payout_reserve_percent: seller.chargeback_rate_payout_reserve_active? ? User::CHARGEBACK_RATE_PAYOUT_RESERVE_PERCENT : nil,
