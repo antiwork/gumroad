@@ -60,11 +60,12 @@ module S3Retrievable
 
         url = send(column)
         splitted = url.split("/")
-        # Upload keys are namespaced by the external id of the account that uploaded them, which
-        # for a file a collaborator added is not `user`'s, so match a guid-shaped namespace as
-        # well as the owner's (archives carry the owner's id but no guid).
-        namespaced = url.match?(%r{\A#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/\w+/[^/]+/[A-Za-z0-9]{32}/original/}) ||
-          (user.try(:external_id).present? && url.match?(%r{\A#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/\w+/#{user.external_id}/}))
+        # Upload keys are namespaced by the external id of the account that uploaded them, which for
+        # a file a collaborator added is not `user`'s, so accept a guid-shaped namespace as well as
+        # the owner's (archives carry the owner's id but have no guid segment).
+        relative = url.start_with?(S3_BASE_URL) ? url.delete_prefix(S3_BASE_URL) : ""
+        namespaced = relative.match?(%r{\A[^/]+/[^/]+/[A-Za-z0-9]{32}/original/}) ||
+          (user.try(:external_id).present? && relative.split("/")[1] == user.external_id)
         starting_index = namespaced ? 8 : 7
         max_split_count = namespaced ? 9 : 8
         splitted.count > max_split_count ? splitted[starting_index..-1].join("/") : splitted.last # to handle file names that have / in them.
