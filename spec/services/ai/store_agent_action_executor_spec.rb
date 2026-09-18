@@ -39,6 +39,73 @@ describe Ai::StoreAgentActionExecutor do
       end
     end
 
+    %w[user product].each do |surface|
+      context "reversible #{surface} HTML edits" do
+        let(:pageable) { surface == "user" ? seller : create(:product, user: seller) }
+        let(:endpoint) { "edit_#{surface}_custom_html" }
+        let(:path_params) { surface == "user" ? {} : { "id" => pageable.external_id } }
+        let(:original) { "<p>Keep this instruction.</p><a data-gumroad-action=\"buy\">Buy</a>" }
+        let(:formatted) { "<p><strong>Keep this instruction.</strong></p>" }
+
+        before do
+          Feature.activate_user(:custom_html_pages, seller)
+          pageable.update!(custom_html: original)
+        end
+
+        def apply_formatting
+          executor.execute(type: "api_write", params: api_write(endpoint:, path_params:, params: { "find" => "<p>Keep this instruction.</p>", "replace" => formatted }))
+        end
+
+        it "returns a server receipt that restores the entire original page through the real API" do
+          original_page = pageable.reload.custom_html
+          result = apply_formatting
+          expect(result[:success]).to be(true)
+          expect(result[:html_undo]).to be_present
+          expect(pageable.reload.custom_html).to include(formatted)
+
+          undo = executor.execute(type: "api_write", params: result.fetch(:html_undo))
+
+          expect(undo[:success]).to be(true)
+          expect(pageable.reload.custom_html).to eq(original_page)
+        end
+
+        it "refuses a stale undo at confirmation even when its snippet still matches" do
+          receipt = apply_formatting.fetch(:html_undo)
+          pageable.update!(custom_html: pageable.reload.custom_html + "<footer>New content</footer>")
+          changed_page = pageable.reload.custom_html
+
+          result = executor.execute(type: "api_write", params: receipt)
+
+          expect(result[:success]).to be(false)
+          expect(result[:message]).to include("changed")
+          expect(pageable.reload.custom_html).to eq(changed_page)
+        end
+      end
+    end
+
+    it "cannot replay a receipt against another seller's product" do
+      other_seller = create(:user)
+      Feature.activate_user(:custom_html_pages, other_seller)
+      other_product = create(:product, user: other_seller)
+      other_product.update!(custom_html: "<p><strong>Theirs</strong></p><a data-gumroad-action=\"buy\">Buy</a>")
+      their_page = other_product.reload.custom_html
+      receipt = {
+        "endpoint" => "edit_product_custom_html",
+        "path_params" => { "id" => other_product.external_id },
+        "params" => {
+          "find" => "<p><strong>Theirs</strong></p>", "replace" => "<p>Theirs</p>",
+          "expected_custom_html_sha256" => Digest::SHA256.hexdigest(their_page),
+          "result_custom_html_sha256" => Digest::SHA256.hexdigest(their_page.sub("<strong>Theirs</strong>", "Theirs")),
+        },
+      }
+
+      result = executor.execute(type: "api_write", params: receipt)
+
+      expect(result[:success]).to be(false)
+      expect(result).not_to have_key(:html_undo)
+      expect(other_product.reload.custom_html).to eq(their_page)
+    end
+
     context "update_product (price change replayed through the API)" do
       let!(:product) { create(:product, user: seller, price_cents: 1000) }
 

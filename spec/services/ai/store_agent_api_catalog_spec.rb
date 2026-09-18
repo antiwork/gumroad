@@ -82,7 +82,7 @@ describe Ai::StoreAgentApiCatalog do
     it "limits listing to Store Agent-owned subscriptions for the requested resource" do
       endpoint = described_class.find("list_resource_subscriptions")
 
-      expect(endpoint.unknown_param_keys_error("resource_name" => "sale")).to be_nil
+      expect(endpoint.unknown_param_keys_error({ "resource_name" => "sale" })).to be_nil
       expect(endpoint.forced_params).to eq("current_oauth_application_only" => true)
       expect(ResourceSubscription.valid_resource_name?("sale")).to be(true)
     end
@@ -218,6 +218,26 @@ describe Ai::StoreAgentApiCatalog do
       expect(endpoint.path).to eq("/user/custom_html/edit")
       expect(endpoint.scope).to eq("edit_profile")
       expect(endpoint.params).to eq(%w[find replace])
+      expect(endpoint.server_params).to eq(%w[expected_custom_html_sha256 result_custom_html_sha256])
+    end
+
+    it "keeps the undo checksums server-only: hidden from the manifest and refused from the model" do
+      %w[edit_user_custom_html edit_product_custom_html].each do |id|
+        endpoint = described_class.find(id)
+        body = { "find" => "<p>a</p>", "replace" => "<p>b</p>", "expected_custom_html_sha256" => "a" * 64, "result_custom_html_sha256" => "b" * 64 }
+
+        error = endpoint.unknown_param_keys_error(body)
+        expect(error).to include("Unknown params expected_custom_html_sha256, result_custom_html_sha256 for #{id}")
+        expect(error).to include("this endpoint accepts: find, replace.")
+        expect(endpoint.unknown_param_keys_error(body, server_params_allowed: true)).to be_nil
+        expect(endpoint.unknown_param_keys_error(body.merge("extra" => 1), server_params_allowed: true)).to include("Unknown param extra")
+      end
+
+      manifest = described_class.manifest(:write)
+      expect(manifest).to include("edit_user_custom_html (params: find, replace)")
+      expect(manifest).to include("edit_product_custom_html (path: id) (params: find, replace)")
+      expect(manifest).not_to include("expected_custom_html_sha256")
+      expect(manifest).not_to include("result_custom_html_sha256")
     end
 
     it "warns the model that the full-page update is destructive and points at the targeted edit" do
@@ -260,8 +280,8 @@ describe Ai::StoreAgentApiCatalog do
       endpoint = described_class.find("create_product")
 
       expect(endpoint.params).to include("draft", "published")
-      expect(endpoint.unknown_param_keys_error("name" => "Book", "price" => 500, "draft" => true)).to be_nil
-      expect(endpoint.unknown_param_keys_error("name" => "Book", "price" => 500, "published" => false)).to be_nil
+      expect(endpoint.unknown_param_keys_error({ "name" => "Book", "price" => 500, "draft" => true })).to be_nil
+      expect(endpoint.unknown_param_keys_error({ "name" => "Book", "price" => 500, "published" => false })).to be_nil
     end
 
     # The product goes on sale the moment it is created, so the model has to know that before it proposes the write.
@@ -301,6 +321,7 @@ describe Ai::StoreAgentApiCatalog do
       expect(endpoint.path).to eq("/products/:id/custom_html/edit")
       expect(endpoint.scope).to eq("edit_products")
       expect(endpoint.params).to eq(%w[find replace])
+      expect(endpoint.server_params).to eq(%w[expected_custom_html_sha256 result_custom_html_sha256])
     end
 
     it "exposes the full-page update as a confirmable write accepting only custom_html" do

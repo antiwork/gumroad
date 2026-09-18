@@ -46,7 +46,7 @@ class Api::Internal::AgentMessagesController < Api::Internal::BaseController
           messages
         end
 
-      result = ::Ai::StoreAgentService.new(seller: current_seller, pundit_user:).respond(messages: history)
+      result = ::Ai::StoreAgentService.new(seller: current_seller, pundit_user:, conversation:).respond(messages: history)
 
       # A persistence failure does not erase a completed read reply. A proposed write is different:
       # without a stored message it cannot be confirmed, so its confirmation wording is replaced.
@@ -181,7 +181,7 @@ class Api::Internal::AgentMessagesController < Api::Internal::BaseController
 
     # Convert server-only execution metadata to the narrow client retry/status contract.
     def public_action_result(result, action_status:, retryable:)
-      public_result = result.except(:failure_reason, :failure_status, :retry_safe)
+      public_result = result.except(:failure_reason, :failure_status, :retry_safe, :html_undo)
       public_result[:action_status] = action_status if action_status
       public_result[:retryable] = true if retryable
       public_result

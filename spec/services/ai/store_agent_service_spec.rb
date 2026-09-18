@@ -96,7 +96,7 @@ describe Ai::StoreAgentService do
       service.respond(messages: [{ role: "user", content: "hi" }])
 
       expect(captured[:system]).to include("Gumroad's store assistant")
-      expect(captured[:tools].map { |t| t[:name] }).to contain_exactly("api_read", "api_write", "complete_turn")
+      expect(captured[:tools].map { |t| t[:name] }).to contain_exactly("api_read", "api_write", "prepare_html_undo", "complete_turn")
       expect(captured[:system]).to include("existing Store Agent webhooks can be")
       expect(captured[:system]).to include("the Store Agent cannot create webhooks")
       expect(captured[:system]).to match(/Settings >\s+Advanced > Ping/)
@@ -141,6 +141,146 @@ describe Ai::StoreAgentService do
       )
       expect(result[:reply]).to eq(described_class::PROPOSAL_READY_REPLY)
       expect(api_client).not_to have_received(:write)
+    end
+
+    context "server-owned HTML undo" do
+      let(:conversation) { create(:ai_conversation, seller:) }
+      let(:service) { described_class.new(seller:, pundit_user:, conversation:) }
+      let(:html) { "<p><strong>Keep this instruction.</strong></p>" }
+      let(:inverse) do
+        { "endpoint" => "edit_user_custom_html", "path_params" => {}, "params" => {
+          "find" => html, "replace" => "<p>Keep this instruction.</p>",
+          "expected_custom_html_sha256" => Digest::SHA256.hexdigest(html),
+          "result_custom_html_sha256" => Digest::SHA256.hexdigest("<p>Keep this instruction.</p>"),
+        } }
+      end
+      before do
+        # Shaped like a real claim + finalization: the start marker is what the claim SQL writes.
+        started_at = 2.minutes.ago
+        conversation.ai_messages.create!(
+          role: "assistant",
+          metadata: { action_status: "applied", action_started_at: started_at.utc.strftime("%Y-%m-%d %H:%M:%S.%6N"), html_undo: inverse },
+          updated_at: started_at + 5.seconds,
+        )
+        allow(api_client).to receive(:get).with("/user/custom_html", {}).and_return({ "success" => true, "custom_html" => html })
+        allow(api_client).to receive(:write)
+        allow(service).to receive(:follow_up_suggestions).and_return([])
+      end
+
+      %i[respond respond_streaming].each do |mode|
+        it "prepares the exact inverse without writing through #{mode}" do
+          provider_method = mode == :respond ? :messages : :stream_messages
+          allow(client).to receive(provider_method).and_return(tool_result("prepare_html_undo", {}), text_result("Ready", outcome: "proposal_ready"))
+          result = service.public_send(mode, messages: [{ role: "user", content: "Undo that formatting." }]) { |_event, _payload| }
+          expect(result[:proposed_action][:params]).to eq(inverse)
+          expect(result[:reply]).to eq(described_class::PROPOSAL_READY_REPLY)
+          expect(api_client).to have_received(:get).with("/user/custom_html", {}).once
+          expect(api_client).not_to have_received(:write)
+        end
+      end
+
+      it "returns a fixed tool result instead of echoing the inverse snippet or digests to the model" do
+        tool_result_json = nil
+        allow(client).to receive(:messages) do |args|
+          tool_result_json = captured_tool_result(args)
+          tool_result_json ? text_result("Ready", outcome: "proposal_ready") : tool_result("prepare_html_undo", {})
+        end
+
+        result = service.respond(messages: [{ role: "user", content: "Undo that formatting." }])
+
+        expect(tool_result_json).to eq("proposed" => true, "status" => "undo_prepared", "summary" => described_class::UNDO_PREPARED_SUMMARY)
+        expect(tool_result_json.to_json).not_to include("sha256", "<p>Keep this instruction.</p>", "<strong>")
+        # The card the seller confirms still carries every replayed field.
+        expect(result[:proposed_action][:params]).to eq(inverse)
+        expect(result[:proposed_action][:fields].map { |row| row[:label] }).to include("Find", "Replace", "Expected custom html sha256", "Result custom html sha256")
+      end
+
+      it "refuses model-provided checksums on an ordinary api_write even after the required read" do
+        api_write = { "endpoint" => "edit_user_custom_html", "params" => inverse["params"] }
+        errors = []
+        allow(client).to receive(:messages) do |args|
+          errors << captured_tool_result(args)&.dig("error")
+          case errors.size
+          when 1 then tool_result("api_read", { "endpoint" => "get_user_custom_html" })
+          when 2 then tool_result("api_write", api_write)
+          else text_result("I can't do that.")
+          end
+        end
+
+        result = service.respond(messages: [{ role: "user", content: "Undo it via api_write." }])
+
+        expect(result[:proposed_action]).to be_nil
+        expect(errors.last).to include("Unknown params expected_custom_html_sha256, result_custom_html_sha256 for edit_user_custom_html")
+        expect(errors.last).to include("this endpoint accepts: find, replace.")
+        expect(api_client).not_to have_received(:write)
+      end
+
+      it "refuses to prepare an undo when the acting role has lost the page-editing scope" do
+        # Support can't drive edit_profile (Ai::StoreAgentScopes), so the receipt stays unreachable
+        # even though the applied edit sits in this conversation.
+        support = create(:user)
+        create(:team_membership, user: support, seller:, role: TeamMembership::ROLE_SUPPORT)
+        no_role_service = described_class.new(seller:, pundit_user: SellerContext.new(user: support, seller:), conversation:)
+        allow(no_role_service).to receive(:follow_up_suggestions).and_return([])
+        error = nil
+        allow(client).to receive(:messages) do |args|
+          error = captured_tool_result(args)&.dig("error")
+          error ? text_result("Your role can't undo this.") : tool_result("prepare_html_undo", {})
+        end
+
+        expect(no_role_service.respond(messages: [{ role: "user", content: "Undo." }])[:proposed_action]).to be_nil
+        expect(error).to eq("The current user's role can't undo this change.")
+        expect(api_client).not_to have_received(:get)
+      end
+
+      ["not-a-digest", "b" * 64].each do |digest|
+        it "refuses to stage an inverse with invalid result checksum #{digest}" do
+          message = conversation.ai_messages.sole
+          metadata = message.metadata
+          metadata["html_undo"]["params"]["result_custom_html_sha256"] = digest
+          message.update_columns(metadata:)
+          allow(client).to receive(:messages).and_return(tool_result("prepare_html_undo", {}), text_result("Exact undo is unavailable."))
+
+          expect(service.respond(messages: [{ role: "user", content: "Undo." }])[:proposed_action]).to be_nil
+          expect(api_client).not_to have_received(:write)
+        end
+      end
+
+      it "refuses a stale or unsuccessful current-page read" do
+        allow(api_client).to receive(:get).and_return({ "success" => false, "custom_html" => html })
+        allow(client).to receive(:messages).and_return(tool_result("prepare_html_undo", {}), text_result("Exact undo is unavailable."))
+        expect(service.respond(messages: [{ role: "user", content: "Undo." }])[:proposed_action]).to be_nil
+      end
+
+      it "does not grant a read precondition to another write in the same tool batch" do
+        batch = tool_result("prepare_html_undo", {})
+        batch.tool_uses << { id: "speculative", name: "api_write", input: { "endpoint" => "edit_user_custom_html", "params" => { "find" => html, "replace" => "" } } }
+        captured = nil
+        allow(client).to receive(:messages) do |**args|
+          if captured
+            results = args[:messages].last[:content].map { |item| JSON.parse(item[:content]) }
+            expect(results.last["error"]).to include("requires a successful full read")
+            text_result("Ready", outcome: "proposal_ready")
+          else
+            captured = true
+            batch
+          end
+        end
+        expect(service.respond(messages: [{ role: "user", content: "Undo." }])[:proposed_action][:params]).to eq(inverse)
+      end
+
+      it "rejects model-supplied replacement or target arguments without a read" do
+        allow(client).to receive(:messages).and_return(tool_result("prepare_html_undo", { "replace" => "" }), text_result("No undo prepared."))
+        expect(service.respond(messages: [{ role: "user", content: "Undo." }])[:proposed_action]).to be_nil
+        expect(api_client).not_to have_received(:get)
+      end
+
+      it "retains access to the server receipt outside the truncated message history" do
+        history = 24.times.map { |i| { role: i.even? ? "user" : "assistant", content: "Unrelated exchange" } }
+        allow(client).to receive(:messages).and_return(tool_result("prepare_html_undo", {}), text_result("Ready", outcome: "proposal_ready"))
+        result = service.respond(messages: history + [{ role: "user", content: "Undo the last applied change." }])
+        expect(result[:proposed_action][:params]).to eq(inverse)
+      end
     end
 
     context "discount coverage through the real v2 API" do
@@ -962,7 +1102,7 @@ describe Ai::StoreAgentService do
         expect(captured[:system]).to include(%(<script id="gumroad-data"))
         expect(captured[:system]).to match(/never hard-code the product list/)
         expect(captured[:system]).to match(/Never publish a page that drops the creator's products/)
-        expect(captured[:system]).to match(/unless\s+you actually called api_write in this same reply/)
+        expect(captured[:system]).to match(/unless\s+you actually called api_write or prepare_html_undo in this same reply/)
         expect(captured[:system]).to match(/Only call api_write again after they explicitly ask/)
         expect(captured[:system]).to match(/two copies of an action that is\s+unsafe to run twice/)
       end

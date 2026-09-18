@@ -110,12 +110,27 @@ describe Api::Mobile::AgentController do
       expect(Ai::StoreAgentService).to receive(:new) do |args|
         expect(args[:seller]).to eq(@seller)
         expect(args[:pundit_user].seller).to eq(@seller)
+        expect(args[:conversation]).to be_nil
         instance_double(Ai::StoreAgentService, respond: store_agent_turn(reply: "ok"))
       end
 
       post :create, params: valid_params
 
       expect(response).to be_successful
+    end
+
+    it "hands the service only the seller, actor, and server-selected conversation" do
+      conversation = create(:ai_conversation, seller: @seller)
+      expect(Ai::StoreAgentService).to receive(:new) do |args|
+        expect(args.keys).to contain_exactly(:seller, :pundit_user, :conversation)
+        expect(args[:conversation]).to eq(conversation)
+        instance_double(Ai::StoreAgentService, respond: store_agent_turn(reply: "ok"))
+      end
+
+      post :create, params: valid_params.merge(conversation_id: conversation.external_id, html_undo: { "find" => "x" }, metadata: { action_started_at: "x" })
+
+      expect(response).to be_successful
+      expect(conversation.ai_messages.role_assistant.sole.metadata.to_h.keys).not_to include("html_undo", "action_started_at")
     end
 
     it "rejects an empty message list" do
