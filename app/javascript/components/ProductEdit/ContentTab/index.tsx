@@ -1408,8 +1408,7 @@ export const ContentTab = () => {
   const { evaporateUploader, s3UploadConfig } = useConfigureEvaporate({
     aws_access_key_id: awsKey,
     s3_url: s3Url,
-    // The signature endpoint authorizes against the account doing the editing, so the key has to
-    // be namespaced by that id — the product owner's fails for a collaborator (gp#2775).
+    // Keyed by the editing account, not `seller` (the owner): the signature endpoint checks current_seller.
     user_id: currentSellerExternalId,
   });
 
