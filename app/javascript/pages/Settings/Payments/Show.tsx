@@ -1393,6 +1393,9 @@ export default function PaymentsPage() {
                   symbolFormat: "long",
                 })}
                 .
+                {payoutThresholdBelowMinimum && !payoutThresholdEdited
+                  ? " Until you enter a higher amount, your payouts use that minimum."
+                  : null}
               </FieldsetDescription>
             </Fieldset>
             {props.payouts_paused_internally ? (

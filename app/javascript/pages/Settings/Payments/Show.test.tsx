@@ -22,7 +22,10 @@ vi.mock("@inertiajs/react", () => ({
     return {
       data,
       processing: false,
-      setData: (key: keyof T, value: T[keyof T]) => setDataState((prev) => ({ ...prev, [key]: value })),
+      // Inertia's setData takes either one field or a partial payload; the country-change reset uses
+      // the payload form, which a field-only double drops without failing.
+      setData: (key: string | Partial<T>, value?: T[keyof T]) =>
+        setDataState((prev) => (typeof key === "object" ? { ...prev, ...key } : { ...prev, [key]: value })),
       transform: (fn: (d: T) => unknown) => {
         transformRef.current = fn;
       },
@@ -295,7 +298,7 @@ describe("US company representative tax ID", () => {
 describe("stale payout threshold below the platform minimum", () => {
   const stale = { payout_threshold_cents: 1000, minimum_payout_threshold_cents: 10_000 };
   const saveButton = () => screen.getByRole("button", { name: "Update settings" });
-  const thresholdField = () => screen.getByLabelText("Minimum payout threshold");
+  const thresholdField = () => screen.getByLabelText<HTMLInputElement>("Minimum payout threshold");
 
   it("does not flag the untouched stored value and still allows saving", () => {
     mocks.usePage.mockReturnValue({ props: { ...pageProps(), ...stale } });
@@ -303,6 +306,32 @@ describe("stale payout threshold below the platform minimum", () => {
 
     expect(thresholdField().getAttribute("aria-invalid")).toBe("false");
     expect(saveButton().hasAttribute("disabled")).toBe(false);
+  });
+
+  it("says the payouts use the minimum while the stored value sits below it", () => {
+    mocks.usePage.mockReturnValue({ props: { ...pageProps(), ...stale } });
+    render(<PaymentsPage />);
+
+    expect(screen.getByText(/Until you enter a higher amount, your payouts use that minimum\./u)).toBeTruthy();
+  });
+
+  it("omits the note once the stored value reaches the minimum", () => {
+    renderPage();
+
+    expect(screen.queryByText(/Until you enter a higher amount/u)).toBeNull();
+  });
+
+  it("still raises the value when the seller retypes the stale amount", () => {
+    mocks.usePage.mockReturnValue({ props: { ...pageProps(), ...stale } });
+    render(<PaymentsPage />);
+
+    fireEvent.change(thresholdField(), { target: { value: "10" } });
+    save();
+
+    expect(mocks.put).toHaveBeenCalledWith(
+      "/settings_payments",
+      expect.objectContaining({ payout_threshold_cents: 10_000 }),
+    );
   });
 
   it("raises the untouched stale value to the minimum when saving another change", () => {
