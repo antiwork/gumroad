@@ -12,9 +12,9 @@ describe "removed Gumroad Walks API" do
     /api/v2/walks/app_attest/attestations
   ].each do |path|
     it "does not route POST #{path}" do
-      expect {
+      expect do
         Rails.application.routes.recognize_path(path, method: :post)
-      }.to raise_error(ActionController::RoutingError)
+      end.to raise_error(ActionController::RoutingError)
     end
   end
 end
