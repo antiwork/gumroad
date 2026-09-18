@@ -1042,6 +1042,130 @@ describe User, :vcr do
     end
   end
 
+  describe "staff privileges on account closure" do
+    let(:staff) { create(:user, is_team_member: true, announcement_notification_enabled: false) }
+    let(:gumroad) { create(:user, email: ApplicationMailer::ADMIN_EMAIL, is_team_member: true) }
+    let!(:membership) { create(:team_membership, seller: gumroad, user: staff) }
+
+    it "clears the closing user's staff flag and preserves memberships and other flags" do
+      other_membership = create(:team_membership, user: staff)
+      memberships = staff.user_memberships.reload.map(&:attributes)
+
+      expect(staff.deactivate!).to eq(true)
+
+      expect(staff.reload).not_to be_is_team_member
+      expect(staff.announcement_notification_enabled).to eq(false)
+      expect(staff.user_memberships.reload.map(&:attributes)).to eq(memberships)
+      expect(gumroad.reload).to be_is_team_member
+      expect(other_membership.reload).not_to be_deleted
+
+      staff.reactivate!
+      expect(staff.reload).to be_alive
+      expect(staff).not_to be_is_team_member
+      expect(staff.member_of?(gumroad)).to eq(true)
+    end
+
+    it "preserves flags changed after the member was loaded" do
+      allow_any_instance_of(TeamMembership).to receive(:user).and_wrap_original do |original, *args|
+        member = original.call(*args)
+        if member.id == staff.id
+          User.where(id: member.id).update_all(User.set_flag_sql(:announcement_notification_enabled, true))
+        end
+        member
+      end
+
+      expect(gumroad.deactivate!).to eq(true)
+      expect(staff.reload).not_to be_is_team_member
+      expect(staff.announcement_notification_enabled).to eq(true)
+    end
+
+    with_versioning do
+      it "rolls back staff removal when PaperTrail cannot persist the member audit" do
+        versions_count = PaperTrail::Version.count
+        allow_any_instance_of(PaperTrail::Version).to receive(:save!).and_wrap_original do |original, *args|
+          version = original.receiver
+          if version.item_type == "User" && version.item_id == staff.id
+            raise ActiveRecord::RecordInvalid, version
+          end
+          original.call(*args)
+        end
+
+        expect(gumroad.deactivate!).to eq(false)
+        expect(gumroad.reload).to be_alive
+        expect(staff.reload).to be_is_team_member
+        expect(PaperTrail::Version.count).to eq(versions_count)
+      end
+
+      it "audits staff removal when Gumroad closes without deleting memberships" do
+        other_member = create(:user, is_team_member: true)
+        create(:team_membership, seller: gumroad, user: other_member, role: TeamMembership::ROLE_SUPPORT)
+        unrelated_staff = create(:user, is_team_member: true)
+        create(:team_membership, seller: gumroad, user: unrelated_staff, deleted_at: 1.day.ago)
+        memberships = TeamMembership.order(:id).map(&:attributes)
+        old_flags = staff.flags
+
+        expect(gumroad.deactivate!).to eq(true)
+
+        expect(gumroad.reload).not_to be_is_team_member
+        expect(staff.reload).not_to be_is_team_member
+        expect(other_member.reload).not_to be_is_team_member
+        expect(unrelated_staff.reload).to be_is_team_member
+        expect(staff.flags).to eq(old_flags & ~User.flag_mapping["flags"][:is_team_member])
+        expect(staff.versions.last.changeset["flags"]).to eq([old_flags, staff.flags])
+        expect(TeamMembership.order(:id).map(&:attributes)).to eq(memberships)
+
+        gumroad.reactivate!
+        expect(staff.reload.member_of?(gumroad)).to eq(true)
+        expect(staff).not_to be_is_team_member
+      end
+
+      it "rolls back closure, staff changes, and their audit rows when cleanup before staff revocation fails" do
+        versions_count = PaperTrail::Version.count
+        allow(gumroad).to receive(:cancel_active_subscriptions!).and_raise("cleanup failed")
+
+        expect(gumroad.deactivate!).to eq(false)
+
+        expect(gumroad.reload).to be_alive
+        expect(gumroad).to be_is_team_member
+        expect(staff.reload).to be_is_team_member
+        expect(membership.reload).not_to be_deleted
+        expect(PaperTrail::Version.count).to eq(versions_count)
+      end
+
+      it "rolls back staff changes and audits when cleanup after revocation fails" do
+        domain = create(:custom_domain, user: gumroad)
+        versions_count = PaperTrail::Version.count
+        allow(gumroad).to receive(:custom_domain).and_return(domain)
+        allow(domain).to receive(:mark_deleted!).and_raise("domain cleanup failed")
+
+        expect(gumroad.deactivate!).to eq(false)
+        expect(gumroad.reload).to be_alive
+        expect(gumroad).to be_is_team_member
+        expect(staff.reload).to be_is_team_member
+        expect(domain.reload).not_to be_deleted
+        expect(PaperTrail::Version.count).to eq(versions_count)
+      end
+
+      it "rolls back earlier member changes if a staff update fails" do
+        failing_staff = create(:user, is_team_member: true)
+        create(:team_membership, seller: gumroad, user: failing_staff)
+        versions_count = PaperTrail::Version.count
+        allow(User).to receive(:_update_record).and_wrap_original do |original, *args|
+          raise ActiveRecord::StatementInvalid, "staff write failed" if args.last["id"] == failing_staff.id
+          original.call(*args)
+        end
+
+        expect(gumroad.deactivate!).to eq(false)
+
+        expect(gumroad.reload).to be_alive
+        expect(gumroad).to be_is_team_member
+        expect(staff.reload).to be_is_team_member
+        expect(failing_staff.reload).to be_is_team_member
+        expect(PaperTrail::Version.count).to eq(versions_count)
+      end
+    end
+  end
+
   describe "#deactivate!" do
     before do
       @user = create(:user)
