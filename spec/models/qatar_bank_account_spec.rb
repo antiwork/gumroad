@@ -36,11 +36,11 @@ describe QatarBankAccount do
   end
 
   describe "#validate_bank_code" do
-    it "allows 8 to 11 alphanumeric characters" do
+    it "allows an 8-character BIC or an 11-character BIC with branch suffix" do
       expect(build(:qatar_bank_account, bank_code: "AAAAQAQAXXX")).to be_valid
-      # The 8-character form is what Qatari banks publish and what Stripe resolves (gp#2768).
       expect(build(:qatar_bank_account, bank_code: "AAAAQAQA")).to be_valid
-      expect(build(:qatar_bank_account, bank_code: "AAAAQAQAXX")).to be_valid
+      expect(build(:qatar_bank_account, bank_code: "AAAAQAQAX")).not_to be_valid
+      expect(build(:qatar_bank_account, bank_code: "AAAAQAQAXX")).not_to be_valid
       expect(build(:qatar_bank_account, bank_code: "AAAAQAQ")).not_to be_valid
       expect(build(:qatar_bank_account, bank_code: "AAAAQAQAXXXX")).not_to be_valid
       expect(build(:qatar_bank_account, bank_code: "AAAAQAQA-XX")).not_to be_valid
