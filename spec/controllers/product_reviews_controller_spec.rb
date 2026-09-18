@@ -103,6 +103,21 @@ describe ProductReviewsController do
         expect(review.reload.message).to eq("This is my review")
       end
 
+      it "keeps a hidden name hidden when a client omits the anonymity choice" do
+        purchaser.update!(name: nil, username: "yacobyte")
+        put :set, params: valid_params.merge(anonymous: true)
+        review = purchase.reload.product_review
+        expect(review.rater_name).to eq("Anonymous")
+
+        purchase.update!(stripe_refunded: true)
+
+        put :set, params: valid_params
+
+        expect(response.parsed_body["success"]).to eq(false)
+        expect(review.reload.anonymous).to eq(true)
+        expect(review.rater_name).to eq("Anonymous")
+      end
+
       it "allows saving the same rating" do
         put :set, params: valid_params
         expect(response.parsed_body["success"]).to eq(true)
