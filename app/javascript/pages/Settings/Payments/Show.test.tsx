@@ -290,6 +290,45 @@ describe("US company representative tax ID", () => {
   });
 });
 
+// A stored threshold below the platform minimum (set before the minimum rose) has no effect on
+// payouts, but until gp#2767 it disabled the save button for every unrelated change.
+describe("stale payout threshold below the platform minimum", () => {
+  const stale = { payout_threshold_cents: 1000, minimum_payout_threshold_cents: 10_000 };
+  const saveButton = () => screen.getByRole("button", { name: "Update settings" });
+  const thresholdField = () => screen.getByLabelText("Minimum payout threshold");
+
+  it("does not flag the untouched stored value and still allows saving", () => {
+    mocks.usePage.mockReturnValue({ props: { ...pageProps(), ...stale } });
+    render(<PaymentsPage />);
+
+    expect(thresholdField().getAttribute("aria-invalid")).toBe("false");
+    expect(saveButton().hasAttribute("disabled")).toBe(false);
+  });
+
+  it("raises the untouched stale value to the minimum when saving another change", () => {
+    mocks.usePage.mockReturnValue({ props: { ...pageProps(), ...stale, payout_frequency_daily_supported: true } });
+    render(<PaymentsPage />);
+
+    fireEvent.change(screen.getByLabelText("Schedule"), { target: { value: "daily" } });
+    save();
+
+    expect(mocks.put).toHaveBeenCalledWith(
+      "/settings_payments",
+      expect.objectContaining({ payout_frequency: "daily", payout_threshold_cents: 10_000 }),
+    );
+  });
+
+  it("still flags a value the seller types below the minimum and blocks saving", () => {
+    mocks.usePage.mockReturnValue({ props: { ...pageProps(), ...stale } });
+    render(<PaymentsPage />);
+
+    fireEvent.change(thresholdField(), { target: { value: "50" } });
+
+    expect(thresholdField().getAttribute("aria-invalid")).toBe("true");
+    expect(saveButton().hasAttribute("disabled")).toBe(true);
+  });
+});
+
 describe("full-SSN re-entry validation", () => {
   it("blocks saving when Stripe requires the full SSN and only last-4 is on file", () => {
     renderPage({

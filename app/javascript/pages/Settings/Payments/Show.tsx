@@ -1172,7 +1172,13 @@ export default function PaymentsPage() {
             : {}),
         },
         payouts_paused_by_user: data.payouts_paused_by_user,
-        payout_threshold_cents: data.payout_threshold_cents,
+        // A stored threshold that predates a higher platform minimum is posted back on every save;
+        // the server would reject it, so raise it to the minimum. A value the seller typed too low
+        // never reaches here (the save button is disabled by payoutThresholdError).
+        payout_threshold_cents:
+          data.payout_threshold_cents != null && data.payout_threshold_cents < props.minimum_payout_threshold_cents
+            ? props.minimum_payout_threshold_cents
+            : data.payout_threshold_cents,
         payout_frequency: data.payout_frequency,
         disable_buyer_local_currency: data.disable_buyer_local_currency,
         disable_buyer_currency_rounding: data.disable_buyer_currency_rounding,
@@ -1229,8 +1235,16 @@ export default function PaymentsPage() {
     }
   }, [isPayoutMethodChangeConfirmed]);
 
-  const payoutThresholdError =
+  // A threshold stored before the platform minimum rose sits below it forever: the form only
+  // replaces it when the field is emptied, and `minimum_payout_amount_cents` already takes the
+  // max on the server, so the stale value changes nothing about payouts. Flag it only once the
+  // seller edits the field to something too low; otherwise it would block every unrelated save
+  // (the Daily schedule, a bank change) with nothing but a red box. The untouched stale value is
+  // raised to the minimum on submit (see the form transform) so the server does not reject it.
+  const payoutThresholdEdited = form.data.payout_threshold_cents !== props.payout_threshold_cents;
+  const payoutThresholdBelowMinimum =
     form.data.payout_threshold_cents != null && form.data.payout_threshold_cents < props.minimum_payout_threshold_cents;
+  const payoutThresholdError = payoutThresholdEdited && payoutThresholdBelowMinimum;
 
   const handlePayoutThresholdBlur = () => {
     if (!form.data.payout_threshold_cents) {
