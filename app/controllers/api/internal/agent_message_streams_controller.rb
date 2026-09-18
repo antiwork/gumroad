@@ -186,7 +186,7 @@ class Api::Internal::AgentMessageStreamsController < Api::Internal::BaseControll
         write_event.call(done_payload, "done")
         done_written = true
       end
-      result = ::Ai::StoreAgentService.new(seller: current_seller, pundit_user:)
+      result = ::Ai::StoreAgentService.new(seller: current_seller, pundit_user:, conversation:)
         .respond_streaming(messages: history, on_reply_complete:) do |event, payload|
         # No-op if persistence already marked this turn failed.
         refresh_agent_turn_in_progress!(client_turn_id)

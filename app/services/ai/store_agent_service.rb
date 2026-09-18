@@ -411,7 +411,7 @@ class Ai::StoreAgentService
     Your last response did not finish with a valid complete_turn call. Call complete_turn exactly
     once as the only tool in that response, and put the creator-facing text in complete_turn.reply.
     Use outcome reply_only when this turn has no proposed change. Use outcome proposal_ready only
-    after api_write returned proposed: true in this same turn. Do not send a text-only response.
+    after api_write or prepare_html_undo returned proposed: true in this same turn. Do not send a text-only response.
   TEXT
   BLANK_REPLY_CORRECTION = <<~TEXT.strip
     Your complete_turn had no creator-facing reply. Call complete_turn exactly once as the only tool,
@@ -419,16 +419,16 @@ class Ai::StoreAgentService
     text-only response.
   TEXT
   PROPOSAL_OUTCOME_CORRECTION = <<~TEXT.strip
-    This turn already has a proposed change from api_write, but your final outcome did not report it.
-    Do not call api_write again. Finish with complete_turn as the only tool and use outcome
-    proposal_ready.
+    This turn already has a proposed change from api_write or prepare_html_undo, but your final
+    outcome did not report it. Do not call api_write or prepare_html_undo again. Finish with
+    complete_turn as the only tool and use outcome proposal_ready.
   TEXT
   # Fed back to the model when it claimed a staged change without calling api_write, so it can
   # either make the call for real or correct itself. Phrased as the tool-protocol fact it is.
   STAGED_CLAIM_CORRECTION = <<~TEXT.strip
     Your last reply told the creator a change is staged and waiting for their confirmation, but you
-    did not call api_write in that reply, so no change was prepared and no confirmation card exists
-    for them to click. Call api_write now only if the creator explicitly asked you to prepare or
+    did not call api_write or prepare_html_undo in that reply, so no change was prepared and no
+    confirmation card exists for them to click. Call api_write now only if the creator explicitly asked you to prepare or
     re-stage this change. If they only reported a missing card, or did not explicitly ask you to
     re-stage it, do not create another proposal: say plainly that no new change is prepared, ask
     whether they want you to stage it again, and do not refer them to a card.
@@ -438,6 +438,11 @@ class Ai::StoreAgentService
   # that was never rendered. Must not itself match STAGED_CLAIM_PATTERNS above.
   NOTHING_STAGED_REPLY = "That change wasn't prepared, so there's nothing here for you to approve " \
                          "yet. Ask me again and I'll redo it."
+  # The whole tool result for a prepared undo. The inverse snippet and page digests stay in the
+  # persisted proposal; echoing them into the transcript would hand the model exactly the
+  # reconstruction material this tool exists to keep server-owned.
+  UNDO_PREPARED_SUMMARY = "Prepared an exact undo of the last applied targeted HTML edit as a new " \
+                          "confirmation card. Nothing has changed yet; the creator must confirm it."
   # How many prior turns of context we forward to the model. Keeps token usage bounded and avoids
   # echoing an unbounded client-supplied history back to the model.
   MAX_HISTORY_MESSAGES = 20
@@ -471,15 +476,24 @@ class Ai::StoreAgentService
     You are Gumroad's store assistant. You help a creator understand and manage their own Gumroad
     store through a chat interface in their dashboard.
 
-    You have three tools:
+    You have four tools:
+    - prepare_html_undo: prepare an exact undo of the LAST APPLIED change in THIS conversation, and
+      only if that change was a targeted HTML edit (edit_user_custom_html or
+      edit_product_custom_html). It never reaches back past a more recent applied change of another
+      kind. The server selects the saved edit, re-reads the current page, and creates a NEW
+      confirmation card. Pass no arguments. For "undo/revert that formatting", use this tool; never
+      reconstruct find/replace from chat history or delete the original instruction text. If it
+      reports the undo is unavailable, explain that limitation and ask what the creator wants
+      changed; do not fall back to api_write with a guessed inverse. Older changes and other
+      conversations cannot be undone with this tool. Nothing changes until the new card is confirmed.
     - api_read: run any READ endpoint to fetch live data (products, sales, payouts, discounts,
       subscribers, upsells, emails, tax forms, earnings, profile, and more). These run immediately.
     - api_write: prepare any change (create/update/delete products, discounts, variants, upsells,
       emails, refunds, shipping, licenses, profile, and more; existing Store Agent webhooks can be
       listed and deleted, but the Store Agent cannot create webhooks). Writes never take effect
       immediately — they produce a proposed change the creator reviews and confirms in the UI.
-    - complete_turn: finish every creator-facing reply with a typed outcome after all api_read or
-      api_write results are back.
+    - complete_turn: finish every creator-facing reply with a typed outcome after every other
+      tool's results are back.
 
     To call a tool you pass `endpoint` (one of the ids listed below), `path_params` (the ids the
     endpoint's path needs, e.g. the product id), and `params` (query for reads, body for writes).
@@ -508,7 +522,8 @@ class Ai::StoreAgentService
       and keep going until the response has no next_page_key. Any task covering "all" of something
       (all products, all sales, the whole catalog) requires walking every page first. Never state or
       imply you checked items you did not actually fetch — if you can't or didn't fetch a page, say so.
-    - Never claim a change has already been made. On a turn where you called api_write, your final
+    - Never claim a change has already been made. On a turn where you called api_write or
+      prepare_html_undo, your final
       text is replaced with fixed server copy telling the creator the change is ready to confirm.
       Any necessary explanation or limitation must be given in an earlier reply_only turn;
       preamble text before api_write is discarded too.
@@ -657,7 +672,7 @@ class Ai::StoreAgentService
       reviews hidden or the product has none, so whatever the page already has inside those
       elements stays — put a sensible fallback there rather than a placeholder.
     - Never tell the creator a change is prepared, staged, or waiting for their confirmation unless
-      you actually called api_write in this same reply. If the creator agrees to go ahead and
+      you actually called api_write or prepare_html_undo in this same reply. If the creator agrees to go ahead and
       nothing is staged yet, that is your cue to call api_write now — not to ask for confirmation
       again.
     - If the creator says they cannot see a confirmation card or button, believe them. Never send
@@ -679,8 +694,8 @@ class Ai::StoreAgentService
       Put the creator-facing text in complete_turn.reply so the outcome and the answer arrive
       together. You may also write the same text before the call; on a proposal turn that text is replaced with
       fixed server copy and never shown, so keep it minimal there. Use reply_only when this turn has
-      no proposed change. Use proposal_ready only after api_write returned proposed: true in this
-      same turn. Never mix complete_turn with api_read or api_write. Never send a text-only final
+      no proposed change. Use proposal_ready only after api_write or prepare_html_undo returned proposed: true in this
+      same turn. Never mix complete_turn with any other tool. Never send a text-only final
       response.
 
     How to write:
@@ -706,9 +721,10 @@ class Ai::StoreAgentService
     def as_json(*) = { type:, params:, summary:, title:, fields: fields || [] }
   end
 
-  def initialize(seller:, pundit_user:)
+  def initialize(seller:, pundit_user:, conversation: nil)
     @seller = seller
     @pundit_user = pundit_user
+    @agent_conversation = conversation
   end
 
   # @param messages [Array<Hash>] prior conversation, each { role: "user"|"assistant", content: String }
@@ -1379,9 +1395,40 @@ class Ai::StoreAgentService
       case name
       when "api_read" then run_api_read(arguments)
       when "api_write" then propose_api_write(arguments)
+      when "prepare_html_undo" then prepare_html_undo(arguments)
       else
         [{ error: "Unknown tool: #{name}" }, nil]
       end
+    end
+
+    def prepare_html_undo(arguments)
+      return [{ error: "prepare_html_undo accepts no arguments; the server selects the last applied change." }, nil] if arguments.any?
+
+      inverse = Ai::StoreAgentHtmlUndo.latest_for(seller:, conversation: @agent_conversation)
+      unless inverse
+        return [{ error: "An exact undo of the last applied change is unavailable in this conversation. Explain this limitation; do not guess an inverse or delete the original content." }, nil]
+      end
+      endpoint = Ai::StoreAgentApiCatalog.find(inverse.fetch("endpoint"))
+      required_read = Ai::StoreAgentApiCatalog.find(endpoint.requires_read)
+      unless endpoint_permitted?(endpoint) && endpoint_permitted?(required_read)
+        return [{ error: "The current user's role can't undo this change." }, nil]
+      end
+
+      # This server-owned read must not unlock speculative model writes in the same batch.
+      current = api_client.get(required_read.expand_path(inverse.fetch("path_params")), {})
+      html = current["custom_html"] if successful_api_read?(current)
+      body = inverse.fetch("params")
+      check = Pages::CustomHtmlWriter.check_guarded_edit(html, **body.symbolize_keys) if html.is_a?(String) && html.present?
+      unless check && check.error.nil?
+        return [{ error: "The page changed or the original edit cannot be restored exactly. Explain that exact undo is unavailable; do not guess a replacement." }, nil]
+      end
+
+      result, action = propose_api_write(inverse, verified_html_undo: true)
+      return [result, nil] if action.nil?
+
+      [{ proposed: true, status: "undo_prepared", summary: UNDO_PREPARED_SUMMARY }, action]
+    rescue ArgumentError
+      [{ error: "The original edit's target is unavailable. No undo was prepared." }, nil]
     end
 
     # ---- api_read: auto-executed, creator-scoped via the real v2 API ----
@@ -1426,7 +1473,7 @@ class Ai::StoreAgentService
 
     # ---- api_write: returns a proposed action; never mutates ----
 
-    def propose_api_write(arguments)
+    def propose_api_write(arguments, verified_html_undo: false)
       endpoint = Ai::StoreAgentApiCatalog.find(arguments["endpoint"])
       if endpoint.nil?
         return [{ error: "Unknown endpoint. Use one of the write endpoint ids listed for api_write." }, nil]
@@ -1460,7 +1507,7 @@ class Ai::StoreAgentService
 
         required_path = required_read.expand_path(path_params)
         required_target = [required_read.id, required_path]
-        unless @completed_read_targets&.key?(required_target)
+        unless verified_html_undo || @completed_read_targets&.key?(required_target)
           log_missing_required_read(endpoint:, required_read:)
           return [
             {
@@ -1494,7 +1541,10 @@ class Ai::StoreAgentService
       # payload, fails there with a confusing internal error, and the model retries the same wrong
       # key forever. Naming the unknown and allowed keys here lets the model correct itself within
       # the same turn instead of doom-looping.
-      if (error = unknown_body_keys_error(endpoint, body))
+      # Server-only keys (the undo checksums) are accepted only on the verified undo path; a model
+      # that supplies them on api_write gets the ordinary unknown-key correction, which never
+      # advertises them.
+      if (error = endpoint.unknown_param_keys_error(body, server_params_allowed: verified_html_undo))
         return [{ error: }, nil]
       end
       normalize_product_currency_param!(endpoint, body)
@@ -1710,13 +1760,6 @@ class Ai::StoreAgentService
       raw.transform_keys(&:to_s)
     end
 
-    # A corrective message when the proposed body carries keys the endpoint doesn't declare, or nil
-    # when the body is fine. Delegates to the catalog Endpoint so this propose-path message and the
-    # executor's confirm-path message can't drift apart.
-    def unknown_body_keys_error(endpoint, body)
-      endpoint.unknown_param_keys_error(body)
-    end
-
     def api_client
       @_api_client ||= Ai::StoreAgentApiClient.new(seller:, pundit_user:)
     end
@@ -1779,9 +1822,10 @@ class Ai::StoreAgentService
           },
           required: ["endpoint"],
         ),
+        tool_schema("prepare_html_undo", "Prepare an exact undo of the LAST applied change in this conversation, only if that change was a targeted HTML edit; it never reaches back to an older edit. The server selects the saved edit and re-checks the current page. Takes no arguments. Returns proposed: true only when a new confirmation card is ready; never applies the change.", {}),
         tool_schema(
           COMPLETE_TURN_TOOL,
-          "Finish the creator-facing reply after every API tool result is back. Call exactly once and as the only tool in the final response. Put the creator-facing text in reply; on a proposal turn that text is replaced with fixed server copy and never shown. Use proposal_ready only when api_write returned proposed: true in this same turn; otherwise use reply_only.",
+          "Finish the creator-facing reply after every API tool result is back. Call exactly once and as the only tool in the final response. Put the creator-facing text in reply; on a proposal turn that text is replaced with fixed server copy and never shown. Use proposal_ready only when api_write or prepare_html_undo returned proposed: true in this same turn; otherwise use reply_only.",
           {
             outcome: {
               type: "string",

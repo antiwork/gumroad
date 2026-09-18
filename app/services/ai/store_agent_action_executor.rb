@@ -65,15 +65,21 @@ class Ai::StoreAgentActionExecutor
     # so such a call would drop the value the seller confirmed (e.g. a price sent as "price_cents")
     # and fail downstream with a confusing internal error. The propose path (StoreAgentService)
     # already rejects these, so a well-formed proposal never hits this.
+    # Server-only keys are accepted here because a persisted proposal can only carry them via the
+    # verified undo path; the propose path refuses them from the model.
     body = normalize_body(params[:params])
-    unknown_keys_error = endpoint.unknown_param_keys_error(body)
+    unknown_keys_error = endpoint.unknown_param_keys_error(body, server_params_allowed: true)
     if unknown_keys_error
       return failure(unknown_keys_error, reason: "unknown_parameters", retry_safe: true)
     end
 
     response = api_client.write(endpoint.method, path, body)
 
-    interpret(endpoint, response)
+    result = interpret(endpoint, response)
+    if result[:success] && (receipt = Ai::StoreAgentHtmlUndo.receipt(endpoint: endpoint.id, path_params: params[:path_params].to_h, body: body.stringify_keys, response:))
+      result[:html_undo] = receipt
+    end
+    result
   end
 
   private

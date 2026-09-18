@@ -378,13 +378,17 @@ module AgentConversationPersistence
       [nil, ACTION_CONFIRMATION_RETRY_MESSAGE, nil, true]
     end
 
+    # The claim also stamps action_started_at from the database clock, in the same statement, so a
+    # finalized row carries its whole execution interval [action_started_at, updated_at]. The HTML
+    # undo (Ai::StoreAgentHtmlUndo) needs that to tell a late finalization apart from the truly
+    # last-applied change; both ends come from CURRENT_TIMESTAMP(6) so app clocks never enter.
     def compare_and_set_agent_action_claim(message)
       AiMessage
         .where(id: message.id)
         .where("JSON_EXTRACT(metadata, '$.action_status') IS NULL")
         .update_all(
           [
-            "metadata = JSON_SET(metadata, '$.action_status', ?), updated_at = CURRENT_TIMESTAMP(6)",
+            "metadata = JSON_SET(metadata, '$.action_status', ?, '$.action_started_at', DATE_FORMAT(CURRENT_TIMESTAMP(6), '%Y-%m-%d %H:%i:%s.%f')), updated_at = CURRENT_TIMESTAMP(6)",
             ACTION_STATUS_EXECUTING,
           ],
         )
@@ -406,7 +410,7 @@ module AgentConversationPersistence
       released = AiMessage
         .where(id: message.id)
         .where("JSON_UNQUOTE(JSON_EXTRACT(metadata, '$.action_status')) = ?", ACTION_STATUS_EXECUTING)
-        .update_all("metadata = JSON_REMOVE(metadata, '$.action_status'), updated_at = CURRENT_TIMESTAMP(6)")
+        .update_all("metadata = JSON_REMOVE(metadata, '$.action_status', '$.action_started_at'), updated_at = CURRENT_TIMESTAMP(6)")
       return true if released == 1
 
       Rails.logger.error(ACTION_CLAIM_RELEASE_FAILED_NOTICE)
@@ -472,6 +476,7 @@ module AgentConversationPersistence
       raise ActiveRecord::StaleObjectError.new(message, "finalize") unless metadata["action_status"] == ACTION_STATUS_EXECUTING
 
       metadata["action_status"] = ACTION_STATUS_APPLIED
+      metadata["html_undo"] = result[:html_undo] if result[:html_undo].present?
       # Mirror the live UI: once applied, the created/edited object replaces the turn's lookup
       # objects as the thing worth showing.
       metadata["objects"] = [result[:object]] if result[:object].present?

@@ -44,6 +44,27 @@ describe Api::Internal::AgentMessageStreamsController do
   describe "POST create" do
     let(:valid_params) { { messages: [{ role: "user", content: "How are my sales?" }] } }
 
+    it "hands the service only the seller, actor, and server-selected conversation" do
+      conversation = create(:ai_conversation, seller:)
+      turn = store_agent_turn(reply: "ok", proposed_action: nil)
+      expect(Ai::StoreAgentService).to receive(:new) do |args|
+        expect(args.keys).to contain_exactly(:seller, :pundit_user, :conversation)
+        expect(args[:seller]).to eq(seller)
+        expect(args[:conversation]).to eq(conversation)
+        service_double = instance_double(Ai::StoreAgentService)
+        allow(service_double).to receive(:respond_streaming) do |messages:, on_reply_complete: nil, &_blk|
+          on_reply_complete&.call(turn)
+          turn.merge(suggestions: [])
+        end
+        service_double
+      end
+
+      post :create, params: valid_params.merge(conversation_id: conversation.external_id, html_undo: { "find" => "x" }, metadata: { action_started_at: "x" }), format: :json
+
+      expect(response.body).to include("event: done")
+      expect(conversation.ai_messages.role_assistant.sole.metadata.to_h.keys).not_to include("html_undo", "action_started_at")
+    end
+
     it_behaves_like "authentication required for action", :post, :create do
       let(:request_params) { valid_params }
     end
