@@ -86,6 +86,16 @@ describe GdprDataErasureService do
       expect(other_guardian.reload.first_name).to eq("Someone")
     end
 
+    it "revokes the erased account's team memberships" do
+      membership_as_member = create(:team_membership, user:, seller: create(:user))
+      membership_as_seller = create(:team_membership, seller: user)
+
+      described_class.new(user, performed_by: admin).perform!
+
+      expect(membership_as_member.reload).to be_deleted
+      expect(membership_as_seller.reload).to be_deleted
+    end
+
     describe "the guardian's copy held by our payment processor" do
       let!(:merchant_account) do
         create(:merchant_account, user:, charge_processor_merchant_id: "acct_erasure_test")

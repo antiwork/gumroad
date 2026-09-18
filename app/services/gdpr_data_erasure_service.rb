@@ -198,6 +198,7 @@ class GdprDataErasureService
       @user.installments.alive.each(&:mark_deleted!)
       @user.user_compliance_infos.alive.each(&:mark_deleted!)
       @user.bank_accounts.alive.each(&:mark_deleted!)
+      @user.revoke_team_memberships!
       @user.send(:cancel_active_subscriptions!)
       @user.invalidate_active_sessions!
 

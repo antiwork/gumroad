@@ -1155,6 +1155,58 @@ describe User, :vcr do
         end
       end
 
+      context "when the account is part of a team" do
+        let(:brand_service) do
+          User::CreateBrandAccountService.new(
+            creator: @user,
+            email: "brand@example.com",
+            username: "brandy",
+            name: "Brandy",
+          )
+        end
+
+        def switcher_membership_ids(user)
+          pundit_user = SellerContext.new(user: User.find(user.id), seller: user)
+          UserMembershipsPresenter.new(pundit_user:).props.map { _1[:id] }
+        end
+
+        it "removes a closed brand account from its admin's account switcher" do
+          brand_service.perform
+          brand_membership = brand_service.team_membership
+          expect(switcher_membership_ids(@user)).to include(brand_membership.external_id)
+
+          brand_service.brand_user.deactivate!
+
+          expect(brand_membership.reload).to be_deleted
+          expect(switcher_membership_ids(@user)).not_to include(brand_membership.external_id)
+        end
+
+        it "revokes the closing account's memberships in both directions" do
+          other_seller = create(:user)
+          membership_as_member = create(:team_membership, user: @user, seller: other_seller)
+          membership_as_seller = create(:team_membership, seller: @user)
+
+          expect(@user.deactivate!).to eq(true)
+
+          expect(membership_as_member.reload).to be_deleted
+          expect(membership_as_seller.reload).to be_deleted
+        end
+
+        it "still closes the account when a membership row is one the validations reject" do
+          legacy_membership = TeamMembership.new(
+            user: create(:user),
+            seller: @user,
+            role: TeamMembership::ROLE_ADMIN,
+          )
+          legacy_membership.save!(validate: false)
+          expect(legacy_membership).not_to be_valid # the member has no owner membership of their own
+
+          expect(@user.deactivate!).to eq(true)
+
+          expect(legacy_membership.reload).to be_deleted
+        end
+      end
+
       context "when the user has active subscriptions" do
         let!(:subscription1) { create(:subscription, link: create(:membership_product), user: @user, free_trial_ends_at: 30.days.from_now) }
         let!(:subscription2) { create(:subscription, link: create(:membership_product), user: @user, free_trial_ends_at: 30.days.from_now) }

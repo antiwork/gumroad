@@ -830,6 +830,7 @@ class User < ApplicationRecord
       installments.alive.each(&:mark_deleted!)
       user_compliance_infos.alive.each(&:mark_deleted!)
       bank_accounts.alive.each(&:mark_deleted!)
+      revoke_team_memberships!
       # Account-level public media (see Api::V2::MediaController) is purged from storage, not
       # just soft-deleted, so the CDN stops serving it. Rescue per file so one bad blob doesn't
       # roll back the whole account closure.
@@ -854,6 +855,15 @@ class User < ApplicationRecord
   def reactivate!
     self.deleted_at = nil
     save!
+  end
+
+  # Revokes team access in both directions: as seller (else a closed shop stays in its team's
+  # account switcher) and as member (else it stays in the teams it belonged to). Bulk update,
+  # because a legacy membership the validations would reject must not block account closure.
+  def revoke_team_memberships!
+    now = Time.current
+    user_memberships.not_deleted.update_all(deleted_at: now, updated_at: now)
+    seller_memberships.not_deleted.update_all(deleted_at: now, updated_at: now)
   end
 
   def mark_as_invited(referral_id)
