@@ -80,14 +80,14 @@ For Gumroad-specific scopes and associations (`alive`, `successful`, `unpaid_bal
 
 EC2 recycles private IPs, so the **bastion's** `known_hosts` accumulates stale keys and refuses the onward hop with `REMOTE HOST IDENTIFICATION HAS CHANGED` / `Offending ECDSA key`. From outside this is easy to mistake for a hung instance, and it silently shrinks the usable pool each time instances are replaced.
 
-`prod_query.sh` self-heals: after picking a working host it routes `ssh-keygen -R` through that host (they share the bastion's `known_hosts`), in a single hop for all the addresses it needs to clear. Three things to know:
+`prod_query.sh` catches them without touching the pin: a candidate is recorded as stale-keyed when a changed-key complaint names its address — including on a probe that looked healthy, since the forced command exits 0 after its own hop refused — and the run reports those addresses with the one-hop `ssh-keygen -R` command to run by hand.
 
-- **Only genuinely outdated keys are removed.** A candidate is cleared only when SSH's own error names that address and says the identification changed. A plain timeout, a container that is still starting, or a network blip leaves the recorded key alone — throwing away a correct host key would give up real protection against someone impersonating that address. Note the bastion's onward hop usually just *warns* about a changed key and connects anyway — recycled IPs make that the steady state — so a warn-and-proceed failure stays on the patient-retry list too (the key gets cleared, but it isn't why the probe failed). Only an outright `Host key verification failed` refusal disqualifies a candidate from the retry.
+- **The pin is never removed automatically.** Every textbook trigger for a removal is something a pin exists to defend against: EC2 membership says the address is a pool member, not that the key it serves is the instance's, and a changed-key complaint is an alarm rather than proof of a recycle — deleting the entry and reconnecting pins whatever answered. Clearing is an explicit operator action, printed as a one-hop command.
+- **Only genuinely outdated keys are reported.** A plain timeout, a container that is still starting, or a network blip leaves the recorded key alone — only SSH naming that address counts. The onward hop usually just *warns* about a changed key and connects anyway (recycled IPs make that the steady state), so a warn-and-proceed failure stays on the patient-retry list too. Only an outright `Host key verification failed` refusal drops a candidate from the retry.
+- **A pool rejected entirely for stale keys says so**, with that same command, instead of the generic health-probe error.
 
-- **You cannot run a command on the bastion itself.** It auto-jumps to whatever `LC_PAPER` names; omitting `LC_PAPER` fails with `ssh: Could not resolve hostname`. Always route through a working instance IP.
+- **`LC_PAPER=127.0.0.1` means the bastion itself.** The forced command jumps to whatever `LC_PAPER` names, and omitting the variable — or the `-o SendEnv=LC_PAPER` that ships it — fails with `ssh: Could not resolve hostname`; instance IPs run the command on that instance. Anything aimed at the bastion's own files goes through `127.0.0.1`.
 - **The warning text is often noise.** A run can print the whole man-in-the-middle banner for a *previous* hop and still succeed. Judge by exit code and `MARK` output, not the banner.
-
-- **The self-heal needs one working hop, so it cannot rescue a fully-rejected pool.** `ssh-keygen -R` is routed through the instance that answered. If every candidate is rejected there is no hop to route through, the keys stay stale, and the next run is rejected identically — the pool stops decaying only while something still answers.
 
 ### "No instance passed the health probe" usually means slow, not down
 
