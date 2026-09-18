@@ -1163,3 +1163,76 @@ describe UpdateUserComplianceInfo do
     end
   end
 end
+
+
+describe UpdateUserComplianceInfo, "Stripe failure after a partial update" do
+  self.use_transactional_tests = false
+
+  before do
+    @user = create(:user)
+    @compliance_info = create(:user_compliance_info_business, user: @user, business_type: UserComplianceInfo::BusinessTypes::SINGLE_MEMBER_LLC)
+    @merchant_account = create(:merchant_account, user: @user)
+    @stripe_account = Stripe::Account.construct_from(
+      id: @merchant_account.charge_processor_merchant_id,
+      country: "US",
+      capabilities: {},
+      metadata: { user_compliance_info_id: @compliance_info.external_id },
+      company: { structure: "single_member_llc" }
+    )
+    allow(Stripe::Account).to receive(:retrieve).with(@stripe_account.id).and_return(@stripe_account)
+  end
+
+  after do
+    @user.user_compliance_info_requests.destroy_all
+    @user.user_compliance_infos.destroy_all
+    @user.merchant_accounts.destroy_all
+    @user.comments.destroy_all
+    @user.destroy!
+  end
+
+  [Stripe::APIConnectionError, Stripe::AuthenticationError, Stripe::RateLimitError].each do |error_class|
+    it "commits the revision before propagating #{error_class.name} without releasing the lock during Stripe work" do
+      provider_error = error_class.new("Synthetic provider failure")
+      submitted_revision_id = nil
+      allow(Stripe::Account).to receive(:update).with(@stripe_account.id, anything) do |_id, attributes|
+        if attributes == { company: { structure: "" } }
+          @stripe_account.company.structure = nil
+          @stripe_account
+        else
+          expect(@stripe_account.company.structure).to be_nil
+          submitted_revision_id = @user.reload.alive_user_compliance_info.id
+          country_writer = Thread.new do
+            ActiveRecord::Base.connection_pool.with_connection do |connection|
+              connection.execute("SET SESSION innodb_lock_wait_timeout = 1")
+              begin
+                UpdateUserCountry.new(new_country_code: "CA", user: User.find(@user.id)).process
+              rescue ActiveRecord::LockWaitTimeout => error
+                error
+              ensure
+                connection.execute("SET SESSION innodb_lock_wait_timeout = DEFAULT")
+              end
+            end
+          end
+          expect(country_writer.value).to be_a(ActiveRecord::LockWaitTimeout)
+          raise provider_error
+        end
+      end
+      params = ActionController::Parameters.new(is_business: false, first_name: "Updated")
+
+      expect do
+        described_class.new(compliance_params: params, user: @user).process
+      end.to raise_error { |error| expect(error).to equal(provider_error) }
+
+      committed = Thread.new do
+        ActiveRecord::Base.connection_pool.with_connection do
+          User.find(@user.id).alive_user_compliance_info.attributes.slice("id", "first_name", "is_business")
+        end
+      end.value
+      expect(committed).to include("id" => submitted_revision_id, "first_name" => "Updated", "is_business" => false)
+      expect(@compliance_info.reload).to be_deleted
+      expect(@user.user_compliance_infos.alive.count).to eq(1)
+      expect(@stripe_account.company.structure).to be_nil
+      expect(Stripe::Account).to have_received(:update).twice
+    end
+  end
+end
