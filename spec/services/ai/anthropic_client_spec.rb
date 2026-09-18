@@ -384,8 +384,22 @@ describe Ai::AnthropicClient do
       expect(stub).to have_been_requested
     end
 
-    it "raises a clear error (no blank-key request) when ANTHROPIC_API_KEY is missing" do
+    it "falls back to WALKS_ANTHROPIC_API_KEY when ANTHROPIC_API_KEY is blank" do
       allow(GlobalConfig).to receive(:get).with("ANTHROPIC_API_KEY").and_return("")
+      allow(GlobalConfig).to receive(:get).with("WALKS_ANTHROPIC_API_KEY").and_return("sk-ant-walks")
+
+      stub = stub_request(:post, url)
+        .with(headers: { "x-api-key" => "sk-ant-walks" })
+        .to_return(status: 200, body: { "content" => [], "stop_reason" => "end_turn" }.to_json, headers: { "Content-Type" => "application/json" })
+
+      client.messages(system: "s", messages: [{ role: "user", content: "x" }])
+
+      expect(stub).to have_been_requested
+    end
+
+    it "raises a clear error (no blank-key request) when both keys are missing" do
+      allow(GlobalConfig).to receive(:get).with("ANTHROPIC_API_KEY").and_return("")
+      allow(GlobalConfig).to receive(:get).with("WALKS_ANTHROPIC_API_KEY").and_return(nil)
       request = stub_request(:post, url)
 
       expect { client.messages(system: "s", messages: [{ role: "user", content: "x" }]) }

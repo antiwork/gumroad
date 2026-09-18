@@ -596,8 +596,9 @@ class Ai::AnthropicClient
       )
     end
 
-    # Raise here rather than send a blank x-api-key (upstream 401 becomes a generic seller error).
-    # OpenRouter/Vercel keys go in the same header.
+    # Native Anthropic still falls back to WALKS_ANTHROPIC_API_KEY until ANTHROPIC_API_KEY
+    # is confirmed in production credentials. Walks endpoints are gone; this key is only
+    # a shared secret name. Raise here rather than send a blank x-api-key.
     def api_key
       case resolved_gateway
       when :vercel
@@ -605,7 +606,8 @@ class Ai::AnthropicClient
       when :openrouter
         openrouter_api_key
       else
-        key = GlobalConfig.get("ANTHROPIC_API_KEY").presence
+        key = GlobalConfig.get("ANTHROPIC_API_KEY").presence ||
+              GlobalConfig.get("WALKS_ANTHROPIC_API_KEY").presence
         raise Error, "Anthropic API key is not configured (set ANTHROPIC_API_KEY)." if key.blank?
 
         key
