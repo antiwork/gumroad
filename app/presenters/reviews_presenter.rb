@@ -15,6 +15,7 @@ class ReviewsPresenter
           id: review.external_id,
           purchase_id: ObfuscateIds.encrypt(review.purchase_id),
           purchase_email_digest: review.purchase.email_digest,
+          account_name: review.rater_account_name,
           product: product_props(product),
         )
       end,
@@ -24,6 +25,7 @@ class ReviewsPresenter
           {
             id: purchase.external_id,
             email_digest: purchase.email_digest,
+            account_name: purchase.rater_account_name,
             product: product_props(product),
           }
         end

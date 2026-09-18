@@ -3039,6 +3039,7 @@ class PurchaseTest < ActiveSupport::TestCase
                    is_following: false,
                    product_rating: 4,
                    review: ProductReviewPresenter.new(purchase.product_review).review_form_props,
+                   review_account_name: purchase.rater_account_name,
                    view_content_button_text: view_content_button_text(link),
                    account_by_this_email_exists: false,
                    display_product_reviews: true,

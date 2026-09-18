@@ -34,6 +34,7 @@ describe ReviewsPresenter do
               id: reviews.first.external_id,
               purchase_id: reviews.first.purchase.external_id,
               purchase_email_digest: reviews.first.purchase.email_digest,
+              account_name: reviews.first.rater_account_name,
               product: {
                 name: reviews.first.link.name,
                 url: reviews.first.link.long_url(recommended_by: "library"),
@@ -52,6 +53,7 @@ describe ReviewsPresenter do
               id: reviews.second.external_id,
               purchase_id: reviews.second.purchase.external_id,
               purchase_email_digest: reviews.second.purchase.email_digest,
+              account_name: reviews.second.rater_account_name,
               product: {
                 name: reviews.second.link.name,
                 url: reviews.second.link.long_url(recommended_by: "library"),
@@ -70,6 +72,7 @@ describe ReviewsPresenter do
               id: reviews.third.external_id,
               purchase_id: reviews.third.purchase.external_id,
               purchase_email_digest: reviews.third.purchase.email_digest,
+              account_name: reviews.third.rater_account_name,
               product: {
                 name: reviews.third.link.name,
                 url: reviews.third.link.long_url(recommended_by: "library"),
@@ -89,6 +92,7 @@ describe ReviewsPresenter do
             {
               id: purchase2.external_id,
               email_digest: purchase2.email_digest,
+              account_name: purchase2.rater_account_name,
               product: {
                 name: product2.name,
                 url: product2.long_url(recommended_by: "library"),
@@ -106,6 +110,7 @@ describe ReviewsPresenter do
             {
               id: purchase1.external_id,
               email_digest: purchase1.email_digest,
+              account_name: purchase1.rater_account_name,
               product: {
                 name: product1.name,
                 url: product1.long_url(recommended_by: "library"),

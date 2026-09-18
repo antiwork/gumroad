@@ -164,6 +164,7 @@ describe ProductPresenter::ProductProps do
                 tier_description: nil
               },
               review: ProductReviewPresenter.new(purchase.product_review).review_form_props,
+              review_account_name: purchase.rater_account_name,
               should_show_receipt: true,
               was_paid: false,
               is_gift_receiver_purchase: false,
@@ -404,6 +405,7 @@ describe ProductPresenter::ProductProps do
               created_at: purchase.created_at,
               membership: nil,
               review: ProductReviewPresenter.new(purchase.product_review).review_form_props,
+              review_account_name: purchase.rater_account_name,
               should_show_receipt: true,
               was_paid: true,
               is_gift_receiver_purchase: false,
@@ -825,6 +827,33 @@ describe ProductPresenter::ProductProps do
 
         expect(props[:purchase].to_json).not_to include(purchase.license_key)
       end
+    end
+  end
+
+  describe "purchase props" do
+    let(:seller) { create(:named_seller) }
+    let(:product) { create(:product, user: seller) }
+    let(:buyer) { create(:user, name: nil, username: "yacobyte") }
+    let(:request) do
+      OpenStruct.new(remote_ip: "12.12.128.128", host: "example.com", host_with_port: "example.com", params: {}, cookie_jar: {})
+    end
+
+    # The review form needs this name before a first review exists, so it rides on the purchase
+    # rather than on review props. `purchase_props` copies an explicit list of keys, which is easy
+    # to miss when adding one.
+    it "carries the name the review form offers as the public identity" do
+      purchase = create(:purchase, link: product, purchaser: buyer, email: buyer.email, full_name: "Checkout Name")
+
+      props = presenter.props(
+        seller_custom_domain_url: nil,
+        request:,
+        pundit_user: SellerContext.new(user: buyer, seller: buyer),
+        purchase_id: purchase.external_id,
+        purchase_email_digest: purchase.email_digest
+      )
+
+      expect(props[:purchase][:id]).to eq(purchase.external_id)
+      expect(props[:purchase][:review_account_name]).to eq("yacobyte")
     end
   end
 end

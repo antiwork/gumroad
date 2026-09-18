@@ -6,7 +6,8 @@ describe("Product page reviews", js: true, type: :system) do
   include ActionView::Helpers::TextHelper
 
   def create_review(index, rating)
-    purchase = create(:purchase, link: product, full_name: "Purchaser #{index}")
+    purchaser = create(:user, name: nil, username: "reviewer#{index}")
+    purchase = create(:purchase, link: product, purchaser:, full_name: "Purchaser #{index}")
     create(:product_review, rating:, purchase:, message: "This is review #{index}", created_at: index.months.ago)
   end
 
@@ -300,7 +301,7 @@ describe("Product page reviews", js: true, type: :system) do
       visit product.long_url
 
       within_section "Ratings", match: :first do
-        within_section "Purchaser 5", match: :first do
+        within_section "reviewer5", match: :first do
           expect(page).to have_selector("[aria-label='5 stars']")
           expect(page).to have_text("This is review 5")
           expect(page).to have_image(src: avatar_url)
@@ -309,48 +310,48 @@ describe("Product page reviews", js: true, type: :system) do
           expect(check).to have_tooltip(text: "Verified Buyer")
           expect(page).to_not have_text("New")
         end
-        within_section "Purchaser 2", match: :first do
+        within_section "reviewer2", match: :first do
           expect(page).to have_selector("[aria-label='4 stars']")
           expect(page).to have_text("This is review 2")
           expect(page).to have_image(src: avatar_url)
           expect(page).to_not have_text("New")
         end
 
-        expect(page).to_not have_text("Purchaser 1")
-        expect(page).to_not have_text("Purchaser 0")
-        expect(page).to_not have_text("Purchaser 4")
-        expect(page).to_not have_section("Purchaser 3")
+        expect(page).to_not have_text("reviewer1")
+        expect(page).to_not have_text("reviewer0")
+        expect(page).to_not have_text("reviewer4")
+        expect(page).to_not have_section("reviewer3")
         expect(page).to_not have_text("Review response 3")
 
         click_on "Load more"
 
-        within_section "Purchaser 1", match: :first do
+        within_section "reviewer1", match: :first do
           expect(page).to have_selector("[aria-label='3 stars']")
           expect(page).to have_text("This is review 1")
           expect(page).to have_image(src: avatar_url)
           expect(page).to_not have_text("New")
         end
-        within_section "Purchaser 0", match: :first do
+        within_section "reviewer0", match: :first do
           expect(page).to have_selector("[aria-label='2 stars']")
           expect(page).to have_text("This is review 0")
           expect(page).to have_image(src: avatar_url)
           expect(page).to have_text("New")
         end
 
-        expect(page).to_not have_text("Purchaser 4")
-        expect(page).to_not have_section("Purchaser 3")
+        expect(page).to_not have_text("reviewer4")
+        expect(page).to_not have_section("reviewer3")
         expect(page).to_not have_text("Review response 3")
 
         click_on "Load more"
 
-        within_section "Purchaser 4", match: :first do
+        within_section "reviewer4", match: :first do
           expect(page).to have_selector("[aria-label='2 stars']")
           expect(page).to have_text("This is review 4")
           expect(page).to have_image(src: avatar_url)
           expect(page).to_not have_text("New")
         end
 
-        within_section "Purchaser 3", match: :first do
+        within_section "reviewer3", match: :first do
           expect(page).to have_selector("[aria-label='1 star']")
           expect(page).to have_text("This is review 3")
           expect(page).to_not have_text("New")

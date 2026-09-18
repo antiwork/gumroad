@@ -65,7 +65,7 @@ export const GetProductReviews = () => (
             {
               name: "rater_name",
               type: "string",
-              description: "Display name of the reviewer, or 'Anonymous' when they have no name set",
+              description: "The reviewer's display name or username, or 'Anonymous'. The checkout name is never used.",
             },
             {
               name: "response",

@@ -1467,6 +1467,9 @@ class Purchase < ApplicationRecord
       review = purchase.original_product_review
       json[:product_rating] = review.rating if review.present?
       json[:review] = ProductReviewPresenter.new(review).review_form_props if review.present?
+      # nil hides the identity choice in the review form: a guest purchase has nothing to offer
+      # besides Anonymous.
+      json[:review_account_name] = purchase.rater_account_name
       json[:has_shipping_to_show] = purchase.shipping_cents > 0
       json[:shipping_amount] = purchase.buyer_presentment? ? purchase.formatted_buyer_presentment_shipping : purchase.formatted_shipping_amount
       json[:has_sales_tax_to_show] = purchase.was_purchase_taxable && purchase.price_cents > 0

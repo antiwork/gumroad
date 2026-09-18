@@ -217,6 +217,7 @@ describe UrlRedirectPresenter do
           product_available: true,
           disable_reviews_after_year: false,
           review: nil,
+          review_account_name: nil,
           membership: nil,
           purchase_custom_fields: [],
           call: nil,
@@ -880,6 +881,7 @@ describe UrlRedirectPresenter do
           product_available: true,
           disable_reviews_after_year: true,
           review: nil,
+          review_account_name: nil,
           membership: {
             has_active_subscription: true,
             subscription_id: @subscription.external_id,
