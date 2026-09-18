@@ -108,6 +108,54 @@ describe DirectAffiliate do
       expect(flag_on.send_posts).to be true
       expect(flag_off.send_posts).to be false
     end
+
+    it "has a `removed_at_request` flag that survives the soft delete" do
+      affiliate = create(:direct_affiliate)
+      affiliate.mark_removed_at_request!
+      affiliate.mark_deleted!
+
+      expect(described_class.removed_at_request.find(affiliate.id).removed_at_request).to be true
+    end
+
+    it "records `removed_at_request` on a row that no longer passes today's validations" do
+      affiliate = create(:direct_affiliate)
+      affiliate.update_columns(affiliate_basis_points: 0)
+      expect(affiliate).not_to be_valid
+
+      affiliate.mark_removed_at_request!
+
+      expect(affiliate.reload.removed_at_request).to be true
+    end
+  end
+
+  describe "#reassignment_blocked?" do
+    it "is false when nobody asked to be removed" do
+      expect(direct_affiliate.reassignment_blocked?).to be(false)
+    end
+
+    context "when the person asked to be removed from this seller" do
+      before do
+        removed = create(:direct_affiliate, seller:, affiliate_user:)
+        removed.mark_removed_at_request!
+        removed.mark_deleted!
+      end
+
+      it "is true for the same person added again by the same seller" do
+        expect(direct_affiliate.reassignment_blocked?).to be(true)
+      end
+
+      it "is false for another person" do
+        other = create(:direct_affiliate, seller:, affiliate_user: create(:affiliate_user))
+
+        expect(other.reassignment_blocked?).to be(false)
+      end
+
+      it "is false for another seller" do
+        other = create(:direct_affiliate, seller: create(:user), affiliate_user:)
+
+        expect(other.reassignment_blocked?).to be(false)
+      end
+    end
   end
 
   describe "destination_url validation" do

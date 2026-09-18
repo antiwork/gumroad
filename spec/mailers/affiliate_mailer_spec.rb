@@ -131,6 +131,22 @@ describe AffiliateMailer do
       expect(mail_plaintext).to include("You can now share the products linked below with your audience. For every sale you make, you will get a percentage of the total sale as your commission.")
       expect(mail_plaintext).to include("You can direct them to this link: #{affiliate.referral_url}, or share the individual links listed above.")
     end
+
+    context "when the person asked us to remove them from this seller" do
+      it "does not send an email to the person added again" do
+        seller = create(:named_user)
+        product = create(:product, user: seller)
+        affiliate_user = create(:affiliate_user)
+        removed = create(:direct_affiliate, seller:, affiliate_user:)
+        removed.mark_removed_at_request!
+        removed.mark_deleted!
+        affiliate = create(:direct_affiliate, seller:, affiliate_user:)
+        create(:product_affiliate, product:, affiliate:)
+
+        mail = AffiliateMailer.notify_direct_affiliate_of_updated_products(affiliate.id)
+        expect(mail.message).to be_a(ActionMailer::Base::NullMail)
+      end
+    end
   end
 
   describe "#direct_affiliate_removal" do
@@ -275,6 +291,19 @@ describe AffiliateMailer do
       end
     end
 
+    context "when the person asked us to remove them from this seller" do
+      it "does not send an email to the person added again" do
+        affiliate_user = create(:affiliate_user)
+        removed = create(:direct_affiliate, seller:, affiliate_user:)
+        removed.mark_removed_at_request!
+        removed.mark_deleted!
+        direct_affiliate = create(:direct_affiliate, seller:, affiliate_user:, products: [product])
+
+        mail = AffiliateMailer.direct_affiliate_invitation(direct_affiliate.id)
+        expect(mail.message).to be_a(ActionMailer::Base::NullMail)
+      end
+    end
+
     context "when prevent_sending_invitation_email_to_seller param is true" do
       it "doesn't send the email to seller" do
         direct_affiliate = create(:direct_affiliate, seller:, products: [product])
@@ -297,6 +326,22 @@ describe AffiliateMailer do
       expect(mail.to).to eq([direct_affiliate.affiliate_user.form_email])
       expect(mail.subject).to include("#{seller.name} has added you as an affiliate to #{product.name}")
       expect(mail.body.encoded).to include("You are now able to share #{product.name} with your audience. For every sale you make, you will get 10% of the total sale as your commission.")
+    end
+
+    context "when the person asked us to remove them from this seller" do
+      it "does not send an email to the person added again" do
+        seller = create(:named_user)
+        product = create(:product, user: seller)
+        affiliate_user = create(:affiliate_user)
+        removed = create(:direct_affiliate, seller:, affiliate_user:)
+        removed.mark_removed_at_request!
+        removed.mark_deleted!
+        direct_affiliate = create(:direct_affiliate, seller:, affiliate_user:)
+        create(:product_affiliate, product:, affiliate: direct_affiliate)
+
+        mail = AffiliateMailer.notify_direct_affiliate_of_new_product(direct_affiliate.id, product.id)
+        expect(mail.message).to be_a(ActionMailer::Base::NullMail)
+      end
     end
   end
 
