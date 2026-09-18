@@ -24,7 +24,12 @@ RUN sed -r 's/(name="memory" value=")[^"]+"/\11GiB"/' -i /etc/ImageMagick-6/poli
   # Change width limit from 10KP to 50KP
   && sed -r 's/(name="width" value=")[^"]+"/\150KP"/' -i /etc/ImageMagick-6/policy.xml \
   # Change height limit from 10KP to 50KP
-  && sed -r 's/(name="height" value=")[^"]+"/\150KP"/' -i /etc/ImageMagick-6/policy.xml
+  && sed -r 's/(name="height" value=")[^"]+"/\150KP"/' -i /etc/ImageMagick-6/policy.xml \
+  # Restrict the coders to the formats the app handles (see FILE_REGEX, web_image_content_types).
+  # Every alias needs listing: IM6 matches on the alias, so dropping JPG blocks `.jpg` writes
+  # while `identify` still works. The grep fails the build if the splice ever stops matching.
+  && sed -i 's@</policymap>@  <policy domain="coder" rights="none" pattern="*" />\n  <policy domain="coder" rights="read|write" pattern="{GIF,JPEG,JPG,PNG,PNG8,PNG24,PNG32,WEBP,TIFF,TIF,BMP,BMP2,BMP3,PSD}" />\n</policymap>@' /etc/ImageMagick-6/policy.xml \
+  && grep -q '<policy domain="coder" rights="read|write"' /etc/ImageMagick-6/policy.xml
 
 # Dowload latest GeoIP DB
 # Staged outside $APP_DIR so this layer stays cached across source changes;
