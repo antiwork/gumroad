@@ -203,6 +203,7 @@ if [ -n "$need_discovery" ]; then
 
   instance_ip=""
   stale_key_ips=""
+  unexplained_ips=""
   slow_ips=""
   budget_exhausted=""
   probe_err=$(mktemp)
@@ -237,9 +238,9 @@ if [ -n "$need_discovery" ]; then
         >&2 echo "Instance $ip failed health probe (outdated host key noted), trying next..."
       fi
     else
-      # A 20s probe is tuned to skip past a hung host quickly, which means it also rejects a
-      # host that is merely slow — and a slow-but-working host is still a usable hop. Keep it
-      # for a second, more patient pass rather than discarding it (see below).
+      # Impatience, not a key problem: a merely slow host is still a usable hop, and clearing a
+      # key would not change this candidate's failure.
+      unexplained_ips="$unexplained_ips $ip"
       slow_ips="$slow_ips $ip"
       >&2 echo "Instance $ip failed health probe, trying next..."
     fi
@@ -285,29 +286,29 @@ if [ -n "$need_discovery" ]; then
     fi
   fi
 
-  # A stale entry means the bastion's recorded key for that address is wrong. Report it and stop
-  # there: deleting the entry automatically would silence the only signal that a hop's host key
-  # changed, and re-learning on the next connect would trust whatever answered — the pin is not
-  # ours to drop without independent key provenance. Clearing is an explicit operator action.
+  # A stale entry means the bastion's record for that address is wrong; it is an alarm, not proof of
+  # a recycle, and re-learning would trust whatever answered. The pin is not ours to drop without
+  # independent key provenance, so report it and let an operator clear it.
   if [ -n "$instance_ip" ] && [ -n "${stale_key_ips// /}" ]; then
     >&2 echo "WARNING: the bastion's host key is outdated for:$stale_key_ips (the hop continues past the mismatch, so this run is fine)."
     report_stale_key_recovery "$stale_key_ips"
   fi
 
   if [ -z "$instance_ip" ]; then
+    # Report what each bucket actually was. A stale key is one reason a candidate fails; saying
+    # "every candidate refused because of it" would point at a cause that cannot fix the others.
+    >&2 echo "Error: No instance in $PROD_SECURITY_GROUP passed the health probe."
     if [ -n "${stale_key_ips// /}" ]; then
-      # Distinct from "the pool is unhealthy": here SSH told us the bastion's own record is wrong,
-      # and the old code said nothing about it while burning the caller's whole timeout.
-      >&2 echo "Error: every candidate in $PROD_SECURITY_GROUP refused the hop because the bastion's host key is outdated for:$stale_key_ips"
+      >&2 echo "       The bastion's host key is outdated for:$stale_key_ips"
       report_stale_key_recovery "$stale_key_ips"
-      exit 1
+    fi
+    if [ -n "${unexplained_ips// /}" ]; then
+      >&2 echo "       No key complaint from:$unexplained_ips — clearing keys will not fix those."
     fi
     if [ -n "$budget_exhausted" ]; then
-      echo "Error: ran out of the ${PROD_SELECT_BUDGET}s instance-selection budget before any candidate in $PROD_SECURITY_GROUP answered." >&2
-      echo "Not necessarily an outage — the pool may just be slow. Set PROD_INSTANCE_IP to pin a host, or raise PROD_SELECT_BUDGET." >&2
-    else
-      echo "Error: No instance in $PROD_SECURITY_GROUP passed the health probe. Set PROD_INSTANCE_IP to force one." >&2
+      >&2 echo "       Ran out of the ${PROD_SELECT_BUDGET}s instance-selection budget before any candidate answered."
     fi
+    >&2 echo "       Not necessarily an outage — the pool may just be slow. Set PROD_INSTANCE_IP to pin a host, or raise PROD_SELECT_BUDGET."
     exit 1
   fi
 fi
