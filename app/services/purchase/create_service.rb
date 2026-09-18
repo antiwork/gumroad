@@ -142,10 +142,13 @@ class Purchase::CreateService < Purchase::BaseService
 
       locked_listed_rate = listed_currency_rate_hint(purchase)
 
-      if params[:tip_cents].present? && params[:tip_cents] > 0
+      # Some clients submit cents as strings ("100"); normalize before the numeric comparisons below.
+      submitted_tip_cents = params[:tip_cents].to_i
+
+      if submitted_tip_cents > 0
         raise Purchase::PurchaseInvalid, "Tip is not allowed for this product" unless purchase.seller.tipping_enabled? && product.not_is_tiered_membership?
 
-        raise Purchase::PurchaseInvalid, "Tip is too large for this purchase" if (purchase_params[:perceived_price_cents].ceil - params[:tip_cents].floor) < purchase.minimum_paid_price_cents
+        raise Purchase::PurchaseInvalid, "Tip is too large for this purchase" if (purchase_params[:perceived_price_cents].ceil - submitted_tip_cents) < purchase.minimum_paid_price_cents
 
         # Listed-currency tip_cents must convert at the quote's locked rate, the same
         # rate prepare_for_charge! uses. A live-rate read here makes the submitted USD
