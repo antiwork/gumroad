@@ -2079,6 +2079,9 @@ const BankAccountSection = ({
                     aria-invalid={errorFieldNames.has("bank_code")}
                     onChange={(evt) => updateBankAccount({ bank_code: evt.target.value })}
                   />
+                  <FieldsetDescription>
+                    Your bank's SWIFT/BIC code, 8 or 11 characters (e.g. QNBAQAQA or QNBAQAQAXXX).
+                  </FieldsetDescription>
                 </Fieldset>
               ) : user.country_code === "GA" ? (
                 <Fieldset state={errorFieldNames.has("bank_code") ? "danger" : undefined}>

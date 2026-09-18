@@ -3,7 +3,10 @@
 class QatarBankAccount < BankAccount
   BANK_ACCOUNT_TYPE = "QA"
 
-  BANK_CODE_FORMAT_REGEX = /^[a-zA-Z0-9]{11}$/
+  # Qatari banks publish 8-character SWIFT/BICs (QNBAQAQA) and Stripe's QA rail resolves both the
+  # 8- and the XXX-padded 11-character form, so demanding exactly 11 only rejected correct codes
+  # (gumroad-private#2768).
+  BANK_CODE_FORMAT_REGEX = /^[a-zA-Z0-9]{8,11}$/
   ACCOUNT_NUMBER_FORMAT_REGEX = /^[a-zA-Z0-9]{29}$/
   private_constant :BANK_CODE_FORMAT_REGEX, :ACCOUNT_NUMBER_FORMAT_REGEX
 
