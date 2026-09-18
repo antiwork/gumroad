@@ -201,9 +201,8 @@ class Api::Internal::AgentCustomHtmlPreviewsController < Api::Internal::BaseCont
         expected_digest = params[:expected_custom_html_sha256]
         result_digest = params[:result_custom_html_sha256]
         if !expected_digest.nil? || !result_digest.nil?
-          # A checksum-bound proposal is the server-built undo; preview it under the writer's own
-          # guarded rules (current-page digest, literal match, sanitized-result digest) so Confirm
-          # is never enabled on an undo the writer would refuse.
+          # The server-built undo, previewed under the writer's own guarded rules so Confirm is never
+          # enabled on an undo the writer would refuse.
           check = Pages::CustomHtmlWriter.check_guarded_edit(current, find:, replace:, expected_custom_html_sha256: expected_digest, result_custom_html_sha256: result_digest)
           return [nil, nil, check.error] if check.error
 
