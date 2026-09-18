@@ -112,6 +112,22 @@ describe Pages::CustomHtmlWriter do
       expect(normal.success?).to be(true)
       expect(user.reload.custom_html).to include(replace)
     end
+
+    it "refuses a snippet that begins at two overlapping positions, without writing" do
+      user.update!(custom_html: "<div>x</div><div>x</div><div>x</div>")
+      page_before = current_page
+      overlapping_find = "<div>x</div><div>x</div>"
+      # String#scan would report this as one occurrence, because it consumes the match at offset 0 and
+      # never tries offset 11 — the splice #sub performs.
+      leftmost = Ai::PageSanitizer.sanitize_with_report(page_before.sub(overlapping_find) { "<div>x</div>" }).html.to_s
+
+      result = described_class.edit!(user, find: overlapping_find, replace: "<div>x</div>",
+                                           expected_custom_html_sha256: Digest::SHA256.hexdigest(page_before),
+                                           result_custom_html_sha256: Digest::SHA256.hexdigest(leftmost))
+
+      expect(result.error).to eq(described_class.find_ambiguous_error(2))
+      expect(user.reload.custom_html).to eq(page_before)
+    end
   end
 
   describe ".check_guarded_edit" do
@@ -125,6 +141,17 @@ describe Pages::CustomHtmlWriter do
         .to eq(described_class::FIND_MISSING_ERROR)
       expect(described_class.check_guarded_edit(page, find: "<p>Twice</p><p>Twice</p>", replace: "x" * Page::MAX_CUSTOM_HTML_LENGTH, expected_custom_html_sha256: digest, result_custom_html_sha256: "a" * 64).error)
         .to eq(described_class::LENGTH_ERROR)
+    end
+
+    it "counts overlapping snippet positions as ambiguous" do
+      page = "<div>x</div><div>x</div><div>x</div>"
+      digest = Digest::SHA256.hexdigest(page)
+      # The digest of the splice #sub would perform, so the uniqueness check is the only thing that
+      # can refuse this.
+      result_digest = Digest::SHA256.hexdigest("<div>x</div><div>x</div>")
+
+      expect(described_class.check_guarded_edit(page, find: "<div>x</div><div>x</div>", replace: "<div>x</div>", expected_custom_html_sha256: digest, result_custom_html_sha256: result_digest).error)
+        .to eq(described_class.find_ambiguous_error(2))
     end
   end
 end

@@ -146,19 +146,18 @@ class Pages::CustomHtmlWriter
     "find matches #{occurrences} places in the current custom HTML. Include more surrounding context so it matches exactly once."
   end
 
-  # Non-mutating validation of a checksum-bound edit against `current_custom_html`. Shared with the
-  # proposal preview (Api::Internal::AgentCustomHtmlPreviewsController) so a guarded undo that
-  # previews can't fail at confirm time, and vice versa. Unlike a normal edit, `find` must match
-  # literally: it is the actual saved replacement, and the whitespace fallback could splice a
-  # different byte sequence than the one result_custom_html_sha256 was computed from. Returns the
-  # sanitized page the write would save (nil when it sanitizes to nothing) or an error.
+  # Non-mutating validation of a checksum-bound edit, shared with the proposal preview so a guarded
+  # undo that previews can't fail at confirm time. `find` must match literally here — the whitespace
+  # fallback could splice a different byte sequence than result_custom_html_sha256 was computed from.
   def self.check_guarded_edit(current_custom_html, find:, replace:, expected_custom_html_sha256:, result_custom_html_sha256:)
     unless [expected_custom_html_sha256, result_custom_html_sha256].all? { |digest| digest.is_a?(String) && digest.match?(SHA256_HEX_FORMAT) }
       return GuardedEdit.new(error: INVALID_CHECKSUMS_ERROR)
     end
     return GuardedEdit.new(error: PAGE_CHANGED_ERROR) if Digest::SHA256.hexdigest(current_custom_html.to_s) != expected_custom_html_sha256
 
-    occurrences = find.is_a?(String) && find.present? ? current_custom_html.scan(find).size : 0
+    # Lookahead so overlapping begins count too: `scan` consumes each match, reading "aa" in "aaa" as
+    # one occurrence when `sub` would splice the leftmost of two.
+    occurrences = find.is_a?(String) && find.present? ? current_custom_html.scan(/(?=#{Regexp.escape(find)})/).size : 0
     return GuardedEdit.new(error: FIND_MISSING_ERROR) if occurrences.zero?
     return GuardedEdit.new(error: find_ambiguous_error(occurrences)) if occurrences > 1
 
