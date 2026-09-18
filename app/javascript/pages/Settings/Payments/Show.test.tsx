@@ -22,7 +22,10 @@ vi.mock("@inertiajs/react", () => ({
     return {
       data,
       processing: false,
-      setData: (key: keyof T, value: T[keyof T]) => setDataState((prev) => ({ ...prev, [key]: value })),
+      // Inertia's setData takes either one field or a partial payload; the country-change reset uses
+      // the payload form, which a field-only double drops without failing.
+      setData: (key: string | Partial<T>, value?: T[keyof T]) =>
+        setDataState((prev) => (typeof key === "object" ? { ...prev, ...key } : { ...prev, [key]: value })),
       transform: (fn: (d: T) => unknown) => {
         transformRef.current = fn;
       },
@@ -295,7 +298,7 @@ describe("US company representative tax ID", () => {
 describe("stale payout threshold below the platform minimum", () => {
   const stale = { payout_threshold_cents: 1000, minimum_payout_threshold_cents: 10_000 };
   const saveButton = () => screen.getByRole("button", { name: "Update settings" });
-  const thresholdField = () => screen.getByLabelText("Minimum payout threshold");
+  const thresholdField = () => screen.getByLabelText<HTMLInputElement>("Minimum payout threshold");
 
   it("does not flag the untouched stored value and still allows saving", () => {
     mocks.usePage.mockReturnValue({ props: { ...pageProps(), ...stale } });
@@ -309,7 +312,17 @@ describe("stale payout threshold below the platform minimum", () => {
     mocks.usePage.mockReturnValue({ props: { ...pageProps(), ...stale } });
     render(<PaymentsPage />);
 
-    expect((thresholdField() as HTMLInputElement).value).toBe("100");
+    expect(thresholdField().value).toBe("100");
+  });
+
+  it("keeps the country minimum in the field after a country change reloads the props", () => {
+    mocks.usePage.mockReturnValue({ props: { ...pageProps(), ...stale } });
+    const { rerender } = render(<PaymentsPage />);
+
+    mocks.usePage.mockReturnValue({ props: { ...pageProps({}, { country: "CA" }), ...stale } });
+    rerender(<PaymentsPage />);
+
+    expect(thresholdField().value).toBe("100");
   });
 
   it("still raises the value when the seller retypes the stale amount", () => {
