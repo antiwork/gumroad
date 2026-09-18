@@ -15,6 +15,7 @@ class AffiliateMailer < ApplicationMailer
     # early aborts delivery (ActionMailer produces a NullMail).
     @direct_affiliate = DirectAffiliate.find_by(id: affiliate_id)
     return if @direct_affiliate.nil?
+    return if @direct_affiliate.reassignment_blocked?
 
     @seller = @direct_affiliate.seller
     @seller_name = @direct_affiliate.seller.name_or_username
@@ -64,6 +65,8 @@ class AffiliateMailer < ApplicationMailer
 
   def notify_direct_affiliate_of_updated_products(affiliate_id)
     @direct_affiliate = DirectAffiliate.find(affiliate_id)
+    return if @direct_affiliate.reassignment_blocked?
+
     @products = @direct_affiliate.enabled_products
                                  .sort_by { -_1[:fee_percent] }
     seller_name = @direct_affiliate.seller.name_or_username
@@ -75,6 +78,8 @@ class AffiliateMailer < ApplicationMailer
 
   def notify_direct_affiliate_of_new_product(affiliate_id, product_id)
     @direct_affiliate = DirectAffiliate.find(affiliate_id)
+    return if @direct_affiliate.reassignment_blocked?
+
     @seller_name = @direct_affiliate.seller.name_or_username
     product = Link.find(product_id)
     @product_name = product.name

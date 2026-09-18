@@ -27,6 +27,7 @@ class Affiliate < ApplicationRecord
   has_flags 1 => :apply_to_all_products,
             2 => :send_posts,
             3 => :dont_show_as_co_creator,
+            4 => :removed_at_request,
             :column => "flags",
             :flag_query_mode => :bit_operator,
             check_for_column: false
