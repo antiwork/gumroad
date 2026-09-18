@@ -1103,12 +1103,24 @@ export default function PaymentsPage() {
     }
   };
 
+  // A threshold stored before the platform minimum rose sits below it forever and changes no
+  // payout (`minimum_payout_amount_cents` takes the max server-side), so flag it only once the
+  // seller edits the field too low — otherwise it blocks every unrelated save with a red box.
+  const payoutThresholdEdited = form.data.payout_threshold_cents !== props.payout_threshold_cents;
+  const payoutThresholdBelowMinimum =
+    form.data.payout_threshold_cents != null && form.data.payout_threshold_cents < props.minimum_payout_threshold_cents;
+  const payoutThresholdError = payoutThresholdEdited && payoutThresholdBelowMinimum;
+
   const validateForm = () => {
     setClientErrorMessage(null);
     // Start from a clean slate every attempt. Not every input clears the set as it changes (the
     // PayPal email field and the saved-bank-account toggle don't), so a leftover entry from a
     // previous attempt would otherwise block a save and name a field the seller has since filled in.
     resetErrorFieldNames();
+
+    // The country-change confirmation and the mobile-app save call handleSave past the disabled
+    // button, so a below-minimum edit has to be refused here too.
+    if (payoutThresholdError) return false;
 
     if (isUpdateCountryConfirmed) {
       return true;
@@ -1172,7 +1184,14 @@ export default function PaymentsPage() {
             : {}),
         },
         payouts_paused_by_user: data.payouts_paused_by_user,
-        payout_threshold_cents: data.payout_threshold_cents,
+        // A stored threshold below a raised platform minimum makes the server reject every save, so
+        // raise the untouched value; an edited value never reaches here (validateForm refuses it).
+        payout_threshold_cents:
+          data.payout_threshold_cents != null &&
+          data.payout_threshold_cents === props.payout_threshold_cents &&
+          data.payout_threshold_cents < props.minimum_payout_threshold_cents
+            ? props.minimum_payout_threshold_cents
+            : data.payout_threshold_cents,
         payout_frequency: data.payout_frequency,
         disable_buyer_local_currency: data.disable_buyer_local_currency,
         disable_buyer_currency_rounding: data.disable_buyer_currency_rounding,
@@ -1228,9 +1247,6 @@ export default function PaymentsPage() {
       handleSave();
     }
   }, [isPayoutMethodChangeConfirmed]);
-
-  const payoutThresholdError =
-    form.data.payout_threshold_cents != null && form.data.payout_threshold_cents < props.minimum_payout_threshold_cents;
 
   const handlePayoutThresholdBlur = () => {
     if (!form.data.payout_threshold_cents) {

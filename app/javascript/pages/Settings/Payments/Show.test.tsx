@@ -290,6 +290,71 @@ describe("US company representative tax ID", () => {
   });
 });
 
+// A stored threshold below the platform minimum changes no payout, so it must not flag the field
+// or block saving an unrelated change.
+describe("stale payout threshold below the platform minimum", () => {
+  const stale = { payout_threshold_cents: 1000, minimum_payout_threshold_cents: 10_000 };
+  const saveButton = () => screen.getByRole("button", { name: "Update settings" });
+  const thresholdField = () => screen.getByLabelText("Minimum payout threshold");
+
+  it("does not flag the untouched stored value and still allows saving", () => {
+    mocks.usePage.mockReturnValue({ props: { ...pageProps(), ...stale } });
+    render(<PaymentsPage />);
+
+    expect(thresholdField().getAttribute("aria-invalid")).toBe("false");
+    expect(saveButton().hasAttribute("disabled")).toBe(false);
+  });
+
+  it("raises the untouched stale value to the minimum when saving another change", () => {
+    mocks.usePage.mockReturnValue({ props: { ...pageProps(), ...stale, payout_frequency_daily_supported: true } });
+    render(<PaymentsPage />);
+
+    fireEvent.change(screen.getByLabelText("Schedule"), { target: { value: "daily" } });
+    save();
+
+    expect(mocks.put).toHaveBeenCalledWith(
+      "/settings_payments",
+      expect.objectContaining({ payout_frequency: "daily", payout_threshold_cents: 10_000 }),
+    );
+  });
+
+  it("still flags a value the seller types below the minimum and blocks saving", () => {
+    mocks.usePage.mockReturnValue({ props: { ...pageProps(), ...stale } });
+    render(<PaymentsPage />);
+
+    fireEvent.change(thresholdField(), { target: { value: "50" } });
+
+    expect(thresholdField().getAttribute("aria-invalid")).toBe("true");
+    expect(saveButton().hasAttribute("disabled")).toBe(true);
+  });
+
+  // These two paths call handleSave past the disabled button.
+  it("refuses a value typed below the minimum when the mobile app saves", () => {
+    vi.stubGlobal("ReactNativeWebView", { postMessage: vi.fn() });
+    mocks.usePage.mockReturnValue({ props: { ...pageProps(), ...stale, is_mobile_app_web_view: true } });
+    render(<PaymentsPage />);
+
+    fireEvent.change(thresholdField(), { target: { value: "50" } });
+    fireEvent(window, new MessageEvent("message", { data: JSON.stringify({ type: "mobileAppSettingsSave" }) }));
+
+    expect(mocks.put).not.toHaveBeenCalled();
+    vi.unstubAllGlobals();
+  });
+
+  it("refuses a value typed below the minimum when the country change is confirmed", () => {
+    mocks.usePage.mockReturnValue({
+      props: { ...pageProps(), ...stale, countries: { US: "United States", CA: "Canada" } },
+    });
+    render(<PaymentsPage />);
+
+    fireEvent.change(thresholdField(), { target: { value: "50" } });
+    fireEvent.change(screen.getByLabelText("Country"), { target: { value: "CA" } });
+    fireEvent.click(screen.getByRole("button", { name: "Confirm" }));
+
+    expect(mocks.put).not.toHaveBeenCalled();
+  });
+});
+
 describe("full-SSN re-entry validation", () => {
   it("blocks saving when Stripe requires the full SSN and only last-4 is on file", () => {
     renderPage({
