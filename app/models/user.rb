@@ -818,35 +818,37 @@ class User < ApplicationRecord
   def deactivate!
     validate_account_closure_balances!
 
-    ActiveRecord::Base.transaction do
-      update!(
-        deleted_at: Time.current,
-        username: nil,
-        credit_card_id: nil,
-        payouts_paused_internally: true,
-      )
+    begin
+      ActiveRecord::Base.transaction(requires_new: true) do
+        update!(
+          deleted_at: Time.current,
+          username: nil,
+          credit_card_id: nil,
+          payouts_paused_internally: true,
+        )
 
-      links.each(&:delete!)
-      installments.alive.each(&:mark_deleted!)
-      user_compliance_infos.alive.each(&:mark_deleted!)
-      bank_accounts.alive.each(&:mark_deleted!)
-      # Account-level public media (see Api::V2::MediaController) is purged from storage, not
-      # just soft-deleted, so the CDN stops serving it. Rescue per file so one bad blob doesn't
-      # roll back the whole account closure.
-      PublicFile.alive.where(seller: self, resource: self).find_each do |file|
-        file.mark_deleted_and_purge_file!
-      rescue => e
-        Rails.logger.warn("deactivate!: Failed to purge media file #{file.id} for user #{id}: #{e.message}")
+        links.each(&:delete!)
+        installments.alive.each(&:mark_deleted!)
+        user_compliance_infos.alive.each(&:mark_deleted!)
+        bank_accounts.alive.each(&:mark_deleted!)
+        # Account-level public media (see Api::V2::MediaController) is purged from storage, not
+        # just soft-deleted, so the CDN stops serving it. Rescue per file so one bad blob doesn't
+        # roll back the whole account closure.
+        PublicFile.alive.where(seller: self, resource: self).find_each do |file|
+          file.mark_deleted_and_purge_file!
+        rescue => e
+          Rails.logger.warn("deactivate!: Failed to purge media file #{file.id} for user #{id}: #{e.message}")
+        end
+        cancel_active_subscriptions!
+        invalidate_active_sessions!
+        clear_team_member_flags!
+
+        if custom_domain&.persisted? && !custom_domain.deleted?
+          custom_domain.mark_deleted!
+        end
+
+        true
       end
-      cancel_active_subscriptions!
-      invalidate_active_sessions!
-      clear_team_member_flags!
-
-      if custom_domain&.persisted? && !custom_domain.deleted?
-        custom_domain.mark_deleted!
-      end
-
-      true
     rescue
       false
     end
@@ -859,12 +861,23 @@ class User < ApplicationRecord
     staff_users = gumroad_account? ? seller_memberships.not_deleted.includes(:user).map(&:user) : []
     staff_users << self
 
-    staff_users.compact.uniq.each do |staff_user|
-      next unless staff_user.is_team_member?
-      staff_user.is_team_member = false
-      # Not save!: a `flags` change fires clear_products_cache, and that callback must not be able
-      # to roll back the closure transaction.
-      staff_user.update_columns(flags: staff_user.flags)
+    transaction do
+      staff_users.compact.uniq.each do |staff_user|
+        # Reload under a lock so revocation preserves other concurrently changed flags.
+        staff_user.with_lock do
+          next unless staff_user.is_team_member?
+
+          flags = staff_user.flags & ~User.flag_mapping["flags"][:is_team_member]
+          # Member validations and cache/job callbacks must not block account closure.
+          version = staff_user.paper_trail.update_columns(flags:)
+          if PaperTrail.enabled? && PaperTrail.request.enabled? && PaperTrail.request.enabled_for_model?(User)
+            # PaperTrail can swallow audit failures under its default error policy.
+            unless version.respond_to?(:persisted?) && version.persisted?
+              raise ActiveRecord::RecordNotSaved, "Staff revocation audit could not be saved"
+            end
+          end
+        end
+      end
     end
   end
 

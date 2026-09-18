@@ -2,7 +2,7 @@
 
 class Settings::Team::TeamInvitationPolicy < ApplicationPolicy
   def create?
-    update? && seller&.account_active?
+    seller&.account_active? && update?
   end
 
   def update?

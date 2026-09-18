@@ -7,6 +7,34 @@ describe GdprDataErasureService do
   let(:admin) { create(:user, email: "admin@example.com", name: "Admin") }
 
   describe "#perform!" do
+    with_versioning do
+      [false, true].each do |already_deleted|
+        it "audits staff cleanup before erasure with already_deleted=#{already_deleted}" do
+          gumroad = create(:user, email: ApplicationMailer::ADMIN_EMAIL, is_team_member: true)
+          staff = create(:user, is_team_member: true, announcement_notification_enabled: false)
+          membership = create(:team_membership, seller: gumroad, user: staff)
+          gumroad.update_column(:deleted_at, 1.day.ago) if already_deleted
+          staff.update_column(:timezone, "invalid")
+          old_flags = staff.flags
+          allow_any_instance_of(User).to receive(:clear_products_cache).and_wrap_original do |original, *args|
+            raise "member cache unavailable" if original.receiver.id == staff.id
+            original.call(*args)
+          end
+
+          result = described_class.new(gumroad, performed_by: admin).perform!
+
+          expect(result[:success]).to eq(true)
+          expect(gumroad.reload).not_to be_is_team_member
+          expect(gumroad.email).to eq("deleted-#{gumroad.id}@deleted.gumroad.com")
+          expect(staff.reload).not_to be_is_team_member
+          expect(staff.announcement_notification_enabled).to eq(false)
+          expect(staff.versions.last.changeset["flags"]).to eq([old_flags, staff.flags])
+          expect(gumroad.versions.where(event: "update").filter_map { _1.changeset["flags"] }.last).to eq([gumroad.flags | User.flag_mapping["flags"][:is_team_member], gumroad.flags])
+          expect(membership.reload).not_to be_deleted
+        end
+      end
+    end
+
     it "anonymizes user PII" do
       result = described_class.new(user, performed_by: admin).perform!
 
