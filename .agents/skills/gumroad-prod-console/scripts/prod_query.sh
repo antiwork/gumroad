@@ -96,7 +96,7 @@ report_stale_key_recovery() {
   for stale_ip in $ips; do
     keygen_cmd="$keygen_cmd ssh-keygen -f ~/.ssh/known_hosts -R '$stale_ip';"
   done
-  >&2 echo "  clear with: LC_PAPER=127.0.0.1 ssh admin@$PROD_BASTION \"$keygen_cmd\""
+  >&2 echo "  clear with: LC_PAPER=127.0.0.1 ssh -o SendEnv=LC_PAPER admin@$PROD_BASTION \"$keygen_cmd\""
 }
 
 # Last-good private IP. Skip EC2 discovery when that host still answers.
