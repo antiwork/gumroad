@@ -67,4 +67,25 @@ class CreatorMailer < ApplicationMailer
       subject: @subject
     )
   end
+
+  # Sent when a launch post could not go out because the seller's X token cannot write.
+  # The link lands on the product's Share tab, not Settings, so the post they were trying
+  # to send is in front of them when they come back from reconnecting.
+  def marketing_x_reconnect(marketing_action_id:)
+    # Not alive_for_reconnect_notice: the job claims reconnect_notified_at before it enqueues
+    # this, so that scope is already empty by now. What still matters is that the seller has
+    # not reconnected or closed the action in between.
+    @action = Marketing::Action.awaiting_reconnect.find_by(id: marketing_action_id)
+    return if @action.nil?
+
+    seller = @action.user
+    email = seller.form_email
+    return unless EmailFormatValidator.valid?(email)
+
+    @product = @action.link
+    @share_url = "#{UrlService.domain_with_protocol}/products/#{@product.unique_permalink}/edit/share"
+    @subject = "Reconnect X to send your launch post"
+
+    mail(to: email, subject: @subject)
+  end
 end

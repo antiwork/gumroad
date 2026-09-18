@@ -38,7 +38,33 @@ describe Marketing::Channels::X do
     expect(result.action).not_to be_terminal
     expect(result.action.error_code).to eq("x_write_permission_missing")
     expect(result.intent_url).to include("twitter.com/intent/tweet").and include(CGI.escape(utm_link.short_url))
-    expect(result.connect_path).to eq("/settings/social_connections")
+    # Carries the product through so the reconnect returns to this post, not to Settings.
+    expect(result.connect_path).to eq("/settings/social_connections?social_connect_origin=marketing" \
+                                      "&social_connect_product=#{product.unique_permalink}")
+  end
+
+  # The card reaches only a seller who returns to the product, so an attempt made from the
+  # CLI or an agent session would otherwise leave them with nothing.
+  it "queues the reconnect email when the token cannot write" do
+    stub_tweets(status: 403, body: { title: "Forbidden",
+                                     type: "https://api.x.com/2/problems/oauth1-permissions",
+                                     detail: "Your client app is not configured with the appropriate " \
+                                             "oauth1 app permissions for this endpoint." })
+
+    expect do
+      described_class.new(action).call
+    end.to change { SendMarketingXReconnectEmailJob.jobs.size }.by(1)
+
+    expect(SendMarketingXReconnectEmailJob.jobs.last["args"]).to eq([action.id])
+  end
+
+  it "queues no reconnect email when X refuses the request outright" do
+    stub_tweets(status: 403, body: { title: "Forbidden", reason: "client-not-enrolled",
+                                     detail: "Client is not enrolled." })
+
+    expect do
+      described_class.new(action).call
+    end.not_to change { SendMarketingXReconnectEmailJob.jobs.size }
   end
 
   it "fails without calling X when the seller has no user token" do

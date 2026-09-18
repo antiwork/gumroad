@@ -1,0 +1,20 @@
+<%= header_section("Reconnect X to send your launch post") %>
+<div>
+  <p>
+    Your launch post for <strong><%= @product.name %></strong> did not go out. Gumroad asked X for
+    read access when you connected your account, so we could not post on your behalf.
+  </p>
+  <p>
+    We fixed that. Reconnecting takes one click and your post is ready to send.
+  </p>
+  <p>
+    <a class="button primary" href="<%= @share_url %>">Reconnect X and send your post</a>
+  </p>
+  <p>
+    X asks you to select "I trust this app" before it enables the Authorize button. That step is
+    what grants posting access.
+  </p>
+  <p>
+    You can also post it yourself at any time from the same page.
+  </p>
+</div>

@@ -1,4 +1,4 @@
-import { CheckCircle, Instagram, Tiktok, TwitterX, Youtube } from "@boxicons/react";
+import { CheckCircle, DotsHorizontalRounded, Instagram, Tiktok, TwitterX, Youtube } from "@boxicons/react";
 import { router, usePage } from "@inertiajs/react";
 import * as React from "react";
 import typia from "typia";
@@ -9,11 +9,13 @@ import { asyncVoid } from "$app/utils/promise";
 import { assertResponseError } from "$app/utils/request";
 
 import { BrandName, Button } from "$app/components/Button";
+import { Popover, PopoverContent, PopoverTrigger } from "$app/components/Popover";
 import { showAlert } from "$app/components/server-components/Alert";
 import { Layout as SettingsLayout } from "$app/components/Settings/Layout";
 import { SocialAuthButton } from "$app/components/SocialAuthButton";
 import { FieldsetDescription } from "$app/components/ui/Fieldset";
 import { FormSection } from "$app/components/ui/FormSection";
+import { Menu, MenuItem } from "$app/components/ui/Menu";
 import { Row, RowActions, RowContent, Rows } from "$app/components/ui/Rows";
 
 type SocialConnectionsPageProps = {
@@ -143,8 +145,8 @@ export default function SocialConnectionsPage() {
           <>
             <h2>Social connections</h2>
             <FieldsetDescription>
-              Connecting a social account is optional. It gives us extra context when we review your account. We only
-              read your public profile, and we never post for you.
+              Connecting a social account is optional. It gives us extra context when we review your account. We read
+              your public profile. On X, we post only the launch posts you write and approve.
             </FieldsetDescription>
           </>
         }
@@ -158,12 +160,14 @@ export default function SocialConnectionsPage() {
               <Row key={key} role="listitem" className="grid-cols-[1fr_auto]">
                 <RowContent className="items-start gap-3">
                   <Icon pack="brands" className="mt-0.5 size-5 shrink-0" />
-                  <div className="grid gap-1">
+                  {/* min-w-0 lets the handle truncate. Without it a long one wraps a character
+                      per line once the actions have taken their width. */}
+                  <div className="grid min-w-0 gap-1">
                     <div className="font-bold">{name}</div>
                     {connected ? (
                       <FieldsetDescription className="flex items-center gap-1">
-                        {displayHandle ?? "Connected"}
-                        <CheckCircle pack="filled" className="size-4 text-success" aria-label="Connected" />
+                        <span className="truncate">{displayHandle ?? "Connected"}</span>
+                        <CheckCircle pack="filled" className="size-4 shrink-0 text-success" aria-label="Connected" />
                       </FieldsetDescription>
                     ) : displayLegacyHandle ? (
                       <FieldsetDescription>
@@ -176,9 +180,32 @@ export default function SocialConnectionsPage() {
                 </RowContent>
                 <RowActions>
                   {connected ? (
-                    <Button type="button" aria-label={`Disconnect ${accountLabel}`} onClick={disconnect}>
-                      Disconnect
-                    </Button>
+                    <>
+                      {/* A connected account can still hold a token that cannot do what we
+                          need — X caps the grant at whatever the consent screen was asked
+                          for. Without this, re-authorizing means disconnecting first, which
+                          for a seller who signed up with X drops the identity they log in with.
+                          Disconnect moves into the menu to keep the row on one line at phone
+                          width, and because it is the rarer and destructive one. */}
+                      <SocialAuthButton provider={key} href={connectHref} aria-label={`Reconnect ${accountLabel}`}>
+                        Reconnect
+                      </SocialAuthButton>
+                      <Popover>
+                        <PopoverTrigger
+                          aria-label={`Open ${name} connection menu`}
+                          className="flex size-11 cursor-pointer items-center justify-center all-unset"
+                        >
+                          <DotsHorizontalRounded className="size-5" />
+                        </PopoverTrigger>
+                        <PopoverContent className="border-0 p-0 shadow-none">
+                          <Menu>
+                            <MenuItem variant="danger" aria-label={`Disconnect ${accountLabel}`} onClick={disconnect}>
+                              Disconnect
+                            </MenuItem>
+                          </Menu>
+                        </PopoverContent>
+                      </Popover>
+                    </>
                   ) : (
                     <>
                       {displayLegacyHandle ? (

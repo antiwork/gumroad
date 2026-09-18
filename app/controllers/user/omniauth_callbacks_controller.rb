@@ -283,12 +283,12 @@ class User::OmniauthCallbacksController < Devise::OmniauthCallbacksController
       provider = action_name == "failure" ? request.env["omniauth.error.strategy"]&.name.to_s : action_name
       connecting = %w[youtube instagram tiktok].include?(provider) ||
         (provider == "twitter" && request.env.dig("omniauth.params", REQ_PARAM_STATE) == "link_twitter_account")
-      @return_to_onboarding = connecting && consume_social_connect_return
+      @social_connect_return_destination = consume_social_connect_return if connecting
       session.delete(:social_connect_return) unless connecting || action_name == "failure"
     end
 
     def social_connect_destination
-      @return_to_onboarding ? dashboard_path : settings_social_connections_path
+      @social_connect_return_destination || settings_social_connections_path
     end
 
     def hide_layouts

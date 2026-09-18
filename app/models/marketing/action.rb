@@ -11,6 +11,7 @@ class Marketing::Action < ApplicationRecord
   MAX_COPY_LENGTH = MAX_POST_LENGTH - X_URL_LENGTH - 2
 
   TERMINAL_STATUSES = %w[posted failed cancelled].freeze
+  X_WRITE_PERMISSION_MISSING = "x_write_permission_missing"
 
   belongs_to :user
   belongs_to :link
@@ -62,6 +63,9 @@ class Marketing::Action < ApplicationRecord
   end
 
   scope :open, -> { where.not(status: TERMINAL_STATUSES) }
+  # Still worth a reconnect nudge: open, still blocked on write permission, not yet emailed.
+  scope :awaiting_reconnect, -> { open.where(error_code: X_WRITE_PERMISSION_MISSING) }
+  scope :alive_for_reconnect_notice, -> { awaiting_reconnect.where(reconnect_notified_at: nil) }
 
   # One open action per (user, product, channel); retries land on the same row.
   def self.find_or_create_open!(user:, link:, channel:)

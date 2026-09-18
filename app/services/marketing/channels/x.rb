@@ -92,8 +92,12 @@ class Marketing::Channels::X
     # stays open with the reason recorded: failing it would hide the reconnect
     # fallback until the next reload and mint a fresh recommendation every time.
     def require_reconnect!
-      action.error_code = "x_write_permission_missing"
+      action.error_code = Marketing::Action::X_WRITE_PERMISSION_MISSING
       action.require_reconnect!
+      # The card only reaches a seller who comes back to the product. Without this, an
+      # attempt made from the CLI or an agent session leaves nothing behind that tells them.
+      # The job claims the row, so a seller who retries is not mailed twice.
+      SendMarketingXReconnectEmailJob.perform_async(action.id)
     end
 
     def fail_with!(code)
@@ -105,7 +109,8 @@ class Marketing::Channels::X
       Result.new(
         action:,
         intent_url: "https://twitter.com/intent/tweet?#{{ text: action.copy, url: action.utm_link&.short_url }.compact.to_query}",
-        connect_path: Rails.application.routes.url_helpers.settings_social_connections_path,
+        connect_path: Rails.application.routes.url_helpers.settings_social_connections_path(
+          social_connect_origin: "marketing", social_connect_product: action.link.unique_permalink),
       )
     end
 end
