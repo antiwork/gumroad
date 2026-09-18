@@ -438,9 +438,7 @@ class Ai::StoreAgentService
   # that was never rendered. Must not itself match STAGED_CLAIM_PATTERNS above.
   NOTHING_STAGED_REPLY = "That change wasn't prepared, so there's nothing here for you to approve " \
                          "yet. Ask me again and I'll redo it."
-  # The whole tool result for a prepared undo. The inverse snippet and page digests stay in the
-  # persisted proposal; echoing them into the transcript would hand the model exactly the
-  # reconstruction material this tool exists to keep server-owned.
+  # Keep inverse snippets and digests out of model tool results; only the server owns the undo.
   UNDO_PREPARED_SUMMARY = "Prepared an exact undo of the last applied targeted HTML edit as a new " \
                           "confirmation card. Nothing has changed yet; the creator must confirm it."
   # How many prior turns of context we forward to the model. Keeps token usage bounded and avoids

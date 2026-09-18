@@ -7,14 +7,8 @@ class Ai::StoreAgentHtmlUndo
   ACTION_STARTED_AT_FORMAT = /\A\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d{6}\z/
   RESOLVED_STATUSES = %w[applied unknown].freeze
 
-  # The receipt of the conversation's last applied change, or nil unless that change is provably
-  # the most recent one and a reversible targeted HTML edit.
-  #
-  # Ordering is by execution interval, not proposal creation or finalization alone: a profile edit
-  # whose finalization lands after a product edit that started and finished in between is not the
-  # last change, even though its updated_at is the newest. So the candidate must carry a
-  # well-formed action_started_at, and no other claimed action may have finished at or after it,
-  # whatever it targeted. Anything still executing refuses regardless of age.
+  # Execution intervals, not finalization order, identify the last applied change across targets.
+  # Overlapping or still-running actions make the inverse ambiguous, so refuse rather than guess.
   def self.latest_for(seller:, conversation:)
     return unless conversation
 

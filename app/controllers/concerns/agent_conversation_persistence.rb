@@ -378,10 +378,8 @@ module AgentConversationPersistence
       [nil, ACTION_CONFIRMATION_RETRY_MESSAGE, nil, true]
     end
 
-    # The claim also stamps action_started_at from the database clock, in the same statement, so a
-    # finalized row carries its whole execution interval [action_started_at, updated_at]. The HTML
-    # undo (Ai::StoreAgentHtmlUndo) needs that to tell a late finalization apart from the truly
-    # last-applied change; both ends come from CURRENT_TIMESTAMP(6) so app clocks never enter.
+    # Use the DB clock for both ends of the execution interval: a late finalization must not
+    # make an older action look like the last applied change across targets.
     def compare_and_set_agent_action_claim(message)
       AiMessage
         .where(id: message.id)
