@@ -25,6 +25,24 @@ RSpec.describe ProductReview::UpdateService do
         .and change { product_review.message }.from("Original message").to("Updated message")
     end
 
+    it "leaves the anonymity choice alone when the caller did not make one" do
+      product_review.update!(anonymous: true)
+
+      described_class.new(product_review, rating: 5, message: "Updated message").update
+
+      expect(product_review.reload.anonymous).to eq(true)
+    end
+
+    it "writes the anonymity choice the caller made" do
+      described_class.new(product_review, rating: 5, message: "Updated message", anonymous: true).update
+
+      expect(product_review.reload.anonymous).to eq(true)
+
+      described_class.new(product_review, rating: 5, message: "Updated message", anonymous: false).update
+
+      expect(product_review.reload.anonymous).to eq(false)
+    end
+
     context "with video_options" do
       let(:video_url) { "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/video.mp4" }
       let(:blob) do
