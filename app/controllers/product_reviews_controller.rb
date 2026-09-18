@@ -85,7 +85,7 @@ class ProductReviewsController < ApplicationController
       review = purchase.post_review(
         rating: set_params[:rating].to_i,
         message: set_params[:message],
-        anonymous: anonymous_choice,
+        anonymous: submitted_anonymous,
         video_options: set_params[:video_options] || {}
       )
 
@@ -99,19 +99,23 @@ class ProductReviewsController < ApplicationController
       render json: { success: false, message: "Sorry, something went wrong." }
     end
 
-    # True only when the request takes the name off a frozen review. A request that omits the
-    # choice casts to false, so accepting it would republish the identity the buyer hid.
+    # A client that does not know about the identity choice omits the parameter. Casting that to
+    # false would republish the name of a buyer who had chosen Anonymous — on any purchase, not
+    # only an ineligible one — so absent means "leave it alone".
+    def submitted_anonymous
+      return :unchanged unless set_params.key?(:anonymous)
+
+      ActiveModel::Type::Boolean.new.cast(set_params[:anonymous]) || false
+    end
+
+    # True when the request leaves the rating, the message and the video exactly as they are, which
+    # is what the form sends when the buyer only moves the identity radio, in either direction.
     def identity_only_change?(review)
       return false if review.nil?
 
-      anonymous_choice &&
-        set_params[:rating].to_i == review.rating &&
+      set_params[:rating].to_i == review.rating &&
         set_params[:message].to_s == review.message.to_s &&
         set_params[:video_options].blank?
-    end
-
-    def anonymous_choice
-      ActiveModel::Type::Boolean.new.cast(set_params[:anonymous]) || false
     end
 
     def fetch_visible_product
