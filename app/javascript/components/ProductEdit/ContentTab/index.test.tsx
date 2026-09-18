@@ -78,7 +78,8 @@ vi.mock("$app/components/S3UploadConfig", async (importOriginal) => {
     useS3UploadConfig: () => ({ generateS3KeyForUpload: () => ({ s3key: "key", fileUrl: "url" }) }),
   };
 });
-vi.mock("$app/components/useIsAboveBreakpoint", () => ({ useIsAboveBreakpoint: () => true }));
+const viewport = vi.hoisted(() => ({ isDesktop: true }));
+vi.mock("$app/components/useIsAboveBreakpoint", () => ({ useIsAboveBreakpoint: () => viewport.isDesktop }));
 vi.mock("$app/components/ReviewForm", () => ({ ReviewForm: () => null }));
 vi.mock("$app/components/UpsellSelectModal", () => ({ UpsellSelectModal: () => null }));
 vi.mock("$app/components/TestimonialSelectModal", () => ({ TestimonialSelectModal: () => null }));
@@ -89,19 +90,25 @@ vi.mock("react-sortablejs", () => ({
   // Production Sortable writes `list` back through setList during layout.
   // Off by default so other tests keep a silent stub; the switch-overwrite
   // case turns it on to reproduce that write.
+  //
+  // The `tag` element is rendered because the real Sortable puts these children
+  // inside it, and a test has to be able to see which rows are in that container
+  // (react-sortablejs indexes `list` by the container's raw child index).
   ReactSortable: ({
     children,
     list,
     setList,
+    tag: Tag = "div",
   }: {
     children: React.ReactNode;
     list: unknown[];
     setList: (next: unknown[]) => void;
+    tag?: React.ElementType;
   }) => {
     React.useLayoutEffect(() => {
       if (sortable.echoList) setList(list);
     }, [list, setList]);
-    return children;
+    return <Tag>{children}</Tag>;
   },
 }));
 const alerts = vi.hoisted((): { message: string; level: string }[] => []);
@@ -115,6 +122,7 @@ afterEach(() => {
   alerts.length = 0;
   scheduledUploads.length = 0;
   sortable.echoList = false;
+  viewport.isDesktop = true;
 });
 
 const getMountedEditor = () => {
@@ -788,4 +796,39 @@ it("ignores a second toolbar pick while a mixed pick is still snapshotting", asy
   } finally {
     File.prototype.arrayBuffer = originalArrayBuffer;
   }
+});
+
+// A phone shows the page list behind a "Table of contents" summary row, and that row
+// used to render INSIDE the ReactSortable. react-sortablejs reorders `list` — which
+// holds only the pages — by SortableJS's RAW child index, so one extra child shifted
+// every page index by one: a drop resolved to no page, the app threw
+// "Cannot read properties of undefined (reading 'id')", and the order snapped back.
+// See https://github.com/antiwork/gumroad-private/issues/2760
+it("keeps the mobile page-list summary row out of the Sortable's container", async () => {
+  viewport.isDesktop = false;
+  const product = buildProduct([
+    { id: "variant-paid", name: "Paid", rich_content: [makePage("page-a", "PAGE A"), makePage("page-b", "PAGE B")] },
+  ]);
+  context.product = product;
+
+  render(<ContentTabContent selectedVariantId="variant-paid" />);
+  await act(async () => {});
+
+  // Collapsed on a phone the Sortable has nothing to render, so no container exists.
+  const summaryButton = [...document.querySelectorAll("button")].find((button) =>
+    button.textContent?.includes("Table of contents:"),
+  );
+  expect(summaryButton).toBeDefined();
+  expect(document.querySelector('[role="tablist"]')).toBeNull();
+
+  await act(async () => {
+    fireEvent.click(summaryButton!);
+  });
+
+  const list = document.querySelector('[role="tablist"]');
+  expect(list).not.toBeNull();
+  // The pin: the summary row is still rendered, just not as a child of the sortable.
+  expect(document.body.textContent).toContain("Table of contents:");
+  expect(list?.textContent).not.toContain("Table of contents:");
+  expect(list?.querySelectorAll('[role="tab"]')).toHaveLength(2);
 });

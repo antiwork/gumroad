@@ -1071,26 +1071,30 @@ export const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: st
             !isDesktop && !showPageList ? null : (
               <div className="flex flex-col gap-4">
                 {showPageList ? (
-                  <ReactSortable
-                    draggable="[role=tab]"
-                    handle="[aria-grabbed]"
-                    tag={PageList}
-                    list={pages.map((page) => ({ ...page, id: page.id }))}
-                    setList={reorderPages}
-                  >
-                    <>
-                      {isDesktop ? null : (
-                        <PageListItem asChild className="tailwind-override text-left">
-                          <button className="cursor-pointer all-unset" onClick={() => setPagesExpanded(!pagesExpanded)}>
-                            <span className="flex-1">
-                              <strong>Table of contents:</strong> {titleWithFallback(selectedPage?.title)}
-                            </span>
+                  <>
+                    {/* The mobile summary row stays OUT of the Sortable: react-sortablejs maps
+                        SortableJS's raw child indices onto `list`, which holds only the pages, so
+                        one extra child shifts every index and a drop resolves to no page at all.
+                        Desktop renders no summary row, so its markup is unchanged. */}
+                    {isDesktop ? null : (
+                      <PageListItem asChild className="tailwind-override rounded-sm border bg-background text-left">
+                        <button className="cursor-pointer all-unset" onClick={() => setPagesExpanded(!pagesExpanded)}>
+                          <span className="flex-1">
+                            <strong>Table of contents:</strong> {titleWithFallback(selectedPage?.title)}
+                          </span>
 
-                            {pagesExpanded ? <ChevronDown className="size-5" /> : <ChevronRight className="size-5" />}
-                          </button>
-                        </PageListItem>
-                      )}
-                      {isDesktop || pagesExpanded ? (
+                          {pagesExpanded ? <ChevronDown className="size-5" /> : <ChevronRight className="size-5" />}
+                        </button>
+                      </PageListItem>
+                    )}
+                    {isDesktop || pagesExpanded ? (
+                      <ReactSortable
+                        draggable="[role=tab]"
+                        handle="[aria-grabbed]"
+                        tag={PageList}
+                        list={pages.map((page) => ({ ...page, id: page.id }))}
+                        setList={reorderPages}
+                      >
                         <>
                           {pages.map((page) => (
                             <PageTab
@@ -1158,9 +1162,9 @@ export const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: st
                             </button>
                           </PageListItem>
                         </>
-                      ) : null}
-                    </>
-                  </ReactSortable>
+                      </ReactSortable>
+                    ) : null}
+                  </>
                 ) : null}
                 {isDesktop ? (
                   <>
