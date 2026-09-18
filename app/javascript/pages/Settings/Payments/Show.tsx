@@ -1172,11 +1172,13 @@ export default function PaymentsPage() {
             : {}),
         },
         payouts_paused_by_user: data.payouts_paused_by_user,
-        // A stored threshold that predates a higher platform minimum is posted back on every save;
-        // the server would reject it, so raise it to the minimum. A value the seller typed too low
-        // never reaches here (the save button is disabled by payoutThresholdError).
+        // A stored threshold below a raised platform minimum makes the server reject every save, so
+        // raise the untouched value. An edited value is never substituted here: the save button
+        // blocks a below-minimum edit, and the server guard covers handlers that bypass the button.
         payout_threshold_cents:
-          data.payout_threshold_cents != null && data.payout_threshold_cents < props.minimum_payout_threshold_cents
+          data.payout_threshold_cents != null &&
+          data.payout_threshold_cents === props.payout_threshold_cents &&
+          data.payout_threshold_cents < props.minimum_payout_threshold_cents
             ? props.minimum_payout_threshold_cents
             : data.payout_threshold_cents,
         payout_frequency: data.payout_frequency,
@@ -1235,12 +1237,9 @@ export default function PaymentsPage() {
     }
   }, [isPayoutMethodChangeConfirmed]);
 
-  // A threshold stored before the platform minimum rose sits below it forever: the form only
-  // replaces it when the field is emptied, and `minimum_payout_amount_cents` already takes the
-  // max on the server, so the stale value changes nothing about payouts. Flag it only once the
-  // seller edits the field to something too low; otherwise it would block every unrelated save
-  // (the Daily schedule, a bank change) with nothing but a red box. The untouched stale value is
-  // raised to the minimum on submit (see the form transform) so the server does not reject it.
+  // A threshold stored before the platform minimum rose sits below it forever and changes no
+  // payout (`minimum_payout_amount_cents` takes the max server-side), so flag it only once the
+  // seller edits the field too low — otherwise it blocks every unrelated save with a red box.
   const payoutThresholdEdited = form.data.payout_threshold_cents !== props.payout_threshold_cents;
   const payoutThresholdBelowMinimum =
     form.data.payout_threshold_cents != null && form.data.payout_threshold_cents < props.minimum_payout_threshold_cents;

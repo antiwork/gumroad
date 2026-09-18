@@ -290,8 +290,8 @@ describe("US company representative tax ID", () => {
   });
 });
 
-// A stored threshold below the platform minimum (set before the minimum rose) has no effect on
-// payouts, but until gp#2767 it disabled the save button for every unrelated change.
+// A stored threshold below the platform minimum changes no payout, so it must not flag the field
+// or block saving an unrelated change.
 describe("stale payout threshold below the platform minimum", () => {
   const stale = { payout_threshold_cents: 1000, minimum_payout_threshold_cents: 10_000 };
   const saveButton = () => screen.getByRole("button", { name: "Update settings" });
@@ -326,6 +326,21 @@ describe("stale payout threshold below the platform minimum", () => {
 
     expect(thresholdField().getAttribute("aria-invalid")).toBe("true");
     expect(saveButton().hasAttribute("disabled")).toBe(true);
+  });
+
+  it("posts the seller's typed value back unchanged when the mobile app saves past the disabled button", () => {
+    vi.stubGlobal("ReactNativeWebView", { postMessage: vi.fn() });
+    mocks.usePage.mockReturnValue({ props: { ...pageProps(), ...stale, is_mobile_app_web_view: true } });
+    render(<PaymentsPage />);
+
+    fireEvent.change(thresholdField(), { target: { value: "50" } });
+    fireEvent(window, new MessageEvent("message", { data: JSON.stringify({ type: "mobileAppSettingsSave" }) }));
+
+    expect(mocks.put).toHaveBeenCalledWith(
+      "/settings_payments",
+      expect.objectContaining({ payout_threshold_cents: 5000 }),
+    );
+    vi.unstubAllGlobals();
   });
 });
 
