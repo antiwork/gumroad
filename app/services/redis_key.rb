@@ -86,7 +86,6 @@ class RedisKey
     def seller_age_threshold_days = "seller_age_threshold_days"
     def sales_report_jobs = "sales_report_jobs"
     def acme_challenge(token) = "acme_challenge:#{token}"
-    def walks_app_attest_challenge(challenge) = "walks_app_attest_challenge:#{challenge}"
     def paypal_topup_needed = "paypal:topup_needed"
     # Set (with a TTL) by each weekly payout batch job while it runs, so the
     # deploy pipeline can ask "is a payout batch in flight right now?" instead
