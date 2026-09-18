@@ -4068,16 +4068,16 @@ describe Api::Internal::Admin::UsersController do
 
   describe "POST restore_bank_payout_rail" do
     let(:user) { create(:named_user) }
-    let(:merchant_account) { create(:merchant_account, user:) }
+    let(:merchant_account) { create(:merchant_account, user:, country: "IN") }
 
     def strip_bank_rail!(user)
-      merchant_account = user.merchant_accounts.stripe.alive.first || create(:merchant_account, user:)
+      merchant_account = user.merchant_accounts.stripe.alive.first || create(:merchant_account, user:, country: "IN")
       create(:user_compliance_info, user:, country: "India") if user.alive_user_compliance_info.nil?
       create(:indian_bank_account, user:, stripe_connect_account_id: merchant_account.charge_processor_merchant_id)
       params = ActionController::Parameters.new(payment_address: "paypal@example.com", confirm_bank_rail_loss: "true")
       expect(UpdatePayoutMethod.new(user_params: params, seller: user.reload).process).to eq(success: true)
       allow(Stripe::Account).to receive(:retrieve).with(merchant_account.charge_processor_merchant_id)
-        .and_return(Stripe::Account.construct_from(id: merchant_account.charge_processor_merchant_id, payouts_enabled: true))
+        .and_return(Stripe::Account.construct_from(id: merchant_account.charge_processor_merchant_id, country: "IN", payouts_enabled: true))
       user.reload
     end
 
@@ -4105,6 +4105,20 @@ describe Api::Internal::Admin::UsersController do
       expect(user.active_bank_account).to be_present
       expect(user.stripe_account).to eq(merchant_account)
       expect(user.payment_address).to be_blank
+    end
+
+    it "returns 422 without restoring a rail from a different country" do
+      merchant_account
+      strip_bank_rail!(user)
+      merchant_account.update!(country: "US")
+
+      post :restore_bank_payout_rail, params: { user_id: user.external_id }
+
+      expect(response).to have_http_status(:unprocessable_entity)
+      expect(response.parsed_body["message"]).to eq("The removed bank rail does not match the seller's current country")
+      expect(user.reload.active_bank_account).to be_nil
+      expect(merchant_account.reload).to be_deleted
+      expect(user.payment_address).to eq("paypal@example.com")
     end
 
     it "returns 422 when the user still has an active bank account" do

@@ -431,7 +431,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
 
         old_ach_account = @user.active_ach_account
 
-        fill_in("Address", with: "address_full_match")
+        fill_in("Address", with: "address_full_match", fill_options: { clear: :backspace })
         click_on("Update settings")
 
         expect(page).to have_alert(text: "Thanks! You're all set.")
@@ -540,7 +540,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         @user.mark_compliant!(author_id: @user.id)
         visit settings_payments_path
 
-        fill_in "Pay to the order of", with: "Gumhead Moneybags"
+        fill_in "Pay to the order of", with: "Gumhead Moneybags", fill_options: { clear: :backspace }
         click_on("Update settings")
         expect(page).to have_alert(text: "Thanks! You're all set.")
 
@@ -1233,6 +1233,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
             expect(page).to have_content "Confirm payout method change"
             expect(page).to have_content "Due to limitations with our payments provider, changing payout method from bank account to PayPal means that you will have to forfeit your existing balance of #{@user.formatted_balance_to_forfeit(:payout_method_change)}"
             expect(page).to have_content "Please confirm that you understand by typing \"I understand\" below and clicking Confirm."
+            expect(page).to have_button("Confirm", disabled: true)
             fill_in "I understand", with: "I understand"
             click_on "Confirm"
           end
@@ -4359,7 +4360,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
 
         visit settings_payments_path
 
-        fill_in("First name", with: "newfirst")
+        fill_in("First name", with: "newfirst", fill_options: { clear: :backspace })
         click_on("Update settings")
 
         expect(page).to have_alert(text: "Thanks! You're all set.")
@@ -4383,7 +4384,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
 
         visit settings_payments_path
 
-        fill_in("First name", with: "newfirst")
+        fill_in("First name", with: "newfirst", fill_options: { clear: :backspace })
         click_on("Update settings")
 
         expect(page).to have_alert(text: "Thanks! You're all set.")
@@ -6846,7 +6847,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         visit settings_payments_path
 
         field = find_field("Minimum payout threshold", with: "100")
-        field.fill_in(with: "50")
+        field.fill_in(with: "50", fill_options: { clear: :backspace })
 
         expect(field["aria-invalid"]).to eq("true")
         expect(page).to have_text("The minimum payout threshold for United States is $100.")
@@ -6874,7 +6875,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
           visit settings_payments_path
 
           field = find_field("Minimum payout threshold", with: "100")
-          field.fill_in(with: "50")
+          field.fill_in(with: "50", fill_options: { clear: :backspace })
 
           expect(field["aria-invalid"]).to eq("true")
           expect(page).to have_text("The minimum payout threshold for South Korea is $100.")

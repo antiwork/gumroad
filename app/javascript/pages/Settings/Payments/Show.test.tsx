@@ -596,12 +596,13 @@ describe("server error naming a field", () => {
 describe("switching to PayPal where the bank rail cannot be re-created", () => {
   // An India seller with a live bank account: the save deletes it and Stripe refuses a new IND
   // account, so the confirmation must fire even with nothing forfeitable.
-  const renderIndiaSeller = (paypal_switch_loses_bank_rail: boolean) => {
+  const renderIndiaSeller = (paypal_switch_loses_bank_rail: boolean, balance: string | null = null) => {
     mocks.usePage.mockReturnValue({
       props: {
         ...pageProps({ country_code: "IN", payout_currency: "inr" }, { country: "IN" }),
         countries: { IN: "India" },
         paypal_switch_loses_bank_rail,
+        formatted_balance_to_forfeit_on_payout_method_change: balance,
         paypal_address: null,
         bank_account_details: {
           show_bank_account: true,
@@ -633,6 +634,25 @@ describe("switching to PayPal where the bank rail cannot be re-created", () => {
     expect(confirm.hasAttribute("disabled")).toBe(false);
     fireEvent.click(confirm);
 
+    expect(mocks.put).toHaveBeenCalledWith(
+      "/settings_payments",
+      expect.objectContaining({ payment_address: "paypal@example.com", confirm_bank_rail_loss: true }),
+    );
+  });
+
+  it("shows both losses and requires typed confirmation when a balance is also forfeited", () => {
+    renderIndiaSeller(true, "$123.45");
+    save();
+
+    expect(screen.getByText(/forfeit your existing balance of/u)).toBeTruthy();
+    expect(screen.getByText("$123.45")).toBeTruthy();
+    expect(screen.getByText(/you will not be able to switch back/u)).toBeTruthy();
+    const confirm = screen.getByRole("button", { name: "Confirm" });
+    fireEvent.change(screen.getByLabelText('Type "I understand" to confirm'), { target: { value: "understand" } });
+    expect(confirm.hasAttribute("disabled")).toBe(true);
+    expect(mocks.put).not.toHaveBeenCalled();
+    fireEvent.change(screen.getByLabelText('Type "I understand" to confirm'), { target: { value: "I understand" } });
+    fireEvent.click(confirm);
     expect(mocks.put).toHaveBeenCalledWith(
       "/settings_payments",
       expect.objectContaining({ payment_address: "paypal@example.com", confirm_bank_rail_loss: true }),

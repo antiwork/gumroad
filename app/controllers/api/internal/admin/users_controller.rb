@@ -605,6 +605,8 @@ class Api::Internal::Admin::UsersController < Api::Internal::Admin::BaseControll
       result = RestoreBankPayoutRail.new(user:).process
       unless result.success
         message = case result.error
+                  when :payout_rail_changed then "Payout details changed during the restore; please try again"
+                  when :incompatible_bank_rail then "The removed bank rail does not match the seller's current country"
                   when :rail_recreatable then "This seller can add a bank account themselves; no restore needed"
                   when :bank_account_already_active then "User already has an active bank account"
                   when :no_deleted_bank_account then "No removed bank account to restore"
