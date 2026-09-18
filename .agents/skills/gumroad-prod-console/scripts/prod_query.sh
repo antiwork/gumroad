@@ -72,7 +72,7 @@ file_mtime() {
 }
 
 # No-op docker exec on an instance, through the bastion — the same operation the real query
-# uses. Output is uninteresting on success; the caller classifies failures from $3.
+# uses. The caller classifies failures from $3.
 probe_instance() {
   local ip="$1" timeout_s="$2" err="${3:-/dev/null}"
   LC_PAPER="$ip" probe_timeout "$timeout_s" ssh -o SendEnv=LC_PAPER -o StrictHostKeyChecking=accept-new "${SSH_MUX_OPTS[@]}" \
@@ -81,17 +81,16 @@ probe_instance() {
     >/dev/null 2>"$err"
 }
 
-# A changed-key complaint naming this address means the bastion's recorded key for it is
-# wrong. The address has to be named: the bastion can print the same banner about an earlier
-# hop, which says nothing about this candidate.
+# A changed-key complaint naming this address means the bastion's recorded key for it is wrong;
+# requiring the address keeps an earlier hop's banner from condemning this candidate.
 probe_saw_stale_key() {
   grep -qE "REMOTE HOST IDENTIFICATION HAS CHANGED|Host key verification failed" "$2" \
     && grep -qF "$1" "$2"
 }
 
-# Remove stale known_hosts entries for recycled instances. Must run ON the bastion, because
-# LC_PAPER is what the forced command jumps to: an instance address runs the removal there,
-# where there is no known_hosts to fix, and ssh-keygen still exits 0 — a silent no-op.
+# Remove stale known_hosts entries for recycled instances. Must run ON the bastion: LC_PAPER is
+# what the forced command jumps to, so an instance address runs the removal over there, where
+# ssh-keygen exits 0 against a file that does not exist.
 clear_stale_bastion_host_keys() {
   local ips="$1" timeout_s="$2" keygen_cmd="" stale_ip
   [ -n "${ips// /}" ] || return 0
@@ -219,27 +218,22 @@ if [ -n "$need_discovery" ]; then
     [ "$remaining" -gt 20 ] && remaining=20 || true
     if probe_instance "$ip" "$remaining" "$probe_err"; then
       instance_ip="$ip"
-      # The bastion's forced command exits 0 even when its own hop refused, so a probe can
-      # "pass" on an instance whose key the bastion still has wrong (measured: changed-key
-      # banner on stderr, exit 0, no "Host key verification failed"). Record it either way —
-      # the bastion only re-learns a key after an explicit removal.
+      # The forced command exits 0 even when its own hop refused, so a probe can "pass" on an
+      # instance whose key the bastion still has wrong. Record it either way — the bastion only
+      # re-learns a key after an explicit removal.
       if probe_saw_stale_key "$ip" "$probe_err"; then
         stale_key_ips="$stale_key_ips $ip"
         >&2 echo "Instance $ip answered, but the bastion's host key for it is outdated; will clear it."
       fi
       break
     fi
-    # A probe can fail for many reasons — the container is still starting, the host is
-    # hung, the network blipped, we timed out. In all of those the bastion's recorded host
-    # key is still correct and deleting it would throw away a real protection against
-    # someone impersonating that address. Only treat the key as stale when SSH itself says
-    # so, AND the complaint names the address we just probed.
+    # Only treat the key as stale when SSH itself says so AND names the address we probed: other
+    # probe failures (container starting, hung host, timeout) leave a CORRECT key in place, and
+    # deleting it would throw away real protection against an impersonated address.
     if probe_saw_stale_key "$ip" "$probe_err"; then
       stale_key_ips="$stale_key_ips $ip"
-      # The bastion's onward hop usually just WARNS about a changed key and connects anyway
-      # (recycled EC2 IPs make that the steady state, not an anomaly). Only an outright
-      # refusal means the key caused the failure; after a warn-and-proceed banner the probe
-      # failed for some other reason, so that candidate still deserves the patient retry.
+      # Recycled addresses make a warn-and-proceed banner the steady state, so only an outright
+      # refusal means the key caused the failure; anything else still deserves the patient retry.
       if grep -qF "Host key verification failed" "$probe_err"; then
         >&2 echo "Instance $ip refused: bastion holds an outdated host key, trying next..."
       else
@@ -295,21 +289,11 @@ if [ -n "$need_discovery" ]; then
     fi
   fi
 
-  # EC2 recycles private IPs, so the BASTION's known_hosts accumulates stale keys and refuses
-  # (or warns, then refuses later) on the onward hop with "REMOTE HOST IDENTIFICATION HAS
-  # CHANGED" / "Offending ECDSA key". From out here that is easy to mistake for an unhealthy
-  # instance, and it silently shrinks the usable pool every time instances are replaced.
-  #
-  # Clean up now that a working hop is known. This does not rescue the current run (the
-  # instance we are using already works), it stops the pool from silently decaying for the
-  # next one. All removals go in ONE hop, however many candidates were stale, so this costs at
-  # most a single connection instead of one per address.
-  #
-  # Safe: removing a key for a recycled internal IP means the next connect re-learns it via
-  # accept-new, exactly like a first-ever connect. ssh-keygen -R is a no-op with no entry.
+  # The bastion's known_hosts accumulates a wrong key for every recycled address, and the pool
+  # silently shrinks as it does. Clear them now that a working hop is known; all removals go in
+  # ONE hop. Safe: the next connect re-learns via accept-new, and -R is a no-op without an entry.
   if [ -n "$instance_ip" ] && [ -n "${stale_key_ips// /}" ]; then
-    # Also inside the selection budget: this is housekeeping for the NEXT run, so it must
-    # never be the reason this one times out before its query starts.
+    # Inside the selection budget: housekeeping for the NEXT run must not starve this one's query.
     remaining=$(( select_deadline - $(date +%s) ))
     [ "$remaining" -gt 20 ] && remaining=20 || true
     if [ "$remaining" -lt 5 ]; then
@@ -321,10 +305,8 @@ if [ -n "$need_discovery" ]; then
     fi
   fi
 
-  # Nothing in the pool answered. If those refusals were about outdated bastion host keys,
-  # this is the one case clearing can rescue IN THIS RUN — and the case where deferring to
-  # the next run is useless, because a whole-cluster recycle rotates every address at once, so
-  # every candidate is stale. Clear them and re-probe once.
+  # Nothing answered, and the refusals were stale keys: clearing can rescue THIS run, and
+  # deferring to the next one would not — a whole-cluster recycle rotates every address at once.
   if [ -z "$instance_ip" ] && [ -n "${stale_key_ips// /}" ]; then
     remaining=$(( select_deadline - $(date +%s) ))
     if [ "$remaining" -lt 5 ]; then
