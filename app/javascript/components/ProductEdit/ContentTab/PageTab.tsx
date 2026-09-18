@@ -100,8 +100,9 @@ export const PageTab = ({
     >
       {!disabled ? (
         <Move
-          // SortableJS starts a drag from `[aria-grabbed]` only, and a `visibility: hidden`
-          // element is not a touch target — so a coarse pointer needs it visible without hover.
+          // SortableJS only starts a drag from `[aria-grabbed]`, and a `visibility: hidden`
+          // element is not a touch target at all — so on a coarse pointer the handle has to
+          // be visible without hover, or the drag is unstartable on a phone.
           className="invisible absolute left-0 size-5 cursor-move text-muted group-hover/tab:visible pointer-coarse:visible"
           aria-grabbed={dragging}
         />
