@@ -53,9 +53,9 @@ describe Marketing::Channels::X do
 
     expect do
       described_class.new(action).call
-    end.to change { SendMarketingXReconnectEmailJob.jobs.size }.by(1)
+    end.to change { EnqueueMarketingXReconnectEmailJob.jobs.size }.by(1)
 
-    expect(SendMarketingXReconnectEmailJob.jobs.last["args"]).to eq([seller.id])
+    expect(EnqueueMarketingXReconnectEmailJob.jobs.last["args"]).to eq([seller.id])
   end
 
   # Keyed on the seller, so a second blocked product cannot mail them a second time.
@@ -69,7 +69,7 @@ describe Marketing::Channels::X do
     described_class.new(action).call
     described_class.new(other).call
 
-    expect(SendMarketingXReconnectEmailJob.jobs.map { _1["args"] }.uniq).to eq([[seller.id]])
+    expect(EnqueueMarketingXReconnectEmailJob.jobs.map { _1["args"] }.uniq).to eq([[seller.id]])
   end
 
   it "queues no reconnect email when X refuses the request outright" do
@@ -78,7 +78,7 @@ describe Marketing::Channels::X do
 
     expect do
       described_class.new(action).call
-    end.not_to change { SendMarketingXReconnectEmailJob.jobs.size }
+    end.not_to change { EnqueueMarketingXReconnectEmailJob.jobs.size }
   end
 
   it "fails without calling X when the seller has no user token" do

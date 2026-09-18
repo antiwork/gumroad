@@ -36,6 +36,7 @@ describe SendMarketingXReconnectEmailJob, "with uniqueness enabled" do
   it "deduplicates queued and in-flight seller enqueues and covers a product that fails during delivery" do
     @actions.last.update!(error_code: nil)
     Onetime::NotifyMarketingXReconnectBacklog.process
+    EnqueueMarketingXReconnectEmailJob.drain
     expect(described_class.jobs.sole["args"]).to eq([@seller.id])
     expect(described_class.perform_async(@seller.id)).to be_nil
     job = described_class.jobs.sole
@@ -65,7 +66,8 @@ describe SendMarketingXReconnectEmailJob, "with uniqueness enabled" do
     expect(ActionMailer::Base.deliveries.size).to eq(1)
     expect(@actions.map { _1.reload.reconnect_notified_at }).to all(be_present)
     expect(Sidekiq.redis { |redis| redis.exists(key.locked) }).to eq(0)
-    expect(described_class.perform_async(@seller.id)).to be_present
+    EnqueueMarketingXReconnectEmailJob.drain
+    expect(described_class.perform_async(@seller.id)).to be_nil
     expect { described_class.drain }.not_to change { ActionMailer::Base.deliveries.size }
   ensure
     proceed << true if proceed
