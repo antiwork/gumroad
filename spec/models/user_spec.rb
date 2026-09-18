@@ -1171,6 +1171,51 @@ describe User, :vcr do
           end
         end
       end
+
+      context "when the user is a Gumroad-team member" do
+        let(:gumroad_account) { create(:user, email: ApplicationMailer::ADMIN_EMAIL) }
+        let(:staff_user) { create(:admin_user) }
+
+        it "clears the flag when the member closes their own account" do
+          create(:team_membership, user: staff_user, seller: gumroad_account)
+
+          expect(staff_user.deactivate!).to eq(true)
+
+          expect(staff_user.reload).not_to be_is_team_member
+        end
+
+        it "clears the flag of the members when the Gumroad account itself is closed" do
+          create(:team_membership, user: staff_user, seller: gumroad_account)
+          gumroad_account.update!(is_team_member: true)
+
+          expect(gumroad_account.deactivate!).to eq(true)
+
+          expect(gumroad_account.reload).not_to be_is_team_member
+          expect(staff_user.reload).not_to be_is_team_member
+        end
+
+        it "leaves the flag set when the closed account is not the Gumroad account" do
+          create(:team_membership, user: staff_user, seller: @user)
+
+          expect(@user.deactivate!).to eq(true)
+
+          expect(staff_user.reload).to be_is_team_member
+        end
+
+        it "closes the account anyway when a member's after_update callback raises" do
+          create(:team_membership, user: staff_user, seller: gumroad_account)
+          # Any `flags` change fires clear_products_cache, which reaches for a cache/queue that can
+          # be down; a raise there must not roll back the closure transaction.
+          allow_any_instance_of(User).to receive(:clear_products_cache).and_wrap_original do |original, *args|
+            raise "cache backend down" if original.receiver.id == staff_user.id
+            original.call(*args)
+          end
+
+          expect(gumroad_account.deactivate!).to eq(true)
+
+          expect(staff_user.reload).not_to be_is_team_member
+        end
+      end
     end
 
     context "when user cannot be deactivated" do
