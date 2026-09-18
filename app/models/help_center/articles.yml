@@ -508,7 +508,7 @@
 - id: 292
   slug: "292-account-login-security"
   title: "Account login security"
-  description: "In this article reCAPTCHA Two-Factor Authentication (2FA) Not receiving your token Disable 2FA You can login to Gumroad here with an Email address, Twitter, or "
+  description: "In this article reCAPTCHA Two-Factor Authentication (2FA) Not receiving your token Disable 2FA You can login to Gumroad here with an Email address, a Google account, an X (Twitter) account, or a "
   category_id: <%= HelpCenter::Category::OPEN_AN_ACCOUNT.id %>
 - id: 295
   slug: "295-external-integration"
