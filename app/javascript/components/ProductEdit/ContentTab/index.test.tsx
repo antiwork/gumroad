@@ -2,7 +2,7 @@
 import { cleanup, render, act, fireEvent } from "@testing-library/react";
 import type { Editor } from "@tiptap/core";
 import * as React from "react";
-import { afterEach, expect, it, vi } from "vitest";
+import { afterEach, assert, expect, it, vi } from "vitest";
 
 import { PICKED_FILE_SNAPSHOT_LIMIT_BYTES } from "$app/utils/snapshotPickedFile";
 
@@ -87,13 +87,8 @@ vi.mock("$app/components/ProductEdit/ContentTab/EpubNudge", () => ({ EpubNudge: 
 const sortable = vi.hoisted(() => ({ echoList: false }));
 vi.mock("react-sortablejs", () => ({
   default: ({ children }: { children: React.ReactNode }) => children,
-  // Production Sortable writes `list` back through setList during layout.
-  // Off by default so other tests keep a silent stub; the switch-overwrite
-  // case turns it on to reproduce that write.
-  //
-  // The `tag` element is rendered because the real Sortable puts these children
-  // inside it, and a test has to be able to see which rows are in that container
-  // (react-sortablejs indexes `list` by the container's raw child index).
+  // Echo layout writes only in the switch-overwrite regression.
+  // Preserve the container because Sortable uses raw child indices.
   ReactSortable: ({
     children,
     list,
@@ -108,7 +103,7 @@ vi.mock("react-sortablejs", () => ({
     React.useLayoutEffect(() => {
       if (sortable.echoList) setList(list);
     }, [list, setList]);
-    return <Tag>{children}</Tag>;
+    return <Tag data-testid="sortable">{children}</Tag>;
   },
 }));
 const alerts = vi.hoisted((): { message: string; level: string }[] => []);
@@ -798,12 +793,6 @@ it("ignores a second toolbar pick while a mixed pick is still snapshotting", asy
   }
 });
 
-// A phone shows the page list behind a "Table of contents" summary row, and that row
-// used to render INSIDE the ReactSortable. react-sortablejs reorders `list` — which
-// holds only the pages — by SortableJS's RAW child index, so one extra child shifted
-// every page index by one: a drop resolved to no page, the app threw
-// "Cannot read properties of undefined (reading 'id')", and the order snapped back.
-// See https://github.com/antiwork/gumroad-private/issues/2760
 it("keeps the mobile page-list summary row out of the Sortable's container", async () => {
   viewport.isDesktop = false;
   const product = buildProduct([
@@ -814,20 +803,18 @@ it("keeps the mobile page-list summary row out of the Sortable's container", asy
   render(<ContentTabContent selectedVariantId="variant-paid" />);
   await act(async () => {});
 
-  // Collapsed on a phone the Sortable has nothing to render, so no container exists.
   const summaryButton = [...document.querySelectorAll("button")].find((button) =>
     button.textContent?.includes("Table of contents:"),
   );
-  expect(summaryButton).toBeDefined();
-  expect(document.querySelector('[role="tablist"]')).toBeNull();
+  assert(summaryButton, "The mobile page-list summary is rendered");
+  expect(document.querySelector('[data-testid="sortable"]')).toBeNull();
 
   await act(async () => {
-    fireEvent.click(summaryButton!);
+    fireEvent.click(summaryButton);
   });
 
-  const list = document.querySelector('[role="tablist"]');
+  const list = document.querySelector('[data-testid="sortable"]');
   expect(list).not.toBeNull();
-  // The pin: the summary row is still rendered, just not as a child of the sortable.
   expect(document.body.textContent).toContain("Table of contents:");
   expect(list?.textContent).not.toContain("Table of contents:");
   expect(list?.querySelectorAll('[role="tab"]')).toHaveLength(2);

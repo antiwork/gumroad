@@ -216,6 +216,7 @@ export const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: st
   const uid = React.useId();
   const scrollContainerRef = React.useRef<HTMLDivElement>(null);
   const isDesktop = useIsAboveBreakpoint("lg");
+  const PageListContainer = isDesktop ? React.Fragment : PageList;
   const imageSettings = useImageUploadSettings();
 
   const selectedVariant = product.has_same_rich_content_for_all_variants
@@ -1071,13 +1072,10 @@ export const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: st
             !isDesktop && !showPageList ? null : (
               <div className="flex flex-col gap-4">
                 {showPageList ? (
-                  <>
-                    {/* The mobile summary row stays OUT of the Sortable: react-sortablejs maps
-                        SortableJS's raw child indices onto `list`, which holds only the pages, so
-                        one extra child shifts every index and a drop resolves to no page at all.
-                        Desktop renders no summary row, so its markup is unchanged. */}
+                  <PageListContainer>
+                    {/* Keep the summary outside Sortable so its raw child indices match the pages. */}
                     {isDesktop ? null : (
-                      <PageListItem asChild className="tailwind-override rounded-sm border bg-background text-left">
+                      <PageListItem asChild className="tailwind-override text-left">
                         <button className="cursor-pointer all-unset" onClick={() => setPagesExpanded(!pagesExpanded)}>
                           <span className="flex-1">
                             <strong>Table of contents:</strong> {titleWithFallback(selectedPage?.title)}
@@ -1091,7 +1089,8 @@ export const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: st
                       <ReactSortable
                         draggable="[role=tab]"
                         handle="[aria-grabbed]"
-                        tag={PageList}
+                        tag={isDesktop ? PageList : "div"}
+                        className={isDesktop ? undefined : "grid border-t [&>:first-child]:rounded-t-none"}
                         list={pages.map((page) => ({ ...page, id: page.id }))}
                         setList={reorderPages}
                       >
@@ -1164,7 +1163,7 @@ export const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: st
                         </>
                       </ReactSortable>
                     ) : null}
-                  </>
+                  </PageListContainer>
                 ) : null}
                 {isDesktop ? (
                   <>
