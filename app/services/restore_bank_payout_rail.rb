@@ -20,9 +20,11 @@ class RestoreBankPayoutRail
 
     result = nil
     user.with_lock do
-      # Re-read under the lock: a bank-account save or a concurrent restore can land between the
-      # checks above and here, and reviving on top of it would leave two live bank accounts.
+      # Re-read under the lock: a bank-account save, a concurrent restore, or a country change can
+      # land between the checks above and here. Reviving on top of the first two leaves two live
+      # bank accounts; against the third it restores the rail the country change just removed.
       _, _, error = locate(bank_account:, merchant_account:)
+      error ||= :rail_recreatable if user.can_create_bank_payout_rail?
       if error
         result = Result.new(success: false, error:)
       else

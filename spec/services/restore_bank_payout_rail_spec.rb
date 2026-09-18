@@ -111,4 +111,20 @@ describe RestoreBankPayoutRail do
     expect(user.bank_accounts.alive.count).to eq(1)
     expect(merchant_account.reload.deleted_at).to be_present
   end
+
+  it "does not revive when the seller becomes able to re-create the rail while it waited for the lock" do
+    switch_to_paypal!
+    service = described_class.new(user:)
+    allow(user).to receive(:with_lock).and_wrap_original do |original, &block|
+      compliance_info.mark_deleted!
+      create(:user_compliance_info, user:, country: "Egypt")
+      original.call(&block)
+    end
+
+    result = service.process
+
+    expect(result.error).to eq(:rail_recreatable)
+    expect(user.reload.active_bank_account).to be_nil
+    expect(merchant_account.reload.deleted_at).to be_present
+  end
 end

@@ -1222,7 +1222,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
           within_modal do
             expect(page).to have_content "Confirm payout method change"
             expect(page).to have_content "Due to limitations with our payments provider, changing payout method from bank account to PayPal means that you will have to forfeit your existing balance of #{@user.formatted_balance_to_forfeit(:payout_method_change)}"
-            expect(page).to have_content "Please confirm that you're okay forfeiting your balance by typing \"I understand\" below and clicking Confirm."
+            expect(page).to have_content "Please confirm that you understand by typing \"I understand\" below and clicking Confirm."
             click_on "Cancel"
           end
 
@@ -1232,7 +1232,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
           within_modal do
             expect(page).to have_content "Confirm payout method change"
             expect(page).to have_content "Due to limitations with our payments provider, changing payout method from bank account to PayPal means that you will have to forfeit your existing balance of #{@user.formatted_balance_to_forfeit(:payout_method_change)}"
-            expect(page).to have_content "Please confirm that you're okay forfeiting your balance by typing \"I understand\" below and clicking Confirm."
+            expect(page).to have_content "Please confirm that you understand by typing \"I understand\" below and clicking Confirm."
             fill_in "I understand", with: "I understand"
             click_on "Confirm"
           end
