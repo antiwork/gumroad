@@ -102,6 +102,23 @@ describe User::Team do
     end
   end
 
+  describe "#find_user_membership_for_seller!" do
+    it "denies access to a deleted seller and preserves membership access after restoration" do
+      membership = create(:team_membership, user:, seller: other_seller)
+      original_attributes = membership.attributes
+      other_seller.deactivate!
+
+      expect(User.find(user.id).member_of?(other_seller)).to be(false)
+      expect { User.find(user.id).find_user_membership_for_seller!(other_seller) }.to raise_error(ActiveRecord::RecordNotFound)
+      expect(membership.reload.attributes).to eq(original_attributes)
+
+      other_seller.reactivate!
+
+      expect(User.find(user.id).find_user_membership_for_seller!(other_seller)).to eq(membership)
+      expect(User.find(user.id).role_admin_for?(other_seller)).to be(true)
+    end
+  end
+
   describe "#user_memberships" do
     context "with no team_membership records" do
       it "returns empty collection" do

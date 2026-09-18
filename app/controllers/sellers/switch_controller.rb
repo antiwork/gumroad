@@ -16,6 +16,7 @@ class Sellers::SwitchController < Sellers::BaseController
     def find_team_membership!(external_team_membership_id)
       logged_in_user.user_memberships
         .not_deleted
+        .joins(:seller).merge(User.alive)
         .find_by_external_id!(external_team_membership_id)
     end
 

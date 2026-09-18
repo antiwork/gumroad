@@ -44,6 +44,7 @@ module User::Team
     # Returns an array to ensure this is only queried once per request
     @_user_memberships_not_deleted_and_ordered ||= user_memberships
       .not_deleted
+      .joins(:seller).merge(User.alive)
       .order(last_accessed_at: :desc, created_at: :desc)
       .to_a
   end

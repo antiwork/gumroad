@@ -47,6 +47,27 @@ describe Sellers::SwitchController do
           expect(response).to have_http_status(:no_content)
         end
       end
+
+      context "with deleted seller" do
+        it "preserves the current account and membership until the seller is restored" do
+          seller.deactivate!
+          cookies.encrypted[:current_seller_id] = user.id
+          original_attributes = team_membership.reload.attributes
+
+          post :create, params: { team_membership_id: team_membership.external_id.to_s }
+
+          expect(response).to have_http_status(:no_content)
+          expect(cookies.encrypted[:current_seller_id]).to eq(user.id)
+          expect(team_membership.reload.attributes).to eq(original_attributes)
+
+          seller.reactivate!
+          post :create, params: { team_membership_id: team_membership.external_id.to_s }
+
+          expect(response).to have_http_status(:no_content)
+          expect(cookies.encrypted[:current_seller_id]).to eq(seller.id)
+          expect(team_membership.reload.last_accessed_at).to be_within(2.seconds).of(Time.current)
+        end
+      end
     end
   end
 end
