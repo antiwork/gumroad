@@ -85,7 +85,7 @@ class ProductReviewsController < ApplicationController
       review = purchase.post_review(
         rating: set_params[:rating].to_i,
         message: set_params[:message],
-        anonymous: ActiveModel::Type::Boolean.new.cast(set_params[:anonymous]) || false,
+        anonymous: submitted_anonymous,
         video_options: set_params[:video_options] || {}
       )
 
@@ -97,6 +97,14 @@ class ProductReviewsController < ApplicationController
       render json: { success: false, message: e.message }
     rescue StandardError
       render json: { success: false, message: "Sorry, something went wrong." }
+    end
+
+    # A client that does not know about the identity choice omits the parameter. Casting that to
+    # false would republish the name of a buyer who had chosen Anonymous, so absent means "leave it".
+    def submitted_anonymous
+      return :unchanged unless set_params.key?(:anonymous)
+
+      ActiveModel::Type::Boolean.new.cast(set_params[:anonymous]) || false
     end
 
     # True when the request leaves the rating, the message and the video exactly as they are, which

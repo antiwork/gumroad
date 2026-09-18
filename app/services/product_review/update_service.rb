@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 class ProductReview::UpdateService
-  def initialize(product_review, rating:, message:, anonymous: false, video_options: {})
+  def initialize(product_review, rating:, message:, anonymous: :unchanged, video_options: {})
     @product_review = product_review
     @anonymous = anonymous
     @rating = rating
@@ -24,7 +24,10 @@ class ProductReview::UpdateService
 
   private
     def update_rating_and_message
-      @product_review.update!(rating: @rating, message: @message, anonymous: @anonymous)
+      attributes = { rating: @rating, message: @message }
+      # :unchanged keeps whatever the buyer already chose, including "no choice made" on a new review.
+      attributes[:anonymous] = @anonymous unless @anonymous == :unchanged
+      @product_review.update!(**attributes)
     end
 
     def update_video

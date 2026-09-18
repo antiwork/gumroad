@@ -89,6 +89,28 @@ describe ProductReviewsController do
         expect(review.rater_name).to eq("Anonymous")
       end
 
+      # A client deployed before the identity choice existed omits the parameter. Casting that to
+      # false would republish the name of a buyer who had chosen Anonymous.
+      it "keeps the buyer Anonymous when a request omits the choice" do
+        purchaser.update!(name: nil, username: "yacobyte")
+        put :set, params: valid_params.merge(anonymous: true)
+        review = purchase.reload.product_review
+        expect(review.rater_name).to eq("Anonymous")
+
+        put :set, params: valid_params.merge(rating: 5)
+
+        expect(response.parsed_body["success"]).to eq(true)
+        expect(review.reload.rating).to eq(5)
+        expect(review.anonymous).to eq(true)
+        expect(review.rater_name).to eq("Anonymous")
+      end
+
+      it "leaves a new review with no choice made when the request omits it" do
+        put :set, params: valid_params
+
+        expect(purchase.reload.product_review.anonymous).to be_nil
+      end
+
       it "freezes the message once the purchase is ineligible" do
         put :set, params: valid_params
         review = purchase.reload.product_review
