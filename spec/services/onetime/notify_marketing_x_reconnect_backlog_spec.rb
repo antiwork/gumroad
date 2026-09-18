@@ -14,11 +14,11 @@ describe Onetime::NotifyMarketingXReconnectBacklog do
 
   let(:seller) { create(:user, twitter_handle: "edgar", twitter_oauth_token: "tok", twitter_oauth_secret: "sec") }
 
-  it "enqueues one notification per stuck action" do
-    action = stuck_action(seller:)
+  it "enqueues one notification per stuck seller" do
+    stuck_action(seller:)
 
     expect { described_class.process }.to change { SendMarketingXReconnectEmailJob.jobs.size }.by(1)
-    expect(SendMarketingXReconnectEmailJob.jobs.last["args"]).to eq([action.id])
+    expect(SendMarketingXReconnectEmailJob.jobs.last["args"]).to eq([seller.id])
   end
 
   it "mails a seller once even when several of their products are stuck" do
@@ -59,17 +59,18 @@ describe Onetime::NotifyMarketingXReconnectBacklog do
     expect { described_class.process }.not_to change { SendMarketingXReconnectEmailJob.jobs.size }
   end
 
+  # The queued job is keyed to the seller, so it still covers the sibling and no second
+  # pass is needed to reach them.
   it "keeps siblings recoverable when the selected action is deleted" do
     first = stuck_action(seller:)
     second = stuck_action(seller:)
     described_class.process
     first.destroy!
-    SendMarketingXReconnectEmailJob.drain
-    described_class.process
 
     expect do
       perform_enqueued_jobs { SendMarketingXReconnectEmailJob.drain }
     end.to change { ActionMailer::Base.deliveries.size }.by(1)
+
     expect(second.reload.reconnect_notified_at).to be_present
   end
 
@@ -131,7 +132,7 @@ describe Onetime::NotifyMarketingXReconnectBacklog do
     described_class.process
 
     expect(other_action.reload.reconnect_notified_at).to be_nil
-    expect(SendMarketingXReconnectEmailJob.jobs.map { _1["args"] }).to include([other_action.id])
+    expect(SendMarketingXReconnectEmailJob.jobs.map { _1["args"] }).to include([other_seller.id])
   end
 
   it "skips a seller already notified" do

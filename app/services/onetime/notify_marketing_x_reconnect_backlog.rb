@@ -33,7 +33,7 @@ class Onetime::NotifyMarketingXReconnectBacklog
         enqueued += 1
         next if @dry_run
 
-        SendMarketingXReconnectEmailJob.perform_async(action.id)
+        SendMarketingXReconnectEmailJob.perform_async(action.user_id)
       end
     end
 

@@ -2,30 +2,35 @@
 
 class SendMarketingXReconnectEmailJob
   include Sidekiq::Job
+  # Keyed on the seller, not the action: one notice covers every product they have blocked,
+  # so two blocked products must not mail them twice.
   sidekiq_options queue: :low, lock: :until_executed
 
-  # Delivery is an SMTP call, so it stays outside the lock: holding the seller's rows across
-  # it would block approve, cancel and post until SMTP times out. The claim is still made only
-  # against a real delivery, and re-reading the eligible set afterwards means a product
-  # cancelled mid-send is not consumed. Two jobs racing for one seller can double-send; the
-  # unique lock covers the common case of the same action failing twice.
-  def perform(marketing_action_id)
-    action = Marketing::Action.find_by(id: marketing_action_id)
-    return if action.nil?
+  def perform(seller_id)
+    seller = User.find_by(id: seller_id)
+    return if seller.nil?
 
-    pending_ids = action.user.with_lock { eligible_for(action).pluck(:id) }
+    pending_ids = seller.with_lock { eligible_for(seller).pluck(:id) }
     return if pending_ids.empty?
 
-    delivered = CreatorMailer.marketing_x_reconnect(marketing_action_id: pending_ids.first).deliver_now
-    return unless delivered.is_a?(Mail::Message)
+    # Delivery stays outside the lock: it is an SMTP call, and holding the seller's rows across
+    # it would block approve, cancel and post until SMTP times out. An action that leaves the
+    # scope mid-send makes the mailer decline, so fall through to the next one rather than
+    # finishing with the seller unnotified.
+    return unless pending_ids.any? { deliver(_1) }
 
-    action.user.with_lock do
-      eligible_for(action).where(id: pending_ids).update_all(reconnect_notified_at: Time.current)
+    # Re-read rather than trust the ids: a product cancelled mid-send must not be consumed.
+    seller.with_lock do
+      eligible_for(seller).where(id: pending_ids).update_all(reconnect_notified_at: Time.current)
     end
   end
 
   private
-    def eligible_for(action)
-      Marketing::Action.alive_for_reconnect_notice.where(user_id: action.user_id).order(:id)
+    def deliver(marketing_action_id)
+      CreatorMailer.marketing_x_reconnect(marketing_action_id:).deliver_now.is_a?(Mail::Message)
+    end
+
+    def eligible_for(seller)
+      Marketing::Action.alive_for_reconnect_notice.where(user_id: seller.id).order(:id)
     end
 end

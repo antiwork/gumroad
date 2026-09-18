@@ -55,7 +55,21 @@ describe Marketing::Channels::X do
       described_class.new(action).call
     end.to change { SendMarketingXReconnectEmailJob.jobs.size }.by(1)
 
-    expect(SendMarketingXReconnectEmailJob.jobs.last["args"]).to eq([action.id])
+    expect(SendMarketingXReconnectEmailJob.jobs.last["args"]).to eq([seller.id])
+  end
+
+  # Keyed on the seller, so a second blocked product cannot mail them a second time.
+  it "queues one notification for a seller with two blocked products" do
+    stub_tweets(status: 403, body: { title: "Forbidden",
+                                     type: "https://api.x.com/2/problems/oauth1-permissions",
+                                     detail: "Your client app is not configured with the appropriate " \
+                                             "oauth1 app permissions for this endpoint." })
+    other = create(:marketing_action, user: seller, link: create(:product, user: seller), copy: "Other").tap(&:approve!)
+
+    described_class.new(action).call
+    described_class.new(other).call
+
+    expect(SendMarketingXReconnectEmailJob.jobs.map { _1["args"] }.uniq).to eq([[seller.id]])
   end
 
   it "queues no reconnect email when X refuses the request outright" do
