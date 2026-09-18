@@ -593,26 +593,28 @@ class Api::Internal::Admin::UsersController < Api::Internal::Admin::BaseControll
     end
   end
 
-  # Puts back the bank rail a PayPal switch deleted, for sellers whose country cannot re-create one
-  # (India). See RestoreBankPayoutRail.
   def restore_bank_payout_rail
     user = find_internal_admin_user_for_write_or_render
     return unless user
 
     record_admin_write(action: "users.restore_bank_payout_rail", target: user) do
+      # Validated first so a bad note cannot leave a committed restore behind a 422.
+      note = build_admin_note(user, params[:note]) if params[:note].present?
+      return render_invalid_comment(note) if note&.invalid?
+
       result = RestoreBankPayoutRail.new(user:).process
       unless result.success
         message = case result.error
+                  when :rail_recreatable then "This seller can add a bank account themselves; no restore needed"
                   when :bank_account_already_active then "User already has an active bank account"
                   when :no_deleted_bank_account then "No removed bank account to restore"
                   when :no_deleted_merchant_account then "No removed Stripe account matches the bank account"
-                  when :stripe_account_unavailable then "The Stripe account no longer exists"
+                  when :not_removed_by_paypal_switch then "The bank account was not removed by a PayPal switch"
+                  when :stripe_account_unavailable then "The Stripe account is closed or cannot receive payouts"
         end
         return render json: { success: false, message: }, status: :unprocessable_entity
       end
 
-      note = build_admin_note(user, params[:note]) if params[:note].present?
-      return render_invalid_comment(note) if note&.invalid?
       note&.save!
 
       render json: internal_admin_user_success_payload(user, {

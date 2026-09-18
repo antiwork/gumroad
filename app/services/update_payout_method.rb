@@ -259,8 +259,7 @@ class UpdatePayoutMethod
       if PaypalPayoutProcessor.terminal_failure_for_payout_email?(user, payment_address)
         return { error: :paypal_address_permanently_refused }
       end
-      # The save below deletes the bank rail. Where the country cannot re-create it (India, see
-      # User#paypal_switch_loses_bank_rail?) that is permanent, so refuse unless the seller confirmed.
+      # Irreversible where the rail cannot be re-created; the seller has to confirm it.
       if user.paypal_switch_loses_bank_rail? && !bank_rail_loss_confirmed?
         return { error: :paypal_switch_loses_bank_rail }
       end

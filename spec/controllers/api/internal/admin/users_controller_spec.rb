@@ -4077,7 +4077,7 @@ describe Api::Internal::Admin::UsersController do
       params = ActionController::Parameters.new(payment_address: "paypal@example.com", confirm_bank_rail_loss: "true")
       expect(UpdatePayoutMethod.new(user_params: params, seller: user.reload).process).to eq(success: true)
       allow(Stripe::Account).to receive(:retrieve).with(merchant_account.charge_processor_merchant_id)
-        .and_return(Stripe::Account.construct_from(id: merchant_account.charge_processor_merchant_id))
+        .and_return(Stripe::Account.construct_from(id: merchant_account.charge_processor_merchant_id, payouts_enabled: true))
       user.reload
     end
 
@@ -4115,6 +4115,18 @@ describe Api::Internal::Admin::UsersController do
 
       expect(response).to have_http_status(:unprocessable_entity)
       expect(response.parsed_body["message"]).to eq("User already has an active bank account")
+    end
+
+    it "returns 422 for an invalid note without restoring anything" do
+      merchant_account
+      strip_bank_rail!(user)
+
+      post :restore_bank_payout_rail, params: { user_id: user.external_id, note: "x" * 10_001 }
+
+      expect(response).to have_http_status(:unprocessable_entity)
+      user.reload
+      expect(user.active_bank_account).to be_nil
+      expect(user.payment_address).to eq("paypal@example.com")
     end
 
     include_examples "requires user_id for user mutation", :restore_bank_payout_rail

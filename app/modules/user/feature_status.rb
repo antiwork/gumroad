@@ -63,16 +63,13 @@ class User
       active_bank_account.present? || can_create_bank_payout_rail?
     end
 
-    # Whether a bank rail can be (re)created for this seller's country. India is the exception:
-    # Stripe refuses new IND accounts (StripeMerchantAccountManager::NEW_ACCOUNT_CREATION_BLOCKED_COUNTRIES),
-    # so India sellers keep bank payouts only while their existing account survives.
+    # False for India: Stripe refuses new IND accounts, so an existing rail is the only one the
+    # seller will ever have.
     def can_create_bank_payout_rail?
       (native_payouts_supported? && !signed_up_from_india?) || signed_up_from_united_arab_emirates?
     end
 
-    # Saving a PayPal address deletes the active bank account and merchant account
-    # (UpdatePayoutMethod#process_payment_address_params). Where the rail cannot be re-created that
-    # save is a one-way door, and callers must confirm it explicitly.
+    # A PayPal save deletes the bank rail; where it cannot be re-created the save is irreversible.
     def paypal_switch_loses_bank_rail?
       active_bank_account.present? && !active_bank_account.is_a?(CardBankAccount) && !can_create_bank_payout_rail?
     end
