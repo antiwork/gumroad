@@ -88,9 +88,8 @@ class UpdateUserComplianceInfo
       @current_compliance_info = nil
       process_locked { provider_mutated = true }
     rescue Stripe::StripeError => error
-      # Nothing reached the provider, so roll back and let the retry re-send. Past the first
-      # write the revision must stay: Stripe cannot be rolled back, and the unchanged retry
-      # path never re-sends.
+      # Roll back failed reads so an identical retry resends the revision. Once a write
+      # starts, Stripe may have accepted it even if its response fails.
       raise error unless provider_mutated
 
       stripe_error = error
