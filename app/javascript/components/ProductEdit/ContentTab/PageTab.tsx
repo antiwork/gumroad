@@ -100,7 +100,8 @@ export const PageTab = ({
     >
       {!disabled ? (
         <Move
-          className="invisible absolute left-0 size-5 cursor-move text-muted group-hover/tab:visible"
+          // A hidden handle cannot receive the touch that starts a drag.
+          className="invisible absolute left-0 size-5 cursor-move text-muted group-hover/tab:visible pointer-coarse:visible"
           aria-grabbed={dragging}
         />
       ) : null}

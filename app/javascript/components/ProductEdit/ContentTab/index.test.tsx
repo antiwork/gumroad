@@ -2,7 +2,7 @@
 import { cleanup, render, act, fireEvent } from "@testing-library/react";
 import type { Editor } from "@tiptap/core";
 import * as React from "react";
-import { afterEach, expect, it, vi } from "vitest";
+import { afterEach, assert, expect, it, vi } from "vitest";
 
 import { PICKED_FILE_SNAPSHOT_LIMIT_BYTES } from "$app/utils/snapshotPickedFile";
 
@@ -78,7 +78,8 @@ vi.mock("$app/components/S3UploadConfig", async (importOriginal) => {
     useS3UploadConfig: () => ({ generateS3KeyForUpload: () => ({ s3key: "key", fileUrl: "url" }) }),
   };
 });
-vi.mock("$app/components/useIsAboveBreakpoint", () => ({ useIsAboveBreakpoint: () => true }));
+const viewport = vi.hoisted(() => ({ isDesktop: true }));
+vi.mock("$app/components/useIsAboveBreakpoint", () => ({ useIsAboveBreakpoint: () => viewport.isDesktop }));
 vi.mock("$app/components/ReviewForm", () => ({ ReviewForm: () => null }));
 vi.mock("$app/components/UpsellSelectModal", () => ({ UpsellSelectModal: () => null }));
 vi.mock("$app/components/TestimonialSelectModal", () => ({ TestimonialSelectModal: () => null }));
@@ -86,22 +87,23 @@ vi.mock("$app/components/ProductEdit/ContentTab/EpubNudge", () => ({ EpubNudge: 
 const sortable = vi.hoisted(() => ({ echoList: false }));
 vi.mock("react-sortablejs", () => ({
   default: ({ children }: { children: React.ReactNode }) => children,
-  // Production Sortable writes `list` back through setList during layout.
-  // Off by default so other tests keep a silent stub; the switch-overwrite
-  // case turns it on to reproduce that write.
+  // Echo layout writes only in the switch-overwrite regression.
+  // Preserve the container because Sortable uses raw child indices.
   ReactSortable: ({
     children,
     list,
     setList,
+    tag: Tag = "div",
   }: {
     children: React.ReactNode;
     list: unknown[];
     setList: (next: unknown[]) => void;
+    tag?: React.ElementType;
   }) => {
     React.useLayoutEffect(() => {
       if (sortable.echoList) setList(list);
     }, [list, setList]);
-    return children;
+    return <Tag data-testid="sortable">{children}</Tag>;
   },
 }));
 const alerts = vi.hoisted((): { message: string; level: string }[] => []);
@@ -115,6 +117,7 @@ afterEach(() => {
   alerts.length = 0;
   scheduledUploads.length = 0;
   sortable.echoList = false;
+  viewport.isDesktop = true;
 });
 
 const getMountedEditor = () => {
@@ -788,4 +791,31 @@ it("ignores a second toolbar pick while a mixed pick is still snapshotting", asy
   } finally {
     File.prototype.arrayBuffer = originalArrayBuffer;
   }
+});
+
+it("keeps the mobile page-list summary row out of the Sortable's container", async () => {
+  viewport.isDesktop = false;
+  const product = buildProduct([
+    { id: "variant-paid", name: "Paid", rich_content: [makePage("page-a", "PAGE A"), makePage("page-b", "PAGE B")] },
+  ]);
+  context.product = product;
+
+  render(<ContentTabContent selectedVariantId="variant-paid" />);
+  await act(async () => {});
+
+  const summaryButton = [...document.querySelectorAll("button")].find((button) =>
+    button.textContent?.includes("Table of contents:"),
+  );
+  assert(summaryButton, "The mobile page-list summary is rendered");
+  expect(document.querySelector('[data-testid="sortable"]')).toBeNull();
+
+  await act(async () => {
+    fireEvent.click(summaryButton);
+  });
+
+  const list = document.querySelector('[data-testid="sortable"]');
+  expect(list).not.toBeNull();
+  expect(document.body.textContent).toContain("Table of contents:");
+  expect(list?.textContent).not.toContain("Table of contents:");
+  expect(list?.querySelectorAll('[role="tab"]')).toHaveLength(2);
 });
