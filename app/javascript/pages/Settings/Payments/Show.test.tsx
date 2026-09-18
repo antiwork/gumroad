@@ -328,7 +328,8 @@ describe("stale payout threshold below the platform minimum", () => {
     expect(saveButton().hasAttribute("disabled")).toBe(true);
   });
 
-  it("posts the seller's typed value back unchanged when the mobile app saves past the disabled button", () => {
+  // These two paths call handleSave past the disabled button.
+  it("refuses a value typed below the minimum when the mobile app saves", () => {
     vi.stubGlobal("ReactNativeWebView", { postMessage: vi.fn() });
     mocks.usePage.mockReturnValue({ props: { ...pageProps(), ...stale, is_mobile_app_web_view: true } });
     render(<PaymentsPage />);
@@ -336,11 +337,21 @@ describe("stale payout threshold below the platform minimum", () => {
     fireEvent.change(thresholdField(), { target: { value: "50" } });
     fireEvent(window, new MessageEvent("message", { data: JSON.stringify({ type: "mobileAppSettingsSave" }) }));
 
-    expect(mocks.put).toHaveBeenCalledWith(
-      "/settings_payments",
-      expect.objectContaining({ payout_threshold_cents: 5000 }),
-    );
+    expect(mocks.put).not.toHaveBeenCalled();
     vi.unstubAllGlobals();
+  });
+
+  it("refuses a value typed below the minimum when the country change is confirmed", () => {
+    mocks.usePage.mockReturnValue({
+      props: { ...pageProps(), ...stale, countries: { US: "United States", CA: "Canada" } },
+    });
+    render(<PaymentsPage />);
+
+    fireEvent.change(thresholdField(), { target: { value: "50" } });
+    fireEvent.change(screen.getByLabelText("Country"), { target: { value: "CA" } });
+    fireEvent.click(screen.getByRole("button", { name: "Confirm" }));
+
+    expect(mocks.put).not.toHaveBeenCalled();
   });
 });
 
