@@ -86,12 +86,9 @@ class Pages::CustomHtmlWriter
         sanitization_report = check.sanitization_report
       else
         # `find` must locate exactly one place in the page so the edit is unambiguous. Matching is
-        # whitespace-tolerant (Ai::CustomHtmlSnippetMatcher): agents reading the page routinely
-        # normalize characters like non-breaking spaces to plain spaces when they echo a snippet back,
-        # and an exact-only match would make such an edit permanently unappliable
-        # (gumroad-private#1251). Zero matches means the caller is working from stale HTML; multiple
-        # matches means the snippet needs more surrounding context. Both errors say so explicitly, so
-        # the agent can correct itself in the same turn.
+        # whitespace-tolerant (Ai::CustomHtmlSnippetMatcher) because agents echo a snippet back with
+        # normalized spaces, and an exact-only match would make such an edit permanently unappliable
+        # (gumroad-private#1251).
         match = Ai::CustomHtmlSnippetMatcher.match(previous_custom_html, find)
         if match.occurrences.zero?
           edit_error = FIND_MISSING_ERROR
@@ -112,9 +109,8 @@ class Pages::CustomHtmlWriter
         end
 
         # Re-sanitize the whole spliced result, not just the inserted snippet: the replacement can
-        # change how surrounding markup parses (for example by opening a tag the snippet closes), so
-        # only the full document is safe to check. Matches replace!'s blank-to-nil normalization so an
-        # edit that empties the page unpublishes it the same way.
+        # change how surrounding markup parses, so only the full document is safe to check. Blank to
+        # nil matches replace!'s normalization, so an edit that empties the page unpublishes it too.
         result = Ai::PageSanitizer.sanitize_with_report(edited)
         pageable.custom_html = result.html.presence
         sanitization_report = result.report
