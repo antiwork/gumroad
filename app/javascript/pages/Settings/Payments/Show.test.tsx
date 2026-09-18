@@ -308,21 +308,17 @@ describe("stale payout threshold below the platform minimum", () => {
     expect(saveButton().hasAttribute("disabled")).toBe(false);
   });
 
-  it("shows the country minimum in the field, not the stale stored value", () => {
+  it("says the payouts use the minimum while the stored value sits below it", () => {
     mocks.usePage.mockReturnValue({ props: { ...pageProps(), ...stale } });
     render(<PaymentsPage />);
 
-    expect(thresholdField().value).toBe("100");
+    expect(screen.getByText(/Until you enter a higher amount, your payouts use that minimum\./u)).toBeTruthy();
   });
 
-  it("keeps the country minimum in the field after a country change reloads the props", () => {
-    mocks.usePage.mockReturnValue({ props: { ...pageProps(), ...stale } });
-    const { rerender } = render(<PaymentsPage />);
+  it("omits the note once the stored value reaches the minimum", () => {
+    renderPage();
 
-    mocks.usePage.mockReturnValue({ props: { ...pageProps({}, { country: "CA" }), ...stale } });
-    rerender(<PaymentsPage />);
-
-    expect(thresholdField().value).toBe("100");
+    expect(screen.queryByText(/Until you enter a higher amount/u)).toBeNull();
   });
 
   it("still raises the value when the seller retypes the stale amount", () => {
