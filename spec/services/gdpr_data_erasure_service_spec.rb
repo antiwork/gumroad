@@ -26,6 +26,28 @@ describe GdprDataErasureService do
       expect(user.deleted_at).to be_present
     end
 
+    context "when the erased account is on the Gumroad team" do
+      it "clears the staff flag of the account and of the members it grants the flag to" do
+        gumroad_account = create(:admin_user, email: ApplicationMailer::ADMIN_EMAIL)
+        staff_user = create(:admin_user)
+        create(:team_membership, user: staff_user, seller: gumroad_account)
+
+        described_class.new(gumroad_account, performed_by: admin).perform!
+
+        expect(gumroad_account.reload).not_to be_is_team_member
+        expect(staff_user.reload).not_to be_is_team_member
+      end
+
+      it "clears the flag of an account closed before this cleanup existed" do
+        staff_user = create(:admin_user)
+        staff_user.update!(deleted_at: Time.current)
+
+        described_class.new(staff_user, performed_by: admin).perform!
+
+        expect(staff_user.reload).not_to be_is_team_member
+      end
+    end
+
     it "nulls PII columns on all compliance info rows, including previously replaced ones" do
       # Compliance edits replace the row (Immutable), so a user accumulates soft-deleted
       # rows that still carry PII — erasure must scrub those too, not just the alive one.
