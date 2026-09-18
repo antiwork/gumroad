@@ -615,6 +615,39 @@ describe Purchase::CreateService, :vcr do
     expect(purchase.tip).to be_nil
   end
 
+  it "converts a string tip_cents on a listed-currency product at the quote's locked rate" do
+    user.update!(tipping_enabled: true)
+    eur_product = create(:product, user:, price_currency_type: Currency::EUR, price_cents: 10_00)
+    quote = signed_buyer_currency_quote(
+      seller: user,
+      product: eur_product,
+      rate: "0.8",
+      canonical_components: {
+        price_cents: 12_50,
+        tip_cents: 1_26,
+        seller_tax_cents: 0,
+        gumroad_tax_cents: 0,
+        shipping_cents: 0,
+      }
+    )
+
+    purchase, error = described_class.new(
+      product: eur_product,
+      params: {
+        purchase: base_params.fetch(:purchase).merge(perceived_price_cents: 11_00),
+        tip_cents: "100",
+        buyer_currency_quote: quote,
+        is_part_of_combined_charge: true,
+      },
+      buyer:
+    ).perform
+
+    expect(error).to be_nil
+    expect(purchase.tip.value_cents).to eq(1_00)
+    expect(purchase.reload.tip.value_usd_cents).to eq(1_26)
+    expect(purchase.total_transaction_cents).to eq(13_76)
+  end
+
   it "fails closed when repeated permalink rows cannot be bound by uid" do
     user.update!(tipping_enabled: true)
     eur_product = create(:product, user:, price_currency_type: Currency::EUR, price_cents: 10_00)

@@ -155,8 +155,8 @@ class Purchase::CreateService < Purchase::BaseService
         # tip miss the signed split by more than rounding slack and fail-closes as
         # buyer_currency_quote_invalid.
         purchase.build_tip(
-          value_cents: params[:tip_cents],
-          value_usd_cents: get_usd_cents(product.price_currency_type, params[:tip_cents], rate: locked_listed_rate)
+          value_cents: submitted_tip_cents,
+          value_usd_cents: get_usd_cents(product.price_currency_type, submitted_tip_cents, rate: locked_listed_rate)
         )
       end
       purchase.buyer_currency_quote_canonical_components = buyer_currency_quote_canonical_components_hint(purchase)
