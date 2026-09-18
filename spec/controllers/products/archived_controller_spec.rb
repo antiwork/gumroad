@@ -61,6 +61,23 @@ describe Products::ArchivedController, inertia: true do
 
         expect(response).to redirect_to(products_url)
       end
+
+      it "does not redirect when a search query is present" do
+        get :index, params: { query: "anything" }
+
+        expect(response).to have_http_status(:ok)
+        expect(inertia).to render_component("Products/Archived/Index")
+      end
+    end
+
+    context "when a search query matches no archived products" do
+      it "keeps the seller on the archived page instead of redirecting to the products page" do
+        get :index, params: { query: "no-such-archived-product" }
+
+        expect(response).to have_http_status(:ok)
+        expect(inertia).to render_component("Products/Archived/Index")
+        expect(response.body).to include("no-such-archived-product")
+      end
     end
   end
 
