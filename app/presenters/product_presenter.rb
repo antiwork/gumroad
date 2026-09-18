@@ -352,6 +352,9 @@ class ProductPresenter
       successful_sales_count: product.successful_sales_count,
       ratings: product.rating_stats,
       seller: UserPresenter.new(user:).author_byline_props,
+      # Upload keys must be namespaced by `current_seller` (what the S3 signature endpoint checks),
+      # which for a collaborator is their own account, not the owner in the byline above.
+      current_seller_external_id: (pundit_user&.seller || product.user).external_id,
       existing_files:,
       s3_url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}",
       aws_key: AWS_ACCESS_KEY,

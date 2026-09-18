@@ -93,6 +93,7 @@ type Props = {
   successful_sales_count: number;
   ratings: RatingsWithPercentages;
   seller: Seller;
+  current_seller_external_id: string;
   existing_files: ExistingFileEntry[];
   aws_key: string;
   s3_url: string;
@@ -134,6 +135,7 @@ const createContextValue = (props: Props) => ({
   successfulSalesCount: props.successful_sales_count,
   ratings: props.ratings,
   seller: props.seller,
+  currentSellerExternalId: props.current_seller_external_id,
   existingFiles: props.existing_files,
   setExistingFiles: () => {},
   awsKey: props.aws_key,

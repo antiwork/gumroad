@@ -652,6 +652,7 @@ describe ProductPresenter do
             percentages: [0, 0, 0, 0, 0],
           },
           seller: UserPresenter.new(user: product.user).author_byline_props,
+          current_seller_external_id: product.user.external_id,
           existing_files: product_files,
           s3_url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}",
           aws_key: AWS_ACCESS_KEY,
@@ -807,6 +808,24 @@ describe ProductPresenter do
         product_data = presenter.edit_props[:product]
 
         expect(product_data[:default_offer_code]).to include(discount: a_hash_including(type: "fixed", cents: 100))
+      end
+    end
+
+    context "when a collaborator opens the editor" do
+      let(:collaborator) { create(:collaborator, seller: product.user, products: [product]) }
+      let(:presenter) do
+        described_class.new(
+          product:,
+          request:,
+          pundit_user: SellerContext.new(user: collaborator.affiliate_user, seller: collaborator.affiliate_user),
+        )
+      end
+
+      it "keys uploads with the collaborator's own external id, while the byline stays the owner's" do
+        props = presenter.edit_props
+
+        expect(props[:current_seller_external_id]).to eq(collaborator.affiliate_user.external_id)
+        expect(props[:seller][:id]).to eq(product.user.external_id)
       end
     end
 
@@ -1030,6 +1049,7 @@ describe ProductPresenter do
               percentages: [0, 0, 0, 0, 100],
             },
             seller: UserPresenter.new(user: membership.user).author_byline_props,
+            current_seller_external_id: membership.user.external_id,
             existing_files: [],
             s3_url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}",
             aws_key: AWS_ACCESS_KEY,
@@ -1279,6 +1299,7 @@ describe ProductPresenter do
               percentages: [0, 0, 0, 0, 0],
             },
             seller: UserPresenter.new(user: new_product.user).author_byline_props,
+            current_seller_external_id: new_product.user.external_id,
             existing_files: [],
             s3_url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}",
             aws_key: AWS_ACCESS_KEY,

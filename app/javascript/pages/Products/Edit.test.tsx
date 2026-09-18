@@ -47,6 +47,7 @@ const makePageProps = (id: string): Record<string, unknown> => ({
   ratings: { count: 0, average: 0, percentages: [0, 0, 0, 0, 0] },
   seller: { id: "seller-id", name: "Seller", avatar_url: "", profile_url: "", is_verified: false },
   existing_files: [],
+  current_seller_external_id: "seller-external-id",
   aws_key: "",
   s3_url: "",
   available_countries: [],
