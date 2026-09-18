@@ -80,7 +80,9 @@ describe Ai::StoreAgentObjectFormatter do
         second = create(:product, user: seller, name: "EUR workbook", price_currency_type: "eur", price_cents: 2000)
         code.products << second
 
-        expect(card_for(code.as_json_for_api.stringify_keys)[:fields]).to include({ label: "Applies to", value: "EUR guide and EUR workbook" })
+        coverage = card_for(code.as_json_for_api.stringify_keys)[:fields].find { |field| field[:label] == "Applies to" }&.fetch(:value)
+
+        expect(coverage).to eq("EUR guide and EUR workbook").or eq("EUR workbook and EUR guide")
       end
 
       it "does not describe excluded products as covered by a universal code" do

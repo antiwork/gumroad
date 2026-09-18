@@ -5,21 +5,24 @@ class TeamMailer < ApplicationMailer
 
   layout "layouts/email"
 
-  # The inviter writes their own display name, and this email reaches someone who may never have
-  # heard of them. The subject and the fallback identity are ours; the name reaches the body only
-  # once the seller has been reviewed, since the name is where the scam copy goes.
   def invite(team_invitation)
+    # Delayed jobs must not use stale invitation or seller state from a replica.
+    team_invitation = ApplicationRecord.connected_to(role: :writing) do
+      TeamInvitation.includes(:seller).find_by(id: team_invitation.id)
+    end
+    return unless team_invitation&.seller&.account_active?
+    return if team_invitation.deleted? || team_invitation.accepted? || team_invitation.expired?
+    return unless team_invitation.single_mailbox_email?
+    # Acceptance deletes an invitation addressed to the owner's own mailbox, so never send it.
+    return if team_invitation.matches_owner_email?
+
     @team_invitation = team_invitation
-    @seller = team_invitation.seller
-    @seller_email = @seller.email
-    @seller_username = @seller.username
-    @seller_name = TeamInvitationThrottle.trusted_sender?(@seller) ? sanitize(@seller.display_name) : @seller_email
-    @subject = "You've been invited to join #{@seller_username} on Gumroad"
+    @subject = "Gumroad team invitation"
 
     mail(
       from: NOREPLY_EMAIL_WITH_NAME,
       to: @team_invitation.email,
-      reply_to: @seller.email,
+      reply_to: NOREPLY_EMAIL,
       subject: @subject
     )
   end

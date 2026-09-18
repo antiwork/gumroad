@@ -84,7 +84,7 @@ class Settings::Team::InvitationsController < Sellers::BaseController
       alert_message = "Invitation link has expired. Please contact the account owner."
     elsif team_invitation.accepted?
       alert_message = "Invitation has already been accepted."
-    elsif team_invitation.deleted?
+    elsif team_invitation.deleted? || !team_invitation.seller&.account_active?
       alert_message = "Invitation link is invalid. Please contact the account owner."
     elsif team_invitation.matches_owner_email?
       # It can happen if the owner sends an invitation, and then changes their email address to the same email used
@@ -98,16 +98,26 @@ class Settings::Team::InvitationsController < Sellers::BaseController
       flash[:alert] = alert_message
     else
       team_membership = nil
-      logged_in_user.with_lock do
+      User.transaction do
+        # Reciprocal invitations must acquire both user locks in the same order.
+        users = User.where(id: [logged_in_user.id, team_invitation.seller_id]).order(:id).lock.index_by(&:id)
+        logged_in_user.lock!
+        seller = users[team_invitation.seller_id]
+        next unless seller&.account_active?
+
         team_invitation.update_as_accepted!(deleted_at: Time.current)
         logged_in_user.create_owner_membership_if_needed!
         logged_in_user.update!(is_team_member: true) if team_invitation.from_gumroad_account?
-        team_membership = team_invitation.seller.seller_memberships.create!(user: logged_in_user, role: team_invitation.role)
+        team_membership = seller.seller_memberships.create!(user: logged_in_user, role: team_invitation.role)
         TeamMailer.invitation_accepted(team_membership).deliver_later
       end
 
-      switch_seller_account(team_membership)
-      flash[:notice] = "Welcome to the team at #{team_membership.seller.username}!"
+      if team_membership
+        switch_seller_account(team_membership)
+        flash[:notice] = "Welcome to the team at #{team_membership.seller.username}!"
+      else
+        flash[:alert] = "Invitation link is invalid. Please contact the account owner."
+      end
     end
 
     redirect_to dashboard_url
@@ -115,6 +125,9 @@ class Settings::Team::InvitationsController < Sellers::BaseController
 
   def resend_invitation
     authorize [:settings, :team, @team_invitation]
+    unless @team_invitation.single_mailbox_email?
+      return render json: { success: false, error_message: "Email is invalid" }, status: :unprocessable_entity
+    end
     return unless throttle_invitation_sends
 
     @team_invitation.update!(

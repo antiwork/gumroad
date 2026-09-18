@@ -2,15 +2,15 @@
 
 class Settings::Team::TeamInvitationPolicy < ApplicationPolicy
   def create?
-    user.role_admin_for?(seller)
+    update? && seller&.account_active?
   end
 
   def update?
-    create?
+    user.role_admin_for?(seller)
   end
 
   def destroy?
-    create?
+    update?
   end
 
   def restore?

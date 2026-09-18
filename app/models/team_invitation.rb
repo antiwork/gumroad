@@ -26,6 +26,7 @@ class TeamInvitation < ApplicationRecord
 
   validates :email, email_format: true
   with_options if: :not_deleted? do
+    validate :email_is_single_mailbox
     validates_uniqueness_of :email, scope: %i[seller_id deleted_at], message: "has already been invited"
     validate :email_cannot_belong_to_existing_member
   end
@@ -41,10 +42,26 @@ class TeamInvitation < ApplicationRecord
   end
 
   def matches_owner_email?
-    email.downcase == seller.email.downcase
+    email.downcase == seller.email&.downcase
+  end
+
+  def single_mailbox_email?
+    return false unless EmailFormatValidator.valid?(email)
+
+    addresses = Mail::AddressList.new(email)
+    return false unless addresses.addresses.one? && addresses.group_names.empty?
+
+    # Require the entire bare mailbox, retaining legitimate quoted local parts.
+    addresses.addresses.first.address == email
+  rescue Mail::Field::ParseError, ArgumentError
+    false
   end
 
   private
+    def email_is_single_mailbox
+      errors.add(:email, :invalid) if errors[:email].empty? && !single_mailbox_email?
+    end
+
     def email_cannot_belong_to_existing_member
       return unless seller.present?
       return if seller.seller_memberships.not_deleted.joins(:user).where("users.email = ?", email).none? && email != seller.email
