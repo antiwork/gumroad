@@ -282,7 +282,12 @@ export default function PaymentsPage() {
   }>({
     user: props.compliance_info,
     payouts_paused_by_user: props.payouts_paused_by_user,
-    payout_threshold_cents: props.payout_threshold_cents,
+    // A stored threshold below the country minimum never applies to a payout (the server takes the
+    // max) and the submit transform raises it anyway, so show the value that will be saved.
+    payout_threshold_cents:
+      props.payout_threshold_cents < props.minimum_payout_threshold_cents
+        ? props.minimum_payout_threshold_cents
+        : props.payout_threshold_cents,
     payout_frequency: props.payout_frequency,
     disable_buyer_local_currency: props.disable_buyer_local_currency,
     disable_buyer_currency_rounding: props.disable_buyer_currency_rounding,
