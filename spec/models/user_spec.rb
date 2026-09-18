@@ -1205,6 +1205,45 @@ describe User, :vcr do
 
           expect(legacy_membership.reload).to be_deleted
         end
+
+        it "versions the memberships it revokes" do
+          with_versioning do
+            membership = create(:team_membership, user: @user, seller: create(:user))
+
+            expect { @user.deactivate! }.to change { membership.versions.count }.by(1)
+            expect(membership.versions.last.changeset).to have_key("deleted_at")
+          end
+        end
+
+        it "clears the staff flag of a Gumroad-team member who closes their own account" do
+          gumroad_account = create(:user, email: ApplicationMailer::ADMIN_EMAIL)
+          staff_user = create(:admin_user)
+          create(:team_membership, user: staff_user, seller: gumroad_account)
+
+          expect(staff_user.deactivate!).to eq(true)
+
+          expect(staff_user.reload).not_to be_is_team_member
+        end
+
+        it "clears the staff flag of the whole team when the Gumroad account is closed" do
+          gumroad_account = create(:admin_user, email: ApplicationMailer::ADMIN_EMAIL)
+          staff_user = create(:admin_user)
+          create(:team_membership, user: staff_user, seller: gumroad_account)
+
+          expect(gumroad_account.deactivate!).to eq(true)
+
+          expect(gumroad_account.reload).not_to be_is_team_member
+          expect(staff_user.reload).not_to be_is_team_member
+        end
+
+        it "leaves the staff flag alone when no Gumroad-account membership is revoked" do
+          staff_user = create(:admin_user)
+          create(:team_membership, user: staff_user, seller: @user)
+
+          expect(@user.deactivate!).to eq(true)
+
+          expect(staff_user.reload).to be_is_team_member
+        end
       end
 
       context "when the user has active subscriptions" do

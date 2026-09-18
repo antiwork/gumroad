@@ -858,12 +858,32 @@ class User < ApplicationRecord
   end
 
   # Revokes team access in both directions: as seller (else a closed shop stays in its team's
-  # account switcher) and as member (else it stays in the teams it belonged to). Bulk update,
-  # because a legacy membership the validations would reject must not block account closure.
+  # account switcher) and as member (else it stays in the teams it belonged to). Validation is
+  # skipped so a legacy membership cannot block closure; the writes are still versioned.
   def revoke_team_memberships!
-    now = Time.current
-    user_memberships.not_deleted.update_all(deleted_at: now, updated_at: now)
-    seller_memberships.not_deleted.update_all(deleted_at: now, updated_at: now)
+    memberships = user_memberships.not_deleted.to_a | seller_memberships.not_deleted.to_a
+    clear_gumroad_staff_flags!(memberships)
+
+    memberships.each do |membership|
+      membership.deleted_at = Time.current
+      membership.save!(validate: false)
+    end
+  end
+
+  private def clear_gumroad_staff_flags!(memberships)
+    # Losing a Gumroad-account membership clears the staff flag too: the flag is not
+    # membership-scoped, so an already-issued OAuth token would keep resolving a closed account for
+    # admin surfaces. The team-removal path clears it on removal as well.
+    gumroad_seller_id = User.find_by(email: ApplicationMailer::ADMIN_EMAIL)&.id
+
+    staff_ids = memberships.filter_map { |membership| membership.user_id if membership.seller_id == gumroad_seller_id }
+    staff_ids << id if gumroad_seller_id == id
+
+    User.where(id: staff_ids).find_each do |staff_user|
+      next unless staff_user.is_team_member?
+      staff_user.is_team_member = false
+      staff_user.save!(validate: false)
+    end
   end
 
   def mark_as_invited(referral_id)
