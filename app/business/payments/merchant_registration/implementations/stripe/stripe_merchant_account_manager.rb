@@ -405,7 +405,7 @@ module StripeMerchantAccountManager
   ADDRESS_SUBHASH_KEYS = %i[address address_kanji address_kana].freeze
   private_constant :ADDRESS_SUBHASH_KEYS
 
-  def self.update_account(user, passphrase:, notify: true, force_address_resync: false)
+  def self.update_account(user, passphrase:, notify: true, force_address_resync: false, on_provider_mutation: nil)
     validate_for_update(user)
 
     stripe_account = Stripe::Account.retrieve(user.stripe_account.charge_processor_merchant_id)
@@ -553,6 +553,9 @@ module StripeMerchantAccountManager
     switching_to_individual = !user_compliance_info.is_business? && last_user_compliance_info&.is_business?
     obsolete_representative_note_ids = switching_to_individual ? identity_rejection_note_ids(user, scope: :representative) : []
 
+    # Everything above only reads; this call is the first thing that can reach Stripe, so the
+    # caller must stop treating a later failure as a pure read failure.
+    on_provider_mutation&.call
     account_update = update_account_attributes(user, stripe_account, diff_attributes, notify:, legal_entity_country: country_code)
     updated_stripe_account = account_update.stripe_account
 
@@ -2685,12 +2688,12 @@ module StripeMerchantAccountManager
     MerchantRegistrationMailer.stripe_account_rejected(user.id).deliver_later(queue: "critical")
   end
 
-  def self.handle_new_user_compliance_info(user_compliance_info, notify: true, force_address_resync: false)
+  def self.handle_new_user_compliance_info(user_compliance_info, notify: true, force_address_resync: false, on_provider_mutation: nil)
     return if user_compliance_info.user.has_stripe_account_connected?
     ApplicationRecord.connected_to(role: :writing) do
       return unless user_has_stripe_connect_merchant_account?(user_compliance_info.user)
 
-      update_account(user_compliance_info.user, passphrase: GlobalConfig.get("STRONGBOX_GENERAL_PASSWORD"), notify:, force_address_resync:)
+      update_account(user_compliance_info.user, passphrase: GlobalConfig.get("STRONGBOX_GENERAL_PASSWORD"), notify:, force_address_resync:, on_provider_mutation:)
     end
   end
 

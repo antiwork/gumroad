@@ -83,12 +83,16 @@ class UpdateUserComplianceInfo
 
   def process
     stripe_error = nil
+    provider_mutated = false
     result = user.with_lock do
       @current_compliance_info = nil
-      process_locked
+      process_locked { provider_mutated = true }
     rescue Stripe::StripeError => error
-      # Keep the lock through Stripe work, but commit the revision before propagating
-      # a provider failure: earlier Stripe updates cannot be rolled back.
+      # Nothing reached the provider, so roll back and let the retry re-send. Past the first
+      # write the revision must stay: Stripe cannot be rolled back, and the unchanged retry
+      # path never re-sends.
+      raise error unless provider_mutated
+
       stripe_error = error
     end
     raise stripe_error if stripe_error
@@ -97,7 +101,7 @@ class UpdateUserComplianceInfo
   end
 
   private
-    def process_locked
+    def process_locked(&on_provider_mutation)
       if compliance_params.present?
         po_box_error = po_box_error_message
         return { success: false, error_message: po_box_error } if po_box_error.present?
@@ -158,7 +162,7 @@ class UpdateUserComplianceInfo
         end
 
         begin
-          StripeMerchantAccountManager.handle_new_user_compliance_info(new_compliance_info)
+          StripeMerchantAccountManager.handle_new_user_compliance_info(new_compliance_info, on_provider_mutation:)
         rescue Stripe::InvalidRequestError => e
           if e.code == "postal_code_invalid"
             country = new_compliance_info.legal_entity_country

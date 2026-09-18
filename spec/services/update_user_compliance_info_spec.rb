@@ -1236,3 +1236,43 @@ describe UpdateUserComplianceInfo, "Stripe failure after a partial update" do
     end
   end
 end
+describe UpdateUserComplianceInfo, "Stripe failure before the first provider write" do
+  self.use_transactional_tests = false
+
+  before do
+    @user = create(:user)
+    @compliance_info = create(:user_compliance_info_business, user: @user, business_type: UserComplianceInfo::BusinessTypes::SINGLE_MEMBER_LLC)
+    @merchant_account = create(:merchant_account, user: @user)
+    @original_first_name = @compliance_info.first_name
+    allow(Stripe::Account).to receive(:update)
+  end
+
+  after do
+    @user.user_compliance_info_requests.destroy_all
+    @user.user_compliance_infos.destroy_all
+    @user.merchant_accounts.destroy_all
+    @user.comments.destroy_all
+    @user.destroy!
+  end
+
+  [Stripe::APIConnectionError, Stripe::AuthenticationError, Stripe::RateLimitError].each do |error_class|
+    it "rolls the submitted revision back when #{error_class.name} arrives before any provider write" do
+      provider_error = error_class.new("Synthetic provider failure")
+      allow(Stripe::Account).to receive(:retrieve).and_raise(provider_error)
+      params = ActionController::Parameters.new(is_business: false, first_name: "Updated")
+
+      expect do
+        described_class.new(compliance_params: params, user: @user).process
+      end.to raise_error { |error| expect(error).to equal(provider_error) }
+
+      committed = Thread.new do
+        ActiveRecord::Base.connection_pool.with_connection do
+          User.find(@user.id).alive_user_compliance_info.attributes.slice("id", "first_name", "is_business")
+        end
+      end.value
+      expect(committed).to include("id" => @compliance_info.id, "first_name" => @original_first_name, "is_business" => true)
+      expect(@compliance_info.reload).not_to be_deleted
+      expect(Stripe::Account).not_to have_received(:update)
+    end
+  end
+end
