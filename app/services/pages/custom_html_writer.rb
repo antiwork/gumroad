@@ -59,12 +59,16 @@ class Pages::CustomHtmlWriter
   # regenerating the whole page — before it existed, the only write surface was a full replacement,
   # so a seller asking for a tiny tweak could lose their entire hand-built page to a fresh, much
   # smaller regeneration.
-  def self.edit!(pageable, find:, replace:)
+  #
+  # Passing either checksum makes the edit "guarded": the server-built undo of an earlier targeted
+  # edit (Ai::StoreAgentHtmlUndo). Guarded edits go through check_guarded_edit below.
+  def self.edit!(pageable, find:, replace:, expected_custom_html_sha256: nil, result_custom_html_sha256: nil)
     previous_custom_html = nil
     sanitization_report = nil
     edit_error = nil
+    guarded = !expected_custom_html_sha256.nil? || !result_custom_html_sha256.nil?
 
-    pageable.with_lock do
+    pageable.with_lock(requires_new: guarded) do
       previous_custom_html = pageable.custom_html
 
       if previous_custom_html.blank?
@@ -72,44 +76,101 @@ class Pages::CustomHtmlWriter
         raise ActiveRecord::Rollback
       end
 
-      # `find` must locate exactly one place in the page so the edit is unambiguous. Matching is
-      # whitespace-tolerant (Ai::CustomHtmlSnippetMatcher): agents reading the page routinely
-      # normalize characters like non-breaking spaces to plain spaces when they echo a snippet back,
-      # and an exact-only match would make such an edit permanently unappliable
-      # (gumroad-private#1251). Zero matches means the caller is working from stale HTML; multiple
-      # matches means the snippet needs more surrounding context. Both errors say so explicitly, so
-      # the agent can correct itself in the same turn.
-      match = Ai::CustomHtmlSnippetMatcher.match(previous_custom_html, find)
-      if match.occurrences.zero?
-        edit_error = "find does not appear in the current custom HTML. Re-read the page and copy the snippet exactly, including whitespace."
-        raise ActiveRecord::Rollback
-      elsif match.occurrences > 1
-        edit_error = "find matches #{match.occurrences} places in the current custom HTML. Include more surrounding context so it matches exactly once."
-        raise ActiveRecord::Rollback
+      if guarded
+        check = check_guarded_edit(previous_custom_html, find:, replace:, expected_custom_html_sha256:, result_custom_html_sha256:)
+        if check.error
+          edit_error = check.error
+          raise ActiveRecord::Rollback
+        end
+        pageable.custom_html = check.custom_html
+        sanitization_report = check.sanitization_report
+      else
+        # `find` must locate exactly one place in the page so the edit is unambiguous. Matching is
+        # whitespace-tolerant (Ai::CustomHtmlSnippetMatcher): agents reading the page routinely
+        # normalize characters like non-breaking spaces to plain spaces when they echo a snippet back,
+        # and an exact-only match would make such an edit permanently unappliable
+        # (gumroad-private#1251). Zero matches means the caller is working from stale HTML; multiple
+        # matches means the snippet needs more surrounding context. Both errors say so explicitly, so
+        # the agent can correct itself in the same turn.
+        match = Ai::CustomHtmlSnippetMatcher.match(previous_custom_html, find)
+        if match.occurrences.zero?
+          edit_error = FIND_MISSING_ERROR
+          raise ActiveRecord::Rollback
+        elsif match.occurrences > 1
+          edit_error = find_ambiguous_error(match.occurrences)
+          raise ActiveRecord::Rollback
+        end
+
+        # Block form so the replacement is inserted literally — the two-argument form of String#sub
+        # treats backslash sequences (\0, \1, \\) in the replacement specially, which would corrupt
+        # HTML that legitimately contains backslashes.
+        edited = previous_custom_html.sub(match.matcher) { replace }
+
+        if edited.length > Page::MAX_CUSTOM_HTML_LENGTH
+          edit_error = LENGTH_ERROR
+          raise ActiveRecord::Rollback
+        end
+
+        # Re-sanitize the whole spliced result, not just the inserted snippet: the replacement can
+        # change how surrounding markup parses (for example by opening a tag the snippet closes), so
+        # only the full document is safe to check. Matches replace!'s blank-to-nil normalization so an
+        # edit that empties the page unpublishes it the same way.
+        result = Ai::PageSanitizer.sanitize_with_report(edited)
+        pageable.custom_html = result.html.presence
+        sanitization_report = result.report
       end
 
-      # Block form so the replacement is inserted literally — the two-argument form of String#sub
-      # treats backslash sequences (\0, \1, \\) in the replacement specially, which would corrupt
-      # HTML that legitimately contains backslashes.
-      edited = previous_custom_html.sub(match.matcher) { replace }
-
-      if edited.length > Page::MAX_CUSTOM_HTML_LENGTH
-        edit_error = "The edited custom_html would be too long (maximum is #{Page::MAX_CUSTOM_HTML_LENGTH} characters)."
-        raise ActiveRecord::Rollback
-      end
-
-      # Re-sanitize the whole spliced result, not just the inserted snippet: the replacement can
-      # change how surrounding markup parses (for example by opening a tag the snippet closes), so
-      # only the full document is safe to check. Matches replace!'s blank-to-nil normalization so an
-      # edit that empties the page unpublishes it the same way.
-      result = Ai::PageSanitizer.sanitize_with_report(edited)
-      pageable.custom_html = result.html.presence
-      sanitization_report = result.report
       pageable.save!
+      # check_guarded_edit already verified this digest before the save; Page's own before_validation
+      # re-sanitizes on save, so this only fires if that ever stops being idempotent.
+      if guarded && Digest::SHA256.hexdigest(pageable.custom_html.to_s) != result_custom_html_sha256
+        edit_error = RESULT_MISMATCH_ERROR
+        raise ActiveRecord::Rollback
+      end
     end
 
     return Result.new(error: edit_error) if edit_error
 
     Result.new(custom_html: pageable.custom_html, previous_custom_html:, sanitization_report:)
+  end
+
+  GuardedEdit = Struct.new(:custom_html, :sanitization_report, :error, keyword_init: true)
+  SHA256_HEX_FORMAT = /\A[0-9a-f]{64}\z/
+  FIND_MISSING_ERROR = "find does not appear in the current custom HTML. Re-read the page and copy the snippet exactly, including whitespace."
+  LENGTH_ERROR = "The edited custom_html would be too long (maximum is #{Page::MAX_CUSTOM_HTML_LENGTH} characters)."
+  INVALID_CHECKSUMS_ERROR = "Both custom HTML checksums must be valid SHA-256 digests."
+  PAGE_CHANGED_ERROR = "The page changed since this undo was prepared. Ask the agent to check it again."
+  RESULT_MISMATCH_ERROR = "The original page cannot be restored exactly. No change was saved."
+
+  def self.find_ambiguous_error(occurrences)
+    "find matches #{occurrences} places in the current custom HTML. Include more surrounding context so it matches exactly once."
+  end
+
+  # Non-mutating validation of a checksum-bound edit against `current_custom_html`. Shared with the
+  # proposal preview (Api::Internal::AgentCustomHtmlPreviewsController) so a guarded undo that
+  # previews can't fail at confirm time, and vice versa. Unlike a normal edit, `find` must match
+  # literally: it is the actual saved replacement, and the whitespace fallback could splice a
+  # different byte sequence than the one result_custom_html_sha256 was computed from. Returns the
+  # sanitized page the write would save (nil when it sanitizes to nothing) or an error.
+  def self.check_guarded_edit(current_custom_html, find:, replace:, expected_custom_html_sha256:, result_custom_html_sha256:)
+    unless [expected_custom_html_sha256, result_custom_html_sha256].all? { |digest| digest.is_a?(String) && digest.match?(SHA256_HEX_FORMAT) }
+      return GuardedEdit.new(error: INVALID_CHECKSUMS_ERROR)
+    end
+    return GuardedEdit.new(error: PAGE_CHANGED_ERROR) if Digest::SHA256.hexdigest(current_custom_html.to_s) != expected_custom_html_sha256
+
+    occurrences = find.is_a?(String) && find.present? ? current_custom_html.scan(find).size : 0
+    return GuardedEdit.new(error: FIND_MISSING_ERROR) if occurrences.zero?
+    return GuardedEdit.new(error: find_ambiguous_error(occurrences)) if occurrences > 1
+
+    edited = current_custom_html.sub(find) { replace.to_s }
+    return GuardedEdit.new(error: LENGTH_ERROR) if edited.length > Page::MAX_CUSTOM_HTML_LENGTH
+
+    result = Ai::PageSanitizer.sanitize_with_report(edited)
+    custom_html = result.html.presence
+    # Page sanitizes again on save; an exact undo cannot restore a non-fixed-point document.
+    return GuardedEdit.new(error: RESULT_MISMATCH_ERROR) if Ai::PageSanitizer.sanitize(custom_html).presence != custom_html
+    return GuardedEdit.new(error: RESULT_MISMATCH_ERROR) if Digest::SHA256.hexdigest(custom_html.to_s) != result_custom_html_sha256
+
+    GuardedEdit.new(custom_html:, sanitization_report: result.report)
   end
 end

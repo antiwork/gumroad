@@ -1,0 +1,130 @@
+# frozen_string_literal: true
+
+require "spec_helper"
+
+describe Pages::CustomHtmlWriter do
+  describe ".edit! with checksums (the server-built HTML undo)" do
+    let(:user) { create(:user) }
+    let(:original) { "<section><p>Keep this instruction.</p><footer>Unchanged</footer></section>" }
+    let(:find) { "<p><strong>Keep this instruction.</strong></p>" }
+    let(:replace) { "<p>Keep this instruction.</p>" }
+    let(:current_page) { user.reload.custom_html }
+    let(:expected_digest) { Digest::SHA256.hexdigest(current_page) }
+    let(:result_digest) { Digest::SHA256.hexdigest(Ai::PageSanitizer.sanitize_with_report(current_page.sub(find) { replace }).html.to_s) }
+
+    before do
+      Feature.activate_user(:custom_html_pages, user)
+      user.update!(custom_html: "<section><p><strong>Keep this instruction.</strong></p><footer>Unchanged</footer></section>")
+    end
+
+    def guarded_edit(**overrides)
+      described_class.edit!(user, find:, replace:, expected_custom_html_sha256: expected_digest, result_custom_html_sha256: result_digest, **overrides)
+    end
+
+    it "restores the exact page when both digests hold" do
+      page_before = current_page
+      result = guarded_edit
+
+      expect(result.success?).to be(true)
+      expect(result.previous_custom_html).to eq(page_before)
+      expect(Digest::SHA256.hexdigest(user.reload.custom_html)).to eq(result_digest)
+      expect(user.custom_html).not_to include("<strong>")
+    end
+
+    [
+      { expected_custom_html_sha256: "not-a-digest" },
+      { result_custom_html_sha256: "ABCDEF" },
+      { result_custom_html_sha256: nil },
+      { expected_custom_html_sha256: nil },
+    ].each do |override|
+      it "refuses malformed or single checksums #{override.inspect} without writing" do
+        page_before = current_page
+        result = guarded_edit(**override)
+
+        expect(result.error).to eq(described_class::INVALID_CHECKSUMS_ERROR)
+        expect(user.reload.custom_html).to eq(page_before)
+      end
+    end
+
+    it "refuses a stale page whose snippet still matches, without writing" do
+      stale_digest = expected_digest
+      user.update!(custom_html: current_page.sub("</section>", "<footer>Added later</footer></section>"))
+      changed_page = user.reload.custom_html
+
+      result = guarded_edit(expected_custom_html_sha256: stale_digest)
+
+      expect(result.error).to eq(described_class::PAGE_CHANGED_ERROR)
+      expect(user.reload.custom_html).to eq(changed_page)
+    end
+
+    it "refuses before saving when the sanitized result would not match the recorded original" do
+      page_before = current_page
+      # Transactional specs would hide a post-save rollback (the writer's Rollback is swallowed by
+      # the outer example transaction), so this only holds if the check runs before the save.
+      expect(user).not_to receive(:save!)
+
+      result = guarded_edit(result_custom_html_sha256: "b" * 64)
+
+      expect(result.error).to eq(described_class::RESULT_MISMATCH_ERROR)
+      expect(user.reload.custom_html).to eq(page_before)
+    end
+
+    it "refuses a nonidempotent sanitized result without leaking a save through an outer transaction" do
+      page_before = current_page
+      replacement = %(#{replace}<iframe src="data:text/html,example"></iframe>)
+      once = Ai::PageSanitizer.sanitize_with_report(page_before.sub(find) { replacement }).html
+      twice = Ai::PageSanitizer.sanitize_with_report(once).html
+      expect(once).not_to eq(twice)
+      check = described_class.check_guarded_edit(page_before, find:, replace: replacement,
+                                                              expected_custom_html_sha256: expected_digest,
+                                                              result_custom_html_sha256: Digest::SHA256.hexdigest(once))
+      expect(check.error).to eq(described_class::RESULT_MISMATCH_ERROR)
+
+      user.class.transaction(requires_new: true) do
+        result = guarded_edit(replace: replacement, result_custom_html_sha256: Digest::SHA256.hexdigest(once))
+        expect(result.error).to eq(described_class::RESULT_MISMATCH_ERROR)
+      end
+      expect(user.reload.custom_html).to eq(page_before)
+    end
+
+    it "checks the result digest against the sanitized output rather than the raw splice" do
+      unsafe_replace = %(<p>Keep this instruction.</p><script src="https://evil.example.com/x.js"></script>)
+      raw_splice = current_page.sub(find) { unsafe_replace }
+      sanitized = Ai::PageSanitizer.sanitize_with_report(raw_splice).html.to_s
+      expect(sanitized).not_to include("evil.example.com")
+
+      expect(guarded_edit(replace: unsafe_replace, result_custom_html_sha256: Digest::SHA256.hexdigest(raw_splice)).error).to eq(described_class::RESULT_MISMATCH_ERROR)
+      expect(guarded_edit(replace: unsafe_replace, result_custom_html_sha256: Digest::SHA256.hexdigest(sanitized)).success?).to be(true)
+      expect(user.reload.custom_html).to eq(sanitized)
+    end
+
+    it "matches the snippet literally where a normal edit falls back to whitespace-tolerant matching" do
+      user.update!(custom_html: "<section><p><strong>Keep this instruction.</strong></p></section>")
+      nbsp_page = current_page
+
+      guarded = described_class.edit!(user, find:, replace:,
+                                            expected_custom_html_sha256: Digest::SHA256.hexdigest(nbsp_page),
+                                            result_custom_html_sha256: Digest::SHA256.hexdigest("<section>#{replace}</section>"))
+      expect(guarded.error).to eq(described_class::FIND_MISSING_ERROR)
+      expect(user.reload.custom_html).to eq(nbsp_page)
+
+      normal = described_class.edit!(user, find:, replace:)
+      expect(normal.success?).to be(true)
+      expect(user.reload.custom_html).to include(replace)
+    end
+  end
+
+  describe ".check_guarded_edit" do
+    it "is a pure check that reports the same errors the write would" do
+      page = "<section><p>Twice</p><p>Twice</p></section>"
+      digest = Digest::SHA256.hexdigest(page)
+
+      expect(described_class.check_guarded_edit(page, find: "<p>Twice</p>", replace: "", expected_custom_html_sha256: digest, result_custom_html_sha256: "a" * 64).error)
+        .to eq(described_class.find_ambiguous_error(2))
+      expect(described_class.check_guarded_edit(page, find: "", replace: "", expected_custom_html_sha256: digest, result_custom_html_sha256: "a" * 64).error)
+        .to eq(described_class::FIND_MISSING_ERROR)
+      expect(described_class.check_guarded_edit(page, find: "<p>Twice</p><p>Twice</p>", replace: "x" * Page::MAX_CUSTOM_HTML_LENGTH, expected_custom_html_sha256: digest, result_custom_html_sha256: "a" * 64).error)
+        .to eq(described_class::LENGTH_ERROR)
+    end
+  end
+end

@@ -233,6 +233,102 @@ describe Api::Internal::AgentCustomHtmlPreviewsController do
       end
     end
 
+    # A checksum-bound proposal (the server-built HTML undo) must preview under the exact rules the
+    # writer applies at confirm time: current-page digest, literal snippet match, and the digest of
+    # the sanitized result. A laxer preview would enable Confirm on an undo the writer then refuses.
+    context "for a guarded edit_user_custom_html undo" do
+      let(:original) { "<section><p>Keep this instruction.</p><footer>Unchanged</footer></section>" }
+      let(:formatted) { "<section><p><strong>Keep this instruction.</strong></p><footer>Unchanged</footer></section>" }
+      let(:current_page) { seller.reload.custom_html }
+      let(:find) { "<p><strong>Keep this instruction.</strong></p>" }
+      let(:replace) { "<p>Keep this instruction.</p>" }
+      let(:guarded_params) do
+        {
+          endpoint: "edit_user_custom_html",
+          find:,
+          replace:,
+          expected_custom_html_sha256: Digest::SHA256.hexdigest(current_page),
+          result_custom_html_sha256: Digest::SHA256.hexdigest(Ai::PageSanitizer.sanitize_with_report(current_page.sub(find) { replace }).html.to_s),
+        }
+      end
+
+      before do
+        seller.custom_html = formatted
+        seller.save!
+      end
+
+      it "previews the exact inverse when both digests match the current page and its restored result" do
+        post :create, params: guarded_params, format: :json
+
+        expect(response.parsed_body["success"]).to be(true), response.parsed_body.inspect
+        html = staged_preview_document
+        expect(html).to include("<p>Keep this instruction.</p>")
+        expect(html).not_to include("<strong>")
+        expect(seller.reload.custom_html).to eq(current_page)
+      end
+
+      it "refuses a stale page whose snippet still matches, mirroring the writer" do
+        stale_digest = Digest::SHA256.hexdigest(current_page)
+        seller.custom_html = formatted.sub("</section>", "<footer>Added later</footer></section>")
+        seller.save!
+
+        post :create, params: guarded_params.merge(expected_custom_html_sha256: stale_digest), format: :json
+
+        expect(response.parsed_body).to eq("success" => false, "error" => "The page changed since this undo was prepared. Ask the agent to check it again.")
+      end
+
+      [
+        { expected_custom_html_sha256: "not-a-digest" },
+        { result_custom_html_sha256: "ABCDEF" },
+        { expected_custom_html_sha256: nil, result_custom_html_sha256: "a" * 64 },
+      ].each do |override|
+        it "refuses a malformed or single checksum #{override.inspect}" do
+          params = guarded_params.merge(override).compact
+
+          post :create, params:, format: :json
+
+          expect(response.parsed_body).to eq("success" => false, "error" => "Both custom HTML checksums must be valid SHA-256 digests.")
+        end
+      end
+
+      it "requires a literal snippet match instead of the whitespace-tolerant fallback normal edits get" do
+        seller.custom_html = "<section><p><strong>Keep this instruction.</strong></p></section>"
+        seller.save!
+        nbsp_page = seller.reload.custom_html
+
+        post :create, params: { endpoint: "edit_user_custom_html", find:, replace: }, format: :json
+        expect(response.parsed_body["success"]).to be(true)
+
+        post :create, params: {
+          endpoint: "edit_user_custom_html", find:, replace:,
+          expected_custom_html_sha256: Digest::SHA256.hexdigest(nbsp_page),
+          result_custom_html_sha256: Digest::SHA256.hexdigest("<section>#{replace}</section>"),
+        }, format: :json
+        expect(response.parsed_body).to eq("success" => false, "error" => "find does not appear in the current custom HTML. Re-read the page and copy the snippet exactly, including whitespace.")
+      end
+
+      it "refuses when the sanitized result would not match the recorded original" do
+        post :create, params: guarded_params.merge(result_custom_html_sha256: "b" * 64), format: :json
+
+        expect(response.parsed_body).to eq("success" => false, "error" => "The original page cannot be restored exactly. No change was saved.")
+      end
+
+      it "checks the result digest against the sanitized output, not the raw splice" do
+        unsafe_replace = %(<p>Keep this instruction.</p><script src="https://evil.example.com/x.js"></script>)
+        raw_splice = current_page.sub(find) { unsafe_replace }
+        sanitized = Ai::PageSanitizer.sanitize_with_report(raw_splice).html.to_s
+        expect(sanitized).not_to include("evil.example.com")
+
+        post :create, params: guarded_params.merge(replace: unsafe_replace, result_custom_html_sha256: Digest::SHA256.hexdigest(raw_splice)), format: :json
+        expect(response.parsed_body["success"]).to be(false)
+
+        post :create, params: guarded_params.merge(replace: unsafe_replace, result_custom_html_sha256: Digest::SHA256.hexdigest(sanitized)), format: :json
+        expect(response.parsed_body["success"]).to be(true), response.parsed_body.inspect
+        expect(staged_preview_document).not_to include("evil.example.com")
+        expect(seller.reload.custom_html).to eq(current_page)
+      end
+    end
+
     it "renders an error for a write that has no page preview" do
       post :create, params: { endpoint: "update_product", custom_html: "<p>hi</p>" }, format: :json
 

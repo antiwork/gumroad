@@ -666,7 +666,9 @@ class Api::V2::LinksController < Api::V2::BaseController
     end
 
     begin
-      result = Pages::CustomHtmlWriter.edit!(@product, find:, replace:)
+      result = Pages::CustomHtmlWriter.edit!(@product, find:, replace:,
+                                                       expected_custom_html_sha256: params[:expected_custom_html_sha256],
+                                                       result_custom_html_sha256: params[:result_custom_html_sha256])
     rescue ActiveRecord::RecordInvalid => e
       object = e.record
       return (object == @product || object.nil?) ? error_with_product(@product) : render_response(false, message: object.errors.full_messages.to_sentence)
