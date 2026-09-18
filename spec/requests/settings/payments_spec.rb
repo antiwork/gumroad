@@ -5885,6 +5885,31 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         expect(@user.reload.active_bank_account.send(:account_number_decrypted)).to eq("QA87CITI123456789012345678901")
         expect(@user.reload.active_bank_account.routing_number).to eq("AAAAQAQAXXX")
       end
+
+      it "accepts the 8-character SWIFT / BIC code a Qatari bank publishes" do
+        visit settings_payments_path
+
+        fill_in("First name", with: "Qatar")
+        fill_in("Last name", with: "Creator")
+        fill_in("Address", with: "address_full_match")
+        fill_in("City", with: "Doha")
+        fill_in("Phone number", with: "33123456")
+        fill_in("Postal code", with: "12345")
+        select("1", from: "Day")
+        select("January", from: "Month")
+        select("1980", from: "Year")
+        fill_in("Pay to the order of", with: "Qatar Creator")
+        fill_in("SWIFT / BIC Code", with: "QNBAQAQA")
+        fill_in("IBAN", with: "QA87CITI123456789012345678901")
+        fill_in("Confirm IBAN", with: "QA87CITI123456789012345678901")
+
+        expect(page).to have_content("Your bank's SWIFT/BIC code, 8 or 11 characters")
+
+        click_on("Update settings")
+
+        expect(page).to have_alert(text: "Thanks! You're all set.")
+        expect(@user.reload.active_bank_account.routing_number).to eq("QNBAQAQA")
+      end
     end
 
     describe "Bahamas creator" do

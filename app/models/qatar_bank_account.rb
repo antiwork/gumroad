@@ -3,7 +3,9 @@
 class QatarBankAccount < BankAccount
   BANK_ACCOUNT_TYPE = "QA"
 
-  BANK_CODE_FORMAT_REGEX = /^[a-zA-Z0-9]{11}$/
+  # Qatari banks publish 8-character SWIFT/BICs; Stripe resolves both that and the branch-suffixed
+  # 11-character form, and nothing in between is a BIC.
+  BANK_CODE_FORMAT_REGEX = /^[a-zA-Z0-9]{8}([a-zA-Z0-9]{3})?$/
   ACCOUNT_NUMBER_FORMAT_REGEX = /^[a-zA-Z0-9]{29}$/
   private_constant :BANK_CODE_FORMAT_REGEX, :ACCOUNT_NUMBER_FORMAT_REGEX
 

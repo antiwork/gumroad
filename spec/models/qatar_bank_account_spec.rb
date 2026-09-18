@@ -36,10 +36,14 @@ describe QatarBankAccount do
   end
 
   describe "#validate_bank_code" do
-    it "allows 11 characters only" do
+    it "allows an 8-character BIC or an 11-character BIC with branch suffix" do
       expect(build(:qatar_bank_account, bank_code: "AAAAQAQAXXX")).to be_valid
-      expect(build(:qatar_bank_account, bank_code: "AAAAQAQA")).not_to be_valid
+      expect(build(:qatar_bank_account, bank_code: "AAAAQAQA")).to be_valid
+      expect(build(:qatar_bank_account, bank_code: "AAAAQAQAX")).not_to be_valid
+      expect(build(:qatar_bank_account, bank_code: "AAAAQAQAXX")).not_to be_valid
+      expect(build(:qatar_bank_account, bank_code: "AAAAQAQ")).not_to be_valid
       expect(build(:qatar_bank_account, bank_code: "AAAAQAQAXXXX")).not_to be_valid
+      expect(build(:qatar_bank_account, bank_code: "AAAAQAQA-XX")).not_to be_valid
     end
   end
 
