@@ -1014,6 +1014,13 @@ describe CustomerSurchargeController, :vcr do
     expect(response.parsed_body).to include(expected_surcharge_response(shipping_rate_cents: 20, tax_cents: 32, subtotal: 300))
   end
 
+  it "quotes a string quantity the same as the numeric form" do
+    post "calculate_all", params: { products: [{ permalink: @product.unique_permalink, price: 100, quantity: 1 }, { permalink: @physical_product.unique_permalink, price: 200, quantity: "3" }], postal_code: 98039, country: "US" }, as: :json
+
+    expect(response).to have_http_status(:ok)
+    expect(response.parsed_body).to include(expected_surcharge_response(shipping_rate_cents: 20, tax_cents: 32, subtotal: 300))
+  end
+
   it "converts each non-USD shipping rate term the same way the charge path does" do
     # Purchase#calculate_shipping calls calculate_shipping_rate with the product currency
     # (sum of per-term conversions). The surcharge path used to convert the summed listed
