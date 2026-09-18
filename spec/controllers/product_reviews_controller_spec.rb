@@ -89,6 +89,20 @@ describe ProductReviewsController do
         expect(review.rater_name).to eq("Anonymous")
       end
 
+      it "freezes the message once the purchase is ineligible" do
+        put :set, params: valid_params
+        review = purchase.reload.product_review
+        purchase.update!(stripe_refunded: true)
+
+        put :set, params: valid_params.merge(message: "Rewritten after the refund")
+
+        expect(response.parsed_body).to include(
+          "success" => false,
+          "message" => "You can no longer change this review, but you can still show it as Anonymous."
+        )
+        expect(review.reload.message).to eq("This is my review")
+      end
+
       it "allows saving the same rating" do
         put :set, params: valid_params
         expect(response.parsed_body["success"]).to eq(true)
@@ -176,7 +190,7 @@ describe ProductReviewsController do
         put :set, params: valid_params
 
         expect(response.parsed_body["success"]).to eq(false)
-        expect(response.parsed_body["message"]).to eq("Sorry, something went wrong.")
+        expect(response.parsed_body["message"]).to eq("This purchase is no longer eligible for a review.")
         expect(purchase.reload.product_review).to be_nil
       end
     end

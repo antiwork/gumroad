@@ -68,6 +68,20 @@ class ProductReviewsController < ApplicationController
         return
       end
 
+      # A review stays on the product page after its purchase stops being eligible, so the buyer
+      # keeps one lever over it: taking their name off. Everything else freezes — otherwise a
+      # charged-back buyer could rewrite public copy with no purchase behind it.
+      existing_review = purchase.original_product_review
+      unless purchase.allows_review? || identity_only_change?(existing_review)
+        render json: {
+          success: false,
+          message: existing_review.present? ?
+            "You can no longer change this review, but you can still show it as Anonymous." :
+            "This purchase is no longer eligible for a review."
+        }
+        return
+      end
+
       review = purchase.post_review(
         rating: set_params[:rating].to_i,
         message: set_params[:message],
@@ -83,6 +97,16 @@ class ProductReviewsController < ApplicationController
       render json: { success: false, message: e.message }
     rescue StandardError
       render json: { success: false, message: "Sorry, something went wrong." }
+    end
+
+    # True when the request leaves the rating, the message and the video exactly as they are, which
+    # is what the form sends when the buyer only moves the identity radio.
+    def identity_only_change?(review)
+      return false if review.nil?
+
+      set_params[:rating].to_i == review.rating &&
+        set_params[:message].to_s == review.message.to_s &&
+        set_params[:video_options].blank?
     end
 
     def fetch_visible_product
