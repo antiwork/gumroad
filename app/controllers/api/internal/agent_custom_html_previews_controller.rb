@@ -198,6 +198,20 @@ class Api::Internal::AgentCustomHtmlPreviewsController < Api::Internal::BaseCont
         current = current_seller.custom_html
         return [nil, nil, "There is no custom HTML page to edit."] if current.blank?
 
+        expected_digest = params[:expected_custom_html_sha256]
+        result_digest = params[:result_custom_html_sha256]
+        if !expected_digest.nil? || !result_digest.nil?
+          # A checksum-bound proposal is the server-built undo; preview it under the writer's own
+          # guarded rules (current-page digest, literal match, sanitized-result digest) so Confirm
+          # is never enabled on an undo the writer would refuse.
+          check = Pages::CustomHtmlWriter.check_guarded_edit(current, find:, replace:, expected_custom_html_sha256: expected_digest, result_custom_html_sha256: result_digest)
+          return [nil, nil, check.error] if check.error
+
+          edited = current.sub(find) { replace }
+          marked = edited.include?(PREVIEW_CHANGED_MARKER_TEXT) ? nil : current.sub(find) { PREVIEW_CHANGED_MARKER + replace }
+          return [edited, marked, nil]
+        end
+
         # Same whitespace-tolerant matcher as the real edit endpoint (Ai::CustomHtmlSnippetMatcher)
         # so preview and apply always agree on whether — and where — the snippet matches. See the
         # matcher for why exact-only matching isn't enough (agent-normalized whitespace like

@@ -110,7 +110,9 @@ class Api::V2::UsersController < Api::V2::BaseController
     end
 
     begin
-      result = Pages::CustomHtmlWriter.edit!(user, find:, replace:)
+      result = Pages::CustomHtmlWriter.edit!(user, find:, replace:,
+                                                   expected_custom_html_sha256: params[:expected_custom_html_sha256],
+                                                   result_custom_html_sha256: params[:result_custom_html_sha256])
     rescue ActiveRecord::RecordInvalid => e
       return error_with_object(:user, e.record)
     end
