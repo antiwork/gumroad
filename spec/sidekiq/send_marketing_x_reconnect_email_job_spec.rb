@@ -86,6 +86,23 @@ describe SendMarketingXReconnectEmailJob do
     expect(action.reload.reconnect_notified_at).to be_nil
   end
 
+  # Delivery now happens outside the lock, so the eligible set is re-read afterwards.
+  it "does not consume a sibling product cancelled while the mail was being delivered" do
+    sibling = create(:marketing_action, user: seller, link: create(:product, user: seller), copy: "Other").tap do |a|
+      a.approve!
+      a.update!(error_code: Marketing::Action::X_WRITE_PERMISSION_MISSING)
+    end
+    allow_any_instance_of(Mail::TestMailer).to receive(:deliver!).and_wrap_original do |original, *args|
+      sibling.cancel!
+      original.call(*args)
+    end
+
+    expect { described_class.new.perform(action.id) }.to change { ActionMailer::Base.deliveries.size }.by(1)
+
+    expect(action.reload.reconnect_notified_at).to be_present
+    expect(sibling.reload.reconnect_notified_at).to be_nil
+  end
+
   it "ignores an action that no longer exists" do
     expect { described_class.new.perform(-1) }.not_to raise_error
   end
