@@ -151,7 +151,9 @@ export default function SocialConnectionsPage() {
           </>
         }
       >
-        <Rows role="list">
+        {/* FormSection puts the header in the other column and sizes the row to the taller of
+            the two, so without this the card stretches to the header's height. */}
+        <Rows role="list" className="self-start">
           {providers.map(({ key, name, Icon, connected, handle, legacyHandle, connectHref, disconnect }) => {
             const displayHandle = formatHandle(handle);
             const displayLegacyHandle = formatHandle(legacyHandle ?? null);

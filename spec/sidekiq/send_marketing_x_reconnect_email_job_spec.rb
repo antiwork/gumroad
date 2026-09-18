@@ -50,9 +50,9 @@ describe SendMarketingXReconnectEmailJob do
     end.not_to have_enqueued_mail(CreatorMailer, :marketing_x_reconnect)
   end
 
-  # A held claim outlives the process, so a failed enqueue would strand the seller as
-  # notified and unmailed.
-  it "releases the claim when the delivery cannot be enqueued" do
+  # Recording before the enqueue would strand the seller as notified and unmailed if the
+  # worker died in between.
+  it "records nothing when the delivery cannot be enqueued" do
     mail = double
     allow(mail).to receive(:deliver_later).and_raise(Redis::CannotConnectError)
     allow(CreatorMailer).to receive(:marketing_x_reconnect).and_return(mail)
