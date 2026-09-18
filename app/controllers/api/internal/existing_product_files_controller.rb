@@ -7,7 +7,7 @@ class Api::Internal::ExistingProductFilesController < Api::Internal::BaseControl
   before_action :fetch_product_by_unique_permalink, only: :index
 
   def index
-    e404 if @product.user != current_seller
+    e404 unless product_accessible_by_current_user?(@product)
 
     render json: { existing_files: ProductPresenter.new(product: @product, pundit_user:).existing_files }
   end

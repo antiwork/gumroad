@@ -122,6 +122,10 @@ class ProductPresenter
       pundit_user&.seller != user
   end
 
+  def collaborator_editing?
+    pundit_user.present? && pundit_user.seller != user
+  end
+
   def covers
     {
       covers: product.display_asset_previews.as_json,
@@ -130,7 +134,11 @@ class ProductPresenter
   end
 
   def existing_files
-    user.alive_product_files_preferred_for_product(product)
+    scope = user.alive_product_files_preferred_for_product(product)
+    # The picker offers the seller their whole library; a collaborator's access is to this
+    # product only, so their list stops at its files.
+    scope = scope.where(link: product) if collaborator_editing?
+    scope
         .limit($redis.get(RedisKey.product_presenter_existing_product_files_limit))
         .order(id: :desc)
         .includes(:alive_subtitle_files, thumbnail_attachment: :blob).map { _1.as_json(existing_product_file: true) }
