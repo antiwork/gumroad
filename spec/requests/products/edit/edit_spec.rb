@@ -1093,8 +1093,8 @@ describe("Product Edit Scenario", type: :system, js: true) do
 
   it "allows creating and deleting a testimonial in the product rich content" do
     product = create(:product, user: seller, name: "Sample product", price_cents: 1000)
-    purchase1 = create(:purchase, link: product, email: "reviewer1@example.com", full_name: "Reviewer 1")
-    purchase2 = create(:purchase, link: product, email: "reviewer2@example.com", full_name: "Reviewer 2")
+    purchase1 = create(:purchase, link: product, email: "reviewer1@example.com", purchaser: create(:user, name: "Reviewer 1"), full_name: "Reviewer 1")
+    purchase2 = create(:purchase, link: product, email: "reviewer2@example.com", purchaser: create(:user, name: "Reviewer 2"), full_name: "Reviewer 2")
 
     visit edit_link_path(product.unique_permalink)
     select_tab "Content"
@@ -1149,8 +1149,8 @@ describe("Product Edit Scenario", type: :system, js: true) do
 
   it "allows creating and deleting a testimonial in the product description" do
     product = create(:product, user: seller, name: "Sample product", price_cents: 1000)
-    purchase1 = create(:purchase, link: product, email: "reviewer1@example.com", full_name: "Reviewer 1")
-    purchase2 = create(:purchase, link: product, email: "reviewer2@example.com", full_name: "Reviewer 2")
+    purchase1 = create(:purchase, link: product, email: "reviewer1@example.com", purchaser: create(:user, name: "Reviewer 1"), full_name: "Reviewer 1")
+    purchase2 = create(:purchase, link: product, email: "reviewer2@example.com", purchaser: create(:user, name: "Reviewer 2"), full_name: "Reviewer 2")
 
     visit edit_link_path(product.unique_permalink)
 
