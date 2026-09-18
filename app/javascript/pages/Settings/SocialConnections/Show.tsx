@@ -181,12 +181,9 @@ export default function SocialConnectionsPage() {
                 <RowActions>
                   {connected ? (
                     <>
-                      {/* A connected account can still hold a token that cannot do what we
-                          need — X caps the grant at whatever the consent screen was asked
-                          for. Without this, re-authorizing means disconnecting first, which
-                          for a seller who signed up with X drops the identity they log in with.
-                          Disconnect moves into the menu to keep the row on one line at phone
-                          width, and because it is the rarer and destructive one. */}
+                      {/* A connected account can still hold a read-only token, so reconnecting
+                          must not require Disconnect first: that clears twitter_user_id, the login
+                          identity for a seller who signed up with X. */}
                       <SocialAuthButton provider={key} href={connectHref} aria-label={`Reconnect ${accountLabel}`}>
                         Reconnect
                       </SocialAuthButton>

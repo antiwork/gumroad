@@ -94,9 +94,8 @@ class Marketing::Channels::X
     def require_reconnect!
       action.error_code = Marketing::Action::X_WRITE_PERMISSION_MISSING
       action.require_reconnect!
-      # The card only reaches a seller who comes back to the product. Without this, an
-      # attempt made from the CLI or an agent session leaves nothing behind that tells them.
-      # The job claims the row, so a seller who retries is not mailed twice.
+      # The card reaches only a seller who returns to the product; a CLI or agent attempt
+      # would otherwise leave no trace. The job's claim keeps a retry from mailing twice.
       SendMarketingXReconnectEmailJob.perform_async(action.id)
     end
 

@@ -31,9 +31,7 @@ class Marketing::Recommendations
   private
     attr_reader :product, :seller
 
-    # Carries the seller back to this product's Share tab after they reconnect, so the
-    # post they were trying to send is in front of them again rather than left behind
-    # on a settings page.
+    # Returns the seller to this product's Share tab after reconnecting, not to Settings.
     def marketing_connect_path
       Rails.application.routes.url_helpers.settings_social_connections_path(
         social_connect_origin: "marketing", social_connect_product: product.unique_permalink)

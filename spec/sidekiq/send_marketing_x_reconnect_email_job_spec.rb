@@ -50,6 +50,31 @@ describe SendMarketingXReconnectEmailJob do
     end.not_to have_enqueued_mail(CreatorMailer, :marketing_x_reconnect)
   end
 
+  # A held claim outlives the process, so a failed enqueue would strand the seller as
+  # notified and unmailed.
+  it "releases the claim when the delivery cannot be enqueued" do
+    mail = double
+    allow(mail).to receive(:deliver_later).and_raise(Redis::CannotConnectError)
+    allow(CreatorMailer).to receive(:marketing_x_reconnect).and_return(mail)
+
+    expect { described_class.new.perform(action.id) }.to raise_error(Redis::CannotConnectError)
+    expect(action.reload.reconnect_notified_at).to be_nil
+  end
+
+  it "mails on the retry that follows a failed enqueue" do
+    mail = double
+    allow(mail).to receive(:deliver_later).and_raise(Redis::CannotConnectError)
+    allow(CreatorMailer).to receive(:marketing_x_reconnect).and_return(mail)
+    expect { described_class.new.perform(action.id) }.to raise_error(Redis::CannotConnectError)
+
+    allow(CreatorMailer).to receive(:marketing_x_reconnect).and_call_original
+    expect do
+      described_class.new.perform(action.id)
+    end.to have_enqueued_mail(CreatorMailer, :marketing_x_reconnect).with(marketing_action_id: action.id)
+
+    expect(action.reload.reconnect_notified_at).to be_present
+  end
+
   it "ignores an action that no longer exists" do
     expect { described_class.new.perform(-1) }.not_to raise_error
   end

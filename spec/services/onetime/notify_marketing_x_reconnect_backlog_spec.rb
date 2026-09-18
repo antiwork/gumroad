@@ -27,6 +27,32 @@ describe Onetime::NotifyMarketingXReconnectBacklog do
     expect { described_class.process }.to change { SendMarketingXReconnectEmailJob.jobs.size }.by(1)
   end
 
+  # The in-process Set dies with the run, so the seller's other stuck actions have to be
+  # closed in the database or a rerun mails them again.
+  it "closes the seller's other stuck actions so a rerun does not mail them again" do
+    first = stuck_action(seller:)
+    second = stuck_action(seller:)
+
+    expect { described_class.process }.to change { SendMarketingXReconnectEmailJob.jobs.size }.by(1)
+
+    expect(second.reload.reconnect_notified_at).to be_present
+    expect(first.reload.reconnect_notified_at).to be_nil # claimed by the job it was queued for
+
+    SendMarketingXReconnectEmailJob.drain
+    expect { described_class.process }.not_to change { SendMarketingXReconnectEmailJob.jobs.size }
+  end
+
+  it "leaves another seller's stuck action eligible" do
+    other_seller = create(:user, twitter_handle: "ada", twitter_oauth_token: "t", twitter_oauth_secret: "s")
+    stuck_action(seller:)
+    other_action = stuck_action(seller: other_seller)
+
+    described_class.process
+
+    expect(other_action.reload.reconnect_notified_at).to be_nil
+    expect(SendMarketingXReconnectEmailJob.jobs.map { _1["args"] }).to include([other_action.id])
+  end
+
   it "skips a seller already notified" do
     stuck_action(seller:).update!(reconnect_notified_at: Time.current)
 
