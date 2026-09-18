@@ -33,5 +33,29 @@ describe Api::Internal::ExistingProductFilesController do
       expect(response).to be_successful
       expect(response.parsed_body.deep_symbolize_keys).to eq({ existing_files: product_files })
     end
+
+    context "when the signed in user is a collaborator on the product" do
+      let(:affiliate_user) { create(:user) }
+      let!(:collaborator) { create(:collaborator, seller:, affiliate_user:, products: [product]) }
+      let!(:other_file) { create(:product_file, link: create(:product, user: seller)) }
+
+      before do
+        sign_out(user_with_role_for_seller)
+        sign_in(affiliate_user)
+      end
+
+      it "returns only the product's files" do
+        get :index, format: :json, params: { product_id: product.unique_permalink }
+
+        expect(response).to be_successful
+        expect(response.parsed_body.deep_symbolize_keys).to eq({ existing_files: product_files })
+      end
+
+      it "returns 404 for a product of the seller they do not collaborate on" do
+        expect do
+          get :index, format: :json, params: { product_id: other_file.link.unique_permalink }
+        end.to raise_error(ActionController::RoutingError)
+      end
+    end
   end
 end

@@ -1482,6 +1482,31 @@ describe ProductPresenter do
       expect(presenter.existing_files).to eq(product_files)
     end
 
+    context "when the seller has files on another product" do
+      let(:other_product) { create(:product, user: seller) }
+      let!(:other_file) { create(:product_file, link: other_product, url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachments/other.pdf") }
+
+      it "offers the seller their whole library" do
+        seller_presenter = described_class.new(product:, pundit_user: SellerContext.new(user: seller, seller:))
+
+        expect(seller_presenter.existing_files.map { _1[:id] }).to match_array([product.product_files.first.external_id, other_file.external_id])
+      end
+
+      it "offers a collaborator only this product's files" do
+        collaborator = create(:collaborator, seller:, products: [product])
+        collaborator_presenter = described_class.new(product:, pundit_user: SellerContext.new(user: collaborator.affiliate_user, seller: collaborator.affiliate_user))
+
+        expect(collaborator_presenter.existing_files.map { _1[:id] }).to eq([product.product_files.first.external_id])
+      end
+
+      it "does not offer a collaborator the seller's other files from edit_props" do
+        collaborator = create(:collaborator, seller:, products: [product])
+        collaborator_presenter = described_class.new(product:, request: ActionDispatch::TestRequest.create, pundit_user: SellerContext.new(user: collaborator.affiliate_user, seller: collaborator.affiliate_user))
+
+        expect(collaborator_presenter.edit_props[:existing_files].map { _1[:id] }).to eq([product.product_files.first.external_id])
+      end
+    end
+
     it "eager-loads variant_category and alive_rich_contents in edit_props variants (no N+1)" do
       variant_product = create(:product, user: seller)
       category = create(:variant_category, link: variant_product)
