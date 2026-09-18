@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { cleanup, render } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import * as React from "react";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
@@ -41,7 +41,7 @@ beforeAll(() => {
 
 afterEach(cleanup);
 
-const renderPage = () => {
+const renderPage = (overrides: Record<string, unknown> = {}) => {
   mocks.usePage.mockReturnValue({
     props: {
       authenticity_token: "authenticity-token",
@@ -58,6 +58,7 @@ const renderPage = () => {
       tiktok_connect_enabled: false,
       tiktok_connected: false,
       tiktok_handle: null,
+      ...overrides,
     },
   });
   render(<SocialConnectionsPage />);
@@ -84,5 +85,32 @@ describe("SocialConnectionsPage", () => {
     renderPage();
 
     expect(xConnectAction()).toContain("state=link_twitter_account");
+  });
+
+  // A read-only token still reads as connected, so without this the only way to
+  // re-authorize is Disconnect first.
+  it("offers Reconnect on a connected X account without requiring a disconnect", () => {
+    renderPage({ twitter_connected: true, twitter_handle: "gumroad" });
+
+    expect(screen.getByRole("button", { name: "Reconnect @gumroad from X" })).toBeTruthy();
+  });
+
+  // Disconnect stays reachable, one level in, so the row holds one line at phone width.
+  it("keeps Disconnect in the connection menu", async () => {
+    renderPage({ twitter_connected: true, twitter_handle: "gumroad" });
+
+    expect(screen.queryByRole("menuitem", { name: "Disconnect @gumroad from X" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Open X connection menu" }));
+
+    expect(await screen.findByRole("menuitem", { name: "Disconnect @gumroad from X" })).toBeTruthy();
+  });
+
+  it("points the Reconnect button at the same write-enabled connect flow", () => {
+    renderPage({ twitter_connected: true, twitter_handle: "gumroad" });
+
+    const action = xConnectAction();
+
+    expect(action).toContain("state=link_twitter_account");
+    expect(action).not.toContain("x_auth_access_type");
   });
 });

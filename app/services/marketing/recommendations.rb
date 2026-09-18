@@ -31,6 +31,12 @@ class Marketing::Recommendations
   private
     attr_reader :product, :seller
 
+    # Returns the seller to this product's Share tab after reconnecting, not to Settings.
+    def marketing_connect_path
+      Rails.application.routes.url_helpers.settings_social_connections_path(
+        social_connect_origin: "marketing", social_connect_product: product.unique_permalink)
+    end
+
     def x_entry
       seller.reload
       action = action_for("x")
@@ -39,7 +45,7 @@ class Marketing::Recommendations
       {
         connected: seller.twitter_oauth_token.present? && seller.twitter_oauth_secret.present?,
         handle: seller.twitter_handle,
-        connect_path: Rails.application.routes.url_helpers.settings_social_connections_path,
+        connect_path: marketing_connect_path,
         intent_url: intent_url(action),
         action:,
       }

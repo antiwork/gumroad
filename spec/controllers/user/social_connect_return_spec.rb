@@ -9,7 +9,8 @@ describe User::OmniauthCallbacksController do
   before do
     request.env["devise.mapping"] = Devise.mappings[:user]
     sign_in seller
-    session[:social_connect_return] = { "token" => token, "user_id" => seller.id, "created_at" => Time.current.to_i }
+    session[:social_connect_return] = { "token" => token, "user_id" => seller.id,
+                                        "destination" => dashboard_path, "created_at" => Time.current.to_i }
     request.env["omniauth.params"] = { "social_connect_return" => token, "state" => "link_twitter_account" }
   end
 
@@ -113,6 +114,30 @@ describe User::OmniauthCallbacksController do
     post :youtube
     expect(response).to redirect_to login_path
     expect(session[:social_connect_return]).to be_nil
+  end
+
+  context "returning to a product's Share tab" do
+    let(:product) { create(:product, user: seller, purchase_disabled_at: nil) }
+    let(:share_tab) { "#{edit_link_path(product.unique_permalink)}/share" }
+
+    before do
+      session[:social_connect_return] = { "token" => token, "user_id" => seller.id,
+                                          "destination" => share_tab, "created_at" => Time.current.to_i }
+    end
+
+    it "returns a reconnected X account to the post the seller was trying to send" do
+      expect(controller).to receive(:link_twitter_account)
+      post :twitter
+      expect(response).to redirect_to share_tab
+      expect(session[:social_connect_return]).to be_nil
+    end
+
+    it "returns a cancelled reconnect to the same Share tab" do
+      request.env["omniauth.error.strategy"] = double(name: "twitter")
+      get :failure
+      expect(response).to redirect_to share_tab
+      expect(flash[:alert]).to include("Couldn't connect")
+    end
   end
 
   it "does not alter Google sign-in referral behavior" do

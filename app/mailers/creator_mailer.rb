@@ -67,4 +67,21 @@ class CreatorMailer < ApplicationMailer
       subject: @subject
     )
   end
+
+  # Links to the product's Share tab, not Settings, so the post is in front of the seller
+  # when they return from reconnecting.
+  def marketing_x_reconnect(marketing_action_id:)
+    @action = Marketing::Action.awaiting_reconnect.find_by(id: marketing_action_id)
+    return if @action.nil?
+
+    seller = @action.user
+    email = seller.form_email
+    return unless EmailFormatValidator.valid?(email)
+
+    @product = @action.link
+    @share_url = "#{UrlService.domain_with_protocol}/products/#{@product.unique_permalink}/edit/share"
+    @subject = "Reconnect X to send your launch post"
+
+    mail(to: email, subject: @subject)
+  end
 end
