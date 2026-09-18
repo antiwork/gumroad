@@ -6,6 +6,9 @@ class TeamInvitationThrottle
   # A seller we have not reviewed gets this many invitations in total, revoked ones included. The
   # mailer carries the inviter's identity to strangers from our own sending domain, so an account
   # that has not been reviewed waits for review rather than for the next window.
+  #
+  # The weekly risk scan treats spending this allowance with no products as its review line, so
+  # changing the number changes what gets flagged: keep the scan's threshold in step.
   UNREVIEWED_TOTAL_LIMIT = 3
 
   # Check both windows and reserve a send atomically. Redis supplies the clock for every app process.
