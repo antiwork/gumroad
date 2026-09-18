@@ -596,7 +596,6 @@ class Ai::AnthropicClient
       )
     end
 
-    # Walks key if ANTHROPIC_API_KEY is unset (remove once the dedicated key is provisioned).
     # Raise here rather than send a blank x-api-key (upstream 401 becomes a generic seller error).
     # OpenRouter/Vercel keys go in the same header.
     def api_key
@@ -606,8 +605,7 @@ class Ai::AnthropicClient
       when :openrouter
         openrouter_api_key
       else
-        key = GlobalConfig.get("ANTHROPIC_API_KEY").presence ||
-              GlobalConfig.get("WALKS_ANTHROPIC_API_KEY").presence
+        key = GlobalConfig.get("ANTHROPIC_API_KEY").presence
         raise Error, "Anthropic API key is not configured (set ANTHROPIC_API_KEY)." if key.blank?
 
         key

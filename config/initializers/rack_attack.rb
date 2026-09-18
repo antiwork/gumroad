@@ -142,26 +142,6 @@ class Rack::Attack
     # and /login.json each have an entry).
     throttle_by_ip path: "/sellers/brand_accounts",      requests: 3, period: 20.seconds, method: :post # Initial: 9rpm, Max: 45 requests/9 hours
     throttle_by_ip path: "/sellers/brand_accounts.json", requests: 3, period: 20.seconds, method: :post # Initial: 9rpm, Max: 45 requests/9 hours
-
-    # Gumroad Walks: each successful realtime token gives the client up to 2h of OpenAI
-    # Realtime usage against our key, so a leaked/replayed JWS is capped here at ~$10/IP/hr.
-    # `max_level: 1` skips the backoff tiers — with a 1-hour base period `rpm * level` rounds
-    # to <1 and would block the very first escalation. Both `/api/v2/walks/...` and
-    # `/v2/walks/...` need entries since `api_routes` is mounted under both prefixes.
-    # Temporarily relaxed while debugging the App Attest reinstall flow (repeated reinstalls
-    # burn the 3/hr attestation cap below and surface as "attestation rejected"); restore once fixed.
-    # throttle_by_ip path: "/api/v2/walks/realtime_tokens", method: :post, requests: 5, period: 1.hour, max_level: 1
-    # throttle_by_ip path: "/v2/walks/realtime_tokens",     method: :post, requests: 5, period: 1.hour, max_level: 1
-    # throttle_by_ip path: "/api/v2/walks/synthesis",       method: :post, requests: 5, period: 1.hour, max_level: 1
-    # throttle_by_ip path: "/v2/walks/synthesis",           method: :post, requests: 5, period: 1.hour, max_level: 1
-
-    # App Attest bootstrap. `attestations` is once-per-install on the happy path, so 3/IP/hr
-    # lets a NAT recover from transient failures without letting a botnet fan out keys.
-    # `challenges` fires once per walks call plus once per attestation, so it needs more headroom.
-    # throttle_by_ip path: "/api/v2/walks/app_attest/attestations", method: :post, requests: 3,  period: 1.hour, max_level: 1
-    # throttle_by_ip path: "/v2/walks/app_attest/attestations",     method: :post, requests: 3,  period: 1.hour, max_level: 1
-    # throttle_by_ip path: "/api/v2/walks/app_attest/challenges",   method: :post, requests: 60, period: 1.hour, max_level: 1
-    # throttle_by_ip path: "/v2/walks/app_attest/challenges",       method: :post, requests: 60, period: 1.hour, max_level: 1
   end
 
   throttle_by_ip path: "/",                               requests: 60, period: 30.seconds # Initial: 120rpm, Max: 600 requests/9 hours
@@ -485,8 +465,7 @@ class Rack::Attack
   # mirroring the products/custom_html throttles above.
   #
   # `max_level: 1` skips the backoff tiers: with a 10-minute base period the derived rpm is
-  # 2, so level 2 would allow only 4 requests/64s — stricter than the base limit (same trap
-  # as the walks throttles above).
+  # 2, so level 2 would allow only 4 requests/64s — stricter than the base limit.
   v2_media_path = /\A\/(api\/)?v2\/media(\.\w+)?\z/
   throttle_by_ip path: v2_media_path, method: :post, requests: 20, period: 10.minutes, max_level: 1
   throttle_with_exponential_backoff(name: "media_uploads/token", requests: 20, period: 10.minutes, max_level: 1) do |req|
