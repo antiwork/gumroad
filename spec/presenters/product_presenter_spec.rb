@@ -177,6 +177,7 @@ describe ProductPresenter do
             created_at: purchase.created_at,
             membership: nil,
             review: nil,
+            review_account_name: purchase.rater_account_name,
             should_show_receipt: true,
             was_paid: true,
             is_gift_receiver_purchase: false,

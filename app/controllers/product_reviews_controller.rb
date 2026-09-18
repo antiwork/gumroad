@@ -71,6 +71,7 @@ class ProductReviewsController < ApplicationController
       review = purchase.post_review(
         rating: set_params[:rating].to_i,
         message: set_params[:message],
+        anonymous: ActiveModel::Type::Boolean.new.cast(set_params[:anonymous]) || false,
         video_options: set_params[:video_options] || {}
       )
 
@@ -97,7 +98,7 @@ class ProductReviewsController < ApplicationController
 
     def set_params
       params.permit(
-        :rating, :message,
+        :rating, :message, :anonymous,
         video_options: [
           { destroy: [:id] },
           { create: [:url, :thumbnail_signed_id] }

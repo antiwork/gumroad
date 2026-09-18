@@ -36,6 +36,59 @@ describe ProductReviewsController do
         expect(review.rating).to eq(2)
       end
 
+      it "saves the buyer's choice to review anonymously and lets them undo it" do
+        purchaser.update!(name: nil, username: "yacobyte")
+
+        put :set, params: valid_params.merge(anonymous: true)
+        expect(response.parsed_body["success"]).to eq(true)
+        expect(response.parsed_body["review"]["anonymous"]).to eq(true)
+        review = purchase.reload.product_review
+        expect(review.anonymous).to eq(true)
+        expect(review.rater_name).to eq("Anonymous")
+
+        put :set, params: valid_params.merge(anonymous: false)
+        expect(response.parsed_body["success"]).to eq(true)
+        expect(review.reload.anonymous).to eq(false)
+        expect(review.rater_name).to eq("yacobyte")
+      end
+
+      it "publishes the account identity when the buyer sends no choice" do
+        purchaser.update!(name: nil, username: "yacobyte")
+
+        put :set, params: valid_params
+
+        expect(response.parsed_body["success"]).to eq(true)
+        expect(purchase.reload.product_review.rater_name).to eq("yacobyte")
+      end
+
+      it "leaves the checkout name untouched when the buyer reviews anonymously" do
+        purchase.update!(full_name: "Checkout Name")
+
+        put :set, params: valid_params.merge(anonymous: true)
+
+        expect(purchase.reload.full_name).to eq("Checkout Name")
+        expect(purchase.rater_identity_name).to eq(purchaser.name.presence || "Checkout Name")
+      end
+
+      # A review stays public after its purchase becomes ineligible, so the buyer must still be able
+      # to take their name off it. `before_update` on ProductReview only guards a rating change, so
+      # an identity-only edit gets through.
+      it "lets a buyer go Anonymous after the purchase becomes ineligible" do
+        purchaser.update!(name: nil, username: "yacobyte")
+        put :set, params: valid_params
+        review = purchase.reload.product_review
+        expect(review.rater_name).to eq("yacobyte")
+
+        purchase.update!(stripe_refunded: true)
+        expect(purchase.reload.allows_review_to_be_counted?).to be(false)
+
+        put :set, params: valid_params.merge(anonymous: true)
+
+        expect(response.parsed_body["success"]).to eq(true)
+        expect(review.reload.anonymous).to eq(true)
+        expect(review.rater_name).to eq("Anonymous")
+      end
+
       it "allows saving the same rating" do
         put :set, params: valid_params
         expect(response.parsed_body["success"]).to eq(true)

@@ -46,6 +46,8 @@ type Product = {
 
 type Review = {
   id: string;
+  anonymous: boolean;
+  account_name: string | null;
   rating: number;
   message: string | null;
   purchase_id: string;
@@ -59,7 +61,7 @@ type Review = {
 
 interface Props {
   reviews: Review[];
-  purchases: { id: string; email_digest: string; product: Product }[];
+  purchases: { id: string; email_digest: string; account_name: string | null; product: Product }[];
 }
 
 let newReviewId = 0;
@@ -128,6 +130,7 @@ const Row = ({ review, onChange }: { review: Review; onChange: (review: Review) 
                     purchaseId={review.purchase_id}
                     purchaseEmailDigest={review.purchase_email_digest}
                     review={review}
+                    accountName={review.account_name}
                     onChange={(newReview) => onChange({ ...review, ...newReview })}
                     className="flex flex-wrap items-center justify-between gap-4 p-4"
                   />
@@ -175,6 +178,7 @@ export default function ReviewsIndex({ reviews: initialReviews, purchases: initi
                       purchaseId={purchase.id}
                       purchaseEmailDigest={purchase.email_digest}
                       review={null}
+                      accountName={purchase.account_name}
                       onChange={(newReview) => {
                         setReviews((prevReviews) => [
                           ...prevReviews,

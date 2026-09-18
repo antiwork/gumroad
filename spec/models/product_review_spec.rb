@@ -222,4 +222,43 @@ describe ProductReview do
       end.not_to have_enqueued_mail(ContactingCreatorMailer, :review_submitted)
     end
   end
+
+  describe "#rater_name" do
+    let(:purchaser) { create(:user, name: nil, username: "yacobyte") }
+    let(:purchase) { create(:purchase, purchaser:, full_name: "Checkout Name") }
+    let(:product_review) { create(:product_review, purchase:) }
+
+    it "publishes the account identity when the buyer has made no choice" do
+      expect(product_review.anonymous).to be_nil
+      expect(product_review.rater_name).to eq("yacobyte")
+      expect(product_review.shows_account_identity?).to be(true)
+    end
+
+    it "publishes Anonymous when the buyer chose it" do
+      product_review.update!(anonymous: true)
+
+      expect(product_review.rater_name).to eq("Anonymous")
+      expect(product_review.shows_account_identity?).to be(false)
+    end
+
+    it "returns to the account identity when the buyer undoes the choice" do
+      product_review.update!(anonymous: true)
+      product_review.update!(anonymous: false)
+
+      expect(product_review.rater_name).to eq("yacobyte")
+    end
+
+    it "follows a later rename of the account" do
+      purchaser.update!(name: "Renamed")
+
+      expect(product_review.reload.rater_name).to eq("Renamed")
+    end
+
+    it "publishes Anonymous when the purchase carries no account identity" do
+      guest_review = create(:product_review, purchase: create(:purchase, purchaser: nil, full_name: "Checkout Name"))
+
+      expect(guest_review.rater_name).to eq("Anonymous")
+      expect(guest_review.rater_account_name).to be_nil
+    end
+  end
 end

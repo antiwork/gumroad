@@ -87,11 +87,11 @@ describe ProductReviewPresenter do
 
     context "product review is not associated with an account" do
       before { product_review.purchase.update!(full_name: "Purchaser") }
-      it "uses the purchase's full name" do
+      it "uses 'Anonymous' rather than the checkout name" do
         expect(described_class.new(product_review).product_review_props[:rater]).to eq(
           {
             avatar_url: ActionController::Base.helpers.image_url("gumroad-default-avatar-5.png"),
-            name: "Purchaser",
+            name: "Anonymous",
           }
         )
       end
@@ -114,18 +114,45 @@ describe ProductReviewPresenter do
       end
 
       context "account's name is blank" do
-        before { purchaser.update!(name: nil) }
+        before { purchaser.update!(name: nil, username: "yacobyte") }
 
-        it "uses 'Anonymous'" do
-          expect(described_class.new(product_review).product_review_props[:rater][:name]).to eq("Anonymous")
+        it "uses the username" do
+          expect(described_class.new(product_review).product_review_props[:rater][:name]).to eq("yacobyte")
         end
 
         context "purchase's full name is present" do
           before { product_review.purchase.update!(full_name: "Purchaser") }
 
-          it "uses the purchase's full name" do
-            expect(described_class.new(product_review).product_review_props[:rater][:name]).to eq("Purchaser")
+          it "still uses the username rather than the checkout name" do
+            expect(described_class.new(product_review).product_review_props[:rater][:name]).to eq("yacobyte")
           end
+        end
+
+        context "account has no username either" do
+          before { purchaser.update!(username: nil) }
+
+          it "uses 'Anonymous' rather than the account's external id" do
+            expect(described_class.new(product_review).product_review_props[:rater][:name]).to eq("Anonymous")
+          end
+        end
+      end
+
+      context "buyer chose Anonymous for this review" do
+        before { product_review.update!(anonymous: true) }
+
+        it "hides the account's name and avatar" do
+          expect(described_class.new(product_review).product_review_props[:rater]).to eq(
+            {
+              avatar_url: ActionController::Base.helpers.image_url("gumroad-default-avatar-5.png"),
+              name: "Anonymous",
+            }
+          )
+        end
+
+        it "offers the account name back through the form props" do
+          props = described_class.new(product_review).review_form_props
+
+          expect(props[:anonymous]).to be(true)
         end
       end
     end
@@ -144,11 +171,11 @@ describe ProductReviewPresenter do
       let(:giftee_purchase) { create(:purchase, :gift_receiver, purchaser:, full_name: "Sabrina Rehman", street_address: "1 Main St") }
       let(:product_review) { create(:product_review, purchase: giftee_purchase) }
 
-      it "uses the shipping name and the default avatar" do
+      it "uses 'Anonymous' and the default avatar rather than the shipping name" do
         expect(described_class.new(product_review).product_review_props[:rater]).to eq(
           {
             avatar_url: ActionController::Base.helpers.image_url("gumroad-default-avatar-5.png"),
-            name: "Sabrina Rehman",
+            name: "Anonymous",
           }
         )
       end
@@ -178,6 +205,7 @@ describe ProductReviewPresenter do
     it "returns the correct props" do
       expect(described_class.new(product_review).review_form_props).to eq(
         {
+          anonymous: false,
           message: product_review.message,
           rating: product_review.rating,
           video: nil

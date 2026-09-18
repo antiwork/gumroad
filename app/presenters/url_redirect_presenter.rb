@@ -121,6 +121,7 @@ class UrlRedirectPresenter
           product_available: !purchase.link&.deleted?,
           disable_reviews_after_year: purchase.seller.disable_reviews_after_year?,
           review: review.present? ? ProductReviewPresenter.new(review).review_form_props : nil,
+          review_account_name: purchase.rater_account_name,
           membership: purchase.subscription.present? ? {
             has_active_subscription: purchase.has_active_subscription?,
             subscription_id: purchase.subscription.external_id,

@@ -75,6 +75,14 @@ class ProductReview < ApplicationRecord
   # silently replace it.
   after_update_commit :notify_seller_of_arrived_message, if: -> { saved_change_to_message? && saved_change_to_message.first.blank? && message.present? }
 
+  # The buyer's choice wins over the account identity. A NULL `anonymous` means no choice was made,
+  # so reviews written before the column existed keep the identity rule with no backfill.
+  def shows_account_identity? = !anonymous? && rater_account_name.present?
+
+  def rater_account_name = purchase.rater_account_name
+
+  def rater_name = shows_account_identity? ? rater_account_name : "Anonymous"
+
   def seller_notified? = seller_notified_at.present?
 
   # Takes the seller's one notice for this review and returns the token proving this render holds

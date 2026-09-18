@@ -182,6 +182,7 @@ export type Purchase = {
   email_digest: string;
   created_at: string;
   review: FormReview | null;
+  review_account_name: string | null;
   should_show_receipt: boolean;
   was_paid: boolean;
   is_gift_receiver_purchase: boolean;
@@ -886,6 +887,7 @@ const ExistingPurchaseCard = ({
             permalink={permalink}
             purchaseId={purchase.id}
             review={purchase.review}
+            accountName={purchase.review_account_name}
             purchaseEmailDigest={purchase.email_digest}
             className="flex flex-wrap items-center justify-between gap-4 p-4"
           />

@@ -29,9 +29,9 @@ module Purchase::Reviews
     purchase&.true_original_purchase&.product_review
   end
 
-  def post_review(rating:, message: nil, video_options: {})
+  def post_review(rating:, message: nil, anonymous: false, video_options: {})
     review = original_product_review || true_original_purchase.build_product_review(link:)
-    ProductReview::UpdateService.new(review, rating:, message:, video_options:).update
+    ProductReview::UpdateService.new(review, rating:, message:, anonymous:, video_options:).update
   end
 
   # Important: The logic needs to be the same as the one in the scope `allowing_reviews_to_be_counted`
@@ -43,8 +43,13 @@ module Purchase::Reviews
     allows_reviews(permit_recurring_charges: true)
   end
 
-  def rater_name
-    rater_identity_name.presence || "Anonymous"
+  # The identity a review may publish, or nil when there is none. The checkout name is absent on
+  # purpose: a buyer types that name to pay, not to publish. Read the username column directly —
+  # `User#username` falls back to the external id.
+  def rater_account_name
+    return unless rater_uses_account_identity?
+
+    purchaser.name.presence || purchaser.read_attribute(:username).presence
   end
 
   def rater_identity_name

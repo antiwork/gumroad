@@ -401,24 +401,40 @@ describe Purchase::Reviews do
     end
   end
 
-  describe "#rater_name" do
+  describe "#rater_account_name" do
     it "uses the purchaser name" do
       purchaser = create(:user, name: "Reviewer")
       purchase = create(:purchase, purchaser:, full_name: "Checkout Name")
 
-      expect(purchase.rater_name).to eq("Reviewer")
+      expect(purchase.rater_account_name).to eq("Reviewer")
     end
 
-    it "falls back to the purchase full_name for a guest" do
+    it "uses the username when the account has no name" do
+      purchaser = create(:user, name: nil, username: "yacobyte")
+      purchase = create(:purchase, purchaser:, full_name: "Checkout Name")
+
+      expect(purchase.rater_account_name).to eq("yacobyte")
+    end
+
+    it "returns nil rather than the external id when the account has no name and no username" do
+      purchaser = create(:user, name: nil, username: nil)
+      purchase = create(:purchase, purchaser:, full_name: "Checkout Name")
+
+      expect(purchaser.username).to eq(purchaser.external_id)
+      expect(purchase.rater_account_name).to be_nil
+    end
+
+    it "ignores the checkout name for a guest, but keeps it for the seller notification" do
       purchase = create(:purchase, purchaser: nil, full_name: "Checkout Name")
 
-      expect(purchase.rater_name).to eq("Checkout Name")
+      expect(purchase.rater_account_name).to be_nil
+      expect(purchase.rater_identity_name).to eq("Checkout Name")
     end
 
     it "does not attribute a digital gift review to the sender's copied full_name" do
       giftee_purchase = create(:purchase, :gift_receiver, purchaser: nil, full_name: "Mahmood Pervaiz")
 
-      expect(giftee_purchase.rater_name).to eq("Anonymous")
+      expect(giftee_purchase.rater_account_name).to be_nil
       expect(giftee_purchase.rater_identity_name).to be_nil
     end
 
@@ -426,28 +442,29 @@ describe Purchase::Reviews do
       giftee = create(:user, name: "Sabrina")
       giftee_purchase = create(:purchase, :gift_receiver, purchaser: giftee, full_name: "Mahmood Pervaiz")
 
-      expect(giftee_purchase.rater_name).to eq("Sabrina")
+      expect(giftee_purchase.rater_account_name).to eq("Sabrina")
     end
 
     it "keeps the sender name available for gift receipt subjects" do
       giftee = create(:user, name: "Sabrina")
       giftee_purchase = create(:purchase, :gift_receiver, purchaser: giftee, full_name: "Mahmood Pervaiz")
 
-      expect(giftee_purchase.rater_name).to eq("Sabrina")
+      expect(giftee_purchase.rater_account_name).to eq("Sabrina")
       expect(giftee_purchase.gifter_full_name).to eq("Mahmood Pervaiz")
     end
 
-    it "keeps the shipping name on a physical gift" do
+    it "ignores the shipping name on a physical gift, but keeps it for the seller notification" do
       giftee_purchase = create(:purchase, :gift_receiver, purchaser: nil, full_name: "Sabrina Rehman", street_address: "1 Main St")
 
-      expect(giftee_purchase.rater_name).to eq("Sabrina Rehman")
+      expect(giftee_purchase.rater_account_name).to be_nil
+      expect(giftee_purchase.rater_identity_name).to eq("Sabrina Rehman")
     end
 
-    it "keeps the shipping name on a physical gift even when the giftee has a different account name" do
+    it "ignores the shipping name on a physical gift with a linked account" do
       giftee = create(:user, name: "Account Name")
       giftee_purchase = create(:purchase, :gift_receiver, purchaser: giftee, full_name: "Sabrina Rehman", street_address: "1 Main St")
 
-      expect(giftee_purchase.rater_name).to eq("Sabrina Rehman")
+      expect(giftee_purchase.rater_account_name).to be_nil
       expect(giftee_purchase.rater_uses_account_identity?).to eq(false)
     end
 
@@ -455,7 +472,7 @@ describe Purchase::Reviews do
       giftee_purchase = create(:purchase, :gift_receiver, purchaser: nil, full_name: "Mahmood Pervaiz")
       giftee_purchase.link.update!(require_shipping: true)
 
-      expect(giftee_purchase.rater_name).to eq("Anonymous")
+      expect(giftee_purchase.rater_account_name).to be_nil
     end
   end
 end

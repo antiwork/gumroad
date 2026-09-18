@@ -10,6 +10,7 @@ export const setProductRating = async ({
   purchaseEmailDigest,
   rating,
   message,
+  anonymous,
   videoOptions,
 }: {
   permalink: string;
@@ -17,6 +18,7 @@ export const setProductRating = async ({
   purchaseEmailDigest: string;
   rating: number;
   message?: string | null;
+  anonymous?: boolean;
   videoOptions?: {
     create?: { url: string; thumbnail_signed_id: string | undefined };
     destroy?: { id: string };
@@ -32,6 +34,7 @@ export const setProductRating = async ({
       purchase_email_digest: purchaseEmailDigest,
       rating,
       message,
+      anonymous,
       video_options: videoOptions,
     },
   });
@@ -40,6 +43,7 @@ export const setProductRating = async ({
     | {
         success: true;
         review: {
+          anonymous: boolean;
           rating: number;
           message: string | null;
           video: { id: string; thumbnail_url: string | null } | null;

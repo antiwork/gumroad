@@ -22,8 +22,8 @@ class ProductReviewPresenter
       rating: product_review.rating,
       message: product_review.message,
       rater: {
-        avatar_url: purchase.rater_uses_account_identity? ? purchaser.avatar_url : ActionController::Base.helpers.image_url("gumroad-default-avatar-5.png"),
-        name: purchase.rater_name,
+        avatar_url: product_review.shows_account_identity? ? purchaser.avatar_url : ActionController::Base.helpers.image_url("gumroad-default-avatar-5.png"),
+        name: product_review.rater_name,
       },
       purchase_id: include_purchase_id ? purchase.external_id : nil,
       # `is_new` only says whether the review is recent. The timestamp itself is what a creator
@@ -42,6 +42,7 @@ class ProductReviewPresenter
 
   def review_form_props
     {
+      anonymous: product_review.anonymous?,
       rating: product_review.rating,
       message: product_review.message,
       video: video_props(product_review.editable_video),

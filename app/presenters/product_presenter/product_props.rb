@@ -110,6 +110,7 @@ class ProductPresenter::ProductProps
         email_digest: purchase_info[:email_digest],
         created_at: purchase_info[:created_at],
         review: purchase_info[:review],
+        review_account_name: purchase_info[:review_account_name],
         should_show_receipt: purchase_info[:should_show_receipt],
         was_paid: purchase_info[:was_paid],
         is_gift_receiver_purchase: purchase_info[:is_gift_receiver_purchase],

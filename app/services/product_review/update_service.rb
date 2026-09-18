@@ -1,8 +1,9 @@
 # frozen_string_literal: true
 
 class ProductReview::UpdateService
-  def initialize(product_review, rating:, message:, video_options: {})
+  def initialize(product_review, rating:, message:, anonymous: false, video_options: {})
     @product_review = product_review
+    @anonymous = anonymous
     @rating = rating
     @message = message
     @video_options = video_options.to_h.with_indifferent_access
@@ -23,7 +24,7 @@ class ProductReview::UpdateService
 
   private
     def update_rating_and_message
-      @product_review.update!(rating: @rating, message: @message)
+      @product_review.update!(rating: @rating, message: @message, anonymous: @anonymous)
     end
 
     def update_video

@@ -106,13 +106,32 @@ describe Api::V2::ProductReviewsController do
       expect(returned.first["message"]).to be_nil
     end
 
-    it "falls back to the purchase's full name when the buyer has no account" do
+    it "returns Anonymous instead of the checkout name when the buyer has no account" do
       review = create_review
       review.purchase.update!(purchaser: nil, full_name: "Purchaser")
 
       get @action, params: @params
 
-      expect(response.parsed_body["product_reviews"].first["rater_name"]).to eq("Purchaser")
+      expect(response.parsed_body["product_reviews"].first["rater_name"]).to eq("Anonymous")
+    end
+
+    it "returns Anonymous when the buyer chose it for this review" do
+      review = create_review
+      review.purchase.update!(purchaser: create(:user, name: "Reviewer"))
+      review.update!(anonymous: true)
+
+      get @action, params: @params
+
+      expect(response.parsed_body["product_reviews"].first["rater_name"]).to eq("Anonymous")
+    end
+
+    it "returns the username when the buyer's account has no name" do
+      review = create_review
+      review.purchase.update!(purchaser: create(:user, name: nil, username: "yacobyte"), full_name: "Purchaser")
+
+      get @action, params: @params
+
+      expect(response.parsed_body["product_reviews"].first["rater_name"]).to eq("yacobyte")
     end
 
     it "does not attribute a digital gift review to the sender's copied full_name" do

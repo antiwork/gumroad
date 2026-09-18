@@ -60,6 +60,7 @@ export type LayoutProps = {
     product_available: boolean;
     disable_reviews_after_year: boolean;
     review: Review | null;
+    review_account_name: string | null;
     membership: {
       has_active_subscription: boolean;
       subscription_id: string;
@@ -132,6 +133,7 @@ export const Layout = ({
                 purchaseId={purchase.id}
                 purchaseEmailDigest={purchase.email_digest}
                 review={purchase.review}
+                accountName={purchase.review_account_name}
                 disabledStatus={disabledStatus}
                 className="flex flex-wrap items-center justify-between gap-4 p-4"
               />
