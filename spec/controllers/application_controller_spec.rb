@@ -493,4 +493,29 @@ describe ApplicationController do
       expect(session).to_not have_key(:signup_referrer)
     end
   end
+
+  describe "#check_payment_details" do
+    let(:seller) { create(:user) }
+
+    before do
+      allow(controller).to receive(:current_seller).and_return(seller)
+    end
+
+    it "does not fail the request when the Redis payment-requirements read stalls" do
+      allow($redis).to receive(:sismember)
+        .with(RedisKey.user_ids_with_payment_requirements_key, seller.id)
+        .and_raise(RedisClient::Error.new("Waited 1.0 seconds"))
+
+      expect { controller.send(:check_payment_details) }.not_to raise_error
+      expect(controller.send(:seller_has_payment_requirements?)).to be(false)
+    end
+
+    it "still reports a seller who is in the payment-requirements set" do
+      allow($redis).to receive(:sismember)
+        .with(RedisKey.user_ids_with_payment_requirements_key, seller.id)
+        .and_return(true)
+
+      expect(controller.send(:seller_has_payment_requirements?)).to be(true)
+    end
+  end
 end

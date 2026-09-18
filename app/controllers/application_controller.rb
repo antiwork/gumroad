@@ -362,7 +362,7 @@ class ApplicationController < ActionController::Base
 
     def check_payment_details
       return unless current_seller
-      return unless $redis.sismember(RedisKey.user_ids_with_payment_requirements_key, current_seller.id)
+      return unless seller_has_payment_requirements?
 
       merchant_account = current_seller.merchant_accounts.alive.stripe.last
 
@@ -378,6 +378,14 @@ class ApplicationController < ActionController::Base
       else
         redirect_to settings_payments_path, notice: "Urgent: We are required to collect more information from you to continue processing payments." and return
       end
+    end
+
+    # Fast-path gate in front of the compliance redirect. A stalled Redis read must not 500 the
+    # page for every seller, so degrade to "no requirements" and skip the informational redirect.
+    def seller_has_payment_requirements?
+      $redis.sismember(RedisKey.user_ids_with_payment_requirements_key, current_seller.id)
+    rescue Redis::BaseError, RedisClient::Error
+      false
     end
 
     def fetch_affiliate(product, product_params = nil)

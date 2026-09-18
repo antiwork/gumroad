@@ -43,6 +43,14 @@ describe PurchasingPowerParityService do
         expect(@service.get_factor("FAKE", @seller)).to eq(0.99)
       end
     end
+
+    context "when the Redis read stalls" do
+      it "returns the neutral factor instead of failing" do
+        allow(@service).to receive(:ppp_namespace).and_raise(Redis::TimeoutError.new("Waited 1.0 seconds"))
+
+        expect(@service.get_factor("FAKE", @seller)).to eq(1)
+      end
+    end
   end
 
   describe "#set_factor" do
@@ -70,6 +78,16 @@ describe PurchasingPowerParityService do
       expect(result["FR"]).to eq(0.4)
       expect(result["IT"]).to eq(0.456)
       expect(result["GB"]).to eq(0.6)
+      expect(result["PL"]).to eq(1.0)
+    end
+
+    it "falls back to the neutral factor for every country when the Redis read stalls" do
+      allow(@service).to receive(:ppp_namespace).and_raise(Redis::TimeoutError.new("Waited 1.0 seconds"))
+
+      result = @service.get_all_countries_factors(@seller)
+
+      expect(result.keys).to eq(Compliance::Countries.mapping.keys)
+      expect(result["FR"]).to eq(1.0)
       expect(result["PL"]).to eq(1.0)
     end
   end

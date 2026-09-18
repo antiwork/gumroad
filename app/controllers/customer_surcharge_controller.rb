@@ -169,6 +169,10 @@ class CustomerSurchargeController < ApplicationController
       detected_buyer_currency:,
       available_buyer_currencies: available
     }
+  rescue CurrencyHelper::RateUnavailable
+    # Surcharges are priced off this rate. With no rate this process can trust, withholding the
+    # quote ("try again") is the only answer that cannot misprice the buyer's cart.
+    head :service_unavailable
   end
 
   private
