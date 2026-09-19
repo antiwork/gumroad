@@ -680,10 +680,10 @@ describe "Rack::Attack throttle", type: :request do
     end
   end
 
-  describe "products search throttle (gumroad-private#2805)" do
-    def search_request(path = "/products/search", ip:)
+  describe "products search throttle" do
+    def search_request(method: "GET", path: "/products/search", ip:)
       Rack::Attack::Request.new(
-        Rack::MockRequest.env_for(path, method: "GET", input: "", "HTTP_CF_CONNECTING_IP" => ip)
+        Rack::MockRequest.env_for(path, method:, input: "", "HTTP_CF_CONNECTING_IP" => ip),
       )
     end
 
@@ -692,11 +692,28 @@ describe "Rack::Attack throttle", type: :request do
 
       travel_to(Time.current) do
         300.times do |i|
-          path = i.even? ? "/products/search" : "/products/search.json"
-          expect(Rack::Attack.configuration.throttled?(search_request(path, ip: "203.0.113.90"))).to be(false), "request #{i + 1} unexpectedly throttled"
+          expect(
+            Rack::Attack.configuration.throttled?(
+              search_request(path: i.even? ? "/products/search" : "/products/search.json", ip: "203.0.113.90"),
+            ),
+          ).to be(false)
         end
 
         expect(Rack::Attack.configuration.throttled?(search_request(ip: "203.0.113.90"))).to be(true)
+      end
+    ensure
+      reset_rack_attack!
+    end
+
+    it "counts only GET/HEAD, so another verb's flood cannot spend a client's bucket" do
+      reset_rack_attack!
+
+      travel_to(Time.current) do
+        301.times do
+          expect(
+            Rack::Attack.configuration.throttled?(search_request(method: "POST", ip: "203.0.113.93")),
+          ).to be(false)
+        end
       end
     ensure
       reset_rack_attack!
