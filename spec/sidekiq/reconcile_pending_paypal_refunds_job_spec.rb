@@ -114,13 +114,6 @@ describe ReconcilePendingPaypalRefundsJob do
 
         described_class.new.perform
       end
-
-      it "skips refunds older than the maximum age" do
-        refund.update!(created_at: 90.days.ago)
-        expect(PaypalChargeProcessor).not_to receive(:fetch_refund_status)
-
-        described_class.new.perform
-      end
     end
 
     it "skips refunds that are not PayPal's" do

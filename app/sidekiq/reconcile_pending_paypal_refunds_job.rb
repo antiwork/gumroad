@@ -21,11 +21,12 @@ class ReconcilePendingPaypalRefundsJob
   PAYPAL_COMPLETED_STATUS = "COMPLETED"
   PAYPAL_TERMINAL_FAILURE_STATUSES = { "FAILED" => "failed", "CANCELLED" => "canceled" }.freeze
 
-  # A refund PayPal is still holding as PENDING can settle later, and re-reading a
-  # settled one never changes it, so only rows inside this window are worth a
-  # round-trip; the upper bound stops legacy rows being read forever.
+  # A refund PayPal is still holding as PENDING can settle later, so only rows past this
+  # age are worth a round-trip. There is no upper bound: the candidate scope is
+  # `status = "PENDING"` alone, and every read either resolves the row or proves it is
+  # still stuck, so a refund that never settles keeps being checked rather than being
+  # dropped after an arbitrary window.
   MINIMUM_AGE = 3.days
-  MAXIMUM_AGE = 60.days
 
   def perform
     refunds_to_reconcile.find_each do |refund|
@@ -42,7 +43,7 @@ class ReconcilePendingPaypalRefundsJob
             .where(status: PAYPAL_PENDING_STATUS)
             .where.not(processor_refund_id: [nil, ""])
             .where(purchases: { charge_processor_id: PaypalChargeProcessor.charge_processor_id })
-            .where(created_at: MAXIMUM_AGE.ago..MINIMUM_AGE.ago)
+            .where(created_at: ...MINIMUM_AGE.ago)
     end
 
     def reconcile(refund)
