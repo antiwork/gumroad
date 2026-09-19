@@ -128,10 +128,10 @@ class Api::V2::LicensesController < Api::V2::BaseController
     end
 
     class << self
-      # The last timestamp this process successfully read. An unread timestamp must not be
+      # Mirrors the last successful read of the key. An unread timestamp must not be
       # indistinguishable from "no enforcement", so the remembered value keeps the product_id
       # requirement in place exactly as the key does; only a process that has never read the key
-      # falls back to the pre-flag behaviour (no enforcement).
+      # omits it, which is the pre-flag behaviour.
       attr_accessor :last_known_force_product_id_timestamp
     end
 
@@ -146,7 +146,9 @@ class Api::V2::LicensesController < Api::V2::BaseController
     def force_product_id_timestamp
       @_force_prouct_id_timestamp ||= begin
         timestamp = $redis.get(RedisKey.force_product_id_timestamp)&.to_datetime
-        self.class.last_known_force_product_id_timestamp = timestamp unless timestamp.nil?
+        # Mirrors the last successful read, nil included: a cutoff the operator has removed must not
+        # be restored by a later stall.
+        self.class.last_known_force_product_id_timestamp = timestamp
         timestamp
       end
     rescue *REDIS_TRANSPORT_ERRORS
