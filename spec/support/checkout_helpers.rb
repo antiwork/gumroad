@@ -194,10 +194,10 @@ end
 def fill_in_credit_card(number: "4242424242424242", expiry: StripePaymentMethodHelper::EXPIRY_MMYY, cvc: "123", zip_code: nil)
   within_fieldset "Card information" do
     within_credit_card_frame do
-      fill_in "Card number", with: number, visible: false if number.present?
-      fill_in "MM / YY", with: expiry, visible: false if expiry.present?
-      fill_in "CVC", with: cvc, visible: false if cvc.present?
-      fill_in "ZIP", with: zip_code, visible: false if zip_code.present?
+      fill_in_stripe_field ["Card number"], with: number if number.present?
+      fill_in_stripe_field ["MM / YY"], with: expiry if expiry.present?
+      fill_in_stripe_field ["CVC"], with: cvc if cvc.present?
+      fill_in_stripe_field ["ZIP"], with: zip_code if zip_code.present?
     end
   end
 end
@@ -236,11 +236,16 @@ def within_payment_element_frame(&block)
 end
 
 def fill_in_stripe_field(labels, with:)
-  field = labels.lazy.filter_map { |label| first(:fillable_field, label, visible: false, wait: 0) }.first
-  field ||= first(:fillable_field, labels.first, visible: false)
-  raise Capybara::ElementNotFound, "Unable to find Stripe field matching #{labels.join(', ')}" if field.nil?
+  page.document.synchronize do
+    field = labels.lazy.filter_map { |label| first(:fillable_field, label, visible: false, wait: 0) }.first
+    raise Capybara::ElementNotFound, "Unable to find Stripe field matching #{labels.join(', ')}" if field.nil?
 
-  field.fill_in(with:)
+    field.fill_in(with:)
+    # Stripe can lose focus mid-entry; verify every requested character, ignoring its formatting.
+    unless field.value.delete(" /") == with.to_s.delete(" /")
+      raise Capybara::ExpectationNotMet, "Stripe field #{labels.join(', ')} did not retain the complete requested value"
+    end
+  end
 end
 
 SCA_CHALLENGE_IFRAME = "iframe[src^='https://js.stripe.com/v3/three-ds-2-challenge']"

@@ -1,0 +1,56 @@
+# frozen_string_literal: true
+
+class Api::V2::MuseController < Api::V2::BaseController
+  skip_before_action :verify_authenticity_token
+  # Parse before inherited callbacks access params so malformed JSON gets a JSON-RPC error.
+  prepend_before_action :parse_rpc_body, only: :mcp
+  # view_public is the access-token default scope but is absent from public_scopes, so a
+  # default-scope token was rejected here before any tool's own scope check ran.
+  before_action(only: [:mcp]) { doorkeeper_authorize!(*Doorkeeper.configuration.public_scopes, :view_public) }
+
+  def status
+    render json: { status: "success" }
+  end
+
+  def oauth_metadata
+    render json: Muse::Mcp.oauth_metadata(base_url)
+  end
+
+  def mcp_discovery
+    render json: Muse::Mcp.discovery(base_url)
+  end
+
+  def mcp
+    if request.get?
+      response.headers["Allow"] = "POST"
+      return head :method_not_allowed
+    end
+
+    result = Muse::Mcp.new(user: current_resource_owner, token: doorkeeper_token).handle(@rpc_body)
+    return head :accepted if result.nil?
+
+    status = result.is_a?(Hash) && result[:error] ? rpc_http_status(result[:error][:code]) : :ok
+    render json: result, status:
+  end
+
+  private
+    def parse_rpc_body
+      return unless request.post?
+
+      @rpc_body = JSON.parse(request.raw_post)
+    rescue JSON::ParserError
+      render json: { jsonrpc: "2.0", id: nil, error: { code: -32700, message: "Parse error" } }, status: :bad_request
+    end
+
+    def rpc_http_status(code)
+      case code
+      when -32700, -32600, -32602 then :bad_request
+      when -32601 then :not_found
+      else :ok
+      end
+    end
+
+    def base_url
+      "#{PROTOCOL}://#{DOMAIN}"
+    end
+end
