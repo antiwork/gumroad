@@ -303,3 +303,42 @@ it("offers no download switch for a file with no other way to open it", async ()
 
   expect(screen.queryByText(/Disable file downloads/u)).toBeNull();
 });
+
+const oversizedEpub: FileEntry = {
+  ...documentFile,
+  extension: "EPUB",
+  is_pdf: false,
+  file_size: 40 * 1024 * 1024,
+};
+
+it("offers no download switch when the server says the file is not eligible", async () => {
+  const file: FileEntry = {
+    ...oversizedEpub,
+    can_disable_downloads: false,
+    status: { type: "saved" },
+  };
+  context.filesById = new Map<string, FileEntry>([[FILE_ID, file]]);
+
+  render(<FileEmbedEditor config={{ filesById: context.filesById }} />);
+  await act(() => Promise.resolve());
+
+  act(() => {
+    fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+  });
+
+  expect(screen.queryByText(/Disable file downloads/u)).toBeNull();
+});
+
+it("holds the download switch back for an oversized EPUB picked but not yet saved", async () => {
+  // Unsaved files carry no server answer, so the editor has to apply the reader's size limit itself.
+  context.filesById = new Map<string, FileEntry>([[FILE_ID, oversizedEpub]]);
+
+  render(<FileEmbedEditor config={{ filesById: context.filesById }} />);
+  await act(() => Promise.resolve());
+
+  act(() => {
+    fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+  });
+
+  expect(screen.queryByText(/Disable file downloads/u)).toBeNull();
+});

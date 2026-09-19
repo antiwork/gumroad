@@ -116,6 +116,8 @@ class ProductFile < ApplicationRecord
       pdf_stamp_enabled: pdf_stamp_enabled?,
       hide_kindle_and_read_buttons: hide_kindle_and_read_buttons?,
       is_streamable: streamable?,
+      # So the editor never offers a switch the backend ignores (see #can_disable_downloads?).
+      can_disable_downloads: can_disable_downloads?,
       stream_only: stream_only?,
       # Pixel dimensions, so the product editor's video preview can be shaped to
       # the file rather than assuming 16:9 and pillarboxing portrait video. Nil

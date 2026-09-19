@@ -86,9 +86,12 @@ const FileEmbedNodeView = ({
 
   const file = filesById.get(typia.assert<string>(node.attrs.id));
   const downloadUrl = file && getDownloadUrl(id, file);
-  // Mirror of ProductFile#can_disable_downloads?: the player or the document reader has to
-  // exist before a seller can turn downloads off.
-  const canDisableDownloads = file ? file.is_streamable || file.is_pdf || file.extension === "EPUB" : false;
+  // The server answers this for a saved file; a file still uploading answers for itself, so the
+  // switch never appears where the backend would ignore it (ProductFile#can_disable_downloads?).
+  const canDisableDownloads = file
+    ? (file.can_disable_downloads ??
+      (file.is_streamable || FileUtils.isBrowserReadableDocument(file.extension, file.file_size)))
+    : false;
 
   const playerRef = React.useRef<jwplayer.JWPlayer | null>(null);
   const subtitleUploadSettled = React.useRef(new Map<string, () => void>());

@@ -422,6 +422,14 @@ describe ProductFile do
     end
   end
 
+  describe "#as_json download-disable eligibility" do
+    it "reports the same eligibility the download gate uses" do
+      expect(create(:epub_product_file, stream_only: true, size: 33.megabytes).as_json).to include(can_disable_downloads: false)
+      expect(create(:readable_document).as_json).to include(can_disable_downloads: true)
+      expect(create(:streamable_video).as_json).to include(can_disable_downloads: true)
+    end
+  end
+
   describe "file group and analyze" do
     it "enqueues analyze after file creation" do
       product_file = create(:readable_document)
