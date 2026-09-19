@@ -13,7 +13,7 @@ class AcmeChallengesController < ApplicationController
       return
     end
 
-    content = $redis.get(RedisKey.acme_challenge(token))
+    content = acme_challenge_content(token)
 
     if content.present?
       render plain: content
@@ -23,6 +23,14 @@ class AcmeChallengesController < ApplicationController
   end
 
   private
+    # A stalled read is "no challenge staged" (404), the same as an expired token, rather than
+    # failing the certificate-issuance check.
+    def acme_challenge_content(token)
+      $redis.get(RedisKey.acme_challenge(token))
+    rescue *REDIS_TRANSPORT_ERRORS
+      nil
+    end
+
     def mask_token(token)
       return "nil" if token.blank?
       return token if token.length <= 4

@@ -11,6 +11,9 @@ class ProductPresenter
 
   SALES_COUNT_CACHE_KEY_REFIX = "product-presenter:sales-count-cache"
   SALES_COUNT_CACHE_METRICS_KEY = "#{SALES_COUNT_CACHE_KEY_REFIX}-metrics"
+  # Only used when the Redis override cannot be read. An unset key still means "no limit", so this
+  # must not become the limit for every picker.
+  DEFAULT_EXISTING_PRODUCT_FILES_LIMIT = 100
   LATEST_SALE_ID_NOT_PROVIDED = Object.new.freeze
   private_constant :LATEST_SALE_ID_NOT_PROVIDED
 
@@ -139,7 +142,7 @@ class ProductPresenter
     # product only, so their list stops at its files.
     scope = scope.where(link: product) if collaborator_editing?
     scope
-        .limit($redis.get(RedisKey.product_presenter_existing_product_files_limit))
+        .limit(existing_product_files_limit)
         .order(id: :desc)
         .includes(:alive_subtitle_files, thumbnail_attachment: :blob).map { _1.as_json(existing_product_file: true) }
   end
@@ -414,6 +417,14 @@ class ProductPresenter
   end
 
   private
+    # An unset key means "no limit", which the picker relies on; only a stalled read gets the cap,
+    # so a Redis blip cannot uncap the list.
+    def existing_product_files_limit
+      $redis.get(RedisKey.product_presenter_existing_product_files_limit)
+    rescue *REDIS_TRANSPORT_ERRORS
+      DEFAULT_EXISTING_PRODUCT_FILES_LIMIT
+    end
+
     def default_sku
       skus_enabled && skus.alive.not_is_default_sku.empty? ? skus.is_default_sku.first : nil
     end

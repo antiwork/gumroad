@@ -152,6 +152,9 @@ module ValidateRecaptcha
     rescue ArgumentError, TypeError
       Rails.logger.error("Invalid reCAPTCHA score threshold for #{surface}: #{value.inspect}")
       nil
+    rescue *REDIS_TRANSPORT_ERRORS
+      # An unread override falls back to the built-in threshold, the same as an unset key.
+      RECAPTCHA_SCORE_THRESHOLD_DEFAULTS[surface.to_sym]
     end
 
     def recaptcha_fail_open?(surface)

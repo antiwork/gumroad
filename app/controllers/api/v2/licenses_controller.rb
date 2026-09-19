@@ -127,11 +127,18 @@ class Api::V2::LicensesController < Api::V2::BaseController
       @_redis_namespace ||= Redis::Namespace.new(:license_verifications, redis: $redis)
     end
 
+    # Both flags gate license verification and both degrade to "unset" — the behaviour before they
+    # existed — so a stalled read never 500s a verification request. An unread
+    # skip_product_id_check leaves the product_id requirement enforced.
     def skip_product_id_check(product)
       redis_namespace.get("skip_product_id_check_#{product.id}").present?
+    rescue *REDIS_TRANSPORT_ERRORS
+      false
     end
 
     def force_product_id_timestamp
       @_force_prouct_id_timestamp ||= $redis.get(RedisKey.force_product_id_timestamp)&.to_datetime
+    rescue *REDIS_TRANSPORT_ERRORS
+      nil
     end
 end
