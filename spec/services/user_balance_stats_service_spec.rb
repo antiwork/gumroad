@@ -35,6 +35,14 @@ describe UserBalanceStatsService do
       end
     end
 
+    context "when the Redis read stalls" do
+      before { allow($redis).to receive(:get).and_raise(RedisClient::Error.new("Waited 1.0 seconds")) }
+
+      it "computes the overview from SQL instead of failing the dashboard" do
+        expect(instance.fetch_overview).to eq(overview)
+      end
+    end
+
     context "when the seller is cacheable and the cache is cold" do
       before { allow(instance).to receive(:should_use_cache?).and_return(true) }
 
@@ -268,6 +276,16 @@ describe UserBalanceStatsService do
 
     context "when user is not a large seller" do
       it "returns false" do
+        expect(instance.send(:should_use_cache?)).to eq(false)
+      end
+    end
+
+    context "when the Redis read stalls" do
+      before { allow($redis).to receive(:get).and_raise(Redis::TimeoutError.new("Waited 1.0 seconds")) }
+
+      it "returns false rather than failing the request" do
+        create(:large_seller, user:, sales_count: 200)
+
         expect(instance.send(:should_use_cache?)).to eq(false)
       end
     end

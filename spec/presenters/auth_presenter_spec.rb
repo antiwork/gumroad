@@ -85,6 +85,14 @@ describe AuthPresenter do
       end
     end
 
+    context "when the Redis read stalls" do
+      it "renders zero social-proof stats instead of failing the signup page" do
+        allow($redis).to receive(:mget).and_raise(RedisClient::ReadTimeoutError.new("Waited 1.0 seconds"))
+
+        expect(presenter.signup_props[:stats]).to eq({ number_of_creators: 0, total_made: 0 })
+      end
+    end
+
     context "with a team invitation" do
       let(:team_invitation) { create(:team_invitation) }
       let(:params) do

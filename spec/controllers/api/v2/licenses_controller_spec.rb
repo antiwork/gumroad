@@ -676,6 +676,29 @@ describe Api::V2::LicensesController do
           expect(response.parsed_body).to include({ "success" => true })
         end
       end
+
+      context "when the skip check's Redis read stalls" do
+        before do
+          $redis.set(RedisKey.force_product_id_timestamp, @product.created_at - 1.day)
+          allow_any_instance_of(Redis::Namespace).to receive(:get).and_call_original
+          allow_any_instance_of(Redis::Namespace).to receive(:get).with("skip_product_id_check_#{@product.id}")
+            .and_raise(RedisClient::ReadTimeoutError.new("Waited 1.0 seconds"))
+        end
+
+        after { $redis.del(RedisKey.force_product_id_timestamp) }
+
+        it "keeps the product_id check instead of granting the exemption" do
+          post :verify, params: { product_permalink: @product.unique_permalink, license_key: @purchase.license.serial }
+
+          expect(response).to have_http_status(:internal_server_error)
+          message = "The 'product_id' parameter is required to verify the license for this product. "
+          message += "Please set 'product_id' to '#{@product.external_id}' in the request."
+          expect(response.parsed_body).to eq({
+            success: false,
+            message:
+          }.as_json)
+        end
+      end
     end
 
     context "when product_id param is not blank" do

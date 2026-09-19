@@ -139,9 +139,16 @@ class ProductPresenter
     # product only, so their list stops at its files.
     scope = scope.where(link: product) if collaborator_editing?
     scope
-        .limit($redis.get(RedisKey.product_presenter_existing_product_files_limit))
+        .limit(existing_product_files_limit)
         .order(id: :desc)
         .includes(:alive_subtitle_files, thumbnail_attachment: :blob).map { _1.as_json(existing_product_file: true) }
+  end
+
+  # An unset key already means "no limit" here, so a stalled read degrades to the same list.
+  def existing_product_files_limit
+    $redis.get(RedisKey.product_presenter_existing_product_files_limit)
+  rescue Redis::BaseError, RedisClient::Error
+    nil
   end
 
   def edit_props

@@ -129,6 +129,10 @@ class Api::V2::LicensesController < Api::V2::BaseController
 
     def skip_product_id_check(product)
       redis_namespace.get("skip_product_id_check_#{product.id}").present?
+    rescue Redis::BaseError, RedisClient::Error
+      # The flag is an escape hatch from the required-product_id check, so a stalled read must
+      # fail toward keeping the check rather than granting the exemption.
+      false
     end
 
     def force_product_id_timestamp

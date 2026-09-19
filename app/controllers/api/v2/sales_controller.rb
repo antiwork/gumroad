@@ -100,7 +100,7 @@ class Api::V2::SalesController < Api::V2::BaseController
     # accounts with broad filters; without this guard the request runs until
     # Rack::Timeout kills the worker process at 120s.
     begin
-      timeout_s = ($redis.get(RedisKey.api_v2_sales_page_key_query_timeout) || 15).to_i
+      timeout_s = page_key_query_timeout_seconds
       WithMaxExecutionTime.timeout_queries(seconds: timeout_s) do
         paginated_sales = filter_sales(start_date:, end_date:, email:, product_id:, purchase_id:, name:, license_key:)
         subquery_filters = ->(query) {
@@ -344,6 +344,14 @@ class Api::V2::SalesController < Api::V2::BaseController
       Date.strptime(params[param], "%Y-%m-%d")
     rescue ArgumentError
       error_400("Invalid date format provided in field '#{param}'. Dates must be in the format YYYY-MM-DD.")
+    end
+
+    # The key is an operator override, so a stalled read falls back to the same 15s an unset key
+    # uses rather than failing the request this guard exists to protect.
+    def page_key_query_timeout_seconds
+      ($redis.get(RedisKey.api_v2_sales_page_key_query_timeout) || 15).to_i
+    rescue Redis::BaseError, RedisClient::Error
+      15
     end
 
     def set_page # DEPRECATED

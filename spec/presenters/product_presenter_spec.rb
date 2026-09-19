@@ -1483,6 +1483,19 @@ describe ProductPresenter do
       expect(presenter.existing_files).to eq(product_files)
     end
 
+    it "drops the limit instead of raising when the Redis limit read stalls" do
+      second_file = create(:product_file, link: product, position: 1, url: "#{S3_BASE_URL}attachments/two/two.pdf")
+      $redis.set(RedisKey.product_presenter_existing_product_files_limit, 1)
+      allow($redis).to receive(:get).and_call_original
+      allow($redis).to receive(:get).with(RedisKey.product_presenter_existing_product_files_limit)
+        .and_raise(Redis::TimeoutError.new("Waited 1.0 seconds"))
+
+      expect(presenter.existing_files.map { _1[:id] })
+        .to match_array([product.product_files.first.external_id, second_file.external_id])
+    ensure
+      $redis.del(RedisKey.product_presenter_existing_product_files_limit)
+    end
+
     context "when the seller has files on another product" do
       let(:other_product) { create(:product, user: seller) }
       let!(:other_file) { create(:product_file, link: other_product, url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachments/other.pdf") }
