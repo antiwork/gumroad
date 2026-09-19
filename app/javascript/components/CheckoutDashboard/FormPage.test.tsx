@@ -95,19 +95,19 @@ describe("FormPage gifting preview", () => {
 describe("FormPage payment method switches", () => {
   afterEach(cleanup);
 
-  const switchFor = (name: RegExp) => screen.getByRole("switch", { name }) as HTMLInputElement;
+  const switchFor = (name: RegExp) => screen.getByRole("switch", { name });
 
   it("offers Link and PayPal's card funding button by default", () => {
     render(<FormPage {...props(false)} />);
 
-    expect(switchFor(/offer stripe link at checkout/iu).checked).toBe(true);
-    expect(switchFor(/show paypal's debit or credit card button/iu).checked).toBe(true);
+    expect(switchFor(/offer stripe link at checkout/iu)).toHaveProperty("checked", true);
+    expect(switchFor(/show paypal's debit or credit card button/iu)).toHaveProperty("checked", true);
   });
 
   it("shows a seller who has switched both off as unchecked", () => {
     render(<FormPage {...props(false, { link_disabled: true, paypal_card_funding_disabled: true })} />);
 
-    expect(switchFor(/offer stripe link at checkout/iu).checked).toBe(false);
-    expect(switchFor(/show paypal's debit or credit card button/iu).checked).toBe(false);
+    expect(switchFor(/offer stripe link at checkout/iu)).toHaveProperty("checked", false);
+    expect(switchFor(/show paypal's debit or credit card button/iu)).toHaveProperty("checked", false);
   });
 });
