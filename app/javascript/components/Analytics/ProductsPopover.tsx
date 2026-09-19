@@ -27,7 +27,8 @@ export const ProductsPopover = ({
       </InputGroup>
     </PopoverTrigger>
     <PopoverContent matchTriggerWidth className="p-0">
-      <Card className="border-none shadow-none">
+      {/* Bounded on the Card, not PopoverContent, so the content keeps `overflow: visible` and the arrow isn't clipped. */}
+      <Card className="max-h-[var(--radix-popover-content-available-height,80vh)] overflow-y-auto border-none shadow-none">
         <CardContent>
           <Fieldset className="grow basis-0">
             <Label>
@@ -60,7 +61,7 @@ export const ProductsPopover = ({
             ))}
           </Fieldset>
         </CardContent>
-        <CardContent>
+        <CardContent className="sticky bottom-0 bg-background">
           <Button
             onClick={() =>
               setProducts((prevProducts) =>
