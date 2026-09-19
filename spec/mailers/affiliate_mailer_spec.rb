@@ -121,6 +121,18 @@ describe AffiliateMailer do
         expect(mail.body.encoded).to_not include("continue to receive a commission")
         expect(mail.body.encoded).to_not include("free trial has expired on")
       end
+
+      it "keeps the free-trial terms when the end date is not readable yet" do
+        product = create(:membership_product, :with_free_trial_enabled, user: seller)
+        affiliate = create(:direct_affiliate, seller:)
+        purchase = create(:free_trial_membership_purchase, affiliate:, link: product, seller:)
+        purchase.update_columns(subscription_id: nil)
+
+        mail = AffiliateMailer.notify_affiliate_of_sale(purchase.id)
+
+        expect(mail.body.encoded).to include("If the subscriber continues with their subscription after their free trial has expired, we'll add your commission to your balance")
+        expect(mail.body.encoded).to_not include("expired on,")
+      end
     end
   end
 
