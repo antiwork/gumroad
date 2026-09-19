@@ -6,7 +6,7 @@ import { PROFILE_SORT_KEYS, SORT_KEYS } from "$app/parsers/product";
 import { classNames } from "$app/utils/classNames";
 import { CurrencyCode, getShortCurrencySymbol } from "$app/utils/currency";
 import { asyncVoid } from "$app/utils/promise";
-import { AbortError, assertResponseError } from "$app/utils/request";
+import { AbortError, assertResponseError, RateLimitError } from "$app/utils/request";
 
 import { Button } from "$app/components/Button";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
@@ -58,8 +58,16 @@ export type Action =
   | { type: "load-more" }
   | { type: "load-error" };
 
+// Every `set-params` is a new object, so a failed search is re-issued as soon as the same params come
+// around again — thousands of requests a minute from one IP when a client is stuck doing that. Don't
+// re-ask for params that just failed until the server's own window (its Retry-After) is up; params
+// that actually changed still go through.
+const DEFAULT_REQUEST_BACKOFF_SECONDS = 60;
+
 export const useSearchReducer = (initial: Omit<State, "offset">) => {
   const activeRequest = React.useRef<{ cancel: () => void } | null>(null);
+  const activeRequestKey = React.useRef<string | null>(null);
+  const backoff = React.useRef<{ key: string; until: number } | null>(null);
 
   const [state, dispatch] = React.useReducer(
     (state: State, action: Action) => {
@@ -94,6 +102,13 @@ export const useSearchReducer = (initial: Omit<State, "offset">) => {
 
   useOnChange(
     asyncVoid(async () => {
+      const requestKey = JSON.stringify(state.params);
+      // Already asking for exactly this? One answer settles both.
+      if (activeRequestKey.current === requestKey) return;
+      const pending = backoff.current;
+      if (pending?.key === requestKey && Date.now() < pending.until) return;
+
+      activeRequestKey.current = requestKey;
       try {
         const requestParams = state.params;
         const request = getSearchResults(requestParams);
@@ -108,12 +123,27 @@ export const useSearchReducer = (initial: Omit<State, "offset">) => {
               : { ...results, products: [...state.results.products, ...results.products] },
         });
       } catch (e) {
-        if (!(e instanceof AbortError)) {
+        if (e instanceof AbortError) {
+          // The caller gave up on this request; it says nothing about the params.
+          dispatch({ type: "load-error" });
+        } else {
+          const rateLimited = e instanceof RateLimitError ? e : null;
+          backoff.current = {
+            key: requestKey,
+            until: Date.now() + (rateLimited?.retryAfter ?? DEFAULT_REQUEST_BACKOFF_SECONDS) * 1000,
+          };
+          showAlert(
+            // The server knows what the limit is; a generic failure for a wait the user has to sit
+            // out reads as a fault in their account.
+            rateLimited ? rateLimited.message : "Something went wrong. Please try refreshing the page.",
+            "error",
+          );
+          dispatch({ type: "load-error" });
+          // A response that isn't our API's error shape must still reach error reporting.
           assertResponseError(e);
-          showAlert("Something went wrong. Please try refreshing the page.", "error");
         }
-        dispatch({ type: "load-error" });
       } finally {
+        if (activeRequestKey.current === requestKey) activeRequestKey.current = null;
         activeRequest.current = null;
       }
     }),
