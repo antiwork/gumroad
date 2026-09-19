@@ -37,6 +37,19 @@ describe BosniaAndHerzegovinaBankAccount do
       expect(build(:bosnia_and_herzegovina_bank_account, bank_code: "UNCRBA22XXXX")).not_to be_valid
       expect(build(:bosnia_and_herzegovina_bank_account, bank_code: "UNCRBA22-XX")).not_to be_valid
     end
+
+    # Live rows hold 9- and 10-character codes from before this check, and they must stay saveable:
+    # renaming the account holder and every mark_deleted! path (payout-method switch, GDPR erasure,
+    # account closure) save the existing row.
+    it "does not block saves of an already-stored code that predates this format check" do
+      bank_account = build(:bosnia_and_herzegovina_bank_account, bank_code: "UNCRBA22XX")
+      bank_account.save!(validate: false)
+
+      bank_account.account_holder_full_name = "Renamed Seller"
+      expect(bank_account.save).to be(true)
+      expect { bank_account.mark_deleted! }.not_to raise_error
+      expect(bank_account.reload.deleted_at).to be_present
+    end
   end
 
   describe "#account_number_visual" do

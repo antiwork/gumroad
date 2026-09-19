@@ -10,7 +10,10 @@ class BosniaAndHerzegovinaBankAccount < BankAccount
 
   alias_attribute :bank_code, :bank_number
 
-  validate :validate_bank_code
+  # Only on write: live rows hold 9- and 10-character codes from before this check, and re-validating
+  # them would abort unrelated saves — including the mark_deleted! a payout-method switch performs
+  # after the Stripe account is already gone.
+  validate :validate_bank_code, if: -> { new_record? || will_save_change_to_bank_number? }
   validate :validate_account_number, if: -> { Rails.env.production? }
 
   def routing_number
