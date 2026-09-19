@@ -73,6 +73,10 @@ class Ai::StoreAgentActionExecutor
       return failure(unknown_keys_error, reason: "unknown_parameters", retry_safe: true)
     end
 
+    if (error = endpoint.email_audience_error(body, seller:))
+      return failure(error, reason: "invalid_parameters", retry_safe: true)
+    end
+
     response = api_client.write(endpoint.method, path, body)
 
     result = interpret(endpoint, response)

@@ -91,6 +91,30 @@ module Ai::StoreAgentApiCatalog
       accepted = accepted_params.any? ? "this endpoint accepts: #{accepted_params.join(', ')}" : "this endpoint accepts no params"
       "Unknown param#{"s" if unknown.size > 1} #{unknown.join(', ')} for #{id}; #{accepted}."
     end
+
+    # Match the email controller's audience aliases, identifier precedence, and seller scope.
+    # Run before staging and again before dispatch so stale proposals cannot bypass the contract.
+    def email_audience_error(body, seller:)
+      return unless id == "create_email"
+
+      body = body.with_indifferent_access
+      audience = body[:audience]
+      audiences = Api::V2::EmailsController::AUDIENCE_TYPES_BY_PARAM
+      unless (audience.nil? || audience.is_a?(String)) && audiences.key?((audience.presence || Installment::AUDIENCE_TYPE).downcase)
+        return "Invalid audience. Valid values are: #{audiences.keys.join(', ')}."
+      end
+      return unless audience.to_s.downcase == Installment::PRODUCT_TYPE
+
+      identifier = body[:product_id]
+      identifier = body[:link_id] if identifier.nil? || (identifier.is_a?(String) && identifier.blank?)
+      if identifier.nil? || (identifier.is_a?(String) && identifier.blank?)
+        return "Product audience requires a product_id or link_id."
+      end
+      return "Product not found." unless identifier.is_a?(String)
+
+      product = seller.links.visible.find_by_external_id(identifier) || seller.links.visible.find_by(unique_permalink: identifier)
+      "Product not found." unless product
+    end
   end
 
   # Build one endpoint row. read defaults to false (i.e. a write that must be confirmed).

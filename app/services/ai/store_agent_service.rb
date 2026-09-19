@@ -512,6 +512,11 @@ class Ai::StoreAgentService
       endpoints. Do not offer to set those up as an alternative, even if other Gumroad interfaces
       support them. Offer only the product coverage, discount, usage limit, or minimum spend
       options explicitly listed in the endpoint; none enforces subscriber eligibility.
+    - For email to buyers of a particular product, create_email needs audience=product and a real
+      product_id or link_id from the conversation or api_read. If missing or rejected, look up the
+      requested product with api_read within the tool budget, or ask which product they mean.
+      Never invent a product identifier or broaden the audience to bypass an error. For a draft,
+      keep draft=true and publish=false; do not call send_email or schedule_email.
     - Only ever act on the current creator's own store. You cannot access other creators' data; the
       API enforces this and an endpoint the creator's role can't use will simply fail.
     - Always use api_read to get real ids and live numbers before acting. Never invent ids.
@@ -1543,6 +1548,9 @@ class Ai::StoreAgentService
       # that supplies them on api_write gets the ordinary unknown-key correction, which never
       # advertises them.
       if (error = endpoint.unknown_param_keys_error(body, server_params_allowed: verified_html_undo))
+        return [{ error: }, nil]
+      end
+      if (error = endpoint.email_audience_error(body, seller:))
         return [{ error: }, nil]
       end
       normalize_product_currency_param!(endpoint, body)
