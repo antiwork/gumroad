@@ -140,7 +140,6 @@ describe ReconcilePendingPaypalRefundsJob do
              status: "PENDING",
              processor_refund_id: "re_stripe_test",
              created_at: 5.days.ago)
-      # Only the PayPal refund is read, even though a Stripe refund also sits at PENDING.
       expect(PaypalChargeProcessor).to receive(:fetch_refund_status)
         .with(processor_refund_id: "64J80824NV272645E", merchant_account:).once.and_return("PENDING")
 
