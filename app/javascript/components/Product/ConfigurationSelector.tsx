@@ -38,6 +38,7 @@ import { Button } from "$app/components/Button";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { NumberInput } from "$app/components/NumberInput";
 import { PriceInput } from "$app/components/PriceInput";
+import { needsOptionChoice } from "$app/components/Product/purchaseReadiness";
 import { TypeSafeOptionSelect } from "$app/components/TypeSafeOptionSelect";
 import { Alert } from "$app/components/ui/Alert";
 import { Calendar } from "$app/components/ui/Calendar";
@@ -757,12 +758,14 @@ export const ConfigurationSelector = React.forwardRef<
   const rootRef = React.useRef<HTMLDivElement>(null);
   React.useImperativeHandle(ref, () => ({
     focusRequiredInput: () => {
-      if (pwywInputRef.current) {
-        pwywInputRef.current.focus();
+      const optionRadio = rootRef.current?.querySelector<HTMLElement>(
+        "[data-option-picker] [role='radio']:not([disabled])",
+      );
+      if (needsOptionChoice(product, selection) && optionRadio) {
+        optionRadio.focus();
         return;
       }
-      const optionRadio = rootRef.current?.querySelector<HTMLElement>("[data-option-picker] [role='radio']");
-      (optionRadio ?? rootRef.current?.querySelector<HTMLElement>("[role='radio']"))?.focus();
+      pwywInputRef.current?.focus();
     },
     scrollIntoView: (arg?: boolean | ScrollIntoViewOptions) => {
       // The wrapper is display: contents, so it has no box of its own to scroll to — aim at the

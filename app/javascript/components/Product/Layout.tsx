@@ -332,11 +332,14 @@ const CtaBar = ({
             selection={selection}
             label={ctaLabel}
             onClick={(evt) => {
-              if (!isSelectionComplete(product, selection)) {
+              // PWYW always hands off to the main CTA: its validate() owns the minimum-price rule,
+              // while isSelectionComplete only knows that no amount was entered at all.
+              if (isPWYW || !isSelectionComplete(product, selection)) {
                 evt.preventDefault();
                 configurationSelectorRef.current?.scrollIntoView({ block: "nearest" });
                 configurationSelectorRef.current?.focusRequiredInput();
-                if (isPWYW && selection.price.value === null) showAlert("You must input an amount", "warning");
+                if (!needsOptionChoice(product, selection) && isPWYW && selection.price.value === null)
+                  showAlert("You must input an amount", "warning");
               }
             }}
           />

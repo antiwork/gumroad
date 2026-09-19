@@ -117,4 +117,44 @@ describe("version selector accessibility", () => {
 
     expect(document.activeElement).toBe(screen.getByRole("radio", { name: "Listener's Edition" }));
   });
+
+  it("focuses the option radios rather than the price field when an option is still required", () => {
+    const ref = React.createRef<ConfigurationSelectorHandle>();
+    render(
+      <ConfigurationSelector
+        ref={ref}
+        product={{ ...versionedProduct, pwyw: { suggested_price_cents: 500 } }}
+        selection={{ ...initialSelection, optionId: null }}
+        setSelection={() => {}}
+        discount={null}
+      />,
+    );
+
+    ref.current?.focusRequiredInput();
+
+    expect(document.activeElement).toBe(screen.getByRole("radio", { name: "Listener's Edition" }));
+  });
+
+  it("skips a sold-out option when focusing the picker", () => {
+    const ref = React.createRef<ConfigurationSelectorHandle>();
+    render(
+      <ConfigurationSelector
+        ref={ref}
+        product={{
+          ...versionedProduct,
+          options: [
+            { ...versionedProduct.options[0]!, quantity_left: 0 },
+            versionedProduct.options[1]!,
+          ],
+        }}
+        selection={{ ...initialSelection, optionId: null }}
+        setSelection={() => {}}
+        discount={null}
+      />,
+    );
+
+    ref.current?.focusRequiredInput();
+
+    expect(document.activeElement).toBe(screen.getByRole("radio", { name: "Collector's Edition" }));
+  });
 });

@@ -90,6 +90,18 @@ describe("needsOptionChoice", () => {
       needsOptionChoice(product({ native_type: "coffee", options: [option("first"), option("second")] }), selection()),
     ).toBe(false);
   });
+
+  it("does not ask for a choice when the picker has nothing to offer", () => {
+    const soldOut = product({ options: [option("first", { quantity_left: 0 }), option("second", { quantity_left: 0 })] });
+    expect(needsOptionChoice(soldOut, selection())).toBe(false);
+    expect(isSelectionComplete(soldOut, selection())).toBe(true);
+  });
+
+  it("does not ask for a choice when no option can be priced for the chosen recurrence", () => {
+    const membership = product({ is_tiered_membership: true, options: [option("first"), option("second")] });
+    expect(needsOptionChoice(membership, selection())).toBe(true);
+    expect(needsOptionChoice(membership, selection({ recurrence: "monthly" }))).toBe(false);
+  });
 });
 
 describe("isSelectionComplete", () => {

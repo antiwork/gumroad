@@ -12,6 +12,32 @@ describe("Purchase product page", type: :system, js: true) do
     expect(page).to have_text(product.name)
   end
 
+  # The coffee page itself is a different component (CoffeeProduct); this page renders the shared
+  # Product component, so a coffee-aware readiness rule has to hold here too.
+  context "when the purchase is for a coffee product with several amounts" do
+    let(:coffee) do
+      create(:product, name: "Buy me a coffee!", user: create(:named_seller), native_type: Link::NATIVE_TYPE_COFFEE)
+    end
+    let(:purchase) { create(:purchase, link: coffee) }
+
+    before do
+      create(:variant, name: "", variant_category: coffee.variant_categories_alive.first, price_difference_cents: 200)
+    end
+
+    it "starts on the first amount tab and lets the buyer tip a custom amount from Other" do
+      visit purchase_product_path(purchase.external_id)
+
+      expect(page).to have_radio_button("$1", checked: true)
+      expect(page).to have_radio_button("Other", checked: false)
+
+      choose "Other"
+      fill_in "Name a fair price", with: "5"
+      click_on "Purchase again"
+
+      expect(page).to have_current_path(%r{\A/checkout})
+    end
+  end
+
   describe "Refund policy" do
     before do
       purchase.create_purchase_refund_policy!(
