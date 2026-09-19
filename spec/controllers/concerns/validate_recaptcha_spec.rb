@@ -254,6 +254,18 @@ describe ValidateRecaptcha, type: :controller do
         expect(parsed_body["error"]).to eq("captcha_failed")
       end
 
+      it "keeps gating at the built-in threshold when the Redis read stalls" do
+        stub_recaptcha_response(valid: true, score: 0.1)
+        allow($redis).to receive(:get).and_call_original
+        allow($redis).to receive(:get).with(RedisKey.recaptcha_score_threshold(:checkout_score))
+          .and_raise(Redis::TimeoutError.new("Waited 1.0 seconds"))
+
+        post :checkout_score_action, params: { "g-recaptcha-response" => "test_token" }
+
+        expect(response).to have_http_status(:unprocessable_entity)
+        expect(parsed_body["error"]).to eq("captcha_failed")
+      end
+
       describe "#recaptcha_failure_message" do
         it "does not blame ad blockers when a genuine, correctly-hosted token failed on score alone" do
           stub_recaptcha_response(valid: true, score: 0.3)

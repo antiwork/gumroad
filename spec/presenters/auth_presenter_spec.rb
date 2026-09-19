@@ -97,5 +97,27 @@ describe AuthPresenter do
         expect(presenter.signup_props).to include(email: team_invitation.email)
       end
     end
+
+    context "when the Redis read stalls" do
+      before { described_class::LAST_SIGNUP_STATS.clear }
+
+      it "serves the last values this process read instead of zeros" do
+        $redis.mset(
+          RedisKey.total_made, 923_456_789,
+          RedisKey.number_of_creators, 56_789
+        )
+        expect(presenter.signup_props[:stats]).to eq(number_of_creators: 56_789, total_made: 923_456_789)
+
+        allow($redis).to receive(:mget).and_raise(RedisClient::Error.new("Waited 1.0 seconds"))
+
+        expect(presenter.signup_props[:stats]).to eq(number_of_creators: 56_789, total_made: 923_456_789)
+      end
+
+      it "renders zeros only when this process has never read the values" do
+        allow($redis).to receive(:mget).and_raise(Redis::TimeoutError.new("Waited 1.0 seconds"))
+
+        expect(presenter.signup_props[:stats]).to eq(number_of_creators: 0, total_made: 0)
+      end
+    end
   end
 end

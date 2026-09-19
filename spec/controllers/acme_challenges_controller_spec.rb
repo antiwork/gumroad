@@ -32,6 +32,18 @@ describe AcmeChallengesController do
       end
     end
 
+    context "when the Redis read stalls" do
+      it "returns not found instead of failing the check" do
+        allow($redis).to receive(:get).and_call_original
+        allow($redis).to receive(:get).with(RedisKey.acme_challenge(token))
+          .and_raise(Redis::TimeoutError.new("Waited 1.0 seconds"))
+
+        get :show, params: { token: token }
+
+        expect(response.status).to eq(404)
+      end
+    end
+
     context "when token is too long" do
       it "returns bad request" do
         get :show, params: { token: "a" * 65 }

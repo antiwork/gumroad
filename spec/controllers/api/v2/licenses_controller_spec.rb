@@ -663,6 +663,31 @@ describe Api::V2::LicensesController do
         end
       end
 
+      context "when the Redis flags cannot be read" do
+        it "still requires product_id when the skip flag read stalls" do
+          $redis.set(RedisKey.force_product_id_timestamp, @product.created_at - 1.day)
+          allow(controller).to receive(:redis_namespace).and_raise(Redis::TimeoutError.new("Waited 1.0 seconds"))
+
+          post :verify, params: { product_permalink: @product.unique_permalink, license_key: @purchase.license.serial }
+
+          expect(response).to have_http_status(:internal_server_error)
+          expect(response.parsed_body["message"]).to include("The 'product_id' parameter is required")
+        ensure
+          $redis.del(RedisKey.force_product_id_timestamp)
+        end
+
+        it "does not require product_id when the timestamp flag read stalls" do
+          allow($redis).to receive(:get).and_call_original
+          allow($redis).to receive(:get).with(RedisKey.force_product_id_timestamp)
+            .and_raise(RedisClient::Error.new("Waited 1.0 seconds"))
+
+          post :verify, params: { product_permalink: @product.unique_permalink, license_key: @purchase.license.serial }
+
+          expect(response).to be_successful
+          expect(response.parsed_body).to include({ "success" => true })
+        end
+      end
+
       context "when the product_id check is skipped for the product" do
         before do
           redis_namespace = Redis::Namespace.new(:license_verifications, redis: $redis)

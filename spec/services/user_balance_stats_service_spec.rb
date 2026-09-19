@@ -307,4 +307,51 @@ describe UserBalanceStatsService do
       expect(described_class.cacheable_users).to match_array([user_2, user_4])
     end
   end
+
+  describe "#write_cache when the Redis write stalls" do
+    it "does not raise" do
+      allow(instance).to receive(:generate).and_return(example_values)
+      allow($redis).to receive(:setex).and_raise(RedisClient::Error.new("Waited 1.0 seconds"))
+
+      expect { instance.write_cache }.not_to raise_error
+    end
+  end
+
+  describe ".cacheable_users when a Redis read stalls" do
+    it "caches nobody rather than dropping the exclusion set" do
+      stub_const("#{described_class}::DEFAULT_SALES_CACHING_THRESHOLD", 100)
+      create(:large_seller, sales_count: 200, user:)
+
+      expect(described_class.cacheable_users).to include(user)
+
+      allow($redis).to receive(:get).and_call_original
+      allow($redis).to receive(:get).with(RedisKey.balance_stats_sales_caching_threshold)
+        .and_raise(Redis::TimeoutError.new("Waited 1.0 seconds"))
+
+      expect(described_class.cacheable_users).to be_empty
+    end
+  end
+
+  describe "#should_use_cache? when a Redis read stalls" do
+    it "returns false so the stats are computed live instead of failing the page" do
+      stub_const("#{described_class}::DEFAULT_SALES_CACHING_THRESHOLD", 100)
+      create(:large_seller, sales_count: 200, user:)
+
+      expect(described_class.new(user:).send(:should_use_cache?)).to eq(true)
+
+      # The read that stalls lives inside `cacheable_users`; this pins that the caller degrades too
+      # rather than letting the raise reach the dashboard.
+      allow(described_class).to receive(:cacheable_users).and_raise(Redis::TimeoutError.new("Waited 1.0 seconds"))
+
+      expect(described_class.new(user:).send(:should_use_cache?)).to eq(false)
+    end
+  end
+
+  describe "#read_cache when the Redis read stalls" do
+    it "reads as a cache miss instead of failing the page" do
+      allow($redis).to receive(:get).and_raise(RedisClient::Error.new("Waited 1.0 seconds"))
+
+      expect(instance.send(:read_cache)).to be_nil
+    end
+  end
 end
