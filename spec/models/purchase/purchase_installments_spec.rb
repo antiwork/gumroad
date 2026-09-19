@@ -98,9 +98,8 @@ describe "PurchaseInstallments", :vcr do
 
     it "loads each purchase's filter inputs once for the batch" do
       # The buyer filter reads `variant_attributes` and the license chain
-      # (subscription -> original_purchase -> license for a renewal charge) per
-      # purchase, so a membership with several renewals paid those queries once
-      # per renewal until the batch preloaded them.
+      # (subscription -> original_purchase -> license for a renewal charge), so the
+      # batch preloads all three for every purchase at once.
       product = create(:product)
       variant = create(:variant, variant_category: create(:variant_category, link: product))
       subscription = create(:subscription, link: product)
@@ -124,7 +123,8 @@ describe "PurchaseInstallments", :vcr do
         sql = payload[:sql].to_s
         next unless sql.start_with?("SELECT")
 
-        per_purchase_lookups << sql if sql.match?(/`base_variants_purchases`\.`purchase_id` = \d+/) ||
+        per_purchase_lookups << sql if sql.match?(/FROM `purchases`.*LIMIT 1\z/) ||
+                                       sql.match?(/`base_variants_purchases`\.`purchase_id` = \d+/) ||
                                        sql.match?(/`subscriptions`\.`id` = \d+ LIMIT 1\z/) ||
                                        sql.match?(/`licenses`\.`purchase_id` = \d+ LIMIT 1\z/)
       end
