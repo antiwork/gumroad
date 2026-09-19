@@ -27,6 +27,10 @@ describe("Offer-code usage from product page", type: :system, js: true) do
     offer_code = create(:offer_code, products: [product], amount_cents: 350, name: "ÕËëæç")
     visit URI::DEFAULT_PARSER.escape("/l/#{product.unique_permalink}/#{offer_code.code}")
 
+    # A multi-option product no longer preselects the first option, so the discounted price and the
+    # offer-code notice only reach the page once the buyer picks one.
+    choose "Base"
+
     expect(page).to have_selector("[itemprop='price']", text: "$3.50 $0", visible: false)
 
     expect(page).to have_selector("[role='status']", text: "$3.50 off will be applied at checkout (Code #{offer_code.code.upcase})")
@@ -330,6 +334,10 @@ describe("Offer-code usage from product page", type: :system, js: true) do
 
       it "displays the duration notice and the purchase succeeds" do
         visit "#{product.long_url}/#{offer_code.code}"
+
+        # No tier is preselected, so the duration notice appears only after the buyer picks one.
+        choose "First Tier"
+
         expect(page).to have_selector("[role='status']", exact_text: "$1 off will be applied at checkout (Code SXSW) This discount will only apply to the first payment of your subscription.", normalize_ws: true)
         add_to_cart(product, option: "First Tier", offer_code:)
         check_out(product)

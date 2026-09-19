@@ -84,7 +84,8 @@ describe "Call", type: :system, js: true do
     it "allows selecting a duration and changing it during checkout" do
       visit call.long_url
 
-      expect(page).to have_radio_button("$10", checked: true)
+      # Multi-duration calls no longer preselect a duration, so neither radio starts checked.
+      expect(page).to have_radio_button("$10", checked: false)
       expect(page).to have_radio_button("$20", checked: false)
 
       wait_for_ajax

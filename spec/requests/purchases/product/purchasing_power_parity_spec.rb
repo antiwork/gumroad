@@ -192,6 +192,11 @@ describe "Purchasing power parity", type: :system, js: true do
 
     it "applies the PPP discount" do
       visit @membership.long_url
+
+      # No tier is preselected, and the notice reports the chosen tier's discounted price, so the
+      # buyer picks a tier before either the notice or the discounted price reaches the page.
+      choose "First Tier"
+
       expect(page).to have_selector("[role='status']", text: "This product supports purchasing power parity. Because you're located in Latvia, the price has been discounted by 51% to $1.47.")
       expect(page).to have_radio_button("First Tier", text: /\$3\s+\$1\.47 a month/)
       expect(page).to have_radio_button("Second Tier", text: /\$5\s+\$2\.45 a month/)
