@@ -17,38 +17,21 @@ module Muse
       end
     end
 
+    class ToolError < StandardError; end
+
     def initialize(user:, token:)
       @user = user
       @token = token
     end
 
     def handle(body)
-      return rpc_error(nil, "Parse error", code: -32700) unless body.is_a?(Hash)
+      if body.is_a?(Array)
+        return rpc_error(nil, "Invalid Request", code: -32600) if body.empty?
 
-      id = body["id"]
-      # A request without an id is a JSON-RPC notification: run it, send nothing back.
-      notification = !body.key?("id")
-      method = body["method"].to_s
-      params = body["params"] || {}
-      raise Error.new("params must be an object", code: -32602) unless params.is_a?(Hash)
-
-      result = case method
-               when "initialize" then initialize_result
-               when "notifications/initialized", "notifications/cancelled" then nil
-               when "ping" then {}
-               when "tools/list" then { tools: tools }
-               when "tools/call" then call_tool(params)
-               else
-                 return notification ? nil : rpc_error(id, "Method not found: #{method}", code: -32601)
+        return body.filter_map { |message| handle_message(message) }.presence
       end
 
-      return nil if notification
-
-      { jsonrpc: "2.0", id:, result: }
-    rescue Error => e
-      notification ? nil : rpc_error(id, e.message, code: e.code, data: e.data)
-    rescue ArgumentError, TypeError => e
-      notification ? nil : rpc_error(id, e.message, code: -32602)
+      handle_message(body)
     end
 
     def self.discovery(base_url)
@@ -82,6 +65,49 @@ module Muse
 
     private
       attr_reader :user, :token
+
+      def handle_message(body)
+        return rpc_error(nil, "Invalid Request", code: -32600) unless body.is_a?(Hash)
+
+        id = valid_id?(body["id"]) ? body["id"] : nil
+        return rpc_error(id, "Invalid Request", code: -32600) unless body["jsonrpc"] == "2.0"
+        # We issue no server requests; unsolicited client replies need no dispatch or response.
+        return nil if client_response?(body)
+        unless body["method"].is_a?(String) && (!body.key?("id") || valid_id?(body["id"])) && !body.key?("result") && !body.key?("error")
+          return rpc_error(id, "Invalid Request", code: -32600)
+        end
+
+        notification = !body.key?("id")
+        method = body["method"]
+        params = body.fetch("params", {})
+        raise Error.new("params must be an object", code: -32602) unless params.is_a?(Hash)
+
+        result = case method
+                 when "initialize" then initialize_result
+                 when "notifications/initialized", "notifications/cancelled" then nil
+                 when "ping" then {}
+                 when "tools/list" then { tools: tools }
+                 when "tools/call" then call_tool(params)
+                 else
+                   raise Error.new("Method not found: #{method}", code: -32601)
+        end
+        notification ? nil : { jsonrpc: "2.0", id:, result: }
+      rescue Error => e
+        notification ? nil : rpc_error(id, e.message, code: e.code, data: e.data)
+      end
+
+      def valid_id?(id)
+        id.is_a?(String) || id.is_a?(Integer)
+      end
+
+      def client_response?(body)
+        return false if body.key?("method") || body.key?("params") || !valid_id?(body["id"])
+        return false unless body.key?("result") ^ body.key?("error")
+        return body["result"].is_a?(Hash) if body.key?("result")
+
+        error = body["error"]
+        error.is_a?(Hash) && error["code"].is_a?(Integer) && error["message"].is_a?(String)
+      end
 
       def initialize_result
         {
@@ -129,13 +155,32 @@ module Muse
       end
 
       def call_tool(params)
-        name = params["name"].to_s
-        arguments = params["arguments"] || {}
+        name = params["name"]
+        definition = tools.find { |tool| tool[:name] == name }
+        raise Error.new("Unknown tool: #{name}", code: -32602) unless definition
+
+        arguments = params.fetch("arguments", {})
         raise Error.new("arguments must be an object", code: -32602) unless arguments.is_a?(Hash)
-        raise Error.new("Unknown tool: #{name}", code: -32602) unless respond_to?("tool_#{name}", true)
+        validate_tool_arguments!(definition[:inputSchema], arguments)
 
         payload = send("tool_#{name}", arguments)
         { content: [{ type: "text", text: JSON.pretty_generate(payload) }], structuredContent: payload }
+      rescue ToolError, Link::LinkInvalid, ActiveRecord::RecordInvalid => e
+        message = e.is_a?(ActiveRecord::RecordInvalid) ? e.record.errors.full_messages.to_sentence : e.message
+        { content: [{ type: "text", text: message }], isError: true }
+      end
+
+      def validate_tool_arguments!(schema, arguments)
+        (schema[:required] || []).each do |key|
+          raise Error.new("#{key} is required", code: -32602) unless arguments.key?(key)
+        end
+        arguments.each do |key, value|
+          property = schema[:properties][key]
+          raise Error.new("Unknown argument: #{key}", code: -32602) unless property
+
+          type = property[:type] == "integer" ? Integer : String
+          raise Error.new("#{key} must be a #{property[:type]}", code: -32602) unless value.is_a?(type)
+        end
       end
 
       def tool_get_account(_args)
@@ -162,11 +207,11 @@ module Muse
 
       def tool_create_draft_product(args)
         require_scopes!(:edit_products, :account)
-        name = args["name"].to_s.strip
-        raise Error.new("name is required") if name.blank?
+        name = args["name"].strip
+        raise Error.new("name is required", code: -32602) if name.blank?
 
-        price_cents = Integer(args["price_cents"])
-        raise Error.new("price_cents must be zero or more") if price_cents.negative?
+        price_cents = args["price_cents"]
+        raise Error.new("price_cents must be zero or more", code: -32602) if price_cents.negative?
 
         product = user.links.build(
           name:,
@@ -181,8 +226,6 @@ module Muse
         product.taxonomy = Taxonomy.find_by(slug: "other")
         product.save!
         { product: product_payload(product), message: "Draft saved. It is not for sale until publish_product." }
-      rescue ActiveRecord::RecordInvalid => e
-        raise Error.new(e.record.errors.full_messages.to_sentence)
       end
 
       def tool_publish_product(args)
@@ -190,8 +233,6 @@ module Muse
         product = find_product!(args["id"])
         product.publish!
         { product: product_payload(product.reload) }
-      rescue Link::LinkInvalid, ActiveRecord::RecordInvalid => e
-        raise Error.new(e.respond_to?(:record) && e.record ? e.record.errors.full_messages.to_sentence : e.message)
       end
 
       def tool_unpublish_product(args)
@@ -214,7 +255,7 @@ module Muse
               product_id: sale.link.external_id,
               product_name: sale.link.name,
               price_cents: sale.price_cents,
-              currency: sale.displayed_price_currency_type,
+              currency: Currency::USD,
               created_at: sale.created_at.iso8601,
               refunded: sale.refunded?,
               chargedback: sale.chargedback?
@@ -252,20 +293,17 @@ module Muse
       end
 
       def find_product!(id)
-        raise Error.new("id is required") if id.blank?
+        raise Error.new("id is required", code: -32602) if id.blank?
 
         product = user.links.find_by_external_id(id) || user.links.find_by(unique_permalink: id) || user.links.find_by(custom_permalink: id)
-        raise Error.new("The product was not found.") if product.nil? || product.deleted_at.present?
+        raise ToolError, "The product was not found." if product.nil? || product.deleted_at.present?
 
         product
       end
 
       def limit_for(args, default:)
-        raw = args["limit"]
-        return default if raw.blank?
-
-        n = Integer(raw)
-        raise Error.new("limit must be between 1 and 50") unless n.between?(1, 50)
+        n = args.fetch("limit", default)
+        raise Error.new("limit must be between 1 and 50", code: -32602) unless n.between?(1, 50)
 
         n
       end
