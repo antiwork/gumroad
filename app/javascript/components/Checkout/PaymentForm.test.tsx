@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import type { Stripe, StripeElements } from "@stripe/stripe-js";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import * as React from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -991,6 +991,52 @@ describe("PaymentForm payment method visibility", () => {
     expect(paypalMock.loadScript).toHaveBeenCalledWith(
       expect.objectContaining({ clientId: "paypal-client-id", vault: true, disableFunding: "card" }),
     );
+  });
+
+  it("re-decides PayPal's card funding button when an accepted offer changes the cart", async () => {
+    paypalMock.loadScript.mockReset();
+    paypalMock.render.mockReset();
+    paypalMock.loadScript.mockResolvedValue({
+      Buttons: (config: PayPalButtonsConfig) => {
+        paypalMock.buttonsConfig = config;
+        return { render: paypalMock.render };
+      },
+    });
+
+    const [product] = state().products;
+    if (product === undefined) throw new Error("Expected a checkout product");
+    const harness: CheckoutHarness = { dispatch: () => {}, actions: [] };
+    const mixedCart = state({
+      paypalClientId: "paypal-client-id",
+      paymentMethod: "paypal",
+      products: [
+        { ...product, requirePayment: true, supportsPaypal: "native" as const, paypalCardFundingDisabled: false },
+        {
+          ...product,
+          permalink: "product-b",
+          requirePayment: true,
+          supportsPaypal: "native" as const,
+          paypalCardFundingDisabled: true,
+        },
+      ],
+    });
+    render(<StatefulPaymentForm initial={mixedCart} harness={harness} />);
+
+    await waitFor(() => expect(paypalMock.render).toHaveBeenCalled());
+    expect(paypalMock.loadScript.mock.calls.at(-1)?.[0]).not.toHaveProperty("disableFunding");
+    const rendersBeforeCartChange = paypalMock.render.mock.calls.length;
+
+    act(() =>
+      harness.dispatch({
+        type: "update-products",
+        products: mixedCart.products.map((item) => ({ ...item, paypalCardFundingDisabled: true })),
+      }),
+    );
+
+    // The aggregate flipped, so the funding set is re-applied...
+    await waitFor(() => expect(paypalMock.loadScript.mock.calls.at(-1)?.[0]).toMatchObject({ disableFunding: "card" }));
+    // ...and the buttons rebuilt, because the funding set is fixed when the script loads.
+    await waitFor(() => expect(paypalMock.render.mock.calls.length).toBeGreaterThan(rendersBeforeCartChange));
   });
 
   it("keeps PayPal's card funding button when another seller in the cart still offers it", async () => {

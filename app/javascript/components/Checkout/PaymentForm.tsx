@@ -1423,24 +1423,33 @@ const NativePayPal = ({ implementation }: { implementation: PayPalNamespace }) =
 const usePayPalImplementation = () => {
   const [state] = useState();
   const [nativePaypal, setNativePaypal] = React.useState<PayPalNamespace | null>(null);
-  useRunOnce(
+  // Bumped on every successful load. The buttons are built once per namespace, so the lane that
+  // renders them keys on this to rebuild against the namespace the current options produced.
+  const [paypalGeneration, setPaypalGeneration] = React.useState(0);
+  // PayPal renders its own "Debit or Credit Card" funding button next to the PayPal button, and the
+  // funding set is fixed when the SDK script loads. A seller's opt-out (checkout settings) applies
+  // only when every seller in the cart asked for it, so this re-runs when that aggregate flips:
+  // loadScript inserts a fresh script tag whenever the options differ, which re-applies the funding
+  // set. The cart can change (products added/removed) without remounting this form.
+  const cardFundingDisabled =
+    state.products.length > 0 && state.products.every((product: CheckoutProduct) => product.paypalCardFundingDisabled);
+  React.useEffect(() => {
+    if (!state.paypalClientId) return;
+    let cancelled = false;
     asyncVoid(async () => {
-      if (!state.paypalClientId) return;
-      // PayPal renders its own "Debit or Credit Card" funding button next to the PayPal button.
-      // The funding set is fixed when the SDK script loads, so a seller's opt-out applies only
-      // when every seller in the cart asked for it.
-      const cardFundingDisabled =
-        state.products.length > 0 &&
-        state.products.every((product: CheckoutProduct) => product.paypalCardFundingDisabled);
-      setNativePaypal(
-        await loadPaypal({
-          clientId: state.paypalClientId,
-          vault: true,
-          ...(cardFundingDisabled ? { disableFunding: "card" } : {}),
-        }),
-      );
-    }),
-  );
+      const paypal = await loadPaypal({
+        clientId: state.paypalClientId,
+        vault: true,
+        ...(cardFundingDisabled ? { disableFunding: "card" } : {}),
+      });
+      if (cancelled) return;
+      setNativePaypal(paypal);
+      setPaypalGeneration((generation) => generation + 1);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [state.paypalClientId, cardFundingDisabled]);
   const braintreeToken = useBraintreeToken(true);
   const implementation = state.products.reduce<Product["supports_paypal"]>((impl, item) => {
     if (impl === "native" && item.supportsPaypal === "native" && nativePaypal) return "native";
@@ -1448,12 +1457,12 @@ const usePayPalImplementation = () => {
     return null;
   }, "native");
 
-  return { implementation, nativePaypal, braintreeToken };
+  return { implementation, nativePaypal, braintreeToken, paypalGeneration };
 };
 
 const PayPalContent = () => {
   const [state, dispatch] = useState();
-  const { implementation, nativePaypal, braintreeToken } = usePayPalImplementation();
+  const { implementation, nativePaypal, braintreeToken, paypalGeneration } = usePayPalImplementation();
 
   React.useEffect(() => {
     if (!implementation) return;
@@ -1487,7 +1496,7 @@ const PayPalContent = () => {
   return (
     <div className="flex flex-col items-center gap-4">
       {nativePaypal && implementation === "native" ? (
-        <NativePayPal implementation={nativePaypal} />
+        <NativePayPal key={paypalGeneration} implementation={nativePaypal} />
       ) : braintreeToken.type === "available" ? (
         <BraintreePayPal token={braintreeToken.token} />
       ) : null}
