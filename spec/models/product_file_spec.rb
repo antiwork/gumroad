@@ -358,12 +358,13 @@ describe ProductFile do
         create(:readable_document),
         create(:non_streamable_video),
         create(:streamable_video),
-        create(:readable_document, stream_only: true),
         create(:non_readable_document),
         create(:listenable_audio)
       ]
       non_archivable = [
         create(:streamable_video, stream_only: true),
+        # Downloads are off, so the file must not reach the buyer inside an archive.
+        create(:readable_document, stream_only: true),
         create(:product_file, filetype: "link", url: "http://gumroad.com")
       ]
 
@@ -373,7 +374,7 @@ describe ProductFile do
   end
 
   describe "#stream_only?" do
-    it "returns false for non-video file" do
+    it "returns false for a readable document that is not marked as stream_only" do
       product_file = create(:readable_document)
 
       expect(product_file.stream_only?).to eq(false)
@@ -391,16 +392,33 @@ describe ProductFile do
       expect(product_file.stream_only?).to eq(false)
     end
 
-    it "returns false for non-video file marked as stream_only" do
-      product_file = create(:readable_document, stream_only: true)
-
-      expect(product_file.stream_only?).to eq(false)
-    end
-
     it "returns true for streamable video file marked as stream_only" do
       product_file = create(:streamable_video, stream_only: true)
 
       expect(product_file.stream_only?).to eq(true)
+    end
+
+    it "returns true for a readable document marked as stream_only" do
+      product_file = create(:readable_document, stream_only: true)
+
+      expect(product_file.stream_only?).to eq(true)
+    end
+
+    it "returns true for an EPUB marked as stream_only" do
+      product_file = create(:epub_product_file, stream_only: true, size: 1.megabyte)
+
+      expect(product_file.stream_only?).to eq(true)
+    end
+
+    it "returns false for files with no other way to open them" do
+      product_files = [
+        create(:non_readable_document, stream_only: true),
+        create(:listenable_audio, stream_only: true),
+        # Too large for the in-browser reader, so the download has to stay.
+        create(:epub_product_file, stream_only: true, size: 33.megabytes)
+      ]
+
+      expect(product_files.map(&:stream_only?)).to eq([false, false, false])
     end
   end
 

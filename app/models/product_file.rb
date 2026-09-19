@@ -260,8 +260,15 @@ class ProductFile < ApplicationRecord
     pdf? || (epub? && (size.nil? || size <= MAX_EPUB_READER_ARCHIVE_SIZE))
   end
 
+  # Downloads can only be turned off where the buyer has another way to open the file:
+  # the video player, or the in-browser reader. Mirrors the read page's own gate, so
+  # turning the flag on can never leave a buyer with nothing to open.
+  def can_disable_downloads?
+    streamable? || browser_readable?
+  end
+
   def stream_only?
-    streamable? && stream_only
+    can_disable_downloads? && stream_only
   end
 
   def archivable?

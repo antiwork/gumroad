@@ -258,3 +258,48 @@ it("renders the human-readable size once the file has one", async () => {
 
   expect(screen.getByText("1.7 MB")).toBeTruthy();
 });
+
+const documentFile: FileEntry = {
+  ...streamableFile,
+  display_name: "report",
+  extension: "PDF",
+  is_pdf: true,
+  is_streamable: false,
+  url: "https://example.com/report.pdf",
+};
+
+it("offers download-disabling on a document, with copy for the reader rather than streaming", async () => {
+  const file: FileEntry = { ...documentFile, stream_only: true, status: { type: "saved" } };
+  context.filesById = new Map<string, FileEntry>([[FILE_ID, file]]);
+
+  render(<FileEmbedEditor config={{ filesById: context.filesById }} />);
+  await act(() => Promise.resolve());
+
+  act(() => {
+    fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+  });
+
+  expect(screen.getByText(/buyers read it in the browser instead/u)).toBeTruthy();
+  expect(screen.queryByText(/stream only/u)).toBeNull();
+  // The reader is the only way to open a document whose downloads are disabled.
+  expect(screen.getByText(/stay on while downloads are disabled/u)).toBeTruthy();
+});
+
+it("offers no download switch for a file with no other way to open it", async () => {
+  const file: FileEntry = {
+    ...streamableFile,
+    extension: "ZIP",
+    is_streamable: false,
+    status: { type: "saved" },
+  };
+  context.filesById = new Map<string, FileEntry>([[FILE_ID, file]]);
+
+  render(<FileEmbedEditor config={{ filesById: context.filesById }} />);
+  await act(() => Promise.resolve());
+
+  act(() => {
+    fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+  });
+
+  expect(screen.queryByText(/Disable file downloads/u)).toBeNull();
+});
