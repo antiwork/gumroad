@@ -471,8 +471,8 @@ const FormPage = ({
               label="Show PayPal's debit or credit card button"
             />
             <p className="text-muted">
-              PayPal adds this button next to the PayPal button for customers who would rather pay with a card.
-              Turning it off leaves only the PayPal button.
+              PayPal adds this button next to the PayPal button for customers who would rather pay with a card. Turning
+              it off leaves only the PayPal button.
             </p>
           </section>
           {paypal_connect.show_paypal_connect ? (

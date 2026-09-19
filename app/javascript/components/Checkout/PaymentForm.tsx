@@ -712,10 +712,13 @@ const CreditCardContent = ({
   const usesPaymentElement = useStripePaymentElement || useStripePaymentElementClientConfirm;
   const stripePaymentElementConfig = usesPaymentElement ? state.checkoutPayment.elements_options : null;
   // CardElement renders Link's inline "save my information" signup under the card fields; a seller
-  // can switch that off in checkout settings. Lanes with no card_element config (the element lane
-  // when the buyer picks their saved card) keep Link on, as they always have.
+  // can switch that off in checkout settings. The element lanes read the flag off their own config
+  // so a card lane falling back to CardElement (the element is unusable, or the buyer picked their
+  // saved card) still honours it; a lane carrying neither config keeps Link on, as it always has.
   const cardElementLinkEnabled =
-    state.checkoutPayment.integration === "card_element" ? state.checkoutPayment.stripe_link_enabled : true;
+    state.checkoutPayment.integration === "card_element"
+      ? state.checkoutPayment.stripe_link_enabled
+      : (stripePaymentElementConfig?.stripe_link_enabled ?? true);
   const suppressClientConfirmWallets = shouldSuppressClientConfirmWallets(state);
   const paymentElementWalletsEnabled =
     state.checkoutPayment.payment_element_wallets &&
@@ -1421,24 +1424,29 @@ const NativePayPal = ({ implementation }: { implementation: PayPalNamespace }) =
 const usePayPalImplementation = () => {
   const [state] = useState();
   const [nativePaypal, setNativePaypal] = React.useState<PayPalNamespace | null>(null);
-  useRunOnce(
+  // PayPal renders its own "Debit or Credit Card" funding button next to the PayPal button, and the
+  // funding set is fixed when the SDK script loads. A seller's opt-out (checkout settings) applies
+  // only when every seller in the cart asked for it, so this re-runs when that aggregate flips:
+  // loadScript inserts a fresh script tag whenever the options differ, which re-applies the funding
+  // set. The cart can change (products added/removed) without remounting this form.
+  const cardFundingDisabled =
+    state.products.length > 0 &&
+    state.products.every((product: CheckoutProduct) => product.paypalCardFundingDisabled);
+  React.useEffect(() => {
+    if (!state.paypalClientId) return;
+    let cancelled = false;
     asyncVoid(async () => {
-      if (!state.paypalClientId) return;
-      // PayPal renders its own "Debit or Credit Card" funding button next to the PayPal button.
-      // The funding set is fixed when the SDK script loads, so a seller's opt-out applies only
-      // when every seller in the cart asked for it.
-      const cardFundingDisabled =
-        state.products.length > 0 &&
-        state.products.every((product: CheckoutProduct) => product.paypalCardFundingDisabled);
-      setNativePaypal(
-        await loadPaypal({
-          clientId: state.paypalClientId,
-          vault: true,
-          ...(cardFundingDisabled ? { disableFunding: "card" } : {}),
-        }),
-      );
-    }),
-  );
+      const paypal = await loadPaypal({
+        clientId: state.paypalClientId,
+        vault: true,
+        ...(cardFundingDisabled ? { disableFunding: "card" } : {}),
+      });
+      if (!cancelled) setNativePaypal(paypal);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [state.paypalClientId, cardFundingDisabled]);
   const braintreeToken = useBraintreeToken(true);
   const implementation = state.products.reduce<Product["supports_paypal"]>((impl, item) => {
     if (impl === "native" && item.supportsPaypal === "native" && nativePaypal) return "native";
