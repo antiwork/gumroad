@@ -183,7 +183,8 @@ describe("Product Edit Scenario", type: :system, js: true) do
     expect(upsell.offer_code.deleted?).to be(true)
 
     product.reload
-    expect(product.description).to eq("<p><br></p>")
+    # A deliberate clear sends a null description, stored as an empty string.
+    expect(product.description).to eq("")
   end
 
   it "allows creating and deleting an upsell with variants in the product description" do
@@ -275,7 +276,8 @@ describe("Product Edit Scenario", type: :system, js: true) do
     expect(upsell.offer_code.deleted?).to be(true)
 
     product.reload
-    expect(product.description).to eq("<p><br></p>")
+    # A deliberate clear sends a null description, stored as an empty string.
+    expect(product.description).to eq("")
   end
 
   it "allows creating and deleting an upsell in the product rich content" do

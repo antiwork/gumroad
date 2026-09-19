@@ -124,6 +124,7 @@ export type TaxonomyAttributeValue = string | boolean | number | null;
 export type Product = {
   name: string;
   description: string;
+  description_changed?: boolean;
   custom_permalink: string | null;
   price_cents: number;
   suggested_price_cents: number | null;

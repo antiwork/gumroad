@@ -1586,3 +1586,64 @@ it("blocks the save when a lost page's raw id survives only on a different page 
   expect(screen.getByText("Some content couldn't be loaded")).toBeTruthy();
   expect(screen.getByText("Real lesson")).toBeTruthy();
 });
+
+// Pins the per-save description marker. `description_changed` tells the server a
+// blank description in the snapshot is a deliberate clear, so clearing it at the
+// wrong moment either loses a real clear (cleared too early) or lets a stale tab
+// wipe newer copy (never cleared). The safe rule is the one the file already uses
+// for the sent snapshot: only the marker THIS request carried is spent.
+it("keeps a description clear the seller made while the save was in flight", async () => {
+  const product = { ...buildTieredProduct([buildTier("tier-a", "Tier A", [])]), description: "<p>Old copy</p>" };
+  const props = buildTieredProps(product);
+
+  const requests: { resolve: (response: SaveProductResponse) => void }[] = [];
+  saveProductMock.mockImplementation(() => new Promise<SaveProductResponse>((resolve) => requests.push({ resolve })));
+
+  render(<ProductEditPage {...props} />);
+  await waitFor(() => expect(contextCapture.current).not.toBeNull());
+
+  let save: Promise<boolean> | undefined;
+  act(() => {
+    save = contextCapture.current?.save();
+  });
+  await waitFor(() => expect(saveProductMock).toHaveBeenCalledOnce());
+  expect(saveProductMock.mock.calls[0]?.[2]).toMatchObject({ description: "<p>Old copy</p>" });
+
+  // The seller empties the description while the request runs: the clear is not
+  // in this request, so the follow-up save must still claim it.
+  act(() => contextCapture.current?.updateProduct({ description: "", description_changed: true }));
+
+  await act(async () => {
+    requests[0]?.resolve({});
+    await save;
+  });
+
+  expect(contextCapture.current?.product.description_changed).toBe(true);
+});
+
+it("spends a description marker the completed save carried", async () => {
+  const product = buildTieredProduct([buildTier("tier-a", "Tier A", [])]);
+  const props = buildTieredProps(product);
+
+  const requests: { resolve: (response: SaveProductResponse) => void }[] = [];
+  saveProductMock.mockImplementation(() => new Promise<SaveProductResponse>((resolve) => requests.push({ resolve })));
+
+  render(<ProductEditPage {...props} />);
+  await waitFor(() => expect(contextCapture.current).not.toBeNull());
+
+  act(() => contextCapture.current?.updateProduct({ description: "", description_changed: true }));
+
+  let save: Promise<boolean> | undefined;
+  act(() => {
+    save = contextCapture.current?.save();
+  });
+  await waitFor(() => expect(saveProductMock).toHaveBeenCalledOnce());
+  expect(saveProductMock.mock.calls[0]?.[2]).toMatchObject({ description_changed: true });
+
+  await act(async () => {
+    requests[0]?.resolve({});
+    await save;
+  });
+
+  expect(contextCapture.current?.product.description_changed).toBe(false);
+});

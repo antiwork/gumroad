@@ -540,7 +540,9 @@ class LinksController < ApplicationController
           :preserved_rich_content_ids,
           :rich_content_provenance_version
         ))
-        @product.description = SaveContentUpsellsService.new(seller: @product.user, content: product_permitted_params[:description], old_content: @product.description_was).from_html
+        if product_permitted_params.key?(:description)
+          @product.description = SaveContentUpsellsService.new(seller: @product.user, content: product_permitted_params[:description], old_content: @product.description_was).from_html
+        end
         @product.skus_enabled = false
         @product.save_custom_button_text_option(product_permitted_params[:custom_button_text_option]) unless product_permitted_params[:custom_button_text_option].nil?
         @product.save_custom_summary(product_permitted_params[:custom_summary]) unless product_permitted_params[:custom_summary].nil?
@@ -949,17 +951,21 @@ class LinksController < ApplicationController
       end
     end
 
-    # Blank custom_permalink is "not specified" unless the current editor marks
-    # it as a deliberate clear. Older tabs send the whole snapshot without that
-    # marker, so their stale blank must not wipe a slug another tab set.
+    # Blank custom_permalink / description is unspecified unless marked a
+    # deliberate clear, so a content-tab snapshot cannot wipe another tab's copy.
     def omit_unspecified_product_scalars!
       permitted = product_permitted_params
       permitted.delete(:custom_permalink) if permitted[:custom_permalink].blank? && !custom_permalink_clear_requested?
+      permitted.delete(:description) if permitted[:description].blank? && !description_clear_requested?
       permitted.delete(:customizable_price) if permitted[:customizable_price].nil?
     end
 
     def custom_permalink_clear_requested?
       ActiveModel::Type::Boolean.new.cast(params[:custom_permalink_changed])
+    end
+
+    def description_clear_requested?
+      ActiveModel::Type::Boolean.new.cast(params[:description_changed])
     end
 
     # Built from PERMITTED params so submitted? sees collections as strong

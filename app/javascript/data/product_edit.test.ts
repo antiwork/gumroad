@@ -112,6 +112,59 @@ describe("scalarSettingsForSave", () => {
     ).toEqual({ customizable_price: false });
   });
 
+  it("omits a blank description unless this session edited the field", () => {
+    expect(scalarSettingsForSave(product({ description: "" }), lastSaved())).toEqual({});
+    expect(scalarSettingsForSave(product({ description: "", description_changed: true }), lastSaved())).toEqual({
+      description: null,
+      description_changed: true,
+    });
+    expect(scalarSettingsForSave(product({ description: "", description_changed: false }), lastSaved())).toEqual({});
+  });
+
+  it("sends a non-empty description", () => {
+    expect(scalarSettingsForSave(product({ description: "<p>Hi</p>" }), lastSaved())).toEqual({
+      description: "<p>Hi</p>",
+    });
+  });
+
+  it("treats the editor's empty document as blank", () => {
+    // An emptied rich-text editor serializes to markup, so truthiness alone
+    // would let an unmarked stale snapshot overwrite newer copy with it.
+    expect(scalarSettingsForSave(product({ description: "<p><br></p>" }), lastSaved())).toEqual({});
+    expect(scalarSettingsForSave(product({ description: "<p>&nbsp;</p>" }), lastSaved())).toEqual({});
+    expect(scalarSettingsForSave(product({ description: "<ul><li><p><br></p></li></ul>" }), lastSaved())).toEqual({});
+    expect(scalarSettingsForSave(product({ description: "<h2></h2>" }), lastSaved())).toEqual({});
+  });
+
+  it("still sends a description that renders something, embed-only included", () => {
+    expect(scalarSettingsForSave(product({ description: "<img src='x.png'>" }), lastSaved())).toEqual({
+      description: "<img src='x.png'>",
+    });
+    expect(scalarSettingsForSave(product({ description: "<figure><audio></audio></figure>" }), lastSaved())).toEqual({
+      description: "<figure><audio></audio></figure>",
+    });
+    expect(scalarSettingsForSave(product({ description: "<p> <br> hi </p>" }), lastSaved())).toEqual({
+      description: "<p> <br> hi </p>",
+    });
+    // The media node serializes as an attribute-only wrapper — the payload is in
+    // the attributes, so it is content even with nothing between the tags. A
+    // session that edited the field would otherwise send a clear and drop it.
+    const mediaEmbed =
+      '<div class="tiptap__raw" data-url="https://example.com/x.mp4" data-thumbnail="https://example.com/x.png"></div>';
+    expect(scalarSettingsForSave(product({ description: mediaEmbed }), lastSaved())).toEqual({
+      description: mediaEmbed,
+    });
+    expect(scalarSettingsForSave(product({ description: mediaEmbed, description_changed: true }), lastSaved())).toEqual(
+      { description: mediaEmbed },
+    );
+  });
+
+  it("clears when the session emptied the editor", () => {
+    expect(
+      scalarSettingsForSave(product({ description: "<p><br></p>", description_changed: true }), lastSaved()),
+    ).toEqual({ description: null, description_changed: true });
+  });
+
   it("always sends customizable_price when the caller has no baseline", () => {
     // A caller that does not track the last-saved value (null baseline) must
     // keep the pre-fix always-submit behavior, so disabling PWYW still lands.

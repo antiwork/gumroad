@@ -666,6 +666,9 @@ const ProductEditPage = (props: Props) => {
       applyCanonicalIds(reconciled, response, sentPagesById);
       reconciled.confirmed_removed_variant_ids = [];
       reconciled.confirmed_removed_rich_content_ids = [];
+      // The marker is per-save. Keeping it would let a later content-tab
+      // snapshot still claim a description clear.
+      reconciled.description_changed = false;
       lastSavedProductRef.current = reconciled;
       setVariantIdMappings((previous) => ({ ...previous, ...response.variant_id_mappings }));
       setRichContentIdMappings((previous) => {
@@ -701,6 +704,9 @@ const ProductEditPage = (props: Props) => {
           sentConfirmedPageIds,
           confirmedPageIdMappings,
         );
+        // The marker this request carried is spent. A description edited while
+        // the save was in flight was not part of it, so its marker stays.
+        if (current.description === productSent.description) current.description_changed = false;
       });
 
       if (response.warning_message) showAlert(response.warning_message, "warning");

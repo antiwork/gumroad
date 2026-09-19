@@ -1169,6 +1169,45 @@ class LinksControllerUpdateTest < ActionController::TestCase
     assert_nil @product.reload.custom_permalink
   end
 
+  test "PUT update does not clear a description when the snapshot sends a blank one" do
+    kept = "<p>Keep this</p>"
+    @product.update!(description: kept)
+
+    put :update, params: @params.merge(description: ""), as: :json
+
+    assert_response :success
+    assert_equal kept, @product.reload.description
+  end
+
+  test "PUT update still writes a new description when the snapshot sends one" do
+    @product.update!(description: "<p>Old</p>")
+
+    put :update, params: @params.merge(description: "<p>New copy</p>"), as: :json
+
+    assert_response :success
+    assert_equal "<p>New copy</p>", @product.reload.description
+  end
+
+  test "PUT update clears a description when the current editor marks the blank value as changed" do
+    @product.update!(description: "<p>Old</p>")
+
+    put :update, params: @params.merge(description: "", description_changed: true), as: :json
+
+    assert_response :success
+    assert_equal "", @product.reload.description
+  end
+
+  test "PUT update clears a description when the editor sends a null value it marked as changed" do
+    # `scalarSettingsForSave` sends `description: null` for a deliberate clear,
+    # so the guard must keep a nil the marker claims and persist the clear.
+    @product.update!(description: "<p>Old</p>")
+
+    put :update, params: @params.merge(description: nil, description_changed: true), as: :json
+
+    assert_response :success
+    assert_equal "", @product.reload.description
+  end
+
   test "PUT update returns the existing validation error when suggested price is set but the default price record is missing" do
     @product.prices.destroy_all
     @product.update_column(:customizable_price, true)
@@ -3417,7 +3456,7 @@ class LinksControllerUpdateTest < ActionController::TestCase
 
     files_params = [{ "id" => public_file1.public_id, "status" => { "type" => "saved" } }]
 
-    post :update, params: { id: @product.unique_permalink, description: "", public_files: files_params }, format: :json
+    post :update, params: { id: @product.unique_permalink, description: "", description_changed: true, public_files: files_params }, format: :json
 
     assert_response :success
     assert_equal "", @product.reload.description
