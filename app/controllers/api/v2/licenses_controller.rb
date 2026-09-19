@@ -70,15 +70,13 @@ class Api::V2::LicensesController < Api::V2::BaseController
       # Force sellers to use product_id param in license verification request
       if params[:product_id].blank? \
         && product.present? \
-        && !skip_product_id_check(product)
+        && !skip_product_id_check(product) \
+        && product_id_required?(product)
 
-        # Raise HTTP 500 if the product is created on or after a specific date
-        if force_product_id_timestamp.present? && product.created_at > force_product_id_timestamp
-          Rails.logger.error("[License Verification Error] product_id missing, responding with HTTP 500 for product: #{product.id}")
-          message = "The 'product_id' parameter is required to verify the license for this product. "
-          message += "Please set 'product_id' to '#{@license.link.external_id}' in the request."
-          return render json: { success: false, message: }, status: :internal_server_error
-        end
+        Rails.logger.error("[License Verification Error] product_id missing, responding with HTTP 500 for product: #{product.id}")
+        message = "The 'product_id' parameter is required to verify the license for this product. "
+        message += "Please set 'product_id' to '#{@license.link.external_id}' in the request."
+        return render json: { success: false, message: }, status: :internal_server_error
       end
 
       # Skip verifying product_permalink when product_id is present
@@ -135,11 +133,18 @@ class Api::V2::LicensesController < Api::V2::BaseController
       false
     end
 
+    # The requirement runs from the cutover timestamp onward. A stalled read is not evidence that
+    # the cutover has not happened, so it answers true: the caller gets the explicit product_id
+    # error the enforced path returns instead of an unhandled Redis failure, and no request gains
+    # the exemption the configured cutover denies it.
+    def product_id_required?(product)
+      timestamp = force_product_id_timestamp
+      timestamp.present? && product.created_at > timestamp
+    rescue Redis::BaseError, RedisClient::Error
+      true
+    end
+
     def force_product_id_timestamp
       @_force_prouct_id_timestamp ||= $redis.get(RedisKey.force_product_id_timestamp)&.to_datetime
-    rescue Redis::BaseError, RedisClient::Error
-      # Unset already means "not enforced", so a stalled read takes the same path rather than
-      # raising out of the branch the stale-skip check just sent this request into.
-      nil
     end
 end

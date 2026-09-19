@@ -699,15 +699,16 @@ describe Api::V2::LicensesController do
           }.as_json)
         end
 
-        it "does not raise when the enforcement-timestamp read stalls on the same path" do
+        it "returns the explicit product_id error instead of raising when the enforcement-timestamp read stalls" do
           allow($redis).to receive(:get).and_call_original
           allow($redis).to receive(:get).with(RedisKey.force_product_id_timestamp)
             .and_raise(Redis::TimeoutError.new("Waited 1.0 seconds"))
 
           post :verify, params: { product_permalink: @product.unique_permalink, license_key: @purchase.license.serial }
 
-          expect(response).to be_successful
-          expect(response.parsed_body).to include({ "success" => true })
+          expect(response).to have_http_status(:internal_server_error)
+          expect(response.parsed_body["success"]).to be false
+          expect(response.parsed_body["message"]).to include("'product_id' parameter is required")
         end
       end
     end
