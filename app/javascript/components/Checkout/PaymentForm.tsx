@@ -1434,11 +1434,12 @@ const usePayPalImplementation = () => {
   const cardFundingDisabled =
     state.products.length > 0 && state.products.every((product: CheckoutProduct) => product.paypalCardFundingDisabled);
   React.useEffect(() => {
-    if (!state.paypalClientId) return;
+    const clientId = state.paypalClientId;
+    if (!clientId) return;
     let cancelled = false;
     asyncVoid(async () => {
       const paypal = await loadPaypal({
-        clientId: state.paypalClientId,
+        clientId,
         vault: true,
         ...(cardFundingDisabled ? { disableFunding: "card" } : {}),
       });
