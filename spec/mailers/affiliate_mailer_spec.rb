@@ -106,6 +106,22 @@ describe AffiliateMailer do
         expect(mail.body.encoded).to include "(Blue, Small)"
       end
     end
+
+    context "when the purchase's subscription is not attached yet" do
+      it "sends the sale email without the subscription terms" do
+        product = create(:membership_product, user: seller)
+        affiliate = create(:direct_affiliate, seller:)
+        purchase = create(:membership_purchase, affiliate:, link: product, seller:)
+        purchase.update_columns(subscription_id: nil)
+
+        mail = AffiliateMailer.notify_affiliate_of_sale(purchase.id)
+
+        expect(mail.to).to eq([affiliate.affiliate_user.form_email])
+        expect(mail.body.encoded).to include("Thanks for being part of the team and helping make another sale happen!")
+        expect(mail.body.encoded).to_not include("continue to receive a commission")
+        expect(mail.body.encoded).to_not include("free trial has expired on")
+      end
+    end
   end
 
   describe "#notify_direct_affiliate_of_updated_products" do
