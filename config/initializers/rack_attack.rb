@@ -260,6 +260,16 @@ class Rack::Attack
                             period: 60.seconds,
                             throttle_params: Proc.new { |req| req.host }
 
+  # Storefront sections and Discover search here, and a client repeating one search sends thousands of
+  # requests a minute from one IP — enough to trip the zone-wide edge limit, which then blocks that IP
+  # from the whole site. Refuse the repeat ourselves instead, well under the edge limit: 300/min is far
+  # above browsing (a person clicking filters is a few per second at most), so only a loop reaches it.
+  # Keyed on IP alone and matched by regex so every format suffix shares one bucket.
+  # Initial: 300rpm, Max: 1500 requests/9 hours
+  throttle_with_exponential_backoff(name: "products_search/ip", requests: 300, period: 60.seconds) do |req|
+    req.remote_ip if req.path.match?(%r{\A/products/search(?:\.[^/]+)?\z})
+  end
+
   # Initial: 10rpm, Max: 60 requests/3 days (per user)
   throttle_by_params path: "/two-factor",
                      requests: 10,

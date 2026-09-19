@@ -679,4 +679,39 @@ describe "Rack::Attack throttle", type: :request do
       reset_rack_attack!
     end
   end
+
+  describe "products search throttle (gumroad-private#2805)" do
+    def search_request(path = "/products/search", ip:)
+      Rack::Attack::Request.new(
+        Rack::MockRequest.env_for(path, method: "GET", input: "", "HTTP_CF_CONNECTING_IP" => ip)
+      )
+    end
+
+    it "throttles a client repeating one search, across format suffixes of the same path" do
+      reset_rack_attack!
+
+      travel_to(Time.current) do
+        300.times do |i|
+          path = i.even? ? "/products/search" : "/products/search.json"
+          expect(Rack::Attack.configuration.throttled?(search_request(path, ip: "203.0.113.90"))).to be(false), "request #{i + 1} unexpectedly throttled"
+        end
+
+        expect(Rack::Attack.configuration.throttled?(search_request(ip: "203.0.113.90"))).to be(true)
+      end
+    ensure
+      reset_rack_attack!
+    end
+
+    it "leaves ordinary browsing on another IP alone" do
+      reset_rack_attack!
+
+      travel_to(Time.current) do
+        60.times do
+          expect(Rack::Attack.configuration.throttled?(search_request(ip: "203.0.113.91"))).to be(false)
+        end
+      end
+    ensure
+      reset_rack_attack!
+    end
+  end
 end
