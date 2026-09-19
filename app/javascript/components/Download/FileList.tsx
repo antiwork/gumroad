@@ -352,27 +352,25 @@ export const FileRow = ({
           </TrackClick>
         ) : null}
 
-        {!file.processing ? (
-          <>
-            {file.kindle_data != null ? (
-              <TrackClick eventName="send_to_kindle_click" file={file}>
-                <Button color="kindle" onClick={toggleKindleDrawer}>
-                  <Amazon pack="brands" className="size-5" />
-                  Send to Kindle
-                </Button>
-              </TrackClick>
-            ) : null}
+        {file.kindle_data != null && !file.processing ? (
+          <TrackClick eventName="send_to_kindle_click" file={file}>
+            <Button color="kindle" onClick={toggleKindleDrawer}>
+              <Amazon pack="brands" className="size-5" />
+              Send to Kindle
+            </Button>
+          </TrackClick>
+        ) : null}
 
-            {file.read_url != null ? (
-              <NativeAppLink file={file}>
-                <NavigationButton color="primary" href={file.read_url}>
-                  {file.latest_media_location != null && file.latest_media_location.location === file.content_length
-                    ? "Read again"
-                    : "Read"}
-                </NavigationButton>
-              </NativeAppLink>
-            ) : null}
-          </>
+        {/* Reading signs the unstamped original, so it stays clickable while a stamped copy is
+            being prepared — which is the only action a stream_only PDF has. */}
+        {file.read_url != null ? (
+          <NativeAppLink file={file}>
+            <NavigationButton color="primary" href={file.read_url}>
+              {file.latest_media_location != null && file.latest_media_location.location === file.content_length
+                ? "Read again"
+                : "Read"}
+            </NavigationButton>
+          </NativeAppLink>
         ) : null}
       </RowActions>
 
