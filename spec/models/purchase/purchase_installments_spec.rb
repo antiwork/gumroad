@@ -96,6 +96,49 @@ describe "PurchaseInstallments", :vcr do
       expect(Purchase.product_installments(purchase_ids: [purchase.id])).to be_empty
     end
 
+    it "loads each purchase's filter inputs once for the batch" do
+      # The buyer filter reads `variant_attributes` and the license chain
+      # (subscription -> original_purchase -> license for a renewal charge) per
+      # purchase, so a membership with several renewals paid those queries once
+      # per renewal until the batch preloaded them.
+      product = create(:product)
+      variant = create(:variant, variant_category: create(:variant_category, link: product))
+      subscription = create(:subscription, link: product)
+      original_purchase = create(:purchase, :with_license, link: product, variant_attributes: [variant],
+                                                           subscription:, is_original_subscription_purchase: true,
+                                                           email: "member@example.com")
+      renewals = Array.new(3) do
+        create(:purchase, link: product, variant_attributes: [variant], subscription:,
+                          is_original_subscription_purchase: false, email: original_purchase.email)
+      end
+      other_product = create(:product)
+      rejected_post = create(:seller_installment, seller: product.user, published_at: 10.minutes.ago,
+                                                  bought_products: [other_product.unique_permalink])
+      create(:creator_contacting_customers_email_info_sent, purchase: original_purchase, installment: rejected_post)
+      visible_post = create(:seller_installment, seller: product.user, published_at: 20.minutes.ago,
+                                                 bought_products: [product.unique_permalink])
+      create(:creator_contacting_customers_email_info_sent, purchase: original_purchase, installment: visible_post)
+
+      per_purchase_lookups = []
+      counter = lambda do |*, payload|
+        sql = payload[:sql].to_s
+        next unless sql.start_with?("SELECT")
+
+        per_purchase_lookups << sql if sql.match?(/`base_variants_purchases`\.`purchase_id` = \d+/) ||
+                                       sql.match?(/`subscriptions`\.`id` = \d+ LIMIT 1\z/) ||
+                                       sql.match?(/`licenses`\.`purchase_id` = \d+ LIMIT 1\z/)
+      end
+
+      installments = nil
+      ActiveSupport::Notifications.subscribed(counter, "sql.active_record") do
+        installments = Purchase.product_installments(purchase_ids: ([original_purchase] + renewals).map(&:id))
+      end
+
+      expect(per_purchase_lookups).to be_empty,
+                                  "expected the batch to be preloaded, got per-purchase lookups:\n#{per_purchase_lookups.join("\n")}"
+      expect(installments.map(&:id)).to eq([visible_post.id])
+    end
+
     context "when purchased product(s) have should_show_all_posts enabled" do
       let(:enabled_product) { create(:product, should_show_all_posts: true) }
       let(:enabled_product_variant) { create(:variant, variant_category: create(:variant_category, link: enabled_product)) }
