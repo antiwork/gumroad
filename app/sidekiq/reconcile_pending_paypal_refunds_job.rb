@@ -17,7 +17,10 @@ class ReconcilePendingPaypalRefundsJob
   # PayPal's refund statuses. The lowercase values on the right are what
   # Refund::TERMINAL_FAILURE_STATUSES understands, so a refund failed on PayPal is
   # indistinguishable downstream from one failed on Stripe.
-  PAYPAL_PENDING_STATUS = "PENDING"
+  #
+  # `status` holds the processor's own string, so both cases are accepted: a row we
+  # failed to recognise would be exactly the silent PENDING this job exists to end.
+  PAYPAL_PENDING_STATUSES = %w(PENDING pending).freeze
   PAYPAL_COMPLETED_STATUS = "COMPLETED"
   PAYPAL_TERMINAL_FAILURE_STATUSES = { "FAILED" => "failed", "CANCELLED" => "canceled" }.freeze
 
@@ -40,7 +43,7 @@ class ReconcilePendingPaypalRefundsJob
   private
     def refunds_to_reconcile
       Refund.joins(:purchase)
-            .where(status: PAYPAL_PENDING_STATUS)
+            .where(status: PAYPAL_PENDING_STATUSES)
             .where.not(processor_refund_id: [nil, ""])
             .where(purchases: { charge_processor_id: PaypalChargeProcessor.charge_processor_id })
             .where(created_at: ...MINIMUM_AGE.ago)
@@ -52,7 +55,7 @@ class ReconcilePendingPaypalRefundsJob
         processor_refund_id: refund.processor_refund_id,
         merchant_account: purchase.merchant_account ||
           purchase.seller.merchant_account(PaypalChargeProcessor.charge_processor_id)
-      )
+      ).to_s.upcase
 
       case processor_status
       when PAYPAL_COMPLETED_STATUS

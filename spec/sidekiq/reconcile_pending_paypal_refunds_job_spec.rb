@@ -72,6 +72,16 @@ describe ReconcilePendingPaypalRefundsJob do
       expect(FailedRefundException.find_by(refund:)).to be_nil
     end
 
+    it "handles a processor status that is not upper-cased" do
+      refund.update!(status: "pending")
+      processor_reports("failed")
+
+      described_class.new.perform
+
+      expect(refund.reload.status).to eq("failed")
+      expect(FailedRefundException.find_by(refund:)).to be_present
+    end
+
     it "reads the processor with the refund id and the seller's merchant account" do
       expect(PaypalChargeProcessor).to receive(:fetch_refund_status)
         .with(processor_refund_id: "64J80824NV272645E", merchant_account:)
