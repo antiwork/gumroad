@@ -26,16 +26,29 @@ describe("Purchase product page", type: :system, js: true) do
     let(:purchase) { create(:purchase, link: coffee) }
 
     before do
-      create(:variant, name: "", variant_category: coffee.variant_categories_alive.first, price_difference_cents: 200)
+      category = coffee.variant_categories_alive.first
+      # The page snapshots the amounts that predate the purchase, and created_at is stored to the
+      # second, so backdate them: otherwise the page renders one amount (or none) and this example
+      # never reaches the multi-amount rule it claims to cover.
+      older = 1.hour.ago
+      category.alive_variants.each { |variant| variant.update!(created_at: older) }
+      create(:variant, name: "", variant_category: category, price_difference_cents: 200, created_at: older)
     end
 
     it "keeps the custom-amount CTA live instead of asking for a SKU" do
       visit purchase_product_path(purchase.external_id)
 
       expect(page).to have_text("Buy me a coffee!")
-      # A blank optionId on a coffee purchase is the "Other" amount, not a missing SKU.
+      # Both amounts are on screen and one is preselected, so the amount field only exists once
+      # "Other" is chosen — that blank optionId is the Other amount, not a missing SKU.
+      expect(page).to have_css("[role='radio']", text: "Other")
+      expect(page).to_not have_field("Name a fair price")
       expect(page).to_not have_link("Choose an option")
 
+      find("[role='radio']", text: "Other").click
+
+      # A blank optionId is exactly the state a non-coffee product would guard.
+      expect(page).to_not have_link("Choose an option")
       fill_in "Name a fair price", with: "5"
       first("a[href*='/checkout']").click
 
