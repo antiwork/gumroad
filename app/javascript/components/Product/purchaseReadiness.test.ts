@@ -92,7 +92,9 @@ describe("needsOptionChoice", () => {
   });
 
   it("does not ask for a choice when the picker has nothing to offer", () => {
-    const soldOut = product({ options: [option("first", { quantity_left: 0 }), option("second", { quantity_left: 0 })] });
+    const soldOut = product({
+      options: [option("first", { quantity_left: 0 }), option("second", { quantity_left: 0 })],
+    });
     expect(needsOptionChoice(soldOut, selection())).toBe(false);
     expect(isSelectionComplete(soldOut, selection())).toBe(true);
   });

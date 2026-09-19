@@ -771,10 +771,7 @@ export const ConfigurationSelector = React.forwardRef<
       // The wrapper is display: contents, so it has no box of its own to scroll to — aim at the
       // option picker when there is one, else the first control inside.
       const root = rootRef.current;
-      const target = (root?.querySelector("[data-option-picker]") ?? root?.firstElementChild) as
-        | HTMLElement
-        | null
-        | undefined;
+      const target = root?.querySelector("[data-option-picker]") ?? root?.firstElementChild;
       target?.scrollIntoView(arg ?? { block: "nearest" });
     },
   }));
@@ -802,7 +799,12 @@ export const ConfigurationSelector = React.forwardRef<
   );
 
   if (product.native_type === "coffee") {
-    if (product.options.length === 1) return <div ref={rootRef} className="contents">{pwywInput}</div>;
+    if (product.options.length === 1)
+      return (
+        <div ref={rootRef} className="contents">
+          {pwywInput}
+        </div>
+      );
     return (
       <div ref={rootRef} className="contents">
         <Tabs

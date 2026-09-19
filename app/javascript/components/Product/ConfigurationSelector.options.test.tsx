@@ -61,6 +61,12 @@ const initialSelection: PriceSelection = {
   payInInstallments: false,
 };
 
+const versionedOption = (index: number): Product["options"][number] => {
+  const option = versionedProduct.options[index];
+  if (!option) throw new Error(`versionedProduct has no option at index ${index}`);
+  return option;
+};
+
 const renderSelector = () => {
   const Harness = () => {
     const [selection, setSelection] = React.useState(initialSelection);
@@ -142,10 +148,7 @@ describe("version selector accessibility", () => {
         ref={ref}
         product={{
           ...versionedProduct,
-          options: [
-            { ...versionedProduct.options[0]!, quantity_left: 0 },
-            versionedProduct.options[1]!,
-          ],
+          options: [{ ...versionedOption(0), quantity_left: 0 }, versionedOption(1)],
         }}
         selection={{ ...initialSelection, optionId: null }}
         setSelection={() => {}}

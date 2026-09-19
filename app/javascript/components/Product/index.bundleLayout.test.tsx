@@ -277,8 +277,13 @@ describe("product page sticky CTA readiness", () => {
   });
 
   it("lets the bar through when every option is sold out", () => {
-    const soldOut = { ...product, options: [{ ...option("standard"), quantity_left: 0 }, option("deluxe")] };
-    soldOut.options[1]!.quantity_left = 0;
+    const soldOut = {
+      ...product,
+      options: [
+        { ...option("standard"), quantity_left: 0 },
+        { ...option("deluxe"), quantity_left: 0 },
+      ],
+    };
 
     const bar = renderLayout(soldOut);
     const cta = within(bar).getByRole("link", { name: "I want this!" });
