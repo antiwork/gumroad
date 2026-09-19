@@ -52,4 +52,15 @@ RSpec.describe Marketing::Eligibility do
     expect(described_class.enabled_for?(nil)).to eq(false)
     expect(described_class.enabled_for?(build(:user))).to eq(false)
   end
+
+  # RedisFailOpen re-raises for a gate it has not memoized yet, so a stalled read
+  # reaches the caller as an exception rather than as a false.
+  [RedisClient::ReadTimeoutError, Redis::TimeoutError].each do |error_class|
+    it "treats a treatment seller as not enabled when the flag read stalls with #{error_class}" do
+      create(:marketing_holdout_assignment, user: seller)
+      allow(Flipper).to receive(:enabled?).with(:auto_marketing, seller).and_raise(error_class.new("Waited 1.0 seconds"))
+
+      expect(described_class.enabled_for?(seller)).to eq(false)
+    end
+  end
 end
