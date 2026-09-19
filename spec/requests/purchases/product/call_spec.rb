@@ -84,12 +84,16 @@ describe "Call", type: :system, js: true do
     it "allows selecting a duration and changing it during checkout" do
       visit call.long_url
 
+      # A call with several durations is a multi-option product, so the buyer has to pick one
+      # before the CTA turns into the buy button.
+      expect(page).to have_radio_button("$10", checked: false)
+      expect(page).to have_radio_button("$20", checked: false)
+
+      choose "$10"
       expect(page).to have_radio_button("$10", checked: true)
       expect(page).to have_radio_button("$20", checked: false)
 
       wait_for_ajax
-
-      choose "$10"
 
       scroll_to first("footer")
       click_on "I want this!"
