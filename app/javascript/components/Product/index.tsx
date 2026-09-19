@@ -69,7 +69,7 @@ import { CtaButton } from "$app/components/Product/CtaButton";
 import { DiscountExpirationCountdown } from "$app/components/Product/DiscountExpirationCountdown";
 import { PriceTag } from "$app/components/Product/PriceTag";
 import { getBundleComparisonPriceCents, getStandalonePrice } from "$app/components/Product/pricing";
-import { initialOptionId } from "$app/components/Product/purchaseReadiness";
+import { initialOptionId, needsOptionChoice } from "$app/components/Product/purchaseReadiness";
 import { Ribbon } from "$app/components/Product/Ribbon";
 import { ShareSection } from "$app/components/Product/ShareSection";
 import { SubscriptionChoiceModal } from "$app/components/Product/SubscriptionChoiceModal";
@@ -371,7 +371,7 @@ export const Product = ({
   const comparisonPriceCents = isBundle ? getBundleComparisonPriceCents(product, selectedOption) : basePriceCents;
 
   const validate = () => {
-    if (product.options.length > 1 && !selection.optionId) {
+    if (needsOptionChoice(product, selection)) {
       configurationSelectorRef?.current?.scrollIntoView({ block: "nearest" });
       configurationSelectorRef?.current?.focusRequiredInput();
       return false;

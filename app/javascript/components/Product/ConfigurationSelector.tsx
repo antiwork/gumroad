@@ -765,7 +765,14 @@ export const ConfigurationSelector = React.forwardRef<
       (optionRadio ?? rootRef.current?.querySelector<HTMLElement>("[role='radio']"))?.focus();
     },
     scrollIntoView: (arg?: boolean | ScrollIntoViewOptions) => {
-      rootRef.current?.scrollIntoView(arg ?? { block: "nearest" });
+      // The wrapper is display: contents, so it has no box of its own to scroll to — aim at the
+      // option picker when there is one, else the first control inside.
+      const root = rootRef.current;
+      const target = (root?.querySelector("[data-option-picker]") ?? root?.firstElementChild) as
+        | HTMLElement
+        | null
+        | undefined;
+      target?.scrollIntoView(arg ?? { block: "nearest" });
     },
   }));
   const buyerCurrencyCode = currencyCodeList.find((code) => code === product.buyer_currency) ?? null;
@@ -792,9 +799,9 @@ export const ConfigurationSelector = React.forwardRef<
   );
 
   if (product.native_type === "coffee") {
-    if (product.options.length === 1) return <div ref={rootRef}>{pwywInput}</div>;
+    if (product.options.length === 1) return <div ref={rootRef} className="contents">{pwywInput}</div>;
     return (
-      <div ref={rootRef}>
+      <div ref={rootRef} className="contents">
         <Tabs
           variant="buttons"
           role="radiogroup"
@@ -841,7 +848,7 @@ export const ConfigurationSelector = React.forwardRef<
   }
 
   return (
-    <div ref={rootRef}>
+    <div ref={rootRef} className="contents">
       {hasMultipleRecurrences && product.recurrences ? (
         <TypeSafeOptionSelect
           aria-label="Recurrence"

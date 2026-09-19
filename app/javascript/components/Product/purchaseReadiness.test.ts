@@ -69,6 +69,11 @@ describe("initialOptionId", () => {
     });
     expect(initialOptionId(sold, new URLSearchParams("option=second"))).toBeNull();
   });
+
+  it("keeps the first in-stock amount on a coffee product", () => {
+    const coffee = product({ native_type: "coffee", options: [option("one"), option("five")] });
+    expect(initialOptionId(coffee, new URLSearchParams())).toBe("one");
+  });
 });
 
 describe("needsOptionChoice", () => {
@@ -116,5 +121,10 @@ describe("isSelectionComplete", () => {
       recurrences: { default: "monthly", enabled: [{ recurrence: "monthly", price_cents: 500, id: "m" }] },
     });
     expect(isSelectionComplete(qty, selection({ optionId: "only", quantity: 1, recurrence: "monthly" }))).toBe(true);
+  });
+
+  it("lets a coffee buyer through on the Other amount", () => {
+    const coffee = product({ native_type: "coffee", options: [option("one"), option("five")] });
+    expect(isSelectionComplete(coffee, selection({ price: { error: false, value: 10000 } }))).toBe(true);
   });
 });
