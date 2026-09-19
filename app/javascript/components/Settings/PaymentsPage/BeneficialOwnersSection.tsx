@@ -1162,6 +1162,7 @@ const BeneficialOwnersSection = ({
                       id={`${uid}-nationality`}
                       required
                       disabled={isFormDisabled}
+                      aria-describedby={`${uid}-nationality-note`}
                       value={formState.nationality || ""}
                       onChange={(event) => updateForm({ nationality: event.target.value })}
                     >
@@ -1174,7 +1175,7 @@ const BeneficialOwnersSection = ({
                         </option>
                       ))}
                     </Select>
-                    <FieldsetDescription>
+                    <FieldsetDescription id={`${uid}-nationality-note`}>
                       Nationals of Cuba, Iran, North Korea and Syria cannot be verified, so their nationalities are not
                       listed.
                     </FieldsetDescription>

@@ -141,7 +141,9 @@ describe("BeneficialOwnersSection nationality note", () => {
     renderSection([], "AE");
     fireEvent.click(await screen.findByRole("button", { name: "Add beneficial owner" }));
 
-    expect(await screen.findByText(/Nationals of Cuba, Iran, North Korea and Syria/u)).toBeTruthy();
+    const note = await screen.findByText(/Nationals of Cuba, Iran, North Korea and Syria/u);
+
+    expect(screen.getByLabelText("Nationality").getAttribute("aria-describedby")).toBe(note.id);
   });
 
   it("does not carry the note for a country that does not ask for nationality", async () => {
