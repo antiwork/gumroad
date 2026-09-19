@@ -429,17 +429,20 @@ export const reconcileMountedEditorFileEmbedIds = (editor: Editor, fileIdMapping
   if (transaction.docChanged) editor.view.dispatch(transaction);
 };
 
-// Tags that a visually empty rich-text document can still consist of: the
-// editor serializes an empty paragraph as `<p><br></p>`, and deleting the last
-// node of a block leaves the wrapper behind. Anything else — text, an image, an
-// embed — means the description renders something.
-const EMPTY_RICH_TEXT_TAGS = /<\/?(?:p|br|h[1-6]|ul|ol|li|div|span|strong|em|b|i|u|s|a|blockquote|code|pre)\b[^>]*>/giu;
+// An emptied rich-text field is markup, not "": the editor writes an empty
+// paragraph as `<p><br></p>`, and block wrappers keep their own styling. Only
+// strip text-bearing blocks (attributes and all) and truly bare wrappers —
+// an element that could carry the payload, like the media node's
+// `<div class="tiptap__raw" data-url=…></div>`, has to read as content.
+// Over-retaining markup only ever means "not blank", which cannot drop copy.
+const EMPTY_RICH_TEXT_MARKUP =
+  /<\/?(?:p|br|h[1-6]|ul|ol|li|blockquote|code|pre)\b[^>]*>|<\/?(?:div|span|a|strong|em|b|i|u|s)>/giu;
 
 export const isBlankDescription = (description: string | null | undefined) => {
   if (!description) return true;
   return (
     description
-      .replace(EMPTY_RICH_TEXT_TAGS, "")
+      .replace(EMPTY_RICH_TEXT_MARKUP, "")
       .replace(/&nbsp;|&#160;/gu, " ")
       .trim() === ""
   );

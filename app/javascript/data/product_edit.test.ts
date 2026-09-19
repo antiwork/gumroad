@@ -146,6 +146,17 @@ describe("scalarSettingsForSave", () => {
     expect(scalarSettingsForSave(product({ description: "<p> <br> hi </p>" }), lastSaved())).toEqual({
       description: "<p> <br> hi </p>",
     });
+    // The media node serializes as an attribute-only wrapper — the payload is in
+    // the attributes, so it is content even with nothing between the tags. A
+    // session that edited the field would otherwise send a clear and drop it.
+    const mediaEmbed =
+      '<div class="tiptap__raw" data-url="https://example.com/x.mp4" data-thumbnail="https://example.com/x.png"></div>';
+    expect(scalarSettingsForSave(product({ description: mediaEmbed }), lastSaved())).toEqual({
+      description: mediaEmbed,
+    });
+    expect(scalarSettingsForSave(product({ description: mediaEmbed, description_changed: true }), lastSaved())).toEqual(
+      { description: mediaEmbed },
+    );
   });
 
   it("clears when the session emptied the editor", () => {
