@@ -43,6 +43,16 @@ describe Products::MarketingActionsController do
       expect(response).to have_http_status(:not_found)
     end
 
+    it "404s instead of failing the request when the flag read stalls" do
+      allow(Flipper).to receive(:enabled?).with(:auto_marketing, seller).and_raise(Redis::TimeoutError.new("Waited 1.0 seconds"))
+
+      expect do
+        get :index, params: { product_id: product.unique_permalink }, as: :json
+      end.not_to change { [Marketing::Action.count, UtmLink.count] }
+
+      expect(response).to have_http_status(:not_found)
+    end
+
     it "404s for another seller's product" do
       get :index, params: { product_id: create(:product).unique_permalink }, as: :json
       expect(response).to have_http_status(:not_found)
