@@ -200,6 +200,7 @@ describe CheckoutPresenter do
             custom_fields: [],
             supports_paypal: nil,
             paypal_card_funding_disabled: false,
+            link_disabled: false,
             has_offer_codes: false,
             has_tipping_enabled: false,
             analytics: product.analytics_data,
@@ -888,6 +889,7 @@ describe CheckoutPresenter do
                                  native_type: @product.native_type,
                                  supports_paypal: nil,
                                  paypal_card_funding_disabled: false,
+                                 link_disabled: false,
                                  creator: {
                                    id: @product.user.external_id,
                                    name: @product.user.username,
@@ -1018,6 +1020,17 @@ describe CheckoutPresenter do
         result = described_class.new(logged_in_user: nil, ip: "127.0.0.1").subscription_manager_props(subscription: @subscription.reload)
 
         expect(result[:request_apple_pay_merchant_tokens]).to eq(true)
+      end
+
+      it "carries the seller's Link opt-out onto the manage page's own payment config",
+         vcr: { cassette_name: "CheckoutPresenter/_subscription_manager_props/tiered_membership_product/returns_subscription_data_object_for_the_subscription_manage_page" } do
+        @product.user.update!(link_disabled: true)
+
+        result = described_class.new(logged_in_user: nil, ip: "127.0.0.1").subscription_manager_props(subscription: @subscription.reload)
+
+        # The manage page builds its own card-element config instead of taking checkout's, so this
+        # payload key is the only thing that stops Link's save-info block there.
+        expect(result[:product][:link_disabled]).to eq(true)
       end
 
       it "does not return a deleted original offer code discount",

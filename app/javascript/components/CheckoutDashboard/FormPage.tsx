@@ -494,6 +494,7 @@ const FormPage = ({
             },
           }}
           recommendedProduct={recommendationType !== "no_recommendations" ? cardProduct : undefined}
+          stripeLinkEnabled={!linkDisabled}
         />
       </WithPreviewSidebar>
     </Layout>

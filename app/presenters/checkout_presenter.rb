@@ -440,6 +440,9 @@ class CheckoutPresenter
         # Whole-cart opt-out: the PayPal button set is page-level, so the client ANDs this across
         # every product in the cart before hiding PayPal's card funding button.
         paypal_card_funding_disabled: product.user.paypal_card_funding_disabled?,
+        # Per-product for the surfaces that build their own payment config (the subscription manage
+        # page and the dashboard preview) and so never see checkoutPayment.stripe_link_enabled.
+        link_disabled: product.user.link_disabled?,
         custom_fields: product.custom_field_descriptors,
         exchange_rate: get_rate(product.price_currency_type).to_f / (is_currency_type_single_unit?(product.price_currency_type) ? 100 : 1),
         is_tiered_membership: product.is_tiered_membership,

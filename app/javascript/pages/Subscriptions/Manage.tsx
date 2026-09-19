@@ -53,6 +53,7 @@ type Props = {
     custom_fields: CustomFieldDescriptor[];
     supports_paypal: "native" | "braintree" | null;
     paypal_card_funding_disabled: boolean;
+    link_disabled: boolean;
     creator: Creator;
     currency_code: CurrencyCode;
     options: Option[];
@@ -328,7 +329,9 @@ export default function SubscriptionsManage() {
       request_apple_pay_merchant_tokens,
       payment_element_wallets: false,
       flat_payment_methods: false,
-      stripe_link_enabled: true,
+      // This page builds its own card-element config, so the seller's Link opt-out has to come off
+      // the product payload — the checkout page's own config never reaches here.
+      stripe_link_enabled: !product.link_disabled,
       elements_options: null,
     },
   });
