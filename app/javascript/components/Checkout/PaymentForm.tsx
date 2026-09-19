@@ -58,6 +58,7 @@ import {
   isProcessing,
   isSubmitDisabled,
   PaymentMethodType,
+  Product as CheckoutProduct,
   paypalBillingAddressChangesTaxLocation,
   paymentElementCollectsFullBillingDetails,
   requiresPaymentElementReusablePaymentMethod,
@@ -710,6 +711,11 @@ const CreditCardContent = ({
   const useStripePaymentElementClientConfirm = canUseStripePaymentElementClientConfirm(state);
   const usesPaymentElement = useStripePaymentElement || useStripePaymentElementClientConfirm;
   const stripePaymentElementConfig = usesPaymentElement ? state.checkoutPayment.elements_options : null;
+  // CardElement renders Link's inline "save my information" signup under the card fields; a seller
+  // can switch that off in checkout settings. Lanes with no card_element config (the element lane
+  // when the buyer picks their saved card) keep Link on, as they always have.
+  const cardElementLinkEnabled =
+    state.checkoutPayment.integration === "card_element" ? state.checkoutPayment.stripe_link_enabled : true;
   const suppressClientConfirmWallets = shouldSuppressClientConfirmWallets(state);
   const paymentElementWalletsEnabled =
     state.checkoutPayment.payment_element_wallets &&
@@ -1189,7 +1195,7 @@ const CreditCardContent = ({
           useSavedCard={useSavedCard}
           setUseSavedCard={setUseSavedCard}
           onChange={(evt) => setCardError(!!evt.error)}
-          enableLink
+          enableLink={cardElementLinkEnabled}
         />
       )}
       {paymentMethodsAppendix}
@@ -1418,7 +1424,19 @@ const usePayPalImplementation = () => {
   useRunOnce(
     asyncVoid(async () => {
       if (!state.paypalClientId) return;
-      setNativePaypal(await loadPaypal({ clientId: state.paypalClientId, vault: true }));
+      // PayPal renders its own "Debit or Credit Card" funding button next to the PayPal button.
+      // The funding set is fixed when the SDK script loads, so a seller's opt-out applies only
+      // when every seller in the cart asked for it.
+      const cardFundingDisabled =
+        state.products.length > 0 &&
+        state.products.every((product: CheckoutProduct) => product.paypalCardFundingDisabled);
+      setNativePaypal(
+        await loadPaypal({
+          clientId: state.paypalClientId,
+          vault: true,
+          ...(cardFundingDisabled ? { disableFunding: "card" } : {}),
+        }),
+      );
     }),
   );
   const braintreeToken = useBraintreeToken(true);

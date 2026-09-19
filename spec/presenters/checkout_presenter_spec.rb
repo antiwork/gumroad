@@ -199,6 +199,7 @@ describe CheckoutPresenter do
             shippable_country_codes: [],
             custom_fields: [],
             supports_paypal: nil,
+            paypal_card_funding_disabled: false,
             has_offer_codes: false,
             has_tipping_enabled: false,
             analytics: product.analytics_data,
@@ -886,6 +887,7 @@ describe CheckoutPresenter do
                                  name: @product.name,
                                  native_type: @product.native_type,
                                  supports_paypal: nil,
+                                 paypal_card_funding_disabled: false,
                                  creator: {
                                    id: @product.user.external_id,
                                    name: @product.user.username,

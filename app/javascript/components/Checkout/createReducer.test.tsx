@@ -64,6 +64,7 @@ const initialArgs = {
       customFields: [],
       bundleProductCustomFields: [],
       supportsPaypal: null,
+      paypalCardFundingDisabled: false,
       testPurchase: false,
       requirePayment: true,
       hasFreeTrial: false,

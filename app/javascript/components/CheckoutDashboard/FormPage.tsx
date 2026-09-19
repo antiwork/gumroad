@@ -46,6 +46,8 @@ type FormData = {
     tipping_enabled: boolean;
     ach_payments_enabled: boolean;
     gifting_disabled: boolean;
+    link_disabled: boolean;
+    paypal_card_funding_disabled: boolean;
   };
   custom_fields: CustomFieldWithKey[];
 };
@@ -60,6 +62,8 @@ export type FormPageProps = {
     tipping_enabled: boolean;
     ach_payments_enabled: boolean;
     gifting_disabled: boolean;
+    link_disabled: boolean;
+    paypal_card_funding_disabled: boolean;
   };
   cart_item: CartItem | null;
   card_product: CardProduct | null;
@@ -71,7 +75,15 @@ export type FormPageProps = {
 
 const FormPage = ({
   pages,
-  user: { display_offer_code_field, recommendation_type, tipping_enabled, ach_payments_enabled, gifting_disabled },
+  user: {
+    display_offer_code_field,
+    recommendation_type,
+    tipping_enabled,
+    ach_payments_enabled,
+    gifting_disabled,
+    link_disabled,
+    paypal_card_funding_disabled,
+  },
   cart_item,
   card_product,
   custom_fields,
@@ -96,6 +108,8 @@ const FormPage = ({
       tipping_enabled,
       ach_payments_enabled,
       gifting_disabled,
+      link_disabled,
+      paypal_card_funding_disabled,
     },
     custom_fields: custom_fields.map(addKey),
   });
@@ -168,6 +182,8 @@ const FormPage = ({
   const tippingEnabled = form.data.user.tipping_enabled;
   const achPaymentsEnabled = form.data.user.ach_payments_enabled;
   const giftingDisabled = form.data.user.gifting_disabled;
+  const linkDisabled = form.data.user.link_disabled;
+  const paypalCardFundingDisabled = form.data.user.paypal_card_funding_disabled;
 
   const productOptions = React.useMemo(
     () => products.filter((product) => !product.archived).map((product) => ({ id: product.id, label: product.name })),
@@ -439,6 +455,24 @@ const FormPage = ({
               Bank account payments take about 4 business days to clear, and customers only receive their purchase once
               the payment settles. Not recommended for time-sensitive products. Available to customers in the United
               States.
+            </p>
+            <Switch
+              checked={!linkDisabled}
+              onChange={(e) => updateUserData({ link_disabled: !e.target.checked })}
+              label="Offer Stripe Link at checkout"
+            />
+            <p className="text-muted">
+              Link lets customers save their payment details and pay with one click. Turning it off also removes the
+              optional "save my information" section Link renders under the card fields.
+            </p>
+            <Switch
+              checked={!paypalCardFundingDisabled}
+              onChange={(e) => updateUserData({ paypal_card_funding_disabled: !e.target.checked })}
+              label="Show PayPal's debit or credit card button"
+            />
+            <p className="text-muted">
+              PayPal adds this button next to the PayPal button for customers who would rather pay with a card.
+              Turning it off leaves only the PayPal button.
             </p>
           </section>
           {paypal_connect.show_paypal_connect ? (

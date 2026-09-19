@@ -52,6 +52,7 @@ type Props = {
     require_shipping: boolean;
     custom_fields: CustomFieldDescriptor[];
     supports_paypal: "native" | "braintree" | null;
+    paypal_card_funding_disabled: boolean;
     creator: Creator;
     currency_code: CurrencyCode;
     options: Option[];
@@ -283,6 +284,7 @@ export default function SubscriptionsManage() {
     customFields: [], // Custom fields were already collected during original purchase
     bundleProductCustomFields: [],
     supportsPaypal: product.supports_paypal,
+    paypalCardFundingDisabled: product.paypal_card_funding_disabled,
     testPurchase: subscription.is_test,
     requirePayment,
     subscription_id: subscription.id,
@@ -326,6 +328,7 @@ export default function SubscriptionsManage() {
       request_apple_pay_merchant_tokens,
       payment_element_wallets: false,
       flat_payment_methods: false,
+      stripe_link_enabled: true,
       elements_options: null,
     },
   });
