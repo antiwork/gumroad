@@ -30,6 +30,9 @@ describe ReconcilePendingPaypalRefundsJob do
   end
 
   describe "#perform" do
+    # The refund must exist before #perform runs; `refund` is a lazy let otherwise.
+    before { refund }
+
     it "handles a refund PayPal reports as failed through HandleFailedRefundService" do
       processor_reports("FAILED")
 
@@ -117,7 +120,9 @@ describe ReconcilePendingPaypalRefundsJob do
     end
 
     it "skips refunds that are not PayPal's" do
-      stripe_purchase = create(:purchase, link: product, seller:, price_cents: 15_00, total_transaction_cents: 15_00)
+      stripe_purchase = create(:purchase, link: product, seller:,
+                                          merchant_account: create(:merchant_account, user: seller),
+                                          price_cents: 15_00, total_transaction_cents: 15_00)
       create(:refund,
              purchase: stripe_purchase,
              amount_cents: 15_00,
@@ -125,7 +130,9 @@ describe ReconcilePendingPaypalRefundsJob do
              status: "PENDING",
              processor_refund_id: "re_stripe_test",
              created_at: 5.days.ago)
-      expect(PaypalChargeProcessor).not_to receive(:fetch_refund_status)
+      # Only the PayPal refund is read, even though a Stripe refund also sits at PENDING.
+      expect(PaypalChargeProcessor).to receive(:fetch_refund_status)
+        .with(processor_refund_id: "64J80824NV272645E", merchant_account:).once.and_return("PENDING")
 
       described_class.new.perform
     end

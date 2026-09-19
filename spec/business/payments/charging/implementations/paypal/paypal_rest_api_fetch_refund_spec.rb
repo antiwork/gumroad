@@ -9,6 +9,7 @@ describe PaypalRestApi do
 
   before do
     allow(PayPal::PayPalHttpClient).to receive(:new).and_return(http_client)
+    allow_any_instance_of(PaypalPartnerRestCredentials).to receive(:auth_token).and_return("Bearer test-token")
   end
 
   describe "#fetch_refund" do
