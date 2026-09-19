@@ -133,10 +133,8 @@ class Api::V2::LicensesController < Api::V2::BaseController
       false
     end
 
-    # The requirement runs from the cutover timestamp onward. A stalled read is not evidence that
-    # the cutover has not happened, so it answers true: the caller gets the explicit product_id
-    # error the enforced path returns instead of an unhandled Redis failure, and no request gains
-    # the exemption the configured cutover denies it.
+    # A stalled read is not evidence that the cutover has not happened, so fail closed and keep
+    # the product_id requirement enabled.
     def product_id_required?(product)
       timestamp = force_product_id_timestamp
       timestamp.present? && product.created_at > timestamp
