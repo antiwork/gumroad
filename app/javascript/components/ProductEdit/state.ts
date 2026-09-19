@@ -365,6 +365,9 @@ export type FileEntry = {
   pdf_stamp_enabled: boolean;
   hide_kindle_and_read_buttons: boolean;
   is_streamable: boolean;
+  // Downloads-off eligibility from the server; absent on a file the editor just built, which judges
+  // itself until it is saved. See ProductFile#can_disable_downloads?.
+  can_disable_downloads?: boolean;
   stream_only: boolean;
   is_transcoding_in_progress: boolean;
   // Pixel dimensions of the video, when we know them, so the editor's preview

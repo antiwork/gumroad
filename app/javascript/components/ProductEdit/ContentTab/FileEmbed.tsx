@@ -86,6 +86,12 @@ const FileEmbedNodeView = ({
 
   const file = filesById.get(typia.assert<string>(node.attrs.id));
   const downloadUrl = file && getDownloadUrl(id, file);
+  // The server answers this for a saved file; a file still uploading answers for itself, so the
+  // switch never appears where the backend would ignore it (ProductFile#can_disable_downloads?).
+  const canDisableDownloads = file
+    ? (file.can_disable_downloads ??
+      (file.is_streamable || FileUtils.isBrowserReadableDocument(file.extension, file.file_size)))
+    : false;
 
   const playerRef = React.useRef<jwplayer.JWPlayer | null>(null);
   const subtitleUploadSettled = React.useRef(new Map<string, () => void>());
@@ -746,45 +752,55 @@ const FileEmbedNodeView = ({
 
               {file.is_pdf || file.extension === "EPUB" ? (
                 <Switch
-                  checked={!file.hide_kindle_and_read_buttons}
+                  checked={!file.hide_kindle_and_read_buttons || file.stream_only}
+                  disabled={file.stream_only}
                   onChange={(e) => updateFile({ hide_kindle_and_read_buttons: !e.target.checked })}
-                  label='Show "Send to Kindle" and "Read" buttons on the download page'
+                  label={
+                    file.stream_only
+                      ? "Send to Kindle and Read buttons stay on while downloads are disabled"
+                      : 'Show "Send to Kindle" and "Read" buttons on the download page'
+                  }
                 />
               ) : null}
 
               {file.is_streamable ? (
-                <>
-                  <Fieldset>
-                    <FieldsetTitle>Subtitles</FieldsetTitle>
-                    <div className="flex flex-col gap-4">
-                      <SubtitleList
-                        subtitleFiles={file.subtitle_files}
-                        onRemoveSubtitle={removeSubtitle}
-                        onCancelSubtitleUpload={removeSubtitle}
-                        onChangeSubtitleLanguage={(url, language) =>
-                          updateFile({
-                            subtitle_files: file.subtitle_files.map((subtitle) =>
-                              subtitle.url === url ? { ...subtitle, language } : subtitle,
-                            ),
-                          })
-                        }
-                      />
-                      <SubtitleUploadBox onUploadFiles={uploadSubtitles} />
-                    </div>
-                  </Fieldset>
-                  <Switch
-                    checked={file.stream_only}
-                    onChange={(e) => updateFile({ stream_only: e.target.checked })}
-                    label={
+                <Fieldset>
+                  <FieldsetTitle>Subtitles</FieldsetTitle>
+                  <div className="flex flex-col gap-4">
+                    <SubtitleList
+                      subtitleFiles={file.subtitle_files}
+                      onRemoveSubtitle={removeSubtitle}
+                      onCancelSubtitleUpload={removeSubtitle}
+                      onChangeSubtitleLanguage={(url, language) =>
+                        updateFile({
+                          subtitle_files: file.subtitle_files.map((subtitle) =>
+                            subtitle.url === url ? { ...subtitle, language } : subtitle,
+                          ),
+                        })
+                      }
+                    />
+                    <SubtitleUploadBox onUploadFiles={uploadSubtitles} />
+                  </div>
+                </Fieldset>
+              ) : null}
+
+              {canDisableDownloads ? (
+                <Switch
+                  checked={file.stream_only}
+                  onChange={(e) => updateFile({ stream_only: e.target.checked })}
+                  label={
+                    file.is_streamable ? (
                       <>
                         Disable file downloads (stream only){" "}
                         <a href="/help/article/43-streaming-videos" target="_blank" rel="noreferrer">
                           Learn more
                         </a>
                       </>
-                    }
-                  />
-                </>
+                    ) : (
+                      "Disable file downloads (buyers read it in the browser instead)"
+                    )
+                  }
+                />
               ) : null}
             </RowDetails>
           ) : null}

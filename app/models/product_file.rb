@@ -116,6 +116,8 @@ class ProductFile < ApplicationRecord
       pdf_stamp_enabled: pdf_stamp_enabled?,
       hide_kindle_and_read_buttons: hide_kindle_and_read_buttons?,
       is_streamable: streamable?,
+      # So the editor never offers a switch the backend ignores (see #can_disable_downloads?).
+      can_disable_downloads: can_disable_downloads?,
       stream_only: stream_only?,
       # Pixel dimensions, so the product editor's video preview can be shaped to
       # the file rather than assuming 16:9 and pillarboxing portrait video. Nil
@@ -260,8 +262,15 @@ class ProductFile < ApplicationRecord
     pdf? || (epub? && (size.nil? || size <= MAX_EPUB_READER_ARCHIVE_SIZE))
   end
 
+  # Downloads can only be turned off where the buyer has another way to open the file:
+  # the video player, or the in-browser reader. Mirrors the read page's own gate, so
+  # turning the flag on can never leave a buyer with nothing to open.
+  def can_disable_downloads?
+    streamable? || browser_readable?
+  end
+
   def stream_only?
-    streamable? && stream_only
+    can_disable_downloads? && stream_only
   end
 
   def archivable?

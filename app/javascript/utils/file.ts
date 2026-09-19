@@ -1,5 +1,8 @@
 export const ALLOWED_EXTENSIONS = ["jpeg", "jpg", "png", "gif", "webp"];
 
+// Mirrors ProductFile::MAX_EPUB_READER_ARCHIVE_SIZE.
+const EPUB_READER_MAX_BYTES = 32 * 1024 * 1024;
+
 const FileUtils = {
   getReadableFileSize: (bytes: number): string => {
     if (bytes >= 1073741824) {
@@ -52,6 +55,10 @@ const FileUtils = {
     }
     return encodeURIComponent(url);
   },
+  // Mirrors ProductFile#browser_readable?: the reader refuses a larger EPUB, so a file picked in
+  // the editor has to be judged here until the server has analyzed it.
+  isBrowserReadableDocument: (extension: string | null, fileSize: number | null) =>
+    extension === "PDF" || (extension === "EPUB" && (fileSize === null || fileSize <= EPUB_READER_MAX_BYTES)),
   isFileExtensionStreamable: (extension: string) => {
     const streamableExtensions = ["mp4", "m4v", "mov", "mpeg", "mpeg4", "wmv", "movie", "ogv", "avi", "webm"];
     return streamableExtensions.includes(extension.toLowerCase());

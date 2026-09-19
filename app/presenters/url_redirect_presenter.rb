@@ -275,7 +275,9 @@ class UrlRedirectPresenter
         latest_media_location: file.media_location_for_download_page(media_location),
         content_length: file.content_length,
         isbn: file.isbn,
-        read_url: file.browser_readable? && !file.try(:hide_kindle_and_read_buttons?) ? (
+        # A file with downloads disabled keeps its reader: for a document that is the only
+        # way to open it, whatever the seller's button opt-out says.
+        read_url: file.browser_readable? && (!file.try(:hide_kindle_and_read_buttons?) || file.try(:stream_only?)) ? (
           file.is_a?(Link) ? url_redirect_read_url(url_redirect.token) : file.is_a?(ProductFile) ? url_redirect_read_for_product_file_path(url_redirect.token, file.external_id) : nil
         ) : nil,
         external_link_url: file.external_link? ? file.url : nil,

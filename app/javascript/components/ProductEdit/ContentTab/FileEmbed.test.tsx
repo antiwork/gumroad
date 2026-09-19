@@ -258,3 +258,87 @@ it("renders the human-readable size once the file has one", async () => {
 
   expect(screen.getByText("1.7 MB")).toBeTruthy();
 });
+
+const documentFile: FileEntry = {
+  ...streamableFile,
+  display_name: "report",
+  extension: "PDF",
+  is_pdf: true,
+  is_streamable: false,
+  url: "https://example.com/report.pdf",
+};
+
+it("offers download-disabling on a document, with copy for the reader rather than streaming", async () => {
+  const file: FileEntry = { ...documentFile, stream_only: true, status: { type: "saved" } };
+  context.filesById = new Map<string, FileEntry>([[FILE_ID, file]]);
+
+  render(<FileEmbedEditor config={{ filesById: context.filesById }} />);
+  await act(() => Promise.resolve());
+
+  act(() => {
+    fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+  });
+
+  expect(screen.getByText(/buyers read it in the browser instead/u)).toBeTruthy();
+  expect(screen.queryByText(/stream only/u)).toBeNull();
+  // The reader is the only way to open a document whose downloads are disabled.
+  expect(screen.getByText(/stay on while downloads are disabled/u)).toBeTruthy();
+});
+
+it("offers no download switch for a file with no other way to open it", async () => {
+  const file: FileEntry = {
+    ...streamableFile,
+    extension: "ZIP",
+    is_streamable: false,
+    status: { type: "saved" },
+  };
+  context.filesById = new Map<string, FileEntry>([[FILE_ID, file]]);
+
+  render(<FileEmbedEditor config={{ filesById: context.filesById }} />);
+  await act(() => Promise.resolve());
+
+  act(() => {
+    fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+  });
+
+  expect(screen.queryByText(/Disable file downloads/u)).toBeNull();
+});
+
+const oversizedEpub: FileEntry = {
+  ...documentFile,
+  extension: "EPUB",
+  is_pdf: false,
+  file_size: 40 * 1024 * 1024,
+};
+
+it("offers no download switch when the server says the file is not eligible", async () => {
+  const file: FileEntry = {
+    ...oversizedEpub,
+    can_disable_downloads: false,
+    status: { type: "saved" },
+  };
+  context.filesById = new Map<string, FileEntry>([[FILE_ID, file]]);
+
+  render(<FileEmbedEditor config={{ filesById: context.filesById }} />);
+  await act(() => Promise.resolve());
+
+  act(() => {
+    fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+  });
+
+  expect(screen.queryByText(/Disable file downloads/u)).toBeNull();
+});
+
+it("holds the download switch back for an oversized EPUB picked but not yet saved", async () => {
+  // Unsaved files carry no server answer, so the editor has to apply the reader's size limit itself.
+  context.filesById = new Map<string, FileEntry>([[FILE_ID, oversizedEpub]]);
+
+  render(<FileEmbedEditor config={{ filesById: context.filesById }} />);
+  await act(() => Promise.resolve());
+
+  act(() => {
+    fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+  });
+
+  expect(screen.queryByText(/Disable file downloads/u)).toBeNull();
+});
