@@ -783,6 +783,64 @@ describe CheckoutController, type: :controller, inertia: true do
         expect(CartProduct.last).to have_attributes(product:, url_parameters: {}, referrer: "direct")
       end
 
+      # Regression: a client that serializes its absent URL params as empty strings sends `rent: ""`.
+      # A boolean attribute casts that to nil, which the NOT NULL column rejects, and the raise rolls
+      # back the whole cart save.
+      it "saves a cart product when the item sends a blank rent" do
+        product = create(:product)
+
+        expect do
+          patch :update, params: {
+            cart: {
+              items: [
+                {
+                  product: { id: product.external_id },
+                  option_id: nil,
+                  recurrence: nil,
+                  price: 100,
+                  quantity: 1,
+                  rent: "",
+                  referrer: "direct",
+                  url_parameters: {}
+                }
+              ],
+              discountCodes: []
+            }
+          }, as: :json
+        end.to change(CartProduct, :count).by(1)
+
+        expect(response).to have_http_status(:see_other)
+        expect(flash[:alert]).to be_nil
+        expect(CartProduct.last.rent).to be(false)
+      end
+
+      it "saves a stringified rent as a rental" do
+        product = create(:product)
+
+        expect do
+          patch :update, params: {
+            cart: {
+              items: [
+                {
+                  product: { id: product.external_id },
+                  option_id: nil,
+                  recurrence: nil,
+                  price: 100,
+                  quantity: 1,
+                  rent: "true",
+                  referrer: "direct",
+                  url_parameters: {}
+                }
+              ],
+              discountCodes: []
+            }
+          }, as: :json
+        end.to change(CartProduct, :count).by(1)
+
+        expect(response).to have_http_status(:see_other)
+        expect(CartProduct.last.rent).to be(true)
+      end
+
       it "keeps the stored url_parameters and referrer when the item omits them" do
         product = create(:product)
         cart = create(:cart, user: controller.logged_in_user)
