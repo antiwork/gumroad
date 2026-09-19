@@ -47,6 +47,10 @@ class UserBalanceStatsService
       .where("large_sellers.sales_count >= ?", sales_threshold.to_i)
     users = users.where("large_sellers.user_id NOT IN (?)", excluded_user_ids) unless excluded_user_ids.empty?
     users
+  rescue *REDIS_TRANSPORT_ERRORS
+    # An unread exclusion set must not read as an empty one: without the NOT IN the users it holds
+    # out become cacheable. Cache nobody while Redis is stalled — they compute live instead.
+    User.none
   end
 
   private
@@ -83,10 +87,15 @@ class UserBalanceStatsService
     rescue JSON::ParserError => e
       Rails.logger.error("Failed to parse cached balance stats for user #{user.id}: #{e.message}")
       nil
+    rescue *REDIS_TRANSPORT_ERRORS
+      # A cache that cannot be read is a miss: the caller computes the stats instead.
+      nil
     end
 
     def should_use_cache?
       @should_use_cache ||= self.class.cacheable_users.where(id: user.id).exists?
+    rescue *REDIS_TRANSPORT_ERRORS
+      false
     end
 
     def cache_key

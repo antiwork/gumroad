@@ -98,7 +98,7 @@ class Api::Internal::AgentCustomHtmlPreviewsController < Api::Internal::BaseCont
   # /landing/embed endpoint so the previewed page's scripts actually run. The Redis key is scoped
   # to the signed-in seller, so a token can never fetch another seller's staged preview.
   def show
-    document = $redis.get(RedisKey.agent_custom_html_preview(current_seller.id, params[:token]))
+    document = staged_preview_document(params[:token])
     apply_custom_html_response_headers
     # The document is derived from a not-yet-applied proposal on the seller's account — never
     # cacheable by shared proxies, and pointless to cache locally.
@@ -111,6 +111,14 @@ class Api::Internal::AgentCustomHtmlPreviewsController < Api::Internal::BaseCont
   end
 
   private
+    # A stalled read serves the same expired-preview response as a token that was never staged,
+    # rather than failing the preview iframe.
+    def staged_preview_document(token)
+      $redis.get(RedisKey.agent_custom_html_preview(current_seller.id, token))
+    rescue *REDIS_TRANSPORT_ERRORS
+      nil
+    end
+
     def authorize_store_agent
       authorize current_seller, :use_store_agent?
     end

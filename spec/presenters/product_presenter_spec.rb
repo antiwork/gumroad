@@ -1483,6 +1483,19 @@ describe ProductPresenter do
       expect(presenter.existing_files).to eq(product_files)
     end
 
+    it "caps the picker at the default limit when the Redis read stalls, and leaves an unset key unlimited" do
+      create(:product_file, link: product, position: 1, url: "#{S3_BASE_URL}attachments/two/one.pdf")
+      stub_const("ProductPresenter::DEFAULT_EXISTING_PRODUCT_FILES_LIMIT", 1)
+
+      expect(presenter.existing_files.size).to eq(2)
+
+      allow($redis).to receive(:get).and_call_original
+      allow($redis).to receive(:get).with(RedisKey.product_presenter_existing_product_files_limit)
+        .and_raise(Redis::TimeoutError.new("Waited 1.0 seconds"))
+
+      expect(presenter.existing_files.size).to eq(1)
+    end
+
     context "when the seller has files on another product" do
       let(:other_product) { create(:product, user: seller) }
       let!(:other_file) { create(:product_file, link: other_product, url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachments/other.pdf") }

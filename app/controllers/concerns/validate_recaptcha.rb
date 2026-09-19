@@ -49,6 +49,9 @@ module ValidateRecaptcha
     checkout_score: 0.4,
     checkout_score_trusted: 0.3,
   }.freeze
+  # The last threshold this process read per surface. A threshold is enforcement, so a stalled read
+  # serves a configured value instead of silently downgrading it to the built-in default.
+  LAST_SCORE_THRESHOLDS = {}
   RECAPTCHA_SCORE_LOG_PREFIX = "[recaptcha_score]"
 
   # A real reCAPTCHA token is on the order of 1-2 KB. Anything an order of
@@ -148,10 +151,17 @@ module ValidateRecaptcha
         RECAPTCHA_SCORE_THRESHOLD_DEFAULTS[surface.to_sym]
       return nil if value.nil?
 
-      Float(value)
+      parsed = Float(value)
+      LAST_SCORE_THRESHOLDS[surface.to_sym] = parsed
+      parsed
     rescue ArgumentError, TypeError
       Rails.logger.error("Invalid reCAPTCHA score threshold for #{surface}: #{value.inspect}")
       nil
+    rescue *REDIS_TRANSPORT_ERRORS
+      # A stall must not downgrade a configured threshold to the built-in default: serve the value
+      # this process last read for the surface. Only a process that has never read one falls back to
+      # the surface default, which is the key-absent behaviour.
+      LAST_SCORE_THRESHOLDS.fetch(surface.to_sym) { RECAPTCHA_SCORE_THRESHOLD_DEFAULTS[surface.to_sym] }
     end
 
     def recaptcha_fail_open?(surface)

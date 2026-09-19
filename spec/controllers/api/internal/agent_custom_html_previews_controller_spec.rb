@@ -374,6 +374,17 @@ describe Api::Internal::AgentCustomHtmlPreviewsController do
       expect(response.body).to include("This preview has expired.")
     end
 
+    it "renders the expired notice when the Redis read stalls" do
+      allow($redis).to receive(:get).and_call_original
+      allow($redis).to receive(:get).with(RedisKey.agent_custom_html_preview(seller.id, "stalled-token"))
+        .and_raise(Redis::TimeoutError.new("Waited 1.0 seconds"))
+
+      get :show, params: { token: "stalled-token" }
+
+      expect(response).to have_http_status(:not_found)
+      expect(response.body).to include("This preview has expired.")
+    end
+
     it "does not serve a document staged for another seller" do
       # Tokens are namespaced by seller id in Redis, so even a leaked token is useless to any
       # other account.
