@@ -289,6 +289,53 @@ describe ValidateRecaptcha, type: :controller do
         expect(parsed_body["error"]).to eq("captcha_failed")
       end
 
+      it "does not restore a threshold an operator has removed" do
+        described_class::LAST_SCORE_THRESHOLDS.clear
+        $redis.set(RedisKey.recaptcha_score_threshold(:login), "0.9")
+        stub_recaptcha_response(valid: true, score: 0.7)
+
+        post :login_action, params: { "g-recaptcha-response" => "test_token" }
+        expect(response).to have_http_status(:unprocessable_entity)
+
+        # The threshold is gone, so gating is off — and a later stall must not bring it back.
+        $redis.del(RedisKey.recaptcha_score_threshold(:login))
+        post :login_action, params: { "g-recaptcha-response" => "test_token" }
+        expect(response).to have_http_status(:ok)
+
+        allow($redis).to receive(:get).and_call_original
+        allow($redis).to receive(:get).with(RedisKey.recaptcha_score_threshold(:login))
+          .and_raise(Redis::TimeoutError.new("Waited 1.0 seconds"))
+
+        post :login_action, params: { "g-recaptcha-response" => "test_token" }
+
+        expect(response).to have_http_status(:ok)
+      ensure
+        $redis.del(RedisKey.recaptcha_score_threshold(:login))
+      end
+
+      it "does not restore a threshold now set to an unparseable value" do
+        described_class::LAST_SCORE_THRESHOLDS.clear
+        $redis.set(RedisKey.recaptcha_score_threshold(:login), "0.9")
+        stub_recaptcha_response(valid: true, score: 0.7)
+
+        post :login_action, params: { "g-recaptcha-response" => "test_token" }
+        expect(response).to have_http_status(:unprocessable_entity)
+
+        $redis.set(RedisKey.recaptcha_score_threshold(:login), "not-a-number")
+        post :login_action, params: { "g-recaptcha-response" => "test_token" }
+        expect(response).to have_http_status(:ok)
+
+        allow($redis).to receive(:get).and_call_original
+        allow($redis).to receive(:get).with(RedisKey.recaptcha_score_threshold(:login))
+          .and_raise(Redis::TimeoutError.new("Waited 1.0 seconds"))
+
+        post :login_action, params: { "g-recaptcha-response" => "test_token" }
+
+        expect(response).to have_http_status(:ok)
+      ensure
+        $redis.del(RedisKey.recaptcha_score_threshold(:login))
+      end
+
       describe "#recaptcha_failure_message" do
         it "does not blame ad blockers when a genuine, correctly-hosted token failed on score alone" do
           stub_recaptcha_response(valid: true, score: 0.3)

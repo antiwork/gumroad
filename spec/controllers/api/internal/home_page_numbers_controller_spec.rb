@@ -58,4 +58,26 @@ describe Api::Internal::HomePageNumbersController do
       expect(Rails.cache.read("homepage_numbers")).to be_nil
     end
   end
+
+  context "when the payout key is unset" do
+    before do
+      Rails.cache.delete("homepage_numbers")
+      $redis.del(RedisKey.prev_week_payout_usd)
+    end
+
+    it "caches the blank figure a real unset-key read gives" do
+      allow($redis).to receive(:get).and_call_original
+      get :index
+
+      expect(response.parsed_body).to eq({ "prev_week_payout_usd" => "$" })
+      expect(Rails.cache.read("homepage_numbers")).to be_present
+
+      get :index
+
+      # Served from the cache written by the unset read, not read from Redis again: one read total,
+      # from the first request.
+      expect(response.parsed_body).to eq({ "prev_week_payout_usd" => "$" })
+      expect($redis).to have_received(:get).with(RedisKey.prev_week_payout_usd).once
+    end
+  end
 end

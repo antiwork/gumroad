@@ -706,6 +706,25 @@ describe Api::V2::LicensesController do
           expect(response).to be_successful
           expect(response.parsed_body).to include({ "success" => true })
         end
+
+        it "does not restore a cutoff an operator has removed" do
+          $redis.set(RedisKey.force_product_id_timestamp, @product.created_at - 1.day)
+          post :verify, params: { product_permalink: @product.unique_permalink, license_key: @purchase.license.serial }
+          expect(response).to have_http_status(:internal_server_error)
+
+          # The cutoff is gone: enforcement is off, and a later stall must not bring it back.
+          $redis.del(RedisKey.force_product_id_timestamp)
+          post :verify, params: { product_permalink: @product.unique_permalink, license_key: @purchase.license.serial }
+          expect(response).to be_successful
+
+          allow($redis).to receive(:get).and_call_original
+          allow($redis).to receive(:get).with(RedisKey.force_product_id_timestamp)
+            .and_raise(RedisClient::Error.new("Waited 1.0 seconds"))
+
+          post :verify, params: { product_permalink: @product.unique_permalink, license_key: @purchase.license.serial }
+
+          expect(response).to be_successful
+        end
       end
 
       context "when the product_id check is skipped for the product" do

@@ -149,13 +149,12 @@ module ValidateRecaptcha
     def recaptcha_score_threshold(surface)
       value = $redis.get(RedisKey.recaptcha_score_threshold(surface)).presence ||
         RECAPTCHA_SCORE_THRESHOLD_DEFAULTS[surface.to_sym]
-      return nil if value.nil?
-
-      parsed = Float(value)
-      LAST_SCORE_THRESHOLDS[surface.to_sym] = parsed
-      parsed
+      # What a successful read resolves to is the latest observed config, nil included: remembering
+      # only non-nil values would let a later stall restore a threshold the operator has removed.
+      LAST_SCORE_THRESHOLDS[surface.to_sym] = value && Float(value)
     rescue ArgumentError, TypeError
       Rails.logger.error("Invalid reCAPTCHA score threshold for #{surface}: #{value.inspect}")
+      LAST_SCORE_THRESHOLDS[surface.to_sym] = nil
       nil
     rescue *REDIS_TRANSPORT_ERRORS
       # A stall must not downgrade a configured threshold to the built-in default: serve the value
