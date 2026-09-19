@@ -89,6 +89,7 @@ const futureChargePaymentElementConfig: CheckoutPaymentConfig = {
 
 const cardElementConfig: CheckoutPaymentConfig = {
   integration: "card_element",
+  stripe_link_enabled: true,
   fallback_reason: "stripe_payment_element_flag_disabled",
   disable_wallets: false,
   request_apple_pay_merchant_tokens: false,
@@ -182,6 +183,7 @@ const product = (overrides: Partial<Product> = {}): Product => ({
   customFields: [],
   bundleProductCustomFields: [],
   supportsPaypal: null,
+  paypalCardFundingDisabled: false,
   testPurchase: false,
   requirePayment: true,
   hasFreeTrial: false,

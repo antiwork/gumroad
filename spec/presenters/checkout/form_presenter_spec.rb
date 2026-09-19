@@ -21,6 +21,8 @@ describe Checkout::FormPresenter do
               tipping_enabled: false,
               ach_payments_enabled: false,
               gifting_disabled: false,
+              link_disabled: false,
+              paypal_card_funding_disabled: false,
             },
             cart_item: nil,
             card_product: nil,
@@ -61,6 +63,26 @@ describe Checkout::FormPresenter do
 
       it "returns true for ach_payments_enabled" do
         expect(presenter.form_props[:user][:ach_payments_enabled]).to eq(true)
+      end
+    end
+
+    context "when the seller has switched Link off" do
+      before do
+        seller.update!(link_disabled: true)
+      end
+
+      it "returns true for link_disabled" do
+        expect(presenter.form_props[:user][:link_disabled]).to eq(true)
+      end
+    end
+
+    context "when the seller has hidden PayPal's card funding button" do
+      before do
+        seller.update!(paypal_card_funding_disabled: true)
+      end
+
+      it "returns true for paypal_card_funding_disabled" do
+        expect(presenter.form_props[:user][:paypal_card_funding_disabled]).to eq(true)
       end
     end
 

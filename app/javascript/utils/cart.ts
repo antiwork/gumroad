@@ -56,6 +56,7 @@ export const PLACEHOLDER_CART_ITEM: CartItem = {
     custom_fields: [],
     require_shipping: false,
     supports_paypal: null,
+    paypal_card_funding_disabled: false,
     has_offer_codes: false,
     analytics: {
       google_analytics_id: null,

@@ -111,6 +111,12 @@ class Checkout::PaymentMethodResolver
     us_based_merchant_account?(seller)
   end
 
+  # Seller-complete keying: one seller's opt-out must not remove Link from another seller's buyers.
+  # Class-level because Checkout::StripePaymentPresenter gates the element's Link on the same rule.
+  def self.link_disabled_for?(sellers)
+    sellers.present? && sellers.all? { _1.present? && _1.link_disabled? }
+  end
+
   # Same US-account rule as Klarna's, for a different reason: Stripe ties each Alipay presentment
   # currency to the business's country (docs.stripe.com/payments/alipay — `usd` maps to the United
   # States only; only `cny` is valid for any country), and this lane creates USD intents.
@@ -216,6 +222,10 @@ class Checkout::PaymentMethodResolver
     # needs to know about capabilities, or capabilities about policy.
     def launched_method_set(eligible)
       launched = eligible & LAUNCHED_PAYMENT_METHOD_TYPES
+      # Sellers can switch Link off from checkout settings (the "save my information" block under
+      # the card fields is part of Link). Whole-cart only, for the same reason as the presenter's
+      # other seller-complete flags: one seller opting out must not change another's checkout.
+      launched -= [LINK_PAYMENT_METHOD_TYPE] if link_disabled?
       launched += seller_opt_in_methods(eligible)
       forced = forced_currency_methods(eligible)
       launched += forced
@@ -237,6 +247,11 @@ class Checkout::PaymentMethodResolver
       return [] unless sellers.one? && sellers.first&.ach_payments_enabled?
 
       eligible & SELLER_OPT_IN_PAYMENT_METHOD_TYPES
+    end
+
+    # Seller-complete keying: one seller's opt-out must not remove Link from another seller's buyers.
+    def link_disabled?
+      self.class.link_disabled_for?(sellers)
     end
 
     # No Stripe-test-mode bypass, unlike the forced-currency methods: the flag is the QA switch too

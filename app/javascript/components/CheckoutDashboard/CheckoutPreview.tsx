@@ -12,10 +12,14 @@ export const CheckoutPreview = ({
   children,
   cartItem,
   recommendedProduct,
+  stripeLinkEnabled = true,
 }: {
   children?: React.ReactNode;
   cartItem: CartItem;
   recommendedProduct?: CardProduct | undefined;
+  // The preview builds its own card-element config, so the settings page hands it the seller's
+  // current Link setting; surfaces that don't (the upsell preview) keep Link on as they always had.
+  stripeLinkEnabled?: boolean;
 }) => {
   const paymentState = React.useMemo<ReturnType<typeof createReducer>>(
     () => [
@@ -52,6 +56,7 @@ export const CheckoutPreview = ({
           request_apple_pay_merchant_tokens: false,
           payment_element_wallets: false,
           flat_payment_methods: false,
+          stripe_link_enabled: stripeLinkEnabled,
           elements_options: null,
         },
         availablePaymentMethods: [],
@@ -66,6 +71,7 @@ export const CheckoutPreview = ({
             creator: cartItem.product.creator,
             requireShipping: cartItem.product.require_shipping,
             supportsPaypal: null,
+            paypalCardFundingDisabled: false,
             customFields: cartItem.product.custom_fields,
             bundleProductCustomFields: [],
             testPurchase: false,
