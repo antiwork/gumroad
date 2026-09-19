@@ -332,8 +332,12 @@ const CtaBar = ({
             selection={selection}
             label={ctaLabel}
             onClick={(evt) => {
-              // PWYW always hands off to the main CTA: its validate() owns the minimum-price rule,
-              // while isSelectionComplete only knows that no amount was entered at all.
+              // The bar mirrors the in-page CTA's validation and holds the click back only while the
+              // buyer still owes the page a choice: PWYW always hands off (that CTA owns the
+              // minimum-price rule), and isSelectionComplete covers the missing SKU, amount and call
+              // time. Rent, quantity and recurrence controls merely existing is not a missing choice —
+              // intercepting for those is what made bar taps feel dead, and the defaults the bar
+              // sends (buy, quantity 1, seller's default plan) are the same ones that CTA sends.
               if (isPWYW || !isSelectionComplete(product, selection)) {
                 evt.preventDefault();
                 configurationSelectorRef.current?.scrollIntoView({ block: "nearest" });
