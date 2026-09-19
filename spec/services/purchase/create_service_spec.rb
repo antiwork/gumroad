@@ -1285,6 +1285,23 @@ describe Purchase::CreateService, :vcr do
       end
     end
 
+    context "when the client does not submit the bundle contents" do
+      before do
+        params[:purchase][:perceived_price_cents] = 100
+        params.delete(:bundle_products)
+      end
+
+      it "returns an error instead of raising" do
+        _, error = Purchase::CreateService.new(
+          product:,
+          params:,
+          buyer:
+        ).perform
+
+        expect(error).to eq("The bundle's contents have changed. Please refresh the page!")
+      end
+    end
+
     context "when a component product is sold out" do
       # The component is taken to its cap by real sales rather than by setting the counter directly,
       # so remaining_for_sale_count is derived the same way it is in production.
