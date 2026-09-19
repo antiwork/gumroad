@@ -52,8 +52,13 @@ class AffiliateMailer < ApplicationMailer
       @affiliate_percentage_text = "#{@affiliate.basis_points(product_id: @purchase.link_id) / 100}%"
       @purchase_price_formatted = MoneyFormatter.format(@purchase.price_cents, :usd, no_cents_if_whole: true, symbol: true)
       @affiliate_amount_formatted = MoneyFormatter.format(@purchase.affiliate_credit_cents, :usd, no_cents_if_whole: true, symbol: true)
-      @free_trial_end_date = @purchase.link.is_tiered_membership? ? @purchase.subscription.free_trial_end_date_formatted : nil
-      @recurring_commission_text = @purchase.is_original_subscription_purchase? ? "You'll continue to receive a commission once #{recurrence_long_indicator(@purchase.subscription.recurrence)} as long as the subscription is active." : nil
+      # Not every membership purchase has its subscription attached yet when this job runs, so both
+      # the trial date and the recurrence have to come off the association.
+      subscription = @purchase.subscription
+      @free_trial_end_date = subscription&.free_trial_end_date_formatted
+      @recurring_commission_text = if subscription && @purchase.is_original_subscription_purchase?
+        "You'll continue to receive a commission once #{recurrence_long_indicator(subscription.recurrence)} as long as the subscription is active."
+      end
 
       if @affiliate.global?
         notify_global_affiliate_of_sale

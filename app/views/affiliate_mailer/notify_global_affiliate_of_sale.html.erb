@@ -12,7 +12,7 @@
   </ul>
 
   <% if @purchase.is_free_trial_purchase? %>
-    <p>If the subscriber continues with their subscription after their free trial has expired on <%= @free_trial_end_date %>, we'll add your commission to your balance. <%= @recurring_commission_text %></p>
+    <p>If the subscriber continues with their subscription after their free trial has expired<%= " on #{@free_trial_end_date}" if @free_trial_end_date %>, we'll add your commission to your balance. <%= @recurring_commission_text %></p>
   <% else %>
     <p>We've added your commission to your balance. <%= @recurring_commission_text %></p>
   <% end %>
