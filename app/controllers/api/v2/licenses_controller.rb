@@ -137,5 +137,9 @@ class Api::V2::LicensesController < Api::V2::BaseController
 
     def force_product_id_timestamp
       @_force_prouct_id_timestamp ||= $redis.get(RedisKey.force_product_id_timestamp)&.to_datetime
+    rescue Redis::BaseError, RedisClient::Error
+      # Unset already means "not enforced", so a stalled read takes the same path rather than
+      # raising out of the branch the stale-skip check just sent this request into.
+      nil
     end
 end

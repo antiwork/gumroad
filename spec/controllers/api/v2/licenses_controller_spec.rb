@@ -698,6 +698,17 @@ describe Api::V2::LicensesController do
             message:
           }.as_json)
         end
+
+        it "does not raise when the enforcement-timestamp read stalls on the same path" do
+          allow($redis).to receive(:get).and_call_original
+          allow($redis).to receive(:get).with(RedisKey.force_product_id_timestamp)
+            .and_raise(Redis::TimeoutError.new("Waited 1.0 seconds"))
+
+          post :verify, params: { product_permalink: @product.unique_permalink, license_key: @purchase.license.serial }
+
+          expect(response).to be_successful
+          expect(response.parsed_body).to include({ "success" => true })
+        end
       end
     end
 

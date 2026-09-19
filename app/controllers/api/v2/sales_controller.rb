@@ -68,7 +68,7 @@ class Api::V2::SalesController < Api::V2::BaseController
     if params[:page] # DEPRECATED
       filtered_sales = filter_sales(start_date:, end_date:, email:, product_id:, purchase_id:, name:, license_key:, root_scope: current_resource_owner.sales)
       begin
-        timeout_s = ($redis.get(RedisKey.api_v2_sales_deprecated_pagination_query_timeout) || 15).to_i
+        timeout_s = query_timeout_seconds(RedisKey.api_v2_sales_deprecated_pagination_query_timeout)
         WithMaxExecutionTime.timeout_queries(seconds: timeout_s) do
           paginated_sales = filtered_sales.for_sales_api.preload(*SALES_API_PRELOADS).limit(RESULTS_PER_PAGE + 1).offset((@page - 1) * RESULTS_PER_PAGE).to_a
           has_next_page = paginated_sales.size > RESULTS_PER_PAGE
@@ -100,7 +100,7 @@ class Api::V2::SalesController < Api::V2::BaseController
     # accounts with broad filters; without this guard the request runs until
     # Rack::Timeout kills the worker process at 120s.
     begin
-      timeout_s = page_key_query_timeout_seconds
+      timeout_s = query_timeout_seconds(RedisKey.api_v2_sales_page_key_query_timeout)
       WithMaxExecutionTime.timeout_queries(seconds: timeout_s) do
         paginated_sales = filter_sales(start_date:, end_date:, email:, product_id:, purchase_id:, name:, license_key:)
         subquery_filters = ->(query) {
@@ -346,10 +346,11 @@ class Api::V2::SalesController < Api::V2::BaseController
       error_400("Invalid date format provided in field '#{param}'. Dates must be in the format YYYY-MM-DD.")
     end
 
-    # The key is an operator override, so a stalled read falls back to the same 15s an unset key
-    # uses rather than failing the request this guard exists to protect.
-    def page_key_query_timeout_seconds
-      ($redis.get(RedisKey.api_v2_sales_page_key_query_timeout) || 15).to_i
+    # The keys are operator overrides, so a stalled read falls back to the same 15s an unset key
+    # uses rather than failing the request the guard exists to protect. Both pagination paths read
+    # their own key.
+    def query_timeout_seconds(key)
+      ($redis.get(key) || 15).to_i
     rescue Redis::BaseError, RedisClient::Error
       15
     end

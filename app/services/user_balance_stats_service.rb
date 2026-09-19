@@ -85,9 +85,9 @@ class UserBalanceStatsService
       nil
     end
 
-    # "Not cacheable" is the only safe answer to a stalled read here: it costs one SQL aggregate,
-    # while falling back to the threshold constant with an empty exclusion set would make the
-    # sellers Redis explicitly excludes newly cacheable.
+    # "Not cacheable" is the only safe answer to a stalled read here: it computes the requested
+    # statistics from SQL, while falling back to the threshold constant with an empty exclusion set
+    # would make the sellers Redis explicitly excludes newly cacheable.
     def should_use_cache?
       @should_use_cache ||= self.class.cacheable_users.where(id: user.id).exists?
     rescue Redis::BaseError, RedisClient::Error
