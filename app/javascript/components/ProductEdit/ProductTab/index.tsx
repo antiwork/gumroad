@@ -119,7 +119,7 @@ export const ProductTab = () => {
                     id={`${uid}-body`}
                     value={product.description}
                     placeholder="Add a short inspiring message"
-                    onChange={(evt) => updateProduct({ description: evt.target.value })}
+                    onChange={(evt) => updateProduct({ description: evt.target.value, description_changed: true })}
                   />
                 </Fieldset>
                 <Fieldset>
@@ -137,7 +137,7 @@ export const ProductTab = () => {
                 <DescriptionEditor
                   id={id}
                   initialDescription={initialProduct.description}
-                  onChange={(description) => updateProduct({ description })}
+                  onChange={(description) => updateProduct({ description, description_changed: true })}
                   setImagesUploading={setImagesUploading}
                   publicFiles={product.public_files}
                   updatePublicFiles={(updater) => updateProduct((product) => updater(product.public_files))}

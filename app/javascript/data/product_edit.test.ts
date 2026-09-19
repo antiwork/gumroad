@@ -112,6 +112,20 @@ describe("scalarSettingsForSave", () => {
     ).toEqual({ customizable_price: false });
   });
 
+  it("omits a blank description unless this session edited the field", () => {
+    expect(scalarSettingsForSave(product({ description: "" }), lastSaved())).toEqual({});
+    expect(scalarSettingsForSave(product({ description: "", description_changed: true }), lastSaved())).toEqual({
+      description: null,
+      description_changed: true,
+    });
+  });
+
+  it("sends a non-empty description", () => {
+    expect(scalarSettingsForSave(product({ description: "<p>Hi</p>" }), lastSaved())).toEqual({
+      description: "<p>Hi</p>",
+    });
+  });
+
   it("always sends customizable_price when the caller has no baseline", () => {
     // A caller that does not track the last-saved value (null baseline) must
     // keep the pre-fix always-submit behavior, so disabling PWYW still lands.

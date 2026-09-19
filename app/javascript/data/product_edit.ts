@@ -443,6 +443,8 @@ export const reconcileMountedEditorFileEmbedIds = (editor: Editor, fileIdMapping
 export const scalarSettingsForSave = (
   product: {
     custom_permalink: string | null;
+    description?: string;
+    description_changed?: boolean | undefined;
     customizable_price: boolean;
     price_cents: number;
     hasPaidVariantPricing: boolean;
@@ -460,6 +462,14 @@ export const scalarSettingsForSave = (
   } else if (lastSaved.custom_permalink) {
     settings.custom_permalink = null;
     settings.custom_permalink_changed = true;
+  }
+  // Blank description is unspecified unless this session edited the field.
+  // Content-tab saves can carry an empty description without that edit.
+  if (product.description) {
+    settings.description = product.description;
+  } else if (product.description_changed) {
+    settings.description = null;
+    settings.description_changed = true;
   }
   const flagIsDerivedFromUnchangedInputs =
     lastSaved.customizable_price !== null &&
@@ -509,7 +519,14 @@ export const saveProduct = async (
   // would make "Keep version content" delete files embedded in the hidden
   // pages even though that retry asks us to preserve every file.
   const files = filesForSave(product.files, fileIds, options.keepAllFiles ?? false);
-  const { custom_html: _customHtml, custom_permalink, customizable_price, ...productParams } = product;
+  const {
+    custom_html: _customHtml,
+    custom_permalink,
+    customizable_price,
+    description,
+    description_changed,
+    ...productParams
+  } = product;
   const response = await request({
     method: "POST",
     accept: "json",
@@ -519,6 +536,8 @@ export const saveProduct = async (
       ...scalarSettingsForSave(
         {
           custom_permalink,
+          description,
+          description_changed,
           customizable_price,
           price_cents: product.price_cents,
           hasPaidVariantPricing: hasPaidVariantPricing(product),
