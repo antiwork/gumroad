@@ -715,7 +715,9 @@ const CreditCardContent = ({
   // can switch that off in checkout settings. Lanes with no card_element config (the element lane
   // when the buyer picks their saved card) keep Link on, as they always have.
   const cardElementLinkEnabled =
-    state.checkoutPayment.integration === "card_element" ? state.checkoutPayment.stripe_link_enabled : true;
+    state.checkoutPayment.integration === "card_element"
+      ? state.checkoutPayment.stripe_link_enabled
+      : state.checkoutPayment.elements_options.stripe_link_enabled;
   const suppressClientConfirmWallets = shouldSuppressClientConfirmWallets(state);
   const paymentElementWalletsEnabled =
     state.checkoutPayment.payment_element_wallets &&

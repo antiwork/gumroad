@@ -972,7 +972,7 @@ describe("PaymentForm payment method visibility", () => {
       usingSavedCard: true,
     });
 
-    expect(cardElementInputRender.enableLink).toBe(true);
+    expect(cardElementInputRender.enableLink).toBe(false);
   });
 
   it("hides PayPal's card funding button when every seller in the cart switched it off", async () => {
