@@ -120,6 +120,16 @@ class PaypalRestApi
     (200...300).include?(api_response.status_code)
   end
 
+  # Reads a refund PayPal created for one of our captures. It belongs to the seller's
+  # merchant account, so the same auth assertion the refund call uses is required to see
+  # it.
+  def fetch_refund(refund_id:, merchant_account: nil)
+    @request = new_request(path: "/v2/payments/refunds/#{refund_id}", verb: "GET")
+    paypal_account_id = merchant_account&.charge_processor_merchant_id
+    @request.headers["Paypal-Auth-Assertion"] = paypal_auth_assertion_header(paypal_account_id) if paypal_account_id.present?
+    execute_request
+  end
+
   private
     def purchase_unit(purchase_unit_info)
       currency = purchase_unit_info[:currency]
