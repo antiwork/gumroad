@@ -135,7 +135,7 @@ describe "PurchaseInstallments", :vcr do
       end
 
       expect(per_purchase_lookups).to be_empty,
-                                  "expected the batch to be preloaded, got per-purchase lookups:\n#{per_purchase_lookups.join("\n")}"
+                                      "expected the batch to be preloaded, got per-purchase lookups:\n#{per_purchase_lookups.join("\n")}"
       expect(installments.map(&:id)).to eq([visible_post.id])
     end
 
