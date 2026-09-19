@@ -118,6 +118,7 @@ describe("scalarSettingsForSave", () => {
       description: null,
       description_changed: true,
     });
+    expect(scalarSettingsForSave(product({ description: "", description_changed: false }), lastSaved())).toEqual({});
   });
 
   it("sends a non-empty description", () => {
