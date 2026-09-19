@@ -3126,12 +3126,9 @@ class Purchase < ApplicationRecord
 
     purchases = Purchase.includes(:link).where(id: purchase_ids)
 
-    # The buyer-filter pass below reads `purchase.variant_attributes` and the
-    # purchase's license for every purchase in the batch (see
-    # WithFiltering#purchase_passes_filters). Neither is shared between the
-    # batch's purchase rows, so a member with N renewals paid ~4 queries per
-    # renewal (base_variants, subscriptions, original_purchase, licenses) on a
-    # single content page. Preload them once for the whole batch.
+    # The buyer filter (WithFiltering#purchase_passes_filters) reads each purchase's
+    # `variant_attributes` and license chain, and neither is shared between a batch's
+    # rows — preload them for the batch instead of per purchase.
     ActiveRecord::Associations::Preloader.new(
       records: purchases.to_a,
       associations: [:variant_attributes, :license, { subscription: { original_purchase: :license } }]
