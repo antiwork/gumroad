@@ -308,15 +308,6 @@ describe UserBalanceStatsService do
     end
   end
 
-  describe "#write_cache when the Redis write stalls" do
-    it "does not raise" do
-      allow(instance).to receive(:generate).and_return(example_values)
-      allow($redis).to receive(:setex).and_raise(RedisClient::Error.new("Waited 1.0 seconds"))
-
-      expect { instance.write_cache }.not_to raise_error
-    end
-  end
-
   describe ".cacheable_users when a Redis read stalls" do
     it "caches nobody rather than dropping the exclusion set" do
       stub_const("#{described_class}::DEFAULT_SALES_CACHING_THRESHOLD", 100)

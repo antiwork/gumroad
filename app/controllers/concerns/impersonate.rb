@@ -35,8 +35,7 @@ module Impersonate
     return if impersonated_user_id.nil?
 
     User.alive.find(impersonated_user_id)
-  rescue ActiveRecord::RecordNotFound, *REDIS_TRANSPORT_ERRORS
-    # A stalled read reads as "not impersonating", the same as an expired key.
+  rescue ActiveRecord::RecordNotFound
     nil
   end
 

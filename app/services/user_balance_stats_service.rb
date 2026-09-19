@@ -36,9 +36,6 @@ class UserBalanceStatsService
   def write_cache
     data = generate
     $redis.setex(cache_key, 48.hours.to_i, data.to_json)
-  rescue *REDIS_TRANSPORT_ERRORS
-    # Best-effort: the stats are already computed and the caller has its answer.
-    nil
   end
 
   def self.cacheable_users

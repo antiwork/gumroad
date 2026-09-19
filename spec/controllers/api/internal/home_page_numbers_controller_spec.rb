@@ -54,6 +54,8 @@ describe Api::Internal::HomePageNumbersController do
 
       expect(response).to be_successful
       expect(response.parsed_body).to eq({ "prev_week_payout_usd" => "$" })
+      # A degraded figure must not be published and remembered for a day on the homepage.
+      expect(Rails.cache.read("homepage_numbers")).to be_nil
     end
   end
 end

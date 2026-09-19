@@ -254,7 +254,30 @@ describe ValidateRecaptcha, type: :controller do
         expect(parsed_body["error"]).to eq("captcha_failed")
       end
 
-      it "keeps gating at the built-in threshold when the Redis read stalls" do
+      it "serves the threshold this process last read instead of downgrading it on a stall" do
+        described_class::LAST_SCORE_THRESHOLDS.clear
+        $redis.set(RedisKey.recaptcha_score_threshold(:checkout_score), "0.9")
+        stub_recaptcha_response(valid: true, score: 0.7)
+
+        post :checkout_score_action, params: { "g-recaptcha-response" => "test_token" }
+        expect(response).to have_http_status(:unprocessable_entity)
+
+        allow($redis).to receive(:get).and_call_original
+        allow($redis).to receive(:get).with(RedisKey.recaptcha_score_threshold(:checkout_score))
+          .and_raise(Redis::TimeoutError.new("Waited 1.0 seconds"))
+
+        post :checkout_score_action, params: { "g-recaptcha-response" => "test_token" }
+
+        # 0.7 would clear the built-in 0.4 default, so a passing response here means the configured
+        # threshold was silently downgraded.
+        expect(response).to have_http_status(:unprocessable_entity)
+        expect(parsed_body["error"]).to eq("captcha_failed")
+      ensure
+        $redis.del(RedisKey.recaptcha_score_threshold(:checkout_score))
+      end
+
+      it "keeps gating at the built-in threshold when this process has never read an override" do
+        described_class::LAST_SCORE_THRESHOLDS.clear
         stub_recaptcha_response(valid: true, score: 0.1)
         allow($redis).to receive(:get).and_call_original
         allow($redis).to receive(:get).with(RedisKey.recaptcha_score_threshold(:checkout_score))

@@ -664,6 +664,8 @@ describe Api::V2::LicensesController do
       end
 
       context "when the Redis flags cannot be read" do
+        before { described_class.last_known_force_product_id_timestamp = nil }
+
         it "still requires product_id when the skip flag read stalls" do
           $redis.set(RedisKey.force_product_id_timestamp, @product.created_at - 1.day)
           allow(controller).to receive(:redis_namespace).and_raise(Redis::TimeoutError.new("Waited 1.0 seconds"))
@@ -676,7 +678,25 @@ describe Api::V2::LicensesController do
           $redis.del(RedisKey.force_product_id_timestamp)
         end
 
-        it "does not require product_id when the timestamp flag read stalls" do
+        it "keeps enforcing the timestamp this process last read" do
+          $redis.set(RedisKey.force_product_id_timestamp, @product.created_at - 1.day)
+          post :verify, params: { product_permalink: @product.unique_permalink, license_key: @purchase.license.serial }
+          expect(response).to have_http_status(:internal_server_error)
+
+          allow($redis).to receive(:get).and_call_original
+          allow($redis).to receive(:get).with(RedisKey.force_product_id_timestamp)
+            .and_raise(RedisClient::Error.new("Waited 1.0 seconds"))
+
+          post :verify, params: { product_permalink: @product.unique_permalink, license_key: @purchase.license.serial }
+
+          # An unread timestamp must not be indistinguishable from "no enforcement".
+          expect(response).to have_http_status(:internal_server_error)
+          expect(response.parsed_body["message"]).to include("The 'product_id' parameter is required")
+        ensure
+          $redis.del(RedisKey.force_product_id_timestamp)
+        end
+
+        it "serves the pre-flag behaviour when this process has never read the timestamp" do
           allow($redis).to receive(:get).and_call_original
           allow($redis).to receive(:get).with(RedisKey.force_product_id_timestamp)
             .and_raise(RedisClient::Error.new("Waited 1.0 seconds"))

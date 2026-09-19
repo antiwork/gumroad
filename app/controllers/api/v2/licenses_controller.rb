@@ -127,9 +127,16 @@ class Api::V2::LicensesController < Api::V2::BaseController
       @_redis_namespace ||= Redis::Namespace.new(:license_verifications, redis: $redis)
     end
 
-    # Both flags gate license verification and both degrade to "unset" — the behaviour before they
-    # existed — so a stalled read never 500s a verification request. An unread
-    # skip_product_id_check leaves the product_id requirement enforced.
+    class << self
+      # The last timestamp this process successfully read. An unread timestamp must not be
+      # indistinguishable from "no enforcement", so the remembered value keeps the product_id
+      # requirement in place exactly as the key does; only a process that has never read the key
+      # falls back to the pre-flag behaviour (no enforcement).
+      attr_accessor :last_known_force_product_id_timestamp
+    end
+
+    # An unread skip_product_id_check leaves the check unskipped, so the product_id requirement is
+    # still enforced — the two flag reads point the same way.
     def skip_product_id_check(product)
       redis_namespace.get("skip_product_id_check_#{product.id}").present?
     rescue *REDIS_TRANSPORT_ERRORS
@@ -137,8 +144,12 @@ class Api::V2::LicensesController < Api::V2::BaseController
     end
 
     def force_product_id_timestamp
-      @_force_prouct_id_timestamp ||= $redis.get(RedisKey.force_product_id_timestamp)&.to_datetime
+      @_force_prouct_id_timestamp ||= begin
+        timestamp = $redis.get(RedisKey.force_product_id_timestamp)&.to_datetime
+        self.class.last_known_force_product_id_timestamp = timestamp unless timestamp.nil?
+        timestamp
+      end
     rescue *REDIS_TRANSPORT_ERRORS
-      nil
+      self.class.last_known_force_product_id_timestamp
     end
 end

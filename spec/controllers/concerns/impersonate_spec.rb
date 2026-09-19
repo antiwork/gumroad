@@ -116,20 +116,6 @@ describe Impersonate, type: :controller do
           end
         end
 
-        context "when the Redis read stalls" do
-          it "returns nil instead of failing the request" do
-            allow($redis).to receive(:get).and_call_original
-            allow($redis).to receive(:get).with(RedisKey.impersonated_user(admin.id))
-              .and_raise(RedisClient::Error.new("Waited 1.0 seconds"))
-
-            get :action
-
-            expect(response).to be_successful
-            expect(controller.impersonated_user).to be(nil)
-            expect(controller.impersonating?).to eq(false)
-          end
-        end
-
         context "when impersonating" do
           before do
             controller.impersonate_user(user)
