@@ -23,6 +23,11 @@ update_purchase_healthcheck_threshold:
   cron: "* * * * *" # Every minute — the threshold carries a 1h TTL, so the healthcheck fails closed if this stalls
   class: UpdatePurchaseHealthcheckThresholdJob
   description: Recomputes the /healthcheck/purchases threshold from the prior 7 days' purchase rate
+reconcile_pending_paypal_refunds:
+  cron: "45 * * * *" # Every hour at :45, off the :00 payout and reporting runs
+  class: ReconcilePendingPaypalRefundsJob
+  queue: low
+  description: Re-reads PayPal refunds we recorded as PENDING; terminal failures go to the failed-refund exception queue
 flush_delivered_email_infos:
   cron: "* * * * *" # Every minute
   class: FlushDeliveredEmailInfosJob
