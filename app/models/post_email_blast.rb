@@ -37,7 +37,7 @@ class PostEmailBlast < ApplicationRecord
     return "sent" if completed_at.present?
     return "sent" if remaining_recipient_count&.<=(0)
     return "waiting" if quota_deferred_until&.future?
-    return "sending" if [requested_at, last_email_delivered_at].compact.max > AlertOnStalledPostEmailBlastsJob::STALL_THRESHOLD.ago
+    return "sending" if [requested_at, last_email_delivered_at].compact.max > AlertOnStalledPostEmailBlastsJob::EMAIL_ACTIVITY_THRESHOLD.ago
 
     "incomplete"
   end

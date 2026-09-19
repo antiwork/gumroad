@@ -15,9 +15,11 @@
 # AUTO_RESUME_WINDOW (unless recipients are still owed), not more than once per STALL_THRESHOLD,
 # and never a non-opener resend while UNACCOUNTED — its dedupe set is written only after
 # delivery, so a duplicate racing a live sender the snapshots missed would double-deliver.
-# A blast that emailed inside STALL_THRESHOLD is treated as running even when Sidekiq::Workers
-# does not list it — otherwise a still-sending large blast burns the resume marker and is
-# never tried again after the real death (gumroad-private#2338).
+# A blast that emailed inside EMAIL_ACTIVITY_THRESHOLD is treated as running even when
+# Sidekiq::Workers does not list it — a still-sending blast at observed throughput stamps
+# last_email every few seconds, so a short quiet window covers a missed Workers scan
+# without burning the resume marker. Four hours of that window left a mid-send kill
+# looking "running" until the next cron past the stall threshold.
 #
 # The exception is a blast whose sender handed every recipient over and then died before
 # stamping `completed_at` (gumroad-private#2250). Resuming that one cannot double-send, so it
@@ -26,9 +28,15 @@ class AlertOnStalledPostEmailBlastsJob
   include Sidekiq::Job
   sidekiq_options retry: 2, queue: :low
 
-  # Large resumed blasts legitimately run for a couple of hours (~4k sends/min against six-figure
-  # audiences), so anything under this is treated as still in flight.
+  # Candidate window: blasts requested more recently than this are still allowed to be in
+  # their first send or a quota deferral, so the scan does not page them.
   STALL_THRESHOLD = 4.hours
+
+  # Silence longer than this, with no visible sender, is a dead blast — not a slow one.
+  # Above SendPostBlastEmailsSliceJob::CHUNK_LOAD_TIMEOUT (20 min): a live slice can be
+  # quiet that long while loading members, but only while its worker is busy, which
+  # already counts as :running.
+  EMAIL_ACTIVITY_THRESHOLD = 30.minutes
 
   # Blasts older than this were already stalled before this alert existed; re-reporting the same
   # historical rows every run buries the new ones the alert exists to catch.
@@ -183,7 +191,7 @@ class AlertOnStalledPostEmailBlastsJob
     # the point is that it is later than the dispositions taken in `scan_for_stalled_blasts`.
     def last_email_recent?(blast)
       emailed_at = blast.last_email_delivered_at
-      emailed_at.present? && emailed_at > STALL_THRESHOLD.ago
+      emailed_at.present? && emailed_at > EMAIL_ACTIVITY_THRESHOLD.ago
     end
 
     # A quota-deferred blast waits in the scheduled set, which none of the scans read.

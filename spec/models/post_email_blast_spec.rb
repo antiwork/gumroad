@@ -52,12 +52,13 @@ RSpec.describe PostEmailBlast do
       $redis.del(RedisKey.blast_pending_recipients(handed_off.id)) if handed_off
     end
 
-    it "is waiting while a quota deferral is ahead, sending inside the stall threshold, incomplete past it" do
+    it "is waiting while a quota deferral is ahead, sending inside the activity threshold, incomplete past it" do
       deferred = create(:blast, :just_requested, post:, requested_at: 5.hours.ago)
       $redis.set(RedisKey.blast_quota_deferred_until(deferred.id), 1.hour.from_now.utc.iso8601)
       expect(deferred.delivery_status).to eq("waiting")
 
       expect(create(:blast, post:, requested_at: 1.hour.ago, last_email_delivered_at: 10.minutes.ago, completed_at: nil).delivery_status).to eq("sending")
+      expect(create(:blast, post:, requested_at: 6.hours.ago, last_email_delivered_at: 45.minutes.ago, completed_at: nil).delivery_status).to eq("incomplete")
       expect(create(:blast, post:, requested_at: 2.days.ago, last_email_delivered_at: 2.days.ago, completed_at: nil).delivery_status).to eq("incomplete")
     ensure
       $redis.del(RedisKey.blast_quota_deferred_until(deferred.id)) if deferred

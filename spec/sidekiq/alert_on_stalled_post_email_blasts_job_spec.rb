@@ -267,9 +267,9 @@ describe AlertOnStalledPostEmailBlastsJob do
         described_class.new.perform
       end
 
-      it "treats a blast that emailed inside the stall threshold as running even without a Sidekiq worker" do
+      it "treats a blast that emailed inside the activity threshold as running even without a Sidekiq worker" do
         blast = stalled_blast(requested_hours_ago: 6)
-        blast.update!(last_email_delivered_at: 30.minutes.ago)
+        blast.update!(last_email_delivered_at: 10.minutes.ago)
         stub_sidekiq
 
         described_class.new.perform
@@ -277,6 +277,21 @@ describe AlertOnStalledPostEmailBlastsJob do
         expect(SendPostBlastEmailsJob).not_to have_received(:perform_async)
         expect($redis.exists?(RedisKey.stalled_blast_auto_resumed(blast.id))).to be(false)
         expect(InternalNotificationWorker).not_to have_received(:perform_async)
+      end
+
+      it "resumes a blast whose last email is older than the activity threshold when no sender is visible" do
+        blast = stalled_blast(requested_hours_ago: 6)
+        blast.update!(last_email_delivered_at: 45.minutes.ago)
+        $redis.set(RedisKey.blast_pending_recipients(blast.id), 12)
+        stub_sidekiq
+
+        described_class.new.perform
+
+        expect(SendPostBlastEmailsJob).to have_received(:perform_async).with(blast.id)
+        expect($redis.exists?(RedisKey.stalled_blast_auto_resumed(blast.id))).to be(true)
+        expect(InternalNotificationWorker).not_to have_received(:perform_async)
+      ensure
+        $redis.del(RedisKey.blast_pending_recipients(blast.id)) if blast
       end
 
       it "reports a quota-deferred blast as DEFERRED and leaves it alone" do
