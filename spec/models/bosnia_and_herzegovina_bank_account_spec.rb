@@ -27,6 +27,18 @@ describe BosniaAndHerzegovinaBankAccount do
     end
   end
 
+  describe "#validate_bank_code" do
+    it "allows an 8-character BIC or an 11-character BIC with branch suffix" do
+      expect(build(:bosnia_and_herzegovina_bank_account, bank_code: "UNCRBA22")).to be_valid
+      expect(build(:bosnia_and_herzegovina_bank_account, bank_code: "UNCRBA22XXX")).to be_valid
+      expect(build(:bosnia_and_herzegovina_bank_account, bank_code: "UNCRBA2")).not_to be_valid
+      expect(build(:bosnia_and_herzegovina_bank_account, bank_code: "UNCRBA22X")).not_to be_valid
+      expect(build(:bosnia_and_herzegovina_bank_account, bank_code: "UNCRBA22XX")).not_to be_valid
+      expect(build(:bosnia_and_herzegovina_bank_account, bank_code: "UNCRBA22XXXX")).not_to be_valid
+      expect(build(:bosnia_and_herzegovina_bank_account, bank_code: "UNCRBA22-XX")).not_to be_valid
+    end
+  end
+
   describe "#account_number_visual" do
     it "returns the visual account number" do
       expect(create(:bosnia_and_herzegovina_bank_account, account_number_last_four: "6000").account_number_visual).to eq("BA******6000")

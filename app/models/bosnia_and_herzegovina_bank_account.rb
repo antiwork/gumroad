@@ -3,7 +3,9 @@
 class BosniaAndHerzegovinaBankAccount < BankAccount
   BANK_ACCOUNT_TYPE = "BA"
 
-  BANK_CODE_FORMAT_REGEX = /^([0-9a-zA-Z]){8,11}$/
+  # Stripe's BA rail resolves the 8-character BIC or the 11-character branch-suffixed form only, so a
+  # 9- or 10-character value saved and then failed the async bank sync with no error at save time.
+  BANK_CODE_FORMAT_REGEX = /^[a-zA-Z0-9]{8}([a-zA-Z0-9]{3})?$/
   private_constant :BANK_CODE_FORMAT_REGEX
 
   alias_attribute :bank_code, :bank_number
