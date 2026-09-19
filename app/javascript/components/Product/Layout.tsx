@@ -22,6 +22,7 @@ import {
   PriceSelection,
 } from "$app/components/Product/ConfigurationSelector";
 import { CtaButton } from "$app/components/Product/CtaButton";
+import { isSelectionComplete } from "$app/components/Product/purchaseReadiness";
 import { PriceTag } from "$app/components/Product/PriceTag";
 import { getBundleComparisonPriceCents } from "$app/components/Product/pricing";
 import {
@@ -233,14 +234,7 @@ const CtaBar = ({
 }) => {
   const selectionAttributes = applySelection(product, discountCode?.valid ? discountCode.discount : null, selection);
   let { priceCents } = selectionAttributes;
-  const {
-    discountedPriceCents,
-    isPWYW,
-    hasRentOption,
-    hasMultipleRecurrences,
-    hasConfigurableQuantity,
-    selectedOption,
-  } = selectionAttributes;
+  const { discountedPriceCents, isPWYW, selectedOption } = selectionAttributes;
 
   const [visible, setVisible] = React.useState(false);
   const ref = React.useRef<null | HTMLDivElement>(null);
@@ -298,6 +292,7 @@ const CtaBar = ({
           marginTop: visible || !isDesktop ? undefined : -height,
         }}
       >
+        {product.options.length > 1 && !selection.optionId ? null : (
         <PriceTag
           currencyCode={product.currency_code}
           oldPrice={discountedPriceCents < priceCents ? priceCents : undefined}
@@ -324,6 +319,7 @@ const CtaBar = ({
           )}
           buyerLocalOriginalPriceCents={product.buyer_local_original_price_cents}
         />
+        )}
         <h3 className="hidden flex-1 lg:block">{product.name}</h3>
         {product.ratings != null && product.ratings.count > 0 ? (
           <RatingsSummary className="hidden lg:flex" ratings={product.ratings} />
@@ -336,15 +332,9 @@ const CtaBar = ({
             selection={selection}
             label={ctaLabel}
             onClick={(evt) => {
-              if (
-                isPWYW ||
-                product.options.length > 1 ||
-                hasRentOption ||
-                hasMultipleRecurrences ||
-                hasConfigurableQuantity
-              ) {
+              if (!isSelectionComplete(product, selection)) {
                 evt.preventDefault();
-                ctaButtonRef.current?.scrollIntoView(false);
+                configurationSelectorRef.current?.scrollIntoView({ block: "nearest" });
                 configurationSelectorRef.current?.focusRequiredInput();
                 if (isPWYW && selection.price.value === null) showAlert("You must input an amount", "warning");
               }

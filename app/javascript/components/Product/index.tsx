@@ -66,6 +66,7 @@ import {
 } from "$app/components/Product/ConfigurationSelector";
 import { Covers as CoversComponent } from "$app/components/Product/Covers";
 import { CtaButton } from "$app/components/Product/CtaButton";
+import { initialOptionId } from "$app/components/Product/purchaseReadiness";
 import { DiscountExpirationCountdown } from "$app/components/Product/DiscountExpirationCountdown";
 import { PriceTag } from "$app/components/Product/PriceTag";
 import { getBundleComparisonPriceCents, getStandalonePrice } from "$app/components/Product/pricing";
@@ -253,10 +254,7 @@ export const useSelectionFromUrl = (product: Product) => {
       ({ id, name }) => id === searchParams.get("option") || name === searchParams.get("variant"),
     );
     const parsedQuantity = Number(searchParams.get("quantity"));
-    const optionId =
-      parsedOption && parsedOption.quantity_left !== 0
-        ? parsedOption.id
-        : (product.options.find(({ quantity_left }) => quantity_left !== 0)?.id ?? null);
+    const optionId = initialOptionId(product, searchParams);
     const parsedPrice = Number(searchParams.get("price") ?? undefined);
     const parsedCallStartTime = new Date(searchParams.get("call_start_time") ?? "");
     const parsedPayInInstallments = searchParams.get("pay_in_installments") === "true" && !!product.installment_plan;
@@ -373,6 +371,11 @@ export const Product = ({
   const comparisonPriceCents = isBundle ? getBundleComparisonPriceCents(product, selectedOption) : basePriceCents;
 
   const validate = () => {
+    if (product.options.length > 1 && !selection.optionId) {
+      configurationSelectorRef?.current?.scrollIntoView({ block: "nearest" });
+      configurationSelectorRef?.current?.focusRequiredInput();
+      return false;
+    }
     if (isPWYW && (selection.price.value === null || selection.price.value < discountedPriceCents)) {
       setSelection?.({ ...selection, price: { ...selection.price, error: true } });
       if (selection.price.value === null) {

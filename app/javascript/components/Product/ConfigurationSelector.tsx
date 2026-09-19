@@ -692,6 +692,7 @@ const PaymentOptionSelector = ({
 
 export type ConfigurationSelectorHandle = {
   focusRequiredInput: () => void;
+  scrollIntoView: (arg?: boolean | ScrollIntoViewOptions) => void;
 };
 
 export const ConfigurationSelector = React.forwardRef<
@@ -753,8 +754,19 @@ export const ConfigurationSelector = React.forwardRef<
   const quantityInputUID = React.useId();
 
   const pwywInputRef = React.useRef<HTMLInputElement>(null);
+  const rootRef = React.useRef<HTMLDivElement>(null);
   React.useImperativeHandle(ref, () => ({
-    focusRequiredInput: () => pwywInputRef.current?.focus(),
+    focusRequiredInput: () => {
+      if (pwywInputRef.current) {
+        pwywInputRef.current.focus();
+        return;
+      }
+      const optionRadio = rootRef.current?.querySelector<HTMLElement>("[data-option-picker] [role='radio']");
+      (optionRadio ?? rootRef.current?.querySelector<HTMLElement>("[role='radio']"))?.focus();
+    },
+    scrollIntoView: (arg?: boolean | ScrollIntoViewOptions) => {
+      rootRef.current?.scrollIntoView(arg ?? { block: "nearest" });
+    },
   }));
   const buyerCurrencyCode = currencyCodeList.find((code) => code === product.buyer_currency) ?? null;
   const pwywInput = (
@@ -780,9 +792,9 @@ export const ConfigurationSelector = React.forwardRef<
   );
 
   if (product.native_type === "coffee") {
-    if (product.options.length === 1) return pwywInput;
+    if (product.options.length === 1) return <div ref={rootRef}>{pwywInput}</div>;
     return (
-      <>
+      <div ref={rootRef}>
         <Tabs
           variant="buttons"
           role="radiogroup"
@@ -824,12 +836,12 @@ export const ConfigurationSelector = React.forwardRef<
           </Tab>
         </Tabs>
         {selection.optionId === null ? pwywInput : null}
-      </>
+      </div>
     );
   }
 
   return (
-    <>
+    <div ref={rootRef}>
       {hasMultipleRecurrences && product.recurrences ? (
         <TypeSafeOptionSelect
           aria-label="Recurrence"
@@ -881,6 +893,7 @@ export const ConfigurationSelector = React.forwardRef<
       ) : null}
       {hasOptions && hasRentOption ? <hr /> : null}
       {hasOptions ? (
+        <div data-option-picker>
         <Tabs
           variant="buttons"
           role="radiogroup"
@@ -939,6 +952,7 @@ export const ConfigurationSelector = React.forwardRef<
             {product.currency_code}
           </div>
         </Tabs>
+        </div>
       ) : null}
       {isPWYW ? pwywInput : null}
       {product.native_type === "call" && selectedOption ? (
@@ -964,7 +978,7 @@ export const ConfigurationSelector = React.forwardRef<
       {showInstallmentPlan && product.installment_plan ? (
         <PaymentOptionSelector product={product} selection={selection} onChange={update} />
       ) : null}
-    </>
+    </div>
   );
 });
 ConfigurationSelector.displayName = "ConfigurationSelector";

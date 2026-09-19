@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import {
   ConfigurationSelector,
+  type ConfigurationSelectorHandle,
   type PriceSelection,
   type Product,
 } from "$app/components/Product/ConfigurationSelector";
@@ -98,5 +99,22 @@ describe("version selector accessibility", () => {
     const texts = describedByTexts(screen.getByRole("radio", { name: "Collector's Edition" }));
     expect(texts).toHaveLength(1);
     expect(texts[0]).toContain("$14.99");
+  });
+
+  it("focuses the first option radio when the buyer has not chosen yet", () => {
+    const ref = React.createRef<ConfigurationSelectorHandle>();
+    render(
+      <ConfigurationSelector
+        ref={ref}
+        product={versionedProduct}
+        selection={{ ...initialSelection, optionId: null }}
+        setSelection={() => {}}
+        discount={null}
+      />,
+    );
+
+    ref.current?.focusRequiredInput();
+
+    expect(document.activeElement).toBe(screen.getByRole("radio", { name: "Listener's Edition" }));
   });
 });

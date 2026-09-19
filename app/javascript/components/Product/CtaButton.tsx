@@ -8,6 +8,7 @@ import { assertResponseError } from "$app/utils/request";
 import { trackProductEvent } from "$app/utils/user_analytics";
 
 import { NavigationButton } from "$app/components/Button";
+import { INCOMPLETE_PURCHASE_CTA_LABEL, isSelectionComplete } from "$app/components/Product/purchaseReadiness";
 import { getNotForSaleMessage, Product, ProductDiscount, Purchase } from "$app/components/Product";
 import {
   applySelection,
@@ -172,16 +173,18 @@ export const CtaButton = React.forwardRef<HTMLAnchorElement, Props>(
           className={compactOnMobile}
           {...buttonCommonProps}
         >
-          {label ??
-            (purchase && (purchase.was_paid || product.recurrences)
-              ? "Purchase again"
-              : product.recurrences
-                ? "Subscribe"
-                : selection.rent
-                  ? "Rent"
-                  : product.custom_button_text_option
-                    ? getCtaName(product.custom_button_text_option)
-                    : "I want this!")}
+          {!isSelectionComplete(product, selection)
+            ? INCOMPLETE_PURCHASE_CTA_LABEL
+            : label ??
+              (purchase && (purchase.was_paid || product.recurrences)
+                ? "Purchase again"
+                : product.recurrences
+                  ? "Subscribe"
+                  : selection.rent
+                    ? "Rent"
+                    : product.custom_button_text_option
+                      ? getCtaName(product.custom_button_text_option)
+                      : "I want this!")}
         </NavigationButton>
 
         {product.installment_plan && product.installment_plan.number_of_installments > 1 && discountedPriceCents > 0 ? (
