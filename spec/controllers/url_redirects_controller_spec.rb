@@ -36,6 +36,35 @@ describe UrlRedirectsController, inertia: true do
       expect(inertia.props).to include(expected_props)
     end
 
+    describe "expired stamped PDFs" do
+      let(:stampable_file) { create(:pdf_product_file, link: @product, pdf_stamp_enabled: true) }
+
+      # Expiry is deliberate (ExpireStampedPdfsJob bounds the per-purchase duplicate copies), but
+      # a stream_only file has no Download click to restamp one, so the page has to recover it.
+      it "restamps an expired stamped PDF so the row keeps its actions" do
+        stamped_pdf = create(:stamped_pdf, url_redirect: @url_redirect, product_file: stampable_file)
+        stamped_pdf.mark_deleted!
+
+        get :download_page, params: { id: @token }
+
+        expect(StampPdfForPurchaseJob).to have_enqueued_sidekiq_job(@url_redirect.purchase_id)
+      end
+
+      it "does not restamp while the stamped PDF is alive" do
+        create(:stamped_pdf, url_redirect: @url_redirect, product_file: stampable_file)
+
+        get :download_page, params: { id: @token }
+
+        expect(StampPdfForPurchaseJob).not_to have_enqueued_sidekiq_job
+      end
+
+      it "does not restamp a file whose stamped PDF was never created" do
+        get :download_page, params: { id: @token }
+
+        expect(StampPdfForPurchaseJob).not_to have_enqueued_sidekiq_job
+      end
+    end
+
     context "with access revoked for purchase" do
       before do
         @url_redirect.purchase.update!(is_access_revoked: true)
