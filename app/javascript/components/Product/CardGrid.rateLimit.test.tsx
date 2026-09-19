@@ -3,6 +3,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import * as React from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import type { SearchResults } from "$app/data/search";
 import { RateLimitError } from "$app/utils/request";
 
 import { CardGrid, State, useSearchReducer } from "$app/components/Product/CardGrid";
@@ -98,6 +99,29 @@ describe("CardGrid search backoff", () => {
     fireEvent.click(screen.getByText("search A"));
     await settle();
     expect(getSearchResults).toHaveBeenCalledTimes(1);
+  });
+
+  it("serves a repeat of a search that is still in flight from that request's answer", async () => {
+    let resolveRequest: (value: SearchResults) => void = () => {};
+    getSearchResults.mockReturnValue({
+      response: new Promise<SearchResults>((resolve) => {
+        resolveRequest = resolve;
+      }),
+      cancel: () => {},
+    });
+    render(<Harness />);
+
+    fireEvent.click(screen.getByText("search A"));
+    await waitFor(() => expect(getSearchResults).toHaveBeenCalledTimes(1));
+
+    // Nothing cancels a search request, so a repeat while it is still out is answered by it: the
+    // grid still gets results rather than being left mid-search with nothing in flight.
+    fireEvent.click(screen.getByText("search A"));
+    await settle();
+    expect(getSearchResults).toHaveBeenCalledTimes(1);
+
+    resolveRequest(results);
+    await waitFor(() => expect(screen.getByText("No products found")).toBeTruthy());
   });
 
   it("backs off when the response isn't our API's JSON, like an edge block page", async () => {
