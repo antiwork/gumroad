@@ -1426,11 +1426,9 @@ const usePayPalImplementation = () => {
   // Bumped on every successful load. The buttons are built once per namespace, so the lane that
   // renders them keys on this to rebuild against the namespace the current options produced.
   const [paypalGeneration, setPaypalGeneration] = React.useState(0);
-  // PayPal renders its own "Debit or Credit Card" funding button next to the PayPal button, and the
-  // funding set is fixed when the SDK script loads. A seller's opt-out (checkout settings) applies
-  // only when every seller in the cart asked for it, so this re-runs when that aggregate flips:
-  // loadScript inserts a fresh script tag whenever the options differ, which re-applies the funding
-  // set. The cart can change (products added/removed) without remounting this form.
+  // The funding set is fixed when the SDK script loads, so a cart change has to load again to drop
+  // PayPal's card button: loadScript inserts a fresh tag whenever the options differ, and the cart's
+  // opt-out aggregate is the only thing that moves here without a remount.
   const cardFundingDisabled =
     state.products.length > 0 && state.products.every((product: CheckoutProduct) => product.paypalCardFundingDisabled);
   React.useEffect(() => {
