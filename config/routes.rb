@@ -519,6 +519,15 @@ Rails.application.routes.draw do
   constraints GumroadDomainConstraint do
     get "/about", to: "home#about"
     get "/gumclaw", to: "gumclaw#index"
+    get "/muse", to: "muse#index"
+
+    get "/muse/v1/status" => "api/v2/muse#status"
+    get "/muse/v1/oauth2/authorize/:code(.:format)" => "oauth/authorizations#show"
+    get "/muse/v1/oauth2/authorize(.:format)" => "oauth/authorizations#new"
+    post "/muse/v1/oauth2/token(.:format)" => "oauth/tokens#create"
+    match "/muse/v1/mcp" => "api/v2/muse#mcp", via: [:get, :post]
+    get "/.well-known/mcp.json" => "api/v2/muse#mcp_discovery"
+    get "/.well-known/oauth-authorization-server" => "api/v2/muse#oauth_metadata"
     get "/careers", to: redirect("/gumclaw")
     get "/careers/:slug", to: redirect("/gumclaw")
     get "/jobs", to: redirect("/gumclaw")

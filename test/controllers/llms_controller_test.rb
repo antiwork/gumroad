@@ -41,6 +41,7 @@ class LlmsControllerTest < ActionController::TestCase
     assert_includes response.body, "gumroad.com/discover"
     assert_includes response.body, "https://{username}.gumroad.com/wishlists/{slug}"
     assert_includes response.body, "https://gumroad.com/api"
+    assert_includes response.body, "https://gumroad.com/muse"
     assert_includes response.body, "https://gumroad.com/help"
   end
 end
