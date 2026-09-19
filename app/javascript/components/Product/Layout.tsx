@@ -24,6 +24,7 @@ import {
 import { CtaButton } from "$app/components/Product/CtaButton";
 import { PriceTag } from "$app/components/Product/PriceTag";
 import { getBundleComparisonPriceCents } from "$app/components/Product/pricing";
+import { isSelectionComplete, needsOptionChoice } from "$app/components/Product/purchaseReadiness";
 import {
   Action,
   AddSectionButton,
@@ -233,14 +234,7 @@ const CtaBar = ({
 }) => {
   const selectionAttributes = applySelection(product, discountCode?.valid ? discountCode.discount : null, selection);
   let { priceCents } = selectionAttributes;
-  const {
-    discountedPriceCents,
-    isPWYW,
-    hasRentOption,
-    hasMultipleRecurrences,
-    hasConfigurableQuantity,
-    selectedOption,
-  } = selectionAttributes;
+  const { discountedPriceCents, isPWYW, selectedOption } = selectionAttributes;
 
   const [visible, setVisible] = React.useState(false);
   const ref = React.useRef<null | HTMLDivElement>(null);
@@ -298,32 +292,34 @@ const CtaBar = ({
           marginTop: visible || !isDesktop ? undefined : -height,
         }}
       >
-        <PriceTag
-          currencyCode={product.currency_code}
-          oldPrice={discountedPriceCents < priceCents ? priceCents : undefined}
-          price={discountedPriceCents}
-          url={product.long_url}
-          recurrence={
-            product.recurrences
-              ? {
-                  id: selection.recurrence ?? product.recurrences.default,
-                  duration_in_months: product.duration_in_months,
-                }
-              : undefined
-          }
-          isPayWhatYouWant={isPWYW}
-          isSalesLimited={product.is_sales_limited}
-          creatorName={product.seller?.name}
-          buyerCurrency={product.buyer_currency}
-          buyerLocalCurrencyRate={product.buyer_local_currency_rate}
-          buyerLocalCurrencySubunitToUnit={product.buyer_local_currency_subunit_to_unit}
-          buyerLocalPriceCents={buyerLocalPriceCentsForSelection(
-            product.buyer_local_price_cents,
-            discountCode?.valid ? discountCode.discount : null,
-            selection.quantity,
-          )}
-          buyerLocalOriginalPriceCents={product.buyer_local_original_price_cents}
-        />
+        {needsOptionChoice(product, selection) ? null : (
+          <PriceTag
+            currencyCode={product.currency_code}
+            oldPrice={discountedPriceCents < priceCents ? priceCents : undefined}
+            price={discountedPriceCents}
+            url={product.long_url}
+            recurrence={
+              product.recurrences
+                ? {
+                    id: selection.recurrence ?? product.recurrences.default,
+                    duration_in_months: product.duration_in_months,
+                  }
+                : undefined
+            }
+            isPayWhatYouWant={isPWYW}
+            isSalesLimited={product.is_sales_limited}
+            creatorName={product.seller?.name}
+            buyerCurrency={product.buyer_currency}
+            buyerLocalCurrencyRate={product.buyer_local_currency_rate}
+            buyerLocalCurrencySubunitToUnit={product.buyer_local_currency_subunit_to_unit}
+            buyerLocalPriceCents={buyerLocalPriceCentsForSelection(
+              product.buyer_local_price_cents,
+              discountCode?.valid ? discountCode.discount : null,
+              selection.quantity,
+            )}
+            buyerLocalOriginalPriceCents={product.buyer_local_original_price_cents}
+          />
+        )}
         <h3 className="hidden flex-1 lg:block">{product.name}</h3>
         {product.ratings != null && product.ratings.count > 0 ? (
           <RatingsSummary className="hidden lg:flex" ratings={product.ratings} />
@@ -336,17 +332,18 @@ const CtaBar = ({
             selection={selection}
             label={ctaLabel}
             onClick={(evt) => {
-              if (
-                isPWYW ||
-                product.options.length > 1 ||
-                hasRentOption ||
-                hasMultipleRecurrences ||
-                hasConfigurableQuantity
-              ) {
+              // The bar mirrors the in-page CTA's validation and holds the click back only while the
+              // buyer still owes the page a choice: PWYW always hands off (that CTA owns the
+              // minimum-price rule), and isSelectionComplete covers the missing SKU, amount and call
+              // time. Rent, quantity and recurrence controls merely existing is not a missing choice —
+              // intercepting for those is what made bar taps feel dead, and the defaults the bar
+              // sends (buy, quantity 1, seller's default plan) are the same ones that CTA sends.
+              if (isPWYW || !isSelectionComplete(product, selection)) {
                 evt.preventDefault();
-                ctaButtonRef.current?.scrollIntoView(false);
+                configurationSelectorRef.current?.scrollIntoView({ block: "nearest" });
                 configurationSelectorRef.current?.focusRequiredInput();
-                if (isPWYW && selection.price.value === null) showAlert("You must input an amount", "warning");
+                if (!needsOptionChoice(product, selection) && isPWYW && selection.price.value === null)
+                  showAlert("You must input an amount", "warning");
               }
             }}
           />

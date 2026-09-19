@@ -9,6 +9,12 @@ import { Product, type Product as ProductData } from "$app/components/Product";
 import type { PriceSelection } from "$app/components/Product/ConfigurationSelector";
 import { Layout } from "$app/components/Product/Layout";
 
+const selectionFlags = vi.hoisted(() => ({
+  hasRentOption: false,
+  hasMultipleRecurrences: false,
+  hasConfigurableQuantity: false,
+}));
+
 vi.stubGlobal("SSR", false);
 vi.stubGlobal("Routes", {
   checkout_url: () => "https://example.com/checkout",
@@ -51,9 +57,7 @@ vi.mock("$app/components/Product/ConfigurationSelector", () => {
       isPWYW: false,
       maxQuantity: null,
       selectedOption: null,
-      hasRentOption: false,
-      hasMultipleRecurrences: false,
-      hasConfigurableQuantity: false,
+      ...selectionFlags,
     }),
     buyerLocalPriceCentsForSelection: (priceCents?: number) => priceCents,
     buyerLocalContextFor: (product: ProductData) => ({
@@ -203,6 +207,94 @@ describe("product page recovery prompt", () => {
     } else {
       expect(screen.queryByText("Already bought this?")).toBeNull();
     }
+  });
+});
+
+describe("product page sticky CTA readiness", () => {
+  const renderLayout = (p: ProductData) => {
+    class FakeIntersectionObserver {
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+    }
+    vi.stubGlobal("IntersectionObserver", FakeIntersectionObserver);
+
+    render(
+      <Layout
+        product={p}
+        purchase={null}
+        discount_code={null}
+        wishlists={[]}
+        main_section_index={0}
+        sections={[]}
+        creator_profile={{
+          external_id: "seller",
+          name: "Measure Twice Digital",
+          avatar_url: "https://example.com/avatar.png",
+          twitter_handle: null,
+          subdomain: null,
+          is_verified: false,
+          can_edit: false,
+        }}
+        currency_code="usd"
+      />,
+    );
+
+    return screen.getByRole("region", { name: "Product information bar" });
+  };
+
+  const option = (id: string): ProductData["options"][number] => ({
+    id,
+    name: id,
+    quantity_left: null,
+    description: "",
+    price_difference_cents: 0,
+    recurrence_price_values: null,
+    is_pwyw: false,
+    duration_in_minutes: null,
+  });
+
+  // The bar mirrors the in-page CTA's validation: it holds the click back only while the buyer still
+  // owes the page a choice. Rent/quantity/recurrence controls being present is not a missing choice —
+  // intercepting for those is what made bar taps feel dead before this change.
+  it("navigates for a rent-or-buy, quantity-enabled product with nothing left to choose", () => {
+    selectionFlags.hasRentOption = true;
+    selectionFlags.hasConfigurableQuantity = true;
+
+    const bar = renderLayout(product);
+    const cta = within(bar).getByRole("link", { name: "I want this!" });
+
+    expect(fireEvent.click(cta)).toBe(true);
+  });
+
+  it("holds the click back and relabels while an option is unchosen", () => {
+    selectionFlags.hasMultipleRecurrences = true;
+
+    const bar = renderLayout({ ...product, options: [option("standard"), option("deluxe")] });
+    const cta = within(bar).getByRole("link", { name: "Choose an option" });
+
+    expect(fireEvent.click(cta)).toBe(false);
+  });
+
+  it("lets the bar through when every option is sold out", () => {
+    const soldOut = {
+      ...product,
+      options: [
+        { ...option("standard"), quantity_left: 0 },
+        { ...option("deluxe"), quantity_left: 0 },
+      ],
+    };
+
+    const bar = renderLayout(soldOut);
+    const cta = within(bar).getByRole("link", { name: "I want this!" });
+
+    expect(fireEvent.click(cta)).toBe(true);
+  });
+
+  afterEach(() => {
+    selectionFlags.hasRentOption = false;
+    selectionFlags.hasMultipleRecurrences = false;
+    selectionFlags.hasConfigurableQuantity = false;
   });
 });
 

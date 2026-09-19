@@ -16,6 +16,7 @@ import {
   PriceSelection,
   withConfiguredOncePerCartAmount,
 } from "$app/components/Product/ConfigurationSelector";
+import { INCOMPLETE_PURCHASE_CTA_LABEL, needsOptionChoice } from "$app/components/Product/purchaseReadiness";
 import { useOriginalLocation } from "$app/components/useOriginalLocation";
 import { useRunOnce } from "$app/components/useRunOnce";
 
@@ -172,16 +173,18 @@ export const CtaButton = React.forwardRef<HTMLAnchorElement, Props>(
           className={compactOnMobile}
           {...buttonCommonProps}
         >
-          {label ??
-            (purchase && (purchase.was_paid || product.recurrences)
-              ? "Purchase again"
-              : product.recurrences
-                ? "Subscribe"
-                : selection.rent
-                  ? "Rent"
-                  : product.custom_button_text_option
-                    ? getCtaName(product.custom_button_text_option)
-                    : "I want this!")}
+          {needsOptionChoice(product, selection)
+            ? INCOMPLETE_PURCHASE_CTA_LABEL
+            : (label ??
+              (purchase && (purchase.was_paid || product.recurrences)
+                ? "Purchase again"
+                : product.recurrences
+                  ? "Subscribe"
+                  : selection.rent
+                    ? "Rent"
+                    : product.custom_button_text_option
+                      ? getCtaName(product.custom_button_text_option)
+                      : "I want this!"))}
         </NavigationButton>
 
         {product.installment_plan && product.installment_plan.number_of_installments > 1 && discountedPriceCents > 0 ? (

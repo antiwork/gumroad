@@ -99,6 +99,7 @@ describe "Product page wishlist selector", js: true, type: :system do
       it "saves the tier and recurrence" do
         visit product.long_url
 
+        choose("First Tier")
         create_new_wishlist("Wishlist 1")
         expect(user.wishlists.last.wishlist_products.sole).to have_attributes(
           recurrence: "monthly",
@@ -135,6 +136,7 @@ describe "Product page wishlist selector", js: true, type: :system do
       it "saves the sku and quantity" do
         visit product.long_url
 
+        choose("Red")
         create_new_wishlist("Wishlist 1")
         expect(user.wishlists.last.wishlist_products.sole).to have_attributes(
           quantity: 1,

@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import {
   ConfigurationSelector,
+  type ConfigurationSelectorHandle,
   type PriceSelection,
   type Product,
 } from "$app/components/Product/ConfigurationSelector";
@@ -60,6 +61,12 @@ const initialSelection: PriceSelection = {
   payInInstallments: false,
 };
 
+const versionedOption = (index: number): Product["options"][number] => {
+  const option = versionedProduct.options[index];
+  if (!option) throw new Error(`versionedProduct has no option at index ${index}`);
+  return option;
+};
+
 const renderSelector = () => {
   const Harness = () => {
     const [selection, setSelection] = React.useState(initialSelection);
@@ -98,5 +105,59 @@ describe("version selector accessibility", () => {
     const texts = describedByTexts(screen.getByRole("radio", { name: "Collector's Edition" }));
     expect(texts).toHaveLength(1);
     expect(texts[0]).toContain("$14.99");
+  });
+
+  it("focuses the first option radio when the buyer has not chosen yet", () => {
+    const ref = React.createRef<ConfigurationSelectorHandle>();
+    render(
+      <ConfigurationSelector
+        ref={ref}
+        product={versionedProduct}
+        selection={{ ...initialSelection, optionId: null }}
+        setSelection={() => {}}
+        discount={null}
+      />,
+    );
+
+    ref.current?.focusRequiredInput();
+
+    expect(document.activeElement).toBe(screen.getByRole("radio", { name: "Listener's Edition" }));
+  });
+
+  it("focuses the option radios rather than the price field when an option is still required", () => {
+    const ref = React.createRef<ConfigurationSelectorHandle>();
+    render(
+      <ConfigurationSelector
+        ref={ref}
+        product={{ ...versionedProduct, pwyw: { suggested_price_cents: 500 } }}
+        selection={{ ...initialSelection, optionId: null }}
+        setSelection={() => {}}
+        discount={null}
+      />,
+    );
+
+    ref.current?.focusRequiredInput();
+
+    expect(document.activeElement).toBe(screen.getByRole("radio", { name: "Listener's Edition" }));
+  });
+
+  it("skips a sold-out option when focusing the picker", () => {
+    const ref = React.createRef<ConfigurationSelectorHandle>();
+    render(
+      <ConfigurationSelector
+        ref={ref}
+        product={{
+          ...versionedProduct,
+          options: [{ ...versionedOption(0), quantity_left: 0 }, versionedOption(1)],
+        }}
+        selection={{ ...initialSelection, optionId: null }}
+        setSelection={() => {}}
+        discount={null}
+      />,
+    );
+
+    ref.current?.focusRequiredInput();
+
+    expect(document.activeElement).toBe(screen.getByRole("radio", { name: "Collector's Edition" }));
   });
 });

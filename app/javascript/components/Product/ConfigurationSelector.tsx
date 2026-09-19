@@ -38,6 +38,7 @@ import { Button } from "$app/components/Button";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { NumberInput } from "$app/components/NumberInput";
 import { PriceInput } from "$app/components/PriceInput";
+import { needsOptionChoice } from "$app/components/Product/purchaseReadiness";
 import { TypeSafeOptionSelect } from "$app/components/TypeSafeOptionSelect";
 import { Alert } from "$app/components/ui/Alert";
 import { Calendar } from "$app/components/ui/Calendar";
@@ -692,6 +693,7 @@ const PaymentOptionSelector = ({
 
 export type ConfigurationSelectorHandle = {
   focusRequiredInput: () => void;
+  scrollIntoView: (arg?: boolean | ScrollIntoViewOptions) => void;
 };
 
 export const ConfigurationSelector = React.forwardRef<
@@ -753,8 +755,25 @@ export const ConfigurationSelector = React.forwardRef<
   const quantityInputUID = React.useId();
 
   const pwywInputRef = React.useRef<HTMLInputElement>(null);
+  const rootRef = React.useRef<HTMLDivElement>(null);
   React.useImperativeHandle(ref, () => ({
-    focusRequiredInput: () => pwywInputRef.current?.focus(),
+    focusRequiredInput: () => {
+      const optionRadio = rootRef.current?.querySelector<HTMLElement>(
+        "[data-option-picker] [role='radio']:not([disabled])",
+      );
+      if (needsOptionChoice(product, selection) && optionRadio) {
+        optionRadio.focus();
+        return;
+      }
+      pwywInputRef.current?.focus();
+    },
+    scrollIntoView: (arg?: boolean | ScrollIntoViewOptions) => {
+      // The wrapper is display: contents, so it has no box of its own to scroll to — aim at the
+      // option picker when there is one, else the first control inside.
+      const root = rootRef.current;
+      const target = root?.querySelector("[data-option-picker]") ?? root?.firstElementChild;
+      target?.scrollIntoView(arg ?? { block: "nearest" });
+    },
   }));
   const buyerCurrencyCode = currencyCodeList.find((code) => code === product.buyer_currency) ?? null;
   const pwywInput = (
@@ -780,9 +799,14 @@ export const ConfigurationSelector = React.forwardRef<
   );
 
   if (product.native_type === "coffee") {
-    if (product.options.length === 1) return pwywInput;
+    if (product.options.length === 1)
+      return (
+        <div ref={rootRef} className="contents">
+          {pwywInput}
+        </div>
+      );
     return (
-      <>
+      <div ref={rootRef} className="contents">
         <Tabs
           variant="buttons"
           role="radiogroup"
@@ -824,12 +848,12 @@ export const ConfigurationSelector = React.forwardRef<
           </Tab>
         </Tabs>
         {selection.optionId === null ? pwywInput : null}
-      </>
+      </div>
     );
   }
 
   return (
-    <>
+    <div ref={rootRef} className="contents">
       {hasMultipleRecurrences && product.recurrences ? (
         <TypeSafeOptionSelect
           aria-label="Recurrence"
@@ -881,64 +905,66 @@ export const ConfigurationSelector = React.forwardRef<
       ) : null}
       {hasOptions && hasRentOption ? <hr /> : null}
       {hasOptions ? (
-        <Tabs
-          variant="buttons"
-          role="radiogroup"
-          className="md:grid-flow-row"
-          style={{ gridTemplateColumns: "repeat(auto-fit, minmax(min(15rem, 100%), 1fr))" }}
-          itemProp="offers"
-          itemType="https://schema.org/AggregateOffer"
-          itemScope
-        >
-          {product.options
-            .filter((option) => !(product.hide_sold_out_variants && option.quantity_left === 0))
-            .map((option) => (
-              <OptionRadioButton
-                key={option.id}
-                disabled={
-                  option.quantity_left === 0 ||
-                  (product.is_tiered_membership &&
-                    !!selection.recurrence &&
-                    !option.recurrence_price_values?.[selection.recurrence])
-                }
-                selected={option.id === selection.optionId}
-                onClick={() => {
-                  if (option.id === selection.optionId) return;
-                  update({ optionId: option.id, price: { value: null, error: false } });
-                }}
-                priceCents={basePriceCents + computeOptionPrice(option, selection.recurrence)}
-                name={option.name}
-                description={option.description}
-                quantityLeft={option.quantity_left}
-                currencyCode={product.currency_code}
-                isPWYW={product.is_tiered_membership ? option.is_pwyw : !!product.pwyw}
-                status={option.status}
-                discount={previewDiscount({
-                  ...selection,
-                  optionId: option.id,
-                  price: { value: null, error: false },
-                })}
-                recurrence={selection.recurrence}
-                product={product}
-                quantity={selection.quantity}
-                hidePrice={hidePrices}
-              />
-            ))}
-          <div itemProp="offerCount" className="hidden">
-            {product.options.length}
-          </div>
-          <div itemProp="lowPrice" className="hidden">
-            {formatPriceCentsWithoutCurrencySymbol(
-              product.currency_code,
-              Math.min(
-                ...product.options.map((option) => basePriceCents + computeOptionPrice(option, selection.recurrence)),
-              ),
-            )}
-          </div>
-          <div itemProp="priceCurrency" className="hidden">
-            {product.currency_code}
-          </div>
-        </Tabs>
+        <div data-option-picker>
+          <Tabs
+            variant="buttons"
+            role="radiogroup"
+            className="md:grid-flow-row"
+            style={{ gridTemplateColumns: "repeat(auto-fit, minmax(min(15rem, 100%), 1fr))" }}
+            itemProp="offers"
+            itemType="https://schema.org/AggregateOffer"
+            itemScope
+          >
+            {product.options
+              .filter((option) => !(product.hide_sold_out_variants && option.quantity_left === 0))
+              .map((option) => (
+                <OptionRadioButton
+                  key={option.id}
+                  disabled={
+                    option.quantity_left === 0 ||
+                    (product.is_tiered_membership &&
+                      !!selection.recurrence &&
+                      !option.recurrence_price_values?.[selection.recurrence])
+                  }
+                  selected={option.id === selection.optionId}
+                  onClick={() => {
+                    if (option.id === selection.optionId) return;
+                    update({ optionId: option.id, price: { value: null, error: false } });
+                  }}
+                  priceCents={basePriceCents + computeOptionPrice(option, selection.recurrence)}
+                  name={option.name}
+                  description={option.description}
+                  quantityLeft={option.quantity_left}
+                  currencyCode={product.currency_code}
+                  isPWYW={product.is_tiered_membership ? option.is_pwyw : !!product.pwyw}
+                  status={option.status}
+                  discount={previewDiscount({
+                    ...selection,
+                    optionId: option.id,
+                    price: { value: null, error: false },
+                  })}
+                  recurrence={selection.recurrence}
+                  product={product}
+                  quantity={selection.quantity}
+                  hidePrice={hidePrices}
+                />
+              ))}
+            <div itemProp="offerCount" className="hidden">
+              {product.options.length}
+            </div>
+            <div itemProp="lowPrice" className="hidden">
+              {formatPriceCentsWithoutCurrencySymbol(
+                product.currency_code,
+                Math.min(
+                  ...product.options.map((option) => basePriceCents + computeOptionPrice(option, selection.recurrence)),
+                ),
+              )}
+            </div>
+            <div itemProp="priceCurrency" className="hidden">
+              {product.currency_code}
+            </div>
+          </Tabs>
+        </div>
       ) : null}
       {isPWYW ? pwywInput : null}
       {product.native_type === "call" && selectedOption ? (
@@ -964,7 +990,7 @@ export const ConfigurationSelector = React.forwardRef<
       {showInstallmentPlan && product.installment_plan ? (
         <PaymentOptionSelector product={product} selection={selection} onChange={update} />
       ) : null}
-    </>
+    </div>
   );
 });
 ConfigurationSelector.displayName = "ConfigurationSelector";
