@@ -16,7 +16,12 @@ describe("Purchase product page", type: :system, js: true) do
   # Product component, so a coffee-aware readiness rule has to hold here too.
   context "when the purchase is for a coffee product with several amounts" do
     let(:coffee) do
-      create(:product, name: "Buy me a coffee!", user: create(:named_seller), native_type: Link::NATIVE_TYPE_COFFEE)
+      create(
+        :product,
+        name: "Buy me a coffee!",
+        user: create(:named_seller, :eligible_for_service_products),
+        native_type: Link::NATIVE_TYPE_COFFEE,
+      )
     end
     let(:purchase) { create(:purchase, link: coffee) }
 
@@ -24,15 +29,15 @@ describe("Purchase product page", type: :system, js: true) do
       create(:variant, name: "", variant_category: coffee.variant_categories_alive.first, price_difference_cents: 200)
     end
 
-    it "starts on the first amount tab and lets the buyer tip a custom amount from Other" do
+    it "keeps the custom-amount CTA live instead of asking for a SKU" do
       visit purchase_product_path(purchase.external_id)
 
-      expect(page).to have_radio_button("$1", checked: true)
-      expect(page).to have_radio_button("Other", checked: false)
+      expect(page).to have_text("Buy me a coffee!")
+      # A blank optionId on a coffee purchase is the "Other" amount, not a missing SKU.
+      expect(page).to_not have_link("Choose an option")
 
-      choose "Other"
       fill_in "Name a fair price", with: "5"
-      click_on "Purchase again"
+      first("a[href*='/checkout']").click
 
       expect(page).to have_current_path(%r{\A/checkout})
     end
