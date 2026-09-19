@@ -144,6 +144,10 @@ describe("Offer-code usage from product page", type: :system, js: true) do
 
     visit "#{product1.long_url}/#{offer_code1.code}"
     add_to_cart(product1, offer_code: offer_code1)
+    # Deliberate navigation must wait for the displayed discount to reach the saved cart.
+    wait_until_true(sleep_interval: CheckoutPresenter::CART_SAVE_DEBOUNCE_DURATION_IN_SECONDS) do
+      CartProduct.find_by(product: product1)&.cart&.discount_codes&.pluck("code") == [offer_code1.code]
+    end
 
     visit product2.long_url
     add_to_cart(product2)
@@ -152,6 +156,9 @@ describe("Offer-code usage from product page", type: :system, js: true) do
     click_on "Apply"
     expect(page).to_not have_selector("[aria-label='Discount code']", text: offer_code1.code)
     expect(page).to have_selector("[aria-label='Discount code']", text: offer_code2.code)
+    wait_until_true(sleep_interval: CheckoutPresenter::CART_SAVE_DEBOUNCE_DURATION_IN_SECONDS) do
+      CartProduct.find_by(product: product1)&.cart&.discount_codes&.pluck("code") == [offer_code2.code]
+    end
 
     visit product3.long_url
     add_to_cart(product3)
