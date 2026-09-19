@@ -166,18 +166,60 @@ describe SendPostBlastEmailsSliceJob, :freeze_time do
       expect(blast.reload.completed_at).to be_present
     end
 
-    it "retries a chunk another copy is already sending" do
+    it "reschedules itself past the claim expiry instead of failing when another copy holds the chunk" do
       post = post_with_audience
       blast = create(:blast, :just_requested, post:, recipient_filter: PostEmailBlast::RECIPIENT_FILTER_UNOPENED)
       activate_partition(blast)
-      $redis.set(RedisKey.blast_slice_claim(blast.id, partition_key, 0), "live-copy-jid")
+      $redis.set(RedisKey.blast_slice_claim(blast.id, partition_key, 0), "live-copy-jid", ex: 600)
 
-      expect { described_class.new.perform(blast.id, partition_key, 0, 1, audience_ids.first(1)) }.to raise_error(/already claimed/)
+      expect { described_class.new.perform(blast.id, partition_key, 0, 1, audience_ids.first(1)) }.not_to raise_error
 
       expect_sent_count 0
       expect(blast.reload.completed_at).to be_blank
+      expect(described_class.jobs.size).to eq(1)
+      requeued = described_class.jobs.sole
+      expect(requeued["args"]).to eq([blast.id, partition_key, 0, 1, audience_ids.first(1)])
+      expect(requeued["at"]).to be_within(2).of((600 + described_class::CLAIM_RECHECK_SLACK.to_i).seconds.from_now.to_f)
+      # The held claim was left alone.
+      expect($redis.get(RedisKey.blast_slice_claim(blast.id, partition_key, 0))).to eq("live-copy-jid")
     ensure
       $redis.del(RedisKey.blast_slice_claim(blast.id, partition_key, 0), RedisKey.blast_active_slice_partition(blast.id)) if blast
+    end
+
+    it "renews its claim after loading the chunk members" do
+      post = post_with_audience
+      blast = create(:blast, :just_requested, post:)
+      activate_partition(blast)
+      claim_key = RedisKey.blast_slice_claim(blast.id, partition_key, 0)
+      ttl_after_load = nil
+      allow_any_instance_of(described_class).to receive(:load_chunk_members).and_wrap_original do |original, *args|
+        # Pretend the load ran long enough for the claim to be close to lapsing.
+        $redis.expire(claim_key, 5)
+        original.call(*args)
+      end
+      allow_any_instance_of(described_class).to receive(:send_members) { ttl_after_load = $redis.ttl(claim_key) }
+
+      described_class.new.perform(blast.id, partition_key, 0, 1, audience_ids)
+
+      expect(ttl_after_load).to be > (described_class::CHUNK_CLAIM_TTL.to_i - 30)
+    end
+
+    it "keeps the member-load statement cap below the claim lifetime" do
+      expect(described_class::CHUNK_LOAD_TIMEOUT).to be < described_class::CHUNK_CLAIM_TTL
+    end
+
+    it "sends the chunk once the previous copy's claim has lapsed" do
+      post = post_with_audience
+      blast = create(:blast, :just_requested, post:)
+      activate_partition(blast)
+      # Redis expiry runs on wall-clock time, not the frozen test clock.
+      $redis.set(RedisKey.blast_slice_claim(blast.id, partition_key, 0), "killed-copy-token", px: 20)
+      sleep 0.05
+
+      described_class.new.perform(blast.id, partition_key, 0, 1, audience_ids)
+
+      expect_sent_count 3
+      expect(blast.reload.completed_at).to be_present
     end
 
     it "finalizes when retrying a chunk after every chunk was already recorded" do
@@ -233,10 +275,11 @@ describe SendPostBlastEmailsSliceJob, :freeze_time do
       job = described_class.new
       job.jid = "requeued-jid"
 
-      expect { job.perform(blast.id, partition_key, 0, 1, audience_ids) }.to raise_error(/already claimed/)
+      job.perform(blast.id, partition_key, 0, 1, audience_ids)
 
       expect_sent_count 0
       expect(blast.reload.completed_at).to be_blank
+      expect(described_class.jobs.size).to eq(1)
     ensure
       $redis.del(RedisKey.blast_slice_claim(blast.id, partition_key, 0), RedisKey.blast_active_slice_partition(blast.id)) if blast
     end
@@ -249,10 +292,11 @@ describe SendPostBlastEmailsSliceJob, :freeze_time do
       job = described_class.new
       job.jid = "jid-b"
 
-      expect { job.perform(blast.id, partition_key, 0, 1, audience_ids) }.to raise_error(/already claimed/)
+      job.perform(blast.id, partition_key, 0, 1, audience_ids)
 
       expect_sent_count 0
       expect(blast.reload.completed_at).to be_blank
+      expect(described_class.jobs.size).to eq(1)
     ensure
       $redis.del(RedisKey.blast_slice_claim(blast.id, partition_key, 0), RedisKey.blast_active_slice_partition(blast.id)) if blast
     end
@@ -362,6 +406,120 @@ describe SendPostBlastEmailsSliceJob, :freeze_time do
       end.to raise_error(NoMethodError, /full_sanitizer/)
 
       expect(SentPostEmail.where(post:).count).to eq(0)
+    end
+
+    it "does not leave SentPostEmail rows when the worker is hard-killed before the provider accepts" do
+      post = post_with_audience
+      blast = create(:blast, :just_requested, post:)
+      activate_partition(blast)
+      # A kill signal is not a StandardError and skips any rescue; the rows must simply not exist yet.
+      allow(PostSendgridApi).to receive(:process).and_raise(Sidekiq::Shutdown)
+
+      expect do
+        described_class.new.perform(blast.id, partition_key, 0, 1, audience_ids)
+      end.to raise_error(Sidekiq::Shutdown)
+
+      expect(SentPostEmail.where(post:).count).to eq(0)
+    end
+
+    it "records recipients as sent only after the provider accepted them" do
+      post = post_with_audience
+      blast = create(:blast, :just_requested, post:)
+      activate_partition(blast)
+      rows_at_send = nil
+      allow(PostSendgridApi).to receive(:process).and_wrap_original do |original, **kwargs|
+        rows_at_send = SentPostEmail.where(post:).count
+        original.call(**kwargs)
+      end
+
+      described_class.new.perform(blast.id, partition_key, 0, 1, audience_ids)
+
+      expect(rows_at_send).to eq(0)
+      expect(SentPostEmail.where(post:).count).to eq(3)
+      expect_sent_count 3
+    end
+
+    it "renews the chunk claim on every member-load slice" do
+      post = post_with_audience
+      blast = create(:blast, :just_requested, post:)
+      activate_partition(blast)
+      job = described_class.new
+      renewals_during_load = 0
+      allow(job).to receive(:renew_chunk_claim!).and_wrap_original do |original|
+        renewals_during_load += 1 if PostSendgridApi.mails.empty?
+        original.call
+      end
+      stub_const("#{described_class}::CHUNK_REVALIDATION_SLICE_SIZE", 1)
+
+      job.perform(blast.id, partition_key, 0, 1, audience_ids)
+
+      # One renewal per 1-member load slice, before any provider renewal.
+      expect(renewals_during_load).to be >= 3
+      expect_sent_count 3
+    end
+
+    it "retries the post-acceptance sent-row write in-process instead of re-sending the slice" do
+      post = post_with_audience
+      blast = create(:blast, :just_requested, post:)
+      activate_partition(blast)
+      calls = 0
+      allow(SentPostEmail).to receive(:insert_all_emails).and_wrap_original do |original, **kwargs|
+        calls += 1
+        raise ActiveRecord::Deadlocked if calls == 1
+        original.call(**kwargs)
+      end
+      allow_any_instance_of(described_class).to receive(:sleep)
+
+      described_class.new.perform(blast.id, partition_key, 0, 1, audience_ids)
+
+      # The provider was handed the slice exactly once; the write landed on the second try.
+      expect_sent_count 3
+      expect(SentPostEmail.where(post:).count).to eq(3)
+      expect(blast.reload.completed_at).to be_present
+    end
+
+    it "raises after the post-acceptance write attempts are exhausted" do
+      post = post_with_audience
+      blast = create(:blast, :just_requested, post:)
+      activate_partition(blast)
+      allow(SentPostEmail).to receive(:insert_all_emails).and_raise(ActiveRecord::Deadlocked)
+      allow_any_instance_of(described_class).to receive(:sleep)
+
+      expect do
+        described_class.new.perform(blast.id, partition_key, 0, 1, audience_ids)
+      end.to raise_error(ActiveRecord::Deadlocked)
+
+      expect(SentPostEmail).to have_received(:insert_all_emails).exactly(PostBlastSending::POST_ACCEPT_WRITE_ATTEMPTS).times
+    end
+
+    it "re-sends recipients a killed copy left without a row, and skips the ones it recorded" do
+      post = post_with_audience
+      blast = create(:blast, :just_requested, post:)
+      activate_partition(blast)
+      # First copy delivered alpha (row written) then died before bravo/charlie.
+      SentPostEmail.create!(post:, email: "alpha@example.com")
+
+      described_class.new.perform(blast.id, partition_key, 0, 1, audience_ids)
+
+      expect(PostSendgridApi.mails.keys).to contain_exactly("bravo@example.com", "charlie@example.com")
+      expect(SentPostEmail.where(post:).count).to eq(3)
+      expect(blast.reload.completed_at).to be_present
+    end
+
+    it "drops an address another sender recorded between the chunk filter and the provider call" do
+      post = post_with_audience
+      blast = create(:blast, :just_requested, post:)
+      activate_partition(blast)
+      job = described_class.new
+      allow(job).to receive(:remove_already_emailed_members).and_wrap_original do |original|
+        original.call
+        SentPostEmail.create!(post:, email: "bravo@example.com")
+      end
+
+      job.perform(blast.id, partition_key, 0, 1, audience_ids)
+
+      expect(PostSendgridApi.mails.keys).to contain_exactly("alpha@example.com", "charlie@example.com")
+      expect(SentPostEmail.where(post:).count).to eq(3)
     end
 
     it "exposes SanitizeHelper class methods used by strip_tags" do

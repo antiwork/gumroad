@@ -31,13 +31,15 @@ class CustomerSurchargeController < ApplicationController
         next
       end
       listed_currency = product.price_currency_type.to_s.downcase
+      submitted_price_cents = item[:price].to_d.to_i
+      surcharge_price_cents = direct_listed_surcharge_price_cents(product:, item:) || submitted_price_cents
       surcharges = calculate_surcharges(
         product,
         item[:quantity],
-        item[:price].to_d.to_i,
+        surcharge_price_cents,
         subscription_id: item[:subscription_id],
         recommended_by: item[:recommended_by],
-        rate: rates_by_listed_currency.fetch(listed_currency, :unset)
+        rate: rates_by_listed_currency.fetch(listed_currency) { signed_direct_listed_rate(listed_currency) || :unset }
       )
       unless surcharges
         all_lines_quotable = false
@@ -126,6 +128,26 @@ class CustomerSurchargeController < ApplicationController
       available = available.reject { |entry| entry[:code] == quote_currency }
     end
 
+    direct_listed_allocation_currency = direct_listed_allocation_currency_for_cart(
+      all_lines_quotable ? quote_line_items : []
+    )
+    direct_listed_line_allocations = direct_listed_line_allocations_for(
+      all_lines_quotable ? quote_line_items : [],
+      direct_listed_allocation_currency,
+      products
+    )
+    charge_allocations = direct_listed_charge_allocations_for_token(
+      direct_listed_line_allocations,
+      quote_line_items
+    )
+    direct_listed_amount_token = Checkout::DirectListedAmountToken.issue(
+      allocations: charge_allocations,
+      # Prepare verifies against purchases_to_charge sellers, which omit free lines. Signing
+      # the full cart seller set would make a paid+free two-seller cart fail every attempt.
+      sellers: sellers_for_direct_listed_amount_token(charge_allocations, quote_line_items),
+      currency: direct_listed_allocation_currency
+    )
+
     render json: {
       vat_id_valid:,
       has_vat_id_input:,
@@ -136,6 +158,8 @@ class CustomerSurchargeController < ApplicationController
       # Unlike the agreement total above, this includes only the tax due on an installment's
       # first payment. Payment surfaces must use the amount the charge path will create now.
       charge_canonical_total_cents: all_lines_quotable ? quote_line_items.sum(&:charge_canonical_total_cents) : nil,
+      direct_listed_line_allocations:,
+      direct_listed_amount_token:,
       buyer_currency_quote: quote_props,
       detected_buyer_currency:,
       available_buyer_currencies: available
@@ -189,6 +213,104 @@ class CustomerSurchargeController < ApplicationController
           }
         end,
       }
+    end
+
+    def direct_listed_line_allocations_for(line_items, currency, products)
+      return nil if currency.blank? || line_items.blank?
+
+      # Charge time converts tax/shipping with the page-issued token rate. A live
+      # get_rate here can refresh between page render and this request and mount
+      # the Element on a different listed total than the deferred intent.
+      rate = signed_direct_listed_rate(currency)
+      return nil if rate.blank?
+
+      allocations = line_items.map do |line_item|
+        item = products[line_item.line_index]
+        listed_price_cents = numeric_cents(item[:listed_price_cents])
+        listed_tip_cents = numeric_cents(item[:listed_tip_cents]) || 0
+        return nil if listed_price_cents.nil?
+
+        tax_cents = usd_cents_to_currency(currency, line_item.charge_seller_tax_cents.to_i, rate) +
+          usd_cents_to_currency(currency, line_item.charge_gumroad_tax_cents.to_i, rate)
+        shipping_cents = usd_cents_to_currency(currency, line_item.charge_shipping_cents.to_i, rate)
+        total_cents = listed_price_cents + listed_tip_cents + tax_cents + shipping_cents
+        {
+          permalink: line_item.permalink.to_s,
+          price_cents: listed_price_cents,
+          tip_cents: listed_tip_cents,
+          tax_cents:,
+          shipping_cents:,
+          total_cents:,
+        }
+      end
+
+      allocations
+    end
+
+    # The Element displays every cart line, including free lines, while prepare compares only
+    # purchases that contribute money to the PaymentIntent. Sign that same chargeable subset so
+    # a mixed paid/free cart does not reject an otherwise unchanged amount forever.
+    def direct_listed_charge_allocations_for_token(allocations, line_items)
+      return if allocations.blank? || allocations.length != line_items.length
+
+      allocations.zip(line_items).filter_map do |allocation, line_item|
+        allocation if line_item.charge_canonical_total_cents.positive?
+      end
+    end
+
+    def numeric_cents(value)
+      return unless value.is_a?(String) || value.is_a?(Numeric)
+
+      value.to_d.to_i
+    end
+
+    # The browser stores a listed-currency product price as an unrounded USD float, then adds a
+    # separately rounded USD tip before requesting tax. Purchase creation instead converts the
+    # combined listed price and tip once. Those operations can differ by one cent, so use the
+    # purchase basis whenever this request is calculating the direct-listed Element amount.
+    def direct_listed_surcharge_price_cents(product:, item:)
+      return unless params[:payment_details_source] == PurchasePaymentFlow::PAYMENT_ELEMENT
+
+      currency = product.price_currency_type.to_s.downcase
+      return unless params[:payment_element_mount_currency].to_s.downcase == currency
+      return unless params[:payment_element_direct_listed_currency].to_s.downcase == currency
+
+      rate = signed_direct_listed_rate(currency)
+      return if rate.blank?
+
+      listed_price_cents = numeric_cents(item[:listed_price_cents])
+      listed_tip_cents = numeric_cents(item[:listed_tip_cents]) || 0
+      return if listed_price_cents.nil?
+
+      get_usd_cents(currency, listed_price_cents + listed_tip_cents, rate:)
+    end
+
+    def signed_direct_listed_rate(currency)
+      return if currency.blank?
+
+      @signed_direct_listed_rates ||= {}
+      return @signed_direct_listed_rates[currency] if @signed_direct_listed_rates.key?(currency)
+
+      @signed_direct_listed_rates[currency] = Checkout::PaymentMethodListToken.direct_listed_currency_rate(
+        params[:payment_method_list_token],
+        sellers: surcharge_cart_sellers,
+        currency:
+      )
+    end
+
+    def sellers_for_direct_listed_amount_token(allocations, line_items)
+      permalinks = Array(allocations).map { _1[:permalink].to_s }
+      paid_sellers = line_items.filter_map { _1.product.user if permalinks.include?(_1.permalink.to_s) }.uniq
+      paid_sellers.presence || surcharge_cart_sellers
+    end
+
+    def surcharge_cart_sellers
+      @surcharge_cart_sellers ||= begin
+        permalinks = Array(params[:products]).filter_map do |item|
+          item[:permalink] if item.is_a?(ActionController::Parameters) || item.is_a?(Hash)
+        end.uniq
+        Link.where(unique_permalink: permalinks).includes(:user).map(&:user).uniq
+      end
     end
 
     def buyer_currency_charge_details(product:, item:, surcharges:)
@@ -351,5 +473,25 @@ class CustomerSurchargeController < ApplicationController
       # This capability keeps the listed option available after the Element switches to USD.
       # Prepare still validates the separately reported actual mount before creating an intent.
       currency if direct_listed_currency_offered_for_cart?(line_items, currency)
+    end
+
+    # Method-forced mounts (iDEAL/Bancontact/UPI/Pix) request the same per-line allocations
+    # without the listed-card selector ramp. Do not reuse selector currency for the picker.
+    def direct_listed_allocation_currency_for_cart(line_items)
+      selector = direct_listed_selector_currency_for_cart(line_items)
+      return selector if selector.present?
+
+      currency = params[:payment_element_direct_listed_currency].to_s.downcase.presence
+      return if currency.blank?
+      return unless params[:payment_details_source] == PurchasePaymentFlow::PAYMENT_ELEMENT
+      return unless params[:payment_element_mount_currency].to_s.downcase == currency
+      return unless Checkout::BuyerCurrencyEligibility::FORCED_CURRENCY_PAYMENT_METHODS.value?(currency)
+      return unless Checkout::BuyerCurrencyEligibility.direct_listed_line_items_eligible?(
+        line_items:,
+        buyer_currency: currency,
+        require_listed_direct_charge: false
+      )
+
+      currency
     end
 end
