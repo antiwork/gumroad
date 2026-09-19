@@ -1197,6 +1197,17 @@ class LinksControllerUpdateTest < ActionController::TestCase
     assert_equal "", @product.reload.description
   end
 
+  test "PUT update clears a description when the editor sends a null value it marked as changed" do
+    # `scalarSettingsForSave` sends `description: null` for a deliberate clear,
+    # so the guard must keep a nil the marker claims and persist the clear.
+    @product.update!(description: "<p>Old</p>")
+
+    put :update, params: @params.merge(description: nil, description_changed: true), as: :json
+
+    assert_response :success
+    assert_equal "", @product.reload.description
+  end
+
   test "PUT update returns the existing validation error when suggested price is set but the default price record is missing" do
     @product.prices.destroy_all
     @product.update_column(:customizable_price, true)

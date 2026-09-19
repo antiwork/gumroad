@@ -127,6 +127,33 @@ describe("scalarSettingsForSave", () => {
     });
   });
 
+  it("treats the editor's empty document as blank", () => {
+    // An emptied rich-text editor serializes to markup, so truthiness alone
+    // would let an unmarked stale snapshot overwrite newer copy with it.
+    expect(scalarSettingsForSave(product({ description: "<p><br></p>" }), lastSaved())).toEqual({});
+    expect(scalarSettingsForSave(product({ description: "<p>&nbsp;</p>" }), lastSaved())).toEqual({});
+    expect(scalarSettingsForSave(product({ description: "<ul><li><p><br></p></li></ul>" }), lastSaved())).toEqual({});
+    expect(scalarSettingsForSave(product({ description: "<h2></h2>" }), lastSaved())).toEqual({});
+  });
+
+  it("still sends a description that renders something, embed-only included", () => {
+    expect(scalarSettingsForSave(product({ description: "<img src='x.png'>" }), lastSaved())).toEqual({
+      description: "<img src='x.png'>",
+    });
+    expect(scalarSettingsForSave(product({ description: "<figure><audio></audio></figure>" }), lastSaved())).toEqual({
+      description: "<figure><audio></audio></figure>",
+    });
+    expect(scalarSettingsForSave(product({ description: "<p> <br> hi </p>" }), lastSaved())).toEqual({
+      description: "<p> <br> hi </p>",
+    });
+  });
+
+  it("clears when the session emptied the editor", () => {
+    expect(
+      scalarSettingsForSave(product({ description: "<p><br></p>", description_changed: true }), lastSaved()),
+    ).toEqual({ description: null, description_changed: true });
+  });
+
   it("always sends customizable_price when the caller has no baseline", () => {
     // A caller that does not track the last-saved value (null baseline) must
     // keep the pre-fix always-submit behavior, so disabling PWYW still lands.

@@ -429,6 +429,22 @@ export const reconcileMountedEditorFileEmbedIds = (editor: Editor, fileIdMapping
   if (transaction.docChanged) editor.view.dispatch(transaction);
 };
 
+// Tags that a visually empty rich-text document can still consist of: the
+// editor serializes an empty paragraph as `<p><br></p>`, and deleting the last
+// node of a block leaves the wrapper behind. Anything else — text, an image, an
+// embed — means the description renders something.
+const EMPTY_RICH_TEXT_TAGS = /<\/?(?:p|br|h[1-6]|ul|ol|li|div|span|strong|em|b|i|u|s|a|blockquote|code|pre)\b[^>]*>/giu;
+
+export const isBlankDescription = (description: string | null | undefined) => {
+  if (!description) return true;
+  return (
+    description
+      .replace(EMPTY_RICH_TEXT_TAGS, "")
+      .replace(/&nbsp;|&#160;/gu, " ")
+      .trim() === ""
+  );
+};
+
 // Only send a scalar when this session changed it or changed the input that
 // drives it. A blank custom URL is "not specified" unless the session is
 // clearing one it knows about; an unchanged blank can be a stale tab snapshot
@@ -464,8 +480,9 @@ export const scalarSettingsForSave = (
     settings.custom_permalink_changed = true;
   }
   // Blank description is unspecified unless this session edited the field.
-  // Content-tab saves can carry an empty description without that edit.
-  if (product.description) {
+  // Content-tab saves can carry an empty description without that edit, and the
+  // editor's empty document is markup (`<p><br></p>`), not "".
+  if (!isBlankDescription(product.description)) {
     settings.description = product.description;
   } else if (product.description_changed) {
     settings.description = null;

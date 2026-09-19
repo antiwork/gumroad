@@ -704,7 +704,9 @@ const ProductEditPage = (props: Props) => {
           sentConfirmedPageIds,
           confirmedPageIdMappings,
         );
-        current.description_changed = false;
+        // The marker this request carried is spent. A description edited while
+        // the save was in flight was not part of it, so its marker stays.
+        if (current.description === productSent.description) current.description_changed = false;
       });
 
       if (response.warning_message) showAlert(response.warning_message, "warning");
