@@ -22,9 +22,9 @@ import {
   PriceSelection,
 } from "$app/components/Product/ConfigurationSelector";
 import { CtaButton } from "$app/components/Product/CtaButton";
-import { isSelectionComplete } from "$app/components/Product/purchaseReadiness";
 import { PriceTag } from "$app/components/Product/PriceTag";
 import { getBundleComparisonPriceCents } from "$app/components/Product/pricing";
+import { isSelectionComplete, needsOptionChoice } from "$app/components/Product/purchaseReadiness";
 import {
   Action,
   AddSectionButton,
@@ -292,33 +292,33 @@ const CtaBar = ({
           marginTop: visible || !isDesktop ? undefined : -height,
         }}
       >
-        {product.options.length > 1 && !selection.optionId ? null : (
-        <PriceTag
-          currencyCode={product.currency_code}
-          oldPrice={discountedPriceCents < priceCents ? priceCents : undefined}
-          price={discountedPriceCents}
-          url={product.long_url}
-          recurrence={
-            product.recurrences
-              ? {
-                  id: selection.recurrence ?? product.recurrences.default,
-                  duration_in_months: product.duration_in_months,
-                }
-              : undefined
-          }
-          isPayWhatYouWant={isPWYW}
-          isSalesLimited={product.is_sales_limited}
-          creatorName={product.seller?.name}
-          buyerCurrency={product.buyer_currency}
-          buyerLocalCurrencyRate={product.buyer_local_currency_rate}
-          buyerLocalCurrencySubunitToUnit={product.buyer_local_currency_subunit_to_unit}
-          buyerLocalPriceCents={buyerLocalPriceCentsForSelection(
-            product.buyer_local_price_cents,
-            discountCode?.valid ? discountCode.discount : null,
-            selection.quantity,
-          )}
-          buyerLocalOriginalPriceCents={product.buyer_local_original_price_cents}
-        />
+        {needsOptionChoice(product, selection) ? null : (
+          <PriceTag
+            currencyCode={product.currency_code}
+            oldPrice={discountedPriceCents < priceCents ? priceCents : undefined}
+            price={discountedPriceCents}
+            url={product.long_url}
+            recurrence={
+              product.recurrences
+                ? {
+                    id: selection.recurrence ?? product.recurrences.default,
+                    duration_in_months: product.duration_in_months,
+                  }
+                : undefined
+            }
+            isPayWhatYouWant={isPWYW}
+            isSalesLimited={product.is_sales_limited}
+            creatorName={product.seller?.name}
+            buyerCurrency={product.buyer_currency}
+            buyerLocalCurrencyRate={product.buyer_local_currency_rate}
+            buyerLocalCurrencySubunitToUnit={product.buyer_local_currency_subunit_to_unit}
+            buyerLocalPriceCents={buyerLocalPriceCentsForSelection(
+              product.buyer_local_price_cents,
+              discountCode?.valid ? discountCode.discount : null,
+              selection.quantity,
+            )}
+            buyerLocalOriginalPriceCents={product.buyer_local_original_price_cents}
+          />
         )}
         <h3 className="hidden flex-1 lg:block">{product.name}</h3>
         {product.ratings != null && product.ratings.count > 0 ? (

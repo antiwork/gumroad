@@ -894,64 +894,64 @@ export const ConfigurationSelector = React.forwardRef<
       {hasOptions && hasRentOption ? <hr /> : null}
       {hasOptions ? (
         <div data-option-picker>
-        <Tabs
-          variant="buttons"
-          role="radiogroup"
-          className="md:grid-flow-row"
-          style={{ gridTemplateColumns: "repeat(auto-fit, minmax(min(15rem, 100%), 1fr))" }}
-          itemProp="offers"
-          itemType="https://schema.org/AggregateOffer"
-          itemScope
-        >
-          {product.options
-            .filter((option) => !(product.hide_sold_out_variants && option.quantity_left === 0))
-            .map((option) => (
-              <OptionRadioButton
-                key={option.id}
-                disabled={
-                  option.quantity_left === 0 ||
-                  (product.is_tiered_membership &&
-                    !!selection.recurrence &&
-                    !option.recurrence_price_values?.[selection.recurrence])
-                }
-                selected={option.id === selection.optionId}
-                onClick={() => {
-                  if (option.id === selection.optionId) return;
-                  update({ optionId: option.id, price: { value: null, error: false } });
-                }}
-                priceCents={basePriceCents + computeOptionPrice(option, selection.recurrence)}
-                name={option.name}
-                description={option.description}
-                quantityLeft={option.quantity_left}
-                currencyCode={product.currency_code}
-                isPWYW={product.is_tiered_membership ? option.is_pwyw : !!product.pwyw}
-                status={option.status}
-                discount={previewDiscount({
-                  ...selection,
-                  optionId: option.id,
-                  price: { value: null, error: false },
-                })}
-                recurrence={selection.recurrence}
-                product={product}
-                quantity={selection.quantity}
-                hidePrice={hidePrices}
-              />
-            ))}
-          <div itemProp="offerCount" className="hidden">
-            {product.options.length}
-          </div>
-          <div itemProp="lowPrice" className="hidden">
-            {formatPriceCentsWithoutCurrencySymbol(
-              product.currency_code,
-              Math.min(
-                ...product.options.map((option) => basePriceCents + computeOptionPrice(option, selection.recurrence)),
-              ),
-            )}
-          </div>
-          <div itemProp="priceCurrency" className="hidden">
-            {product.currency_code}
-          </div>
-        </Tabs>
+          <Tabs
+            variant="buttons"
+            role="radiogroup"
+            className="md:grid-flow-row"
+            style={{ gridTemplateColumns: "repeat(auto-fit, minmax(min(15rem, 100%), 1fr))" }}
+            itemProp="offers"
+            itemType="https://schema.org/AggregateOffer"
+            itemScope
+          >
+            {product.options
+              .filter((option) => !(product.hide_sold_out_variants && option.quantity_left === 0))
+              .map((option) => (
+                <OptionRadioButton
+                  key={option.id}
+                  disabled={
+                    option.quantity_left === 0 ||
+                    (product.is_tiered_membership &&
+                      !!selection.recurrence &&
+                      !option.recurrence_price_values?.[selection.recurrence])
+                  }
+                  selected={option.id === selection.optionId}
+                  onClick={() => {
+                    if (option.id === selection.optionId) return;
+                    update({ optionId: option.id, price: { value: null, error: false } });
+                  }}
+                  priceCents={basePriceCents + computeOptionPrice(option, selection.recurrence)}
+                  name={option.name}
+                  description={option.description}
+                  quantityLeft={option.quantity_left}
+                  currencyCode={product.currency_code}
+                  isPWYW={product.is_tiered_membership ? option.is_pwyw : !!product.pwyw}
+                  status={option.status}
+                  discount={previewDiscount({
+                    ...selection,
+                    optionId: option.id,
+                    price: { value: null, error: false },
+                  })}
+                  recurrence={selection.recurrence}
+                  product={product}
+                  quantity={selection.quantity}
+                  hidePrice={hidePrices}
+                />
+              ))}
+            <div itemProp="offerCount" className="hidden">
+              {product.options.length}
+            </div>
+            <div itemProp="lowPrice" className="hidden">
+              {formatPriceCentsWithoutCurrencySymbol(
+                product.currency_code,
+                Math.min(
+                  ...product.options.map((option) => basePriceCents + computeOptionPrice(option, selection.recurrence)),
+                ),
+              )}
+            </div>
+            <div itemProp="priceCurrency" className="hidden">
+              {product.currency_code}
+            </div>
+          </Tabs>
         </div>
       ) : null}
       {isPWYW ? pwywInput : null}

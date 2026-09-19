@@ -68,6 +68,7 @@ describe("ProductShowScenario", type: :system, js: true) do
     product = create(:membership_product_with_preset_tiered_pwyw_pricing, price_cents: 0)
 
     visit short_link_path(product)
+    choose "First Tier"
     fill_in "Name a fair price", with: "1"
     click_on "Subscribe"
 
@@ -609,6 +610,7 @@ describe("ProductShowScenario", type: :system, js: true) do
 
         it "sets the PWYW input placeholder value correctly" do
           visit product.long_url
+          choose "First Tier"
           expect(page).to have_field("Name a fair price:", with: "", placeholder: "600+")
         end
       end
@@ -649,6 +651,7 @@ describe("ProductShowScenario", type: :system, js: true) do
 
         it "sets the PWYW input placeholder value correctly" do
           visit "#{product.long_url}/#{offer_code.code}"
+          choose "First Tier"
           expect(page).to have_field("Name a fair price:", with: "", placeholder: "499+")
         end
       end

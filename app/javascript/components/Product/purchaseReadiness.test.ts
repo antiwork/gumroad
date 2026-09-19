@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { Option, PriceSelection, Product } from "$app/components/Product/ConfigurationSelector";
-import { initialOptionId, isSelectionComplete } from "$app/components/Product/purchaseReadiness";
+import { initialOptionId, isSelectionComplete, needsOptionChoice } from "$app/components/Product/purchaseReadiness";
 
 const option = (id: string, extra: Partial<Option> = {}): Option => ({
   id,
@@ -68,6 +68,22 @@ describe("initialOptionId", () => {
       options: [option("first"), option("second", { quantity_left: 0 })],
     });
     expect(initialOptionId(sold, new URLSearchParams("option=second"))).toBeNull();
+  });
+});
+
+describe("needsOptionChoice", () => {
+  it("relabels the CTA only while a multi-option product has no SKU chosen", () => {
+    const two = product({ options: [option("first"), option("second")] });
+    expect(needsOptionChoice(two, selection())).toBe(true);
+    expect(needsOptionChoice(two, selection({ optionId: "first" }))).toBe(false);
+  });
+
+  it("leaves single-option, PWYW, and coffee products on their own label", () => {
+    expect(needsOptionChoice(product({ options: [option("only")] }), selection())).toBe(false);
+    expect(needsOptionChoice(product({ pwyw: { suggested_price_cents: 500 } }), selection())).toBe(false);
+    expect(
+      needsOptionChoice(product({ native_type: "coffee", options: [option("first"), option("second")] }), selection()),
+    ).toBe(false);
   });
 });
 

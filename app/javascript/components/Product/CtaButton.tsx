@@ -8,7 +8,6 @@ import { assertResponseError } from "$app/utils/request";
 import { trackProductEvent } from "$app/utils/user_analytics";
 
 import { NavigationButton } from "$app/components/Button";
-import { INCOMPLETE_PURCHASE_CTA_LABEL, isSelectionComplete } from "$app/components/Product/purchaseReadiness";
 import { getNotForSaleMessage, Product, ProductDiscount, Purchase } from "$app/components/Product";
 import {
   applySelection,
@@ -17,6 +16,7 @@ import {
   PriceSelection,
   withConfiguredOncePerCartAmount,
 } from "$app/components/Product/ConfigurationSelector";
+import { INCOMPLETE_PURCHASE_CTA_LABEL, needsOptionChoice } from "$app/components/Product/purchaseReadiness";
 import { useOriginalLocation } from "$app/components/useOriginalLocation";
 import { useRunOnce } from "$app/components/useRunOnce";
 
@@ -173,9 +173,9 @@ export const CtaButton = React.forwardRef<HTMLAnchorElement, Props>(
           className={compactOnMobile}
           {...buttonCommonProps}
         >
-          {!isSelectionComplete(product, selection)
+          {needsOptionChoice(product, selection)
             ? INCOMPLETE_PURCHASE_CTA_LABEL
-            : label ??
+            : (label ??
               (purchase && (purchase.was_paid || product.recurrences)
                 ? "Purchase again"
                 : product.recurrences
@@ -184,7 +184,7 @@ export const CtaButton = React.forwardRef<HTMLAnchorElement, Props>(
                     ? "Rent"
                     : product.custom_button_text_option
                       ? getCtaName(product.custom_button_text_option)
-                      : "I want this!")}
+                      : "I want this!"))}
         </NavigationButton>
 
         {product.installment_plan && product.installment_plan.number_of_installments > 1 && discountedPriceCents > 0 ? (
