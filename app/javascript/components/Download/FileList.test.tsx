@@ -233,4 +233,32 @@ describe("FileList", () => {
       expect(createJWPlayer.mock.calls[0]?.[1]).not.toHaveProperty("aspectratio");
     });
   });
+
+  // A stream_only file never renders Download, so a missing stamped copy used to leave the row
+  // with nothing clickable at all. Reading signs the unstamped original, so it stays available.
+  describe("a file whose stamped copy is missing", () => {
+    const stampedPdfFile = (overrides: Partial<FileItem> = {}): FileItem =>
+      videoFile({
+        extension: "PDF",
+        file_name: "Guide.pdf",
+        stream_url: null,
+        pagelength: 762,
+        read_url: "/read/file-1",
+        pdf_stamp_enabled: true,
+        processing: true,
+        ...overrides,
+      });
+
+    it("still renders Read", () => {
+      renderFileRow(stampedPdfFile());
+
+      expect(screen.getByRole("link", { name: "Read" })).toBeTruthy();
+    });
+
+    it("does not offer Send to Kindle until the stamped copy exists", () => {
+      renderFileRow(stampedPdfFile({ kindle_data: { email: null, icon_url: "/kindle.png" } }));
+
+      expect(screen.queryByText("Send to Kindle")).toBeNull();
+    });
+  });
 });
