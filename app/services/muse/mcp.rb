@@ -26,26 +26,29 @@ module Muse
       return rpc_error(nil, "Parse error", code: -32700) unless body.is_a?(Hash)
 
       id = body["id"]
+      # A request without an id is a JSON-RPC notification: run it, send nothing back.
+      notification = !body.key?("id")
       method = body["method"].to_s
       params = body["params"] || {}
+      raise Error.new("params must be an object", code: -32602) unless params.is_a?(Hash)
 
       result = case method
                when "initialize" then initialize_result
-               when "notifications/initialized", "notifications/cancelled" then :notify
+               when "notifications/initialized", "notifications/cancelled" then nil
                when "ping" then {}
                when "tools/list" then { tools: tools }
                when "tools/call" then call_tool(params)
                else
-                 return rpc_error(id, "Method not found: #{method}", code: -32601)
+                 return notification ? nil : rpc_error(id, "Method not found: #{method}", code: -32601)
       end
 
-      return nil if result == :notify
+      return nil if notification
 
       { jsonrpc: "2.0", id:, result: }
     rescue Error => e
-      rpc_error(id, e.message, code: e.code, data: e.data)
-    rescue ArgumentError => e
-      rpc_error(id, e.message, code: -32602)
+      notification ? nil : rpc_error(id, e.message, code: e.code, data: e.data)
+    rescue ArgumentError, TypeError => e
+      notification ? nil : rpc_error(id, e.message, code: -32602)
     end
 
     def self.discovery(base_url)
@@ -128,6 +131,7 @@ module Muse
       def call_tool(params)
         name = params["name"].to_s
         arguments = params["arguments"] || {}
+        raise Error.new("arguments must be an object", code: -32602) unless arguments.is_a?(Hash)
         raise Error.new("Unknown tool: #{name}", code: -32602) unless respond_to?("tool_#{name}", true)
 
         payload = send("tool_#{name}", arguments)

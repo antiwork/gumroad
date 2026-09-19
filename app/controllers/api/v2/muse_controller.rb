@@ -2,7 +2,9 @@
 
 class Api::V2::MuseController < Api::V2::BaseController
   skip_before_action :verify_authenticity_token
-  before_action(only: [:mcp]) { doorkeeper_authorize!(*Doorkeeper.configuration.public_scopes) }
+  # view_public is the access-token default scope but is absent from public_scopes, so a
+  # default-scope token was rejected here before any tool's own scope check ran.
+  before_action(only: [:mcp]) { doorkeeper_authorize!(*Doorkeeper.configuration.public_scopes, :view_public) }
 
   def status
     render json: { status: "success" }
