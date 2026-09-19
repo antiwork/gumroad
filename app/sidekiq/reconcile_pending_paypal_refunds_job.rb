@@ -1,10 +1,7 @@
 # frozen_string_literal: true
 
-# PayPal sends no refund-failed webhook — PAYMENT.CAPTURE.REFUNDED fires only when a
-# refund completes — so a refund PayPal accepted as PENDING and later failed keeps that
-# status on our row forever: it stays inside Refund.effective as money that moved, and
-# never reaches the FailedRefundException queue that exists to resolve it. This job is
-# the missing trigger, reusing the same service the Stripe lane already calls.
+# PayPal does not send a webhook when an accepted refund later fails, so reconcile
+# pending refunds to ensure failures reach the existing exception queue.
 class ReconcilePendingPaypalRefundsJob
   include Sidekiq::Job
   sidekiq_options retry: 1, queue: :low, lock: :until_executed
