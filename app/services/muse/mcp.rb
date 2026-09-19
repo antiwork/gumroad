@@ -93,29 +93,29 @@ module Muse
         [
           tool("get_account", "The connected creator's public profile: name, username, storefront URL, currency.", {}),
           tool("list_products", "List the creator's products (newest first). Returns id, name, price, published state, and URL.", {
-            "limit" => { type: "integer", description: "Max products to return (1-50, default 25)." }
-          }),
+                 "limit" => { type: "integer", description: "Max products to return (1-50, default 25)." }
+               }),
           tool("get_product", "Fetch one product by id or permalink.", {
-            "id" => { type: "string", description: "Product id or permalink." }
-          }, required: %w[id]),
+                 "id" => { type: "string", description: "Product id or permalink." }
+               }, required: %w[id]),
           tool("create_draft_product", "Create a draft digital product. It is not for sale until publish_product runs. Confirm the name and price with the creator first.", {
-            "name" => { type: "string", description: "Product name." },
-            "price_cents" => { type: "integer", description: "Price in minor units (cents for USD). Use 0 for a free product." },
-            "description" => { type: "string", description: "HTML or plain-text description." }
-          }, required: %w[name price_cents]),
+                 "name" => { type: "string", description: "Product name." },
+                 "price_cents" => { type: "integer", description: "Price in minor units (cents for USD). Use 0 for a free product." },
+                 "description" => { type: "string", description: "HTML or plain-text description." }
+               }, required: %w[name price_cents]),
           tool("publish_product", "Make a draft product purchasable. Confirm with the creator first.", {
-            "id" => { type: "string", description: "Product id or permalink." }
-          }, required: %w[id]),
+                 "id" => { type: "string", description: "Product id or permalink." }
+               }, required: %w[id]),
           tool("unpublish_product", "Take a product off sale without deleting it.", {
-            "id" => { type: "string", description: "Product id or permalink." }
-          }, required: %w[id]),
+                 "id" => { type: "string", description: "Product id or permalink." }
+               }, required: %w[id]),
           tool("list_sales", "Recent successful sales. Includes buyer email, product, amount, and time.", {
-            "limit" => { type: "integer", description: "Max sales to return (1-50, default 25)." },
-            "email" => { type: "string", description: "Filter by buyer email." }
-          }),
+                 "limit" => { type: "integer", description: "Max sales to return (1-50, default 25)." },
+                 "email" => { type: "string", description: "Filter by buyer email." }
+               }),
           tool("list_payouts", "Recent payouts to the creator's bank or PayPal.", {
-            "limit" => { type: "integer", description: "Max payouts to return (1-50, default 10)." }
-          })
+                 "limit" => { type: "integer", description: "Max payouts to return (1-50, default 10)." }
+               })
         ]
       end
 
