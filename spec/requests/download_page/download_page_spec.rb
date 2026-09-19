@@ -16,7 +16,7 @@ describe("Download Page", type: :system, js: true) do
 
       visit("/d/#{url_redirect.token}")
       select_disclosure "Open in app" do
-        expect(page).to have_text("Download from the App Store")
+        expect(page).to have_text("Get the app")
       end
 
       vcr_turned_on do
@@ -56,7 +56,7 @@ describe("Download Page", type: :system, js: true) do
       visit("/d/#{url_redirect.token}")
 
       select_disclosure "Open in app" do
-        expect(page).to have_text("Download from the App Store")
+        expect(page).to have_text("Get the app")
         expect(page).to(have_link("App Store"))
         expect(page).to(have_link("Play Store"))
       end
