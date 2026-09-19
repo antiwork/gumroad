@@ -294,11 +294,11 @@ describe("AccountDetailsSection nationality field", () => {
   it("says why the sanctioned nationalities are missing", () => {
     renderSection(makeUser({ country_code: "AE" }));
 
-    expect(
-      screen.getByText(
-        "Nationals of Cuba, Iran, North Korea and Syria cannot be verified, so their nationalities are not listed.",
-      ),
-    ).toBeTruthy();
+    const note = screen.getByText(
+      "Nationals of Cuba, Iran, North Korea and Syria cannot be verified, so their nationalities are not listed.",
+    );
+
+    expect(screen.getByLabelText("Nationality").getAttribute("aria-describedby")).toBe(note.id);
   });
 
   it("does not carry the note when the field is not rendered", () => {

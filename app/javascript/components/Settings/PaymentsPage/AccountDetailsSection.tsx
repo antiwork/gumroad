@@ -1144,6 +1144,7 @@ const AccountDetailsSection = ({
             id={`${uid}-nationality`}
             disabled={isFormDisabled}
             aria-invalid={errorFieldNames.has("nationality")}
+            aria-describedby={`${uid}-nationality-note`}
             value={complianceInfo.nationality || ""}
             onChange={(evt) => updateComplianceInfo({ nationality: evt.target.value })}
           >
@@ -1156,7 +1157,7 @@ const AccountDetailsSection = ({
               </option>
             ))}
           </Select>
-          <FieldsetDescription>
+          <FieldsetDescription id={`${uid}-nationality-note`}>
             Nationals of Cuba, Iran, North Korea and Syria cannot be verified, so their nationalities are not listed.
           </FieldsetDescription>
         </Fieldset>
