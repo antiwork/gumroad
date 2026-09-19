@@ -3,12 +3,13 @@
 class BosniaAndHerzegovinaBankAccount < BankAccount
   BANK_ACCOUNT_TYPE = "BA"
 
-  BANK_CODE_FORMAT_REGEX = /^([0-9a-zA-Z]){8,11}$/
+  BANK_CODE_FORMAT_REGEX = /^[a-zA-Z0-9]{8}([a-zA-Z0-9]{3})?$/
   private_constant :BANK_CODE_FORMAT_REGEX
 
   alias_attribute :bank_code, :bank_number
 
-  validate :validate_bank_code
+  # Legacy invalid codes must not block unrelated saves, including payout-method deletion.
+  validate :validate_bank_code, if: -> { new_record? || will_save_change_to_bank_number? }
   validate :validate_account_number, if: -> { Rails.env.production? }
 
   def routing_number
