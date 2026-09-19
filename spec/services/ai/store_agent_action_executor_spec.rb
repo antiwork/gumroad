@@ -17,6 +17,30 @@ describe Ai::StoreAgentActionExecutor do
   end
 
   describe "#execute" do
+    context "create_email (write replayed through the API)" do
+      let(:product) { create(:product, user: seller) }
+      let(:params) { api_write(endpoint: "create_email", params: { "audience" => "product", "product_id" => product.external_id, "subject" => "Update", "body" => "Hello", "draft" => true, "publish" => false }) }
+
+      it "creates only a draft for the intended product after confirmation" do
+        result = nil
+        expect { result = executor.execute(type: "api_write", params:) }.not_to change(PostEmailBlast, :count)
+        expect(result[:success]).to be(true)
+        installment = seller.installments.alive.sole
+        expect(installment).not_to be_published
+        expect(installment.link).to eq(product)
+        expect(installment.bought_products).to eq([product.unique_permalink])
+        expect(SendPostBlastEmailsJob.jobs.size).to eq(0)
+      end
+
+      it "rechecks a product deleted after staging without dispatching" do
+        proposal = params
+        product.update!(deleted_at: Time.current)
+        expect_any_instance_of(Ai::StoreAgentApiClient).not_to receive(:write)
+        result = executor.execute(type: "api_write", params: proposal)
+        expect(result).to include(success: false, message: "Product not found.", retry_safe: true)
+      end
+    end
+
     context "create_offer_code (write replayed through the API)" do
       let!(:product) { create(:product, user: seller, price_cents: 1000) }
 
@@ -233,6 +257,14 @@ describe Ai::StoreAgentActionExecutor do
           expect(result[:failure_reason]).to eq("unknown_parameters")
           expect(result[:retry_safe]).to be(true)
         end.not_to change { seller.links.count }
+      end
+
+      it "rejects a product email without an identifier before dispatch" do
+        expect_any_instance_of(Ai::StoreAgentApiClient).not_to receive(:write)
+        result = executor.execute(type: "api_write", params: api_write(endpoint: "create_email", params: { "audience" => "product", "product_id" => "" }))
+
+        expect(result).to include(success: false, failure_reason: "invalid_parameters", retry_safe: true)
+        expect(result[:message]).to eq("Product audience requires a product_id or link_id.")
       end
 
       it "rejects a stale webhook creation confirmation before dispatching" do

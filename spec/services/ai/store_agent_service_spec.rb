@@ -143,6 +143,90 @@ describe Ai::StoreAgentService do
       expect(api_client).not_to have_received(:write)
     end
 
+    context "email audience validation" do
+      let(:body) { { "audience" => "product", "product_id" => "", "subject" => "Update", "body" => "Hello", "draft" => true, "publish" => false } }
+      let(:input) { { "endpoint" => "create_email", "params" => body } }
+
+      before do
+        allow(api_client).to receive(:write)
+        allow(service).to receive(:follow_up_suggestions).and_return([])
+      end
+
+      %i[respond respond_streaming].each do |mode|
+        it "does not stage a product email without an identifier via #{mode}" do
+          provider_method = mode == :respond ? :messages : :stream_messages
+          allow(client).to receive(provider_method).and_return(tool_result("api_write", input), text_result("Ready", outcome: "proposal_ready"))
+          events = []
+          result = service.public_send(mode, messages: [{ role: "user", content: "Draft an email to buyers of my guide." }]) { |event, payload| events << [event, payload] }
+
+          expect(result[:proposed_action]).to be_nil
+          expect(result[:reply]).to eq(described_class::NOTHING_STAGED_REPLY)
+          if mode == :respond_streaming
+            expect(events.map(&:first)).to include(:turn_ready)
+            expect(events.map(&:first)).not_to include(:proposed_action)
+          end
+          expect(api_client).not_to have_received(:write)
+        end
+
+        it "preserves the exact product and draft without writing via #{mode}" do
+          body["product_id"] = create(:product, user: seller).external_id
+          provider_method = mode == :respond ? :messages : :stream_messages
+          allow(client).to receive(provider_method).and_return(tool_result("api_write", input), text_result("Ready", outcome: "proposal_ready"))
+          result = service.public_send(mode, messages: [{ role: "user", content: "Draft this product email, do not send it." }]) { |_event, _payload| }
+
+          expect(result[:proposed_action][:params]).to include("endpoint" => "create_email", "params" => body)
+          expect(result[:reply]).to eq(described_class::PROPOSAL_READY_REPLY)
+          expect(api_client).not_to have_received(:write)
+        end
+      end
+
+      it "returns a corrective error then accepts the identifier from a product read" do
+        product = create(:product, user: seller)
+        allow(api_client).to receive(:get).with("/products", {}).and_return("success" => true, "products" => [{ "id" => product.external_id }])
+        responses = [tool_result("api_write", input), tool_result("api_read", { "endpoint" => "list_products" }),
+                     tool_result("api_write", input.merge("params" => body.merge("product_id" => product.external_id))), text_result("Ready", outcome: "proposal_ready")]
+        errors = []
+        allow(client).to receive(:messages) do |args|
+          errors << captured_tool_result(args)
+          responses.shift
+        end
+
+        result = service.respond(messages: [{ role: "user", content: "Draft an email for buyers of my guide." }])
+
+        expect(errors.compact).to include(include("error" => "Product audience requires a product_id or link_id."))
+        expect(result[:proposed_action][:params]["params"]).to eq(body.merge("product_id" => product.external_id))
+        expect(api_client).to have_received(:get).once
+        expect(api_client).not_to have_received(:write)
+      end
+
+      it "rejects a cross-seller identifier before staging" do
+        body["product_id"] = create(:product).external_id
+        allow(client).to receive(:messages).and_return(tool_result("api_write", input), text_result("Which product in your store?"))
+        expect(service.respond(messages: [{ role: "user", content: "Draft this product email." }])[:proposed_action]).to be_nil
+        expect(api_client).not_to have_received(:write)
+      end
+
+      it "checks role authorization before looking up an email product" do
+        body["product_id"] = create(:product, user: seller).external_id
+        allow(service).to receive(:permitted_scopes).and_return([])
+        expect(seller).not_to receive(:links)
+        responses = [tool_result("api_write", input), text_result("Permission denied.")]
+        error = nil
+        allow(client).to receive(:messages) do |args|
+          error = captured_tool_result(args)
+          responses.shift
+        end
+        expect(service.respond(messages: [{ role: "user", content: "Draft this product email." }])[:proposed_action]).to be_nil
+        expect(error).to eq("error" => "The current user's role can't perform create_email.")
+      end
+
+      it "instructs the model to recover a missing product without broadening or sending" do
+        expect(service.send(:system_prompt)).to include("Never invent a product identifier or broaden the audience")
+        expect(service.send(:system_prompt)).to include("ask which product they mean")
+        expect(service.send(:system_prompt)).to include("draft=true and publish=false")
+      end
+    end
+
     context "server-owned HTML undo" do
       let(:conversation) { create(:ai_conversation, seller:) }
       let(:service) { described_class.new(seller:, pundit_user:, conversation:) }

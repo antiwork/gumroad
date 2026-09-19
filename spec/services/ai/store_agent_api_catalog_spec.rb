@@ -62,6 +62,70 @@ describe Ai::StoreAgentApiCatalog do
     end
   end
 
+  describe "Endpoint#email_audience_error" do
+    let(:seller) { create(:user) }
+    let(:endpoint) { described_class.find("create_email") }
+    let(:product) { create(:product, user: seller) }
+
+    [nil, "", " ", "all", "audience", "customers", "seller", "followers", "follower", "CUSTOMERS"].each do |audience|
+      it "preserves the non-product audience #{audience.inspect}" do
+        expect(endpoint.email_audience_error({ audience: }, seller:)).to be_nil
+      end
+    end
+
+    [false, true, 1, [], {}, "buyers", " product "].each do |audience|
+      it "rejects the invalid audience #{audience.inspect} rather than broadening it" do
+        expect(endpoint.email_audience_error({ audience: }, seller:)).to include("Invalid audience")
+      end
+    end
+
+    [nil, "", " \t"].each do |identifier|
+      it "rejects product audiences with both identifiers #{identifier.inspect}" do
+        expect(endpoint.email_audience_error({ audience: "product", product_id: identifier, link_id: identifier }, seller:))
+          .to include("Product audience requires a product_id or link_id")
+      end
+    end
+
+    %w[product_id link_id].each do |key|
+      %i[external_id unique_permalink].each do |identifier|
+        it "accepts the seller's #{identifier} via #{key}" do
+          body = { "audience" => "PRODUCT", key => product.public_send(identifier) }
+          expect(endpoint.email_audience_error(body, seller:)).to be_nil
+        end
+      end
+
+      [false, true, 1, [], {}, ["missing"], "missing"].each do |identifier|
+        it "rejects an invalid #{key} of #{identifier.inspect}" do
+          expect(endpoint.email_audience_error({ "audience" => "product", key => identifier }, seller:)).to be_present
+        end
+      end
+
+      it "rejects another seller's product via #{key}" do
+        other_product = create(:product)
+        expect(endpoint.email_audience_error({ "audience" => "product", key => other_product.external_id }, seller:)).to eq("Product not found.")
+      end
+    end
+
+    it "falls back to link_id only when product_id is blank" do
+      expect(endpoint.email_audience_error({ audience: "product", product_id: " ", link_id: product.unique_permalink }, seller:)).to be_nil
+      expect(endpoint.email_audience_error({ audience: "product", product_id: "missing", link_id: product.external_id }, seller:)).to eq("Product not found.")
+    end
+
+    it "rejects a deleted product but accepts an unpublished visible product" do
+      product.unpublish!
+      body = { audience: "product", product_id: product.external_id }
+      expect(endpoint.email_audience_error(body, seller:)).to be_nil
+      product.update!(deleted_at: Time.current)
+      expect(endpoint.email_audience_error(body, seller:)).to eq("Product not found.")
+    end
+
+    it "does not validate an unused identifier or another endpoint" do
+      expect(endpoint.email_audience_error({ audience: "customers", product_id: "missing" }, seller:)).to be_nil
+      expect(endpoint.email_audience_error({ audience: "product", product_id: product.external_id, link_id: "missing" }, seller:)).to be_nil
+      expect(described_class.find("create_product").email_audience_error({}, seller:)).to be_nil
+    end
+  end
+
   describe "discount eligibility" do
     it "keeps the display summary concise without inventing eligibility parameters" do
       endpoint = described_class.find("create_offer_code")
