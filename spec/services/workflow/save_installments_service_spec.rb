@@ -825,7 +825,9 @@ describe Workflow::SaveInstallmentsService do
 
       expect { result = service.process }.to_not change { workflow.installments.count }
       expect(result.first).to be(false)
-      expect(result.last.full_messages).to eq(["Delayed delivery time is too large"])
+      expect(result.last.full_messages).to eq(
+        ["Delay can be at most #{InstallmentRule::MAX_DELAY_YEARS} years. Enter a smaller delay."],
+      )
       expect(service.saved_installments).to be_empty
     end
 

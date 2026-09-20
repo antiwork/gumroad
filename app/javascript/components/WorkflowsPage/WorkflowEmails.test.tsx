@@ -154,6 +154,14 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe("WorkflowEmails", () => {
+  it("labels the email row actions in plain text", () => {
+    renderEditor();
+
+    expect(screen.getByRole("button", { name: "Edit" }).textContent).toContain("Edit");
+    expect(screen.getByRole("button", { name: "Preview Email" }).textContent).toContain("Preview");
+    expect(screen.getByRole("button", { name: "Delete" }).textContent).toContain("Delete");
+  });
+
   it("keeps Save changes disabled until an uploaded image has its CDN URL, not just its blob", async () => {
     const { container } = renderEditor();
     fireEvent.click(screen.getByRole("button", { name: "Edit" }));

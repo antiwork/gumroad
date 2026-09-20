@@ -50,6 +50,7 @@ class InstallmentRule < ApplicationRecord
 
   # delayed_delivery_time is a 4-byte integer column, so a large creator-entered duration overflows it at bind time.
   MAX_DELAY_SECONDS = (2**31) - 1
+  MAX_DELAY_YEARS = MAX_DELAY_SECONDS / 365.days.to_i
 
   validates_presence_of :installment, :version
   validate :to_be_published_at_cannot_be_in_the_past
@@ -208,7 +209,7 @@ class InstallmentRule < ApplicationRecord
       if delayed_delivery_time.negative?
         errors.add(:delayed_delivery_time, "must not be negative")
       elsif delayed_delivery_time > MAX_DELAY_SECONDS
-        errors.add(:delayed_delivery_time, "is too large")
+        errors.add(:base, "Delay can be at most #{MAX_DELAY_YEARS} years. Enter a smaller delay.")
       end
     end
 
