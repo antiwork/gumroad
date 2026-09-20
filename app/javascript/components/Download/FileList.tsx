@@ -20,6 +20,7 @@ import { humanizedDuration } from "$app/utils/duration";
 import FileUtils from "$app/utils/file";
 import { createJWPlayer } from "$app/utils/jwPlayer";
 import { dispatchMediaPlaybackState } from "$app/utils/media_playback";
+import { isFinishedMediaLocation, isResumableMediaLocation, persistableMediaLocation } from "$app/utils/mediaLocation";
 import { asyncVoid } from "$app/utils/promise";
 import { assertResponseError, request, ResponseError } from "$app/utils/request";
 import { videoFrameIsPortrait, videoFrameStyle, videoPlayerAspectRatio } from "$app/utils/videoFrame";
@@ -184,10 +185,9 @@ export const FileRow = ({
   const closeKindleDrawer = () => setIsShowingKindleDrawer(false);
   const [isShowingAudioDrawer, setIsShowingAudioDrawer] = React.useState(false);
   const toggleAudioDrawer = () => setIsShowingAudioDrawer((current) => !current);
+  const savedLocation = file.latest_media_location?.location;
   const [resumeLocation, setResumeLocation] = React.useState(
-    file.latest_media_location == null || file.latest_media_location.location === file.content_length
-      ? 0
-      : file.latest_media_location.location,
+    isResumableMediaLocation(savedLocation, file.content_length) ? savedLocation : 0,
   );
   const [isExpanded, setIsExpanded] = React.useState(false);
   const [isCollapsed, setIsCollapsed] = React.useState(initialCollapsed);
@@ -302,7 +302,7 @@ export const FileRow = ({
         {!isEmbed && streamUrl != null ? (
           <TrackClick eventName="stream_click" file={file} resumeAt={resumeLocation || 0} contentLength={file.duration}>
             <NavigationButton color="primary" href={streamUrl} target="_blank">
-              {file.latest_media_location != null && file.latest_media_location.location === file.content_length
+              {isFinishedMediaLocation(file.latest_media_location?.location, file.content_length)
                 ? "Watch again"
                 : "Watch"}
             </NavigationButton>
@@ -345,7 +345,7 @@ export const FileRow = ({
             >
               {isShowingAudioDrawer
                 ? "Close"
-                : file.latest_media_location != null && file.latest_media_location.location === file.content_length
+                : isFinishedMediaLocation(file.latest_media_location?.location, file.content_length)
                   ? "Play again"
                   : "Play"}
             </Button>
@@ -638,12 +638,13 @@ const VideoEmbedPreview = ({
   const mediaUrls = allMediaUrls[file.id] ?? [];
   const trackMediaLocation = React.useCallback((position: number) => {
     if (purchaseId === null) return;
-    setResumeLocation(position >= (file.content_length ?? duration) ? 0 : position);
+    const length = file.content_length ?? duration;
+    setResumeLocation(isFinishedMediaLocation(position, length) ? 0 : position);
     void trackMediaLocationChanged({
       urlRedirectId: redirectId,
       productFileId: file.id,
       purchaseId,
-      location: file.content_length !== null && position > file.content_length ? file.content_length : position,
+      location: persistableMediaLocation(position, file.content_length ?? duration),
     });
   }, []);
   const throttledTrackMediaLocation = React.useCallback(throttle(trackMediaLocation, LOCATION_TRACK_EVENT_DELAY), []);

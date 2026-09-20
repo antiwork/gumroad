@@ -192,6 +192,23 @@ describe("FileList", () => {
       });
       expect(createJWPlayer).not.toHaveBeenCalled();
     });
+
+    it("restarts from the start when the saved position is in the last seconds", () => {
+      const postMessage = mockReactNativeWebView();
+      const file = videoFile({
+        duration: 3711,
+        content_length: 3711,
+        latest_media_location: { location: 3690, timestamp: "2026-09-18T18:22:24Z" },
+      });
+
+      renderFileRow(file);
+      fireEvent.click(screen.getByRole("link", { name: "Watch again" }));
+
+      expect(JSON.parse(String(postMessage.mock.calls[0]?.[0]))).toMatchObject({
+        type: "click",
+        payload: { resourceId: file.id, resumeAt: "0", contentLength: "3711" },
+      });
+    });
   });
 
   describe("the embedded video frame", () => {

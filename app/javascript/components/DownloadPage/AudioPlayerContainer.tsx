@@ -3,6 +3,7 @@ import * as React from "react";
 
 import { createConsumptionEvent } from "$app/data/consumption_analytics";
 import { trackMediaLocationChanged } from "$app/data/media_location";
+import { isFinishedMediaLocation, persistableMediaLocation } from "$app/utils/mediaLocation";
 
 import { AudioPlayer } from "$app/components/AudioPlayer";
 import { useMediaUrls, usePurchaseInfo } from "$app/components/DownloadPage/WithContent";
@@ -48,12 +49,13 @@ export const AudioPlayerContainer = ({
   const updateProgress = React.useCallback(
     throttle((currentTime: number) => {
       if (purchaseId == null) return;
-      setResumeLocation(currentTime);
+      const length = contentLength ?? duration;
+      setResumeLocation(isFinishedMediaLocation(currentTime, length) ? 0 : currentTime);
       void trackMediaLocationChanged({
         urlRedirectId: redirectId,
         productFileId: fileId,
         purchaseId,
-        location: contentLength !== null && currentTime > contentLength ? contentLength : currentTime,
+        location: persistableMediaLocation(currentTime, length),
       });
     }, LOCATION_TRACK_EVENT_DELAY),
     [],
@@ -84,7 +86,7 @@ export const AudioPlayerContainer = ({
           urlRedirectId: redirectId,
           productFileId: fileId,
           purchaseId,
-          location: contentLength !== null && currentTime > contentLength ? contentLength : currentTime,
+          location: persistableMediaLocation(currentTime, contentLength),
         });
       }}
       onEnded={onEnded}

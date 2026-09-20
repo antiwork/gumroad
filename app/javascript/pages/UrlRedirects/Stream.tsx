@@ -7,6 +7,7 @@ import { createConsumptionEvent } from "$app/data/consumption_analytics";
 import { trackMediaLocationChanged } from "$app/data/media_location";
 import GuidGenerator from "$app/utils/guid_generator";
 import { createJWPlayer } from "$app/utils/jwPlayer";
+import { isFinishedMediaLocation, isResumableMediaLocation, persistableMediaLocation } from "$app/utils/mediaLocation";
 
 import { TranscodingNoticeModal } from "$app/components/Download/TranscodingNoticeModal";
 
@@ -96,7 +97,7 @@ function Stream() {
       const updateLocalMediaLocation = (position: number, duration: number) => {
         const videoFile = playlist[player.getPlaylistIndex()];
         if (videoFile && isInitialSeekDone && lastPlayedId === player.getPlaylistIndex()) {
-          const location = position === duration ? 0 : position;
+          const location = isFinishedMediaLocation(position, duration) ? 0 : position;
           if (videoFile.latest_media_location == null) videoFile.latest_media_location = { location };
           else videoFile.latest_media_location.location = location;
         }
@@ -110,10 +111,7 @@ function Stream() {
             urlRedirectId: url_redirect_id,
             productFileId: videoFile.external_id,
             purchaseId: purchase_id,
-            location:
-              videoFile.content_length != null && position > videoFile.content_length
-                ? videoFile.content_length
-                : position,
+            location: persistableMediaLocation(position, videoFile.content_length),
           });
         }
       };
@@ -161,11 +159,9 @@ function Stream() {
       player.on("visualQuality", () => {
         if (isInitialSeekDone && lastPlayedId === player.getPlaylistIndex()) return;
         const videoFile = playlist[player.getPlaylistIndex()];
-        if (
-          videoFile?.latest_media_location != null &&
-          videoFile.latest_media_location.location !== videoFile.content_length
-        ) {
-          player.seek(videoFile.latest_media_location.location);
+        const saved = videoFile?.latest_media_location?.location;
+        if (isResumableMediaLocation(saved, videoFile?.content_length)) {
+          player.seek(saved);
         }
         isInitialSeekDone = true;
       });
