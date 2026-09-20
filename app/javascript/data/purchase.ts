@@ -110,10 +110,12 @@ export type StartCartPurchaseRequestPayload = {
     | {
         gifteeEmail: string;
         giftNote: string;
+        hideGifter?: boolean;
       }
     | {
         gifteeId: string;
         giftNote: string;
+        hideGifter?: boolean;
       }
     | null;
   eventAttributes: {
@@ -339,6 +341,7 @@ export const createPurchasesRequestData = (
       data.giftee_email = payload.giftInfo.gifteeEmail;
     }
     data.gift_note = payload.giftInfo.giftNote;
+    data.hide_gifter = payload.giftInfo.hideGifter === true;
   }
 
   const paymentDetailsSource = getPaymentDetailsSource(payload.paymentMethod, payload.usedStripePaymentElement);

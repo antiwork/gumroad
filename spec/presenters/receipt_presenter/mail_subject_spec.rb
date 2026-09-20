@@ -110,6 +110,22 @@ describe ReceiptPresenter::MailSubject, :vcr do
                 expect(mail_subject).to eq("Gifter Name (gifter@example.com) bought Product One for you!")
               end
             end
+
+            context "when the gifter is hidden from the recipient" do
+              before { gift.update!(is_gifter_hidden: true) }
+
+              it "omits the gifter identity" do
+                expect(mail_subject).to eq("Someone bought Product One for you!")
+              end
+
+              context "when the gifter has provided a name" do
+                before { purchase_one.update!(full_name: "Gifter Name") }
+
+                it "still omits the gifter identity" do
+                  expect(mail_subject).to eq("Someone bought Product One for you!")
+                end
+              end
+            end
           end
 
           context "when is gift sender purchase" do

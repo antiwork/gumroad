@@ -502,7 +502,7 @@ class Order::CreateService
       end
 
       force_new_subscription = purchase_params.delete(:force_new_subscription)
-      gift_params = purchase_params.extract!(:giftee_email, :giftee_id, :gift_note)
+      gift_params = purchase_params.extract!(:giftee_email, :giftee_id, :gift_note, :hide_gifter)
       # confirmation_token is extracted alongside the other payment-surface hints so it reaches
       # Purchase::CreateService as a service-level param (used to record the client-confirm lane in
       # payment-flow analytics) instead of being treated as a Purchase attribute.

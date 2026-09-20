@@ -13,7 +13,7 @@
 <div>
   <h2>You've received a gift!</h2>
 
-  <p>Hi! <%= mail_to(@chargeable.gifter_email) %> bought this as a gift for you. We hope you like it!</p>
+  <p>Hi! <% if @chargeable.try(:gifter_hidden_from_recipient?) %>Someone<% else %><%= mail_to(@chargeable.gifter_email) %><% end %> bought this as a gift for you. We hope you like it!</p>
 
   <% if @chargeable.gift_note.present? %>
     <div>

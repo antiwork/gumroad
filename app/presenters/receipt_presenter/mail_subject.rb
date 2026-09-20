@@ -35,6 +35,7 @@ class ReceiptPresenter::MailSubject
       subject = "You've upgraded your membership for #{purchase.link_name}!" if purchase.link.is_recurring_billing && purchase.is_upgrade_purchase
       subject = "#{purchase.gifter_email} bought #{purchase.link_name} for you!" if purchase.is_gift_receiver_purchase
       subject = "#{purchase.gifter_full_name} (#{purchase.gifter_email}) bought #{purchase.link_name} for you!" if purchase.is_gift_receiver_purchase && purchase.gifter_full_name
+      subject = "Someone bought #{purchase.link_name} for you!" if purchase.is_gift_receiver_purchase && purchase.gifter_hidden_from_recipient?
       subject = "You bought #{purchase.giftee_name_or_email} #{purchase.link_name}!" if purchase.is_gift_sender_purchase
       subject = "#{purchase.link.name} is ready for download!" if purchase.is_commission_completion_purchase?
       subject

@@ -563,8 +563,8 @@ const CheckoutIndexPage = () => {
         vatId: state.vatId,
         giftInfo: state.gift
           ? state.gift.type === "anonymous"
-            ? { giftNote: state.gift.note, gifteeId: state.gift.id }
-            : { giftNote: state.gift.note, gifteeEmail: state.gift.email }
+            ? { giftNote: state.gift.note, gifteeId: state.gift.id, hideGifter: !!state.gift.hideGifter }
+            : { giftNote: state.gift.note, gifteeEmail: state.gift.email, hideGifter: !!state.gift.hideGifter }
           : null,
         eventAttributes: {
           plugins: getPlugins(),

@@ -2196,6 +2196,14 @@ describe OrdersController, :vcr do
 
           post :create, params: multiple_purchase_params
         end
+
+        it "hides the gifter from the recipient when hide_gifter is set" do
+          multiple_purchase_params.merge!(hide_gifter: true)
+
+          post :create, params: multiple_purchase_params
+
+          expect(Gift.successful.map(&:is_gifter_hidden).uniq).to eq([true])
+        end
       end
 
       describe "saved cards" do

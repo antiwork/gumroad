@@ -220,8 +220,8 @@ export type Product = {
 };
 
 export type Gift =
-  | { type: "normal"; email: string; note: string }
-  | { type: "anonymous"; id: string; name: string; note: string };
+  | { type: "normal"; email: string; note: string; hideGifter?: boolean }
+  | { type: "anonymous"; id: string; name: string; note: string; hideGifter?: boolean };
 
 export type Tip =
   | { type: "percentage"; percentage: number }

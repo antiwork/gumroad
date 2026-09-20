@@ -994,6 +994,16 @@ describe CustomerMailer do
         expect(mail.body.sanitized).to match(purchase.link_name)
       end
 
+      context "when the gifter is hidden from the recipient" do
+        before { gift.update!(is_gifter_hidden: true) }
+
+        it "omits the gifter email from the subject and body" do
+          expect(mail.subject).to eq("Someone bought Digital product for you!")
+          expect(mail.body.sanitized).to have_text("Hi! Someone bought this as a gift for you. We hope you like it!")
+          expect(mail.body.sanitized).not_to include("gifter@example.com")
+        end
+      end
+
       context "when the purchase includes shipping" do
         let(:product) { create(:physical_product) }
         let(:gift_sender_purchase) { create(:physical_purchase, link: product, gift_given: gift, is_gift_sender_purchase: true, email: "gifter@example.com") }

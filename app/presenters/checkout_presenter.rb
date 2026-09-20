@@ -359,7 +359,7 @@ class CheckoutPresenter
       {
         clear_cart: true,
         add_products: [checkout_wishlist_product(wishlist_product, params)],
-        gift: { type: "anonymous", id: wishlist_product.wishlist.user.external_id, name: wishlist_product.wishlist.user.name_or_username, note: "" }
+        gift: { type: "anonymous", id: wishlist_product.wishlist.user.external_id, name: wishlist_product.wishlist.user.name_or_username, note: "", hideGifter: false }
       }
     end
 

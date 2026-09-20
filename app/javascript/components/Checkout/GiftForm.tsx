@@ -35,7 +35,10 @@ export const GiftForm = ({ isMembership, className }: { isMembership: boolean; c
               e.preventDefault();
               setCancellingPresetGift(true);
             } else {
-              dispatch({ type: "set-value", gift: gift ? null : { type: "normal", email: "", note: "" } });
+              dispatch({
+                type: "set-value",
+                gift: gift ? null : { type: "normal", email: "", note: "", hideGifter: false },
+              });
             }
           }}
         />
@@ -107,6 +110,14 @@ export const GiftForm = ({ isMembership, className }: { isMembership: boolean; c
               className="w-full"
             />
           </Fieldset>
+          <Label className="flex w-full grow items-center gap-4">
+            <Switch
+              checked={!!gift.hideGifter}
+              disabled={processing}
+              onChange={() => dispatch({ type: "set-value", gift: { ...gift, hideGifter: !gift.hideGifter } })}
+            />
+            Stay anonymous to the recipient
+          </Label>
         </div>
       ) : null}
     </div>

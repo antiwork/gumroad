@@ -32,7 +32,7 @@ export const CheckoutPreview = ({
         state: "",
         zipCode: "",
         saveAddress: false,
-        gift: { type: "normal", email: "", note: "" },
+        gift: { type: "normal", email: "", note: "", hideGifter: false },
         customFieldValues: {},
         surcharges: { type: "pending" },
         status: { type: "input", errors: new Set() },
