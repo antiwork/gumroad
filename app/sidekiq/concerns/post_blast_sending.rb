@@ -76,6 +76,7 @@ module PostBlastSending
     renew_chunk_claim! if respond_to?(:renew_chunk_claim!, true)
     owed = members.size
     members = drop_members_already_sent(members)
+    members = drop_members_that_left_the_audience(members)
     return decrement_pending_recipients(owed) if members.empty?
 
     recipients = prepare_recipients(members)
@@ -258,6 +259,34 @@ module PostBlastSending
     return members if already_sent.empty?
 
     members.reject { already_sent.include?(_1.email) }
+  end
+
+  # The audience row is rebuilt out of band, and nothing rechecks it between recipient
+  # selection and this handoff, so a slice can still carry someone who has since left the
+  # audience: an opt-out or refund applied after the row was built, or a row that never
+  # converged. Re-derive eligibility from the live purchase rows, which can only ever
+  # remove a recipient.
+  def drop_members_that_left_the_audience(members)
+    return members if members.empty?
+    # A follower or affiliate post reaches people the purchase predicate says nothing about.
+    customer_post = @post.seller_or_product_or_variant_type?
+    return members unless customer_post || @post.audience_type?
+
+    details_by_member_id = AudienceMember.where(id: members.map(&:id)).select(:id, :details).index_by(&:id)
+    purchase_ids = details_by_member_id.values.flat_map { audience_purchase_ids(_1.details) }.uniq
+    eligible_purchase_ids = Purchase.includes(:subscription).where(id: purchase_ids).filter_map { |purchase| purchase.id if purchase.should_be_audience_member? }.to_set
+
+    kept, dropped = members.partition do |member|
+      details = details_by_member_id[member.id]&.details || {}
+      audience_purchase_ids(details).any? { eligible_purchase_ids.include?(_1) } ||
+        (!customer_post && (details["follower"].present? || details["affiliates"].present?))
+    end
+    Rails.logger.info("[#{self.class.name}] blast_id=#{@blast.id} dropped #{dropped.size} recipients who left the audience") if dropped.any?
+    kept
+  end
+
+  def audience_purchase_ids(details)
+    Array.wrap(details.to_h["purchases"]).filter_map { _1["id"] }
   end
 
   # Only after the provider accepted, so a row here always has an email behind it. A transient

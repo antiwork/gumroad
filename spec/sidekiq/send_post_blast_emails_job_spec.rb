@@ -295,6 +295,49 @@ describe SendPostBlastEmailsJob, :freeze_time do
       end
     end
 
+    describe "recipients who left the audience before the provider handoff" do
+      # `update_column` stands in for an eligibility change landing without the audience row
+      # being rebuilt (the projection converges out of band), then the assertion pins that the
+      # row really is stale — otherwise the examples would pass on a rebuilt row.
+      def leave_audience(purchase, **changes)
+        purchase.update_columns(**changes)
+        expect(AudienceMember.find_by!(seller_id: @seller.id, email: purchase.email).details["purchases"].pluck("id")).to include(purchase.id)
+      end
+
+      it "drops a customer whose purchase opted out after the row was built" do
+        opted_out = create(:purchase, :from_seller, seller: @seller)
+        still_contactable = create(:purchase, :from_seller, seller: @seller)
+        leave_audience(opted_out, can_contact: false)
+
+        post = create(:seller_post, :published, seller: @seller)
+        described_class.new.perform(create(:blast, :just_requested, post:).id)
+
+        expect_sent_count 1
+        expect_sent_email still_contactable.email
+      end
+
+      it "drops a customer whose purchase was refunded after the row was built" do
+        refunded = create(:purchase, :from_seller, seller: @seller)
+        leave_audience(refunded, stripe_refunded: true)
+
+        post = create(:seller_post, :published, seller: @seller)
+        described_class.new.perform(create(:blast, :just_requested, post:).id)
+
+        expect_sent_count 0
+      end
+
+      it "keeps a follower who also holds a purchase that left the audience" do
+        follower = create(:active_follower, user: @seller)
+        leave_audience(create(:purchase, :from_seller, seller: @seller, email: follower.email), can_contact: false)
+
+        post = create(:audience_post, :published, seller: @seller)
+        described_class.new.perform(create(:blast, :just_requested, post:).id)
+
+        expect_sent_count 1
+        expect_sent_email follower.email
+      end
+    end
+
     describe "Attachments and UrlRedirect" do
       before do
         @followers = create_list(:active_follower, 2, user: @seller)

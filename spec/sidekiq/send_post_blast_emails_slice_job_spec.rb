@@ -47,6 +47,21 @@ describe SendPostBlastEmailsSliceJob, :freeze_time do
       expect($redis.exists?(RedisKey.blast_done_slices(blast.id, partition_key))).to eq(false)
     end
 
+    it "drops a chunk recipient who left the audience after the chunk was partitioned" do
+      post = create(:seller_post, :published, seller: @seller)
+      opted_out = create(:purchase, :from_seller, seller: @seller)
+      opted_out.update_column(:can_contact, false)
+      expect(AudienceMember.find_by!(seller_id: @seller.id, email: opted_out.email).details["purchases"].pluck("id")).to include(opted_out.id)
+      still_contactable = create(:purchase, :from_seller, seller: @seller)
+      blast = create(:blast, :just_requested, post:)
+      activate_partition(blast)
+
+      described_class.new.perform(blast.id, partition_key, 0, 1, audience_ids)
+
+      expect_sent_count 1
+      expect(PostSendgridApi.mails.keys).to eq([still_contactable.email])
+    end
+
     it "decrements the pending recipient count the parent published" do
       blast = create(:blast, :just_requested, post: post_with_audience)
       activate_partition(blast)
