@@ -137,7 +137,8 @@ function Stream() {
         throttledTrackMediaLocation.cancel();
         const videoFile = playlist[player.getPlaylistIndex()];
         if (!videoFile) return;
-        trackMediaLocation(videoFile.content_length === null ? player.getDuration() : videoFile.content_length);
+        const length = videoFile.content_length ?? player.getDuration();
+        if (length > 0) trackMediaLocation(length);
         updateLocalMediaLocation(player.getDuration(), player.getDuration());
       });
 

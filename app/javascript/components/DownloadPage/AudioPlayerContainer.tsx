@@ -64,12 +64,13 @@ export const AudioPlayerContainer = ({
   const onEnded = () => {
     pauseAudio();
     updateProgress.cancel();
-    if (purchaseId == null) return;
+    const length = contentLength ?? duration.current;
+    if (purchaseId == null || !(length > 0)) return;
     void trackMediaLocationChanged({
       urlRedirectId: redirectId,
       productFileId: fileId,
       purchaseId,
-      location: contentLength ?? duration.current,
+      location: length,
     });
   };
 

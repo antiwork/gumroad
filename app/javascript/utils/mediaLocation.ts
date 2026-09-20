@@ -10,7 +10,7 @@ export const isFinishedMediaLocation = (
   location: number | null | undefined,
   contentLength: number | null | undefined,
 ): boolean => {
-  if (location == null || !contentLength) return false;
+  if (location == null || contentLength == null || contentLength <= 0) return false;
   return location >= contentLength - nearEndToleranceSeconds(contentLength);
 };
 
@@ -20,7 +20,7 @@ export const isResumableMediaLocation = (
 ): location is number => !!location && !isFinishedMediaLocation(location, contentLength);
 
 export const persistableMediaLocation = (position: number, contentLength: number | null | undefined): number => {
-  if (contentLength == null) return position;
+  if (contentLength == null || contentLength <= 0) return position;
   if (isFinishedMediaLocation(position, contentLength) || position > contentLength) return contentLength;
   return position;
 };

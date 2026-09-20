@@ -189,6 +189,11 @@ export const FileRow = ({
   const [resumeLocation, setResumeLocation] = React.useState(
     isResumableMediaLocation(savedLocation, file.content_length ?? file.duration) ? savedLocation : 0,
   );
+  React.useEffect(() => {
+    setResumeLocation(
+      isResumableMediaLocation(savedLocation, file.content_length ?? file.duration) ? savedLocation : 0,
+    );
+  }, [savedLocation, file.content_length, file.duration]);
   const [isExpanded, setIsExpanded] = React.useState(false);
   const [isCollapsed, setIsCollapsed] = React.useState(initialCollapsed);
   const downloadUrl = file.download_url;
@@ -708,7 +713,8 @@ const VideoEmbedPreview = ({
         .on("time", (event) => throttledTrackMediaLocation(event.position))
         .on("complete", () => {
           throttledTrackMediaLocation.cancel();
-          trackMediaLocation(file.content_length ?? file.duration ?? duration.current);
+          const length = file.content_length ?? file.duration ?? duration.current;
+          if (length > 0) trackMediaLocation(length);
           publishPlaybackState(false);
           setIsVideoPlayerShowing(false);
         });
