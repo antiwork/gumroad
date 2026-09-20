@@ -706,7 +706,12 @@ class ContactingCreatorMailer < ApplicationMailer
   #
   # The claim is taken last, so an ordinary rejection does not have to give one back.
   def review_submitted(review_id)
-    @review = ProductReview.includes(:purchase, link: :user).find(review_id)
+    # A worker's SELECTs read a replica (USE_DB_WORKER_REPLICAS), and the purchase can be seconds
+    # old when this delayed render runs, so the preload can come back empty and the render would
+    # then dereference a nil purchase. TeamMailer#invite pins the same way.
+    @review = ApplicationRecord.connected_to(role: :writing) do
+      ProductReview.includes(:purchase, link: :user).find(review_id)
+    end
     return do_not_send if @review.deleted?
     return do_not_send if @review.seller_notified?
 
