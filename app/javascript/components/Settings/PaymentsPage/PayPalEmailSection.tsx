@@ -52,13 +52,10 @@ const PayPalEmailSection = ({
         // by `isFormDisabled` is a permission restriction and keeps the existing silent hide.
         !canSetupBankPayouts && user.country_code === "IN" ? (
           <div className="grid gap-2">
-            {/* Underline is the affordance every actionable link on this page carries, so the
-                inert control drops it and keeps only the dimmed label. */}
-            <LinkButton
-              className="justify-self-start disabled:cursor-not-allowed disabled:no-underline disabled:opacity-50"
-              disabled
-              aria-describedby={`${uid}-bank-payouts-unavailable`}
-            >
+            {/* Same class list as the enabled branch above. A disabled form link on this page
+                keeps its colour and underline and just stops being reachable — as the tax ID
+                "Change" links in AccountDetailsSection and BeneficialOwnersSection do. */}
+            <LinkButton className="justify-self-start" disabled aria-describedby={`${uid}-bank-payouts-unavailable`}>
               Switch to direct deposit
             </LinkButton>
             <Alert id={`${uid}-bank-payouts-unavailable`} role="status" variant="info">

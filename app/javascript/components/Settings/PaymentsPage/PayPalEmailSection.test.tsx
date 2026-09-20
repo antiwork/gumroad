@@ -8,6 +8,7 @@ import type { FormFieldName } from "$app/types/payments";
 import PayPalEmailSection from "$app/components/Settings/PaymentsPage/PayPalEmailSection";
 
 const updatePayoutMethod = vi.fn();
+const onSubmit = vi.fn((event: React.FormEvent) => event.preventDefault());
 
 const renderSection = (
   overrides: {
@@ -16,6 +17,7 @@ const renderSection = (
     countryCode?: string | null;
     noPayoutRailInCountry?: boolean;
     countryName?: string | null;
+    inForm?: boolean;
   } = {},
 ) => {
   const {
@@ -24,8 +26,9 @@ const renderSection = (
     countryCode = "IN",
     noPayoutRailInCountry = false,
     countryName = "India",
+    inForm = false,
   } = overrides;
-  render(
+  const section = (
     <PayPalEmailSection
       canSetupBankPayouts={canSetupBankPayouts}
       showPayPalPayoutsFeeNote={false}
@@ -38,7 +41,17 @@ const renderSection = (
       errorFieldNames={new Set<FormFieldName>()}
       user={{ country_code: countryCode, no_payout_rail_in_country: noPayoutRailInCountry }}
       countryName={countryName}
-    />,
+    />
+  );
+  render(
+    inForm ? (
+      <form aria-label="Payouts" onSubmit={onSubmit}>
+        <input type="text" aria-label="PayPal email" />
+        {section}
+      </form>
+    ) : (
+      section
+    ),
   );
 };
 
@@ -48,6 +61,7 @@ const indiaExplanation = () => screen.queryByText(/New bank payout accounts cann
 
 beforeEach(() => {
   updatePayoutMethod.mockReset();
+  onSubmit.mockReset();
   Object.assign(globalThis, { Routes: { help_center_root_path: () => "/help" } });
 });
 afterEach(cleanup);
@@ -83,15 +97,42 @@ describe("bank payout switch option", () => {
     expect(updatePayoutMethod).not.toHaveBeenCalled();
   });
 
-  it("describes the disabled option to assistive tech and drops both link affordances", () => {
+  it("describes the disabled option to assistive tech", () => {
     renderSection();
 
     const option = switchOption();
-    expect(option.className).toContain("disabled:cursor-not-allowed");
-    expect(option.className).toContain("disabled:no-underline");
     expect(document.getElementById(option.getAttribute("aria-describedby") ?? "")?.textContent).toMatch(
       /New bank payout accounts cannot be set up in India/u,
     );
+  });
+
+  // The convention this matches: `AccountDetailsSection.tsx:675`/`:1219` and
+  // `BeneficialOwnersSection.tsx:1216`/`:1243` all hand `LinkButton` a `disabled` prop and no
+  // `disabled:` class, so a form link on this page reads the same whether or not it is live.
+  it("gives the unavailable option the same classes as the working one", () => {
+    renderSection({ canSetupBankPayouts: true, countryCode: "US", countryName: "United States" });
+    const enabled = switchOption().className;
+    cleanup();
+
+    renderSection();
+
+    expect(switchOption().className).toBe(enabled);
+  });
+
+  it("carries no disabled-only styling on the unavailable option", () => {
+    renderSection();
+
+    expect(switchOption().className).not.toMatch(/disabled:/u);
+  });
+
+  it("keeps the shared form-link base styling on the unavailable option", () => {
+    renderSection();
+
+    const option = switchOption();
+    expect(option.className).toContain("all-unset");
+    expect(option.className).toContain("underline");
+    expect(option.className).toContain("cursor-pointer");
+    expect(option.className).toContain("justify-self-start");
   });
 
   it("carries the reason in a status alert rather than muted helper text, and keeps support underlined", () => {
@@ -135,5 +176,49 @@ describe("bank payout switch option", () => {
 
     expect(noSwitchOption()).toBeNull();
     expect(indiaExplanation()).toBeNull();
+  });
+});
+
+describe("bank payout switch keyboard semantics", () => {
+  it("keeps the working option focusable and activates it without submitting the form", () => {
+    renderSection({ canSetupBankPayouts: true, countryCode: "US", countryName: "United States", inForm: true });
+
+    const option = switchOption();
+    option.focus();
+    expect(document.activeElement).toBe(option);
+
+    // What Enter and Space dispatch on a focused native button. `type="button"` is what keeps it
+    // out of the form's default-submit path; `LinkButton.test.tsx` covers that contract directly.
+    expect(option.getAttribute("type")).toBe("button");
+    fireEvent.click(option, { detail: 0 });
+
+    expect(updatePayoutMethod).toHaveBeenCalledWith("bank");
+    expect(onSubmit).not.toHaveBeenCalled();
+  });
+
+  it("leaves the unavailable option out of the tab order and inert to keyboard activation", () => {
+    renderSection({ inForm: true });
+
+    const option = switchOption();
+    expect(option.hasAttribute("disabled")).toBe(true);
+    expect(option.hasAttribute("tabindex")).toBe(false);
+
+    option.focus();
+    expect(document.activeElement).not.toBe(option);
+
+    fireEvent.click(option, { detail: 0 });
+    expect(updatePayoutMethod).not.toHaveBeenCalled();
+    expect(onSubmit).not.toHaveBeenCalled();
+  });
+
+  it("keeps support reachable by keyboard while it explains the unavailable option", () => {
+    renderSection();
+
+    const support = screen.getByRole("link", { name: "Contact support" });
+    support.focus();
+    expect(document.activeElement).toBe(support);
+
+    const describedBy = document.getElementById(switchOption().getAttribute("aria-describedby") ?? "");
+    expect(describedBy?.contains(support)).toBe(true);
   });
 });
