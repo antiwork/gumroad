@@ -46,7 +46,10 @@ class AudienceMember < ApplicationRecord
   # as_of: the audience as it stood then. The row and the purchase, follow or affiliation that
   # qualifies the member must predate it; `refresh!` adds later purchases to an existing row
   # without touching `created_at`, so the row bound alone is not enough.
-  def self.filter(seller_id:, params: {}, with_ids: false, ids: nil, as_of: nil)
+  #
+  # purchase_ids: limits qualifying purchases before selecting the highest matching id,
+  # so a stale projection can be rechecked against live purchase eligibility.
+  def self.filter(seller_id:, params: {}, with_ids: false, ids: nil, as_of: nil, purchase_ids: nil)
     params = normalize_filter_params(params)
     base_scope = where(seller_id:)
     base_scope = base_scope.where(id: ids) if ids
@@ -139,7 +142,7 @@ class AudienceMember < ApplicationRecord
     filter_purchases_when ||= (params[:paid_more_than_cents] && params[:paid_less_than_cents])
     filter_purchases_when ||= (params[:created_after] && params[:created_before])
     filter_purchases_when ||= params[:active_customers_only] || params[:minimum_license_uses]
-    if filter_purchases_when || with_ids || as_of
+    if filter_purchases_when || with_ids || as_of || purchase_ids
       json_filter = base_scope
       json_table = <<~SQL.squish
         JSON_TABLE(details, '$' COLUMNS (
@@ -164,6 +167,7 @@ class AudienceMember < ApplicationRecord
         ))
       SQL
       json_filter = json_filter.joins("INNER JOIN #{json_table} AS jt")
+      json_filter = json_filter.where("jt.purchase_id IN (?)", purchase_ids) if purchase_ids
       # MySQL expands sibling JSON_TABLE paths into disjoint rows. A purchase predicate keeps
       # only purchase rows, and an affiliate-product predicate keeps only affiliate rows; asking
       # one `jt` row to satisfy both made affiliate posts with purchase filters resolve nobody.
