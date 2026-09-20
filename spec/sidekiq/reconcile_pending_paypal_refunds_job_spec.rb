@@ -101,7 +101,7 @@ describe ReconcilePendingPaypalRefundsJob do
       expect(refund.paypal_refund_unreadable_at).to be_blank
     end
 
-    it "does not mark a refund unreadable when notifying the unreadability fails" do
+    it "retries notification after a notifier failure without marking the refund unreadable" do
       allow(PaypalChargeProcessor).to receive(:fetch_refund_status)
         .and_raise(ChargeProcessorError, "401|closed_user")
       allow(ErrorNotifier).to receive(:notify).and_raise(StandardError, "sentry unavailable")
@@ -111,6 +111,15 @@ describe ReconcilePendingPaypalRefundsJob do
       refund.reload
       expect(refund.status).to eq("PENDING")
       expect(refund.paypal_refund_unreadable_at).to be_blank
+      expect(refund.json_data["paypal_refund_unreadable_issue"]).to be_nil
+      expect(ErrorNotifier).to have_received(:notify).twice
+
+      allow(ErrorNotifier).to receive(:notify).and_return(nil)
+      described_class.new.perform
+
+      expect(refund.reload.paypal_refund_unreadable_at).to be_present
+      expect(refund.json_data["paypal_refund_unreadable_issue"]).to eq("closed_user")
+      expect(ErrorNotifier).to have_received(:notify).exactly(3).times
     end
 
     it "does not let a persistent notifier outage abort later refunds" do
@@ -132,11 +141,14 @@ describe ReconcilePendingPaypalRefundsJob do
 
       expect(refund.reload.status).to eq("PENDING")
       expect(refund.paypal_refund_unreadable_at).to be_blank
+      expect(refund.paypal_refund_unreadable_issue).to be_nil
+      expect(ErrorNotifier).to have_received(:notify).twice
       expect(sibling.reload.status).to eq("failed")
+      expect(FailedRefundException.find_by(refund: sibling)).to be_present
     end
 
     it "notifies once then skips later passes for a closed PayPal merchant" do
-      allow(PaypalChargeProcessor).to receive(:fetch_refund_status)
+      expect(PaypalChargeProcessor).to receive(:fetch_refund_status).once
         .and_raise(ChargeProcessorError, "401|closed_user")
       expect(ErrorNotifier).to receive(:notify).once.with(
         kind_of(ChargeProcessorError),
@@ -153,27 +165,138 @@ describe ReconcilePendingPaypalRefundsJob do
     end
 
     %w(locked_user NOT_AUTHORIZED PERMISSION_DENIED).each do |issue|
-      it "treats #{issue} as a terminal unreadability" do
-        allow(PaypalChargeProcessor).to receive(:fetch_refund_status)
+      it "keeps reading #{issue} while deduplicating notifications" do
+        expect(PaypalChargeProcessor).to receive(:fetch_refund_status).twice
           .and_raise(ChargeProcessorError, "403|#{issue}")
-        allow(ErrorNotifier).to receive(:notify)
+        expect(ErrorNotifier).to receive(:notify).once
 
-        described_class.new.perform
+        2.times { described_class.new.perform }
 
-        refund.reload
-        expect(refund.status).to eq("PENDING")
+        expect(refund.reload.status).to eq("PENDING")
         expect(refund.paypal_refund_unreadable_at).to be_present
+        expect(refund.json_data["paypal_refund_unreadable_issue"]).to eq(issue.downcase)
+      end
+
+      %w(COMPLETED FAILED).each do |status|
+        it "recovers #{status} after #{issue} access is restored for the original merchant" do
+          merchant_account.update!(deleted_at: Time.current)
+          create(:merchant_account_paypal, user: seller)
+          reads = 0
+          expect(PaypalChargeProcessor).to receive(:fetch_refund_status).twice
+            .with(processor_refund_id: refund.processor_refund_id, merchant_account:) do
+              reads += 1
+              raise ChargeProcessorInvalidRequestError.new("403|#<OpenStruct name=\"#{issue}\">", processor_error_code: issue) if reads == 1
+              status
+            end
+          expect(ErrorNotifier).to receive(:notify).once
+
+          2.times { described_class.new.perform }
+
+          expect(refund.reload.status).to eq(status == "FAILED" ? "failed" : status)
+          expect(FailedRefundException.exists?(refund:)).to eq(status == "FAILED")
+          expect(refund.balance_reversed_on_failure).to be_falsey
+        end
       end
     end
 
-    it "does not re-read a refund already marked unreadable" do
+    %w(COMPLETED FAILED).each do |status|
+      it "recovers #{status} for an unclassified legacy timestamp marker" do
+        refund.update!(paypal_refund_unreadable_at: 1.hour.ago.iso8601)
+        expect(PaypalChargeProcessor).to receive(:fetch_refund_status).and_return(status)
+        expect(ErrorNotifier).not_to receive(:notify)
+
+        described_class.new.perform
+
+        expect(refund.reload.status).to eq(status == "FAILED" ? "failed" : status)
+        expect(FailedRefundException.exists?(refund:)).to eq(status == "FAILED")
+      end
+    end
+
+    it "classifies a previously notified error as closed without sending another alert" do
       refund.update!(paypal_refund_unreadable_at: 1.hour.ago.iso8601)
-      expect(PaypalChargeProcessor).not_to receive(:fetch_refund_status)
+      expect(PaypalChargeProcessor).to receive(:fetch_refund_status).once
+        .and_raise(ChargeProcessorError, "401|closed_user")
+      expect(ErrorNotifier).not_to receive(:notify)
+
+      2.times { described_class.new.perform }
+
+      expect(refund.reload.json_data["paypal_refund_unreadable_issue"]).to eq("closed_user")
+    end
+
+    [nil, ""].each do |timestamp|
+      it "reads an explicitly closed marker with a #{timestamp.inspect} notification timestamp" do
+        refund.update!(json_data: { paypal_refund_unreadable_issue: "closed_user", paypal_refund_unreadable_at: timestamp })
+        expect(PaypalChargeProcessor).to receive(:fetch_refund_status).and_return("COMPLETED")
+
+        described_class.new.perform
+
+        expect(refund.reload.status).to eq("COMPLETED")
+      end
+    end
+
+    it "skips later reads after a structured closed_user response" do
+      error = ChargeProcessorInvalidRequestError.new('403|#<OpenStruct name="NOT_AUTHORIZED", details=[#<OpenStruct issue="CLOSED_USER">]>',
+                                                     processor_error_code: "CLOSED_USER")
+      expect(PaypalChargeProcessor).to receive(:fetch_refund_status).once.and_raise(error)
+      expect(ErrorNotifier).to receive(:notify).once
+
+      2.times { described_class.new.perform }
+
+      expect(refund.reload.paypal_refund_unreadable_issue).to eq("closed_user")
+    end
+
+    it "rechecks pending status after a read fails" do
+      allow(PaypalChargeProcessor).to receive(:fetch_refund_status) do
+        Refund.find(refund.id).update!(status: "COMPLETED")
+        raise ChargeProcessorError, "401|closed_user"
+      end
       expect(ErrorNotifier).not_to receive(:notify)
 
       described_class.new.perform
 
-      expect(refund.reload.status).to eq("PENDING")
+      expect(refund.reload.status).to eq("COMPLETED")
+      expect(refund.paypal_refund_unreadable_at).to be_nil
+    end
+
+    ["403|a message mentioning closed_user", '403|#<OpenStruct name="OTHER", message="closed_user">',
+     '403|#<OpenStruct name="OTHER", message="issue=\\"closed_user\\"">'].each do |message|
+      it "does not classify an unrelated message as closed: #{message}" do
+        expect(PaypalChargeProcessor).to receive(:fetch_refund_status).twice
+          .and_raise(ChargeProcessorError, message)
+        expect(ErrorNotifier).to receive(:notify).twice.with(
+          kind_of(ChargeProcessorError), context: { refund_id: refund.id, purchase_id: purchase.id }
+        )
+
+        2.times { described_class.new.perform }
+
+        expect(refund.reload.paypal_refund_unreadable_at).to be_nil
+      end
+    end
+
+    %w(closed_user locked_user NOT_AUTHORIZED PERMISSION_DENIED).each do |issue|
+      it "does not move money or alter the purchase on #{issue}" do
+        allow(PaypalChargeProcessor).to receive(:fetch_refund_status)
+          .and_raise(ChargeProcessorError, "403|#{issue}")
+        allow(ErrorNotifier).to receive(:notify)
+        expect(ChargeProcessor).not_to receive(:refund!)
+        expect(PaypalChargeProcessor).not_to receive(:refund!)
+        expect(Purchase::HandleFailedRefundService).not_to receive(:new)
+        balance = create(:balance, user: seller, merchant_account:)
+        payment = create(:payment, user: seller)
+        balance_before = balance.attributes
+        payment_before = payment.attributes
+        purchase_before = purchase.reload.attributes
+        money_before = [Balance, BalanceTransaction, Credit, Payment, Refund, FailedRefundException].map(&:count)
+
+        described_class.new.perform
+
+        expect(purchase.reload.attributes).to eq(purchase_before)
+        expect(balance.reload.attributes).to eq(balance_before)
+        expect(payment.reload.attributes).to eq(payment_before)
+        expect([Balance, BalanceTransaction, Credit, Payment, Refund, FailedRefundException].map(&:count)).to eq(money_before)
+        expect(refund.reload.status).to eq("PENDING")
+        expect(refund.balance_reversed_on_failure).to be_falsey
+      end
     end
 
     it "does not let one unreadable refund stop the others" do

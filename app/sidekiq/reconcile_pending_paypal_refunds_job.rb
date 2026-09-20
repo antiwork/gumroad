@@ -18,14 +18,10 @@ class ReconcilePendingPaypalRefundsJob
   PAYPAL_COMPLETED_STATUS = "COMPLETED"
   PAYPAL_TERMINAL_FAILURE_STATUSES = { "FAILED" => "failed", "CANCELLED" => "canceled" }.freeze
 
-  # Credential issues that cannot succeed on a later pass. Matching is case-insensitive
-  # because PayPal mixes closed_user with NOT_AUTHORIZED. Do not match HTTP 401/403
-  # alone — a partner-token blip would then skip every pending refund forever.
-  UNREADABLE_PAYPAL_ISSUES = %w(closed_user locked_user NOT_AUTHORIZED PERMISSION_DENIED).freeze
+  UNREADABLE_PAYPAL_ISSUES = %w(closed_user locked_user not_authorized permission_denied).freeze
 
   # Only refunds past this age are worth a round-trip; a younger one can still settle. No
-  # upper bound, because the scope is `status = "PENDING"` alone and every read either
-  # resolves the row or proves it is stuck.
+  # upper bound, because access to an unreadable refund can be restored later.
   MINIMUM_AGE = 3.days
 
   def perform
@@ -50,7 +46,10 @@ class ReconcilePendingPaypalRefundsJob
             .where.not(processor_refund_id: [nil, ""])
             .where(purchases: { charge_processor_id: PaypalChargeProcessor.charge_processor_id })
             .where(created_at: ...MINIMUM_AGE.ago)
-            .where("JSON_EXTRACT(refunds.json_data, '$.paypal_refund_unreadable_at') IS NULL")
+            .where(<<~SQL.squish)
+              COALESCE(refunds.json_data->>'$.paypal_refund_unreadable_at', '') IN ('', 'null')
+              OR COALESCE(refunds.json_data->>'$.paypal_refund_unreadable_issue', '') != 'closed_user'
+            SQL
     end
 
     def reconcile(refund)
@@ -75,16 +74,27 @@ class ReconcilePendingPaypalRefundsJob
     end
 
     def handle_processor_error(refund, error)
-      raise error unless unreadable_paypal_credentials?(error)
+      issue = unreadable_paypal_issue(error)
+      raise error unless issue
 
-      # Stamp only after notify succeeds; otherwise later passes skip a refund that never alerted.
-      notify_unreadable(refund, error)
-      refund.update!(paypal_refund_unreadable_at: Time.current.iso8601)
+      # Lock only the refund here; terminal failure handling takes the purchase lock first.
+      refund.with_lock do
+        next unless PAYPAL_PENDING_STATUSES.include?(refund.status)
+
+        if refund.paypal_refund_unreadable_at.blank?
+          notify_unreadable(refund, error)
+          refund.paypal_refund_unreadable_at = Time.current.iso8601
+        end
+        refund.update!(paypal_refund_unreadable_issue: issue)
+      end
     end
 
-    def unreadable_paypal_credentials?(error)
-      message = error.message.to_s.downcase
-      UNREADABLE_PAYPAL_ISSUES.any? { |issue| message.include?(issue.downcase) }
+    def unreadable_paypal_issue(error)
+      issue = error.processor_error_code if error.respond_to?(:processor_error_code)
+      # Also accept a plain error-code body, never an issue mentioned in descriptive text.
+      issue ||= error.message.to_s[/\A\d{3}\|([a-z_]+)\z/i, 1]
+      issue = issue.to_s.downcase
+      issue if UNREADABLE_PAYPAL_ISSUES.include?(issue)
     end
 
     def notify_unreadable(refund, error)

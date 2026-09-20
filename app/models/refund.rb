@@ -114,9 +114,9 @@ class Refund < ApplicationRecord
   # the original refund event stays booked to its own day untouched, because ledger
   # days must regenerate bit-identical.
   attr_json_data_accessor :balance_reversed_on_failure_at
-  # PayPal refused the status read with a terminal credential issue (closed/locked
-  # merchant, NOT_AUTHORIZED). Reconcile skips further reads; status stays PENDING.
+  # Notification history is independent of read eligibility; only a notified closed_user stops reads.
   attr_json_data_accessor :paypal_refund_unreadable_at
+  attr_json_data_accessor :paypal_refund_unreadable_issue
 
   FEE_RETENTION_ERRORS = [Stripe::InvalidRequestError, Stripe::APIError, Stripe::APIConnectionError,
                           Stripe::AuthenticationError, Stripe::PermissionError, Stripe::RateLimitError,
