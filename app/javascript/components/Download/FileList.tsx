@@ -20,6 +20,7 @@ import { humanizedDuration } from "$app/utils/duration";
 import FileUtils from "$app/utils/file";
 import { createJWPlayer } from "$app/utils/jwPlayer";
 import { dispatchMediaPlaybackState } from "$app/utils/media_playback";
+import { isFinishedMediaLocation, isResumableMediaLocation, persistableMediaLocation } from "$app/utils/mediaLocation";
 import { asyncVoid } from "$app/utils/promise";
 import { assertResponseError, request, ResponseError } from "$app/utils/request";
 import { videoFrameIsPortrait, videoFrameStyle, videoPlayerAspectRatio } from "$app/utils/videoFrame";
@@ -184,11 +185,15 @@ export const FileRow = ({
   const closeKindleDrawer = () => setIsShowingKindleDrawer(false);
   const [isShowingAudioDrawer, setIsShowingAudioDrawer] = React.useState(false);
   const toggleAudioDrawer = () => setIsShowingAudioDrawer((current) => !current);
+  const savedLocation = file.latest_media_location?.location;
   const [resumeLocation, setResumeLocation] = React.useState(
-    file.latest_media_location == null || file.latest_media_location.location === file.content_length
-      ? 0
-      : file.latest_media_location.location,
+    isResumableMediaLocation(savedLocation, file.content_length ?? file.duration) ? savedLocation : 0,
   );
+  React.useEffect(() => {
+    setResumeLocation(
+      isResumableMediaLocation(savedLocation, file.content_length ?? file.duration) ? savedLocation : 0,
+    );
+  }, [savedLocation, file.content_length, file.duration]);
   const [isExpanded, setIsExpanded] = React.useState(false);
   const [isCollapsed, setIsCollapsed] = React.useState(initialCollapsed);
   const downloadUrl = file.download_url;
@@ -302,7 +307,7 @@ export const FileRow = ({
         {!isEmbed && streamUrl != null ? (
           <TrackClick eventName="stream_click" file={file} resumeAt={resumeLocation || 0} contentLength={file.duration}>
             <NavigationButton color="primary" href={streamUrl} target="_blank">
-              {file.latest_media_location != null && file.latest_media_location.location === file.content_length
+              {isFinishedMediaLocation(file.latest_media_location?.location, file.content_length ?? file.duration)
                 ? "Watch again"
                 : "Watch"}
             </NavigationButton>
@@ -345,7 +350,7 @@ export const FileRow = ({
             >
               {isShowingAudioDrawer
                 ? "Close"
-                : file.latest_media_location != null && file.latest_media_location.location === file.content_length
+                : isFinishedMediaLocation(file.latest_media_location?.location, file.content_length ?? file.duration)
                   ? "Play again"
                   : "Play"}
             </Button>
@@ -631,19 +636,20 @@ const VideoEmbedPreview = ({
   className,
 }: VideoEmbedPreviewProps) => {
   const [isVideoPlayerShowing, setIsVideoPlayerShowing] = React.useState(false);
-  const [duration, setDuration] = React.useState(0);
+  const duration = React.useRef(0);
   const videoPlayerId = `jwplayer-${file.id}`;
   const { purchaseId, redirectId } = usePurchaseInfo();
   const [allMediaUrls] = useMediaUrls();
   const mediaUrls = allMediaUrls[file.id] ?? [];
   const trackMediaLocation = React.useCallback((position: number) => {
     if (purchaseId === null) return;
-    setResumeLocation(position >= (file.content_length ?? duration) ? 0 : position);
+    const length = file.content_length ?? file.duration ?? duration.current;
+    setResumeLocation(isFinishedMediaLocation(position, length) ? 0 : position);
     void trackMediaLocationChanged({
       urlRedirectId: redirectId,
       productFileId: file.id,
       purchaseId,
-      location: file.content_length !== null && position > file.content_length ? file.content_length : position,
+      location: persistableMediaLocation(position, file.content_length ?? file.duration ?? duration.current),
     });
   }, []);
   const throttledTrackMediaLocation = React.useCallback(throttle(trackMediaLocation, LOCATION_TRACK_EVENT_DELAY), []);
@@ -693,8 +699,12 @@ const VideoEmbedPreview = ({
             productFileId: file.id,
             purchaseId,
           });
-          setDuration(player.getDuration());
-          player.seek(resumeLocation);
+          duration.current = player.getDuration();
+          player.seek(
+            isResumableMediaLocation(resumeLocation, file.content_length ?? file.duration ?? duration.current)
+              ? resumeLocation
+              : 0,
+          );
           initialSeekDone = true;
         })
         .on("pause", () => publishPlaybackState(false))
@@ -703,7 +713,8 @@ const VideoEmbedPreview = ({
         .on("time", (event) => throttledTrackMediaLocation(event.position))
         .on("complete", () => {
           throttledTrackMediaLocation.cancel();
-          trackMediaLocation(file.content_length ?? duration);
+          const length = file.content_length ?? file.duration ?? duration.current;
+          if (length > 0) trackMediaLocation(length);
           publishPlaybackState(false);
           setIsVideoPlayerShowing(false);
         });

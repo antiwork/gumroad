@@ -1,6 +1,7 @@
 import { PauseCircle, PlayCircle, RotateCcw10, RotateCw10 } from "@boxicons/react";
 import * as React from "react";
 
+import { isResumableMediaLocation } from "$app/utils/mediaLocation";
 import { asyncVoid } from "$app/utils/promise";
 
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
@@ -10,6 +11,7 @@ import { useUserAgentInfo } from "$app/components/UserAgent";
 type Props = {
   src: string;
   startTime?: number;
+  contentLength?: number | null;
   onPlay?: () => void;
   onPause?: () => void;
   onSeeked?: (currentTime: number) => void;
@@ -81,7 +83,9 @@ export const AudioPlayer = (props: Props) => {
   const onLoadedMetadata = withAudio((audio) => {
     setDuration(audio.duration);
     setIsLoaded(true);
-    audio.currentTime = props.startTime ?? 0;
+    audio.currentTime = isResumableMediaLocation(props.startTime, props.contentLength ?? audio.duration)
+      ? props.startTime
+      : 0;
     playAudio();
     props.onLoadedMetadata?.(audio.duration);
   });
