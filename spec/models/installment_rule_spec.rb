@@ -334,9 +334,7 @@ describe InstallmentRule do
         post_rule = build(:installment_rule, delayed_delivery_time: described_class::MAX_DELAY_SECONDS + 1)
 
         expect(post_rule).not_to be_valid
-        expect(post_rule.errors.full_messages).to include(
-          "Delay can be at most #{described_class::MAX_DELAY_YEARS} years. Enter a smaller delay.",
-        )
+        expect(post_rule.errors.full_messages).to include(described_class::OVERFLOW_DELAY_MESSAGE)
       end
 
       it "rejects a negative delay" do
