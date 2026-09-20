@@ -456,8 +456,12 @@ class Purchase::CreateService < Purchase::BaseService
     def validate_bundle_products
       return unless product.is_bundle?
 
+      # Not every client echoes the bundle contents back (the checkout page always does), so an
+      # absent key is a contents mismatch, not a reason to raise.
+      submitted_bundle_products = params[:bundle_products] || []
+
       product.bundle_products.alive.each do |bundle_product|
-        if params[:bundle_products].none? { _1[:product_id] == bundle_product.product.external_id && _1[:variant_id] == bundle_product.variant&.external_id && _1[:quantity].to_i == bundle_product.quantity }
+        if submitted_bundle_products.none? { _1[:product_id] == bundle_product.product.external_id && _1[:variant_id] == bundle_product.variant&.external_id && _1[:quantity].to_i == bundle_product.quantity }
           raise Purchase::PurchaseInvalid, "The bundle's contents have changed. Please refresh the page!"
         end
 
