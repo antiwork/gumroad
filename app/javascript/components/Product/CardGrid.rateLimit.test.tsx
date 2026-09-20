@@ -4,7 +4,7 @@ import * as React from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { SearchResults } from "$app/data/search";
-import { RateLimitError } from "$app/utils/request";
+import { RateLimitError, ResponseError } from "$app/utils/request";
 
 import { CardGrid, State, useSearchReducer } from "$app/components/Product/CardGrid";
 
@@ -55,6 +55,7 @@ const settle = () => new Promise((resolve) => setTimeout(resolve, 50));
 
 describe("CardGrid search backoff", () => {
   it("does not re-ask for params the server rate limited, and tells the user why", async () => {
+    const report = vi.spyOn(console, "error").mockImplementation(() => {});
     failing(new RateLimitError("You're making requests too quickly. Please wait a moment and try again.", 900));
     render(<Harness />);
 
@@ -63,6 +64,8 @@ describe("CardGrid search backoff", () => {
     // The server knows what the wait is; a generic "something went wrong" sends people looking for a
     // fault in their account that isn't there.
     await waitFor(() => expect(showAlert).toHaveBeenCalledWith(expect.stringContaining("too quickly"), "error"));
+    expect(report).not.toHaveBeenCalled();
+    report.mockRestore();
 
     fireEvent.click(screen.getByText("search A"));
     await settle();
@@ -71,6 +74,17 @@ describe("CardGrid search backoff", () => {
     // A different search is a person, not a loop: it still goes through.
     fireEvent.click(screen.getByText("search B"));
     await waitFor(() => expect(getSearchResults).toHaveBeenCalledTimes(2));
+  });
+
+  it("does not report a handled API error that is not a rate limit", async () => {
+    const report = vi.spyOn(console, "error").mockImplementation(() => {});
+    failing(new ResponseError("Something went wrong."));
+    render(<Harness />);
+
+    fireEvent.click(screen.getByText("search A"));
+    await waitFor(() => expect(showAlert).toHaveBeenCalled());
+    expect(report).not.toHaveBeenCalled();
+    report.mockRestore();
   });
 
   it("keeps each failed search's cooldown when a second one fails in the same window", async () => {

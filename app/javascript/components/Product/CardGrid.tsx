@@ -6,7 +6,7 @@ import { PROFILE_SORT_KEYS, SORT_KEYS } from "$app/parsers/product";
 import { classNames } from "$app/utils/classNames";
 import { CurrencyCode, getShortCurrencySymbol } from "$app/utils/currency";
 import { asyncVoid } from "$app/utils/promise";
-import { AbortError, RateLimitError } from "$app/utils/request";
+import { AbortError, RateLimitError, ResponseError } from "$app/utils/request";
 
 import { Button } from "$app/components/Button";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
@@ -144,10 +144,12 @@ export const useSearchReducer = (initial: Omit<State, "offset">) => {
             "error",
           );
           dispatch({ type: "load-error" });
-          // A response that isn't our API's error shape (a block page, a proxy error, a dropped
-          // connection) is worth reporting, but throwing here would take the alert down with it.
-          // eslint-disable-next-line no-console
-          console.error(e);
+          if (!(e instanceof ResponseError)) {
+            // A response that isn't our API's error shape (a block page, a proxy error, a dropped
+            // connection) is worth reporting, but throwing here would take the alert down with it.
+            // eslint-disable-next-line no-console
+            console.error(e);
+          }
         }
       } finally {
         if (activeRequestKey.current === requestKey) activeRequestKey.current = null;
