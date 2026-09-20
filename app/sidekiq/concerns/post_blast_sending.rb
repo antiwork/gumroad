@@ -50,10 +50,6 @@ module PostBlastSending
     $redis.set(RedisKey.blast_pending_recipients(@blast.id), @members.size, ex: PENDING_RECIPIENTS_TTL.to_i)
   end
 
-  def decrement_pending_recipients(count)
-    $redis.decrby(RedisKey.blast_pending_recipients(@blast.id), count)
-  end
-
   def send_members(members)
     cache = {}
     members.each_slice(recipients_slice_size) do |members_slice|
@@ -74,13 +70,17 @@ module PostBlastSending
   # one duplicate provider slice, which is visible and bounded.
   def send_provider_slice(provider:, members:, cache:)
     renew_chunk_claim! if respond_to?(:renew_chunk_claim!, true)
-    members = drop_members_already_sent(members)
+    # Skipped first: a recipient an earlier execution already charged and recorded must not be
+    # sent to or charged twice. The count is then taken BEFORE the sent-row filter, because an
+    # execution is charged for every member the published count still holds — including one whose
+    # row was written by an execution that died before its own decrement.
     members = drop_members_already_skipped_from_audience(members)
+    owed = members.size
+    members = drop_members_already_sent(members)
     kept, dropped = partition_members_that_left_the_audience(members)
-    owed = kept.size + dropped.size
     if kept.empty?
-      record_skipped_audience_members(dropped)
-      return decrement_pending_recipients(owed)
+      settle_pending_recipients(dropped, owed)
+      return
     end
 
     recipients = prepare_recipients(kept)
@@ -90,8 +90,7 @@ module PostBlastSending
     else
       store_recipients_as_sent(kept)
     end
-    record_skipped_audience_members(dropped)
-    decrement_pending_recipients(owed)
+    settle_pending_recipients(dropped, owed)
   end
 
   def deliver_provider_slice(provider:, recipients:, cache:)
@@ -340,14 +339,19 @@ module PostBlastSending
     $redis.smembers(RedisKey.blast_skipped_emails(@blast.id)).to_set
   end
 
-  def record_skipped_audience_members(members)
-    emails = members.map(&:email)
-    return if emails.empty?
-
+  # Records this slice's skips and charges them to the published count in one atomic step.
+  # Split into two calls, a crash in between leaves a member marked as skipped — that marker is
+  # what makes a retry drop them — with the count still charged for them, and no later execution
+  # can settle it.
+  def settle_pending_recipients(skipped, owed)
+    emails = skipped.map(&:email)
     key = RedisKey.blast_skipped_emails(@blast.id)
-    $redis.pipelined do |pipe|
-      pipe.sadd(key, emails)
-      pipe.expire(key, PENDING_RECIPIENTS_TTL.to_i)
+    $redis.multi do |tx|
+      unless emails.empty?
+        tx.sadd(key, emails)
+        tx.expire(key, PENDING_RECIPIENTS_TTL.to_i)
+      end
+      tx.decrby(RedisKey.blast_pending_recipients(@blast.id), owed)
     end
   end
 
