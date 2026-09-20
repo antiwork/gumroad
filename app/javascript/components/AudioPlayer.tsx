@@ -11,6 +11,7 @@ import { useUserAgentInfo } from "$app/components/UserAgent";
 type Props = {
   src: string;
   startTime?: number;
+  contentLength?: number | null;
   onPlay?: () => void;
   onPause?: () => void;
   onSeeked?: (currentTime: number) => void;
@@ -82,7 +83,9 @@ export const AudioPlayer = (props: Props) => {
   const onLoadedMetadata = withAudio((audio) => {
     setDuration(audio.duration);
     setIsLoaded(true);
-    audio.currentTime = isResumableMediaLocation(props.startTime, audio.duration) ? props.startTime : 0;
+    audio.currentTime = isResumableMediaLocation(props.startTime, props.contentLength ?? audio.duration)
+      ? props.startTime
+      : 0;
     playAudio();
     props.onLoadedMetadata?.(audio.duration);
   });

@@ -20,3 +20,13 @@ it.each([
   fireEvent.loadedMetadata(audio);
   expect(audio.currentTime).toBe(expected);
 });
+
+it("keeps a mid-file resume when backend duration is longer than the loaded file", () => {
+  const { container } = render(<AudioPlayer src="https://example.com/audio.mp3" startTime={45} contentLength={1000} />);
+  const audio = container.querySelector("audio");
+  if (!audio) throw new Error("Audio element missing");
+  Object.defineProperty(audio, "duration", { value: 46 });
+  audio.play = vi.fn().mockResolvedValue(undefined);
+  fireEvent.loadedMetadata(audio);
+  expect(audio.currentTime).toBe(45);
+});

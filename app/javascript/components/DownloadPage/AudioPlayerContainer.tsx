@@ -101,6 +101,7 @@ export const AudioPlayerContainer = ({
         });
       }}
       startTime={resumeLocation}
+      contentLength={contentLength}
     />
   );
 };
