@@ -429,7 +429,11 @@ class PaypalChargeProcessor
     if paypal_rest_api.successful_response?(api_response)
       api_response.result.status
     else
-      raise ChargeProcessorError, build_error_message(api_response.status_code, api_response.result)
+      issue = paypal_rejection_issue(api_response)
+      issue ||= api_response.result.error if api_response.result.respond_to?(:error)
+      raise ChargeProcessorInvalidRequestError.new(
+        build_error_message(api_response.status_code, api_response.result), processor_error_code: issue
+      )
     end
   end
 
