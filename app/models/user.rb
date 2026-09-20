@@ -1217,13 +1217,9 @@ class User < ApplicationRecord
       alive_user_compliance_info&.legal_entity_country_code == "US"
   end
 
-  # Anchored on the payout account's age, not signup date — a seller can hold an
-  # account for years before connecting one. Only accounts a payout could land on have to
-  # season: destination is picked at payout time, so an account the processor cannot select
-  # would reject a payout that does get created. An account inherits seasoning from any
-  # earlier account of the same kind (alive or retired), since a country/payout-method
-  # change retires one row and creates another — reading only the live row would restart the
-  # clock on a longtime seller.
+  # Anchored on the payout account's age, not signup date. An account inherits seasoning from
+  # any earlier account of the same kind (alive or retired): a country/payout-method change
+  # retires one row and creates another, so reading only the live row restarts the clock.
   def stripe_accounts_seasoned_for_instant_payouts?
     destinations = instant_payout_destination_accounts
     return false if destinations.empty?
@@ -1246,9 +1242,8 @@ class User < ApplicationRecord
   end
   private :instant_payout_destination_accounts
 
-  # Read through the processor's own filter, as a payout claim does
-  # (Payouts.select_and_claim_payable_balances): a balance it drops cannot name a destination, and
-  # the held-balance branch of destination_merchant_account would otherwise hand back the retired
+  # Read through the processor's own filter, as a payout claim does: a balance the claim drops
+  # cannot name a destination, or destination_merchant_account would hand back the retired
   # account the balance is stranded on while the payout is created elsewhere.
   def stripe_held_unpaid_balances
     unpaid_balances_up_to_date(Date.today).includes(:merchant_account).select do |balance|
