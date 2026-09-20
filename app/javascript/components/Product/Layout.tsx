@@ -297,7 +297,6 @@ const CtaBar = ({
     >
       <div
         ref={ref}
-        // Stack the nowrap price and CTA in narrow WebViews.
         className="mx-auto flex max-w-product-page items-center justify-between gap-2 p-4 max-sm:flex-col max-sm:items-stretch lg:gap-4 lg:px-8"
         style={{
           transition: "var(--transition-duration)",
