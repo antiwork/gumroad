@@ -2798,6 +2798,14 @@ describe ContactingCreatorMailer do
         expect($redis.get(RedisKey.product_review_seller_notified(review.id))).to be_nil
         expect(review.reload.seller_notified_at).to be_nil
       end
+
+      it "reads the review and its associations from the primary, so a worker's replica lag cannot hide the purchase" do
+        expect(ApplicationRecord).to receive(:connected_to).with(role: :writing).and_call_original
+
+        mail = ContactingCreatorMailer.review_submitted(review.id)
+
+        expect(mail.to).to eq([review.link.user.email])
+      end
     end
 
     it "does not send for a deleted review" do
