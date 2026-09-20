@@ -276,15 +276,23 @@ module PostBlastSending
     return [members, []] unless buyer_post || @post.audience_type?
 
     details_by_member_id = AudienceMember.where(id: members.map(&:id)).select(:id, :details).index_by(&:id)
-    purchase_ids = details_by_member_id.values.flat_map { matching_audience_purchase_ids(_1.details) }.uniq
-    eligible_purchase_ids = Purchase.includes(:subscription).where(id: purchase_ids).filter_map { |purchase| purchase.id if purchase.should_be_audience_member? }.to_set
+    purchase_ids = details_by_member_id.values.flat_map { Array.wrap(_1.details["purchases"]).pluck("id") }.uniq
+    eligible_purchase_ids = Purchase.includes(:subscription).where(id: purchase_ids).filter_map { |purchase| purchase.id if purchase.should_be_audience_member? }
+    # Apply the original detail predicates and MAX(purchase_id) after removing ineligible
+    # purchases, retaining the cutoff when the parent rebuilt a dated audience.
+    qualifying_purchase_ids = if eligible_purchase_ids.empty?
+      {}
+    else
+      AudienceMember.filter(seller_id: @post.seller_id, params: audience_filters, with_ids: true,
+                            ids: members.map(&:id), purchase_ids: eligible_purchase_ids, as_of: @audience_as_of)
+        .pluck(:id, :purchase_id).to_h
+    end
     allow_non_purchase_recipients = !buyer_post && !purchase_targeted?
 
     kept, dropped = members.partition do |member|
       details = details_by_member_id[member.id]&.details || {}
-      surviving_ids = matching_audience_purchase_ids(details).select { eligible_purchase_ids.include?(_1) }
-      if surviving_ids.any?
-        member.purchase_id = surviving_ids.first unless surviving_ids.include?(member.purchase_id.to_i)
+      if (purchase_id = qualifying_purchase_ids[member.id])
+        member.purchase_id = purchase_id
         true
       else
         allow_non_purchase_recipients && (details["follower"].present? || details["affiliates"].present?)
@@ -294,34 +302,11 @@ module PostBlastSending
     [kept, dropped]
   end
 
-  def matching_audience_purchase_ids(details)
-    purchases = Array.wrap(details.to_h["purchases"])
-    product_ids = targeted_product_ids
-    variant_ids = targeted_variant_ids
-    selected = if product_ids.empty? && variant_ids.empty?
-      purchases
-    else
-      purchases.select do |purchase|
-        product_ids.include?(purchase["product_id"].to_i) ||
-          (Array.wrap(purchase["variant_ids"]).map(&:to_i) & variant_ids).any?
-      end
-    end
-    selected.filter_map { _1["id"]&.to_i }
-  end
-
-  def purchase_targeted?
-    targeted_product_ids.any? || targeted_variant_ids.any?
-  end
-
   # Audience selection uses bought_* filters, not the post's own link/variant.
   # A product (or variant) post with only not_bought_* still reaches buyers of
   # other products; treating link_id as required targeting would drop all of them.
-  def targeted_product_ids
-    @targeted_product_ids ||= Array(audience_filters[:bought_product_ids]).map(&:to_i).uniq
-  end
-
-  def targeted_variant_ids
-    @targeted_variant_ids ||= Array(audience_filters[:bought_variant_ids]).map(&:to_i).uniq
+  def purchase_targeted?
+    audience_filters.values_at(:bought_product_ids, :bought_variant_ids).any?(&:present?)
   end
 
   def audience_filters

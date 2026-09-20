@@ -32,6 +32,32 @@ describe SendPostBlastEmailsSliceJob, :freeze_time do
   end
 
   describe "#perform" do
+    it "rebinds a stale purchase to the newest qualifying purchase in the chunk" do
+      product = create(:product, user: @seller)
+      email = "buyer@example.com"
+      create(:purchase, link: product, email:, price_cents: 500)
+      qualifying = create(:purchase, link: product, email:, price_cents: 10_000)
+      newest = create(:purchase, link: product, email:, price_cents: 10_000)
+      post = create(:product_post, :published, seller: @seller, link: product,
+                                               bought_products: [product.unique_permalink], paid_more_than_cents: 5_000)
+      blast = create(:blast, :just_requested, post:)
+      activate_partition(blast)
+      job = described_class.new
+      allow(job).to receive(:send_members).and_wrap_original do |method, members|
+        expect(members.sole.purchase_id).to eq(newest.id)
+        newest.update_column(:can_contact, false)
+        expect(@seller.audience_members.find_by!(email:).details["purchases"].pluck("id")).to include(newest.id)
+        method.call(members)
+      end
+
+      job.perform(blast.id, partition_key, 0, 1, audience_ids)
+
+      expect_sent_count 1
+      expect(PostSendgridApi.mails.fetch(email)[:custom_args]["purchase_id"]).to eq(qualifying.id.to_s)
+      expect(UrlRedirect.find_by!(installment: post).purchase_id).to eq(qualifying.id)
+      expect(blast.reload.completed_at).to be_present
+    end
+
     it "sends only the handed chunk and records it as done" do
       post = post_with_audience
       blast = create(:blast, :just_requested, post:)

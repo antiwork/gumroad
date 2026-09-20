@@ -377,6 +377,68 @@ describe SendPostBlastEmailsJob, :freeze_time do
         ]
       end
 
+      describe "replacement purchase selection" do
+        def opt_out_after_selection(job, purchase)
+          allow(job).to receive(:send_members).and_wrap_original do |method, members|
+            expect(members.sole.purchase_id).to eq(purchase.id)
+            leave_audience(purchase, can_contact: false)
+            method.call(members)
+          end
+        end
+
+        it "uses the qualifying purchase for links and personalization when the newest purchase opts out" do
+          product = create(:product, user: @seller)
+          email = "buyer@example.com"
+          create(:purchase, link: product, email:, price_cents: 500, full_name: "Excluded Buyer")
+          qualifying = create(:purchase, link: product, email:, price_cents: 10_000, full_name: "Qualifying Buyer")
+          newest = create(:purchase, link: product, email:, price_cents: 10_000, full_name: "Optedout Buyer")
+          post = create(:product_post, :published, seller: @seller, link: product,
+                                                   bought_products: [product.unique_permalink], paid_more_than_cents: 5_000, message: "Hello {{first_name}}")
+          job = described_class.new
+          opt_out_after_selection(job, newest)
+
+          job.perform(create(:blast, :just_requested, post:).id)
+
+          expect_sent_count 1
+          expect_sent_email email, content_match: [
+            /#{unsubscribe_purchase_url(qualifying.secure_external_id(scope: "unsubscribe"))}.*Unsubscribe/,
+            /Hello Qualifying/,
+          ]
+          expect(UrlRedirect.find_by!(installment: post).purchase_id).to eq(qualifying.id)
+        end
+
+        it "chooses the highest qualifying purchase id when multiple purchases survive" do
+          email = "buyer@example.com"
+          create(:purchase, :from_seller, seller: @seller, email:)
+          qualifying = create(:purchase, :from_seller, seller: @seller, email:)
+          newest = create(:purchase, :from_seller, seller: @seller, email:)
+          post = create(:seller_post, :published, seller: @seller)
+          job = described_class.new
+          opt_out_after_selection(job, newest)
+
+          job.perform(create(:blast, :just_requested, post:).id)
+
+          expect_sent_count 1
+          expect(PostSendgridApi.mails.fetch(email)[:custom_args]["purchase_id"]).to eq(qualifying.id.to_s)
+        end
+
+        it "does not replace a purchase with one acquired after the audience cutoff" do
+          email = "buyer@example.com"
+          original = create(:purchase, :from_seller, seller: @seller, email:, created_at: 2.hours.ago)
+          @seller.audience_members.find_by!(email:).update_column(:created_at, 2.hours.ago)
+          create(:purchase, :from_seller, seller: @seller, email:)
+          post = create(:seller_post, :published, seller: @seller)
+          blast = create(:blast, :just_requested, post:, started_at: 1.hour.ago)
+          job = described_class.new
+          opt_out_after_selection(job, original)
+
+          job.perform(blast.id)
+
+          expect_sent_count 0
+          expect(blast.reload.completed_at).to be_present
+        end
+      end
+
       it "drops a follower whose remaining purchases no longer match an audience post filter" do
         product_a = create(:product, user: @seller)
         product_b = create(:product, user: @seller)

@@ -204,6 +204,7 @@ class SendPostBlastEmailsJob
     def load_audience_members
       snapshot_key = RedisKey.blast_audience_snapshot(@blast.id)
       snapshotted_ids = $redis.lrange(snapshot_key, 0, -1)
+      @audience_as_of = snapshotted_ids.empty? ? @blast.started_at : nil
 
       if snapshotted_ids.empty?
         # Fully delivered: nothing left to send, so skip the scan and let `perform` stamp it.
@@ -222,7 +223,7 @@ class SendPostBlastEmailsJob
 
         # Bounded to `started_at`: a resume days later must not reach people who joined after the send.
         members = WithMaxExecutionTime.timeout_queries(seconds: audience_load_timeout_seconds) do
-          AudienceMember.filter(seller_id: @post.seller_id, params: @filters, with_ids: true, as_of: @blast.started_at)
+          AudienceMember.filter(seller_id: @post.seller_id, params: @filters, with_ids: true, as_of: @audience_as_of)
             .select(:id, :email, :purchase_id, :follower_id, :affiliate_id).to_a
         end
         write_audience_snapshot(snapshot_key, members)
