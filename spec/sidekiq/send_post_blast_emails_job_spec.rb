@@ -350,6 +350,19 @@ describe SendPostBlastEmailsJob, :freeze_time do
         expect_sent_count 0
       end
 
+      it "still sends a product post whose audience is not_bought_products of that product" do
+        excluded = create(:product, user: @seller)
+        other = create(:product, user: @seller)
+        buyer = create(:purchase, :from_seller, seller: @seller, link: other)
+        create(:purchase, :from_seller, seller: @seller, link: excluded)
+
+        post = create(:product_post, :published, seller: @seller, link: excluded, not_bought_products: [excluded.unique_permalink])
+        described_class.new.perform(create(:blast, :just_requested, post:).id)
+
+        expect_sent_count 1
+        expect_sent_email buyer.email
+      end
+
       it "prepares the surviving matching purchase when the original one left the audience" do
         surviving = create(:purchase, :from_seller, seller: @seller)
         later = create(:purchase, :from_seller, seller: @seller, email: surviving.email)

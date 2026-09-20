@@ -314,20 +314,15 @@ module PostBlastSending
     targeted_product_ids.any? || targeted_variant_ids.any?
   end
 
+  # Audience selection uses bought_* filters, not the post's own link/variant.
+  # A product (or variant) post with only not_bought_* still reaches buyers of
+  # other products; treating link_id as required targeting would drop all of them.
   def targeted_product_ids
-    @targeted_product_ids ||= begin
-      ids = Array(audience_filters[:bought_product_ids]).map(&:to_i)
-      ids << @post.link_id if @post.product_type? && @post.link_id
-      ids.uniq
-    end
+    @targeted_product_ids ||= Array(audience_filters[:bought_product_ids]).map(&:to_i).uniq
   end
 
   def targeted_variant_ids
-    @targeted_variant_ids ||= begin
-      ids = Array(audience_filters[:bought_variant_ids]).map(&:to_i)
-      ids << @post.base_variant_id if @post.variant_type? && @post.base_variant_id
-      ids.uniq
-    end
+    @targeted_variant_ids ||= Array(audience_filters[:bought_variant_ids]).map(&:to_i).uniq
   end
 
   def audience_filters
