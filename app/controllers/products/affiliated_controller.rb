@@ -22,12 +22,17 @@ class Products::AffiliatedController < Sellers::BaseController
     # a conditional UPDATE lets exactly one request win, and only the winner mails the seller and
     # reports success. The loser 404s like any other stale row.
     #
+    # Same UPDATE records `removed_at_request` so a crash cannot leave a deleted row that still
+    # mails on re-add. Seller-side remove does not set this bit.
+    #
     # It also skips validations, deliberately: this is a state transition, not a creation, and a
     # legacy row that no longer satisfies today's rules (basis points out of range, no destination
     # URL and no seller username) would otherwise raise and leave the affiliate with no exit — the
     # thing this endpoint exists for.
     now = Time.current
-    removed = DirectAffiliate.alive.where(id: @direct_affiliate.id).update_all(deleted_at: now, updated_at: now)
+    removed = DirectAffiliate.alive.where(id: @direct_affiliate.id).update_all(
+      ["deleted_at = ?, updated_at = ?, #{DirectAffiliate.set_removed_at_request_sql}", now, now]
+    )
     e404 if removed.zero?
 
     @direct_affiliate.reload
