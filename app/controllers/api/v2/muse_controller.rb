@@ -53,7 +53,7 @@ class Api::V2::MuseController < Api::V2::BaseController
     def doorkeeper_unauthorized_render_options(*)
       response.set_header(
         "WWW-Authenticate",
-        %(Bearer realm="Gumroad", resource_metadata="#{base_url}/.well-known/oauth-protected-resource")
+        %(Bearer realm="Gumroad", resource_metadata="#{base_url}/.well-known/oauth-protected-resource#{request.path}")
       )
       nil
     end

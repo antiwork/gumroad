@@ -107,7 +107,20 @@ describe "Muse MCP" do
     post_mcp({ jsonrpc: "2.0", id: 1, method: "ping" }, token: nil)
 
     expect(response).to have_http_status(:unauthorized)
-    expect(response.headers["WWW-Authenticate"]).to include("resource_metadata=")
+    expect(response.headers["WWW-Authenticate"]).to include("resource_metadata=\"#{PROTOCOL}://#{DOMAIN}/.well-known/oauth-protected-resource/muse/v1/mcp\"")
+  end
+
+  it "points Claude and ChatGPT 401 challenges at their own resource metadata" do
+    %w[claude chatgpt].each do |client|
+      post "/#{client}/v1/mcp",
+           params: { jsonrpc: "2.0", id: 1, method: "ping" }.to_json,
+           headers: { "CONTENT_TYPE" => "application/json", "HOST" => DOMAIN }
+
+      expect(response).to have_http_status(:unauthorized)
+      expect(response.headers["WWW-Authenticate"]).to include(
+        "resource_metadata=\"#{PROTOCOL}://#{DOMAIN}/.well-known/oauth-protected-resource/#{client}/v1/mcp\""
+      )
+    end
   end
 
   it "serves the same MCP tools on Claude and ChatGPT aliases" do
