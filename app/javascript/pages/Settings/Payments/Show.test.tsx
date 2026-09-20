@@ -621,6 +621,14 @@ describe("switching to PayPal where the bank rail cannot be re-created", () => {
     fireEvent.change(screen.getByLabelText("PayPal Email"), { target: { value: "paypal@example.com" } });
   };
 
+  it("names the account being removed with the masked value the page already holds", () => {
+    renderIndiaSeller(true);
+    save();
+
+    expect(screen.getByText(/will be removed from your payout settings/u)).toBeTruthy();
+    expect(screen.getByText("******6789")).toBeTruthy();
+  });
+
   it("opens the typed confirmation instead of saving, then saves with the confirmation flag", () => {
     renderIndiaSeller(true);
     save();
@@ -670,5 +678,43 @@ describe("switching to PayPal where the bank rail cannot be re-created", () => {
       expect.objectContaining({ payment_address: "paypal@example.com" }),
     );
     expect(JSON.stringify(mocks.put.mock.calls[0])).not.toContain("confirm_bank_rail_loss");
+  });
+});
+
+describe("bank payout switch option on the payments page", () => {
+  const renderSeller = (country_code: string, show_bank_account: boolean, is_form_disabled = false) => {
+    mocks.usePage.mockReturnValue({
+      props: {
+        ...pageProps({ country_code, payout_currency: "inr" }, { country: country_code }),
+        countries: { [country_code]: country_code === "IN" ? "India" : "United States" },
+        is_form_disabled,
+        bank_account_details: {
+          show_bank_account,
+          show_paypal: true,
+          is_a_card: false,
+          routing_number: null,
+          account_number_visual: null,
+          card: null,
+          card_data_handling_mode: null,
+          bank_account: null,
+        },
+      },
+    });
+    render(<PaymentsPage />);
+  };
+
+  it("shows the India seller a disabled option and the reason instead of hiding it", () => {
+    renderSeller("IN", false);
+
+    expect(screen.getByRole("button", { name: "Switch to direct deposit" }).hasAttribute("disabled")).toBe(true);
+    expect(screen.getByText(/New bank payout accounts cannot be set up in India/u)).toBeTruthy();
+  });
+
+  it("leaves the eligible seller's working switch alone", () => {
+    renderSeller("US", true);
+    fireEvent.click(screen.getByRole("radio", { name: "PayPal" }));
+
+    expect(screen.getByRole("button", { name: "Switch to direct deposit" }).hasAttribute("disabled")).toBe(false);
+    expect(screen.queryByText(/New bank payout accounts cannot be set up in India/u)).toBeNull();
   });
 });

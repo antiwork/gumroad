@@ -47,6 +47,26 @@ const PayPalEmailSection = ({
           <LinkButton className="justify-self-start" onClick={() => updatePayoutMethod("bank")}>
             Switch to direct deposit
           </LinkButton>
+        ) : // Only India: everywhere else `!canSetupBankPayouts` can mean an unsupported country or
+        // missing compliance data, which this copy would misdescribe. An eligible seller held back
+        // by `isFormDisabled` is a permission restriction and keeps the existing silent hide.
+        !canSetupBankPayouts && user.country_code === "IN" ? (
+          <div className="grid gap-2">
+            <LinkButton
+              className="justify-self-start disabled:cursor-not-allowed disabled:opacity-50"
+              disabled
+              aria-describedby={`${uid}-bank-payouts-unavailable`}
+            >
+              Switch to direct deposit
+            </LinkButton>
+            <small id={`${uid}-bank-payouts-unavailable`} className="block text-muted">
+              New bank payout accounts cannot be set up in India.{" "}
+              <a href={Routes.help_center_root_path()} className="underline">
+                Contact support
+              </a>{" "}
+              if you need help with a previous bank payout account.
+            </small>
+          </div>
         ) : null}
         <Fieldset state={errorFieldNames.has("paypal_email_address") ? "danger" : undefined}>
           <FieldsetTitle>
