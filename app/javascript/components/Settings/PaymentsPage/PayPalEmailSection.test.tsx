@@ -83,14 +83,28 @@ describe("bank payout switch option", () => {
     expect(updatePayoutMethod).not.toHaveBeenCalled();
   });
 
-  it("describes the disabled option to assistive tech and drops the pointer affordance", () => {
+  it("describes the disabled option to assistive tech and drops both link affordances", () => {
     renderSection();
 
     const option = switchOption();
     expect(option.className).toContain("disabled:cursor-not-allowed");
+    expect(option.className).toContain("disabled:no-underline");
     expect(document.getElementById(option.getAttribute("aria-describedby") ?? "")?.textContent).toMatch(
       /New bank payout accounts cannot be set up in India/u,
     );
+  });
+
+  it("carries the reason in a status alert rather than muted helper text, and keeps support underlined", () => {
+    renderSection();
+
+    const explanation = document.getElementById(switchOption().getAttribute("aria-describedby") ?? "");
+    expect(explanation?.getAttribute("role")).toBe("status");
+    expect(explanation?.tagName).not.toBe("SMALL");
+    expect(explanation?.className).not.toContain("text-muted");
+
+    const support = screen.getByRole("link", { name: "Contact support" });
+    expect(explanation?.contains(support)).toBe(true);
+    expect(support.className).toContain("underline");
   });
 
   // The country reason is true regardless of who is editing, and the control is inert either way.

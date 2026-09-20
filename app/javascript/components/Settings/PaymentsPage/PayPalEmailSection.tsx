@@ -52,20 +52,22 @@ const PayPalEmailSection = ({
         // by `isFormDisabled` is a permission restriction and keeps the existing silent hide.
         !canSetupBankPayouts && user.country_code === "IN" ? (
           <div className="grid gap-2">
+            {/* Underline is the affordance every actionable link on this page carries, so the
+                inert control drops it and keeps only the dimmed label. */}
             <LinkButton
-              className="justify-self-start disabled:cursor-not-allowed disabled:opacity-50"
+              className="justify-self-start disabled:cursor-not-allowed disabled:no-underline disabled:opacity-50"
               disabled
               aria-describedby={`${uid}-bank-payouts-unavailable`}
             >
               Switch to direct deposit
             </LinkButton>
-            <small id={`${uid}-bank-payouts-unavailable`} className="block text-muted">
+            <Alert id={`${uid}-bank-payouts-unavailable`} role="status" variant="info">
               New bank payout accounts cannot be set up in India.{" "}
               <a href={Routes.help_center_root_path()} className="underline">
                 Contact support
               </a>{" "}
               if you need help with a previous bank payout account.
-            </small>
+            </Alert>
           </div>
         ) : null}
         <Fieldset state={errorFieldNames.has("paypal_email_address") ? "danger" : undefined}>
