@@ -74,18 +74,23 @@ module PostBlastSending
   # one duplicate provider slice, which is visible and bounded.
   def send_provider_slice(provider:, members:, cache:)
     renew_chunk_claim! if respond_to?(:renew_chunk_claim!, true)
-    owed = members.size
     members = drop_members_already_sent(members)
-    members = drop_members_that_left_the_audience(members)
-    return decrement_pending_recipients(owed) if members.empty?
+    members = drop_members_already_skipped_from_audience(members)
+    kept, dropped = partition_members_that_left_the_audience(members)
+    owed = kept.size + dropped.size
+    if kept.empty?
+      record_skipped_audience_members(dropped)
+      return decrement_pending_recipients(owed)
+    end
 
-    recipients = prepare_recipients(members)
+    recipients = prepare_recipients(kept)
     deliver_provider_slice(provider: provider, recipients: recipients, cache: cache)
     if @blast.to_non_openers?
-      mark_members_sent_in_this_blast(members)
+      mark_members_sent_in_this_blast(kept)
     else
-      store_recipients_as_sent(members)
+      store_recipients_as_sent(kept)
     end
+    record_skipped_audience_members(dropped)
     decrement_pending_recipients(owed)
   end
 
@@ -246,7 +251,8 @@ module PostBlastSending
     $redis.del(*[snapshot_key, "#{snapshot_key}:tmp", checkpoint_key, "#{checkpoint_key}:tmp",
                  RedisKey.blast_pending_recipients(@blast.id), RedisKey.blast_done_slices(@blast.id),
                  RedisKey.blast_active_slice_partition(@blast.id), partition_chunks_key,
-                 RedisKey.blast_quota_deferred_until(@blast.id), RedisKey.blast_quota_admitted(@blast.id)].compact)
+                 RedisKey.blast_quota_deferred_until(@blast.id), RedisKey.blast_quota_admitted(@blast.id),
+                 RedisKey.blast_skipped_emails(@blast.id)].compact)
   end
 
   # Re-checked right before each provider call: the chunk-level filter ran once at the start
@@ -261,32 +267,93 @@ module PostBlastSending
     members.reject { already_sent.include?(_1.email) }
   end
 
-  # The audience row is rebuilt out of band, and nothing rechecks it between recipient
-  # selection and this handoff, so a slice can still carry someone who has since left the
-  # audience: an opt-out or refund applied after the row was built, or a row that never
-  # converged. Re-derive eligibility from the live purchase rows, which can only ever
-  # remove a recipient.
-  def drop_members_that_left_the_audience(members)
-    return members if members.empty?
+  # Recheck live purchase eligibility at the provider handoff: the audience row is
+  # rebuilt out of band, so a slice can still carry someone who has since left.
+  # Matching this post's targeting can only ever remove a recipient.
+  def partition_members_that_left_the_audience(members)
+    return [members, []] if members.empty?
     # A follower or affiliate post reaches people the purchase predicate says nothing about.
-    customer_post = @post.seller_or_product_or_variant_type?
-    return members unless customer_post || @post.audience_type?
+    buyer_post = @post.seller_or_product_or_variant_type?
+    return [members, []] unless buyer_post || @post.audience_type?
 
     details_by_member_id = AudienceMember.where(id: members.map(&:id)).select(:id, :details).index_by(&:id)
-    purchase_ids = details_by_member_id.values.flat_map { audience_purchase_ids(_1.details) }.uniq
+    purchase_ids = details_by_member_id.values.flat_map { matching_audience_purchase_ids(_1.details) }.uniq
     eligible_purchase_ids = Purchase.includes(:subscription).where(id: purchase_ids).filter_map { |purchase| purchase.id if purchase.should_be_audience_member? }.to_set
+    allow_non_purchase_recipients = !buyer_post && !purchase_targeted?
 
     kept, dropped = members.partition do |member|
       details = details_by_member_id[member.id]&.details || {}
-      audience_purchase_ids(details).any? { eligible_purchase_ids.include?(_1) } ||
-        (!customer_post && (details["follower"].present? || details["affiliates"].present?))
+      surviving_ids = matching_audience_purchase_ids(details).select { eligible_purchase_ids.include?(_1) }
+      if surviving_ids.any?
+        member.purchase_id = surviving_ids.first unless surviving_ids.include?(member.purchase_id.to_i)
+        true
+      else
+        allow_non_purchase_recipients && (details["follower"].present? || details["affiliates"].present?)
+      end
     end
     Rails.logger.info("[#{self.class.name}] blast_id=#{@blast.id} dropped #{dropped.size} recipients who left the audience") if dropped.any?
-    kept
+    [kept, dropped]
   end
 
-  def audience_purchase_ids(details)
-    Array.wrap(details.to_h["purchases"]).filter_map { _1["id"] }
+  def matching_audience_purchase_ids(details)
+    purchases = Array.wrap(details.to_h["purchases"])
+    product_ids = targeted_product_ids
+    variant_ids = targeted_variant_ids
+    selected = if product_ids.empty? && variant_ids.empty?
+      purchases
+    else
+      purchases.select do |purchase|
+        product_ids.include?(purchase["product_id"].to_i) ||
+          (Array.wrap(purchase["variant_ids"]).map(&:to_i) & variant_ids).any?
+      end
+    end
+    selected.filter_map { _1["id"]&.to_i }
+  end
+
+  def purchase_targeted?
+    targeted_product_ids.any? || targeted_variant_ids.any?
+  end
+
+  def targeted_product_ids
+    @targeted_product_ids ||= begin
+      ids = Array(audience_filters[:bought_product_ids]).map(&:to_i)
+      ids << @post.link_id if @post.product_type? && @post.link_id
+      ids.uniq
+    end
+  end
+
+  def targeted_variant_ids
+    @targeted_variant_ids ||= begin
+      ids = Array(audience_filters[:bought_variant_ids]).map(&:to_i)
+      ids << @post.base_variant_id if @post.variant_type? && @post.base_variant_id
+      ids.uniq
+    end
+  end
+
+  def audience_filters
+    @filters || @post.audience_members_filter_params
+  end
+
+  def drop_members_already_skipped_from_audience(members)
+    already_skipped = skipped_audience_emails
+    return members if already_skipped.empty?
+
+    members.reject { already_skipped.include?(_1.email) }
+  end
+
+  def skipped_audience_emails
+    $redis.smembers(RedisKey.blast_skipped_emails(@blast.id)).to_set
+  end
+
+  def record_skipped_audience_members(members)
+    emails = members.map(&:email)
+    return if emails.empty?
+
+    key = RedisKey.blast_skipped_emails(@blast.id)
+    $redis.pipelined do |pipe|
+      pipe.sadd(key, emails)
+      pipe.expire(key, PENDING_RECIPIENTS_TTL.to_i)
+    end
   end
 
   # Only after the provider accepted, so a row here always has an email behind it. A transient

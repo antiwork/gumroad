@@ -62,6 +62,38 @@ describe SendPostBlastEmailsSliceJob, :freeze_time do
       expect(PostSendgridApi.mails.keys).to eq([still_contactable.email])
     end
 
+    it "does not count skipped recipients again when a later provider slice fails and the child retries" do
+      post = create(:seller_post, :published, seller: @seller)
+      skipped_emails = 2.times.map do
+        purchase = create(:purchase, :from_seller, seller: @seller)
+        purchase.update_column(:can_contact, false)
+        expect(AudienceMember.find_by!(seller_id: @seller.id, email: purchase.email).details["purchases"].pluck("id")).to include(purchase.id)
+        purchase.email
+      end
+      create(:purchase, :from_seller, seller: @seller)
+      blast = create(:blast, :just_requested, post:)
+      activate_partition(blast)
+      pending_key = RedisKey.blast_pending_recipients(blast.id)
+      skipped_key = RedisKey.blast_skipped_emails(blast.id)
+      $redis.set(pending_key, 3)
+      allow_any_instance_of(described_class).to receive(:recipients_slice_size).and_return(1)
+      allow_any_instance_of(described_class).to receive(:load_chunk_members).and_wrap_original do |method, ids|
+        method.call(ids).sort_by { skipped_emails.include?(_1.email) ? 0 : 1 }
+      end
+      allow(PostSendgridApi).to receive(:process).and_raise(StandardError, "provider down")
+
+      expect { described_class.new.perform(blast.id, partition_key, 0, 1, audience_ids) }.to raise_error(StandardError, "provider down")
+      pending_after_first = $redis.get(pending_key).to_i
+      expect($redis.smembers(skipped_key)).to match_array(skipped_emails)
+      expect(pending_after_first).to eq(1)
+
+      expect { described_class.new.perform(blast.id, partition_key, 0, 1, audience_ids) }.to raise_error(StandardError, "provider down")
+      expect($redis.get(pending_key).to_i).to eq(pending_after_first)
+      expect(SendPostBlastEmailsJob.fully_delivered?(blast.reload)).to eq(false)
+    ensure
+      $redis.del(pending_key, skipped_key, RedisKey.blast_done_slices(blast.id, partition_key)) if blast
+    end
+
     it "decrements the pending recipient count the parent published" do
       blast = create(:blast, :just_requested, post: post_with_audience)
       activate_partition(blast)

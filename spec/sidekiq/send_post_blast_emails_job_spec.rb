@@ -336,6 +336,47 @@ describe SendPostBlastEmailsJob, :freeze_time do
         expect_sent_count 1
         expect_sent_email follower.email
       end
+
+      it "drops a targeted purchase even when an unrelated purchase is still eligible" do
+        product_a = create(:product, user: @seller)
+        product_b = create(:product, user: @seller)
+        targeted = create(:purchase, :from_seller, seller: @seller, link: product_a)
+        create(:purchase, :from_seller, seller: @seller, link: product_b, email: targeted.email)
+        leave_audience(targeted, can_contact: false)
+
+        post = create(:product_post, :published, seller: @seller, link: product_a, bought_products: [product_a.unique_permalink])
+        described_class.new.perform(create(:blast, :just_requested, post:).id)
+
+        expect_sent_count 0
+      end
+
+      it "prepares the surviving matching purchase when the original one left the audience" do
+        surviving = create(:purchase, :from_seller, seller: @seller)
+        later = create(:purchase, :from_seller, seller: @seller, email: surviving.email)
+        leave_audience(later, can_contact: false)
+
+        post = create(:seller_post, :published, seller: @seller)
+        described_class.new.perform(create(:blast, :just_requested, post:).id)
+
+        expect_sent_count 1
+        expect_sent_email surviving.email, content_match: [
+          /#{unsubscribe_purchase_url(surviving.secure_external_id(scope: "unsubscribe"))}.*Unsubscribe/
+        ]
+      end
+
+      it "drops a follower whose remaining purchases no longer match an audience post filter" do
+        product_a = create(:product, user: @seller)
+        product_b = create(:product, user: @seller)
+        follower = create(:active_follower, user: @seller)
+        targeted = create(:purchase, :from_seller, seller: @seller, link: product_a, email: follower.email)
+        create(:purchase, :from_seller, seller: @seller, link: product_b, email: follower.email)
+        leave_audience(targeted, can_contact: false)
+
+        post = create(:audience_post, :published, seller: @seller, bought_products: [product_a.unique_permalink])
+        described_class.new.perform(create(:blast, :just_requested, post:).id)
+
+        expect_sent_count 0
+      end
     end
 
     describe "Attachments and UrlRedirect" do
