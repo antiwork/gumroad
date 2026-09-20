@@ -1493,6 +1493,56 @@ describe SendPostBlastEmailsJob, :freeze_time do
       expect(batch_sizes.sum).to eq(5)
     end
 
+    it "does not pipeline skip membership when no skip set exists" do
+      post, = audience_post_with_followers(5)
+      blast = create(:blast, :just_requested, post:)
+      sismember_calls = 0
+      allow($redis).to receive(:pipelined).and_wrap_original do |original, &block|
+        original.call do |pipe|
+          allow(pipe).to receive(:sismember).and_wrap_original do |sismember, *args|
+            sismember_calls += 1
+            sismember.call(*args)
+          end
+          block.call(pipe)
+        end
+      end
+      allow_any_instance_of(described_class).to receive(:send_members)
+
+      described_class.new.perform(blast.id)
+
+      expect(sismember_calls).to eq(0)
+    end
+
+    it "checks skipped recipients in bounded Redis pipelines" do
+      stub_const("PostBlastSending::SKIP_MEMBERSHIP_SLICE_SIZE", 2)
+      post, = audience_post_with_followers(5)
+      blast = create(:blast, :just_requested, post:)
+      skipped_key = RedisKey.blast_skipped_emails(blast.id)
+      skipped_email = AudienceMember.find_by!(seller_id: post.seller_id).email
+      $redis.sadd(skipped_key, skipped_email)
+      pipeline_sizes = []
+      allow($redis).to receive(:pipelined).and_wrap_original do |original, &block|
+        sismember_count = 0
+        result = original.call do |pipe|
+          allow(pipe).to receive(:sismember).and_wrap_original do |sismember, *args|
+            sismember_count += 1
+            sismember.call(*args)
+          end
+          block.call(pipe)
+        end
+        pipeline_sizes << sismember_count if sismember_count.positive?
+        result
+      end
+      allow_any_instance_of(described_class).to receive(:send_members)
+
+      described_class.new.perform(blast.id)
+
+      expect(pipeline_sizes).to all(be <= 2)
+      expect(pipeline_sizes.sum).to eq(5)
+    ensure
+      $redis.del(skipped_key) if skipped_key
+    end
+
     it "completes inline blasts without a slice partition" do
       post, = audience_post_with_followers(1)
       blast = create(:blast, :just_requested, post:)

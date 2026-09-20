@@ -41,6 +41,9 @@ module PostBlastSending
   # attempt passes its full (six-figure) audience through here.
   ALREADY_EMAILED_SLICE_SIZE = 1_000
 
+  # Parent retries pass the full audience; keep each SISMEMBER pipeline bounded.
+  SKIP_MEMBERSHIP_SLICE_SIZE = 1_000
+
   # Publishes how many recipients this attempt still owes the ESPs, so a monitor can tell a
   # blast that died mid-send from one that died after the last handoff but before the stamp
   # below (gumroad-private#2250). Written per attempt, after filtering: a retry owes only
@@ -317,10 +320,14 @@ module PostBlastSending
     return members if members.empty?
 
     key = RedisKey.blast_skipped_emails(@blast.id)
-    flags = $redis.pipelined do |pipe|
-      members.each { |member| pipe.sismember(key, member.email) }
+    return members unless $redis.exists?(key)
+
+    members.each_slice(SKIP_MEMBERSHIP_SLICE_SIZE).flat_map do |slice|
+      flags = $redis.pipelined do |pipe|
+        slice.each { |member| pipe.sismember(key, member.email) }
+      end
+      slice.zip(flags).filter_map { |member, skipped| member unless skipped == true || skipped == 1 }
     end
-    members.zip(flags).filter_map { |member, skipped| member unless skipped == true || skipped == 1 }
   end
 
   # Records this slice's skips and charges them to the published count in one atomic step.
