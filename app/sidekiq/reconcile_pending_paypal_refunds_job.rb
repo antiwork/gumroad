@@ -71,8 +71,9 @@ class ReconcilePendingPaypalRefundsJob
     def handle_processor_error(refund, error)
       raise error unless unreadable_paypal_credentials?(error)
 
-      refund.update!(paypal_refund_unreadable_at: Time.current.iso8601)
+      # Stamp only after notify succeeds; otherwise later passes skip a refund that never alerted.
       notify_unreadable(refund, error)
+      refund.update!(paypal_refund_unreadable_at: Time.current.iso8601)
     end
 
     def unreadable_paypal_credentials?(error)
@@ -85,7 +86,5 @@ class ReconcilePendingPaypalRefundsJob
         error,
         context: { refund_id: refund.id, purchase_id: refund.purchase_id, paypal_refund_unreadable: true }
       )
-    rescue StandardError => notify_error
-      Rails.logger.error("Notifying unreadable PayPal refund #{refund.id} failed: #{notify_error.class}: #{notify_error.message}")
     end
 end

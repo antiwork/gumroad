@@ -101,6 +101,22 @@ describe ReconcilePendingPaypalRefundsJob do
       expect(refund.paypal_refund_unreadable_at).to be_blank
     end
 
+    it "does not mark a refund unreadable when notifying the unreadability fails" do
+      allow(PaypalChargeProcessor).to receive(:fetch_refund_status)
+        .and_raise(ChargeProcessorError, "401|closed_user")
+      call_count = 0
+      allow(ErrorNotifier).to receive(:notify) do
+        call_count += 1
+        raise StandardError, "sentry unavailable" if call_count == 1
+      end
+
+      described_class.new.perform
+
+      refund.reload
+      expect(refund.status).to eq("PENDING")
+      expect(refund.paypal_refund_unreadable_at).to be_blank
+    end
+
     it "notifies once then skips later passes for a closed PayPal merchant" do
       allow(PaypalChargeProcessor).to receive(:fetch_refund_status)
         .and_raise(ChargeProcessorError, "401|closed_user")
