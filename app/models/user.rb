@@ -1218,20 +1218,17 @@ class User < ApplicationRecord
   end
 
   # Anchored on the payout account's age, not signup date — a seller can hold an
-  # account for years before connecting one. Every account a payout could land on
-  # must season, since destination is picked at payout time; seasoning only the
-  # managed account would leave a fresh connected account as a hole. An account
-  # inherits seasoning from any earlier account of the same kind (alive or retired),
-  # since a country/payout-method change retires one row and creates another —
-  # reading only the live row would restart the clock on a longtime seller.
+  # account for years before connecting one. Only accounts a payout could land on have to
+  # season: destination is picked at payout time, so an account the processor cannot select
+  # would reject a payout that does get created. An account inherits seasoning from any
+  # earlier account of the same kind (alive or retired), since a country/payout-method
+  # change retires one row and creates another — reading only the live row would restart the
+  # clock on a longtime seller.
   def stripe_accounts_seasoned_for_instant_payouts?
-    resolvable_destinations = instant_payout_destination_accounts
-    return false if resolvable_destinations.empty?
+    destinations = instant_payout_destination_accounts
+    return false if destinations.empty?
 
-    # The managed and the connected account both have to season even when only one of them is where
-    # the next payout would land, because get_payout_details picks between them per payout.
-    accounts = ([stripe_account, stripe_connect_account] + resolvable_destinations).compact.uniq
-    accounts.all? do |account|
+    destinations.all? do |account|
       # A held-balance destination can be an account that was retired after the funds landed on it,
       # and paying into it fails rather than seasoning into a working destination.
       account.active? && seasoned_for_instant_payouts?(account)
@@ -1239,21 +1236,25 @@ class User < ApplicationRecord
   end
   private :stripe_accounts_seasoned_for_instant_payouts?
 
-  # Every account StripePayoutProcessor.get_payout_details could resolve to: it branches on whether
-  # Stripe still holds any of the seller's balances, so both branches are candidates. The
-  # held-balance branch can only differ from the managed account when there is none, so the balance
-  # read stays off the path where a managed account already answers it.
+  # Every account StripePayoutProcessor.destination_merchant_account could resolve to: it branches on
+  # whether Stripe still holds any of the seller's payable balances, so both branches are candidates.
   def instant_payout_destination_accounts
     [
       StripePayoutProcessor.destination_merchant_account(self, []),
-      stripe_account || StripePayoutProcessor.destination_merchant_account(self, stripe_held_unpaid_balances),
+      StripePayoutProcessor.destination_merchant_account(self, stripe_held_unpaid_balances),
     ].compact.uniq
   end
   private :instant_payout_destination_accounts
 
+  # Read through the processor's own filter, as a payout claim does
+  # (Payouts.select_and_claim_payable_balances): a balance it drops cannot name a destination, and
+  # the held-balance branch of destination_merchant_account would otherwise hand back the retired
+  # account the balance is stranded on while the payout is created elsewhere.
   def stripe_held_unpaid_balances
-    balances.unpaid.includes(:merchant_account).select do |balance|
-      balance.merchant_account&.holder_of_funds == HolderOfFunds::STRIPE
+    unpaid_balances_up_to_date(Date.today).includes(:merchant_account).select do |balance|
+      balance.merchant_account.present? &&
+        balance.merchant_account.holder_of_funds == HolderOfFunds::STRIPE &&
+        StripePayoutProcessor.is_balance_payable(balance)
     end
   end
   private :stripe_held_unpaid_balances

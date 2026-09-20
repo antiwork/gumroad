@@ -3944,9 +3944,21 @@ describe User, :vcr do
 
           expect(user.stripe_account).to be_nil
           expect(retired_account.holder_of_funds).to eq(HolderOfFunds::STRIPE)
+          expect(StripePayoutProcessor.is_balance_payable(balance)).to eq(true)
           expect(StripePayoutProcessor.get_payout_details(user, [balance]).first).to eq(retired_account)
           expect(user.eligible_for_instant_payouts?).to eq(false)
         end
+      end
+
+      # Read through the processor's filter: a balance it drops never names a destination, so the
+      # claim keeps nothing and the payout is created on the seasoned connected account.
+      it "does not gate on a Stripe-held balance the processor cannot pay out" do
+        retired_account = create(:merchant_account, user:, created_at: 90.days.ago, deleted_at: Time.current)
+        balance = create(:balance, user:, merchant_account: retired_account, holding_currency: Currency::EUR)
+        allow(StripePayoutProcessor).to receive(:pay_out_currencies).and_return([])
+
+        expect(StripePayoutProcessor.is_balance_payable(balance)).to eq(false)
+        expect(user.eligible_for_instant_payouts?).to eq(true)
       end
 
       it "does not block on a retired account whose balance was already paid" do
@@ -3964,33 +3976,42 @@ describe User, :vcr do
       expect(user.reload.eligible_for_instant_payouts?).to eq(false)
     end
 
-    # The payout is created on whichever account StripePayoutProcessor.get_payout_details picks,
-    # which can be the connected account, so seasoning the managed one alone is not enough.
+    # Only the accounts StripePayoutProcessor.destination_merchant_account can return for this
+    # seller have to season: a connected account Connect routing cannot select is not a destination,
+    # so gating on it rejected a seller whose payout is created on the managed account.
     context "when the seller also holds a connected Stripe account" do
-      it "returns false while the connected account is younger than 60 days" do
-        create(:merchant_account_stripe_connect, user:, created_at: 10.days.ago)
+      let!(:connected_account) { create(:merchant_account_stripe_connect, user:, created_at: 1.day.ago) }
 
-        expect(user.reload.eligible_for_instant_payouts?).to eq(false)
-      end
+      after { Feature.deactivate_user(:merchant_migration, user) }
 
-      it "returns true once both accounts are seasoned" do
-        create(:merchant_account_stripe_connect, user:, created_at: 90.days.ago)
+      it "does not gate on the connected account while Connect routing cannot select it" do
+        expect(user.has_stripe_account_connected?).to eq(false)
+        expect(StripePayoutProcessor.destination_merchant_account(user, [])).to eq(merchant_account)
 
         expect(user.reload.eligible_for_instant_payouts?).to eq(true)
       end
 
-      # The seasoned managed account must not lend its age to a different rail: a fresh
-      # connected account is a new destination, not a replacement for the managed one.
-      it "returns false for a fresh connected account even though the managed one is seasoned" do
-        create(:merchant_account_stripe_connect, user:, created_at: 1.day.ago)
+      it "gates on the connected account once Connect routing selects it" do
+        Feature.activate_user(:merchant_migration, user)
+
+        expect(user.has_stripe_account_connected?).to eq(true)
+        expect(StripePayoutProcessor.destination_merchant_account(user, [])).to eq(connected_account)
 
         expect(user.reload.eligible_for_instant_payouts?).to eq(false)
       end
 
+      it "returns true once the connected account Connect routing selects is seasoned" do
+        Feature.activate_user(:merchant_migration, user)
+        connected_account.update!(created_at: 90.days.ago)
+
+        expect(user.reload.eligible_for_instant_payouts?).to eq(true)
+      end
+
       it "returns true when a fresh connected account replaced an older retired connected one" do
-        create(:merchant_account_stripe_connect, user:, created_at: 90.days.ago)
-          .delete_charge_processor_account!
+        connected_account.update!(created_at: 90.days.ago)
+        connected_account.delete_charge_processor_account!
         create(:merchant_account_stripe_connect, user:, created_at: 1.day.ago)
+        Feature.activate_user(:merchant_migration, user)
 
         expect(user.reload.eligible_for_instant_payouts?).to eq(true)
       end
