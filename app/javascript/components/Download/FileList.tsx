@@ -187,7 +187,7 @@ export const FileRow = ({
   const toggleAudioDrawer = () => setIsShowingAudioDrawer((current) => !current);
   const savedLocation = file.latest_media_location?.location;
   const [resumeLocation, setResumeLocation] = React.useState(
-    isResumableMediaLocation(savedLocation, file.content_length) ? savedLocation : 0,
+    isResumableMediaLocation(savedLocation, file.content_length ?? file.duration) ? savedLocation : 0,
   );
   const [isExpanded, setIsExpanded] = React.useState(false);
   const [isCollapsed, setIsCollapsed] = React.useState(initialCollapsed);
@@ -302,7 +302,7 @@ export const FileRow = ({
         {!isEmbed && streamUrl != null ? (
           <TrackClick eventName="stream_click" file={file} resumeAt={resumeLocation || 0} contentLength={file.duration}>
             <NavigationButton color="primary" href={streamUrl} target="_blank">
-              {isFinishedMediaLocation(file.latest_media_location?.location, file.content_length)
+              {isFinishedMediaLocation(file.latest_media_location?.location, file.content_length ?? file.duration)
                 ? "Watch again"
                 : "Watch"}
             </NavigationButton>
@@ -345,7 +345,7 @@ export const FileRow = ({
             >
               {isShowingAudioDrawer
                 ? "Close"
-                : isFinishedMediaLocation(file.latest_media_location?.location, file.content_length)
+                : isFinishedMediaLocation(file.latest_media_location?.location, file.content_length ?? file.duration)
                   ? "Play again"
                   : "Play"}
             </Button>
@@ -631,20 +631,20 @@ const VideoEmbedPreview = ({
   className,
 }: VideoEmbedPreviewProps) => {
   const [isVideoPlayerShowing, setIsVideoPlayerShowing] = React.useState(false);
-  const [duration, setDuration] = React.useState(0);
+  const duration = React.useRef(0);
   const videoPlayerId = `jwplayer-${file.id}`;
   const { purchaseId, redirectId } = usePurchaseInfo();
   const [allMediaUrls] = useMediaUrls();
   const mediaUrls = allMediaUrls[file.id] ?? [];
   const trackMediaLocation = React.useCallback((position: number) => {
     if (purchaseId === null) return;
-    const length = file.content_length ?? duration;
+    const length = file.content_length ?? file.duration ?? duration.current;
     setResumeLocation(isFinishedMediaLocation(position, length) ? 0 : position);
     void trackMediaLocationChanged({
       urlRedirectId: redirectId,
       productFileId: file.id,
       purchaseId,
-      location: persistableMediaLocation(position, file.content_length ?? duration),
+      location: persistableMediaLocation(position, file.content_length ?? file.duration ?? duration.current),
     });
   }, []);
   const throttledTrackMediaLocation = React.useCallback(throttle(trackMediaLocation, LOCATION_TRACK_EVENT_DELAY), []);
@@ -694,8 +694,12 @@ const VideoEmbedPreview = ({
             productFileId: file.id,
             purchaseId,
           });
-          setDuration(player.getDuration());
-          player.seek(resumeLocation);
+          duration.current = player.getDuration();
+          player.seek(
+            isResumableMediaLocation(resumeLocation, file.content_length ?? file.duration ?? duration.current)
+              ? resumeLocation
+              : 0,
+          );
           initialSeekDone = true;
         })
         .on("pause", () => publishPlaybackState(false))
@@ -704,7 +708,7 @@ const VideoEmbedPreview = ({
         .on("time", (event) => throttledTrackMediaLocation(event.position))
         .on("complete", () => {
           throttledTrackMediaLocation.cancel();
-          trackMediaLocation(file.content_length ?? duration);
+          trackMediaLocation(file.content_length ?? file.duration ?? duration.current);
           publishPlaybackState(false);
           setIsVideoPlayerShowing(false);
         });

@@ -28,7 +28,7 @@ export const AudioPlayerContainer = ({
   const { purchaseId, redirectId } = usePurchaseInfo();
   const [mediaUrls] = useMediaUrls();
   const [isPlaying, setIsPlaying] = React.useState(false);
-  const [duration, setDuration] = React.useState(0);
+  const duration = React.useRef(0);
   const mediaUrl = (mediaUrls[fileId] ?? [])[0];
 
   if (!mediaUrl) return null;
@@ -49,7 +49,7 @@ export const AudioPlayerContainer = ({
   const updateProgress = React.useCallback(
     throttle((currentTime: number) => {
       if (purchaseId == null) return;
-      const length = contentLength ?? duration;
+      const length = contentLength ?? duration.current;
       setResumeLocation(isFinishedMediaLocation(currentTime, length) ? 0 : currentTime);
       void trackMediaLocationChanged({
         urlRedirectId: redirectId,
@@ -69,7 +69,7 @@ export const AudioPlayerContainer = ({
       urlRedirectId: redirectId,
       productFileId: fileId,
       purchaseId,
-      location: contentLength === null ? duration : contentLength,
+      location: contentLength ?? duration.current,
     });
   };
 
@@ -86,12 +86,13 @@ export const AudioPlayerContainer = ({
           urlRedirectId: redirectId,
           productFileId: fileId,
           purchaseId,
-          location: persistableMediaLocation(currentTime, contentLength),
+          location: persistableMediaLocation(currentTime, contentLength ?? duration.current),
         });
       }}
       onEnded={onEnded}
-      onLoadedMetadata={(duration: number) => {
-        setDuration(duration);
+      onLoadedMetadata={(loadedDuration: number) => {
+        duration.current = loadedDuration;
+        if (isFinishedMediaLocation(resumeLocation, contentLength ?? loadedDuration)) setResumeLocation(0);
         void createConsumptionEvent({
           eventType: "listen",
           urlRedirectId: redirectId,

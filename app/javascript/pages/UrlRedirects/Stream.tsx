@@ -111,7 +111,7 @@ function Stream() {
             urlRedirectId: url_redirect_id,
             productFileId: videoFile.external_id,
             purchaseId: purchase_id,
-            location: persistableMediaLocation(position, videoFile.content_length),
+            location: persistableMediaLocation(position, videoFile.content_length ?? player.getDuration()),
           });
         }
       };
@@ -160,7 +160,7 @@ function Stream() {
         if (isInitialSeekDone && lastPlayedId === player.getPlaylistIndex()) return;
         const videoFile = playlist[player.getPlaylistIndex()];
         const saved = videoFile?.latest_media_location?.location;
-        if (isResumableMediaLocation(saved, videoFile?.content_length)) {
+        if (isResumableMediaLocation(saved, videoFile?.content_length ?? player.getDuration())) {
           player.seek(saved);
         }
         isInitialSeekDone = true;
