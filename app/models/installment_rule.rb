@@ -51,7 +51,7 @@ class InstallmentRule < ApplicationRecord
   # delayed_delivery_time is a 4-byte integer column, so a large creator-entered duration overflows it at bind time.
   MAX_DELAY_SECONDS = (2**31) - 1
   MAX_DELAY_YEARS = MAX_DELAY_SECONDS / 365.days.to_i
-  OVERFLOW_DELAY_MESSAGE = "Delay can be at most #{MAX_DELAY_YEARS} years. Enter a smaller delay."
+  OVERFLOW_DELAY_MESSAGE = "Use a delay of #{MAX_DELAY_YEARS} years or less."
 
   validates_presence_of :installment, :version
   validate :to_be_published_at_cannot_be_in_the_past
