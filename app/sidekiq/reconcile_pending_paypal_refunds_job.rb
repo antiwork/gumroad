@@ -33,7 +33,13 @@ class ReconcilePendingPaypalRefundsJob
       reconcile(refund)
     rescue StandardError => e
       Rails.logger.error("Reconciling pending PayPal refund #{refund.id} failed: #{e.class}: #{e.message}")
-      ErrorNotifier.notify(e, context: { refund_id: refund.id, purchase_id: refund.purchase_id })
+      # Best-effort: notify_unreadable re-raises into this rescue, and a second
+      # notify failure must not abort later refunds in this find_each.
+      begin
+        ErrorNotifier.notify(e, context: { refund_id: refund.id, purchase_id: refund.purchase_id })
+      rescue StandardError => notify_error
+        Rails.logger.error("ErrorNotifier failed for pending PayPal refund #{refund.id}: #{notify_error.class}: #{notify_error.message}")
+      end
     end
   end
 

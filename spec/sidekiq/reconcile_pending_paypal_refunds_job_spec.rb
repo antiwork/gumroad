@@ -104,17 +104,35 @@ describe ReconcilePendingPaypalRefundsJob do
     it "does not mark a refund unreadable when notifying the unreadability fails" do
       allow(PaypalChargeProcessor).to receive(:fetch_refund_status)
         .and_raise(ChargeProcessorError, "401|closed_user")
-      call_count = 0
-      allow(ErrorNotifier).to receive(:notify) do
-        call_count += 1
-        raise StandardError, "sentry unavailable" if call_count == 1
-      end
+      allow(ErrorNotifier).to receive(:notify).and_raise(StandardError, "sentry unavailable")
 
       described_class.new.perform
 
       refund.reload
       expect(refund.status).to eq("PENDING")
       expect(refund.paypal_refund_unreadable_at).to be_blank
+    end
+
+    it "does not let a persistent notifier outage abort later refunds" do
+      sibling = create(:refund,
+                       purchase:,
+                       amount_cents: 0,
+                       total_transaction_cents: 15_00,
+                       status: "PENDING",
+                       processor_refund_id: "8SL48586NM399494P",
+                       created_at: 4.days.ago)
+      allow(PaypalChargeProcessor).to receive(:fetch_refund_status) do |processor_refund_id:, **|
+        raise ChargeProcessorError, "401|closed_user" if processor_refund_id == refund.processor_refund_id
+
+        "FAILED"
+      end
+      allow(ErrorNotifier).to receive(:notify).and_raise(StandardError, "sentry unavailable")
+
+      described_class.new.perform
+
+      expect(refund.reload.status).to eq("PENDING")
+      expect(refund.paypal_refund_unreadable_at).to be_blank
+      expect(sibling.reload.status).to eq("failed")
     end
 
     it "notifies once then skips later passes for a closed PayPal merchant" do
