@@ -20,6 +20,22 @@ class Api::V2::MuseController < Api::V2::BaseController
     render json: Muse::Mcp.discovery(base_url)
   end
 
+  def protected_resource_metadata
+    path = params[:resource_path].to_s
+    path = "/#{path}" if path.present? && !path.start_with?("/")
+    path = "/muse/v1/mcp" if path.blank?
+    render json: Muse::Mcp.protected_resource_metadata(base_url, resource_path: path)
+  end
+
+  def register
+    payload = Muse::OauthClientRegistration.create!(JSON.parse(request.raw_post.presence || "{}"))
+    render json: payload, status: :created
+  rescue JSON::ParserError
+    render json: { error: "invalid_client_metadata", error_description: "JSON parse error" }, status: :bad_request
+  rescue Muse::OauthClientRegistration::Error => e
+    render json: { error: "invalid_client_metadata", error_description: e.message }, status: :bad_request
+  end
+
   def mcp
     if request.get?
       response.headers["Allow"] = "POST"
@@ -34,6 +50,14 @@ class Api::V2::MuseController < Api::V2::BaseController
   end
 
   private
+    def doorkeeper_unauthorized_render_options(*)
+      response.set_header(
+        "WWW-Authenticate",
+        %(Bearer realm="Gumroad", resource_metadata="#{base_url}/.well-known/oauth-protected-resource")
+      )
+      nil
+    end
+
     def parse_rpc_body
       return unless request.post?
 

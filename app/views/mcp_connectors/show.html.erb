@@ -3,9 +3,9 @@
     <%= render "home/shared/header",
       bg_color: "dark-gray",
       text_color: "white",
-      subtitle: "Muse connector",
-      title: "Ask Muse.<br class=\"sm:hidden\"> It sells on Gumroad.",
-      description: "Connect Muse to a Gumroad account. The agent can list products and sales, draft a product, publish it, and check payouts. People reach a creator just by asking.",
+      subtitle: @client[:subtitle],
+      title: @client[:title],
+      description: @client[:description],
       no_border: true,
       gap: "gap-8 md:gap-12" do %>
       <%= render "home/shared/button", text: "Open API docs", url: "/api", variant: "light" %>
@@ -16,7 +16,7 @@
     <div class="text-white pt-16 sm:pt-24 pb-32">
       <div class="flex flex-col justify-center gap-4 sm:gap-6 mx-auto text-center max-w-5xl mb-12 sm:mb-16 px-8 md:mb-28">
         <h2 class="text-4xl md:text-6xl lg:text-7xl">How it works</h2>
-        <p class="text-lg md:text-2xl">You bring Gumroad. Muse brings the agent.</p>
+        <p class="text-lg md:text-2xl"><%= @client[:how_intro] %></p>
       </div>
       <%= render "home/shared/how_we_build",
         cards: [
@@ -24,19 +24,19 @@
             icon: image_path("careers/audience.svg"),
             icon_bg: "pink",
             title: "Creators connect once",
-            description: "OAuth the Gumroad account in Muse. After that, “what did I sell today?” and “draft a $19 guide” run against the live store."
+            description: @client[:first_card]
           },
           {
             icon: image_path("careers/launch.svg"),
             icon_bg: "yellow",
             title: "Drafts stay drafts",
-            description: "New products are saved unpublished. Muse has to confirm with the creator before anything goes on sale."
+            description: "New products are saved unpublished. The agent has to confirm with the creator before anything goes on sale."
           },
           {
             icon: image_path("careers/flag.svg"),
             icon_bg: "purple",
             title: "Buyers still check out here",
-            description: "Product URLs stay on Gumroad. Muse’s browser can open them; Link handles payment the way Muse already shops."
+            description: "Product URLs stay on Gumroad. The agent's browser can open them; Link handles payment."
           }
         ]
       %>
@@ -45,12 +45,19 @@
 
   <div class="px-8 py-16 lg:px-[4vw] lg:py-24">
     <div class="flex flex-col gap-8 lg:gap-16 max-w-5xl mx-auto">
-      <h2 class="font-medium text-4xl sm:text-5xl lg:text-7xl text-center">For Muse, and any other agent</h2>
+      <h2 class="font-medium text-4xl sm:text-5xl lg:text-7xl text-center"><%= @client[:connect_title] %></h2>
       <div class="text-lg md:text-2xl max-w-3xl mx-auto space-y-4">
-        <p>MCP endpoint: <code class="text-base"><%= "#{PROTOCOL}://#{DOMAIN}/muse/v1/mcp" %></code></p>
+        <p>MCP endpoint: <code class="text-base"><%= "#{PROTOCOL}://#{DOMAIN}/#{@client_key}/v1/mcp" %></code></p>
         <p>Discovery: <code class="text-base"><%= "#{PROTOCOL}://#{DOMAIN}/.well-known/mcp.json" %></code></p>
         <p>OAuth: <code class="text-base"><%= "#{PROTOCOL}://#{DOMAIN}/muse/v1/oauth2/authorize" %></code></p>
         <p>Same REST API as the CLI: <a class="underline" href="/api">gumroad.com/api</a></p>
+        <p>
+          Also
+          <% others = McpConnectorsController::CLIENTS.except(@client_key) %>
+          <% others.each_with_index do |(key, client), index| %>
+            <%= ", " unless index.zero? %>
+            <%= link_to client[:label], "/#{key}", class: "underline" %><% end %>.
+        </p>
       </div>
     </div>
   </div>

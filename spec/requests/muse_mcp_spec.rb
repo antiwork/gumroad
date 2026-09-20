@@ -37,7 +37,57 @@ describe "Muse MCP" do
     expect(body["name"]).to eq("Gumroad")
     expect(body["mcp"]).to eq("#{PROTOCOL}://#{DOMAIN}/muse/v1/mcp")
     expect(body["oauth"]["authorization_endpoint"]).to eq("#{PROTOCOL}://#{DOMAIN}/muse/v1/oauth2/authorize")
+    expect(body["oauth"]["registration_endpoint"]).to eq("#{PROTOCOL}://#{DOMAIN}/muse/v1/oauth2/register")
     expect(body["oauth"]["scopes"]).to include("view_sales", "edit_products")
+    expect(body["clients"]).to include(
+      "muse" => "#{PROTOCOL}://#{DOMAIN}/muse/v1/mcp",
+      "claude" => "#{PROTOCOL}://#{DOMAIN}/claude/v1/mcp",
+      "chatgpt" => "#{PROTOCOL}://#{DOMAIN}/chatgpt/v1/mcp"
+    )
+  end
+
+  it "returns OAuth protected resource metadata" do
+    get "/.well-known/oauth-protected-resource", headers: { "HOST" => DOMAIN }
+
+    expect(response).to be_successful
+    expect(response.parsed_body["resource"]).to eq("#{PROTOCOL}://#{DOMAIN}/muse/v1/mcp")
+    expect(response.parsed_body["authorization_servers"]).to eq(["#{PROTOCOL}://#{DOMAIN}"])
+
+    get "/.well-known/oauth-protected-resource/claude/v1/mcp", headers: { "HOST" => DOMAIN }
+
+    expect(response).to be_successful
+    expect(response.parsed_body["resource"]).to eq("#{PROTOCOL}://#{DOMAIN}/claude/v1/mcp")
+  end
+
+  it "registers a public OAuth client for MCP" do
+    expect do
+      post "/claude/v1/oauth2/register",
+           params: {
+             client_name: "Claude",
+             redirect_uris: ["https://claude.ai/api/mcp/auth_callback"],
+             token_endpoint_auth_method: "none"
+           }.to_json,
+           headers: { "HOST" => DOMAIN, "CONTENT_TYPE" => "application/json" }
+    end.to change(OauthApplication, :count).by(1)
+
+    expect(response).to have_http_status(:created)
+    body = response.parsed_body
+    expect(body["client_id"]).to be_present
+    expect(body).not_to have_key("client_secret")
+    application = OauthApplication.find_by!(uid: body["client_id"])
+    expect(application).not_to be_confidential
+    expect(application.owner).to be_nil
+  end
+
+  it "rejects a non-https redirect URI during registration" do
+    expect do
+      post "/chatgpt/v1/oauth2/register",
+           params: { redirect_uris: ["http://evil.example"] }.to_json,
+           headers: { "HOST" => DOMAIN, "CONTENT_TYPE" => "application/json" }
+    end.not_to change(OauthApplication, :count)
+
+    expect(response).to have_http_status(:bad_request)
+    expect(response.parsed_body["error"]).to eq("invalid_client_metadata")
   end
 
   it "returns RFC 8414 metadata" do
@@ -49,12 +99,28 @@ describe "Muse MCP" do
     expect(body["authorization_endpoint"]).to end_with("/muse/v1/oauth2/authorize")
     expect(body["token_endpoint"]).to end_with("/muse/v1/oauth2/token")
     expect(body["code_challenge_methods_supported"]).to include("S256")
+    expect(body["registration_endpoint"]).to end_with("/muse/v1/oauth2/register")
+    expect(body["token_endpoint_auth_methods_supported"]).to include("none")
   end
 
   it "returns 401 without a token" do
     post_mcp({ jsonrpc: "2.0", id: 1, method: "ping" }, token: nil)
 
     expect(response).to have_http_status(:unauthorized)
+    expect(response.headers["WWW-Authenticate"]).to include("resource_metadata=")
+  end
+
+  it "serves the same MCP tools on Claude and ChatGPT aliases" do
+    token = create("doorkeeper/access_token", application: @app, resource_owner_id: @seller.id, scopes: "view_sales")
+    headers = { "CONTENT_TYPE" => "application/json", "HOST" => DOMAIN, "Authorization" => "Bearer #{token.token}" }
+
+    %w[claude chatgpt].each do |client|
+      post "/#{client}/v1/mcp", params: { jsonrpc: "2.0", id: 1, method: "tools/list" }.to_json, headers: headers
+
+      expect(response).to be_successful
+      names = response.parsed_body.dig("result", "tools").map { |tool| tool["name"] }
+      expect(names).to include("list_sales", "create_draft_product")
+    end
   end
 
   context "with a view_sales token" do
