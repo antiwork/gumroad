@@ -329,14 +329,13 @@ module PostBlastSending
   end
 
   def drop_members_already_skipped_from_audience(members)
-    already_skipped = skipped_audience_emails
-    return members if already_skipped.empty?
+    return members if members.empty?
 
-    members.reject { already_skipped.include?(_1.email) }
-  end
-
-  def skipped_audience_emails
-    $redis.smembers(RedisKey.blast_skipped_emails(@blast.id)).to_set
+    key = RedisKey.blast_skipped_emails(@blast.id)
+    flags = $redis.pipelined do |pipe|
+      members.each { |member| pipe.sismember(key, member.email) }
+    end
+    members.zip(flags).filter_map { |member, skipped| member unless skipped == true || skipped == 1 }
   end
 
   # Records this slice's skips and charges them to the published count in one atomic step.

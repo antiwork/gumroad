@@ -390,6 +390,37 @@ describe SendPostBlastEmailsJob, :freeze_time do
 
         expect_sent_count 0
       end
+
+      it "excludes already-skipped recipients from a parent retry's published pending count" do
+        opted_out = create(:purchase, :from_seller, seller: @seller)
+        still_contactable = create(:purchase, :from_seller, seller: @seller)
+        leave_audience(opted_out, can_contact: false)
+
+        post = create(:seller_post, :published, seller: @seller)
+        blast = create(:blast, :just_requested, post:)
+        pending_key = RedisKey.blast_pending_recipients(blast.id)
+        skipped_key = RedisKey.blast_skipped_emails(blast.id)
+        allow_any_instance_of(described_class).to receive(:recipients_slice_size).and_return(1)
+        allow_any_instance_of(described_class).to receive(:load_audience_members).and_wrap_original do |method|
+          method.call.sort_by { _1.email == opted_out.email ? 0 : 1 }
+        end
+        allow(PostSendgridApi).to receive(:process).and_raise(StandardError, "provider down")
+
+        expect { described_class.new.perform(blast.id) }.to raise_error(StandardError, "provider down")
+        expect($redis.smembers(skipped_key)).to eq([opted_out.email])
+        expect($redis.get(pending_key).to_i).to eq(1)
+
+        allow(PostSendgridApi).to receive(:process).and_call_original
+        allow_any_instance_of(described_class).to receive(:mark_blast_as_completed)
+
+        described_class.new.perform(blast.id)
+
+        expect(PostSendgridApi.mails.keys).to eq([still_contactable.email])
+        expect($redis.get(pending_key).to_i).to eq(0)
+        expect(described_class.fully_delivered?(blast.reload)).to eq(true)
+      ensure
+        $redis.del(pending_key, skipped_key) if pending_key
+      end
     end
 
     describe "Attachments and UrlRedirect" do

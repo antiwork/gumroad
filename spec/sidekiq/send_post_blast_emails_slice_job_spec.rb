@@ -75,7 +75,7 @@ describe SendPostBlastEmailsSliceJob, :freeze_time do
       # this recipient over and died before charging the count it published.
       allow(job).to receive(:remove_already_emailed_members).and_wrap_original do |method|
         method.call
-        SentPostEmail.create!(post:, email: stranded.email)
+        create(:sent_post_email, post:, email: stranded.email)
       end
       allow(job).to receive(:recipients_slice_size).and_return(1)
       allow(job).to receive(:load_chunk_members).and_wrap_original do |method, ids|

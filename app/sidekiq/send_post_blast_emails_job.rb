@@ -68,6 +68,10 @@ class SendPostBlastEmailsJob
       end
     end
 
+    # A parent retry reloads the same stale rows a prior attempt already charged
+    # and recorded as skipped. Drop them before publishing pending, or the new
+    # count includes people no later slice will decrement.
+    @members = drop_members_already_skipped_from_audience(@members)
     return mark_blast_as_completed if @members.empty?
     unless admitted?
       requeue_for_daily_blast_limit
