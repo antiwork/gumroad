@@ -85,7 +85,7 @@ describe Workflows::EmailsController, type: :controller, inertia: true do
       }
 
       expect(response).to redirect_to(workflow_emails_path(workflow.external_id))
-      expect(flash[:alert]).to eq("Delayed delivery time is too large")
+      expect(flash[:alert]).to eq(InstallmentRule::OVERFLOW_DELAY_MESSAGE)
       expect(workflow.installments.count).to eq(0)
     end
 
