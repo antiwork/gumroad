@@ -3,6 +3,17 @@
 require "spec_helper"
 
 describe McpConnectorsController do
+  render_views
+
+  it "documents Claude custom setup without claiming a directory listing" do
+    get :show, params: { client: "claude" }
+
+    expect(response).to be_successful
+    expect(response.body).to include("Available as a custom connector", "not yet listed in Claude’s connector directory", "Set up a custom connector")
+    expect(response.body).to include("/claude/v1/mcp", "organization administrator", "Review the requested permissions before you authorize access")
+    expect(response.body).not_to include("Submitted for review")
+  end
+
   before { allow(GithubStarsController).to receive(:cached_count).and_return(1234) }
 
   {
