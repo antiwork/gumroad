@@ -34,10 +34,9 @@ class CustomerMailer < ApplicationMailer
     @chargeables = renderable_chargeables(@chargeables).first(GROUPED_RECEIPT_MAX_CHARGEABLES).reverse
     return if @chargeables.empty?
 
-    # Rendering reads the invoice purchase and the unbundled purchases off each chargeable, so
-    # pin them — they memoize — before the claim: a purchase that leaves its success state mid-send
-    # then cannot empty a receipt whose send was already claimed.
-    @chargeables = @chargeables.select { |chargeable| resolve_receipt_reads(chargeable) }
+    # A charge that lost its purchases since the query above has nothing to render; drop it before
+    # the claim so a receipt set that cannot be sent does not consume the 24h send window.
+    @chargeables = @chargeables.select(&:receipt_renderable?)
     return if @chargeables.empty?
 
     last_chargeable = @chargeables.last
@@ -429,15 +428,6 @@ class CustomerMailer < ApplicationMailer
       chargeables.select do |chargeable|
         chargeable.is_a?(Purchase) ? renderable_purchase_ids.include?(chargeable.id) : renderable_charge_ids.include?(chargeable.id)
       end
-    end
-
-    # A charge renders from its invoice purchase and its unbundled purchases; a purchase-backed
-    # chargeable renders from itself, which cannot change under it. Both charge reads memoize, so
-    # this is the last moment they can be pinned to the state the receipt was selected for.
-    def resolve_receipt_reads(chargeable)
-      return true unless chargeable.is_a?(Charge)
-
-      chargeable.purchase_as_chargeable.present? && chargeable.unbundled_purchases.present?
     end
 
     # True when this render owns the send for this recipient + receipt set. NX so a

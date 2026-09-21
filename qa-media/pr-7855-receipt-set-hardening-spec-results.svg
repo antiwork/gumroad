@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1240" height="678" viewBox="0 0 1240 678" font-family="SFMono-Regular, Menlo, Consolas, monospace">
+  <rect width="1240" height="678" fill="#1b1f24"/>
+  <rect x="0" y="0" width="1240" height="34" fill="#2d333b"/>
+  <circle cx="20" cy="17" r="6" fill="#ff5f56"/>
+  <circle cx="42" cy="17" r="6" fill="#ffbd2e"/>
+  <circle cx="64" cy="17" r="6" fill="#27c93f"/>
+  <text x="90" y="22" fill="#adbac7" font-size="13">receipt set hardening — red/green proof (follow-up to #7852)</text>
+  <text x="24" y="62" fill="#768390" font-size="12.5">$ bundle exec rspec spec/mailers/customer_mailer_spec.rb spec/sidekiq/send_charge_receipt_job_spec.rb</text>
+  <text x="24" y="86" fill="#768390" font-size="12.5">                     spec/models/charge_spec.rb spec/models/concerns/charge/chargeable_spec.rb</text>
+  <text x="24" y="134" fill="#f47067" font-size="14" font-weight="bold">RED — origin/main (pre-fix): "drops a chargeable whose charge has no successful purchase left"</text>
+  <text x="24" y="158" fill="#e6edf3" font-size="12.5">  expected NullMail, got a delivered &quot;Receipts for Purchases&quot; mail  (the claim was taken first)</text>
+  <text x="24" y="206" fill="#f47067" font-size="14" font-weight="bold">RED — CI at the previous head 7e91ae39c, 3 failures (caught before review):</text>
+  <text x="24" y="230" fill="#e6edf3" font-size="12.5">  NoMethodError: private method 'purchase_as_chargeable' called for an instance of Charge</text>
+  <text x="24" y="254" fill="#e6edf3" font-size="12.5">  spec/mailers/customer_mailer_spec.rb:1576  test-successful empty bundle dropped from the receipt</text>
+  <text x="24" y="302" fill="#7ce38b" font-size="14" font-weight="bold">GREEN — with the fix, local run:</text>
+  <text x="24" y="326" fill="#e6edf3" font-size="12.5">  250 examples, 2 failures</text>
+  <text x="24" y="350" fill="#e6edf3" font-size="12.5">  spec/mailers/customer_mailer_spec.rb                                  97 examples, 2 failures</text>
+  <text x="24" y="374" fill="#e6edf3" font-size="12.5">  spec/sidekiq/send_charge_receipt_job_spec.rb                          17 examples, 0 failures</text>
+  <text x="24" y="398" fill="#e6edf3" font-size="12.5">  spec/models/charge_spec.rb                                            46 examples, 0 failures</text>
+  <text x="24" y="422" fill="#e6edf3" font-size="12.5">  spec/models/concerns/charge/chargeable_spec.rb                        90 examples, 0 failures</text>
+  <text x="24" y="470" fill="#768390" font-size="12.5">  The 2 failures are pre-existing and local-env only (the built vite email assets are absent in</text>
+  <text x="24" y="494" fill="#768390" font-size="12.5">  this checkout): customer_mailer_spec.rb:683 and :1466 fail identically with the mailer reverted</text>
+  <text x="24" y="518" fill="#768390" font-size="12.5">  to origin/main.</text>
+  <text x="24" y="566" fill="#e6edf3" font-size="12.5">  New examples in this PR (all passing):</text>
+  <text x="24" y="590" fill="#e6edf3" font-size="12.5">    renders nothing instead of raising mid-render</text>
+  <text x="24" y="614" fill="#e6edf3" font-size="12.5">    does not take the send claim when nothing is renderable</text>
+  <text x="24" y="638" fill="#e6edf3" font-size="12.5">    drops a chargeable whose charge has no successful purchase left</text>
+  <text x="24" y="662" fill="#e6edf3" font-size="12.5">    resolves renderability in a fixed number of queries</text>
+</svg>
