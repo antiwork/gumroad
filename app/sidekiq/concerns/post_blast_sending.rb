@@ -41,6 +41,10 @@ module PostBlastSending
   # attempt passes its full (six-figure) audience through here.
   ALREADY_EMAILED_SLICE_SIZE = 1_000
 
+  # One recipient can carry many purchases; the provider's recipient limit does not
+  # bound this IN list. Keep live eligibility reads below MySQL's range-plan limit.
+  PURCHASE_REVALIDATION_SLICE_SIZE = 1_000
+
   # Parent retries pass the full audience; keep each SISMEMBER pipeline bounded.
   SKIP_MEMBERSHIP_SLICE_SIZE = 1_000
 
@@ -280,7 +284,9 @@ module PostBlastSending
 
     details_by_member_id = AudienceMember.where(id: members.map(&:id)).select(:id, :details).index_by(&:id)
     purchase_ids = details_by_member_id.values.flat_map { Array.wrap(_1.details["purchases"]).pluck("id") }.uniq
-    eligible_purchase_ids = Purchase.includes(:subscription).where(id: purchase_ids).filter_map { |purchase| purchase.id if purchase.should_be_audience_member? }
+    eligible_purchase_ids = purchase_ids.each_slice(PURCHASE_REVALIDATION_SLICE_SIZE).flat_map do |ids|
+      Purchase.includes(:subscription).where(id: ids).filter_map { |purchase| purchase.id if purchase.should_be_audience_member? }
+    end
     # Apply the original detail predicates and MAX(purchase_id) after removing ineligible
     # purchases, retaining the cutoff when the parent rebuilt a dated audience.
     qualifying_purchase_ids = if eligible_purchase_ids.empty?
