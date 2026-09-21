@@ -2489,9 +2489,8 @@ describe Ai::StoreAgentService do
       end
 
       it "tells the re-ask to send the change in smaller pieces" do
-        # A byte-identical retry truncates again whenever the attempt's SIZE is the problem rather
-        # than its budget — a whole custom page fits no cap — so the re-ask has to carry a different
-        # instruction. Only that one attempt: the next turn starts from the ordinary prompt.
+        # Only the re-ask carries it: a whole page fits no cap, so repeating the same attempt fails
+        # the same way, while the next turn must start from the ordinary prompt again.
         systems = []
         allow(client).to receive(:messages) do |**kwargs|
           systems << kwargs[:system]
@@ -2502,6 +2501,12 @@ describe Ai::StoreAgentService do
 
         expect(systems.first).not_to include(described_class::TRUNCATION_RECOVERY_INSTRUCTION)
         expect(systems.last).to include(described_class::TRUNCATION_RECOVERY_INSTRUCTION)
+      end
+
+      it "never sends the model to a partial value outside a page build" do
+        # A description or a bio is replaced as a whole, so "do the part that fits" would persist an
+        # incomplete value the creator confirmed.
+        expect(described_class::TRUNCATION_RECOVERY_INSTRUCTION).to include("never send half a value")
       end
     end
 
@@ -3155,9 +3160,8 @@ describe Ai::StoreAgentService do
   describe "SYSTEM_PROMPT_HEADER whole-page guidance" do
     let(:prompt) { described_class::SYSTEM_PROMPT_HEADER.gsub(/[[:space:]\u00a0]+/, " ") }
 
-    # A page write carries the ENTIRE document in its arguments, so a long page cannot fit one
-    # reply. Unless the prompt names the section-by-section route, the agent's only valid shape is
-    # the one write that truncates, and it offers that shape back to the creator.
+    # A page write carries the ENTIRE document in its arguments; without the section-by-section
+    # route in the prompt, the agent's only valid shape is the one write that truncates.
     it "teaches the section-by-section build for a page too big for one reply" do
       expect(prompt).to include("<!-- gumroad:sections -->")
       expect(prompt).to include("ONE section per reply with edit_user_custom_html")

@@ -70,14 +70,12 @@ class Ai::StoreAgentService
   # turn's arguments, so re-ask it once at double the cap. Only truncating turns pay this.
   MAX_TRUNCATION_RETRY_TOKENS = 16_384
   MAX_TRUNCATION_RETRIES = 1
-  # What the seller sees when a turn still hits MAX_REPLY_TOKENS, instead of streaming a fragment or
-  # raising: a truncated turn is unusable. The ask has to hold on every surface — a custom page is
-  # one whole document, so "change or summarize a smaller section" is not something a creator can do.
+  # What the seller sees when a turn still hits MAX_REPLY_TOKENS: a truncated turn is unusable, and
+  # the ask has to hold on every surface, including a page that is one whole document.
   TRUNCATED_REPLY = "That's more than I can write in a single reply. Let's do it in smaller " \
                     "steps — ask me for one part at a time and I'll take it from there."
-  # Appended to the system prompt for the re-ask only. A byte-identical retry at a bigger cap fails
-  # the same way when the attempt's SIZE is the problem rather than its budget — a whole custom page
-  # must carry every byte in one tool call — so the retry is told what to do differently.
+  # The re-ask only. A byte-identical retry at a bigger cap truncates identically when the attempt's
+  # SIZE is the problem, so this one tells the model to go smaller instead.
   TRUNCATION_RECOVERY_INSTRUCTION = <<~PROMPT.strip
     Your last response ran out of room before it finished, so it was discarded and the creator has
     not seen it. Sending the same thing again the same way fails the same way — send it in smaller
@@ -85,8 +83,9 @@ class Ai::StoreAgentService
     but minimal page first (name and bio, the product grid read from gumroad-data, prices, footer)
     with a <!-- gumroad:sections --> marker where the sections go, then add ONE section per reply
     with edit_user_custom_html, replacing the marker with that section plus the marker again, and
-    drop the marker in the edit that completes the page. For any other oversized value, do the part
-    that fits and tell the creator you will continue with the rest once they confirm.
+    drop the marker in the edit that completes the page. For an oversized change of any other kind,
+    never send half a value — a description or a bio is replaced as a whole — so cover fewer items
+    this turn and tell the creator what is still left.
   PROMPT
   # Phrases a reply uses when it asserts THIS turn staged a change. Such a reply is only TRUE when
   # the same turn produced a proposed action — the confirmation card is rendered from that action, so

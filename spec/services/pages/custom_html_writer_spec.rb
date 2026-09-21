@@ -156,9 +156,8 @@ describe Pages::CustomHtmlWriter do
   end
 
   describe "composing a page section by section around a marker" do
-    # The store agent builds a page too big for one write by publishing a complete but minimal page
-    # that carries a marker, then adding one section per reply. Both halves have to hold: the marker
-    # survives the sanitizer, and one splice inserts a section ahead of it and leaves it in place.
+    # Both halves of the incremental build have to hold: the marker survives the sanitizer, and one
+    # splice inserts a section ahead of it and leaves it in place.
     let(:user) { create(:user) }
     let(:shell) do
       %(<section class="store"><h1 data-gumroad-field="name">Store</h1>) +
@@ -180,8 +179,7 @@ describe Pages::CustomHtmlWriter do
 
       expect(result.success?).to be(true)
       page = user.reload.custom_html
-      # Compare tags, not the exact string: Nokogiri re-serializes the spliced document and may add
-      # whitespace between block elements.
+      # Nokogiri re-serializes the splice and may add whitespace between block elements.
       expect(page).to include(%(<section class="about">), "<h2>About</h2>")
       expect(page.index(%(<section class="about">))).to be < page.index("<!-- gumroad:sections -->")
       expect(page.scan("<!-- gumroad:sections -->").size).to eq(1)
