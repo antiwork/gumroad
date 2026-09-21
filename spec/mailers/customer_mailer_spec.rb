@@ -53,6 +53,19 @@ describe CustomerMailer do
       end
     end
 
+    context "when the charge has no successful purchases" do
+      let(:seller) { create(:named_seller) }
+      let(:product) { create(:product, user: seller) }
+      let(:failed_purchase) { create(:failed_purchase, link: product, seller:) }
+      let!(:charge) { create(:charge, purchases: [failed_purchase], seller:) }
+
+      it "renders nothing instead of raising mid-render" do
+        rendered = described_class.receipt(failed_purchase.id)
+
+        expect(rendered.message).to be_a(ActionMailer::Base::NullMail)
+      end
+    end
+
     context "when support email exists" do
       subject(:mail) do
         user = create(:user, email: "bob@gumroad.com", name: "bob walsh")
@@ -1604,16 +1617,34 @@ describe CustomerMailer do
     it "drops a chargeable whose charge has no successful purchase left by render time" do
       charge = create(:charge, seller:)
       charge.purchases << purchases
-      # The state filter runs first, so a purchase can be admitted as successful and then leave
-      # that state (a refund or chargeback landing mid-send) before the template re-derives it.
-      allow_any_instance_of(CustomerMailer).to receive(:claim_grouped_receipt_send) do
-        purchases.each { |purchase| purchase.update!(purchase_state: "failed") }
-        true
+      # The first check admits these purchases as successful, then they leave that state (a refund
+      # or chargeback landing mid-send) before the template re-derives them.
+      checks = 0
+      allow_any_instance_of(CustomerMailer).to receive(:renderable_chargeables).and_wrap_original do |original, chargeables|
+        renderable = original.call(chargeables)
+        checks += 1
+        purchases.each { |purchase| purchase.update!(purchase_state: "failed") } if checks == 1
+        renderable
       end
 
-      mail = CustomerMailer.grouped_receipt(purchases.map(&:id))
+      mail = CustomerMailer.grouped_receipt(purchases.map(&:id)).message
 
-      expect(mail.message).to be_a(ActionMailer::Base::NullMail)
+      expect(checks).to eq(2)
+      expect(mail).to be_a(ActionMailer::Base::NullMail)
+    end
+
+    it "does not take the send claim when the whole receipt set drops out before render" do
+      charge = create(:charge, seller:)
+      charge.purchases << purchases
+      allow_any_instance_of(CustomerMailer).to receive(:renderable_chargeables).and_wrap_original do |original, chargeables|
+        renderable = original.call(chargeables)
+        purchases.each { |purchase| purchase.update!(purchase_state: "failed") }
+        renderable
+      end
+
+      expect_any_instance_of(CustomerMailer).not_to receive(:claim_grouped_receipt_send)
+
+      expect(CustomerMailer.grouped_receipt(purchases.map(&:id)).message).to be_a(ActionMailer::Base::NullMail)
     end
 
     it "eager loads charges and orders to avoid N+1 queries" do
@@ -1638,6 +1669,31 @@ describe CustomerMailer do
       order_queries = queries.select { |sql| sql.match?(/FROM `orders`/i) }
       expect(charge_queries.size).to be <= 2
       expect(order_queries.size).to be <= 2
+    end
+
+    it "resolves renderability in the same number of queries however many receipts are in the group" do
+      chargeables = Array.new(5) do
+        purchase = create(:purchase, link: product, seller:)
+        charge = create(:charge, seller:)
+        charge.purchases << purchase
+        charge.order.purchases << purchase
+        Charge::Chargeable.find_by_purchase_or_charge!(purchase:)
+      end
+
+      count_purchase_queries = lambda do |group|
+        queries = []
+        callback = lambda { |_name, _start, _finish, _id, payload|
+          queries << payload[:sql] if payload[:sql] && !payload[:name]&.match?(/SCHEMA|TRANSACTION/)
+        }
+
+        ActiveSupport::Notifications.subscribed(callback, "sql.active_record") do
+          CustomerMailer.new.send(:renderable_chargeables, group)
+        end
+
+        queries.count { |sql| sql.match?(/FROM `purchases`|FROM `charge_purchases`/i) }
+      end
+
+      expect(count_purchase_queries.call(chargeables.first(1))).to eq(count_purchase_queries.call(chargeables))
     end
 
     it "caps the number of rendered receipts, keeping the newest purchases" do
