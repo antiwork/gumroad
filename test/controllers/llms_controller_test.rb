@@ -43,7 +43,7 @@ class LlmsControllerTest < ActionController::TestCase
     assert_includes response.body, "https://gumroad.com/api"
     assert_includes response.body, "https://gumroad.com/muse"
     assert_includes response.body, "https://gumroad.com/claude"
-    assert_includes response.body, "https://gumroad.com/chatgpt"
+    assert_not_includes response.body, "https://gumroad.com/chatgpt"
     assert_includes response.body, "https://gumroad.com/help"
   end
 end
