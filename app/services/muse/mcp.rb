@@ -169,6 +169,7 @@ module Muse
         schema[:required] = required if required.any?
         {
           name:,
+          title: name.humanize,
           description:,
           inputSchema: schema,
           annotations: {
