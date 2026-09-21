@@ -2022,20 +2022,306 @@ class SubscriptionTest < ActiveSupport::TestCase
     refute_enqueued_email(ContactingCreatorMailer, :subscription_autocancelled, args: [@subscription.id])
   end
 
-  test "#unsubscribe_and_fail! sends email to customer but not creator on repeated recent failure" do
-    create_failed_purchase(link: @subscription.link, subscription: @subscription, email: @subscription.user.email, created_at: 2.hours.ago)
-    assert_equal true, @subscription.seller.enable_payment_email
+  test "#unsubscribe_and_fail! notifies the creator on a first cancellation five days after a failed renewal" do
+    @subscription.update!(created_at: 5.days.ago - 1.month)
+    @purchase.update!(created_at: @subscription.created_at)
+    create_failed_purchase(link: @subscription.link, subscription: @subscription, email: @subscription.user.email,
+                           is_original_subscription_purchase: false, created_at: 5.days.ago)
+
+    @subscription.unsubscribe_and_fail!
+
+    assert_enqueued_email(CustomerLowPriorityMailer, :subscription_autocancelled, args: [@subscription.id])
+    assert_enqueued_email(ContactingCreatorMailer, :subscription_autocancelled, args: [@subscription.id])
+    assert_sidekiq_enqueued(PostToPingEndpointsWorker, args: [nil, nil, ResourceSubscription::CANCELLED_RESOURCE_NAME, @subscription.id])
+  end
+
+  test "#unsubscribe_and_fail! suppresses a creator notice after reactivation within seven days" do
+    @subscription.unsubscribe_and_fail!
+    @subscription.resubscribe!
+    assert_nil @subscription.reload.failed_at
+    assert_nil @subscription.deactivated_at
+    clear_enqueued_jobs
+    Sidekiq::Worker.clear_all
+
+    travel 2.hours do
+      @subscription.unsubscribe_and_fail!
+    end
+
+    assert_enqueued_email(CustomerLowPriorityMailer, :subscription_autocancelled, args: [@subscription.id])
+    refute_enqueued_email(ContactingCreatorMailer, :subscription_autocancelled, args: [@subscription.id])
+    assert_sidekiq_enqueued(PostToPingEndpointsWorker, args: [nil, nil, ResourceSubscription::CANCELLED_RESOURCE_NAME, @subscription.id])
+    assert_sidekiq_enqueued(PostToPingEndpointsWorker, args: [nil, nil, ResourceSubscription::SUBSCRIPTION_ENDED_RESOURCE_NAME, @subscription.id])
+  end
+
+  test "#unsubscribe_and_fail! sends another creator notice after seven days without extending the window on suppressed cancellations" do
+    freeze_time do
+      @subscription.unsubscribe_and_fail!
+      travel 6.days
+      @subscription.resubscribe!
+      @subscription.unsubscribe_and_fail!
+      travel 1.day
+      @subscription.resubscribe!
+      clear_enqueued_jobs
+      create_failed_purchase(link: @subscription.link, subscription: @subscription, email: @subscription.user.email)
+
+      @subscription.unsubscribe_and_fail!
+
+      assert_enqueued_email(CustomerLowPriorityMailer, :subscription_autocancelled, args: [@subscription.id])
+      assert_enqueued_email(ContactingCreatorMailer, :subscription_autocancelled, args: [@subscription.id])
+      @subscription.resubscribe!
+      clear_enqueued_jobs
+      @subscription.unsubscribe_and_fail!
+      refute_enqueued_email(ContactingCreatorMailer, :subscription_autocancelled, args: [@subscription.id])
+    end
+  end
+
+  test "#unsubscribe_and_fail! does not count a cancellation with purchase emails disabled as a creator notice" do
+    @subscription.seller.update!(enable_payment_email: false)
     @subscription.unsubscribe_and_fail!
     assert_enqueued_email(CustomerLowPriorityMailer, :subscription_autocancelled, args: [@subscription.id])
     refute_enqueued_email(ContactingCreatorMailer, :subscription_autocancelled, args: [@subscription.id])
+    assert_sidekiq_enqueued(PostToPingEndpointsWorker, args: [nil, nil, ResourceSubscription::CANCELLED_RESOURCE_NAME, @subscription.id])
+    @subscription.resubscribe!
+    @subscription.seller.update!(enable_payment_email: true)
+    clear_enqueued_jobs
+    create_failed_purchase(link: @subscription.link, subscription: @subscription, email: @subscription.user.email)
+
+    @subscription.unsubscribe_and_fail!
+
+    assert_enqueued_email(ContactingCreatorMailer, :subscription_autocancelled, args: [@subscription.id])
   end
 
-  test "#unsubscribe_and_fail! sends email to customer and creator on new failure more than 7 days ago" do
-    create_failed_purchase(link: @subscription.link, subscription: @subscription, email: @subscription.user.email, created_at: 30.days.ago)
-    assert_equal true, @subscription.seller.enable_payment_email
+  test "#unsubscribe_and_fail! does not enqueue duplicate notifications without reactivation" do
     @subscription.unsubscribe_and_fail!
-    assert_enqueued_email(CustomerLowPriorityMailer, :subscription_autocancelled, args: [@subscription.id])
+    clear_enqueued_jobs
+    Sidekiq::Worker.clear_all
+
+    @subscription.reload.unsubscribe_and_fail!
+
+    assert_empty enqueued_jobs
+    assert_empty PostToPingEndpointsWorker.jobs
+  end
+
+  test "#unsubscribe_and_fail! retries a creator enqueue failure without suppressing the notice" do
+    creator_notices = SentEmailInfo.where(key: SentEmailInfo.mailer_key_digest("ContactingCreatorMailer", "subscription_autocancelled", @subscription.id))
+    expired_notice = creator_notices.create!(created_at: 8.days.ago)
+    original_created_at = expired_notice.reload.created_at
+    SubscriptionCancellationEmailJob.any_instance.expects(:enqueue).raises(RuntimeError, "enqueue failed")
+
+    assert_raises(RuntimeError) do
+      Subscription.transaction(requires_new: true) { @subscription.unsubscribe_and_fail! }
+    end
+    assert_nil @subscription.reload.failed_at
+    assert_nil @subscription.deactivated_at
+    assert_equal [expired_notice.id], creator_notices.pluck(:id)
+    assert_equal original_created_at, expired_notice.reload.created_at
+    clear_enqueued_jobs
+    SubscriptionCancellationEmailJob.any_instance.unstub(:enqueue)
+
+    @subscription.unsubscribe_and_fail!
+
     assert_enqueued_email(ContactingCreatorMailer, :subscription_autocancelled, args: [@subscription.id])
+    assert_equal 1, creator_notices.count
+    assert_operator creator_notices.first.created_at, :>, original_created_at
+  end
+
+  test "#unsubscribe_and_fail! retries when the creator enqueue returns false" do
+    creator_notices = SentEmailInfo.where(key: SentEmailInfo.mailer_key_digest("ContactingCreatorMailer", "subscription_autocancelled", @subscription.id))
+    SubscriptionCancellationEmailJob.any_instance.expects(:enqueue).returns(false)
+
+    assert_raises(Subscription::UpdateFailed) do
+      Subscription.transaction(requires_new: true) { @subscription.unsubscribe_and_fail! }
+    end
+    assert_nil @subscription.reload.failed_at
+    assert_nil @subscription.deactivated_at
+    assert_empty creator_notices.reload
+    clear_enqueued_jobs
+    SubscriptionCancellationEmailJob.any_instance.unstub(:enqueue)
+
+    @subscription.unsubscribe_and_fail!
+
+    assert_enqueued_email(ContactingCreatorMailer, :subscription_autocancelled, args: [@subscription.id])
+  end
+
+  test "#unsubscribe_and_fail! sends a creator notice for a repeat cancellation more than seven days later" do
+    @subscription.unsubscribe_and_fail!
+
+    travel 30.days do
+      @subscription.resubscribe!
+      clear_enqueued_jobs
+      create_failed_purchase(link: @subscription.link, subscription: @subscription, email: @subscription.user.email, created_at: 5.days.ago)
+
+      @subscription.unsubscribe_and_fail!
+
+      assert_enqueued_email(ContactingCreatorMailer, :subscription_autocancelled, args: [@subscription.id])
+    end
+  end
+
+  [false, true].each do |expired_marker|
+    test "#unsubscribe_and_fail! delivers only the committed creator notice after a late webhook failure with #{expired_marker ? 'an expired' : 'no'} marker" do
+      Premailer::Rails::CSSHelper.stubs(:css_for_url).returns("")
+      assert_equal :test, ActionMailer::Base.delivery_method
+      ActionMailer::Base.deliveries.clear
+      creator_notices = SentEmailInfo.where(key: SentEmailInfo.mailer_key_digest("ContactingCreatorMailer", "subscription_autocancelled", @subscription.id))
+      creator_notices.create!(created_at: 8.days.ago) if expired_marker
+      original_markers = creator_notices.pluck(:id, :created_at)
+      @subscription.expects(:send_cancelled_notification_webhook).raises(RuntimeError, "webhook enqueue failed")
+
+      assert_raises(RuntimeError) do
+        Subscription.transaction(requires_new: true) { @subscription.unsubscribe_and_fail! }
+      end
+      assert_nil @subscription.reload.failed_at
+      assert_nil @subscription.deactivated_at
+      assert_equal original_markers, creator_notices.pluck(:id, :created_at)
+      @subscription.unstub(:send_cancelled_notification_webhook)
+
+      @subscription.unsubscribe_and_fail!
+
+      creator_jobs = enqueued_jobs.select { |job| job[:args].first(2) == ["ContactingCreatorMailer", "subscription_autocancelled"] }
+      assert_equal 2, creator_jobs.size
+      perform_enqueued_jobs(only: ->(job) { job[:args].first(2) == ["ContactingCreatorMailer", "subscription_autocancelled"] })
+
+      assert_equal 1, ActionMailer::Base.deliveries.size
+      assert_equal [@subscription.seller.email], ActionMailer::Base.deliveries.last.to
+    end
+  end
+
+  [false, true].each do |expired_marker|
+    test "#unsubscribe_and_fail! retries a creator marker write failure with #{expired_marker ? 'an expired' : 'no'} marker without duplicate creator mail" do
+      creator_notices = SentEmailInfo.where(key: SentEmailInfo.mailer_key_digest("ContactingCreatorMailer", "subscription_autocancelled", @subscription.id))
+      creator_notices.create!(created_at: 8.days.ago) if expired_marker
+      original_markers = creator_notices.pluck(:id, :created_at)
+      creator_jobs = -> { enqueued_jobs.select { |job| job[:args].first(2) == ["ContactingCreatorMailer", "subscription_autocancelled"] } }
+      buyer_jobs = -> { enqueued_jobs.select { |job| job[:args].first(2) == ["CustomerLowPriorityMailer", "subscription_autocancelled"] } }
+      SentEmailInfo.any_instance.expects(:save!).raises(ActiveRecord::StatementInvalid, "write failed")
+
+      assert_raises(ActiveRecord::StatementInvalid) do
+        Subscription.transaction(requires_new: true) { @subscription.unsubscribe_and_fail! }
+      end
+      assert_nil @subscription.reload.failed_at
+      assert_nil @subscription.deactivated_at
+      assert_equal original_markers, creator_notices.pluck(:id, :created_at)
+      assert_equal 0, creator_jobs.call.size
+      assert_equal ["low"], buyer_jobs.call.pluck(:queue)
+      SentEmailInfo.any_instance.unstub(:save!)
+
+      @subscription.unsubscribe_and_fail!
+
+      assert_equal ["critical"], creator_jobs.call.pluck(:queue)
+      assert_enqueued_email(ContactingCreatorMailer, :subscription_autocancelled, args: [@subscription.id])
+      assert_equal ["low", "low"], buyer_jobs.call.pluck(:queue)
+      assert_equal 1, creator_notices.count
+      marker = creator_notices.first
+      assert_operator marker.created_at, :>, 7.days.ago
+
+      @subscription.resubscribe!
+      @subscription.unsubscribe_and_fail!
+
+      assert_equal ["critical"], creator_jobs.call.pluck(:queue)
+      assert_equal ["low", "low", "low"], buyer_jobs.call.pluck(:queue)
+      assert_equal [[marker.id, marker.created_at]], creator_notices.pluck(:id, :created_at)
+    end
+  end
+
+  test "#unsubscribe_and_fail! leaves delivery retries usable after recording the creator notice" do
+    Premailer::Rails::CSSHelper.stubs(:css_for_url).returns("")
+    @subscription.unsubscribe_and_fail!
+    creator_job = enqueued_jobs.find { |job| job[:job] == SubscriptionCancellationEmailJob }
+    clear_enqueued_jobs
+    ActionMailer::Base.deliveries.clear
+    Mail::TestMailer.any_instance.expects(:deliver!).raises(Net::ReadTimeout)
+
+    ActiveJob::Base.execute(creator_job)
+
+    assert_enqueued_email(ContactingCreatorMailer, :subscription_autocancelled, args: [@subscription.id])
+    assert_empty ActionMailer::Base.deliveries
+    Mail::TestMailer.any_instance.unstub(:deliver!)
+    perform_enqueued_jobs
+
+    assert_equal 1, ActionMailer::Base.deliveries.size
+    assert_equal [@subscription.seller.email], ActionMailer::Base.deliveries.last.to
+  end
+
+  test "#unsubscribe_and_fail! discards a queued creator job when enqueue reports failure after accepting it" do
+    Premailer::Rails::CSSHelper.stubs(:css_for_url).returns("")
+    ActionMailer::Base.deliveries.clear
+    SubscriptionCancellationEmailJob.any_instance.stubs(:successfully_enqueued?).returns(false)
+
+    assert_raises(Subscription::UpdateFailed) do
+      Subscription.transaction(requires_new: true) { @subscription.unsubscribe_and_fail! }
+    end
+    assert_equal 1, enqueued_jobs.count { |job| job[:job] == SubscriptionCancellationEmailJob }
+    assert_nil @subscription.reload.failed_at
+    SubscriptionCancellationEmailJob.any_instance.unstub(:successfully_enqueued?)
+
+    @subscription.unsubscribe_and_fail!
+    perform_enqueued_jobs(only: SubscriptionCancellationEmailJob)
+
+    assert_equal 1, ActionMailer::Base.deliveries.size
+  end
+
+  test "#unsubscribe_and_fail! delivers a committed creator notice after restart and a later preference change" do
+    Premailer::Rails::CSSHelper.stubs(:css_for_url).returns("")
+    ActionMailer::Base.deliveries.clear
+    @subscription.unsubscribe_and_fail!
+    @subscription.resubscribe!
+    @subscription.seller.update!(enable_payment_email: false)
+
+    perform_enqueued_jobs(only: SubscriptionCancellationEmailJob)
+
+    assert_equal 1, ActionMailer::Base.deliveries.size
+    assert_equal [@subscription.seller.email], ActionMailer::Base.deliveries.last.to
+  end
+
+  test "#unsubscribe_and_fail! retains delayed creator deliveries after a new seven-day window starts" do
+    Premailer::Rails::CSSHelper.stubs(:css_for_url).returns("")
+    ActionMailer::Base.deliveries.clear
+    @subscription.unsubscribe_and_fail!
+
+    travel 8.days do
+      @subscription.resubscribe!
+      @subscription.unsubscribe_and_fail!
+      perform_enqueued_jobs(only: SubscriptionCancellationEmailJob)
+    end
+
+    assert_equal 2, ActionMailer::Base.deliveries.size
+    assert ActionMailer::Base.deliveries.all? { |mail| mail.to == [@subscription.seller.email] }
+  end
+
+  test "#unsubscribe_and_fail! keeps creator delivery retries valid after the marker expires and is replaced" do
+    Premailer::Rails::CSSHelper.stubs(:css_for_url).returns("")
+    ActionMailer::Base.deliveries.clear
+    @subscription.unsubscribe_and_fail!
+    Mail::TestMailer.any_instance.expects(:deliver!).raises(Net::ReadTimeout)
+    perform_enqueued_jobs(only: SubscriptionCancellationEmailJob)
+    assert_empty ActionMailer::Base.deliveries
+    assert_equal 1, enqueued_jobs.count { |job| job[:job] == SubscriptionCancellationEmailJob }
+    Mail::TestMailer.any_instance.unstub(:deliver!)
+
+    travel 8.days do
+      @subscription.resubscribe!
+      @subscription.unsubscribe_and_fail!
+      perform_enqueued_jobs(only: SubscriptionCancellationEmailJob)
+    end
+
+    assert_equal 2, ActionMailer::Base.deliveries.size
+  end
+
+  test "#unsubscribe_and_fail! discards creator jobs from an outer transaction rollback before retry" do
+    Premailer::Rails::CSSHelper.stubs(:css_for_url).returns("")
+    ActionMailer::Base.deliveries.clear
+    Subscription.transaction(requires_new: true) do
+      @subscription.unsubscribe_and_fail!
+      raise ActiveRecord::Rollback
+    end
+
+    perform_enqueued_jobs(only: SubscriptionCancellationEmailJob)
+    assert_empty ActionMailer::Base.deliveries
+    assert_nil @subscription.reload.failed_at
+    @subscription.unsubscribe_and_fail!
+    perform_enqueued_jobs(only: SubscriptionCancellationEmailJob)
+
+    assert_equal 1, ActionMailer::Base.deliveries.size
   end
 
   test "#unsubscribe_and_fail! emails the customer" do
