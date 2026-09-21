@@ -303,6 +303,7 @@ describe "Muse MCP" do
       post_mcp({ jsonrpc: "2.0", id: 1, method: "initialize" })
 
       instructions = response.parsed_body.dig("result", "instructions")
+      expect(instructions).to include("check out on the product URL")
       expect(instructions).to include("does not take payment")
       expect(instructions).not_to include("Muse's browser")
       expect(instructions).not_to include("refunding")
