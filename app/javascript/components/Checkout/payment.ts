@@ -147,6 +147,9 @@ export type CheckoutPaymentConfig =
       india_card_mandate_reliability?: boolean;
       payment_element_wallets: boolean;
       flat_payment_methods: boolean;
+      // CardElement renders Link's inline "save my information" signup under the card fields
+      // unless the seller switched Link off in checkout settings.
+      stripe_link_enabled: boolean;
       elements_options: null;
     }
   | {
@@ -205,6 +208,9 @@ export type Product = {
   customFields: CustomFieldDescriptor[];
   bundleProductCustomFields: { product: { id: string; name: string }; customFields: CustomFieldDescriptor[] }[];
   supportsPaypal: "native" | "braintree" | null;
+  // The seller switched PayPal's own debit-or-credit-card funding button off. The button set is
+  // page-level, so the page hides it only when every product in the cart asks for it.
+  paypalCardFundingDisabled: boolean;
   testPurchase: boolean;
   requirePayment: boolean;
   hasFreeTrial: boolean;
@@ -1895,6 +1901,7 @@ export function createReducer(initial: {
         request_apple_pay_merchant_tokens: false,
         payment_element_wallets: false,
         flat_payment_methods: false,
+        stripe_link_enabled: true,
         elements_options: null,
       },
       paymentMethod: "card",

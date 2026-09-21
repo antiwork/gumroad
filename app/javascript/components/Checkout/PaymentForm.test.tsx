@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import type { Stripe, StripeElements } from "@stripe/stripe-js";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import * as React from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -32,6 +32,8 @@ type PayPalButtonsConfig = {
   onApprove: (data: { billingToken: string }) => Promise<void>;
   onClick?: (data: Record<string, never>, actions: { resolve: () => void; reject: () => void }) => unknown;
 };
+
+const cardElementInputRender = vi.hoisted<{ enableLink: boolean | undefined }>(() => ({ enableLink: undefined }));
 
 const paypalMock = vi.hoisted<{
   buttonsConfig: null | PayPalButtonsConfig;
@@ -66,7 +68,10 @@ vi.mock("$app/data/payment_method_result", () => ({
 vi.mock("$app/data/braintree_client_token_data", () => ({ useBraintreeToken: () => ({ type: "not-available" }) }));
 vi.mock("$app/utils/stripe_loader", () => ({ getCheckoutStripeInstance: vi.fn(), getStripeInstance: vi.fn() }));
 vi.mock("$app/components/Checkout/CreditCardInput", () => ({
-  CreditCardInput: () => null,
+  CreditCardInput: ({ enableLink }: { enableLink?: boolean }) => {
+    cardElementInputRender.enableLink = enableLink;
+    return null;
+  },
   StripeElementsProvider: ({ children }: { children: React.ReactNode }) => children,
 }));
 vi.mock("$app/components/Checkout/PaymentElementInput", () => ({
@@ -99,6 +104,7 @@ vi.mock("$app/components/server-components/Alert", () => ({ showAlert: vi.fn(), 
 
 const cardElementConfig: CheckoutPaymentConfig = {
   integration: "card_element",
+  stripe_link_enabled: true,
   fallback_reason: "not_checkout",
   disable_wallets: false,
   request_apple_pay_merchant_tokens: false,
@@ -120,6 +126,7 @@ const state = (overrides: Partial<State> = {}): State => ({
       customFields: [{ id: "field-1", type: "text", name: "Nickname", required: true, collect_per_product: false }],
       bundleProductCustomFields: [],
       supportsPaypal: null,
+      paypalCardFundingDisabled: false,
       testPurchase: false,
       requirePayment: false,
       hasFreeTrial: false,
@@ -232,6 +239,7 @@ describe("PaymentForm validation-failure feedback", () => {
     paymentElementInputRender.setupFutureUsage = undefined;
     paymentElementInputRender.walletsEnabled = undefined;
     paypalMock.buttonsConfig = null;
+    cardElementInputRender.enableLink = undefined;
     paypalMock.createBillingAgreement.mockReset();
     paypalMock.getPaymentMethodResult.mockReset();
     paypalMock.getReusablePaymentMethodResult.mockReset();
@@ -636,6 +644,7 @@ describe("PaymentForm validation-failure feedback", () => {
         price: 1_000,
         requirePayment: true,
         supportsPaypal: "native" as const,
+        paypalCardFundingDisabled: false,
       })),
     });
     paypalMock.createBillingAgreement.mockImplementation(async (token: string) => ({
@@ -711,6 +720,7 @@ describe("PaymentForm validation-failure feedback", () => {
         price: 1_000,
         requirePayment: true,
         supportsPaypal: "native" as const,
+        paypalCardFundingDisabled: false,
       })),
     });
     paypalMock.createBillingAgreement.mockImplementation(async (token: string) => ({
@@ -910,5 +920,141 @@ describe("PaymentForm validation-failure feedback", () => {
     expect(screen.getByLabelText("Nickname").getAttribute("aria-describedby")).toBe(
       screen.getByText("This field is required.").id,
     );
+  });
+});
+
+describe("PaymentForm payment method visibility", () => {
+  it("passes the seller's Link setting down to the card fields — Link renders the save-info block", () => {
+    const checkoutState = state();
+    const [product] = checkoutState.products;
+    if (product === undefined) throw new Error("Expected a checkout product");
+
+    renderPaymentForm({
+      ...checkoutState,
+      products: [{ ...product, requirePayment: true }],
+      checkoutPayment: { ...cardElementConfig, stripe_link_enabled: false },
+    });
+
+    expect(cardElementInputRender.enableLink).toBe(false);
+  });
+
+  it("leaves Link on the card fields for a lane with no card_element config", () => {
+    type ClientConfirmPayment = Extract<CheckoutPaymentConfig, { integration: "payment_element_client_confirm" }>;
+    const checkoutPayment: ClientConfirmPayment = {
+      integration: "payment_element_client_confirm",
+      fallback_reason: null,
+      recurring_upi_registration: false,
+      disable_wallets: false,
+      request_apple_pay_merchant_tokens: false,
+      payment_element_wallets: false,
+      flat_payment_methods: false,
+      elements_options: {
+        stripe_elements_mode: "payment",
+        currency: "usd",
+        buyer_currency_presentment: false,
+        presentment_amount_cents: null,
+        listed_currency_display: null,
+        payment_method_types: ["card"],
+        inr_local_methods: [],
+        payment_method_list_token: null,
+        stripe_link_enabled: false,
+        stripe_connect_account_id: null,
+      },
+    };
+    const checkoutState = state();
+    const [product] = checkoutState.products;
+    if (product === undefined) throw new Error("Expected a checkout product");
+
+    renderPaymentForm({
+      ...checkoutState,
+      products: [{ ...product, requirePayment: true }],
+      checkoutPayment,
+      usingSavedCard: true,
+    });
+
+    expect(cardElementInputRender.enableLink).toBe(false);
+  });
+
+  it("hides PayPal's card funding button when every seller in the cart switched it off", async () => {
+    const checkoutState = state({
+      paypalClientId: "paypal-client-id",
+      products: state().products.map((product) => ({
+        ...product,
+        requirePayment: true,
+        supportsPaypal: "native" as const,
+        paypalCardFundingDisabled: true,
+      })),
+    });
+    renderPaymentForm(checkoutState);
+
+    await waitFor(() => expect(paypalMock.loadScript).toHaveBeenCalled());
+    expect(paypalMock.loadScript).toHaveBeenCalledWith(
+      expect.objectContaining({ clientId: "paypal-client-id", vault: true, disableFunding: "card" }),
+    );
+  });
+
+  it("re-decides PayPal's card funding button when an accepted offer changes the cart", async () => {
+    paypalMock.loadScript.mockReset();
+    paypalMock.render.mockReset();
+    paypalMock.loadScript.mockResolvedValue({
+      Buttons: (config: PayPalButtonsConfig) => {
+        paypalMock.buttonsConfig = config;
+        return { render: paypalMock.render };
+      },
+    });
+
+    const [product] = state().products;
+    if (product === undefined) throw new Error("Expected a checkout product");
+    const harness: CheckoutHarness = { dispatch: () => {}, actions: [] };
+    const mixedCart = state({
+      paypalClientId: "paypal-client-id",
+      paymentMethod: "paypal",
+      products: [
+        { ...product, requirePayment: true, supportsPaypal: "native" as const, paypalCardFundingDisabled: false },
+        {
+          ...product,
+          permalink: "product-b",
+          requirePayment: true,
+          supportsPaypal: "native" as const,
+          paypalCardFundingDisabled: true,
+        },
+      ],
+    });
+    render(<StatefulPaymentForm initial={mixedCart} harness={harness} />);
+
+    await waitFor(() => expect(paypalMock.render).toHaveBeenCalled());
+    expect(paypalMock.loadScript.mock.calls.at(-1)?.[0]).not.toHaveProperty("disableFunding");
+    const rendersBeforeCartChange = paypalMock.render.mock.calls.length;
+
+    act(() =>
+      harness.dispatch({
+        type: "update-products",
+        products: mixedCart.products.map((item) => ({ ...item, paypalCardFundingDisabled: true })),
+      }),
+    );
+
+    // The aggregate flipped, so the funding set is re-applied...
+    await waitFor(() => expect(paypalMock.loadScript.mock.calls.at(-1)?.[0]).toMatchObject({ disableFunding: "card" }));
+    // ...and the buttons rebuilt, because the funding set is fixed when the script loads.
+    await waitFor(() => expect(paypalMock.render.mock.calls.length).toBeGreaterThan(rendersBeforeCartChange));
+  });
+
+  it("keeps PayPal's card funding button when another seller in the cart still offers it", async () => {
+    const cartState = state();
+    const checkoutState = state({
+      paypalClientId: "paypal-client-id",
+      products: cartState.products
+        .flatMap((item) => [item, { ...item, permalink: "product-b" }])
+        .map((item, index) => ({
+          ...item,
+          requirePayment: true,
+          supportsPaypal: "native" as const,
+          paypalCardFundingDisabled: index === 0,
+        })),
+    });
+    renderPaymentForm(checkoutState);
+
+    await waitFor(() => expect(paypalMock.loadScript).toHaveBeenCalled());
+    expect(paypalMock.loadScript.mock.calls.at(-1)?.[0]).not.toHaveProperty("disableFunding");
   });
 });

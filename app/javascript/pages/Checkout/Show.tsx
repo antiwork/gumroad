@@ -449,6 +449,7 @@ const CheckoutIndexPage = () => {
         creator: item.product.creator,
         requireShipping: item.product.require_shipping,
         supportsPaypal: item.product.supports_paypal,
+        paypalCardFundingDisabled: item.product.paypal_card_funding_disabled,
         customFields: item.product.custom_fields,
         bundleProductCustomFields: item.product.bundle_products.map(({ product_id, name, custom_fields }) => ({
           product: { id: product_id, name },

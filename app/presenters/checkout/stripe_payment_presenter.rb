@@ -115,6 +115,9 @@ class Checkout::StripePaymentPresenter
         # And with no Payment Element there is no accordion to act as the payment-method
         # selector, so the CardElement lane always renders the legacy nested radio-row list.
         flat_payment_methods: false,
+        # CardElement renders Link's own inline signup under the card fields unless the seller
+        # switched Link off in checkout settings.
+        stripe_link_enabled: !link_disabled_for_cart?,
         elements_options: nil,
       }
     end
@@ -154,7 +157,8 @@ class Checkout::StripePaymentPresenter
           # exception mirrors the client-confirm PPP method matrix: Link's funding country can't be
           # verified pre-charge, so on a PPP-verified checkout it would only fail the card-country
           # check at purchase (Purchase#validate_purchasing_power_parity). Gate it out up front.
-          stripe_link_enabled: !ppp_verification_applies?,
+          # A seller can also switch the whole thing off from checkout settings.
+          stripe_link_enabled: !link_disabled_for_cart? && !ppp_verification_applies?,
         },
       }
     end
@@ -222,6 +226,13 @@ class Checkout::StripePaymentPresenter
     # enabling wallets-in-the-element for one seller must never change another seller's checkout.
     def payment_element_wallets?
       sellers.present? && sellers.all? { _1.present? && Feature.active?(PAYMENT_ELEMENT_WALLETS_FEATURE_NAME, _1) }
+    end
+
+    # Seller-complete for the same reason: one seller switching Link off in checkout settings must
+    # not remove it from another seller's checkout. Shared with the resolver so the element's Link
+    # and the client-confirm method list can never disagree.
+    def link_disabled_for_cart?
+      Checkout::PaymentMethodResolver.link_disabled_for?(sellers)
     end
 
     # Same seller-complete keying as payment_element_wallets?; charge path uses

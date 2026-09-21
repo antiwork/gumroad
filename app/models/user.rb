@@ -433,6 +433,8 @@ class User < ApplicationRecord
             59 => :has_dismissed_gumhead_promo,
             60 => :hide_follow_form, # Seller setting: hides the subscribe box in the public profile header. Custom HTML pages omit it by not including the form.
             61 => :gumhead_enabled, # Gumhead beta membership; gates :gumhead via the :gumhead_beta group so the cohort can exceed Flipper's 100-actor cap.
+            62 => :link_disabled, # Seller opt-out (checkout settings page): checkout stops offering Stripe Link, which also removes the "save my information" block it renders under the card fields.
+            63 => :paypal_card_funding_disabled, # Seller opt-out (checkout settings page): hides PayPal's own debit-or-credit-card funding button, leaving only the PayPal sign-in button.
             :column => "flags",
             :flag_query_mode => :bit_operator,
             check_for_column: false

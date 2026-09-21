@@ -71,8 +71,8 @@ describe Checkout::StripePaymentPresenter do
     checkout_product_for(product, **overrides)
   end
 
-  def card_element_fallback(reason, request_apple_pay_merchant_tokens: false, india_card_mandate_reliability: false)
-    { integration: described_class::STRIPE_CARD_ELEMENT_INTEGRATION, fallback_reason: reason, disable_wallets: false, request_apple_pay_merchant_tokens:, india_card_mandate_reliability:, payment_element_wallets: false, flat_payment_methods: false, elements_options: nil }
+  def card_element_fallback(reason, request_apple_pay_merchant_tokens: false, india_card_mandate_reliability: false, stripe_link_enabled: true)
+    { integration: described_class::STRIPE_CARD_ELEMENT_INTEGRATION, fallback_reason: reason, disable_wallets: false, request_apple_pay_merchant_tokens:, india_card_mandate_reliability:, payment_element_wallets: false, flat_payment_methods: false, stripe_link_enabled:, elements_options: nil }
   end
 
   # The Element's Link toggle and the intent's method list derive from the same resolver output, so
@@ -437,6 +437,7 @@ describe Checkout::StripePaymentPresenter do
       india_card_mandate_reliability: false,
       payment_element_wallets: false,
       flat_payment_methods: false,
+      stripe_link_enabled: true,
       elements_options: nil,
     )
   ensure
@@ -650,6 +651,38 @@ describe Checkout::StripePaymentPresenter do
     cart = create(:cart, :guest)
     products = [
       create(:product, user: create(:user), price_cents: 100),
+      create(:product, user: create(:user), price_cents: 200),
+    ]
+    products.each do |product|
+      Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, product.user)
+      create(:cart_product, cart:, product:)
+    end
+
+    expect(stripe_payment_props(cart:)).to eq(payment_element_props)
+  end
+
+  it "drops Link from the element's method list for a seller who switched it off in checkout settings" do
+    seller = create(:user, link_disabled: true)
+    product = create(:product, user: seller, price_cents: 1234)
+    Feature.activate_user(described_class::STRIPE_PAYMENT_ELEMENT_CHECKOUT_FEATURE_NAME, seller)
+
+    expect(stripe_payment_props(add_products: [checkout_product_for(product)]))
+      .to eq(payment_element_props(stripe_link_enabled: false))
+  end
+
+  it "switches Link off on the CardElement lane too, where Link renders the save-info block" do
+    seller = create(:user, link_disabled: true)
+    product = create(:product, user: seller, price_cents: 1234)
+
+    expect(stripe_payment_props(add_products: [checkout_product_for(product)]))
+      .to eq(card_element_fallback("stripe_payment_element_flag_disabled", stripe_link_enabled: false))
+  end
+
+  it "keeps Link for a cart where only one seller switched it off — the opt-out is seller-complete" do
+    cart = create(:cart, :guest)
+    opt_out_seller = create(:user, link_disabled: true)
+    products = [
+      create(:product, user: opt_out_seller, price_cents: 100),
       create(:product, user: create(:user), price_cents: 200),
     ]
     products.each do |product|

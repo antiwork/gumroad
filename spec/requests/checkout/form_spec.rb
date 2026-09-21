@@ -216,6 +216,27 @@ describe("Checkout form page", type: :system, js: true) do
     end
   end
 
+  describe "payment method visibility" do
+    it "allows switching Link and PayPal's card funding button off and back on" do
+      visit checkout_form_path
+
+      find_field("Offer Stripe Link at checkout", checked: true).uncheck
+      find_field("Show PayPal's debit or credit card button", checked: true).uncheck
+      click_on "Save changes"
+      expect(page).to have_alert(text: "Changes saved!")
+      expect(seller.reload.link_disabled).to eq(true)
+      expect(seller.reload.paypal_card_funding_disabled).to eq(true)
+
+      refresh
+      find_field("Offer Stripe Link at checkout", checked: false).check
+      find_field("Show PayPal's debit or credit card button", checked: false).check
+      click_on "Save changes"
+      expect(page).to have_alert(text: "Changes saved!")
+      expect(seller.reload.link_disabled).to eq(false)
+      expect(seller.reload.paypal_card_funding_disabled).to eq(false)
+    end
+  end
+
   describe "PayPal Connect" do
     context "when signed in as the seller (owner)" do
       before do

@@ -48,6 +48,7 @@ export type Product = {
   custom_fields: CustomFieldDescriptor[];
   require_shipping: boolean;
   supports_paypal: "native" | "braintree" | null;
+  paypal_card_funding_disabled: boolean;
   has_offer_codes: boolean;
   has_tipping_enabled: boolean;
   analytics: AnalyticsData;
