@@ -49,7 +49,7 @@ export function Calendar({ defaultMonth, ...props }: React.ComponentProps<typeof
         // button would cover this.
         selected: classNames("bg-accent-with-text text-accent-foreground", defaultClassNames.selected),
         // Disabled days should read as "unavailable" by fading out, matching how every other disabled
-        // control in the app is styled (see Button/Input/Checkbox, all opacity-30).
+        // action in the app is styled (see Button/Checkbox, both opacity-30).
         disabled: classNames("opacity-30", defaultClassNames.disabled),
       }}
       components={{
