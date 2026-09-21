@@ -55,8 +55,8 @@ const renderSection = (
   );
 };
 
-const switchOption = () => screen.getByRole("button", { name: "Switch to direct deposit" });
-const noSwitchOption = () => screen.queryByRole("button", { name: "Switch to direct deposit" });
+const switchOption = () => screen.getByRole("button", { name: "Set up direct deposit" });
+const noSwitchOption = () => screen.queryByRole("button", { name: "Set up direct deposit" });
 const indiaExplanation = () =>
   screen.queryByText(
     /Switching to direct deposit is unavailable because new bank payout accounts cannot be set up in India/u,
@@ -68,7 +68,6 @@ beforeEach(() => {
   onSubmit.mockReset();
   Object.assign(globalThis, {
     Routes: {
-      help_center_root_path: () => "/help",
       help_center_article_path: (slug: string) => `/help/article/${slug}`,
     },
   });
@@ -81,10 +80,13 @@ describe("bank payout switch option", () => {
 
     const option = switchOption();
     expect(option.hasAttribute("disabled")).toBe(false);
+    expect(screen.getByRole("status").contains(option)).toBe(true);
+    expect(screen.getByRole("status").textContent).toContain("You can receive payouts in your bank account.");
+    expect(screen.queryAllByRole("link")).toEqual([]);
     expect(indiaExplanation()).toBeNull();
 
     fireEvent.click(option);
-    expect(updatePayoutMethod).toHaveBeenCalledWith("bank");
+    expect(updatePayoutMethod).toHaveBeenCalledExactlyOnceWith("bank");
   });
 
   it("keeps the switch working for an India seller whose bank account is still active", () => {
@@ -92,6 +94,8 @@ describe("bank payout switch option", () => {
 
     expect(switchOption().hasAttribute("disabled")).toBe(false);
     expect(indiaExplanation()).toBeNull();
+    fireEvent.click(switchOption());
+    expect(updatePayoutMethod).toHaveBeenCalledExactlyOnceWith("bank");
   });
 
   it("replaces the option with the country reason for an India seller who cannot set one up", () => {
@@ -101,26 +105,11 @@ describe("bank payout switch option", () => {
     expect(indiaExplanation()).toBeTruthy();
   });
 
-  it("offers a payouts help article instead of a control that cannot do anything", () => {
+  it("keeps unavailable guidance plain with no help or setup action", () => {
     renderSection();
 
-    const link = payoutsLink();
-    expect(link?.getAttribute("href")).toBe("/help/article/13-getting-paid");
-    // Reading it must not cost the seller the PayPal address they were part-way through typing.
-    expect(link?.getAttribute("target")).toBe("_blank");
-    expect(link?.getAttribute("rel")).toBe("noreferrer");
-  });
-
-  it("does not send the seller to the help homepage or a contact form", () => {
-    renderSection();
-
-    expect(screen.queryByRole("link", { name: "Contact support" })).toBeNull();
-    expect(
-      screen
-        .getAllByRole("link")
-        .map((link) => link.getAttribute("href"))
-        .filter((href) => href === "/help"),
-    ).toEqual([]);
+    expect(screen.queryAllByRole("link")).toEqual([]);
+    expect(screen.queryAllByRole("button")).toEqual([]);
   });
 
   it("promises no restoration and assumes no previous bank account", () => {
@@ -130,12 +119,12 @@ describe("bank payout switch option", () => {
     expect(notice?.textContent).not.toMatch(/previous bank|again|restor|reinstat|for now|at this time|yet/iu);
   });
 
-  it("carries the reason and its link in one status alert", () => {
+  it("carries the restriction in one plain status alert", () => {
     renderSection();
 
     const alert = screen.getByRole("status");
     expect(alert.textContent).toMatch(/new bank payout accounts cannot be set up in India/u);
-    expect(alert.contains(payoutsLink())).toBe(true);
+    expect(alert.querySelector("a, button")).toBeNull();
     expect(alert.className).not.toContain("text-muted");
   });
 
@@ -145,7 +134,7 @@ describe("bank payout switch option", () => {
 
     expect(noSwitchOption()).toBeNull();
     expect(indiaExplanation()).toBeTruthy();
-    expect(payoutsLink()).toBeTruthy();
+    expect(payoutsLink()).toBeNull();
   });
 
   it("leaves an eligible seller's permission restriction unexplained by country copy", () => {
@@ -184,7 +173,7 @@ describe("bank payout switch keyboard semantics", () => {
     expect(option.getAttribute("type")).toBe("button");
     fireEvent.click(option, { detail: 0 });
 
-    expect(updatePayoutMethod).toHaveBeenCalledWith("bank");
+    expect(updatePayoutMethod).toHaveBeenCalledExactlyOnceWith("bank");
     expect(onSubmit).not.toHaveBeenCalled();
   });
 
@@ -195,19 +184,5 @@ describe("bank payout switch keyboard semantics", () => {
     expect(screen.queryByRole("button", { name: /direct deposit|bank/iu })).toBeNull();
     expect(updatePayoutMethod).not.toHaveBeenCalled();
     expect(onSubmit).not.toHaveBeenCalled();
-  });
-
-  it("keeps the payouts article reachable by keyboard from inside the notice", () => {
-    renderSection({ inForm: true });
-
-    const link = payoutsLink();
-    link?.focus();
-    expect(document.activeElement).toBe(link);
-    expect(screen.getByRole("status").contains(link)).toBe(true);
-
-    // A link, not a submit button: activating it must not post the payouts form.
-    fireEvent.click(link ?? document.body, { detail: 0 });
-    expect(onSubmit).not.toHaveBeenCalled();
-    expect(updatePayoutMethod).not.toHaveBeenCalled();
   });
 });

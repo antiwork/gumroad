@@ -703,22 +703,37 @@ describe("bank payout switch option on the payments page", () => {
     render(<PaymentsPage />);
   };
 
-  it("gives the India seller the reason and a payouts article instead of an option", () => {
+  it("gives the unavailable India seller a plain restriction with no setup or help action", () => {
     renderSeller("IN", false);
 
-    expect(screen.queryByRole("button", { name: "Switch to direct deposit" })).toBeNull();
+    expect(screen.queryByRole("button", { name: /direct deposit/u })).toBeNull();
     const reason = screen.getByText(/new bank payout accounts cannot be set up in India/u);
-    expect(reason.closest('[role="status"]')?.contains(screen.getByRole("link", { name: "Learn about payouts" }))).toBe(
-      true,
-    );
+    expect(reason.closest('[role="status"]')).toBeTruthy();
+    expect(reason.closest('[role="status"]')?.querySelector("a, button")).toBeNull();
   });
 
-  it("leaves the eligible seller's working switch alone", () => {
-    renderSeller("US", true);
+  it.each(["US", "IN"])("opens the existing bank form in place for an eligible %s seller without saving", (country) => {
+    renderSeller(country, true);
     fireEvent.click(screen.getByRole("radio", { name: "PayPal" }));
+    fireEvent.change(screen.getByLabelText("PayPal Email"), { target: { value: "unsaved@example.com" } });
 
-    expect(screen.getByRole("button", { name: "Switch to direct deposit" }).hasAttribute("disabled")).toBe(false);
+    const setup = screen.getByRole("button", { name: "Set up direct deposit" });
+    expect(setup.closest('[role="status"]')).toBeTruthy();
+    fireEvent.click(setup);
+
+    expect(screen.getByRole("radio", { name: "Bank Account" }).getAttribute("aria-checked")).toBe("true");
+    expect(screen.getByLabelText(country === "IN" ? "Account #" : "Account number")).toBeTruthy();
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(mocks.put).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("radio", { name: "PayPal" }));
+    expect(screen.getByRole<HTMLInputElement>("textbox", { name: "PayPal Email" }).value).toBe("unsaved@example.com");
+    expect(mocks.put).not.toHaveBeenCalled();
+  });
+
+  it("hides setup for an eligible seller without update permission", () => {
+    renderSeller("IN", true, true);
+    expect(screen.queryByRole("button", { name: /direct deposit/u })).toBeNull();
     expect(screen.queryByText(/cannot be set up in India/u)).toBeNull();
-    expect(screen.queryByRole("link", { name: "Learn about payouts" })).toBeNull();
+    expect(mocks.put).not.toHaveBeenCalled();
   });
 });

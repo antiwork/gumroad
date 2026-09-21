@@ -44,18 +44,16 @@ const PayPalEmailSection = ({
       <div className="whitespace-pre-line">{feeInfoText}</div>
       <div className="grid gap-4">
         {canSetupBankPayouts && !isFormDisabled ? (
-          <LinkButton className="justify-self-start" onClick={() => updatePayoutMethod("bank")}>
-            Switch to direct deposit
-          </LinkButton>
+          <Alert role="status" variant="info">
+            You can receive payouts in your bank account.{" "}
+            <LinkButton onClick={() => updatePayoutMethod("bank")}>Set up direct deposit</LinkButton>
+          </Alert>
         ) : // Only India: everywhere else `!canSetupBankPayouts` can mean an unsupported country or
         // missing compliance data, which this copy would misdescribe. An eligible seller held back
         // by `isFormDisabled` is a permission restriction and keeps the existing silent hide.
         !canSetupBankPayouts && user.country_code === "IN" ? (
           <Alert role="status" variant="info">
-            Switching to direct deposit is unavailable because new bank payout accounts cannot be set up in India.{" "}
-            <a href={Routes.help_center_article_path("13-getting-paid")} target="_blank" rel="noreferrer">
-              Learn about payouts
-            </a>
+            Switching to direct deposit is unavailable because new bank payout accounts cannot be set up in India.
           </Alert>
         ) : null}
         <Fieldset state={errorFieldNames.has("paypal_email_address") ? "danger" : undefined}>
