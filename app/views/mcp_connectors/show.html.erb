@@ -1,16 +1,23 @@
 <% client_name = @client[:label] %>
+<% pending_review = @client[:pending_review] %>
 <div class="min-h-screen">
   <header class="grid border-b border-black lg:grid-cols-2">
     <div class="flex flex-col justify-center gap-8 bg-pink px-8 py-16 text-black lg:px-16 lg:py-24">
       <p class="text-xl">Sell digital products with AI</p>
       <h1 class="text-5xl font-medium leading-none text-balance sm:text-6xl xl:text-7xl">Gumroad MCP<br>for <%= client_name %></h1>
-      <p class="max-w-xl text-xl sm:text-2xl">Connect your Gumroad store to <%= client_name %>. Create product drafts, check sales, and track payouts from your chat.</p>
+      <% if pending_review %>
+        <p class="max-w-xl text-xl sm:text-2xl">Submitted for review. The Gumroad connector is not yet available in Muse.</p>
+      <% else %>
+        <p class="max-w-xl text-xl sm:text-2xl">Connect your Gumroad store to <%= client_name %>. Create product drafts, check sales, and track payouts from your chat.</p>
+      <% end %>
       <% if @client[:listing_notice] %>
         <p class="max-w-xl text-lg"><%= @client[:listing_notice] %></p>
       <% end %>
       <div class="flex flex-col items-start gap-5">
-        <%= render "home/shared/button", text: @client[:connect_label] || "Connect your store", url: "#connect", variant: "dark" %>
-        <p class="text-base">You’ll need a Gumroad account and MCP support in <%= client_name %>.</p>
+        <%= render "home/shared/button", text: pending_review ? "View technical details" : (@client[:connect_label] || "Connect your store"), url: "#connect", variant: "dark" %>
+        <% unless pending_review %>
+          <p class="text-base">You’ll need a Gumroad account and MCP support in <%= client_name %>.</p>
+        <% end %>
       </div>
     </div>
     <div class="hidden items-center justify-center border-l border-black bg-yellow px-12 py-12 text-black lg:flex">
@@ -22,7 +29,7 @@
     <div class="mx-auto max-w-7xl">
       <div class="mb-12 max-w-3xl space-y-6">
         <p class="text-xl">An MCP server for selling digital products</p>
-        <h2 id="capabilities-title" class="text-4xl font-medium text-balance md:text-6xl">What can you do with <%= client_name %>?</h2>
+        <h2 id="capabilities-title" class="text-4xl font-medium text-balance md:text-6xl"><%= pending_review ? "What does the connector support?" : "What can you do with #{client_name}?" %></h2>
         <p class="text-lg">Use Model Context Protocol (MCP) to connect your AI assistant to your store. Manage ebooks, templates, courses, and other digital products.</p>
       </div>
       <div class="grid gap-10 md:grid-cols-3">
@@ -38,7 +45,7 @@
             <%= image_tag "features/books-and-writing.svg", alt: "", class: "h-full w-full object-contain", loading: "lazy" %>
           </div>
           <h3 class="text-2xl font-medium">“Draft my next product.”</h3>
-          <p class="text-lg">Ask for a product name, price, and description. Add the product files in Gumroad, then ask <%= client_name %> to publish.</p>
+          <p class="text-lg">Ask for a product name, price, and description. Add the product files in Gumroad before publishing.</p>
         </article>
         <article class="space-y-5">
           <div class="flex h-56 items-center justify-center rounded-xl border border-black bg-purple p-8">
@@ -54,28 +61,41 @@
   <section id="connect" class="scroll-mt-28 border-y border-black bg-dark-gray px-8 py-16 text-white lg:px-16 lg:py-24" aria-labelledby="connect-title">
     <div class="mx-auto grid max-w-7xl gap-12 lg:grid-cols-2 lg:gap-20">
       <div class="space-y-6">
-        <p class="text-xl text-pink">Set up Gumroad MCP</p>
-        <h2 id="connect-title" class="text-4xl font-medium text-balance md:text-6xl">How do you connect <%= client_name %>?</h2>
+        <p class="text-xl text-pink"><%= pending_review ? "For connector reviewers" : "Set up Gumroad MCP" %></p>
+        <h2 id="connect-title" class="text-4xl font-medium text-balance md:text-6xl"><%= pending_review ? "Technical details" : "How do you connect #{client_name}?" %></h2>
         <p class="max-w-xl text-lg"><%= @client[:availability] %></p>
       </div>
-      <ol class="list-none space-y-8 pl-0">
-        <li class="space-y-4">
-          <h3 class="text-2xl font-medium">1. Add the connector</h3>
-          <p class="text-lg"><%= @client[:setup] %></p>
+      <% if pending_review %>
+        <div class="space-y-6 text-lg">
+          <p>The hosted MCP server supports OAuth with PKCE. These details are for review and testing with compatible MCP clients.</p>
           <div class="rounded-lg border border-white/35 p-5">
             <p class="mb-2 text-sm text-pink">MCP server URL</p>
-            <code class="block select-all break-all text-base"><%= "#{PROTOCOL}://#{DOMAIN}/#{@client_key}/v1/mcp" %></code>
+            <code class="block select-all break-all text-base"><%= "#{PROTOCOL}://#{DOMAIN}/muse/v1/mcp" %></code>
           </div>
-        </li>
-        <li class="space-y-3">
-          <h3 class="text-2xl font-medium">2. Connect your Gumroad account</h3>
-          <p class="text-lg">Sign in to Gumroad when prompted. Review the requested permissions before you authorize access.</p>
-        </li>
-        <li class="space-y-3">
-          <h3 class="text-2xl font-medium">3. Start a conversation</h3>
-          <p class="text-lg">Select the connector in your chat. Try asking, “Show my Gumroad products.”</p>
-        </li>
-      </ol>
+          <p>A creator must authorize access to their Gumroad account. Tool access depends on the granted scopes.</p>
+          <%= link_to "OAuth server metadata", "/.well-known/oauth-authorization-server", class: "block underline underline-offset-4" %>
+          <%= link_to "MCP discovery", "/.well-known/mcp.json", class: "block underline underline-offset-4" %>
+        </div>
+      <% else %>
+        <ol class="list-none space-y-8 pl-0">
+          <li class="space-y-4">
+            <h3 class="text-2xl font-medium">1. Add the connector</h3>
+            <p class="text-lg"><%= @client[:setup] %></p>
+            <div class="rounded-lg border border-white/35 p-5">
+              <p class="mb-2 text-sm text-pink">MCP server URL</p>
+              <code class="block select-all break-all text-base"><%= "#{PROTOCOL}://#{DOMAIN}/#{@client_key}/v1/mcp" %></code>
+            </div>
+          </li>
+          <li class="space-y-3">
+            <h3 class="text-2xl font-medium">2. Connect your Gumroad account</h3>
+            <p class="text-lg">Sign in to Gumroad when prompted. Review the requested permissions before you authorize access.</p>
+          </li>
+          <li class="space-y-3">
+            <h3 class="text-2xl font-medium">3. Start a conversation</h3>
+            <p class="text-lg">Select the connector in your chat. Try asking, “Show my Gumroad products.”</p>
+          </li>
+        </ol>
+      <% end %>
     </div>
   </section>
 
@@ -89,7 +109,7 @@
         </div>
         <div class="space-y-3">
           <h3 class="text-2xl font-medium">Can it publish products?</h3>
-          <p>New products start as unpublished drafts. With product access, <%= client_name %> can publish or unpublish them. Review these actions in <%= client_name %>.</p>
+          <p>New products start as unpublished drafts. With product access, the connector can publish or unpublish them. Review these actions in your MCP client.</p>
         </div>
         <div class="space-y-3">
           <h3 class="text-2xl font-medium">How do customers buy?</h3>
@@ -102,7 +122,7 @@
   <div class="border-t border-black dark:border-white/35 px-8 py-10 lg:px-16">
     <div class="mx-auto flex max-w-7xl flex-col justify-between gap-6 md:flex-row">
       <nav aria-label="Other connectors" class="flex flex-wrap items-center gap-x-6 gap-y-2">
-        <span>Also available for</span>
+        <span>Other connector details</span>
         <% McpConnectorsController::CLIENTS.except(@client_key).each do |key, client| %>
           <%= link_to "Gumroad MCP for #{client[:label]}", "/#{key}", class: "inline-flex min-h-11 items-center underline underline-offset-4" %>
         <% end %>

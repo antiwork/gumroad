@@ -14,6 +14,14 @@ describe McpConnectorsController do
     expect(response.body).not_to include("Submitted for review")
   end
 
+  it "shows review status and technical details without Muse setup instructions" do
+    get :show, params: { client: "muse" }
+
+    expect(response.body).to include("not yet available in Muse", "View technical details", "/muse/v1/mcp", "/.well-known/oauth-authorization-server")
+    expect(Nokogiri::HTML(response.body).at_css('#connect a[href="/.well-known/mcp.json"]')&.text).to eq("MCP discovery")
+    expect(response.body).not_to include("Connect your store", "1. Add the connector", "Select the connector in your chat")
+  end
+
   before { allow(GithubStarsController).to receive(:cached_count).and_return(1234) }
 
   {
@@ -26,7 +34,7 @@ describe McpConnectorsController do
       expect(response).to be_successful
       expect(assigns(:hide_layouts)).to be(true)
 
-      description = "Connect #{McpConnectorsController::CLIENTS[client][:label]} to Gumroad with MCP. Create digital product drafts, publish products, check sales, and track payouts from your AI chat."
+      description = client == "muse" ? "The Gumroad connector is submitted for review and is not yet available in Muse. Read the MCP endpoint and OAuth details." : "Connect #{McpConnectorsController::CLIENTS[client][:label]} to Gumroad with MCP. Create digital product drafts, publish products, check sales, and track payouts from your AI chat."
       page_url = "#{PROTOCOL}://#{DOMAIN}/#{client}"
       tags = controller.send(:meta_tags)
 
