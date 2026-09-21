@@ -3717,11 +3717,316 @@ describe StripeChargeProcessor, :vcr do
           allow(Charge::Chargeable).to receive(:find_by_processor_transaction_id!).and_return(chargeable)
         end
 
-        it "does not transfer the creator's share and reports an informational event" do
+        it "keeps the fee refund informational but alerts about the nonzero gross credit" do
           expect(StripeTransferInternallyToCreator).not_to receive(:transfer_funds_to_account)
+          expect(ErrorNotifier).to receive(:notify).with(/Dispute du_fee_only_reinstated/, hash_including(balance_transactions: array_including(hash_including(amount: 32, fee: -15_00))))
           expect(ChargeProcessor).to receive(:handle_event) do |charge_event|
             expect(charge_event.type).to eq(ChargeEvent::TYPE_INFORMATIONAL)
           end
+          StripeChargeProcessor.handle_stripe_event(stripe_event)
+        end
+      end
+
+      describe "event dispute funds reinstated with ambiguous balance transactions" do
+        let(:stripe_event_type) { "charge.dispute.funds_reinstated" }
+        let(:stripe_charge) do
+          Stripe::Charge.construct_from(id: "ch_ambiguous", destination: "acct_ambiguous", metadata: {})
+        end
+        let(:withdrawal) { { id: "txn_withdrawal", amount: -10_00, currency: "usd", description: "Chargeback withdrawal for ch_ambiguous", fee: 15_00 } }
+        let(:fee_refund) { { id: "txn_fee", amount: 0, currency: "usd", description: nil, fee: -15_00 } }
+        let(:balance_transactions) { [withdrawal, fee_refund] }
+        let(:stripe_event_object) do
+          Stripe::Dispute.construct_from(
+            id: "du_ambiguous", object: "dispute", charge: stripe_charge.id, status: "lost",
+            currency: "usd", amount: 10_00, balance_transactions:
+          )
+        end
+
+        before do
+          allow(Stripe::Dispute).to receive(:retrieve).and_return(stripe_event_object)
+          allow(Stripe::Charge).to receive(:retrieve).and_return(stripe_charge)
+          expect(StripeTransferInternallyToCreator).not_to receive(:transfer_funds_to_account)
+        end
+
+        it "keeps a zero-gross fee refund informational without alerting" do
+          expect(ErrorNotifier).not_to receive(:notify)
+          expect(ChargeProcessor).to receive(:handle_event) do |charge_event|
+            expect(charge_event.type).to eq(ChargeEvent::TYPE_INFORMATIONAL)
+          end
+
+          StripeChargeProcessor.handle_stripe_event(stripe_event)
+        end
+
+        {
+          "nil transactions" => -> { nil },
+          "empty transactions" => -> { [] },
+          "only the withdrawal" => -> { [withdrawal] },
+          "a partial credit without a refunded fee" => -> { [withdrawal, fee_refund.merge(amount: 9_00, fee: 0)] },
+          "a credit with no fee field" => -> { [withdrawal, fee_refund.except(:fee).merge(amount: 9_00)] },
+          "multiple credits totaling the withdrawal" => -> { [withdrawal, fee_refund.merge(amount: 5_00), fee_refund.merge(id: "txn_other", amount: 5_00)] },
+          "multiple withdrawals" => -> { [withdrawal, withdrawal.merge(id: "txn_other"), fee_refund] },
+          "a fee credit in another currency" => -> { [withdrawal, fee_refund.merge(currency: "eur")] },
+          "a credit without a currency" => -> { [withdrawal, fee_refund.merge(currency: nil)] },
+          "a credit without an amount" => -> { [withdrawal, fee_refund.merge(amount: nil)] },
+          "an unrecognized described credit" => -> { [withdrawal, fee_refund.merge(description: "Funds reinstated", amount: 9_00)] },
+          "a full gross credit with a refunded fee" => -> { [withdrawal, fee_refund.merge(amount: 10_00)] },
+          "a fee credit without a withdrawal" => -> { [fee_refund] }
+        }.each do |shape, transactions|
+          context "with #{shape}" do
+            let(:balance_transactions) { instance_exec(&transactions) }
+
+            it "alerts and raises before dispatching or transferring" do
+              expect(ErrorNotifier).to receive(:notify).with(/Dispute du_ambiguous/, hash_including(dispute_status: "lost"))
+              expect(ChargeProcessor).not_to receive(:handle_event)
+
+              expect { StripeChargeProcessor.handle_stripe_event(stripe_event) }
+                .to raise_error(RuntimeError, /without a recognized Chargeback reversal/)
+            end
+          end
+        end
+      end
+
+      describe "event dispute funds reinstated without a recognized Chargeback reversal" do
+        let(:stripe_event_type) { "charge.dispute.funds_reinstated" }
+        let(:stripe_charge_id) { "ch_unrecognized_reinstated" }
+        let(:stripe_dispute_id) { "du_unrecognized_reinstated" }
+        let(:stripe_dispute_status) { "won" }
+        let(:reversal_description) { "Funds reinstated for #{stripe_charge_id}" }
+
+        let(:stripe_charge) do
+          Stripe::Charge.construct_from(
+            id: stripe_charge_id,
+            destination: "acct_unrecognized_reinstated",
+            currency: "usd",
+            amount: 10_00,
+            application_fee: Stripe::ApplicationFee.construct_from(id: "fee_unrecognized_reinstated", currency: "usd", amount_refunded: 1_00),
+            metadata: {}
+          )
+        end
+
+        let(:stripe_dispute) do
+          Stripe::Dispute.construct_from(
+            id: stripe_dispute_id,
+            object: "dispute",
+            charge: stripe_charge_id,
+            status: stripe_dispute_status,
+            currency: "usd",
+            amount: 10_00,
+            balance_transactions: [
+              { id: "txn_withdrawal", amount: -10_00, currency: "usd", description: "Chargeback withdrawal for #{stripe_charge_id}", fee: 15_00 },
+              { id: "txn_reversal", amount: 10_00, currency: "usd", description: reversal_description, fee: -15_00 }
+            ]
+          )
+        end
+
+        let(:stripe_event_object) { stripe_dispute }
+        let(:chargeable) { double(charged_amount_cents: 10_00, charged_gumroad_amount_cents: 1_00) }
+
+        before do
+          allow(Stripe::Dispute).to receive(:retrieve).and_return(stripe_dispute)
+          allow(Stripe::Charge).to receive(:retrieve).and_return(stripe_charge)
+          allow(Charge::Chargeable).to receive(:find_by_processor_transaction_id!).and_return(chargeable)
+        end
+
+        it "refuses to transfer, alerts with the dispute's balance transactions, and raises" do
+          expect(StripeTransferInternallyToCreator).not_to receive(:transfer_funds_to_account)
+          expect(ChargeProcessor).not_to receive(:handle_event)
+          expect(ErrorNotifier).to receive(:notify).with(
+            /Dispute du_unrecognized_reinstated \(won\).*without a recognized Chargeback reversal/,
+            hash_including(
+              stripe_event_id: stripe_event_id,
+              dispute_status: "won",
+              balance_transactions: [
+                hash_including(id: "txn_withdrawal", amount: -10_00),
+                hash_including(id: "txn_reversal", amount: 10_00, description: reversal_description)
+              ]
+            )
+          )
+
+          expect { StripeChargeProcessor.handle_stripe_event(stripe_event) }
+            .to raise_error(RuntimeError, /Dispute du_unrecognized_reinstated \(won\).*creator's share was not transferred/)
+        end
+
+        it "propagates the error out of HandleStripeEventWorker so Sidekiq retries the event" do
+          expect(StripeTransferInternallyToCreator).not_to receive(:transfer_funds_to_account)
+          allow(ErrorNotifier).to receive(:notify)
+
+          expect { HandleStripeEventWorker.new.perform(stripe_event) }
+            .to raise_error(RuntimeError, /Dispute du_unrecognized_reinstated/)
+        end
+
+        it "transfers once a retry sees the recognized reversal, under the same idempotency key" do
+          recognized_dispute = Stripe::Dispute.construct_from(
+            stripe_dispute.to_hash.merge(
+              balance_transactions: [
+                { id: "txn_withdrawal", amount: -10_00, currency: "usd", description: "Chargeback withdrawal for #{stripe_charge_id}", fee: 15_00 },
+                { id: "txn_reversal", amount: 10_00, currency: "usd", description: "Chargeback reversal for #{stripe_charge_id}", fee: -15_00 }
+              ]
+            )
+          )
+          attempts = 0
+          allow(Stripe::Dispute).to receive(:retrieve) do
+            attempts += 1
+            attempts == 1 ? stripe_dispute : recognized_dispute
+          end
+          allow(ErrorNotifier).to receive(:notify)
+
+          stripe_transfer = Stripe::Transfer.construct_from(id: "tr_unrecognized_reinstated", destination: stripe_charge.destination, destination_payment: "py_unrecognized_reinstated")
+          destination_payment = Stripe::Charge.construct_from(
+            id: "py_unrecognized_reinstated",
+            balance_transaction: { currency: "usd", amount: 9_00, net: 9_00 }
+          )
+          allow(Stripe::Charge).to receive(:retrieve) do |params, _options = nil|
+            params[:id] == "py_unrecognized_reinstated" ? destination_payment : stripe_charge
+          end
+          expect(StripeTransferInternallyToCreator).to receive(:transfer_funds_to_account).once.with(
+            message_why: "Dispute #{stripe_dispute_id} won",
+            stripe_account_id: stripe_charge.destination,
+            currency: "usd",
+            amount_cents: 9_00,
+            related_charge_id: stripe_charge_id,
+            idempotency_key: "dispute_funds_reinstated_transfer_#{stripe_dispute_id}"
+          ).and_return(stripe_transfer)
+          expect(ChargeProcessor).to receive(:handle_event).once do |charge_event|
+            expect(charge_event.type).to eq(ChargeEvent::TYPE_DISPUTE_WON)
+            expect(charge_event.flow_of_funds.settled_amount.cents).to eq(10_00)
+          end
+
+          expect { StripeChargeProcessor.handle_stripe_event(stripe_event) }.to raise_error(RuntimeError, /Dispute du_unrecognized_reinstated/)
+          StripeChargeProcessor.handle_stripe_event(stripe_event)
+        end
+
+        context "when the dispute is lost but a balance transaction still credits the withdrawn amount" do
+          let(:stripe_dispute_status) { "lost" }
+
+          it "raises instead of treating the credit as a fee-only reversal" do
+            expect(StripeTransferInternallyToCreator).not_to receive(:transfer_funds_to_account)
+            expect(ChargeProcessor).not_to receive(:handle_event)
+            expect(ErrorNotifier).to receive(:notify).with(/Dispute du_unrecognized_reinstated \(lost\)/, hash_including(dispute_status: "lost"))
+
+            expect { StripeChargeProcessor.handle_stripe_event(stripe_event) }
+              .to raise_error(RuntimeError, /Dispute du_unrecognized_reinstated \(lost\)/)
+          end
+        end
+
+        context "when a lost non-USD dispute is credited back in the settlement currency" do
+          let(:stripe_dispute_status) { "lost" }
+          let(:stripe_dispute) do
+            # ¥1500 charge withdrawn as $10.00: the credit is numerically below the dispute amount, so only a
+            # comparison against the withdrawal (same settlement currency) recognizes it as a reinstatement.
+            Stripe::Dispute.construct_from(
+              id: stripe_dispute_id,
+              object: "dispute",
+              charge: stripe_charge_id,
+              status: stripe_dispute_status,
+              currency: "jpy",
+              amount: 1500,
+              balance_transactions: [
+                { id: "txn_withdrawal", amount: -10_00, currency: "usd", description: "Chargeback withdrawal for #{stripe_charge_id}", fee: 15_00 },
+                { id: "txn_reversal", amount: 10_00, currency: "usd", description: reversal_description, fee: -15_00 }
+              ]
+            )
+          end
+
+          it "raises instead of treating the credit as a fee-only reversal" do
+            expect(StripeTransferInternallyToCreator).not_to receive(:transfer_funds_to_account)
+            expect(ChargeProcessor).not_to receive(:handle_event)
+            expect(ErrorNotifier).to receive(:notify).with(/Dispute du_unrecognized_reinstated \(lost\)/, hash_including(dispute_status: "lost"))
+
+            expect { StripeChargeProcessor.handle_stripe_event(stripe_event) }
+              .to raise_error(RuntimeError, /Dispute du_unrecognized_reinstated \(lost\)/)
+          end
+        end
+
+        context "when the dispute is lost and carries no recognizable Chargeback withdrawal to compare against" do
+          let(:stripe_dispute_status) { "lost" }
+          let(:stripe_dispute) do
+            Stripe::Dispute.construct_from(
+              id: stripe_dispute_id,
+              object: "dispute",
+              charge: stripe_charge_id,
+              status: stripe_dispute_status,
+              currency: "usd",
+              amount: 10_00,
+              balance_transactions: [
+                { id: "txn_dispute", amount: -10_00, currency: "usd", description: "Dispute", fee: 15_00 },
+                { id: "txn_fee_reversal", amount: 32, currency: "usd", description: nil, fee: -15_00 }
+              ]
+            )
+          end
+
+          it "raises instead of assuming the reversal was fee-only" do
+            expect(StripeTransferInternallyToCreator).not_to receive(:transfer_funds_to_account)
+            expect(ChargeProcessor).not_to receive(:handle_event)
+            expect(ErrorNotifier).to receive(:notify).with(/Dispute du_unrecognized_reinstated \(lost\)/, hash_including(dispute_status: "lost"))
+
+            expect { StripeChargeProcessor.handle_stripe_event(stripe_event) }
+              .to raise_error(RuntimeError, /Dispute du_unrecognized_reinstated \(lost\)/)
+          end
+        end
+      end
+
+      describe "event dispute funds reinstated with a recognized Chargeback reversal on a dispute that is not yet closed" do
+        let(:stripe_event_type) { "charge.dispute.funds_reinstated" }
+        let(:stripe_charge_id) { "ch_reinstated_under_review" }
+        let(:stripe_dispute_id) { "du_reinstated_under_review" }
+
+        let(:stripe_charge) do
+          Stripe::Charge.construct_from(
+            id: stripe_charge_id,
+            destination: "acct_reinstated_under_review",
+            currency: "usd",
+            amount: 10_00,
+            application_fee: Stripe::ApplicationFee.construct_from(id: "fee_reinstated_under_review", currency: "usd", amount_refunded: 1_00),
+            metadata: {}
+          )
+        end
+
+        let(:stripe_dispute) do
+          Stripe::Dispute.construct_from(
+            id: stripe_dispute_id,
+            object: "dispute",
+            charge: stripe_charge_id,
+            status: "under_review",
+            currency: "usd",
+            amount: 10_00,
+            balance_transactions: [
+              { id: "txn_withdrawal", amount: -10_00, currency: "usd", description: "Chargeback withdrawal for #{stripe_charge_id}", fee: 15_00 },
+              { id: "txn_reversal", amount: 10_00, currency: "usd", description: "Chargeback reversal for #{stripe_charge_id}", fee: -15_00 }
+            ]
+          )
+        end
+
+        let(:stripe_event_object) { stripe_dispute }
+        let(:chargeable) { double(charged_amount_cents: 10_00, charged_gumroad_amount_cents: 1_00) }
+        let(:stripe_transfer) { Stripe::Transfer.construct_from(id: "tr_reinstated_under_review", destination: stripe_charge.destination, destination_payment: "py_reinstated_under_review") }
+        let(:destination_payment) { Stripe::Charge.construct_from(id: "py_reinstated_under_review", balance_transaction: { currency: "usd", amount: 9_00, net: 9_00 }) }
+
+        before do
+          allow(Stripe::Dispute).to receive(:retrieve).and_return(stripe_dispute)
+          allow(Stripe::Charge).to receive(:retrieve) do |params, _options = nil|
+            params[:id] == "py_reinstated_under_review" ? destination_payment : stripe_charge
+          end
+          allow(Charge::Chargeable).to receive(:find_by_processor_transaction_id!).and_return(chargeable)
+        end
+
+        it "still transfers the creator's share and reports the dispute as won" do
+          expect(ErrorNotifier).not_to receive(:notify)
+          expect(StripeTransferInternallyToCreator).to receive(:transfer_funds_to_account).with(
+            message_why: "Dispute #{stripe_dispute_id} won",
+            stripe_account_id: stripe_charge.destination,
+            currency: "usd",
+            amount_cents: 9_00,
+            related_charge_id: stripe_charge_id,
+            idempotency_key: "dispute_funds_reinstated_transfer_#{stripe_dispute_id}"
+          ).and_return(stripe_transfer)
+          expect(ChargeProcessor).to receive(:handle_event) do |charge_event|
+            expect(charge_event.type).to eq(ChargeEvent::TYPE_DISPUTE_WON)
+            expect(charge_event.flow_of_funds.settled_amount.currency).to eq("usd")
+            expect(charge_event.flow_of_funds.settled_amount.cents).to eq(10_00)
+            expect(charge_event.flow_of_funds.gumroad_amount.cents).to eq(1_00)
+          end
+
           StripeChargeProcessor.handle_stripe_event(stripe_event)
         end
       end

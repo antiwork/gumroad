@@ -1489,14 +1489,20 @@ class StripeChargeProcessor
   end
 
   def self.handle_stripe_event_charge_dispute_for_charge_with_destination_funds_reinstated(stripe_dispute, stripe_charge, event)
-    # Stripe also fires funds_reinstated when it reverses only the dispute FEE on a dispute it closed
-    # lost, so bail out before moving money: there is no reinstatement to hand the creator.
-    chargeback_reversal_balance_transaction = stripe_dispute.balance_transactions.find do |balance_transaction|
+    # A fee refund can emit funds_reinstated without returning the disputed principal.
+    chargeback_reversal_balance_transaction = Array(stripe_dispute.balance_transactions).find do |balance_transaction|
       balance_transaction.description.to_s[/^Chargeback reversal/].present?
     end
     if chargeback_reversal_balance_transaction.nil?
-      event.type = ChargeEvent::TYPE_INFORMATIONAL
-      return
+      fee_refund = dispute_reinstatement_fee_refund(stripe_dispute)
+      if fee_refund
+        # A refunded fee doesn't explain a nonzero gross credit; surface it for reconciliation.
+        notify_unrecognized_dispute_reinstatement(stripe_dispute, stripe_charge, event) unless fee_refund.amount.zero?
+        event.type = ChargeEvent::TYPE_INFORMATIONAL
+        return
+      end
+
+      raise notify_unrecognized_dispute_reinstatement(stripe_dispute, stripe_charge, event)
     end
 
     event.type = ChargeEvent::TYPE_DISPUTE_WON
@@ -1567,6 +1573,43 @@ class StripeChargeProcessor
       merchant_account_gross_amount:,
       merchant_account_net_amount:
     )
+  end
+
+  def self.dispute_reinstatement_fee_refund(stripe_dispute)
+    return unless stripe_dispute.status == "lost"
+
+    balance_transactions = Array(stripe_dispute.balance_transactions)
+    return unless balance_transactions.size == 2
+
+    withdrawal = balance_transactions.find do |transaction|
+      transaction.amount.is_a?(Integer) && transaction.amount.negative? &&
+        transaction.description.to_s.match?(/\AChargeback(?: withdrawal.*)?\z/)
+    end
+    return unless withdrawal && withdrawal.currency.present?
+
+    # Compare settlement amounts: Dispute#amount can be in a different currency.
+    balance_transactions.find do |transaction|
+      transaction.description.blank? && transaction.currency == withdrawal.currency &&
+        transaction[:fee].is_a?(Integer) && transaction[:fee].negative? &&
+        transaction.amount.is_a?(Integer) && transaction.amount >= 0 && transaction.amount < -withdrawal.amount
+    end
+  end
+
+  # Sidekiq failures aren't reported to Sentry here; notify explicitly before propagating the error.
+  def self.notify_unrecognized_dispute_reinstatement(stripe_dispute, stripe_charge, event)
+    balance_transactions = Array(stripe_dispute.balance_transactions).map do |balance_transaction|
+      {
+        id: balance_transaction.id,
+        amount: balance_transaction.amount,
+        currency: balance_transaction.currency,
+        description: balance_transaction.description,
+        fee: balance_transaction[:fee]
+      }
+    end
+    message = "Dispute #{stripe_dispute.id} (#{stripe_dispute.status}) on charge #{stripe_charge.id} fired funds_reinstated " \
+              "without a recognized Chargeback reversal balance transaction; the creator's share was not transferred."
+    ErrorNotifier.notify(message, stripe_event_id: event.charge_event_id, dispute_status: stripe_dispute.status, balance_transactions:)
+    message
   end
 
   # Gumroad's share of a disputed charge, expressed in the charge's own currency.
