@@ -1086,9 +1086,7 @@ describe Payouts do
     end
   end
 
-  # gumroad-private#2840: a seller routed through their own connected account, with Stripe-held debt
-  # stranded on the managed account a country change retired. The debt keeps `balances_held_by_stripe`
-  # non-empty, so `destination_merchant_account` falls back to the retired account.
+  # Retired-account debts must remain in the claim even when they block the payout.
   describe ".create_payments with Stripe-held balances stranded on a retired account" do
     let(:payout_date) { Date.today - 1 }
     let(:user) { create(:user) }

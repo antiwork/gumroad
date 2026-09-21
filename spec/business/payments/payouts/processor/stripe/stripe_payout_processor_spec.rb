@@ -249,9 +249,7 @@ describe StripePayoutProcessor do
   end
 
   describe ".prepare_payment_and_set_amount" do
-    # The guard fires before any Stripe call, so none of these may be reached: the internal transfer
-    # is the money movement gumroad-private#2840 loops on, and the drift guard's balance read comes
-    # after it in the method.
+    # Refusing a retired destination must not depend on Stripe being available.
     def expect_no_stripe_money_movement
       expect(StripeTransferInternallyToCreator).not_to receive(:transfer_funds_to_account)
       expect(Stripe::Transfer).not_to receive(:create)
