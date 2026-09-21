@@ -1296,6 +1296,7 @@ export default function PaymentsPage() {
         <ConfirmBalanceForfeitOnPayoutMethodChangeModal
           balance={props.formatted_balance_to_forfeit_on_payout_method_change}
           losesBankRail={props.paypal_switch_loses_bank_rail}
+          bankAccountNumberVisual={props.bank_account_details.account_number_visual}
           open={showPayoutMethodChangeConfirmationModal}
           onConfirm={confirmPayoutMethodChange}
           onClose={cancelPayoutMethodChange}

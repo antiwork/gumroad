@@ -9,6 +9,8 @@ type Props = {
   balance: string | null;
   // The seller's country cannot re-create a bank rail once the switch deletes it (India).
   losesBankRail?: boolean;
+  // The server's own masked string (BankAccount#account_number_visual); never a raw account number.
+  bankAccountNumberVisual?: string | null;
   open: boolean;
   onClose: () => void;
   onConfirm: () => void;
@@ -17,6 +19,7 @@ type Props = {
 export const ConfirmBalanceForfeitOnPayoutMethodChangeModal = ({
   balance,
   losesBankRail = false,
+  bankAccountNumberVisual = null,
   open,
   onClose,
   onConfirm,
@@ -55,10 +58,29 @@ export const ConfirmBalanceForfeitOnPayoutMethodChangeModal = ({
                   <br />
                 </>
               ) : null}
+              {/* Every PayPal save deletes the active bank account (UpdatePayoutMethod#process_payment_address_params);
+                  the rail-loss copy below already names it, so name it here only when that branch is silent. */}
+              {!losesBankRail && bankAccountNumberVisual ? (
+                <>
+                  Your bank account <b>{bankAccountNumberVisual}</b> will also be removed from your payout settings.
+                  <br />
+                  <br />
+                </>
+              ) : null}
               {losesBankRail ? (
                 <>
                   Bank account payouts are no longer available for new setups in your country. If you switch to PayPal,
-                  your bank account will be removed and <b>you will not be able to switch back</b>.
+                  your bank account{" "}
+                  {bankAccountNumberVisual ? (
+                    <>
+                      <b>{bankAccountNumberVisual}</b>{" "}
+                    </>
+                  ) : null}
+                  will be removed from your payout settings and <b>you will not be able to switch back yourself</b>.{" "}
+                  <a href={Routes.help_center_root_path()} className="underline">
+                    Contact support
+                  </a>{" "}
+                  if you need help.
                   <br />
                   <br />
                 </>

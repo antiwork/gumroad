@@ -621,6 +621,14 @@ describe("switching to PayPal where the bank rail cannot be re-created", () => {
     fireEvent.change(screen.getByLabelText("PayPal Email"), { target: { value: "paypal@example.com" } });
   };
 
+  it("names the account being removed with the masked value the page already holds", () => {
+    renderIndiaSeller(true);
+    save();
+
+    expect(screen.getByText(/will be removed from your payout settings/u)).toBeTruthy();
+    expect(screen.getByText("******6789")).toBeTruthy();
+  });
+
   it("opens the typed confirmation instead of saving, then saves with the confirmation flag", () => {
     renderIndiaSeller(true);
     save();
@@ -659,6 +667,25 @@ describe("switching to PayPal where the bank rail cannot be re-created", () => {
     );
   });
 
+  it("names the account being removed when only a balance is forfeited and the rail can be re-created", () => {
+    renderIndiaSeller(false, "$123.45");
+    save();
+
+    expect(mocks.put).not.toHaveBeenCalled();
+    expect(screen.getByText(/forfeit your existing balance of/u)).toBeTruthy();
+    expect(screen.getByText(/will also be removed from your payout settings/u)).toBeTruthy();
+    expect(screen.getAllByText("******6789")).toHaveLength(1);
+    expect(screen.queryByText(/you will not be able to switch back/u)).toBeNull();
+
+    fireEvent.change(screen.getByLabelText('Type "I understand" to confirm'), { target: { value: "I understand" } });
+    fireEvent.click(screen.getByRole("button", { name: "Confirm" }));
+    expect(mocks.put).toHaveBeenCalledWith(
+      "/settings_payments",
+      expect.objectContaining({ payment_address: "paypal@example.com" }),
+    );
+    expect(JSON.stringify(mocks.put.mock.calls[0])).not.toContain("confirm_bank_rail_loss");
+  });
+
   it("saves straight away where the rail can be re-created", () => {
     renderIndiaSeller(false);
     save();
@@ -670,5 +697,62 @@ describe("switching to PayPal where the bank rail cannot be re-created", () => {
       expect.objectContaining({ payment_address: "paypal@example.com" }),
     );
     expect(JSON.stringify(mocks.put.mock.calls[0])).not.toContain("confirm_bank_rail_loss");
+  });
+});
+
+describe("bank payout switch option on the payments page", () => {
+  const renderSeller = (country_code: string, show_bank_account: boolean, is_form_disabled = false) => {
+    mocks.usePage.mockReturnValue({
+      props: {
+        ...pageProps({ country_code, payout_currency: "inr" }, { country: country_code }),
+        countries: { [country_code]: country_code === "IN" ? "India" : "United States" },
+        is_form_disabled,
+        bank_account_details: {
+          show_bank_account,
+          show_paypal: true,
+          is_a_card: false,
+          routing_number: null,
+          account_number_visual: null,
+          card: null,
+          card_data_handling_mode: null,
+          bank_account: null,
+        },
+      },
+    });
+    render(<PaymentsPage />);
+  };
+
+  it("gives the unavailable India seller a plain restriction with no setup or help action", () => {
+    renderSeller("IN", false);
+
+    expect(screen.queryByRole("button", { name: /direct deposit/u })).toBeNull();
+    const reason = screen.getByText(/new bank payout accounts cannot be set up in India/u);
+    expect(reason.closest('[role="status"]')).toBeTruthy();
+    expect(reason.closest('[role="status"]')?.querySelector("a, button")).toBeNull();
+  });
+
+  it.each(["US", "IN"])("opens the existing bank form in place for an eligible %s seller without saving", (country) => {
+    renderSeller(country, true);
+    fireEvent.click(screen.getByRole("radio", { name: "PayPal" }));
+    fireEvent.change(screen.getByLabelText("PayPal Email"), { target: { value: "unsaved@example.com" } });
+
+    const setup = screen.getByRole("button", { name: "Set up direct deposit" });
+    expect(setup.closest('[role="status"]')).toBeTruthy();
+    fireEvent.click(setup);
+
+    expect(screen.getByRole("radio", { name: "Bank Account" }).getAttribute("aria-checked")).toBe("true");
+    expect(screen.getByLabelText(country === "IN" ? "Account #" : "Account number")).toBeTruthy();
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(mocks.put).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("radio", { name: "PayPal" }));
+    expect(screen.getByRole<HTMLInputElement>("textbox", { name: "PayPal Email" }).value).toBe("unsaved@example.com");
+    expect(mocks.put).not.toHaveBeenCalled();
+  });
+
+  it("hides setup for an eligible seller without update permission", () => {
+    renderSeller("IN", true, true);
+    expect(screen.queryByRole("button", { name: /direct deposit/u })).toBeNull();
+    expect(screen.queryByText(/cannot be set up in India/u)).toBeNull();
+    expect(mocks.put).not.toHaveBeenCalled();
   });
 });
