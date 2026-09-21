@@ -154,6 +154,29 @@ describe ReviewsPresenter do
       end
     end
 
+    context "when a purchase awaiting review has been removed from the library" do
+      before { purchase2.update!(is_deleted_by_buyer: true) }
+
+      it "omits the removed purchase and keeps other eligible purchases" do
+        expect(presenter.reviews_props[:purchases].map { |purchase| purchase[:id] }).to eq([purchase1.external_id])
+      end
+
+      it "includes the purchase again after it is restored" do
+        purchase2.update!(is_deleted_by_buyer: false)
+
+        expect(presenter.reviews_props[:purchases].map { |purchase| purchase[:id] }).to eq([purchase2.external_id, purchase1.external_id])
+      end
+    end
+
+    context "when a reviewed purchase has been removed from the library" do
+      let!(:removed_purchase) { create(:purchase, purchaser: user, is_deleted_by_buyer: true) }
+      let!(:existing_review) { create(:product_review, purchase: removed_purchase, link: removed_purchase.link) }
+
+      it "keeps the existing review available to manage" do
+        expect(presenter.reviews_props[:reviews].map { |review| review[:id] }).to include(existing_review.external_id)
+      end
+    end
+
     context "when a purchase awaiting review is for a deleted product" do
       let!(:deleted_product) { create(:product, deleted_at: 1.day.ago) }
       let!(:purchase_on_deleted_product) { create(:purchase, purchaser: user, link: deleted_product) }
