@@ -43,10 +43,18 @@ const PayPalEmailSection = ({
       ) : null}
       <div className="whitespace-pre-line">{feeInfoText}</div>
       <div className="grid gap-4">
-        {canSetupBankPayouts && !isFormDisabled ? (
-          <LinkButton className="justify-self-start" onClick={() => updatePayoutMethod("bank")}>
-            Switch to direct deposit
-          </LinkButton>
+        <LinkButton
+          className="justify-self-start disabled:cursor-not-allowed disabled:no-underline"
+          disabled={!canSetupBankPayouts || isFormDisabled}
+          aria-describedby={!canSetupBankPayouts ? `${uid}-bank-payouts-note` : undefined}
+          onClick={() => updatePayoutMethod("bank")}
+        >
+          Switch to direct deposit
+        </LinkButton>
+        {!canSetupBankPayouts ? (
+          <Alert id={`${uid}-bank-payouts-note`} role="status" variant="info">
+            Bank payouts can no longer be set up in this country; contact support if this looks wrong.
+          </Alert>
         ) : null}
         <Fieldset state={errorFieldNames.has("paypal_email_address") ? "danger" : undefined}>
           <FieldsetTitle>

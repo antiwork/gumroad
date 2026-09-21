@@ -7,6 +7,7 @@ import { Label } from "$app/components/ui/Label";
 
 type Props = {
   balance: string | null;
+  bankAccountNumber: string | null;
   // The seller's country cannot re-create a bank rail once the switch deletes it (India).
   losesBankRail?: boolean;
   open: boolean;
@@ -16,6 +17,7 @@ type Props = {
 
 export const ConfirmBalanceForfeitOnPayoutMethodChangeModal = ({
   balance,
+  bankAccountNumber,
   losesBankRail = false,
   open,
   onClose,
@@ -45,6 +47,13 @@ export const ConfirmBalanceForfeitOnPayoutMethodChangeModal = ({
         }
       >
         <h4>
+          {bankAccountNumber ? (
+            <>
+              Your bank account <b>{bankAccountNumber}</b> will be removed.
+              <br />
+              <br />
+            </>
+          ) : null}
           {requiresTypedConfirmation ? (
             <>
               {balance ? (
@@ -57,8 +66,8 @@ export const ConfirmBalanceForfeitOnPayoutMethodChangeModal = ({
               ) : null}
               {losesBankRail ? (
                 <>
-                  Bank account payouts are no longer available for new setups in your country. If you switch to PayPal,
-                  your bank account will be removed and <b>you will not be able to switch back</b>.
+                  Bank account payouts are no longer available for new setups in your country. If you switch to PayPal,{" "}
+                  <b>you will not be able to switch back</b>.
                   <br />
                   <br />
                 </>
