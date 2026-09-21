@@ -2023,11 +2023,35 @@ class SubscriptionTest < ActiveSupport::TestCase
   end
 
   test "#unsubscribe_and_fail! sends email to customer but not creator on repeated recent failure" do
-    create_failed_purchase(link: @subscription.link, subscription: @subscription, email: @subscription.user.email, created_at: 2.hours.ago)
+    # A previous billing cycle that failed: its failed charge, the successful charge that reopened
+    # the cycle, then the failure that triggers this cancellation.
+    create_failed_purchase(link: @subscription.link, subscription: @subscription, email: @subscription.user.email, created_at: 4.days.ago)
+    create_purchase(link: @subscription.link, subscription: @subscription, email: @subscription.user.email, created_at: 1.day.ago)
+    create_failed_purchase(link: @subscription.link, subscription: @subscription, email: @subscription.user.email, created_at: 1.hour.ago)
     assert_equal true, @subscription.seller.enable_payment_email
     @subscription.unsubscribe_and_fail!
     assert_enqueued_email(CustomerLowPriorityMailer, :subscription_autocancelled, args: [@subscription.id])
     refute_enqueued_email(ContactingCreatorMailer, :subscription_autocancelled, args: [@subscription.id])
+  end
+
+  test "#unsubscribe_and_fail! emails the creator when the recent failure is the one that triggered the cancellation" do
+    # UnsubscribeAndFailWorker fires ~5 days after the failed charge, so the triggering failure is
+    # always inside the 7-day window: the last successful charge is the only thing that separates it
+    # from a failure that happened in an earlier cycle.
+    @purchase.update_columns(created_at: 10.days.ago)
+    create_failed_purchase(link: @subscription.link, subscription: @subscription, email: @subscription.user.email, created_at: 5.days.ago)
+    assert_equal true, @subscription.seller.enable_payment_email
+    @subscription.unsubscribe_and_fail!
+    assert_enqueued_email(CustomerLowPriorityMailer, :subscription_autocancelled, args: [@subscription.id])
+    assert_enqueued_email(ContactingCreatorMailer, :subscription_autocancelled, args: [@subscription.id])
+  end
+
+  test "#unsubscribe_and_fail! emails the creator when this cycle's charge was retried" do
+    create_failed_purchase(link: @subscription.link, subscription: @subscription, email: @subscription.user.email, created_at: 1.day.ago)
+    create_failed_purchase(link: @subscription.link, subscription: @subscription, email: @subscription.user.email, created_at: 1.hour.ago)
+    assert_equal true, @subscription.seller.enable_payment_email
+    @subscription.unsubscribe_and_fail!
+    assert_enqueued_email(ContactingCreatorMailer, :subscription_autocancelled, args: [@subscription.id])
   end
 
   test "#unsubscribe_and_fail! sends email to customer and creator on new failure more than 7 days ago" do
