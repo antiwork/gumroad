@@ -130,19 +130,19 @@ module Muse
           protocolVersion: PROTOCOL_VERSION,
           capabilities: { tools: { listChanged: false } },
           serverInfo: SERVER_INFO,
-          instructions: "Gumroad is where independent creators sell digital products. Use these tools for a connected creator's own store: products, sales, and payouts. Confirm with the person before publishing, refunding, or changing prices. Buyers checking out still use the product URL — Muse's browser handles that."
+          instructions: "Use these tools for a connected creator's own store: products, sales, and payouts. Confirm with the person before publishing or unpublishing. Buyers still check out on the product URL. This server does not take payment."
         }
       end
 
       def tools
         [
-          tool("get_account", "The connected creator's public profile: name, username, storefront URL, currency.", {}),
+          tool("get_account", "The connected creator's public profile: name, username, storefront URL, currency.", {}, read_only: true),
           tool("list_products", "List the creator's products (newest first). Returns id, name, price, published state, and URL.", {
                  "limit" => { type: "integer", description: "Max products to return (1-50, default 25)." }
-               }),
+               }, read_only: true),
           tool("get_product", "Fetch one product by id or permalink.", {
                  "id" => { type: "string", description: "Product id or permalink." }
-               }, required: %w[id]),
+               }, required: %w[id], read_only: true),
           tool("create_draft_product", "Create a draft digital product. It is not for sale until publish_product runs. Confirm the name and price with the creator first.", {
                  "name" => { type: "string", description: "Product name." },
                  "price_cents" => { type: "integer", description: "Price in minor units (cents for USD). Use 0 for a free product." },
@@ -150,24 +150,33 @@ module Muse
                }, required: %w[name price_cents]),
           tool("publish_product", "Make a draft product purchasable. Confirm with the creator first.", {
                  "id" => { type: "string", description: "Product id or permalink." }
-               }, required: %w[id]),
+               }, required: %w[id], destructive: true),
           tool("unpublish_product", "Take a product off sale without deleting it.", {
                  "id" => { type: "string", description: "Product id or permalink." }
-               }, required: %w[id]),
+               }, required: %w[id], destructive: true),
           tool("list_sales", "Recent successful sales. Includes buyer email, product, amount, and time.", {
                  "limit" => { type: "integer", description: "Max sales to return (1-50, default 25)." },
                  "email" => { type: "string", description: "Filter by buyer email." }
-               }),
+               }, read_only: true),
           tool("list_payouts", "Recent payouts to the creator's bank or PayPal.", {
                  "limit" => { type: "integer", description: "Max payouts to return (1-50, default 10)." }
-               })
+               }, read_only: true)
         ]
       end
 
-      def tool(name, description, properties, required: [])
+      def tool(name, description, properties, required: [], read_only: false, destructive: false)
         schema = { type: "object", properties:, additionalProperties: false }
         schema[:required] = required if required.any?
-        { name:, description:, inputSchema: schema }
+        {
+          name:,
+          description:,
+          inputSchema: schema,
+          annotations: {
+            readOnlyHint: read_only,
+            openWorldHint: false,
+            destructiveHint: destructive
+          }
+        }
       end
 
       def call_tool(params)
