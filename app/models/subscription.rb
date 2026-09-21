@@ -961,11 +961,15 @@ class Subscription < ApplicationRecord
       if seller.enable_payment_email?
         creator_notices = SentEmailInfo.where(key: SentEmailInfo.mailer_key_digest("ContactingCreatorMailer", "subscription_autocancelled", id))
         unless creator_notices.where("created_at > ?", ALLOWED_TIME_BEFORE_SENDING_REPEATED_CANCELLATION_EMAIL_TO_CREATOR.ago).exists?
-          # Persist before enqueue so a marker write failure cannot queue a duplicate on retry.
-          creator_notices.delete_all
-          creator_notices.create!
+          # Retain expired notice identities for delayed deliveries and SMTP retries.
+          if (previous_notice = creator_notices.first)
+            previous_notice.update!(key: SentEmailInfo.mailer_key_digest("ContactingCreatorMailer", "subscription_autocancelled", id, previous_notice.id))
+          end
+          notice = creator_notices.create!
 
-          enqueued = ContactingCreatorMailer.subscription_autocancelled(id).deliver_later(queue: "critical")
+          enqueued = SubscriptionCancellationEmailJob.set(queue: "critical").perform_later(
+            "ContactingCreatorMailer", "subscription_autocancelled", "deliver_now", args: [id], sent_email_info_id: notice.id
+          )
           raise UpdateFailed, "Could not enqueue creator cancellation email" unless enqueued
         end
       end
