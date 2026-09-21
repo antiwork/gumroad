@@ -1489,6 +1489,14 @@ class StripeChargeProcessor
   end
 
   def self.handle_stripe_event_charge_dispute_for_charge_with_destination_funds_reinstated(stripe_dispute, stripe_charge, event)
+    # Stripe also fires this when a lost dispute is only partly reinstated, and
+    # this worker retries, so transferring here re-sends the seller's share on
+    # every delivery. Only a won dispute returns the seller's money.
+    unless stripe_dispute.status == "won"
+      event.type = ChargeEvent::TYPE_INFORMATIONAL
+      return
+    end
+
     event.type = ChargeEvent::TYPE_DISPUTE_WON
     # NOTE: The application fee billed is the same application fee that was refunded to us when the chargeback occurred.
     # If for some reason the chargeback reversal returned to us a different amount than was originally chargedback (e.g. due to currency changes)
@@ -1522,7 +1530,8 @@ class StripeChargeProcessor
       currency: Currency::USD,
       # Transfer Amount- Fees to Creator account. In future, we won't need to do this as we would have not sent fees at all before
       amount_cents:,
-      related_charge_id: stripe_charge.id
+      related_charge_id: stripe_charge.id,
+      idempotency_key: "dispute_won_#{stripe_dispute.id}"
     )
     issued_amount = FlowOfFunds::Amount.new(
       currency: stripe_dispute.currency,

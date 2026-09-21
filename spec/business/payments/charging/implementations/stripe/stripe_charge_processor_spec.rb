@@ -3490,6 +3490,33 @@ describe StripeChargeProcessor, :vcr do
           stripe_charge.refresh
         end
 
+        describe "when the dispute was lost" do
+          let(:stripe_managed_account) do
+            user = create(:user)
+            create(:ach_account_stripe_succeed, user:)
+            create(:merchant_account_stripe, user:)
+          end
+          let(:stripe_charge_destination) { stripe_managed_account.charge_processor_merchant_id }
+          let(:stripe_charge_application_fee) { 1_00 }
+
+          before do
+            stripe_dispute.status = "lost"
+            allow(Stripe::Dispute).to receive(:retrieve).and_return(stripe_dispute)
+          end
+
+          it "does not transfer anything and reports the event as informational" do
+            expect(StripeTransferInternallyToCreator).not_to receive(:transfer_funds_to_account)
+
+            original_handle_event = ChargeProcessor.method(:handle_event)
+            expect(ChargeProcessor).to(receive(:handle_event)) do |charge_event|
+              expect(charge_event.type).to eq(ChargeEvent::TYPE_INFORMATIONAL)
+              expect(charge_event.flow_of_funds).to eq(nil)
+              original_handle_event.call(charge_event)
+            end
+            StripeChargeProcessor.handle_stripe_event(stripe_event)
+          end
+        end
+
         describe "for a charge on Gumroads account" do
           it "tells the charge processor about the informational event" do
             original_handle_event = ChargeProcessor.method(:handle_event)
@@ -3538,7 +3565,8 @@ describe StripeChargeProcessor, :vcr do
               stripe_account_id: stripe_managed_account.charge_processor_merchant_id,
               currency: "usd",
               amount_cents: (purchase.total_transaction_cents - purchase.total_transaction_amount_for_gumroad_cents),
-              related_charge_id: stripe_charge_id
+              related_charge_id: stripe_charge_id,
+              idempotency_key: "dispute_won_#{stripe_dispute_id}"
             ).and_call_original
             StripeChargeProcessor.handle_stripe_event(stripe_event)
           end
@@ -3633,7 +3661,8 @@ describe StripeChargeProcessor, :vcr do
               stripe_account_id: stripe_managed_account.charge_processor_merchant_id,
               currency: "usd",
               amount_cents: (purchase.total_transaction_cents - purchase.total_transaction_amount_for_gumroad_cents),
-              related_charge_id: stripe_charge_id
+              related_charge_id: stripe_charge_id,
+              idempotency_key: "dispute_won_#{stripe_dispute_id}"
             ).and_call_original
             StripeChargeProcessor.handle_stripe_event(stripe_event)
           end
