@@ -208,7 +208,7 @@ describe "Muse MCP" do
   end
 
   it "points Claude and ChatGPT 401 challenges at their own resource metadata" do
-    %w[claude chatgpt].each do |client|
+    %w[muse claude chatgpt].each do |client|
       post "/#{client}/v1/mcp",
            params: { jsonrpc: "2.0", id: 1, method: "ping" }.to_json,
            headers: { "CONTENT_TYPE" => "application/json", "HOST" => DOMAIN }
@@ -220,7 +220,7 @@ describe "Muse MCP" do
     end
   end
 
-  it "serves the same MCP tools on Claude and ChatGPT aliases" do
+  it "serves tools with display titles on every MCP endpoint" do
     token = create("doorkeeper/access_token", application: @app, resource_owner_id: @seller.id, scopes: "view_sales")
     headers = { "CONTENT_TYPE" => "application/json", "HOST" => DOMAIN, "Authorization" => "Bearer #{token.token}" }
 
@@ -228,8 +228,17 @@ describe "Muse MCP" do
       post "/#{client}/v1/mcp", params: { jsonrpc: "2.0", id: 1, method: "tools/list" }.to_json, headers: headers
 
       expect(response).to be_successful
-      names = response.parsed_body.dig("result", "tools").map { |tool| tool["name"] }
-      expect(names).to include("list_sales", "create_draft_product")
+      titles = response.parsed_body.dig("result", "tools").to_h { |tool| [tool["name"], tool["title"]] }
+      expect(titles).to eq(
+        "get_account" => "Get account",
+        "list_products" => "List products",
+        "get_product" => "Get product",
+        "create_draft_product" => "Create draft product",
+        "publish_product" => "Publish product",
+        "unpublish_product" => "Unpublish product",
+        "list_sales" => "List sales",
+        "list_payouts" => "List payouts"
+      )
     end
   end
 
