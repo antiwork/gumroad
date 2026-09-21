@@ -1512,11 +1512,9 @@ class StripeChargeProcessor
     chargeable = Charge::Chargeable.find_by_processor_transaction_id!(stripe_charge.id)
     amount_cents = chargeable.charged_amount_cents - chargeable.charged_gumroad_amount_cents
 
-    # Resolve Gumroad's share BEFORE moving any money. `presentment_gumroad_amount_for`
-    # deliberately raises rather than book a mixed-currency figure, and the transfer below
-    # has no idempotency key while this runs in HandleStripeEventWorker (`retry: 10`). If
-    # the raise came after the transfer, every retry would re-send the creator the full
-    # seller share — up to 11 duplicate transfers before the job reached the dead set.
+    # Resolve Gumroad's share BEFORE moving any money: `presentment_gumroad_amount_for`
+    # deliberately raises rather than book a mixed-currency figure, and a raise after the
+    # transfer left the creator paid with no disbursement recorded against the dispute.
     gumroad_amount = if stripe_charge.application_fee.present?
       FlowOfFunds::Amount.new(
         currency: stripe_charge.application_fee.currency,
