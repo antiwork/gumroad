@@ -47,6 +47,7 @@ describe Checkout::DiscountsPresenter do
                      existing_customers_only: false,
                      ownership_products: [],
                      ownership_duration_tiers: nil,
+                     option_ids: [],
                      excluded_products: [],
                      products: [
                        {
@@ -86,6 +87,7 @@ describe Checkout::DiscountsPresenter do
                      existing_customers_only: false,
                      ownership_products: [],
                      ownership_duration_tiers: nil,
+                     option_ids: [],
                      excluded_products: [],
                      products: [
                        {
@@ -116,6 +118,7 @@ describe Checkout::DiscountsPresenter do
                      existing_customers_only: false,
                      ownership_products: [],
                      ownership_duration_tiers: nil,
+                     option_ids: [],
                      excluded_products: [],
                      products: nil,
                    },
@@ -129,6 +132,7 @@ describe Checkout::DiscountsPresenter do
                      url: product3.long_url,
                      is_tiered_membership: true,
                      is_recurring_billing: true,
+                     options: product3.options.map { { id: _1[:id], name: _1[:name] } },
                    },
                    {
                      id: product1.external_id,
@@ -181,6 +185,7 @@ describe Checkout::DiscountsPresenter do
             existing_customers_only: false,
             ownership_products: [],
             ownership_duration_tiers: nil,
+            option_ids: [],
             excluded_products: [],
             products: [
               {
