@@ -1614,23 +1614,33 @@ describe CustomerMailer do
       expect(mail.message).to be_a(ActionMailer::Base::NullMail)
     end
 
-    it "drops a chargeable whose charge has no successful purchase left by render time" do
+    it "drops a chargeable whose charge has no successful purchase left" do
       charge = create(:charge, seller:)
       charge.purchases << purchases
-      # The first check admits these purchases as successful, then they leave that state (a refund
-      # or chargeback landing mid-send) before the template re-derives them.
-      checks = 0
-      allow_any_instance_of(CustomerMailer).to receive(:renderable_chargeables).and_wrap_original do |original, chargeables|
-        renderable = original.call(chargeables)
-        checks += 1
-        purchases.each { |purchase| purchase.update!(purchase_state: "failed") } if checks == 1
-        renderable
+      # The state filter admits these purchases as successful, then they leave that state (a refund
+      # or chargeback landing mid-send) before the receipt reads are pinned.
+      allow_any_instance_of(CustomerMailer).to receive(:resolve_receipt_reads).and_wrap_original do |original, chargeable|
+        purchases.each { |purchase| purchase.update!(purchase_state: "failed") }
+        original.call(chargeable)
+      end
+
+      expect(CustomerMailer.grouped_receipt(purchases.map(&:id)).message).to be_a(ActionMailer::Base::NullMail)
+    end
+
+    it "renders the receipt when a purchase leaves its success state after the reads are pinned" do
+      charge = create(:charge, seller:)
+      charge.purchases << purchases
+      # The claim runs after the receipt reads are pinned, so flipping the state here is the window
+      # the selection checks cannot close on their own.
+      allow_any_instance_of(CustomerMailer).to receive(:claim_grouped_receipt_send).and_wrap_original do |original, email|
+        purchases.each { |purchase| purchase.update!(purchase_state: "failed") }
+        original.call(email)
       end
 
       mail = CustomerMailer.grouped_receipt(purchases.map(&:id)).message
 
-      expect(checks).to eq(2)
-      expect(mail).to be_a(ActionMailer::Base::NullMail)
+      expect(mail).not_to be_a(ActionMailer::Base::NullMail)
+      expect(mail.subject).to eq("Receipts for Purchases")
     end
 
     it "does not take the send claim when the whole receipt set drops out before render" do
