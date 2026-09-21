@@ -69,6 +69,7 @@ type Product = {
   is_tiered_membership: boolean;
   is_recurring_billing: boolean;
   archived: boolean;
+  options?: { id: string; name: string }[];
 };
 
 export type Duration = 1;
@@ -94,6 +95,7 @@ export type OfferCode = {
   existing_customers_only: boolean;
   ownership_products: Product[];
   ownership_duration_tiers: OwnershipDurationTier[] | null;
+  option_ids: string[];
 };
 
 export type SortKey = "name" | "revenue" | "uses" | "term";
@@ -709,6 +711,7 @@ const DiscountsPage = ({
             maxQuantity: offerCode.limit,
             discount: offerCode.discount,
             selectedProductIds: offerCode.products?.map(({ id }) => id) ?? [],
+            selectedOptionIds: offerCode.option_ids,
             excludedProductIds: offerCode.excluded_products.map(({ id }) => id),
             currencyCode: offerCode.discount.type === "cents" ? offerCode.currency_type : null,
             universal: !offerCode.products,
@@ -757,6 +760,7 @@ const DiscountsPage = ({
             maxQuantity: offerCode.limit,
             discount: offerCode.discount,
             selectedProductIds: offerCode.products?.map(({ id }) => id) ?? [],
+            selectedOptionIds: offerCode.option_ids,
             excludedProductIds: offerCode.excluded_products.map(({ id }) => id),
             currencyCode: offerCode.discount.type === "cents" ? offerCode.currency_type : null,
             universal: !offerCode.products,
@@ -870,6 +874,21 @@ const Form = ({
     value: offerCode?.products?.map(({ id }) => id) ?? [],
   });
   const selectedProducts = products.filter(({ id }) => selectedProductIds.value.includes(id));
+  const [selectedOptionIds, setSelectedOptionIds] = React.useState<{ value: string[]; error?: boolean }>({
+    value: offerCode?.option_ids ?? [],
+  });
+  // Offer codes are not restricted by option unless the seller picks some, and a code restricted
+  // on one product leaves the other products' options alone.
+  const selectableOptions = selectedProducts.flatMap((product) =>
+    (product.options ?? []).map((option) => ({ id: option.id, label: `${product.name} — ${option.name}` })),
+  );
+  const selectedOptions = selectableOptions.filter(({ id }) => selectedOptionIds.value.includes(id));
+  const optionIdsInScope = (productIds: string[]) =>
+    new Set(
+      products
+        .filter(({ id }) => productIds.includes(id))
+        .flatMap((product) => (product.options ?? []).map(({ id }) => id)),
+    );
   const [excludedProductIds, setExcludedProductIds] = React.useState<string[]>(
     offerCode?.excluded_products.map(({ id }) => id) ?? [],
   );
@@ -1057,6 +1076,7 @@ const Form = ({
       existing_customers_only: existingCustomersOnly,
       ownership_products: existingCustomersOnly ? ownershipProducts : [],
       ownership_duration_tiers: tieredPayload,
+      option_ids: universal ? [] : selectedOptionIds.value,
     });
   };
 
@@ -1165,6 +1185,8 @@ const Form = ({
               placeholder="Products to which this discount will apply"
               onChange={(selectedIds) => {
                 setSelectedProductIds({ value: selectedIds.map(({ id }) => id) });
+                const inScope = optionIdsInScope(selectedIds.map(({ id }) => id));
+                setSelectedOptionIds((prev) => ({ value: prev.value.filter((id) => inScope.has(id)) }));
                 setCurrencyCode(
                   (prevCurrencyCode) =>
                     products.find(({ id }) => id === selectedIds[0]?.id)?.currency_type ?? prevCurrencyCode,
@@ -1179,12 +1201,34 @@ const Form = ({
                 onChange={(evt) => {
                   setUniversal(evt.target.checked);
                   setSelectedProductIds({ value: [] });
+                  setSelectedOptionIds({ value: [] });
                 }}
                 aria-invalid={selectedProductIds.error}
               />
               All products
             </Label>
           </Fieldset>
+          {!universal && selectableOptions.length > 0 ? (
+            <Fieldset>
+              <FieldsetTitle>
+                <Label htmlFor={`${uid}options`}>Options</Label>
+              </FieldsetTitle>
+              <Select
+                inputId={`${uid}options`}
+                instanceId={`${uid}options`}
+                options={selectableOptions}
+                value={selectedOptions}
+                isMulti
+                isClearable
+                placeholder="All options"
+                onChange={(selectedIds) => setSelectedOptionIds({ value: selectedIds.map(({ id }) => id) })}
+              />
+              <FieldsetDescription>
+                Limit the discount to specific options. Leave this empty to discount every option of the selected
+                products.
+              </FieldsetDescription>
+            </Fieldset>
+          ) : null}
           {universal ? (
             <Fieldset>
               <FieldsetTitle>

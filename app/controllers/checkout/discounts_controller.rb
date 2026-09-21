@@ -62,9 +62,10 @@ class Checkout::DiscountsController < Sellers::BaseController
     parse_date_times
     offer_code = current_seller.offer_codes.build(
       products: selected_products,
+      variants: selected_options,
       ownership_products:,
       excluded_products:,
-      **offer_code_params.except(:selected_product_ids, :ownership_product_ids, :excluded_product_ids)
+      **offer_code_params.except(:selected_product_ids, :selected_option_ids, :ownership_product_ids, :excluded_product_ids)
     )
 
     if offer_code.save
@@ -81,7 +82,7 @@ class Checkout::DiscountsController < Sellers::BaseController
     authorize [:checkout, offer_code]
 
     parse_date_times
-    update_params = offer_code_params.except(:selected_product_ids, :ownership_product_ids, :excluded_product_ids, :code, :ownership_duration_tiers).to_h
+    update_params = offer_code_params.except(:selected_product_ids, :selected_option_ids, :ownership_product_ids, :excluded_product_ids, :code, :ownership_duration_tiers).to_h
     if params.key?(:ownership_duration_tiers)
       update_params[:ownership_duration_tiers] = params[:ownership_duration_tiers].nil? ? nil : offer_code_params[:ownership_duration_tiers]
     end
@@ -89,6 +90,7 @@ class Checkout::DiscountsController < Sellers::BaseController
     if offer_code.update(
       **update_params,
       products: selected_products(offer_code),
+      variants: selected_options(offer_code),
       ownership_products: ownership_products(offer_code),
       excluded_products: excluded_products(offer_code)
     )
@@ -117,7 +119,7 @@ class Checkout::DiscountsController < Sellers::BaseController
         :name, :code, :universal, :max_purchase_count, :amount_cents, :amount_percentage,
         :currency_type, :valid_at, :expires_at, :minimum_quantity, :duration_in_billing_cycles,
         :minimum_amount_cents, :existing_customers_only, :once_per_cart,
-        selected_product_ids: [], ownership_product_ids: [], excluded_product_ids: [],
+        selected_product_ids: [], selected_option_ids: [], ownership_product_ids: [], excluded_product_ids: [],
         ownership_duration_tiers: [[:months, :amount_percentage]]
       )
     end
@@ -139,6 +141,16 @@ class Checkout::DiscountsController < Sellers::BaseController
       return offer_code.ownership_products if offer_code && !params.key?(:ownership_product_ids)
 
       current_seller.products.by_external_ids(offer_code_params[:ownership_product_ids])
+    end
+
+    # Options are resolved against the submitted products rather than the whole catalogue: an
+    # option of a product the discount does not apply to is never a valid scope, and dropping it
+    # here means an edit that removes a product also drops its now-meaningless option rows.
+    def selected_options(offer_code = nil)
+      return offer_code.variants if offer_code && !params.key?(:selected_option_ids)
+
+      BaseVariant.by_external_ids(offer_code_params[:selected_option_ids].to_a)
+                 .where(link_id: selected_products(offer_code).map(&:id))
     end
 
     def excluded_products(offer_code = nil)

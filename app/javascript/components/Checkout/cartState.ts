@@ -8,7 +8,7 @@ import {
   ProductNativeType,
 } from "$app/parsers/product";
 import { CurrencyCode, getMinPriceCents } from "$app/utils/currency";
-import { applyOfferCodeToCents } from "$app/utils/offer-code";
+import { applyOfferCodeToCents, discountAppliesToOption } from "$app/utils/offer-code";
 import { RecurrenceId } from "$app/utils/recurringPricing";
 
 import {
@@ -220,6 +220,7 @@ const getDiscountedPriceForItem = (
   for (const [discountCodeIndex, discountCode] of cart.discountCodes.entries()) {
     const discount = discountCode.products[item.product.permalink];
     if (!discount) continue;
+    if (!discountAppliesToOption(discount, item.product, item.option_id)) continue;
     if (!hasMetCartDiscountConditions(cart, item, discount)) continue;
     const oncePerCart = discount.type === "fixed" && discount.once_per_cart;
     const allocationKey = oncePerCart

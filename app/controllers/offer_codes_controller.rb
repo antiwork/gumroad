@@ -8,6 +8,7 @@ class OfferCodesController < ApplicationController
     inactive: "Sorry, the discount code you wish to use is inactive.",
     unmet_minimum_purchase_quantity: "Sorry, the discount code you wish to use has an unmet minimum quantity.",
     not_existing_customer: "Sorry, this discount code is only for existing customers.",
+    option_not_eligible: "Sorry, this discount code is not valid for the option you selected.",
   }.freeze
 
   PARTIAL_APPLICATION_MESSAGES = {
@@ -15,6 +16,7 @@ class OfferCodesController < ApplicationController
     sold_out: "The discount code was applied to some products. The rest exceed its remaining usage limit.",
     unmet_minimum_purchase_quantity: "The discount code was applied to some products. The rest do not meet its minimum quantity.",
     not_existing_customer: "The discount code was applied to some products. The rest are only discounted for existing customers.",
+    option_not_eligible: "The discount code was applied to some products. The rest are not discounted on the option you selected.",
   }.freeze
 
   def compute_discount

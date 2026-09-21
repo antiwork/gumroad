@@ -28,12 +28,18 @@ class OfferCodeDiscountComputingService
     products_data = {}
 
     product_entry_groups.each do |link, entries|
-      purchase_quantity = quantities_by_permalink[link.unique_permalink].to_i
       offer_code = find_applicable_offer_code_for(link)
 
       next unless offer_code
       track_applicable_offer_code(offer_code)
 
+      entries = entries_eligible_for_option_scope(offer_code, link, entries)
+      if entries.empty?
+        track_option_ineligibility
+        next
+      end
+
+      purchase_quantity = entries.sum { |_input_key, product| product[:quantity].to_i }
       resolved_discount = offer_code.evaluate_for_buyer(buyer, product: link)
 
       # Keep later covered lines in the response and carry any amount the first line could not
@@ -117,14 +123,15 @@ class OfferCodeDiscountComputingService
       aggregate
     end
 
-    # Callers key `products` however they like — by permalink, or by cart index.
-    # Only the permalink inside each entry is authoritative, so never index
-    # `products` by permalink: doing so 500s on any index-keyed payload.
-    # Index-keyed carts can also repeat a permalink across lines, so quantities
-    # sum — keeping only one line's would let a capped code over-apply.
-    def quantities_by_permalink
-      @_quantities_by_permalink ||= products.values.each_with_object(Hash.new(0)) do |entry, acc|
-        acc[entry[:permalink]] += entry[:quantity].to_i
+    # Callers key `products` however they like — by permalink, or by cart index. Only the permalink
+    # inside each entry is authoritative, so never index `products` by permalink: doing so 500s on
+    # any index-keyed payload. Index-keyed carts can also repeat a permalink across lines, so
+    # quantities sum — keeping only one line's would let a capped code over-apply.
+    def entries_eligible_for_option_scope(offer_code, link, entries)
+      return entries if offer_code.restricted_variants_for(link).empty?
+
+      entries.select do |_input_key, product|
+        offer_code.applicable_to_variant?(link, product[:variant_external_id])
       end
     end
 
@@ -291,11 +298,19 @@ class OfferCodeDiscountComputingService
       end
     end
 
+    def track_option_ineligibility
+      @product_level_ineligibilities ||= {}
+      @product_level_ineligibilities[:option_not_eligible] = true
+    end
+
     PRODUCT_LEVEL_INELIGIBILITIES_BY_DISPLAY_PRIORITY = [
       :not_existing_customer,
       :unmet_minimum_purchase_quantity,
       :insufficient_times_of_use,
       :sold_out,
+      # Ranks last: the other reasons are about the code's own terms, which the buyer can act on,
+      # while this one is only ever "pick the other option".
+      :option_not_eligible,
     ]
 
     def error_code(products_data)

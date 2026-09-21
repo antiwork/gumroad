@@ -22,4 +22,7 @@ type DiscountConditions = {
   minimum_quantity: number | null;
   duration_in_billing_cycles: 1 | null;
   minimum_amount_cents: number | null;
+  // Options (variants) the discount is limited to. Absent means every option. Products whose own
+  // options are missing from the list are unrestricted — variant ids are unique per product.
+  option_ids?: string[] | null;
 };

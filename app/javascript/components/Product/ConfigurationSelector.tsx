@@ -29,7 +29,7 @@ import {
   getMinPriceCents,
 } from "$app/utils/currency";
 import { formatCallDate } from "$app/utils/date";
-import { applyOfferCodeToCents } from "$app/utils/offer-code";
+import { applyOfferCodeToCents, discountAppliesToOption } from "$app/utils/offer-code";
 import { formatInstallmentPaymentSchedule } from "$app/utils/price";
 import { isSingleChargeDuration, recurrenceNames, recurrenceLabels, RecurrenceId } from "$app/utils/recurringPricing";
 
@@ -266,11 +266,13 @@ export const applySelection = (
   const selectedOption = product.options.find(({ id }) => id === selection.optionId) ?? null;
   const maxQuantity = getMaxQuantity(product, selectedOption);
   const priceCents = basePriceCents + (selectedOption ? computeOptionPrice(selectedOption, selection.recurrence) : 0);
+  // An option the code is not scoped to keeps its normal price, before and after purchase.
+  const optionDiscount = discount && discountAppliesToOption(discount, product, selection.optionId) ? discount : null;
   const applicableDiscount =
-    discount && hasMetDiscountConditions(discount, selection.quantity)
+    optionDiscount && hasMetDiscountConditions(optionDiscount, selection.quantity)
       ? preserveOncePerCartAllocation
-        ? discount
-        : withConfiguredOncePerCartAmount(discount)
+        ? optionDiscount
+        : withConfiguredOncePerCartAmount(optionDiscount)
       : null;
   const discountedPrice = computeSelectionDiscountedPrice(priceCents, applicableDiscount, product, selection.quantity);
   const discountedTotalCents =
@@ -726,8 +728,12 @@ export const ConfigurationSelector = React.forwardRef<
       ...prevSelection,
       ...(typeof update === "function" ? update(prevSelection) : update),
     }));
-  const previewDiscount = (previewSelection: PriceSelection) =>
-    discountForSelection ? discountForSelection(previewSelection) : discount;
+  const previewDiscount = (previewSelection: PriceSelection) => {
+    const previewed = discountForSelection ? discountForSelection(previewSelection) : discount;
+    // Every option's radio shows the price the buyer would pay for it, so the code is dropped for
+    // the options it is not scoped to.
+    return previewed && discountAppliesToOption(previewed, product, previewSelection.optionId) ? previewed : null;
+  };
 
   const selectedOption = product.options.find(({ id }) => id === selection.optionId) ?? null;
   const {

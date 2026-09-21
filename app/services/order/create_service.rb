@@ -175,7 +175,7 @@ class Order::CreateService
           recovered_allocations.each { restore_once_per_cart_coverage(offer_codes, _1, line_items) }
           if submitted_discount_code.present? && !allocated_discount&.[](:once_per_cart)
             offer_codes[submitted_discount_code] ||= {}
-            offer_codes[submitted_discount_code][line_item_uid] = { permalink: product.unique_permalink, quantity: line_item_params[:quantity], discount_code: submitted_discount_code }
+            offer_codes[submitted_discount_code][line_item_uid] = { permalink: product.unique_permalink, quantity: line_item_params[:quantity], discount_code: submitted_discount_code, variant_external_id: line_item_params[:variants]&.first }
           end
         end
 
@@ -285,7 +285,8 @@ class Order::CreateService
           link = links_by_permalink[item[:permalink]]
           product = item.slice(:permalink, :quantity).merge(
             price_cents: submitted_uids.include?(item.fetch(:uid)) ? allocation_capacity_cents(item, link) : 0,
-            tip_cents: 0
+            tip_cents: 0,
+            variant_external_id: item[:variants]&.first
           )
           [item.fetch(:uid), product]
         end
@@ -394,6 +395,7 @@ class Order::CreateService
           permalink: retry_line[:permalink],
           quantity: retry_line[:quantity],
           discount_code: submitted_discount_code,
+          variant_external_id: retry_line[:variants]&.first,
         }
       end
     end

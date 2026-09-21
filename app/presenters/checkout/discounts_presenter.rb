@@ -18,17 +18,7 @@ class Checkout::DiscountsPresenter
       pages:,
       pagination:,
       offer_codes: offer_codes.map { offer_code_props(_1) },
-      products: pundit_user.seller.products.visible.map do |product|
-        {
-          id: product.external_id,
-          name: product.name,
-          archived: product.archived?,
-          currency_type: product.price_currency_type,
-          url: product.long_url,
-          is_tiered_membership: product.is_tiered_membership?,
-          is_recurring_billing: product.is_recurring_billing?,
-        }
-      end,
+      products: product_props_by_product,
       show_black_friday_banner: Feature.active?(:black_friday_seller_banner),
       black_friday_code: SearchProducts::BLACK_FRIDAY_CODE,
       black_friday_code_name: BLACK_FRIDAY_CODE_NAME
@@ -55,6 +45,7 @@ class Checkout::DiscountsPresenter
       existing_customers_only: offer_code.existing_customers_only?,
       ownership_products: offer_code.ownership_products.map { product_props_for(_1) },
       ownership_duration_tiers: offer_code.normalized_ownership_duration_tiers,
+      option_ids: offer_code.variants.map(&:external_id),
     }
   end
 
@@ -69,5 +60,17 @@ class Checkout::DiscountsPresenter
         is_tiered_membership: product.is_tiered_membership?,
         is_recurring_billing: product.is_recurring_billing?,
       }
+    end
+
+    # The form offers a product's options as discount scope, so the options travel with the
+    # products it already lists. Variants are preloaded: `Link#options` falls back to a query per
+    # product when the association is not loaded.
+    def product_props_by_product
+      pundit_user.seller.products.visible.includes(:alive_variants, :variant_categories_alive).map do |product|
+        props = product_props_for(product)
+        options = product.options
+        props[:options] = options.map { { id: _1[:id], name: _1[:name] } } if options.any?
+        props
+      end
     end
 end
