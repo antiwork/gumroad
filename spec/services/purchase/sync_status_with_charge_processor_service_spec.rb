@@ -704,6 +704,213 @@ describe Purchase::SyncStatusWithChargeProcessorService, :vcr do
     end
   end
 
+  describe "charge receipts", vcr: false do
+    let(:purchase) { create(:purchase_in_progress, link: @product, email: "buyer@example.com") }
+    let!(:charge) { create(:charge, seller: @seller, merchant_account: purchase.merchant_account, purchases: [purchase]) }
+    let(:processor_charge) do
+      BaseProcessorCharge.new.tap do |result|
+        result.id = purchase.stripe_transaction_id
+        result.status = "succeeded"
+        result.charge_processor_id = StripeChargeProcessor.charge_processor_id
+        result.flow_of_funds = FlowOfFunds.build_simple_flow_of_funds(Currency::USD, charge.amount_cents)
+      end
+    end
+
+    before do
+      charge.order.purchases << purchase
+      allow(ChargeProcessor).to receive(:get_or_search_charge).and_return(processor_charge)
+      SendChargeReceiptJob.clear
+      SendPurchaseReceiptJob.clear
+    end
+
+    it "enqueues the missing charge receipt after successful sync and does not replay it on another sync" do
+      expect(described_class.new(purchase).perform).to be(true)
+      expect(purchase.reload).to be_successful
+      expect(SendPurchaseReceiptJob.jobs.size).to eq(0)
+      expect(SendChargeReceiptJob.jobs.size).to eq(1)
+      expect(SendChargeReceiptJob).to have_enqueued_sidekiq_job(charge.id).on("critical")
+
+      expect(described_class.new(purchase).perform).to be(false)
+      expect(SendChargeReceiptJob.jobs.size).to eq(1)
+    end
+
+    it "queues PDF stamping on the default queue" do
+      @product.product_files << create(:readable_document, pdf_stamp_enabled: true)
+
+      expect(described_class.new(purchase).perform).to be(true)
+      expect(purchase.reload.url_redirect).to be_present
+      expect(SendChargeReceiptJob).to have_enqueued_sidekiq_job(charge.id).on("default")
+    end
+
+    context "when receipt enqueue fails" do
+      let(:enqueue_error) { RedisClient::CannotConnectError.new("receipt Redis unavailable") }
+
+      before do
+        allow(SendChargeReceiptJob).to receive(:client_push).and_raise(enqueue_error)
+        allow(ErrorNotifier).to receive(:notify)
+      end
+
+      [false, true].each do |mark_as_failed|
+        it "preserves successful fulfillment and returns true with mark_as_failed: #{mark_as_failed}" do
+          service = described_class.new(purchase, mark_as_failed:)
+
+          expect(service.perform).to be(true)
+
+          expect(purchase.reload).to be_successful
+          expect(purchase.url_redirect).to be_present
+          expect(service.charge_outcome).to eq(:succeeded)
+          expect(charge.reload).not_to be_receipt_sent
+          expect(SendChargeReceiptJob.jobs.size).to eq(0)
+          expect(ErrorNotifier).to have_received(:notify).with(enqueue_error).once
+        end
+      end
+
+      it "contains the enqueue error at the outer commit and lets later callbacks run" do
+        later_callback_ran = false
+
+        Purchase.transaction do
+          expect(described_class.new(purchase, mark_as_failed: true).perform).to be(true)
+          expect(SendChargeReceiptJob).not_to have_received(:client_push)
+          AfterCommitEverywhere.after_commit { later_callback_ran = true }
+        end
+
+        expect(purchase.reload).to be_successful
+        expect(purchase.url_redirect).to be_present
+        expect(later_callback_ran).to be(true)
+        expect(charge.reload).not_to be_receipt_sent
+        expect(SendChargeReceiptJob.jobs.size).to eq(0)
+        expect(ErrorNotifier).to have_received(:notify).with(enqueue_error).once
+      end
+
+      it "lets SyncStuckPurchasesJob finalize the remaining purchases in the batch" do
+        purchase.update!(created_at: 12.hours.ago)
+        later_purchase = create(:purchase_in_progress, link: @product, email: "later-buyer@example.com", created_at: 10.hours.ago)
+
+        SyncStuckPurchasesJob.new.perform
+
+        expect(purchase.reload).to be_successful
+        expect(purchase.url_redirect).to be_present
+        expect(later_purchase.reload).to be_successful
+        expect(later_purchase.url_redirect).to be_present
+        expect(SendPurchaseReceiptJob).to have_enqueued_sidekiq_job(later_purchase.id)
+        expect(charge.reload).not_to be_receipt_sent
+        expect(SendChargeReceiptJob.jobs.size).to eq(0)
+        expect(ErrorNotifier).to have_received(:notify).with(enqueue_error).once
+      end
+    end
+
+    it "does not enqueue a receipt for an unsuccessful processor charge" do
+      processor_charge.status = "failed"
+
+      expect(described_class.new(purchase, mark_as_failed: true).perform).to be(false)
+      expect(purchase.reload).to be_failed
+      expect(SendChargeReceiptJob.jobs.size).to eq(0)
+    end
+
+    it "does not enqueue a receipt for an already successful purchase" do
+      purchase.update!(purchase_state: "successful")
+
+      expect(described_class.new(purchase).perform).to be(false)
+      expect(SendChargeReceiptJob.jobs.size).to eq(0)
+    end
+
+    it "preserves the standalone purchase receipt when there is no charge" do
+      charge.charge_purchases.destroy_all
+      purchase.reload
+
+      expect(described_class.new(purchase).perform).to be(true)
+      expect(SendChargeReceiptJob.jobs.size).to eq(0)
+      expect(SendPurchaseReceiptJob).to have_enqueued_sidekiq_job(purchase.id)
+    end
+
+    it "does not enqueue a charge receipt that was already sent" do
+      charge.update!(receipt_sent: true)
+
+      expect(described_class.new(purchase).perform).to be(true)
+      expect(purchase.reload).to be_successful
+      expect(SendChargeReceiptJob.jobs.size).to eq(0)
+    end
+
+    it "does not enqueue a receipt when finalization raises" do
+      allow_any_instance_of(Purchase::MarkSuccessfulService).to receive(:perform).and_raise("finalization failed")
+      allow(ErrorNotifier).to receive(:notify)
+
+      expect(described_class.new(purchase).perform).to be(false)
+      expect(purchase.reload).to be_in_progress
+      expect(SendChargeReceiptJob.jobs.size).to eq(0)
+    end
+
+    it "preserves the return value but does not enqueue if finalization leaves the purchase unsuccessful" do
+      allow_any_instance_of(Purchase::MarkSuccessfulService).to receive(:perform).and_return(false)
+
+      expect(described_class.new(purchase).perform).to be(true)
+      expect(purchase.reload).to be_in_progress
+      expect(SendChargeReceiptJob.jobs.size).to eq(0)
+    end
+
+    it "waits for the surrounding transaction to commit before pushing to Redis" do
+      Sidekiq::Testing.disable! do
+        queued_receipts = -> { Sidekiq::Queue.new("critical").select { _1.klass == "SendChargeReceiptJob" } }
+        Purchase.transaction do
+          expect(described_class.new(purchase).perform).to be(true)
+          expect(purchase).to be_successful
+          expect(queued_receipts.call.size).to eq(0)
+        end
+
+        expect(queued_receipts.call.map(&:args)).to eq([[charge.id]])
+      end
+    end
+
+    it "does not push to Redis when the surrounding transaction rolls back" do
+      Sidekiq::Testing.disable! do
+        Purchase.transaction do
+          expect(described_class.new(purchase).perform).to be(true)
+          raise ActiveRecord::Rollback
+        end
+
+        expect(purchase.reload).to be_in_progress
+        expect(Sidekiq::Queue.new("critical").count { _1.klass == "SendChargeReceiptJob" }).to eq(0)
+      end
+    end
+
+    it "waits for the other purchases and sends each receipt once despite duplicate jobs" do
+      purchase.update!(is_part_of_combined_charge: true)
+      sibling = create(:purchase_in_progress, link: @product, email: purchase.email, is_part_of_combined_charge: true)
+      charge.purchases << sibling
+      charge.order.purchases << sibling
+      charge.update!(amount_cents: purchase.total_transaction_cents + sibling.total_transaction_cents)
+      processor_charge.flow_of_funds = FlowOfFunds.build_simple_flow_of_funds(Currency::USD, charge.amount_cents)
+      expect(ActionMailer::Base.delivery_method).to eq(:test)
+      ActionMailer::Base.deliveries.clear
+
+      expect(described_class.new(purchase).perform).to be(true)
+      expect(SendChargeReceiptJob.jobs.size).to eq(1)
+      SendChargeReceiptJob.perform_one
+      expect(ActionMailer::Base.deliveries.size).to eq(0)
+      expect(charge.reload).not_to be_receipt_sent
+      expect(SendChargeReceiptJob).to have_enqueued_sidekiq_job(charge.id, 1)
+
+      expect(described_class.new(sibling).perform).to be(true)
+      expect(SendChargeReceiptJob.jobs.size).to eq(2)
+      SendChargeReceiptJob.drain
+
+      expect(ActionMailer::Base.deliveries.size).to eq(2)
+      expect(CustomerEmailInfo.where(email_name: SendgridEventInfo::RECEIPT_MAILER_METHOD).pluck(:purchase_id)).to contain_exactly(purchase.id, sibling.id)
+      expect(charge.reload).to be_receipt_sent
+    end
+
+    it "keeps receipt ownership with the client-confirmed finalizer" do
+      charge.update!(client_confirmed: true)
+      finalizer = instance_double(Order::FinalizeConfirmedChargeService, charge_intent: nil)
+      expect(Order::FinalizeConfirmedChargeService).to receive(:new).with(order: charge.order, charge:).and_return(finalizer)
+      expect(finalizer).to receive(:perform) { purchase.update!(purchase_state: "successful") }
+      expect(ChargeProcessor).not_to receive(:get_or_search_charge)
+
+      expect(described_class.new(purchase).perform).to be(true)
+      expect(SendChargeReceiptJob.jobs.size).to eq(0)
+    end
+  end
+
   describe "serializing competing callers" do
     let(:purchase) { create(:purchase_in_progress, link: @product, stripe_transaction_id: "ch_test") }
 

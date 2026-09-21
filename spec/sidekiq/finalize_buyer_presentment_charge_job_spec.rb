@@ -20,9 +20,76 @@ describe FinalizeBuyerPresentmentChargeJob do
     charge.purchases << purchase
   end
 
+  context "with real purchase finalization" do
+    let(:processor_charge) do
+      BaseProcessorCharge.new.tap do |result|
+        result.id = purchase.stripe_transaction_id
+        result.status = "succeeded"
+        result.charge_processor_id = StripeChargeProcessor.charge_processor_id
+        result.flow_of_funds = FlowOfFunds.build_simple_flow_of_funds(Currency::USD, charge.amount_cents)
+      end
+    end
+
+    before do
+      charge.order.purchases << purchase
+      allow(ChargeProcessor).to receive(:get_or_search_charge).and_return(processor_charge)
+      SendChargeReceiptJob.clear
+      SendPurchaseReceiptJob.clear
+    end
+
+    it "enqueues exactly one receipt through sync after finalizing the purchase" do
+      described_class.new.perform(charge.id)
+
+      expect(purchase.reload).to be_successful
+      expect(purchase.url_redirect).to be_present
+      expect(SendPurchaseReceiptJob.jobs.size).to eq(0)
+      expect(SendChargeReceiptJob.jobs.size).to eq(1)
+      expect(SendChargeReceiptJob).to have_enqueued_sidekiq_job(charge.id).on("critical")
+    end
+
+    it "enqueues exactly one receipt on the default queue for PDF stamping" do
+      purchase.link.product_files << create(:readable_document, pdf_stamp_enabled: true)
+
+      described_class.new.perform(charge.id)
+
+      expect(purchase.reload).to be_successful
+      expect(purchase.url_redirect).to be_present
+      expect(SendChargeReceiptJob.jobs.size).to eq(1)
+      expect(SendChargeReceiptJob).to have_enqueued_sidekiq_job(charge.id).on("default")
+    end
+
+    it "lets ordinary sync schedule the receipt for a settlement-deferrable charge" do
+      expect(Purchase::SyncStatusWithChargeProcessorService.new(purchase).perform).to be(true)
+
+      expect(purchase.reload).to be_successful
+      expect(SendChargeReceiptJob.jobs.size).to eq(1)
+      expect(SendChargeReceiptJob).to have_enqueued_sidekiq_job(charge.id).on("critical")
+    end
+
+    it "propagates receipt enqueue errors and enqueues on retry after the purchase finalized" do
+      enqueue_error = RedisClient::CannotConnectError.new("receipt Redis unavailable")
+      allow(SendChargeReceiptJob).to receive(:client_push).and_raise(enqueue_error)
+
+      expect { described_class.new.perform(charge.id) }.to raise_error(enqueue_error)
+
+      expect(purchase.reload).to be_successful
+      expect(purchase.url_redirect).to be_present
+      expect(charge.reload).not_to be_receipt_sent
+      expect(SendChargeReceiptJob.jobs.size).to eq(0)
+      expect(SendChargeReceiptJob).to have_received(:client_push).once
+
+      allow(SendChargeReceiptJob).to receive(:client_push).and_call_original
+      described_class.new.perform(charge.id)
+
+      expect(ChargeProcessor).to have_received(:get_or_search_charge).once
+      expect(SendChargeReceiptJob.jobs.size).to eq(1)
+      expect(SendChargeReceiptJob).to have_enqueued_sidekiq_job(charge.id).on("critical")
+    end
+  end
+
   it "finalizes settled purchases and sends the withheld charge receipt" do
     sync_service = instance_double(Purchase::SyncStatusWithChargeProcessorService, perform: true)
-    expect(Purchase::SyncStatusWithChargeProcessorService).to receive(:new).with(purchase).and_return(sync_service)
+    expect(Purchase::SyncStatusWithChargeProcessorService).to receive(:new).with(purchase, enqueue_charge_receipt: false).and_return(sync_service)
 
     described_class.new.perform(charge.id)
 
@@ -35,7 +102,7 @@ describe FinalizeBuyerPresentmentChargeJob do
     charge.update!(stripe_payment_intent_id: nil, processor_transaction_id: nil)
     purchase.create_processor_payment_intent!(intent_id: "pi_presentment")
     sync_service = instance_double(Purchase::SyncStatusWithChargeProcessorService, perform: true)
-    expect(Purchase::SyncStatusWithChargeProcessorService).to receive(:new).with(purchase).and_return(sync_service)
+    expect(Purchase::SyncStatusWithChargeProcessorService).to receive(:new).with(purchase, enqueue_charge_receipt: false).and_return(sync_service)
 
     described_class.new.perform(charge.id)
 
@@ -79,7 +146,7 @@ describe FinalizeBuyerPresentmentChargeJob do
   it "polls seller-held charges without a presentment snapshot" do
     charge.charge_presentment.destroy!
     sync_service = instance_double(Purchase::SyncStatusWithChargeProcessorService, perform: false)
-    expect(Purchase::SyncStatusWithChargeProcessorService).to receive(:new).with(purchase).and_return(sync_service)
+    expect(Purchase::SyncStatusWithChargeProcessorService).to receive(:new).with(purchase, enqueue_charge_receipt: false).and_return(sync_service)
 
     described_class.new.perform(charge.id)
 
@@ -91,7 +158,7 @@ describe FinalizeBuyerPresentmentChargeJob do
     charge.update!(merchant_account: nil)
     purchase.update_column(:merchant_account_id, nil)
     sync_service = instance_double(Purchase::SyncStatusWithChargeProcessorService, perform: false)
-    expect(Purchase::SyncStatusWithChargeProcessorService).to receive(:new).with(purchase).and_return(sync_service)
+    expect(Purchase::SyncStatusWithChargeProcessorService).to receive(:new).with(purchase, enqueue_charge_receipt: false).and_return(sync_service)
 
     described_class.new.perform(charge.id)
 
