@@ -10,6 +10,7 @@ Existing query auditing, database selection and freshness checks are unchanged.
 """
 
 import argparse
+import fcntl
 import ipaddress
 import json
 import os
@@ -66,6 +67,18 @@ def configure(ip, tag, config, replace=False):
     ipaddress.IPv4Address(ip)
     if not re.fullmatch(r"production-[0-9a-f]+", tag):
         raise ValueError("Expected production-<revision> image tag")
+    config.parent.mkdir(parents=True, exist_ok=True)
+    # Keep the lock inode: unlinking it would let concurrent installers lock
+    # different files. Reject a competing installer before any SSH or changes.
+    lock = os.open(str(config) + ".lock", os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600)
+    try:
+        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        return _configure_locked(ip, tag, config, replace)
+    finally:
+        os.close(lock)
+
+
+def _configure_locked(ip, tag, config, replace):
     if config.is_symlink() or (config.exists() and not replace):
         raise ValueError(f"Refusing to replace existing config: {config}")
     original = config.read_bytes() if config.exists() else None

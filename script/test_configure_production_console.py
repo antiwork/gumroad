@@ -99,6 +99,38 @@ class ConsoleConfigurationTest(unittest.TestCase):
         self.assertEqual(self.config.read_text(), "other installer\n")
         self.assertEqual(list(self.config.parent.glob(".console-pin-*")), [])
 
+    def test_concurrent_repin_cannot_overwrite_between_compare_and_replace(self):
+        self.install()
+        original_replace = os.replace
+
+        def attempt_competing_repin(source, destination):
+            with patch.object(configure.os, "replace", original_replace):
+                with self.assertRaises(BlockingIOError):
+                    configure.configure("192.0.2.12", "production-abcdef", self.config, replace=True)
+            original_replace(source, destination)
+
+        with patch.object(configure.subprocess, "run", return_value=subprocess.CompletedProcess([], 0, output())):
+            with patch.object(configure.os, "replace", side_effect=attempt_competing_repin):
+                configure.configure("192.0.2.11", "production-abcdef", self.config, replace=True)
+        self.assertIn("PROD_INSTANCE_IP=192.0.2.11", self.config.read_text())
+        self.assertEqual(list(self.config.parent.glob(".console-pin-*")), [])
+
+    def test_other_process_lock_blocks_ssh_and_release_allows_install(self):
+        lock_path = str(self.config) + ".lock"
+        child_code = 'import fcntl, sys; f=open(sys.argv[1], "w"); fcntl.flock(f, fcntl.LOCK_EX); print("locked", flush=True); sys.stdin.read()'
+        with subprocess.Popen(["python3", "-c", child_code, lock_path], stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True) as child:
+            try:
+                assert child.stdout is not None
+                self.assertEqual(child.stdout.readline().strip(), "locked")
+                with patch.object(configure.subprocess, "run") as run, self.assertRaises(BlockingIOError):
+                    configure.configure("192.0.2.10", "production-abcdef", self.config)
+                run.assert_not_called()
+                self.assertFalse(self.config.exists())
+            finally:
+                child.communicate(timeout=5)
+        self.install()
+        self.assertTrue(self.config.exists())
+
     def test_remote_inspection_filters_shopper_and_other_jobs_without_leaking_env(self):
         container = {"Name": NAME, "Image": IMAGE, "State": {"Running": True}, "HostConfig": {"Memory": configure.MEMORY_LIMIT_BYTES}, "Config": {"Env": ["NOMAD_JOB_NAME=web_server_generic", "NOMAD_TASK_NAME=puma", "SECRET=not-for-output"]}}
         shopper = copy.deepcopy(container)
