@@ -167,7 +167,7 @@ module Muse
       def tool(name, description, properties, required: [])
         schema = { type: "object", properties:, additionalProperties: false }
         schema[:required] = required if required.any?
-        { name:, description:, inputSchema: schema }
+        { name:, title: name.humanize, description:, inputSchema: schema }
       end
 
       def call_tool(params)
