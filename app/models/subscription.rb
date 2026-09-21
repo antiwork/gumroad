@@ -953,25 +953,21 @@ class Subscription < ApplicationRecord
         return if renewal_disabled_due_to_indian_card_mandate?
       end
 
-      # Episode opens at the later of the last successful charge and the last restart,
-      # floored to the second so a charge in that same second is not a previous episode.
-      cycle_opened_at = [
-        purchases.successful.maximum(:created_at),
-        subscription_events.restarted.maximum(:occurred_at)
-      ].compact.max&.change(usec: 0)
-      was_recently_failed = cycle_opened_at.present? &&
-        purchases.failed
-                 .where("created_at > ?", ALLOWED_TIME_BEFORE_SENDING_REPEATED_CANCELLATION_EMAIL_TO_CREATOR.ago)
-                 .where("created_at < ?", cycle_opened_at)
-                 .exists?
-
       self.failed_at = Time.current
       self.deactivate!
 
       CustomerLowPriorityMailer.subscription_autocancelled(id).deliver_later(queue: "low")
 
-      if seller.enable_payment_email? && !was_recently_failed
-        ContactingCreatorMailer.subscription_autocancelled(id).deliver_later(queue: "critical")
+      if seller.enable_payment_email?
+        creator_notices = SentEmailInfo.where(key: SentEmailInfo.mailer_key_digest("ContactingCreatorMailer", "subscription_autocancelled", id))
+        unless creator_notices.where("created_at > ?", ALLOWED_TIME_BEFORE_SENDING_REPEATED_CANCELLATION_EMAIL_TO_CREATOR.ago).exists?
+          # Persist before enqueue so a marker write failure cannot queue a duplicate on retry.
+          creator_notices.delete_all
+          creator_notices.create!
+
+          enqueued = ContactingCreatorMailer.subscription_autocancelled(id).deliver_later(queue: "critical")
+          raise UpdateFailed, "Could not enqueue creator cancellation email" unless enqueued
+        end
       end
 
       send_cancelled_notification_webhook
