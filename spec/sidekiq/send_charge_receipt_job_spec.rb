@@ -208,6 +208,18 @@ describe SendChargeReceiptJob do
     end
   end
 
+  context "when no purchase has settled" do
+    it "does not send a receipt and leaves the charge unsent so a later settle can still send" do
+      purchase_one.update!(purchase_state: "failed")
+      purchase_two.update!(purchase_state: "failed")
+
+      described_class.new.perform(charge.id)
+
+      expect(CustomerMailer).not_to have_received(:receipt)
+      expect(charge.reload.receipt_sent?).to be(false)
+    end
+  end
+
   context "when the charge receipt has already been sent" do
     before do
       charge.update!(receipt_sent: true)

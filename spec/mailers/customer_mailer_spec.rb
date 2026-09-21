@@ -1601,6 +1601,21 @@ describe CustomerMailer do
       expect(mail.message).to be_a(ActionMailer::Base::NullMail)
     end
 
+    it "drops a chargeable whose charge has no successful purchase left by render time" do
+      charge = create(:charge, seller:)
+      charge.purchases << purchases
+      # The state filter runs first, so a purchase can be admitted as successful and then leave
+      # that state (a refund or chargeback landing mid-send) before the template re-derives it.
+      allow_any_instance_of(CustomerMailer).to receive(:claim_grouped_receipt_send) do
+        purchases.each { |purchase| purchase.update!(purchase_state: "failed") }
+        true
+      end
+
+      mail = CustomerMailer.grouped_receipt(purchases.map(&:id))
+
+      expect(mail.message).to be_a(ActionMailer::Base::NullMail)
+    end
+
     it "eager loads charges and orders to avoid N+1 queries" do
       purchases_with_charges = Array.new(3) do
         purchase = create(:purchase, link: product, seller:)

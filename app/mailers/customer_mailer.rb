@@ -40,6 +40,13 @@ class CustomerMailer < ApplicationMailer
     last_chargeable = @chargeables.last
     return unless claim_grouped_receipt_send(last_chargeable.orderable.email)
 
+    # Each chargeable re-reads its own successful purchases during render, so a purchase that
+    # leaves its success state in between (a refund or chargeback mid-send) empties the charge
+    # and the render raises. Drop those rather than losing the whole group.
+    @chargeables = @chargeables.select { |chargeable| chargeable.successful_purchases.exists? }
+    return if @chargeables.empty?
+    last_chargeable = @chargeables.last
+
     # CUSTOMERS_MAIL_DOMAIN is send-only, so a missing Reply-To hard-bounces the buyer's reply.
     # One Reply-To serves the whole group, so a group spanning several support addresses goes to
     # support instead of to whichever seller happens to be newest.
