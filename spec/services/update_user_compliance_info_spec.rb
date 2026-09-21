@@ -1187,6 +1187,7 @@ describe UpdateUserComplianceInfo, "Stripe failure after a partial update" do
     @user.user_compliance_infos.destroy_all
     @user.merchant_accounts.destroy_all
     @user.comments.destroy_all
+    GlobalAffiliate.where(affiliate_user_id: @user.id).delete_all
     @user.destroy!
   end
 
@@ -1277,6 +1278,7 @@ describe UpdateUserComplianceInfo, "Stripe failure before the first provider wri
     @user.user_compliance_infos.destroy_all
     @user.merchant_accounts.destroy_all
     @user.comments.destroy_all
+    GlobalAffiliate.where(affiliate_user_id: @user.id).delete_all
     @user.destroy!
   end
 

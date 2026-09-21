@@ -25,6 +25,7 @@ describe SubscriptionCancellationEmailJob do
     @subscription.subscription_events.destroy_all
     @subscription.destroy!
     @product.destroy!
+    GlobalAffiliate.where(affiliate_user_id: [@seller.id, @buyer.id]).delete_all
     @buyer.destroy!
     @seller.destroy!
   end
