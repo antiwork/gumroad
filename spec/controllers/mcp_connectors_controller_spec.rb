@@ -6,9 +6,8 @@ describe McpConnectorsController do
   before { allow(GithubStarsController).to receive(:cached_count).and_return(1234) }
 
   {
-    "muse" => "Gumroad for Muse",
-    "claude" => "Gumroad for Claude",
-    "chatgpt" => "Gumroad for ChatGPT"
+    "muse" => "Gumroad MCP for Muse | Sell digital products",
+    "claude" => "Gumroad MCP for Claude | Sell digital products"
   }.each do |client, title|
     it "sets title, description, and canonical for #{client}" do
       get :show, params: { client: }
@@ -16,7 +15,7 @@ describe McpConnectorsController do
       expect(response).to be_successful
       expect(assigns(:hide_layouts)).to be(true)
 
-      description = McpConnectorsController::CLIENTS[client][:meta_description]
+      description = "Connect #{McpConnectorsController::CLIENTS[client][:label]} to Gumroad with MCP. Create digital product drafts, publish products, check sales, and track payouts from your AI chat."
       page_url = "#{PROTOCOL}://#{DOMAIN}/#{client}"
       tags = controller.send(:meta_tags)
 

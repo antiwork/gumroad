@@ -69,6 +69,22 @@ describe Checkout::PaymentMethodResolver do
         end
       end
 
+      context "when the seller has switched Link off from the checkout settings page" do
+        before { seller.update!(link_disabled: true) }
+
+        it "drops Link for every buyer country" do
+          expect(resolve(buyer_country: "US").payment_method_types).to eq(%w[card cashapp])
+          expect(resolve(buyer_country: "GB").payment_method_types).to eq(%w[card])
+        end
+
+        it "keeps Link for a multi-seller cart where any seller still offers it — the opt-out is seller-complete" do
+          other_seller = create(:user)
+
+          expect(described_class.link_disabled_for?([seller, other_seller])).to be(false)
+          expect(described_class.link_disabled_for?([seller])).to be(true)
+        end
+      end
+
       it "drops US-locked methods (Cash App/ACH) for a non-US buyer, keeping card and Link" do
         expect(resolve(buyer_country: "GB").payment_method_types).to eq(%w[card link])
       end
@@ -77,7 +93,7 @@ describe Checkout::PaymentMethodResolver do
         expect(resolve(buyer_country: nil).payment_method_types).to eq(%w[card link])
       end
 
-      it "launches Link with no per-seller flag — it auto-enables with the Payment Element" do
+      it "launches Link by default for a seller who has not switched it off in checkout settings" do
         expect(resolve.payment_method_types).to include("link")
       end
 

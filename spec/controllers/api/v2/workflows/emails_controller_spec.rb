@@ -182,13 +182,13 @@ describe Api::V2::Workflows::EmailsController do
         [@params.merge(delay_amount: 1.5), "delay_amount must be a non-negative integer."],
         [@params.merge(delay_amount: "1.5"), "delay_amount must be a non-negative integer."],
         [@params.merge(delay_unit: "year"), "delay_unit must be one of: hour, day, week, month."],
-        [@params.merge(delay_amount: "01720440", delay_unit: InstallmentRule::HOUR), "delay is too large."],
+        [@params.merge(delay_amount: "01720440", delay_unit: InstallmentRule::HOUR), InstallmentRule::OVERFLOW_DELAY_MESSAGE],
         [
           @params.merge(
             delay_amount: Api::V2::Workflows::EmailsController::MAX_DELAY_SECONDS + 1,
             delay_unit: InstallmentRule::HOUR
           ),
-          "delay is too large.",
+          InstallmentRule::OVERFLOW_DELAY_MESSAGE,
         ],
       ]
 

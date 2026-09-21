@@ -10,9 +10,8 @@ class Products::ArchivedController < Sellers::BaseController
   def index
     authorize [:products, :archived, Link]
 
-    # Only an account with nothing archived at all gets bounced to the All products tab. A search
-    # that matches nothing must keep the seller on this tab with their query intact; the redirect
-    # used to fire for an empty result set too, silently switching tabs and dropping the search.
+    # Bounce only an account with nothing archived at all; a search that matches nothing must keep
+    # the seller on this tab with their query intact.
     return redirect_to products_url if index_params[:query].blank? && archived_products_page_presenter.empty?
 
     set_meta_tag(title: "Archived products")

@@ -327,6 +327,90 @@ RSpec.describe AudienceMember, :freeze_time do
       expect(filtered(affiliate_product_ids: [1, 2], created_after: 3.day.ago)).to eq([member3])
     end
 
+    context "with purchase_ids" do
+      it "applies price, country, date and subscription constraints before selecting the highest allowed id" do
+        matching = { product_id: 42, price_cents: 100, country: "United States", created_at: 3.days.ago.iso8601 }
+        purchases = [
+          matching.merge(id: 1),
+          matching.merge(id: 2),
+          matching.merge(id: 3, price_cents: 25),
+          matching.merge(id: 4, price_cents: 200),
+          matching.merge(id: 5, country: "Canada"),
+          matching.merge(id: 6, created_at: 7.days.ago.iso8601),
+          matching.merge(id: 7, created_at: 1.hour.ago.iso8601),
+          matching.merge(id: 8, subscription_cancelled: true),
+          matching.merge(id: 9),
+        ]
+        member = create(:audience_member, seller:, email: "buyer@example.com", purchases:)
+        params = { type: "customer", bought_product_ids: [42], paid_more_than_cents: 50, paid_less_than_cents: 150,
+                   bought_from: "United States", created_after: 5.days.ago, created_before: 1.day.ago, active_customers_only: true }
+
+        result = described_class.filter(seller_id:, params:, with_ids: true, ids: [member.id], purchase_ids: (1..8).to_a).sole
+
+        expect(result.id).to eq(member.id)
+        expect(result.purchase_id).to eq(2)
+      end
+
+      it "retains product-or-variant matching within the allowed purchases" do
+        member = create(:audience_member, seller:, email: "buyer@example.com", purchases: [
+                          { id: 1, product_id: 42 },
+                          { id: 2, product_id: 43, variant_ids: [7] },
+                          { id: 3, product_id: 44 },
+                        ])
+        params = { bought_product_ids: [42], bought_variant_ids: [7] }
+
+        result = described_class.filter(seller_id:, params:, with_ids: true, purchase_ids: [1, 2, 3]).sole
+
+        expect(result.id).to eq(member.id)
+        expect(result.purchase_id).to eq(2)
+      end
+
+      it "retains negative-only targeting across the member's entire purchase history" do
+        member = create(:audience_member, seller:, email: "buyer@example.com", purchases: [{ id: 1, product_id: 42 }, { id: 2, product_id: 43 }])
+
+        expect(described_class.filter(seller_id:, params: { not_bought_product_ids: [44] }, with_ids: true, purchase_ids: [1]).sole.purchase_id).to eq(1)
+        expect(described_class.filter(seller_id:, params: { not_bought_product_ids: [43] }, with_ids: true, ids: [member.id], purchase_ids: [1])).to be_empty
+      end
+
+      it "requires an allowed qualifying purchase with and without identity columns" do
+        member = create(:audience_member, seller:, email: "buyer@example.com", purchases: [{ id: 1 }], follower: {})
+
+        [false, true].each do |with_ids|
+          expect(described_class.filter(seller_id:, with_ids:, purchase_ids: [1]).to_a).to eq([member])
+          expect(described_class.filter(seller_id:, with_ids:, purchase_ids: [])).to be_empty
+          expect(described_class.filter(seller_id:, with_ids:, purchase_ids: [2])).to be_empty
+        end
+      end
+
+      it "keeps the as_of cutoff when selecting an allowed purchase" do
+        member = create(:audience_member, seller:, email: "buyer@example.com", created_at: 3.days.ago, purchases: [
+                          { id: 1, created_at: 2.days.ago.iso8601 },
+                          { id: 2, created_at: 1.hour.ago.iso8601 },
+                        ])
+
+        result = described_class.filter(seller_id:, with_ids: true, ids: [member.id], purchase_ids: [1, 2], as_of: 1.day.ago).sole
+
+        expect(result.purchase_id).to eq(1)
+      end
+
+      it "applies current license uses to the allowed purchases" do
+        product = create(:product, user: seller, is_licensed: true)
+        purchases = [0, 3, 5].map do |uses|
+          create(:purchase, link: product, email: "buyer@example.com").tap do |purchase|
+            create(:license, purchase:, link: product, uses:)
+          end
+        end
+        params = { bought_product_ids: [product.id], minimum_license_uses: 2 }
+        purchase_ids = purchases.first(2).map(&:id)
+
+        expect(described_class.filter(seller_id:, params:, with_ids: true, purchase_ids:).sole.purchase_id).to eq(purchases.second.id)
+
+        purchases.second.license.update!(uses: 0)
+
+        expect(described_class.filter(seller_id:, params:, with_ids: true, purchase_ids:)).to be_empty
+      end
+    end
+
     context "with_ids" do
       it "returns the members, including the last record id matching the filters" do
         member_1 = create_member(

@@ -389,6 +389,9 @@ class UrlRedirectsController < ApplicationController
     def trigger_files_lifecycle_events
       @url_redirect.update_transcoded_videos_last_accessed_at
       @url_redirect.enqueue_job_to_regenerate_deleted_transcoded_videos
+      # Stamped PDFs expire (ExpireStampedPdfsJob), and a stream_only file shows no Download
+      # button to restamp one on click, so recover on render the way videos do above.
+      @url_redirect.enqueue_job_to_regenerate_deleted_stamped_pdfs
     end
 
     def redirect_bundle_purchase_to_library_if_needed

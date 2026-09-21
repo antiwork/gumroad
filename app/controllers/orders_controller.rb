@@ -479,7 +479,7 @@ class OrdersController < ApplicationController
         :save_shipping_address, :card_expiry_month, :card_expiry_year, :stripe_status, :visual,
         :billing_agreement_id, :paypal_order_id, :stripe_payment_method_id, :stripe_customer_id, :stripe_setup_intent_id,
         :braintree_transient_customer_store_key, :braintree_device_data, :use_existing_card, :paymentToken,
-        :url_parameters, :is_gift, :giftee_email, :giftee_id, :gift_note, :referrer, :buyer_currency_quote,
+        :url_parameters, :is_gift, :giftee_email, :giftee_id, :gift_note, :hide_gifter, :referrer, :buyer_currency_quote,
         # The browser reports a client-side tokenization/setup failure (e.g. a failed 3DS on the
         # setup-intent lane) as a hash; permitting it as a scalar silently dropped it and every
         # such failure surfaced as the generic CREDIT_CARD_NOT_PROVIDED decline copy.

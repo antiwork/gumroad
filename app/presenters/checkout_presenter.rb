@@ -359,7 +359,7 @@ class CheckoutPresenter
       {
         clear_cart: true,
         add_products: [checkout_wishlist_product(wishlist_product, params)],
-        gift: { type: "anonymous", id: wishlist_product.wishlist.user.external_id, name: wishlist_product.wishlist.user.name_or_username, note: "" }
+        gift: { type: "anonymous", id: wishlist_product.wishlist.user.external_id, name: wishlist_product.wishlist.user.name_or_username, note: "", hideGifter: false }
       }
     end
 
@@ -437,6 +437,12 @@ class CheckoutPresenter
         price_cents: product.price_cents,
         buyer_currency_display:,
         supports_paypal: supports_paypal(product),
+        # Whole-cart opt-out: the PayPal button set is page-level, so the client ANDs this across
+        # every product in the cart before hiding PayPal's card funding button.
+        paypal_card_funding_disabled: product.user.paypal_card_funding_disabled?,
+        # Per-product for the surfaces that build their own payment config (the subscription manage
+        # page and the dashboard preview) and so never see checkoutPayment.stripe_link_enabled.
+        link_disabled: product.user.link_disabled?,
         custom_fields: product.custom_field_descriptors,
         exchange_rate: get_rate(product.price_currency_type).to_f / (is_currency_type_single_unit?(product.price_currency_type) ? 100 : 1),
         is_tiered_membership: product.is_tiered_membership,

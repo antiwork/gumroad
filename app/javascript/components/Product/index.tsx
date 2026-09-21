@@ -65,14 +65,13 @@ import {
   withConfiguredOncePerCartAmount,
 } from "$app/components/Product/ConfigurationSelector";
 import { Covers as CoversComponent } from "$app/components/Product/Covers";
-import { CtaButton } from "$app/components/Product/CtaButton";
 import { DiscountExpirationCountdown } from "$app/components/Product/DiscountExpirationCountdown";
 import { PriceTag } from "$app/components/Product/PriceTag";
 import { getBundleComparisonPriceCents, getStandalonePrice } from "$app/components/Product/pricing";
-import { initialOptionId, needsOptionChoice } from "$app/components/Product/purchaseReadiness";
+import { PurchaseButton } from "$app/components/Product/PurchaseButton";
+import { initialOptionId } from "$app/components/Product/purchaseReadiness";
 import { Ribbon } from "$app/components/Product/Ribbon";
 import { ShareSection } from "$app/components/Product/ShareSection";
-import { SubscriptionChoiceModal } from "$app/components/Product/SubscriptionChoiceModal";
 import { Thumbnail } from "$app/components/Product/Thumbnail";
 import { PublicFilesSettingsContext } from "$app/components/ProductEdit/ProductTab/DescriptionEditor";
 import { InstallmentPlan } from "$app/components/ProductEdit/state";
@@ -308,8 +307,6 @@ export const Product = ({
   hideSellerByline?: boolean | undefined;
 }) => {
   const [pageLoaded, setPageLoaded] = React.useState(false);
-  const [checkoutUrlForModal, setCheckoutUrlForModal] = React.useState<string | null>(null);
-  const loggedInUser = useLoggedInUser();
   const descriptionEditor = useRichTextEditor({
     // delay initialization to avoid errors in SSR
     initialValue: pageLoaded ? product.description_html : null,
@@ -326,7 +323,7 @@ export const Product = ({
 
   const selectionAttributes = applySelection(product, discountCode?.valid ? discountCode.discount : null, selection);
   let { basePriceCents } = selectionAttributes;
-  const { priceCents, discountedPriceCents, pppDiscounted, isPWYW, maxQuantity, selectedOption } = selectionAttributes;
+  const { priceCents, discountedPriceCents, pppDiscounted, maxQuantity, selectedOption } = selectionAttributes;
   React.useEffect(() => {
     if (maxQuantity !== null && selection.quantity > maxQuantity)
       setSelection?.({ ...selection, quantity: maxQuantity });
@@ -363,46 +360,8 @@ export const Product = ({
 
   const isBundle = product.bundle_products.length > 0;
   if (isBundle) basePriceCents = getStandalonePrice(product);
-  // What the price tag and the contents list below strike through as the
-  // "original price". Usually the same standalone sum, but on a bundle tier
-  // that costs extra there is no honest comparison to draw, so this is null
-  // and nothing is struck through. Kept separate from basePriceCents, which
-  // also drives whether the price tag renders at all.
+  // Paid bundle tiers have no standalone comparison; basePriceCents still controls price visibility.
   const comparisonPriceCents = isBundle ? getBundleComparisonPriceCents(product, selectedOption) : basePriceCents;
-
-  const validate = () => {
-    if (needsOptionChoice(product, selection)) {
-      configurationSelectorRef?.current?.scrollIntoView({ block: "nearest" });
-      configurationSelectorRef?.current?.focusRequiredInput();
-      return false;
-    }
-    if (isPWYW && (selection.price.value === null || selection.price.value < discountedPriceCents)) {
-      setSelection?.({ ...selection, price: { ...selection.price, error: true } });
-      if (selection.price.value === null) {
-        configurationSelectorRef?.current?.focusRequiredInput();
-        showAlert("You must input an amount", "warning");
-      } else if (selection.price.value < discountedPriceCents) {
-        const formattedMinPrice = formatBuyerLocalOrSetPrice(
-          discountedPriceCents,
-          {
-            currencyCode: product.currency_code,
-            buyerCurrency: product.buyer_currency,
-            buyerLocalCurrencyRate: product.buyer_local_currency_rate,
-            buyerLocalCurrencySubunitToUnit: product.buyer_local_currency_subunit_to_unit,
-          },
-          { symbolFormat: "short" },
-        );
-        configurationSelectorRef?.current?.focusRequiredInput();
-        showAlert(`Minimum price for this product is ${formattedMinPrice}.`, "error");
-      }
-      return false;
-    }
-    if (product.native_type === "call" && !selection.callStartTime) {
-      showAlert("You must select a date and time for the call", "warning");
-      return false;
-    }
-    return true;
-  };
 
   // The storefront-wrapped page's profile header already shows the seller, but not a
   // collaborator — keep the byline when there is one so the "with X" context survives.
@@ -687,7 +646,7 @@ export const Product = ({
               {product.duration_in_months === 1 ? "one month" : `${product.duration_in_months} months`}
             </Alert>
           ) : null}
-          <CtaButton
+          <PurchaseButton
             ref={ctaButtonRef}
             product={product}
             purchase={purchase}
@@ -695,21 +654,8 @@ export const Product = ({
             selection={selection}
             label={ctaLabel}
             showInstallmentPlanNotes
-            onClick={(e) => {
-              if (!validate()) {
-                e.preventDefault();
-                return;
-              }
-              if (
-                loggedInUser &&
-                purchase &&
-                (purchase.membership || purchase.subscription_has_lapsed) &&
-                product.is_recurring_billing
-              ) {
-                e.preventDefault();
-                setCheckoutUrlForModal(e.currentTarget.href);
-              }
-            }}
+            setSelection={setSelection}
+            configurationSelectorRef={configurationSelectorRef}
           />
           {purchase === null && !product.can_edit ? (
             <PurchaseRecoveryLink
@@ -773,13 +719,6 @@ export const Product = ({
           />
         ) : null}
       </section>
-      {purchase && (purchase.membership || purchase.subscription_has_lapsed) && product.is_recurring_billing ? (
-        <SubscriptionChoiceModal
-          purchase={purchase}
-          checkoutUrl={checkoutUrlForModal ?? ""}
-          onClose={() => setCheckoutUrlForModal(null)}
-        />
-      ) : null}
     </article>
   );
 };

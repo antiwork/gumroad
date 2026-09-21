@@ -295,6 +295,196 @@ describe SendPostBlastEmailsJob, :freeze_time do
       end
     end
 
+    describe "recipients who left the audience before the provider handoff" do
+      # `update_column` stands in for an eligibility change landing without the audience row
+      # being rebuilt (the projection converges out of band), then the assertion pins that the
+      # row really is stale — otherwise the examples would pass on a rebuilt row.
+      def leave_audience(purchase, **changes)
+        purchase.update_columns(**changes)
+        expect(AudienceMember.find_by!(seller_id: @seller.id, email: purchase.email).details["purchases"].pluck("id")).to include(purchase.id)
+      end
+
+      it "drops a customer whose purchase opted out after the row was built" do
+        opted_out = create(:purchase, :from_seller, seller: @seller)
+        still_contactable = create(:purchase, :from_seller, seller: @seller)
+        leave_audience(opted_out, can_contact: false)
+
+        post = create(:seller_post, :published, seller: @seller)
+        described_class.new.perform(create(:blast, :just_requested, post:).id)
+
+        expect_sent_count 1
+        expect_sent_email still_contactable.email
+      end
+
+      it "drops a customer whose purchase was refunded after the row was built" do
+        refunded = create(:purchase, :from_seller, seller: @seller)
+        leave_audience(refunded, stripe_refunded: true)
+
+        post = create(:seller_post, :published, seller: @seller)
+        described_class.new.perform(create(:blast, :just_requested, post:).id)
+
+        expect_sent_count 0
+      end
+
+      it "keeps a follower who also holds a purchase that left the audience" do
+        follower = create(:active_follower, user: @seller)
+        leave_audience(create(:purchase, :from_seller, seller: @seller, email: follower.email), can_contact: false)
+
+        post = create(:audience_post, :published, seller: @seller)
+        described_class.new.perform(create(:blast, :just_requested, post:).id)
+
+        expect_sent_count 1
+        expect_sent_email follower.email
+      end
+
+      it "drops a targeted purchase even when an unrelated purchase is still eligible" do
+        product_a = create(:product, user: @seller)
+        product_b = create(:product, user: @seller)
+        targeted = create(:purchase, :from_seller, seller: @seller, link: product_a)
+        create(:purchase, :from_seller, seller: @seller, link: product_b, email: targeted.email)
+        leave_audience(targeted, can_contact: false)
+
+        post = create(:product_post, :published, seller: @seller, link: product_a, bought_products: [product_a.unique_permalink])
+        described_class.new.perform(create(:blast, :just_requested, post:).id)
+
+        expect_sent_count 0
+      end
+
+      it "still sends a product post whose audience is not_bought_products of that product" do
+        excluded = create(:product, user: @seller)
+        other = create(:product, user: @seller)
+        buyer = create(:purchase, :from_seller, seller: @seller, link: other)
+        create(:purchase, :from_seller, seller: @seller, link: excluded)
+
+        post = create(:product_post, :published, seller: @seller, link: excluded, not_bought_products: [excluded.unique_permalink])
+        described_class.new.perform(create(:blast, :just_requested, post:).id)
+
+        expect_sent_count 1
+        expect_sent_email buyer.email
+      end
+
+      it "prepares the surviving matching purchase when the original one left the audience" do
+        surviving = create(:purchase, :from_seller, seller: @seller)
+        later = create(:purchase, :from_seller, seller: @seller, email: surviving.email)
+        leave_audience(later, can_contact: false)
+
+        post = create(:seller_post, :published, seller: @seller)
+        described_class.new.perform(create(:blast, :just_requested, post:).id)
+
+        expect_sent_count 1
+        expect_sent_email surviving.email, content_match: [
+          /#{unsubscribe_purchase_url(surviving.secure_external_id(scope: "unsubscribe"))}.*Unsubscribe/
+        ]
+      end
+
+      describe "replacement purchase selection" do
+        def opt_out_after_selection(job, purchase)
+          allow(job).to receive(:send_members).and_wrap_original do |method, members|
+            expect(members.sole.purchase_id).to eq(purchase.id)
+            leave_audience(purchase, can_contact: false)
+            method.call(members)
+          end
+        end
+
+        it "uses the qualifying purchase for links and personalization when the newest purchase opts out" do
+          product = create(:product, user: @seller)
+          email = "buyer@example.com"
+          create(:purchase, link: product, email:, price_cents: 500, full_name: "Excluded Buyer")
+          qualifying = create(:purchase, link: product, email:, price_cents: 10_000, full_name: "Qualifying Buyer")
+          newest = create(:purchase, link: product, email:, price_cents: 10_000, full_name: "Optedout Buyer")
+          post = create(:product_post, :published, seller: @seller, link: product,
+                                                   bought_products: [product.unique_permalink], paid_more_than_cents: 5_000, message: "Hello {{first_name}}")
+          job = described_class.new
+          opt_out_after_selection(job, newest)
+
+          job.perform(create(:blast, :just_requested, post:).id)
+
+          expect_sent_count 1
+          expect_sent_email email, content_match: [
+            /#{unsubscribe_purchase_url(qualifying.secure_external_id(scope: "unsubscribe"))}.*Unsubscribe/,
+            /Hello Qualifying/,
+          ]
+          expect(UrlRedirect.find_by!(installment: post).purchase_id).to eq(qualifying.id)
+        end
+
+        it "chooses the highest qualifying purchase id when multiple purchases survive" do
+          email = "buyer@example.com"
+          create(:purchase, :from_seller, seller: @seller, email:)
+          qualifying = create(:purchase, :from_seller, seller: @seller, email:)
+          newest = create(:purchase, :from_seller, seller: @seller, email:)
+          post = create(:seller_post, :published, seller: @seller)
+          job = described_class.new
+          opt_out_after_selection(job, newest)
+
+          job.perform(create(:blast, :just_requested, post:).id)
+
+          expect_sent_count 1
+          expect(PostSendgridApi.mails.fetch(email)[:custom_args]["purchase_id"]).to eq(qualifying.id.to_s)
+        end
+
+        it "does not replace a purchase with one acquired after the audience cutoff" do
+          email = "buyer@example.com"
+          original = create(:purchase, :from_seller, seller: @seller, email:, created_at: 2.hours.ago)
+          @seller.audience_members.find_by!(email:).update_column(:created_at, 2.hours.ago)
+          create(:purchase, :from_seller, seller: @seller, email:)
+          post = create(:seller_post, :published, seller: @seller)
+          blast = create(:blast, :just_requested, post:, started_at: 1.hour.ago)
+          job = described_class.new
+          opt_out_after_selection(job, original)
+
+          job.perform(blast.id)
+
+          expect_sent_count 0
+          expect(blast.reload.completed_at).to be_present
+        end
+      end
+
+      it "drops a follower whose remaining purchases no longer match an audience post filter" do
+        product_a = create(:product, user: @seller)
+        product_b = create(:product, user: @seller)
+        follower = create(:active_follower, user: @seller)
+        targeted = create(:purchase, :from_seller, seller: @seller, link: product_a, email: follower.email)
+        create(:purchase, :from_seller, seller: @seller, link: product_b, email: follower.email)
+        leave_audience(targeted, can_contact: false)
+
+        post = create(:audience_post, :published, seller: @seller, bought_products: [product_a.unique_permalink])
+        described_class.new.perform(create(:blast, :just_requested, post:).id)
+
+        expect_sent_count 0
+      end
+
+      it "excludes already-skipped recipients from a parent retry's published pending count" do
+        opted_out = create(:purchase, :from_seller, seller: @seller)
+        still_contactable = create(:purchase, :from_seller, seller: @seller)
+        leave_audience(opted_out, can_contact: false)
+
+        post = create(:seller_post, :published, seller: @seller)
+        blast = create(:blast, :just_requested, post:)
+        pending_key = RedisKey.blast_pending_recipients(blast.id)
+        skipped_key = RedisKey.blast_skipped_emails(blast.id)
+        allow_any_instance_of(described_class).to receive(:recipients_slice_size).and_return(1)
+        allow_any_instance_of(described_class).to receive(:load_audience_members).and_wrap_original do |method|
+          method.call.sort_by { _1.email == opted_out.email ? 0 : 1 }
+        end
+        allow(PostSendgridApi).to receive(:process).and_raise(StandardError, "provider down")
+
+        expect { described_class.new.perform(blast.id) }.to raise_error(StandardError, "provider down")
+        expect($redis.smembers(skipped_key)).to eq([opted_out.email])
+        expect($redis.get(pending_key).to_i).to eq(1)
+
+        allow(PostSendgridApi).to receive(:process).and_call_original
+        allow_any_instance_of(described_class).to receive(:mark_blast_as_completed)
+
+        described_class.new.perform(blast.id)
+
+        expect(PostSendgridApi.mails.keys).to eq([still_contactable.email])
+        expect($redis.get(pending_key).to_i).to eq(0)
+        expect(described_class.fully_delivered?(blast.reload)).to eq(true)
+      ensure
+        $redis.del(pending_key, skipped_key) if pending_key
+      end
+    end
+
     describe "Attachments and UrlRedirect" do
       before do
         @followers = create_list(:active_follower, 2, user: @seller)
@@ -1301,6 +1491,56 @@ describe SendPostBlastEmailsJob, :freeze_time do
 
       expect(batch_sizes).to all(be <= 2)
       expect(batch_sizes.sum).to eq(5)
+    end
+
+    it "does not pipeline skip membership when no skip set exists" do
+      post, = audience_post_with_followers(5)
+      blast = create(:blast, :just_requested, post:)
+      sismember_calls = 0
+      allow($redis).to receive(:pipelined).and_wrap_original do |original, &block|
+        original.call do |pipe|
+          allow(pipe).to receive(:sismember).and_wrap_original do |sismember, *args|
+            sismember_calls += 1
+            sismember.call(*args)
+          end
+          block.call(pipe)
+        end
+      end
+      allow_any_instance_of(described_class).to receive(:send_members)
+
+      described_class.new.perform(blast.id)
+
+      expect(sismember_calls).to eq(0)
+    end
+
+    it "checks skipped recipients in bounded Redis pipelines" do
+      stub_const("PostBlastSending::SKIP_MEMBERSHIP_SLICE_SIZE", 2)
+      post, = audience_post_with_followers(5)
+      blast = create(:blast, :just_requested, post:)
+      skipped_key = RedisKey.blast_skipped_emails(blast.id)
+      skipped_email = AudienceMember.find_by!(seller_id: post.seller_id).email
+      $redis.sadd(skipped_key, skipped_email)
+      pipeline_sizes = []
+      allow($redis).to receive(:pipelined).and_wrap_original do |original, &block|
+        sismember_count = 0
+        result = original.call do |pipe|
+          allow(pipe).to receive(:sismember).and_wrap_original do |sismember, *args|
+            sismember_count += 1
+            sismember.call(*args)
+          end
+          block.call(pipe)
+        end
+        pipeline_sizes << sismember_count if sismember_count.positive?
+        result
+      end
+      allow_any_instance_of(described_class).to receive(:send_members)
+
+      described_class.new.perform(blast.id)
+
+      expect(pipeline_sizes).to all(be <= 2)
+      expect(pipeline_sizes.sum).to eq(5)
+    ensure
+      $redis.del(skipped_key) if skipped_key
     end
 
     it "completes inline blasts without a slice partition" do

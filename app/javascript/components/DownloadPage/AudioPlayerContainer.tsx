@@ -3,6 +3,7 @@ import * as React from "react";
 
 import { createConsumptionEvent } from "$app/data/consumption_analytics";
 import { trackMediaLocationChanged } from "$app/data/media_location";
+import { isFinishedMediaLocation, persistableMediaLocation } from "$app/utils/mediaLocation";
 
 import { AudioPlayer } from "$app/components/AudioPlayer";
 import { useMediaUrls, usePurchaseInfo } from "$app/components/DownloadPage/WithContent";
@@ -27,7 +28,7 @@ export const AudioPlayerContainer = ({
   const { purchaseId, redirectId } = usePurchaseInfo();
   const [mediaUrls] = useMediaUrls();
   const [isPlaying, setIsPlaying] = React.useState(false);
-  const [duration, setDuration] = React.useState(0);
+  const duration = React.useRef(0);
   const mediaUrl = (mediaUrls[fileId] ?? [])[0];
 
   if (!mediaUrl) return null;
@@ -48,12 +49,13 @@ export const AudioPlayerContainer = ({
   const updateProgress = React.useCallback(
     throttle((currentTime: number) => {
       if (purchaseId == null) return;
-      setResumeLocation(currentTime);
+      const length = contentLength ?? duration.current;
+      setResumeLocation(isFinishedMediaLocation(currentTime, length) ? 0 : currentTime);
       void trackMediaLocationChanged({
         urlRedirectId: redirectId,
         productFileId: fileId,
         purchaseId,
-        location: contentLength !== null && currentTime > contentLength ? contentLength : currentTime,
+        location: persistableMediaLocation(currentTime, length),
       });
     }, LOCATION_TRACK_EVENT_DELAY),
     [],
@@ -62,12 +64,13 @@ export const AudioPlayerContainer = ({
   const onEnded = () => {
     pauseAudio();
     updateProgress.cancel();
-    if (purchaseId == null) return;
+    const length = contentLength ?? duration.current;
+    if (purchaseId == null || !(length > 0)) return;
     void trackMediaLocationChanged({
       urlRedirectId: redirectId,
       productFileId: fileId,
       purchaseId,
-      location: contentLength === null ? duration : contentLength,
+      location: length,
     });
   };
 
@@ -84,12 +87,13 @@ export const AudioPlayerContainer = ({
           urlRedirectId: redirectId,
           productFileId: fileId,
           purchaseId,
-          location: contentLength !== null && currentTime > contentLength ? contentLength : currentTime,
+          location: persistableMediaLocation(currentTime, contentLength ?? duration.current),
         });
       }}
       onEnded={onEnded}
-      onLoadedMetadata={(duration: number) => {
-        setDuration(duration);
+      onLoadedMetadata={(loadedDuration: number) => {
+        duration.current = loadedDuration;
+        if (isFinishedMediaLocation(resumeLocation, contentLength ?? loadedDuration)) setResumeLocation(0);
         void createConsumptionEvent({
           eventType: "listen",
           urlRedirectId: redirectId,
@@ -98,6 +102,7 @@ export const AudioPlayerContainer = ({
         });
       }}
       startTime={resumeLocation}
+      contentLength={contentLength}
     />
   );
 };

@@ -2,8 +2,7 @@ import type { Option, PriceSelection, Product } from "$app/components/Product/Co
 
 export const INCOMPLETE_PURCHASE_CTA_LABEL = "Choose an option";
 
-// Whether the picker can actually offer this option right now: the ConfigurationSelector mirrors
-// this exact rule to render the radio disabled.
+// Keep availability in sync with disabled option radios in ConfigurationSelector.
 const isSelectable = (
   product: Pick<Product, "is_tiered_membership">,
   selection: Pick<PriceSelection, "recurrence">,
@@ -20,22 +19,14 @@ export const initialOptionId = (
     (option: Option) => option.id === searchParams.get("option") || option.name === searchParams.get("variant"),
   );
   if (requested && requested.quantity_left !== 0) return requested.id;
-  // Coffee amount tabs are presets with "Other" as an explicit escape hatch, not SKUs to choose
-  // between, so the first in-stock preset stays the default.
+  // Coffee defaults to the first available preset; a blank option represents "Other".
   if (product.options.length <= 1 || product.native_type === "coffee") {
     return product.options.find((option: Option) => option.quantity_left !== 0)?.id ?? null;
   }
   return null;
 };
 
-/**
- * Whether the buyer still has to pick a SKU before the CTA can mean anything — the only state that
- * relabels the button, holds the checkout back, and sends the click to the option radios. A product
- * with nothing left to pick (every option sold out, or unpriced for the chosen recurrence, or hidden
- * because it is sold out) is not asking a question, so it keeps the plain CTA and lets checkout
- * report the real reason. Coffee is excluded: a blank optionId there is the deliberate "Other"
- * amount.
- */
+// Only request a choice when an option is available. Coffee's blank option means "Other".
 export const needsOptionChoice = (
   product: Pick<Product, "options" | "native_type" | "is_tiered_membership">,
   selection: Pick<PriceSelection, "optionId" | "recurrence">,

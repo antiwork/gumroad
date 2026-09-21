@@ -6,36 +6,13 @@ class McpConnectorsController < ApplicationController
   CLIENTS = {
     "muse" => {
       label: "Muse",
-      subtitle: "Muse connector",
-      title: "Ask Muse.<br class=\"sm:hidden\"> It sells on Gumroad.",
-      description: "Connect Muse to a Gumroad account. The agent can list products and sales, draft a product, publish it, and check payouts. People reach a creator just by asking.",
-      meta_title: "Gumroad for Muse",
-      meta_description: "Connect Muse to Gumroad. Creators can ask Muse to list sales, draft a product, publish it, and check payouts.",
-      how_intro: "You bring Gumroad. Muse brings the agent.",
-      connect_title: "Paste this into Muse",
-      first_card: "OAuth the Gumroad account in Muse. After that, “what did I sell today?” and “draft a $19 guide” run against the live store."
+      setup: "Add a remote MCP server in your client using the URL below. Choose OAuth when the client requests an authentication method.",
+      availability: "Requires a Muse client with support for remote MCP servers and OAuth."
     },
     "claude" => {
       label: "Claude",
-      subtitle: "Claude connector",
-      title: "Ask Claude.<br class=\"sm:hidden\"> It sells on Gumroad.",
-      description: "Add Gumroad as a custom connector in Claude. It can list products and sales, draft a product, publish it, and check payouts for the connected creator.",
-      meta_title: "Gumroad for Claude",
-      meta_description: "Connect Claude to Gumroad. Creators can ask Claude to list sales, draft a product, publish it, and check payouts.",
-      how_intro: "You bring Gumroad. Claude brings the agent.",
-      connect_title: "Paste this into Claude",
-      first_card: "In Claude, Customize → Connectors → Add custom connector. Paste the MCP URL. Claude opens Gumroad so the creator can authorize."
-    },
-    "chatgpt" => {
-      label: "ChatGPT",
-      subtitle: "ChatGPT connector",
-      title: "Ask ChatGPT.<br class=\"sm:hidden\"> It sells on Gumroad.",
-      description: "Add Gumroad as a ChatGPT connector. It can list products and sales, draft a product, publish it, and check payouts for the connected creator.",
-      meta_title: "Gumroad for ChatGPT",
-      meta_description: "Connect ChatGPT to Gumroad. Creators can ask ChatGPT to list sales, draft a product, publish it, and check payouts.",
-      how_intro: "You bring Gumroad. ChatGPT brings the agent.",
-      connect_title: "Paste this into ChatGPT",
-      first_card: "In ChatGPT, turn on developer mode, then create a connector with the MCP URL. ChatGPT opens Gumroad so the creator can authorize."
+      setup: "Open the Connectors settings in Claude. Add a custom connector with the URL below.",
+      availability: "Custom connector access depends on your Claude plan and workspace settings."
     }
   }.freeze
 
@@ -59,8 +36,8 @@ class McpConnectorsController < ApplicationController
 
     def set_meta_data
       page_url = "#{PROTOCOL}://#{DOMAIN}/#{@client_key}"
-      title = @client[:meta_title]
-      description = @client[:meta_description]
+      title = "Gumroad MCP for #{@client[:label]} | Sell digital products"
+      description = "Connect #{@client[:label]} to Gumroad with MCP. Create digital product drafts, publish products, check sales, and track payouts from your AI chat."
 
       set_meta_tag(title:)
       set_meta_tag(name: "description", content: description)

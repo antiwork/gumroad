@@ -40,6 +40,7 @@ const cartProduct = (overrides: Partial<CartProduct> = {}): CartProduct => ({
   custom_fields: [],
   require_shipping: false,
   supports_paypal: null,
+  paypal_card_funding_disabled: false,
   has_offer_codes: false,
   has_tipping_enabled: false,
   analytics: { google_analytics_id: null, facebook_pixel_id: null, tiktok_pixel_id: null, free_sales: false },

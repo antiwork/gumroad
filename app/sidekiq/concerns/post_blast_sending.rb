@@ -41,6 +41,9 @@ module PostBlastSending
   # attempt passes its full (six-figure) audience through here.
   ALREADY_EMAILED_SLICE_SIZE = 1_000
 
+  # Parent retries pass the full audience; keep each SISMEMBER pipeline bounded.
+  SKIP_MEMBERSHIP_SLICE_SIZE = 1_000
+
   # Publishes how many recipients this attempt still owes the ESPs, so a monitor can tell a
   # blast that died mid-send from one that died after the last handoff but before the stamp
   # below (gumroad-private#2250). Written per attempt, after filtering: a retry owes only
@@ -48,10 +51,6 @@ module PostBlastSending
   # can still be distinguished from completed-but-unstamped ones.
   def start_pending_recipients
     $redis.set(RedisKey.blast_pending_recipients(@blast.id), @members.size, ex: PENDING_RECIPIENTS_TTL.to_i)
-  end
-
-  def decrement_pending_recipients(count)
-    $redis.decrby(RedisKey.blast_pending_recipients(@blast.id), count)
   end
 
   def send_members(members)
@@ -74,18 +73,27 @@ module PostBlastSending
   # one duplicate provider slice, which is visible and bounded.
   def send_provider_slice(provider:, members:, cache:)
     renew_chunk_claim! if respond_to?(:renew_chunk_claim!, true)
+    # Skipped first: a recipient an earlier execution already charged and recorded must not be
+    # sent to or charged twice. The count is then taken BEFORE the sent-row filter, because an
+    # execution is charged for every member the published count still holds — including one whose
+    # row was written by an execution that died before its own decrement.
+    members = drop_members_already_skipped_from_audience(members)
     owed = members.size
     members = drop_members_already_sent(members)
-    return decrement_pending_recipients(owed) if members.empty?
+    kept, dropped = partition_members_that_left_the_audience(members)
+    if kept.empty?
+      settle_pending_recipients(dropped, owed)
+      return
+    end
 
-    recipients = prepare_recipients(members)
+    recipients = prepare_recipients(kept)
     deliver_provider_slice(provider: provider, recipients: recipients, cache: cache)
     if @blast.to_non_openers?
-      mark_members_sent_in_this_blast(members)
+      mark_members_sent_in_this_blast(kept)
     else
-      store_recipients_as_sent(members)
+      store_recipients_as_sent(kept)
     end
-    decrement_pending_recipients(owed)
+    settle_pending_recipients(dropped, owed)
   end
 
   def deliver_provider_slice(provider:, recipients:, cache:)
@@ -245,7 +253,8 @@ module PostBlastSending
     $redis.del(*[snapshot_key, "#{snapshot_key}:tmp", checkpoint_key, "#{checkpoint_key}:tmp",
                  RedisKey.blast_pending_recipients(@blast.id), RedisKey.blast_done_slices(@blast.id),
                  RedisKey.blast_active_slice_partition(@blast.id), partition_chunks_key,
-                 RedisKey.blast_quota_deferred_until(@blast.id), RedisKey.blast_quota_admitted(@blast.id)].compact)
+                 RedisKey.blast_quota_deferred_until(@blast.id), RedisKey.blast_quota_admitted(@blast.id),
+                 RedisKey.blast_skipped_emails(@blast.id)].compact)
   end
 
   # Re-checked right before each provider call: the chunk-level filter ran once at the start
@@ -258,6 +267,83 @@ module PostBlastSending
     return members if already_sent.empty?
 
     members.reject { already_sent.include?(_1.email) }
+  end
+
+  # Recheck live purchase eligibility at the provider handoff: the audience row is
+  # rebuilt out of band, so a slice can still carry someone who has since left.
+  # Matching this post's targeting can only ever remove a recipient.
+  def partition_members_that_left_the_audience(members)
+    return [members, []] if members.empty?
+    # A follower or affiliate post reaches people the purchase predicate says nothing about.
+    buyer_post = @post.seller_or_product_or_variant_type?
+    return [members, []] unless buyer_post || @post.audience_type?
+
+    details_by_member_id = AudienceMember.where(id: members.map(&:id)).select(:id, :details).index_by(&:id)
+    purchase_ids = details_by_member_id.values.flat_map { Array.wrap(_1.details["purchases"]).pluck("id") }.uniq
+    eligible_purchase_ids = Purchase.includes(:subscription).where(id: purchase_ids).filter_map { |purchase| purchase.id if purchase.should_be_audience_member? }
+    # Apply the original detail predicates and MAX(purchase_id) after removing ineligible
+    # purchases, retaining the cutoff when the parent rebuilt a dated audience.
+    qualifying_purchase_ids = if eligible_purchase_ids.empty?
+      {}
+    else
+      AudienceMember.filter(seller_id: @post.seller_id, params: audience_filters, with_ids: true,
+                            ids: members.map(&:id), purchase_ids: eligible_purchase_ids, as_of: @audience_as_of)
+        .pluck(:id, :purchase_id).to_h
+    end
+    allow_non_purchase_recipients = !buyer_post && !purchase_targeted?
+
+    kept, dropped = members.partition do |member|
+      details = details_by_member_id[member.id]&.details || {}
+      if (purchase_id = qualifying_purchase_ids[member.id])
+        member.purchase_id = purchase_id
+        true
+      else
+        allow_non_purchase_recipients && (details["follower"].present? || details["affiliates"].present?)
+      end
+    end
+    Rails.logger.info("[#{self.class.name}] blast_id=#{@blast.id} dropped #{dropped.size} recipients who left the audience") if dropped.any?
+    [kept, dropped]
+  end
+
+  # Audience selection uses bought_* filters, not the post's own link/variant.
+  # A product (or variant) post with only not_bought_* still reaches buyers of
+  # other products; treating link_id as required targeting would drop all of them.
+  def purchase_targeted?
+    audience_filters.values_at(:bought_product_ids, :bought_variant_ids).any?(&:present?)
+  end
+
+  def audience_filters
+    @filters || @post.audience_members_filter_params
+  end
+
+  def drop_members_already_skipped_from_audience(members)
+    return members if members.empty?
+
+    key = RedisKey.blast_skipped_emails(@blast.id)
+    return members unless $redis.exists?(key)
+
+    members.each_slice(SKIP_MEMBERSHIP_SLICE_SIZE).flat_map do |slice|
+      flags = $redis.pipelined do |pipe|
+        slice.each { |member| pipe.sismember(key, member.email) }
+      end
+      slice.zip(flags).filter_map { |member, skipped| member unless skipped == true || skipped == 1 }
+    end
+  end
+
+  # Records this slice's skips and charges them to the published count in one atomic step.
+  # Split into two calls, a crash in between leaves a member marked as skipped — that marker is
+  # what makes a retry drop them — with the count still charged for them, and no later execution
+  # can settle it.
+  def settle_pending_recipients(skipped, owed)
+    emails = skipped.map(&:email)
+    key = RedisKey.blast_skipped_emails(@blast.id)
+    $redis.multi do |tx|
+      unless emails.empty?
+        tx.sadd(key, emails)
+        tx.expire(key, PENDING_RECIPIENTS_TTL.to_i)
+      end
+      tx.decrby(RedisKey.blast_pending_recipients(@blast.id), owed)
+    end
   end
 
   # Only after the provider accepted, so a row here always has an email behind it. A transient

@@ -224,6 +224,31 @@ describe("createPurchasesRequestData wallet_type threading", () => {
     expect(data).not.toHaveProperty("wallet_type");
   });
 
+  it("sends hide_gifter when the buyer chose to stay anonymous to the recipient", () => {
+    const data = createPurchasesRequestData(
+      {
+        ...payloadWith({ type: "not-applicable" }),
+        giftInfo: { gifteeEmail: "giftee@example.com", giftNote: "Happy birthday!", hideGifter: true },
+      },
+      {},
+    );
+
+    expect(data.giftee_email).toBe("giftee@example.com");
+    expect(data.hide_gifter).toBe(true);
+  });
+
+  it("sends hide_gifter false when the buyer did not opt in", () => {
+    const data = createPurchasesRequestData(
+      {
+        ...payloadWith({ type: "not-applicable" }),
+        giftInfo: { gifteeEmail: "giftee@example.com", giftNote: "" },
+      },
+      {},
+    );
+
+    expect(data.hide_gifter).toBe(false);
+  });
+
   // Buyer-currency presentment: an eligible wallet purchase must carry the quote token, or the
   // charge silently falls back to canonical USD and the buyer is charged a total that isn't the
   // one their wallet sheet showed. Pinned per lane because the two lanes build their params

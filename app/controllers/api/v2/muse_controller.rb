@@ -3,7 +3,7 @@
 class Api::V2::MuseController < Api::V2::BaseController
   skip_before_action :verify_authenticity_token
   # Parse before inherited callbacks access params so malformed JSON gets a JSON-RPC error.
-  prepend_before_action :parse_rpc_body, only: :mcp
+  prepend_before_action :validate_mcp_origin, :parse_rpc_body, only: :mcp
   # view_public is the access-token default scope but is absent from public_scopes, so a
   # default-scope token was rejected here before any tool's own scope check ran.
   before_action(only: [:mcp]) { doorkeeper_authorize!(*Doorkeeper.configuration.public_scopes, :view_public) }
@@ -50,6 +50,11 @@ class Api::V2::MuseController < Api::V2::BaseController
   end
 
   private
+    def validate_mcp_origin
+      origin = request.headers["Origin"]
+      head :forbidden unless origin.nil? || origin == base_url
+    end
+
     def doorkeeper_unauthorized_render_options(*)
       response.set_header(
         "WWW-Authenticate",

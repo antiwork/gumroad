@@ -233,6 +233,41 @@ describe "Muse MCP" do
     end
   end
 
+  describe "MCP Origin validation" do
+    before do
+      @token = create("doorkeeper/access_token", application: @app, resource_owner_id: @seller.id, scopes: "edit_products")
+    end
+
+    %w[muse claude chatgpt].each do |client|
+      it "rejects untrusted origins before writing through #{client}" do
+        ["https://untrusted.example", "null", "", "#{PROTOCOL}://#{DOMAIN}.example"].each do |origin|
+          expect do
+            post "/#{client}/v1/mcp",
+                 params: { jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "create_draft_product", arguments: { name: "Field notes", price_cents: 1900 } } }.to_json,
+                 headers: { "HOST" => DOMAIN, "CONTENT_TYPE" => "application/json", "Authorization" => "Bearer #{@token.token}", "Origin" => origin }
+          end.not_to change(Link, :count)
+          expect(response).to have_http_status(:forbidden)
+        end
+      end
+
+      it "rejects an untrusted GET origin on #{client}" do
+        get "/#{client}/v1/mcp", headers: { "HOST" => DOMAIN, "Authorization" => "Bearer #{@token.token}", "Origin" => "https://untrusted.example" }
+        expect(response).to have_http_status(:forbidden)
+      end
+
+      it "accepts the canonical origin and absent origins on #{client}" do
+        [nil, "#{PROTOCOL}://#{DOMAIN}"].each do |origin|
+          headers = { "HOST" => DOMAIN, "CONTENT_TYPE" => "application/json", "Authorization" => "Bearer #{@token.token}" }
+          headers["Origin"] = origin unless origin.nil?
+          post "/#{client}/v1/mcp", params: { jsonrpc: "2.0", id: 1, method: "ping" }.to_json, headers: headers
+
+          expect(response).to have_http_status(:ok)
+          expect(response.parsed_body).to eq("jsonrpc" => "2.0", "id" => 1, "result" => {})
+        end
+      end
+    end
+  end
+
   context "with a view_sales token" do
     before do
       @token = create("doorkeeper/access_token", application: @app, resource_owner_id: @seller.id, scopes: "view_sales")

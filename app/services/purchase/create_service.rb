@@ -402,7 +402,13 @@ class Purchase::CreateService < Purchase::BaseService
       raise Purchase::PurchaseInvalid, "Gift purchases cannot be on installment plans." if params[:pay_in_installments]
 
       if product.can_gift?
-        gift = product.gifts.build(giftee_email:, gift_note: gift_params[:gift_note], gifter_email: params[:purchase][:email], is_recipient_hidden: gift_params[:giftee_email].blank?)
+        gift = product.gifts.build(
+          giftee_email:,
+          gift_note: gift_params[:gift_note],
+          gifter_email: params[:purchase][:email],
+          is_recipient_hidden: gift_params[:giftee_email].blank?,
+          is_gifter_hidden: ActiveRecord::Type::Boolean.new.cast(gift_params[:hide_gifter]),
+        )
         error_message = gift.save ? nil : gift.errors.full_messages[0]
         raise Purchase::PurchaseInvalid, error_message if error_message.present?
 
@@ -456,8 +462,12 @@ class Purchase::CreateService < Purchase::BaseService
     def validate_bundle_products
       return unless product.is_bundle?
 
+      # Not every client echoes the bundle contents back (the checkout page always does), so an
+      # absent key is a contents mismatch, not a reason to raise.
+      submitted_bundle_products = params[:bundle_products] || []
+
       product.bundle_products.alive.each do |bundle_product|
-        if params[:bundle_products].none? { _1[:product_id] == bundle_product.product.external_id && _1[:variant_id] == bundle_product.variant&.external_id && _1[:quantity].to_i == bundle_product.quantity }
+        if submitted_bundle_products.none? { _1[:product_id] == bundle_product.product.external_id && _1[:variant_id] == bundle_product.variant&.external_id && _1[:quantity].to_i == bundle_product.quantity }
           raise Purchase::PurchaseInvalid, "The bundle's contents have changed. Please refresh the page!"
         end
 

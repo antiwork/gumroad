@@ -21,10 +21,10 @@ import {
   ConfigurationSelectorHandle,
   PriceSelection,
 } from "$app/components/Product/ConfigurationSelector";
-import { CtaButton } from "$app/components/Product/CtaButton";
 import { PriceTag } from "$app/components/Product/PriceTag";
 import { getBundleComparisonPriceCents } from "$app/components/Product/pricing";
-import { isSelectionComplete, needsOptionChoice } from "$app/components/Product/purchaseReadiness";
+import { PurchaseButton } from "$app/components/Product/PurchaseButton";
+import { needsOptionChoice } from "$app/components/Product/purchaseReadiness";
 import {
   Action,
   AddSectionButton,
@@ -190,6 +190,7 @@ export const Layout = (
         discountCode={discountCode ?? null}
         ctaLabel={ctaLabel}
         selection={selection}
+        setSelection={setSelection}
         ctaButtonRef={ctaButtonRef}
         configurationSelectorRef={configurationSelectorRef}
         hasHero={!!hasHero}
@@ -221,6 +222,7 @@ const CtaBar = ({
   configurationSelectorRef,
   ctaLabel,
   selection,
+  setSelection,
   hasHero,
 }: {
   product: Product;
@@ -230,6 +232,7 @@ const CtaBar = ({
   configurationSelectorRef: React.RefObject<ConfigurationSelectorHandle>;
   ctaLabel?: string | undefined;
   selection: PriceSelection;
+  setSelection: React.Dispatch<React.SetStateAction<PriceSelection>>;
   hasHero: boolean;
 }) => {
   const selectionAttributes = applySelection(product, discountCode?.valid ? discountCode.discount : null, selection);
@@ -242,20 +245,30 @@ const CtaBar = ({
 
   React.useEffect(() => {
     if (!ctaButtonRef.current) return;
-    new IntersectionObserver(
+    const observer = new IntersectionObserver(
       ([entry]) => {
         if (!entry) return;
 
         setVisible(!entry.isIntersecting);
       },
       { threshold: 0.5 },
-    ).observe(ctaButtonRef.current);
-  }, [ctaButtonRef.current]);
+    );
+    observer.observe(ctaButtonRef.current);
+    return () => observer.disconnect();
+  }, [ctaButtonRef]);
 
-  const height = ref.current?.getBoundingClientRect().height ?? 0;
+  const [height, setHeight] = React.useState(0);
+  React.useEffect(() => {
+    const element = ref.current;
+    if (!element) return;
+    const updateHeight = () => setHeight(element.getBoundingClientRect().height);
+    updateHeight();
+    const observer = new ResizeObserver(updateHeight);
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, []);
 
-  // Same comparison rule as the main price tag: only a tier that adds nothing to
-  // the bundle's price can honestly be compared against the standalone sum.
+  // Paid bundle tiers have no standalone price comparison.
   const bundleComparisonPriceCents = getBundleComparisonPriceCents(product, selectedOption);
   if (bundleComparisonPriceCents !== null) priceCents = bundleComparisonPriceCents;
 
@@ -284,8 +297,6 @@ const CtaBar = ({
     >
       <div
         ref={ref}
-        // Below sm the price and CTA are both nowrap and do not fit side by side (Instagram's
-        // WebView is ~280px), so stack them instead of letting them overlap.
         className="mx-auto flex max-w-product-page items-center justify-between gap-2 p-4 max-sm:flex-col max-sm:items-stretch lg:gap-4 lg:px-8"
         style={{
           transition: "var(--transition-duration)",
@@ -325,27 +336,14 @@ const CtaBar = ({
           <RatingsSummary className="hidden lg:flex" ratings={product.ratings} />
         ) : null}
         <div className="flex shrink-0 items-center gap-2 max-sm:flex-col max-sm:items-stretch">
-          <CtaButton
+          <PurchaseButton
             product={product}
             purchase={purchase}
             discountCode={discountCode ?? null}
             selection={selection}
             label={ctaLabel}
-            onClick={(evt) => {
-              // The bar mirrors the in-page CTA's validation and holds the click back only while the
-              // buyer still owes the page a choice: PWYW always hands off (that CTA owns the
-              // minimum-price rule), and isSelectionComplete covers the missing SKU, amount and call
-              // time. Rent, quantity and recurrence controls merely existing is not a missing choice —
-              // intercepting for those is what made bar taps feel dead, and the defaults the bar
-              // sends (buy, quantity 1, seller's default plan) are the same ones that CTA sends.
-              if (isPWYW || !isSelectionComplete(product, selection)) {
-                evt.preventDefault();
-                configurationSelectorRef.current?.scrollIntoView({ block: "nearest" });
-                configurationSelectorRef.current?.focusRequiredInput();
-                if (!needsOptionChoice(product, selection) && isPWYW && selection.price.value === null)
-                  showAlert("You must input an amount", "warning");
-              }
-            }}
+            setSelection={setSelection}
+            configurationSelectorRef={configurationSelectorRef}
           />
         </div>
       </div>

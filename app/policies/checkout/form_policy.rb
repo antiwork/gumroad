@@ -15,7 +15,7 @@ class Checkout::FormPolicy < ApplicationPolicy
 
   def permitted_attributes
     {
-      user: [:display_offer_code_field, :recommendation_type, :tipping_enabled, :ach_payments_enabled, :gifting_disabled],
+      user: [:display_offer_code_field, :recommendation_type, :tipping_enabled, :ach_payments_enabled, :gifting_disabled, :link_disabled, :paypal_card_funding_disabled],
       custom_fields: [[:id, :type, :name, :required, :global, :collect_per_product, { products: [] }]]
     }
   end

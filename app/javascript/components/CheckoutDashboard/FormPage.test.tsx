@@ -36,7 +36,7 @@ vi.mock("$app/components/LoggedInUser", () => ({
 }));
 vi.mock("$app/components/CheckoutDashboard/PayPalConnectSection", () => ({ default: () => null }));
 
-const props = (giftingDisabled: boolean): FormPageProps => ({
+const props = (giftingDisabled: boolean, user: Partial<FormPageProps["user"]> = {}): FormPageProps => ({
   pages: [],
   user: {
     display_offer_code_field: false,
@@ -44,6 +44,9 @@ const props = (giftingDisabled: boolean): FormPageProps => ({
     tipping_enabled: false,
     ach_payments_enabled: false,
     gifting_disabled: giftingDisabled,
+    link_disabled: false,
+    paypal_card_funding_disabled: false,
+    ...user,
   },
   cart_item: PLACEHOLDER_CART_ITEM,
   card_product: null,
@@ -86,5 +89,25 @@ describe("FormPage gifting preview", () => {
     fireEvent.click(screen.getByRole("switch", { name: /purchase your products as gifts/u }));
 
     expect(screen.queryByText("Give as a gift?")).toBeNull();
+  });
+});
+
+describe("FormPage payment method switches", () => {
+  afterEach(cleanup);
+
+  const switchFor = (name: RegExp) => screen.getByRole("switch", { name });
+
+  it("offers Link and PayPal's card funding button by default", () => {
+    render(<FormPage {...props(false)} />);
+
+    expect(switchFor(/offer stripe link at checkout/iu)).toHaveProperty("checked", true);
+    expect(switchFor(/show paypal's debit or credit card button/iu)).toHaveProperty("checked", true);
+  });
+
+  it("shows a seller who has switched both off as unchecked", () => {
+    render(<FormPage {...props(false, { link_disabled: true, paypal_card_funding_disabled: true })} />);
+
+    expect(switchFor(/offer stripe link at checkout/iu)).toHaveProperty("checked", false);
+    expect(switchFor(/show paypal's debit or credit card button/iu)).toHaveProperty("checked", false);
   });
 });

@@ -267,6 +267,16 @@ class Rack::Attack
                             period: 60.seconds,
                             throttle_params: Proc.new { |req| req.host }
 
+  # A repeating search must be refused by us, well under the zone-wide edge limit that otherwise blocks
+  # the whole IP. Keyed on IP alone so every format suffix shares one bucket; GET/HEAD only, since a
+  # flood of other verbs is rejected by routing anyway but would still spend the bucket.
+  # Initial: 300rpm, Max: 1500 requests/9 hours
+  throttle_with_exponential_backoff(name: "products_search/ip", requests: 300, period: 60.seconds) do |req|
+    if %w[GET HEAD].include?(req.request_method) && req.path.match?(%r{\A/products/search(?:\.[^/]+)?\z})
+      req.remote_ip
+    end
+  end
+
   # Initial: 10rpm, Max: 60 requests/3 days (per user)
   throttle_by_params path: "/two-factor",
                      requests: 10,

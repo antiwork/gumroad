@@ -418,6 +418,25 @@ class PaypalChargeProcessor
     end
   end
 
+  # PayPal's refund status is the only place a refund we accepted can turn out to have
+  # failed after the fact. Non-2xx raises, so callers must treat a raise as "unknown" —
+  # never as a failure — and leave the refund alone.
+  def self.fetch_refund_status(processor_refund_id:, merchant_account:)
+    paypal_rest_api = PaypalRestApi.new
+    api_response = paypal_rest_api.fetch_refund(refund_id: processor_refund_id, merchant_account:)
+
+    log_paypal_api_response("Fetch Refund", processor_refund_id, api_response)
+    if paypal_rest_api.successful_response?(api_response)
+      api_response.result.status
+    else
+      issue = paypal_rejection_issue(api_response)
+      issue ||= api_response.result.error if api_response.result.respond_to?(:error)
+      raise ChargeProcessorInvalidRequestError.new(
+        build_error_message(api_response.status_code, api_response.result), processor_error_code: issue
+      )
+    end
+  end
+
   def self.paypal_order_info(purchase)
     merchant_account = purchase.merchant_account || purchase.seller.merchant_account(charge_processor_id)
     currency = merchant_account.currency

@@ -19,7 +19,7 @@ class ReviewsPresenter
           product: product_props(product),
         )
       end,
-      purchases: user.purchases.allowing_reviews_to_be_counted.where.missing(:product_review).joins(:link).merge(Link.visible).preload(:seller, link: [:user, :thumbnail_alive]).order(created_at: :desc).filter_map do |purchase|
+      purchases: user.purchases.not_is_deleted_by_buyer.allowing_reviews_to_be_counted.where.missing(:product_review).joins(:link).merge(Link.visible).preload(:seller, link: [:user, :thumbnail_alive]).order(created_at: :desc).filter_map do |purchase|
         if !purchase.seller.disable_reviews_after_year? || purchase.created_at > 1.year.ago
           product = purchase.link
           {

@@ -1285,6 +1285,23 @@ describe Purchase::CreateService, :vcr do
       end
     end
 
+    context "when the client does not submit the bundle contents" do
+      before do
+        params[:purchase][:perceived_price_cents] = 100
+        params.delete(:bundle_products)
+      end
+
+      it "returns an error instead of raising" do
+        _, error = Purchase::CreateService.new(
+          product:,
+          params:,
+          buyer:
+        ).perform
+
+        expect(error).to eq("The bundle's contents have changed. Please refresh the page!")
+      end
+    end
+
     context "when a component product is sold out" do
       # The component is taken to its cap by real sales rather than by setting the counter directly,
       # so remaining_for_sale_count is derived the same way it is in production.
@@ -3050,6 +3067,7 @@ describe Purchase::CreateService, :vcr do
       expect(gift.gift_note).to eq "Happy birthday!"
       expect(gift.giftee_email).to eq "giftee@gumroad.com"
       expect(gift.gifter_email).to eq "gifter@gumroad.com"
+      expect(gift.is_gifter_hidden).to eq false
 
       giftee_purchase = gift.giftee_purchase
       expect(giftee_purchase.quantity).to eq 1
@@ -3434,6 +3452,15 @@ describe Purchase::CreateService, :vcr do
         expect(purchase.gift.is_recipient_hidden).to eq true
         expect(purchase.gift.giftee_purchase.purchaser).to eq giftee
       end
+    end
+
+    it "hides the gifter from the recipient when hide_gifter is set" do
+      gift_params[:gift][:hide_gifter] = true
+
+      purchase, _ = Purchase::CreateService.new(product:, params: gift_params).perform
+
+      expect(purchase.gift.is_gifter_hidden).to eq true
+      expect(purchase.gift.giftee_purchase.gifter_hidden_from_recipient?).to eq true
     end
 
     context "but is missing giftee email" do

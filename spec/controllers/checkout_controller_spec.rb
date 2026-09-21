@@ -31,6 +31,7 @@ describe CheckoutController, type: :controller, inertia: true do
         payment_element_wallets: false,
         flat_payment_methods: false,
         india_card_mandate_reliability: false,
+        stripe_link_enabled: true,
         elements_options: nil,
       )
       expect(inertia.props[:checkout]).to eq({

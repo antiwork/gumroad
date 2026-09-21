@@ -12,7 +12,8 @@ class Gift < ApplicationRecord
   validates :giftee_email, presence: true, email_format: true
   validates :gifter_email, presence: true, email_format: true
 
-  has_flags 1 => :is_recipient_hidden
+  has_flags 1 => :is_recipient_hidden,
+            2 => :is_gifter_hidden
 
   state_machine(:state, initial: :in_progress) do
     before_transition in_progress: :successful, do: :everything_successful?
