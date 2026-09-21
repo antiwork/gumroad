@@ -19,6 +19,7 @@ const { getSearchResults } = vi.mocked(await import("$app/data/search"));
 
 afterEach(() => {
   cleanup();
+  vi.restoreAllMocks();
   vi.clearAllMocks();
 });
 
@@ -65,7 +66,6 @@ describe("CardGrid search backoff", () => {
     // fault in their account that isn't there.
     await waitFor(() => expect(showAlert).toHaveBeenCalledWith(expect.stringContaining("too quickly"), "error"));
     expect(report).not.toHaveBeenCalled();
-    report.mockRestore();
 
     fireEvent.click(screen.getByText("search A"));
     await settle();
@@ -76,15 +76,14 @@ describe("CardGrid search backoff", () => {
     await waitFor(() => expect(getSearchResults).toHaveBeenCalledTimes(2));
   });
 
-  it("does not report a handled API error that is not a rate limit", async () => {
+  it("still reports a server or network failure wrapped as ResponseError", async () => {
     const report = vi.spyOn(console, "error").mockImplementation(() => {});
     failing(new ResponseError("Something went wrong."));
     render(<Harness />);
 
     fireEvent.click(screen.getByText("search A"));
     await waitFor(() => expect(showAlert).toHaveBeenCalled());
-    expect(report).not.toHaveBeenCalled();
-    report.mockRestore();
+    expect(report).toHaveBeenCalled();
   });
 
   it("keeps each failed search's cooldown when a second one fails in the same window", async () => {
