@@ -1,8 +1,9 @@
 // @vitest-environment happy-dom
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import * as React from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { trackMediaLocationChanged } from "$app/data/media_location";
 import { videoFrameIsPortrait, videoFrameStyle } from "$app/utils/videoFrame";
 
 import { FileItem, FileList, FileRow, FolderItem } from "$app/components/Download/FileList";
@@ -28,6 +29,8 @@ const createJWPlayer = vi.hoisted(() =>
   }),
 );
 vi.mock("$app/utils/jwPlayer", () => ({ createJWPlayer }));
+vi.mock("$app/data/media_location", () => ({ trackMediaLocationChanged: vi.fn() }));
+vi.mock("$app/data/consumption_analytics", () => ({ createConsumptionEvent: vi.fn() }));
 
 // Clicking the play button fires a tracking request, which reaches for the Rails
 // route helpers the real page defines globally. Stub the one route it needs so the
@@ -192,9 +195,51 @@ describe("FileList", () => {
       });
       expect(createJWPlayer).not.toHaveBeenCalled();
     });
+
+    it.each([3711, null])("restarts near the end with content_length %s", (contentLength) => {
+      const postMessage = mockReactNativeWebView();
+      const file = videoFile({
+        duration: 3711,
+        content_length: contentLength,
+        latest_media_location: { location: 3690, timestamp: "2026-09-18T18:22:24Z" },
+      });
+
+      renderFileRow(file);
+      fireEvent.click(screen.getByRole("link", { name: "Watch again" }));
+
+      expect(JSON.parse(String(postMessage.mock.calls[0]?.[0]))).toMatchObject({
+        type: "click",
+        payload: { resourceId: file.id, resumeAt: "0", contentLength: "3711" },
+      });
+    });
   });
 
   describe("the embedded video frame", () => {
+    it("uses player metadata in the initial seek, retained callbacks, and completion", async () => {
+      const handlers: Record<string, (event?: { position: number }) => void> = {};
+      const seek = vi.fn();
+      createJWPlayer.mockImplementationOnce(() => {
+        const player = {
+          getDuration: () => 3711,
+          seek,
+          on: (name: string, callback: (event?: { position: number }) => void) => {
+            handlers[name] = callback;
+            return player;
+          },
+        };
+        return Promise.resolve(player);
+      });
+      const file = videoFile({ latest_media_location: { location: 3690, timestamp: "2026-09-18T18:22:24Z" } });
+      renderEmbeddedRow(file, { [file.id]: ["https://example.com/index.m3u8"] });
+      fireEvent.click(screen.getByRole("button", { name: "Watch" }));
+      await waitFor(() => expect(handlers.play).toBeDefined());
+      act(() => handlers.play?.());
+      expect(seek).toHaveBeenCalledWith(0);
+      act(() => handlers.time?.({ position: 3690 }));
+      expect(trackMediaLocationChanged).toHaveBeenLastCalledWith(expect.objectContaining({ location: 3711 }));
+      act(() => handlers.complete?.());
+      expect(trackMediaLocationChanged).toHaveBeenLastCalledWith(expect.objectContaining({ location: 3711 }));
+    });
     it("shapes the pre-play frame to a portrait video's own ratio", () => {
       const { container } = renderEmbeddedRow(videoFile({ width: 1080, height: 1920 }));
       const frame = container.querySelector<HTMLElement>(".preview");

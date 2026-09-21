@@ -235,6 +235,7 @@ describe AffiliatesController, type: :controller, inertia: true do
         expect(response).to redirect_to(affiliates_path)
         expect(flash[:notice]).to eq("Affiliate deleted successfully")
         expect(affiliate.reload).to be_deleted
+        expect(affiliate.removed_at_request).to be(false)
       end
 
       it "returns 404 for non-existent affiliate" do

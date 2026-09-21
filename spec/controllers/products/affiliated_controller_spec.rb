@@ -200,6 +200,8 @@ describe Products::AffiliatedController, inertia: true do
 
       expect(response).to have_http_status(:ok)
       expect(direct_affiliate.reload.deleted?).to be(true)
+      expect(direct_affiliate.removed_at_request).to be(true)
+      expect(direct_affiliate.reassignment_blocked?).to be(true)
 
       # The response carries the refreshed page, so the seller's products are already gone from it.
       body = response.parsed_body
@@ -242,6 +244,7 @@ describe Products::AffiliatedController, inertia: true do
 
       expect(response).to have_http_status(:ok)
       expect(direct_affiliate.reload.deleted?).to be(true)
+      expect(direct_affiliate.removed_at_request).to be(true)
     end
 
     # Two tabs both pass the `alive` lookup, then race the transition. The seam is mid-request: the
@@ -261,9 +264,11 @@ describe Products::AffiliatedController, inertia: true do
         original_deleted_at = direct_affiliate.reload.deleted_at
       end.not_to have_enqueued_mail(AffiliateMailer, :direct_affiliate_removal_by_affiliate_user)
 
-      # The winner's timestamp survives — the loser must not re-stamp a row it did not transition.
+      # The winner's timestamp survives — the loser must not re-stamp a row it did not transition,
+      # and must not record an opt-out it did not win (the other tab may have been a seller delete).
       expect(original_deleted_at).to be_present
       expect(direct_affiliate.reload.deleted_at).to eq(original_deleted_at)
+      expect(direct_affiliate.removed_at_request).to be(false)
     end
   end
 end

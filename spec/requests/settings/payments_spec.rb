@@ -973,11 +973,11 @@ describe("Payments Settings Scenario", type: :system, js: true) do
     it "allows US creator to switch to ACH" do
       @user.update(payment_address: "barny@paypal.com")
       visit settings_payments_path
-      click_on "Switch to direct deposit"
+      click_on "Set up direct deposit"
       expect(page).to_not have_field("PayPal Email")
     end
 
-    it "does not offer direct deposit to an India creator, who cannot complete bank setup" do
+    it "explains why direct deposit is unavailable for an India creator who cannot complete bank setup" do
       @user.update!(payment_address: "barny@paypal.com")
       old_user_compliance_info = @user.alive_user_compliance_info
       new_user_compliance_info = old_user_compliance_info.dup
@@ -990,14 +990,16 @@ describe("Payments Settings Scenario", type: :system, js: true) do
       visit settings_payments_path
 
       expect(page).to have_field("PayPal Email")
-      expect(page).to_not have_button("Switch to direct deposit")
+      expect(page).to_not have_button("Switch to direct deposit", disabled: :all)
+      expect(page).to_not have_button("Set up direct deposit", disabled: :all)
+      expect(page).to have_content("Switching to direct deposit is unavailable because new bank payout accounts cannot be set up in India.")
     end
 
     it "keeps the creator on PayPal payouts if the bank account info is not entered" do
       @user.update!(payment_address: "paypal-gr-integspecs@gumroad.com")
 
       visit settings_payments_path
-      click_on "Switch to direct deposit"
+      click_on "Set up direct deposit"
       expect(page).to_not have_field("PayPal Email")
       expect(page).to have_field("Pay to the order of")
       expect(@user.reload.payment_address).to eq("paypal-gr-integspecs@gumroad.com")
@@ -1006,7 +1008,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
       expect(page).to have_field("PayPal Email")
       expect(page).to_not have_field("Pay to the order of")
 
-      click_on "Switch to direct deposit"
+      click_on "Set up direct deposit"
       expect(page).to_not have_field("PayPal Email")
       fill_in("First name", with: "barnabas")
       fill_in("Last name", with: "barnabastein")

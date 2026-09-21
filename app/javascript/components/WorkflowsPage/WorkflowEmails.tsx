@@ -435,26 +435,27 @@ const EmailRow = ({
       <RowActions>
         {isAbandonedCartWorkflow ? null : (
           <Button
-            size="icon"
+            size="sm"
             outline
             disabled={(expanded && hasUploadingImages) || false}
-            aria-label="Edit"
+            aria-label={expanded ? "Collapse" : "Edit"}
             onClick={toggleExpanded}
           >
             {expanded ? <ChevronUp className="size-5" /> : <ChevronDown className="size-5" />}
+            {expanded ? "Collapse" : "Edit"}
           </Button>
         )}
         <WithTooltip tip="Send email preview">
-          <Button size="icon" outline aria-label="Preview Email" disabled={isBusy} onClick={onSendPreviewEmail}>
+          <Button size="sm" outline aria-label="Preview Email" disabled={isBusy} onClick={onSendPreviewEmail}>
             <Eye className="size-5" />
+            Preview
           </Button>
         </WithTooltip>
         {isAbandonedCartWorkflow ? null : (
-          <WithTooltip tip="Delete">
-            <Button size="icon" outline color="danger" aria-label="Delete" disabled={isBusy} onClick={onDelete}>
-              <Trash className="size-5" />
-            </Button>
-          </WithTooltip>
+          <Button size="sm" outline color="danger" aria-label="Delete" disabled={isBusy} onClick={onDelete}>
+            <Trash className="size-5" />
+            Delete
+          </Button>
         )}
       </RowActions>
       {expanded ? (
