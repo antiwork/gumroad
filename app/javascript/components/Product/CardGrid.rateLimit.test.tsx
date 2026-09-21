@@ -19,7 +19,7 @@ const { getSearchResults } = vi.mocked(await import("$app/data/search"));
 
 afterEach(() => {
   cleanup();
-  vi.restoreAllMocks();
+  vi.spyOn(console, "error").mockRestore();
   vi.clearAllMocks();
 });
 
