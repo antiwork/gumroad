@@ -2047,6 +2047,8 @@ class SubscriptionTest < ActiveSupport::TestCase
   end
 
   test "#unsubscribe_and_fail! emails the creator when this cycle's charge was retried" do
+    # Both attempts are inside the current cycle: the last successful charge predates them.
+    @purchase.update_columns(created_at: 10.days.ago)
     create_failed_purchase(link: @subscription.link, subscription: @subscription, email: @subscription.user.email, created_at: 1.day.ago)
     create_failed_purchase(link: @subscription.link, subscription: @subscription, email: @subscription.user.email, created_at: 1.hour.ago)
     assert_equal true, @subscription.seller.enable_payment_email
