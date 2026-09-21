@@ -265,20 +265,35 @@ describe "Muse MCP" do
       expect(response).to have_http_status(:accepted)
     end
 
+    %w[muse claude chatgpt].each do |client|
+      [0, "missing-method"].each do |id|
+        it "returns a correlated method error over HTTP 200 on #{client} for ID #{id.inspect}" do
+          post "/#{client}/v1/mcp",
+               params: { jsonrpc: "2.0", id:, method: "resources/list" }.to_json,
+               headers: { "HOST" => DOMAIN, "CONTENT_TYPE" => "application/json",
+                          "ACCEPT" => "application/json, text/event-stream", "Authorization" => "Bearer #{@token.token}" }
+
+          expect(response).to have_http_status(:ok)
+          expect(response.media_type).to eq("application/json")
+          expect(response.parsed_body).to include("jsonrpc" => "2.0", "id" => id, "error" => include("code" => -32601))
+        end
+      end
+    end
+
     it "reports invalid params rather than crashing" do
       post_mcp({ jsonrpc: "2.0", id: 9, method: "tools/call", params: [] })
 
-      expect(response).to have_http_status(:bad_request)
+      expect(response).to have_http_status(:ok)
       expect(response.parsed_body.dig("error", "code")).to eq(-32602)
 
       post_mcp({ jsonrpc: "2.0", id: 10, method: "tools/call", params: { name: "list_sales", arguments: [] } })
 
-      expect(response).to have_http_status(:bad_request)
+      expect(response).to have_http_status(:ok)
       expect(response.parsed_body.dig("error", "code")).to eq(-32602)
 
       post_mcp({ jsonrpc: "2.0", id: 11, method: "tools/call", params: { name: "list_sales", arguments: { limit: true } } })
 
-      expect(response).to have_http_status(:bad_request)
+      expect(response).to have_http_status(:ok)
       expect(response.parsed_body.dig("error", "code")).to eq(-32602)
     end
   end
@@ -477,8 +492,8 @@ describe "Muse MCP" do
           post_mcp(tool_call("create_draft_product", { name: "Invalid price", price_cents: }))
         end.not_to change(Link, :count)
 
-        expect(response).to have_http_status(:bad_request)
-        expect(response.parsed_body.dig("error", "code")).to eq(-32602)
+        expect(response).to have_http_status(:ok)
+        expect(response.parsed_body).to include("id" => "tool", "error" => include("code" => -32602))
       end
     end
 
@@ -497,8 +512,8 @@ describe "Muse MCP" do
       it "rejects malformed limit #{limit.inspect}" do
         post_mcp(tool_call("list_products", { limit: }))
 
-        expect(response).to have_http_status(:bad_request)
-        expect(response.parsed_body.dig("error", "code")).to eq(-32602)
+        expect(response).to have_http_status(:ok)
+        expect(response.parsed_body).to include("id" => "tool", "error" => include("code" => -32602))
       end
     end
 

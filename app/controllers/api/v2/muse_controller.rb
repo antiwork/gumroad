@@ -68,8 +68,8 @@ class Api::V2::MuseController < Api::V2::BaseController
 
     def rpc_http_status(code)
       case code
-      when -32700, -32600, -32602 then :bad_request
-      when -32601 then :not_found
+      when -32700, -32600 then :bad_request
+      # Method and parameter errors need a successful transport to reach the RPC caller.
       else :ok
       end
     end
