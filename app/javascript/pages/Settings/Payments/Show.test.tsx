@@ -703,11 +703,14 @@ describe("bank payout switch option on the payments page", () => {
     render(<PaymentsPage />);
   };
 
-  it("shows the India seller a disabled option and the reason instead of hiding it", () => {
+  it("gives the India seller the reason and a payouts article instead of an option", () => {
     renderSeller("IN", false);
 
-    expect(screen.getByRole("button", { name: "Switch to direct deposit" }).hasAttribute("disabled")).toBe(true);
-    expect(screen.getByText(/New bank payout accounts cannot be set up in India/u)).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Switch to direct deposit" })).toBeNull();
+    const reason = screen.getByText(/new bank payout accounts cannot be set up in India/u);
+    expect(reason.closest('[role="status"]')?.contains(screen.getByRole("link", { name: "Learn about payouts" }))).toBe(
+      true,
+    );
   });
 
   it("leaves the eligible seller's working switch alone", () => {
@@ -715,6 +718,7 @@ describe("bank payout switch option on the payments page", () => {
     fireEvent.click(screen.getByRole("radio", { name: "PayPal" }));
 
     expect(screen.getByRole("button", { name: "Switch to direct deposit" }).hasAttribute("disabled")).toBe(false);
-    expect(screen.queryByText(/New bank payout accounts cannot be set up in India/u)).toBeNull();
+    expect(screen.queryByText(/cannot be set up in India/u)).toBeNull();
+    expect(screen.queryByRole("link", { name: "Learn about payouts" })).toBeNull();
   });
 });

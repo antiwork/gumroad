@@ -51,21 +51,12 @@ const PayPalEmailSection = ({
         // missing compliance data, which this copy would misdescribe. An eligible seller held back
         // by `isFormDisabled` is a permission restriction and keeps the existing silent hide.
         !canSetupBankPayouts && user.country_code === "IN" ? (
-          <div className="grid gap-2">
-            {/* Same class list as the enabled branch above. A disabled form link on this page
-                keeps its colour and underline and just stops being reachable — as the tax ID
-                "Change" links in AccountDetailsSection and BeneficialOwnersSection do. */}
-            <LinkButton className="justify-self-start" disabled aria-describedby={`${uid}-bank-payouts-unavailable`}>
-              Switch to direct deposit
-            </LinkButton>
-            <Alert id={`${uid}-bank-payouts-unavailable`} role="status" variant="info">
-              New bank payout accounts cannot be set up in India.{" "}
-              <a href={Routes.help_center_root_path()} className="underline">
-                Contact support
-              </a>{" "}
-              if you need help with a previous bank payout account.
-            </Alert>
-          </div>
+          <Alert role="status" variant="info">
+            Switching to direct deposit is unavailable because new bank payout accounts cannot be set up in India.{" "}
+            <a href={Routes.help_center_article_path("13-getting-paid")} target="_blank" rel="noreferrer">
+              Learn about payouts
+            </a>
+          </Alert>
         ) : null}
         <Fieldset state={errorFieldNames.has("paypal_email_address") ? "danger" : undefined}>
           <FieldsetTitle>
