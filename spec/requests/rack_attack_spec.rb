@@ -360,6 +360,46 @@ describe "Rack::Attack throttle", type: :request do
     end
   end
 
+  describe "MCP connector OAuth alias throttles" do
+    before { reset_rack_attack! }
+    after { reset_rack_attack! }
+
+    def oauth_request(path, ip:, method: "POST")
+      Rack::Attack::Request.new(
+        Rack::MockRequest.env_for(path, method:, input: "", "HTTP_CF_CONNECTING_IP" => ip)
+      )
+    end
+
+    it "counts the connector token aliases in the canonical /oauth/token IP bucket" do
+      paths = %w[/oauth/token /muse/v1/oauth2/token /claude/v1/oauth2/token.json /chatgpt/v1/oauth2/token]
+
+      travel_to(Time.current) do
+        3000.times do |i|
+          throttled = Rack::Attack.configuration.throttled?(oauth_request(paths[i % paths.size], ip: "203.0.113.50"))
+          expect(throttled).to be(false), "request #{i + 1} unexpectedly throttled"
+        end
+
+        expect(Rack::Attack.configuration.throttled?(oauth_request("/chatgpt/v1/oauth2/token.json", ip: "203.0.113.50"))).to be(true)
+        expect(Rack::Attack.configuration.throttled?(oauth_request("/oauth/token", ip: "203.0.113.51"))).to be(false)
+      end
+    end
+
+    it "shares one dynamic registration bucket across the connector aliases" do
+      paths = %w[/muse/v1/oauth2/register /claude/v1/oauth2/register /chatgpt/v1/oauth2/register]
+
+      travel_to(Time.current) do
+        20.times do |i|
+          throttled = Rack::Attack.configuration.throttled?(oauth_request(paths[i % paths.size], ip: "203.0.113.60"))
+          expect(throttled).to be(false), "request #{i + 1} unexpectedly throttled"
+        end
+
+        expect(Rack::Attack.configuration.throttled?(oauth_request("/claude/v1/oauth2/register.json", ip: "203.0.113.60"))).to be(true)
+        expect(Rack::Attack.configuration.throttled?(oauth_request("/claude/v1/oauth2/register", ip: "203.0.113.61"))).to be(false)
+        expect(Rack::Attack.configuration.throttled?(oauth_request("/claude/v1/oauth2/register", ip: "203.0.113.60", method: "GET"))).to be(false)
+      end
+    end
+  end
+
   describe "POST /settings/passkeys registration throttles" do
     before { reset_rack_attack! }
     after { reset_rack_attack! }

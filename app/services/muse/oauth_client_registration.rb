@@ -6,6 +6,10 @@ module Muse
 
     MCP_SCOPES = %w[view_public view_profile view_sales edit_products view_payouts account].freeze
     NAME_MAX = 80
+    REDIRECT_URIS_MAX = 10
+    # oauth_applications.redirect_uri (newline-joined) and oauth_access_grants.redirect_uri are
+    # varchar(255), and the session sql_mode is non-strict, so MySQL truncates instead of raising.
+    REDIRECT_URIS_MAX_LENGTH = 255
 
     def self.create!(params)
       new(params).create!
@@ -20,12 +24,15 @@ module Muse
       raise Error, "redirect_uris is required" if redirect_uris.empty?
 
       redirect_uris.each { |uri| validate_redirect_uri!(uri) }
+      redirect_uri = redirect_uris.join("\n")
+      raise Error, "redirect_uris must be at most #{REDIRECT_URIS_MAX_LENGTH} characters combined" if redirect_uri.length > REDIRECT_URIS_MAX_LENGTH
 
       application = OauthApplication.new(
         name: client_name,
-        redirect_uri: redirect_uris.join("\n"),
+        redirect_uri:,
         confidential: confidential?,
-        scopes: assigned_scopes
+        scopes: assigned_scopes,
+        mcp_dynamic_client: true
       )
       # Dynamic clients are not owned by a Gumroad user.
       application.define_singleton_method(:validate_owner?) { false }
@@ -48,7 +55,10 @@ module Muse
     private
       def normalized_redirect_uris
         raw = @params["redirect_uris"] || @params[:redirect_uris] || @params["redirect_uri"] || @params[:redirect_uri]
-        Array(raw).flatten.map { |uri| uri.to_s.strip }.compact_blank.uniq
+        raw = Array(raw).flatten
+        raise Error, "redirect_uris must contain at most #{REDIRECT_URIS_MAX} entries" if raw.size > REDIRECT_URIS_MAX
+
+        raw.map { |uri| uri.to_s.strip }.compact_blank.uniq
       end
 
       def client_name

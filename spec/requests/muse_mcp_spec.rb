@@ -3,6 +3,8 @@
 require "spec_helper"
 
 describe "Muse MCP" do
+  include Devise::Test::IntegrationHelpers
+
   before do
     MerchantAccount.gumroad(StripeChargeProcessor.charge_processor_id) ||
       create(:merchant_account, user: nil, charge_processor_merchant_id: "acct_#{SecureRandom.hex(8)}")
@@ -20,6 +22,21 @@ describe "Muse MCP" do
     }
     headers["Authorization"] = "Bearer #{token.token}" if token
     post "/muse/v1/mcp", params: payload.to_json, headers:
+  end
+
+  # Per-form CSRF tokens: the approve and deny forms each carry their own.
+  def authenticity_token(doc, method: "post")
+    form = doc.css("form").find do |candidate|
+      (candidate.at_css("input[name='_method']")&.[]("value") || "post") == method
+    end
+    form.at_css("input[name='authenticity_token']")["value"]
+  end
+
+  def stub_vite_layout_helpers
+    allow(ViteRuby.instance.manifest).to receive(:resolve_entries).and_return({ stylesheets: ["/vite-test.css"] })
+    allow_any_instance_of(ActionView::Base).to receive(:vite_client_tag).and_return("")
+    allow_any_instance_of(ActionView::Base).to receive(:vite_react_refresh_tag).and_return("")
+    allow_any_instance_of(ActionView::Base).to receive(:vite_typescript_tag).and_return("")
   end
 
   it "exposes a public status endpoint" do
@@ -77,6 +94,8 @@ describe "Muse MCP" do
     application = OauthApplication.find_by!(uid: body["client_id"])
     expect(application).not_to be_confidential
     expect(application.owner).to be_nil
+    expect(application).to be_mcp_dynamic_client
+    expect(@app).not_to be_mcp_dynamic_client
   end
 
   %w[none client_secret_post client_secret_basic].each do |method|
@@ -119,6 +138,53 @@ describe "Muse MCP" do
 
     expect(response).to have_http_status(:bad_request)
     expect(response.parsed_body["error"]).to eq("invalid_client_metadata")
+  end
+
+  it "stores the real Claude and ChatGPT callbacks without truncation" do
+    redirect_uris = %w[https://claude.ai/api/mcp/auth_callback https://chatgpt.com/connector_platform_oauth_redirect]
+
+    post "/muse/v1/oauth2/register",
+         params: { redirect_uris:, token_endpoint_auth_method: "none" }.to_json,
+         headers: { "HOST" => DOMAIN, "CONTENT_TYPE" => "application/json" }
+
+    expect(response).to have_http_status(:created)
+    expect(response.parsed_body["redirect_uris"]).to eq(redirect_uris)
+    expect(OauthApplication.find_by!(uid: response.parsed_body["client_id"]).redirect_uri).to eq(redirect_uris.join("\n"))
+  end
+
+  it "rejects more redirect URIs than a registration may hold without creating a client" do
+    redirect_uris = (1..(Muse::OauthClientRegistration::REDIRECT_URIS_MAX + 1)).map { |i| "https://example.com/callback/#{i}" }
+
+    expect do
+      post "/claude/v1/oauth2/register",
+           params: { redirect_uris: }.to_json,
+           headers: { "HOST" => DOMAIN, "CONTENT_TYPE" => "application/json" }
+    end.not_to change(OauthApplication, :count)
+
+    expect(response).to have_http_status(:bad_request)
+    expect(response.parsed_body).to eq(
+      "error" => "invalid_client_metadata",
+      "error_description" => "redirect_uris must contain at most #{Muse::OauthClientRegistration::REDIRECT_URIS_MAX} entries"
+    )
+  end
+
+  it "rejects redirect URIs the stored allowlist column would truncate without creating a client" do
+    redirect_uris = ["https://example.com/#{"a" * 200}", "https://example.org/#{"b" * 60}"]
+    limit = Muse::OauthClientRegistration::REDIRECT_URIS_MAX_LENGTH
+    expect(redirect_uris.map(&:length).max).to be <= limit
+    expect(redirect_uris.join("\n").length).to be > limit
+
+    expect do
+      post "/chatgpt/v1/oauth2/register",
+           params: { redirect_uris: }.to_json,
+           headers: { "HOST" => DOMAIN, "CONTENT_TYPE" => "application/json" }
+    end.not_to change(OauthApplication, :count)
+
+    expect(response).to have_http_status(:bad_request)
+    expect(response.parsed_body).to eq(
+      "error" => "invalid_client_metadata",
+      "error_description" => "redirect_uris must be at most #{limit} characters combined"
+    )
   end
 
   it "returns RFC 8414 metadata" do
@@ -560,6 +626,329 @@ describe "Muse MCP" do
 
         expect(response.parsed_body.dig("error", "message")).to include("edit_products")
       end
+    end
+  end
+
+  context "with a dynamically registered public client" do
+    let(:redirect_uri) { "https://claude.ai/api/mcp/auth_callback" }
+    let(:claude_resource) { "#{PROTOCOL}://#{DOMAIN}/claude/v1/mcp" }
+    let(:code_verifier) { SecureRandom.urlsafe_base64(48) }
+    let(:code_challenge) { Base64.urlsafe_encode64(Digest::SHA256.digest(code_verifier), padding: false) }
+    let(:ping) { { jsonrpc: "2.0", id: 1, method: "ping" } }
+
+    before do
+      host! DOMAIN
+      stub_vite_layout_helpers
+
+      post "/claude/v1/oauth2/register",
+           params: { client_name: "Claude", redirect_uris: [redirect_uri], token_endpoint_auth_method: "none", scope: "view_sales" }.to_json,
+           headers: { "CONTENT_TYPE" => "application/json" }
+      @client_id = response.parsed_body.fetch("client_id")
+      @application = OauthApplication.find_by!(uid: @client_id)
+
+      sign_in @seller
+    end
+
+    it "renders consent for the ownerless client and carries the S256 challenge and resource into the form" do
+      doc = consent_page
+
+      expect(response).to have_http_status(:ok)
+      expect(@application.owner).to be_nil
+      expect(response.body).to include("MCP Claude")
+      expect(doc.at_css("input[name='code_challenge']")["value"]).to eq(code_challenge)
+      expect(doc.at_css("input[name='code_challenge_method']")["value"]).to eq("S256")
+      expect(doc.at_css("input[name='resource']")["value"]).to eq(claude_resource)
+    end
+
+    it "requires an S256 challenge on the alias and on the canonical /oauth path without creating a grant" do
+      expect do
+        get "/claude/v1/oauth2/authorize", params: authorize_params.except(:code_challenge, :code_challenge_method)
+        expect(response).to have_http_status(:bad_request)
+        expect(response.body).to include("code_challenge with code_challenge_method S256 is required")
+
+        get "/oauth/authorize", params: authorize_params(code_challenge: code_verifier, code_challenge_method: "plain")
+        expect(response).to have_http_status(:bad_request)
+        expect(response.body).to include("code_challenge with code_challenge_method S256 is required")
+
+        doc = consent_page
+        post "/oauth/authorize", params: authorize_params.except(:code_challenge, :code_challenge_method).merge(authenticity_token: authenticity_token(doc))
+        expect(response).to have_http_status(:found)
+        expect(Rack::Utils.parse_query(URI.parse(response.location).query)).to include("error" => "invalid_request", "state" => "xyz")
+      end.not_to change(Doorkeeper::AccessGrant, :count)
+    end
+
+    it "requires a supported resource and rejects unknown targets without creating a grant" do
+      expect do
+        get "/claude/v1/oauth2/authorize", params: authorize_params.except(:resource)
+        expect(response).to have_http_status(:bad_request)
+        expect(response.body).to include("resource is required")
+
+        get "/oauth/authorize", params: authorize_params(resource: "https://evil.example/mcp")
+        expect(response).to have_http_status(:bad_request)
+        expect(response.body).to include("resource is not a supported MCP resource")
+
+        doc = consent_page
+        post "/oauth/authorize", params: authorize_params(resource: "#{claude_resource}/").merge(authenticity_token: authenticity_token(doc))
+        expect(response).to have_http_status(:found)
+        expect(Rack::Utils.parse_query(URI.parse(response.location).query)).to include("error" => "invalid_target", "state" => "xyz")
+      end.not_to change(Doorkeeper::AccessGrant, :count)
+    end
+
+    it "refuses the client_credentials grant for a dynamic client" do
+      expect do
+        post "/claude/v1/oauth2/token", params: { grant_type: "client_credentials", client_id: @client_id, scope: "view_sales" }
+      end.not_to change(Doorkeeper::AccessToken, :count)
+
+      expect(response).to have_http_status(:unauthorized)
+      expect(response.parsed_body["error"]).to eq("unauthorized_client")
+    end
+
+    it "leaves manually created applications on Doorkeeper's default rules and off the resource binding" do
+      legacy_app = create(:oauth_application, owner: create(:user), confidential: false, redirect_uri: "https://example.com/callback", scopes: "view_sales")
+      legacy_params = { response_type: "code", client_id: legacy_app.uid, redirect_uri: "https://example.com/callback", scope: "view_sales", state: "legacy", resource: "https://evil.example/mcp" }
+
+      get "/oauth/authorize", params: legacy_params
+      expect(response).to have_http_status(:ok)
+      doc = Nokogiri::HTML(response.body)
+      expect(doc.at_css("input[name='resource']")).to be_nil
+
+      post "/oauth/authorize", params: legacy_params.merge(authenticity_token: authenticity_token(doc))
+      expect(response).to have_http_status(:found)
+      code = Rack::Utils.parse_query(URI.parse(response.location).query).fetch("code")
+      expect(legacy_app.access_grants.last.resource).to be_nil
+
+      post "/oauth/token", params: { grant_type: "authorization_code", code:, redirect_uri: "https://example.com/callback", client_id: legacy_app.uid }
+      expect(response).to have_http_status(:ok)
+      legacy_token = response.parsed_body.fetch("access_token")
+      expect(Doorkeeper::AccessToken.by_token(legacy_token).resource).to be_nil
+
+      mcp_call(legacy_token, ping)
+      expect(response).to have_http_status(:ok)
+      get "/api/v2/user", headers: { "Authorization" => "Bearer #{legacy_token}" }
+      expect(response).to have_http_status(:ok)
+    end
+
+    it "refuses an unregistered redirect URI and an unregistered scope without creating a grant" do
+      expect do
+        get "/claude/v1/oauth2/authorize", params: authorize_params(redirect_uri: "https://evil.example/callback")
+        expect(response).to have_http_status(:bad_request)
+        expect(response.body).to include("match client redirect URI.")
+
+        get "/claude/v1/oauth2/authorize", params: authorize_params(scope: "edit_products")
+        expect(response).to have_http_status(:bad_request)
+        expect(response.body).to include("The requested scope is invalid, unknown, or malformed.")
+      end.not_to change(Doorkeeper::AccessGrant, :count)
+    end
+
+    it "sends a denied consent back to the client with access_denied and no grant" do
+      doc = consent_page
+
+      expect do
+        delete "/oauth/authorize", params: authorize_params.merge(authenticity_token: authenticity_token(doc, method: "delete"))
+      end.not_to change(Doorkeeper::AccessGrant, :count)
+
+      expect(response).to have_http_status(:found)
+      location = URI.parse(response.location)
+      expect("#{location.scheme}://#{location.host}#{location.path}").to eq(redirect_uri)
+      expect(Rack::Utils.parse_query(location.query)).to eq("error" => "access_denied", "error_description" => "The resource owner or authorization server denied the request.", "state" => "xyz")
+    end
+
+    it "exchanges an S256 code without a secret, binds the token to its resource, rotates on refresh, and honors revocation" do
+      code = approve_consent
+      grant = @application.access_grants.last
+      expect(grant.code_challenge_method).to eq("S256")
+      expect(grant.resource_owner_id).to eq(@seller.id)
+      expect(grant.scopes.to_s).to eq("view_sales")
+      expect(grant.resource).to eq(claude_resource)
+
+      expect { exchange_code(code, "not-the-verifier") }.not_to change(Doorkeeper::AccessToken, :count)
+      expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body["error"]).to eq("invalid_grant")
+
+      expect { exchange_code(code, code_verifier, resource: "#{PROTOCOL}://#{DOMAIN}/chatgpt/v1/mcp") }.not_to change(Doorkeeper::AccessToken, :count)
+      expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body).to eq("error" => "invalid_target", "error_description" => "resource does not match the authorization request")
+
+      body = exchange_code(code, code_verifier, resource: claude_resource)
+      expect(response).to have_http_status(:ok)
+      expect(body).to include("token_type" => "Bearer", "scope" => "view_sales")
+      access_token = body.fetch("access_token")
+      refresh_token = body.fetch("refresh_token")
+      issued = Doorkeeper::AccessToken.by_token(access_token)
+      expect(issued.application_id).to eq(@application.id)
+      expect(issued.resource).to eq(claude_resource)
+
+      expect { exchange_code(code, code_verifier) }.not_to change(Doorkeeper::AccessToken, :count)
+      expect(response.parsed_body["error"]).to eq("invalid_grant")
+
+      mcp_call(access_token, { jsonrpc: "2.0", id: 1, method: "tools/list" })
+      expect(response).to have_http_status(:ok)
+      expect(response.parsed_body.dig("result", "tools").map { |tool| tool["name"] }).to include("list_sales")
+
+      %w[chatgpt muse].each do |other|
+        post "/#{other}/v1/mcp", params: ping.to_json, headers: { "CONTENT_TYPE" => "application/json", "Authorization" => "Bearer #{access_token}" }
+        expect(response).to have_http_status(:unauthorized)
+        expect(response.headers["WWW-Authenticate"]).to include("resource_metadata=\"#{PROTOCOL}://#{DOMAIN}/.well-known/oauth-protected-resource/#{other}/v1/mcp\"")
+      end
+      get "/api/v2/user", headers: { "Authorization" => "Bearer #{access_token}" }
+      expect(response).to have_http_status(:unauthorized)
+
+      purchase = create(:purchase, seller: @seller, link: @product, email: "buyer@example.com", price_cents: 1900)
+      mcp_call(access_token, { jsonrpc: "2.0", id: 2, method: "tools/call", params: { name: "list_sales", arguments: {} } })
+      expect(response).to have_http_status(:ok)
+      expect(response.parsed_body.dig("result", "structuredContent", "sales").map { |sale| sale["id"] }).to include(purchase.external_id)
+
+      expect do
+        mcp_call(access_token, { jsonrpc: "2.0", id: 3, method: "tools/call", params: { name: "create_draft_product", arguments: { name: "Nope", price_cents: 500 } } })
+      end.not_to change(Link, :count)
+      expect(response.parsed_body.dig("error", "message")).to include("edit_products")
+
+      expect do
+        post "/claude/v1/oauth2/token", params: { grant_type: "refresh_token", refresh_token:, client_id: @client_id, resource: "#{PROTOCOL}://#{DOMAIN}/muse/v1/mcp" }
+      end.not_to change(Doorkeeper::AccessToken, :count)
+      expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body["error"]).to eq("invalid_target")
+      expect(Doorkeeper::AccessToken.by_token(access_token)).not_to be_revoked
+
+      post "/claude/v1/oauth2/token", params: { grant_type: "refresh_token", refresh_token:, client_id: @client_id, resource: claude_resource }
+      expect(response).to have_http_status(:ok)
+      refreshed = response.parsed_body
+      expect(refreshed["scope"]).to eq("view_sales")
+      expect(refreshed["access_token"]).not_to eq(access_token)
+      expect(refreshed["refresh_token"]).not_to eq(refresh_token)
+      expect(Doorkeeper::AccessToken.by_token(refreshed["access_token"]).resource).to eq(claude_resource)
+      # oauth_access_tokens has no previous_refresh_token column, so Doorkeeper revokes the source token on refresh.
+      expect(Doorkeeper::AccessToken.by_token(access_token)).to be_revoked
+
+      mcp_call(access_token, ping)
+      expect(response).to have_http_status(:unauthorized)
+      mcp_call(refreshed["access_token"], ping)
+      expect(response).to have_http_status(:ok)
+
+      post "/claude/v1/oauth2/token", params: { grant_type: "refresh_token", refresh_token:, client_id: @client_id }
+      expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body["error"]).to eq("invalid_grant")
+
+      @application.revoke_access_for(@seller)
+
+      mcp_call(refreshed["access_token"], ping)
+      expect(response).to have_http_status(:unauthorized)
+      post "/claude/v1/oauth2/token", params: { grant_type: "refresh_token", refresh_token: refreshed["refresh_token"], client_id: @client_id }
+      expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body["error"]).to eq("invalid_grant")
+    end
+
+    def authorize_params(overrides = {})
+      {
+        response_type: "code",
+        client_id: @client_id,
+        redirect_uri:,
+        scope: "view_sales",
+        state: "xyz",
+        code_challenge:,
+        code_challenge_method: "S256",
+        resource: claude_resource
+      }.merge(overrides)
+    end
+
+    def consent_page
+      get "/claude/v1/oauth2/authorize", params: authorize_params
+      Nokogiri::HTML(response.body)
+    end
+
+    # The consent form posts to the canonical Doorkeeper path, not the connector alias.
+    def approve_consent
+      doc = consent_page
+      expect(response).to have_http_status(:ok)
+
+      post "/oauth/authorize", params: authorize_params.merge(authenticity_token: authenticity_token(doc))
+
+      expect(response).to have_http_status(:found)
+      location = URI.parse(response.location)
+      expect("#{location.scheme}://#{location.host}#{location.path}").to eq(redirect_uri)
+      query = Rack::Utils.parse_query(location.query)
+      expect(query["state"]).to eq("xyz")
+      query.fetch("code")
+    end
+
+    def exchange_code(code, verifier, resource: nil)
+      post "/claude/v1/oauth2/token", params: { grant_type: "authorization_code", code:, redirect_uri:, client_id: @client_id, code_verifier: verifier, resource: }.compact
+      response.parsed_body
+    end
+
+    def mcp_call(token, payload)
+      post "/claude/v1/mcp", params: payload.to_json, headers: { "CONTENT_TYPE" => "application/json", "Authorization" => "Bearer #{token}" }
+    end
+  end
+
+  context "with a manually created confidential client" do
+    let(:redirect_uri) { "https://example.com/callback" }
+    let(:legacy_app) { create(:oauth_application, owner: create(:user), confidential: true, redirect_uri:, scopes: "view_sales view_profile") }
+
+    before do
+      host! DOMAIN
+      stub_vite_layout_helpers
+      sign_in @seller
+    end
+
+    def authorize(scope:, client: legacy_app)
+      get "/oauth/authorize", params: { response_type: "code", client_id: client.uid, redirect_uri:, scope:, state: "again" }
+    end
+
+    it "skips consent and returns straight to the client when a live token already covers the requested scopes" do
+      create("doorkeeper/access_token", application: legacy_app, resource_owner_id: @seller.id, scopes: "view_sales")
+
+      expect { authorize(scope: "view_sales") }.to change(legacy_app.access_grants, :count).by(1)
+
+      expect(response).to have_http_status(:found)
+      location = URI.parse(response.location)
+      expect("#{location.scheme}://#{location.host}#{location.path}").to eq(redirect_uri)
+      query = Rack::Utils.parse_query(location.query)
+      expect(query["state"]).to eq("again")
+      expect(query["code"]).to be_present
+      expect(legacy_app.access_grants.last.resource).to be_nil
+    end
+
+    it "still asks for consent when no live token of this user covers the requested scopes" do
+      create("doorkeeper/access_token", application: legacy_app, resource_owner_id: @seller.id, scopes: "view_sales")
+      create("doorkeeper/access_token", application: legacy_app, resource_owner_id: create(:user).id, scopes: "view_sales view_profile")
+
+      expect do
+        authorize(scope: "view_sales view_profile")
+        expect(response).to have_http_status(:ok)
+        expect(response.body).to include("Authorize")
+      end.not_to change(Doorkeeper::AccessGrant, :count)
+    end
+
+    it "still asks a public manual client for consent even with a matching token" do
+      public_app = create(:oauth_application, owner: create(:user), confidential: false, redirect_uri:, scopes: "view_sales")
+      create("doorkeeper/access_token", application: public_app, resource_owner_id: @seller.id, scopes: "view_sales")
+
+      expect { authorize(scope: "view_sales", client: public_app) }.not_to change(Doorkeeper::AccessGrant, :count)
+      expect(response).to have_http_status(:ok)
+      expect(response.body).to include("Authorize")
+    end
+
+    it "always asks a confidential dynamic client for consent even with a matching token" do
+      claude_resource = "#{PROTOCOL}://#{DOMAIN}/claude/v1/mcp"
+      post "/claude/v1/oauth2/register",
+           params: { redirect_uris: ["https://claude.ai/api/mcp/auth_callback"], token_endpoint_auth_method: "client_secret_post", scope: "view_sales" }.to_json,
+           headers: { "CONTENT_TYPE" => "application/json" }
+      dynamic_app = OauthApplication.find_by!(uid: response.parsed_body.fetch("client_id"))
+      expect(dynamic_app).to be_confidential
+      create("doorkeeper/access_token", application: dynamic_app, resource_owner_id: @seller.id, scopes: "view_sales", resource: claude_resource)
+      code_challenge = Base64.urlsafe_encode64(Digest::SHA256.digest(SecureRandom.urlsafe_base64(48)), padding: false)
+
+      expect do
+        get "/claude/v1/oauth2/authorize", params: {
+          response_type: "code", client_id: dynamic_app.uid, redirect_uri: "https://claude.ai/api/mcp/auth_callback", scope: "view_sales",
+          state: "dcr", code_challenge:, code_challenge_method: "S256", resource: claude_resource
+        }
+      end.not_to change(Doorkeeper::AccessGrant, :count)
+
+      expect(response).to have_http_status(:ok)
+      expect(response.body).to include("Authorize")
+      expect(Nokogiri::HTML(response.body).at_css("input[name='resource']")["value"]).to eq(claude_resource)
     end
   end
 end
