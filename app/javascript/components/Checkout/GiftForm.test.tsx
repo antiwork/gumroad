@@ -8,6 +8,7 @@ import { StateContext, type CheckoutPaymentConfig, type State } from "$app/compo
 
 const cardElementConfig: CheckoutPaymentConfig = {
   integration: "card_element",
+  stripe_link_enabled: true,
   fallback_reason: "not_checkout",
   disable_wallets: false,
   request_apple_pay_merchant_tokens: false,
@@ -29,6 +30,7 @@ const state = (overrides: Partial<State> = {}): State => ({
       customFields: [],
       bundleProductCustomFields: [],
       supportsPaypal: null,
+      paypalCardFundingDisabled: false,
       testPurchase: false,
       requirePayment: true,
       hasFreeTrial: false,

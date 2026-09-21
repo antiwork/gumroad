@@ -446,34 +446,42 @@ const FormPage = ({
             <header>
               <h2>Payment methods</h2>
             </header>
-            <Switch
-              checked={achPaymentsEnabled}
-              onChange={(e) => updateUserData({ ach_payments_enabled: e.target.checked })}
-              label="Allow customers to pay by bank account (ACH Direct Debit)"
-            />
-            <p className="text-muted">
-              Bank account payments take about 4 business days to clear, and customers only receive their purchase once
-              the payment settles. Not recommended for time-sensitive products. Available to customers in the United
-              States.
-            </p>
-            <Switch
-              checked={!linkDisabled}
-              onChange={(e) => updateUserData({ link_disabled: !e.target.checked })}
-              label="Offer Stripe Link at checkout"
-            />
-            <p className="text-muted">
-              Link lets customers save their payment details and pay with one click. Turning it off also removes the
-              optional "save my information" section Link renders under the card fields.
-            </p>
-            <Switch
-              checked={!paypalCardFundingDisabled}
-              onChange={(e) => updateUserData({ paypal_card_funding_disabled: !e.target.checked })}
-              label="Show PayPal's debit or credit card button"
-            />
-            <p className="text-muted">
-              PayPal adds this button next to the PayPal button for customers who would rather pay with a card. Turning
-              it off leaves only the PayPal button.
-            </p>
+            <div className="space-y-6">
+              <div className="space-y-2">
+                <Switch
+                  checked={achPaymentsEnabled}
+                  onChange={(e) => updateUserData({ ach_payments_enabled: e.target.checked })}
+                  label="Allow customers to pay by bank account (ACH Direct Debit)"
+                />
+                <p className="text-muted">
+                  Bank account payments take about 4 business days to clear, and customers only receive their purchase
+                  once the payment settles. Not recommended for time-sensitive products. Available to customers in the
+                  United States.
+                </p>
+              </div>
+              <div className="space-y-2">
+                <Switch
+                  checked={!linkDisabled}
+                  onChange={(e) => updateUserData({ link_disabled: !e.target.checked })}
+                  label="Offer Stripe Link at checkout"
+                />
+                <p className="text-muted">
+                  Link lets customers save their payment details and pay with one click. Turning it off also removes the
+                  optional "save my information" section Link renders under the card fields.
+                </p>
+              </div>
+              <div className="space-y-2">
+                <Switch
+                  checked={!paypalCardFundingDisabled}
+                  onChange={(e) => updateUserData({ paypal_card_funding_disabled: !e.target.checked })}
+                  label="Show PayPal's debit or credit card button"
+                />
+                <p className="text-muted">
+                  PayPal adds this button next to the PayPal button for customers who would rather pay with a card.
+                  Turning it off leaves only the PayPal button.
+                </p>
+              </div>
+            </div>
           </section>
           {paypal_connect.show_paypal_connect ? (
             <PayPalConnectSection
