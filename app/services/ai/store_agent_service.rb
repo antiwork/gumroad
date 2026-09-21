@@ -70,11 +70,23 @@ class Ai::StoreAgentService
   # turn's arguments, so re-ask it once at double the cap. Only truncating turns pay this.
   MAX_TRUNCATION_RETRY_TOKENS = 16_384
   MAX_TRUNCATION_RETRIES = 1
-  # What the seller sees when a turn still hits MAX_REPLY_TOKENS. A truncated turn is unusable (a
-  # cut-off tool call has unparseable arguments; a cut-off reply would present half an answer as
-  # complete), so ask for something smaller instead of streaming garbage or raising.
-  TRUNCATED_REPLY = "That's too much for me to handle in one go — try asking me to change or " \
-                    "summarize a smaller section, and I'll take it from there."
+  # What the seller sees when a turn still hits MAX_REPLY_TOKENS: a truncated turn is unusable, and
+  # the ask has to hold on every surface, including a page that is one whole document.
+  TRUNCATED_REPLY = "That's more than I can write in a single reply. Let's do it in smaller " \
+                    "steps — ask me for one part at a time and I'll take it from there."
+  # The re-ask only. A byte-identical retry at a bigger cap truncates identically when the attempt's
+  # SIZE is the problem, so this one tells the model to go smaller instead.
+  TRUNCATION_RECOVERY_INSTRUCTION = <<~PROMPT.strip
+    Your last response ran out of room before it finished, so it was discarded and the creator has
+    not seen it. Sending the same thing again the same way fails the same way — send it in smaller
+    pieces instead, and keep every value you emit small. For a whole custom page: publish a complete
+    but minimal page first (name and bio, the product grid read from gumroad-data, prices, footer)
+    with a <!-- gumroad:sections --> marker where the sections go, then add ONE section per reply
+    with edit_user_custom_html, replacing the marker with that section plus the marker again, and
+    drop the marker in the edit that completes the page. For an oversized change of any other kind,
+    never send half a value — a description or a bio is replaced as a whole — so cover fewer items
+    this turn and tell the creator what is still left.
+  PROMPT
   # Phrases a reply uses when it asserts THIS turn staged a change. Such a reply is only TRUE when
   # the same turn produced a proposed action — the confirmation card is rendered from that action, so
   # with no action there is no card and the creator hunts a button that cannot exist. The model does
@@ -658,6 +670,15 @@ class Ai::StoreAgentService
       picture, served from a host custom pages are not allowed to load images from, so
       embedding it renders a broken image. Never author an empty image slot, and never
       expect an avatar in the gumroad-data JSON — it isn't there.
+    - A page with several sections is usually too big to write in one reply: the write carries the
+      ENTIRE page in its arguments, so a long page runs out of reply budget before the call is
+      finished and the creator gets an error instead of a page. Build it in pieces instead of one
+      giant write: publish a complete but minimal page first — the header with name and bio, the
+      product grid read from gumroad-data, the prices, the footer — with a <!-- gumroad:sections -->
+      marker where the sections will go, then add ONE section per reply with edit_user_custom_html,
+      replacing the marker with that section plus the marker again. The marker is an HTML comment,
+      invisible on the rendered page, and it comes out in the edit that completes the page. Say you
+      are building it section by section so the confirmations make sense to the creator.
     - Never publish a page that drops the creator's products or reduces the storefront to a
       colored background.
     - A PRODUCT's landing page (the /l/ page buyers see for one product) is a different surface
@@ -748,7 +769,7 @@ class Ai::StoreAgentService
     while remaining_iterations.positive?
       remaining_iterations -= 1
       result = client.messages(
-        system: system_prompt,
+        system: system_prompt_for(truncation_retries),
         messages: conversation,
         tools: tool_schemas,
         max_tokens: truncation_retries.zero? ? MAX_REPLY_TOKENS : MAX_TRUNCATION_RETRY_TOKENS,
@@ -844,7 +865,7 @@ class Ai::StoreAgentService
       result =
         begin
           client.stream_messages(
-            system: system_prompt,
+            system: system_prompt_for(truncation_retries),
             messages: conversation,
             tools: tool_schemas,
             max_tokens: truncation_retries.zero? ? MAX_REPLY_TOKENS : MAX_TRUNCATION_RETRY_TOKENS,
@@ -1389,6 +1410,13 @@ class Ai::StoreAgentService
         reads: Ai::StoreAgentApiCatalog.manifest(:read),
         writes: Ai::StoreAgentApiCatalog.manifest(:write),
       )
+    end
+
+    # The re-ask after a truncated turn carries one extra instruction the ordinary turns must not
+    # see (TRUNCATION_RECOVERY_INSTRUCTION). It rides on the system prompt so the conversation itself
+    # stays exactly what the creator said.
+    def system_prompt_for(truncation_retries)
+      truncation_retries.zero? ? system_prompt : "#{system_prompt}\n\n#{TRUNCATION_RECOVERY_INSTRUCTION}"
     end
 
     # Two generic API tools drive the whole catalog. `complete_turn` is a terminal marker: unlike
