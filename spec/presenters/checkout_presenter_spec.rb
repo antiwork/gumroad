@@ -405,7 +405,8 @@ describe CheckoutPresenter do
             type: "anonymous",
             id: wishlist.user.external_id,
             name: wishlist.user.name,
-            note: ""
+            note: "",
+            hideGifter: false
           },
           add_products: [{
             product: a_hash_including(id: wishlist_product.product.external_id),
@@ -433,7 +434,8 @@ describe CheckoutPresenter do
             type: "anonymous",
             id: wishlist.user.external_id,
             name: wishlist.user.username,
-            note: ""
+            note: "",
+            hideGifter: false
           }
         )
       end

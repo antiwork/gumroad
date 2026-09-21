@@ -402,7 +402,13 @@ class Purchase::CreateService < Purchase::BaseService
       raise Purchase::PurchaseInvalid, "Gift purchases cannot be on installment plans." if params[:pay_in_installments]
 
       if product.can_gift?
-        gift = product.gifts.build(giftee_email:, gift_note: gift_params[:gift_note], gifter_email: params[:purchase][:email], is_recipient_hidden: gift_params[:giftee_email].blank?)
+        gift = product.gifts.build(
+          giftee_email:,
+          gift_note: gift_params[:gift_note],
+          gifter_email: params[:purchase][:email],
+          is_recipient_hidden: gift_params[:giftee_email].blank?,
+          is_gifter_hidden: ActiveRecord::Type::Boolean.new.cast(gift_params[:hide_gifter]),
+        )
         error_message = gift.save ? nil : gift.errors.full_messages[0]
         raise Purchase::PurchaseInvalid, error_message if error_message.present?
 

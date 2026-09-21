@@ -1438,7 +1438,7 @@ class Purchase < ApplicationRecord
       has_files: link.has_files?,
       product_id: link.external_id,
       is_gift_receiver_purchase: purchase.present? && purchase.is_gift_receiver_purchase,
-      gift_receiver_text: "#{purchase.try(:gifter_email)} bought this for you.",
+      gift_receiver_text: purchase.try(:gifter_hidden_from_recipient?) ? "Someone bought this for you." : "#{purchase.try(:gifter_email)} bought this for you.",
       is_gift_sender_purchase: purchase.present? && purchase.is_gift_sender_purchase,
       gift_sender_text: "You bought this for #{purchase&.giftee_name_or_email}.",
       content_url: purchase.has_content? ? url_redirect.try(:download_page_url) : nil,
@@ -2861,6 +2861,10 @@ class Purchase < ApplicationRecord
 
   def gifter_email
     gift&.gifter_email
+  end
+
+  def gifter_hidden_from_recipient?
+    gift&.is_gifter_hidden? || false
   end
 
   def giftee_email
