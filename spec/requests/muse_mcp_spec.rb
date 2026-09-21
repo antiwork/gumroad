@@ -290,6 +290,34 @@ describe "Muse MCP" do
       expect(names).to include("get_account", "list_products", "list_sales", "create_draft_product", "publish_product")
     end
 
+    it "labels reads, drafts, and sale-state changes for the host" do
+      post_mcp({ jsonrpc: "2.0", id: 1, method: "tools/list" })
+
+      annotations = response.parsed_body.dig("result", "tools").to_h { |tool| [tool["name"], tool["annotations"]] }
+      expect(annotations.keys).to contain_exactly(
+        "get_account", "list_products", "get_product", "create_draft_product",
+        "publish_product", "unpublish_product", "list_sales", "list_payouts"
+      )
+      expect(annotations.values).to all(include("openWorldHint" => false))
+      %w[get_account list_products get_product list_sales list_payouts].each do |name|
+        expect(annotations[name]).to include("readOnlyHint" => true, "destructiveHint" => false)
+      end
+      expect(annotations["create_draft_product"]).to include("readOnlyHint" => false, "destructiveHint" => false)
+      %w[publish_product unpublish_product].each do |name|
+        expect(annotations[name]).to include("readOnlyHint" => false, "destructiveHint" => true)
+      end
+    end
+
+    it "says checkout stays on the product URL" do
+      post_mcp({ jsonrpc: "2.0", id: 1, method: "initialize" })
+
+      instructions = response.parsed_body.dig("result", "instructions")
+      expect(instructions).to include("check out on the product URL")
+      expect(instructions).to include("does not take payment")
+      expect(instructions).not_to include("Muse's browser")
+      expect(instructions).not_to include("refunding")
+    end
+
     it "lists sales" do
       purchase = create(:purchase, seller: @seller, link: @product, email: "buyer@example.com", price_cents: 1900)
 
