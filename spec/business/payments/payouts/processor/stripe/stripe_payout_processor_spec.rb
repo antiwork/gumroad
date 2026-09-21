@@ -247,4 +247,135 @@ describe StripePayoutProcessor do
       expect(ErrorNotifier).to have_received(:notify).once
     end
   end
+
+  describe ".prepare_payment_and_set_amount" do
+    # The guard fires before any Stripe call, so none of these may be reached: the internal transfer
+    # is the money movement gumroad-private#2840 loops on, and the drift guard's balance read comes
+    # after it in the method.
+    def expect_no_stripe_money_movement
+      expect(StripeTransferInternallyToCreator).not_to receive(:transfer_funds_to_account)
+      expect(Stripe::Transfer).not_to receive(:create)
+      expect(Stripe::Payout).not_to receive(:create)
+      expect(Stripe::Balance).not_to receive(:retrieve)
+    end
+
+    def build_payment(seller, balances, stripe_connect_account_id)
+      create(:payment, user: seller, processor: PayoutProcessorType::STRIPE, state: "creating", amount_cents: 0,
+                       currency: Currency::AUD, stripe_connect_account_id:, balances:)
+    end
+
+    context "when the destination is a retired Gumroad-managed account" do
+      let(:seller) { create(:user) }
+      let!(:compliance_info) { create(:user_compliance_info, user: seller) }
+      let!(:connected_account) { create(:merchant_account_stripe_connect, user: seller, created_at: 90.days.ago) }
+      let(:retired_account) do
+        create(:merchant_account, user: seller, currency: Currency::AUD, charge_processor_merchant_id: "acct_retired_aud")
+          .tap(&:delete_charge_processor_account!)
+      end
+
+      before do
+        # Connect routing is live: the connected account is the seller's only active destination and
+        # #stripe_account never returns for them again, so the held-balance fallback is what picks.
+        Feature.activate_user(:merchant_migration, seller)
+      end
+      after { Feature.deactivate_user(:merchant_migration, seller) }
+
+      it "fails closed before any Stripe call when the held-balance fallback resolves to the retired account" do
+        debts = [
+          create(:balance, user: seller, merchant_account: retired_account, state: "processing", date: 3.days.ago.to_date,
+                           amount_cents: -50_00, holding_currency: Currency::AUD, holding_amount_cents: -215_00),
+          create(:balance, user: seller, merchant_account: retired_account, state: "processing", date: 2.days.ago.to_date,
+                           amount_cents: -23_63, holding_currency: Currency::AUD, holding_amount_cents: -100_39),
+        ]
+        gumroad_held = create(:balance, user: seller, state: "processing", date: 1.day.ago.to_date, amount_cents: 563_56)
+        balances = debts + [gumroad_held]
+        payment = build_payment(seller, balances, retired_account.charge_processor_merchant_id)
+        expect_no_stripe_money_movement
+
+        expect(seller.has_stripe_account_connected?).to eq(true)
+        expect(seller.stripe_account).to be_nil
+        expect(described_class.get_payout_details(seller, balances).first).to eq(retired_account)
+        # Both ledgers read negative, so the drift guard alone never refuses this payout.
+        expect(debts.sum(&:holding_amount_cents)).to be_negative
+        expect(debts.sum(&:amount_cents)).to be_negative
+
+        errors = described_class.prepare_payment_and_set_amount(payment, balances)
+
+        expect(errors.sole).to include("acct_retired_aud", "is retired", "blocked before transfer", "balances remain unpaid")
+        expect(errors.sole).to include("Balance #{debts.first.id}: -21500 aud", "investigate reconciliation")
+        expect(errors.sole).not_to include(connected_account.charge_processor_merchant_id, "Move the funds")
+        payment.reload
+        expect(payment).to be_failed
+        expect(payment.failure_reason).to eq(Payment::FailureReason::DESTINATION_ACCOUNT_RETIRED)
+        expect(payment.stripe_connect_account_id).to eq("acct_retired_aud")
+        expect(payment.stripe_internal_transfer_id).to be_nil
+        expect(payment.amount_cents).to eq(0)
+        expect(payment.balances.ids).to match_array(balances.map(&:id))
+        expect(balances.map { |balance| balance.reload.state }.uniq).to eq(["unpaid"])
+      end
+
+      [[:deleted_at, Time.current], [:charge_processor_deleted_at, Time.current], [:charge_processor_alive_at, nil]].each do |attribute, value|
+        it "refuses an explicitly grouped destination retired through #{attribute}, leaving its positive balance unpaid" do
+          account = create(:merchant_account, user: seller, currency: Currency::AUD,
+                                              charge_processor_merchant_id: "acct_#{attribute}", attribute => value)
+          credit = create(:balance, user: seller, merchant_account: account, state: "processing", date: 2.days.ago.to_date,
+                                    amount_cents: 300_00, holding_currency: Currency::AUD, holding_amount_cents: 450_00)
+          payment = build_payment(seller, [credit], account.charge_processor_merchant_id)
+          expect_no_stripe_money_movement
+          expect(account.active?).to eq(false)
+
+          errors = described_class.prepare_payment_and_set_amount(payment, [credit], account, Currency::AUD)
+
+          expect(errors.sole).to include("acct_#{attribute}").and include(attribute.to_s)
+          expect(payment.reload).to be_failed
+          expect(payment.failure_reason).to eq(Payment::FailureReason::DESTINATION_ACCOUNT_RETIRED)
+          expect(payment.amount_cents).to eq(0)
+          expect(credit.reload).to be_unpaid
+        end
+      end
+    end
+
+    context "when the destination is an active Gumroad-managed account" do
+      let(:seller) { create(:user) }
+      let!(:active_account) { create(:merchant_account, user: seller, currency: Currency::AUD, charge_processor_merchant_id: "acct_active_aud") }
+
+      it "still prepares the payout and reads the destination balance" do
+        credit = create(:balance, user: seller, merchant_account: active_account, state: "processing", date: 2.days.ago.to_date,
+                                  amount_cents: 300_00, holding_currency: Currency::AUD, holding_amount_cents: 450_00)
+        payment = build_payment(seller, [credit], active_account.charge_processor_merchant_id)
+        allow(Stripe::Balance).to receive(:retrieve).and_return(
+          Stripe::Balance.construct_from(available: [{ currency: Currency::AUD, amount: 500_00 }], pending: [])
+        )
+        expect(StripeTransferInternallyToCreator).not_to receive(:transfer_funds_to_account)
+
+        errors = described_class.prepare_payment_and_set_amount(payment, [credit])
+
+        expect(errors).to eq([])
+        expect(payment).not_to be_failed
+        expect(payment.amount_cents).to eq(450_00)
+        expect(payment.currency).to eq(Currency::AUD)
+        expect(payment.stripe_connect_account_id).to eq("acct_active_aud")
+        expect(credit.reload).to be_processing
+      end
+
+      # payout_groups routes a stale row to the active account so preparation fails it as a mismatch;
+      # that path is unchanged and must not be reclassified as a retired destination.
+      it "keeps failing a balance parked on a replaced account as a currency mismatch" do
+        replaced_account = create(:merchant_account, user: seller, currency: Currency::AUD, charge_processor_merchant_id: "acct_replaced_aud")
+                             .tap(&:delete_charge_processor_account!)
+        stale = create(:balance, user: seller, merchant_account: replaced_account, state: "processing", date: 2.days.ago.to_date,
+                                 amount_cents: 20_00, holding_currency: Currency::AUD, holding_amount_cents: 30_00)
+        merchant_account, payout_currency, group = described_class.payout_groups(seller, [stale]).sole
+        expect(merchant_account).to eq(active_account)
+        payment = build_payment(seller, group, merchant_account.charge_processor_merchant_id)
+        expect_no_stripe_money_movement
+
+        errors = described_class.prepare_payment_and_set_amount(payment, group, merchant_account, payout_currency)
+
+        expect(errors.sole).to include("does not match the payout currency")
+        expect(payment.reload.failure_reason).to eq(Payment::FailureReason::CURRENCY_MISMATCH)
+        expect(stale.reload).to be_unpaid
+      end
+    end
+  end
 end

@@ -1086,6 +1086,94 @@ describe Payouts do
     end
   end
 
+  # gumroad-private#2840: a seller routed through their own connected account, with Stripe-held debt
+  # stranded on the managed account a country change retired. The debt keeps `balances_held_by_stripe`
+  # non-empty, so `destination_merchant_account` falls back to the retired account.
+  describe ".create_payments with Stripe-held balances stranded on a retired account" do
+    let(:payout_date) { Date.today - 1 }
+    let(:user) { create(:user) }
+    let!(:compliance_info) { create(:user_compliance_info, user:) }
+    let!(:connected_account) { create(:merchant_account_stripe_connect, user:, created_at: 90.days.ago) }
+    let!(:retired_account) do
+      create(:merchant_account, user:, currency: Currency::AUD, charge_processor_merchant_id: "acct_retired_aud")
+        .tap(&:delete_charge_processor_account!)
+    end
+    let!(:stripe_debts) do
+      [
+        create(:balance, user:, merchant_account: retired_account, date: payout_date - 4, amount_cents: -50_00,
+                         holding_currency: Currency::AUD, holding_amount_cents: -215_00),
+        create(:balance, user:, merchant_account: retired_account, date: payout_date - 3, amount_cents: -23_63,
+                         holding_currency: Currency::AUD, holding_amount_cents: -100_39),
+      ]
+    end
+    let!(:gumroad_credits) do
+      [
+        create(:balance, user:, date: payout_date - 2, amount_cents: 281_78),
+        create(:balance, user:, date: payout_date - 1, amount_cents: 281_78),
+      ]
+    end
+
+    before do
+      Feature.activate_user(:merchant_migration, user)
+      expect(StripeTransferInternallyToCreator).not_to receive(:transfer_funds_to_account)
+      expect(Stripe::Transfer).not_to receive(:create)
+      expect(Stripe::Payout).not_to receive(:create)
+      expect(Stripe::Balance).not_to receive(:retrieve)
+    end
+    after { Feature.deactivate_user(:merchant_migration, user) }
+
+    it "merges the Gumroad-held credit into the retired account's group, so the seller-level debt check passes it" do
+      balances = user.unpaid_balances_up_to_date(payout_date).to_a
+      expect(balances.all? { |balance| StripePayoutProcessor.is_balance_payable(balance) }).to eq(true)
+
+      groups = StripePayoutProcessor.payout_groups(user, balances)
+
+      expect(groups.map { |account, currency, group| [account, currency, group.map(&:id).sort] })
+        .to eq([[retired_account, Currency::AUD, balances.map(&:id).sort]])
+      expect(groups.sole.last.sum(&:amount_cents)).to be_positive
+      expect(stripe_debts.sum(&:holding_amount_cents)).to be_negative
+      expect(stripe_debts.sum(&:amount_cents)).to be_negative
+    end
+
+    it "fails the payout closed before the internal transfer and returns every claimed balance to unpaid" do
+      ledger_cents = user.balances.sum(:amount_cents)
+
+      pairs = described_class.create_payments(payout_date.to_s, PayoutProcessorType::STRIPE, user)
+
+      payment, errors = pairs.sole
+      expect(errors.sole).to include("acct_retired_aud", "blocked before transfer", "balances remain unpaid")
+      expect(payment.reload).to be_failed
+      expect(payment.failure_reason).to eq(Payment::FailureReason::DESTINATION_ACCOUNT_RETIRED)
+      expect(payment.stripe_connect_account_id).to eq("acct_retired_aud")
+      expect(payment.stripe_internal_transfer_id).to be_nil
+      expect(payment.balances.ids).to match_array((stripe_debts + gumroad_credits).map(&:id))
+      expect(user.balances.reload.map(&:state).uniq).to eq(["unpaid"])
+      expect(user.balances.sum(:amount_cents)).to eq(ledger_cents)
+      expect(user.reload.payouts_paused?).to eq(false)
+    end
+
+    it "dispatches nothing when the payout runs through PayoutUsersService" do
+      payments = PayoutUsersService.new(date_string: payout_date.to_s, processor_type: PayoutProcessorType::STRIPE, user_ids: user.id).process
+
+      expect(payments).to eq([])
+      expect(user.payments.sole).to be_failed
+      expect(user.payments.sole.failure_reason).to eq(Payment::FailureReason::DESTINATION_ACCOUNT_RETIRED)
+      expect(user.balances.reload.map(&:state).uniq).to eq(["unpaid"])
+    end
+
+    it "also refuses positive balances parked on the retired account instead of paying through it" do
+      stripe_debts.each { |debt| debt.update!(amount_cents: 100_00, holding_amount_cents: 150_00) }
+
+      pairs = described_class.create_payments(payout_date.to_s, PayoutProcessorType::STRIPE, user)
+
+      payment, errors = pairs.sole
+      expect(errors.sole).to include("acct_retired_aud")
+      expect(payment.reload).to be_failed
+      expect(payment.failure_reason).to eq(Payment::FailureReason::DESTINATION_ACCOUNT_RETIRED)
+      expect(user.balances.reload.map(&:state).uniq).to eq(["unpaid"])
+    end
+  end
+
   describe ".create_payments_for_balances_up_to_date_for_bank_account_types" do
     let(:payout_date) { Date.today - 1 }
     let(:payout_processor_type) { PayoutProcessorType::STRIPE }
