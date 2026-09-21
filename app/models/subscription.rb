@@ -953,14 +953,16 @@ class Subscription < ApplicationRecord
         return if renewal_disabled_due_to_indian_card_mandate?
       end
 
-      # Only a failure from a previous billing cycle is a repeat: the failed charge that triggered
-      # this cancellation is itself always inside the window, because UnsubscribeAndFailWorker runs
-      # days after it, so an unqualified window match suppresses a first cancellation too.
-      last_successful_charge_at = purchases.successful.maximum(:created_at)
-      was_recently_failed = last_successful_charge_at.present? &&
+      # Episode opens at the later of the last successful charge and the last restart,
+      # floored to the second so a charge in that same second is not a previous episode.
+      cycle_opened_at = [
+        purchases.successful.maximum(:created_at),
+        subscription_events.restarted.maximum(:occurred_at)
+      ].compact.max&.change(usec: 0)
+      was_recently_failed = cycle_opened_at.present? &&
         purchases.failed
                  .where("created_at > ?", ALLOWED_TIME_BEFORE_SENDING_REPEATED_CANCELLATION_EMAIL_TO_CREATOR.ago)
-                 .where("created_at < ?", last_successful_charge_at)
+                 .where("created_at < ?", cycle_opened_at)
                  .exists?
 
       self.failed_at = Time.current

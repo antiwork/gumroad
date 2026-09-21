@@ -2056,6 +2056,28 @@ class SubscriptionTest < ActiveSupport::TestCase
     assert_enqueued_email(ContactingCreatorMailer, :subscription_autocancelled, args: [@subscription.id])
   end
 
+  test "#unsubscribe_and_fail! does not email the creator again when a restart's charge fails" do
+    # A failed restart does not create a successful purchase, so the last success does not advance.
+    @purchase.update_columns(created_at: 10.days.ago)
+    create_failed_purchase(link: @subscription.link, subscription: @subscription, email: @subscription.user.email, created_at: 3.days.ago)
+    @subscription.update!(failed_at: 3.days.ago, deactivated_at: 3.days.ago)
+    @subscription.resubscribe!
+    create_failed_purchase(link: @subscription.link, subscription: @subscription, email: @subscription.user.email, created_at: Time.current)
+    @subscription.unsubscribe_and_fail!
+    assert_enqueued_email(CustomerLowPriorityMailer, :subscription_autocancelled, args: [@subscription.id])
+    refute_enqueued_email(ContactingCreatorMailer, :subscription_autocancelled, args: [@subscription.id])
+  end
+
+  test "#unsubscribe_and_fail! still emails the creator after a restart that had no failed charge" do
+    @purchase.update_columns(created_at: 10.days.ago)
+    @subscription.update!(cancelled_at: 2.days.ago, deactivated_at: 2.days.ago)
+    @subscription.resubscribe!
+    create_failed_purchase(link: @subscription.link, subscription: @subscription, email: @subscription.user.email, created_at: Time.current)
+    assert_equal true, @subscription.seller.enable_payment_email
+    @subscription.unsubscribe_and_fail!
+    assert_enqueued_email(ContactingCreatorMailer, :subscription_autocancelled, args: [@subscription.id])
+  end
+
   test "#unsubscribe_and_fail! sends email to customer and creator on new failure more than 7 days ago" do
     create_failed_purchase(link: @subscription.link, subscription: @subscription, email: @subscription.user.email, created_at: 30.days.ago)
     assert_equal true, @subscription.seller.enable_payment_email
