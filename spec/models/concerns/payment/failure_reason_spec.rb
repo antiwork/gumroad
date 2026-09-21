@@ -66,6 +66,13 @@ describe Payment::FailureReason do
     end
   end
 
+  describe "INTERNAL_RECONCILIATION_REASONS" do
+    it "counts a retired payout destination as a refusal about Gumroad's own books" do
+      expect(described_class::INTERNAL_RECONCILIATION_REASONS)
+        .to contain_exactly(described_class::DESTINATION_LEDGER_NEGATIVE, described_class::DESTINATION_ACCOUNT_RETIRED)
+    end
+  end
+
   # Deciding whether the seller still needs telling is a narrower question than "carries some
   # terminal-PayPal explanation": a note about a rejection on a PayPal address they have since
   # replaced explains a block they are no longer under.
@@ -388,6 +395,18 @@ describe Payment::FailureReason do
 
             payout_note = "Payout via Stripe on #{payment.created_at} failed because the bank account on file at Stripe was replaced, so payouts can no longer be sent to the saved reference. "
             payout_note += "Solution: Re-add the bank account in payout settings to refresh the saved reference."
+            expect(payment.user.comments.last.content).to eq payout_note
+          end
+        end
+
+        context "when failure reason is destination_account_retired" do
+          it "adds a payout note that sends the seller to Support without asking them to change payout details" do
+            expect do
+              payment.mark_failed!(Payment::FailureReason::DESTINATION_ACCOUNT_RETIRED)
+            end.to change { payment.user.comments.count }.by(1)
+
+            payout_note = "Payout via Stripe on #{payment.created_at} failed because the selected payout account has been retired. "
+            payout_note += "Solution: Contact Gumroad Support to investigate reconciliation before retrying."
             expect(payment.user.comments.last.content).to eq payout_note
           end
         end

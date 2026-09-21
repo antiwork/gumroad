@@ -277,6 +277,17 @@ class StripePayoutProcessor
       return ["Cannot process payout: no valid merchant account found for user."]
     end
 
+    # Held balances can still name a retired account. Stop before transferring more funds
+    # into it, without discarding the ledger obligations attached to those balances.
+    unless merchant_account.active?
+      message = retired_destination_error(merchant_account, balances_held_by_stripe)
+      payment.stripe_connect_account_id = merchant_account.charge_processor_merchant_id
+      payment.error_message = message.truncate(1000)
+      payment.mark_failed!(Payment::FailureReason::DESTINATION_ACCOUNT_RETIRED)
+      payment.errors.add(:base, message)
+      return [message]
+    end
+
     # The payout can only move the balances of one currency: a Stripe payout is created in a single
     # currency and Stripe's account balance is per currency, so cents of two currencies can never be
     # summed into one wire amount.
@@ -490,6 +501,23 @@ class StripePayoutProcessor
     [message, Payment::FailureReason::INSUFFICIENT_FUNDS]
   end
   private_class_method :destination_balance_drift_error
+
+  # Refusing a retired destination must not depend on Stripe being available.
+  def self.retired_destination_error(merchant_account, balances_held_by_stripe)
+    retired_via = []
+    retired_via << "deleted_at #{merchant_account.deleted_at&.to_date}" if merchant_account.deleted?
+    retired_via << "charge_processor_deleted_at #{merchant_account.charge_processor_deleted_at&.to_date}" if merchant_account.charge_processor_deleted?
+    retired_via << "charge_processor_alive_at nil" if merchant_account.charge_processor_alive_at.nil?
+    held = balances_held_by_stripe.select { |balance| balance.merchant_account_id == merchant_account.id }
+    held_summary = held.map { |balance| "Balance #{balance.id}: #{balance.holding_amount_cents} #{balance.holding_currency}" }.join(", ")
+
+    "Cannot process payout: destination Stripe account #{merchant_account.charge_processor_merchant_id} " \
+      "(MerchantAccount #{merchant_account.id}) is retired (#{retired_via.join(", ")}). " \
+      "#{held.size} Stripe-held balance#{"s" if held.size != 1} still route to it (#{held_summary}). " \
+      "This attempt was blocked before transfer and the balances remain unpaid. " \
+      "Contact Gumroad Support to investigate reconciliation before retrying."
+  end
+  private_class_method :retired_destination_error
 
   # Names the rows a human has to correct; the offending set is usually one row among many healthy ones.
   def self.negative_balance_ids(balances)

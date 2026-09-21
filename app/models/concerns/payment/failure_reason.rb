@@ -22,6 +22,7 @@ module Payment::FailureReason
   # leave the row in `processing` and block the next payout. Completed/unclaimed still need one.
   NEVER_DISPATCHED_REASONS = [TRANSACTION_NOT_FOUND, PROCESSOR_UNAVAILABLE].freeze
   DESTINATION_LEDGER_NEGATIVE = "destination_ledger_negative"
+  DESTINATION_ACCOUNT_RETIRED = "destination_account_retired"
   PAYPAL_PAYOUT_FAILED = "PAYPAL payout failed"
 
   # Failures caused by us or by the processor being unreachable, never by the seller's payout
@@ -48,7 +49,7 @@ module Payment::FailureReason
   # at the wrong component. Unlike TRANSIENT_REASONS they DO get a STRIPE_FAILURE_SOLUTIONS entry:
   # the seller cannot fix this, so the one useful thing we can tell them is to contact Support
   # rather than re-entering correct bank details.
-  INTERNAL_RECONCILIATION_REASONS = [DESTINATION_LEDGER_NEGATIVE].freeze
+  INTERNAL_RECONCILIATION_REASONS = [DESTINATION_LEDGER_NEGATIVE, DESTINATION_ACCOUNT_RETIRED].freeze
 
   # The subset an automated requeue may re-issue: failures raised before Stripe could accept
   # anything, so re-issuing cannot duplicate money.
@@ -422,6 +423,10 @@ module Payment::FailureReason
     "destination_ledger_negative" => {
       reason: "a residual balance on the account holding your funds would be deducted from this payout without appearing in your balance",
       solution: "Gumroad needs to reconcile that balance before payouts can resume; your payout details are fine and nothing needs changing. Contact Gumroad Support",
+    },
+    "destination_account_retired" => {
+      reason: "the selected payout account has been retired",
+      solution: "Contact Gumroad Support to investigate reconciliation before retrying",
     },
     "destination_currency_mismatch" => {
       reason: "the payout currency does not match any bank account configured to receive it on the connected Stripe account",
