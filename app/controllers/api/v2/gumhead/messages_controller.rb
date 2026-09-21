@@ -254,6 +254,7 @@ class Api::V2::Gumhead::MessagesController < Api::V2::BaseController
     # header is accepted here.
     def doorkeeper_token
       @doorkeeper_token ||= Doorkeeper::OAuth::Token.authenticate(request, :from_bearer_authorization)
+      Muse::DynamicClientOauth.token_for_request(@doorkeeper_token, request)
     end
 
     def ensure_gumhead_enabled

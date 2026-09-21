@@ -11,6 +11,34 @@ class Oauth::AuthorizationsController < Doorkeeper::AuthorizationsController
   helper_method :admin_scope_optional?, :show_admin_authorization_checkbox?
 
   private
+    # Dynamically registered MCP clients must send an S256 challenge and a supported resource on
+    # every authorization request, including ones on the canonical /oauth path.
+    def pre_auth
+      @pre_auth ||= Muse::DynamicClientOauth.screen(super)
+    end
+
+    # Only dynamic clients bind grants to a resource; other applications never persist one.
+    def pre_auth_params
+      fields = super
+      dynamic_client_request? ? fields : fields.except(:resource)
+    end
+
+    def dynamic_client_request?
+      return @dynamic_client_request if defined?(@dynamic_client_request)
+
+      @dynamic_client_request = OauthApplication.alive.where(mcp_dynamic_client: true).exists?(uid: params[:client_id].to_s)
+    end
+
+    # Doorkeeper refuses its matching-token consent skip whenever any custom access token attribute
+    # is configured. `resource` is only ever set for dynamic clients, which always see consent, so
+    # discount it here and keep the skip for other confidential clients exactly as before.
+    def can_authorize_response?
+      return false if dynamic_client_request?
+
+      other_custom_attributes = Doorkeeper.config.custom_access_token_attributes.map(&:to_sym) - [:resource]
+      other_custom_attributes.empty? && pre_auth.client.application.confidential? && matching_token?
+    end
+
     # Scope migrations lock the application while revoking credentials. Re-read
     # and validate the requested scopes under that same lock so a request that
     # saw the old scopes cannot create a grant after the revocation sweep.

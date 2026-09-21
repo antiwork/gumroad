@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.1].define(version: 2026_12_16_090001) do
+ActiveRecord::Schema[7.1].define(version: 2026_12_16_090002) do
   create_table "active_storage_attachments", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
     t.string "name", limit: 191, null: false
     t.string "record_type", limit: 191, null: false
@@ -1429,6 +1429,7 @@ ActiveRecord::Schema[7.1].define(version: 2026_12_16_090001) do
     t.string "scopes", default: "", null: false
     t.string "code_challenge"
     t.string "code_challenge_method"
+    t.string "resource"
     t.index ["created_at"], name: "index_oauth_access_grants_on_created_at"
     t.index ["resource_owner_id", "application_id"], name: "idx_on_resource_owner_id_application_id_1b7397c458"
     t.index ["token"], name: "index_oauth_access_grants_on_token", unique: true
@@ -1443,6 +1444,7 @@ ActiveRecord::Schema[7.1].define(version: 2026_12_16_090001) do
     t.datetime "revoked_at", precision: nil
     t.datetime "created_at", precision: nil, null: false
     t.string "scopes"
+    t.string "resource"
     t.index ["refresh_token"], name: "index_oauth_access_tokens_on_refresh_token", unique: true
     t.index ["resource_owner_id"], name: "index_oauth_access_tokens_on_resource_owner_id"
     t.index ["token"], name: "index_oauth_access_tokens_on_token", unique: true
@@ -1463,6 +1465,7 @@ ActiveRecord::Schema[7.1].define(version: 2026_12_16_090001) do
     t.boolean "confidential", default: false, null: false
     t.boolean "device_authorization_enabled", default: false, null: false
     t.boolean "is_first_party_agent_app", default: false, null: false
+    t.boolean "mcp_dynamic_client", default: false, null: false
     t.index ["owner_id", "owner_type", "is_first_party_agent_app"], name: "index_oauth_applications_on_owner_and_first_party_agent"
     t.index ["owner_id", "owner_type"], name: "index_oauth_applications_on_owner_id_and_owner_type"
     t.index ["uid"], name: "index_oauth_applications_on_uid", unique: true

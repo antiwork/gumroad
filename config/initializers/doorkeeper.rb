@@ -46,6 +46,16 @@ Doorkeeper.configure do
 
   grant_flows %w[authorization_code client_credentials]
 
+  # Grants and tokens for dynamically registered MCP clients carry the resource they were
+  # requested for (RFC 8707); Doorkeeper copies it grant → token → refreshed token. Other
+  # applications never receive the parameter (see Oauth::AuthorizationsController#pre_auth_params).
+  custom_access_token_attributes [:resource]
+
+  # Dynamic registration advertises authorization_code (+ refresh) only.
+  allow_grant_flow_for_client do |grant_flow, client|
+    !client&.mcp_dynamic_client || grant_flow == Doorkeeper::OAuth::AUTHORIZATION_CODE
+  end
+
   skip_authorization do |_resource_owner, client|
     client.uid == OauthApplication::MOBILE_API_OAUTH_APPLICATION_UID
   end
