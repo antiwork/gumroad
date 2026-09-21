@@ -10,8 +10,11 @@
       <% else %>
         <p class="max-w-xl text-xl sm:text-2xl">Connect your Gumroad store to <%= client_name %>. Create product drafts, check sales, and track payouts from your chat.</p>
       <% end %>
+      <% if @client[:listing_notice] %>
+        <p class="max-w-xl text-lg"><%= @client[:listing_notice] %></p>
+      <% end %>
       <div class="flex flex-col items-start gap-5">
-        <%= render "home/shared/button", text: pending_review ? "View technical details" : "Connect your store", url: "#connect", variant: "dark" %>
+        <%= render "home/shared/button", text: pending_review ? "View technical details" : (@client[:connect_label] || "Connect your store"), url: "#connect", variant: "dark" %>
         <% unless pending_review %>
           <p class="text-base">You’ll need a Gumroad account and MCP support in <%= client_name %>.</p>
         <% end %>
