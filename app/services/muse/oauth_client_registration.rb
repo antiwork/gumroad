@@ -67,7 +67,10 @@ module Muse
 
       def token_endpoint_auth_method
         method = (@params["token_endpoint_auth_method"] || @params[:token_endpoint_auth_method]).to_s
-        method.presence || "none"
+        method = method.presence || "none"
+        raise Error, "unsupported token_endpoint_auth_method" unless %w[none client_secret_post client_secret_basic].include?(method)
+
+        method
       end
 
       def confidential?

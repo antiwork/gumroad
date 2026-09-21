@@ -79,6 +79,37 @@ describe "Muse MCP" do
     expect(application.owner).to be_nil
   end
 
+  %w[none client_secret_post client_secret_basic].each do |method|
+    it "registers the supported #{method} authentication method" do
+      post "/muse/v1/oauth2/register",
+           params: { redirect_uris: ["https://example.com/callback"], token_endpoint_auth_method: method }.to_json,
+           headers: { "HOST" => DOMAIN, "CONTENT_TYPE" => "application/json" }
+
+      expect(response).to have_http_status(:created)
+      body = response.parsed_body
+      expect(body["token_endpoint_auth_method"]).to eq(method)
+      application = OauthApplication.find_by!(uid: body["client_id"])
+      expect(application.confidential?).to eq(method != "none")
+      expect(body.key?("client_secret")).to eq(method != "none")
+    end
+  end
+
+  %w[private_key_jwt client_secret_jwt tls_client_auth unknown].each do |method|
+    it "rejects unsupported #{method} authentication without creating a client" do
+      expect do
+        post "/chatgpt/v1/oauth2/register",
+             params: { redirect_uris: ["https://example.com/callback"], token_endpoint_auth_method: method }.to_json,
+             headers: { "HOST" => DOMAIN, "CONTENT_TYPE" => "application/json" }
+      end.not_to change(OauthApplication, :count)
+
+      expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body).to include(
+        "error" => "invalid_client_metadata",
+        "error_description" => "unsupported token_endpoint_auth_method"
+      )
+    end
+  end
+
   it "rejects a non-https redirect URI during registration" do
     expect do
       post "/chatgpt/v1/oauth2/register",
