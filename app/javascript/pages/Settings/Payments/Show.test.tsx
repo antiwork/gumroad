@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import * as React from "react";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -627,6 +627,8 @@ describe("switching to PayPal where the bank rail cannot be re-created", () => {
 
     expect(mocks.put).not.toHaveBeenCalled();
     expect(screen.getByText(/you will not be able to switch back/u)).toBeTruthy();
+    expect(within(screen.getByRole("dialog")).getByText("******6789")).toBeTruthy();
+    expect(screen.getByRole("dialog").textContent).toContain("PayPal, you will not be able to switch back");
     const confirm = screen.getByRole("button", { name: "Confirm" });
     expect(confirm.hasAttribute("disabled")).toBe(true);
 
@@ -647,6 +649,8 @@ describe("switching to PayPal where the bank rail cannot be re-created", () => {
     expect(screen.getByText(/forfeit your existing balance of/u)).toBeTruthy();
     expect(screen.getByText("$123.45")).toBeTruthy();
     expect(screen.getByText(/you will not be able to switch back/u)).toBeTruthy();
+    expect(within(screen.getByRole("dialog")).getByText("******6789")).toBeTruthy();
+    expect(screen.getByRole("dialog").textContent).toContain("PayPal, you will not be able to switch back");
     const confirm = screen.getByRole("button", { name: "Confirm" });
     fireEvent.change(screen.getByLabelText('Type "I understand" to confirm'), { target: { value: "understand" } });
     expect(confirm.hasAttribute("disabled")).toBe(true);
@@ -657,6 +661,18 @@ describe("switching to PayPal where the bank rail cannot be re-created", () => {
       "/settings_payments",
       expect.objectContaining({ payment_address: "paypal@example.com", confirm_bank_rail_loss: true }),
     );
+  });
+
+  it("names the removed account when only the balance is forfeited", () => {
+    renderIndiaSeller(false, "$123.45");
+    save();
+
+    const dialog = screen.getByRole("dialog");
+    expect(within(dialog).getByText("******6789")).toBeTruthy();
+    expect(dialog.textContent).toContain("Your bank account ******6789 will be removed.");
+    expect(within(dialog).getByText("$123.45")).toBeTruthy();
+    expect(within(dialog).queryByText(/you will not be able to switch back/u)).toBeNull();
+    expect(mocks.put).not.toHaveBeenCalled();
   });
 
   it("saves straight away where the rail can be re-created", () => {

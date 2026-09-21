@@ -977,7 +977,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
       expect(page).to_not have_field("PayPal Email")
     end
 
-    it "does not offer direct deposit to an India creator, who cannot complete bank setup" do
+    it "explains why direct deposit is disabled for an India creator who cannot complete bank setup" do
       @user.update!(payment_address: "barny@paypal.com")
       old_user_compliance_info = @user.alive_user_compliance_info
       new_user_compliance_info = old_user_compliance_info.dup
@@ -990,7 +990,8 @@ describe("Payments Settings Scenario", type: :system, js: true) do
       visit settings_payments_path
 
       expect(page).to have_field("PayPal Email")
-      expect(page).to_not have_button("Switch to direct deposit")
+      expect(page).to have_button("Switch to direct deposit", disabled: true)
+      expect(page).to have_content("Bank payouts can no longer be set up in this country; contact support if this looks wrong.")
     end
 
     it "keeps the creator on PayPal payouts if the bank account info is not entered" do
