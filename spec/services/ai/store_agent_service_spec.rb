@@ -2487,6 +2487,22 @@ describe Ai::StoreAgentService do
                              described_class::MAX_TRUNCATION_RETRY_TOKENS,
                            ])
       end
+
+      it "tells the re-ask to send the change in smaller pieces" do
+        # A byte-identical retry truncates again whenever the attempt's SIZE is the problem rather
+        # than its budget — a whole custom page fits no cap — so the re-ask has to carry a different
+        # instruction. Only that one attempt: the next turn starts from the ordinary prompt.
+        systems = []
+        allow(client).to receive(:messages) do |**kwargs|
+          systems << kwargs[:system]
+          systems.one? ? truncated_text_result("") : text_result("Let's build it section by section.")
+        end
+
+        service.respond(messages: [{ role: "user", content: "build my profile page" }])
+
+        expect(systems.first).not_to include(described_class::TRUNCATION_RECOVERY_INSTRUCTION)
+        expect(systems.last).to include(described_class::TRUNCATION_RECOVERY_INSTRUCTION)
+      end
     end
 
     context "when the model emits a non-hash tool input" do
@@ -2897,6 +2913,27 @@ describe Ai::StoreAgentService do
       expect(reset_index).to be < answer_index
     end
 
+    it "tells the streamed re-ask to send the change in smaller pieces" do
+      truncated = Ai::AnthropicClient::Result.new(text: "", tool_uses: [], stop_reason: "max_tokens")
+      systems = []
+      turns = [
+        { stream: [], result: truncated },
+        { stream: ["Let's build it section by section."], result: text_result("Let's build it section by section.") },
+      ]
+      allow(client).to receive(:stream_messages) do |args, &on_text|
+        systems << args[:system]
+        turn = turns.shift
+        Array(turn[:stream]).each { |piece| on_text&.call(piece) }
+        turn[:result]
+      end
+      allow(client).to receive(:messages).and_return(text_result("[]"))
+
+      collect_events([{ role: "user", content: "build my profile page" }])
+
+      expect(systems.first).not_to include(described_class::TRUNCATION_RECOVERY_INSTRUCTION)
+      expect(systems.last).to include(described_class::TRUNCATION_RECOVERY_INSTRUCTION)
+    end
+
     it "gives the streamed larger cap and its re-ask to the turn that truncated only" do
       truncated = Ai::AnthropicClient::Result.new(text: "", tool_uses: [], stop_reason: "max_tokens")
       caps = []
@@ -3112,6 +3149,18 @@ describe Ai::StoreAgentService do
       expect(events).to include([:reset, {}])
       expect(visible_reply).to eq("You have 3 products.")
       expect(result[:reply]).to eq("You have 3 products.")
+    end
+  end
+
+  describe "SYSTEM_PROMPT_HEADER whole-page guidance" do
+    let(:prompt) { described_class::SYSTEM_PROMPT_HEADER.gsub(/[[:space:]\u00a0]+/, " ") }
+
+    # A page write carries the ENTIRE document in its arguments, so a long page cannot fit one
+    # reply. Unless the prompt names the section-by-section route, the agent's only valid shape is
+    # the one write that truncates, and it offers that shape back to the creator.
+    it "teaches the section-by-section build for a page too big for one reply" do
+      expect(prompt).to include("<!-- gumroad:sections -->")
+      expect(prompt).to include("ONE section per reply with edit_user_custom_html")
     end
   end
 

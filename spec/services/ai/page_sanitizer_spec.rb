@@ -24,6 +24,12 @@ describe Ai::PageSanitizer do
       expect(sanitized).not_to include(%(on="notAnEvent()"))
     end
 
+    it "keeps HTML comments, the marker the store agent builds a page around" do
+      sanitized = described_class.sanitize("<!-- gumroad:sections --><p>Hi</p>")
+
+      expect(sanitized).to include("<!-- gumroad:sections -->")
+    end
+
     it "allows style blocks" do
       sanitized = described_class.sanitize(%(<style>.hero { color: red; }</style><section class="hero">Hi</section>))
 
