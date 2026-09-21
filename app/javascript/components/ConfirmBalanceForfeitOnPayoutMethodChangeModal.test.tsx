@@ -24,7 +24,8 @@ const renderModal = (
   );
 };
 
-const removalWarning = () => screen.queryByText(/will be removed from your payout settings/u);
+const railLossWarning = () => screen.queryByText(/Bank account payouts are no longer available/u);
+const balanceRemovalNotice = () => screen.queryByText(/will also be removed from your payout settings/u);
 
 beforeEach(() => {
   onClose.mockReset();
@@ -37,8 +38,9 @@ describe("rail-loss warning", () => {
   it("names the saved account with the masked value the server already sent", () => {
     renderModal({ losesBankRail: true, bankAccountNumberVisual: "******6789" });
 
-    expect(removalWarning()).toBeTruthy();
-    expect(screen.getByText("******6789")).toBeTruthy();
+    expect(railLossWarning()).toBeTruthy();
+    expect(screen.getAllByText("******6789")).toHaveLength(1);
+    expect(balanceRemovalNotice()).toBeNull();
     expect(screen.getByText(/you will not be able to switch back yourself/u)).toBeTruthy();
     expect(screen.getByRole("link", { name: "Contact support" }).getAttribute("href")).toBe("/help");
   });
@@ -58,7 +60,7 @@ describe("rail-loss warning", () => {
   it("falls back to a generic mention when no saved account reaches the modal", () => {
     renderModal({ losesBankRail: true });
 
-    expect(removalWarning()).toBeTruthy();
+    expect(railLossWarning()).toBeTruthy();
     expect(document.body.textContent).toContain("your bank account will be removed from your payout settings");
     expect(document.body.textContent).not.toMatch(/null|undefined/u);
   });
@@ -73,13 +75,40 @@ describe("rail-loss warning", () => {
 });
 
 describe("balance-only confirmation", () => {
-  it("keeps the forfeiture copy and adds no account identity", () => {
+  it("names the saved account being removed with the masked value the server already sent", () => {
     renderModal({ balance: "$123.45", bankAccountNumberVisual: "******6789" });
 
     expect(screen.getByText(/forfeit your existing balance of/u)).toBeTruthy();
     expect(screen.getByText("$123.45")).toBeTruthy();
-    expect(removalWarning()).toBeNull();
-    expect(screen.queryByText("******6789")).toBeNull();
+    expect(balanceRemovalNotice()).toBeTruthy();
+    expect(document.body.textContent).toContain(
+      "Your bank account ******6789 will also be removed from your payout settings.",
+    );
+    expect(screen.getAllByText("******6789")).toHaveLength(1);
+    // The rail can be re-created here, so none of the irreversible rail-loss copy applies.
+    expect(railLossWarning()).toBeNull();
+    expect(document.body.textContent).not.toMatch(/switch back|Contact support/u);
+    expect(document.body.textContent).not.toMatch(/\b\d{5,}\b/u);
+  });
+
+  it("omits the account sentence rather than asserting an account it cannot name", () => {
+    renderModal({ balance: "$123.45" });
+
+    expect(screen.getByText(/forfeit your existing balance of/u)).toBeTruthy();
+    expect(balanceRemovalNotice()).toBeNull();
+    expect(document.body.textContent).not.toMatch(
+      /Your bank account|removed from your payout settings|null|undefined/u,
+    );
+    expect(screen.getByRole("button", { name: "Confirm" }).hasAttribute("disabled")).toBe(true);
+  });
+
+  it("leaves the rail-loss warning as the single mention of the account when both losses apply", () => {
+    renderModal({ balance: "$123.45", losesBankRail: true, bankAccountNumberVisual: "******6789" });
+
+    expect(screen.getByText(/forfeit your existing balance of/u)).toBeTruthy();
+    expect(railLossWarning()).toBeTruthy();
+    expect(balanceRemovalNotice()).toBeNull();
+    expect(screen.getAllByText("******6789")).toHaveLength(1);
   });
 
   it("requires the typed acknowledgment before confirming", () => {
@@ -98,7 +127,8 @@ describe("plain method change", () => {
     renderModal();
 
     expect(screen.queryByLabelText('Type "I understand" to confirm')).toBeNull();
-    expect(removalWarning()).toBeNull();
+    expect(railLossWarning()).toBeNull();
+    expect(balanceRemovalNotice()).toBeNull();
     const confirm = screen.getByRole("button", { name: "Confirm" });
     expect(confirm.hasAttribute("disabled")).toBe(false);
     fireEvent.click(confirm);

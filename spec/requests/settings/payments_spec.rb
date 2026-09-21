@@ -1234,6 +1234,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
           within_modal do
             expect(page).to have_content "Confirm payout method change"
             expect(page).to have_content "Due to limitations with our payments provider, changing payout method from bank account to PayPal means that you will have to forfeit your existing balance of #{@user.formatted_balance_to_forfeit(:payout_method_change)}"
+            expect(page).to have_content "Your bank account #{@user.active_bank_account.account_number_visual} will also be removed from your payout settings."
             expect(page).to have_content "Please confirm that you understand by typing \"I understand\" below and clicking Confirm."
             expect(page).to have_button("Confirm", disabled: true)
             fill_in "I understand", with: "I understand"

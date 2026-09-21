@@ -58,6 +58,15 @@ export const ConfirmBalanceForfeitOnPayoutMethodChangeModal = ({
                   <br />
                 </>
               ) : null}
+              {/* Every PayPal save deletes the active bank account (UpdatePayoutMethod#process_payment_address_params);
+                  the rail-loss copy below already names it, so name it here only when that branch is silent. */}
+              {!losesBankRail && bankAccountNumberVisual ? (
+                <>
+                  Your bank account <b>{bankAccountNumberVisual}</b> will also be removed from your payout settings.
+                  <br />
+                  <br />
+                </>
+              ) : null}
               {losesBankRail ? (
                 <>
                   Bank account payouts are no longer available for new setups in your country. If you switch to PayPal,

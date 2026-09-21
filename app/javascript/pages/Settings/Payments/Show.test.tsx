@@ -667,6 +667,25 @@ describe("switching to PayPal where the bank rail cannot be re-created", () => {
     );
   });
 
+  it("names the account being removed when only a balance is forfeited and the rail can be re-created", () => {
+    renderIndiaSeller(false, "$123.45");
+    save();
+
+    expect(mocks.put).not.toHaveBeenCalled();
+    expect(screen.getByText(/forfeit your existing balance of/u)).toBeTruthy();
+    expect(screen.getByText(/will also be removed from your payout settings/u)).toBeTruthy();
+    expect(screen.getAllByText("******6789")).toHaveLength(1);
+    expect(screen.queryByText(/you will not be able to switch back/u)).toBeNull();
+
+    fireEvent.change(screen.getByLabelText('Type "I understand" to confirm'), { target: { value: "I understand" } });
+    fireEvent.click(screen.getByRole("button", { name: "Confirm" }));
+    expect(mocks.put).toHaveBeenCalledWith(
+      "/settings_payments",
+      expect.objectContaining({ payment_address: "paypal@example.com" }),
+    );
+    expect(JSON.stringify(mocks.put.mock.calls[0])).not.toContain("confirm_bank_rail_loss");
+  });
+
   it("saves straight away where the rail can be re-created", () => {
     renderIndiaSeller(false);
     save();
