@@ -2550,6 +2550,7 @@ const BankAccountSection = ({
                     </FieldsetTitle>
                     <Input
                       id={`${uid}-saved-routing-number`}
+                      className="bg-active-bg disabled:opacity-100 forced-colors:border-dashed"
                       disabled
                       value={bankAccountDetails.routing_number || ""}
                     />
@@ -2561,6 +2562,7 @@ const BankAccountSection = ({
                   </FieldsetTitle>
                   <Input
                     id={`${uid}-saved-account-number`}
+                    className="bg-active-bg disabled:opacity-100 forced-colors:border-dashed"
                     disabled
                     value={bankAccountDetails.account_number_visual || ""}
                   />
