@@ -144,10 +144,12 @@ export const useSearchReducer = (initial: Omit<State, "offset">) => {
             "error",
           );
           dispatch({ type: "load-error" });
-          // A response that isn't our API's error shape (a block page, a proxy error, a dropped
-          // connection) is worth reporting, but throwing here would take the alert down with it.
-          // eslint-disable-next-line no-console
-          console.error(e);
+          if (!(e instanceof RateLimitError)) {
+            // request() wraps 5xx and dropped connections as ResponseError; only a 429 is the
+            // expected backoff path. Throwing here would take the alert down with it.
+            // eslint-disable-next-line no-console
+            console.error(e);
+          }
         }
       } finally {
         if (activeRequestKey.current === requestKey) activeRequestKey.current = null;
