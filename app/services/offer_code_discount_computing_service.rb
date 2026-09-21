@@ -127,11 +127,15 @@ class OfferCodeDiscountComputingService
     # inside each entry is authoritative, so never index `products` by permalink: doing so 500s on
     # any index-keyed payload. Index-keyed carts can also repeat a permalink across lines, so
     # quantities sum — keeping only one line's would let a capped code over-apply.
+    # A missing variant id is "unknown", not "ineligible". Checkout preview asks for one discount
+    # per product and does not send the chosen option; the client filters that discount with
+    # option_ids. Order and purchase callers always pass the option, and a present id that is
+    # outside the scope stays ineligible.
     def entries_eligible_for_option_scope(offer_code, link, entries)
       return entries if offer_code.restricted_variants_for(link).empty?
 
       entries.select do |_input_key, product|
-        offer_code.applicable_to_variant?(link, product[:variant_external_id])
+        product[:variant_external_id].blank? || offer_code.applicable_to_variant?(link, product[:variant_external_id])
       end
     end
 

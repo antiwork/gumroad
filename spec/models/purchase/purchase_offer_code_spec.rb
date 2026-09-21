@@ -148,4 +148,27 @@ describe Purchase, "offer-code capacity" do
     expect(purchase.error_code).to be_nil
     expect(purchase).to be_persisted
   end
+
+  it "rejects a sibling version and still discounts the scoped one" do
+    product = create(:product, price_cents: 2_000)
+    category = create(:variant_category, link: product)
+    tier = create(:variant, variant_category: category, name: "Basic")
+    sibling = create(:variant, variant_category: category, name: "Pro")
+    expect(tier.link_id).to be_nil
+    offer_code = create(:offer_code, user: product.user, products: [product], amount_cents: 100, variants: [tier])
+
+    rejected = build(:purchase_in_progress, link: product, seller: product.user, offer_code:, discount_code: offer_code.code)
+    rejected.variant_attributes << sibling
+    rejected.send(:validate_offer_code)
+
+    expect(rejected.errors.full_messages).to include("Sorry, this discount code is not valid for the option you selected.")
+    expect(rejected.send(:offer_amount_off, product.price_cents)).to eq(0)
+
+    allowed = build(:purchase_in_progress, link: product, seller: product.user, offer_code:, discount_code: offer_code.code)
+    allowed.variant_attributes << tier
+    allowed.send(:validate_offer_code)
+
+    expect(allowed.errors.full_messages).not_to include("Sorry, this discount code is not valid for the option you selected.")
+    expect(allowed.send(:offer_amount_off, product.price_cents)).to eq(100)
+  end
 end

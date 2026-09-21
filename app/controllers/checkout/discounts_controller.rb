@@ -146,11 +146,15 @@ class Checkout::DiscountsController < Sellers::BaseController
     # Options are resolved against the submitted products rather than the whole catalogue: an
     # option of a product the discount does not apply to is never a valid scope, and dropping it
     # here means an edit that removes a product also drops its now-meaningless option rows.
+    # Versions and tiers store the product on variant_category, not link_id (that column is for
+    # SKUs). Matching only link_id would save nothing and the code would discount every option.
     def selected_options(offer_code = nil)
       return offer_code.variants if offer_code && !params.key?(:selected_option_ids)
 
-      BaseVariant.by_external_ids(offer_code_params[:selected_option_ids].to_a)
-                 .where(link_id: selected_products(offer_code).map(&:id))
+      product_ids = selected_products(offer_code).map(&:id)
+      requested = BaseVariant.by_external_ids(offer_code_params[:selected_option_ids].to_a)
+      category_ids = VariantCategory.where(link_id: product_ids).select(:id)
+      requested.where(link_id: product_ids).or(requested.where(variant_category_id: category_ids))
     end
 
     def excluded_products(offer_code = nil)

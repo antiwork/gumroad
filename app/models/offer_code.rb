@@ -321,14 +321,17 @@ class OfferCode < ApplicationRecord
   end
 
   # Public: the options of `link` this code is limited to. Empty means every option.
+  # Match through the option's product, not base_variants.link_id: that column is only set for
+  # SKUs, so a version or tier would otherwise look unrestricted and the code would discount it.
   def restricted_variants_for(link)
-    variants.select { |variant| variant.link_id == link.id }
+    variants.select { |variant| variant.owning_product_id == link.id }
   end
 
   # Public: whether the code may discount the option the buyer chose. `variant` is a BaseVariant
   # record (a purchase or a server-side allocation) or the external id a client submitted. A blank
-  # value means the caller does not know the option — the buyer-facing preview computes one discount
-  # per product and the client filters it per option — so it stays eligible.
+  # value is ineligible when the code is limited: purchase enforcement must fail closed if the
+  # chosen option is missing. The buyer-facing preview does not call this with a blank id; it omits
+  # the option and the client filters the returned discount.
   def applicable_to_variant?(link, variant)
     restricted = restricted_variants_for(link)
     return true if restricted.empty?

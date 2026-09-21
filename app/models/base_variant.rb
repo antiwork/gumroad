@@ -22,6 +22,14 @@ class BaseVariant < ApplicationRecord
 
   delegate :has_stampable_pdfs?, to: :link
 
+  # SKUs store the product on link_id. Versions and tiers (Variant) leave that
+  # column nil and reach the product through variant_category.
+  def owning_product_id
+    return variant_category&.link_id if is_a?(Variant)
+
+    link_id
+  end
+
   scope :in_order, -> { order(created_at: :asc) }
 
   has_flags 1 => :is_default_sku,
