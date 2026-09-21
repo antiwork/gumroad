@@ -3538,7 +3538,8 @@ describe StripeChargeProcessor, :vcr do
               stripe_account_id: stripe_managed_account.charge_processor_merchant_id,
               currency: "usd",
               amount_cents: (purchase.total_transaction_cents - purchase.total_transaction_amount_for_gumroad_cents),
-              related_charge_id: stripe_charge_id
+              related_charge_id: stripe_charge_id,
+              idempotency_key: "dispute_funds_reinstated_transfer_#{stripe_dispute_id}"
             ).and_call_original
             StripeChargeProcessor.handle_stripe_event(stripe_event)
           end
@@ -3633,7 +3634,8 @@ describe StripeChargeProcessor, :vcr do
               stripe_account_id: stripe_managed_account.charge_processor_merchant_id,
               currency: "usd",
               amount_cents: (purchase.total_transaction_cents - purchase.total_transaction_amount_for_gumroad_cents),
-              related_charge_id: stripe_charge_id
+              related_charge_id: stripe_charge_id,
+              idempotency_key: "dispute_funds_reinstated_transfer_#{stripe_dispute_id}"
             ).and_call_original
             StripeChargeProcessor.handle_stripe_event(stripe_event)
           end
@@ -3673,6 +3675,54 @@ describe StripeChargeProcessor, :vcr do
             end
             StripeChargeProcessor.handle_stripe_event(stripe_event)
           end
+        end
+      end
+
+      describe "event dispute funds reinstated for a fee-only reversal" do
+        let(:stripe_event_type) { "charge.dispute.funds_reinstated" }
+
+        # Stripe fires funds_reinstated for a dispute it closed lost when it reverses only the fee.
+        let(:stripe_charge) do
+          Stripe::Charge.construct_from(
+            id: "ch_fee_only_reinstated",
+            destination: "acct_fee_only_reinstated",
+            currency: "usd",
+            amount: 10_00,
+            application_fee: Stripe::ApplicationFee.construct_from(id: "fee_fee_only_reinstated", currency: "usd", amount_refunded: 1_00),
+            metadata: {}
+          )
+        end
+
+        let(:stripe_dispute) do
+          Stripe::Dispute.construct_from(
+            id: "du_fee_only_reinstated",
+            object: "dispute",
+            charge: stripe_charge.id,
+            status: "lost",
+            currency: "usd",
+            amount: 10_00,
+            balance_transactions: [
+              { id: "txn_dispute", amount: -10_00, currency: "usd", description: "Chargeback" },
+              { id: "txn_fee_reversal", amount: 32, currency: "usd", description: nil, fee: -15_00 }
+            ]
+          )
+        end
+
+        let(:stripe_event_object) { stripe_dispute }
+        let(:chargeable) { double(charged_amount_cents: 10_00, charged_gumroad_amount_cents: 1_00) }
+
+        before do
+          allow(Stripe::Dispute).to receive(:retrieve).and_return(stripe_dispute)
+          allow(Stripe::Charge).to receive(:retrieve).and_return(stripe_charge)
+          allow(Charge::Chargeable).to receive(:find_by_processor_transaction_id!).and_return(chargeable)
+        end
+
+        it "does not transfer the creator's share and reports an informational event" do
+          expect(StripeTransferInternallyToCreator).not_to receive(:transfer_funds_to_account)
+          expect(ChargeProcessor).to receive(:handle_event) do |charge_event|
+            expect(charge_event.type).to eq(ChargeEvent::TYPE_INFORMATIONAL)
+          end
+          StripeChargeProcessor.handle_stripe_event(stripe_event)
         end
       end
 

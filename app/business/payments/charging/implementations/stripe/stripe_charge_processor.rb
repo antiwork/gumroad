@@ -1489,6 +1489,16 @@ class StripeChargeProcessor
   end
 
   def self.handle_stripe_event_charge_dispute_for_charge_with_destination_funds_reinstated(stripe_dispute, stripe_charge, event)
+    # Stripe also fires funds_reinstated when it reverses only the dispute FEE on a dispute it closed
+    # lost, so bail out before moving money: there is no reinstatement to hand the creator.
+    chargeback_reversal_balance_transaction = stripe_dispute.balance_transactions.find do |balance_transaction|
+      balance_transaction.description.to_s[/^Chargeback reversal/].present?
+    end
+    if chargeback_reversal_balance_transaction.nil?
+      event.type = ChargeEvent::TYPE_INFORMATIONAL
+      return
+    end
+
     event.type = ChargeEvent::TYPE_DISPUTE_WON
     # NOTE: The application fee billed is the same application fee that was refunded to us when the chargeback occurred.
     # If for some reason the chargeback reversal returned to us a different amount than was originally chargedback (e.g. due to currency changes)
@@ -1522,15 +1532,15 @@ class StripeChargeProcessor
       currency: Currency::USD,
       # Transfer Amount- Fees to Creator account. In future, we won't need to do this as we would have not sent fees at all before
       amount_cents:,
-      related_charge_id: stripe_charge.id
+      related_charge_id: stripe_charge.id,
+      # HandleStripeEventWorker retries (`retry: 10`); without a key a retry after a lost response
+      # re-sends the whole creator share.
+      idempotency_key: "dispute_funds_reinstated_transfer_#{stripe_dispute.id}"
     )
     issued_amount = FlowOfFunds::Amount.new(
       currency: stripe_dispute.currency,
       cents: stripe_dispute.amount
     )
-    chargeback_reversal_balance_transaction = stripe_dispute.balance_transactions.find do |balance_transaction|
-      balance_transaction.description[/^Chargeback reversal/].present?
-    end
     settled_amount = FlowOfFunds::Amount.new(
       currency: chargeback_reversal_balance_transaction.currency,
       cents: chargeback_reversal_balance_transaction.amount
