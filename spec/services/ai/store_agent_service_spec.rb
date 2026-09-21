@@ -96,7 +96,9 @@ describe Ai::StoreAgentService do
       service.respond(messages: [{ role: "user", content: "hi" }])
 
       expect(captured[:system]).to include("Gumroad's store assistant")
-      expect(captured[:tools].map { |t| t[:name] }).to contain_exactly("api_read", "api_write", "prepare_html_undo", "complete_turn")
+      expect(captured[:tools].map { |t| t[:name] }).to contain_exactly(
+        "api_read", "api_write", "prepare_html_undo", "stage_profile_section", "propose_profile_page", "complete_turn"
+      )
       expect(captured[:system]).to include("existing Store Agent webhooks can be")
       expect(captured[:system]).to include("the Store Agent cannot create webhooks")
       expect(captured[:system]).to match(/Settings >\s+Advanced > Ping/)
@@ -2460,6 +2462,17 @@ describe Ai::StoreAgentService do
 
         expect(result[:reply]).to eq(described_class::TRUNCATED_REPLY)
         expect(client).to have_received(:messages).twice
+      end
+
+      it "keeps a whole-page request as a draft instead of telling the creator to ask for a smaller page" do
+        allow(client).to receive(:messages).and_return(truncated_text_result(""))
+
+        result = service.respond(messages: [{ role: "user", content: "build and publish my custom profile page in one pass" }])
+
+        expect(result[:reply]).to include("Nothing is live")
+        expect(result[:reply]).not_to eq(described_class::TRUNCATED_REPLY)
+        expect(result[:proposed_action]).to be_nil
+        expect($redis.get(RedisKey.profile_page_draft(seller.id, 0))).to be_present
       end
 
       it "gives the larger cap and its re-ask to the turn that truncated only" do

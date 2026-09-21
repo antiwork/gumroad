@@ -75,6 +75,18 @@ class Ai::StoreAgentService
   # complete), so ask for something smaller instead of streaming garbage or raising.
   TRUNCATED_REPLY = "That's too much for me to handle in one go — try asking me to change or " \
                     "summarize a smaller section, and I'll take it from there."
+  # A whole profile page is the request this sentence cannot answer: a smaller section is not a
+  # valid publish, because a custom page replaces the storefront. Match the ask, not a description.
+  WHOLE_PAGE_REQUEST = /
+    \b(?:
+      custom\s+(?:profile|landing)\s+page
+      | profile\s+page
+      | pages\s+push\s+profile
+      | (?:complete|whole|full|entire)\s+(?:[\w-]+\s+){0,6}page\b
+      | one\s+pass
+      | build\s+and\s+publish
+    )
+  /ix
   # Phrases a reply uses when it asserts THIS turn staged a change. Such a reply is only TRUE when
   # the same turn produced a proposed action — the confirmation card is rendered from that action, so
   # with no action there is no card and the creator hunts a button that cannot exist. The model does
@@ -474,7 +486,7 @@ class Ai::StoreAgentService
     You are Gumroad's store assistant. You help a creator understand and manage their own Gumroad
     store through a chat interface in their dashboard.
 
-    You have four tools:
+    You have six tools:
     - prepare_html_undo: prepare an exact undo of the LAST APPLIED change in THIS conversation, and
       only if that change was a targeted HTML edit (edit_user_custom_html or
       edit_product_custom_html). It never reaches back past a more recent applied change of another
@@ -484,6 +496,12 @@ class Ai::StoreAgentService
       reports the undo is unavailable, explain that limitation and ask what the creator wants
       changed; do not fall back to api_write with a guessed inverse. Older changes and other
       conversations cannot be undone with this tool. Nothing changes until the new card is confirmed.
+    - stage_profile_section: add ONE section to a profile-page draft. It does not publish and it does
+      not create a confirmation card. Use it to build a new profile page across turns, so the page
+      never has to fit in one reply. Catalogue kinds (name_bio, products, posts) take no HTML.
+    - propose_profile_page: turn that draft into a confirmation card for the whole page. Pass no
+      arguments. Nothing is published until the creator confirms. It fails if a custom page already
+      exists — use edit_user_custom_html then, not a full replacement.
     - api_read: run any READ endpoint to fetch live data (products, sales, payouts, discounts,
       subscribers, upsells, emails, tax forms, earnings, profile, and more). These run immediately.
     - api_write: prepare any change (create/update/delete products, discounts, variants, upsells,
@@ -592,8 +610,19 @@ class Ai::StoreAgentService
       about. Never regenerate or replace an existing page from scratch unless the creator
       explicitly asks for a whole new page — a full replacement destroys everything else on it.
     - When the creator has NO custom HTML page yet and wants a custom page — a layout, structure, or
-      imagery the default storefront doesn't give them — author a COMPLETE page with
-      update_user_custom_html. A colour or font change is NOT that: colours and fonts are the store
+      imagery the default storefront doesn't give them — do NOT emit the whole page in one
+      update_user_custom_html call. A whole page does not fit in one reply, and a partial published
+      page replaces the storefront. Call stage_profile_section once per turn, then
+      propose_profile_page only when the creator asks to preview or publish. Nothing is published
+      until they confirm that card.
+      Catalogue sections take no HTML: kind name_bio, products, or posts. The server writes the
+      live name, bio, and product and post lists from the injected store data. Prefer those over
+      hand-authored product HTML. A custom section is kind html, with a short label and only that
+      section's HTML, under 12,000 characters. After each stage_profile_section, tell the creator
+      which section was added and that nothing is published, using the tool result's
+      tell_the_creator text. Do not go silent, and do not ask them to confirm until
+      propose_profile_page.
+      A colour or font change is NOT a custom page: colours and fonts are the store
       theme, so never author a whole custom page as a way to change a colour.
       Every published page is served with the
       creator's live store data injected into it as a <script id="gumroad-data"
@@ -697,7 +726,8 @@ class Ai::StoreAgentService
       Put the creator-facing text in complete_turn.reply so the outcome and the answer arrive
       together. You may also write the same text before the call; on a proposal turn that text is replaced with
       fixed server copy and never shown, so keep it minimal there. Use reply_only when this turn has
-      no proposed change. Use proposal_ready only after api_write or prepare_html_undo returned proposed: true in this
+      no proposed change. Use proposal_ready only after api_write, prepare_html_undo, or
+      propose_profile_page returned proposed: true in this
       same turn. Never mix complete_turn with any other tool. Never send a text-only final
       response.
 
@@ -734,6 +764,7 @@ class Ai::StoreAgentService
   # @return [Hash] { reply: String, proposed_action: Hash|nil, objects: Array<Hash> }
   def respond(messages:)
     conversation = build_conversation(messages)
+    @latest_user_message = conversation.reverse.find { |m| m[:role] == "user" }&.dig(:content).to_s
     proposed_action = nil
     # Display objects collected from the read calls this turn, rendered inline as cards in the chat.
     @objects = []
@@ -769,7 +800,7 @@ class Ai::StoreAgentService
           next
         end
 
-        reply = proposed_action ? PROPOSAL_READY_REPLY : TRUNCATED_REPLY
+        reply = proposed_action ? PROPOSAL_READY_REPLY : truncated_reply
         return turn_result(reply:, proposed_action:)
       end
 
@@ -820,7 +851,8 @@ class Ai::StoreAgentService
   # unpersisted — the seller watched it stream in, but no record of it survives.
   def respond_streaming(messages:, on_reply_complete: nil, &emit)
     conversation = build_conversation(messages)
-    last_user_message = conversation.reverse.find { |m| m[:role] == "user" }&.dig(:content).to_s
+    @latest_user_message = conversation.reverse.find { |m| m[:role] == "user" }&.dig(:content).to_s
+    last_user_message = @latest_user_message
     proposed_action = nil
     @objects = []
     @completed_read_targets = {}
@@ -888,7 +920,7 @@ class Ai::StoreAgentService
           next
         end
 
-        reply = proposed_action ? PROPOSAL_READY_REPLY : TRUNCATED_REPLY
+        reply = proposed_action ? PROPOSAL_READY_REPLY : truncated_reply
         return finish_stream(reply:, proposed_action:, last_user_message:, emit:, on_reply_complete:) do |turn|
           emit.call(:reset, {}) if emitted_any
           emit.call(:token, { text: turn[:reply] })
@@ -1399,6 +1431,8 @@ class Ai::StoreAgentService
       when "api_read" then run_api_read(arguments)
       when "api_write" then propose_api_write(arguments)
       when "prepare_html_undo" then prepare_html_undo(arguments)
+      when "stage_profile_section" then stage_profile_section(arguments)
+      when "propose_profile_page" then propose_profile_page(arguments)
       else
         [{ error: "Unknown tool: #{name}" }, nil]
       end
@@ -1432,6 +1466,62 @@ class Ai::StoreAgentService
       [{ proposed: true, status: "undo_prepared", summary: UNDO_PREPARED_SUMMARY }, action]
     rescue ArgumentError
       [{ error: "The original edit's target is unavailable. No undo was prepared." }, nil]
+    end
+
+    def stage_profile_section(arguments)
+      return [{ error: "A confirmation card is already waiting. Do not add another section this turn." }, nil] if @proposed_action
+
+      draft = profile_page_draft
+      result = draft.append(
+        kind: arguments["kind"],
+        html: arguments["html"],
+        label: arguments["label"],
+        heading: arguments["heading"],
+      )
+      return [{ error: result.error }, nil] unless result.success?
+
+      [{ staged: true, section_count: result.section_count, tell_the_creator: result.tell_the_creator }, nil]
+    end
+
+    def propose_profile_page(arguments)
+      return [{ error: "propose_profile_page accepts no arguments; the server composes the draft." }, nil] if arguments.any?
+      return [{ error: "A confirmation card is already waiting. Do not propose another change this turn." }, nil] if @proposed_action
+
+      draft = profile_page_draft
+      return [{ error: "No profile-page draft exists. Add sections with stage_profile_section first." }, nil] if draft.empty?
+
+      endpoint = Ai::StoreAgentApiCatalog.find("update_user_custom_html")
+      return [{ error: "The current user's role can't publish a profile page." }, nil] unless endpoint_permitted?(endpoint)
+
+      current = api_client.get("/user/custom_html", {})
+      if successful_api_read?(current) && current["custom_html"].present?
+        return [{ error: "A custom page already exists. Do not replace it. Use edit_user_custom_html for a targeted change." }, nil]
+      end
+
+      html = draft.compose
+      summary = "Replace the profile page with the drafted page (#{draft.section_count} sections)."
+      action = ProposedAction.new(
+        type: "api_write",
+        params: { "endpoint" => endpoint.id, "path_params" => {}, "params" => { "custom_html" => html } },
+        summary:,
+        title: endpoint.summary,
+        fields: [preview_field("Sections", draft.section_count)],
+      )
+      [{ proposed: true, summary: }, action]
+    end
+
+    def profile_page_draft
+      Ai::ProfilePageDraft.new(seller:, conversation: @agent_conversation)
+    end
+
+    def truncated_reply
+      return TRUNCATED_REPLY unless WHOLE_PAGE_REQUEST.match?(@latest_user_message.to_s)
+
+      draft = profile_page_draft
+      draft.seed_catalogue! if draft.empty?
+      draft.seller_update(:seeded_after_truncation)
+    rescue StandardError
+      TRUNCATED_REPLY
     end
 
     # ---- api_read: auto-executed, creator-scoped via the real v2 API ----
@@ -1830,8 +1920,20 @@ class Ai::StoreAgentService
         ),
         tool_schema("prepare_html_undo", "Prepare an exact undo of the LAST applied change in this conversation, only if that change was a targeted HTML edit; it never reaches back to an older edit. The server selects the saved edit and re-checks the current page. Takes no arguments. Returns proposed: true only when a new confirmation card is ready; never applies the change.", {}),
         tool_schema(
+          "stage_profile_section",
+          "Add ONE section to the profile-page draft. Does not publish and does not create a confirmation card. Call once per turn. Catalogue kinds (name_bio, products, posts) take no html. A custom section is kind html, with a short label and only that section's HTML.",
+          {
+            kind: { type: "string", enum: Ai::ProfilePageDraft::KINDS, description: "name_bio, products, or posts for a server-rendered catalogue section; html for a custom section." },
+            label: { type: "string", description: "Short name for the section. Required for html. Repeating the same label replaces that custom section." },
+            heading: { type: "string", description: "Optional heading for a products or posts section. Ignored for html." },
+            html: { type: "string", description: "The section's own HTML, under 12,000 characters. Required for html. Omit for catalogue kinds." },
+          },
+          required: ["kind"],
+        ),
+        tool_schema("propose_profile_page", "Turn the profile-page draft into a confirmation card for the whole page. Pass no arguments. Nothing is published until the creator confirms. Fails if a custom page already exists.", {}),
+        tool_schema(
           COMPLETE_TURN_TOOL,
-          "Finish the creator-facing reply after every API tool result is back. Call exactly once and as the only tool in the final response. Put the creator-facing text in reply; on a proposal turn that text is replaced with fixed server copy and never shown. Use proposal_ready only when api_write or prepare_html_undo returned proposed: true in this same turn; otherwise use reply_only.",
+          "Finish the creator-facing reply after every API tool result is back. Call exactly once and as the only tool in the final response. Put the creator-facing text in reply; on a proposal turn that text is replaced with fixed server copy and never shown. Use proposal_ready only when api_write, prepare_html_undo, or propose_profile_page returned proposed: true in this same turn; otherwise use reply_only.",
           {
             outcome: {
               type: "string",

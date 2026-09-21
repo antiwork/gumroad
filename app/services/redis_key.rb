@@ -35,6 +35,7 @@ class RedisKey
     def gumhead_client_versions = "gumhead_client_versions"
     def agent_turn_status(user_id, client_turn_id) = "agent_turn_status:#{user_id}:#{client_turn_id}"
     def agent_custom_html_preview(user_id, token) = "agent_custom_html_preview:#{user_id}:#{token}"
+    def profile_page_draft(seller_id, conversation_id) = "profile_page_draft:#{seller_id}:#{conversation_id || 0}"
     def agent_custom_html_preview_index(user_id) = "agent_custom_html_preview_index:#{user_id}"
     def fraudulent_free_purchases_block_hours = "fraudulent_free_purchases_block_hours"
     def recaptcha_score_threshold(surface) = "recaptcha_score_threshold:#{surface}"
