@@ -58,6 +58,29 @@ describe("Product checkout with upsells", type: :system, js: true) do
       expect(purchase.variant_attributes.first).to eq(upsell_product.alive_variants.first)
     end
 
+    context "when the upsell has no offer text" do
+      before { upsell.update!(text: nil) }
+
+      it "still renders checkout and offers the upsell" do
+        visit upsell_product.long_url
+        add_to_cart(upsell_product, option: "Untitled 1")
+        fill_checkout_form(upsell_product)
+
+        click_on "Pay"
+
+        # The offer text is the dialog heading, so a blank one renders a dialog with no heading.
+        within_modal do
+          expect(page).to have_no_css("h2")
+          expect(page).to have_text("Check out this awesome upsell at https://upsell.com!")
+          expect(page).to have_radio_button("Untitled 2")
+          click_on "Upgrade"
+        end
+
+        expect(page).to have_alert(text: "Your purchase was successful! We sent a receipt to test@gumroad.com.")
+        expect(Purchase.last.upsell_purchase.upsell).to eq(upsell)
+      end
+    end
+
     context "when the upsell is paused" do
       before { upsell.update!(paused: true) }
 
@@ -157,6 +180,28 @@ describe("Product checkout with upsells", type: :system, js: true) do
       purchase = Purchase.last
       expect(purchase.upsell_purchase).to be_nil
       expect(purchase.variant_attributes.first).to eq(selected_product.alive_variants.first)
+    end
+
+    context "when the cross-sell has no offer text" do
+      before { cross_sell.update!(text: nil) }
+
+      it "still renders checkout and offers the cross-sell" do
+        visit selected_product.long_url
+        add_to_cart(selected_product)
+        fill_checkout_form(selected_product)
+
+        click_on "Pay"
+
+        within_modal do
+          expect(page).to have_no_css("h2")
+          expect(page).to have_text("Check out this awesome cross-sell at https://cross-sell.com!")
+          expect(page).to have_section("Offered product - Untitled 1")
+          click_on "Add to cart"
+        end
+
+        expect(page).to have_alert(text: "Your purchase was successful! We sent a receipt to test@gumroad.com.")
+        expect(Purchase.last.upsell_purchase.upsell).to eq(cross_sell)
+      end
     end
 
     context "when the cross-sell is paused" do
