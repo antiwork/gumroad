@@ -1,8 +1,10 @@
 # frozen_string_literal: true
 
 module Charge::Chargeable
-  # How far back the payment-intent fallback below looks, in `charges.id` — about two weeks
-  # of charges at current volume, against a table of ~88M rows.
+  # How far back the payment-intent fallback below looks, in `charges.id`. The floor is
+  # Stripe's 72-hour webhook retry window: a delivery retried on day three must still
+  # resolve, so anything under ~300_000 ids at current volume would silently drop it.
+  # 1M is ~12 days, and ~975k rows is a buffer-pool-resident scan instead of 8.35 GB.
   RECENT_CHARGE_ID_LOOKBACK = 1_000_000
 
   class << self
