@@ -2,8 +2,9 @@
 
 module Charge::Chargeable
   class << self
-    # Provider events can arrive before replication catches up; keep every fallback
-    # on the primary. Each lookup still needs its own index.
+    # The :writing pin keeps these lookups on the primary: a worker's replica can be minutes
+    # behind, and a miss here drops the charge event. The pin only binds because
+    # ApplicationRecord.connected_to pins the pool owner mysql2_proxy compares against.
     def find_by_stripe_event(event)
       ApplicationRecord.connected_to(role: :writing) do
         chargeable = nil

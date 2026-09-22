@@ -10,9 +10,7 @@ describe Follower::CreateService do
   it "keeps dependent confirmation reads on primary" do
     service = described_class.new(followed_user: user, follower_email: follower.email)
     expect(service).to receive(:confirm_follower) do
-      expect(ApplicationRecord.connected_to_stack).to include(
-        include(role: :writing, klasses: include(ApplicationRecord))
-      )
+      expect(primary_pinned?).to eq(true)
     end
 
     service.perform

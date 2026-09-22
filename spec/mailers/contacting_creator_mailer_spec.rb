@@ -9,17 +9,13 @@ describe ContactingCreatorMailer do
     end.new
   end
 
-  def writing_role_pinned?
-    ApplicationRecord.connected_to_stack.any? { |entry| entry[:role] == :writing && entry[:klasses].include?(ApplicationRecord) }
-  end
-
   # No replica role is configured in the test environment, so a pinned read and an unpinned one look
   # the same at the connection level. Record placement instead: every Purchase/Refund read inside the
   # block has to run while the writing role is on the stack.
   def reads_with_pin_state
     reads = []
     subscriber = ActiveSupport::Notifications.subscribe("sql.active_record") do |_name, _start, _finish, _id, payload|
-      reads << [payload[:name], writing_role_pinned?] if ["Purchase Load", "Refund Load"].include?(payload[:name])
+      reads << [payload[:name], primary_pinned?] if ["Purchase Load", "Refund Load"].include?(payload[:name])
     end
     yield
     reads

@@ -12,7 +12,7 @@ describe ElasticsearchIndexerWorker, :elasticsearch_wait_for_refresh do
           reads = []
           subscriber = lambda do |*, payload|
             next if payload[:name] == "SCHEMA" || payload[:cached] || !payload[:sql].match?(/\ASELECT/i)
-            pin = ApplicationRecord.connected_to_stack.reverse.find { |entry| entry[:klasses]&.include?(ApplicationRecord) }
+            pin = current_pin
             reads << [payload[:sql], pin&.fetch(:role)]
           end
 

@@ -122,9 +122,7 @@ describe UsersController, :vcr, type: :controller do
     it "fetches the seller for the landing page HTML on the primary" do
       pinned_during_fetch = nil
       allow(controller).to receive(:set_user_and_custom_domain_config).and_wrap_original do |method, *args|
-        pinned_during_fetch = ApplicationRecord.connected_to_stack.any? do |entry|
-          entry[:role] == :writing && entry[:klasses].include?(ApplicationRecord)
-        end
+        pinned_during_fetch = primary_pinned?
         method.call(*args)
       end
 
@@ -339,9 +337,7 @@ describe UsersController, :vcr, type: :controller do
     it "fetches the seller on the primary" do
       pinned_during_fetch = nil
       allow(controller).to receive(:set_user_and_custom_domain_config).and_wrap_original do |method, *args|
-        pinned_during_fetch = ApplicationRecord.connected_to_stack.any? do |entry|
-          entry[:role] == :writing && entry[:klasses].include?(ApplicationRecord)
-        end
+        pinned_during_fetch = primary_pinned?
         method.call(*args)
       end
 
