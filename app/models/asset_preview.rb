@@ -447,6 +447,13 @@ class AssetPreview < ApplicationRecord
       return unless file.attached? && should_post_process?
 
       ProcessAssetPreviewRetinaWorker.perform_async(id)
+    rescue *REDIS_TRANSPORT_ERRORS => e
+      # url_from_file serves the original and retries missing variants on later reads.
+      begin
+        ErrorNotifier.notify(e, source: "retina_variant_enqueue", asset_preview_id: id)
+      rescue StandardError => reporting_error
+        Rails.logger.warn("Retina variant enqueue reporting failed: #{reporting_error.class}")
+      end
     end
 
     def enqueue_oversized_image_resize
