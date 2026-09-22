@@ -7,32 +7,24 @@ describe ElasticsearchIndexerWorker, :elasticsearch_wait_for_refresh do
     %w[successful failed].each do |state|
       %w[index update].each do |operation|
         it "reads and serializes #{state} purchases on the primary for #{operation}" do
-          pinned = false
-          allow(ApplicationRecord).to receive(:connected_to).with(role: :writing).and_wrap_original do |method, **options, &block|
-            method.call(**options) do
-              pinned = true
-              begin
-                block.call
-              ensure
-                pinned = false
-              end
+          purchase = create(:purchase, :with_license, purchase_state: state)
+          EsClient.index(index: Purchase.index_name, id: purchase.id, body: purchase.as_indexed_json.merge("purchase_state" => "in_progress"))
+          reads = []
+          subscriber = lambda do |*, payload|
+            next if payload[:name] == "SCHEMA" || payload[:cached] || !payload[:sql].match?(/\ASELECT/i)
+            pin = ApplicationRecord.connected_to_stack.reverse.find { |entry| entry[:klasses]&.include?(ApplicationRecord) }
+            reads << [payload[:sql], pin&.fetch(:role)]
+          end
+
+          ApplicationRecord.uncached do
+            ActiveSupport::Notifications.subscribed(subscriber, "sql.active_record") do
+              described_class.new.perform(operation, "class_name" => "Purchase", "record_id" => purchase.id, "fields" => ["purchase_state", "license_uses"])
             end
           end
-          record = instance_double(Purchase)
-          allow(Purchase).to receive(:find).with(123) do
-            expect(pinned).to eq(true)
-            record
-          end
-          allow(record).to receive(:as_indexed_json) do
-            expect(pinned).to eq(true)
-            { "purchase_state" => state }
-          end
-          body = { "purchase_state" => state }
-          body = { "doc" => body } if operation == "update"
-          expect(EsClient).to receive(operation.to_sym).with(hash_including(body:))
 
-          described_class.new.perform(operation, "class_name" => "Purchase", "record_id" => 123, "fields" => ["purchase_state"])
-          expect(pinned).to eq(false)
+          expect(reads.map(&:first).join("\n")).to include("FROM `purchases`", "FROM `licenses`")
+          expect(reads.map(&:last)).to all(eq(:writing))
+          expect(EsClient.get(index: Purchase.index_name, id: purchase.id).dig("_source", "purchase_state")).to eq(state)
         end
       end
     end
