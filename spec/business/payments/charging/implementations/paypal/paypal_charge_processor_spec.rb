@@ -2222,8 +2222,33 @@ describe PaypalChargeProcessor, :vcr do
 
     context "when invalid order_id is passed" do
       it "raises ChargeProcessorError error" do
-        expect { PaypalChargeProcessor.fetch_order(order_id: "invalid_order_id") }.to raise_error(ChargeProcessorError)
+        expect { PaypalChargeProcessor.fetch_order(order_id: "invalid_order_id") }
+          .to raise_error(ChargeProcessorError, /\A404\|.*RESOURCE_NOT_FOUND/m)
       end
+    end
+  end
+
+  describe "billing agreement error messages" do
+    let(:paypal_rest_api) { instance_double(PaypalRestApi) }
+    let(:api_response) { OpenStruct.new(status_code: 401, result: OpenStruct.new(name: "AUTHENTICATION_FAILURE")) }
+
+    before do
+      allow(PaypalRestApi).to receive(:new).and_return(paypal_rest_api)
+      allow(paypal_rest_api).to receive(:successful_response?).with(api_response).and_return(false)
+    end
+
+    it "reports PayPal's status code and response body for a failed agreement token" do
+      allow(paypal_rest_api).to receive(:generate_billing_agreement_token).with(shipping: false).and_return(api_response)
+
+      expect { described_class.generate_billing_agreement_token }
+        .to raise_error(ChargeProcessorError, /\A401\|.*AUTHENTICATION_FAILURE/m)
+    end
+
+    it "reports PayPal's status code and response body for a failed agreement" do
+      allow(paypal_rest_api).to receive(:create_billing_agreement).with(billing_agreement_token_id: "token-id").and_return(api_response)
+
+      expect { described_class.create_billing_agreement(billing_agreement_token_id: "token-id") }
+        .to raise_error(ChargeProcessorError, /\A401\|.*AUTHENTICATION_FAILURE/m)
     end
   end
 
