@@ -5,7 +5,9 @@
 # Those args must share one lock or both stamp the same file.
 class StampPdfForPurchaseJob
   include Sidekiq::Job
-  sidekiq_options queue: :long, retry: 5, lock: :until_executed
+  # unique_across_queues: checkout enqueues on :long, a download click on :critical.
+  # Without it the queue is part of the lock digest and both stamp the same file.
+  sidekiq_options queue: :long, retry: 5, lock: :until_executed, unique_across_queues: true
 
   def self.lock_args(args)
     [args.first]
@@ -22,5 +24,8 @@ class StampPdfForPurchaseJob
     PdfStampingService.clear_buyer_notification!(purchase_id)
   rescue PdfStampingService::Error => e
     Rails.logger.error("[#{self.class.name}.#{__method__}] Failed stamping for purchase #{purchase.id}: #{e.message}")
+    # Swallowing this made retry: 5 dead. Checkout used to propagate the error from the
+    # receipt job; the stamp worker has to re-raise or a transient failure never retries.
+    raise
   end
 end

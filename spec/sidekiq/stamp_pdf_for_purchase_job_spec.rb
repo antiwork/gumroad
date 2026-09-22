@@ -16,6 +16,18 @@ describe StampPdfForPurchaseJob do
     expect(PdfStampingService).to have_received(:stamp_for_purchase!).with(purchase)
   end
 
+  it "locks by purchase id across the long and critical queues" do
+    long_job = { "class" => described_class.name, "queue" => "long", "args" => [purchase.id] }
+    critical_job = { "class" => described_class.name, "queue" => "critical", "args" => [purchase.id, true] }
+    long_job["lock_args"] = SidekiqUniqueJobs::LockArgs.call(long_job)
+    critical_job["lock_args"] = SidekiqUniqueJobs::LockArgs.call(critical_job)
+
+    expect(long_job["lock_args"]).to eq([purchase.id])
+    expect(critical_job["lock_args"]).to eq([purchase.id])
+    expect(SidekiqUniqueJobs::LockDigest.call(long_job)).to eq(SidekiqUniqueJobs::LockDigest.call(critical_job))
+    expect(described_class.sidekiq_options["unique_across_queues"]).to be(true)
+  end
+
   it "enqueues files ready email when the buyer asked to be notified while a checkout stamp was already queued" do
     purchase.create_url_redirect!
     PdfStampingService.request_buyer_notification!(purchase.id)
@@ -39,9 +51,9 @@ describe StampPdfForPurchaseJob do
       allow(PdfStampingService).to receive(:stamp_for_purchase!).and_raise(PdfStampingService::Error)
     end
 
-    it "logs and doesn't raise an error" do
+    it "logs and re-raises so Sidekiq retries" do
       expect(Rails.logger).to receive(:error).with(/Failed stamping for purchase #{purchase.id}:/)
-      expect { described_class.new.perform(purchase.id) }.not_to raise_error
+      expect { described_class.new.perform(purchase.id) }.to raise_error(PdfStampingService::Error)
     end
   end
 
