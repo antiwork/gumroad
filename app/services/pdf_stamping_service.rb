@@ -59,21 +59,20 @@ module PdfStampingService
   end
 
   private
-
-  def notification_flag_bit
-    UrlRedirect.flag_mapping.fetch("flags").fetch(:files_ready_notification_requested).to_i
-  end
-
-  def notification_flag_sql(enabled:)
-    bit = notification_flag_bit
-    if enabled
-      "flags = COALESCE(flags, 0) | #{bit}"
-    else
-      "flags = COALESCE(flags, 0) & ~#{bit}"
+    def notification_flag_bit
+      UrlRedirect.flag_mapping.fetch("flags").fetch(:files_ready_notification_requested).to_i
     end
-  end
 
-  def notification_flag_set_sql
-    "COALESCE(flags, 0) & #{notification_flag_bit} != 0"
-  end
+    def notification_flag_sql(enabled:)
+      bit = notification_flag_bit
+      if enabled
+        "flags = COALESCE(flags, 0) | #{bit}"
+      else
+        "flags = COALESCE(flags, 0) & ~#{bit}"
+      end
+    end
+
+    def notification_flag_set_sql
+      "COALESCE(flags, 0) & #{notification_flag_bit} != 0"
+    end
 end
