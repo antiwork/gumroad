@@ -95,4 +95,47 @@ describe SendPurchaseReceiptJob do
       described_class.new.perform(purchase.id)
     end
   end
+
+  describe ".lock_args" do
+    it "distinguishes an explicit resend from an automatic run for the same purchase" do
+      auto = { "class" => described_class.name, "queue" => "critical", "args" => [purchase.id] }
+      resend = { "class" => described_class.name, "queue" => "critical", "args" => [purchase.id, true] }
+      auto["lock_args"] = SidekiqUniqueJobs::LockArgs.call(auto)
+      resend["lock_args"] = SidekiqUniqueJobs::LockArgs.call(resend)
+
+      expect(auto["lock_args"]).to eq([purchase.id, false])
+      expect(resend["lock_args"]).to eq([purchase.id, true])
+      expect(SidekiqUniqueJobs::LockDigest.call(auto)).not_to eq(SidekiqUniqueJobs::LockDigest.call(resend))
+      expect(described_class.sidekiq_options["lock"]).to eq(:until_executed)
+    end
+
+    it "collapses a missing second arg with false so two automatic enqueues share a digest" do
+      first = { "class" => described_class.name, "queue" => "critical", "args" => [purchase.id] }
+      repeat = { "class" => described_class.name, "queue" => "critical", "args" => [purchase.id, false] }
+      first["lock_args"] = SidekiqUniqueJobs::LockArgs.call(first)
+      repeat["lock_args"] = SidekiqUniqueJobs::LockArgs.call(repeat)
+
+      expect(SidekiqUniqueJobs::LockDigest.call(first)).to eq(SidekiqUniqueJobs::LockDigest.call(repeat))
+    end
+
+    context "with the unique lock enabled" do
+      around do |example|
+        SidekiqUniqueJobs.use_config(enabled: true) do
+          Sidekiq::Testing.server_middleware { |chain| chain.add SidekiqUniqueJobs::Middleware::Server }
+          example.run
+        ensure
+          Sidekiq::Testing.server_middleware { |chain| chain.remove SidekiqUniqueJobs::Middleware::Server }
+        end
+      end
+
+      it "keeps a resend enqueued while an automatic run is still queued for the same purchase" do
+        expect(described_class.perform_async(purchase.id)).to be_present
+        expect(described_class.perform_async(purchase.id, true)).to be_present
+        expect(described_class.perform_async(purchase.id, true)).to be_nil
+        expect(described_class.perform_async(purchase.id)).to be_nil
+
+        expect(described_class.jobs.size).to eq(2)
+      end
+    end
+  end
 end

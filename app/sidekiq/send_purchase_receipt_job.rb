@@ -6,10 +6,12 @@ class SendPurchaseReceiptJob
   include Sidekiq::Job
   sidekiq_options queue: :critical, retry: 5, lock: :until_executed
 
-  # A resend passes true as the second arg. Lock on the purchase only, or that
-  # resend and the checkout job would both stamp and both send.
+  # A resend passes true as the second arg. Include it in the digest so a
+  # buyer-triggered resend is not dropped by an automatic run still holding
+  # the until_executed lock for the same purchase. The stamp job has its own
+  # per-purchase lock, so two runs here still collapse to one stamp.
   def self.lock_args(args)
-    [args.first]
+    [args.first, !!args[1]]
   end
 
   def perform(purchase_id, resend = false)

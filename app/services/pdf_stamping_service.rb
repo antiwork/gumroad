@@ -52,20 +52,20 @@ module PdfStampingService
       .update_all(notification_flag_sql(enabled: false))
   end
 
-  # One sender wins. A new click clears the enqueued bit, so a request that arrives
-  # after the stamp job's check is not treated as already emailed.
+  # Hold the redirect row through enqueue and cleanup. A click writes that same row;
+  # without the lock a second sender can reclaim the enqueued bit before the first
+  # sender clears it, making the first sender erase the second one's request.
   def deliver_files_ready_notification!(purchase_id)
     return false if purchase_id.blank?
-    return false unless mark_files_ready_enqueued!(purchase_id)
 
-    begin
+    UrlRedirect.transaction do
+      return false unless UrlRedirect.where(purchase_id:).lock.first
+      return false unless mark_files_ready_enqueued!(purchase_id)
+
       CustomerMailer.files_ready_for_download(purchase_id).deliver_later(queue: "critical")
       Rails.cache.delete(cache_key_for_purchase(purchase_id))
       clear_buyer_notification!(purchase_id)
       true
-    rescue StandardError
-      unmark_files_ready_enqueued!(purchase_id)
-      raise
     end
   end
 
@@ -134,10 +134,5 @@ module PdfStampingService
         "flags = COALESCE(flags, 0) | #{bit}"
       )
       updated.positive?
-    end
-
-    def unmark_files_ready_enqueued!(purchase_id)
-      bit = notification_enqueued_flag_bit
-      UrlRedirect.where(purchase_id:).update_all("flags = COALESCE(flags, 0) & ~#{bit}")
     end
 end
