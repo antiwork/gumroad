@@ -38,14 +38,22 @@ class SendChargeReceiptJob
     # block the receipt for a payment that recovers later.
     return if charge.successful_purchases.none?
 
-    charge.purchases_requiring_stamping.each do |purchase|
-      StampPdfForPurchaseJob.perform_async(purchase.id)
+    stamp_error = nil
+    begin
+      charge.purchases_requiring_stamping.each do |purchase|
+        StampPdfForPurchaseJob.perform_async(purchase.id)
+      end
+    rescue StandardError => e
+      stamp_error = e
     end
 
     # Deliveries run outside a shared transaction with the receipt_sent update: an
     # earlier delivery's committed CustomerEmailInfo must survive a later delivery's
     # failure, or a retry would resend an already-delivered receipt.
+    # receipt_sent stays false when the stamp enqueue failed, so the retry still
+    # tries the stamp. send_receipts skips a receipt this attempt already delivered.
     send_receipts(charge)
+    raise stamp_error if stamp_error
 
     charge.with_lock do
       SendAutoInvoiceEmailJob.perform_async(nil, charge.id) if AutoInvoiceEligibility.eligible?(charge)

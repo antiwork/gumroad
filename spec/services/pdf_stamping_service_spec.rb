@@ -49,4 +49,31 @@ describe PdfStampingService do
       expect(result).to eq(expected_key)
     end
   end
+
+  describe ".enqueue_buyer_download_stamp!" do
+    let(:seller) { create(:named_seller) }
+    let(:product) { create(:product, user: seller) }
+    let(:purchase) { create(:purchase, link: product, seller:) }
+
+    before { purchase.create_url_redirect! }
+
+    it "schedules a follower when an earlier enqueue still owns the cache key" do
+      Rails.cache.write(described_class.cache_key_for_purchase(purchase.id), "existing-jid")
+
+      described_class.enqueue_buyer_download_stamp!(purchase.id)
+
+      expect(StampPdfForPurchaseJob.jobs).to be_empty
+      expect(DeliverFilesReadyNotificationJob).to have_enqueued_sidekiq_job(purchase.id)
+      expect(described_class.buyer_notification_requested?(purchase.id)).to be(true)
+    end
+
+    it "schedules a follower when the stamp enqueue is dropped by the purchase lock" do
+      allow(StampPdfForPurchaseJob).to receive_message_chain(:set, :perform_async).and_return(nil)
+
+      described_class.enqueue_buyer_download_stamp!(purchase.id)
+
+      expect(DeliverFilesReadyNotificationJob).to have_enqueued_sidekiq_job(purchase.id)
+      expect(described_class.buyer_notification_requested?(purchase.id)).to be(true)
+    end
+  end
 end

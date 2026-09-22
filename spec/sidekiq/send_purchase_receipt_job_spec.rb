@@ -37,6 +37,25 @@ describe SendPurchaseReceiptJob do
       expect(StampPdfForPurchaseJob.jobs).to be_empty
       expect(mail_double).to have_received(:deliver_now)
     end
+
+    it "delivers the receipt when stamping cannot be enqueued, then raises so the stamp is retried" do
+      allow(StampPdfForPurchaseJob).to receive(:perform_async).and_raise(RuntimeError, "redis down")
+      expect(CustomerMailer).to receive(:receipt).with(purchase.id).and_return(mail_double)
+
+      expect { described_class.new.perform(purchase.id) }.to raise_error(RuntimeError, "redis down")
+      expect(mail_double).to have_received(:deliver_now)
+    end
+
+    it "does not send a second receipt when the enqueue retry finds the first delivery recorded" do
+      CustomerEmailInfo.build_for_purchase(
+        purchase_id: purchase.id,
+        email_name: SendgridEventInfo::RECEIPT_MAILER_METHOD
+      ).mark_sent!
+
+      expect(CustomerMailer).not_to receive(:receipt)
+      described_class.new.perform(purchase.id)
+      expect(StampPdfForPurchaseJob).to have_enqueued_sidekiq_job(purchase.id)
+    end
   end
 
   context "when the purchase is for a product without stampable PDFs" do

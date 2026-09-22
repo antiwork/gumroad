@@ -29,7 +29,7 @@ module PdfStampingService
   def request_buyer_notification!(purchase_id)
     return if purchase_id.blank?
 
-    updated = UrlRedirect.where(purchase_id:).update_all(notification_flag_sql(enabled: true))
+    updated = UrlRedirect.where(purchase_id:).update_all(notification_request_sql)
     return true if updated.positive?
 
     raise Error, "No download page to record a files-ready notification for purchase #{purchase_id}"
@@ -47,15 +47,36 @@ module PdfStampingService
     UrlRedirect.where(purchase_id:).update_all(notification_flag_sql(enabled: false))
   end
 
+  # One sender wins. A new click clears the enqueued bit, so a request that arrives
+  # after the stamp job's check is not treated as already emailed.
+  def deliver_files_ready_notification!(purchase_id)
+    return false if purchase_id.blank?
+    return false unless mark_files_ready_enqueued!(purchase_id)
+
+    begin
+      CustomerMailer.files_ready_for_download(purchase_id).deliver_later(queue: "critical")
+      Rails.cache.delete(cache_key_for_purchase(purchase_id))
+      clear_buyer_notification!(purchase_id)
+      true
+    rescue StandardError
+      unmark_files_ready_enqueued!(purchase_id)
+      raise
+    end
+  end
+
   # A checkout stamp may already hold the purchase lock, which drops this enqueue.
   # The notify flag is what that job reads so the click still gets the ready email.
+  # Always schedule the follower. A cache hit or a rejected enqueue means this click's
+  # job will not run, and the in-flight job may already have passed its check.
   def enqueue_buyer_download_stamp!(purchase_id)
     return if purchase_id.blank?
 
     request_buyer_notification!(purchase_id)
-    Rails.cache.fetch(cache_key_for_purchase(purchase_id), expires_in: 4.hours) do
-      StampPdfForPurchaseJob.set(queue: :critical).perform_async(purchase_id, true)
+    enqueued = Rails.cache.fetch(cache_key_for_purchase(purchase_id), expires_in: 4.hours) do
+      StampPdfForPurchaseJob.set(queue: :critical).perform_async(purchase_id, true).presence
     end
+    DeliverFilesReadyNotificationJob.perform_in(5.seconds, purchase_id)
+    enqueued
   end
 
   private
@@ -74,5 +95,29 @@ module PdfStampingService
 
     def notification_flag_set_sql
       "COALESCE(flags, 0) & #{notification_flag_bit} != 0"
+    end
+
+    def notification_enqueued_flag_bit
+      UrlRedirect.flag_mapping.fetch("flags").fetch(:files_ready_notification_enqueued).to_i
+    end
+
+    # A repeat click must be deliverable even if an earlier send already set the enqueued bit.
+    def notification_request_sql
+      request_bit = notification_flag_bit
+      sent_bit = notification_enqueued_flag_bit
+      "flags = (COALESCE(flags, 0) | #{request_bit}) & ~#{sent_bit}"
+    end
+
+    def mark_files_ready_enqueued!(purchase_id)
+      bit = notification_enqueued_flag_bit
+      updated = UrlRedirect.where(purchase_id:).where("COALESCE(flags, 0) & #{bit} = 0").update_all(
+        "flags = COALESCE(flags, 0) | #{bit}"
+      )
+      updated.positive?
+    end
+
+    def unmark_files_ready_enqueued!(purchase_id)
+      bit = notification_enqueued_flag_bit
+      UrlRedirect.where(purchase_id:).update_all("flags = COALESCE(flags, 0) & ~#{bit}")
     end
 end

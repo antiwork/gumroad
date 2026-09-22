@@ -74,6 +74,27 @@ describe StampPdfForPurchaseJob do
     expect(PdfStampingService.buyer_notification_requested?(purchase.id)).to be(true)
   end
 
+  it "schedules a follower so a click after the notification check still gets the email" do
+    purchase.create_url_redirect!
+
+    described_class.new.perform(purchase.id)
+
+    expect(DeliverFilesReadyNotificationJob).to have_enqueued_sidekiq_job(purchase.id)
+  end
+
+  it "sends from the follower when the click lands after the notification check" do
+    purchase.create_url_redirect!
+    described_class.new.perform(purchase.id)
+    purchase.url_redirect.update!(is_done_pdf_stamping: true)
+    PdfStampingService.request_buyer_notification!(purchase.id)
+
+    expect do
+      DeliverFilesReadyNotificationJob.new.perform(purchase.id)
+    end.to have_enqueued_mail(CustomerMailer, :files_ready_for_download).with(purchase.id)
+
+    expect(PdfStampingService.buyer_notification_requested?(purchase.id)).to be(false)
+  end
+
   it "enqueues files ready email when notify flag is true" do
     expect do
       purchase.create_url_redirect!

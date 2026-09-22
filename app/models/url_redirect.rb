@@ -27,6 +27,10 @@ class UrlRedirect < ApplicationRecord
             # A cache entry expires and can be evicted before that job reads it, so the promise
             # to email the buyer lives on this row until the mail is enqueued.
             5 => :files_ready_notification_requested,
+            # Set when that mail is enqueued, so the stamp job and its follower cannot both send.
+            # A new click clears it; otherwise the second sender would treat the first send as done
+            # and drop a request that arrived after the first sender already checked.
+            6 => :files_ready_notification_enqueued,
             :column => "flags",
             :flag_query_mode => :bit_operator,
             check_for_column: false
@@ -287,8 +291,11 @@ class UrlRedirect < ApplicationRecord
   end
 
   def mark_as_seen
-    self.has_been_seen = true
-    save!
+    # save! would write this instance's flags integer and undo a notification bit
+    # set by update_all earlier in the same request.
+    bit = self.class.flag_mapping.fetch("flags").fetch(:has_been_seen).to_i
+    self.class.where(id:).update_all(["flags = COALESCE(flags, 0) | ?, updated_at = ?", bit, Time.current])
+    reload
   end
 
   def mark_unseen

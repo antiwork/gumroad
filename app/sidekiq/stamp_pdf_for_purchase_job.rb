@@ -17,13 +17,13 @@ class StampPdfForPurchaseJob
     purchase = Purchase.find(purchase_id)
     PdfStampingService.stamp_for_purchase!(purchase)
 
-    return unless notify_buyer || PdfStampingService.buyer_notification_requested?(purchase_id)
+    if notify_buyer || PdfStampingService.buyer_notification_requested?(purchase_id)
+      PdfStampingService.deliver_files_ready_notification!(purchase_id)
+    end
 
-    # Clear only after the enqueue succeeds. A stamp retry or a failed mail enqueue must
-    # still see the request the click promised.
-    CustomerMailer.files_ready_for_download(purchase_id).deliver_later(queue: "critical")
-    Rails.cache.delete(PdfStampingService.cache_key_for_purchase(purchase_id))
-    PdfStampingService.clear_buyer_notification!(purchase_id)
+    # The click that lands after the check above loses its enqueue to this lock.
+    # The follower runs after the lock is released and sends if that flag is set.
+    DeliverFilesReadyNotificationJob.perform_in(5.seconds, purchase_id)
   rescue PdfStampingService::Error => e
     Rails.logger.error("[#{self.class.name}.#{__method__}] Failed stamping for purchase #{purchase.id}: #{e.message}")
     # Swallowing this made retry: 5 dead. Checkout used to propagate the error from the

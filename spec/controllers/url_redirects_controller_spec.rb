@@ -2806,6 +2806,33 @@ describe UrlRedirectsController, inertia: true do
           expect(inertia.props[:latest_media_location]).to be_nil
         end
 
+        it "does not sign the original PDF while the stamp is missing" do
+          product_file = create(:readable_document, link: @product, pdf_stamp_enabled: true)
+
+          get :read, params: { id: @token, product_file_id: product_file.external_id }
+
+          expect(response).to redirect_to(@url_redirect.download_page_url)
+          expect(flash[:warning]).to eq("We are preparing the file for download. You will receive an email when it is ready.")
+          expect(StampPdfForPurchaseJob).to have_enqueued_sidekiq_job(@purchase.id, true).on("critical")
+          expect(PdfStampingService.buyer_notification_requested?(@purchase.id)).to be(true)
+          expect(response.body).not_to include("billion-dollar-company-chapter-0.pdf")
+        end
+
+        it "signs the stamped copy instead of the original upload" do
+          product_file = create(:readable_document, link: @product, pdf_stamp_enabled: true)
+          stamped = create(:stamped_pdf, url_redirect: @url_redirect, product_file:)
+          allow_any_instance_of(UrlRedirectsController).to receive(:signed_download_url_for_s3_key_and_filename) do |_controller, key, _filename, **|
+            "https://signed.example/#{key}"
+          end
+
+          get :read, params: { id: @token, product_file_id: product_file.external_id }
+
+          expect(response).to be_successful
+          expect(inertia.props[:url]).to include("manual_stamped.pdf")
+          expect(inertia.props[:url]).not_to include("billion-dollar-company-chapter-0.pdf")
+          expect(inertia.props[:url]).to include(stamped.s3_key)
+        end
+
         it "creates the proper consumption event" do
           get :read, params: { id: @token, product_file_id: @product.product_files.first.external_id }
           expect(ConsumptionEvent.count).to eq 1

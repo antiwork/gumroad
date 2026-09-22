@@ -246,5 +246,14 @@ describe SendChargeReceiptJob do
       expect(CustomerMailer).to have_received(:receipt).with(purchase_two.id, single_purchase: true)
       expect(charge.reload.receipt_sent?).to be(true)
     end
+
+    it "delivers the receipt when stamping cannot be enqueued, then raises so the stamp is retried" do
+      allow(StampPdfForPurchaseJob).to receive(:perform_async).and_raise(RuntimeError, "redis down")
+
+      expect { described_class.new.perform(charge.id) }.to raise_error(RuntimeError, "redis down")
+      expect(CustomerMailer).to have_received(:receipt).with(purchase_one.id, single_purchase: true)
+      expect(CustomerMailer).to have_received(:receipt).with(purchase_two.id, single_purchase: true)
+      expect(charge.reload.receipt_sent?).to be(false)
+    end
   end
 end
