@@ -10,11 +10,9 @@ class AttachPastPurchasesToUserWorker
 
     failure = nil
     Purchase.where(email: user.email, purchaser_id: nil).find_each do |past_purchase|
-      begin
-        attach(past_purchase, user)
-      rescue => e
-        failure ||= e
-      end
+      attach(past_purchase, user)
+    rescue => e
+      failure ||= e
     end
     raise failure if failure
   end
