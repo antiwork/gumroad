@@ -42,7 +42,7 @@ describe AttachPastPurchasesToUserWorker do
       end
       allow(ErrorNotifier).to receive(:notify)
 
-      expect { described_class.new.perform(user.id) }.not_to raise_error
+      expect { described_class.new.perform(user.id) }.to raise_error(RuntimeError, "attach failed")
 
       expect(later.reload.purchaser).to eq(user)
       expect(failing.reload.purchaser).to be_nil
