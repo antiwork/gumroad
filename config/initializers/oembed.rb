@@ -1,14 +1,8 @@
 # frozen_string_literal: true
 
-# OEmbed::Providers holds its registry in a class variable and `register` appends to it
-# without deduping, so registering from OEmbedFinder appended all 93 url patterns again on
-# every cover-URL lookup and leaked a fresh Provider per custom host. Registering at boot
-# keeps it to one pass: it runs before any request thread exists, and a code reload drops
-# OEmbedFinder without touching the gem's registry, so nothing re-registers.
-#
-# Registration order is matching order — OEmbed::Providers#find walks url patterns in
-# insertion order — so the builtins have to go first, as they did when OEmbedFinder
-# called register_all before adding these three.
+# The gem's registry survives Rails reloads and appends without deduplication.
+# Initialize before request threads start, not on each lookup or reload.
+# Keep builtins first: registration order determines matching precedence.
 OEmbed::Providers.register_all
 
 wistia = OEmbed::Provider.new("http://fast.wistia.com/oembed")
