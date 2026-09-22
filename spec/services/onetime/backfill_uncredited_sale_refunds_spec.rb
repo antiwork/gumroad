@@ -7,11 +7,13 @@ RSpec.describe Onetime::BackfillUncreditedSaleRefunds do
   let(:product) { create(:product, user: seller) }
   let(:purchase) { create(:purchase_in_progress, link: product, seller:, succeeded_at: nil) }
   let(:stripe_refund_id) { "re_backfill_#{SecureRandom.hex(6)}" }
+  let(:refunded_charge_id) { purchase.stripe_transaction_id }
   let(:charge_refund) do
-    stripe_refund = double("stripe_refund", id: stripe_refund_id, status: "succeeded")
+    stripe_refund = double("stripe_refund", id: stripe_refund_id, status: "succeeded", charge: refunded_charge_id)
     charge_refund = ChargeRefund.new
     charge_refund.charge_processor_id = StripeChargeProcessor.charge_processor_id
     charge_refund.id = stripe_refund_id
+    charge_refund.charge_id = refunded_charge_id
     charge_refund.flow_of_funds = FlowOfFunds.build_simple_flow_of_funds(Currency::USD, -purchase.total_transaction_cents)
     charge_refund.instance_variable_set(:@refund, stripe_refund)
     charge_refund
@@ -68,5 +70,16 @@ RSpec.describe Onetime::BackfillUncreditedSaleRefunds do
     expect do
       described_class.process(refunds: { purchase.external_id => stripe_refund_id }, dry_run: false)
     end.to raise_error(ArgumentError, /already has a refund record/)
+  end
+
+  it "refuses a refund that belongs to another charge" do
+    other_purchase = create(:purchase_in_progress, link: product, seller:, succeeded_at: nil,
+                                                   stripe_transaction_id: "ch_other_#{SecureRandom.hex(6)}")
+
+    expect do
+      described_class.process(refunds: { other_purchase.external_id => stripe_refund_id }, dry_run: false)
+    end.to raise_error(ArgumentError, /belongs to charge/)
+    expect(other_purchase.reload.refunds).to be_empty
+    expect(other_purchase.stripe_refunded).to be_falsey
   end
 end

@@ -292,7 +292,8 @@ class Purchase
     # A refund reverses the credit the sale put on the seller's balance, so only a purchase
     # that was credited may be debited: a purchase that never ran the success path was never
     # credited, and debiting it would fund the refund out of the seller's other balances.
-    record_only = !seller_credited_for_sale?
+    # Whether this purchase was credited is read under the purchase lock below, so a success
+    # path committing in between cannot leave the refund skipping a credit that now exists.
     ActiveRecord::Base.transaction do
       # Failed-refund reversals lock the purchase before their refund and balance rows.
       # Use the same order here so a single-purchase refund cannot hold a balance while
@@ -304,6 +305,7 @@ class Purchase
       # Reloading discards that phantom change; lock! reloads again under FOR UPDATE.
       reload.lock!
       partially_refunded_previously = self.stripe_partially_refunded
+      record_only = !seller_credited_for_sale?
       self.stripe_refunded = (gross_amount_refunded_cents + funds_refunded) >= total_transaction_cents
       self.stripe_partially_refunded = !self.stripe_refunded
 

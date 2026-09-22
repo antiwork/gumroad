@@ -29,6 +29,9 @@ class Onetime::BackfillUncreditedSaleRefunds
     unless stripe_refund&.status == "succeeded"
       raise ArgumentError, "Processor refund #{@processor_refund_id} is not a succeeded refund"
     end
+    unless charge_refund.charge_id == purchase.stripe_transaction_id
+      raise ArgumentError, "Processor refund #{@processor_refund_id} belongs to charge #{charge_refund.charge_id}, not to purchase #{@purchase_external_id}"
+    end
 
     reported = {
       purchase_id: purchase.id,
