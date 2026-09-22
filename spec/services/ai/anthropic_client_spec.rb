@@ -759,6 +759,42 @@ describe Ai::AnthropicClient do
       end
     end
 
+    it "does not replay a tool-call token cutoff on the fallback model" do
+      cutoff = { status: 400, body: { error: { type: "api_error", message: "HttpError: HTTP 400: Tool calls cutoff by max_tokens." } }.to_json }
+      primary = stub_request(:post, vercel_url)
+        .with { |request| JSON.parse(request.body)["model"] == "deepseek/deepseek-v4.1-flash" }
+        .to_return(cutoff)
+      fallback = stub_request(:post, vercel_url)
+        .with { |request| JSON.parse(request.body)["model"] == "anthropic/claude-opus-5" }
+        .to_return(status: 200, body: { "content" => [], "stop_reason" => "end_turn" }.to_json, headers: { "Content-Type" => "application/json" })
+
+      result = client.messages(system: "s", messages: [{ role: "user", content: "x" }], recover_token_cutoff: true)
+
+      expect(result).to have_attributes(text: "", tool_uses: [], stop_reason: "max_tokens")
+      expect(primary).to have_been_requested.once
+      expect(fallback).not_to have_been_requested
+    end
+
+    it "returns max_tokens for a no-text streamed cutoff without replaying the fallback model" do
+      stream = [
+        ["content_block_start", { index: 0, content_block: { type: "tool_use", id: "toolu_x", name: "api_write" } }],
+        ["content_block_delta", { index: 0, delta: { type: "input_json_delta", partial_json: '{"description":"<p>cut' } }],
+        ["error", { error: { type: "api_error", message: "HttpError: HTTP 400: Tool calls cutoff by max_tokens." } }],
+      ].map { |event, data| "event: #{event}\ndata: #{data.to_json}\n\n" }.join
+      primary = stub_request(:post, vercel_url)
+        .with { |request| JSON.parse(request.body)["model"] == "deepseek/deepseek-v4.1-flash" }
+        .to_return(status: 200, body: stream, headers: { "Content-Type" => "text/event-stream" })
+      fallback = stub_request(:post, vercel_url)
+        .with { |request| JSON.parse(request.body)["model"] == "anthropic/claude-opus-5" }
+        .to_return(status: 200, body: stream, headers: { "Content-Type" => "text/event-stream" })
+
+      result = client.stream_messages(system: "s", messages: [{ role: "user", content: "x" }], recover_token_cutoff: true)
+
+      expect(result).to have_attributes(text: "", tool_uses: [], stop_reason: "max_tokens")
+      expect(primary).to have_been_requested.once
+      expect(fallback).not_to have_been_requested
+    end
+
     it "replays the Opus fallback on Vercel when OpenRouter is not configured" do
       stub_request(:post, vercel_url)
         .with { |request| JSON.parse(request.body)["model"] == "deepseek/deepseek-v4.1-flash" }

@@ -702,6 +702,9 @@ class Ai::AnthropicClient
       yield
     rescue Error => e
       raise if e.is_a?(UnreadableToolCallError)
+      # A token-cap cutoff fails the same way on the fallback model. Replaying it there
+      # spends the cap again and can mask the truncation recovery with a different error.
+      raise if e.is_a?(ToolCallTokenCutoffError)
       raise if yielded.call
       raise unless vercel? && !@using_fallback_model && fallback_model.present? && fallback_model != model
 
