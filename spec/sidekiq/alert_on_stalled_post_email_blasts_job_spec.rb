@@ -229,6 +229,23 @@ describe AlertOnStalledPostEmailBlastsJob do
         end
       end
 
+      # Held rows are the mail's whole reason to exist, so acted rows must not take their slots.
+      it "reports the HELD rows it was sent for ahead of auto-resumed ones" do
+        stub_const("#{described_class}::MAX_REPORTED", 1)
+        resumed = stalled_blast(requested_hours_ago: 6)
+        held = stalled_blast(requested_hours_ago: 30, post: create(:installment))
+        stub_sidekiq
+
+        described_class.new.perform
+
+        expect(SendPostBlastEmailsJob).to have_received(:perform_async).with(resumed.id)
+        expect(InternalNotificationWorker).to have_received(:perform_async) do |_room, _subject, message|
+          expect(message).to match(/blast #{held.id}.*HELD \(past/)
+          expect(message).not_to match(/blast #{resumed.id} \(post/)
+          expect(message).to include("…and 1 more.")
+        end
+      end
+
       it "never resumes the same blast twice" do
         blast = stalled_blast(requested_hours_ago: 6)
         $redis.set(RedisKey.stalled_blast_auto_resumed(blast.id), Time.current.iso8601)
