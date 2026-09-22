@@ -29,6 +29,7 @@ import { reorderShownIds } from "$app/components/Profile/reorderShownIds";
 import { ImageUploadSettingsContext, RichTextEditorToolbar, useRichTextEditor } from "$app/components/RichTextEditor";
 import { showAlert } from "$app/components/server-components/Alert";
 import { Drawer, ReorderingHandle, SortableList } from "$app/components/SortableList";
+import { isPendingUploadUrl } from "$app/components/TiptapExtensions/Image";
 import { Checkbox } from "$app/components/ui/Checkbox";
 import { Fieldset, FieldsetTitle } from "$app/components/ui/Fieldset";
 import { Input } from "$app/components/ui/Input";
@@ -211,13 +212,14 @@ const OptionRow = ({
 // withFreshUpsellCards below for why that sharing is dangerous.
 const isRecord = (node: unknown): node is Record<string, unknown> => typeof node === "object" && node !== null;
 
-// An image the editor is still previewing from a local blob: URL, i.e. one whose upload has not
-// resolved yet.
-const containsLocalImagePreview = (node: unknown): boolean => {
+// An image whose upload is still resolving — its src is a local preview this session created (see
+// uploadImages). A blob: src loaded from a stored section is a dead link from an earlier session,
+// not an upload in flight, so it must not block later edits.
+const containsPendingUploadImage = (node: unknown): boolean => {
   if (!isRecord(node)) return false;
   const attrs = isRecord(node.attrs) ? node.attrs : null;
-  if (node.type === "image" && typeof attrs?.src === "string" && attrs.src.startsWith("blob:")) return true;
-  return Array.isArray(node.content) && node.content.some(containsLocalImagePreview);
+  if (node.type === "image" && typeof attrs?.src === "string" && isPendingUploadUrl(attrs.src)) return true;
+  return Array.isArray(node.content) && node.content.some(containsPendingUploadImage);
 };
 
 const stripUpsellCardIds = (node: unknown): unknown => {
@@ -534,12 +536,12 @@ const RichTextSectionFields = ({
   React.useEffect(() => {
     if (!editor) return;
     const syncText = () => {
-      // An in-flight image is a local blob: preview, and a save that serialized one would store a
-      // src the profile can never render. Skip it: the editor's own swap to the CDN URL lands the
-      // section text, and that update carries the whole document, so the skipped ones cost nothing.
       if (disabled) return;
+      // A save that serialized an in-flight image would store a src the profile can never render,
+      // so skip while the document holds one. The editor's own swap to the CDN URL is the update
+      // that lands the section text, and it carries the whole document, so skipped ones cost nothing.
       const text = editor.getJSON();
-      if (containsLocalImagePreview(text)) return;
+      if (containsPendingUploadImage(text)) return;
       update({ ...sectionRef.current, text });
     };
     // Sync on content changes only (not on focus/blur), so the preview stays live and an

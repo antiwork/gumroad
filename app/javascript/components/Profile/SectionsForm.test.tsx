@@ -25,11 +25,9 @@ vi.stubGlobal("Routes", {
   s3_utility_cdn_url_for_blob_path: () => "/s3_utility/cdn_url_for_blob",
 });
 const CDN_URL = "https://cdn.example/uploaded-image";
-// The CDN lookup is the window an inserted image spends as a local blob: preview, so a test can
-// hold it open and see what the section text holds in the meantime.
+// Held open to keep an insert inside its blob: preview window; released to swap in the CDN URL.
 const cdn = vi.hoisted((): { hold: boolean; release: (() => void)[] } => ({ hold: false, release: [] }));
 type UploadCallback = (error: Error | null, blob: { key: string }) => void;
-// Uploads settle only when a test says so, so the in-flight window is observable.
 const uploads = vi.hoisted((): { pending: UploadCallback[] } => ({ pending: [] }));
 vi.mock("@rails/activestorage", () => ({
   DirectUpload: class {
@@ -97,6 +95,13 @@ const trackState = () => {
     onChange: (state: FormState) => void states.push(state),
     latest: () => assertDefined(states.at(-1)),
   };
+};
+
+const richTextSectionText = (state: FormState, id = "section-1"): string => {
+  const section = assertDefined(state.sections.find((section) => section.id === id));
+  if (section.type !== "SellerProfileRichTextSection")
+    throw new Error(`expected a rich text section, got ${section.type}`);
+  return JSON.stringify(section.text);
 };
 
 afterEach(() => {
@@ -301,13 +306,7 @@ describe("ProfileSectionsForm", () => {
     ];
     const tracked = trackState();
     const { container } = render(<ProfileSectionsForm {...withRichText} onChange={tracked.onChange} />);
-
-    const sectionText = () => {
-      const section = assertDefined(tracked.latest().sections.find(({ id }) => id === "section-1"));
-      if (section.type !== "SellerProfileRichTextSection")
-        throw new Error(`expected a rich text section, got ${section.type}`);
-      return JSON.stringify(section.text);
-    };
+    const sectionText = () => richTextSectionText(tracked.latest());
 
     fireEvent.click(screen.getByRole("button", { name: "Insert image" }));
     fireEvent.change(assertDefined(container.querySelector('input[type="file"]')), {
@@ -316,8 +315,8 @@ describe("ProfileSectionsForm", () => {
     await waitFor(() => expect(uploads.pending).toHaveLength(1));
     assertDefined(uploads.pending.shift())(null, { key: "blob-key" });
 
-    // The blob is up and the CDN lookup is still open, so the editor is showing the image from a
-    // local blob: URL and a save now would store a src the profile can never render again.
+    // The blob is up but the CDN lookup is open, so a save now would store a src the profile can
+    // never render again.
     await waitFor(() => expect(cdn.release).toHaveLength(1));
     expect(sectionText()).not.toContain("blob:");
 
@@ -325,5 +324,43 @@ describe("ProfileSectionsForm", () => {
 
     // The editor's own swap to the CDN URL is the update that lands the image in the section text.
     await waitFor(() => expect(sectionText()).toContain(CDN_URL));
+  });
+
+  // An image persisted as a blob: src outlives its session — the URL is dead, not in flight, so it
+  // must not stop the section from syncing the edits made while repairing it.
+  it("still syncs a section that already holds a dead blob: src from an earlier session", async () => {
+    cdn.hold = true;
+    const staleBlob = "blob:https://creator.gumroad.com/6f1c0f4e-stale";
+    const withRichText = props();
+    withRichText.sections = [
+      {
+        id: "section-1",
+        type: "SellerProfileRichTextSection",
+        header: "",
+        hide_header: false,
+        text: {
+          type: "doc",
+          content: [{ type: "image", attrs: { src: staleBlob, link: null, uploading: true } }, { type: "paragraph" }],
+        },
+      },
+    ];
+    const tracked = trackState();
+    const { container } = render(<ProfileSectionsForm {...withRichText} onChange={tracked.onChange} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Insert image" }));
+    fireEvent.change(assertDefined(container.querySelector('input[type="file"]')), {
+      target: { files: [new File(["pixels"], "photo.png", { type: "image/png" })] },
+    });
+    await waitFor(() => expect(uploads.pending).toHaveLength(1));
+    assertDefined(uploads.pending.shift())(null, { key: "blob-key" });
+    await waitFor(() => expect(cdn.release).toHaveLength(1));
+    cdn.release.forEach((release) => release());
+
+    const text = await waitFor(() => {
+      const current = richTextSectionText(tracked.latest());
+      expect(current).toContain(CDN_URL);
+      return current;
+    });
+    expect(text).toContain(staleBlob);
   });
 });
