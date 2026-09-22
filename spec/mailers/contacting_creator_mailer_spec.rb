@@ -312,6 +312,15 @@ describe ContactingCreatorMailer do
       mail = ContactingCreatorMailer.purchase_refunded(purchase.id, refund.id)
       expect(mail.body.encoded).not_to include "Reason:"
     end
+
+    it "reads the purchase and its seller from the primary, so worker replica lag cannot blank the render" do
+      purchase = create(:purchase, link: create(:product, name: "Digital Membership"), email: "test@example.com", price_cents: 10_00)
+      expect(ApplicationRecord).to receive(:connected_to).with(role: :writing).and_call_original
+
+      mail = ContactingCreatorMailer.purchase_refunded(purchase.id)
+
+      expect(mail.to).to eq([purchase.seller.email])
+    end
   end
 
   describe "purchase refunded for fraud" do
@@ -325,6 +334,15 @@ describe ContactingCreatorMailer do
       expect(mail.body.encoded).to include "We have refunded test@example.com's purchase of Digital Membership for $10."
       expect(mail.body.encoded).to include "We're doing our best to protect you, and no further action needs to be taken on your part."
       expect(mail.from).to eq([ApplicationMailer::SUPPORT_EMAIL])
+    end
+
+    it "reads the purchase and its seller from the primary, so worker replica lag cannot blank the render" do
+      purchase = create(:purchase, link: create(:product, name: "Digital Membership"), email: "test@example.com", price_cents: 10_00)
+      expect(ApplicationRecord).to receive(:connected_to).with(role: :writing).and_call_original
+
+      mail = ContactingCreatorMailer.purchase_refunded_for_fraud(purchase.id)
+
+      expect(mail.to).to eq([purchase.seller.email])
     end
   end
 
