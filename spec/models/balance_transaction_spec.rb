@@ -791,6 +791,37 @@ describe BalanceTransaction, :vcr do
           end
         end
 
+        describe "the refund's purchase was never marked successful" do
+          let(:balance) do
+            create(
+              :balance,
+              state: "unpaid",
+              user:,
+              merchant_account:,
+              date: refund.created_at.to_date,
+              currency: Currency::USD,
+              amount_cents: 100_00,
+              holding_currency: Currency::CAD,
+              holding_amount_cents: 110_00
+            )
+          end
+
+          before do
+            purchase.update_column(:succeeded_at, nil)
+            refund.purchase.reload
+            balance
+          end
+
+          it "applies the transaction to the earliest unpaid balance" do
+            expect(balance_transaction.balance).to eq(balance)
+            expect(balance_transaction.balance.user).to eq(user)
+            expect(balance_transaction.balance.merchant_account).to eq(merchant_account)
+            expect(balance_transaction.balance.date).to eq(refund.created_at.to_date)
+            expect(balance_transaction.balance.amount_cents).to eq(11_10)
+            expect(balance_transaction.balance.holding_amount_cents).to eq(12_21)
+          end
+        end
+
         describe "unpaid balance exists on another day, but not the day of refund's purchase" do
           let(:balance) do
             create(
