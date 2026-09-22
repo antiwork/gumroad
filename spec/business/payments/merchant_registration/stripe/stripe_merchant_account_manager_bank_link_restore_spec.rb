@@ -2,11 +2,8 @@
 
 require "spec_helper"
 
-# gumroad-private#2882: a "Change account" save set the Stripe account's metadata.bank_account_id
-# but never reached save_stripe_bank_account_info, so the active local bank row kept
-# stripe_bank_account_id NULL. update_bank_account reported that as :noop_metadata_match, which
-# RetryStripeRejectedPayoutSetupForSellerJob reads as success — the retry loop stopped, no failure
-# note was recorded, and every payout for the seller was skipped from then on.
+# A metadata match can name this row while the local external-account link is missing, which leaves
+# the seller unpayable and makes the retry job resolve its note on a false success.
 describe StripeMerchantAccountManager do
   include_context "with Stripe API stubs"
 
@@ -60,8 +57,7 @@ describe StripeMerchantAccountManager do
     )
   end
 
-  # The state the 2026-08-27 save left: the row is active, Stripe has the account, nothing local
-  # points at it.
+  # The row Stripe holds but nothing local points at.
   def unlink_bank_row!
     bank_account.update_columns(stripe_bank_account_id: nil, stripe_connect_account_id: nil, stripe_fingerprint: nil, state: "unverified")
     bank_account.reload

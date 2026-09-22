@@ -1309,10 +1309,9 @@ module StripeMerchantAccountManager
 
     stripe_account = Stripe::Account.retrieve(user.stripe_account.charge_processor_merchant_id)
     if stripe_account["metadata"]["bank_account_id"] == bank_account.external_id
-      # Metadata match does not mean the local row is linked. Reporting that as a no-op stops
-      # RetryStripeRejectedPayoutSetupForSellerJob and every payout is skipped
-      # (gumroad-private#2882). Restore the link only when no Stripe write is owed: a holder-name
-      # mismatch in a sync country still has to fall through to Account.update.
+      # A metadata match does not prove the local row is linked, so the no-op must not be reported
+      # before the link is checked. A holder-name mismatch in a sync country still owes an
+      # Account.update, so the restore only runs when no Stripe write is owed.
       name_out_of_sync = false
       if account_holder_name_synced_to_stripe?(bank_account.user)
         stripe_external_account = stripe_account["external_accounts"]&.first
@@ -1860,16 +1859,9 @@ module StripeMerchantAccountManager
   end
 
   private_class_method
-  # Stripe already holds the seller's bank account (metadata says it is this very row) but the
-  # local row carries no linked external account, so `StripePayoutProcessor.is_user_payable` fails
-  # on every run and the seller is skipped forever. Re-sending the details cannot repair it — the
-  # metadata match above short-circuits — so link the external account Stripe already has.
-  #
-  # Returns :noop_metadata_match only when the row is already linked. The retry job treats that
-  # symbol as success and resolves the payout note, so an unlinked row that cannot be tied to
-  # exactly one external account returns :bank_link_not_restored instead. A wrong link is worse
-  # than a missed repair: last4, routing number and currency must all be present on both sides.
-  # A blank field compares equal to another blank field, and that is not evidence.
+  # Stripe can name this row in metadata while the local link is missing, and re-sending the details
+  # cannot repair that. Links the external account Stripe already holds, never guessing one: last4,
+  # routing number and currency must each match, or :bank_link_not_restored keeps the failure note.
   def self.restore_local_bank_link!(bank_account, stripe_account)
     return :noop_metadata_match if bank_account.stripe_bank_account_id.present?
 
