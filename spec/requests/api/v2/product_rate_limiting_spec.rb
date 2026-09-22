@@ -138,5 +138,30 @@ describe "Product API rate limiting", type: :request do
         expect(response.headers["Retry-After"].to_i).to be_between(1, 60)
       end
     end
+
+    # A regression that reported the one-minute base rule instead of the tier that actually
+    # matched would still pass the example above: the base rule trips first, so its remaining
+    # time is always <= 60. Keep the base bucket under its limit each window and let the
+    # 8**3 = 512-second tier accumulate past its 90-request limit.
+    it "reports the matched backoff tier, not the one-minute base window" do
+      travel_to(Time.at((Time.current.to_i / 512) * 512 + 10)) do
+        4.times do |window|
+          travel 60.seconds if window.positive?
+          30.times do
+            put "/api/v2/products/#{product.external_id}",
+                params: { access_token: token.token, name: "Updated" },
+                headers: { "REMOTE_ADDR" => "203.0.113.8" }
+          end
+        end
+        travel 60.seconds
+
+        put "/api/v2/products/#{product.external_id}",
+            params: { access_token: token.token, name: "Updated" },
+            headers: { "REMOTE_ADDR" => "203.0.113.8" }
+
+        expect(response).to have_http_status(:too_many_requests)
+        expect(response.headers["Retry-After"].to_i).to be_between(61, 512)
+      end
+    end
   end
 end
