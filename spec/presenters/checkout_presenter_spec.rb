@@ -887,6 +887,7 @@ describe CheckoutPresenter do
         result = described_class.new(logged_in_user: nil, ip: "127.0.0.1").subscription_manager_props(subscription: @subscription)
         expect(result).to eq({
                                product: {
+                                 id: @product.external_id,
                                  name: @product.name,
                                  native_type: @product.native_type,
                                  supports_paypal: nil,

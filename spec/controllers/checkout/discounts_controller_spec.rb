@@ -377,7 +377,7 @@ describe Checkout::DiscountsController do
         expect(seller.offer_codes.find_by!(code: "tieronly").variants).to contain_exactly(tier, sku)
       end
 
-      it "does not save a deleted option as a scope" do
+      it "preserves the scope if an option is deleted before saving" do
         product = create(:product, user: seller)
         tier = create(:variant, variant_category: create(:variant_category, link: product))
         removed = create(:variant, variant_category: tier.variant_category, name: "Early bird")
@@ -394,7 +394,7 @@ describe Checkout::DiscountsController do
         }, as: :json
 
         expect(response.parsed_body["success"]).to eq(true), response.body
-        expect(seller.offer_codes.find_by!(code: "liveonly").variants).to contain_exactly(tier)
+        expect(seller.offer_codes.find_by!(code: "liveonly").variants).to contain_exactly(tier, removed)
       end
     end
 
@@ -679,6 +679,31 @@ describe Checkout::DiscountsController do
       expect(offer_code.name).to eq("Renamed discount")
       expect(offer_code.universal).to eq(false)
       expect(offer_code.products).to eq([subject_product])
+    end
+
+    it "drops option restrictions for products removed by a partial update" do
+      subject_product = create(:product, user: seller)
+      option = create(:variant, variant_category: create(:variant_category, link: subject_product))
+      offer_code.update!(universal: false, products: [subject_product], variants: [option])
+      replacement = create(:product, user: seller)
+
+      put :update, params: { id: offer_code.external_id, selected_product_ids: [replacement.external_id] }, as: :json
+
+      expect(response.parsed_body["success"]).to eq(true)
+      expect(offer_code.reload.products).to eq([replacement])
+      expect(offer_code.variants).to be_empty
+    end
+
+    it "preserves a deleted option when editing the discount name" do
+      subject_product = create(:product, user: seller)
+      option = create(:variant, variant_category: create(:variant_category, link: subject_product))
+      offer_code.update!(universal: false, products: [subject_product], variants: [option])
+      option.mark_deleted!
+
+      put :update, params: { id: offer_code.external_id, name: "Renamed", selected_option_ids: [option.external_id] }, as: :json
+
+      expect(response.parsed_body["success"]).to eq(true)
+      expect(offer_code.reload.variants).to eq([option])
     end
 
     it "preserves a percentage offer code's amount on a partial update that omits both amount keys" do

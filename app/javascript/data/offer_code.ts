@@ -13,6 +13,7 @@ type Uid = string;
 export type LineItemConfiguration = {
   permalink: string;
   quantity: number;
+  variant_external_id?: string | null;
 };
 type ComputeDiscountRequestData = {
   code: string;
@@ -42,7 +43,8 @@ export type OfferCodeResponseData =
         | "insufficient_times_of_use"
         | "inactive"
         | "unmet_minimum_purchase_quantity"
-        | "not_existing_customer";
+        | "not_existing_customer"
+        | "option_not_eligible";
       error_message: string;
     }
   | { valid: true; products_data: Record<string, Discount>; notice?: string };

@@ -320,16 +320,15 @@ class OfferCode < ApplicationRecord
     !!(valid_at&.future? || expires_at&.past?)
   end
 
-  # Public: the options of `link` this code is limited to. Empty means every option.
-  # Match through the option's product, not base_variants.link_id: that column is only set for
-  # SKUs, so a version or tier would otherwise look unrestricted and the code would discount it.
-  def restricted_variants_for(link)
-    live_scoped_variants.select { |variant| variant.owning_product_id == link.id }
+  # Deleted options must retain the product restriction until the seller changes it.
+  def restricted_variants_for(product)
+    variants.select { |variant| variant.owning_product_id == product.id }
   end
 
-  # A deleted option is not a limit: the form and checkout only know live options.
-  def live_scoped_variants
-    variants.select(&:alive?)
+  def option_ids_by_product
+    variants.group_by(&:owning_product_id).to_h do |product_id, options|
+      [ObfuscateIds.encrypt(product_id), options.map(&:external_id)]
+    end
   end
 
   # Blank is ineligible here: purchase enforcement must fail closed if the chosen option is missing.
@@ -361,9 +360,7 @@ class OfferCode < ApplicationRecord
       }
     )
     json[:excluded_product_ids] = excluded_products.map(&:external_id) if universal? && excluded_products.present?
-    # Live ids only. The client treats a product with none of its options listed as unrestricted.
-    live_option_ids = live_scoped_variants.map(&:external_id)
-    json[:option_ids] = live_option_ids if live_option_ids.any?
+    json[:option_ids_by_product] = option_ids_by_product if variants.any?
     if is_cents? && once_per_cart?
       json[:once_per_cart] = true
       json[:once_per_cart_id] = external_id

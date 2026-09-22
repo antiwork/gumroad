@@ -46,6 +46,7 @@ import { useOriginalLocation } from "$app/components/useOriginalLocation";
 
 type Props = {
   product: {
+    id: string;
     permalink: string;
     name: string;
     native_type: ProductNativeType;

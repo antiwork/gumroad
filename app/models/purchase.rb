@@ -5570,7 +5570,7 @@ class Purchase < ApplicationRecord
 
       unless offer_code.applicable_to_variant?(link, variant_attributes.first)
         self.error_code = PurchaseErrorCode::OFFER_CODE_INVALID
-        errors.add :base, "Sorry, this discount code is not valid for the option you selected."
+        errors.add :base, "This code does not apply to the selected option."
         return
       end
 

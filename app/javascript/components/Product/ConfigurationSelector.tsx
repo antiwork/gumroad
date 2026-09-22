@@ -158,6 +158,7 @@ export type Recurrences = {
 };
 
 export type Product = {
+  id: string;
   permalink: string;
   rental: Rental | null;
   options: Option[];

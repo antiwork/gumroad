@@ -182,7 +182,11 @@ const hasMetCartDiscountConditions = (cart: CartState, item: CartItem, discount:
   hasMetDiscountConditions(
     discount,
     cart.items
-      .filter(({ product }) => product.permalink === item.product.permalink)
+      .filter(
+        (cartItem) =>
+          cartItem.product.permalink === item.product.permalink &&
+          discountAppliesToOption(discount, cartItem.product, cartItem.option_id),
+      )
       .reduce((total, cartItem) => total + cartItem.quantity, 0),
   ) &&
   (!discount.minimum_amount_cents ||

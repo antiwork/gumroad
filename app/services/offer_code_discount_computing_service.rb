@@ -33,12 +33,11 @@ class OfferCodeDiscountComputingService
       next unless offer_code
       track_applicable_offer_code(offer_code)
 
-      entries = entries_eligible_for_option_scope(offer_code, link, entries)
-      if entries.empty?
-        track_option_ineligibility
-        next
-      end
+      eligible_entries = entries_eligible_for_option_scope(offer_code, link, entries)
+      track_option_ineligibility if eligible_entries.size < entries.size
+      next if eligible_entries.empty?
 
+      entries = key_by_input ? eligible_entries : [[link.unique_permalink, aggregate_products(eligible_entries.map(&:last))]]
       purchase_quantity = entries.sum { |_input_key, product| product[:quantity].to_i }
       resolved_discount = offer_code.evaluate_for_buyer(buyer, product: link)
 
@@ -103,7 +102,6 @@ class OfferCodeDiscountComputingService
         entries = entries_by_permalink[link.unique_permalink]
         next if entries.blank?
 
-        entries = [[link.unique_permalink, aggregate_products(entries.map(&:last))]] unless key_by_input
         [link, entries]
       end
     end
@@ -123,19 +121,12 @@ class OfferCodeDiscountComputingService
       aggregate
     end
 
-    # Callers key `products` however they like — by permalink, or by cart index. Only the permalink
-    # inside each entry is authoritative, so never index `products` by permalink: doing so 500s on
-    # any index-keyed payload. Index-keyed carts can also repeat a permalink across lines, so
-    # quantities sum — keeping only one line's would let a capped code over-apply.
-    # A missing variant id is "unknown", not "ineligible". Checkout preview asks for one discount
-    # per product and does not send the chosen option; the client filters that discount with
-    # option_ids. Order and purchase callers always pass the option, and a present id that is
-    # outside the scope stays ineligible.
+    # Product-page previews omit the option. Cart and order callers send the selected option.
     def entries_eligible_for_option_scope(offer_code, link, entries)
       return entries if offer_code.restricted_variants_for(link).empty?
 
       entries.select do |_input_key, product|
-        product[:variant_external_id].blank? || offer_code.applicable_to_variant?(link, product[:variant_external_id])
+        !product.key?(:variant_external_id) || offer_code.applicable_to_variant?(link, product[:variant_external_id])
       end
     end
 

@@ -49,6 +49,7 @@ import { Menu, MenuItem } from "$app/components/ui/Menu";
 import { PageHeader } from "$app/components/ui/PageHeader";
 import { Pill } from "$app/components/ui/Pill";
 import { Placeholder, PlaceholderImage } from "$app/components/ui/Placeholder";
+import { Radio } from "$app/components/ui/Radio";
 import { Sheet, SheetHeader } from "$app/components/ui/Sheet";
 import { Switch } from "$app/components/ui/Switch";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "$app/components/ui/Table";
@@ -95,7 +96,7 @@ export type OfferCode = {
   existing_customers_only: boolean;
   ownership_products: Product[];
   ownership_duration_tiers: OwnershipDurationTier[] | null;
-  option_ids: string[];
+  option_ids_by_product: Record<string, string[]>;
 };
 
 export type SortKey = "name" | "revenue" | "uses" | "term";
@@ -114,13 +115,31 @@ const formatProductNames = (products: Product[]) => {
     ? `${names}, and ${products.length - 2} ${products.length - 2 === 1 ? "other" : "others"}`
     : names;
 };
-const formatProducts = (offerCode: OfferCode) => {
+const formatOptionScope = (offerCode: OfferCode, product: Product) => {
+  const ids = offerCode.option_ids_by_product[product.id];
+  if (ids === undefined) return "All options";
+  return (
+    product.options
+      ?.filter(({ id }) => ids.includes(id))
+      .map(({ name }) => name)
+      .join(", ") || "No eligible options"
+  );
+};
+const formatProducts = (offerCode: OfferCode, products: Product[]) => {
   if (!offerCode.products) {
     return offerCode.excluded_products.length > 0
       ? `all products except ${formatProductNames(offerCode.excluded_products)}`
       : "all products";
   }
-  return formatProductNames(offerCode.products);
+  return formatProductNames(
+    offerCode.products.map((product) => ({
+      ...product,
+      name:
+        offerCode.option_ids_by_product[product.id] === undefined
+          ? product.name
+          : `${product.name} (${formatOptionScope(offerCode, products.find(({ id }) => id === product.id) ?? product)})`,
+    })),
+  );
 };
 const formatAmount = (offerCode: OfferCode) => {
   if (offerCode.ownership_duration_tiers?.length) {
@@ -421,7 +440,7 @@ const DiscountsPage = ({
                             <b>{offerCode.name}</b>
                           </div>
                           <FieldsetDescription>
-                            {formatAmount(offerCode)} off of {formatProducts(offerCode)}
+                            {formatAmount(offerCode)} off of {formatProducts(offerCode, products)}
                           </FieldsetDescription>
                         </div>
                       </TableCell>
@@ -631,6 +650,14 @@ const DiscountsPage = ({
                       <CardContent key={product.id} className="grid grid-cols-[1fr_auto] gap-2">
                         <div className="grow">
                           <h5 className="font-bold">{product.name}</h5>
+                          {Object.keys(selectedOfferCode.option_ids_by_product).length > 0 ? (
+                            <p>
+                              {formatOptionScope(
+                                selectedOfferCode,
+                                products.find(({ id }) => id === product.id) ?? product,
+                              )}
+                            </p>
+                          ) : null}
                           {uses != null ? `${uses} ${uses === 1 ? "use" : "uses"}` : null}
                         </div>
                         <CopyToClipboard
@@ -711,7 +738,7 @@ const DiscountsPage = ({
             maxQuantity: offerCode.limit,
             discount: offerCode.discount,
             selectedProductIds: offerCode.products?.map(({ id }) => id) ?? [],
-            selectedOptionIds: offerCode.option_ids,
+            selectedOptionIds: Object.values(offerCode.option_ids_by_product).flat(),
             excludedProductIds: offerCode.excluded_products.map(({ id }) => id),
             currencyCode: offerCode.discount.type === "cents" ? offerCode.currency_type : null,
             universal: !offerCode.products,
@@ -760,7 +787,7 @@ const DiscountsPage = ({
             maxQuantity: offerCode.limit,
             discount: offerCode.discount,
             selectedProductIds: offerCode.products?.map(({ id }) => id) ?? [],
-            selectedOptionIds: offerCode.option_ids,
+            selectedOptionIds: Object.values(offerCode.option_ids_by_product).flat(),
             excludedProductIds: offerCode.excluded_products.map(({ id }) => id),
             currencyCode: offerCode.discount.type === "cents" ? offerCode.currency_type : null,
             universal: !offerCode.products,
@@ -874,21 +901,11 @@ const Form = ({
     value: offerCode?.products?.map(({ id }) => id) ?? [],
   });
   const selectedProducts = products.filter(({ id }) => selectedProductIds.value.includes(id));
-  const [selectedOptionIds, setSelectedOptionIds] = React.useState<{ value: string[]; error?: boolean }>({
-    value: offerCode?.option_ids ?? [],
-  });
-  // Offer codes are not restricted by option unless the seller picks some, and a code restricted
-  // on one product leaves the other products' options alone.
-  const selectableOptions = selectedProducts.flatMap((product) =>
-    (product.options ?? []).map((option) => ({ id: option.id, label: `${product.name} — ${option.name}` })),
+  const [optionIdsByProduct, setOptionIdsByProduct] = React.useState<Record<string, string[]>>(
+    offerCode?.option_ids_by_product ?? {},
   );
-  const selectedOptions = selectableOptions.filter(({ id }) => selectedOptionIds.value.includes(id));
-  const optionIdsInScope = (productIds: string[]) =>
-    new Set(
-      products
-        .filter(({ id }) => productIds.includes(id))
-        .flatMap((product) => (product.options ?? []).map(({ id }) => id)),
-    );
+  const optionFieldRefs = React.useRef<Record<string, SelectInstance<Option, true, GroupBase<Option>> | null>>({});
+  const [optionsError, setOptionsError] = React.useState(false);
   const [excludedProductIds, setExcludedProductIds] = React.useState<string[]>(
     offerCode?.excluded_products.map(({ id }) => id) ?? [],
   );
@@ -988,6 +1005,7 @@ const Form = ({
     const isMaxQuantityInvalid = limitQuantity && maxQuantity.value === null;
     const isExpiresAtInvalid = !hasNoEndDate && validAt > expiresAt.value;
     const isSelectedProductsInvalid = !universal && selectedProductIds.value.length === 0;
+    const isOptionsInvalid = !universal && Object.values(optionIdsByProduct).some((ids) => ids.length === 0);
     const isMinimumQuantityInvalid = hasMinimumQuantity && minimumQuantity.value === null;
     const isMinimumAmountInvalid = hasMinimumAmount && minimumAmount.value === null;
     const isOwnershipProductsInvalid = existingCustomersOnly && ownershipProductIds.value.length === 0;
@@ -1022,6 +1040,7 @@ const Form = ({
       isMaxQuantityInvalid ||
       isExpiresAtInvalid ||
       isSelectedProductsInvalid ||
+      isOptionsInvalid ||
       isMinimumQuantityInvalid ||
       isMinimumAmountInvalid ||
       isOwnershipProductsInvalid ||
@@ -1034,6 +1053,7 @@ const Form = ({
       setMaxQuantity((prev) => ({ ...prev, error: isMaxQuantityInvalid }));
       setExpiresAt((prev) => ({ ...prev, error: isExpiresAtInvalid }));
       setSelectedProductIds((prev) => ({ ...prev, error: isSelectedProductsInvalid }));
+      setOptionsError(isOptionsInvalid);
       setMinimumQuantity((prev) => ({ ...prev, error: isMinimumQuantityInvalid }));
       setMinimumAmount((prev) => ({ ...prev, error: isMinimumAmountInvalid }));
       setOwnershipProductIds((prev) => ({ ...prev, error: isOwnershipProductsInvalid }));
@@ -1043,6 +1063,11 @@ const Form = ({
       if (isNameInvalid) invalidFieldRefs.push(nameFieldRef);
       if (isCodeInvalid) invalidFieldRefs.push(codeFieldRef);
       if (isSelectedProductsInvalid) invalidFieldRefs.push(selectedProductsFieldRef);
+      const invalidOptionsProductId = Object.keys(optionIdsByProduct).find(
+        (id) => optionIdsByProduct[id]?.length === 0,
+      );
+      if (isOptionsInvalid && invalidOptionsProductId)
+        invalidFieldRefs.push({ current: optionFieldRefs.current[invalidOptionsProductId] });
       if (isOwnershipProductsInvalid) invalidFieldRefs.push(ownershipProductsFieldRef);
 
       if (invalidFieldRefs[0]?.current) {
@@ -1076,7 +1101,7 @@ const Form = ({
       existing_customers_only: existingCustomersOnly,
       ownership_products: existingCustomersOnly ? ownershipProducts : [],
       ownership_duration_tiers: tieredPayload,
-      option_ids: universal ? [] : selectedOptionIds.value,
+      option_ids_by_product: universal ? {} : optionIdsByProduct,
     });
   };
 
@@ -1185,8 +1210,11 @@ const Form = ({
               placeholder="Products to which this discount will apply"
               onChange={(selectedIds) => {
                 setSelectedProductIds({ value: selectedIds.map(({ id }) => id) });
-                const inScope = optionIdsInScope(selectedIds.map(({ id }) => id));
-                setSelectedOptionIds((prev) => ({ value: prev.value.filter((id) => inScope.has(id)) }));
+                setOptionIdsByProduct((prev) =>
+                  Object.fromEntries(
+                    Object.entries(prev).filter(([id]) => selectedIds.some((product) => product.id === id)),
+                  ),
+                );
                 setCurrencyCode(
                   (prevCurrencyCode) =>
                     products.find(({ id }) => id === selectedIds[0]?.id)?.currency_type ?? prevCurrencyCode,
@@ -1201,34 +1229,83 @@ const Form = ({
                 onChange={(evt) => {
                   setUniversal(evt.target.checked);
                   setSelectedProductIds({ value: [] });
-                  setSelectedOptionIds({ value: [] });
+                  setOptionIdsByProduct({});
                 }}
                 aria-invalid={selectedProductIds.error}
               />
               All products
             </Label>
           </Fieldset>
-          {!universal && selectableOptions.length > 0 ? (
-            <Fieldset>
-              <FieldsetTitle>
-                <Label htmlFor={`${uid}options`}>Options</Label>
-              </FieldsetTitle>
-              <Select
-                inputId={`${uid}options`}
-                instanceId={`${uid}options`}
-                options={selectableOptions}
-                value={selectedOptions}
-                isMulti
-                isClearable
-                placeholder="All options"
-                onChange={(selectedIds) => setSelectedOptionIds({ value: selectedIds.map(({ id }) => id) })}
-              />
-              <FieldsetDescription>
-                Limit the discount to specific options. Leave this empty to discount every option of the selected
-                products.
-              </FieldsetDescription>
-            </Fieldset>
-          ) : null}
+          {!universal
+            ? selectedProducts.map((product) => {
+                const optionIds = optionIdsByProduct[product.id];
+                if (!product.options?.length && optionIds === undefined) return null;
+                const options = (product.options ?? []).map(({ id, name }) => ({ id, label: name }));
+                const selectedOptions = options.filter(({ id }) => optionIds?.includes(id));
+                return (
+                  <Fieldset key={product.id} aria-invalid={optionsError ? optionIds?.length === 0 : false}>
+                    <FieldsetTitle>{product.name}: options</FieldsetTitle>
+                    <div className="flex flex-wrap gap-x-6 gap-y-2">
+                      <Label>
+                        <Radio
+                          name={`${uid}scope-${product.id}`}
+                          checked={optionIds === undefined}
+                          onChange={() =>
+                            setOptionIdsByProduct((prev) =>
+                              Object.fromEntries(Object.entries(prev).filter(([id]) => id !== product.id)),
+                            )
+                          }
+                        />
+                        All options
+                      </Label>
+                      <Label>
+                        <Radio
+                          name={`${uid}scope-${product.id}`}
+                          checked={optionIds !== undefined}
+                          onChange={() => setOptionIdsByProduct((prev) => ({ ...prev, [product.id]: [] }))}
+                        />
+                        Selected options
+                      </Label>
+                    </div>
+                    {optionIds !== undefined ? (
+                      <>
+                        <Label htmlFor={`${uid}options-${product.id}`} className="sr-only">
+                          Eligible options for {product.name}
+                        </Label>
+                        <Select
+                          ref={(ref) => {
+                            optionFieldRefs.current[product.id] = ref;
+                          }}
+                          inputId={`${uid}options-${product.id}`}
+                          instanceId={`${uid}options-${product.id}`}
+                          options={options}
+                          value={selectedOptions}
+                          isMulti
+                          isClearable
+                          placeholder="Select options"
+                          aria-invalid={optionsError ? optionIds.length === 0 : false}
+                          onChange={(selected) =>
+                            setOptionIdsByProduct((prev) => ({ ...prev, [product.id]: selected.map(({ id }) => id) }))
+                          }
+                        />
+                        {selectedOptions.length === 0 && optionIds.length > 0 ? (
+                          <Alert role="status" variant="warning">
+                            The selected options were deleted. This product receives no discount until you select an
+                            option or choose All options.
+                          </Alert>
+                        ) : (
+                          <FieldsetDescription>
+                            {optionsError && optionIds.length === 0
+                              ? "Select at least one option or choose All options."
+                              : "Only the selected options receive this discount."}
+                          </FieldsetDescription>
+                        )}
+                      </>
+                    ) : null}
+                  </Fieldset>
+                );
+              })
+            : null}
           {universal ? (
             <Fieldset>
               <FieldsetTitle>

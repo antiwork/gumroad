@@ -45,7 +45,7 @@ class Checkout::DiscountsPresenter
       existing_customers_only: offer_code.existing_customers_only?,
       ownership_products: offer_code.ownership_products.map { product_props_for(_1) },
       ownership_duration_tiers: offer_code.normalized_ownership_duration_tiers,
-      option_ids: offer_code.live_scoped_variants.map(&:external_id),
+      option_ids_by_product: offer_code.option_ids_by_product,
     }
   end
 
@@ -62,14 +62,19 @@ class Checkout::DiscountsPresenter
       }
     end
 
-    # The form offers a product's options as discount scope, so the options travel with the
-    # products it already lists. Preload both option shapes: `Link#options` queries per product
-    # when the association is not loaded, and SKUs are not `alive_variants`.
     def product_props_by_product
       pundit_user.seller.products.visible.includes(:alive_variants, :variant_categories_alive, :skus_alive_not_default).map do |product|
         props = product_props_for(product)
-        options = product.options
-        props[:options] = options.map { { id: _1[:id], name: _1[:name] } } if options.any?
+        options = if product.skus_enabled?
+          product.skus_alive_not_default
+        else
+          product.alive_variants
+            .select { |variant| variant.variant_category_id == product.variant_categories_alive.first&.id }
+            .sort_by { |variant| [variant.position_in_category.nil? ? 0 : 1, variant.position_in_category.to_i, variant.created_at] }
+        end
+        props[:options] = options.map do |option|
+          { id: option.external_id, name: option.name == "Untitled" ? product.name : option.name.to_s }
+        end if options.any?
         props
       end
     end

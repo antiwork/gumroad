@@ -161,18 +161,18 @@ describe Purchase, "offer-code capacity" do
     rejected.variant_attributes << sibling
     rejected.send(:validate_offer_code)
 
-    expect(rejected.errors.full_messages).to include("Sorry, this discount code is not valid for the option you selected.")
+    expect(rejected.errors.full_messages).to include("This code does not apply to the selected option.")
     expect(rejected.send(:offer_amount_off, product.price_cents)).to eq(0)
 
     allowed = build(:purchase_in_progress, link: product, seller: product.user, offer_code:, discount_code: offer_code.code)
     allowed.variant_attributes << tier
     allowed.send(:validate_offer_code)
 
-    expect(allowed.errors.full_messages).not_to include("Sorry, this discount code is not valid for the option you selected.")
+    expect(allowed.errors.full_messages).not_to include("This code does not apply to the selected option.")
     expect(allowed.send(:offer_amount_off, product.price_cents)).to eq(100)
   end
 
-  it "discounts a remaining option after the scoped option is deleted" do
+  it "rejects a remaining option after the scoped option is deleted" do
     product = create(:product, price_cents: 2_000)
     category = create(:variant_category, link: product)
     tier = create(:variant, variant_category: category, name: "Basic")
@@ -184,7 +184,7 @@ describe Purchase, "offer-code capacity" do
     purchase.variant_attributes << sibling
     purchase.send(:validate_offer_code)
 
-    expect(purchase.errors.full_messages).not_to include("Sorry, this discount code is not valid for the option you selected.")
-    expect(purchase.send(:offer_amount_off, product.price_cents)).to eq(100)
+    expect(purchase.errors.full_messages).to include("This code does not apply to the selected option.")
+    expect(purchase.send(:offer_amount_off, product.price_cents)).to eq(0)
   end
 end

@@ -102,6 +102,9 @@ class Order::CreateService
           end
         end
 
+        pricing_offer_code = if line_item_params[:discount_code].present?
+          product.find_offer_code(code: normalize_discount_code(line_item_params[:discount_code]))
+        end
         purchase_params = build_purchase_params(
           product,
           common_params
@@ -122,7 +125,10 @@ class Order::CreateService
             .merge({ cart_items: })
             .merge(
               offer_code_cart_quantity: line_items
-                .select { _1[:permalink] == product.unique_permalink }
+                .select do |item|
+                  item[:permalink] == product.unique_permalink &&
+                    (pricing_offer_code.nil? || pricing_offer_code.applicable_to_variant?(product, item[:variants]&.first))
+                end
                 .sum { _1[:quantity].to_i }
             )
         ).merge(

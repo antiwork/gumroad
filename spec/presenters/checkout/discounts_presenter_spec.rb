@@ -47,7 +47,7 @@ describe Checkout::DiscountsPresenter do
                      existing_customers_only: false,
                      ownership_products: [],
                      ownership_duration_tiers: nil,
-                     option_ids: [],
+                     option_ids_by_product: {},
                      excluded_products: [],
                      products: [
                        {
@@ -87,7 +87,7 @@ describe Checkout::DiscountsPresenter do
                      existing_customers_only: false,
                      ownership_products: [],
                      ownership_duration_tiers: nil,
-                     option_ids: [],
+                     option_ids_by_product: {},
                      excluded_products: [],
                      products: [
                        {
@@ -118,7 +118,7 @@ describe Checkout::DiscountsPresenter do
                      existing_customers_only: false,
                      ownership_products: [],
                      ownership_duration_tiers: nil,
-                     option_ids: [],
+                     option_ids_by_product: {},
                      excluded_products: [],
                      products: nil,
                    },
@@ -185,7 +185,7 @@ describe Checkout::DiscountsPresenter do
             existing_customers_only: false,
             ownership_products: [],
             ownership_duration_tiers: nil,
-            option_ids: [],
+            option_ids_by_product: {},
             excluded_products: [],
             products: [
               {
@@ -285,14 +285,14 @@ describe Checkout::DiscountsPresenter do
       end
     end
 
-    it "omits a deleted option from option_ids and keeps the live one" do
+    it "preserves deleted options in the product scope" do
       create(:team_membership, user:, seller:, role: TeamMembership::ROLE_ADMIN)
       tier = product3.alive_variants.first
       removed = create(:variant, variant_category: tier.variant_category, name: "Early bird")
       offer_code1.variants = [tier, removed]
       removed.mark_deleted!
 
-      expect(presenter.offer_code_props(offer_code1)[:option_ids]).to eq([tier.external_id])
+      expect(presenter.offer_code_props(offer_code1)[:option_ids_by_product]).to eq({ product3.external_id => [tier.external_id, removed.external_id] })
     end
   end
 end
