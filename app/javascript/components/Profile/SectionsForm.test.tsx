@@ -51,8 +51,7 @@ vi.mock("$app/utils/snapshotPickedFile", () => ({
   fileListMatchesPickedFiles: () => false,
 }));
 vi.stubGlobal("fetch", (url: string) => {
-  const json = (body: string) =>
-    new Response(body, { status: 200, headers: { "Content-Type": "application/json" } });
+  const json = (body: string) => new Response(body, { status: 200, headers: { "Content-Type": "application/json" } });
   if (!String(url).includes("s3_utility")) return Promise.resolve(json("[]"));
 
   if (!cdn.hold) return Promise.resolve(json(JSON.stringify({ url: CDN_URL })));
