@@ -3372,6 +3372,13 @@ class Purchase < ApplicationRecord
     (purchase_chargeback_balance.nil? || chargeback_reversed) && (purchase_refund_balance.nil? || stripe_partially_refunded || stripe_partially_refunded_was)
   end
 
+  # The success path (update_balance_and_mark_successful!) credits the seller's balance and
+  # stamps succeeded_at in the same step, so a purchase without succeeded_at has no sale
+  # credit on any balance. A refund of it has nothing to reverse and must not create a debit.
+  def seller_credited_for_sale?
+    succeeded_at.present?
+  end
+
   def upload_invoice_pdf(pdf)
     timestamp = Time.current.strftime("%F")
     key = "#{Rails.env}/#{timestamp}/invoices/purchases/#{external_id}-#{SecureRandom.hex}/invoice.pdf"

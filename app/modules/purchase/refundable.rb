@@ -289,6 +289,10 @@ class Purchase
     # purchase the block above always sets `canonical_gross_refund_cents` (or returns false), so
     # the fallback is unreachable there and a presentment amount can never be booked as canonical.
     funds_refunded = canonical_gross_refund_cents || flow_of_funds.issued_amount.cents.abs
+    # A refund reverses the credit the sale put on the seller's balance, so only a purchase
+    # that was credited may be debited: a purchase that never ran the success path was never
+    # credited, and debiting it would fund the refund out of the seller's other balances.
+    record_only = !seller_credited_for_sale?
     ActiveRecord::Base.transaction do
       # Failed-refund reversals lock the purchase before their refund and balance rows.
       # Use the same order here so a single-purchase refund cannot hold a balance while
@@ -336,12 +340,12 @@ class Purchase
       self.is_refund_chargeback_fee_waived = !charged_using_gumroad_merchant_account? || is_for_fraud
       mark_giftee_purchase_as_refunded(is_partially_refunded: self.stripe_partially_refunded?) if is_gift_sender_purchase
       subscription.cancel_immediately_if_pending_cancellation! if subscription.present?
-      decrement_balance_for_refund_or_chargeback!(flow_of_funds, refund:) unless chargedback_not_reversed?
+      decrement_balance_for_refund_or_chargeback!(flow_of_funds, refund:) unless chargedback_not_reversed? || record_only
       mark_product_purchases_as_refunded!(is_partially_refunded: self.stripe_partially_refunded?)
       save!
       reverse_the_transfer_made_for_dispute_win! if chargedback? && chargeback_reversed
       reverse_excess_amount_from_stripe_transfer(refund:) if stripe_partially_refunded && vat_already_refunded
-      debit_processor_fee_from_merchant_account!(refund) unless is_refund_chargeback_fee_waived || chargedback_not_reversed?
+      debit_processor_fee_from_merchant_account!(refund) unless is_refund_chargeback_fee_waived || chargedback_not_reversed? || record_only
       Credit.create_for_vat_exclusive_refund!(refund:) if (paypal_order_id.present? || merchant_account&.is_a_stripe_connect_account?) && !chargedback_not_reversed?
       subscription.original_purchase.update!(should_exclude_product_review: true) if subscription&.should_exclude_product_review_on_charge_reversal?
       send_refunded_notification_webhook
@@ -385,6 +389,7 @@ class Purchase
       # partial-refund flag only after the lock so it reflects committed state.
       reload.lock!
       partially_refunded_previously = self.stripe_partially_refunded
+      record_only = !seller_credited_for_sale?
       if (gross_amount_refunded_cents + gross_refund_amount_cents) >= total_transaction_cents
         self.stripe_partially_refunded = false
         self.stripe_refunded = true
@@ -406,7 +411,7 @@ class Purchase
       end
       save!
       Credit.create_for_vat_exclusive_refund!(refund:) if paypal_order_id.present? || merchant_account&.is_a_stripe_connect_account?
-      debit_processor_fee_from_merchant_account!(refund) unless is_refund_chargeback_fee_waived
+      debit_processor_fee_from_merchant_account!(refund) unless is_refund_chargeback_fee_waived || record_only
       # refund can be nil here (build_partial_full_refund may return nothing). Pass the
       # refund's buyer-currency amount as plain values (not the Refund id): this enqueue
       # happens inside the transaction, so the mailer job could run before the Refund row

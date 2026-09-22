@@ -137,6 +137,53 @@ describe "PurchaseRefunds", :vcr do
     expect(user.unpaid_balance_cents).to eq expected_balance
   end
 
+  describe "refunding a purchase that never ran the success path" do
+    let(:seller) { create(:user) }
+    let(:product) { create(:product, user: seller) }
+    let(:admin) { create(:admin_user) }
+    let(:purchase) { create(:purchase_in_progress, link: product, seller:, succeeded_at: nil) }
+
+    def build_charge_refund(purchase)
+      charge_refund = ChargeRefund.new
+      charge_refund.charge_processor_id = StripeChargeProcessor.charge_processor_id
+      charge_refund.id = "re_uncredited_#{SecureRandom.hex(6)}"
+      charge_refund.flow_of_funds = FlowOfFunds.build_simple_flow_of_funds(Currency::USD, -purchase.total_transaction_cents)
+      charge_refund.instance_variable_set(:@refund, double("stripe_refund", id: charge_refund.id, status: "succeeded"))
+      charge_refund
+    end
+
+    before do
+      create(:balance, user: seller, amount_cents: 200)
+      allow(ChargeProcessor).to receive(:refund!).and_return(build_charge_refund(purchase))
+    end
+
+    it "records the refund without debiting the seller" do
+      expect(purchase.seller_credited_for_sale?).to be(false)
+
+      expect(purchase.refund_and_save!(admin.id, reason: "Charged twice")).to be(true)
+
+      purchase.reload
+      refund = purchase.refunds.sole
+      expect(purchase.stripe_refunded).to be(true)
+      expect(refund.processor_refund_id).to be_present
+      expect(refund.balance_transactions).to be_empty
+      expect(Credit.where(fee_retention_refund: refund)).to be_empty
+      expect(purchase.purchase_refund_balance).to be_nil
+      verify_balance(seller, 200)
+    end
+
+    it "still debits the seller when the sale was credited" do
+      purchase.update_balance_and_mark_successful!
+      expect(purchase.reload.seller_credited_for_sale?).to be(true)
+
+      expect(purchase.refund_and_save!(admin.id, reason: "Charged twice")).to be(true)
+
+      purchase.reload
+      expect(purchase.refunds.sole.balance_transactions.where(user: seller)).to be_present
+      expect(purchase.purchase_refund_balance).to eq(seller.balances.sole)
+    end
+  end
+
   describe "refund purchase" do
     let(:merchant_account) { nil }
 
