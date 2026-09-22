@@ -29,7 +29,8 @@ class FinalizeBuyerPresentmentChargeJob
       return
     end
 
-    finalized = pending_purchases.all? { Purchase::SyncStatusWithChargeProcessorService.new(_1).perform }
+    # Keep receipt dispatch here so an enqueue error retries this job after fulfillment commits.
+    finalized = pending_purchases.all? { Purchase::SyncStatusWithChargeProcessorService.new(_1, enqueue_charge_receipt: false).perform }
 
     if finalized
       enqueue_receipt(charge)

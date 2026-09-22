@@ -34,6 +34,10 @@ class SendChargeReceiptJob
       return
     end
 
+    # Nothing has settled: there is no receipt to send, and marking the charge sent here would
+    # block the receipt for a payment that recovers later.
+    return if charge.successful_purchases.none?
+
     charge.purchases_requiring_stamping.each do |purchase|
       PdfStampingService.stamp_for_purchase!(purchase)
     end

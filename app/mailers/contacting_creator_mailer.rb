@@ -506,7 +506,12 @@ class ContactingCreatorMailer < ApplicationMailer
   end
 
   def purchase_refunded_for_fraud(purchase_id)
-    @purchase = Purchase.find_by(id: purchase_id)
+    # A worker's SELECTs read a replica (USE_DB_WORKER_REPLICAS), and a refund can be issued
+    # seconds after the purchase, so the purchase and its seller have to come from the primary —
+    # otherwise both loads can come back empty and the render dereferences nil.
+    @purchase = ApplicationRecord.connected_to(role: :writing) do
+      Purchase.includes(:seller).find_by(id: purchase_id)
+    end
     @seller = @purchase.seller
     @subject = "Fraud was detected on your Gumroad account."
   end
@@ -515,9 +520,14 @@ class ContactingCreatorMailer < ApplicationMailer
   # entered when refunding on the creator's behalf), the email shows it so the creator
   # knows why the sale was refunded without having to write in to support.
   def purchase_refunded(purchase_id, refund_id = nil)
-    @purchase = Purchase.find_by(id: purchase_id)
+    # Same primary read as #purchase_refunded_for_fraud: this mailer is delivered by MailDeliveryJob.
+    # The refund is the newest row in the render, so its note is read here too — a replica that has
+    # not caught up would otherwise drop the "Reason:" line without anyone noticing.
+    ApplicationRecord.connected_to(role: :writing) do
+      @purchase = Purchase.includes(:seller).find_by(id: purchase_id)
+      @refund_reason = Refund.find_by(id: refund_id)&.note
+    end
     @seller = @purchase.seller
-    @refund_reason = Refund.find_by(id: refund_id)&.note
     @subject = "A sale has been refunded"
   end
 

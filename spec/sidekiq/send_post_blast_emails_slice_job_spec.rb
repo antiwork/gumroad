@@ -32,7 +32,13 @@ describe SendPostBlastEmailsSliceJob, :freeze_time do
   end
 
   describe "#perform" do
-    it "rebinds a stale purchase to the newest qualifying purchase in the chunk" do
+    it "bounds purchase revalidation queries and rebinds to the newest qualifying purchase" do
+      stub_const("PostBlastSending::PURCHASE_REVALIDATION_SLICE_SIZE", 2)
+      purchase_queries = []
+      subscriber = lambda do |*, payload|
+        sql = payload[:sql]
+        purchase_queries << sql if sql.start_with?("SELECT `purchases`.* FROM `purchases` WHERE `purchases`.`id`")
+      end
       product = create(:product, user: @seller)
       email = "buyer@example.com"
       create(:purchase, link: product, email:, price_cents: 500)
@@ -47,11 +53,15 @@ describe SendPostBlastEmailsSliceJob, :freeze_time do
         expect(members.sole.purchase_id).to eq(newest.id)
         newest.update_column(:can_contact, false)
         expect(@seller.audience_members.find_by!(email:).details["purchases"].pluck("id")).to include(newest.id)
-        method.call(members)
+        ActiveSupport::Notifications.subscribed(subscriber, "sql.active_record") { method.call(members) }
       end
 
       job.perform(blast.id, partition_key, 0, 1, audience_ids)
 
+      expect(purchase_queries.size).to eq(2)
+      expect(purchase_queries.first).to include("IN (")
+      expect(purchase_queries.first[/IN \(([^)]+)\)/, 1].split(",").size).to eq(2)
+      expect(purchase_queries.last).to include("`purchases`.`id` = #{newest.id}")
       expect_sent_count 1
       expect(PostSendgridApi.mails.fetch(email)[:custom_args]["purchase_id"]).to eq(qualifying.id.to_s)
       expect(UrlRedirect.find_by!(installment: post).purchase_id).to eq(qualifying.id)

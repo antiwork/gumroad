@@ -6,13 +6,16 @@ class McpConnectorsController < ApplicationController
   CLIENTS = {
     "muse" => {
       label: "Muse",
+      pending_review: true,
       setup: "Add a remote MCP server in your client using the URL below. Choose OAuth when the client requests an authentication method.",
-      availability: "Requires a Muse client with support for remote MCP servers and OAuth."
+      availability: "Submitted for review. The Gumroad connector is not yet available in Muse."
     },
     "claude" => {
       label: "Claude",
-      setup: "Open the Connectors settings in Claude. Add a custom connector with the URL below.",
-      availability: "Custom connector access depends on your Claude plan and workspace settings."
+      listing_notice: "Available as a custom connector. Gumroad is not yet listed in Claude’s connector directory.",
+      connect_label: "Set up a custom connector",
+      setup: "Open Settings > Connectors in Claude. Choose Add custom connector and enter the URL below. If this option is unavailable, check your plan or ask your organization administrator to enable custom connectors.",
+      availability: "Custom connector access depends on your Claude plan and organization settings."
     }
   }.freeze
 
@@ -37,7 +40,7 @@ class McpConnectorsController < ApplicationController
     def set_meta_data
       page_url = "#{PROTOCOL}://#{DOMAIN}/#{@client_key}"
       title = "Gumroad MCP for #{@client[:label]} | Sell digital products"
-      description = "Connect #{@client[:label]} to Gumroad with MCP. Create digital product drafts, publish products, check sales, and track payouts from your AI chat."
+      description = @client[:pending_review] ? "The Gumroad connector is submitted for review and is not yet available in Muse. Read the MCP endpoint and OAuth details." : "Connect #{@client[:label]} to Gumroad with MCP. Create digital product drafts, publish products, check sales, and track payouts from your AI chat."
 
       set_meta_tag(title:)
       set_meta_tag(name: "description", content: description)

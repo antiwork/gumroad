@@ -22,19 +22,18 @@ class CustomerMailer < ApplicationMailer
 
   def grouped_receipt(purchase_ids, recommendations: true)
     @recommendations = recommendations
-    # Callers can pass ids of purchases in any state (e.g. the email-reassignment flow
-    # moves failed purchases too). A failed purchase that belongs to a Charge resolves
-    # to a Charge with no successful purchases, and the receipt template crashes with
-    # "undefined method 'external_id' for nil" when it can't find a purchase to render.
-    # Only successful purchases get receipts, so filter here.
+    # Callers pass ids in any state; the email-reassignment flow includes failed purchases.
     @chargeables = Purchase.where(id: purchase_ids)
       .all_success_states_including_test
       .order(id: :desc)
       .includes(charge: [:order, :seller])
       .map { Charge::Chargeable.find_by_purchase_or_charge!(purchase: _1) }
       .uniq
-      .first(GROUPED_RECEIPT_MAX_CHARGEABLES)
-      .reverse
+    @chargeables = renderable_chargeables(@chargeables).first(GROUPED_RECEIPT_MAX_CHARGEABLES).reverse
+    return if @chargeables.empty?
+
+    # Re-check before the claim so a set that cannot be sent does not consume the 24h window.
+    @chargeables = @chargeables.select(&:receipt_renderable?)
     return if @chargeables.empty?
 
     last_chargeable = @chargeables.last
@@ -66,6 +65,9 @@ class CustomerMailer < ApplicationMailer
       )
     end
     @email_name = __method__
+
+    # MailSubject calls link_name on the first successful purchase and raises when that set is empty.
+    return if @chargeable.successful_purchases.none?
 
     @receipt_presenter = ReceiptPresenter.new(@chargeable, for_email:)
 
@@ -406,6 +408,23 @@ class CustomerMailer < ApplicationMailer
   end
 
   private
+    # Batched: a per-chargeable exists? is an N+1 on up to GROUPED_RECEIPT_MAX_CHARGEABLES entries.
+    def renderable_chargeables(chargeables)
+      purchases, charges = chargeables.partition { _1.is_a?(Purchase) }
+      renderable_purchase_ids = Purchase.where(id: purchases.map(&:id))
+        .all_success_states_including_test
+        .pluck(:id).to_set
+      renderable_charge_ids = ChargePurchase.where(charge_id: charges.map(&:id))
+        .joins(:purchase)
+        .where(purchases: { purchase_state: Purchase::ALL_SUCCESS_STATES_INCLUDING_TEST })
+        .distinct
+        .pluck(:charge_id).to_set
+
+      chargeables.select do |chargeable|
+        chargeable.is_a?(Purchase) ? renderable_purchase_ids.include?(chargeable.id) : renderable_charge_ids.include?(chargeable.id)
+      end
+    end
+
     # True when this render owns the send for this recipient + receipt set. NX so a
     # MailDeliveryJob retry that re-renders after a successful SMTP handoff (the
     # gumroad-private#1869 loop: the relay accepted the message but the final response

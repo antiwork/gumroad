@@ -615,6 +615,17 @@ describe LibraryPresenter do
         expect(props[:bundle_downloads]).to eq([expected_download])
       end
 
+      it "prepares the combined ZIP with the bundle's own files as well as the members'" do
+        own_file = create(:product_file, link: purchase1.link, display_name: "bundle-own")
+
+        props = library_props(bundle_ids: [purchase1.link.external_id])
+
+        expect(props[:bundle_downloads]).to eq([{ id: purchase1.link.external_id, label: "Bundle", download_url: nil }])
+        archive = purchase1.link.product_files_archives.alive.entity_archives.sole
+        expect(archive.product_files.map(&:id)).to include(own_file.id)
+        expect(archive.product_files.map(&:link_id)).to include(*purchase1.product_purchases.map(&:link_id))
+      end
+
       it "keeps a bundle archive scoped to the selected purchase" do
         removed_bundle_product = purchase1.link.bundle_products.first
         removed_bundle_product.mark_deleted!

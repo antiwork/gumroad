@@ -156,7 +156,7 @@ class CheckoutPresenter
         ppp_details: product.ppp_details(@ip),
         upsell: product.available_upsell.present? ? {
           id: product.available_upsell.external_id,
-          text: product.available_upsell.text,
+          text: product.available_upsell.text.to_s,
           description: Rinku.auto_link(sanitize(product.available_upsell.description).to_s, :all, 'target="_blank" rel="noopener"'),
         } : nil,
         archived: product.archived?,
@@ -206,7 +206,7 @@ class CheckoutPresenter
         {
           id: cross_sell.external_id,
           replace_selected_products: cross_sell.replace_selected_products,
-          text: cross_sell.text,
+          text: cross_sell.text.to_s,
           description: Rinku.auto_link(sanitize(cross_sell.description).to_s, :all, 'target="_blank" rel="noopener"'),
           offered_product: checkout_product(offered_product, offered_product_cart_item, {}, include_cross_sells: false),
           discount: cross_sell.offer_code&.discount_for_display(buyer: logged_in_user, product: cross_sell.product),

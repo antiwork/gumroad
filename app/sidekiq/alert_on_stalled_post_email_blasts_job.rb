@@ -58,7 +58,8 @@ class AlertOnStalledPostEmailBlastsJob
   # is never promised a retry.
   SCAN_INTERVAL = 6.hours
 
-  # Rows the run acted on (or would have) are the audit trail; message_for never truncates them.
+  # Rows the run acted on (or would have) are the audit trail. `message_for` reports them after
+  # the HELD rows, so they keep their slots only while the held rows leave room.
   AUDITED_ACTIONS = [:resumed, :resumed_to_complete, :would_resume, :would_complete, :skipped_reappeared].freeze
 
   # Both the parent distributor and its slice jobs carry the blast id as args[0], so a
@@ -141,6 +142,13 @@ class AlertOnStalledPostEmailBlastsJob
       { stalled:, truncated: }
     end
 
+    # Held rows still need a human, and while the flag is live are the ONLY reason this job
+    # emails (`notify?`) — so `message_for` leads with them and never truncates them away.
+    # Prefix-matched, like `resolve_action` and `line_for`, rather than a list kept in sync.
+    def held_action?(action)
+      action.to_s.start_with?("held_")
+    end
+
     # Live auto-resume already handles DEAD/UNACCOUNTED rows. Email only when a
     # human (now: Gumclaw, via finance@ + ALWAYS_CC) still has to look — HELD
     # rows or a truncated scan. Silent ticks are the path to deleting this mail.
@@ -148,7 +156,7 @@ class AlertOnStalledPostEmailBlastsJob
       return true if scan[:truncated]
       return true unless live
 
-      scan[:stalled].any? { |entry| entry[:action].to_s.start_with?("held_") }
+      scan[:stalled].any? { |entry| held_action?(entry[:action]) }
     end
 
     def resolve_action(entry, live:)
@@ -275,8 +283,13 @@ class AlertOnStalledPostEmailBlastsJob
 
     def message_for(scan, live:)
       stalled = scan[:stalled]
-      acted, rest = stalled.partition { |entry| entry[:action].in?(AUDITED_ACTIONS) }
-      reported = acted + rest.first([MAX_REPORTED - acted.size, 0].max)
+      # Held rows first: while the flag is live they are the whole reason this mail exists, so
+      # an afternoon of auto-resumed rows must never crowd them out of the report. The acted
+      # rows and then the informational ones fill what is left of MAX_REPORTED, so only the
+      # tail line's count is ever omitted.
+      held, rest = stalled.partition { |entry| held_action?(entry[:action]) }
+      acted, informational = rest.partition { |entry| entry[:action].in?(AUDITED_ACTIONS) }
+      reported = held + (acted + informational).first([MAX_REPORTED - held.size, 0].max)
       lines = reported.map { |entry| line_for(entry) }
       omitted = stalled.size - lines.size
 

@@ -154,4 +154,35 @@ describe Pages::CustomHtmlWriter do
         .to eq(described_class.find_ambiguous_error(2))
     end
   end
+
+  describe "composing a page section by section around a marker" do
+    # Both halves of the incremental build have to hold: the marker survives the sanitizer, and one
+    # splice inserts a section ahead of it and leaves it in place.
+    let(:user) { create(:user) }
+    let(:shell) do
+      %(<section class="store"><h1 data-gumroad-field="name">Store</h1>) +
+        %(<div id="products"></div><!-- gumroad:sections --><footer>Gumroad</footer></section>)
+    end
+
+    before do
+      Feature.activate_user(:custom_html_pages, user)
+      user.update!(custom_html: shell)
+    end
+
+    it "keeps the marker in the stored page" do
+      expect(user.reload.custom_html).to include("<!-- gumroad:sections -->")
+    end
+
+    it "inserts a section ahead of the marker and leaves exactly one marker behind" do
+      section = %(<section class="about"><h2>About</h2><p>Hello</p></section>)
+      result = described_class.edit!(user, find: "<!-- gumroad:sections -->", replace: "#{section}<!-- gumroad:sections -->")
+
+      expect(result.success?).to be(true)
+      page = user.reload.custom_html
+      # Nokogiri re-serializes the splice and may add whitespace between block elements.
+      expect(page).to include(%(<section class="about">), "<h2>About</h2>")
+      expect(page.index(%(<section class="about">))).to be < page.index("<!-- gumroad:sections -->")
+      expect(page.scan("<!-- gumroad:sections -->").size).to eq(1)
+    end
+  end
 end

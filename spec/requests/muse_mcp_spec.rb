@@ -208,7 +208,7 @@ describe "Muse MCP" do
   end
 
   it "points Claude and ChatGPT 401 challenges at their own resource metadata" do
-    %w[claude chatgpt].each do |client|
+    %w[muse claude chatgpt].each do |client|
       post "/#{client}/v1/mcp",
            params: { jsonrpc: "2.0", id: 1, method: "ping" }.to_json,
            headers: { "CONTENT_TYPE" => "application/json", "HOST" => DOMAIN }
@@ -220,7 +220,7 @@ describe "Muse MCP" do
     end
   end
 
-  it "serves the same MCP tools on Claude and ChatGPT aliases" do
+  it "serves tools with display titles on every MCP endpoint" do
     token = create("doorkeeper/access_token", application: @app, resource_owner_id: @seller.id, scopes: "view_sales")
     headers = { "CONTENT_TYPE" => "application/json", "HOST" => DOMAIN, "Authorization" => "Bearer #{token.token}" }
 
@@ -228,8 +228,17 @@ describe "Muse MCP" do
       post "/#{client}/v1/mcp", params: { jsonrpc: "2.0", id: 1, method: "tools/list" }.to_json, headers: headers
 
       expect(response).to be_successful
-      names = response.parsed_body.dig("result", "tools").map { |tool| tool["name"] }
-      expect(names).to include("list_sales", "create_draft_product")
+      titles = response.parsed_body.dig("result", "tools").to_h { |tool| [tool["name"], tool["title"]] }
+      expect(titles).to eq(
+        "get_account" => "Get account",
+        "list_products" => "List products",
+        "get_product" => "Get product",
+        "create_draft_product" => "Create draft product",
+        "publish_product" => "Publish product",
+        "unpublish_product" => "Unpublish product",
+        "list_sales" => "List sales",
+        "list_payouts" => "List payouts"
+      )
     end
   end
 
@@ -279,6 +288,34 @@ describe "Muse MCP" do
       expect(response).to be_successful
       names = response.parsed_body.dig("result", "tools").map { |tool| tool["name"] }
       expect(names).to include("get_account", "list_products", "list_sales", "create_draft_product", "publish_product")
+    end
+
+    it "labels reads, drafts, and sale-state changes for the host" do
+      post_mcp({ jsonrpc: "2.0", id: 1, method: "tools/list" })
+
+      annotations = response.parsed_body.dig("result", "tools").to_h { |tool| [tool["name"], tool["annotations"]] }
+      expect(annotations.keys).to contain_exactly(
+        "get_account", "list_products", "get_product", "create_draft_product",
+        "publish_product", "unpublish_product", "list_sales", "list_payouts"
+      )
+      expect(annotations.values).to all(include("openWorldHint" => false))
+      %w[get_account list_products get_product list_sales list_payouts].each do |name|
+        expect(annotations[name]).to include("readOnlyHint" => true, "destructiveHint" => false)
+      end
+      expect(annotations["create_draft_product"]).to include("readOnlyHint" => false, "destructiveHint" => false)
+      %w[publish_product unpublish_product].each do |name|
+        expect(annotations[name]).to include("readOnlyHint" => false, "destructiveHint" => true)
+      end
+    end
+
+    it "says checkout stays on the product URL" do
+      post_mcp({ jsonrpc: "2.0", id: 1, method: "initialize" })
+
+      instructions = response.parsed_body.dig("result", "instructions")
+      expect(instructions).to include("check out on the product URL")
+      expect(instructions).to include("does not take payment")
+      expect(instructions).not_to include("Muse's browser")
+      expect(instructions).not_to include("refunding")
     end
 
     it "lists sales" do

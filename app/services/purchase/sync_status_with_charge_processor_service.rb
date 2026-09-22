@@ -12,10 +12,11 @@ class Purchase::SyncStatusWithChargeProcessorService
   # nil until #perform has actually consulted the processor.
   attr_reader :charge_outcome
 
-  def initialize(purchase, mark_as_failed: false, require_final_charge_status: false)
+  def initialize(purchase, mark_as_failed: false, require_final_charge_status: false, enqueue_charge_receipt: true)
     @purchase = purchase
     @mark_as_failed = mark_as_failed
     @require_final_charge_status = require_final_charge_status
+    @enqueue_charge_receipt = enqueue_charge_receipt
   end
 
   def perform
@@ -112,6 +113,18 @@ class Purchase::SyncStatusWithChargeProcessorService
         # Any row that can defer on settlement data may be a preorder charge or commission
         # completion whose owner still needs to be marked done once the purchase succeeds.
         complete_later_charge_owner if purchase.processor_settlement_deferrable?
+        if @enqueue_charge_receipt && purchase.successful? && purchase.uses_charge_receipt?
+          # Sidekiq pushes immediately; the receipt must only see committed fulfillment.
+          AfterCommitEverywhere.after_commit do
+            receipt_charge = purchase.charge
+            next if receipt_charge.receipt_sent?
+
+            SendChargeReceiptJob.set(queue: receipt_charge.purchases_requiring_stamping.any? ? "default" : "critical").perform_async(receipt_charge.id)
+          rescue StandardError => e
+            # Receipt dispatch failed after commit; fulfillment must stay successful.
+            ErrorNotifier.notify(e) { |report| report.add_metadata(:purchase, { id: purchase.id }) }
+          end
+        end
         true
       elsif charge.nil? && purchase.free_purchase?
         Purchase::MarkSuccessfulService.new(purchase).perform

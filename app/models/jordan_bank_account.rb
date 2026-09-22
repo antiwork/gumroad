@@ -3,12 +3,15 @@
 class JordanBankAccount < BankAccount
   BANK_ACCOUNT_TYPE = "JO"
 
-  BANK_CODE_FORMAT_REGEX = /^([0-9a-zA-Z]){8,11}$/
+  # Valid syntax does not guarantee that Stripe's directory can resolve the BIC.
+  BANK_CODE_FORMAT_REGEX = /\A[A-Z]{4}JO[A-Z0-9]{2}(?:[A-Z0-9]{3})?\z/
   private_constant :BANK_CODE_FORMAT_REGEX
 
   alias_attribute :bank_code, :bank_number
 
-  validate :validate_bank_code
+  # Only on write: live rows predate this rule, and re-validating them would abort unrelated saves —
+  # including the mark_deleted! a payout-method switch performs after the Stripe account is gone.
+  validate :validate_bank_code, if: -> { new_record? || will_save_change_to_bank_number? }
   validate :validate_account_number, if: -> { Rails.env.production? }
 
   def routing_number
@@ -42,7 +45,7 @@ class JordanBankAccount < BankAccount
   private
     def validate_bank_code
       return if BANK_CODE_FORMAT_REGEX.match?(bank_code)
-      errors.add :base, "The bank code is invalid."
+      errors.add :base, "Enter your bank's SWIFT/BIC code in capitals: 8 characters, or 11 including the branch code (for example IIBAJOAM)."
     end
 
     def validate_account_number

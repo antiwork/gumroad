@@ -236,11 +236,11 @@ class Charge < ApplicationRecord
   end
 
   def external_id_for_invoice
-    purchase_as_chargeable.external_id
+    purchase_for_invoice.external_id
   end
 
   def external_id_numeric_for_invoice
-    purchase_as_chargeable.external_id_numeric.to_s
+    purchase_for_invoice.external_id_numeric.to_s
   end
 
   def country_or_ip_country
@@ -387,6 +387,12 @@ class Charge < ApplicationRecord
     # To be used only when the data retrieved is present on ALL purchases
     def purchase_as_chargeable
       @_purchase_as_chargeable ||= successful_purchases.first
+    end
+
+    # A charge with no successful purchase has no buyer-facing purchase id, so fall back to the
+    # charge's own id rather than raising part-way through rendering an invoice or receipt.
+    def purchase_for_invoice
+      purchase_as_chargeable || self
     end
 
     def purchase_with_gumroad_tax_as_chargeable

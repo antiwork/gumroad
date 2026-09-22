@@ -953,15 +953,25 @@ class Subscription < ApplicationRecord
         return if renewal_disabled_due_to_indian_card_mandate?
       end
 
-      was_recently_failed = purchases.failed.where("created_at > ?", ALLOWED_TIME_BEFORE_SENDING_REPEATED_CANCELLATION_EMAIL_TO_CREATOR.ago).exists?
-
       self.failed_at = Time.current
       self.deactivate!
 
       CustomerLowPriorityMailer.subscription_autocancelled(id).deliver_later(queue: "low")
 
-      if seller.enable_payment_email? && !was_recently_failed
-        ContactingCreatorMailer.subscription_autocancelled(id).deliver_later(queue: "critical")
+      if seller.enable_payment_email?
+        creator_notices = SentEmailInfo.where(key: SentEmailInfo.mailer_key_digest("ContactingCreatorMailer", "subscription_autocancelled", id))
+        unless creator_notices.where("created_at > ?", ALLOWED_TIME_BEFORE_SENDING_REPEATED_CANCELLATION_EMAIL_TO_CREATOR.ago).exists?
+          # Retain expired notice identities for delayed deliveries and SMTP retries.
+          if (previous_notice = creator_notices.first)
+            previous_notice.update!(key: SentEmailInfo.mailer_key_digest("ContactingCreatorMailer", "subscription_autocancelled", id, previous_notice.id))
+          end
+          notice = creator_notices.create!
+
+          enqueued = SubscriptionCancellationEmailJob.set(queue: "critical").perform_later(
+            "ContactingCreatorMailer", "subscription_autocancelled", "deliver_now", args: [id], sent_email_info_id: notice.id
+          )
+          raise UpdateFailed, "Could not enqueue creator cancellation email" unless enqueued
+        end
       end
 
       send_cancelled_notification_webhook

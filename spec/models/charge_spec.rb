@@ -17,6 +17,17 @@ describe Charge, :vcr do
     end
   end
 
+  describe "#external_id_for_invoice" do
+    it "falls back to the charge's own id when no purchase is successful" do
+      charge = create(:charge, seller: create(:named_seller))
+      charge.purchases << create(:failed_purchase)
+
+      expect(charge.successful_purchases).to be_empty
+      expect(charge.external_id_for_invoice).to eq(charge.external_id)
+      expect(charge.external_id_numeric_for_invoice).to eq(charge.external_id_numeric.to_s)
+    end
+  end
+
   describe "#client_confirmed?" do
     it "defaults to false so server-confirmed and multi-seller charges are never treated as client-confirmed" do
       expect(create(:charge)).not_to be_client_confirmed

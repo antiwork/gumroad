@@ -127,6 +127,33 @@ describe Ai::AnthropicClient do
       expect(stub).to have_been_requested.once
     end
 
+    it "does not retry a tool-call token cutoff, and does not treat it as a transient error" do
+      body = { error: { type: "api_error", message: "HttpError: HTTP 400: Tool calls cutoff by max_tokens." } }.to_json
+      stub = stub_request(:post, url).to_return(status: 400, body: body)
+
+      expect { client.messages(system: "s", messages: [{ role: "user", content: "x" }]) }
+        .to raise_error(described_class::ToolCallTokenCutoffError, /Tool calls cutoff by max_tokens/)
+      expect(stub).to have_been_requested.once
+      expect(described_class::ToolCallTokenCutoffError).not_to be < described_class::TransientError
+    end
+
+    it "returns a max_tokens result for a tool-call token cutoff only when the caller opts in" do
+      body = { error: { type: "api_error", message: "HttpError: HTTP 400: Tool calls cutoff by max_tokens." } }.to_json
+      stub = stub_request(:post, url).to_return(status: 400, body: body)
+
+      result = client.messages(system: "s", messages: [{ role: "user", content: "x" }], recover_token_cutoff: true)
+
+      expect(result).to have_attributes(text: "", tool_uses: [], stop_reason: "max_tokens")
+      expect(stub).to have_been_requested.once
+    end
+
+    it "still raises a different max_tokens 400 when the caller opts in" do
+      stub_request(:post, url).to_return(status: 400, body: { error: { message: "max_tokens must be positive" } }.to_json)
+
+      expect { client.messages(system: "s", messages: [{ role: "user", content: "x" }], recover_token_cutoff: true) }
+        .to raise_error(described_class::Error, /max_tokens must be positive/)
+    end
+
     it "sleeps the Retry-After header value on a 429 instead of the default backoff" do
       body = { "content" => [{ "type" => "text", "text" => "ok" }], "stop_reason" => "end_turn" }
       stub_request(:post, url)
@@ -730,6 +757,42 @@ describe Ai::AnthropicClient do
         expect(primary).to have_been_requested.once
         expect(WebMock).not_to have_requested(:post, openrouter_url)
       end
+    end
+
+    it "does not replay a tool-call token cutoff on the fallback model" do
+      cutoff = { status: 400, body: { error: { type: "api_error", message: "HttpError: HTTP 400: Tool calls cutoff by max_tokens." } }.to_json }
+      primary = stub_request(:post, vercel_url)
+        .with { |request| JSON.parse(request.body)["model"] == "deepseek/deepseek-v4.1-flash" }
+        .to_return(cutoff)
+      fallback = stub_request(:post, vercel_url)
+        .with { |request| JSON.parse(request.body)["model"] == "anthropic/claude-opus-5" }
+        .to_return(status: 200, body: { "content" => [], "stop_reason" => "end_turn" }.to_json, headers: { "Content-Type" => "application/json" })
+
+      result = client.messages(system: "s", messages: [{ role: "user", content: "x" }], recover_token_cutoff: true)
+
+      expect(result).to have_attributes(text: "", tool_uses: [], stop_reason: "max_tokens")
+      expect(primary).to have_been_requested.once
+      expect(fallback).not_to have_been_requested
+    end
+
+    it "returns max_tokens for a no-text streamed cutoff without replaying the fallback model" do
+      stream = [
+        ["content_block_start", { index: 0, content_block: { type: "tool_use", id: "toolu_x", name: "api_write" } }],
+        ["content_block_delta", { index: 0, delta: { type: "input_json_delta", partial_json: '{"description":"<p>cut' } }],
+        ["error", { error: { type: "api_error", message: "HttpError: HTTP 400: Tool calls cutoff by max_tokens." } }],
+      ].map { |event, data| "event: #{event}\ndata: #{data.to_json}\n\n" }.join
+      primary = stub_request(:post, vercel_url)
+        .with { |request| JSON.parse(request.body)["model"] == "deepseek/deepseek-v4.1-flash" }
+        .to_return(status: 200, body: stream, headers: { "Content-Type" => "text/event-stream" })
+      fallback = stub_request(:post, vercel_url)
+        .with { |request| JSON.parse(request.body)["model"] == "anthropic/claude-opus-5" }
+        .to_return(status: 200, body: stream, headers: { "Content-Type" => "text/event-stream" })
+
+      result = client.stream_messages(system: "s", messages: [{ role: "user", content: "x" }], recover_token_cutoff: true)
+
+      expect(result).to have_attributes(text: "", tool_uses: [], stop_reason: "max_tokens")
+      expect(primary).to have_been_requested.once
+      expect(fallback).not_to have_been_requested
     end
 
     it "replays the Opus fallback on Vercel when OpenRouter is not configured" do
@@ -1337,6 +1400,55 @@ describe Ai::AnthropicClient do
 
       expect { client.stream_messages(system: "s", messages: [{ role: "user", content: "x" }]) }
         .to raise_error(described_class::Error, /overloaded/i)
+    end
+
+    it "raises ToolCallTokenCutoffError when a stream api_error reports a tool-call token cutoff" do
+      stream = sse(
+        ["content_block_start", { index: 0, content_block: { type: "text" } }],
+        ["content_block_delta", { index: 0, delta: { type: "text_delta", text: "Updating that now. " } }],
+        ["error", { error: { type: "api_error", message: "HttpError: HTTP 400: Tool calls cutoff by max_tokens." } }],
+      )
+      stub = stub_request(:post, url).to_return(status: 200, body: stream, headers: { "Content-Type" => "text/event-stream" })
+      chunks = []
+
+      expect { client.stream_messages(system: "s", messages: [{ role: "user", content: "x" }]) { |text| chunks << text } }
+        .to raise_error(described_class::ToolCallTokenCutoffError, /Tool calls cutoff by max_tokens/)
+
+      expect(chunks).to eq(["Updating that now. "])
+      expect(stub).to have_been_requested.once
+      expect(a_request(:post, url).with(body: hash_including("stream" => false))).not_to have_been_made
+    end
+
+    it "returns max_tokens for a streamed tool-call cutoff when the caller opts in, without replaying" do
+      stream = sse(
+        ["content_block_start", { index: 0, content_block: { type: "text" } }],
+        ["content_block_delta", { index: 0, delta: { type: "text_delta", text: "Updating that now. " } }],
+        ["content_block_start", { index: 1, content_block: { type: "tool_use", id: "toolu_x", name: "api_write" } }],
+        ["content_block_delta", { index: 1, delta: { type: "input_json_delta", partial_json: "{\"description\":\"<p>cut" } }],
+        ["error", { error: { type: "api_error", message: "HttpError: HTTP 400: Tool calls cutoff by max_tokens." } }],
+      )
+      stub = stub_request(:post, url).to_return(status: 200, body: stream, headers: { "Content-Type" => "text/event-stream" })
+      chunks = []
+
+      result = client.stream_messages(
+        system: "s",
+        messages: [{ role: "user", content: "x" }],
+        recover_token_cutoff: true,
+      ) { |text| chunks << text }
+
+      expect(result).to have_attributes(text: "", tool_uses: [], stop_reason: "max_tokens")
+      expect(chunks).to eq(["Updating that now. "])
+      expect(stub).to have_been_requested.once
+      expect(a_request(:post, url).with(body: hash_including("stream" => false))).not_to have_been_made
+    end
+
+    it "does not turn a different stream api_error into max_tokens when the caller opts in" do
+      stream = sse(["error", { error: { type: "api_error", message: "Interrupted" } }])
+      stub_request(:post, url).to_return(status: 200, body: stream, headers: { "Content-Type" => "text/event-stream" })
+
+      expect do
+        client.stream_messages(system: "s", messages: [{ role: "user", content: "x" }], recover_token_cutoff: true)
+      end.to raise_error(described_class::TransientError, /Interrupted/)
     end
   end
 

@@ -587,6 +587,7 @@ ActiveRecord::Schema[7.1].define(version: 2026_12_16_120000) do
     t.index ["paypal_order_id"], name: "index_charges_on_paypal_order_id", unique: true
     t.index ["processor_transaction_id"], name: "index_charges_on_processor_transaction_id", unique: true
     t.index ["seller_id"], name: "index_charges_on_seller_id"
+    t.index ["stripe_payment_intent_id"], name: "index_charges_on_stripe_payment_intent_id"
   end
 
   create_table "collaborator_invitations", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|

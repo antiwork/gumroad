@@ -265,7 +265,10 @@ class BalanceTransaction < ApplicationRecord
         if purchase
           unpaid_balances.where(date: purchase.succeeded_at.to_date).first
         elsif refund
-          unpaid_balances.where(date: refund.purchase.succeeded_at.to_date).first || unpaid_balances.first
+          # A refund's purchase can have no succeeded_at — the charge went through while the
+          # purchase was never marked successful — so there is no charge date to match.
+          refunded_on = refund.purchase.succeeded_at&.to_date
+          (refunded_on && unpaid_balances.where(date: refunded_on).first) || unpaid_balances.first
         elsif dispute
           unpaid_balances.where(date: dispute.disputable.dispute_balance_date).first || unpaid_balances.first
         elsif credit&.financing_paydown_purchase

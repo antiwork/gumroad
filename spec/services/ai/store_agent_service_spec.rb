@@ -2451,6 +2451,7 @@ describe Ai::StoreAgentService do
         expect(client).to have_received(:messages).twice
         expect(client).to have_received(:messages).with(hash_including(max_tokens: described_class::MAX_TRUNCATION_RETRY_TOKENS)).once
         expect(client).to have_received(:messages).with(hash_including(max_tokens: described_class::MAX_REPLY_TOKENS)).once
+        expect(client).to have_received(:messages).with(hash_including(recover_token_cutoff: true)).at_least(:once)
       end
 
       it "returns the honest fallback when the re-ask truncates too" do
@@ -2486,6 +2487,27 @@ describe Ai::StoreAgentService do
                              described_class::MAX_REPLY_TOKENS,
                              described_class::MAX_TRUNCATION_RETRY_TOKENS,
                            ])
+      end
+
+      it "tells the re-ask to send the change in smaller pieces" do
+        # Only the re-ask carries it: a whole page fits no cap, so repeating the same attempt fails
+        # the same way, while the next turn must start from the ordinary prompt again.
+        systems = []
+        allow(client).to receive(:messages) do |**kwargs|
+          systems << kwargs[:system]
+          systems.one? ? truncated_text_result("") : text_result("Let's build it section by section.")
+        end
+
+        service.respond(messages: [{ role: "user", content: "build my profile page" }])
+
+        expect(systems.first).not_to include(described_class::TRUNCATION_RECOVERY_INSTRUCTION)
+        expect(systems.last).to include(described_class::TRUNCATION_RECOVERY_INSTRUCTION)
+      end
+
+      it "never sends the model to a partial value outside a page build" do
+        # A description or a bio is replaced as a whole, so "do the part that fits" would persist an
+        # incomplete value the creator confirmed.
+        expect(described_class::TRUNCATION_RECOVERY_INSTRUCTION).to include("never send half a value")
       end
     end
 
@@ -2884,6 +2906,7 @@ describe Ai::StoreAgentService do
       events, result = collect_events([{ role: "user", content: "rewrite my whole description" }])
 
       expect(caps).to eq([described_class::MAX_REPLY_TOKENS, described_class::MAX_TRUNCATION_RETRY_TOKENS])
+      expect(client).to have_received(:stream_messages).with(hash_including(recover_token_cutoff: true)).twice
       expect(result[:reply]).to eq("You have 3 products.")
       tokens = events.filter_map { |event, payload| payload[:text] if event == :token }
       expect(tokens.last).to eq("You have 3 products.")
@@ -2895,6 +2918,27 @@ describe Ai::StoreAgentService do
       expect(fragment_index).not_to be_nil
       expect(reset_index).to be > fragment_index
       expect(reset_index).to be < answer_index
+    end
+
+    it "tells the streamed re-ask to send the change in smaller pieces" do
+      truncated = Ai::AnthropicClient::Result.new(text: "", tool_uses: [], stop_reason: "max_tokens")
+      systems = []
+      turns = [
+        { stream: [], result: truncated },
+        { stream: ["Let's build it section by section."], result: text_result("Let's build it section by section.") },
+      ]
+      allow(client).to receive(:stream_messages) do |args, &on_text|
+        systems << args[:system]
+        turn = turns.shift
+        Array(turn[:stream]).each { |piece| on_text&.call(piece) }
+        turn[:result]
+      end
+      allow(client).to receive(:messages).and_return(text_result("[]"))
+
+      collect_events([{ role: "user", content: "build my profile page" }])
+
+      expect(systems.first).not_to include(described_class::TRUNCATION_RECOVERY_INSTRUCTION)
+      expect(systems.last).to include(described_class::TRUNCATION_RECOVERY_INSTRUCTION)
     end
 
     it "gives the streamed larger cap and its re-ask to the turn that truncated only" do
@@ -3112,6 +3156,17 @@ describe Ai::StoreAgentService do
       expect(events).to include([:reset, {}])
       expect(visible_reply).to eq("You have 3 products.")
       expect(result[:reply]).to eq("You have 3 products.")
+    end
+  end
+
+  describe "SYSTEM_PROMPT_HEADER whole-page guidance" do
+    let(:prompt) { described_class::SYSTEM_PROMPT_HEADER.gsub(/[[:space:]\u00a0]+/, " ") }
+
+    # A page write carries the ENTIRE document in its arguments; without the section-by-section
+    # route in the prompt, the agent's only valid shape is the one write that truncates.
+    it "teaches the section-by-section build for a page too big for one reply" do
+      expect(prompt).to include("<!-- gumroad:sections -->")
+      expect(prompt).to include("ONE section per reply with edit_user_custom_html")
     end
   end
 
