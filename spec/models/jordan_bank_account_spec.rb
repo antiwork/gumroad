@@ -79,5 +79,55 @@ describe JordanBankAccount do
 
       expect(ba).not_to be_valid
     end
+
+    ["IIBAJOAM\n", "\nIIBAJOAM", "invalid\nIIBAJOAM\ninvalid", "IIBAJOAM200\n"].each do |bank_code|
+      it "rejects the entire input #{bank_code.inspect} on creation" do
+        ba = build(:jordan_bank_account, bank_code:)
+
+        expect(ba.save).to be(false)
+        expect(ba.errors[:base]).to include("Enter your bank's SWIFT/BIC code in capitals: 8 characters, or 11 including the branch code (for example IIBAJOAM).")
+      end
+    end
+
+    [nil, "", " IIBAJOAM", "IIBAJOAM ", "1IBAJOAM", "IIBAJOA-", "IIBAJOAM20a"].each do |bank_code|
+      it "rejects #{bank_code.inspect} without normalizing it" do
+        ba = build(:jordan_bank_account, bank_code:)
+
+        expect(ba).not_to be_valid
+        expect(ba.bank_code).to eq(bank_code)
+      end
+    end
+
+    [nil, "IIBAJOAM\n"].each do |bank_number|
+      it "rejects changing bank_number to #{bank_number.inspect}" do
+        ba = create(:jordan_bank_account, bank_code: "IIBAJOAM")
+
+        expect(ba.update(bank_number:)).to be(false)
+        expect(ba.reload.bank_code).to eq("IIBAJOAM")
+      end
+    end
+
+    [nil, "IIBAJOAMX", "IIBAJOAM\n"].each do |bank_number|
+      it "preserves legacy #{bank_number.inspect} through unrelated saves and deletion" do
+        ba = create(:jordan_bank_account)
+        ba.update_column(:bank_number, bank_number)
+        ba.reload
+
+        ba.update!(account_holder_full_name: "Jordanian Creator II")
+        expect(ba.reload.bank_number).to eq(bank_number)
+        ba.mark_deleted!
+        expect(ba.reload).to be_deleted
+        expect(ba.bank_number).to eq(bank_number)
+      end
+    end
+
+    it "saves a valid replacement through the bank_code alias" do
+      ba = create(:jordan_bank_account)
+      ba.update_column(:bank_number, "IIBAJOAMX")
+
+      ba.reload.update!(bank_code: "IIBAJOA1200")
+
+      expect(ba.reload.bank_number).to eq("IIBAJOA1200")
+    end
   end
 end
