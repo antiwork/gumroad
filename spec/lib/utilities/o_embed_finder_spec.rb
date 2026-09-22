@@ -106,10 +106,7 @@ describe OEmbedFinder do
     end
   end
 
-  # OEmbed::Providers keeps a single registry in a class variable for the life of the
-  # process, and `register` appends without deduping. These examples compare snapshots
-  # instead of absolute counts because every other example in the suite shares that
-  # registry.
+  # Snapshot identities because the process-wide registry is shared across examples.
   describe "provider registry" do
     let(:unmatched_url) { "https://example.com/no-registered-provider-matches-this" }
 
@@ -164,9 +161,7 @@ describe OEmbedFinder do
       expect(registry_snapshot).to eq before
     end
 
-    # Registration lives in config/initializers/oembed.rb precisely so that it outlives a
-    # reload: the gem's registry is not reloadable application code, and OEmbedFinder no
-    # longer carries any per-process state a reload could reset.
+    # The gem registry survives application code reloads.
     it "keeps its providers across a code reload" do
       OEmbedFinder.embeddable_from_url(unmatched_url)
       before = registry_snapshot
