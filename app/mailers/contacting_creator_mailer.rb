@@ -521,11 +521,13 @@ class ContactingCreatorMailer < ApplicationMailer
   # knows why the sale was refunded without having to write in to support.
   def purchase_refunded(purchase_id, refund_id = nil)
     # Same primary read as #purchase_refunded_for_fraud: this mailer is delivered by MailDeliveryJob.
-    @purchase = ApplicationRecord.connected_to(role: :writing) do
-      Purchase.includes(:seller).find_by(id: purchase_id)
+    # The refund is the newest row in the render, so its note is read here too — a replica that has
+    # not caught up would otherwise drop the "Reason:" line without anyone noticing.
+    ApplicationRecord.connected_to(role: :writing) do
+      @purchase = Purchase.includes(:seller).find_by(id: purchase_id)
+      @refund_reason = Refund.find_by(id: refund_id)&.note
     end
     @seller = @purchase.seller
-    @refund_reason = Refund.find_by(id: refund_id)&.note
     @subject = "A sale has been refunded"
   end
 

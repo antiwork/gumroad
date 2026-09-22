@@ -313,13 +313,21 @@ describe ContactingCreatorMailer do
       expect(mail.body.encoded).not_to include "Reason:"
     end
 
-    it "reads the purchase and its seller from the primary, so worker replica lag cannot blank the render" do
+    it "reads the purchase, its seller and the refund note inside one primary block, so worker replica lag cannot blank the render" do
       purchase = create(:purchase, link: create(:product, name: "Digital Membership"), email: "test@example.com", price_cents: 10_00)
+      refund = create(:refund, purchase:, note: "Buyer reported being charged twice")
+      refund_read_pinned = nil
+      allow(Refund).to receive(:find_by).and_wrap_original do |original, *args|
+        refund_read_pinned = ApplicationRecord.connected_to_stack.any? { |entry| entry[:role] == :writing && entry[:klasses].include?(ApplicationRecord) }
+        original.call(*args)
+      end
       expect(ApplicationRecord).to receive(:connected_to).with(role: :writing).and_call_original
 
-      mail = ContactingCreatorMailer.purchase_refunded(purchase.id)
-
+      mail = ContactingCreatorMailer.purchase_refunded(purchase.id, refund.id)
       expect(mail.to).to eq([purchase.seller.email])
+      expect(mail.body.encoded).to include "Reason: Buyer reported being charged twice"
+
+      expect(refund_read_pinned).to eq(true)
     end
   end
 
