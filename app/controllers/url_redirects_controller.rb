@@ -387,16 +387,8 @@ class UrlRedirectsController < ApplicationController
   end
 
   private
-    # A checkout stamp job may already hold the purchase lock. The flag is what that job
-    # reads so the click still gets the ready email when this enqueue is dropped.
     def enqueue_stamp_and_notify_buyer!
-      purchase_id = @url_redirect.purchase_id
-      return if purchase_id.blank?
-
-      PdfStampingService.request_buyer_notification!(purchase_id)
-      Rails.cache.fetch(PdfStampingService.cache_key_for_purchase(purchase_id), expires_in: 4.hours) do
-        StampPdfForPurchaseJob.set(queue: :critical).perform_async(purchase_id, true)
-      end
+      PdfStampingService.enqueue_buyer_download_stamp!(@url_redirect.purchase_id)
     end
 
     def trigger_files_lifecycle_events

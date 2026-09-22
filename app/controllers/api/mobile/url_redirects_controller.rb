@@ -8,9 +8,9 @@ class Api::Mobile::UrlRedirectsController < Api::Mobile::BaseController
   before_action :check_permissions, only: %i[stream hls_playlist download]
   before_action :mark_rental_as_viewed, only: :hls_playlist
   before_action :check_for_expired_rentals, only: %i[stream hls_playlist download]
-  after_action :increment_product_uses_count, only: %i[stream download]
+  after_action :increment_product_uses_count, only: %i[stream download], if: :record_successful_fetch?
   after_action -> { create_consumption_event!(ConsumptionEvent::EVENT_TYPE_WATCH) }, only: [:stream, :hls_playlist]
-  after_action -> { create_consumption_event!(ConsumptionEvent::EVENT_TYPE_DOWNLOAD) }, only: [:download]
+  after_action -> { create_consumption_event!(ConsumptionEvent::EVENT_TYPE_DOWNLOAD) }, only: [:download], if: :record_successful_fetch?
   before_action :fetch_product_file, only: %i[stream hls_playlist download]
 
   def url_redirect_attributes
@@ -41,12 +41,21 @@ class Api::Mobile::UrlRedirectsController < Api::Mobile::BaseController
   end
 
   def download
+    if @product_file.must_be_pdf_stamped? && @url_redirect.missing_stamped_pdf?(@product_file)
+      PdfStampingService.enqueue_buyer_download_stamp!(@url_redirect.purchase_id)
+      return render json: { success: false, message: "We are preparing the file for download. You will receive an email when it is ready." }, status: :unprocessable_entity
+    end
+
     redirect_to @url_redirect.signed_location_for_file(@product_file), allow_other_host: true
   end
 
   private
     def file_not_available
       render json: { success: false, message: "The file is no longer available." }, status: :not_found
+    end
+
+    def record_successful_fetch?
+      response.successful? || response.redirect?
     end
 
     def fetch_product_file

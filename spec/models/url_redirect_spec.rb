@@ -305,6 +305,24 @@ describe UrlRedirect do
       expect(signed_s3_url).to match(/X-Amz-Signature=/)
       expect(signed_s3_url).to match(/stamped_manual/)
     end
+
+    it "does not sign the original upload when a stampable PDF has no stamped copy" do
+      pdf_product_file = @product.product_files.alive.pdf.last
+      pdf_product_file.update!(pdf_stamp_enabled: true)
+
+      expect(@url_redirect.signed_location_for_file(pdf_product_file)).to be_nil
+      expect(@url_redirect.signed_location_for_file(pdf_product_file, allow_unstamped: true)).to match(/manual/)
+    end
+
+    it "omits an unstamped PDF from the Dropbox file list" do
+      pdf_product_file = @product.product_files.alive.pdf.last
+      pdf_product_file.update!(pdf_stamp_enabled: true)
+
+      filenames = JSON.parse(@url_redirect.product_files_hash).map { _1["filename"] }
+
+      expect(filenames).to include(@product.product_files.first.s3_filename)
+      expect(filenames).not_to include(pdf_product_file.s3_filename)
+    end
   end
 
   describe "product_file_json_data_for_mobile" do

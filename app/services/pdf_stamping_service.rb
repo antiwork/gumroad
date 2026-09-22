@@ -40,4 +40,15 @@ module PdfStampingService
   def clear_buyer_notification!(purchase_id)
     Rails.cache.delete(buyer_notify_cache_key(purchase_id))
   end
+
+  # A checkout stamp may already hold the purchase lock, which drops this enqueue.
+  # The notify flag is what that job reads so the click still gets the ready email.
+  def enqueue_buyer_download_stamp!(purchase_id)
+    return if purchase_id.blank?
+
+    request_buyer_notification!(purchase_id)
+    Rails.cache.fetch(cache_key_for_purchase(purchase_id), expires_in: 4.hours) do
+      StampPdfForPurchaseJob.set(queue: :critical).perform_async(purchase_id, true)
+    end
+  end
 end

@@ -161,14 +161,17 @@ class UrlRedirect < ApplicationRecord
 
   # Public: used to pass the list of downloadable files to Dropbox.
   def product_files_hash
-    alive_product_files.map do |product_file|
+    alive_product_files.filter_map do |product_file|
       next if product_file.stream_only?
 
+      url = signed_location_for_file(product_file)
+      next if url.blank?
+
       {
-        url: signed_location_for_file(product_file),
+        url:,
         filename: product_file.s3_filename
       }
-    end.compact.to_json
+    end.to_json
   end
 
   def bundle_archive_product_files
@@ -237,12 +240,18 @@ class UrlRedirect < ApplicationRecord
     end
   end
 
-  def signed_location_for_file(product_file)
+  # allow_unstamped is the seller editor only. A buyer fetch must not receive the
+  # original upload while the watermarked copy is still missing.
+  def signed_location_for_file(product_file, allow_unstamped: false)
     return product_file.url if product_file.external_link?
     s3_retrievable = product_file
     if product_file.must_be_pdf_stamped?
       stamped_s3_retrievable = alive_stamped_pdfs.where(product_file_id: product_file.id).first
-      s3_retrievable = stamped_s3_retrievable if stamped_s3_retrievable.present?
+      if stamped_s3_retrievable.present?
+        s3_retrievable = stamped_s3_retrievable
+      elsif !allow_unstamped
+        return nil
+      end
     end
     s3_key = s3_retrievable.s3_key
     s3_filename = s3_retrievable.s3_filename
