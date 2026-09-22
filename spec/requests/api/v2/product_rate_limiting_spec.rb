@@ -139,10 +139,7 @@ describe "Product API rate limiting", type: :request do
       end
     end
 
-    # A regression that reported the one-minute base rule instead of the tier that actually
-    # matched would still pass the example above: the base rule trips first, so its remaining
-    # time is always <= 60. Keep the base bucket under its limit each window and let the
-    # 8**3 = 512-second tier accumulate past its 90-request limit.
+    # Keep each base bucket within its limit so it cannot mask the 512-second backoff tier.
     it "reports the matched backoff tier, not the one-minute base window" do
       travel_to(Time.at((Time.current.to_i / 512) * 512 + 10)) do
         4.times do |window|
