@@ -20,13 +20,4 @@ class ApplicationRecord < ActiveRecord::Base
   end
 
   connects_to database: { writing: :primary, reading: :primary_replica } if replica_roles_configured?
-
-  # connects_to above hands this class's pool to ActiveRecord::Base, and mysql2_proxy honours a pin
-  # only when its klasses include the connection's pool class — so an ApplicationRecord pin never
-  # matched and these blocks' reads ran on the replica anyway. Pin on the pool owner.
-  def self.connected_to(role: nil, shard: nil, prevent_writes: false, &block)
-    return super unless replica_roles_configured?
-
-    ActiveRecord::Base.connected_to(role:, shard:, prevent_writes:, &block)
-  end
 end

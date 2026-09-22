@@ -295,7 +295,9 @@ describe LinksController, :vcr, type: :controller do
     it "fetches the product for the landing page HTML on the primary" do
       pinned_during_fetch = nil
       allow(controller).to receive(:fetch_product_for_show).and_wrap_original do |method, *args|
-        pinned_during_fetch = primary_pinned?
+        pinned_during_fetch = ApplicationRecord.connected_to_stack.any? do |entry|
+          entry[:role] == :writing && entry[:klasses].include?(ApplicationRecord)
+        end
         method.call(*args)
       end
 

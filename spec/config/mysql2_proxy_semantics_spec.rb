@@ -9,9 +9,9 @@ describe ActiveRecordProxyAdapters::Mysql2Proxy do
   let(:routing_proxy) { described_class.new(primary) }
 
   before do
-    allow(routing_proxy).to receive(:connection_class).and_return(ActiveRecord::Base)
+    allow(routing_proxy).to receive(:connection_class).and_return(ApplicationRecord)
     allow(routing_proxy).to receive(:primary_connection_name).and_return("primary")
-    allow(ActiveRecord::Base).to receive(:connected_to_stack).and_return([])
+    allow(ApplicationRecord).to receive(:connected_to_stack).and_return([])
   end
 
   around do |example|
@@ -50,7 +50,7 @@ describe ActiveRecordProxyAdapters::Mysql2Proxy do
   end
 
   it "honors explicit writing even after the stickiness window" do
-    allow(ActiveRecord::Base).to receive(:connected_to_stack).and_return([{ role: :writing, klasses: [ActiveRecord::Base] }])
+    allow(ApplicationRecord).to receive(:connected_to_stack).and_return([{ role: :writing, klasses: [ApplicationRecord] }])
     expect(roles("SELECT * FROM users")).to eq([:writing])
   end
 
