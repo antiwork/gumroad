@@ -44,13 +44,13 @@ class ElasticsearchIndexerWorker
 
     case operation
     when "index"
-      client_params[:body] = params["body"] || klass.find(record_id).as_indexed_json
+      client_params[:body] = params["body"] || indexed_record_body(klass, record_id)
       client_params[:index] = klass.index_name_from_body(client_params[:body]) if klass.respond_to?(:index_name_from_body)
       EsClient.index(client_params)
     when "update"
       fields = params.fetch("fields")
       client_params[:body] = {
-        "doc" => klass.find(record_id).as_indexed_json(only: fields)
+        "doc" => indexed_record_body(klass, record_id, only: fields)
       }
       EsClient.update(client_params)
     when "delete"
@@ -77,6 +77,13 @@ class ElasticsearchIndexerWorker
   end
 
   private
+    def indexed_record_body(klass, record_id, **options)
+      # A successful stale read consumes the job without a retry; pin serialization too.
+      ApplicationRecord.connected_to(role: :writing) do
+        klass.find(record_id).as_indexed_json(**options)
+      end
+    end
+
     # The updates and deletion to the following index names will have 404 errors ignored.
     # This is useful when adding a new index and all records aren't indexed yet.
     # You can add an indice here by doing something like:

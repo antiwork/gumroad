@@ -3,6 +3,33 @@
 require "spec_helper"
 
 describe ElasticsearchIndexerWorker, :elasticsearch_wait_for_refresh do
+  describe "fresh purchase snapshots" do
+    %w[successful failed].each do |state|
+      %w[index update].each do |operation|
+        it "reads and serializes #{state} purchases on the primary for #{operation}" do
+          purchase = create(:purchase, :with_license, purchase_state: state)
+          EsClient.index(index: Purchase.index_name, id: purchase.id, body: purchase.as_indexed_json.merge("purchase_state" => "in_progress"))
+          reads = []
+          subscriber = lambda do |*, payload|
+            next if payload[:name] == "SCHEMA" || payload[:cached] || !payload[:sql].match?(/\ASELECT/i)
+            pin = ApplicationRecord.connected_to_stack.reverse.find { |entry| entry[:klasses]&.include?(ApplicationRecord) }
+            reads << [payload[:sql], pin&.fetch(:role)]
+          end
+
+          ApplicationRecord.uncached do
+            ActiveSupport::Notifications.subscribed(subscriber, "sql.active_record") do
+              described_class.new.perform(operation, "class_name" => "Purchase", "record_id" => purchase.id, "fields" => ["purchase_state", "license_uses"])
+            end
+          end
+
+          expect(reads.map(&:first).join("\n")).to include("FROM `purchases`", "FROM `licenses`")
+          expect(reads.map(&:last)).to all(eq(:writing))
+          expect(EsClient.get(index: Purchase.index_name, id: purchase.id).dig("_source", "purchase_state")).to eq(state)
+        end
+      end
+    end
+  end
+
   describe "#perform without ActiveRecord objects" do
     before do
       class TravelEvent
