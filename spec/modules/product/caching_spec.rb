@@ -72,6 +72,40 @@ describe Product::Caching do
   describe ".dashboard_collection_data" do
     let(:product) { create(:product, max_purchase_count: 100) }
 
+    [Redis::TimeoutError, RedisClient::ReadTimeoutError].each do |error_class|
+      it "returns cached and live products when warming raises #{error_class}, then retries on the next read" do
+        cached_product = create(:product)
+        cached_value = cached_product.product_cached_values.create!
+        collection = [cached_product, product]
+        error = error_class.new("Redis unavailable")
+        expect(CacheProductDataWorker).to receive(:perform_bulk).with([[product.id]]).and_raise(error)
+        expect(ErrorNotifier).to receive(:notify).with(error, hash_including(source: "dashboard_cache_enqueue"))
+
+        expect(described_class.dashboard_collection_data(collection, cache: true)).to eq([cached_value, product])
+
+        allow(CacheProductDataWorker).to receive(:perform_bulk).and_call_original
+        described_class.dashboard_collection_data(collection, cache: true)
+        expect(CacheProductDataWorker).to have_enqueued_sidekiq_job(product.id)
+      end
+    end
+
+    it "still yields live product data when reporting a failed warm also fails" do
+      collection = [product]
+      allow(CacheProductDataWorker).to receive(:perform_bulk).and_raise(RedisClient::ReadTimeoutError)
+      allow(ErrorNotifier).to receive(:notify).and_raise(StandardError, "reporting unavailable")
+
+      data = described_class.dashboard_collection_data(collection, cache: true) { |item| { "id" => item.id } }
+
+      expect(data).to contain_exactly(hash_including("id" => product.id, "remaining_for_sale_count" => 100))
+    end
+
+    it "does not swallow programming errors from the cache enqueue" do
+      collection = [product]
+      allow(CacheProductDataWorker).to receive(:perform_bulk).and_raise(ArgumentError)
+
+      expect { described_class.dashboard_collection_data(collection, cache: true) }.to raise_error(ArgumentError)
+    end
+
     context "when no block is passed" do
       subject(:dashboard_collection_data) { described_class.dashboard_collection_data(collection, cache:) }
 

@@ -50,7 +50,15 @@ module Product::Caching
     cached_values = ProductCachedValue.fresh.where(product_id: product_ids)
     uncached_product_ids = (product_ids - cached_values.pluck(:product_id)).zip
 
-    CacheProductDataWorker.perform_bulk(uncached_product_ids) if cache && !uncached_product_ids.empty?
+    begin
+      CacheProductDataWorker.perform_bulk(uncached_product_ids) if cache && !uncached_product_ids.empty?
+    rescue *REDIS_TRANSPORT_ERRORS => e
+      begin
+        ErrorNotifier.notify(e, source: "dashboard_cache_enqueue")
+      rescue StandardError => reporting_error
+        Rails.logger.warn("Dashboard cache enqueue reporting failed: #{reporting_error.class}")
+      end
+    end
 
     collection.map do |product|
       cache_or_product = cached_values.find { |cached_value| cached_value.product_id == product.id } || product

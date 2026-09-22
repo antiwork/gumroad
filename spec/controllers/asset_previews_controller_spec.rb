@@ -25,6 +25,46 @@ describe AssetPreviewsController do
       end.to_not change { AssetPreview.count }
     end
 
+    [Redis::TimeoutError, RedisClient::ReadTimeoutError].each do |error_class|
+      it "saves a cover when the retina enqueue raises #{error_class} and recovers on a later render" do
+        blob = ActiveStorage::Blob.create_and_upload!(
+          io: fixture_file_upload("kFDzu.png", "image/png"), filename: "kFDzu.png"
+        )
+        error = error_class.new("Redis unavailable")
+        allow(ProcessAssetPreviewRetinaWorker).to receive(:perform_async).and_raise(error)
+        expect(ErrorNotifier).to receive(:notify).with(error, hash_including(source: "retina_variant_enqueue")).at_least(:once)
+
+        expect do
+          post :create, params: { link_id: product.unique_permalink, asset_preview: { signed_blob_id: blob.signed_id }, format: :json }
+        end.to change { product.asset_previews.alive.count }.by(1)
+
+        expect(response).to be_successful
+        expect(response.parsed_body["success"]).to eq(true)
+        preview = product.asset_previews.alive.last
+        expect(preview.file.blob).to eq(blob)
+        expect(preview.url_from_file).to eq(preview.file.url)
+        expect(preview.file.blob.variant_records).to be_empty
+
+        allow(ProcessAssetPreviewRetinaWorker).to receive(:perform_async).and_call_original
+        Sidekiq::Testing.inline! { preview.url_from_file }
+        expect(preview.reload.retina_variant.url).not_to eq(preview.file.url)
+        expect(preview.url_from_file).to eq(preview.retina_variant.url)
+      end
+    end
+
+    it "saves a cover when reporting a failed retina enqueue also fails" do
+      blob = ActiveStorage::Blob.create_and_upload!(
+        io: fixture_file_upload("kFDzu.png", "image/png"), filename: "kFDzu.png"
+      )
+      allow(ProcessAssetPreviewRetinaWorker).to receive(:perform_async).and_raise(RedisClient::ReadTimeoutError)
+      allow(ErrorNotifier).to receive(:notify).and_raise(StandardError, "reporting unavailable")
+
+      post :create, params: { link_id: product.unique_permalink, asset_preview: { signed_blob_id: blob.signed_id }, format: :json }
+
+      expect(response.parsed_body["success"]).to eq(true)
+      expect(product.asset_previews.alive.last.file.blob).to eq(blob)
+    end
+
     it "adds a preview if one already exists" do
       allow_any_instance_of(AssetPreview).to receive(:analyze_file).and_return(nil)
       product = create(:product, user: seller, preview: fixture_file_upload("kFDzu.png", "image/png"))

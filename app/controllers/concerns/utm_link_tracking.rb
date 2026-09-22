@@ -89,8 +89,15 @@ module UtmLinkTracking
         utm_link.first_click_at ||= Time.current
         utm_link.last_click_at = Time.current
         utm_link.save!
+      end
 
-        UpdateUtmLinkStatsJob.perform_async(utm_link.id)
+      # Keep the visit if enqueue fails; the next stats job recounts all persisted visits.
+      UpdateUtmLinkStatsJob.perform_async(utm_link.id)
+    rescue *REDIS_TRANSPORT_ERRORS => e
+      begin
+        ErrorNotifier.notify(e, source: "utm_stats_enqueue", utm_link_id: utm_link.id)
+      rescue StandardError => reporting_error
+        Rails.logger.warn("UTM stats enqueue reporting failed: #{reporting_error.class}")
       end
     end
 

@@ -64,6 +64,39 @@ describe UtmLinkTracking, type: :controller do
       expect(UpdateUtmLinkStatsJob).to have_enqueued_sidekiq_job(utm_link.id)
     end
 
+    [Redis::TimeoutError, RedisClient::ReadTimeoutError].each do |error_class|
+      it "preserves the visit and renders the page when the stats enqueue raises #{error_class}" do
+        error = error_class.new("Redis unavailable")
+        expect(UpdateUtmLinkStatsJob).to receive(:perform_async).with(utm_link.id).and_raise(error)
+        expect(ErrorNotifier).to receive(:notify).with(error, hash_including(source: "utm_stats_enqueue"))
+
+        expect do
+          get :action, params: { utm_source: utm_link.utm_source, utm_medium: utm_link.utm_medium, utm_campaign: utm_link.utm_campaign }
+        end.to change { utm_link.utm_link_visits.count }.by(1)
+
+        expect(response).to be_successful
+        expect(utm_link.reload.first_click_at).to be_present
+        expect(utm_link.last_click_at).to be_present
+        expect(utm_link.total_clicks).to eq(0)
+
+        allow(UpdateUtmLinkStatsJob).to receive(:perform_async).and_call_original
+        Sidekiq::Testing.inline! do
+          get :action, params: { utm_source: utm_link.utm_source, utm_medium: utm_link.utm_medium, utm_campaign: utm_link.utm_campaign }
+        end
+        expect(utm_link.reload.total_clicks).to eq(2)
+      end
+    end
+
+    it "renders the page when reporting a failed stats enqueue also fails" do
+      allow(UpdateUtmLinkStatsJob).to receive(:perform_async).and_raise(RedisClient::ReadTimeoutError)
+      allow(ErrorNotifier).to receive(:notify).and_raise(StandardError, "reporting unavailable")
+
+      get :action, params: { utm_source: utm_link.utm_source, utm_medium: utm_link.utm_medium, utm_campaign: utm_link.utm_campaign }
+
+      expect(response).to be_successful
+      expect(utm_link.utm_link_visits.count).to eq(1)
+    end
+
     it "does nothing for non-GET requests" do
       expect do
         post :action, params: { utm_source: utm_link.utm_source, utm_medium: utm_link.utm_medium, utm_campaign: utm_link.utm_campaign, utm_content: utm_link.utm_content, utm_term: utm_link.utm_term }
