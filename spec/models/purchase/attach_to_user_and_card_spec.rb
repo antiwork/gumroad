@@ -93,5 +93,25 @@ describe Purchase, "#attach_to_user_and_card" do
 
       expect(member.reload.purchaser).to eq(user)
     end
+
+    it "does not overwrite a member claimed after it was selected" do
+      other = create(:user)
+      saw_lock = false
+
+      allow_any_instance_of(Purchase).to receive(:lock!).and_wrap_original do |method, *args|
+        record = method.receiver
+        if record.id == member.id && record.purchaser_id.nil?
+          saw_lock = true
+          Purchase.where(id: record.id).update_all(purchaser_id: other.id)
+        end
+        method.call(*args)
+      end
+
+      purchase.update!(purchaser: user)
+
+      expect(saw_lock).to be(true)
+      expect(member.reload.purchaser).to eq(other)
+      expect(purchase.reload.purchaser).to eq(user)
+    end
   end
 end

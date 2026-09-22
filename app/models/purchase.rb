@@ -3347,16 +3347,21 @@ class Purchase < ApplicationRecord
 
   # Only this bundle's unclaimed members whose email still matches. A different email is
   # a different buyer. An existing purchaser or a reassignment lock is not ours to move.
+  # find_each's snapshot is not the check: lock and reload each member first, or a claim
+  # that lands after the select is overwritten.
   def attach_unclaimed_bundle_product_purchases
     return unless is_bundle_purchase?
     return if purchaser_id.nil?
 
     product_purchases.all_success_states.where(purchaser_id: nil).find_each do |member|
-      next unless email.present? && member.email.to_s.casecmp?(email)
-      next if member.is_reassignment_locked?
+      member.with_lock do
+        next if member.purchaser_id.present?
+        next unless email.present? && member.email.to_s.casecmp?(email)
+        next if member.is_reassignment_locked?
 
-      member.purchaser = purchaser
-      member.save!(validate: false)
+        member.purchaser = purchaser
+        member.save!(validate: false)
+      end
     rescue => e
       ErrorNotifier.notify(e, context: { purchase_id: member.id, bundle_purchase_id: id, user_id: purchaser_id })
       Rails.logger.error("Purchase#attach_unclaimed_bundle_product_purchases: member #{member.id} failed for bundle purchase #{id}: #{e.class}: #{e.message}")
