@@ -25,6 +25,7 @@ describe DeliverFilesReadyNotificationJob do
 
   it "waits instead of emailing while the stamp is still missing" do
     purchase.create_url_redirect!
+    create(:readable_document, link: product, pdf_stamp_enabled: true)
     PdfStampingService.request_buyer_notification!(purchase.id)
 
     expect do
@@ -33,5 +34,18 @@ describe DeliverFilesReadyNotificationJob do
 
     expect(described_class).to have_enqueued_sidekiq_job(purchase.id, 1)
     expect(PdfStampingService.buyer_notification_requested?(purchase.id)).to be(true)
+  end
+
+  it "does not email just because an older stamp already set the done bit" do
+    redirect = purchase.create_url_redirect!
+    redirect.update!(is_done_pdf_stamping: true)
+    create(:readable_document, link: product, pdf_stamp_enabled: true)
+    PdfStampingService.request_buyer_notification!(purchase.id)
+
+    expect do
+      described_class.new.perform(purchase.id)
+    end.not_to have_enqueued_mail(CustomerMailer, :files_ready_for_download)
+
+    expect(described_class).to have_enqueued_sidekiq_job(purchase.id, 1)
   end
 end

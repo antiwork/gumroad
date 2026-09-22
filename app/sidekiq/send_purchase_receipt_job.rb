@@ -6,11 +6,17 @@ class SendPurchaseReceiptJob
   include Sidekiq::Job
   sidekiq_options queue: :critical, retry: 5, lock: :until_executed
 
-  def perform(purchase_id)
+  # A resend passes true as the second arg. Lock on the purchase only, or that
+  # resend and the checkout job would both stamp and both send.
+  def self.lock_args(args)
+    [args.first]
+  end
+
+  def perform(purchase_id, resend = false)
     purchase = Purchase.find(purchase_id)
 
     stamp_error = enqueue_stamping(purchase)
-    deliver_receipt(purchase) unless purchase.is_bundle_product_purchase?
+    deliver_receipt(purchase, resend:) unless purchase.is_bundle_product_purchase?
     raise stamp_error if stamp_error
   end
 
@@ -25,8 +31,10 @@ class SendPurchaseReceiptJob
       e
     end
 
-    def deliver_receipt(purchase)
-      return if CustomerEmailInfo.where(purchase_id: purchase.id, email_name: SendgridEventInfo::RECEIPT_MAILER_METHOD).exists?
+    # An automatic retry must not resend a receipt this job already delivered.
+    # An explicit resend is a new request and has to go out anyway.
+    def deliver_receipt(purchase, resend:)
+      return if !resend && CustomerEmailInfo.where(purchase_id: purchase.id, email_name: SendgridEventInfo::RECEIPT_MAILER_METHOD).exists?
 
       CustomerMailer.receipt(purchase.id).deliver_now
     end

@@ -1058,7 +1058,7 @@ describe Api::Internal::Admin::PurchasesController do
         success: true,
         message: "Successfully resent receipt for purchase number #{purchase.external_id_numeric} to #{purchase.email}"
       }.as_json)
-      expect(SendPurchaseReceiptJob).to have_enqueued_sidekiq_job(purchase.id).on("critical")
+      expect(SendPurchaseReceiptJob).to have_enqueued_sidekiq_job(purchase.id, true).on("critical")
     end
 
     it "records an audit log with the purchase target" do

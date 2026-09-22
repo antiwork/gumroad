@@ -56,8 +56,8 @@ module Purchase::Receipt
     if is_preorder_authorization
       CustomerMailer.preorder_receipt(preorder.id).deliver_later(queue: "critical", wait: 3.seconds)
     else
-      SendPurchaseReceiptJob.perform_async(id)
-      SendPurchaseReceiptJob.perform_async(gift.giftee_purchase.id) if is_gift_sender_purchase && gift.present?
+      SendPurchaseReceiptJob.perform_async(id, true)
+      SendPurchaseReceiptJob.perform_async(gift.giftee_purchase.id, true) if is_gift_sender_purchase && gift.present?
     end
   end
 

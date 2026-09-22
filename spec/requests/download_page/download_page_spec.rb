@@ -485,7 +485,7 @@ describe("Download Page", type: :system, js: true) do
       click_on "Resend receipt"
     end
     expect(page).to have_alert(text: "Receipt resent")
-    expect(SendPurchaseReceiptJob).to have_enqueued_sidekiq_job(url_redirect.purchase.id).on("critical")
+    expect(SendPurchaseReceiptJob).to have_enqueued_sidekiq_job(url_redirect.purchase.id, true).on("critical")
   end
 
   describe "archive actions" do
@@ -719,7 +719,7 @@ describe("Download Page", type: :system, js: true) do
 
       click_on "Resend receipt"
       expect(page).to have_alert(text: "Receipt resent")
-      expect(SendPurchaseReceiptJob).to have_enqueued_sidekiq_job(purchase.id).on("critical")
+      expect(SendPurchaseReceiptJob).to have_enqueued_sidekiq_job(purchase.id, true).on("critical")
     end
   end
 

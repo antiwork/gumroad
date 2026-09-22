@@ -79,6 +79,20 @@ module PdfStampingService
     enqueued
   end
 
+  # is_done_pdf_stamping stays set after the first stamp. A later file can still be
+  # missing its copy, and the follower must not email until that copy exists.
+  def stamp_pending?(purchase)
+    redirect = purchase.url_redirect
+    return false if redirect.blank?
+
+    product = purchase.link
+    return false if product.blank?
+
+    product.product_files.alive.pdf.pdf_stamp_enabled
+      .where.not(id: redirect.alive_stamped_pdfs.select(:product_file_id))
+      .exists?
+  end
+
   private
     def notification_flag_bit
       UrlRedirect.flag_mapping.fetch("flags").fetch(:files_ready_notification_requested).to_i

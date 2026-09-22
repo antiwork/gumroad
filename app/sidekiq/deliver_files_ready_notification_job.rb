@@ -16,8 +16,7 @@ class DeliverFilesReadyNotificationJob
     return unless PdfStampingService.buyer_notification_requested?(purchase_id)
 
     purchase = Purchase.find(purchase_id)
-    redirect = purchase.url_redirect
-    if redirect && !redirect.is_done_pdf_stamping?
+    if PdfStampingService.stamp_pending?(purchase)
       self.class.perform_in(WAIT, purchase_id, waits + 1) if waits < MAX_WAITS
       return
     end

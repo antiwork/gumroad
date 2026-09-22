@@ -56,6 +56,18 @@ describe SendPurchaseReceiptJob do
       described_class.new.perform(purchase.id)
       expect(StampPdfForPurchaseJob).to have_enqueued_sidekiq_job(purchase.id)
     end
+
+    it "sends again when the buyer asks for another receipt after the first was recorded" do
+      CustomerEmailInfo.build_for_purchase(
+        purchase_id: purchase.id,
+        email_name: SendgridEventInfo::RECEIPT_MAILER_METHOD
+      ).mark_sent!
+      expect(CustomerMailer).to receive(:receipt).with(purchase.id).and_return(mail_double)
+
+      described_class.new.perform(purchase.id, true)
+
+      expect(mail_double).to have_received(:deliver_now)
+    end
   end
 
   context "when the purchase is for a product without stampable PDFs" do
