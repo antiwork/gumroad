@@ -1489,6 +1489,22 @@ class StripeChargeProcessor
   end
 
   def self.handle_stripe_event_charge_dispute_for_charge_with_destination_funds_reinstated(stripe_dispute, stripe_charge, event)
+    # A fee refund can emit funds_reinstated without returning the disputed principal.
+    chargeback_reversal_balance_transaction = Array(stripe_dispute.balance_transactions).find do |balance_transaction|
+      balance_transaction.description.to_s[/^Chargeback reversal/].present?
+    end
+    if chargeback_reversal_balance_transaction.nil?
+      fee_refund = dispute_reinstatement_fee_refund(stripe_dispute)
+      if fee_refund
+        # A refunded fee doesn't explain a nonzero gross credit; surface it for reconciliation.
+        notify_unrecognized_dispute_reinstatement(stripe_dispute, stripe_charge, event) unless fee_refund.amount.zero?
+        event.type = ChargeEvent::TYPE_INFORMATIONAL
+        return
+      end
+
+      raise notify_unrecognized_dispute_reinstatement(stripe_dispute, stripe_charge, event)
+    end
+
     event.type = ChargeEvent::TYPE_DISPUTE_WON
     # NOTE: The application fee billed is the same application fee that was refunded to us when the chargeback occurred.
     # If for some reason the chargeback reversal returned to us a different amount than was originally chargedback (e.g. due to currency changes)
@@ -1502,11 +1518,9 @@ class StripeChargeProcessor
     chargeable = Charge::Chargeable.find_by_processor_transaction_id!(stripe_charge.id)
     amount_cents = chargeable.charged_amount_cents - chargeable.charged_gumroad_amount_cents
 
-    # Resolve Gumroad's share BEFORE moving any money. `presentment_gumroad_amount_for`
-    # deliberately raises rather than book a mixed-currency figure, and the transfer below
-    # has no idempotency key while this runs in HandleStripeEventWorker (`retry: 10`). If
-    # the raise came after the transfer, every retry would re-send the creator the full
-    # seller share — up to 11 duplicate transfers before the job reached the dead set.
+    # Resolve Gumroad's share BEFORE moving any money: `presentment_gumroad_amount_for`
+    # deliberately raises rather than book a mixed-currency figure, and a raise after the
+    # transfer left the creator paid with no disbursement recorded against the dispute.
     gumroad_amount = if stripe_charge.application_fee.present?
       FlowOfFunds::Amount.new(
         currency: stripe_charge.application_fee.currency,
@@ -1522,15 +1536,15 @@ class StripeChargeProcessor
       currency: Currency::USD,
       # Transfer Amount- Fees to Creator account. In future, we won't need to do this as we would have not sent fees at all before
       amount_cents:,
-      related_charge_id: stripe_charge.id
+      related_charge_id: stripe_charge.id,
+      # HandleStripeEventWorker retries (`retry: 10`); without a key a retry after a lost response
+      # re-sends the whole creator share.
+      idempotency_key: "dispute_funds_reinstated_transfer_#{stripe_dispute.id}"
     )
     issued_amount = FlowOfFunds::Amount.new(
       currency: stripe_dispute.currency,
       cents: stripe_dispute.amount
     )
-    chargeback_reversal_balance_transaction = stripe_dispute.balance_transactions.find do |balance_transaction|
-      balance_transaction.description[/^Chargeback reversal/].present?
-    end
     settled_amount = FlowOfFunds::Amount.new(
       currency: chargeback_reversal_balance_transaction.currency,
       cents: chargeback_reversal_balance_transaction.amount
@@ -1559,6 +1573,43 @@ class StripeChargeProcessor
       merchant_account_gross_amount:,
       merchant_account_net_amount:
     )
+  end
+
+  def self.dispute_reinstatement_fee_refund(stripe_dispute)
+    return unless stripe_dispute.status == "lost"
+
+    balance_transactions = Array(stripe_dispute.balance_transactions)
+    return unless balance_transactions.size == 2
+
+    withdrawal = balance_transactions.find do |transaction|
+      transaction.amount.is_a?(Integer) && transaction.amount.negative? &&
+        transaction.description.to_s.match?(/\AChargeback(?: withdrawal.*)?\z/)
+    end
+    return unless withdrawal && withdrawal.currency.present?
+
+    # Compare settlement amounts: Dispute#amount can be in a different currency.
+    balance_transactions.find do |transaction|
+      transaction.description.blank? && transaction.currency == withdrawal.currency &&
+        transaction[:fee].is_a?(Integer) && transaction[:fee].negative? &&
+        transaction.amount.is_a?(Integer) && transaction.amount >= 0 && transaction.amount < -withdrawal.amount
+    end
+  end
+
+  # Sidekiq failures aren't reported to Sentry here; notify explicitly before propagating the error.
+  def self.notify_unrecognized_dispute_reinstatement(stripe_dispute, stripe_charge, event)
+    balance_transactions = Array(stripe_dispute.balance_transactions).map do |balance_transaction|
+      {
+        id: balance_transaction.id,
+        amount: balance_transaction.amount,
+        currency: balance_transaction.currency,
+        description: balance_transaction.description,
+        fee: balance_transaction[:fee]
+      }
+    end
+    message = "Dispute #{stripe_dispute.id} (#{stripe_dispute.status}) on charge #{stripe_charge.id} fired funds_reinstated " \
+              "without a recognized Chargeback reversal balance transaction; the creator's share was not transferred."
+    ErrorNotifier.notify(message, stripe_event_id: event.charge_event_id, dispute_status: stripe_dispute.status, balance_transactions:)
+    message
   end
 
   # Gumroad's share of a disputed charge, expressed in the charge's own currency.
