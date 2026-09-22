@@ -3,6 +3,41 @@
 require "spec_helper"
 
 describe ElasticsearchIndexerWorker, :elasticsearch_wait_for_refresh do
+  describe "fresh purchase snapshots" do
+    %w[successful failed].each do |state|
+      %w[index update].each do |operation|
+        it "reads and serializes #{state} purchases on the primary for #{operation}" do
+          pinned = false
+          allow(ApplicationRecord).to receive(:connected_to).with(role: :writing).and_wrap_original do |method, **options, &block|
+            method.call(**options) do
+              pinned = true
+              begin
+                block.call
+              ensure
+                pinned = false
+              end
+            end
+          end
+          record = instance_double(Purchase)
+          allow(Purchase).to receive(:find).with(123) do
+            expect(pinned).to eq(true)
+            record
+          end
+          allow(record).to receive(:as_indexed_json) do
+            expect(pinned).to eq(true)
+            { "purchase_state" => state }
+          end
+          body = { "purchase_state" => state }
+          body = { "doc" => body } if operation == "update"
+          expect(EsClient).to receive(operation.to_sym).with(hash_including(body:))
+
+          described_class.new.perform(operation, "class_name" => "Purchase", "record_id" => 123, "fields" => ["purchase_state"])
+          expect(pinned).to eq(false)
+        end
+      end
+    end
+  end
+
   describe "#perform without ActiveRecord objects" do
     before do
       class TravelEvent
