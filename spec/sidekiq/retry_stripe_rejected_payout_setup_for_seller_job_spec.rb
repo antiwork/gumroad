@@ -49,6 +49,17 @@ describe RetryStripeRejectedPayoutSetupForSellerJob do
       expect(note.json_data["last_retried_at"]).to be_present
     end
 
+    it "keeps the note when the bank link cannot be restored" do
+      expect(StripeMerchantAccountManager).to receive(:update_bank_account).and_return(:bank_link_not_restored)
+
+      described_class.new.perform(user.id)
+
+      note.reload
+      expect(note).to be_alive
+      expect(note.json_data["retry_count"]).to eq(1)
+      expect(user.comments.alive.with_type_payout_note.map(&:content)).not_to include(described_class::RESOLVED_NOTE)
+    end
+
     it "abandons the retry loop when payments on the Stripe account are blocked at the platform level" do
       expect(StripeMerchantAccountManager).to receive(:update_bank_account).and_return(:account_blocked_by_platform)
 
@@ -681,6 +692,37 @@ describe RetryStripeRejectedPayoutSetupForSellerJob do
       expect(StripePayoutProcessor.has_valid_payout_info?(user.reload)).to be(true)
       expect(note.reload).not_to be_alive
       expect(user.comments.alive.with_type_payout_note.last.content).to eq(described_class::RESOLVED_NOTE)
+    end
+
+    it "does not resolve the note when the external account cannot be shown to be this row" do
+      allow(Stripe::Account).to receive(:retrieve).with(user.stripe_account.charge_processor_merchant_id).and_return(
+        Stripe::Account.construct_from(
+          id: user.stripe_account.charge_processor_merchant_id,
+          metadata: { "bank_account_id" => bank_account.external_id },
+          external_accounts: Stripe::ListObject.construct_from(
+            object: "list",
+            has_more: false,
+            data: [
+              Stripe::StripeObject.construct_from(
+                id: "ba_other",
+                object: "bank_account",
+                last4: "9999",
+                routing_number: bank_account.stripe_external_account_routing_number,
+                currency: bank_account.stripe_external_account_currency,
+                account_holder_name: bank_account.account_holder_full_name,
+                fingerprint: "fp_other"
+              )
+            ]
+          )
+        )
+      )
+
+      described_class.new.perform(user.id)
+
+      expect(bank_account.reload.stripe_bank_account_id).to be_nil
+      expect(note.reload).to be_alive
+      expect(note.json_data["retry_count"]).to eq(1)
+      expect(user.comments.alive.with_type_payout_note.map(&:content)).not_to include(described_class::RESOLVED_NOTE)
     end
   end
 

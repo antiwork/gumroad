@@ -1865,31 +1865,67 @@ module StripeMerchantAccountManager
   # on every run and the seller is skipped forever. Re-sending the details cannot repair it — the
   # metadata match above short-circuits — so link the external account Stripe already has.
   #
-  # Returns :noop_metadata_match when the row is already linked (the honest no-op this branch has
-  # always reported) or when no single external account can be shown to be this row: the account
-  # number is not readable back from Stripe, so last four digits, routing number and currency are
-  # the whole of the identifying evidence, and a wrong link is worse than a missed repair.
+  # Returns :noop_metadata_match only when the row is already linked. The retry job treats that
+  # symbol as success and resolves the payout note, so an unlinked row that cannot be tied to
+  # exactly one external account returns :bank_link_not_restored instead. A wrong link is worse
+  # than a missed repair: last4, routing number and currency must all be present on both sides.
+  # A blank field compares equal to another blank field, and that is not evidence.
   def self.restore_local_bank_link!(bank_account, stripe_account)
     return :noop_metadata_match if bank_account.stripe_bank_account_id.present?
 
     stripe_external_account = matching_stripe_external_account(bank_account, stripe_account)
-    return :noop_metadata_match if stripe_external_account.nil?
+    return :bank_link_not_restored if stripe_external_account.nil?
 
     save_stripe_bank_account_info(bank_account, stripe_account, stripe_external_account:)
     clear_stale_bank_sync_failure_notes(bank_account.user)
     :synced
   end
 
+  # Account#retrieve embeds only the ten most recent external accounts. Matching on that page
+  # alone can miss a second candidate on a later page and still report a unique match.
+  EXTERNAL_ACCOUNTS_MATCH_LIMIT = 100
+
   private_class_method
   def self.matching_stripe_external_account(bank_account, stripe_account)
-    raw_external_accounts = stripe_account["external_accounts"]
-    external_accounts = raw_external_accounts.respond_to?(:data) ? raw_external_accounts.data : Array(raw_external_accounts)
+    external_accounts = external_accounts_for_link_match(stripe_account)
+    return nil if external_accounts.nil?
+
+    local_last4 = bank_account.account_number_last_four.to_s
+    local_routing = bank_account.stripe_external_account_routing_number.to_s
+    local_currency = bank_account.stripe_external_account_currency.to_s
+    return nil if local_last4.blank? || local_routing.blank? || local_currency.blank?
+
     matches = external_accounts.select do |external_account|
-      external_account["last4"].to_s == bank_account.account_number_last_four.to_s &&
-        external_account["routing_number"].to_s == bank_account.stripe_external_account_routing_number.to_s &&
-        external_account["currency"].to_s.casecmp?(bank_account.stripe_external_account_currency.to_s)
+      last4 = external_account["last4"].to_s
+      routing = external_account["routing_number"].to_s
+      currency = external_account["currency"].to_s
+      next false if last4.blank? || routing.blank? || currency.blank?
+
+      last4 == local_last4 && routing == local_routing && currency.casecmp?(local_currency)
     end
     matches.one? ? matches.first : nil
+  end
+
+  private_class_method
+  def self.external_accounts_for_link_match(stripe_account)
+    raw_external_accounts = stripe_account["external_accounts"]
+    return Array(raw_external_accounts) unless raw_external_accounts.respond_to?(:data)
+
+    embedded = raw_external_accounts.data
+    return embedded unless raw_external_accounts.respond_to?(:has_more) && raw_external_accounts.has_more
+
+    listed = Stripe::Account.list_external_accounts(
+      stripe_account.id,
+      { limit: EXTERNAL_ACCOUNTS_MATCH_LIMIT, object: "bank_account" }
+    )
+    return nil if listed.respond_to?(:has_more) && listed.has_more
+
+    listed.respond_to?(:data) ? listed.data : Array(listed)
+  rescue Stripe::StripeError => e
+    Rails.logger.error(
+      "StripeMerchantAccountManager: external-account list failed for #{stripe_account&.id}: #{e.class}: #{e.message}"
+    )
+    nil
   end
 
   private_class_method
