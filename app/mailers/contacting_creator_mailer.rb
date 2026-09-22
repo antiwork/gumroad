@@ -16,6 +16,9 @@ class ContactingCreatorMailer < ApplicationMailer
 
   default from: ApplicationMailer::SUPPORT_EMAIL_WITH_NAME
 
+  # Registered above `after_action :deliver_email` on purpose: the template renders inside that
+  # callback, and an around filter only encloses the callbacks declared after it.
+  around_action :read_notify_from_primary, only: :notify
   after_action :deliver_email
   after_action :send_push_notification!, only: :notify
   # `around` rather than `after`, because the notice claimed at render has to be given back on every
@@ -819,6 +822,12 @@ class ContactingCreatorMailer < ApplicationMailer
       return if sentence.blank? || sentence.length > MAX_FORMAT_HINT_LENGTH
 
       sentence
+    end
+
+    # Delivered by a worker 3 seconds after the sale commits, so a replica read can miss rows the
+    # template walks lazily — the tip, the affiliate credit — and drop their line without raising.
+    def read_notify_from_primary(&block)
+      ApplicationRecord.connected_to(role: :writing, &block)
     end
 
     def do_not_send
