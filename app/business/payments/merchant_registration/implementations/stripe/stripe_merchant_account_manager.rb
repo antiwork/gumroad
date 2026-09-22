@@ -1309,20 +1309,18 @@ module StripeMerchantAccountManager
 
     stripe_account = Stripe::Account.retrieve(user.stripe_account.charge_processor_merchant_id)
     if stripe_account["metadata"]["bank_account_id"] == bank_account.external_id
-      # A metadata match says Stripe was told about this row; it does not say the LOCAL row was
-      # ever linked. A save that set the metadata without reaching save_stripe_bank_account_info
-      # leaves stripe_bank_account_id NULL, and reporting that as a metadata match is read as
-      # success by RetryStripeRejectedPayoutSetupForSellerJob — so the retry loop stops and every
-      # payout is skipped with no failure note (gumroad-private#2882). Countries outside
-      # ACCOUNT_HOLDER_NAME_SYNC_COUNTRIES treat the metadata stamp as sufficient and used to
-      # return the no-op straight away, which is how the unlinked row stayed invisible.
+      # Metadata match does not mean the local row is linked. Reporting that as a no-op stops
+      # RetryStripeRejectedPayoutSetupForSellerJob and every payout is skipped
+      # (gumroad-private#2882). Restore the link only when no Stripe write is owed: a holder-name
+      # mismatch in a sync country still has to fall through to Account.update.
+      name_out_of_sync = false
       if account_holder_name_synced_to_stripe?(bank_account.user)
         stripe_external_account = stripe_account["external_accounts"]&.first
         stripe_holder_name = stripe_external_account && stripe_external_account["account_holder_name"]
-        return :noop_metadata_match unless stripe_holder_name == bank_account.account_holder_full_name
+        name_out_of_sync = stripe_holder_name != bank_account.account_holder_full_name
       end
 
-      return restore_local_bank_link!(bank_account, stripe_account)
+      return restore_local_bank_link!(bank_account, stripe_account) unless name_out_of_sync
     end
 
     attributes = bank_account_hash(bank_account, stripe_account:, passphrase:)

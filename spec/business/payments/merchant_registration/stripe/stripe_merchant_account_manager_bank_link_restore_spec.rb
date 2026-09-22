@@ -134,4 +134,17 @@ describe StripeMerchantAccountManager do
       expect(bank_account.stripe_fingerprint).to eq("fp_already_linked")
     end
   end
+
+  # A holder-name mismatch in a sync country still has to reach Account.update.
+  it "sends a holder-name change for a name-sync country instead of stopping on the metadata match" do
+    user_compliance_info.update_columns(country: "Japan")
+    bank_account.update!(account_holder_full_name: "Updated Name")
+    stub_stripe_account_with([stripe_bank_account_payload(account_holder_name: "Previous Name")])
+    expect(Stripe::Account).to receive(:update).with(
+      merchant_id,
+      hash_including(bank_account: hash_including(account_holder_name: "Updated Name"))
+    ).and_raise(StandardError, "stop here")
+
+    expect { described_class.update_bank_account(user, passphrase:) }.to raise_error(StandardError, "stop here")
+  end
 end
