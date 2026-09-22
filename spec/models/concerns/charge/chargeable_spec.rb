@@ -45,6 +45,32 @@ describe Charge::Chargeable do
         expect(Charge::Chargeable.find_by_stripe_event(event)).to eq(charge)
       end
 
+      # `stripe_payment_intent_id` is unindexed, so without a floor this lookup scans the
+      # whole table on every miss. Asserting the emitted SQL, not just the result: the id
+      # bound is the only thing keeping a miss cheap and a result-only test cannot see it.
+      it "bounds the payment-intent lookup to recent charge ids" do
+        create(:charge, id: 900_000, stripe_payment_intent_id: "pi_bounded")
+        event = build(:charge_event_dispute_formalized, charge_reference: "CH-404", charge_id: nil, processor_payment_intent_id: "pi_bounded")
+
+        statements = []
+        subscriber = ->(*, payload) { statements << payload[:sql] unless payload[:name] == "SCHEMA" }
+        ActiveSupport::Notifications.subscribed(subscriber, "sql.active_record") do
+          Charge::Chargeable.find_by_stripe_event(event)
+        end
+
+        lookup = statements.find { |sql| sql.include?("stripe_payment_intent_id") }
+        expect(lookup).to include("`charges`.`id` >=")
+      end
+
+      it "ignores a charge older than the lookback window" do
+        stale = create(:charge, id: 1, stripe_payment_intent_id: "pi_stale")
+        create(:charge, id: Charge::Chargeable::RECENT_CHARGE_ID_LOOKBACK + 2)
+        event = build(:charge_event_dispute_formalized, charge_reference: "CH-404", charge_id: nil, processor_payment_intent_id: "pi_stale")
+
+        expect(Charge::Chargeable.find_by_stripe_event(event)).to be_nil
+        expect(stale.reload.stripe_payment_intent_id).to eq("pi_stale")
+      end
+
       # Refund events (refund.updated / refund.failed) carry no charge_reference, so a
       # refund on a combined charge cannot take the CH- branch. The lookup must still
       # resolve the canonical Charge — and prefer it over the member purchases, which
