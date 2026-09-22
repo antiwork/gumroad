@@ -4,7 +4,7 @@
 // (gumroad-private#1714): a section could only be rebuilt by hand, a named section's row showed its
 // heading with nothing tying it to the kind of block it labels, and a new subscribe section arrived
 // with pre-filled copy that reads as intentional while every other section type starts blank.
-import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import * as React from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -21,10 +21,40 @@ type FormState = Parameters<NonNullable<ProfileSectionsFormProps["onChange"]>>[0
 vi.stubGlobal("Routes", {
   root_url: () => "https://creator.gumroad.com/",
   checkout_upsells_products_path: () => "/checkout/upsells/products",
+  rails_direct_uploads_path: () => "/rails/active_storage/direct_uploads",
+  s3_utility_cdn_url_for_blob_path: () => "/s3_utility/cdn_url_for_blob",
 });
-vi.stubGlobal("fetch", () =>
-  Promise.resolve(new Response("[]", { status: 200, headers: { "Content-Type": "application/json" } })),
-);
+const CDN_URL = "https://cdn.example/uploaded-image";
+// Held open to keep an insert inside its blob: preview window; released to swap in the CDN URL.
+const cdn = vi.hoisted((): { hold: boolean; release: (() => void)[] } => ({ hold: false, release: [] }));
+type UploadCallback = (error: Error | null, blob: { key: string }) => void;
+const uploads = vi.hoisted((): { pending: UploadCallback[] } => ({ pending: [] }));
+vi.mock("@rails/activestorage", () => ({
+  DirectUpload: class {
+    create(callback: UploadCallback) {
+      uploads.pending.push(callback);
+    }
+  },
+}));
+vi.mock("$app/utils/prepareImageForUpload", () => ({
+  isLikelyImageFile: () => true,
+  prepareImageForUpload: async (file: File) => file,
+  heicDecodingLikely: () => false,
+}));
+// The picked-file snapshot machinery is not what this test is about, and happy-dom's FileList
+// cannot answer its `item` calls.
+vi.mock("$app/utils/snapshotPickedFile", () => ({
+  snapshotPickedFiles: async (files: readonly File[]) => [...files],
+  canResetFileInputAfterSnapshot: () => false,
+  fileListMatchesPickedFiles: () => false,
+}));
+vi.stubGlobal("fetch", (url: string) => {
+  const json = (body: string) => new Response(body, { status: 200, headers: { "Content-Type": "application/json" } });
+  if (!String(url).includes("s3_utility")) return Promise.resolve(json("[]"));
+
+  if (!cdn.hold) return Promise.resolve(json(JSON.stringify({ url: CDN_URL })));
+  return new Promise<Response>((resolve) => cdn.release.push(() => resolve(json(JSON.stringify({ url: CDN_URL })))));
+});
 // `SSR` is a vite `define`, so it does not exist under vitest; RichTextEditor reads it at render.
 vi.stubGlobal("SSR", false);
 
@@ -67,7 +97,19 @@ const trackState = () => {
   };
 };
 
-afterEach(cleanup);
+const richTextSectionText = (state: FormState, id = "section-1"): string => {
+  const section = assertDefined(state.sections.find((section) => section.id === id));
+  if (section.type !== "SellerProfileRichTextSection")
+    throw new Error(`expected a rich text section, got ${section.type}`);
+  return JSON.stringify(section.text);
+};
+
+afterEach(() => {
+  cleanup();
+  uploads.pending.length = 0;
+  cdn.hold = false;
+  cdn.release.length = 0;
+});
 
 describe("ProfileSectionsForm", () => {
   it("duplicates a section directly below the original without touching the original", () => {
@@ -254,5 +296,71 @@ describe("ProfileSectionsForm", () => {
       header: "",
       button_label: "Subscribe",
     });
+  });
+
+  it("keeps an in-flight image's local preview out of the section text and then syncs its CDN URL", async () => {
+    cdn.hold = true;
+    const withRichText = props();
+    withRichText.sections = [
+      { id: "section-1", type: "SellerProfileRichTextSection", header: "", hide_header: false, text: {} },
+    ];
+    const tracked = trackState();
+    const { container } = render(<ProfileSectionsForm {...withRichText} onChange={tracked.onChange} />);
+    const sectionText = () => richTextSectionText(tracked.latest());
+
+    fireEvent.click(screen.getByRole("button", { name: "Insert image" }));
+    fireEvent.change(assertDefined(container.querySelector('input[type="file"]')), {
+      target: { files: [new File(["pixels"], "photo.png", { type: "image/png" })] },
+    });
+    await waitFor(() => expect(uploads.pending).toHaveLength(1));
+    assertDefined(uploads.pending.shift())(null, { key: "blob-key" });
+
+    // The blob is up but the CDN lookup is open, so a save now would store a src the profile can
+    // never render again.
+    await waitFor(() => expect(cdn.release).toHaveLength(1));
+    expect(sectionText()).not.toContain("blob:");
+
+    cdn.release.forEach((release) => release());
+
+    // The editor's own swap to the CDN URL is the update that lands the image in the section text.
+    await waitFor(() => expect(sectionText()).toContain(CDN_URL));
+  });
+
+  // An image persisted as a blob: src outlives its session — the URL is dead, not in flight, so it
+  // must not stop the section from syncing the edits made while repairing it.
+  it("still syncs a section that already holds a dead blob: src from an earlier session", async () => {
+    cdn.hold = true;
+    const staleBlob = "blob:https://creator.gumroad.com/6f1c0f4e-stale";
+    const withRichText = props();
+    withRichText.sections = [
+      {
+        id: "section-1",
+        type: "SellerProfileRichTextSection",
+        header: "",
+        hide_header: false,
+        text: {
+          type: "doc",
+          content: [{ type: "image", attrs: { src: staleBlob, link: null, uploading: true } }, { type: "paragraph" }],
+        },
+      },
+    ];
+    const tracked = trackState();
+    const { container } = render(<ProfileSectionsForm {...withRichText} onChange={tracked.onChange} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Insert image" }));
+    fireEvent.change(assertDefined(container.querySelector('input[type="file"]')), {
+      target: { files: [new File(["pixels"], "photo.png", { type: "image/png" })] },
+    });
+    await waitFor(() => expect(uploads.pending).toHaveLength(1));
+    assertDefined(uploads.pending.shift())(null, { key: "blob-key" });
+    await waitFor(() => expect(cdn.release).toHaveLength(1));
+    cdn.release.forEach((release) => release());
+
+    const text = await waitFor(() => {
+      const current = richTextSectionText(tracked.latest());
+      expect(current).toContain(CDN_URL);
+      return current;
+    });
+    expect(text).toContain(staleBlob);
   });
 });

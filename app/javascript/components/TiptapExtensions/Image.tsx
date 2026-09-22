@@ -46,6 +46,12 @@ const deleteImageInView = (view: EditorView, src: string) =>
     view.dispatch(view.state.tr.deleteRange(nodePos, nodePos + descendant.nodeSize));
   });
 
+// Object URLs created here for uploads that have not settled yet. A section saved during a failed
+// upload can reload holding a dead blob: src from an earlier session; only URLs recorded here are
+// in flight, so ProfileSectionsForm can tell the two apart instead of blocking edits forever.
+const pendingUploadUrls = new Set<string>();
+export const isPendingUploadUrl = (src: string): boolean => pendingUploadUrls.has(src);
+
 // Keep insertAt valid while decode/resize runs. Callers may already map through
 // file snapshotting; this covers the slower prepareImageForUpload window.
 // One shared dispatch hook per view: overlapping uploadImages must not restore
@@ -136,6 +142,7 @@ export const uploadImages = ({
       // We reverse the files so their order in the editor is the same as the order they were selected
       const filesWithUrls = [...prepared].reverse().map((file) => {
         const src = URL.createObjectURL(file);
+        pendingUploadUrls.add(src);
         const node = imageSchema.create({ src, uploading: true });
         view.dispatch(view.state.tr.insert(pos, node));
         return { file, src };
@@ -145,8 +152,14 @@ export const uploadImages = ({
         filesWithUrls.map(
           ({ file, src }) =>
             imageSettings.onUpload(file, src)?.then(
-              (newSrc) => setImageSrcInView(view, src, newSrc),
-              () => deleteImageInView(view, src),
+              (newSrc) => {
+                pendingUploadUrls.delete(src);
+                setImageSrcInView(view, src, newSrc);
+              },
+              () => {
+                pendingUploadUrls.delete(src);
+                deleteImageInView(view, src);
+              },
             ) ?? Promise.resolve(),
         ),
       );
