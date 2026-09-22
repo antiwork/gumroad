@@ -2,9 +2,8 @@
 
 module Charge::Chargeable
   class << self
-    # The :writing pin is declared for intent but does NOT take effect: mysql2_proxy routes
-    # per statement and its `roles_for` does not honour this stack entry, so these reads
-    # still land on the worker replica. Every lookup below must stand on its own index.
+    # Provider events can arrive before replication catches up; keep every fallback
+    # on the primary. Each lookup still needs its own index.
     def find_by_stripe_event(event)
       ApplicationRecord.connected_to(role: :writing) do
         chargeable = nil

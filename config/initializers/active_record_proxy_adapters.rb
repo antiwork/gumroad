@@ -1,5 +1,13 @@
 # frozen_string_literal: true
 
+require "active_record_proxy_adapters/primary_replica_proxy"
+require Rails.root.join("lib/mysql2_proxy_routing")
+
+ActiveRecordProxyAdapters::PrimaryReplicaProxy.prepend(Mysql2ProxyRouting::ScopedRoles)
+ActiveSupport.on_load(:active_record_mysql2proxyadapter) do
+  prepend Mysql2ProxyRouting::ServingPoolCache
+end
+
 ActiveRecordProxyAdapters.configure do |config|
   # Same as the gem's own default (DatabaseConfiguration::PROXY_DELAY), restated
   # here because this is the knob to turn: after any write, every read on that
