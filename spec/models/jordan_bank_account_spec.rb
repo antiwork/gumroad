@@ -32,4 +32,52 @@ describe JordanBankAccount do
       expect(create(:jordan_bank_account, account_number_last_four: "5678").account_number_visual).to eq("JO******5678")
     end
   end
+
+  describe "bank code validation" do
+    it "accepts the 8-character primary BIC" do
+      expect(build(:jordan_bank_account, bank_code: "IIBAJOAM")).to be_valid
+    end
+
+    it "accepts the 11-character XXX-padded form" do
+      expect(build(:jordan_bank_account, bank_code: "IIBAJOAMXXX")).to be_valid
+    end
+
+    it "rejects a 9-character bank code" do
+      ba = build(:jordan_bank_account, bank_code: "IIBAJOAMX")
+      expect(ba).not_to be_valid
+      expect(ba.errors[:base]).to include("Enter your bank's SWIFT/BIC code in capitals: 8 characters, or 11 including the branch code (for example IIBAJOAM).")
+    end
+
+    it "rejects a 10-character bank code" do
+      expect(build(:jordan_bank_account, bank_code: "IIBAJOAMXX")).not_to be_valid
+    end
+
+    it "accepts an 11-character branch-suffixed code, which only the directory can resolve" do
+      expect(build(:jordan_bank_account, bank_code: "IIBAJOAM200")).to be_valid
+    end
+
+    it "rejects a bank code in lowercase" do
+      expect(build(:jordan_bank_account, bank_code: "iibajoam")).not_to be_valid
+    end
+
+    it "rejects a BIC whose country positions are not JO" do
+      expect(build(:jordan_bank_account, bank_code: "IIBAUSAM")).not_to be_valid
+      expect(build(:jordan_bank_account, bank_code: "IIBAGB2L")).not_to be_valid
+    end
+
+    it "does not re-validate a stored bank code on an unrelated save" do
+      ba = create(:jordan_bank_account, bank_code: "IIBAJOAM")
+      ba.update_column(:bank_number, "IIBAJOAMX")
+
+      expect(ba.reload).to be_valid
+      expect { ba.update!(account_holder_full_name: "Jordanian Creator II") }.not_to raise_error
+    end
+
+    it "validates a stored bank code again when the field itself changes" do
+      ba = create(:jordan_bank_account, bank_code: "IIBAJOAM")
+      ba.bank_code = "IIBAJOAMX"
+
+      expect(ba).not_to be_valid
+    end
+  end
 end
