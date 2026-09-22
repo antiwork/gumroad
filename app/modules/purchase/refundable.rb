@@ -289,11 +289,9 @@ class Purchase
     # purchase the block above always sets `canonical_gross_refund_cents` (or returns false), so
     # the fallback is unreachable there and a presentment amount can never be booked as canonical.
     funds_refunded = canonical_gross_refund_cents || flow_of_funds.issued_amount.cents.abs
-    # A refund reverses the credit the sale put on the seller's balance, so only a purchase
-    # that was credited may be debited: a purchase that never ran the success path was never
-    # credited, and debiting it would fund the refund out of the seller's other balances.
-    # Whether this purchase was credited is read under the purchase lock below, so a success
-    # path committing in between cannot leave the refund skipping a credit that now exists.
+    # A refund only debits a purchase the sale credited: refunding one that never ran the success
+    # path would take the money from the seller's other balances. Whether this purchase was credited
+    # is read under the lock below, so a success path committing in between cannot be missed.
     ActiveRecord::Base.transaction do
       # Failed-refund reversals lock the purchase before their refund and balance rows.
       # Use the same order here so a single-purchase refund cannot hold a balance while

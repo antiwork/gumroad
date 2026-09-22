@@ -1,9 +1,7 @@
 # frozen_string_literal: true
 
-# Books the Refund row for a refund the processor issued but that was never written down
-# locally: the DB side of refund_purchase! can roll back after the processor call, and a
-# retry cannot repair it because the charge is already refunded there. Record-only, since
-# the purchase never ran the success path and no seller debit is written for it.
+# Books the Refund row for a refund the processor issued but the local write rolled back with no
+# retry (the charge is already refunded there). Record-only: the purchase never ran the success path.
 #
 #   Onetime::BackfillUncreditedSaleRefunds.process(dry_run: true, refunds: { "purchase external id" => "re_..." })
 class Onetime::BackfillUncreditedSaleRefunds
