@@ -114,6 +114,13 @@ module Charge::Chargeable
     is_a?(Charge) ? order : self
   end
 
+  # Rendering a receipt reads the charge's successful purchases, so a charge with none left has
+  # nothing to render. The receipt mailer resolves this before claiming a send. A purchase-backed
+  # chargeable renders from itself.
+  def receipt_renderable?
+    is_a?(Charge) ? purchase_as_chargeable.present? : true
+  end
+
   def support_email
     unique_support_emails = successful_purchases.joins(:link).pluck("links.support_email").uniq
 
