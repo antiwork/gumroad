@@ -61,6 +61,13 @@ class AlertOnStalledPostEmailBlastsJob
   # Rows the run acted on (or would have) are the audit trail; message_for never truncates them.
   AUDITED_ACTIONS = [:resumed, :resumed_to_complete, :would_resume, :would_complete, :skipped_reappeared].freeze
 
+  # Rows that still need a human. While the flag is live these are the ONLY reason the job
+  # emails at all (`notify?`), so message_for reports them ahead of the audit trail and never
+  # lets MAX_REPORTED drop them. Ordering the auto-resumed rows first sent a 2026-09-22 alert
+  # whose 29 acted rows pushed the four HELD blasts it fired for past the limit — the mail named
+  # none of the rows it was sent for. Keep this list and `line_for`'s held_* cases in sync.
+  HELD_ACTIONS = [:held_past_window, :held_already_resumed, :held_non_opener].freeze
+
   # Both the parent distributor and its slice jobs carry the blast id as args[0], so a
   # mid-send split blast must be recognized as a live sender by the scans below or it would
   # read as UNACCOUNTED and be auto-resumed into duplicate enqueues (gumroad-private#2353).
@@ -148,7 +155,7 @@ class AlertOnStalledPostEmailBlastsJob
       return true if scan[:truncated]
       return true unless live
 
-      scan[:stalled].any? { |entry| entry[:action].to_s.start_with?("held_") }
+      scan[:stalled].any? { |entry| HELD_ACTIONS.include?(entry[:action]) }
     end
 
     def resolve_action(entry, live:)
@@ -275,8 +282,13 @@ class AlertOnStalledPostEmailBlastsJob
 
     def message_for(scan, live:)
       stalled = scan[:stalled]
-      acted, rest = stalled.partition { |entry| entry[:action].in?(AUDITED_ACTIONS) }
-      reported = acted + rest.first([MAX_REPORTED - acted.size, 0].max)
+      # Held rows first: while the flag is live they are the whole reason this mail exists, so
+      # an afternoon of auto-resumed rows must never crowd them out of the report. The acted
+      # rows and then the informational ones fill what is left of MAX_REPORTED, so only the
+      # tail line's count is ever omitted.
+      held, rest = stalled.partition { |entry| HELD_ACTIONS.include?(entry[:action]) }
+      acted, informational = rest.partition { |entry| entry[:action].in?(AUDITED_ACTIONS) }
+      reported = held + (acted + informational).first([MAX_REPORTED - held.size, 0].max)
       lines = reported.map { |entry| line_for(entry) }
       omitted = stalled.size - lines.size
 
