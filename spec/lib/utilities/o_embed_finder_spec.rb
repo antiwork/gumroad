@@ -92,5 +92,21 @@ describe OEmbedFinder do
         expect(OEmbedFinder.embeddable_from_url(new_url)).to eq nil
       end
     end
+
+    describe "video hosts outside the gem's builtin provider list" do
+      it "resolves a FrameRate watch URL" do
+        vcr_turned_on do
+          VCR.use_cassette("OEmbedFinder/framerate_watch_url") do
+            embeddable = OEmbedFinder.embeddable_from_url("https://framerate.tv/watch/AB3peBMp")
+
+            expect(embeddable).to be_present
+            expect(embeddable[:html]).to include("framerate.tv/embed/")
+            expect(embeddable[:info]["width"]).to be_positive
+            expect(embeddable[:info]["height"]).to be_positive
+            expect(embeddable[:info]["thumbnail_url"]).to be_present
+          end
+        end
+      end
+    end
   end
 end

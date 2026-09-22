@@ -1,0 +1,47 @@
+---
+http_interactions:
+- request:
+    method: get
+    uri: https://framerate.tv/api/oembed?format=json&maxwidth=670&url=https://framerate.tv/watch/AB3peBMp
+    body:
+      encoding: US-ASCII
+      string: ''
+    headers:
+      Accept-Encoding:
+      - gzip;q=1.0,deflate;q=0.6,identity;q=0.3
+      Accept:
+      - "*/*"
+      User-Agent:
+      - Mozilla/5.0 (compatible; ruby-oembed/0.17.0)
+  response:
+    status:
+      code: 200
+      message: OK
+    headers:
+      Date:
+      - Tue, 22 Sep 2026 14:32:49 GMT
+      Content-Type:
+      - application/json
+      Transfer-Encoding:
+      - chunked
+      Connection:
+      - keep-alive
+      Access-Control-Allow-Origin:
+      - "*"
+      Cache-Control:
+      - public, max-age=3600
+      X-Proxied-By:
+      - cloudflare-worker
+      Server:
+      - cloudflare
+      Cf-Ray:
+      - a3f20567fb44e56c-EWR
+    body:
+      encoding: ASCII-8BIT
+      string: '{"version":"1.0","type":"video","provider_name":"FrameRate","provider_url":"https://framerate.tv","title":"Amsterdam
+        & Partners | Partnerdag | VIDEO 5 | Monique","description":"","author_name":"Krab","author_url":"https://framerate.tv/profile/Krab","thumbnail_url":"https://image.mux.com/aVA5OdKRI00jF1dFi3Pfe3pfW01Eppggv25uF9J1HzE8w/thumbnail.jpg","thumbnail_width":1280,"thumbnail_height":720,"width":670,"height":377,"html":"<iframe
+        src=\"https://framerate.tv/embed/18cf7ad8-16a8-4d5a-8d7c-f0c883908a42\" width=\"670\"
+        height=\"377\" frameborder=\"0\" allow=\"autoplay; fullscreen; picture-in-picture\"
+        allowfullscreen></iframe>"}'
+  recorded_at: Tue, 22 Sep 2026 14:32:49 GMT
+recorded_with: VCR 6.2.0

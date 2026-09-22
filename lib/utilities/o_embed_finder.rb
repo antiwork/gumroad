@@ -20,6 +20,11 @@ class OEmbedFinder
     sketchfab << "https://sketchfab.com/models/*"
     OEmbed::Providers.register(sketchfab)
 
+    framerate = OEmbed::Provider.new("https://framerate.tv/api/oembed")
+    framerate << "http://*.framerate.tv/watch/*"
+    framerate << "https://*.framerate.tv/watch/*"
+    OEmbed::Providers.register(framerate)
+
     begin
       res = OEmbed::Providers.get(new_url, maxwidth:)
     rescue StandardError
