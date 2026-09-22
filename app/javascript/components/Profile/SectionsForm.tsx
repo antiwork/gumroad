@@ -211,6 +211,15 @@ const OptionRow = ({
 // withFreshUpsellCards below for why that sharing is dangerous.
 const isRecord = (node: unknown): node is Record<string, unknown> => typeof node === "object" && node !== null;
 
+// An image the editor is still previewing from a local blob: URL, i.e. one whose upload has not
+// resolved yet.
+const containsLocalImagePreview = (node: unknown): boolean => {
+  if (!isRecord(node)) return false;
+  const attrs = isRecord(node.attrs) ? node.attrs : null;
+  if (node.type === "image" && typeof attrs?.src === "string" && attrs.src.startsWith("blob:")) return true;
+  return Array.isArray(node.content) && node.content.some(containsLocalImagePreview);
+};
+
 const stripUpsellCardIds = (node: unknown): unknown => {
   if (!isRecord(node)) return node;
   const content = Array.isArray(node.content) ? node.content.map(stripUpsellCardIds) : node.content;
@@ -521,16 +530,17 @@ const RichTextSectionFields = ({
     sectionRef.current = section;
   }, [section]);
   const imageUploadSettings = useSectionImageUploadSettings();
-  const isUploadingRef = React.useRef(imageUploadSettings.isUploading);
-  React.useEffect(() => {
-    isUploadingRef.current = imageUploadSettings.isUploading;
-  }, [imageUploadSettings.isUploading]);
 
   React.useEffect(() => {
     if (!editor) return;
     const syncText = () => {
-      if (disabled || isUploadingRef.current) return;
-      update({ ...sectionRef.current, text: editor.getJSON() });
+      // An in-flight image is a local blob: preview, and a save that serialized one would store a
+      // src the profile can never render. Skip it: the editor's own swap to the CDN URL lands the
+      // section text, and that update carries the whole document, so the skipped ones cost nothing.
+      if (disabled) return;
+      const text = editor.getJSON();
+      if (containsLocalImagePreview(text)) return;
+      update({ ...sectionRef.current, text });
     };
     // Sync on content changes only (not on focus/blur), so the preview stays live and an
     // explicit save right after typing serializes the current text — while merely focusing
