@@ -25,12 +25,21 @@ RSpec.shared_context "real mysql2 proxy pools" do
   end
 
   after(:context) do
-    ActiveRecord::Base.connection_handler.remove_connection_pool("ActiveRecord::Base", role: :reading)
-    ActiveRecord::Base.establish_connection(@original_database)
-    ApplicationRecord.connection_class = @original_connection_class
-    ENV["USE_DB_WORKER_REPLICAS"] = @original_replica_flag
-    @routing_databases&.each { @schema_client.query("DROP DATABASE IF EXISTS `#{_1}`") }
-    @schema_client&.close
+    cleanup_error = nil
+    # Finish the remaining cleanup without replacing the first failure.
+    [
+      -> { ActiveRecord::Base.connection_handler.remove_connection_pool("ActiveRecord::Base", role: :reading) },
+      -> { ActiveRecord::Base.establish_connection(@original_database) },
+      -> { ApplicationRecord.connection_class = @original_connection_class },
+      -> { ENV["USE_DB_WORKER_REPLICAS"] = @original_replica_flag },
+      *@routing_databases.to_a.map { |database| -> { @schema_client.query("DROP DATABASE IF EXISTS `#{database}`") } },
+      -> { @schema_client&.close }
+    ].each do |cleanup|
+      cleanup.call
+    rescue StandardError => error
+      cleanup_error ||= error
+    end
+    raise cleanup_error if cleanup_error
   end
 
   around do |example|
