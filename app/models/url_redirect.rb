@@ -171,13 +171,15 @@ class UrlRedirect < ApplicationRecord
     end.compact.to_json
   end
 
+  # The bundle's own files live on the parent link, and the library drops the parent card as soon as
+  # a member row survives, so this ZIP is the only surface left that can deliver them.
   def bundle_archive_product_files
     return ProductFile.none unless purchase&.is_bundle_purchase?
 
     member_redirects = purchase.product_purchases.visible_in_library.includes(:url_redirect).filter_map(&:url_redirect)
     return ProductFile.none if member_redirects.any? { _1.with_product_files.has_stampable_pdfs? }
 
-    file_ids = member_redirects.flat_map do |url_redirect|
+    file_ids = ([self] + member_redirects).flat_map do |url_redirect|
       next [] unless url_redirect.with_product_files.is_downloadable?
 
       url_redirect.alive_product_files.filter_map { _1.id if _1.archivable? }

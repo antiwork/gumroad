@@ -246,6 +246,36 @@ describe UrlRedirect do
       expect(bundle.product_files_archives.alive).to be_empty
     end
 
+    it "includes the bundle's own files alongside the members'" do
+      add_member_files
+      own_file = create(:product_file, link: bundle, display_name: "bundle-own")
+      bundle_purchase.create_artifacts_and_send_receipt!
+
+      file_ids = bundle_purchase.url_redirect.bundle_archive_product_files.map(&:id)
+      member_file_ids = bundle.bundle_products.flat_map { |bundle_product| bundle_product.product.product_files.alive.map(&:id) }
+
+      expect(file_ids).to match_array(member_file_ids + [own_file.id])
+    end
+
+    it "leaves the bundle's own deleted files out of the archive" do
+      add_member_files
+      own_file = create(:product_file, link: bundle, display_name: "bundle-own")
+      bundle_purchase.create_artifacts_and_send_receipt!
+      own_file.mark_deleted!
+
+      expect(bundle_purchase.url_redirect.bundle_archive_product_files.map(&:id)).not_to include(own_file.id)
+    end
+
+    it "keeps the members' files in the archive when the bundle's own file is a stampable pdf" do
+      add_member_files
+      create(:readable_document, pdf_stamp_enabled: true, link: bundle, display_name: "stamped-own")
+      bundle_purchase.create_artifacts_and_send_receipt!
+
+      file_ids = bundle_purchase.url_redirect.bundle_archive_product_files.map(&:id)
+
+      expect(file_ids).to match_array(bundle.bundle_products.flat_map { |bundle_product| bundle_product.product.product_files.alive.map(&:id) })
+    end
+
     it "does not include files from another purchase of the same bundle" do
       add_member_files
       bundle_purchase.create_artifacts_and_send_receipt!
