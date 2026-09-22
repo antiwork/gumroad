@@ -40,7 +40,7 @@ module Purchase::Receipt
     after_commit do
       next if destroyed?
       unless uses_charge_receipt?
-        SendPurchaseReceiptJob.set(queue: link.has_stampable_pdfs? ? "default" : "critical").perform_async(id)
+        SendPurchaseReceiptJob.perform_async(id)
         SendAutoInvoiceEmailJob.perform_async(id, nil) if AutoInvoiceEligibility.eligible?(self)
       end
       enqueue_send_last_post_job
@@ -56,9 +56,8 @@ module Purchase::Receipt
     if is_preorder_authorization
       CustomerMailer.preorder_receipt(preorder.id).deliver_later(queue: "critical", wait: 3.seconds)
     else
-      queue = link.has_stampable_pdfs? ? "default" : "critical"
-      SendPurchaseReceiptJob.set(queue:).perform_async(id)
-      SendPurchaseReceiptJob.set(queue:).perform_async(gift.giftee_purchase.id) if is_gift_sender_purchase && gift.present?
+      SendPurchaseReceiptJob.perform_async(id)
+      SendPurchaseReceiptJob.perform_async(gift.giftee_purchase.id) if is_gift_sender_purchase && gift.present?
     end
   end
 

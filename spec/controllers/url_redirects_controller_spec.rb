@@ -1791,6 +1791,18 @@ describe UrlRedirectsController, inertia: true do
         expect(response).to redirect_to(url_redirect.download_page_url)
         expect(flash[:warning]).to eq("We are preparing the file for download. You will receive an email when it is ready.")
         expect(StampPdfForPurchaseJob).to have_enqueued_sidekiq_job(url_redirect.purchase_id, true).on("critical")
+        expect(PdfStampingService.buyer_notification_requested?(url_redirect.purchase_id)).to be(true)
+      end
+
+      it "does not return a signed original URL for a JSON download" do
+        product_file = create(:readable_document, link: @product, pdf_stamp_enabled: true)
+        allow_any_instance_of(UrlRedirect).to receive(:signed_location_for_file).and_return("https://example.com/unstamped.pdf")
+
+        get :download_product_files, format: :json, params: { id: @token, product_file_ids: [product_file.external_id] }
+
+        expect(response).to have_http_status(:unprocessable_entity)
+        expect(response.parsed_body["error"]).to eq("We are preparing the file for download. You will receive an email when it is ready.")
+        expect(response.body).not_to include("unstamped.pdf")
       end
 
       context "when accessed via custom domain", type: :request do

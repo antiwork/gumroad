@@ -225,7 +225,13 @@ class UrlRedirect < ApplicationRecord
     if preorder.present?
       signed_download_url_for_s3_key_and_filename(preorder.preorder_link.s3_key, preorder.preorder_link.s3_filename)
     elsif alive_product_files.count == 1
-      signed_location_for_file(alive_product_files.first)
+      file = alive_product_files.first
+      # /r/ would otherwise sign the original upload while the stamp is still running.
+      if file.must_be_pdf_stamped? && missing_stamped_pdf?(file)
+        download_page_url
+      else
+        signed_location_for_file(file)
+      end
     else
       download_page_url
     end

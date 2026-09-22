@@ -16,6 +16,17 @@ describe StampPdfForPurchaseJob do
     expect(PdfStampingService).to have_received(:stamp_for_purchase!).with(purchase)
   end
 
+  it "enqueues files ready email when the buyer asked to be notified while a checkout stamp was already queued" do
+    purchase.create_url_redirect!
+    PdfStampingService.request_buyer_notification!(purchase.id)
+
+    expect do
+      described_class.new.perform(purchase.id)
+    end.to have_enqueued_mail(CustomerMailer, :files_ready_for_download).with(purchase.id)
+
+    expect(PdfStampingService.buyer_notification_requested?(purchase.id)).to be(false)
+  end
+
   it "enqueues files ready email when notify flag is true" do
     expect do
       purchase.create_url_redirect!

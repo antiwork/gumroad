@@ -60,11 +60,20 @@ class UrlRedirectsController < ApplicationController
     e404 unless @product_file&.browser_readable?
 
     s3_retrievable = @product_file
+    if @product_file.must_be_pdf_stamped?
+      stamped = @url_redirect.alive_stamped_pdfs.find_by(product_file_id: @product_file.id)
+      if stamped.nil?
+        enqueue_stamp_and_notify_buyer!
+        flash[:warning] = "We are preparing the file for download. You will receive an email when it is ready."
+        return redirect_to(@url_redirect.download_page_url, allow_other_host: true)
+      end
+      s3_retrievable = stamped
+    end
     title = @product_file.with_product_files_owner.name
     set_meta_tag(title:)
     read_url = signed_download_url_for_s3_key_and_filename(s3_retrievable.s3_key, s3_retrievable.s3_filename, cache_group: "read")
 
-    if s3_retrievable.epub?
+    if @product_file.epub?
       asset_sources = [Rails.application.config.asset_host].compact_blank
       override_content_security_policy_directives(
         child_src: ["'self'", "data:", "blob:"],
@@ -111,23 +120,22 @@ class UrlRedirectsController < ApplicationController
     product_files = @url_redirect.alive_product_files.by_external_ids(params[:product_file_ids])
     e404 unless product_files.present? && product_files.all? { @url_redirect.is_file_downloadable?(_1) }
 
+    if product_files.any? { _1.must_be_pdf_stamped? && @url_redirect.missing_stamped_pdf?(_1) }
+      enqueue_stamp_and_notify_buyer!
+      message = "We are preparing the file for download. You will receive an email when it is ready."
+      if request.format.json?
+        return render(json: { error: message }, status: :unprocessable_entity)
+      else
+        flash[:warning] = message
+        return redirect_to(@url_redirect.download_page_url, allow_other_host: true)
+      end
+    end
+
     if request.format.json?
       render(json: { files: product_files.map { { url: @url_redirect.signed_location_for_file(_1), filename: _1.s3_filename } } })
     else
       # Non-JSON requests to this controller route pass an array with a single product file ID for `product_file_ids`
       @product_file = product_files.first
-
-      if @product_file.must_be_pdf_stamped? && @url_redirect.missing_stamped_pdf?(@product_file)
-        flash[:warning] = "We are preparing the file for download. You will receive an email when it is ready."
-
-        # Do not enqueue the job more than once in 2 hours
-        Rails.cache.fetch(PdfStampingService.cache_key_for_purchase(@url_redirect.purchase_id), expires_in: 4.hours) do
-          StampPdfForPurchaseJob.set(queue: :critical).perform_async(@url_redirect.purchase_id, true) # Stamp and notify the buyer
-        end
-
-        return redirect_to(@url_redirect.download_page_url, allow_other_host: true)
-      end
-
       redirect_to(@url_redirect.signed_location_for_file(@product_file), allow_other_host: true)
       create_consumption_event!(ConsumptionEvent::EVENT_TYPE_DOWNLOAD)
     end
@@ -331,16 +339,9 @@ class UrlRedirectsController < ApplicationController
     return render json: { success: false, error: "File not found" }, status: :not_found if @product_file.nil?
     return render json: { success: false, error: "This file cannot be sent to Kindle" }, status: :unprocessable_entity if !@product_file.can_send_to_kindle?
 
-    # Stamp-enabled PDFs must be sent as the buyer-specific stamped copy, not
-    # the original upload (mirrors the Download button behavior). If the
-    # stamped copy hasn't been generated yet, kick off stamping and ask the
-    # buyer to retry instead of leaking the un-watermarked original.
+    # Don't email the original upload while the stamped copy is missing.
     if @product_file.must_be_pdf_stamped? && @url_redirect.missing_stamped_pdf?(@product_file)
-      # Do not enqueue the job more than once in 2 hours
-      Rails.cache.fetch(PdfStampingService.cache_key_for_purchase(@url_redirect.purchase_id), expires_in: 4.hours) do
-        StampPdfForPurchaseJob.set(queue: :critical).perform_async(@url_redirect.purchase_id, true) # Stamp and notify the buyer
-      end
-
+      enqueue_stamp_and_notify_buyer!
       return render json: { success: false, error: "We are preparing the file. Please try again in a few minutes." }, status: :unprocessable_entity
     end
 
@@ -386,6 +387,18 @@ class UrlRedirectsController < ApplicationController
   end
 
   private
+    # A checkout stamp job may already hold the purchase lock. The flag is what that job
+    # reads so the click still gets the ready email when this enqueue is dropped.
+    def enqueue_stamp_and_notify_buyer!
+      purchase_id = @url_redirect.purchase_id
+      return if purchase_id.blank?
+
+      PdfStampingService.request_buyer_notification!(purchase_id)
+      Rails.cache.fetch(PdfStampingService.cache_key_for_purchase(purchase_id), expires_in: 4.hours) do
+        StampPdfForPurchaseJob.set(queue: :critical).perform_async(purchase_id, true)
+      end
+    end
+
     def trigger_files_lifecycle_events
       @url_redirect.update_transcoded_videos_last_accessed_at
       @url_redirect.enqueue_job_to_regenerate_deleted_transcoded_videos

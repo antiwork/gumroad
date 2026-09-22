@@ -224,9 +224,9 @@ describe Order do
         purchase_one.create_url_redirect!
       end
 
-      it "enqueues the job on the default job queue" do
+      it "enqueues the job on the critical queue" do
         order.send_charge_receipts
-        expect(SendChargeReceiptJob).to have_enqueued_sidekiq_job(charge_one.id).on("default")
+        expect(SendChargeReceiptJob).to have_enqueued_sidekiq_job(charge_one.id).on("critical")
         expect(SendChargeReceiptJob).to have_enqueued_sidekiq_job(charge_two.id).on("critical")
         expect(SendChargeReceiptJob).not_to have_enqueued_sidekiq_job(failed_charge.id)
       end

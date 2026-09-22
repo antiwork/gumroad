@@ -22,4 +22,22 @@ module PdfStampingService
   def cache_key_for_purchase(purchase_id)
     "stamp_pdf_for_purchase_job_#{purchase_id}"
   end
+
+  # Set by a download click when a checkout stamp job is already queued under the same lock,
+  # so that job still sends the "file ready" email the click promised.
+  def buyer_notify_cache_key(purchase_id)
+    "stamp_pdf_notify_buyer_#{purchase_id}"
+  end
+
+  def request_buyer_notification!(purchase_id)
+    Rails.cache.write(buyer_notify_cache_key(purchase_id), true, expires_in: 4.hours)
+  end
+
+  def buyer_notification_requested?(purchase_id)
+    Rails.cache.read(buyer_notify_cache_key(purchase_id)).present?
+  end
+
+  def clear_buyer_notification!(purchase_id)
+    Rails.cache.delete(buyer_notify_cache_key(purchase_id))
+  end
 end

@@ -144,6 +144,14 @@ describe UrlRedirect do
           .to eq(url)
       end
     end
+
+    it "does not sign the original upload when the only file still needs a stamp" do
+      product = create(:product)
+      product.product_files << create(:readable_document, pdf_stamp_enabled: true)
+      url_redirect = create(:url_redirect, link: product)
+
+      expect(url_redirect.redirect_or_s3_location).to eq(url_redirect.download_page_url)
+    end
   end
 
   describe "#is_file_downloadable" do

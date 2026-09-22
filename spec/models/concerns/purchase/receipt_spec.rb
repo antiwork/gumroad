@@ -141,11 +141,11 @@ describe Purchase::Receipt do
         product.product_files.pdf.first.update!(pdf_stamp_enabled: true)
       end
 
-      it "enqueues SendPurchaseReceiptJob using the default queue" do
+      it "enqueues SendPurchaseReceiptJob on the critical queue" do
         purchase.resend_receipt
 
-        expect(SendPurchaseReceiptJob).to have_enqueued_sidekiq_job(purchase.id).on("default")
-        expect(SendPurchaseReceiptJob).to have_enqueued_sidekiq_job(giftee_purchase.id).on("default")
+        expect(SendPurchaseReceiptJob).to have_enqueued_sidekiq_job(purchase.id).on("critical")
+        expect(SendPurchaseReceiptJob).to have_enqueued_sidekiq_job(giftee_purchase.id).on("critical")
       end
     end
   end

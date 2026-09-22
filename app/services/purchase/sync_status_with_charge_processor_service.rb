@@ -119,7 +119,7 @@ class Purchase::SyncStatusWithChargeProcessorService
             receipt_charge = purchase.charge
             next if receipt_charge.receipt_sent?
 
-            SendChargeReceiptJob.set(queue: receipt_charge.purchases_requiring_stamping.any? ? "default" : "critical").perform_async(receipt_charge.id)
+            SendChargeReceiptJob.perform_async(receipt_charge.id)
           rescue StandardError => e
             # Receipt dispatch failed after commit; fulfillment must stay successful.
             ErrorNotifier.notify(e) { |report| report.add_metadata(:purchase, { id: purchase.id }) }
