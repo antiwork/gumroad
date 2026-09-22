@@ -229,9 +229,7 @@ describe AlertOnStalledPostEmailBlastsJob do
         end
       end
 
-      # 2026-09-22: an alert carried 29 auto-resumed rows and four HELD ones; with the acted
-      # rows ordered first, MAX_REPORTED dropped all four and the mail named none of the rows
-      # it was actually sent for.
+      # Held rows are the mail's whole reason to exist, so acted rows must not take their slots.
       it "reports the HELD rows it was sent for ahead of auto-resumed ones" do
         stub_const("#{described_class}::MAX_REPORTED", 1)
         resumed = stalled_blast(requested_hours_ago: 6)
