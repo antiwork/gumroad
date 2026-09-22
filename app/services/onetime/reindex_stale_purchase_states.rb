@@ -11,7 +11,7 @@ class Onetime::ReindexStalePurchaseStates
                                  _source: false,
                                  query: { bool: { filter: [
                                    { term: { purchase_state: "in_progress" } },
-                                   { range: { created_at: { gt: created_after.iso8601, lte: created_before.iso8601 } } }
+                                   { range: { created_at: { gt: created_after.iso8601(6), lte: created_before.iso8601(6) } } }
                                  ] } },
                                  sort: [{ id: :asc }]
                                })

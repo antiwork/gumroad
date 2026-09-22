@@ -34,6 +34,17 @@ describe Onetime::ReindexStalePurchaseStates, :elasticsearch_wait_for_refresh do
     expect { described_class.perform(ids: [0], created_after:, created_before:) }.to raise_error(/missing/)
   end
 
+  it "preserves fractional-second boundaries in candidate selection" do
+    lower = created_after.change(usec: 500_000)
+    upper = created_before.change(usec: 500_000)
+    before_lower = create(:purchase, created_at: lower - 0.25.seconds)
+    within_upper = create(:purchase, created_at: upper - 0.25.seconds)
+    [before_lower, within_upper].each do |purchase|
+      EsClient.index(index: Purchase.index_name, id: purchase.id, body: purchase.as_indexed_json.merge("purchase_state" => "in_progress"), refresh: true)
+    end
+    expect(described_class.candidate_ids(created_after: lower, created_before: upper)).to eq([within_upper.id])
+  end
+
   it "rejects unbounded or duplicate batches" do
     [[], [1, 1], (1..101).to_a].each do |ids|
       expect { described_class.perform(ids:, created_after:, created_before:) }.to raise_error(ArgumentError)
