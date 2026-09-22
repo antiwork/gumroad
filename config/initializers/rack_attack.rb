@@ -7,6 +7,10 @@ class Rack::Attack
   redis_client = Redis.new(url: "redis://#{redis_url}")
   Rack::Attack.cache.store = Rack::Attack::StoreProxy::RedisProxy.new(redis_client)
 
+  # Clients need the remaining time of the matched bucket: the exponential-backoff tiers can
+  # hold a request far longer than the base window.
+  Rack::Attack.throttled_response_retry_after_header = true
+
   class Request < ::Rack::Request
     # When the server is behind a load balancer
     def remote_ip
