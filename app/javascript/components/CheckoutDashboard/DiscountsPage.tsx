@@ -49,7 +49,6 @@ import { Menu, MenuItem } from "$app/components/ui/Menu";
 import { PageHeader } from "$app/components/ui/PageHeader";
 import { Pill } from "$app/components/ui/Pill";
 import { Placeholder, PlaceholderImage } from "$app/components/ui/Placeholder";
-import { Radio } from "$app/components/ui/Radio";
 import { Sheet, SheetHeader } from "$app/components/ui/Sheet";
 import { Switch } from "$app/components/ui/Switch";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "$app/components/ui/Table";
@@ -61,6 +60,8 @@ import { useSortingTableDriver, Sort } from "$app/components/useSortingTableDriv
 
 import blackFridayIllustration from "$assets/images/illustrations/black_friday.svg";
 import placeholder from "$assets/images/placeholders/discounts.png";
+
+type ProductScopeKind = "product" | "option" | "deleted";
 
 type Product = {
   id: string;
@@ -904,8 +905,6 @@ const Form = ({
   const [optionIdsByProduct, setOptionIdsByProduct] = React.useState<Record<string, string[]>>(
     offerCode?.option_ids_by_product ?? {},
   );
-  const optionFieldRefs = React.useRef<Record<string, SelectInstance<Option, true, GroupBase<Option>> | null>>({});
-  const [optionsError, setOptionsError] = React.useState(false);
   const [excludedProductIds, setExcludedProductIds] = React.useState<string[]>(
     offerCode?.excluded_products.map(({ id }) => id) ?? [],
   );
@@ -942,6 +941,38 @@ const Form = ({
   const [currencyCode, setCurrencyCode] = React.useState(
     offerCode?.currency_type ?? selectedProducts[0]?.currency_type ?? products[0]?.currency_type ?? "usd",
   );
+  // One picker holds both scopes: a product row means all of its options, an option row limits the
+  // product to that option. A product limited only to deleted options keeps a "deleted" chip so the
+  // restriction survives until the seller removes it.
+  const productScopeTargets = new Map<string, { productId: string; optionId?: string; kind: ProductScopeKind }>();
+  const productScopeOption = (product: Product): Option => {
+    productScopeTargets.set(product.id, { productId: product.id, kind: "product" });
+    return { id: product.id, label: product.name };
+  };
+  const optionScopeOption = (product: Product, option: { id: string; name: string }): Option => {
+    const id = `${product.id}:${option.id}`;
+    productScopeTargets.set(id, { productId: product.id, optionId: option.id, kind: "option" });
+    return { id, label: `${product.name} (${option.name})`, isSubOption: true };
+  };
+  const productScopeOptions = products
+    .filter(
+      ({ currency_type }) =>
+        discount.type !== "cents" || selectedProductIds.value.length === 0 || currency_type === currencyCode,
+    )
+    .filter((product) => !product.archived || selectedProductIds.value.includes(product.id))
+    .flatMap((product) => [
+      productScopeOption(product),
+      ...(product.options ?? []).map((option) => optionScopeOption(product, option)),
+    ]);
+  const selectedProductScopes = selectedProducts.flatMap((product) => {
+    const optionIds = optionIdsByProduct[product.id];
+    if (optionIds === undefined) return [productScopeOption(product)];
+    const eligibleOptions = (product.options ?? []).filter(({ id }) => optionIds.includes(id));
+    if (eligibleOptions.length > 0) return eligibleOptions.map((option) => optionScopeOption(product, option));
+    const id = `${product.id}:deleted`;
+    productScopeTargets.set(id, { productId: product.id, kind: "deleted" });
+    return [{ id, label: `${product.name} (deleted options)` }];
+  });
 
   const canSetDuration = (universal ? products : selectedProducts).some(
     ({ is_recurring_billing }) => is_recurring_billing,
@@ -1005,7 +1036,6 @@ const Form = ({
     const isMaxQuantityInvalid = limitQuantity && maxQuantity.value === null;
     const isExpiresAtInvalid = !hasNoEndDate && validAt > expiresAt.value;
     const isSelectedProductsInvalid = !universal && selectedProductIds.value.length === 0;
-    const isOptionsInvalid = !universal && Object.values(optionIdsByProduct).some((ids) => ids.length === 0);
     const isMinimumQuantityInvalid = hasMinimumQuantity && minimumQuantity.value === null;
     const isMinimumAmountInvalid = hasMinimumAmount && minimumAmount.value === null;
     const isOwnershipProductsInvalid = existingCustomersOnly && ownershipProductIds.value.length === 0;
@@ -1040,7 +1070,6 @@ const Form = ({
       isMaxQuantityInvalid ||
       isExpiresAtInvalid ||
       isSelectedProductsInvalid ||
-      isOptionsInvalid ||
       isMinimumQuantityInvalid ||
       isMinimumAmountInvalid ||
       isOwnershipProductsInvalid ||
@@ -1053,7 +1082,6 @@ const Form = ({
       setMaxQuantity((prev) => ({ ...prev, error: isMaxQuantityInvalid }));
       setExpiresAt((prev) => ({ ...prev, error: isExpiresAtInvalid }));
       setSelectedProductIds((prev) => ({ ...prev, error: isSelectedProductsInvalid }));
-      setOptionsError(isOptionsInvalid);
       setMinimumQuantity((prev) => ({ ...prev, error: isMinimumQuantityInvalid }));
       setMinimumAmount((prev) => ({ ...prev, error: isMinimumAmountInvalid }));
       setOwnershipProductIds((prev) => ({ ...prev, error: isOwnershipProductsInvalid }));
@@ -1063,11 +1091,6 @@ const Form = ({
       if (isNameInvalid) invalidFieldRefs.push(nameFieldRef);
       if (isCodeInvalid) invalidFieldRefs.push(codeFieldRef);
       if (isSelectedProductsInvalid) invalidFieldRefs.push(selectedProductsFieldRef);
-      const invalidOptionsProductId = Object.keys(optionIdsByProduct).find(
-        (id) => optionIdsByProduct[id]?.length === 0,
-      );
-      if (isOptionsInvalid && invalidOptionsProductId)
-        invalidFieldRefs.push({ current: optionFieldRefs.current[invalidOptionsProductId] });
       if (isOwnershipProductsInvalid) invalidFieldRefs.push(ownershipProductsFieldRef);
 
       if (invalidFieldRefs[0]?.current) {
@@ -1192,32 +1215,30 @@ const Form = ({
               ref={selectedProductsFieldRef}
               inputId={`${uid}products`}
               instanceId={`${uid}products`}
-              options={products
-                .filter(
-                  ({ currency_type }) =>
-                    discount.type !== "cents" ||
-                    selectedProductIds.value.length === 0 ||
-                    currency_type === currencyCode,
-                )
-                .filter((product) => !product.archived)
-                .map((product) => ({ id: product.id, label: product.name }))}
-              value={selectedProducts.map(({ id, name: label }) => ({
-                id,
-                label,
-              }))}
+              options={productScopeOptions}
+              value={selectedProductScopes}
               isMulti
               isClearable
               placeholder="Products to which this discount will apply"
-              onChange={(selectedIds) => {
-                setSelectedProductIds({ value: selectedIds.map(({ id }) => id) });
-                setOptionIdsByProduct((prev) =>
-                  Object.fromEntries(
-                    Object.entries(prev).filter(([id]) => selectedIds.some((product) => product.id === id)),
-                  ),
-                );
+              onChange={(selected, { action, option }) => {
+                const added = action === "select-option" && option ? productScopeTargets.get(option.id) : undefined;
+                const scopes = selected.flatMap(({ id }) => {
+                  const scope = productScopeTargets.get(id);
+                  if (!scope) return [];
+                  const replacedByAdded = added && scope.productId === added.productId && scope.kind !== added.kind;
+                  return replacedByAdded ? [] : [scope];
+                });
+                const productIds = [...new Set(scopes.map(({ productId }) => productId))];
+                const nextOptionIdsByProduct: Record<string, string[]> = {};
+                for (const { productId, optionId, kind } of scopes) {
+                  if (kind === "option" && optionId) (nextOptionIdsByProduct[productId] ??= []).push(optionId);
+                  if (kind === "deleted") nextOptionIdsByProduct[productId] = optionIdsByProduct[productId] ?? [];
+                }
+                setSelectedProductIds({ value: productIds });
+                setOptionIdsByProduct(nextOptionIdsByProduct);
                 setCurrencyCode(
                   (prevCurrencyCode) =>
-                    products.find(({ id }) => id === selectedIds[0]?.id)?.currency_type ?? prevCurrencyCode,
+                    products.find(({ id }) => id === productIds[0])?.currency_type ?? prevCurrencyCode,
                 );
               }}
               isDisabled={universal}
@@ -1236,76 +1257,6 @@ const Form = ({
               All products
             </Label>
           </Fieldset>
-          {!universal
-            ? selectedProducts.map((product) => {
-                const optionIds = optionIdsByProduct[product.id];
-                if (!product.options?.length && optionIds === undefined) return null;
-                const options = (product.options ?? []).map(({ id, name }) => ({ id, label: name }));
-                const selectedOptions = options.filter(({ id }) => optionIds?.includes(id));
-                return (
-                  <Fieldset key={product.id} aria-invalid={optionsError ? optionIds?.length === 0 : false}>
-                    <FieldsetTitle>{product.name}: options</FieldsetTitle>
-                    <div className="flex flex-wrap gap-x-6 gap-y-2">
-                      <Label>
-                        <Radio
-                          name={`${uid}scope-${product.id}`}
-                          checked={optionIds === undefined}
-                          onChange={() =>
-                            setOptionIdsByProduct((prev) =>
-                              Object.fromEntries(Object.entries(prev).filter(([id]) => id !== product.id)),
-                            )
-                          }
-                        />
-                        All options
-                      </Label>
-                      <Label>
-                        <Radio
-                          name={`${uid}scope-${product.id}`}
-                          checked={optionIds !== undefined}
-                          onChange={() => setOptionIdsByProduct((prev) => ({ ...prev, [product.id]: [] }))}
-                        />
-                        Selected options
-                      </Label>
-                    </div>
-                    {optionIds !== undefined ? (
-                      <>
-                        <Label htmlFor={`${uid}options-${product.id}`} className="sr-only">
-                          Eligible options for {product.name}
-                        </Label>
-                        <Select
-                          ref={(ref) => {
-                            optionFieldRefs.current[product.id] = ref;
-                          }}
-                          inputId={`${uid}options-${product.id}`}
-                          instanceId={`${uid}options-${product.id}`}
-                          options={options}
-                          value={selectedOptions}
-                          isMulti
-                          isClearable
-                          placeholder="Select options"
-                          aria-invalid={optionsError ? optionIds.length === 0 : false}
-                          onChange={(selected) =>
-                            setOptionIdsByProduct((prev) => ({ ...prev, [product.id]: selected.map(({ id }) => id) }))
-                          }
-                        />
-                        {selectedOptions.length === 0 && optionIds.length > 0 ? (
-                          <Alert role="status" variant="warning">
-                            The selected options were deleted. This product receives no discount until you select an
-                            option or choose All options.
-                          </Alert>
-                        ) : (
-                          <FieldsetDescription>
-                            {optionsError && optionIds.length === 0
-                              ? "Select at least one option or choose All options."
-                              : "Only the selected options receive this discount."}
-                          </FieldsetDescription>
-                        )}
-                      </>
-                    ) : null}
-                  </Fieldset>
-                );
-              })
-            : null}
           {universal ? (
             <Fieldset>
               <FieldsetTitle>

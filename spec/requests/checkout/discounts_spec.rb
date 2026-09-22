@@ -236,7 +236,7 @@ describe("Checkout discounts page", type: :system, js: true) do
           click_on "New discount"
 
           find(:label, "Products").click
-          expect(page).to have_combo_box "Products", options: ["Product 2", "Membership"]
+          expect(page).to have_combo_box "Products", options: ["Product 2", "Membership", "Membership (First Tier)", "Membership (Second Tier)"]
         end
       end
 
@@ -394,7 +394,7 @@ describe("Checkout discounts page", type: :system, js: true) do
           choose "Fixed amount"
 
           find(:label, "Products").click
-          expect(page).to have_combo_box "Products", options: ["Product 1", "Product 2", "Membership", "Product 3"]
+          expect(page).to have_combo_box "Products", options: ["Product 1", "Product 2", "Membership", "Membership (First Tier)", "Membership (Second Tier)", "Product 3"]
           select_combo_box_option "Product 1", from: "Products"
           find(:label, "Products").click
           expect(page).to have_combo_box "Products", options: ["Product 2", "Membership", "Product 3"]
@@ -717,7 +717,7 @@ describe("Checkout discounts page", type: :system, js: true) do
       expect(page).to have_field("Fixed amount", with: "2")
       expect(page).to have_unchecked_field("All products")
       find("label", text: "Products").click
-      expect(page).to have_combo_box("Products", options: ["Membership"])
+      expect(page).to have_combo_box("Products", options: ["Membership", "Membership (First Tier)", "Membership (Second Tier)"])
       expect(page).to have_checked_field("Limit quantity")
       expect(page).to have_field("Quantity", with: "20")
       expect(page).to have_field("Valid from", with: offer_code2.valid_at.in_time_zone(seller.timezone).iso8601[0..15])
@@ -891,11 +891,46 @@ describe("Checkout discounts page", type: :system, js: true) do
         end
 
         find(:label, "Products").click
-        expect(page).to have_combo_box "Products", options: ["Product 1", "Product 2", "Membership"]
+        expect(page).to have_combo_box "Products", options: ["Membership (First Tier)", "Membership (Second Tier)"]
 
         click_on "Save changes"
 
         expect(offer_code1.reload.products).to eq([product1, product2, membership])
+      end
+    end
+
+    context "when a selected product has options" do
+      let(:icon_library) { create(:product, name: "Icon library", user: seller, price_cents: 2000) }
+      let(:license) { create(:variant_category, link: icon_library, title: "License") }
+      let!(:single_user) { create(:variant, variant_category: license, name: "Single-user") }
+      let!(:team) { create(:variant, variant_category: license, name: "Team") }
+      let!(:launch_code) { create(:percentage_offer_code, name: "Launch", code: "launch", products: [icon_library], user: seller) }
+
+      it "limits the discount to the options picked in the products field" do
+        visit checkout_discounts_path
+        find(:table_row, { "Discount" => "Launch" }).click
+        within_modal("Launch") { click_on "Edit" }
+
+        select_combo_box_option "Icon library (Single-user)", from: "Products"
+        click_on "Save changes"
+
+        within find(:table_row, { "Discount" => "Launch" }) do
+          expect(page).to have_text("off of Icon library (Single-user)")
+        end
+        expect(launch_code.reload.products).to eq([icon_library])
+        expect(launch_code.variants).to eq([single_user])
+
+        find(:table_row, { "Discount" => "Launch" }).click
+        within_modal("Launch") { click_on "Edit" }
+
+        select_combo_box_option "Icon library", from: "Products", option_exact_text: true
+        click_on "Save changes"
+
+        within find(:table_row, { "Discount" => "Launch" }) do
+          expect(page).to have_no_text("Icon library (Single-user)")
+        end
+        expect(launch_code.reload.products).to eq([icon_library])
+        expect(launch_code.variants).to be_empty
       end
     end
   end
@@ -952,7 +987,7 @@ describe("Checkout discounts page", type: :system, js: true) do
     expect(page).to have_field("Percentage", with: "50")
     expect(page).to have_unchecked_field("All products")
     find("label", text: "Products").click
-    expect(page).to have_combo_box("Products", options: ["Product 1", "Product 2"])
+    expect(page).to have_combo_box("Products", options: ["Membership (First Tier)", "Membership (Second Tier)"])
     find("body").native.send_key("escape") # to dismiss the combo box so the limit quantity checkbox is visible
     expect(page).to have_checked_field("Limit quantity")
     expect(page).to have_field("Quantity", with: "12")

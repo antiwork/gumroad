@@ -275,11 +275,11 @@ const MenuList = <IsMulti extends boolean>(props: MenuListProps<Option, IsMulti>
 };
 
 const MultiValue = <IsMulti extends boolean>(props: MultiValueProps<Option, IsMulti>) => (
-  <div {...props.removeProps}>
-    <Pill asChild color="primary" className="cursor-pointer font-[inherit] text-[length:inherit]">
-      <button>
-        {props.data.label}
-        <X className="ml-2 size-5" />
+  <div {...props.removeProps} className="max-w-full min-w-0">
+    <Pill asChild color="primary" className="max-w-full cursor-pointer font-[inherit] text-[length:inherit]">
+      <button title={props.data.label}>
+        <span className="truncate">{props.data.label}</span>
+        <X className="ml-2 size-5 shrink-0" />
       </button>
     </Pill>
   </div>
