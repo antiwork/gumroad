@@ -400,6 +400,9 @@ class Purchase < ApplicationRecord
 
   before_save :assign_default_rental_expired
   before_save :truncate_referrer
+  # A single-row claim writes purchaser on this row only. Member rows are what the library
+  # and the app list, and they still have the nil purchaser copied at creation.
+  after_save :attach_unclaimed_bundle_product_purchases, if: :saved_change_to_purchaser_id?
 
   after_commit :enqueue_update_sales_related_products_infos_job, if: -> (purchase) {
     purchase.purchase_state_previously_changed? && purchase.purchase_state == "successful"
@@ -3340,6 +3343,24 @@ class Purchase < ApplicationRecord
     # save! re-runs financial_transaction_validation and the attach no-ops. Skip
     # validators only; keep callbacks and updated_at.
     save!(validate: false)
+  end
+
+  # Only this bundle's unclaimed members whose email still matches. A different email is
+  # a different buyer. An existing purchaser or a reassignment lock is not ours to move.
+  def attach_unclaimed_bundle_product_purchases
+    return unless is_bundle_purchase?
+    return if purchaser_id.nil?
+
+    product_purchases.all_success_states.where(purchaser_id: nil).find_each do |member|
+      next unless email.present? && member.email.to_s.casecmp?(email)
+      next if member.is_reassignment_locked?
+
+      member.purchaser = purchaser
+      member.save!(validate: false)
+    rescue => e
+      ErrorNotifier.notify(e, context: { purchase_id: member.id, bundle_purchase_id: id, user_id: purchaser_id })
+      Rails.logger.error("Purchase#attach_unclaimed_bundle_product_purchases: member #{member.id} failed for bundle purchase #{id}: #{e.class}: #{e.message}")
+    end
   end
 
   def seller_balance_update_eligible?

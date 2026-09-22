@@ -459,21 +459,55 @@ describe UrlRedirectsController, inertia: true do
           end
         end
 
-        context "when the purchaser claimed the parent but not the members" do
-          # add-to-library attaches only the purchase it is given, so claiming a bundle parent
-          # leaves the members unclaimed and out of the claiming account's library. Counting them
-          # as the claimer's (`purchaser_id: [id, nil]`) would redirect here, to nothing.
+        context "when the purchaser claims the bundle parent" do
+          # Claiming the parent also claims same-email members, so the library has the rows
+          # this redirect points at. A parent attached without that callback is the context below.
+          let(:purchase) { create(:purchase, link: create(:product, :bundle), is_bundle_purchase: true) }
+
           before do
             buyer = create(:user, email: purchase.email)
             purchase.update!(purchaser: buyer)
             sign_in buyer
           end
 
-          it "renders the download page instead of redirecting to an empty filtered library" do
+          it "attaches the members and redirects to the filtered library" do
+            expect(purchase.product_purchases.reload.map(&:purchaser_id).uniq).to eq([purchase.purchaser_id])
+
+            get :download_page, params: { id: purchase.url_redirect.token }
+
+            expect(response).to redirect_to(library_url({ bundles: purchase.link.external_id, host: DOMAIN, protocol: PROTOCOL }))
+          end
+        end
+
+        context "when only the bundle parent was attached" do
+          let(:purchase) { create(:purchase, link: create(:product, :bundle), is_bundle_purchase: true) }
+
+          before do
+            buyer = create(:user, email: purchase.email)
+            # Bypass the claim callback so this stays the historical row: parent attached, members not.
+            purchase.update_columns(purchaser_id: buyer.id)
+            sign_in buyer
+          end
+
+          it "lists each unclaimed member instead of an empty download page" do
             get :download_page, params: { id: purchase.url_redirect.token }
 
             expect(response).to have_http_status(:ok)
             expect(response).to_not be_redirect
+            bundle_products = inertia.props.dig(:content, :bundle_products)
+            expect(bundle_products.map { _1[:url] })
+              .to match_array(purchase.product_purchases.map { _1.url_redirect.download_page_url })
+          end
+
+          it "does not list a member that already belongs to another account" do
+            taken = purchase.product_purchases.first
+            taken.update_columns(purchaser_id: create(:user).id)
+
+            get :download_page, params: { id: purchase.url_redirect.token }
+
+            urls = inertia.props.dig(:content, :bundle_products).map { _1[:url] }
+            expect(urls).not_to include(taken.url_redirect.download_page_url)
+            expect(urls).to match_array(purchase.product_purchases.where(purchaser_id: nil).map { _1.url_redirect.download_page_url })
           end
         end
       end

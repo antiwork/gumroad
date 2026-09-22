@@ -185,13 +185,15 @@ class UrlRedirectPresenter
       }
     end
 
-    # The members a bundle's own download page links to. Only populated for a bundle parent whose
-    # buyer has no account: everyone else is redirected to /library before this renders.
+    # A bundle link has no files of its own. Members already claimed by this purchaser are
+    # reached through /library; list the ones still unclaimed so this page is not empty.
+    # A member owned by another account stays off this page.
     def bundle_product_props
-      return [] unless purchase&.is_bundle_purchase? && purchase.purchaser_id.nil?
+      return [] unless purchase&.is_bundle_purchase?
 
       purchase.product_purchases.filter_map do |member|
         next unless member.has_content?
+        next if purchase.purchaser_id.present? && member.purchaser_id.present?
 
         {
           id: member.link.external_id,
