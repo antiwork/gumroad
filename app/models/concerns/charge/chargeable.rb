@@ -1,11 +1,15 @@
 # frozen_string_literal: true
 
 module Charge::Chargeable
+  # How far back the payment-intent fallback below looks, in `charges.id` — about two weeks
+  # of charges at current volume, against a table of ~88M rows.
+  RECENT_CHARGE_ID_LOOKBACK = 1_000_000
+
   class << self
-    # Pinned to the primary: Stripe delivers within seconds of the row being written, so on a
-    # lagging worker replica the indexed lookups below all miss and the event resolves to nil —
-    # which both call sites read as "not ours" and drop silently. The payment-intent fallback
-    # is also an unindexed scan of `charges`, so every miss pays for it before returning nothing.
+    # The :writing pin is declared for intent but does NOT take effect today: mysql2_proxy
+    # routes per statement and its `roles_for` does not honour this stack entry, so these
+    # reads still land on the worker replica. The id bound below is what actually protects
+    # the fallback; do not drop it on the assumption that the pin is doing the work.
     def find_by_stripe_event(event)
       ApplicationRecord.connected_to(role: :writing) do
         chargeable = nil
@@ -13,7 +17,7 @@ module Charge::Chargeable
         if event.charge_reference.to_s.starts_with?(Charge::COMBINED_CHARGE_PREFIX)
           chargeable ||= Charge.where(id: event.charge_reference.sub(Charge::COMBINED_CHARGE_PREFIX, "")).last
           chargeable ||= Charge.where(processor_transaction_id: event.charge_id).last if event.charge_id
-          chargeable ||= Charge.where(stripe_payment_intent_id: event.processor_payment_intent_id).last if event.processor_payment_intent_id.present?
+          chargeable ||= recent_charge_by_payment_intent(event.processor_payment_intent_id) if event.processor_payment_intent_id.present?
         else
           chargeable = Purchase.find_by_external_id(event.charge_reference) if event.charge_reference
           # Refund events (refund.updated / refund.failed) carry no charge_reference — Stripe's
@@ -30,6 +34,20 @@ module Charge::Chargeable
 
         chargeable
       end
+    end
+
+    # `stripe_payment_intent_id` is unindexed, so an unbounded lookup scans all of `charges`.
+    # This is only ever reached when the primary-key lookup on the CH- reference already
+    # missed — i.e. the row is not visible to this connection — so it almost always returns
+    # nil after paying for the whole scan. The id floor caps that miss at a short backward
+    # PK range scan; a hit still stops at the first matching row, so the window costs nothing
+    # when the charge is found.
+    def recent_charge_by_payment_intent(payment_intent_id)
+      max_id = Charge.maximum(:id).to_i
+      Charge.where(stripe_payment_intent_id: payment_intent_id)
+            .where(id: (max_id - RECENT_CHARGE_ID_LOOKBACK)..)
+            .order(id: :desc)
+            .first
     end
 
     def find_by_processor_transaction_id!(processor_transaction_id)
