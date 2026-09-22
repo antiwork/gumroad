@@ -925,6 +925,19 @@ describe UsersController do
       expect(controller.logged_in_user).to be(nil)
     end
 
+    it "attaches a bundle's unclaimed member purchases to the same account" do
+      bundle = create(:product, :bundle, user: @purchase.seller)
+      @purchase.update!(link: bundle, is_bundle_purchase: true)
+      member = create(:purchase, email: @purchase.email, purchaser: nil, seller: @purchase.seller, link: create(:product, user: @purchase.seller))
+      create(:bundle_product_purchase, bundle_purchase: @purchase, product_purchase: member)
+
+      sign_in(@user)
+      post :add_purchase_to_library, params: @params
+
+      expect(@purchase.reload.purchaser).to eq(@user)
+      expect(member.reload.purchaser).to eq(@user)
+    end
+
     context "when two factor authentication is enabled for the user" do
       before do
         @user.two_factor_authentication_enabled = true
