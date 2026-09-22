@@ -2,28 +2,34 @@
 
 module Charge::Chargeable
   class << self
+    # Pinned to the primary: Stripe delivers within seconds of the row being written, so on a
+    # lagging worker replica the indexed lookups below all miss and the event resolves to nil —
+    # which both call sites read as "not ours" and drop silently. The payment-intent fallback
+    # is also an unindexed scan of `charges`, so every miss pays for it before returning nothing.
     def find_by_stripe_event(event)
-      chargeable = nil
+      ApplicationRecord.connected_to(role: :writing) do
+        chargeable = nil
 
-      if event.charge_reference.to_s.starts_with?(Charge::COMBINED_CHARGE_PREFIX)
-        chargeable ||= Charge.where(id: event.charge_reference.sub(Charge::COMBINED_CHARGE_PREFIX, "")).last
-        chargeable ||= Charge.where(processor_transaction_id: event.charge_id).last if event.charge_id
-        chargeable ||= Charge.where(stripe_payment_intent_id: event.processor_payment_intent_id).last if event.processor_payment_intent_id.present?
-      else
-        chargeable = Purchase.find_by_external_id(event.charge_reference) if event.charge_reference
-        # Refund events (refund.updated / refund.failed) carry no charge_reference — Stripe's
-        # Refund object has no metadata and we don't retrieve the underlying charge for them —
-        # so a refund on a combined charge lands in this branch instead of the CH- branch above.
-        # Check Charge before Purchase: every purchase in a combined charge stores the shared
-        # ch_ id in stripe_transaction_id (see Purchase#save_charge_data), so a purchase lookup
-        # would match one arbitrary purchase and the event would miss the canonical Charge.
-        # Same precedence as find_by_processor_transaction_id! below.
-        chargeable ||= Charge.where(processor_transaction_id: event.charge_id).last if event.charge_id
-        chargeable ||= Purchase.where(stripe_transaction_id: event.charge_id).last if event.charge_id
-        chargeable ||= ProcessorPaymentIntent.where(intent_id: event.processor_payment_intent_id).last&.purchase if event.processor_payment_intent_id.present?
+        if event.charge_reference.to_s.starts_with?(Charge::COMBINED_CHARGE_PREFIX)
+          chargeable ||= Charge.where(id: event.charge_reference.sub(Charge::COMBINED_CHARGE_PREFIX, "")).last
+          chargeable ||= Charge.where(processor_transaction_id: event.charge_id).last if event.charge_id
+          chargeable ||= Charge.where(stripe_payment_intent_id: event.processor_payment_intent_id).last if event.processor_payment_intent_id.present?
+        else
+          chargeable = Purchase.find_by_external_id(event.charge_reference) if event.charge_reference
+          # Refund events (refund.updated / refund.failed) carry no charge_reference — Stripe's
+          # Refund object has no metadata and we don't retrieve the underlying charge for them —
+          # so a refund on a combined charge lands in this branch instead of the CH- branch above.
+          # Check Charge before Purchase: every purchase in a combined charge stores the shared
+          # ch_ id in stripe_transaction_id (see Purchase#save_charge_data), so a purchase lookup
+          # would match one arbitrary purchase and the event would miss the canonical Charge.
+          # Same precedence as find_by_processor_transaction_id! below.
+          chargeable ||= Charge.where(processor_transaction_id: event.charge_id).last if event.charge_id
+          chargeable ||= Purchase.where(stripe_transaction_id: event.charge_id).last if event.charge_id
+          chargeable ||= ProcessorPaymentIntent.where(intent_id: event.processor_payment_intent_id).last&.purchase if event.processor_payment_intent_id.present?
+        end
+
+        chargeable
       end
-
-      chargeable
     end
 
     def find_by_processor_transaction_id!(processor_transaction_id)

@@ -62,6 +62,47 @@ describe Charge::Chargeable do
         expect(Charge::Chargeable.find_by_stripe_event(event)).to eq(charge)
       end
     end
+
+    describe "database role" do
+      # Workers read the replica, and Stripe delivers seconds after the write. A replica
+      # read here resolves a live charge to nil, which both call sites drop as "not ours".
+      def roles_used_while_resolving(event)
+        roles = []
+        subscriber = lambda do |*, payload|
+          next if payload[:name] == "SCHEMA" || payload[:cached] || !payload[:sql].match?(/\ASELECT/i)
+          pin = ApplicationRecord.connected_to_stack.reverse.find { |entry| entry[:klasses]&.include?(ApplicationRecord) }
+          roles << [payload[:sql], pin&.fetch(:role)]
+        end
+
+        ApplicationRecord.uncached do
+          ActiveSupport::Notifications.subscribed(subscriber, "sql.active_record") do
+            Charge::Chargeable.find_by_stripe_event(event)
+          end
+        end
+        roles
+      end
+
+      it "resolves a combined charge on the primary" do
+        create(:charge, id: 22345)
+        event = build(:charge_event_dispute_formalized, charge_reference: "CH-22345")
+
+        reads = roles_used_while_resolving(event)
+
+        expect(reads.map(&:first).join("\n")).to include("FROM `charges`")
+        expect(reads.map(&:last)).to all(eq(:writing))
+      end
+
+      it "resolves a purchase on the primary" do
+        purchase = create(:purchase, stripe_transaction_id: "ch_22345")
+        event = build(:charge_event_dispute_formalized, charge_reference: nil, charge_id: "ch_22345")
+
+        reads = roles_used_while_resolving(event)
+
+        expect(reads.map(&:first).join("\n")).to include("FROM `purchases`")
+        expect(reads.map(&:last)).to all(eq(:writing))
+        expect(Charge::Chargeable.find_by_stripe_event(event)).to eq(purchase)
+      end
+    end
   end
 
   describe ".find_by_processor_transaction_id!" do
