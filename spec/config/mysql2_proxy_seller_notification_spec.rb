@@ -44,8 +44,7 @@ describe "mysql2 proxy seller notification routing" do
     purchase = primary_setup do
       create(:purchase, full_name: "Routing Tipper").tap { _1.create_tip!(value_cents: 1234) }
     end
-    # The rows the action itself loads are on the replica, so an unpinned render gets far enough to
-    # drop the tip line instead of raising — the silent half of the bug.
+    # Replicating these lets an unpinned render reach the template and drop the tip line silently.
     primary_setup { [purchase, purchase.link, purchase.seller].each { replicate_record(_1) } }
 
     message = nil

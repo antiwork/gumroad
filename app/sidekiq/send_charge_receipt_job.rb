@@ -25,9 +25,8 @@ class SendChargeReceiptJob
     [args.first]
   end
 
-  # Enqueued from the checkout request the instant the charge commits, and run by a worker whose
-  # SELECTs read a replica: the charge can be missing there, and one whose purchases have not landed
-  # yet sends a receipt short those line items, then marks it sent for good.
+  # Enqueued as the charge commits and run by a worker whose reads land on a replica: a charge
+  # whose purchases have not replicated sends a receipt short those lines, then marks it sent.
   def perform(charge_id, attempt = 0)
     ApplicationRecord.connected_to(role: :writing) { send_charge_receipt(charge_id, attempt) }
   end

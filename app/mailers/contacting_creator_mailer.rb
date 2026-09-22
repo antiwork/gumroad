@@ -824,10 +824,8 @@ class ContactingCreatorMailer < ApplicationMailer
       sentence
     end
 
-    # Enqueued 3 seconds after the sale commits (Purchase#notify_seller!) and delivered by a worker,
-    # whose SELECTs read a replica (USE_DB_WORKER_REPLICAS). Everything this email needs is that new:
-    # a lagging replica raises out of `Purchase.find`, and the rows the template walks lazily — the
-    # tip, the affiliate credit, the UTM link — silently drop their line when they arrive late.
+    # Delivered by a worker 3 seconds after the sale commits, so a replica read can miss rows the
+    # template walks lazily — the tip, the affiliate credit — and drop their line without raising.
     def read_notify_from_primary(&block)
       ApplicationRecord.connected_to(role: :writing, &block)
     end

@@ -58,9 +58,8 @@ describe "mysql2 proxy charge receipt routing" do
     expect_pin_unwound
   end
 
-  # The silent half: the charge is on the replica but its purchases are not, so an unpinned run
-  # finds no successful purchase, returns without sending, and leaves receipt_sent false — nothing
-  # re-enqueues from there.
+  # The silent half: unpinned, the purchases are missing, so the job returns without sending and
+  # nothing re-enqueues.
   it "reads the purchases of a replicated charge from the primary" do
     charge = create_charge("Routing Lazy Purchases")
     replicate_record(charge)
