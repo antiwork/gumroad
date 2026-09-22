@@ -384,7 +384,7 @@ class PaypalChargeProcessor
     if paypal_rest_api.successful_response?(api_response) && api_response.result.token_id.present?
       api_response.result.token_id
     else
-      raise ChargeProcessorError, build_error_message(api_response.code, api_response.response)
+      raise ChargeProcessorError, build_error_message(api_response.status_code, api_response.result)
     end
 
   rescue => e
@@ -399,7 +399,7 @@ class PaypalChargeProcessor
     if paypal_rest_api.successful_response?(api_response) && api_response.result.id.present?
       open_struct_to_hash(api_response.result).as_json
     else
-      raise ChargeProcessorError, build_error_message(api_response.code, api_response.response)
+      raise ChargeProcessorError, build_error_message(api_response.status_code, api_response.result)
     end
 
   rescue => e
@@ -414,7 +414,7 @@ class PaypalChargeProcessor
     if paypal_rest_api.successful_response?(api_response)
       open_struct_to_hash(api_response.result).as_json
     else
-      raise ChargeProcessorError, build_error_message(api_response.code, api_response.response)
+      raise ChargeProcessorError, build_error_message(api_response.status_code, api_response.result)
     end
   end
 
