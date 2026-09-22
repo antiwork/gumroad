@@ -773,6 +773,7 @@ class Ai::StoreAgentService
         messages: conversation,
         tools: tool_schemas,
         max_tokens: truncation_retries.zero? ? MAX_REPLY_TOKENS : MAX_TRUNCATION_RETRY_TOKENS,
+        recover_token_cutoff: true,
         **tool_loop_thinking,
       )
       @last_stop_reason = result.stop_reason
@@ -869,6 +870,7 @@ class Ai::StoreAgentService
             messages: conversation,
             tools: tool_schemas,
             max_tokens: truncation_retries.zero? ? MAX_REPLY_TOKENS : MAX_TRUNCATION_RETRY_TOKENS,
+            recover_token_cutoff: true,
             **tool_loop_thinking,
             ttft_deadline: tool_loop_ttft_deadline,
             # A corrupted tool call is recovered by replaying the turn without streaming, which

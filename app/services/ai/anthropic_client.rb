@@ -26,6 +26,10 @@ class Ai::AnthropicClient
   # spends the deadline again, so the caller fails over instead (see #stream_messages).
   class TtftDeadlineError < TransientError; end
 
+  # Gateway reports a tool call cut by the token cap as an api_error, not stop_reason.
+  # Not a TransientError: a same-cap retry fails the same way.
+  class ToolCallTokenCutoffError < Error; end
+
   # Shared with the caller so the deadline can be lifted mid-stream, where no callback would fire.
   class FirstByteMarker
     def arrived!
@@ -107,6 +111,8 @@ class Ai::AnthropicClient
   # `error` objects with these types — arriving mid-stream or inside a buffered 200 body — are the
   # embedded equivalents of the retryable statuses above.
   RETRYABLE_STREAM_ERROR_TYPES = %w[overloaded_error api_error rate_limit_error timeout_error].freeze
+  # Substring the gateway puts in that api_error. A bare "max_tokens" also appears in unrelated 400s.
+  TOOL_CALL_TOKEN_CUTOFF = "Tool calls cutoff by max_tokens"
 
   Result = Struct.new(:text, :tool_uses, :stop_reason, keyword_init: true)
 
@@ -171,7 +177,7 @@ class Ai::AnthropicClient
     resolved_gateway.to_s
   end
 
-  def messages(system:, messages:, tools: nil, max_tokens: DEFAULT_MAX_TOKENS, thinking: nil)
+  def messages(system:, messages:, tools: nil, max_tokens: DEFAULT_MAX_TOKENS, thinking: nil, recover_token_cutoff: false)
     with_vercel_model_fallback do
       body = request_body(system:, messages:, tools:, max_tokens:, stream: false, thinking:)
       with_retries do |trace|
@@ -188,13 +194,18 @@ class Ai::AnthropicClient
       rescue HTTP::Error => e
         raise TransientError, "Anthropic network error: #{e.message}"
       end
+    rescue ToolCallTokenCutoffError
+      # Opt-in. Other callers still fail the turn; they do not all treat max_tokens as truncation.
+      raise unless recover_token_cutoff
+
+      Result.new(text: "", tool_uses: [], stop_reason: "max_tokens")
     end
   end
 
   # Retry only before the first yield — a later retry would replay on the seller's screen.
   # Corrupted tool-call JSON: one buffered replay. Already-yielded text (usual tool-use preamble)
   # must be erased via on_discard_streamed_text or the fallback cannot run.
-  def stream_messages(system:, messages:, tools: nil, max_tokens: DEFAULT_MAX_TOKENS, thinking: nil, ttft_deadline: nil, on_discard_streamed_text: nil, &on_text)
+  def stream_messages(system:, messages:, tools: nil, max_tokens: DEFAULT_MAX_TOKENS, thinking: nil, ttft_deadline: nil, on_discard_streamed_text: nil, recover_token_cutoff: false, &on_text)
     yielded_any = false
 
     with_vercel_model_fallback(yielded: -> { yielded_any }) do
@@ -275,6 +286,11 @@ class Ai::AnthropicClient
       end
 
       buffered_fallback(system:, messages:, tools:, max_tokens:, thinking:, original_error: e, &on_text)
+    rescue ToolCallTokenCutoffError
+      # Opt-in. The partial already streamed; the caller discards it and re-asks at a larger cap.
+      raise unless recover_token_cutoff
+
+      Result.new(text: "", tool_uses: [], stop_reason: "max_tokens")
     end
   end
 
@@ -491,6 +507,7 @@ class Ai::AnthropicClient
       return if response.status.success?
 
       message = "Anthropic #{kind} failed: #{response.status} — #{error_detail(response)}"
+      raise ToolCallTokenCutoffError, message if tool_call_token_cutoff?(message)
       if RETRYABLE_STATUS_CODES.include?(response.status.code)
         raise TransientError.new(message, retry_after: parse_retry_after(response))
       end
@@ -509,9 +526,14 @@ class Ai::AnthropicClient
     def embedded_error(data, kind:)
       error = data["error"] || {}
       message = "Anthropic #{kind} error: #{error["message"] || "unknown"}"
+      return ToolCallTokenCutoffError.new(message) if tool_call_token_cutoff?(message)
       return TransientError.new(message) if RETRYABLE_STREAM_ERROR_TYPES.include?(error["type"])
 
       Error.new(message)
+    end
+
+    def tool_call_token_cutoff?(message)
+      message.to_s.include?(TOOL_CALL_TOKEN_CUTOFF)
     end
 
     # Prefer error.message over dumping the body (large, may echo the request).

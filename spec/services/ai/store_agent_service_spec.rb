@@ -2451,6 +2451,7 @@ describe Ai::StoreAgentService do
         expect(client).to have_received(:messages).twice
         expect(client).to have_received(:messages).with(hash_including(max_tokens: described_class::MAX_TRUNCATION_RETRY_TOKENS)).once
         expect(client).to have_received(:messages).with(hash_including(max_tokens: described_class::MAX_REPLY_TOKENS)).once
+        expect(client).to have_received(:messages).with(hash_including(recover_token_cutoff: true)).at_least(:once)
       end
 
       it "returns the honest fallback when the re-ask truncates too" do
@@ -2905,6 +2906,7 @@ describe Ai::StoreAgentService do
       events, result = collect_events([{ role: "user", content: "rewrite my whole description" }])
 
       expect(caps).to eq([described_class::MAX_REPLY_TOKENS, described_class::MAX_TRUNCATION_RETRY_TOKENS])
+      expect(client).to have_received(:stream_messages).with(hash_including(recover_token_cutoff: true)).twice
       expect(result[:reply]).to eq("You have 3 products.")
       tokens = events.filter_map { |event, payload| payload[:text] if event == :token }
       expect(tokens.last).to eq("You have 3 products.")
