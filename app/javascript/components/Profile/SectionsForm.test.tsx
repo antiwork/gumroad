@@ -24,7 +24,7 @@ vi.stubGlobal("Routes", {
   rails_direct_uploads_path: () => "/rails/active_storage/direct_uploads",
   s3_utility_cdn_url_for_blob_path: () => "/s3_utility/cdn_url_for_blob",
 });
-const CDN_URL = "https://public-files.gumroad.com/uploaded-image";
+const CDN_URL = "https://cdn.example/uploaded-image";
 // The CDN lookup is the window an inserted image spends as a local blob: preview, so a test can
 // hold it open and see what the section text holds in the meantime.
 const cdn = vi.hoisted((): { hold: boolean; release: (() => void)[] } => ({ hold: false, release: [] }));
