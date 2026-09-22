@@ -23,6 +23,10 @@ class UrlRedirect < ApplicationRecord
             2 => :admin_generated,
             3 => :is_rental,
             4 => :is_done_pdf_stamping,
+            # Set by a download click while a checkout stamp already holds the purchase lock.
+            # A cache entry expires and can be evicted before that job reads it, so the promise
+            # to email the buyer lives on this row until the mail is enqueued.
+            5 => :files_ready_notification_requested,
             :column => "flags",
             :flag_query_mode => :bit_operator,
             check_for_column: false

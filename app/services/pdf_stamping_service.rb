@@ -23,22 +23,28 @@ module PdfStampingService
     "stamp_pdf_for_purchase_job_#{purchase_id}"
   end
 
-  # Set by a download click when a checkout stamp job is already queued under the same lock,
-  # so that job still sends the "file ready" email the click promised.
-  def buyer_notify_cache_key(purchase_id)
-    "stamp_pdf_notify_buyer_#{purchase_id}"
-  end
-
+  # A download click while a checkout stamp already holds the purchase lock cannot enqueue
+  # a second job. The request has to outlive queue delay, retry, and cache eviction, and it
+  # is cleared only after the files-ready mail is enqueued.
   def request_buyer_notification!(purchase_id)
-    Rails.cache.write(buyer_notify_cache_key(purchase_id), true, expires_in: 4.hours)
+    return if purchase_id.blank?
+
+    updated = UrlRedirect.where(purchase_id:).update_all(notification_flag_sql(enabled: true))
+    return true if updated.positive?
+
+    raise Error, "No download page to record a files-ready notification for purchase #{purchase_id}"
   end
 
   def buyer_notification_requested?(purchase_id)
-    Rails.cache.read(buyer_notify_cache_key(purchase_id)).present?
+    return false if purchase_id.blank?
+
+    UrlRedirect.where(purchase_id:).where(notification_flag_set_sql).exists?
   end
 
   def clear_buyer_notification!(purchase_id)
-    Rails.cache.delete(buyer_notify_cache_key(purchase_id))
+    return if purchase_id.blank?
+
+    UrlRedirect.where(purchase_id:).update_all(notification_flag_sql(enabled: false))
   end
 
   # A checkout stamp may already hold the purchase lock, which drops this enqueue.
@@ -50,5 +56,24 @@ module PdfStampingService
     Rails.cache.fetch(cache_key_for_purchase(purchase_id), expires_in: 4.hours) do
       StampPdfForPurchaseJob.set(queue: :critical).perform_async(purchase_id, true)
     end
+  end
+
+  private
+
+  def notification_flag_bit
+    UrlRedirect.flag_mapping.fetch("flags").fetch(:files_ready_notification_requested).to_i
+  end
+
+  def notification_flag_sql(enabled:)
+    bit = notification_flag_bit
+    if enabled
+      "flags = COALESCE(flags, 0) | #{bit}"
+    else
+      "flags = COALESCE(flags, 0) & ~#{bit}"
+    end
+  end
+
+  def notification_flag_set_sql
+    "COALESCE(flags, 0) & #{notification_flag_bit} != 0"
   end
 end

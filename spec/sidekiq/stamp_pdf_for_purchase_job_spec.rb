@@ -39,6 +39,41 @@ describe StampPdfForPurchaseJob do
     expect(PdfStampingService.buyer_notification_requested?(purchase.id)).to be(false)
   end
 
+  it "still emails after the old cache window has expired and the cache has been evicted" do
+    purchase.create_url_redirect!
+    PdfStampingService.request_buyer_notification!(purchase.id)
+    PdfStampingService.request_buyer_notification!(purchase.id)
+
+    travel 5.hours do
+      Rails.cache.clear
+
+      expect(PdfStampingService.buyer_notification_requested?(purchase.id)).to be(true)
+      expect do
+        described_class.new.perform(purchase.id)
+      end.to have_enqueued_mail(CustomerMailer, :files_ready_for_download).with(purchase.id)
+    end
+
+    expect(PdfStampingService.buyer_notification_requested?(purchase.id)).to be(false)
+  end
+
+  it "keeps the request when stamping fails so a retry can still email" do
+    purchase.create_url_redirect!
+    PdfStampingService.request_buyer_notification!(purchase.id)
+    allow(PdfStampingService).to receive(:stamp_for_purchase!).and_raise(PdfStampingService::Error)
+
+    expect { described_class.new.perform(purchase.id) }.to raise_error(PdfStampingService::Error)
+    expect(PdfStampingService.buyer_notification_requested?(purchase.id)).to be(true)
+  end
+
+  it "keeps the request when the files-ready mail cannot be enqueued" do
+    purchase.create_url_redirect!
+    PdfStampingService.request_buyer_notification!(purchase.id)
+    allow(CustomerMailer).to receive(:files_ready_for_download).and_raise(StandardError, "enqueue failed")
+
+    expect { described_class.new.perform(purchase.id) }.to raise_error(StandardError, "enqueue failed")
+    expect(PdfStampingService.buyer_notification_requested?(purchase.id)).to be(true)
+  end
+
   it "enqueues files ready email when notify flag is true" do
     expect do
       purchase.create_url_redirect!
