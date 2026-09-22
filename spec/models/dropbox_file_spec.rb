@@ -41,10 +41,36 @@ describe DropboxFile do
   describe "callbacks" do
     describe "#schedule_dropbox_file_analyze" do
       it "enqueues the job to transfer the file to S3" do
-        create(:dropbox_file)
+        freeze_time do
+          dropbox_file = create(:dropbox_file)
 
-        expect(TransferDropboxFileToS3Worker).to have_enqueued_sidekiq_job(kind_of(Integer))
+          expect(TransferDropboxFileToS3Worker.jobs.last).to include(
+            "args" => [dropbox_file.id],
+            "queue" => "long",
+            "at" => 5.seconds.from_now.to_f
+          )
+        end
       end
+    end
+  end
+
+  describe "#transfer_to_s3" do
+    it "marks expired imports failed without downloading them" do
+      dropbox_file = create(:dropbox_file, expires_at: 1.second.ago)
+      expect(dropbox_file).not_to receive(:multipart_transfer_to_s3)
+
+      dropbox_file.transfer_to_s3
+
+      expect(dropbox_file.reload).to be_failed
+      expect(dropbox_file.deleted_at).to be_present
+      expect(dropbox_file.s3_url).to be_nil
+    end
+
+    it "transfers an import before its link expires" do
+      dropbox_file = create(:dropbox_file, expires_at: 1.hour.from_now)
+      expect(dropbox_file).to receive(:multipart_transfer_to_s3)
+
+      dropbox_file.transfer_to_s3
     end
   end
 

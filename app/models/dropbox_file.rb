@@ -81,7 +81,7 @@ class DropboxFile < ApplicationRecord
   def transfer_to_s3
     return if cancelled? || deleted? || failed?
 
-    mark_failed! if Time.current > expires_at
+    return mark_failed! if Time.current > expires_at
     extension = File.extname(dropbox_url).delete(".")
     set_json_data_for_attr("filetype", extension)
     FILE_REGEX.each do |file_type, regex|
