@@ -509,6 +509,19 @@ describe UrlRedirectsController, inertia: true do
             expect(urls).not_to include(taken.url_redirect.download_page_url)
             expect(urls).to match_array(purchase.product_purchases.where(purchaser_id: nil).map { _1.url_redirect.download_page_url })
           end
+
+          it "does not list an unclaimed member whose email does not match" do
+            mismatched = purchase.product_purchases.first
+            mismatched.update_columns(email: "other@example.com")
+
+            get :download_page, params: { id: purchase.url_redirect.token }
+
+            urls = inertia.props.dig(:content, :bundle_products).map { _1[:url] }
+            expect(urls).not_to include(mismatched.url_redirect.download_page_url)
+            expect(urls).to match_array(
+              purchase.product_purchases.where.not(id: mismatched.id).map { _1.url_redirect.download_page_url }
+            )
+          end
         end
       end
     end

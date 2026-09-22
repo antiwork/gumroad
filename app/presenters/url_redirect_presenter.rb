@@ -185,15 +185,18 @@ class UrlRedirectPresenter
       }
     end
 
-    # A bundle link has no files of its own. Members already claimed by this purchaser are
-    # reached through /library; list the ones still unclaimed so this page is not empty.
-    # A member owned by another account stays off this page.
+    # A bundle link has no files of its own. Members already in a library are reached
+    # through /library. Once this purchase is claimed, only a same-email unclaimed member
+    # stays listed: the member URL is the access token.
     def bundle_product_props
       return [] unless purchase&.is_bundle_purchase?
 
       purchase.product_purchases.filter_map do |member|
         next unless member.has_content?
-        next if purchase.purchaser_id.present? && member.purchaser_id.present?
+        if purchase.purchaser_id.present?
+          next if member.purchaser_id.present?
+          next unless purchase.email.present? && member.email.to_s.casecmp?(purchase.email)
+        end
 
         {
           id: member.link.external_id,
