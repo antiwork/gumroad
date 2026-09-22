@@ -1861,14 +1861,25 @@ module StripeMerchantAccountManager
   private_class_method
   # Stripe can name this row in metadata while the local link is missing, and re-sending the details
   # cannot repair that. Links the external account Stripe already holds, never guessing one: last4,
-  # routing number and currency must each match, or :bank_link_not_restored keeps the failure note.
+  # routing number, currency and country must each match, or :bank_link_not_restored keeps the failure note.
   def self.restore_local_bank_link!(bank_account, stripe_account)
     return :noop_metadata_match if bank_account.stripe_bank_account_id.present?
 
     stripe_external_account = matching_stripe_external_account(bank_account, stripe_account)
     return :bank_link_not_restored if stripe_external_account.nil?
 
-    save_stripe_bank_account_info(bank_account, stripe_account, stripe_external_account:)
+    # Another bank sync may have linked or replaced the row while Stripe was being read.
+    linked = BankAccount.where(id: bank_account.id, stripe_bank_account_id: nil, deleted_at: nil,
+                               account_number_last_four: bank_account.account_number_last_four,
+                               bank_number: bank_account.bank_number, country: bank_account[:country])
+      .update_all(stripe_bank_account_id: stripe_external_account.id,
+                  stripe_connect_account_id: stripe_account.id,
+                  stripe_fingerprint: stripe_external_account.fingerprint,
+                  updated_at: Time.current)
+    return :bank_link_not_restored unless linked == 1
+
+    bank_account.reload
+    CheckPaymentAddressWorker.perform_async(bank_account.user_id)
     clear_stale_bank_sync_failure_notes(bank_account.user)
     :synced
   end
@@ -1885,15 +1896,18 @@ module StripeMerchantAccountManager
     local_last4 = bank_account.account_number_last_four.to_s
     local_routing = bank_account.stripe_external_account_routing_number.to_s
     local_currency = bank_account.stripe_external_account_currency.to_s
-    return nil if local_last4.blank? || local_routing.blank? || local_currency.blank?
+    local_country = bank_account.stripe_external_account_country.to_s
+    return nil if local_last4.blank? || local_routing.blank? || local_currency.blank? || local_country.blank?
 
     matches = external_accounts.select do |external_account|
       last4 = external_account["last4"].to_s
       routing = external_account["routing_number"].to_s
       currency = external_account["currency"].to_s
-      next false if last4.blank? || routing.blank? || currency.blank?
+      country = external_account["country"].to_s
+      next false if last4.blank? || routing.blank? || currency.blank? || country.blank?
 
-      last4 == local_last4 && routing == local_routing && currency.casecmp?(local_currency)
+      last4 == local_last4 && routing == local_routing &&
+        currency.casecmp?(local_currency) && country.casecmp?(local_country)
     end
     matches.one? ? matches.first : nil
   end

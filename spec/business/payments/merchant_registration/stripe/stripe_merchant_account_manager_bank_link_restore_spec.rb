@@ -23,6 +23,7 @@ describe StripeMerchantAccountManager do
         last4: bank_account.account_number_last_four,
         routing_number: bank_account.stripe_external_account_routing_number,
         currency: bank_account.stripe_external_account_currency,
+        country: bank_account.stripe_external_account_country,
         account_holder_name: bank_account.account_holder_full_name,
         fingerprint: "fp_recovered_from_stripe",
       }.merge(overrides)
@@ -109,6 +110,35 @@ describe StripeMerchantAccountManager do
 
       expect(described_class.update_bank_account(user, passphrase:)).to eq(:bank_link_not_restored)
       expect(bank_account.reload.stripe_bank_account_id).to be_nil
+    end
+
+    it "does not link an account in a different country with matching bank details" do
+      stub_stripe_account_with([stripe_bank_account_payload(country: "CA")])
+
+      expect(described_class.update_bank_account(user, passphrase:)).to eq(:bank_link_not_restored)
+      expect(bank_account.reload.stripe_bank_account_id).to be_nil
+    end
+
+    it "does not link when Stripe omits the external account's country" do
+      stub_stripe_account_with([stripe_bank_account_payload(country: nil)])
+
+      expect(described_class.update_bank_account(user, passphrase:)).to eq(:bank_link_not_restored)
+      expect(bank_account.reload.stripe_bank_account_id).to be_nil
+    end
+
+    it "does not overwrite a bank link written while Stripe accounts were being matched" do
+      stub_stripe_account_with([stripe_bank_account_payload])
+      allow(described_class).to receive(:matching_stripe_external_account).and_wrap_original do |method, *args|
+        match = method.call(*args)
+        bank_account.update_columns(stripe_bank_account_id: "ba_concurrent", stripe_connect_account_id: merchant_id, stripe_fingerprint: "fp_concurrent")
+        match
+      end
+      expect(CheckPaymentAddressWorker).not_to receive(:perform_async)
+
+      expect(described_class.update_bank_account(user, passphrase:)).to eq(:bank_link_not_restored)
+      bank_account.reload
+      expect(bank_account.stripe_bank_account_id).to eq("ba_concurrent")
+      expect(bank_account.stripe_fingerprint).to eq("fp_concurrent")
     end
 
     it "does not treat a missing routing number as evidence that this is the row" do

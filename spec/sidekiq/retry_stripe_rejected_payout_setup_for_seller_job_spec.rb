@@ -676,6 +676,7 @@ describe RetryStripeRejectedPayoutSetupForSellerJob do
                 last4: bank_account.account_number_last_four,
                 routing_number: bank_account.stripe_external_account_routing_number,
                 currency: bank_account.stripe_external_account_currency,
+                country: bank_account.stripe_external_account_country,
                 account_holder_name: bank_account.account_holder_full_name,
                 fingerprint: "fp_recovered_from_stripe"
               )
@@ -709,6 +710,7 @@ describe RetryStripeRejectedPayoutSetupForSellerJob do
                 last4: "9999",
                 routing_number: bank_account.stripe_external_account_routing_number,
                 currency: bank_account.stripe_external_account_currency,
+                country: bank_account.stripe_external_account_country,
                 account_holder_name: bank_account.account_holder_full_name,
                 fingerprint: "fp_other"
               )
