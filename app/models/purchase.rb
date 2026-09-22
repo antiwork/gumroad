@@ -3379,6 +3379,12 @@ class Purchase < ApplicationRecord
     succeeded_at.present?
   end
 
+  # True when a VAT refund on this purchase credited the seller (Credit.create_for_vat_refund!),
+  # which Credit.create_for_vat_exclusive_refund! later reverses.
+  def credited_for_vat_refund?
+    refunds.where("gumroad_tax_cents > 0").joins(:credit).exists?
+  end
+
   def upload_invoice_pdf(pdf)
     timestamp = Time.current.strftime("%F")
     key = "#{Rails.env}/#{timestamp}/invoices/purchases/#{external_id}-#{SecureRandom.hex}/invoice.pdf"

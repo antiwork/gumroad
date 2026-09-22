@@ -165,6 +165,10 @@ class Credit < ApplicationRecord
     # - the refund does not include any VAT (meaning that VAT was refunded separately from the body of the purchase
     #   and there's no more VAT to refund left)
     return if refund.gumroad_tax_cents > 0 || refund.purchase.gumroad_tax_cents == 0
+    # The credit below reverses the positive credit a VAT refund wrote for the seller. A purchase
+    # that never ran the success path has no sale credit, so with no VAT credit to reverse this
+    # would debit the seller's other balances.
+    return if !refund.purchase.seller_credited_for_sale? && !refund.purchase.credited_for_vat_refund?
 
     total_refunded_amount = refund.total_transaction_cents
 

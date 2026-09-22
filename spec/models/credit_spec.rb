@@ -491,4 +491,43 @@ describe Credit do
       expect(credit.balance.holding_currency).to eq(credit.merchant_account.currency)
     end
   end
+
+  describe "create_for_vat_exclusive_refund!" do
+    let(:creator) { create(:user) }
+    let(:merchant_account) { create(:merchant_account_stripe_connect) }
+    let(:purchase) do
+      create(:purchase, succeeded_at: 3.days.ago, link: create(:product, user: creator), charge_processor_id: "stripe",
+                        merchant_account:)
+    end
+    let(:refund) { create(:refund, purchase:, gumroad_tax_cents: 0) }
+
+    before { purchase.update!(gumroad_tax_cents: 10) }
+
+    it "reverses a VAT refund's credit on a purchase the sale credited" do
+      credit = Credit.create_for_vat_exclusive_refund!(refund:)
+
+      expect(credit.amount_cents).to be < 0
+      expect(credit.balance_transaction.issued_amount_net_cents).to eq(credit.amount_cents)
+      expect(creator.reload.unpaid_balance_cents).to eq(credit.amount_cents)
+    end
+
+    it "books nothing for a purchase that never ran the success path" do
+      purchase.update!(succeeded_at: nil)
+      expect(purchase.reload.credited_for_vat_refund?).to be(false)
+
+      expect(Credit).not_to receive(:new)
+      expect(Credit.create_for_vat_exclusive_refund!(refund:)).to be_nil
+      expect(creator.reload.credits).to be_empty
+      expect(creator.reload.unpaid_balance_cents).to eq(0)
+    end
+
+    it "still reverses a VAT refund's credit when the purchase was never credited" do
+      purchase.update!(succeeded_at: nil)
+      vat_refund = create(:refund, purchase:, gumroad_tax_cents: 10, amount_cents: 0, creator_tax_cents: 0, fee_cents: 0)
+      Credit.create_for_vat_refund!(refund: vat_refund)
+      expect(purchase.reload.credited_for_vat_refund?).to be(true)
+
+      expect(Credit.create_for_vat_exclusive_refund!(refund:).amount_cents).to be < 0
+    end
+  end
 end
