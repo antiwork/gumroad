@@ -9,6 +9,24 @@ describe ContactingCreatorMailer do
     end.new
   end
 
+  def writing_role_pinned?
+    ApplicationRecord.connected_to_stack.any? { |entry| entry[:role] == :writing && entry[:klasses].include?(ApplicationRecord) }
+  end
+
+  # No replica role is configured in the test environment, so a pinned read and an unpinned one look
+  # the same at the connection level. Record placement instead: every Purchase/Refund read inside the
+  # block has to run while the writing role is on the stack.
+  def reads_with_pin_state
+    reads = []
+    subscriber = ActiveSupport::Notifications.subscribe("sql.active_record") do |_name, _start, _finish, _id, payload|
+      reads << [payload[:name], writing_role_pinned?] if ["Purchase Load", "Refund Load"].include?(payload[:name])
+    end
+    yield
+    reads
+  ensure
+    ActiveSupport::Notifications.unsubscribe(subscriber)
+  end
+
   it "uses SUPPORT_EMAIL_WITH_NAME as default from address" do
     expect(described_class.default[:from]).to eq(ApplicationMailer::SUPPORT_EMAIL_WITH_NAME)
   end
@@ -316,18 +334,16 @@ describe ContactingCreatorMailer do
     it "reads the purchase, its seller and the refund note inside one primary block, so worker replica lag cannot blank the render" do
       purchase = create(:purchase, link: create(:product, name: "Digital Membership"), email: "test@example.com", price_cents: 10_00)
       refund = create(:refund, purchase:, note: "Buyer reported being charged twice")
-      refund_read_pinned = nil
-      allow(Refund).to receive(:find_by).and_wrap_original do |original, *args|
-        refund_read_pinned = ApplicationRecord.connected_to_stack.any? { |entry| entry[:role] == :writing && entry[:klasses].include?(ApplicationRecord) }
-        original.call(*args)
-      end
       expect(ApplicationRecord).to receive(:connected_to).with(role: :writing).and_call_original
 
-      mail = ContactingCreatorMailer.purchase_refunded(purchase.id, refund.id)
-      expect(mail.to).to eq([purchase.seller.email])
-      expect(mail.body.encoded).to include "Reason: Buyer reported being charged twice"
+      reads = reads_with_pin_state do
+        @mail = ContactingCreatorMailer.purchase_refunded(purchase.id, refund.id).message
+      end
 
-      expect(refund_read_pinned).to eq(true)
+      expect(@mail.to).to eq([purchase.seller.email])
+      expect(@mail.body.encoded).to include "Reason: Buyer reported being charged twice"
+      expect(reads.map(&:first)).to include("Purchase Load", "Refund Load")
+      expect(reads.map(&:last).uniq).to eq([true])
     end
   end
 
@@ -344,13 +360,16 @@ describe ContactingCreatorMailer do
       expect(mail.from).to eq([ApplicationMailer::SUPPORT_EMAIL])
     end
 
-    it "reads the purchase and its seller from the primary, so worker replica lag cannot blank the render" do
+    it "reads the purchase and its seller inside the primary block, so worker replica lag cannot blank the render" do
       purchase = create(:purchase, link: create(:product, name: "Digital Membership"), email: "test@example.com", price_cents: 10_00)
-      expect(ApplicationRecord).to receive(:connected_to).with(role: :writing).and_call_original
 
-      mail = ContactingCreatorMailer.purchase_refunded_for_fraud(purchase.id)
+      reads = reads_with_pin_state do
+        @mail = ContactingCreatorMailer.purchase_refunded_for_fraud(purchase.id).message
+      end
 
-      expect(mail.to).to eq([purchase.seller.email])
+      expect(@mail.to).to eq([purchase.seller.email])
+      expect(reads.map(&:first)).to include("Purchase Load")
+      expect(reads.map(&:last).uniq).to eq([true])
     end
   end
 
