@@ -75,6 +75,8 @@ class AdminSearchService
       purchases = purchases.where(id: license.purchase_id)
     end
 
+    # Raw-SQL columns here must stay table-qualified: the creator_email and
+    # product_title_query filters join links, which shares created_at and price_cents.
     if [transaction_date, last_4, card_type, price, expiry_date].any?(&:present?)
       purchases = purchases.where.not(stripe_fingerprint: nil)
 
@@ -82,11 +84,11 @@ class AdminSearchService
         formatted_date = parse_date!(transaction_date)
         start_date = (formatted_date - 1.days).beginning_of_day.to_fs(:db)
         end_date = (formatted_date + 1.days).end_of_day.to_fs(:db)
-        purchases = purchases.where("created_at between ? and ?", start_date, end_date)
+        purchases = purchases.where("purchases.created_at between ? and ?", start_date, end_date)
       end
       purchases = purchases.where(card_type:) if card_type.present?
       purchases = purchases.where(card_visual_sql_finder(last_4)) if last_4.present?
-      purchases = purchases.where("price_cents between ? and ?", (price.to_d * 75).to_i, (price.to_d * 125).to_i) if price.present?
+      purchases = purchases.where("purchases.price_cents between ? and ?", (price.to_d * 75).to_i, (price.to_d * 125).to_i) if price.present?
       if expiry_date.present?
         expiry_month, expiry_year = CreditCardUtility.extract_month_and_year(expiry_date)
         purchases = purchases.where(card_expiry_year: "20#{expiry_year}") if expiry_year.present?
