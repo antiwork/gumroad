@@ -22,9 +22,7 @@ class CustomerMailer < ApplicationMailer
 
   def grouped_receipt(purchase_ids, recommendations: true)
     @recommendations = recommendations
-    # Callers can pass ids of purchases in any state (the email-reassignment flow moves failed
-    # ones). A failed purchase that resolves to a Charge with nothing settled cannot render —
-    # only successful purchases get receipts — so drop those instead of raising mid-render.
+    # Callers pass ids in any state; the email-reassignment flow includes failed purchases.
     @chargeables = Purchase.where(id: purchase_ids)
       .all_success_states_including_test
       .order(id: :desc)
@@ -34,8 +32,7 @@ class CustomerMailer < ApplicationMailer
     @chargeables = renderable_chargeables(@chargeables).first(GROUPED_RECEIPT_MAX_CHARGEABLES).reverse
     return if @chargeables.empty?
 
-    # A charge that lost its purchases since the query above has nothing to render; drop it before
-    # the claim so a receipt set that cannot be sent does not consume the 24h send window.
+    # Re-check before the claim so a set that cannot be sent does not consume the 24h window.
     @chargeables = @chargeables.select(&:receipt_renderable?)
     return if @chargeables.empty?
 
@@ -69,8 +66,7 @@ class CustomerMailer < ApplicationMailer
     end
     @email_name = __method__
 
-    # The subject and every section read the chargeable's successful purchases, so one with none
-    # left (a charge whose purchases have since failed or been refunded) has nothing to render.
+    # MailSubject calls link_name on the first successful purchase and raises when that set is empty.
     return if @chargeable.successful_purchases.none?
 
     @receipt_presenter = ReceiptPresenter.new(@chargeable, for_email:)
@@ -412,8 +408,7 @@ class CustomerMailer < ApplicationMailer
   end
 
   private
-    # Rendering reads each chargeable's successful purchases, so one with none left cannot render.
-    # Batched: a per-chargeable check is an N+1 on up to GROUPED_RECEIPT_MAX_CHARGEABLES entries.
+    # Batched: a per-chargeable exists? is an N+1 on up to GROUPED_RECEIPT_MAX_CHARGEABLES entries.
     def renderable_chargeables(chargeables)
       purchases, charges = chargeables.partition { _1.is_a?(Purchase) }
       renderable_purchase_ids = Purchase.where(id: purchases.map(&:id))
