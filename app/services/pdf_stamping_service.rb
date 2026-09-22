@@ -41,10 +41,15 @@ module PdfStampingService
     UrlRedirect.where(purchase_id:).where(notification_flag_set_sql).exists?
   end
 
+  # Only a request this delivery still owns may be cleared. A click that lands after the
+  # claim in deliver_files_ready_notification! clears the enqueued bit and records a fresh
+  # request; clearing that one leaves the follower with nothing to send.
   def clear_buyer_notification!(purchase_id)
     return if purchase_id.blank?
 
-    UrlRedirect.where(purchase_id:).update_all(notification_flag_sql(enabled: false))
+    bit = notification_enqueued_flag_bit
+    UrlRedirect.where(purchase_id:).where("COALESCE(flags, 0) & #{bit} != 0")
+      .update_all(notification_flag_sql(enabled: false))
   end
 
   # One sender wins. A new click clears the enqueued bit, so a request that arrives

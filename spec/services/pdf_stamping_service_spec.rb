@@ -76,4 +76,36 @@ describe PdfStampingService do
       expect(described_class.buyer_notification_requested?(purchase.id)).to be(true)
     end
   end
+
+  describe ".deliver_files_ready_notification!" do
+    let(:seller) { create(:named_seller) }
+    let(:product) { create(:product, user: seller) }
+    let(:purchase) { create(:purchase, link: product, seller:) }
+
+    before { purchase.create_url_redirect! }
+
+    it "clears the request it claimed" do
+      described_class.request_buyer_notification!(purchase.id)
+
+      expect(described_class.deliver_files_ready_notification!(purchase.id)).to be(true)
+      expect(described_class.buyer_notification_requested?(purchase.id)).to be(false)
+    end
+
+    # The winner claims the request, then a click clears the enqueued bit and records its
+    # own. Clearing the request after that would erase it, and the follower would send nothing.
+    it "keeps a request a click records after the claim" do
+      described_class.request_buyer_notification!(purchase.id)
+      allow(CustomerMailer).to receive(:files_ready_for_download).and_wrap_original do |original, purchase_id|
+        described_class.request_buyer_notification!(purchase_id)
+        original.call(purchase_id)
+      end
+
+      expect(described_class.deliver_files_ready_notification!(purchase.id)).to be(true)
+      expect(described_class.buyer_notification_requested?(purchase.id)).to be(true)
+
+      expect do
+        DeliverFilesReadyNotificationJob.new.perform(purchase.id)
+      end.to have_enqueued_mail(CustomerMailer, :files_ready_for_download).with(purchase.id)
+    end
+  end
 end
