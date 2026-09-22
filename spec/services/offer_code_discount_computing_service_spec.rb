@@ -1004,5 +1004,42 @@ describe OfferCodeDiscountComputingService do
       ).process
       expect(applied[:error_code]).to be_nil
     end
+
+    it "stops limiting the product once every scoped option is deleted" do
+      tier.mark_deleted!
+
+      preview = described_class.new(
+        scoped_code.code,
+        { product.unique_permalink => { quantity: "1", permalink: product.unique_permalink } }
+      ).process
+      expect(preview[:error_code]).to be_nil
+      expect(preview[:products_data][product.unique_permalink][:discount]).not_to have_key(:option_ids)
+
+      applied = described_class.new(
+        scoped_code.code,
+        { "0" => { quantity: "1", permalink: product.unique_permalink, variant_external_id: other_tier.external_id } },
+        key_by_input: true
+      ).process
+      expect(applied[:error_code]).to be_nil
+    end
+
+    it "keeps the remaining live option limited after another scoped option is deleted" do
+      scoped_code.variants << other_tier
+      tier.mark_deleted!
+      third = create(:variant, variant_category: category, name: "Team")
+
+      preview = described_class.new(
+        scoped_code.code,
+        { product.unique_permalink => { quantity: "1", permalink: product.unique_permalink } }
+      ).process
+      expect(preview[:products_data][product.unique_permalink][:discount][:option_ids]).to eq([other_tier.external_id])
+
+      rejected = described_class.new(
+        scoped_code.code,
+        { "0" => { quantity: "1", permalink: product.unique_permalink, variant_external_id: third.external_id } },
+        key_by_input: true
+      ).process
+      expect(rejected[:error_code]).to eq(:option_not_eligible)
+    end
   end
 end

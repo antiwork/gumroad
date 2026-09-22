@@ -376,6 +376,26 @@ describe Checkout::DiscountsController do
         expect(response.parsed_body["success"]).to eq(true), response.body
         expect(seller.offer_codes.find_by!(code: "tieronly").variants).to contain_exactly(tier, sku)
       end
+
+      it "does not save a deleted option as a scope" do
+        product = create(:product, user: seller)
+        tier = create(:variant, variant_category: create(:variant_category, link: product))
+        removed = create(:variant, variant_category: tier.variant_category, name: "Early bird")
+        removed.mark_deleted!
+
+        post :create, params: {
+          name: "Live only",
+          code: "liveonly",
+          amount_percentage: 100,
+          currency_type: nil,
+          universal: false,
+          selected_product_ids: [product.external_id],
+          selected_option_ids: [tier.external_id, removed.external_id],
+        }, as: :json
+
+        expect(response.parsed_body["success"]).to eq(true), response.body
+        expect(seller.offer_codes.find_by!(code: "liveonly").variants).to contain_exactly(tier)
+      end
     end
 
     context "when the offer code has several products" do

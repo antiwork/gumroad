@@ -324,14 +324,16 @@ class OfferCode < ApplicationRecord
   # Match through the option's product, not base_variants.link_id: that column is only set for
   # SKUs, so a version or tier would otherwise look unrestricted and the code would discount it.
   def restricted_variants_for(link)
-    variants.select { |variant| variant.owning_product_id == link.id }
+    live_scoped_variants.select { |variant| variant.owning_product_id == link.id }
   end
 
-  # Public: whether the code may discount the option the buyer chose. `variant` is a BaseVariant
-  # record (a purchase or a server-side allocation) or the external id a client submitted. A blank
-  # value is ineligible when the code is limited: purchase enforcement must fail closed if the
-  # chosen option is missing. The buyer-facing preview does not call this with a blank id; it omits
-  # the option and the client filters the returned discount.
+  # A deleted option is not a limit: the form and checkout only know live options.
+  def live_scoped_variants
+    variants.select(&:alive?)
+  end
+
+  # Blank is ineligible here: purchase enforcement must fail closed if the chosen option is missing.
+  # Preview omits the id and lets the client filter the returned discount.
   def applicable_to_variant?(link, variant)
     restricted = restricted_variants_for(link)
     return true if restricted.empty?
@@ -359,10 +361,9 @@ class OfferCode < ApplicationRecord
       }
     )
     json[:excluded_product_ids] = excluded_products.map(&:external_id) if universal? && excluded_products.present?
-    # Only sent when the seller limited the code to particular options. The client applies it per
-    # product: options listed here are the only ones discounted, and options of a product whose ids
-    # are absent from this list are unaffected.
-    json[:option_ids] = variants.map(&:external_id) if variants.any?
+    # Live ids only. The client treats a product with none of its options listed as unrestricted.
+    live_option_ids = live_scoped_variants.map(&:external_id)
+    json[:option_ids] = live_option_ids if live_option_ids.any?
     if is_cents? && once_per_cart?
       json[:once_per_cart] = true
       json[:once_per_cart_id] = external_id

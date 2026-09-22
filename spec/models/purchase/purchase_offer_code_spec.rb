@@ -171,4 +171,20 @@ describe Purchase, "offer-code capacity" do
     expect(allowed.errors.full_messages).not_to include("Sorry, this discount code is not valid for the option you selected.")
     expect(allowed.send(:offer_amount_off, product.price_cents)).to eq(100)
   end
+
+  it "discounts a remaining option after the scoped option is deleted" do
+    product = create(:product, price_cents: 2_000)
+    category = create(:variant_category, link: product)
+    tier = create(:variant, variant_category: category, name: "Basic")
+    sibling = create(:variant, variant_category: category, name: "Pro")
+    offer_code = create(:offer_code, user: product.user, products: [product], amount_cents: 100, variants: [tier])
+    tier.mark_deleted!
+
+    purchase = build(:purchase_in_progress, link: product, seller: product.user, offer_code:, discount_code: offer_code.code)
+    purchase.variant_attributes << sibling
+    purchase.send(:validate_offer_code)
+
+    expect(purchase.errors.full_messages).not_to include("Sorry, this discount code is not valid for the option you selected.")
+    expect(purchase.send(:offer_amount_off, product.price_cents)).to eq(100)
+  end
 end

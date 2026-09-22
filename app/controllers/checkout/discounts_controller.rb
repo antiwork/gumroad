@@ -152,7 +152,7 @@ class Checkout::DiscountsController < Sellers::BaseController
       return offer_code.variants if offer_code && !params.key?(:selected_option_ids)
 
       product_ids = selected_products(offer_code).map(&:id)
-      requested = BaseVariant.by_external_ids(offer_code_params[:selected_option_ids].to_a)
+      requested = BaseVariant.alive.by_external_ids(offer_code_params[:selected_option_ids].to_a)
       category_ids = VariantCategory.where(link_id: product_ids).select(:id)
       requested.where(link_id: product_ids).or(requested.where(variant_category_id: category_ids))
     end

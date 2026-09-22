@@ -284,5 +284,15 @@ describe Checkout::DiscountsPresenter do
         end
       end
     end
+
+    it "omits a deleted option from option_ids and keeps the live one" do
+      create(:team_membership, user:, seller:, role: TeamMembership::ROLE_ADMIN)
+      tier = product3.alive_variants.first
+      removed = create(:variant, variant_category: tier.variant_category, name: "Early bird")
+      offer_code1.variants = [tier, removed]
+      removed.mark_deleted!
+
+      expect(presenter.offer_code_props(offer_code1)[:option_ids]).to eq([tier.external_id])
+    end
   end
 end
