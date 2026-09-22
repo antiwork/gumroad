@@ -68,6 +68,7 @@ module PdfStampingService
   # The notify flag is what that job reads so the click still gets the ready email.
   # Always schedule the follower. A cache hit or a rejected enqueue means this click's
   # job will not run, and the in-flight job may already have passed its check.
+  # The follower locks on purchase id, so this schedule is a no-op while one chain is waiting.
   def enqueue_buyer_download_stamp!(purchase_id)
     return if purchase_id.blank?
 
