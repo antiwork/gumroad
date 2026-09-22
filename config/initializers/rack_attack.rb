@@ -7,6 +7,12 @@ class Rack::Attack
   redis_client = Redis.new(url: "redis://#{redis_url}")
   Rack::Attack.cache.store = Rack::Attack::StoreProxy::RedisProxy.new(redis_client)
 
+  # A 429 with no Retry-After is unreadable to a client: the CLI told sellers the limit was
+  # "30 PUTs/min, wait a moment" while a level-5 bucket holds for ~9 hours, so a blocked
+  # seller retried for hours and read it as an account restriction (gp#2855). rack-attack
+  # then reports seconds until the matched rule's bucket rotates.
+  Rack::Attack.throttled_response_retry_after_header = true
+
   class Request < ::Rack::Request
     # When the server is behind a load balancer
     def remote_ip

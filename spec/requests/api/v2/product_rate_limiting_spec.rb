@@ -117,4 +117,26 @@ describe "Product API rate limiting", type: :request do
       end
     end
   end
+
+  describe "Retry-After on the 429" do
+    let(:product) { create(:product, user:) }
+
+    it "tells the client how long the throttled bucket still lasts" do
+      travel_to(Time.current) do
+        30.times do
+          put "/api/v2/products/#{product.external_id}",
+              params: { access_token: token.token, name: "Updated" },
+              headers: { "REMOTE_ADDR" => "203.0.113.7" }
+        end
+
+        put "/api/v2/products/#{product.external_id}",
+            params: { access_token: token.token, name: "Updated" },
+            headers: { "REMOTE_ADDR" => "203.0.113.7" }
+
+        expect(response).to have_http_status(:too_many_requests)
+        expect(response.headers["Retry-After"]).to be_present
+        expect(response.headers["Retry-After"].to_i).to be_between(1, 60)
+      end
+    end
+  end
 end
