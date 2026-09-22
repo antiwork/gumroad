@@ -141,11 +141,28 @@ describe StripeMerchantAccountManager do
     end
 
     it "links the match from a later page when the embedded page is incomplete" do
-      stub_stripe_account_with([stripe_bank_account_payload(last4: "9999")], has_more: true)
+      stub_stripe_account_with(
+        [stripe_bank_account_payload(id: "ba_embedded_decoy", fingerprint: "fp_embedded_decoy", last4: "9999")],
+        has_more: true
+      )
       stub_full_external_account_list([stripe_bank_account_payload])
 
       expect(described_class.update_bank_account(user, passphrase:)).to eq(:synced)
-      expect(bank_account.reload.stripe_bank_account_id).to eq("ba_recovered_from_stripe")
+      bank_account.reload
+      expect(bank_account.stripe_bank_account_id).to eq("ba_recovered_from_stripe")
+      expect(bank_account.stripe_fingerprint).to eq("fp_recovered_from_stripe")
+    end
+
+    it "links the matching external account rather than the first one on the page" do
+      stub_stripe_account_with([
+                                 stripe_bank_account_payload(id: "ba_page_decoy", fingerprint: "fp_page_decoy", last4: "9999"),
+                                 stripe_bank_account_payload
+                               ])
+
+      expect(described_class.update_bank_account(user, passphrase:)).to eq(:synced)
+      bank_account.reload
+      expect(bank_account.stripe_bank_account_id).to eq("ba_recovered_from_stripe")
+      expect(bank_account.stripe_fingerprint).to eq("fp_recovered_from_stripe")
     end
 
     it "does not link from the embedded page when a later page could hold another match" do
