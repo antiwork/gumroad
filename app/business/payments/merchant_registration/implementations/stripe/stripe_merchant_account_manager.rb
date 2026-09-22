@@ -1309,11 +1309,20 @@ module StripeMerchantAccountManager
 
     stripe_account = Stripe::Account.retrieve(user.stripe_account.charge_processor_merchant_id)
     if stripe_account["metadata"]["bank_account_id"] == bank_account.external_id
-      return :noop_metadata_match unless account_holder_name_synced_to_stripe?(bank_account.user)
+      # A metadata match says Stripe was told about this row; it does not say the LOCAL row was
+      # ever linked. A save that set the metadata without reaching save_stripe_bank_account_info
+      # leaves stripe_bank_account_id NULL, and reporting that as a metadata match is read as
+      # success by RetryStripeRejectedPayoutSetupForSellerJob — so the retry loop stops and every
+      # payout is skipped with no failure note (gumroad-private#2882). Countries outside
+      # ACCOUNT_HOLDER_NAME_SYNC_COUNTRIES treat the metadata stamp as sufficient and used to
+      # return the no-op straight away, which is how the unlinked row stayed invisible.
+      if account_holder_name_synced_to_stripe?(bank_account.user)
+        stripe_external_account = stripe_account["external_accounts"]&.first
+        stripe_holder_name = stripe_external_account && stripe_external_account["account_holder_name"]
+        return :noop_metadata_match unless stripe_holder_name == bank_account.account_holder_full_name
+      end
 
-      stripe_external_account = stripe_account["external_accounts"]&.first
-      stripe_holder_name = stripe_external_account && stripe_external_account["account_holder_name"]
-      return :noop_metadata_match if stripe_holder_name == bank_account.account_holder_full_name
+      return restore_local_bank_link!(bank_account, stripe_account)
     end
 
     attributes = bank_account_hash(bank_account, stripe_account:, passphrase:)
@@ -1841,15 +1850,48 @@ module StripeMerchantAccountManager
   end
 
   private_class_method
-  def self.save_stripe_bank_account_info(bank_account, stripe_account)
+  def self.save_stripe_bank_account_info(bank_account, stripe_account, stripe_external_account: nil)
     # We replace the bank account whenever adding a new one, so there will only be one in the list.
-    stripe_external_account = stripe_account.external_accounts.first
+    stripe_external_account ||= stripe_account.external_accounts.first
     bank_account.stripe_connect_account_id = stripe_account.id
     bank_account.stripe_external_account_id = stripe_external_account.id
     bank_account.stripe_fingerprint = stripe_external_account.fingerprint
     bank_account.save!(validate: false)
 
     CheckPaymentAddressWorker.perform_async(bank_account.user_id)
+  end
+
+  private_class_method
+  # Stripe already holds the seller's bank account (metadata says it is this very row) but the
+  # local row carries no linked external account, so `StripePayoutProcessor.is_user_payable` fails
+  # on every run and the seller is skipped forever. Re-sending the details cannot repair it — the
+  # metadata match above short-circuits — so link the external account Stripe already has.
+  #
+  # Returns :noop_metadata_match when the row is already linked (the honest no-op this branch has
+  # always reported) or when no single external account can be shown to be this row: the account
+  # number is not readable back from Stripe, so last four digits, routing number and currency are
+  # the whole of the identifying evidence, and a wrong link is worse than a missed repair.
+  def self.restore_local_bank_link!(bank_account, stripe_account)
+    return :noop_metadata_match if bank_account.stripe_bank_account_id.present?
+
+    stripe_external_account = matching_stripe_external_account(bank_account, stripe_account)
+    return :noop_metadata_match if stripe_external_account.nil?
+
+    save_stripe_bank_account_info(bank_account, stripe_account, stripe_external_account:)
+    clear_stale_bank_sync_failure_notes(bank_account.user)
+    :synced
+  end
+
+  private_class_method
+  def self.matching_stripe_external_account(bank_account, stripe_account)
+    raw_external_accounts = stripe_account["external_accounts"]
+    external_accounts = raw_external_accounts.respond_to?(:data) ? raw_external_accounts.data : Array(raw_external_accounts)
+    matches = external_accounts.select do |external_account|
+      external_account["last4"].to_s == bank_account.account_number_last_four.to_s &&
+        external_account["routing_number"].to_s == bank_account.stripe_external_account_routing_number.to_s &&
+        external_account["currency"].to_s.casecmp?(bank_account.stripe_external_account_currency.to_s)
+    end
+    matches.one? ? matches.first : nil
   end
 
   private_class_method
