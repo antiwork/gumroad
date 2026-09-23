@@ -1131,55 +1131,6 @@ check(
 )
 
 check(
-  "Posts/Show selects the post page specs",
-  base_files: {
-    "spec/controllers/posts_controller_spec.rb" => SPEC_STUB,
-    "spec/requests/user/favicon_spec.rb" => SPEC_STUB,
-    "app/javascript/pages/Posts/Show.tsx" => "old",
-  },
-  head_files: { "app/javascript/pages/Posts/Show.tsx" => "new" },
-  expect_specs: %w[
-    spec/controllers/posts_controller_spec.rb
-    spec/requests/user/favicon_spec.rb
-  ],
-)
-
-check(
-  "a different Posts page still escalates",
-  base_files: { "app/javascript/pages/Posts/Other.tsx" => "old" },
-  head_files: { "app/javascript/pages/Posts/Other.tsx" => "new" },
-  expect_escalate: true,
-)
-
-check(
-  "PostCommentsSection selects the post page and comments controller specs",
-  base_files: {
-    "spec/controllers/posts_controller_spec.rb" => SPEC_STUB,
-    "spec/controllers/comments_controller_spec.rb" => SPEC_STUB,
-    "app/javascript/components/Post/PostCommentsSection.tsx" => "old",
-  },
-  head_files: { "app/javascript/components/Post/PostCommentsSection.tsx" => "new" },
-  expect_specs: %w[
-    spec/controllers/posts_controller_spec.rb
-    spec/controllers/comments_controller_spec.rb
-  ],
-)
-
-check(
-  "AffiliateRequests/New selects the affiliate request form specs",
-  base_files: {
-    "spec/requests/user/affiliate_request_form_spec.rb" => SPEC_STUB,
-    "spec/controllers/affiliate_requests_controller_spec.rb" => SPEC_STUB,
-    "app/javascript/pages/AffiliateRequests/New.tsx" => "old",
-  },
-  head_files: { "app/javascript/pages/AffiliateRequests/New.tsx" => "new" },
-  expect_specs: %w[
-    spec/requests/user/affiliate_request_form_spec.rb
-    spec/controllers/affiliate_requests_controller_spec.rb
-  ],
-)
-
-check(
   "Users/Coffee selects purchase coffee spec and tipping spec",
   base_files: {
     "spec/requests/user/profile_spec.rb" => SPEC_STUB,

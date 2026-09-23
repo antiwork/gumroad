@@ -77,14 +77,14 @@ export default function PostsShow() {
         <style>{custom_styles}</style>
       </Head>
       <Layout creatorProfile={creator_profile}>
-        <header className="border-b border-border">
-          <div className="mx-auto grid max-w-6xl gap-2 px-4 py-8">
+        <header className="border-b border-border px-4 py-8">
+          <div className="mx-auto grid max-w-6xl gap-2">
             <h1 className="text-4xl">{subject}</h1>
             <time>{publishedAtFormatted}</time>
           </div>
         </header>
-        <article className="border-b border-border">
-          <div className="mx-auto grid max-w-6xl gap-8 p-4 pt-8 text-lg lg:pt-12 lg:pb-8">
+        <article className="border-b border-border p-4 pt-8 lg:pt-12 lg:pb-8">
+          <div className="mx-auto grid max-w-6xl gap-8 text-lg">
             {pageLoaded ? null : <LoadingSpinner className="size-8" />}
             {/* dir="auto" gives the post a base direction from its first strong character;
                 per-block direction for mixed-language content is handled by the
@@ -93,7 +93,7 @@ export default function PostsShow() {
           </div>
 
           {call_to_action || download_url ? (
-            <div className="mx-auto mb-4 grid max-w-6xl px-4">
+            <div className="mx-auto mb-4 grid max-w-6xl">
               {call_to_action ? (
                 <p>
                   <Button asChild color="accent">

@@ -110,10 +110,10 @@ const PublicProfile = (props: Props) => {
   return (
     <>
       {props.bio || props.tabs.length > 1 ? (
-        <header className="border-b border-border">
-          {/* The gutter stays at every width: max-w-6xl (1152px) is wider than the lg breakpoint
-              (1024px), so dropping px-4 at lg leaves this flush with the viewport edge in between. */}
-          <div className="mx-auto grid w-full max-w-6xl grid-cols-1 gap-4 px-4 py-8">
+        <header className="border-b border-border px-4 py-8">
+          {/* The gutter sits outside the capped grid, as SectionLayout does below, so the bio and
+              the tabs track the sections' left edge at every width. */}
+          <div className="mx-auto grid w-full max-w-6xl grid-cols-1 gap-4">
             {props.bio ? (
               /*
                 The bio is regular prose, so it renders as a paragraph at normal body size. It used

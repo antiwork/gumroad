@@ -186,23 +186,6 @@ FANOUT = {
   ],
   # Renderer: users_controller.rb:115 Users/Coffee. tipping_spec.rb visits
   # coffee.long_url then checkout (coffee-only carts cannot tip).
-  %r{\Aapp/javascript/pages/Posts/Show\.tsx\z} => %w[
-    spec/controllers/posts_controller_spec.rb
-    spec/requests/user/favicon_spec.rb
-  ],
-  # Renderer: posts_controller.rb:40 Posts/Show. favicon_spec visits view_post_path.
-  %r{\Aapp/javascript/components/Post/PostCommentsSection\.tsx\z} => %w[
-    spec/controllers/posts_controller_spec.rb
-    spec/controllers/comments_controller_spec.rb
-  ],
-  # Importer: pages/Posts/Show.tsx. Comment create/update/delete go through
-  # comments_controller (custom_domain_*_post_comment_path).
-  %r{\Aapp/javascript/pages/AffiliateRequests/New\.tsx\z} => %w[
-    spec/requests/user/affiliate_request_form_spec.rb
-    spec/controllers/affiliate_requests_controller_spec.rb
-  ],
-  # Renderer: affiliate_requests_controller.rb:19 AffiliateRequests/New.
-  # affiliate_request_form_spec visits new_affiliate_request_path.
   # Users/Show is also a Discover/UTM checkout surface — escalate.
   %r{\Aapp/javascript/pages/Users/Subscribe\.tsx\z} => PROFILE_FLOW_SPECS,
   # Renderer: users_controller.rb:125 Users/Subscribe.

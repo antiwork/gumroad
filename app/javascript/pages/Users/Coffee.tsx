@@ -34,7 +34,7 @@ export default function CoffeePage() {
       currencySelector
       shownCurrency={product.buyer_currency_display?.buyer_currency_shown}
     >
-      <CoffeeProduct product={product} purchase={purchase} className="mx-auto w-full max-w-6xl" />
+      <CoffeeProduct product={product} purchase={purchase} className="mx-auto w-full max-w-6xl lg:px-0" />
     </ProfileLayout>
   );
 }

@@ -54,9 +54,9 @@ const AffiliateRequestsNew = () => {
     <Layout creatorProfile={creator_profile}>
       <PageHeader
         title={`Become an affiliate for ${creator_profile.name}`}
-        className="mx-auto w-full max-w-6xl border-0"
+        className="mx-auto w-full max-w-6xl border-0 lg:px-0"
       />
-      <form className="border-y border-border px-4 pt-8" onSubmit={onSubmit}>
+      <form className="border-y border-border px-4 pt-8 lg:px-0" onSubmit={onSubmit}>
         <FormSection
           className="mx-auto w-full max-w-6xl"
           header={
