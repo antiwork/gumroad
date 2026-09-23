@@ -342,3 +342,108 @@ it("holds the download switch back for an oversized EPUB picked but not yet save
 
   expect(screen.queryByText(/Disable file downloads/u)).toBeNull();
 });
+
+const renderDownloadSwitch = async (file: FileEntry) => {
+  const product: { files: FileEntry[] } = { files: [file] };
+  context.filesById = new Map<string, FileEntry>([[FILE_ID, file]]);
+  context.updateProduct = (update: unknown) => {
+    // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- fixture mapper matches updateProduct
+    if (typeof update === "function") (update as (p: typeof product) => void)(product);
+  };
+
+  render(<FileEmbedEditor config={{ filesById: context.filesById }} />);
+  await act(() => Promise.resolve());
+
+  act(() => {
+    fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+  });
+
+  return { product, toggle: screen.getByLabelText(/Disable file downloads/u) as HTMLInputElement };
+};
+
+// The read-only switch is retroactive and has no grandfathering (gumroad-private#2916), so a
+// file buyers already hold is confirmed before the save, naming how many are cut off
+// (gumroad-private#2918).
+it("confirms with the buyer count before disabling downloads on a file buyers already hold", async () => {
+  const { product, toggle } = await renderDownloadSwitch({
+    ...documentFile,
+    existing_buyer_count: 1788,
+    status: { type: "saved" },
+  });
+
+  act(() => {
+    fireEvent.click(toggle);
+  });
+
+  expect(screen.getByText("1,788 existing buyers will lose download access to this file.")).toBeTruthy();
+  // Nothing is written until the seller confirms.
+  expect(product.files[0]?.stream_only).toBe(false);
+});
+
+it("leaves the download switch off when the confirmation is cancelled", async () => {
+  const { product, toggle } = await renderDownloadSwitch({
+    ...documentFile,
+    existing_buyer_count: 1,
+    status: { type: "saved" },
+  });
+
+  act(() => {
+    fireEvent.click(toggle);
+  });
+  expect(screen.getByText("1 existing buyer will lose download access to this file.")).toBeTruthy();
+
+  act(() => {
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+  });
+
+  expect(product.files[0]?.stream_only).toBe(false);
+  expect(screen.queryByText(/will lose download access/u)).toBeNull();
+});
+
+it("turns downloads off once the confirmation is accepted", async () => {
+  const { product, toggle } = await renderDownloadSwitch({
+    ...documentFile,
+    existing_buyer_count: 4,
+    status: { type: "saved" },
+  });
+
+  act(() => {
+    fireEvent.click(toggle);
+  });
+  act(() => {
+    fireEvent.click(screen.getByRole("button", { name: "Disable downloads" }));
+  });
+
+  expect(product.files[0]?.stream_only).toBe(true);
+});
+
+it("disables downloads on a file with no buyers without confirming", async () => {
+  const { product, toggle } = await renderDownloadSwitch({
+    ...documentFile,
+    existing_buyer_count: 0,
+    status: { type: "saved" },
+  });
+
+  act(() => {
+    fireEvent.click(toggle);
+  });
+
+  expect(product.files[0]?.stream_only).toBe(true);
+  expect(screen.queryByText(/will lose download access/u)).toBeNull();
+});
+
+it("does not confirm when re-enabling downloads on a read-only file with buyers", async () => {
+  const { product, toggle } = await renderDownloadSwitch({
+    ...documentFile,
+    existing_buyer_count: 12,
+    stream_only: true,
+    status: { type: "saved" },
+  });
+
+  act(() => {
+    fireEvent.click(toggle);
+  });
+
+  expect(product.files[0]?.stream_only).toBe(false);
+  expect(screen.queryByText(/will lose download access/u)).toBeNull();
+});

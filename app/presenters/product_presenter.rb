@@ -294,7 +294,11 @@ class ProductPresenter
         subscription_duration: product.subscription_duration,
         collaborating_user: collaborator.present? ? UserPresenter.new(user: collaborator).author_byline_props : nil,
         rich_content: product.rich_content_json,
-        files: files_data(product),
+        # Editor-only: how many existing buyers each file's read-only switch would
+        # cut off, so the editor can confirm before a retroactive change
+        # (gumroad-private#2918). Kept out of ProductFile#as_json, which the
+        # existing-files picker and the product page also serialize.
+        files: files_data_with_buyer_counts,
         # Served as false in the recoverable hidden-content state (flag on,
         # product level blank, variant pages real — the July 21, 2026 incident
         # shape) so the editor loads the real per-version pages instead of the
@@ -417,6 +421,15 @@ class ProductPresenter
   end
 
   private
+    # The editor's file list, each file carrying the number of existing buyers who
+    # would lose download access if the file became read-only (gumroad-private#2918).
+    # `existing_buyer_count` is 0 for a file nobody has bought yet, which is what
+    # keeps the editor from confirming on a no-op.
+    def files_data_with_buyer_counts
+      counts = ProductPresenter::FileBuyerCounts.new(product:).props
+      files_data(product).map { |file| file.merge(existing_buyer_count: counts.fetch(file[:id], 0)) }
+    end
+
     # An unset key means "no limit", which the picker relies on; only a stalled read gets the cap,
     # so a Redis blip cannot uncap the list.
     def existing_product_files_limit

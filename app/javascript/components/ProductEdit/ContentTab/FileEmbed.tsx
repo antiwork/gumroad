@@ -24,6 +24,7 @@ import { FileRowContent } from "$app/components/FileRowContent";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { PlayVideoIcon } from "$app/components/PlayVideoIcon";
 import { Popover, PopoverAnchor, PopoverClose, PopoverContent, PopoverTrigger } from "$app/components/Popover";
+import { DisableDownloadsConfirmationModal } from "$app/components/ProductEdit/ContentTab/DisableDownloadsConfirmationModal";
 import {
   FileEmbedGroup,
   titleWithFallback,
@@ -81,6 +82,9 @@ const FileEmbedNodeView = ({
   const [loadingVideo, setLoadingVideo] = React.useState(false);
   const [showingVideoPlayer, setShowingVideoPlayer] = React.useState(false);
   const [showingAudioDrawer, setShowingAudioDrawer] = React.useState(false);
+  // The read-only switch on a file that already has buyers waits here until the seller
+  // confirms what it costs them (gumroad-private#2918).
+  const [showBuyerConfirmation, setShowBuyerConfirmation] = React.useState(false);
   const uploader = assertDefined(useEvaporateUploader());
   const s3UploadConfig = useS3UploadConfig();
 
@@ -787,7 +791,18 @@ const FileEmbedNodeView = ({
               {canDisableDownloads ? (
                 <Switch
                   checked={file.stream_only}
-                  onChange={(e) => updateFile({ stream_only: e.target.checked })}
+                  onChange={(e) => {
+                    // Turning this on takes downloads away from buyers who already paid,
+                    // and there is no grandfathering (gumroad-private#2916), so a file
+                    // someone has bought gets a confirmation naming how many
+                    // (gumroad-private#2918). Unchecking is never destructive, and a file
+                    // with no buyers has nothing to confirm.
+                    if (e.target.checked && (file.existing_buyer_count ?? 0) > 0) {
+                      setShowBuyerConfirmation(true);
+                      return;
+                    }
+                    updateFile({ stream_only: e.target.checked });
+                  }}
                   label={
                     file.is_streamable ? (
                       <>
@@ -806,6 +821,15 @@ const FileEmbedNodeView = ({
           ) : null}
         </Row>
       </NodeActionsWrapper>
+      <DisableDownloadsConfirmationModal
+        open={showBuyerConfirmation}
+        buyerCount={file.existing_buyer_count ?? 0}
+        onClose={() => setShowBuyerConfirmation(false)}
+        onConfirm={() => {
+          setShowBuyerConfirmation(false);
+          updateFile({ stream_only: true });
+        }}
+      />
       {isDropZone ? (
         <div className="absolute inset-0 bg-backdrop">
           <div

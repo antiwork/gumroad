@@ -430,6 +430,10 @@ describe ProductPresenter do
       product_file = product.product_files.first
       [{ attached_product_name: "Product",  extension: "PDF", file_name: "Display Name", display_name: "Display Name", description: "Description", file_size: 50, id: product_file.external_id, is_pdf: true, pdf_stamp_enabled: false, hide_kindle_and_read_buttons: false, is_streamable: false, can_disable_downloads: true, stream_only: false, width: nil, height: nil, is_transcoding_in_progress: false, isbn: nil, pagelength: 3, duration: nil, subtitle_files: [], url: product_file.url, thumbnail: nil, status: { type: "saved" } }]
     end
+    # The editor's own file list: same files, each carrying the number of buyers who would
+    # lose download access if it became read-only (gumroad-private#2918). The count is
+    # editor-only — `existing_files` above serializes through ProductFile#as_json and has none.
+    let(:editor_product_files) { product_files.map { |file| file.merge(existing_buyer_count: 0) } }
     let(:available_countries) { ShippingDestination::Destinations.shipping_countries.map { { code: _1[0], name: _1[1] } } }
 
     before do
@@ -594,7 +598,7 @@ describe ProductPresenter do
             subscription_duration: nil,
             collaborating_user: nil,
             rich_content: [],
-            files: product_files,
+            files: editor_product_files,
             has_same_rich_content_for_all_variants: false,
             is_multiseat_license: false,
             call_limitation_info: nil,

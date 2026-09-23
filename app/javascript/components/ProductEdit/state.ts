@@ -369,6 +369,10 @@ export type FileEntry = {
   // Downloads-off eligibility from the server; absent on a file the editor just built, which judges
   // itself until it is saved. See ProductFile#can_disable_downloads?.
   can_disable_downloads?: boolean;
+  // Existing buyers who would lose download access if this file became read-only, from
+  // the editor's props. Absent on a file the editor just built (it has no buyers yet).
+  // See ProductPresenter::FileBuyerCounts.
+  existing_buyer_count?: number;
   stream_only: boolean;
   is_transcoding_in_progress: boolean;
   // Pixel dimensions of the video, when we know them, so the editor's preview
