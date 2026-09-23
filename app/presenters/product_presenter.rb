@@ -144,7 +144,12 @@ class ProductPresenter
     scope
         .limit(existing_product_files_limit)
         .order(id: :desc)
-        .includes(:alive_subtitle_files, thumbnail_attachment: :blob).map { _1.as_json(existing_product_file: true) }
+        .includes(:alive_subtitle_files, thumbnail_attachment: :blob).map do |file|
+          # A file already on this product keeps its buyer count so turning downloads off from
+          # the picker still confirms; a library file from another product reaches nobody here
+          # yet, and 0 is the honest count for it (gumroad-private#2918).
+          file.as_json(existing_product_file: true).merge(existing_buyers_count: file_buyer_counts[file.external_id] || 0)
+        end
   end
 
   def edit_props

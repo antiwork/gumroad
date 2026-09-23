@@ -594,8 +594,8 @@ describe ProductPresenter do
             subscription_duration: nil,
             collaborating_user: nil,
             rich_content: [],
-            # The editor's file props carry the buyer count; the picker's `existing_files`
-            # below does not (gumroad-private#2918).
+            # Both of the editor's file lists carry the buyer count: the product's own files below,
+            # and `existing_files` further down (gumroad-private#2918).
             files: product_files.map { _1.merge(existing_buyers_count: 0) },
             has_same_rich_content_for_all_variants: false,
             is_multiseat_license: false,
@@ -656,7 +656,7 @@ describe ProductPresenter do
           },
           seller: UserPresenter.new(user: product.user).author_byline_props,
           current_seller_external_id: product.user.external_id,
-          existing_files: product_files,
+          existing_files: product_files.map { _1.merge(existing_buyers_count: 0) },
           s3_url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}",
           aws_key: AWS_ACCESS_KEY,
           available_countries:,
@@ -1478,11 +1478,31 @@ describe ProductPresenter do
     let(:presenter) { described_class.new(product: product) }
     let(:product_files) do
       product_file = product.product_files.first
-      [{ attached_product_name: product.name,  extension: "PDF", file_name: "Display Name", display_name: "Display Name", description: "Description", file_size: 50, id: product_file.external_id, is_pdf: true, pdf_stamp_enabled: false, hide_kindle_and_read_buttons: false, is_streamable: false, can_disable_downloads: true, stream_only: false, width: nil, height: nil, is_transcoding_in_progress: false, isbn: nil, pagelength: 3, duration: nil, subtitle_files: [], url: product_file.url, thumbnail: nil, status: { type: "saved" } }]
+      [{ attached_product_name: product.name,  extension: "PDF", file_name: "Display Name", display_name: "Display Name", description: "Description", file_size: 50, id: product_file.external_id, is_pdf: true, pdf_stamp_enabled: false, hide_kindle_and_read_buttons: false, is_streamable: false, can_disable_downloads: true, stream_only: false, width: nil, height: nil, is_transcoding_in_progress: false, isbn: nil, pagelength: 3, duration: nil, subtitle_files: [], url: product_file.url, thumbnail: nil, status: { type: "saved" }, existing_buyers_count: 0 }]
     end
 
     it "returns existing files" do
       expect(presenter.existing_files).to eq(product_files)
+    end
+
+    it "carries the buyer count of a file already on this product, so the picker's switch confirms too" do
+      # A real purchase cannot be created on a machine without Stripe test access (the sibling
+      # `create(:purchase, link: product)` specs fail there identically); the counting itself is
+      # covered by ProductFileBuyerCountsService's own specs, and this pins the wiring.
+      allow(ProductFileBuyerCountsService).to receive(:new).and_return(
+        instance_double(ProductFileBuyerCountsService, counts_by_external_id: { product.product_files.first.external_id => 7 })
+      )
+
+      expect(presenter.existing_files.dig(0, :existing_buyers_count)).to eq(7)
+    end
+
+    it "reports zero for a library file that belongs to another product" do
+      other_product = create(:product, user: seller)
+      other_file = create(:product_file, link: other_product, url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachments/other.pdf")
+
+      counts = presenter.existing_files.to_h { [_1[:id], _1[:existing_buyers_count]] }
+
+      expect(counts[other_file.external_id]).to eq(0)
     end
 
     it "caps the picker at the default limit when the Redis read stalls, and leaves an unset key unlimited" do
