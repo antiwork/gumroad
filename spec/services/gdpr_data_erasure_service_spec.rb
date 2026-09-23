@@ -826,6 +826,20 @@ describe GdprDataErasureService do
       expect(product.reload.deleted?).to eq(true)
     end
 
+    it "erases an account holding a record that no longer validates" do
+      # Erasure shares the closure's cleanup (User#soft_delete_owned_records!), which skips
+      # validations: a legacy row that fails one must not abort a legally mandated erasure.
+      installment = create(:installment, seller: user)
+      installment.update_columns(message: "<p><br></p>", published_at: nil)
+      expect(installment.reload).to be_invalid
+
+      result = described_class.new(user, performed_by: admin).perform!
+
+      expect(result[:success]).to eq(true)
+      expect(user.reload.deleted?).to eq(true)
+      expect(installment.reload.deleted?).to eq(true)
+    end
+
     it "deletes the user's public media files and purges their blobs from public storage" do
       public_file = PublicFile.new(seller: user, resource: user, display_name: "Logo")
       public_file.file.attach(

@@ -1132,7 +1132,7 @@ describe User, :vcr do
         expect(PaperTrail::Version.count).to eq(versions_count)
       end
 
-      it "rolls back staff changes and audits when cleanup after revocation fails" do
+      it "rolls back staff changes and audits when custom domain cleanup fails" do
         domain = create(:custom_domain, user: gumroad)
         versions_count = PaperTrail::Version.count
         allow(gumroad).to receive(:custom_domain).and_return(domain)
@@ -1339,6 +1339,57 @@ describe User, :vcr do
 
           expect(staff_user.reload).not_to be_is_team_member
         end
+      end
+    end
+
+    context "when a record the closure soft-deletes no longer validates" do
+      # A validation on a row the closure is deleting can only abort the closure.
+      it "closes the account when an alive draft installment's message is empty" do
+        @installment.update_columns(message: "<p><br></p>", published_at: nil)
+        expect(@installment.reload).to be_invalid
+
+        expect(@user.reload.deactivate!).to eq(true)
+
+        expect(@user.reload).to be_deleted
+        expect(@installment.reload).to be_deleted
+      end
+
+      it "closes the account when an alive product no longer validates" do
+        @product.update_columns(name: nil)
+        expect(@product.reload).to be_invalid
+
+        expect(@user.reload.deactivate!).to eq(true)
+
+        expect(@product.reload).to be_deleted
+      end
+
+      it "closes the account when an alive bank account no longer validates" do
+        @bank_account.update_columns(account_number_last_four: nil)
+        expect(@bank_account.reload).to be_invalid
+
+        expect(@user.reload.deactivate!).to eq(true)
+
+        expect(@bank_account.reload).to be_deleted
+      end
+
+      it "still raises for an invalid product when Link#delete! is called without validate: false" do
+        @product.update_columns(name: nil)
+
+        expect { @product.reload.delete! }.to raise_error(ActiveRecord::RecordInvalid)
+      end
+    end
+
+    context "when the account owns a product that is purchase-disabled or banned" do
+      it "soft-deletes the product and runs its delete! cleanup" do
+        disabled = create(:product, user: @user, purchase_disabled_at: Time.current)
+        banned = create(:product, user: @user, banned_at: Time.current)
+        domain = create(:custom_domain, product: disabled, user: nil)
+
+        expect(@user.reload.deactivate!).to eq(true)
+
+        expect(disabled.reload).to be_deleted
+        expect(banned.reload).to be_deleted
+        expect(domain.reload).to be_deleted
       end
     end
 

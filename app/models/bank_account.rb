@@ -82,9 +82,9 @@ class BankAccount < ApplicationRecord
     hash
   end
 
-  def mark_deleted!
+  def mark_deleted!(validate: true)
     self.deleted_at = Time.current
-    save!
+    save!(validate:)
   end
 
   # The routing fields with the labels the payout form puts next to them, so a rejection can quote

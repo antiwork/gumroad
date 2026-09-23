@@ -186,7 +186,7 @@ class GdprDataErasureService
     def deactivate_account!
       return 0 if @user.deleted?
 
-      products_deleted = @user.links.alive.count
+      products_deleted = @user.links.visible.count
 
       # Skip balance validation for GDPR erasure. We are legally obligated
       # to erase regardless of outstanding balance (Article 17).
@@ -197,16 +197,12 @@ class GdprDataErasureService
         payouts_paused_internally: true,
       )
 
-      @user.links.alive.each(&:delete!)
-      @user.installments.alive.each(&:mark_deleted!)
-      @user.user_compliance_infos.alive.each(&:mark_deleted!)
-      @user.bank_accounts.alive.each(&:mark_deleted!)
+      # The account's own cleanup, shared with the self-serve closure so an erasure cannot leave
+      # behind records a closure removes. Validations are skipped: a legacy row that no longer
+      # validates must not abort a mandated erasure (Article 17).
+      @user.soft_delete_owned_records!
       @user.send(:cancel_active_subscriptions!)
       @user.invalidate_active_sessions!
-
-      if @user.custom_domain&.persisted? && !@user.custom_domain.deleted?
-        @user.custom_domain.mark_deleted!
-      end
 
       products_deleted
     end

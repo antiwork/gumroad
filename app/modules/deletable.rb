@@ -9,9 +9,11 @@ module Deletable
     scope :deleted, -> { where.not(deleted_at: nil) }
   end
 
-  def mark_deleted!
+  # `validate: false` lets account closure delete a row that no longer validates, keeping the bang
+  # (and its callbacks and PaperTrail versions) that a plain `update_all` would skip.
+  def mark_deleted!(validate: true)
     self.deleted_at = Time.current
-    save!
+    save!(validate:)
   end
 
   def mark_deleted(validate: true)

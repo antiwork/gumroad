@@ -829,10 +829,7 @@ class User < ApplicationRecord
           payouts_paused_internally: true,
         )
 
-        links.each(&:delete!)
-        installments.alive.each(&:mark_deleted!)
-        user_compliance_infos.alive.each(&:mark_deleted!)
-        bank_accounts.alive.each(&:mark_deleted!)
+        soft_delete_owned_records!
         # Account-level public media (see Api::V2::MediaController) is purged from storage, not
         # just soft-deleted, so the CDN stops serving it. Rescue per file so one bad blob doesn't
         # roll back the whole account closure.
@@ -845,14 +842,24 @@ class User < ApplicationRecord
         invalidate_active_sessions!
         clear_team_member_flags!
 
-        if custom_domain&.persisted? && !custom_domain.deleted?
-          custom_domain.mark_deleted!
-        end
-
         true
       end
     rescue
       false
+    end
+  end
+
+  # One list for both closure paths (self-serve and GDPR erasure), which had drifted. `visible`, not
+  # `alive`, so a purchase-disabled or banned product still gets its `Link#delete!` cleanup;
+  # validations are skipped because these rows are being deleted anyway.
+  def soft_delete_owned_records!
+    links.visible.each { |link| link.delete!(validate: false) }
+    installments.alive.each { |installment| installment.mark_deleted!(validate: false) }
+    user_compliance_infos.alive.each { |info| info.mark_deleted!(validate: false) }
+    bank_accounts.alive.each { |account| account.mark_deleted!(validate: false) }
+
+    if custom_domain&.persisted? && !custom_domain.deleted?
+      custom_domain.mark_deleted!(validate: false)
     end
   end
 
