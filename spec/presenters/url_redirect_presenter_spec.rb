@@ -352,6 +352,31 @@ describe UrlRedirectPresenter do
           .to eq([august.external_id, july.external_id, sign_up.external_id])
       end
 
+      # `purchases.email` collates utf8mb4_unicode_ci, so these two are matched by a SQL email
+      # comparison but rejected by the byte-for-byte one the invoice endpoint applies — the link
+      # would render and then refuse.
+      it "leaves out a charge whose email differs only by case" do
+        sign_up, july, august, url_redirect = membership_with_three_charges
+        # Saved past `downcase_email` so the row keeps its casing, as a row written outside
+        # ActiveRecord (or before that callback) does.
+        july.update_column(:email, "Buyer@Example.com")
+
+        props = described_class.new(url_redirect:, logged_in_user: nil).download_page_with_content_props[:purchase]
+
+        expect(props[:invoice_charges].map { |charge| charge[:id] })
+          .to eq([august.external_id, sign_up.external_id])
+      end
+
+      it "leaves out a charge whose email differs only by accent" do
+        sign_up, july, august, url_redirect = membership_with_three_charges
+        july.update!(email: "búyer@example.com")
+
+        props = described_class.new(url_redirect:, logged_in_user: nil).download_page_with_content_props[:purchase]
+
+        expect(props[:invoice_charges].map { |charge| charge[:id] })
+          .to eq([august.external_id, sign_up.external_id])
+      end
+
       it "leaves out a fully refunded charge" do
         sign_up, july, august, url_redirect = membership_with_three_charges
         july.update!(stripe_refunded: true)

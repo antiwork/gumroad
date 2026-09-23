@@ -82,10 +82,9 @@ class UrlRedirectPresenter
   end
 
   private
-    # The invoiceable charges the download page renders its "Generate invoice" links from.
-    # Membership charges come from the subscription (gumroad-private#2907); anything else
-    # resolves to the single purchase the receipt/invoice links already point at, so a one-off
-    # purchase, a bundle and a gift all keep the exact link they had before.
+    # The invoiceable charges the download page renders its "Generate invoice" links from: a
+    # membership's from the subscription, anything else the single purchase the receipt and
+    # invoice links already point at, so a one-off purchase, a bundle and a gift are unchanged.
     def invoice_charges_for(receipt_purchase)
       return [] if purchase.blank? || receipt_purchase.blank?
 
@@ -130,12 +129,9 @@ class UrlRedirectPresenter
           # embeds the buyer's email, which must not reach the page when email confirmation is
           # still pending; the frontend builds the URL from the id it already has.
           has_invoice: receipt_purchase.present? && receipt_purchase.has_invoice?,
-          # Every charge of this membership whose invoice the buyer may open, newest first, so
-          # the download page can offer the earlier periods of a long-running subscription
-          # instead of only the latest one (gumroad-private#2907). A one-off purchase gets the
-          # single charge the receipt/invoice links already point at, so its page is unchanged.
-          # Ids only, never URLs: the invoice URL embeds the buyer's email, which must not reach
-          # the page while email confirmation is still pending.
+          # Every charge of this membership the buyer may invoice, newest first, so the page can
+          # offer earlier periods as well as the latest. Ids only, never URLs, for the same
+          # email-confirmation reason as `has_invoice`.
           invoice_charges: invoice_charges_for(receipt_purchase),
           product_permalink: purchase.link&.unique_permalink,
           product_id: purchase.link&.external_id,

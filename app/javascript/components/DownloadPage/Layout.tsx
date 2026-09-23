@@ -54,10 +54,9 @@ export type LayoutProps = {
     is_archived: boolean;
     has_invoice: boolean;
     /**
-     * Every charge of this membership the buyer may invoice, newest first. Ids only — the
-     * invoice URL embeds the buyer's email, which must not reach the page while email
-     * confirmation is still pending, so the frontend builds it from the id. One entry for a
-     * one-off purchase, the whole subscription's charges for a membership.
+     * Every charge of this membership the buyer may invoice, newest first. Ids only: the invoice
+     * URL embeds the buyer's email, which must not reach the page while email confirmation is
+     * still pending, so the frontend builds it from the id.
      */
     invoice_charges: InvoiceCharge[];
     product_id: string | null;
@@ -120,9 +119,8 @@ export const Layout = ({
   // `receipt_purchase_id` only ever names a purchase sharing this one's email (see
   // Purchase#receipt_purchase), so the library row's address is the right one for both links.
   const receiptPurchaseEmail = purchase?.email;
-  // Every charge of this membership the buyer may invoice, newest first — one entry for a
-  // one-off purchase. A membership's earlier periods have no other route from the UI: the
-  // receipt and invoice links can only ever name a single purchase (gumroad-private#2907).
+  // Every charge of this membership the buyer may invoice, newest first, so earlier periods are
+  // reachable too; one entry for a one-off purchase.
   const invoiceCharges = (purchase?.invoice_charges ?? []).filter((charge) => charge.has_invoice);
 
   const disabledStatus =
@@ -222,20 +220,12 @@ export const Layout = ({
                         {isResendingReceipt ? "Resending receipt..." : "Resend receipt"}
                       </Button>
                       {/*
-                        Buyers could always reach their invoice, but only by going Receipt →
-                        View receipt → Generate invoice, and enough of them failed to find it
-                        that sellers were fielding the support requests. Surfacing it here
-                        alongside the other receipt actions removes that indirection.
-
                         The receipt and invoice links can only ever name one purchase, so a
-                        membership used to expose only its LATEST charge: a B2B buyer
-                        reconciling several months could find last month's invoice and nothing
-                        earlier (gumroad-private#2907). One link per invoiceable period, newest
-                        first, and the period is named only when there is more than one, so a
-                        one-off purchase and a one-charge membership read exactly as before.
-                        Gated per charge on has_invoice so it matches the receipt: a free
-                        purchase or a membership still in its free trial has no amount to
-                        invoice, and the invoice page would have nothing to render.
+                        membership used to expose only its latest charge and earlier periods had
+                        no route from the UI at all. One link per invoiceable period; the period
+                        is named only when there is more than one, so a one-off purchase and a
+                        one-charge membership read as before. Gated per charge on has_invoice so
+                        a free purchase or a free-trial membership offers nothing to invoice.
                       */}
                       {invoiceCharges.map((charge, index) => (
                         <NavigationButton
