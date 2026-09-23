@@ -3548,6 +3548,29 @@ class StripePayoutProcessorTest < ActiveSupport::TestCase
     assert_includes @user.comments.with_type_payout_note.last.content, "does not match any bank account configured to receive it"
   end
 
+  test ".perform_payment Stripe error handling when Stripe rejects the payout because the destination bank account supports a different currency and names another external account in the payout currency marks the payment with failure_reason DESTINATION_CURRENCY_MISMATCH" do
+    setup_perform_payment_error_case
+    Stripe::Payout.stubs(:create).raises(Stripe::InvalidRequestError.new(currency_mismatch_with_alternative_account_error_message, "currency"))
+    StripePayoutProcessor.perform_payment(@payment)
+    assert_equal Payment::FailureReason::DESTINATION_CURRENCY_MISMATCH, @payment.reload.failure_reason
+  end
+
+  test ".perform_payment Stripe error handling when Stripe rejects the payout because the destination bank account supports a different currency and names another external account in the payout currency does not notify the error tracker" do
+    setup_perform_payment_error_case
+    Stripe::Payout.stubs(:create).raises(Stripe::InvalidRequestError.new(currency_mismatch_with_alternative_account_error_message, "currency"))
+    ErrorNotifier.expects(:notify).never
+    StripePayoutProcessor.perform_payment(@payment)
+  end
+
+  test ".perform_payment Stripe error handling when Stripe rejects the payout because the destination bank account supports a different currency and names another external account in the payout currency adds a payout note describing the currency mismatch" do
+    setup_perform_payment_error_case
+    Stripe::Payout.stubs(:create).raises(Stripe::InvalidRequestError.new(currency_mismatch_with_alternative_account_error_message, "currency"))
+    assert_difference -> { @user.comments.with_type_payout_note.count }, 1 do
+      StripePayoutProcessor.perform_payment(@payment)
+    end
+    assert_includes @user.comments.with_type_payout_note.last.content, "does not match any bank account configured to receive it"
+  end
+
   test ".perform_payment Stripe error handling when Stripe rejects the payout because the amount is below Stripe's per-currency payout minimum marks the payment with failure_reason BELOW_STRIPE_PAYOUT_MINIMUM" do
     setup_perform_payment_error_case
     Stripe::Payout.stubs(:create).raises(Stripe::InvalidRequestError.new("Amount must be no less than £1.00", "amount"))
@@ -3870,6 +3893,12 @@ class StripePayoutProcessorTest < ActiveSupport::TestCase
     # the payout failed only because the seller must resolve requirements directly with Stripe.
     def intervention_required_error_message
       "This account requires further intervention to perform certain actions. Stripe will have recently reached out to resolve this, but if you require further assistance please contact us via https://support.stripe.com/contact"
+    end
+
+    # Stripe appends this suffix to the currency-mismatch rejection whenever the account already has
+    # an external account in the payout currency: it names that account and suggests using it.
+    def currency_mismatch_with_alternative_account_error_message
+      "Attempting to create a transfer of pln to a destination that supports eur, but this account has another external account that supports pln. You should transfer to ba_test_xxx to avoid currency exchange fees."
     end
 
     def capabilities_error
