@@ -197,16 +197,12 @@ class GdprDataErasureService
         payouts_paused_internally: true,
       )
 
-      @user.links.alive.each(&:delete!)
-      @user.installments.alive.each(&:mark_deleted!)
-      @user.user_compliance_infos.alive.each(&:mark_deleted!)
-      @user.bank_accounts.alive.each(&:mark_deleted!)
+      # Same cleanup the self-serve closure runs, so an erasure cannot leave behind records a closure
+      # would have removed. It skips validations, so a legacy row that no longer validates cannot
+      # abort a legally mandated erasure (Article 17).
+      @user.soft_delete_owned_records!
       @user.send(:cancel_active_subscriptions!)
       @user.invalidate_active_sessions!
-
-      if @user.custom_domain&.persisted? && !@user.custom_domain.deleted?
-        @user.custom_domain.mark_deleted!
-      end
 
       products_deleted
     end

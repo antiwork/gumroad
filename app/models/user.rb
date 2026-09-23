@@ -829,10 +829,7 @@ class User < ApplicationRecord
           payouts_paused_internally: true,
         )
 
-        links.each(&:delete!)
-        installments.alive.each(&:mark_deleted!)
-        user_compliance_infos.alive.each(&:mark_deleted!)
-        bank_accounts.alive.each(&:mark_deleted!)
+        soft_delete_owned_records!
         # Account-level public media (see Api::V2::MediaController) is purged from storage, not
         # just soft-deleted, so the CDN stops serving it. Rescue per file so one bad blob doesn't
         # roll back the whole account closure.
@@ -845,14 +842,29 @@ class User < ApplicationRecord
         invalidate_active_sessions!
         clear_team_member_flags!
 
-        if custom_domain&.persisted? && !custom_domain.deleted?
-          custom_domain.mark_deleted!
-        end
-
         true
       end
     rescue
       false
+    end
+  end
+
+  # Soft-deletes every record account closure owns. Shared with GdprDataErasureService, which used to
+  # repeat this list: the two drifted, so a seller erased under GDPR kept leftovers a self-serve
+  # closure would have removed.
+  #
+  # Validations are skipped deliberately. These rows are being removed, so a validation can only
+  # abort the closure — and one legacy row that no longer validates (an old draft installment whose
+  # message scrubs to empty, a product whose permalink predates the current format) would make every
+  # retry fail forever, leaving the account half-closed.
+  def soft_delete_owned_records!
+    links.alive.each { |link| link.delete!(validate: false) }
+    installments.alive.each { |installment| installment.mark_deleted!(validate: false) }
+    user_compliance_infos.alive.each { |info| info.mark_deleted!(validate: false) }
+    bank_accounts.alive.each { |account| account.mark_deleted!(validate: false) }
+
+    if custom_domain&.persisted? && !custom_domain.deleted?
+      custom_domain.mark_deleted!(validate: false)
     end
   end
 

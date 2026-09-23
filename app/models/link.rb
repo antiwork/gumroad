@@ -511,11 +511,13 @@ class Link < ApplicationRecord
     buy_only? || buy_and_rent?
   end
 
-  def delete!
-    mark_deleted!
+  # `validate: false` is for account closure, which deletes every product an account owns: a legacy
+  # product row that no longer validates must not raise and abort the whole closure.
+  def delete!(validate: true)
+    mark_deleted!(validate:)
     clear_featured_product_sections!
     remove_from_profile_sections!
-    custom_domain&.mark_deleted!
+    custom_domain&.mark_deleted!(validate:)
     alive_public_files.update_all(scheduled_for_deletion_at: 10.minutes.from_now)
     CancelSubscriptionsForProductWorker.perform_in(10.minutes, id) if subscriptions.active.present?
     DeleteProductFilesWorker.perform_in(10.minutes, id)
