@@ -30,6 +30,9 @@ class StripePayoutProcessor
   # enough that a balance drained by an earlier payout in the same run isn't still called payable.
   PAY_OUT_CURRENCIES_CACHE_TTL = 10.minutes
 
+  # Onetime::TriageUnlinkedStripeBankAccounts matches notes on this wording.
+  UNLINKED_BANK_ACCOUNT_SKIP_REASON = "was skipped because the payout bank account was not correctly set up."
+
   def self.is_user_payable(user, amount_payable_usd_cents, add_comment: false, from_admin: false, payout_type: Payouts::PAYOUT_TYPE_STANDARD)
     payout_date = Time.current.to_fs(:formatted_date_full_month)
 
@@ -52,7 +55,7 @@ class StripePayoutProcessor
 
     # Don't payout users whose bank account is not linked to a bank account at Stripe
     if user.active_bank_account.stripe_bank_account_id.blank? || user.stripe_account.nil?
-      user.add_payout_note(content: "Payout on #{payout_date} was skipped because the payout bank account was not correctly set up.") if add_comment
+      user.add_payout_note(content: "Payout on #{payout_date} #{UNLINKED_BANK_ACCOUNT_SKIP_REASON}") if add_comment
       return false
     end
 

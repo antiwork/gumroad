@@ -24,6 +24,11 @@ describe PayoutRailSchedule do
     end
   end
 
+  it "distinguishes a bank rail in the payout schedule from the Friday fallback" do
+    expect(described_class.scheduled_bank_account_type?("UkBankAccount")).to be(true)
+    expect(described_class.scheduled_bank_account_type?("ZenginAccount")).to be(false)
+  end
+
   it "maps PayPal and Stripe Connect payouts to the Friday runs" do
     expect(described_class.paypal_weekday).to eq :friday
     expect(described_class.stripe_connect_weekday).to eq :friday
