@@ -417,8 +417,8 @@ describe Payment::FailureReason do
               payment.mark_failed!(Payment::FailureReason::DESTINATION_CURRENCY_MISMATCH)
             end.to change { payment.user.comments.count }.by(1)
 
-            payout_note = "Payout via Stripe on #{payment.created_at} failed because the payout currency does not match any bank account configured to receive it on the connected Stripe account. "
-            payout_note += "Solution: Confirm a bank account that accepts this currency is set up in payout settings. If the issue persists, contact Gumroad Support."
+            payout_note = "Payout via Stripe on #{payment.created_at} failed because the selected payout bank account cannot receive the payout currency. "
+            payout_note += "Solution: Confirm an active bank account that accepts this currency is set up in payout settings. If the issue persists, contact Gumroad Support."
             expect(payment.user.comments.last.content).to eq payout_note
           end
         end

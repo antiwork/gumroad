@@ -3545,7 +3545,7 @@ class StripePayoutProcessorTest < ActiveSupport::TestCase
     assert_difference -> { @user.comments.with_type_payout_note.count }, 1 do
       StripePayoutProcessor.perform_payment(@payment)
     end
-    assert_includes @user.comments.with_type_payout_note.last.content, "does not match any bank account configured to receive it"
+    assert_includes @user.comments.with_type_payout_note.last.content, "the selected payout bank account cannot receive the payout currency"
   end
 
   test ".perform_payment Stripe error handling when Stripe rejects the payout because the destination bank account supports a different currency and names another external account in the payout currency marks the payment with failure_reason DESTINATION_CURRENCY_MISMATCH" do
@@ -3568,7 +3568,7 @@ class StripePayoutProcessorTest < ActiveSupport::TestCase
     assert_difference -> { @user.comments.with_type_payout_note.count }, 1 do
       StripePayoutProcessor.perform_payment(@payment)
     end
-    assert_includes @user.comments.with_type_payout_note.last.content, "does not match any bank account configured to receive it"
+    assert_includes @user.comments.with_type_payout_note.last.content, "the selected payout bank account cannot receive the payout currency"
   end
 
   test ".perform_payment Stripe error handling when Stripe rejects the payout because the destination bank account supports a different currency and names another external account in the payout currency leaves a wrapped message that only contains the sentence unclassified" do
