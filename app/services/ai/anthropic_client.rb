@@ -91,7 +91,17 @@ class Ai::AnthropicClient
 
   # Public: OpenRouter can serve non-Claude models (store agent requests Grok); Anthropic-direct cannot.
   def self.openrouter_configured?
-    GlobalConfig.get("OPENROUTER_API_KEY").present?
+    openrouter_api_key.present?
+  end
+
+  # The store agent's own keys come first so its spend is metered and capped apart from
+  # Gumhead's (which shares GUMHEAD_UPSTREAM_*) and the refund-policy OpenRouter calls.
+  def self.openrouter_api_key
+    GlobalConfig.get("STORE_AGENT_OPENROUTER_API_KEY").presence || GlobalConfig.get("OPENROUTER_API_KEY").presence
+  end
+
+  def self.vercel_api_key
+    GlobalConfig.get("STORE_AGENT_AI_GATEWAY_API_KEY").presence || GlobalConfig.get("GUMHEAD_UPSTREAM_API_KEY").presence
   end
 
   # Short on purpose: fail fast and retry rather than sit on a dead socket.
@@ -672,7 +682,7 @@ class Ai::AnthropicClient
     end
 
     def vercel_api_key
-      GlobalConfig.get("GUMHEAD_UPSTREAM_API_KEY").presence
+      self.class.vercel_api_key
     end
 
     def vercel_messages_url
@@ -689,7 +699,7 @@ class Ai::AnthropicClient
     end
 
     def openrouter_api_key
-      GlobalConfig.get("OPENROUTER_API_KEY").presence
+      self.class.openrouter_api_key
     end
 
     def api_url
