@@ -363,16 +363,16 @@ class Rack::Attack
     req.remote_ip if req.path.match?(PASSWORD_RESET_PATH) && req.post?
   end
 
-  # One budget per target address so an abuser rotating IPs can't mailbomb one inbox. Falls back
-  # to the IP: a request with no address sends no mail, and a shared empty bucket would let one
-  # caller 429 every other caller.
+  # One budget per target address so an abuser rotating IPs can't mailbomb one inbox. Downcased
+  # by hand as well as by `throttle_discriminator_normalizer`, so the key folds case either way;
+  # falls back to the IP, since a shared empty bucket would let one caller 429 everyone else.
   # Initial: 4rpm, Max: 24 requests/9 hours
   throttle_with_exponential_backoff(name: "password_reset/email", requests: 4, period: 60.seconds, max_level: 6) do |req|
     next unless req.path.match?(PASSWORD_RESET_PATH) && req.post?
 
     json = req.json_params
-    email = json.dig("user", "email").presence if json.is_a?(Hash)
-    email || req.params.dig("user", "email").presence || req.remote_ip
+    email = json.dig("user", "email").to_s.downcase.presence if json.is_a?(Hash)
+    email || req.params.dig("user", "email").to_s.downcase.presence || req.remote_ip
   end
 
   # Throttle requests to Sales API with slow pagination; a non-scalar `page`

@@ -85,6 +85,16 @@ describe "Rack::Attack throttle", type: :request do
       end
     end
 
+    it "shares one budget across equivalent spellings of the same address" do
+      travel_to(Time.current) do
+        ["Target@Example.com", "TARGET@EXAMPLE.COM", "target@Example.com", " target@example.com "].each_with_index do |email, i|
+          expect(reset_throttled?(password_reset_request("/users/forgot_password", ip: "203.0.113.#{230 + i}", body: { user: { email: email } }))).to be(false), "request #{i + 1} unexpectedly throttled"
+        end
+
+        expect(reset_throttled?(password_reset_request("/users/forgot_password", ip: "203.0.113.240", body: { user: { email: "target@example.com" } }))).to be(true)
+      end
+    end
+
     it "keys the per-address budget on a form-encoded submission" do
       travel_to(Time.current) do
         4.times { |i| expect(reset_throttled?(password_reset_request("/mobile/forgot_password", ip: "203.0.113.#{180 + i}", body: { "user[email]" => "form@example.com" }, content_type: "application/x-www-form-urlencoded"))).to be(false) }
