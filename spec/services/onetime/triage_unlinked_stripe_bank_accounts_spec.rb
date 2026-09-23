@@ -9,9 +9,25 @@ describe Onetime::TriageUnlinkedStripeBankAccounts do
     create(:user_compliance_info, user:) if user.alive_user_compliance_info.nil?
     stripe_account = create(:merchant_account, user:) if merchant_account
     bank_account = travel_to(2.days.ago) { create(bank_account_factory, user:) }
-    create(:balance, user:, merchant_account: stripe_account || MerchantAccount.gumroad(StripeChargeProcessor.charge_processor_id), amount_cents: 42_00)
+    create(:balance, user:, merchant_account: stripe_account || MerchantAccount.gumroad(StripeChargeProcessor.charge_processor_id), amount_cents: 150_00, date: 2.weeks.ago.to_date)
     user.add_payout_note(content: "Payout on September 18, 2026 #{skip_reason}")
     [user, bank_account]
+  end
+
+  def pause_for_chargeback_rate!(user)
+    user.update!(payouts_paused_internally: true, payouts_paused_by: User::PAYOUT_PAUSE_SOURCE_SYSTEM)
+    user.comments.create!(
+      content: "Payouts automatically paused due to chargeback rate (4.0%).",
+      comment_type: Comment::COMMENT_TYPE_ON_PROBATION,
+      author_name: User::SYSTEM_PAYOUT_PAUSE_COMMENT_AUTHORS[:high_chargeback_rate]
+    )
+  end
+
+  def count_queries(&block)
+    count = 0
+    counter = ->(*, payload) { count += 1 unless payload[:cached] || %w[SCHEMA TRANSACTION].include?(payload[:name]) }
+    ActiveSupport::Notifications.subscribed(counter, "sql.active_record", &block)
+    count
   end
 
   def triage(*bank_accounts, **options)
@@ -39,17 +55,17 @@ describe Onetime::TriageUnlinkedStripeBankAccounts do
 
     result = triage(bank_account)
 
-    expect(result[:dispositions]).to eq(
-      bank_account.id => {
-        disposition: :provider_identity_unverified,
-        user_id: user.id,
-        bank_account_type: "AchAccount",
-        unpaid_balance_cents: 42_00,
-        generic_skip_note_count: 1,
-        latest_generic_skip_at: user.comments.last.created_at,
-        provider_identity: "unverified",
-      }
+    expect(result[:dispositions].fetch(bank_account.id).except(:payout_window_end_date)).to eq(
+      disposition: :provider_identity_unverified,
+      user_id: user.id,
+      bank_account_type: "AchAccount",
+      unpaid_usd_ledger_cents: 150_00,
+      payout_window_usd_ledger_cents: 150_00,
+      generic_skip_note_count: 1,
+      latest_generic_skip_at: user.comments.last.created_at,
+      provider_identity: "unverified"
     )
+    expect(result[:dispositions].dig(bank_account.id, :payout_window_end_date)).to be_a(Date)
     expect(result[:next_start_id]).to eq(bank_account.id + 1)
     expect(result[:done]).to be(true)
   end
@@ -68,7 +84,7 @@ describe Onetime::TriageUnlinkedStripeBankAccounts do
     user, bank_account = seller_with_unlinked_row
     user.comments.each(&:mark_deleted!)
 
-    expect(StripePayoutProcessor.is_user_payable(user, 42_00, add_comment: true)).to be(false)
+    expect(StripePayoutProcessor.is_user_payable(user, 150_00, add_comment: true)).to be(false)
 
     expect(disposition_for(bank_account)).to eq(:provider_identity_unverified)
   end
@@ -160,6 +176,21 @@ describe Onetime::TriageUnlinkedStripeBankAccounts do
       )
     end
 
+    it "stops at MAX_CLASSIFIED_ROWS and resumes after the last classified row" do
+      stub_const("#{described_class}::MAX_CLASSIFIED_ROWS", 2)
+      rows = Array.new(3) { seller_with_unlinked_row.last }
+
+      first = triage(*rows)
+      expect(first[:dispositions].keys).to eq(rows.first(2).map(&:id))
+      expect(first[:next_start_id]).to eq(rows.second.id + 1)
+      expect(first[:done]).to be(false)
+      expect(described_class.process(start_id: first[:next_start_id])[:dispositions].keys).to eq([rows.third.id])
+
+      by_window = triage(*rows, batch_size: 1)
+      expect(by_window[:dispositions].keys).to eq(rows.first(2).map(&:id))
+      expect(by_window[:next_start_id]).to eq(rows.third.id)
+    end
+
     it "rejects invalid or unbounded input" do
       expect { described_class.process(start_id: 0) }.to raise_error(ArgumentError)
       expect { described_class.process(start_id: "1") }.to raise_error(ArgumentError)
@@ -167,6 +198,179 @@ describe Onetime::TriageUnlinkedStripeBankAccounts do
       expect { described_class.process(batch_size: described_class::BATCH_SIZE + 1) }.to raise_error(ArgumentError)
       expect { described_class.process(start_id: 10, end_id: 9) }.to raise_error(ArgumentError)
       expect { described_class.process(end_id: "100") }.to raise_error(ArgumentError)
+    end
+  end
+
+  describe "unpaid balances" do
+    def add_balance(user, merchant_account:, amount_cents:, holding_currency: Currency::USD, holding_amount_cents: amount_cents, date: 2.weeks.ago.to_date)
+      create(:balance, user:, merchant_account:, amount_cents:, holding_currency:, holding_amount_cents:, date:)
+    end
+
+    it "does not treat a future balance as payable in the next standard cycle" do
+      user, bank_account = seller_with_unlinked_row
+      user.balances.update_all(amount_cents: 50_00)
+      add_balance(user, merchant_account: user.stripe_account, amount_cents: 150_00,
+                        date: User::PayoutSchedule.next_scheduled_payout_date + 7)
+
+      result = triage(bank_account)[:dispositions].fetch(bank_account.id)
+      expect(result[:unpaid_usd_ledger_cents]).to eq(200_00)
+      expect(result[:payout_window_usd_ledger_cents]).to eq(50_00)
+      expect(result[:disposition]).to eq(:below_payout_minimum)
+    end
+
+    it "keeps today's US rail window until the 10:00 UTC payout run starts" do
+      travel_to(Time.utc(2026, 9, 24, 9))
+      user, bank_account = seller_with_unlinked_row
+      user.balances.update_all(amount_cents: 50_00)
+      add_balance(user, merchant_account: user.stripe_account, amount_cents: 80_00, date: Date.new(2026, 9, 19))
+
+      result = triage(bank_account)[:dispositions].fetch(bank_account.id)
+      expect(result[:payout_window_end_date]).to eq(Date.new(2026, 9, 18))
+      expect(result[:payout_window_usd_ledger_cents]).to eq(50_00)
+      expect(result[:disposition]).to eq(:below_payout_minimum)
+    ensure
+      travel_back
+    end
+
+    it "moves past this week's US rail after it has run" do
+      travel_to(Time.utc(2026, 9, 25, 12))
+      user, bank_account = seller_with_unlinked_row
+      user.balances.update_all(amount_cents: 50_00)
+      add_balance(user, merchant_account: user.stripe_account, amount_cents: 80_00, date: Date.new(2026, 9, 19))
+
+      result = triage(bank_account)[:dispositions].fetch(bank_account.id)
+      expect(result[:payout_window_end_date]).to eq(Date.new(2026, 9, 25))
+      expect(result[:payout_window_usd_ledger_cents]).to eq(130_00)
+      expect(result[:disposition]).to eq(:provider_identity_unverified)
+    ensure
+      travel_back
+    end
+
+    it "uses each bank rail's next run rather than a Friday fallback" do
+      travel_to(Time.utc(2026, 9, 23, 12))
+      _uk_user, uk_row = seller_with_unlinked_row(bank_account_factory: :uk_bank_account)
+      _us_user, us_row = seller_with_unlinked_row
+
+      result = triage(uk_row, us_row)[:dispositions]
+      expect(result.dig(uk_row.id, :payout_window_end_date)).to eq(Date.new(2026, 9, 25))
+      expect(result.dig(us_row.id, :payout_window_end_date)).to eq(Date.new(2026, 9, 18))
+    ensure
+      travel_back
+    end
+
+    it "uses the weekly fallback for a daily-frequency seller on an unlinked bank row" do
+      user, bank_account = seller_with_unlinked_row
+      user.update!(payout_frequency: User::PayoutSchedule::DAILY)
+
+      expect(disposition_for(bank_account)).to eq(:provider_identity_unverified)
+    end
+
+    it "requires manual schedule review for a monthly seller" do
+      user, bank_account = seller_with_unlinked_row
+      user.update!(payout_frequency: User::PayoutSchedule::MONTHLY)
+
+      result = triage(bank_account)[:dispositions].fetch(bank_account.id)
+      expect(result[:disposition]).to eq(:payout_schedule_requires_review)
+      expect(result[:payout_window_end_date]).to be_nil
+      expect(result[:payout_window_usd_ledger_cents]).to be_nil
+    end
+
+    it "keeps an unsupported legacy bank rail out of the Friday Connect window" do
+      _user, bank_account = seller_with_unlinked_row
+      bank_account.update_column(:type, "ZenginAccount")
+
+      result = triage(bank_account)[:dispositions].fetch(bank_account.id)
+      expect(result[:disposition]).to eq(:no_payout_rail)
+      expect(result[:payout_window_end_date]).to be_nil
+      expect(result[:payout_window_usd_ledger_cents]).to be_nil
+    end
+
+    it "does not preload an unbounded balance history" do
+      stub_const("#{described_class}::MAX_UNPAID_BALANCES_PER_USER", 2)
+      user, bank_account = seller_with_unlinked_row
+      2.times { add_balance(user, merchant_account: user.stripe_account, amount_cents: 20_00) }
+
+      result = triage(bank_account)[:dispositions].fetch(bank_account.id)
+      expect(result[:disposition]).to eq(:balance_history_requires_review)
+      expect(result[:unpaid_usd_ledger_cents]).to eq(190_00)
+      expect(result[:payout_window_usd_ledger_cents]).to be_nil
+    end
+
+    it "reports the USD ledger total, not a sum of holding amounts in different currencies" do
+      user, bank_account = seller_with_unlinked_row
+      add_balance(user, merchant_account: user.stripe_account, amount_cents: 20_00, holding_currency: "cad", holding_amount_cents: 27_00)
+
+      result = triage(bank_account)[:dispositions].fetch(bank_account.id)
+      expect(result[:disposition]).to eq(:provider_identity_unverified)
+      expect(result[:unpaid_usd_ledger_cents]).to eq(170_00)
+    end
+
+    it "flags a net-positive ledger whose account/currency payout group is negative" do
+      user, bank_account = seller_with_unlinked_row
+      add_balance(user, merchant_account: user.stripe_account, amount_cents: -50_00, holding_currency: "cad", holding_amount_cents: -68_00)
+
+      result = triage(bank_account)[:dispositions].fetch(bank_account.id)
+      expect(result[:unpaid_usd_ledger_cents]).to eq(100_00)
+      expect(result[:disposition]).to eq(:negative_balance_group)
+    end
+
+    it "flags a negative balance left on a replaced Stripe account" do
+      user, bank_account = seller_with_unlinked_row
+      retired_account = create(:merchant_account, user:, deleted_at: Time.current)
+      add_balance(user, merchant_account: retired_account, amount_cents: -10_00)
+
+      expect(disposition_for(bank_account)).to eq(:negative_balance_group)
+    end
+
+    it "nets a Gumroad-held debt into the Stripe account group it pays out through" do
+      user, bank_account = seller_with_unlinked_row
+      add_balance(user, merchant_account: MerchantAccount.gumroad(StripeChargeProcessor.charge_processor_id), amount_cents: -20_00)
+
+      expect(disposition_for(bank_account)).to eq(:provider_identity_unverified)
+    end
+  end
+
+  describe "query cost" do
+    # Generous ceilings: the point is that cost is per window and per classified row, never per scanned id.
+    let(:window_query_ceiling) { 25 }
+    let(:row_query_ceiling) { 40 }
+
+    it "costs a constant number of queries per classified row" do
+      rows = Array.new(5) { seller_with_unlinked_row.last }
+      triage(rows.first)
+
+      one_row = count_queries { triage(rows.first) }
+      five_rows = count_queries { triage(*rows) }
+      per_row = (five_rows - one_row) / 4.0
+
+      puts "QUERIES one=#{one_row} five=#{five_rows} per_row=#{per_row}"
+      expect(per_row).to be <= row_query_ceiling
+      expect(one_row - per_row).to be <= window_query_ceiling
+      worst_case = (described_class::MAX_ID_SPAN / described_class::BATCH_SIZE) * window_query_ceiling +
+                   described_class::MAX_CLASSIFIED_ROWS * row_query_ceiling
+      expect(worst_case).to be < 15_000
+    end
+
+    it "does not classify rows past the cap, however dense the window" do
+      stub_const("#{described_class}::MAX_CLASSIFIED_ROWS", 2)
+      rows = Array.new(6) { seller_with_unlinked_row.last }
+      triage(*rows.first(2))
+
+      at_cap = count_queries { triage(*rows.first(2)) }
+      dense = count_queries { triage(*rows) }
+
+      puts "QUERIES at_cap=#{at_cap} dense=#{dense}"
+      expect(dense).to be <= at_cap
+    end
+
+    it "costs a constant number of queries per window with no candidates" do
+      rows = Array.new(4) { seller_with_unlinked_row.last }
+      rows.each { _1.user.balances.update_all(state: "paid") }
+
+      per_window = count_queries { triage(*rows, batch_size: 1) } / rows.size.to_f
+
+      puts "QUERIES per_window=#{per_window}"
+      expect(per_window).to be <= 3
     end
   end
 
@@ -275,6 +479,28 @@ describe Onetime::TriageUnlinkedStripeBankAccounts do
       user.update_column(:user_risk_state, "flagged_for_fraud")
 
       expect(disposition_for(bank_account)).to eq(:risk_hold)
+    end
+
+    it "flags a stale skip note once the unpaid ledger is below the standard minimum" do
+      user, bank_account = seller_with_unlinked_row
+      user.balances.update_all(amount_cents: 42_00, holding_amount_cents: 42_00)
+
+      expect(disposition_for(bank_account)).to eq(:below_payout_minimum)
+    end
+
+    it "flags a chargeback reserve separately from an ordinary pause" do
+      user, bank_account = seller_with_unlinked_row
+      pause_for_chargeback_rate!(user)
+
+      expect(disposition_for(bank_account)).to eq(:chargeback_reserve_active)
+    end
+
+    it "does not treat a larger balance as proof that a reserve is cleared" do
+      user, bank_account = seller_with_unlinked_row
+      3.times { |days| create(:balance, user:, merchant_account: user.stripe_account, amount_cents: 150_00, date: days.days.ago) }
+      pause_for_chargeback_rate!(user)
+
+      expect(disposition_for(bank_account)).to eq(:chargeback_reserve_active)
     end
 
     it "flags a seller with paused payouts" do

@@ -30,6 +30,10 @@ class PayoutRailSchedule
       schedule[:bank_account_types][bank_account_type] || DEFAULT_WEEKDAY
     end
 
+    def scheduled_bank_account_type?(bank_account_type)
+      schedule[:bank_account_types].key?(bank_account_type)
+    end
+
     def paypal_weekday
       schedule[:paypal] || DEFAULT_WEEKDAY
     end
