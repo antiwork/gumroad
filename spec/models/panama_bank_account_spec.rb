@@ -44,6 +44,8 @@ describe PanamaBankAccount do
       expect(build(:panama_bank_account, bank_number: "AAAAPAP")).not_to be_valid
       expect(build(:panama_bank_account, bank_number: "AAAAPAPAXXXX")).not_to be_valid
       expect(build(:panama_bank_account, bank_number: "AAAAPAQA")).not_to be_valid
+      expect(build(:panama_bank_account, bank_number: "BAGEPAPA\n")).not_to be_valid
+      expect(build(:panama_bank_account, bank_number: " AAAAPAPA")).not_to be_valid
     end
   end
 end
