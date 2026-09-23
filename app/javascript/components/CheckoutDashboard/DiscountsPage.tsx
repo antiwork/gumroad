@@ -191,6 +191,14 @@ export const extractParams = (rawParams: URLSearchParams): QueryParams => {
 
 const year = new Date().getFullYear();
 
+// A whole-product scope drops that product's own row from the menu, which would leave its option
+// rows sitting under the previous product's header. Mark those rows as top-level instead.
+export const findWholeProductScopeIds = (
+  selectedProducts: Pick<Product, "id">[],
+  optionIdsByProduct: Record<string, string[]>,
+): Set<string> =>
+  new Set(selectedProducts.filter(({ id }) => optionIdsByProduct[id] === undefined).map(({ id }) => id));
+
 export type DiscountsPageProps = {
   offer_codes: OfferCode[];
   pages: Page[];
@@ -941,6 +949,7 @@ const Form = ({
   const [currencyCode, setCurrencyCode] = React.useState(
     offerCode?.currency_type ?? selectedProducts[0]?.currency_type ?? products[0]?.currency_type ?? "usd",
   );
+  const wholeProductScopeIds = findWholeProductScopeIds(selectedProducts, optionIdsByProduct);
   // One picker holds both scopes: a product row means all of its options, an option row limits the
   // product to that option. A product limited only to deleted options keeps a "deleted" chip so the
   // restriction survives until the seller removes it.
@@ -952,7 +961,11 @@ const Form = ({
   const optionScopeOption = (product: Product, option: { id: string; name: string }): Option => {
     const id = `${product.id}:${option.id}`;
     productScopeTargets.set(id, { productId: product.id, optionId: option.id, kind: "option" });
-    return { id, label: `${product.name} (${option.name})`, isSubOption: true };
+    return {
+      id,
+      label: `${product.name} (${option.name})`,
+      isSubOption: !wholeProductScopeIds.has(product.id),
+    };
   };
   const productScopeOptions = products
     .filter(
