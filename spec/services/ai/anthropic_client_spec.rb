@@ -5,14 +5,13 @@ require "spec_helper"
 describe Ai::AnthropicClient do
   subject(:client) { described_class.new(timeout: 5) }
 
-  let(:url) { "https://api.anthropic.com/v1/messages" }
+  let(:url) { "https://openrouter.ai/api/v1/messages" }
 
   before do
     allow(GlobalConfig).to receive(:get).and_call_original
-    allow(GlobalConfig).to receive(:get).with("ANTHROPIC_API_KEY").and_return("sk-ant-test")
-    # Pin OpenRouter routing OFF by default so these specs exercise the direct-to-Anthropic path
-    # regardless of what the host machine's environment has configured.
-    allow(GlobalConfig).to receive(:get).with("OPENROUTER_API_KEY").and_return(nil)
+    # Pin routing so these specs do not depend on the host machine's environment.
+    allow(GlobalConfig).to receive(:get).with("OPENROUTER_API_KEY").and_return("sk-or-test")
+    allow(GlobalConfig).to receive(:get).with("OPENROUTER_FALLBACK_MODEL").and_return(nil)
     allow(GlobalConfig).to receive(:get).with("GUMHEAD_UPSTREAM_API_KEY").and_return(nil)
     allow(GlobalConfig).to receive(:get).with("GUMHEAD_UPSTREAM_API_BASE").and_return(nil)
     allow(GlobalConfig).to receive(:get).with("STORE_AGENT_OPENROUTER_API_KEY").and_return(nil)
@@ -30,7 +29,7 @@ describe Ai::AnthropicClient do
       body = { "content" => [{ "type" => "text", "text" => "You have 3 products." }], "stop_reason" => "end_turn" }
       stub = stub_request(:post, url)
         .with(
-          headers: { "x-api-key" => "sk-ant-test", "anthropic-version" => "2023-06-01" },
+          headers: { "x-api-key" => "sk-or-test", "anthropic-version" => "2023-06-01" },
           body: hash_including("model" => described_class::DEFAULT_MODEL, "stream" => false),
         )
         .to_return(status: 200, body: body.to_json, headers: { "Content-Type" => "application/json" })
@@ -324,6 +323,7 @@ describe Ai::AnthropicClient do
     before do
       allow(GlobalConfig).to receive(:get).with("GUMHEAD_UPSTREAM_API_KEY").and_return("gw-test")
       allow(GlobalConfig).to receive(:get).with("GUMHEAD_UPSTREAM_API_BASE").and_return("https://ai-gateway.vercel.sh")
+      allow(GlobalConfig).to receive(:get).with("OPENROUTER_API_KEY").and_return(nil)
     end
 
     it "re-issues on the fallback model when the deadline expires before any output" do
@@ -391,6 +391,7 @@ describe Ai::AnthropicClient do
     end
 
     it "keeps re-issuing the same model when no deadline was given" do
+      allow(GlobalConfig).to receive(:get).with("OPENROUTER_API_KEY").and_return("sk-or-test")
       allow(client).to receive(:sleep)
       stub_request(:post, url).to_timeout
 
@@ -401,11 +402,11 @@ describe Ai::AnthropicClient do
   end
 
   describe "API key resolution" do
-    it "uses ANTHROPIC_API_KEY when it is set" do
-      allow(GlobalConfig).to receive(:get).with("ANTHROPIC_API_KEY").and_return("sk-ant-dedicated")
+    it "prefers the store agent's own OpenRouter key on the default route" do
+      allow(GlobalConfig).to receive(:get).with("STORE_AGENT_OPENROUTER_API_KEY").and_return("sk-or-store-agent")
 
       stub = stub_request(:post, url)
-        .with(headers: { "x-api-key" => "sk-ant-dedicated" })
+        .with(headers: { "x-api-key" => "sk-or-store-agent" })
         .to_return(status: 200, body: { "content" => [], "stop_reason" => "end_turn" }.to_json, headers: { "Content-Type" => "application/json" })
 
       client.messages(system: "s", messages: [{ role: "user", content: "x" }])
@@ -413,27 +414,16 @@ describe Ai::AnthropicClient do
       expect(stub).to have_been_requested
     end
 
-    it "falls back to WALKS_ANTHROPIC_API_KEY when ANTHROPIC_API_KEY is blank" do
-      allow(GlobalConfig).to receive(:get).with("ANTHROPIC_API_KEY").and_return("")
+    it "raises instead of calling Anthropic directly when no OpenRouter key is configured" do
+      allow(GlobalConfig).to receive(:get).with("OPENROUTER_API_KEY").and_return("")
       allow(GlobalConfig).to receive(:get).with("WALKS_ANTHROPIC_API_KEY").and_return("sk-ant-walks")
-
-      stub = stub_request(:post, url)
-        .with(headers: { "x-api-key" => "sk-ant-walks" })
-        .to_return(status: 200, body: { "content" => [], "stop_reason" => "end_turn" }.to_json, headers: { "Content-Type" => "application/json" })
-
-      client.messages(system: "s", messages: [{ role: "user", content: "x" }])
-
-      expect(stub).to have_been_requested
-    end
-
-    it "raises a clear error (no blank-key request) when both keys are missing" do
-      allow(GlobalConfig).to receive(:get).with("ANTHROPIC_API_KEY").and_return("")
-      allow(GlobalConfig).to receive(:get).with("WALKS_ANTHROPIC_API_KEY").and_return(nil)
-      request = stub_request(:post, url)
+      openrouter = stub_request(:post, url)
+      anthropic = stub_request(:post, "https://api.anthropic.com/v1/messages")
 
       expect { client.messages(system: "s", messages: [{ role: "user", content: "x" }]) }
         .to raise_error(described_class::Error, /not configured/i)
-      expect(request).not_to have_been_requested
+      expect(openrouter).not_to have_been_requested
+      expect(anthropic).not_to have_been_requested
     end
   end
 
@@ -528,19 +518,6 @@ describe Ai::AnthropicClient do
       expect(client).to have_received(:sleep).once
     end
 
-    it "does not send fallbacks or touch OpenRouter when the key is not configured" do
-      allow(GlobalConfig).to receive(:get).with("OPENROUTER_API_KEY").and_return("")
-      captured = nil
-      stub = stub_request(:post, url)
-        .with(headers: { "x-api-key" => "sk-ant-test" }) { |request| captured = JSON.parse(request.body); true }
-        .to_return(status: 200, body: { "content" => [], "stop_reason" => "end_turn" }.to_json, headers: { "Content-Type" => "application/json" })
-
-      client.messages(system: "s", messages: [{ role: "user", content: "x" }])
-
-      expect(stub).to have_been_requested
-      expect(captured).not_to have_key("fallbacks")
-    end
-
     describe "served-model logging" do
       before { allow(Rails.logger).to receive(:warn) }
 
@@ -594,6 +571,7 @@ describe Ai::AnthropicClient do
     before do
       allow(GlobalConfig).to receive(:get).with("GUMHEAD_UPSTREAM_API_KEY").and_return("sk-vercel-test")
       allow(GlobalConfig).to receive(:get).with("GUMHEAD_UPSTREAM_API_BASE").and_return("https://ai-gateway.vercel.sh")
+      allow(GlobalConfig).to receive(:get).with("OPENROUTER_API_KEY").and_return(nil)
     end
 
     it "routes to Vercel with the Gumhead key, no OpenRouter fallbacks, and Vercel model failover" do
@@ -922,7 +900,8 @@ describe Ai::AnthropicClient do
       expect(Rails.logger).to have_received(:info).with(/served by deepseek\/deepseek-v4.1-flash via vercel/)
     end
 
-    it "does not send fallbacks on a default Anthropic client" do
+    it "sends OpenRouter fallbacks and no Vercel options on a default client" do
+      allow(GlobalConfig).to receive(:get).with("OPENROUTER_API_KEY").and_return("sk-or-test")
       default_client = described_class.new(timeout: 5)
       captured = nil
       stub_request(:post, url)
@@ -931,8 +910,8 @@ describe Ai::AnthropicClient do
 
       default_client.messages(system: "s", messages: [{ role: "user", content: "x" }])
 
-      expect(default_client.gateway_name).to eq("anthropic")
-      expect(captured).not_to have_key("fallbacks")
+      expect(default_client.gateway_name).to eq("openrouter")
+      expect(captured["fallbacks"]).to eq([{ "model" => described_class::DEFAULT_FALLBACK_MODEL }])
       expect(captured).not_to have_key("providerOptions")
     end
   end
@@ -1517,7 +1496,7 @@ describe Ai::AnthropicClient do
             reasoning_tokens: nil,
             served_model: "claude-opus-4-7",
             served_provider: nil,
-            gateway: "anthropic",
+            gateway: "openrouter",
             status: 200,
             error: nil,
           },

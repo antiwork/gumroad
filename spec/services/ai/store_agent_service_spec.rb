@@ -3229,7 +3229,7 @@ describe Ai::StoreAgentService do
       expect(captured[:gateway]).to be_nil
     end
 
-    it "keeps requesting Opus directly from Anthropic when OpenRouter is not configured" do
+    it "keeps requesting Opus when OpenRouter is not configured" do
       allow(Ai::AnthropicClient).to receive(:openrouter_configured?).and_return(false)
       Feature.activate_user(described_class::GROK_RAMP_FEATURE, seller)
       allow(client).to receive(:messages).and_return(text_result("hi"))

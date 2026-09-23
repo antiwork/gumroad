@@ -16,8 +16,7 @@ class Ai::StoreAgentService
   class Error < StandardError; end
 
   MODEL = Ai::AnthropicClient::DEFAULT_MODEL
-  # Grok and DeepSeek are only reachable through OpenRouter, so the cutover keys off routing: a
-  # direct-Anthropic config keeps serving Opus unchanged.
+  # Grok and DeepSeek are only reachable through OpenRouter, so the cutover keys off routing.
   OPENROUTER_MODEL = "x-ai/grok-4.5"
   # When Grok errors (provider down, rate limited), OpenRouter retries the turn on this model
   # rather than the client's default GPT fallback.
