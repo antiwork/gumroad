@@ -39,7 +39,13 @@ class ProductFileBuyerCountsService
     end
 
     def buyers_count
-      @buyers_count ||= buyers.distinct.count(:purchaser_id)
+      @buyers_count ||= buyers.distinct.count(buyer_identity)
+    end
+
+    # A guest purchase has no `purchaser_id`, so its email carries the identity there; recurring
+    # charges share both, which is what collapses a membership's renewals into one buyer.
+    def buyer_identity
+      Arel.sql("COALESCE(purchases.purchaser_id, purchases.email)")
     end
 
     # One query for every variant-scoped file on the page: a buyer counts once per file even
@@ -55,6 +61,6 @@ class ProductFileBuyerCountsService
         .where(base_variants_purchases: { purchase_id: buyers.select(:id) })
         .group("base_variants_product_files.product_file_id")
         .distinct
-        .count("purchases.purchaser_id")
+        .count(buyer_identity)
     end
 end

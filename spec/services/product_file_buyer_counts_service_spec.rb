@@ -31,6 +31,13 @@ describe ProductFileBuyerCountsService do
     expect(counts[product_file.external_id]).to eq(1)
   end
 
+  it "counts a guest purchase, which carries no purchaser id" do
+    purchase = create(:purchase, link: product)
+    purchase.update_column(:purchaser_id, nil)
+
+    expect(counts[product_file.external_id]).to eq(1)
+  end
+
   it "keys the counts by the file external id the editor receives" do
     buy
     other_file = create(:product_file, link: product)
