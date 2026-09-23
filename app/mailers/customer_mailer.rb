@@ -15,6 +15,11 @@ class CustomerMailer < ApplicationMailer
   # another copy. Newest receipts are the ones a "resend my receipts" caller is after.
   GROUPED_RECEIPT_MAX_CHARGEABLES = 20
 
+  # A caller's match can be its whole history — one buyer email matches 31,964 successful
+  # purchases — and materialising an IN list that long never returns: the statement dies at
+  # the session's 300s ceiling. Only the newest few can be rendered, so bound the load.
+  GROUPED_RECEIPT_LOOKBACK = 10 * GROUPED_RECEIPT_MAX_CHARGEABLES
+
   # One send per recipient + receipt set within this window. The claim is taken at render,
   # so a retry of a send that failed before SMTP handoff is also suppressed — acceptable,
   # because every caller of this mailer is a self-serve flow the buyer can re-trigger.
@@ -26,6 +31,7 @@ class CustomerMailer < ApplicationMailer
     @chargeables = Purchase.where(id: purchase_ids)
       .all_success_states_including_test
       .order(id: :desc)
+      .limit(GROUPED_RECEIPT_LOOKBACK)
       .includes(charge: [:order, :seller])
       .map { Charge::Chargeable.find_by_purchase_or_charge!(purchase: _1) }
       .uniq

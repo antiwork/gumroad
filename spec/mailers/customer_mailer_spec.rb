@@ -1527,6 +1527,16 @@ describe CustomerMailer do
       expect(mail.subject).to eq("Receipts for Purchases")
     end
 
+    it "reads only a bounded newest-first slice of a caller's match" do
+      stub_const("CustomerMailer::GROUPED_RECEIPT_LOOKBACK", 1)
+      allow(Charge::Chargeable).to receive(:find_by_purchase_or_charge!).and_call_original
+
+      mail = CustomerMailer.grouped_receipt(purchases.map(&:id))
+      expect(mail.to).to eq([purchases.last.email])
+
+      expect(Charge::Chargeable).to have_received(:find_by_purchase_or_charge!).once
+    end
+
     it "sets Reply-To to the product's support email" do
       product.update!(support_email: "product-support@example.com")
 
