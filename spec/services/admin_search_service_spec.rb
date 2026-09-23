@@ -177,8 +177,14 @@ describe AdminSearchService do
       end
 
       it "supports filtering by card_visual" do
-        purchases = AdminSearchService.new.search_purchases(last_4: "7531")
+        purchases = AdminSearchService.new.search_purchases(last_4: "7531", card_type: "amex")
         expect(purchases).to eq [purchase_amex]
+      end
+
+      it "raises when card_visual is the only filter the query could seek on" do
+        expect do
+          AdminSearchService.new.search_purchases(last_4: "7531", price: "7", expiry_date: "7/21")
+        end.to raise_error(AdminSearchService::InsufficientSearchCriteriaError)
       end
 
       it "supports filtering by expiry date" do

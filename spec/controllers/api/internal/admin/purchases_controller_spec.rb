@@ -243,7 +243,7 @@ describe Api::Internal::Admin::PurchasesController do
         { email: " #{buyer_email} " },
         { creator_email: " #{seller.email} " },
         { license_key: " #{license.serial} " },
-        { card_last4: " 4242 " },
+        { card_last4: " 4242 ", card_type: "visa" },
         { card_type: " visa " },
       ].each do |search_params|
         get :search, params: search_params
@@ -253,6 +253,19 @@ describe Api::Internal::Admin::PurchasesController do
           expect(response.parsed_body["purchases"].map { _1["id"] }).to eq([purchase.external_id_numeric.to_s])
         end
       end
+    end
+
+    it "asks for a narrower search when card_last4 is the only criterion" do
+      purchase = create(:free_purchase)
+      purchase.update_columns(card_type: "visa", card_visual: "**** **** **** 4242", stripe_fingerprint: "test-fingerprint")
+
+      get :search, params: { card_last4: "4242", charge_amount: "98.69" }
+
+      expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body["success"]).to be(false)
+      expect(response.parsed_body["message"]).to eq(
+        "card_last4 needs a narrower search: also provide card_type, purchase_date, query, email, creator_email, or license_key."
+      )
     end
 
     it "preloads purchase associations before serializing search results" do
