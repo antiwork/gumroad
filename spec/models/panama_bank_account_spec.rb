@@ -36,10 +36,14 @@ describe PanamaBankAccount do
   end
 
   describe "#validate_bank_code" do
-    it "allows 11 characters only" do
+    it "allows an 8-character BIC or an 11-character BIC with branch suffix" do
       expect(build(:panama_bank_account, bank_number: "AAAAPAPAXXX")).to be_valid
+      expect(build(:panama_bank_account, bank_number: "BAGEPAPA")).to be_valid
+      expect(build(:panama_bank_account, bank_number: "AAAAPAPAX")).not_to be_valid
       expect(build(:panama_bank_account, bank_number: "AAAAPAPAXX")).not_to be_valid
+      expect(build(:panama_bank_account, bank_number: "AAAAPAP")).not_to be_valid
       expect(build(:panama_bank_account, bank_number: "AAAAPAPAXXXX")).not_to be_valid
+      expect(build(:panama_bank_account, bank_number: "AAAAPAQA")).not_to be_valid
     end
   end
 end

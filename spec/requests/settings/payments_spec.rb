@@ -5249,6 +5249,33 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         expect(@user.reload.active_bank_account.send(:account_number_decrypted)).to eq("000123456789")
         expect(@user.reload.active_bank_account.routing_number).to eq("AAAAPAPAXXX")
       end
+
+      it "allows to enter the 8-character SWIFT / BIC code a Panamanian bank publishes" do
+        visit settings_payments_path
+
+        fill_in("First name", with: "Panamanian")
+        fill_in("Last name", with: "Creator")
+        fill_in("Address", with: "address_full_match")
+        fill_in("City", with: "Panama City")
+        fill_in("Phone number", with: "61234567")
+        fill_in("Postal code", with: "00000")
+
+        select("1", from: "Day")
+        select("January", from: "Month")
+        select("1901", from: "Year")
+
+        fill_in("Pay to the order of", with: "Panamanian creator")
+        fill_in("Account #", with: "000123456789")
+        fill_in("Confirm account #", with: "000123456789")
+        fill_in("SWIFT / BIC Code", with: "BAGEPAPA")
+
+        expect(page).to have_content("Your bank's SWIFT/BIC code, 8 or 11 characters")
+
+        click_on("Update settings")
+
+        expect(page).to have_alert(text: "Thanks! You're all set.")
+        expect(@user.reload.active_bank_account.routing_number).to eq("BAGEPAPA")
+      end
     end
 
     describe "Bangladesh creator" do

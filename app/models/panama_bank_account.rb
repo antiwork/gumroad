@@ -3,7 +3,9 @@
 class PanamaBankAccount < BankAccount
   BANK_ACCOUNT_TYPE = "PA"
 
-  BANK_CODE_FORMAT_REGEX = /^[A-Z]{4}PAPA[A-Z0-9]{3}$/
+  # Panamanian banks publish 8-character SWIFT/BICs; Stripe resolves both that and the
+  # branch-suffixed 11-character form, and nothing in between is a BIC.
+  BANK_CODE_FORMAT_REGEX = /^[A-Z]{4}PAPA([A-Z0-9]{3})?$/
   ACCOUNT_NUMBER_FORMAT_REGEX = /^\d{1,18}$/
   private_constant :BANK_CODE_FORMAT_REGEX, :ACCOUNT_NUMBER_FORMAT_REGEX
 
