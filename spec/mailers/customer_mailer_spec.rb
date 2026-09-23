@@ -1552,6 +1552,18 @@ describe CustomerMailer do
       expect(items).to include("Older item")
     end
 
+    it "does not let failed purchases consume the read budget" do
+      stub_const("CustomerMailer::GROUPED_RECEIPT_LOOKBACK", 1)
+      stub_const("CustomerMailer::GROUPED_RECEIPT_READ_WINDOWS", 1)
+      older = create(:purchase, link: create(:product, user: seller, name: "Older item"), seller:)
+      failed = create_list(:failed_purchase, 2, link: product, seller:)
+
+      mail = CustomerMailer.grouped_receipt([older.id] + failed.map(&:id))
+
+      expect(mail.message).not_to be_a(ActionMailer::Base::NullMail)
+      expect(Nokogiri::HTML(mail.body.decoded).css(".item .product-checkout-cell h4").map(&:text).map(&:strip)).to include("Older item")
+    end
+
     it "sets Reply-To to the product's support email" do
       product.update!(support_email: "product-support@example.com")
 

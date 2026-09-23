@@ -15,15 +15,12 @@ class CustomerMailer < ApplicationMailer
   # another copy. Newest receipts are the ones a "resend my receipts" caller is after.
   GROUPED_RECEIPT_MAX_CHARGEABLES = 20
 
-  # A caller's match can be its whole history — one buyer email matches 31,964 successful
-  # purchases — and materialising an IN list that long never returns: the statement dies at
-  # the session's 300s ceiling. Only the newest few can be rendered, so read it a window at a time.
+  # A caller's match can be its whole history (one buyer email matches 31,964 purchases), and
+  # materialising an IN list that long dies at the session's 300s ceiling. Read it a window at a time.
   GROUPED_RECEIPT_LOOKBACK = 10 * GROUPED_RECEIPT_MAX_CHARGEABLES
 
-  # Every purchase in a combined charge collapses into that one chargeable (the largest charge in
-  # production holds 224 purchases), so one window can resolve to a single receipt and leave the
-  # email short of its fill. Read on until the fill is reachable, but no further: ten windows is
-  # a hundred times what the template can show, and past that the read stops being bounded at all.
+  # A combined charge collapses its purchases into a single chargeable, so one window can resolve
+  # to one receipt; read on until the template's fill is reachable, but stop after ten windows.
   GROUPED_RECEIPT_READ_WINDOWS = 10
 
   # One send per recipient + receipt set within this window. The claim is taken at render,
@@ -413,24 +410,20 @@ class CustomerMailer < ApplicationMailer
   end
 
   private
-    # Newest receipts are the ones a "resend my receipts" caller is after, so the ids are read
-    # newest-first and one window at a time; a combined charge maps several of them to a single
-    # chargeable, which is why the read continues past a window that resolves to too few.
+    # Newest receipts are the ones a "resend my receipts" caller is after, so page newest-first;
+    # the state filter stays in the window query so failed ids cannot eat the read budget.
     def read_renderable_chargeables(purchase_ids)
+      scope = Purchase.where(id: purchase_ids).all_success_states_including_test
       chargeables = []
 
-      purchase_ids.sort.reverse
-        .each_slice(GROUPED_RECEIPT_LOOKBACK)
-        .first(GROUPED_RECEIPT_READ_WINDOWS)
-        .each do |window|
-          window_chargeables = Purchase.where(id: window)
-            .all_success_states_including_test
-            .order(id: :desc)
-            .includes(charge: [:order, :seller])
-            .map { Charge::Chargeable.find_by_purchase_or_charge!(purchase: _1) }
-          chargeables = renderable_chargeables((chargeables + window_chargeables).uniq)
-          break if chargeables.size >= GROUPED_RECEIPT_MAX_CHARGEABLES
-        end
+      GROUPED_RECEIPT_READ_WINDOWS.times do
+        window = scope.order(id: :desc).limit(GROUPED_RECEIPT_LOOKBACK).includes(charge: [:order, :seller]).to_a
+        break if window.empty?
+
+        scope = scope.where("purchases.id < ?", window.last.id)
+        chargeables = renderable_chargeables((chargeables + window.map { Charge::Chargeable.find_by_purchase_or_charge!(purchase: _1) }).uniq)
+        break if chargeables.size >= GROUPED_RECEIPT_MAX_CHARGEABLES
+      end
 
       chargeables
     end
