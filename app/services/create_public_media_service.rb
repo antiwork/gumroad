@@ -272,9 +272,7 @@ class CreatePublicMediaService
       strategies = [
         ContentModeration::Strategies::BlocklistStrategy.new(text: names, image_urls:),
         ContentModeration::Strategies::ClassifierStrategy.new(text: names, image_urls:),
-        ContentModeration::Strategies::PromptStrategy.new(
-          text: name.to_s, image_urls:, corroborate_judgment_flags: true
-        ),
+        ContentModeration::Strategies::PromptStrategy.new(text: name.to_s, image_urls:),
       ]
 
       strategies.each do |strategy|
