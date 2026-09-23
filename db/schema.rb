@@ -1045,7 +1045,7 @@ ActiveRecord::Schema[7.1].define(version: 2026_12_16_090003) do
     t.datetime "deleted_at", precision: nil
     t.index ["email", "followed_id"], name: "index_followers_on_email_and_followed_id", unique: true
     t.index ["followed_id", "confirmed_at"], name: "index_followers_on_followed_id_and_confirmed_at"
-    t.index ["followed_id", "email"], name: "index_followers_on_followed_id_and_email"
+    t.index ["followed_id", "email"], name: "index_follows_on_followed_id_and_email"
     t.index ["follower_user_id", "deleted_at"], name: "index_followers_on_follower_user_id_and_deleted_at"
   end
 
@@ -3094,7 +3094,6 @@ ActiveRecord::Schema[7.1].define(version: 2026_12_16_090003) do
     t.string "notification_content_type", default: "application/x-www-form-urlencoded"
     t.string "google_uid"
     t.integer "purchasing_power_parity_limit"
-    t.string "tiktok_pixel_id"
     t.string "twitter_handle"
     t.index ["account_created_ip"], name: "index_users_on_account_created_ip"
     t.index ["confirmation_token"], name: "index_users_on_confirmation_token", length: 191
