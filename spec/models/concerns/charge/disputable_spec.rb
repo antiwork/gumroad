@@ -436,6 +436,40 @@ describe Charge::Disputable, :vcr do
         expect(FightDisputeJob).to have_enqueued_sidekiq_job(purchase.dispute.id)
       end
 
+      context "when the charge covers several purchases" do
+        let!(:charge) do
+          charge = create(:charge,
+                          seller:,
+                          processor: StripeChargeProcessor.charge_processor_id,
+                          processor_transaction_id: "ch_zitkxbhds3zqlt",
+                          amount_cents: 10_00)
+          charge.purchases << create(:purchase, link: create(:product, user: seller), total_transaction_cents: 2_50)
+          charge.purchases << create(:purchase, link: create(:product, user: seller), total_transaction_cents: 5_00)
+          charge
+        end
+
+        before do
+          # The evidence receipt renders for whichever purchase the charge selects, not the
+          # outer stub's single purchase.
+          allow(DisputeEvidence::GenerateReceiptImageService).to receive(:perform)
+            .and_return(File.read(Rails.root.join("spec", "support", "fixtures", "test-small.jpg")))
+        end
+
+        it "reads the seller's payout-gate rate once for the whole charge" do
+          reads = 0
+          # Below the pause threshold, so every purchase in the loop reaches the read: an
+          # above-threshold rate pauses on the first one and short-circuits the rest.
+          allow_any_instance_of(User).to receive(:lost_chargebacks_for_payout_gate) do
+            reads += 1
+            { volume: "0.5%", count: "0.5%" }
+          end
+
+          Purchase.handle_charge_event(event)
+
+          expect(reads).to eq(1)
+        end
+      end
+
       it "enqueues EnforceRefundPolicyForSellerJob for each purchase" do
         Purchase.handle_charge_event(event)
         expect(EnforceRefundPolicyForSellerJob).to have_enqueued_sidekiq_job(purchase.id)

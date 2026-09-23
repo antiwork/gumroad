@@ -371,6 +371,9 @@ module Charge::Disputable
     # before writing formalized_side_effects_finished_at, so each step is either guarded here
     # or idempotent on its own.
     def perform_dispute_formalized_side_effects!(event, dispute)
+      # A charge can cover several purchases and the payout gate reads a seller-level ratio (the
+      # aggregate takes ~90s on a large catalog), so the loop shares one read per seller.
+      chargeback_stats_by_seller = {}
       disputed_purchases.each do |purchase|
         flow_of_funds = build_flow_of_funds(event.flow_of_funds, purchase)
         # Replay-safe without a guard here: decrement_balance_for_refund_or_chargeback! checks
@@ -408,7 +411,7 @@ module Charge::Disputable
         # pause_payouts_for_seller_based_on_chargeback_rate! and block_buyer_based_on_chargeback_count!
         # are both idempotent (they recompute from current data and re-apply the same state),
         # so replays can safely call them again.
-        purchase.pause_payouts_for_seller_based_on_chargeback_rate!
+        purchase.pause_payouts_for_seller_based_on_chargeback_rate!(chargeback_stats_by_seller:)
         # Enforcement runs as a background job rather than inline: the dispute was already
         # marked formalized above, so an inline failure here would otherwise be skipped on
         # webhook retry. The job gets its own Sidekiq retries and the enforcement method is

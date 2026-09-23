@@ -508,11 +508,18 @@ module Purchase::Blockable
     )
   end
 
-  def pause_payouts_for_seller_based_on_chargeback_rate!
+  def pause_payouts_for_seller_based_on_chargeback_rate!(chargeback_stats_by_seller: nil)
     return unless seller.present?
     return if [User::PAYOUT_PAUSE_SOURCE_ADMIN, User::PAYOUT_PAUSE_SOURCE_SYSTEM].include?(seller.payouts_paused_by_source)
 
-    chargeback_stats = seller.lost_chargebacks_for_payout_gate
+    # Seller-level ratio whose aggregate takes ~90s on a large catalog, and a charge can cover
+    # several purchases: a caller looping over them shares this hash so the read happens once.
+    chargeback_stats =
+      if chargeback_stats_by_seller
+        chargeback_stats_by_seller[seller.id] ||= seller.lost_chargebacks_for_payout_gate
+      else
+        seller.lost_chargebacks_for_payout_gate
+      end
     chargeback_volume_percentage = chargeback_stats[:volume]
     return if chargeback_volume_percentage == "NA"
 
