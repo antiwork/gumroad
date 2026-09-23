@@ -51,7 +51,7 @@ export const CoffeeProduct = ({
     </>
   );
   return (
-    <section className={classNames("grid grow content-center gap-12 px-4", className)}>
+    <section className={classNames("grid grow content-center gap-12", className)}>
       <section className="grid gap-8">
         <h1>{product.name}</h1>
         {product.description_html ? <h3 dangerouslySetInnerHTML={{ __html: product.description_html }} /> : null}
