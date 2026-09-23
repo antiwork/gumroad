@@ -5,6 +5,7 @@ import { createPortal } from "react-dom";
 
 import { Button } from "$app/components/Button";
 import { useIsAboveBreakpoint } from "$app/components/useIsAboveBreakpoint";
+import { useWindowDimensions } from "$app/components/useWindowDimensions";
 import { WithTooltip } from "$app/components/WithTooltip";
 
 // On desktop the preview renders as a persistent sidebar next to the edit form. Below the lg
@@ -200,6 +201,15 @@ export const PreviewSidebar = ({
   children: React.ReactNode;
 } & React.ComponentProps<"aside">) => {
   const isDesktop = useIsAboveBreakpoint("lg");
+  // `null` until the viewport has been measured, which `useWindowDimensions` does in a passive
+  // effect — so the first commit is already painted. During that commit `useIsAboveBreakpoint`
+  // guesses from the user agent (`!isMobile`), which reads as desktop for a desktop browser in a
+  // window narrower than lg. Rendering the copy here then put a preview inside this aside while
+  // it was still `display:none`, and the pane below mounted its own copy once the width was
+  // known: two navigations of a live page, one of them never visible. Waiting for the measurement
+  // costs the desktop sidebar one effect tick and is hydration-safe — SSR and the first client
+  // render both omit the preview, then it mounts once, where it is on screen.
+  const dimensions = useWindowDimensions();
   const modeContext = React.useContext(MobilePreviewModeContext);
   const mode = modeContext?.mode ?? "edit";
   // Below lg the aside is `display:none` and the pane below renders the same preview, so rendering
@@ -219,7 +229,7 @@ export const PreviewSidebar = ({
         aria-label="Preview"
         {...props}
       >
-        {mobilePaneRendersPreview ? null : children}
+        {mobilePaneRendersPreview || dimensions === null ? null : children}
       </aside>
       {/* The desktop sidebar above is display:none below lg, which used to mean mobile sellers
           had NO way to see the preview at all (real support tickets). Below lg the page instead
