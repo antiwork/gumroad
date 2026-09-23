@@ -3571,6 +3571,13 @@ class StripePayoutProcessorTest < ActiveSupport::TestCase
     assert_includes @user.comments.with_type_payout_note.last.content, "does not match any bank account configured to receive it"
   end
 
+  test ".perform_payment Stripe error handling when Stripe rejects the payout because the destination bank account supports a different currency and names another external account in the payout currency leaves a wrapped message that only contains the sentence unclassified" do
+    setup_perform_payment_error_case
+    Stripe::Payout.stubs(:create).raises(Stripe::InvalidRequestError.new("The payout could not be created: Attempting to create a transfer of ron to a destination that supports eur.", "currency"))
+    StripePayoutProcessor.perform_payment(@payment)
+    assert_nil @payment.reload.failure_reason
+  end
+
   test ".perform_payment Stripe error handling when Stripe rejects the payout because the amount is below Stripe's per-currency payout minimum marks the payment with failure_reason BELOW_STRIPE_PAYOUT_MINIMUM" do
     setup_perform_payment_error_case
     Stripe::Payout.stubs(:create).raises(Stripe::InvalidRequestError.new("Amount must be no less than £1.00", "amount"))
