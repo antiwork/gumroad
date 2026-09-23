@@ -75,6 +75,59 @@ describe BosniaAndHerzegovinaBankAccount do
     end
   end
 
+  describe "bank code country" do
+    it "rejects a BIC registered outside Bosnia and Herzegovina" do
+      # ZEN.COM's Lithuanian BIC: 22 live BA rows saved a foreign one and none ever attached to Stripe.
+      bank_account = build(:bosnia_and_herzegovina_bank_account, bank_number: "BZENLT22")
+
+      expect(bank_account).not_to be_valid
+      expect(bank_account.errors.full_messages.join).to include("must be for a bank in Bosnia and Herzegovina")
+      expect(bank_account.errors.full_messages.join).to include("Lithuania")
+    end
+
+    it "accepts a Bosnian BIC" do
+      expect(build(:bosnia_and_herzegovina_bank_account, bank_number: "UNCRBA22XXX")).to be_valid
+    end
+
+    it "accepts a lowercase Bosnian BIC" do
+      expect(build(:bosnia_and_herzegovina_bank_account, bank_number: "uncrba22")).to be_valid
+    end
+
+    it "leaves a non-BIC code to the format validator" do
+      expect(build(:bosnia_and_herzegovina_bank_account, bank_number: "12345678")).to be_valid
+    end
+
+    it "rejects a foreign BIC padded past the format check with a newline" do
+      expect(build(:bosnia_and_herzegovina_bank_account, bank_number: "BZENLT22\nXXXX")).not_to be_valid
+    end
+
+    # The rows this rule rejects are already in the table, and every account-ending path saves
+    # them through a validating mark_deleted!.
+    describe "a persisted row whose stored BIC names another country" do
+      let(:bank_account) do
+        account = build(:bosnia_and_herzegovina_bank_account, bank_number: "BZENLT22")
+        account.save!(validate: false)
+        account
+      end
+
+      it "can still be soft-deleted" do
+        expect { bank_account.mark_deleted! }.to change { bank_account.reload.deleted_at }.from(nil)
+      end
+
+      it "still rejects the code once the seller edits it" do
+        bank_account.bank_number = "TRWIBEB1XXX"
+
+        expect(bank_account).not_to be_valid
+      end
+
+      it "accepts an edit that corrects the country" do
+        bank_account.bank_number = "UNCRBA22XXX"
+
+        expect(bank_account).to be_valid
+      end
+    end
+  end
+
   describe "#account_number_visual" do
     it "returns the visual account number" do
       expect(create(:bosnia_and_herzegovina_bank_account, account_number_last_four: "6000").account_number_visual).to eq("BA******6000")
