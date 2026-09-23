@@ -728,6 +728,65 @@ describe Api::V2::LinksController do
         expect(@user.links.last.product_files.alive.count).to eq(1)
       end
 
+      describe "checking a large batch of new file uploads" do
+        let(:batch_size) { 56 }
+        let(:directory) { "attachments/#{@user.external_id}/#{SecureRandom.hex}/original" }
+        let(:s3_keys) { Array.new(batch_size) { |i| "#{directory}/file-#{i}.pdf" } }
+
+        it "accepts the whole batch while bounding concurrent storage checks" do
+          bucket = Aws::S3::Resource.new.bucket(S3_BUCKET)
+          s3_keys.each { |s3_key| bucket.object(s3_key).put(body: "test content") }
+          in_flight = 0
+          max_in_flight = 0
+          lock = Mutex.new
+          allow_any_instance_of(Aws::S3::Object).to receive(:exists?).and_wrap_original do |original, *args|
+            lock.synchronize { max_in_flight = [max_in_flight, in_flight += 1].max }
+            sleep 0.05
+            original.call(*args)
+          ensure
+            lock.synchronize { in_flight -= 1 }
+          end
+
+          post @action, params: @params.merge(files: s3_keys.map { |s3_key| { url: "#{S3_BASE_URL}#{s3_key}" } })
+
+          expect(response.parsed_body["success"]).to be(true), "Expected success but got: #{response.parsed_body.inspect}"
+          expect(@user.links.last.product_files.alive.count).to eq(batch_size)
+          expect(max_in_flight).to be_between(2, Api::V2::LinksController::UPLOADED_FILE_CHECK_CONCURRENCY)
+        end
+
+        it "stops checking and creates nothing once uploads are missing" do
+          checked_keys = Queue.new
+          allow_any_instance_of(Aws::S3::Object).to receive(:exists?).and_wrap_original do |original, *args|
+            checked_keys << original.receiver.key
+            original.call(*args)
+          end
+
+          expect do
+            post @action, params: @params.merge(files: s3_keys.map { |s3_key| { url: "#{S3_BASE_URL}#{s3_key}" } })
+          end.not_to change { ProductFile.count }
+
+          expect(response).to have_http_status(:bad_request)
+          expect(@user.links.count).to eq(0)
+          expect(checked_keys.size).to be <= Api::V2::LinksController::UPLOADED_FILE_CHECK_CONCURRENCY
+        end
+
+        it "returns a retryable error and creates nothing when one check hits a storage outage" do
+          bucket = Aws::S3::Resource.new.bucket(S3_BUCKET)
+          s3_keys.each { |s3_key| bucket.object(s3_key).put(body: "test content") }
+          allow_any_instance_of(Aws::S3::Object).to receive(:exists?).and_wrap_original do |original, *args|
+            raise Aws::S3::Errors::ServiceError.new(nil, "test outage") if original.receiver.key == s3_keys.last
+            original.call(*args)
+          end
+
+          expect do
+            post @action, params: @params.merge(files: s3_keys.map { |s3_key| { url: "#{S3_BASE_URL}#{s3_key}" } })
+          end.not_to change { ProductFile.count }
+
+          expect(response).to have_http_status(:service_unavailable)
+          expect(@user.links.count).to eq(0)
+        end
+      end
+
       describe "rejecting legacy upload fields" do
         %i[file preview thumbnail].each do |field|
           it "rejects #{field} sent as a string" do
@@ -1632,6 +1691,52 @@ describe Api::V2::LinksController do
 
         expect(response.parsed_body["success"]).to be(true), "Expected success but got: #{response.parsed_body.inspect}"
         expect(@product.reload.product_files.alive.map(&:display_name)).to eq(["Résumé"])
+      end
+
+      describe "checking a large batch of new file uploads" do
+        let(:directory) { "attachments/#{@user.external_id}/#{SecureRandom.hex}/original" }
+        let(:s3_keys) { Array.new(56) { |i| "#{directory}/file-#{i}.pdf" } }
+        let!(:id_only_file) { create(:product_file, link: @product) }
+        let!(:id_and_url_file) { create(:product_file, link: @product, display_name: "Original") }
+
+        before do
+          bucket = Aws::S3::Resource.new.bucket(S3_BUCKET)
+          s3_keys.each { |s3_key| bucket.object(s3_key).put(body: "test content") }
+        end
+
+        def files_param
+          [{ id: id_only_file.external_id }, { id: id_and_url_file.external_id, url: id_and_url_file.url, display_name: "Renamed" }] +
+            s3_keys.map { |s3_key| { url: "#{S3_BASE_URL}#{s3_key}" } }
+        end
+
+        it "accepts the batch without checking storage for existing files" do
+          checked_keys = Queue.new
+          allow_any_instance_of(Aws::S3::Object).to receive(:exists?).and_wrap_original do |original, *args|
+            checked_keys << original.receiver.key
+            original.call(*args)
+          end
+
+          put @action, params: @params.merge(files: files_param)
+
+          expect(response.parsed_body["success"]).to be(true), "Expected success but got: #{response.parsed_body.inspect}"
+          expect(@product.reload.product_files.alive.count).to eq(s3_keys.size + 2)
+          expect(Array.new(checked_keys.size) { checked_keys.pop }).to match_array(s3_keys)
+        end
+
+        it "leaves every file unchanged when one check hits a storage outage" do
+          allow_any_instance_of(Aws::S3::Object).to receive(:exists?).and_wrap_original do |original, *args|
+            raise Seahorse::Client::NetworkingError.new(StandardError.new("test network failure")) if original.receiver.key == s3_keys.last
+            original.call(*args)
+          end
+
+          expect do
+            put @action, params: @params.merge(files: files_param)
+          end.not_to change { ProductFile.count }
+
+          expect(response).to have_http_status(:service_unavailable)
+          expect(id_and_url_file.reload.display_name).to eq("Original")
+          expect(@product.product_files.alive).to contain_exactly(id_only_file, id_and_url_file)
+        end
       end
 
       it "rejects existing file id with a different url" do

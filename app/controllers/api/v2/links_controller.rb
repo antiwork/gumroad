@@ -37,6 +37,7 @@ class Api::V2::LinksController < Api::V2::BaseController
 
   COMPS_EXAMPLES_COUNT = 5
   COMPS_PRICE_PERCENTS = [25, 50, 75].freeze
+  UPLOADED_FILE_CHECK_CONCURRENCY = 8
 
   before_action(only: [:show, :index, :custom_html, :comps]) { doorkeeper_authorize!(*Doorkeeper.configuration.public_api_read_scopes.concat([:view_public])) }
   before_action(only: [:create, :update, :disable, :enable, :destroy, :preview_custom_html, :edit_custom_html]) { doorkeeper_authorize! :edit_products }
@@ -874,17 +875,33 @@ class Api::V2::LinksController < Api::V2::BaseController
       nil
     end
 
-    # Run after validate_file_urls, so every url is a string under the seller's prefix. Accepts a
-    # key stored in another Unicode normalization form; ProductFile#analyze re-points the url.
+    # Resolve reloadable references on the request thread: joining executor-wrapped workers
+    # can deadlock a pending code reload. ProductFile#analyze re-points Unicode variants.
     def uploaded_file_storage_status(files)
-      bucket = Aws::S3::Resource.new.bucket(S3_BUCKET)
-      files.each do |f|
-        s3_key = f[:url].delete_prefix(S3_BASE_URL)
-        return :missing if !bucket.object(s3_key).exists? && S3KeyUnicodeNormalization.existing_variant(s3_key).nil?
+      s3_keys = Queue.new
+      files.each { |f| s3_keys << f[:url].delete_prefix(S3_BASE_URL) }
+      s3_keys.close
+      bucket_name = S3_BUCKET
+      existing_variant = S3KeyUnicodeNormalization.method(:existing_variant)
+      failure = nil
+      failure_lock = Mutex.new
+      workers = Array.new([files.size, UPLOADED_FILE_CHECK_CONCURRENCY].min) do
+        Thread.new do
+          Thread.current.report_on_exception = false
+          bucket = Aws::S3::Resource.new.bucket(bucket_name)
+          while failure.nil? && (s3_key = s3_keys.pop)
+            next if bucket.object(s3_key).exists? || existing_variant.call(s3_key)
+            failure_lock.synchronize { failure ||= :missing }
+          end
+        rescue Aws::S3::Errors::ServiceError, Seahorse::Client::NetworkingError
+          failure_lock.synchronize { failure ||= :unavailable }
+        rescue => e
+          failure_lock.synchronize { failure ||= e }
+        end
       end
-      nil
-    rescue Aws::S3::Errors::ServiceError, Seahorse::Client::NetworkingError
-      :unavailable
+      workers.each(&:join)
+      raise failure if failure.is_a?(Exception)
+      failure
     end
 
     def render_uploaded_file_error(status)
