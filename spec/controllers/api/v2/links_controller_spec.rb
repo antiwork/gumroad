@@ -681,6 +681,53 @@ describe Api::V2::LinksController do
         expect(response.parsed_body["message"]).to include("files must be an array of file objects")
       end
 
+      it "rejects a file url whose upload was never completed" do
+        missing_url = "#{S3_BASE_URL}attachments/#{@user.external_id}/#{SecureRandom.hex}/original/missing.pdf"
+
+        expect do
+          post @action, params: @params.merge(files: [{ url: missing_url }])
+        end.not_to change { @user.links.count }
+
+        expect(response).to have_http_status(:bad_request)
+        expect(response.parsed_body["success"]).to be false
+        expect(response.parsed_body["message"]).to include("POST /v2/files/complete")
+      end
+
+      it "returns a retryable error when S3 cannot verify the upload" do
+        file_url = "#{S3_BASE_URL}attachments/#{@user.external_id}/#{SecureRandom.hex}/original/file.pdf"
+        allow(Aws::S3::Resource).to receive(:new).and_raise(Aws::S3::Errors::ServiceError.new(nil, "test outage"))
+
+        expect do
+          post @action, params: @params.merge(files: [{ url: file_url }])
+        end.not_to change { @user.links.count }
+
+        expect(response).to have_http_status(:service_unavailable)
+        expect(response.parsed_body).to include("success" => false, "message" => include("Retry"))
+      end
+
+      it "creates nothing when a batch mixes an uploaded file with a missing one" do
+        s3_key = "attachments/#{@user.external_id}/#{SecureRandom.hex}/original/present.pdf"
+        Aws::S3::Resource.new.bucket(S3_BUCKET).object(s3_key).put(body: "test content")
+        missing_url = "#{S3_BASE_URL}attachments/#{@user.external_id}/#{SecureRandom.hex}/original/missing.pdf"
+
+        expect do
+          post @action, params: @params.merge(files: [{ url: "#{S3_BASE_URL}#{s3_key}" }, { url: missing_url }])
+        end.not_to change { ProductFile.count }
+
+        expect(response).to have_http_status(:bad_request)
+        expect(@user.links.count).to eq(0)
+      end
+
+      it "accepts a file url whose object is stored under another Unicode normalization form" do
+        directory = "attachments/#{@user.external_id}/#{SecureRandom.hex}/original"
+        Aws::S3::Resource.new.bucket(S3_BUCKET).object("#{directory}/#{"résumé.pdf".unicode_normalize(:nfd)}").put(body: "test content")
+
+        post @action, params: @params.merge(files: [{ url: "#{S3_BASE_URL}#{directory}/#{"résumé.pdf".unicode_normalize(:nfc)}" }])
+
+        expect(response.parsed_body["success"]).to be(true), "Expected success but got: #{response.parsed_body.inspect}"
+        expect(@user.links.last.product_files.alive.count).to eq(1)
+      end
+
       describe "rejecting legacy upload fields" do
         %i[file preview thumbnail].each do |field|
           it "rejects #{field} sent as a string" do
@@ -1531,6 +1578,60 @@ describe Api::V2::LinksController do
         expect(response).to be_successful
         expect(response.parsed_body["success"]).to be false
         expect(response.parsed_body["message"]).to include("must reference your own uploaded files")
+      end
+
+      it "rejects a new file url whose upload was never completed and leaves the files unchanged" do
+        existing_file = create(:product_file, link: @product)
+        Aws::S3::Resource.new.bucket(S3_BUCKET).object(existing_file.s3_key).put(body: "test content")
+        missing_url = "#{S3_BASE_URL}attachments/#{@user.external_id}/#{SecureRandom.hex}/original/missing.pdf"
+
+        expect do
+          put @action, params: @params.merge(files: [
+                                               { id: existing_file.external_id, url: existing_file.url, display_name: "Renamed" },
+                                               { url: missing_url, display_name: "Missing" }
+                                             ])
+        end.not_to change { ProductFile.count }
+
+        expect(response).to have_http_status(:bad_request)
+        expect(response.parsed_body["success"]).to be false
+        expect(response.parsed_body["message"]).to include("POST /v2/files/complete")
+        expect(existing_file.reload.display_name).not_to eq("Renamed")
+        expect(existing_file).to be_alive
+      end
+
+      it "leaves an existing file unchanged when storage is unavailable" do
+        existing_file = create(:product_file, link: @product, display_name: "Original")
+        file_url = "#{S3_BASE_URL}attachments/#{@user.external_id}/#{SecureRandom.hex}/original/file.pdf"
+        allow(Aws::S3::Resource).to receive(:new).and_raise(Seahorse::Client::NetworkingError.new(StandardError.new("test network failure")))
+
+        put @action, params: @params.merge(files: [
+                                             { id: existing_file.external_id, url: existing_file.url },
+                                             { url: file_url }
+                                           ])
+
+        expect(response).to have_http_status(:service_unavailable), response.parsed_body.inspect
+        expect(response.parsed_body["success"]).to be false
+        expect(existing_file.reload.display_name).to eq("Original")
+        expect(@product.product_files.alive.count).to eq(1)
+      end
+
+      it "keeps an existing file referenced by id even when its stored object is missing" do
+        existing_file = create(:product_file, link: @product)
+
+        put @action, params: @params.merge(files: [{ id: existing_file.external_id }])
+
+        expect(response.parsed_body["success"]).to be(true), "Expected success but got: #{response.parsed_body.inspect}"
+        expect(existing_file.reload).to be_alive
+      end
+
+      it "accepts a new file url whose object is stored under another Unicode normalization form" do
+        directory = "attachments/#{@user.external_id}/#{SecureRandom.hex}/original"
+        Aws::S3::Resource.new.bucket(S3_BUCKET).object("#{directory}/#{"résumé.pdf".unicode_normalize(:nfd)}").put(body: "test content")
+
+        put @action, params: @params.merge(files: [{ url: "#{S3_BASE_URL}#{directory}/#{"résumé.pdf".unicode_normalize(:nfc)}", display_name: "Résumé" }])
+
+        expect(response.parsed_body["success"]).to be(true), "Expected success but got: #{response.parsed_body.inspect}"
+        expect(@product.reload.product_files.alive.map(&:display_name)).to eq(["Résumé"])
       end
 
       it "rejects existing file id with a different url" do

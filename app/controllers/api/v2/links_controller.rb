@@ -144,6 +144,8 @@ class Api::V2::LinksController < Api::V2::BaseController
       end
       error = validate_file_urls(params[:files])
       return render_response(false, message: error) if error
+      storage_status = uploaded_file_storage_status(params[:files])
+      return render_uploaded_file_error(storage_status) if storage_status
     end
 
     is_recurring_billing = native_type == Link::NATIVE_TYPE_MEMBERSHIP
@@ -397,6 +399,8 @@ class Api::V2::LinksController < Api::V2::BaseController
       end
       error = validate_file_urls(new_files)
       return render_response(false, message: error) if error
+      storage_status = uploaded_file_storage_status(new_files)
+      return render_uploaded_file_error(storage_status) if storage_status
 
       # `create` permits files[] keys; update hands them to ProductFile#update!, where an unknown
       # key raises UnknownAttributeError — a NoMethodError, so the RecordInvalid rescue in
@@ -868,6 +872,30 @@ class Api::V2::LinksController < Api::V2::BaseController
         return "File URLs must reference your own uploaded files. Use the presigned upload endpoint to upload files first."
       end
       nil
+    end
+
+    # Run after validate_file_urls, so every url is a string under the seller's prefix. Accepts a
+    # key stored in another Unicode normalization form; ProductFile#analyze re-points the url.
+    def uploaded_file_storage_status(files)
+      bucket = Aws::S3::Resource.new.bucket(S3_BUCKET)
+      files.each do |f|
+        s3_key = f[:url].delete_prefix(S3_BASE_URL)
+        return :missing if !bucket.object(s3_key).exists? && S3KeyUnicodeNormalization.existing_variant(s3_key).nil?
+      end
+      nil
+    rescue Aws::S3::Errors::ServiceError, Seahorse::Client::NetworkingError
+      :unavailable
+    end
+
+    def render_uploaded_file_error(status)
+      if status == :unavailable
+        render json: { success: false, message: "File storage is temporarily unavailable. Retry attaching your uploaded files." }, status: :service_unavailable
+      else
+        render json: {
+          success: false,
+          message: "One or more file URLs do not point to an uploaded file. Finish each upload with POST /v2/files/complete and attach the file_url it returns."
+        }, status: :bad_request
+      end
     end
 
     def resolve_category_param
