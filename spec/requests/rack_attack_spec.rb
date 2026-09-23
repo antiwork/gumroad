@@ -32,6 +32,20 @@ describe "Rack::Attack throttle", type: :request do
     before { reset_rack_attack! }
     after { reset_rack_attack! }
 
+    it "returns 429 for a fourth POST to the routable path" do
+      headers = { "CF-Connecting-IP" => "203.0.113.250" }
+
+      travel_to(Time.current) do
+        3.times do |i|
+          post "/users/forgot_password", params: { user: { email: "nonexistent-rate-limit-probe@example.com" } }, headers: headers, as: :json
+          expect(response.status).not_to eq(429), "request #{i + 1} unexpectedly throttled"
+        end
+
+        post "/users/forgot_password", params: { user: { email: "nonexistent-rate-limit-probe@example.com" } }, headers: headers, as: :json
+        expect(response.status).to eq(429)
+      end
+    end
+
     it "does not raise TypeError when json_params contain non-Hash nested values" do
       expect(reset_throttled?(password_reset_request("/users/forgot_password.json", body: { user: "not-a-hash" }))).to be(false)
     end
