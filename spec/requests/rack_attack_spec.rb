@@ -12,13 +12,100 @@ describe "Rack::Attack throttle", type: :request do
     allow_any_instance_of(ActionDispatch::Request).to receive(:host).and_return(VALID_REQUEST_HOSTS.first)
   end
 
-  describe "forgot_password throttle with malformed JSON params" do
-    it "does not raise TypeError when json_params contain non-Hash nested values" do
-      post "/forgot_password.json",
-           params: { user: "not-a-hash" }.to_json,
-           headers: { "CONTENT_TYPE" => "application/json" }
+  describe "password reset throttle" do
+    def password_reset_request(path, ip: "203.0.113.200", body: {}, content_type: "application/json")
+      Rack::Attack::Request.new(
+        Rack::MockRequest.env_for(
+          path,
+          method: "POST",
+          input: content_type == "application/json" ? body.to_json : body.to_query,
+          "CONTENT_TYPE" => content_type,
+          "HTTP_CF_CONNECTING_IP" => ip
+        )
+      )
+    end
 
-      expect(response.status).not_to eq(500)
+    def reset_throttled?(request)
+      Rack::Attack.configuration.throttled?(request)
+    end
+
+    before { reset_rack_attack! }
+    after { reset_rack_attack! }
+
+    it "returns 429 for a fourth POST to the routable path" do
+      headers = { "CF-Connecting-IP" => "203.0.113.250" }
+
+      travel_to(Time.current) do
+        3.times do |i|
+          post "/users/forgot_password", params: { user: { email: "nonexistent-rate-limit-probe@example.com" } }, headers: headers, as: :json
+          expect(response.status).not_to eq(429), "request #{i + 1} unexpectedly throttled"
+        end
+
+        post "/users/forgot_password", params: { user: { email: "nonexistent-rate-limit-probe@example.com" } }, headers: headers, as: :json
+        expect(response.status).to eq(429)
+      end
+    end
+
+    it "does not raise TypeError when json_params contain non-Hash nested values" do
+      expect(reset_throttled?(password_reset_request("/users/forgot_password.json", body: { user: "not-a-hash" }))).to be(false)
+    end
+
+    it "throttles the web reset path by IP" do
+      travel_to(Time.current) do
+        3.times { |i| expect(reset_throttled?(password_reset_request("/users/forgot_password"))).to be(false), "request #{i + 1} unexpectedly throttled" }
+        expect(reset_throttled?(password_reset_request("/users/forgot_password"))).to be(true)
+      end
+    end
+
+    it "does not throttle a GET on the same path" do
+      travel_to(Time.current) do
+        5.times { expect(reset_throttled?(Rack::Attack::Request.new(Rack::MockRequest.env_for("/users/forgot_password/new", "HTTP_CF_CONNECTING_IP" => "203.0.113.201")))).to be(false) }
+      end
+    end
+
+    it "shares one IP budget across the format suffix and the mobile API path" do
+      travel_to(Time.current) do
+        expect(reset_throttled?(password_reset_request("/users/forgot_password"))).to be(false)
+        expect(reset_throttled?(password_reset_request("/users/forgot_password.json"))).to be(false)
+        expect(reset_throttled?(password_reset_request("/mobile/forgot_password"))).to be(false)
+        expect(reset_throttled?(password_reset_request("/mobile/forgot_password.json"))).to be(true)
+      end
+    end
+
+    it "throttles one target address across rotating IPs" do
+      travel_to(Time.current) do
+        4.times { |i| expect(reset_throttled?(password_reset_request("/users/forgot_password", ip: "203.0.113.#{100 + i}", body: { user: { email: "target@example.com" } }))).to be(false), "request #{i + 1} unexpectedly throttled" }
+        expect(reset_throttled?(password_reset_request("/users/forgot_password", ip: "203.0.113.150", body: { user: { email: "target@example.com" } }))).to be(true)
+      end
+    end
+
+    it "keeps a separate budget per target address" do
+      travel_to(Time.current) do
+        4.times { |i| expect(reset_throttled?(password_reset_request("/users/forgot_password", ip: "203.0.113.#{160 + i}", body: { user: { email: "user#{i}@example.com" } }))).to be(false) }
+      end
+    end
+
+    it "shares one budget across equivalent spellings of the same address" do
+      travel_to(Time.current) do
+        ["Target@Example.com", "TARGET@EXAMPLE.COM", "target@Example.com", " target@example.com "].each_with_index do |email, i|
+          expect(reset_throttled?(password_reset_request("/users/forgot_password", ip: "203.0.113.#{230 + i}", body: { user: { email: email } }))).to be(false), "request #{i + 1} unexpectedly throttled"
+        end
+
+        expect(reset_throttled?(password_reset_request("/users/forgot_password", ip: "203.0.113.240", body: { user: { email: "target@example.com" } }))).to be(true)
+      end
+    end
+
+    it "keys the per-address budget on a form-encoded submission" do
+      travel_to(Time.current) do
+        4.times { |i| expect(reset_throttled?(password_reset_request("/mobile/forgot_password", ip: "203.0.113.#{180 + i}", body: { "user[email]" => "form@example.com" }, content_type: "application/x-www-form-urlencoded"))).to be(false) }
+        expect(reset_throttled?(password_reset_request("/mobile/forgot_password", ip: "203.0.113.199", body: { "user[email]" => "form@example.com" }, content_type: "application/x-www-form-urlencoded"))).to be(true)
+      end
+    end
+
+    it "does not collapse address-less requests into one shared budget" do
+      travel_to(Time.current) do
+        4.times { |i| expect(reset_throttled?(password_reset_request("/users/forgot_password", ip: "203.0.113.#{210 + i}", body: { user: {} }))).to be(false) }
+      end
     end
   end
 
