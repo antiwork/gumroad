@@ -5,6 +5,7 @@ import { createPortal } from "react-dom";
 
 import { Button } from "$app/components/Button";
 import { useIsAboveBreakpoint } from "$app/components/useIsAboveBreakpoint";
+import { useWindowDimensions } from "$app/components/useWindowDimensions";
 import { WithTooltip } from "$app/components/WithTooltip";
 
 // On desktop the preview renders as a persistent sidebar next to the edit form. Below the lg
@@ -200,8 +201,19 @@ export const PreviewSidebar = ({
   children: React.ReactNode;
 } & React.ComponentProps<"aside">) => {
   const isDesktop = useIsAboveBreakpoint("lg");
+  // `useWindowDimensions` measures in a passive effect, so its first value is null — and on that
+  // first commit `useIsAboveBreakpoint` guesses from the user agent, which reads as desktop for a
+  // desktop window narrower than lg. Rendering the copy here then put a live page inside this
+  // `display:none` aside, and the pane below mounted its own copy once the width was known.
+  // Waiting for the measurement costs desktop one effect tick; SSR and the first client render
+  // both omit the preview, so it stays hydration-safe and mounts once, where it is on screen.
+  const dimensions = useWindowDimensions();
   const modeContext = React.useContext(MobilePreviewModeContext);
   const mode = modeContext?.mode ?? "edit";
+  // Below lg the aside is `display:none` and the pane below renders the same preview, so rendering
+  // it here as well mounts the preview twice — and in Edit mode mounts one the seller can never
+  // see. Previews are live pages, not thumbnails, so that is a whole page load.
+  const mobilePaneRendersPreview = !isDesktop && modeContext !== null;
 
   return (
     <>
@@ -215,7 +227,7 @@ export const PreviewSidebar = ({
         aria-label="Preview"
         {...props}
       >
-        {children}
+        {mobilePaneRendersPreview || dimensions === null ? null : children}
       </aside>
       {/* The desktop sidebar above is display:none below lg, which used to mean mobile sellers
           had NO way to see the preview at all (real support tickets). Below lg the page instead
