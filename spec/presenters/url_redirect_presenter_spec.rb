@@ -221,9 +221,6 @@ describe UrlRedirectPresenter do
           email_digest: @purchase.email_digest,
           is_archived: false,
           has_invoice: true,
-          invoice_charges: [{ id: @purchase.bundle_purchase.external_id,
-                              date: (@purchase.bundle_purchase.succeeded_at || @purchase.bundle_purchase.created_at).to_date.iso8601,
-                              has_invoice: true }],
           product_long_url: @product.long_url,
           product_id: @product.external_id,
           product_name: @product.name,
@@ -310,110 +307,6 @@ describe UrlRedirectPresenter do
 
         instance = described_class.new(url_redirect:, logged_in_user: nil)
         expect(instance.download_page_with_content_props[:purchase][:has_invoice]).to be(false)
-      end
-    end
-
-    describe "invoice_charges on a membership" do
-      # Every row on a real membership carries the same buyer email; the factory would otherwise
-      # generate a distinct one per purchase, which `invoiceable_charges` treats as a reassignment.
-      def membership_with_three_charges
-        product = create(:membership_product)
-        subscription = create(:subscription, link: product)
-        email = "buyer@example.com"
-        sign_up = create(:membership_purchase, link: product, subscription:, email:,
-                                               is_original_subscription_purchase: true, succeeded_at: 3.months.ago)
-        july = create(:membership_purchase, link: product, subscription:, email:,
-                                            is_original_subscription_purchase: false, succeeded_at: 2.months.ago)
-        august = create(:membership_purchase, link: product, subscription:, email:,
-                                              is_original_subscription_purchase: false, succeeded_at: 1.month.ago)
-        [sign_up, july, august, create(:url_redirect, purchase: august, link: product)]
-      end
-
-      it "lists every charge of the subscription, newest first, so earlier periods are reachable" do
-        sign_up, july, august, url_redirect = membership_with_three_charges
-
-        props = described_class.new(url_redirect:, logged_in_user: nil).download_page_with_content_props[:purchase]
-
-        expect(props[:invoice_charges].map { |charge| charge[:id] })
-          .to eq([august.external_id, july.external_id, sign_up.external_id])
-        expect(props[:invoice_charges].map { |charge| charge[:has_invoice] }).to all(be(true))
-        expect(props[:invoice_charges].first[:date]).to eq(august.succeeded_at.to_date.iso8601)
-      end
-
-      it "leaves out a charge that carries somebody else's email" do
-        sign_up, july, august, url_redirect = membership_with_three_charges
-        create(:membership_purchase, link: sign_up.link, subscription: sign_up.subscription,
-                                     email: "previous-holder@example.com",
-                                     is_original_subscription_purchase: false, succeeded_at: 2.weeks.ago)
-
-        props = described_class.new(url_redirect:, logged_in_user: nil).download_page_with_content_props[:purchase]
-
-        expect(props[:invoice_charges].map { |charge| charge[:id] })
-          .to eq([august.external_id, july.external_id, sign_up.external_id])
-      end
-
-      # `purchases.email` collates utf8mb4_unicode_ci, so these two are matched by a SQL email
-      # comparison but rejected by the byte-for-byte one the invoice endpoint applies — the link
-      # would render and then refuse.
-      it "leaves out a charge whose email differs only by case" do
-        sign_up, july, august, url_redirect = membership_with_three_charges
-        # Saved past `downcase_email` so the row keeps its casing, as a row written outside
-        # ActiveRecord (or before that callback) does.
-        july.update_column(:email, "Buyer@Example.com")
-
-        props = described_class.new(url_redirect:, logged_in_user: nil).download_page_with_content_props[:purchase]
-
-        expect(props[:invoice_charges].map { |charge| charge[:id] })
-          .to eq([august.external_id, sign_up.external_id])
-      end
-
-      it "leaves out a charge whose email differs only by accent" do
-        sign_up, july, august, url_redirect = membership_with_three_charges
-        july.update!(email: "búyer@example.com")
-
-        props = described_class.new(url_redirect:, logged_in_user: nil).download_page_with_content_props[:purchase]
-
-        expect(props[:invoice_charges].map { |charge| charge[:id] })
-          .to eq([august.external_id, sign_up.external_id])
-      end
-
-      it "leaves out a fully refunded charge" do
-        sign_up, july, august, url_redirect = membership_with_three_charges
-        july.update!(stripe_refunded: true)
-
-        props = described_class.new(url_redirect:, logged_in_user: nil).download_page_with_content_props[:purchase]
-
-        expect(props[:invoice_charges].map { |charge| charge[:id] })
-          .to eq([august.external_id, sign_up.external_id])
-      end
-
-      # The giftee row is not `successful`, and the gifter row is rejected, so the subscription
-      # list is empty. The page must still offer the purchase `receipt_purchase` already names.
-      it "offers the giftee's own purchase when a gifted membership has no renewal yet" do
-        product = create(:membership_product)
-        subscription = create(:subscription, link: product)
-        gifter = create(:membership_purchase, link: product, subscription:,
-                                              is_original_subscription_purchase: true, is_gift_sender_purchase: true,
-                                              email: "giftee@example.com", succeeded_at: 1.month.ago)
-        giftee = create(:purchase, :gift_receiver, link: product, subscription:, email: "giftee@example.com", price_cents: 0)
-        url_redirect = create(:url_redirect, purchase: giftee, link: product)
-
-        props = described_class.new(url_redirect:, logged_in_user: nil).download_page_with_content_props[:purchase]
-
-        expect(props[:invoice_charges].map { |charge| charge[:id] }).to eq([giftee.external_id])
-        expect(props[:invoice_charges].map { |charge| charge[:id] }).not_to include(gifter.external_id)
-        expect(props[:has_invoice]).to be(true)
-      end
-
-      it "lists the single receipt/invoice purchase for a one-off purchase" do
-        purchase = create(:purchase, link: @product, seller: @user)
-        url_redirect = create(:url_redirect, purchase:, link: @product)
-
-        props = described_class.new(url_redirect:, logged_in_user: nil).download_page_with_content_props[:purchase]
-
-        expect(props[:invoice_charges]).to eq([
-                                                { id: purchase.external_id, date: purchase.succeeded_at.to_date.iso8601, has_invoice: true }
-                                              ])
       end
     end
 
@@ -992,9 +885,6 @@ describe UrlRedirectPresenter do
           email_digest: @purchase.email_digest,
           is_archived: false,
           has_invoice: true,
-          invoice_charges: [{ id: @purchase.receipt_purchase.external_id,
-                              date: (@purchase.receipt_purchase.succeeded_at || @purchase.receipt_purchase.created_at).to_date.iso8601,
-                              has_invoice: true }],
           product_id: @product.external_id,
           product_name: @product.name,
           variant_id: nil,

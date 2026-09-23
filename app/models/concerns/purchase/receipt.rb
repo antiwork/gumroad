@@ -110,7 +110,7 @@ module Purchase::Receipt
       .not_chargedback_or_chargedback_reversed
       .order(succeeded_at: :desc, id: :desc)
       .reject(&:is_gift_sender_purchase?)
-      .select { |charge| charge.email == email }
+      .select { |charge| charge.email == email && charge.has_invoice? }
   end
 
   def has_invoice?

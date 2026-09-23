@@ -1,5 +1,5 @@
 import { X } from "@boxicons/react";
-import { differenceInYears, format, parseISO } from "date-fns";
+import { differenceInYears, parseISO } from "date-fns";
 import * as React from "react";
 
 import { addPurchaseToLibrary } from "$app/data/account";
@@ -35,9 +35,6 @@ type ContentUnavailabilityReasonCode =
   | "email_confirmation_required"
   | null;
 type Call = { start_time: string; end_time: string; url: string | null };
-// One charge of a membership the buyer may invoice. `date` is the charge's succeeded_at (ISO),
-// used to label the period so a buyer with several months of charges can pick the right one.
-type InvoiceCharge = { id: string; date: string; has_invoice: boolean };
 
 export type LayoutProps = {
   content_unavailability_reason_code: ContentUnavailabilityReasonCode;
@@ -53,12 +50,6 @@ export type LayoutProps = {
     email_digest: string;
     is_archived: boolean;
     has_invoice: boolean;
-    /**
-     * Every charge of this membership the buyer may invoice, newest first. Ids only: the invoice
-     * URL embeds the buyer's email, which must not reach the page while email confirmation is
-     * still pending, so the frontend builds it from the id.
-     */
-    invoice_charges: InvoiceCharge[];
     product_id: string | null;
     product_permalink: string | null;
     product_name: string | null;
@@ -119,9 +110,6 @@ export const Layout = ({
   // `receipt_purchase_id` only ever names a purchase sharing this one's email (see
   // Purchase#receipt_purchase), so the library row's address is the right one for both links.
   const receiptPurchaseEmail = purchase?.email;
-  // Every charge of this membership the buyer may invoice, newest first, so earlier periods are
-  // reachable too; one entry for a one-off purchase.
-  const invoiceCharges = (purchase?.invoice_charges ?? []).filter((charge) => charge.has_invoice);
 
   const disabledStatus =
     purchase && !purchase.product_available
@@ -220,24 +208,26 @@ export const Layout = ({
                         {isResendingReceipt ? "Resending receipt..." : "Resend receipt"}
                       </Button>
                       {/*
-                        The receipt and invoice links can only ever name one purchase, so one link
-                        per invoiceable period; the period is named only when there is more than
-                        one, so a one-off purchase and a one-charge membership read as before.
+                        Buyers could always reach their invoice, but only by going Receipt →
+                        View receipt → Generate invoice, and enough of them failed to find it
+                        that sellers were fielding the support requests. Surfacing it here
+                        alongside the other receipt actions removes that indirection.
+
+                        Gated on has_invoice so it matches the receipt: a free purchase or a
+                        membership still in its free trial has no amount to invoice, and the
+                        invoice page would have nothing to render.
                       */}
-                      {invoiceCharges.map((charge) => (
+                      {purchase.has_invoice ? (
                         <NavigationButton
-                          key={charge.id}
                           href={
                             receiptPurchaseEmail
-                              ? Routes.new_purchase_invoice_url(charge.id, { email: receiptPurchaseEmail })
-                              : Routes.new_purchase_invoice_url(charge.id)
+                              ? Routes.new_purchase_invoice_url(receiptPurchaseId, { email: receiptPurchaseEmail })
+                              : Routes.new_purchase_invoice_url(receiptPurchaseId)
                           }
                         >
-                          {invoiceCharges.length > 1
-                            ? `Generate invoice — ${format(parseISO(charge.date), "MMMM yyyy")}`
-                            : "Generate invoice"}
+                          Generate invoice
                         </NavigationButton>
-                      ))}
+                      ) : null}
                     </div>
                   </Details>
                 </CardContent>

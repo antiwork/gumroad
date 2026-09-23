@@ -82,24 +82,6 @@ class UrlRedirectPresenter
   end
 
   private
-    # A gifted membership's giftee row is `gift_receiver_purchase_successful`, not `successful`, so
-    # `invoiceable_charges` is empty until a renewal — falling back to `receipt_purchase` keeps the
-    # link the page already showed; a non-membership is always its own single charge.
-    def invoice_charges_for(receipt_purchase)
-      return [] if purchase.blank? || receipt_purchase.blank?
-
-      charges = purchase.subscription.present? ? purchase.invoiceable_charges : [receipt_purchase]
-      charges = [receipt_purchase] if charges.empty?
-
-      charges.map do |charge|
-        {
-          id: charge.external_id,
-          date: (charge.succeeded_at || charge.created_at).to_date.iso8601,
-          has_invoice: charge.has_invoice?,
-        }
-      end
-    end
-
     def seller_analytics_props
       PurchaseSellerAnalyticsPresenter.new(purchase).props
     end
@@ -130,10 +112,6 @@ class UrlRedirectPresenter
           # embeds the buyer's email, which must not reach the page when email confirmation is
           # still pending; the frontend builds the URL from the id it already has.
           has_invoice: receipt_purchase.present? && receipt_purchase.has_invoice?,
-          # Every charge of this membership the buyer may invoice, newest first, so the page can
-          # offer earlier periods as well as the latest. Ids only, never URLs, for the same
-          # email-confirmation reason as `has_invoice`.
-          invoice_charges: invoice_charges_for(receipt_purchase),
           product_permalink: purchase.link&.unique_permalink,
           product_id: purchase.link&.external_id,
           product_name: purchase.link&.name,
