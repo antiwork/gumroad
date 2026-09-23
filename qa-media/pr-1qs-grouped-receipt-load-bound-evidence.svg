@@ -29,7 +29,7 @@
 <text x="28" y="708" font-family="Menlo,monospace" font-size="14" fill="#5ddc7a">  -&gt; the shipped read walks 2 windows for that buyer and renders all 15.</text>
 <text x="28" y="738" font-family="Menlo,monospace" font-size="16" font-weight="bold" fill="#8ab4f8">3. Red -&gt; green, and what the new examples catch</text>
 <text x="28" y="768" font-family="Menlo,monospace" font-size="14" fill="#e6e6e6">$ DISABLE_SPRING=1 CI=1 bundle exec rspec spec/mailers/customer_mailer_spec.rb</text>
-<text x="28" y="792" font-family="Menlo,monospace" font-size="14" fill="#5ddc7a">  -&gt; 137 examples, 0 failures (43.3s)</text>
+<text x="28" y="792" font-family="Menlo,monospace" font-size="14" fill="#5ddc7a">  -&gt; 137 examples, 0 failures</text>
 <text x="28" y="816" font-family="Menlo,monospace" font-size="13" fill="#9aa0a6">  the 2 failures the first round recorded (spec:683, spec:1466) do not reproduce under CI=1</text>
 <text x="28" y="846" font-family="Menlo,monospace" font-size="14" fill="#e6e6e6">$ mutant: GROUPED_RECEIPT_READ_WINDOWS.times -&gt; 1.times   (stop at one window)</text>
 <text x="28" y="870" font-family="Menlo,monospace" font-size="14" fill="#5ddc7a">  -&gt; 3 examples, 2 failures   (window budget and shared-charge examples bite)</text>
