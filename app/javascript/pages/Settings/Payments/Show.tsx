@@ -937,9 +937,14 @@ export default function PaymentsPage() {
         });
       }
     }
-    const peruDniRequired = form.data.user.is_business
-      ? form.data.user.business_country === "PE"
-      : form.data.user.country === "PE";
+    // A personal tax ID belongs to the representative, so its shape is only knowable from the
+    // representative's country — the same pairing UpdateUserComplianceInfo enforces. An SG
+    // business whose representative lives elsewhere has no NRIC/FIN to enter.
+    const representativeCountry = form.data.user.country ?? props.compliance_info.country;
+    const individualIdCountryMatches = (country: string) =>
+      representativeCountry === country && (!form.data.user.is_business || form.data.user.business_country === country);
+
+    const peruDniRequired = individualIdCountryMatches("PE");
     if (
       peruDniRequired &&
       form.data.user.individual_tax_id &&
@@ -950,9 +955,7 @@ export default function PaymentsPage() {
         message: "Your DNI must include the verification digit (for example, 12345678-9).",
       });
     }
-    const singaporeNricRequired = form.data.user.is_business
-      ? form.data.user.business_country === "SG"
-      : form.data.user.country === "SG";
+    const singaporeNricRequired = individualIdCountryMatches("SG");
     if (
       singaporeNricRequired &&
       form.data.user.individual_tax_id &&
@@ -964,9 +967,7 @@ export default function PaymentsPage() {
           "Your NRIC/FIN must start with S, T, F, G or M and end with a letter (for example, S1234567A). Please enter it exactly as it appears on your ID.",
       });
     }
-    const colombiaIdRequired = form.data.user.is_business
-      ? form.data.user.business_country === "CO"
-      : form.data.user.country === "CO";
+    const colombiaIdRequired = individualIdCountryMatches("CO");
     if (
       colombiaIdRequired &&
       form.data.user.individual_tax_id &&

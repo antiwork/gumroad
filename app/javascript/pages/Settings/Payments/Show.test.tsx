@@ -294,6 +294,60 @@ describe("US company representative tax ID", () => {
   });
 });
 
+// A personal tax ID belongs to the representative, so a business registered in one country whose
+// representative lives in another must not have an ID shape demanded that they cannot hold
+// (Stripe verifies their passport instead).
+describe("personal tax ID shape check for a business whose representative lives elsewhere", () => {
+  const singaporeBusiness = {
+    is_business: true,
+    business_country: "SG",
+    country: "VN",
+    business_type: "corporation",
+    business_name: "Example Pte Ltd",
+    business_street_address: "1 Raffles Place",
+    business_city: "Singapore",
+    business_zip_code: "048616",
+    business_phone: "+6591234567",
+    job_title: "Director",
+    phone: "+84912345678",
+  };
+
+  const renderBusiness = (complianceOverrides: Partial<ComplianceInfo>) => {
+    const props = pageProps(
+      {
+        individual_tax_id_entered: false,
+        business_tax_id_entered: true,
+        individual_tax_id_needed_countries: ["US", "SG"],
+      },
+      { ...singaporeBusiness, ...complianceOverrides },
+    );
+    mocks.usePage.mockReturnValue({ props: { ...props, countries: { SG: "Singapore", VN: "Vietnam" } } });
+    render(<PaymentsPage />);
+  };
+
+  it("saves a personal tax ID that is not an NRIC when the representative is outside Singapore", () => {
+    renderBusiness({});
+
+    fireEvent.change(screen.getByLabelText("Personal tax ID"), { target: { value: "B1234567" } });
+    save();
+
+    expect(mocks.put).toHaveBeenCalledWith(
+      "/settings_payments",
+      expect.objectContaining({ user: expect.objectContaining({ individual_tax_id: "B1234567" }) }),
+    );
+  });
+
+  it("still blocks a malformed NRIC when the representative lives in Singapore", () => {
+    renderBusiness({ country: "SG", phone: "+6591234567" });
+
+    fireEvent.change(screen.getByLabelText("NRIC number / FIN"), { target: { value: "123456789" } });
+    save();
+
+    expect(mocks.put).not.toHaveBeenCalled();
+    expect(screen.getAllByText(/Your NRIC\/FIN must start with S, T, F, G or M/u).length).toBeGreaterThan(0);
+  });
+});
+
 // A stored threshold below the platform minimum changes no payout, so it must not flag the field
 // or block saving an unrelated change.
 describe("stale payout threshold below the platform minimum", () => {
