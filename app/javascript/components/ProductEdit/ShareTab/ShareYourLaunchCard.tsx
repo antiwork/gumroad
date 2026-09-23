@@ -246,6 +246,9 @@ const ChannelComposer = ({
   const [intentUrl, setIntentUrl] = React.useState<string | undefined>(channel.intent_url);
   const edited = copy !== action.copy;
   const terminal = action.status === "posted" || action.status === "failed" || action.status === "cancelled";
+  // The read-only banner already explains why posting cannot work yet; the button would only fail.
+  // Reconnecting clears the reason and re-enables it.
+  const readOnlyToken = action.error_code === "x_write_permission_missing" && channel.connected;
 
   const run = async (fn: () => Promise<void>) => {
     onBusyChange(true);
@@ -356,7 +359,11 @@ const ChannelComposer = ({
 
           {channel.connected ? (
             <div className="flex flex-wrap gap-2">
-              <Button color="primary" disabled={busy || copy.trim() === ""} onClick={() => setConfirming(true)}>
+              <Button
+                color="primary"
+                disabled={busy || readOnlyToken || copy.trim() === ""}
+                onClick={() => setConfirming(true)}
+              >
                 Post on {channel.label}
               </Button>
               <Button

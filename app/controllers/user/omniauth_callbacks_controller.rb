@@ -330,6 +330,9 @@ class User::OmniauthCallbacksController < Devise::OmniauthCallbacksController
       User.query_twitter(logged_in_user, data)
 
       logged_in_user.update!(twitter_oauth_token: access_token["credentials"]["token"], twitter_oauth_secret: access_token["credentials"]["secret"])
+      # The new token replaces the read-only one that produced the reason, so the card must
+      # stop telling the seller they cannot post.
+      Marketing::Action.awaiting_reconnect.where(user: logged_in_user).update_all(error_code: nil, updated_at: Time.current)
     end
 
     def async_link_twitter_account

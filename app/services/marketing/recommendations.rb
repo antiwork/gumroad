@@ -24,8 +24,25 @@ class Marketing::Recommendations
   def self.copy_for(product)
     name = product.name.to_s.squish
     sentence = product.plaintext_description.split(SENTENCE_BOUNDARY).first.to_s.squish
-    copy = sentence.present? ? "#{name}: #{sentence}" : name
+    # Descriptions often open with the product's own name, and prefixing it again reads as a
+    # glitch in the draft the seller is about to publish.
+    copy = if sentence.blank?
+      name
+    elsif opens_with?(sentence, name)
+      sentence
+    else
+      "#{name}: #{sentence}"
+    end
     copy.truncate(Marketing::Action::MAX_COPY_LENGTH, separator: " ")
+  end
+
+  # A word merely starting with the name ("Gum" in "Gumroad") is not the name being repeated, but a
+  # name-only sentence is — the end of the string is a boundary too.
+  def self.opens_with?(sentence, name)
+    return false if name.blank? || !sentence.downcase.start_with?(name.downcase)
+
+    rest = sentence[name.length..].to_s
+    rest.empty? || rest.match?(/\A[^\p{Alnum}]/)
   end
 
   private

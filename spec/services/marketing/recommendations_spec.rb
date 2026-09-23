@@ -40,6 +40,21 @@ describe Marketing::Recommendations do
     expect(action.copy).not_to match(/limited|hurry|only|today|love/i)
   end
 
+  it "does not prefix the name when the description already opens with it" do
+    product.update!(description: "<p>Gumstein Letters — ten years of letters from the Andes.</p>")
+    expect(channels.first[:action].copy).to eq("Gumstein Letters — ten years of letters from the Andes.")
+  end
+
+  it "keeps the prefix when a longer word merely starts with the name" do
+    product.update!(name: "Gum", description: "<p>Gumroad is where these started.</p>")
+    expect(channels.first[:action].copy).to eq("Gum: Gumroad is where these started.")
+  end
+
+  it "names the product once when the description is only the name" do
+    product.update!(name: "Gumstein Letters", description: "<p>Gumstein Letters</p>")
+    expect(channels.first[:action].copy).to eq("Gumstein Letters")
+  end
+
   it "truncates long names on a word boundary within the copy budget" do
     product.update!(name: "word " * 50, description: "tail " * 60)
     copy = channels.first[:action].copy
