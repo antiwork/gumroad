@@ -323,9 +323,9 @@ describe UrlRedirectPresenter do
         sign_up = create(:membership_purchase, link: product, subscription:, email:,
                                                is_original_subscription_purchase: true, succeeded_at: 3.months.ago)
         july = create(:membership_purchase, link: product, subscription:, email:,
-                                           is_original_subscription_purchase: false, succeeded_at: 2.months.ago)
+                                            is_original_subscription_purchase: false, succeeded_at: 2.months.ago)
         august = create(:membership_purchase, link: product, subscription:, email:,
-                                             is_original_subscription_purchase: false, succeeded_at: 1.month.ago)
+                                              is_original_subscription_purchase: false, succeeded_at: 1.month.ago)
         [sign_up, july, august, create(:url_redirect, purchase: august, link: product)]
       end
 
@@ -369,8 +369,8 @@ describe UrlRedirectPresenter do
         props = described_class.new(url_redirect:, logged_in_user: nil).download_page_with_content_props[:purchase]
 
         expect(props[:invoice_charges]).to eq([
-          { id: purchase.external_id, date: purchase.succeeded_at.to_date.iso8601, has_invoice: true }
-        ])
+                                                { id: purchase.external_id, date: purchase.succeeded_at.to_date.iso8601, has_invoice: true }
+                                              ])
       end
     end
 

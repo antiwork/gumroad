@@ -246,7 +246,9 @@ export const Layout = ({
                               : Routes.new_purchase_invoice_url(charge.id)
                           }
                         >
-                          {index === 0 ? "Generate invoice" : `Generate invoice — ${format(parseISO(charge.date), "MMMM yyyy")}`}
+                          {index === 0
+                            ? "Generate invoice"
+                            : `Generate invoice — ${format(parseISO(charge.date), "MMMM yyyy")}`}
                         </NavigationButton>
                       ))}
                     </div>
