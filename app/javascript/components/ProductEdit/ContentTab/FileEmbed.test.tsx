@@ -406,7 +406,7 @@ it("leaves downloads on when the seller cancels the confirmation", async () => {
 
   expect(product.files[0]?.stream_only).toBe(false);
   expect(screen.queryByRole("dialog")).toBeNull();
-  expect(downloadSwitch().checked).toBe(false);
+  expect(downloadSwitch()).toHaveProperty("checked", false);
 });
 
 it("disables downloads without a dialog when no buyer can reach the file", async () => {

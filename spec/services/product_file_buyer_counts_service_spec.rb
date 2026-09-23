@@ -24,6 +24,13 @@ describe ProductFileBuyerCountsService do
     expect(counts[product_file.external_id]).to eq(3)
   end
 
+  it "counts a membership buyer's recurring charges once" do
+    buyer = create(:user)
+    3.times { create(:purchase, link: product, purchaser: buyer, email: buyer.email) }
+
+    expect(counts[product_file.external_id]).to eq(1)
+  end
+
   it "keys the counts by the file external id the editor receives" do
     buy
     other_file = create(:product_file, link: product)

@@ -294,9 +294,8 @@ class ProductPresenter
         subscription_duration: product.subscription_duration,
         collaborating_user: collaborator.present? ? UserPresenter.new(user: collaborator).author_byline_props : nil,
         rich_content: product.rich_content_json,
-        # `existing_buyers_count` is how many buyers can still reach the file, so the editor can
-        # warn before a retroactive downloads-off change (gumroad-private#2918). Counted once,
-        # with the rest of the editor's props, rather than per keystroke.
+        # `existing_buyers_count` is what the editor warns with before a retroactive downloads-off
+        # change (gumroad-private#2918), counted once here rather than per keystroke.
         files: files_data(product).map { _1.merge(existing_buyers_count: file_buyer_counts[_1[:id]] || 0) },
         # Served as false in the recoverable hidden-content state (flag on,
         # product level blank, variant pages real — the July 21, 2026 incident

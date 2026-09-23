@@ -95,9 +95,8 @@ const FileEmbedNodeView = ({
       (file.is_streamable || FileUtils.isBrowserReadableDocument(file.extension, file.file_size)))
     : false;
 
-  // How many buyers lose download access if the switch is flipped: the server counts them with
-  // the rest of the editor's props (ProductFileBuyerCountsService). A file the editor just built
-  // has no count yet, and one with no buyers needs no confirmation.
+  // Buyers who can still reach this file (ProductFileBuyerCountsService); downloads-off applies
+  // retroactively to all of them, so the switch asks first. Absent on a file just built.
   const existingBuyersCount = file?.existing_buyers_count ?? 0;
 
   const playerRef = React.useRef<jwplayer.JWPlayer | null>(null);
@@ -795,8 +794,7 @@ const FileEmbedNodeView = ({
                 <Switch
                   checked={file.stream_only}
                   onChange={(e) => {
-                    // Turning downloads off applies to everyone who already bought
-                    // (gumroad-private#2916), so name the buyers who lose access first.
+                    // Downloads-off reaches everyone who already bought (gumroad-private#2916).
                     if (e.target.checked && existingBuyersCount > 0) {
                       setConfirmingStreamOnly(true);
                       return;
