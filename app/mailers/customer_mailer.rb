@@ -17,8 +17,14 @@ class CustomerMailer < ApplicationMailer
 
   # A caller's match can be its whole history — one buyer email matches 31,964 successful
   # purchases — and materialising an IN list that long never returns: the statement dies at
-  # the session's 300s ceiling. Only the newest few can be rendered, so bound the load.
+  # the session's 300s ceiling. Only the newest few can be rendered, so read it a window at a time.
   GROUPED_RECEIPT_LOOKBACK = 10 * GROUPED_RECEIPT_MAX_CHARGEABLES
+
+  # Every purchase in a combined charge collapses into that one chargeable (the largest charge in
+  # production holds 224 purchases), so one window can resolve to a single receipt and leave the
+  # email short of its fill. Read on until the fill is reachable, but no further: ten windows is
+  # a hundred times what the template can show, and past that the read stops being bounded at all.
+  GROUPED_RECEIPT_READ_WINDOWS = 10
 
   # One send per recipient + receipt set within this window. The claim is taken at render,
   # so a retry of a send that failed before SMTP handoff is also suppressed — acceptable,
@@ -28,14 +34,7 @@ class CustomerMailer < ApplicationMailer
   def grouped_receipt(purchase_ids, recommendations: true)
     @recommendations = recommendations
     # Callers pass ids in any state; the email-reassignment flow includes failed purchases.
-    @chargeables = Purchase.where(id: purchase_ids)
-      .all_success_states_including_test
-      .order(id: :desc)
-      .limit(GROUPED_RECEIPT_LOOKBACK)
-      .includes(charge: [:order, :seller])
-      .map { Charge::Chargeable.find_by_purchase_or_charge!(purchase: _1) }
-      .uniq
-    @chargeables = renderable_chargeables(@chargeables).first(GROUPED_RECEIPT_MAX_CHARGEABLES).reverse
+    @chargeables = read_renderable_chargeables(purchase_ids).first(GROUPED_RECEIPT_MAX_CHARGEABLES).reverse
     return if @chargeables.empty?
 
     # Re-check before the claim so a set that cannot be sent does not consume the 24h window.
@@ -414,6 +413,28 @@ class CustomerMailer < ApplicationMailer
   end
 
   private
+    # Newest receipts are the ones a "resend my receipts" caller is after, so the ids are read
+    # newest-first and one window at a time; a combined charge maps several of them to a single
+    # chargeable, which is why the read continues past a window that resolves to too few.
+    def read_renderable_chargeables(purchase_ids)
+      chargeables = []
+
+      purchase_ids.sort.reverse
+        .each_slice(GROUPED_RECEIPT_LOOKBACK)
+        .first(GROUPED_RECEIPT_READ_WINDOWS)
+        .each do |window|
+          window_chargeables = Purchase.where(id: window)
+            .all_success_states_including_test
+            .order(id: :desc)
+            .includes(charge: [:order, :seller])
+            .map { Charge::Chargeable.find_by_purchase_or_charge!(purchase: _1) }
+          chargeables = renderable_chargeables((chargeables + window_chargeables).uniq)
+          break if chargeables.size >= GROUPED_RECEIPT_MAX_CHARGEABLES
+        end
+
+      chargeables
+    end
+
     # Batched: a per-chargeable exists? is an N+1 on up to GROUPED_RECEIPT_MAX_CHARGEABLES entries.
     def renderable_chargeables(chargeables)
       purchases, charges = chargeables.partition { _1.is_a?(Purchase) }

@@ -1,32 +1,40 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1100" height="974" viewBox="0 0 1100 974">
+<svg xmlns="http://www.w3.org/2000/svg" width="1100" height="1250" viewBox="0 0 1100 1250">
 <rect width="100%" height="100%" rx="10" fill="#0f1115"/>
 <text x="28" y="48" font-family="Menlo,monospace" font-size="19" font-weight="bold" fill="#f5f5f7">PR evidence - GUMROAD-1QS: bound the grouped-receipt load</text>
 <text x="28" y="82" font-family="Menlo,monospace" font-size="13" fill="#9aa0a6">issue: https://gumroad-to.sentry.io/issues/7750062023/  (same stack as GUMROAD-1KM, 39 events since 2026-09-14)</text>
 <text x="28" y="104" font-family="Menlo,monospace" font-size="13" fill="#9aa0a6">branch: gumclaw/g1qs-grouped-receipt-load-bound   file: app/mailers/customer_mailer.rb</text>
-<text x="28" y="126" font-family="Menlo,monospace" font-size="16" font-weight="bold" fill="#8ab4f8">1. Production replica measurement (read-only, 2026-09-23)</text>
-<text x="28" y="158" font-family="Menlo,monospace" font-size="14" fill="#d7d7d7">Affected caller: /charge_data and the license-lookup flow for one buyer email that matches</text>
-<text x="28" y="182" font-family="Menlo,monospace" font-size="14" fill="#d7d7d7">31,964 successful purchases (ids 35,503 - 354,953,849). Every id is passed to CustomerMailer.</text>
-<text x="28" y="206" font-family="Menlo,monospace" font-size="14" fill="#e6e6e6">$ Purchase.where(id: &lt;31,964 ids&gt;).all_success_states_including_test.order(id: :desc)</text>
-<text x="28" y="230" font-family="Menlo,monospace" font-size="14" fill="#e6e6e6">  .includes(charge: [:order, :seller]).to_a</text>
-<text x="28" y="254" font-family="Menlo,monospace" font-size="14" fill="#ff8a80">  -&gt; killed at the 60s statement cap   (production ceiling is 300s: the event fires exactly 300s</text>
-<text x="28" y="278" font-family="Menlo,monospace" font-size="14" fill="#ff8a80">     after the last SQL breadcrumb)</text>
-<text x="28" y="302" font-family="Menlo,monospace" font-size="14" fill="#e6e6e6">$ ... same chain + .limit(200)</text>
-<text x="28" y="326" font-family="Menlo,monospace" font-size="14" fill="#5ddc7a">  -&gt; 200 rows in 0.75s</text>
-<text x="28" y="350" font-family="Menlo,monospace" font-size="14" fill="#e6e6e6">$ ... .limit(50).map { Charge::Chargeable.find_by_purchase_or_charge!(_1) }.uniq</text>
-<text x="28" y="374" font-family="Menlo,monospace" font-size="14" fill="#5ddc7a">  -&gt; 49 chargeables in 0.31s   (the email renders at most 20)</text>
-<text x="28" y="398" font-family="Menlo,monospace" font-size="16" font-weight="bold" fill="#8ab4f8">2. Red -&gt; green (focused spec)</text>
-<text x="28" y="430" font-family="Menlo,monospace" font-size="14" fill="#e6e6e6">$ DISABLE_SPRING=1 bundle exec rspec spec/mailers/customer_mailer_spec.rb -e 'bounded newest-first'</text>
-<text x="28" y="454" font-family="Menlo,monospace" font-size="14" fill="#5ddc7a">  with the fix:    1 example, 0 failures</text>
-<text x="28" y="478" font-family="Menlo,monospace" font-size="14" fill="#e6e6e6">$ git show origin/main:app/mailers/customer_mailer.rb &gt; app/mailers/customer_mailer.rb</text>
-<text x="28" y="502" font-family="Menlo,monospace" font-size="13" fill="#9aa0a6">  LOOKBACK hits in reverted file: 0</text>
-<text x="28" y="524" font-family="Menlo,monospace" font-size="14" fill="#e6e6e6">$ DISABLE_SPRING=1 bundle exec rspec spec/mailers/customer_mailer_spec.rb -e 'bounded newest-first'</text>
-<text x="28" y="548" font-family="Menlo,monospace" font-size="14" fill="#ff8a80">  without the fix: 1 example, 1 failure</text>
-<text x="28" y="572" font-family="Menlo,monospace" font-size="16" font-weight="bold" fill="#8ab4f8">3. Full spec file (spec/mailers/customer_mailer_spec.rb)</text>
-<text x="28" y="604" font-family="Menlo,monospace" font-size="14" fill="#e6e6e6">135 examples, 3 failures -&gt; with the fix: 135 examples, 2 failures</text>
-<text x="28" y="628" font-family="Menlo,monospace" font-size="13" fill="#9aa0a6">the 2 remaining failures (spec:683 download-CTA padding, spec:1466 partial-refund reminder)</text>
-<text x="28" y="650" font-family="Menlo,monospace" font-size="13" fill="#9aa0a6">fail identically with the base mailer restored, i.e. pre-existing in this environment.</text>
-<text x="28" y="672" font-family="Menlo,monospace" font-size="16" font-weight="bold" fill="#8ab4f8">4. No user-visible change</text>
-<text x="28" y="704" font-family="Menlo,monospace" font-size="14" fill="#d7d7d7">The diff only bounds how many purchases the load reads. Rendered in the test env, the grouped</text>
-<text x="28" y="728" font-family="Menlo,monospace" font-size="14" fill="#d7d7d7">receipt body still renders one receipt block per chargeable (3 receipts from 3 purchases),</text>
-<text x="28" y="752" font-family="Menlo,monospace" font-size="14" fill="#d7d7d7">newest first, capped at GROUPED_RECEIPT_MAX_CHARGEABLES = 20 as before.</text>
+<text x="28" y="130" font-family="Menlo,monospace" font-size="16" font-weight="bold" fill="#8ab4f8">1. Production replica measurement (read-only, 2026-09-23)</text>
+<text x="28" y="160" font-family="Menlo,monospace" font-size="14" fill="#d7d7d7">Affected caller: /charge_data and the license-lookup flow for one buyer email that matches</text>
+<text x="28" y="184" font-family="Menlo,monospace" font-size="14" fill="#d7d7d7">31,964 successful purchases (ids 35,503 - 354,953,849). Every id is passed to CustomerMailer.</text>
+<text x="28" y="210" font-family="Menlo,monospace" font-size="14" fill="#e6e6e6">$ Purchase.where(id: &lt;31,964 ids&gt;).all_success_states_including_test.order(id: :desc)</text>
+<text x="28" y="234" font-family="Menlo,monospace" font-size="14" fill="#e6e6e6">  .includes(charge: [:order, :seller]).to_a</text>
+<text x="28" y="258" font-family="Menlo,monospace" font-size="14" fill="#ff8a80">  -&gt; killed at the 60s statement cap   (production ceiling is 300s: the event fires exactly 300s</text>
+<text x="28" y="282" font-family="Menlo,monospace" font-size="14" fill="#ff8a80">     after the last SQL breadcrumb)</text>
+<text x="28" y="306" font-family="Menlo,monospace" font-size="14" fill="#e6e6e6">$ ... same chain over one 200-id window</text>
+<text x="28" y="330" font-family="Menlo,monospace" font-size="14" fill="#5ddc7a">  -&gt; 200 rows in 0.75s, and for a 1,344-purchase buyer the window resolves 110 chargeables</text>
+<text x="28" y="354" font-family="Menlo,monospace" font-size="14" fill="#5ddc7a">     (the email renders at most 20), so the read stops after one window in every measured case</text>
+<text x="28" y="384" font-family="Menlo,monospace" font-size="16" font-weight="bold" fill="#8ab4f8">2. Why a flat window is not enough (read-only replica, 2026-09-23)</text>
+<text x="28" y="414" font-family="Menlo,monospace" font-size="14" fill="#e6e6e6">$ SELECT charge_id, COUNT(*) FROM charge_purchases GROUP BY charge_id ORDER BY 2 DESC LIMIT 1</text>
+<text x="28" y="438" font-family="Menlo,monospace" font-size="14" fill="#ff8a80">  -&gt; 224 purchases in ONE charge</text>
+<text x="28" y="462" font-family="Menlo,monospace" font-size="14" fill="#e6e6e6">$ SELECT COUNT(*) FROM (SELECT charge_id FROM charge_purchases GROUP BY charge_id</text>
+<text x="28" y="486" font-family="Menlo,monospace" font-size="14" fill="#e6e6e6">  HAVING COUNT(*) &gt; 10) t</text>
+<text x="28" y="510" font-family="Menlo,monospace" font-size="14" fill="#ff8a80">  -&gt; 285,422 charges hold more than 10 purchases (68,291 hold more than 20)</text>
+<text x="28" y="534" font-family="Menlo,monospace" font-size="14" fill="#d7d7d7">So a fixed 200-purchase window is not 10x headroom: those rows can collapse into a handful of</text>
+<text x="28" y="558" font-family="Menlo,monospace" font-size="14" fill="#d7d7d7">chargeables, and the receipts the window never reached are silently left out.</text>
+<text x="28" y="588" font-family="Menlo,monospace" font-size="14" fill="#e6e6e6">$ a buyer with 246 successful purchases:</text>
+<text x="28" y="612" font-family="Menlo,monospace" font-size="14" fill="#ff8a80">    newest-200 window -&gt; 13 chargeables      whole match -&gt; 15 chargeables</text>
+<text x="28" y="636" font-family="Menlo,monospace" font-size="14" fill="#ff8a80">  -&gt; the flat window dropped 2 of that buyer's receipts (Greptile P1, confirmed on live data).</text>
+<text x="28" y="666" font-family="Menlo,monospace" font-size="16" font-weight="bold" fill="#8ab4f8">3. Red -&gt; green, and what the new examples catch</text>
+<text x="28" y="696" font-family="Menlo,monospace" font-size="14" fill="#e6e6e6">$ DISABLE_SPRING=1 CI=1 bundle exec rspec spec/mailers/customer_mailer_spec.rb</text>
+<text x="28" y="720" font-family="Menlo,monospace" font-size="14" fill="#5ddc7a">  -&gt; 136 examples, 0 failures (35.5s)</text>
+<text x="28" y="744" font-family="Menlo,monospace" font-size="13" fill="#9aa0a6">  the 2 failures the first round recorded (spec:683, spec:1466) do not reproduce under CI=1</text>
+<text x="28" y="774" font-family="Menlo,monospace" font-size="14" fill="#e6e6e6">$ mutant A: .first(GROUPED_RECEIPT_READ_WINDOWS) -&gt; .first(1)   (the flat-window read)</text>
+<text x="28" y="798" font-family="Menlo,monospace" font-size="14" fill="#5ddc7a">  -&gt; 2 examples, 2 failures   (both new examples bite)</text>
+<text x="28" y="822" font-family="Menlo,monospace" font-size="14" fill="#e6e6e6">$ mutant B: .sort.reverse -&gt; .sort                                (oldest-first window)</text>
+<text x="28" y="846" font-family="Menlo,monospace" font-size="14" fill="#5ddc7a">  -&gt; 2 examples, 1 failure    (the newest-first example bites)</text>
+<text x="28" y="876" font-family="Menlo,monospace" font-size="16" font-weight="bold" fill="#8ab4f8">4. Effect on the rendered email</text>
+<text x="28" y="906" font-family="Menlo,monospace" font-size="14" fill="#d7d7d7">Callers matching up to a window are read in one query, as before; callers past it are read in</text>
+<text x="28" y="930" font-family="Menlo,monospace" font-size="14" fill="#d7d7d7">newest-first windows until the template can be filled (20 chargeables) or the window budget is</text>
+<text x="28" y="954" font-family="Menlo,monospace" font-size="14" fill="#d7d7d7">reached, so a 246-purchase buyer gets all 15 receipts again instead of 13. Each receipt block is</text>
+<text x="28" y="978" font-family="Menlo,monospace" font-size="14" fill="#d7d7d7">still rendered from its chargeable, newest last, capped at GROUPED_RECEIPT_MAX_CHARGEABLES = 20.</text>
 </svg>
