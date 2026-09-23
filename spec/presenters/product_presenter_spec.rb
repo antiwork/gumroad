@@ -594,8 +594,7 @@ describe ProductPresenter do
             subscription_duration: nil,
             collaborating_user: nil,
             rich_content: [],
-            # Both of the editor's file lists carry the buyer count: the product's own files below,
-            # and `existing_files` further down (gumroad-private#2918).
+            # The picker carries the count too, not just the product's own file list below.
             files: product_files.map { _1.merge(existing_buyers_count: 0) },
             has_same_rich_content_for_all_variants: false,
             is_multiseat_license: false,
@@ -1486,9 +1485,9 @@ describe ProductPresenter do
     end
 
     it "carries the buyer count of a file already on this product, so the picker's switch confirms too" do
-      # A real purchase cannot be created on a machine without Stripe test access (the sibling
-      # `create(:purchase, link: product)` specs fail there identically); the counting itself is
-      # covered by ProductFileBuyerCountsService's own specs, and this pins the wiring.
+      # No purchase here: creating one needs Stripe test access, which this machine lacks (the
+      # sibling `create(:purchase, link: product)` specs fail identically). Counting is covered
+      # by ProductFileBuyerCountsService's specs; this pins the presenter wiring.
       allow(ProductFileBuyerCountsService).to receive(:new).and_return(
         instance_double(ProductFileBuyerCountsService, counts_by_external_id: { product.product_files.first.external_id => 7 })
       )

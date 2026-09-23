@@ -794,7 +794,7 @@ const FileEmbedNodeView = ({
                 <Switch
                   checked={file.stream_only}
                   onChange={(e) => {
-                    // Downloads-off reaches everyone who already bought (gumroad-private#2916).
+                    // Downloads-off reaches everyone who already bought.
                     if (e.target.checked && existingBuyersCount > 0) {
                       setConfirmingStreamOnly(true);
                       return;

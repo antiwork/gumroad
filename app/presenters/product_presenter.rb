@@ -145,9 +145,7 @@ class ProductPresenter
         .limit(existing_product_files_limit)
         .order(id: :desc)
         .includes(:alive_subtitle_files, thumbnail_attachment: :blob).map do |file|
-          # A file already on this product keeps its buyer count so turning downloads off from
-          # the picker still confirms; a library file from another product reaches nobody here
-          # yet, and 0 is the honest count for it (gumroad-private#2918).
+          # Files from other products cannot have buyers for this product yet.
           file.as_json(existing_product_file: true).merge(existing_buyers_count: file_buyer_counts[file.external_id] || 0)
         end
   end
@@ -299,8 +297,8 @@ class ProductPresenter
         subscription_duration: product.subscription_duration,
         collaborating_user: collaborator.present? ? UserPresenter.new(user: collaborator).author_byline_props : nil,
         rich_content: product.rich_content_json,
-        # `existing_buyers_count` is what the editor warns with before a retroactive downloads-off
-        # change (gumroad-private#2918), counted once here rather than per keystroke.
+        # Counted once per page load, not per keystroke; the editor warns with it before a
+        # retroactive downloads-off change.
         files: files_data(product).map { _1.merge(existing_buyers_count: file_buyer_counts[_1[:id]] || 0) },
         # Served as false in the recoverable hidden-content state (flag on,
         # product level blank, variant pages real — the July 21, 2026 incident

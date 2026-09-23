@@ -1,8 +1,8 @@
 # frozen_string_literal: true
 
-# Counts the buyers who can still reach each file, for the editor's downloads-off confirmation
-# (gumroad-private#2918): successful purchases only, distinct buyers, and a variant-scoped file
-# counts its variants' buyers. Reach through rich content is not modeled, so this is an upper bound.
+# Counts the buyers who can still reach each file, for the editor's downloads-off confirmation:
+# successful purchases only, distinct buyers, and a variant-scoped file counts its variants'
+# buyers. Reach through rich content is not modeled, so this is an upper bound.
 class ProductFileBuyerCountsService
   def initialize(product:)
     @product = product
