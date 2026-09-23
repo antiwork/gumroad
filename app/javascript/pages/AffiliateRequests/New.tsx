@@ -52,9 +52,7 @@ const AffiliateRequestsNew = () => {
 
   return (
     <Layout creatorProfile={creator_profile}>
-      {/* The gutter belongs outside the capped header, exactly as it already is on the form below,
-          so the title tracks the form's left edge at every width instead of sitting flush with the
-          viewport in the 1024-1152px band. */}
+      {/* Gutter outside the cap, matching the form below, keeps the title on the form's left edge. */}
       <div className="px-4 lg:px-0">
         <PageHeader
           title={`Become an affiliate for ${creator_profile.name}`}

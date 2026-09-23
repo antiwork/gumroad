@@ -175,8 +175,7 @@ export const ProductPreview = ({ showRefundPolicyModal }: { showRefundPolicyModa
         }}
         hideFollowForm
       >
-        {/* The gutter moved off CoffeeProduct's own root, so the preview supplies it here, on a
-            wrapper that still grows: the preview sits in the same flex-column layout. */}
+        {/* Supplies the gutter CoffeeProduct no longer carries; must grow like the layout column. */}
         <div className="flex grow flex-col px-4">
           <CoffeeProduct
             product={{
