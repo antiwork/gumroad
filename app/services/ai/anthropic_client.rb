@@ -1,8 +1,8 @@
 # frozen_string_literal: true
 
-# Anthropic Messages API client for StoreAgentService. OPENROUTER_API_KEY routes every request
-# through OpenRouter's Anthropic-compatible endpoint (provider failover + `fallbacks` to GPT);
-# without it, traffic is Anthropic-direct.
+# Anthropic Messages API client for StoreAgentService. Requests go through OpenRouter's
+# Anthropic-compatible endpoint (provider failover + `fallbacks` to GPT), or through the Vercel AI
+# Gateway when the caller asks for it.
 class Ai::AnthropicClient
   class Error < StandardError; end
 
@@ -78,10 +78,9 @@ class Ai::AnthropicClient
   end
   private_constant :FirstByteTimeout
 
-  API_URL = "https://api.anthropic.com/v1/messages"
   OPENROUTER_API_URL = "https://openrouter.ai/api/v1/messages"
   VERCEL_HOST = "ai-gateway.vercel.sh"
-  GATEWAYS = %i[anthropic openrouter vercel].freeze
+  GATEWAYS = %i[openrouter vercel].freeze
   API_VERSION = "2023-06-01"
   DEFAULT_MODEL = "claude-opus-4-7"
   DEFAULT_MAX_TOKENS = 1024
@@ -89,7 +88,7 @@ class Ai::AnthropicClient
   # OPENROUTER_FALLBACK_MODEL.
   DEFAULT_FALLBACK_MODEL = "~openai/gpt-latest"
 
-  # Public: OpenRouter can serve non-Claude models (store agent requests Grok); Anthropic-direct cannot.
+  # Public: the store agent only ramps non-Claude models (Grok, DeepSeek) when OpenRouter can serve them.
   def self.openrouter_configured?
     openrouter_api_key.present?
   end
@@ -575,8 +574,8 @@ class Ai::AnthropicClient
         stream:,
       }
       body[:tools] = cacheable_tools(tools) if tools.present?
-      # OpenRouter's Anthropic-compatible endpoint accepts a `fallbacks` list. Anthropic rejects
-      # the unknown parameter; Vercel uses providerOptions.gateway.models instead.
+      # OpenRouter's Anthropic-compatible endpoint accepts a `fallbacks` list; Vercel uses
+      # providerOptions.gateway.models instead.
       body[:fallbacks] = [{ model: fallback_model }] if openrouter? && !@using_fallback_model
       if vercel? && !@using_fallback_model && fallback_model.present?
         body[:providerOptions] = { gateway: { models: [fallback_model] } }
@@ -636,22 +635,14 @@ class Ai::AnthropicClient
       )
     end
 
-    # Native Anthropic still falls back to WALKS_ANTHROPIC_API_KEY until ANTHROPIC_API_KEY
-    # is confirmed in production credentials. Walks endpoints are gone; this key is only
-    # a shared secret name. Raise here rather than send a blank x-api-key.
+    # Raise here rather than send a blank x-api-key.
     def api_key
-      case resolved_gateway
-      when :vercel
-        vercel_api_key
-      when :openrouter
-        openrouter_api_key
-      else
-        key = GlobalConfig.get("ANTHROPIC_API_KEY").presence ||
-              GlobalConfig.get("WALKS_ANTHROPIC_API_KEY").presence
-        raise Error, "Anthropic API key is not configured (set ANTHROPIC_API_KEY)." if key.blank?
+      return vercel_api_key if vercel?
 
-        key
-      end
+      key = openrouter_api_key
+      raise Error, "OpenRouter API key is not configured (set STORE_AGENT_OPENROUTER_API_KEY)." if key.blank?
+
+      key
     end
 
     def openrouter?
@@ -663,18 +654,10 @@ class Ai::AnthropicClient
     end
 
     def resolved_gateway
-      case @preferred_gateway
-      when :vercel
-        return :openrouter if @using_fallback_model && self.class.openrouter_configured?
-        return :vercel if vercel_configured?
-        return :openrouter if self.class.openrouter_configured?
+      return :openrouter unless @preferred_gateway == :vercel
+      return :openrouter if @using_fallback_model && self.class.openrouter_configured?
 
-        :anthropic
-      when :openrouter, :anthropic
-        @preferred_gateway
-      else
-        self.class.openrouter_configured? ? :openrouter : :anthropic
-      end
+      vercel_configured? ? :vercel : :openrouter
     end
 
     def vercel_configured?
@@ -703,11 +686,7 @@ class Ai::AnthropicClient
     end
 
     def api_url
-      case resolved_gateway
-      when :vercel then vercel_messages_url
-      when :openrouter then OPENROUTER_API_URL
-      else API_URL
-      end
+      vercel? ? vercel_messages_url : OPENROUTER_API_URL
     end
 
     def request_model
