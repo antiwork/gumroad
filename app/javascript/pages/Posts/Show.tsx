@@ -83,8 +83,10 @@ export default function PostsShow() {
             <time>{publishedAtFormatted}</time>
           </div>
         </header>
-        <article className="border-b border-border p-4 pt-8 lg:pt-12 lg:pb-8">
-          <div className="mx-auto grid max-w-6xl gap-8 text-lg">
+        <article className="border-b border-border px-4 pt-8 lg:pt-12">
+          {/* The bottom padding belongs here, not on the article: there it would land below the
+              call to action instead of between the body and it. */}
+          <div className="mx-auto grid max-w-6xl gap-8 pb-4 text-lg lg:pb-8">
             {pageLoaded ? null : <LoadingSpinner className="size-8" />}
             {/* dir="auto" gives the post a base direction from its first strong character;
                 per-block direction for mixed-language content is handled by the
