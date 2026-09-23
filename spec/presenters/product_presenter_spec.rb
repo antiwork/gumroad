@@ -428,7 +428,7 @@ describe ProductPresenter do
     let!(:custom_domain) { create(:custom_domain, :with_product, product:) }
     let(:product_files) do
       product_file = product.product_files.first
-      [{ attached_product_name: "Product",  extension: "PDF", file_name: "Display Name", display_name: "Display Name", description: "Description", file_size: 50, id: product_file.external_id, is_pdf: true, pdf_stamp_enabled: false, hide_kindle_and_read_buttons: false, is_streamable: false, can_disable_downloads: true, stream_only: false, existing_buyers_count: 0, width: nil, height: nil, is_transcoding_in_progress: false, isbn: nil, pagelength: 3, duration: nil, subtitle_files: [], url: product_file.url, thumbnail: nil, status: { type: "saved" } }]
+      [{ attached_product_name: "Product",  extension: "PDF", file_name: "Display Name", display_name: "Display Name", description: "Description", file_size: 50, id: product_file.external_id, is_pdf: true, pdf_stamp_enabled: false, hide_kindle_and_read_buttons: false, is_streamable: false, can_disable_downloads: true, stream_only: false, width: nil, height: nil, is_transcoding_in_progress: false, isbn: nil, pagelength: 3, duration: nil, subtitle_files: [], url: product_file.url, thumbnail: nil, status: { type: "saved" } }]
     end
     let(:available_countries) { ShippingDestination::Destinations.shipping_countries.map { { code: _1[0], name: _1[1] } } }
 
@@ -594,7 +594,9 @@ describe ProductPresenter do
             subscription_duration: nil,
             collaborating_user: nil,
             rich_content: [],
-            files: product_files,
+            # The editor's file props carry the buyer count; the picker's `existing_files`
+            # below does not (gumroad-private#2918).
+            files: product_files.map { _1.merge(existing_buyers_count: 0) },
             has_same_rich_content_for_all_variants: false,
             is_multiseat_license: false,
             call_limitation_info: nil,
