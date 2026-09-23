@@ -77,7 +77,7 @@ describe BosniaAndHerzegovinaBankAccount do
 
   describe "bank code country" do
     it "rejects a BIC registered outside Bosnia and Herzegovina" do
-      # ZEN.COM's Lithuanian BIC: 22 live BA rows saved a foreign one and none ever attached to Stripe.
+      # ZEN.COM's Lithuanian BIC: a foreign BIC here never attaches to Stripe.
       bank_account = build(:bosnia_and_herzegovina_bank_account, bank_number: "BZENLT22")
 
       expect(bank_account).not_to be_valid
