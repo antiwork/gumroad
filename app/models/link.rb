@@ -515,8 +515,8 @@ class Link < ApplicationRecord
   # product row that no longer validates must not raise and abort the whole closure.
   def delete!(validate: true)
     mark_deleted!(validate:)
-    clear_featured_product_sections!
-    remove_from_profile_sections!
+    clear_featured_product_sections!(validate:)
+    remove_from_profile_sections!(validate:)
     custom_domain&.mark_deleted!(validate:)
     alive_public_files.update_all(scheduled_for_deletion_at: 10.minutes.from_now)
     CancelSubscriptionsForProductWorker.perform_in(10.minutes, id) if subscriptions.active.present?
@@ -1838,11 +1838,14 @@ class Link < ApplicationRecord
     # SellerProfileFeaturedProductSection.featured_product_id (a JSON column).
     # Without this, the section's cached props would point at a missing product
     # and crash the seller's profile page until the cache TTL elapsed.
-    def clear_featured_product_sections!
+    def clear_featured_product_sections!(validate: true)
       SellerProfileFeaturedProductSection
         .where(seller_id: user_id)
         .where('CAST(JSON_EXTRACT(json_data, "$.featured_product_id") AS UNSIGNED) = ?', id)
-        .find_each { |section| section.update!(json_data: section.json_data.except("featured_product_id")) }
+        .find_each do |section|
+          section.json_data = section.json_data.except("featured_product_id")
+          section.save!(validate:)
+        end
     end
 
     # When a product is soft-deleted, strip its id from any
@@ -1852,11 +1855,12 @@ class Link < ApplicationRecord
     # ProfileSectionsPresenter filters shown products by is_alive_on_profile.
     # Deliberately unscoped: per-product sections list other products too
     # (e.g. "Related"), so a dead id must be stripped from those as well.
-    def remove_from_profile_sections!
+    def remove_from_profile_sections!(validate: true)
       user.with_profile_sections_lock do
         user.seller_profile_products_sections.reload.each do |section|
           next unless section.shown_products.include?(id)
-          section.update!(shown_products: section.shown_products - [id])
+          section.shown_products -= [id]
+          section.save!(validate:)
         end
       end
     end

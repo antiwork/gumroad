@@ -1199,6 +1199,19 @@ describe User, :vcr do
         end
       end
 
+      it "removes a deleted product from invalid profile sections" do
+        products_section = create(:seller_profile_products_section, seller: @user, shown_products: [@product.id])
+        products_section.update_column(:json_data, products_section.json_data.merge("default_product_sort" => "obsolete"))
+        featured_section = create(:seller_profile_featured_product_section, seller: @user, featured_product_id: @product.id)
+        featured_section.update_column(:json_data, featured_section.json_data.merge("obsolete" => true))
+        expect(products_section.reload).not_to be_valid
+        expect(featured_section.reload).not_to be_valid
+
+        expect(@user.reload.deactivate!).to eq(true)
+        expect(products_section.reload.shown_products).not_to include(@product.id)
+        expect(featured_section.reload.featured_product_id).to be_nil
+      end
+
       it "invalidates all the active sessions" do
         travel_to(DateTime.current) do
           expect do
