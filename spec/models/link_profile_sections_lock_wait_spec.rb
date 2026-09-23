@@ -4,9 +4,7 @@ require "spec_helper"
 require "timeout"
 
 # Pins the product-create half of the seller_profiles lock contention: the `after_create` section
-# write took the seller's profile row inside whatever transaction the caller opened, so a held row
-# parked the create on MySQL's 50s `innodb_lock_wait_timeout` and rolled the caller's transaction
-# back with it.
+# write takes the seller's profile row inside whatever transaction the caller opened.
 describe Link, "the profile row lock the after_create section write takes" do
   describe "with the seller_profiles row held by another connection" do
     # The holder thread has to see committed rows, so these examples cannot run inside the fixture
@@ -24,13 +22,13 @@ describe Link, "the profile row lock the after_create section write takes" do
       User.where(id: seller&.id).delete_all
     end
 
-    def hold_profile_row(seller)
+    def hold_row(relation)
       locked = Queue.new
       release = Queue.new
       thread = Thread.new do
         ActiveRecord::Base.connection_pool.with_connection do
           ActiveRecord::Base.transaction do
-            SellerProfile.where(seller_id: seller.id).lock.pluck(:id)
+            relation.lock.pluck(:id)
             locked << true
             release.pop
           end
@@ -53,16 +51,14 @@ describe Link, "the profile row lock the after_create section write takes" do
       section = create(:seller_profile_products_section, seller:, add_new_products: true)
       reported = []
       allow(ErrorNotifier).to receive(:notify) { |exception, **context| reported << [exception, context] }
-      thread, release = hold_profile_row(seller)
+      thread, release = hold_row(SellerProfile.where(seller_id: seller.id))
 
       began = Process.clock_gettime(Process::CLOCK_MONOTONIC)
       product = create(:product, user: seller)
       elapsed = Process.clock_gettime(Process::CLOCK_MONOTONIC) - began
 
       expect(product).to be_persisted
-      # The bound is the thing under test: MySQL's default is 50s, and a create that waits it out is
-      # the shape this prevents. Generous, so a slow box is not the failure — an unbounded wait still
-      # blows past it by an order of magnitude.
+      # MySQL's default is 50s, so an unbounded wait blows past this by an order of magnitude.
       expect(elapsed).to be < 10
       # The add is what is dropped when the wait runs out, and nothing re-adds it later.
       expect(section.reload.shown_products).to be_empty
@@ -72,6 +68,21 @@ describe Link, "the profile row lock the after_create section write takes" do
       expect(lock_reports.first.last).to include(product_id: product.id, seller_id: seller.id, profile_sections_lock_timeout: true)
     ensure
       release_holder(thread, release)
+    end
+
+    it "leaves a write behind the lock raising, so the caller's transaction rolls back instead of committing without it" do
+      section = create(:seller_profile_products_section, seller:, add_new_products: true)
+      original = ActiveRecord::Base.connection.select_value("SELECT @@SESSION.innodb_lock_wait_timeout")
+      # The section write keeps the session's own timeout, so shorten that rather than run the
+      # server's 50s out: the point is which wait ran out, not how long it took.
+      ActiveRecord::Base.connection.execute("SET SESSION innodb_lock_wait_timeout = 1")
+      thread, release = hold_row(SellerProfileSection.where(id: section.id))
+
+      expect { create(:product, user: seller) }.to raise_error(ActiveRecord::LockWaitTimeout)
+      expect(Link.where(user_id: seller.id)).to be_empty
+    ensure
+      release_holder(thread, release)
+      ActiveRecord::Base.connection.execute("SET SESSION innodb_lock_wait_timeout = #{original}") if original
     end
   end
 

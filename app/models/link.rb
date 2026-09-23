@@ -1955,9 +1955,9 @@ class Link < ApplicationRecord
 
     # Deliberately unscoped: "Add new products by default" is a seller-facing
     # toggle on per-product sections too (EditSections), so honor it there.
-    # Best-effort: an unconditional after_create on every product, so a held profile row must
-    # not fail the create or roll back the caller's transaction (a duplication's spans the whole
-    # duplication). The add is dropped when the wait runs out — nothing re-adds it later, so report.
+    # Best-effort: a held profile row must not fail the create or roll back the caller's transaction.
+    # The add is dropped when that wait runs out and nothing re-adds it later, so report it. Only the
+    # acquisition is bounded — a section write timing out behind the lock still raises.
     def add_to_profile_sections
       user.with_profile_sections_lock(lock_wait_timeout_seconds: PROFILE_SECTIONS_LOCK_WAIT_TIMEOUT_SECONDS) do
         user.seller_profile_products_sections.reload.each do |section|
@@ -1965,8 +1965,8 @@ class Link < ApplicationRecord
           section.update!(shown_products: section.shown_products + [id])
         end
       end
-    rescue ActiveRecord::LockWaitTimeout => e
-      ErrorNotifier.notify(e, product_id: id, seller_id: user_id, profile_sections_lock_timeout: true)
+    rescue User::ProfileSectionsLockTimeout => e
+      ErrorNotifier.notify(e.cause || e, product_id: id, seller_id: user_id, profile_sections_lock_timeout: true)
     end
 
     def alive_category_variants_presence

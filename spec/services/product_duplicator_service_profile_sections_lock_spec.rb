@@ -3,10 +3,8 @@
 require "spec_helper"
 require "timeout"
 
-# The shape the Sentry group reported: the duplicate's own `after_create` section write waited out
-# the server's lock timeout on the seller's profile row, and because that raise surfaced inside
-# ProductDuplicatorService's transaction, every price, file, variant and offer code already written
-# by the duplication was rolled back and the dashboard answered `product_duplication_failed`.
+# The shape the Sentry group reported: the duplicate's `after_create` section write waited out the
+# server's lock timeout on the seller's profile row, inside ProductDuplicatorService's transaction.
 describe ProductDuplicatorService, "with the seller_profiles row held by another connection" do
   # The holder thread has to see committed rows, so this group cannot run inside the fixture
   # transaction. Cleanup is explicit for the same reason.
