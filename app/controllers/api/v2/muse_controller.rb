@@ -20,6 +20,15 @@ class Api::V2::MuseController < Api::V2::BaseController
     render json: Muse::Mcp.discovery(base_url)
   end
 
+  # OpenAI's plugin review verifies that we control the MCP host by fetching this path and
+  # expecting nothing but the token it issued. JSON, an empty body, or more than one token fails.
+  def openai_apps_challenge
+    token = ENV["OPENAI_APPS_CHALLENGE_TOKEN"].to_s
+    return head :not_found if token.blank?
+
+    render plain: token
+  end
+
   def protected_resource_metadata
     path = params[:resource_path].to_s
     path = "/#{path}" if path.present? && !path.start_with?("/")

@@ -531,6 +531,7 @@ Rails.application.routes.draw do
       match "/#{client}/v1/mcp" => "api/v2/muse#mcp", via: [:get, :post]
     end
     get "/.well-known/mcp.json" => "api/v2/muse#mcp_discovery"
+    get "/.well-known/openai-apps-challenge" => "api/v2/muse#openai_apps_challenge"
     get "/.well-known/oauth-authorization-server" => "api/v2/muse#oauth_metadata"
     get "/.well-known/oauth-protected-resource" => "api/v2/muse#protected_resource_metadata"
     get "/.well-known/oauth-protected-resource/*resource_path" => "api/v2/muse#protected_resource_metadata"
