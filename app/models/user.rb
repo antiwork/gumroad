@@ -957,9 +957,31 @@ class User < ApplicationRecord
   # Looked up directly (not via #seller_profile, which builds a record) so callers like product
   # creation don't leave an unsaved seller_profile behind to be autosaved later. A seller without a
   # saved profile has nothing to serialize against, so it just runs the block.
-  def with_profile_sections_lock(&block)
+  #
+  # `lock_wait_timeout_seconds` bounds the wait for the profile row itself, for callers running
+  # inside someone else's transaction (a product create) where the server's 50s default is not
+  # theirs to spend. The writes behind the lock keep the session's own timeout — same split as the
+  # editor save's bound (`LinksController#with_editor_save_lock_wait_bound`).
+  def with_profile_sections_lock(lock_wait_timeout_seconds: nil, &block)
     profile = SellerProfile.find_by(seller_id: id)
-    profile ? profile.with_lock(&block) : yield
+    return yield if profile.nil?
+    return profile.with_lock(&block) if lock_wait_timeout_seconds.nil?
+
+    SellerProfile.transaction do
+      with_bounded_lock_wait(lock_wait_timeout_seconds) { profile.lock! }
+      block.call
+    end
+  end
+
+  # `innodb_lock_wait_timeout` is a session setting on the connection the lock will run on,
+  # restored as soon as the lock resolves so no later write in the caller inherits the bound.
+  private def with_bounded_lock_wait(seconds)
+    connection = SellerProfile.connection
+    previous = connection.select_value("SELECT @@SESSION.innodb_lock_wait_timeout")
+    connection.execute("SET SESSION innodb_lock_wait_timeout = #{seconds.to_i}")
+    yield
+  ensure
+    connection.execute("SET SESSION innodb_lock_wait_timeout = #{previous.to_i}") if connection && previous.present?
   end
 
   def time_fields

@@ -66,6 +66,10 @@ class Link < ApplicationRecord
   METADATA_CACHE_NAMESPACE = :product_metadata_cache
   REQUIRE_CAPTCHA_FOR_SELLERS_YOUNGER_THAN = 6.months
 
+  # The section write runs on every product create, inside whatever transaction the caller
+  # opened, so its wait for the seller_profiles row is bounded well below MySQL's 50s default.
+  PROFILE_SECTIONS_LOCK_WAIT_TIMEOUT_SECONDS = 1
+
   # Tax categories: https://developers.taxjar.com/api/reference/#get-list-tax-categories
   # Categories mapping choices: https://www.notion.so/gumroad/System-support-for-US-sales-tax-collection-on-Gumroad-MPF-sales-9fa88740bf3c4453b476b7fa0a7af1e7#3404578361074b4ca24a6fb63464f522
   NATIVE_TYPES_TO_TAX_CODE = {
@@ -1951,13 +1955,18 @@ class Link < ApplicationRecord
 
     # Deliberately unscoped: "Add new products by default" is a seller-facing
     # toggle on per-product sections too (EditSections), so honor it there.
+    # Best-effort: an unconditional after_create on every product, so a held profile row must
+    # not fail the create or roll back the caller's transaction (a duplication's spans the whole
+    # duplication). The add is dropped when the wait runs out — nothing re-adds it later, so report.
     def add_to_profile_sections
-      user.with_profile_sections_lock do
+      user.with_profile_sections_lock(lock_wait_timeout_seconds: PROFILE_SECTIONS_LOCK_WAIT_TIMEOUT_SECONDS) do
         user.seller_profile_products_sections.reload.each do |section|
           next unless section.add_new_products
           section.update!(shown_products: section.shown_products + [id])
         end
       end
+    rescue ActiveRecord::LockWaitTimeout => e
+      ErrorNotifier.notify(e, product_id: id, seller_id: user_id, profile_sections_lock_timeout: true)
     end
 
     def alive_category_variants_presence
