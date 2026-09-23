@@ -759,7 +759,13 @@ class Purchase
 
       return unless amount_already_reversed_cents < amount_to_reverse_cents
 
-      reversal_amount_cents = amount_to_reverse_cents - amount_already_reversed_cents
+      # Reversals not tied to this refund — a dispute withdrawal, an earlier refund on the same
+      # charge — still consume the transfer's reversibility, so the request has to fit in what
+      # Stripe has left.
+      transfer_cents_available_to_reverse = transfer.amount.to_i - transfer.amount_reversed.to_i
+      reversal_amount_cents = [amount_to_reverse_cents - amount_already_reversed_cents,
+                               transfer_cents_available_to_reverse].min
+      return unless reversal_amount_cents.positive?
 
       # Gumroad's ledger stays in USD regardless of the transfer's currency, so the credit's
       # canonical leg comes from the USD figure rather than by converting the reversal amount
@@ -774,7 +780,16 @@ class Purchase
           (canonical_amount_cents * reversal_amount_cents.to_d / amount_to_reverse_cents).round
         end
 
-      transfer_reversal = Stripe::Transfer.create_reversal(transfer.id, { amount: reversal_amount_cents })
+      transfer_reversal = begin
+        Stripe::Transfer.create_reversal(transfer.id, { amount: reversal_amount_cents })
+      rescue Stripe::InvalidRequestError => e
+        # Stripe has already taken the refund, so letting this out rolls the refund bookkeeping
+        # back; nothing is owed once the transfer is fully reversed.
+        raise unless e.message.match?(/already fully reversed/i)
+
+        ErrorNotifier.notify(e, context: { purchase_id: id, refund_id: refund.id, transfer_id: transfer.id })
+        return
+      end
 
       destination_refund = Stripe::Refund.retrieve(transfer_reversal.destination_payment_refund,
                                                    stripe_account: refund.purchase.merchant_account.charge_processor_merchant_id)
