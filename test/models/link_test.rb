@@ -2452,6 +2452,21 @@ class LinkTest < ActiveSupport::TestCase
     assert_enqueued_in DeleteProductRichContentWorker, [product.id], delay: 10.minutes
   end
 
+  # --- #save_files! ---------------------------------------------------------
+
+  test "save_files! does not write a client-supplied id into the primary key" do
+    product = create_product
+    existing_file = create_readable_document(link: product)
+    product.product_files.reload
+    original_id = existing_file.id
+
+    product.save_files!([{ external_id: "cli-upload-1", id: existing_file.external_id, url: existing_file.url, display_name: "Renamed" }])
+
+    surviving = ProductFile.find_by(id: original_id)
+    assert_not_nil surviving, "the row must keep its primary key"
+    assert_equal "Renamed", surviving.display_name
+  end
+
   test "delete! enqueues product file and archive deletion after a 10-minute delay" do
     product = create_product
     product.product_files << create_readable_document(link: product)

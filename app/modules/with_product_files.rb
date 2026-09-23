@@ -67,7 +67,12 @@ module WithProductFiles
       next unless file_params[:url].present?
 
       begin
-        external_id = file_params.delete(:external_id) || file_params.delete(:id)
+        # Both keys are client identifiers, never writable attributes: delete both
+        # unconditionally, or a surviving :id reaches update! as `id = client.to_i`
+        # and renumbers the row's primary key.
+        client_external_id = file_params.delete(:external_id)
+        client_id = file_params.delete(:id)
+        external_id = client_external_id || client_id
         product_file = existing_files_by_external_id[external_id] || reusable_product_file_for(file_params, existing_files - directly_addressed_files) || product_files.build(url: file_params[:url])
         files_to_keep << product_file
 
