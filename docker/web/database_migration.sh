@@ -52,6 +52,13 @@ if [ $? -eq 0 ]; then
   consul_put "database_version_${RAILS_ENV}-$(cat revision)" $schema_version
 fi
 
+# A migration's version is recorded as soon as `up` returns, so a DDL statement that never took
+# effect can never be re-run by a later deploy. Compare db/schema.rb against the live schema and
+# report what is missing. Non-fatal like taxonomy:seed below: `set -e` is on and unlock_migration is
+# at the bottom, so a failing step here would hold the migration lock and wedge every later deploy.
+echo "bundle exec rake db:schema_parity"
+bundle exec rake db:schema_parity || echo "WARNING: db:schema_parity reported drift; the live schema is missing something db/schema.rb declares. Deploy continues."
+
 # Taxonomies are reference data, not schema, so they arrive by seed rather than migration — and
 # db:seed does not run on deploy, which is why seed additions never reached production (#5764's
 # categories were still missing three weeks after shipping). Runs inside the migration lock so

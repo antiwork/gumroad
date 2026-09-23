@@ -1688,6 +1688,55 @@ describe Ai::AnthropicClient do
         )
         expect(replay).to include(streamed: false, buffered_fallback: true, retries: 0, latency_ms: 1000, error: nil)
       end
+
+      it "turns a cutoff on the buffered replay into truncation when the caller opts in" do
+        allow(client).to receive(:sleep)
+        stub_call_clock(0.0, 0.1, 0.2, 0.3, 0.4, 10.0, 10.5, 11.0)
+        corrupted = sse(
+          ["content_block_start", { index: 0, content_block: { type: "tool_use", id: "toolu_x", name: "api_write" } }],
+          ["content_block_delta", { index: 0, delta: { type: "input_json_delta", partial_json: '{"endpoint":"update_product","params":{"name":"cut off' } }],
+          ["message_delta", { delta: { stop_reason: "tool_use" } }],
+        )
+        stub_request(:post, vercel_url).with(body: hash_including("stream" => true))
+          .to_return(status: 200, body: corrupted, headers: { "Content-Type" => "text/event-stream" })
+        # The replay regenerates the turn, so it is the longest attempt and can hit the same cap.
+        stub_request(:post, vercel_url).with(body: hash_including("stream" => false)).to_return(
+          status: 400,
+          body: { error: { type: "api_error", message: "HttpError: HTTP 400: Tool calls cutoff by max_tokens." } }.to_json,
+          headers: { "Content-Type" => "application/json" },
+        )
+
+        result = client.stream_messages(system: "s", messages: [{ role: "user", content: "x" }], recover_token_cutoff: true)
+
+        expect(result.stop_reason).to eq("max_tokens")
+        expect(result.tool_uses).to eq([])
+        expect(client.call_metrics.last).to include(
+          streamed: false,
+          buffered_fallback: true,
+          error: "Ai::AnthropicClient::ToolCallTokenCutoffError",
+        )
+      end
+
+      it "keeps the unreadable-tool-call error when the caller has not opted into cutoff recovery" do
+        allow(client).to receive(:sleep)
+        stub_call_clock(0.0, 0.1, 0.2, 0.3, 0.4, 10.0, 10.5, 11.0)
+        corrupted = sse(
+          ["content_block_start", { index: 0, content_block: { type: "tool_use", id: "toolu_x", name: "api_write" } }],
+          ["content_block_delta", { index: 0, delta: { type: "input_json_delta", partial_json: '{"endpoint":"update_product","params":{"name":"cut off' } }],
+          ["message_delta", { delta: { stop_reason: "tool_use" } }],
+        )
+        stub_request(:post, vercel_url).with(body: hash_including("stream" => true))
+          .to_return(status: 200, body: corrupted, headers: { "Content-Type" => "text/event-stream" })
+        stub_request(:post, vercel_url).with(body: hash_including("stream" => false)).to_return(
+          status: 400,
+          body: { error: { type: "api_error", message: "HttpError: HTTP 400: Tool calls cutoff by max_tokens." } }.to_json,
+          headers: { "Content-Type" => "application/json" },
+        )
+
+        expect do
+          client.stream_messages(system: "s", messages: [{ role: "user", content: "x" }])
+        end.to raise_error(described_class::UnreadableToolCallError)
+      end
     end
 
     it "reports a missing token or provider field as nil, never 0" do
