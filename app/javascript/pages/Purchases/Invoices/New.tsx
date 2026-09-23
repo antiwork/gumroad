@@ -1,4 +1,5 @@
 import { router, useForm, usePage } from "@inertiajs/react";
+import { isEqual } from "lodash-es";
 import * as React from "react";
 import typia from "typia";
 
@@ -123,7 +124,15 @@ const PurchaseNewInvoicePage = () => {
                     value={payment_id}
                     onChange={(e) => {
                       const payment = payments.find(({ id }) => id === e.target.value);
-                      if (payment) router.visit(payment.url);
+                      if (payment) {
+                        const preserveEnteredDetails = form.isDirty || !isEqual(form.data, form_data);
+                        router.visit(payment.url, {
+                          preserveState: preserveEnteredDetails,
+                          onSuccess: () => {
+                            if (preserveEnteredDetails) form.setData("purchase_id", payment.id);
+                          },
+                        });
+                      }
                     }}
                   >
                     {payments.map((payment) => (
