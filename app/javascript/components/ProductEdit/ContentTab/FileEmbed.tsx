@@ -795,6 +795,11 @@ const FileEmbedNodeView = ({
                 <Switch
                   checked={file.stream_only}
                   onChange={(e) => {
+                    // TEMP PROBE (never commit): gp2918 capture diagnostics.
+                    (window as unknown as Record<string, unknown>).__gp2918 = {
+                      next: e.target.checked,
+                      count: existingBuyersCount,
+                    };
                     // Turning downloads off applies to everyone who already bought
                     // (gumroad-private#2916), so name the buyers who lose access first.
                     if (e.target.checked && existingBuyersCount > 0) {
