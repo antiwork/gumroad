@@ -849,16 +849,11 @@ class User < ApplicationRecord
     end
   end
 
-  # Soft-deletes every record account closure owns. Shared with GdprDataErasureService, which used to
-  # repeat this list: the two drifted, so a seller erased under GDPR kept leftovers a self-serve
-  # closure would have removed.
-  #
-  # Validations are skipped deliberately. These rows are being removed, so a validation can only
-  # abort the closure — and one legacy row that no longer validates (an old draft installment whose
-  # message scrubs to empty, a product whose permalink predates the current format) would make every
-  # retry fail forever, leaving the account half-closed.
+  # One list for both closure paths (self-serve and GDPR erasure), which had drifted. `visible`, not
+  # `alive`, so a purchase-disabled or banned product still gets its `Link#delete!` cleanup;
+  # validations are skipped because these rows are being deleted anyway.
   def soft_delete_owned_records!
-    links.alive.each { |link| link.delete!(validate: false) }
+    links.visible.each { |link| link.delete!(validate: false) }
     installments.alive.each { |installment| installment.mark_deleted!(validate: false) }
     user_compliance_infos.alive.each { |info| info.mark_deleted!(validate: false) }
     bank_accounts.alive.each { |account| account.mark_deleted!(validate: false) }

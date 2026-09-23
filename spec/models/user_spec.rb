@@ -1343,9 +1343,7 @@ describe User, :vcr do
     end
 
     context "when a record the closure soft-deletes no longer validates" do
-      # The closure deletes these rows, so a validation on one of them can only abort the closure.
-      # Measured on a seller whose every retry failed: an old draft installment whose message
-      # scrubs to empty blocked the whole closure, and his account stayed half-closed.
+      # A validation on a row the closure is deleting can only abort the closure.
       it "closes the account when an alive draft installment's message is empty" do
         @installment.update_columns(message: "<p><br></p>", published_at: nil)
         expect(@installment.reload).to be_invalid
@@ -1378,6 +1376,20 @@ describe User, :vcr do
         @product.update_columns(name: nil)
 
         expect { @product.reload.delete! }.to raise_error(ActiveRecord::RecordInvalid)
+      end
+    end
+
+    context "when the account owns a product that is purchase-disabled or banned" do
+      it "soft-deletes the product and runs its delete! cleanup" do
+        disabled = create(:product, user: @user, purchase_disabled_at: Time.current)
+        banned = create(:product, user: @user, banned_at: Time.current)
+        domain = create(:custom_domain, product: disabled, user: nil)
+
+        expect(@user.reload.deactivate!).to eq(true)
+
+        expect(disabled.reload).to be_deleted
+        expect(banned.reload).to be_deleted
+        expect(domain.reload).to be_deleted
       end
     end
 

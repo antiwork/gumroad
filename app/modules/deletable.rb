@@ -9,10 +9,8 @@ module Deletable
     scope :deleted, -> { where.not(deleted_at: nil) }
   end
 
-  # Soft-deletes the record, raising on failure. `validate: false` skips model validations while
-  # keeping the bang: the caller is deleting the row anyway, so a validation can only abort an
-  # operation the caller has already decided on (account closure does this for every record the
-  # account owns, where one legacy row that no longer validates must not block the closure).
+  # `validate: false` lets account closure delete a row that no longer validates, keeping the bang
+  # (and its callbacks and PaperTrail versions) that a plain `update_all` would skip.
   def mark_deleted!(validate: true)
     self.deleted_at = Time.current
     save!(validate:)
