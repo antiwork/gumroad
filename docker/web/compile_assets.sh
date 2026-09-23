@@ -34,3 +34,13 @@ remove_assets_dir() {
 }
 
 remove_assets_dir /app/tmp/cache/assets/
+
+# The image is docker-committed from this container, so anything left here ships.
+rm -rf ~/.npm ~/.cache/node-gyp /tmp/node-compile-cache
+
+# Production never runs npm again: server.sh skips `npm run setup` when its outputs exist.
+# Staging keeps node_modules because a preview asset-cache hit restores public/ without
+# routes.js, so its boot runs `npm run setup`.
+if [[ $RAILS_ENV == "production" ]]; then
+  remove_assets_dir /app/node_modules/
+fi

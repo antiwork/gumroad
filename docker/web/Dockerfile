@@ -1,5 +1,15 @@
 # BASE
 ARG WEB_DOCKERFILE_FROM
+
+# Fetched in its own stage so the database is written once, straight to its
+# final path, and stays cached across source changes.
+FROM ${WEB_DOCKERFILE_FROM} AS geoip
+RUN cd /tmp \
+  && curl -J -L -o GeoIP2-City.tar.gz https://download.maxmind.com/app/geoip_download\?edition_id\=GeoIP2-City\&license_key\=fxN7iBPUYfTS76V5\&suffix\=tar.gz \
+  && tar xzf GeoIP2-City.tar.gz \
+  && mv GeoIP2-City_*/GeoIP2-City.mmdb /GeoIP2-City.mmdb \
+  && rm -rf /tmp/*
+
 FROM ${WEB_DOCKERFILE_FROM}
 
 
@@ -14,7 +24,9 @@ RUN useradd -ms /bin/bash app \
   && mkdir -p $APP_DIR \
   && mkdir -p $BUNDLE_PATH \
   && mkdir -p $APP_DIR/log \
-  && mkdir -p $APP_DIR/tmp
+  && mkdir -p $APP_DIR/tmp \
+  && chmod 770 $APP_DIR/tmp $APP_DIR/log \
+  && chown app:app $APP_DIR $APP_DIR/tmp $APP_DIR/log
 
 # Update ImageMagick configuration
 # Set memory limit to 1GiB
@@ -31,17 +43,6 @@ RUN sed -r 's/(name="memory" value=")[^"]+"/\11GiB"/' -i /etc/ImageMagick-6/poli
   && sed -i 's@</policymap>@  <policy domain="coder" rights="none" pattern="*" />\n  <policy domain="coder" rights="read|write" pattern="{GIF,JPEG,JPG,PNG,PNG8,PNG24,PNG32,WEBP,TIFF,TIF,BMP,BMP2,BMP3,PSD}" />\n</policymap>@' /etc/ImageMagick-6/policy.xml \
   && grep -q '<policy domain="coder" rights="read|write"' /etc/ImageMagick-6/policy.xml
 
-# Dowload latest GeoIP DB
-# Staged outside $APP_DIR so this layer stays cached across source changes;
-# moved into place after the full-tree COPY below.
-RUN cd /tmp \
-  && curl -J -L -o GeoIP2-City.tar.gz https://download.maxmind.com/app/geoip_download\?edition_id\=GeoIP2-City\&license_key\=fxN7iBPUYfTS76V5\&suffix\=tar.gz \
-  && tar xzf GeoIP2-City.tar.gz \
-  && mv GeoIP2-City_* GeoIP2-City \
-  && mkdir -p /usr/local/share/geoip \
-  && mv GeoIP2-City/GeoIP2-City.mmdb /usr/local/share/geoip/GeoIP2-City.mmdb \
-  && rm -rf /tmp/*
-
 # Install gems using only the dependency manifests so this (slow) layer is
 # cached unless the Gemfile/lockfile changes.
 ARG BUNDLE_GEMS__CONTRIBSYS__COM
@@ -51,18 +52,12 @@ RUN cd $APP_DIR \
   && BUNDLE_GEMS__CONTRIBSYS__COM=$BUNDLE_GEMS__CONTRIBSYS__COM bundle install
 
 # Full source tree last: changes here only invalidate the layers below.
-COPY . $APP_DIR/
-
-RUN mv /usr/local/share/geoip/GeoIP2-City.mmdb $APP_DIR/lib/GeoIP2-City.mmdb \
-  && rmdir /usr/local/share/geoip
-
-# TODO: look into solutions that prevent image bloating and/or avoids --squash
-RUN chmod -R 755 $BUNDLE_PATH \
-  && chmod -R 755 $APP_DIR \
-  && chmod -R 770 $APP_DIR/tmp \
-  && chmod -R 770 $APP_DIR/log \
-  && chown -R app:app $APP_DIR \
-  && chown -R root:app $BUNDLE_PATH
+# --chown/--chmod set ownership and modes in this layer; a chmod -R/chown -R
+# afterwards would store every file (and the gems) a second time. Some
+# entrypoints Nomad runs directly, like docker/web/sidekiq_worker.sh, are not
+# executable in git, so the 755 matters.
+COPY --chown=app:app --chmod=755 . $APP_DIR/
+COPY --from=geoip --chown=app:app --chmod=755 /GeoIP2-City.mmdb $APP_DIR/lib/GeoIP2-City.mmdb
 
 ENV DATABASE_HOST="db" \
   DATABASE_NAME="gumroad_development" \

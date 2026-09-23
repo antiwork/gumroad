@@ -99,11 +99,20 @@ RUN cd /tmp \
   && cd $APP_DIR \
   && gem install bundler:$(awk '/BUNDLED\ WITH/{getline; print}' Gemfile.lock | tr -d " ") \
   && BUNDLE_GEMS__CONTRIBSYS__COM=${BUNDLE_GEMS__CONTRIBSYS__COM} bundle install \
+  # Set gem modes here, in the layer that writes them: a chmod -R in a child
+  # image copies all of /bundle_path into a second layer.
+  && chmod -R 755 $BUNDLE_PATH \
+  && rm -rf $BUNDLE_PATH/ruby/*/cache /root/.bundle/cache \
   # cleanup
+  # gcc and cpp are named because libc6-dev's Recommends keeps them past autoremove.
   && apt-get remove -y \
   build-essential \
   ruby-dev \
   wget \
+  gcc \
+  gcc-12 \
+  cpp \
+  cpp-12 \
   && apt-get clean autoclean \
   && apt-get autoremove -y \
   && rm -rf \
