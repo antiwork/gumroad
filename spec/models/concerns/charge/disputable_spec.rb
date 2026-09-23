@@ -455,18 +455,18 @@ describe Charge::Disputable, :vcr do
             .and_return(File.read(Rails.root.join("spec", "support", "fixtures", "test-small.jpg")))
         end
 
-        it "reads the seller's payout-gate rate once for the whole charge" do
-          reads = 0
-          # Below the pause threshold, so every purchase in the loop reaches the read: an
-          # above-threshold rate pauses on the first one and short-circuits the rest.
+        it "checks the seller once, after the whole charge is marked charged back" do
+          marked_when_checked = []
+          # Below the pause threshold: an above-threshold rate pauses the seller, and a later
+          # check would short-circuit on the pause source instead of reading the ratio.
           allow_any_instance_of(User).to receive(:lost_chargebacks_for_payout_gate) do
-            reads += 1
+            marked_when_checked << charge.purchases.reload.count { _1.chargeback_date.present? }
             { volume: "0.5%", count: "0.5%" }
           end
 
           Purchase.handle_charge_event(event)
 
-          expect(reads).to eq(1)
+          expect(marked_when_checked).to eq([2])
         end
       end
 
