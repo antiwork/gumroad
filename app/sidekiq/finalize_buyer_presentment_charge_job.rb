@@ -48,6 +48,6 @@ class FinalizeBuyerPresentmentChargeJob
 
   private
     def enqueue_receipt(charge)
-      SendChargeReceiptJob.set(queue: charge.purchases_requiring_stamping.any? ? "default" : "critical").perform_async(charge.id)
+      SendChargeReceiptJob.perform_async(charge.id)
     end
 end

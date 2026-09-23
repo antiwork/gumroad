@@ -734,12 +734,12 @@ describe Purchase::SyncStatusWithChargeProcessorService, :vcr do
       expect(SendChargeReceiptJob.jobs.size).to eq(1)
     end
 
-    it "queues PDF stamping on the default queue" do
+    it "queues the receipt on the critical queue when a PDF still needs stamping" do
       @product.product_files << create(:readable_document, pdf_stamp_enabled: true)
 
       expect(described_class.new(purchase).perform).to be(true)
       expect(purchase.reload.url_redirect).to be_present
-      expect(SendChargeReceiptJob).to have_enqueued_sidekiq_job(charge.id).on("default")
+      expect(SendChargeReceiptJob).to have_enqueued_sidekiq_job(charge.id).on("critical")
     end
 
     context "when receipt enqueue fails" do

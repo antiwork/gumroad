@@ -55,7 +55,7 @@ class Order < ApplicationRecord
 
     successful_charges.each do
       next if _1.receipt_sent?
-      SendChargeReceiptJob.set(queue: _1.purchases_requiring_stamping.any? ? "default" : "critical").perform_async(_1.id)
+      SendChargeReceiptJob.perform_async(_1.id)
     end
   end
 

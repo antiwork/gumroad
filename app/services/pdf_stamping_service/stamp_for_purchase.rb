@@ -17,7 +17,9 @@ module PdfStampingService::StampForPurchase
 
     failed_results = results.reject(&:success?)
     if failed_results.none?
-      url_redirect.update!(is_done_pdf_stamping: true)
+      # The row was loaded before the stamp. A click during the stamp sets the notify bit
+      # on the current row; writing this object's flags back would clear it.
+      mark_stamping_done!(url_redirect)
       true
     else
       debug_info = failed_results.map do |result|
@@ -28,6 +30,13 @@ module PdfStampingService::StampForPurchase
   end
 
   private
+    def mark_stamping_done!(url_redirect)
+      bit = UrlRedirect.flag_mapping.fetch("flags").fetch(:is_done_pdf_stamping).to_i
+      UrlRedirect.where(id: url_redirect.id).update_all(
+        ["flags = COALESCE(flags, 0) | ?, updated_at = ?", bit, Time.current]
+      )
+    end
+
     def find_products_to_stamp(product, url_redirect)
       product.product_files
         .alive

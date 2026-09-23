@@ -237,26 +237,23 @@ describe SendChargeReceiptJob do
       allow_any_instance_of(Charge).to receive(:purchases_requiring_stamping).and_return([purchase_one])
     end
 
-    it "stamps the PDFs and delivers a receipt per purchase" do
+    it "enqueues stamping without waiting for it, then delivers a receipt per purchase" do
       described_class.new.perform(charge.id)
 
-      expect(PdfStampingService).to have_received(:stamp_for_purchase!).exactly(:once)
-      expect(PdfStampingService).to have_received(:stamp_for_purchase!).with(purchase_one)
+      expect(StampPdfForPurchaseJob).to have_enqueued_sidekiq_job(purchase_one.id)
+      expect(PdfStampingService).not_to have_received(:stamp_for_purchase!)
       expect(CustomerMailer).to have_received(:receipt).with(purchase_one.id, single_purchase: true)
       expect(CustomerMailer).to have_received(:receipt).with(purchase_two.id, single_purchase: true)
       expect(charge.reload.receipt_sent?).to be(true)
     end
 
-    context "when stamping fails" do
-      before do
-        allow(PdfStampingService).to receive(:stamp_for_purchase!).and_raise(PdfStampingService::Error)
-      end
+    it "delivers the receipt when stamping cannot be enqueued, then raises so the stamp is retried" do
+      allow(StampPdfForPurchaseJob).to receive(:perform_async).and_raise(RuntimeError, "redis down")
 
-      it "doesn't deliver the email and raises an error" do
-        expect(CustomerMailer).not_to receive(:receipt)
-        expect { described_class.new.perform(charge.id) }.to raise_error(PdfStampingService::Error)
-        expect(charge.reload.receipt_sent?).to be(false)
-      end
+      expect { described_class.new.perform(charge.id) }.to raise_error(RuntimeError, "redis down")
+      expect(CustomerMailer).to have_received(:receipt).with(purchase_one.id, single_purchase: true)
+      expect(CustomerMailer).to have_received(:receipt).with(purchase_two.id, single_purchase: true)
+      expect(charge.reload.receipt_sent?).to be(false)
     end
   end
 end

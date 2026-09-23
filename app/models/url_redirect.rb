@@ -23,6 +23,14 @@ class UrlRedirect < ApplicationRecord
             2 => :admin_generated,
             3 => :is_rental,
             4 => :is_done_pdf_stamping,
+            # Set by a download click while a checkout stamp already holds the purchase lock.
+            # A cache entry expires and can be evicted before that job reads it, so the promise
+            # to email the buyer lives on this row until the mail is enqueued.
+            5 => :files_ready_notification_requested,
+            # Set when that mail is enqueued, so the stamp job and its follower cannot both send.
+            # A new click clears it; otherwise the second sender would treat the first send as done
+            # and drop a request that arrived after the first sender already checked.
+            6 => :files_ready_notification_enqueued,
             :column => "flags",
             :flag_query_mode => :bit_operator,
             check_for_column: false
@@ -161,14 +169,17 @@ class UrlRedirect < ApplicationRecord
 
   # Public: used to pass the list of downloadable files to Dropbox.
   def product_files_hash
-    alive_product_files.map do |product_file|
+    alive_product_files.filter_map do |product_file|
       next if product_file.stream_only?
 
+      url = signed_location_for_file(product_file)
+      next if url.blank?
+
       {
-        url: signed_location_for_file(product_file),
+        url:,
         filename: product_file.s3_filename
       }
-    end.compact.to_json
+    end.to_json
   end
 
   # The bundle's own files live on the parent link, and the library drops the parent card as soon as
@@ -227,18 +238,30 @@ class UrlRedirect < ApplicationRecord
     if preorder.present?
       signed_download_url_for_s3_key_and_filename(preorder.preorder_link.s3_key, preorder.preorder_link.s3_filename)
     elsif alive_product_files.count == 1
-      signed_location_for_file(alive_product_files.first)
+      file = alive_product_files.first
+      # /r/ would otherwise sign the original upload while the stamp is still running.
+      if file.must_be_pdf_stamped? && missing_stamped_pdf?(file)
+        download_page_url
+      else
+        signed_location_for_file(file)
+      end
     else
       download_page_url
     end
   end
 
-  def signed_location_for_file(product_file)
+  # allow_unstamped is the seller editor only. A buyer fetch must not receive the
+  # original upload while the watermarked copy is still missing.
+  def signed_location_for_file(product_file, allow_unstamped: false)
     return product_file.url if product_file.external_link?
     s3_retrievable = product_file
     if product_file.must_be_pdf_stamped?
       stamped_s3_retrievable = alive_stamped_pdfs.where(product_file_id: product_file.id).first
-      s3_retrievable = stamped_s3_retrievable if stamped_s3_retrievable.present?
+      if stamped_s3_retrievable.present?
+        s3_retrievable = stamped_s3_retrievable
+      elsif !allow_unstamped
+        return nil
+      end
     end
     s3_key = s3_retrievable.s3_key
     s3_filename = s3_retrievable.s3_filename
@@ -270,8 +293,11 @@ class UrlRedirect < ApplicationRecord
   end
 
   def mark_as_seen
-    self.has_been_seen = true
-    save!
+    # save! would write this instance's flags integer and undo a notification bit
+    # set by update_all earlier in the same request.
+    bit = self.class.flag_mapping.fetch("flags").fetch(:has_been_seen).to_i
+    self.class.where(id:).update_all(["flags = COALESCE(flags, 0) | ?, updated_at = ?", bit, Time.current])
+    reload
   end
 
   def mark_unseen

@@ -47,7 +47,7 @@ describe FinalizeBuyerPresentmentChargeJob do
       expect(SendChargeReceiptJob).to have_enqueued_sidekiq_job(charge.id).on("critical")
     end
 
-    it "enqueues exactly one receipt on the default queue for PDF stamping" do
+    it "enqueues exactly one receipt on the critical queue when the PDF still needs stamping" do
       purchase.link.product_files << create(:readable_document, pdf_stamp_enabled: true)
 
       described_class.new.perform(charge.id)
@@ -55,7 +55,7 @@ describe FinalizeBuyerPresentmentChargeJob do
       expect(purchase.reload).to be_successful
       expect(purchase.url_redirect).to be_present
       expect(SendChargeReceiptJob.jobs.size).to eq(1)
-      expect(SendChargeReceiptJob).to have_enqueued_sidekiq_job(charge.id).on("default")
+      expect(SendChargeReceiptJob).to have_enqueued_sidekiq_job(charge.id).on("critical")
     end
 
     it "lets ordinary sync schedule the receipt for a settlement-deferrable charge" do

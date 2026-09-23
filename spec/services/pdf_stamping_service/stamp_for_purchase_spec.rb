@@ -30,6 +30,19 @@ describe PdfStampingService::StampForPurchase do
         expect(url_redirect.reload.is_done_pdf_stamping?).to eq(true)
       end
 
+      it "keeps a files-ready request recorded while stamping" do
+        allow(described_class).to receive(:process_product_file) do
+          PdfStampingService.request_buyer_notification!(purchase.id)
+          OpenStruct.new(success?: true)
+        end
+
+        expect(described_class.perform!(purchase)).to be(true)
+
+        url_redirect = purchase.url_redirect.reload
+        expect(url_redirect.is_done_pdf_stamping?).to be(true)
+        expect(url_redirect.files_ready_notification_requested?).to be(true)
+      end
+
       context "with a mix of encrypted and password-protected PDFs" do
         let!(:openable_encrypted_file) { create(:readable_document, pdf_stamp_enabled: true, url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/specs/encrypted_pdf.pdf") }
         let!(:password_protected_file) { create(:readable_document, pdf_stamp_enabled: true, url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/specs/password_protected_pdf.pdf") }

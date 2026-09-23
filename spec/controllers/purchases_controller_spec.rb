@@ -1074,7 +1074,7 @@ describe PurchasesController, :vcr do
 
       it "resends the receipt and returns true" do
         post :resend_receipt, params: { id: ObfuscateIds.encrypt(@purchase.id) }
-        expect(SendPurchaseReceiptJob).to have_enqueued_sidekiq_job(@purchase.id).on("critical")
+        expect(SendPurchaseReceiptJob).to have_enqueued_sidekiq_job(@purchase.id, true).on("critical")
         expect(response).to be_successful
       end
 
@@ -1131,8 +1131,8 @@ describe PurchasesController, :vcr do
           post :resend_receipt, params: { id: ObfuscateIds.encrypt(@gifter_purchase.id) }
           expect(response).to be_successful
 
-          expect(SendPurchaseReceiptJob).to have_enqueued_sidekiq_job(@gifter_purchase.id).on("critical")
-          expect(SendPurchaseReceiptJob).to have_enqueued_sidekiq_job(@giftee_purchase.id).on("critical")
+          expect(SendPurchaseReceiptJob).to have_enqueued_sidekiq_job(@gifter_purchase.id, true).on("critical")
+          expect(SendPurchaseReceiptJob).to have_enqueued_sidekiq_job(@giftee_purchase.id, true).on("critical")
         end
 
         context "when the product has stampable PDFs" do
@@ -1140,12 +1140,12 @@ describe PurchasesController, :vcr do
             allow_any_instance_of(Link).to receive(:has_stampable_pdfs?).and_return(true)
           end
 
-          it "enqueues receipt jobs on default queue" do
+          it "enqueues receipt jobs on the critical queue" do
             post :resend_receipt, params: { id: ObfuscateIds.encrypt(@gifter_purchase.id) }
             expect(response).to be_successful
 
-            expect(SendPurchaseReceiptJob).to have_enqueued_sidekiq_job(@gifter_purchase.id).on("default")
-            expect(SendPurchaseReceiptJob).to have_enqueued_sidekiq_job(@giftee_purchase.id).on("default")
+            expect(SendPurchaseReceiptJob).to have_enqueued_sidekiq_job(@gifter_purchase.id, true).on("critical")
+            expect(SendPurchaseReceiptJob).to have_enqueued_sidekiq_job(@giftee_purchase.id, true).on("critical")
           end
         end
       end

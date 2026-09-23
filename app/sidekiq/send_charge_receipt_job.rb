@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 # Job used to send the initial receipt email after checkout for a given charge.
-# If there are PDFs that need to be stamped, the caller must enqueue this job using the "default" queue
+# Stamping is enqueued separately: waiting for it here held the receipt on the default queue.
 #
 class SendChargeReceiptJob
   include Sidekiq::Job
@@ -44,14 +44,22 @@ class SendChargeReceiptJob
     # block the receipt for a payment that recovers later.
     return if charge.successful_purchases.none?
 
-    charge.purchases_requiring_stamping.each do |purchase|
-      PdfStampingService.stamp_for_purchase!(purchase)
+    stamp_error = nil
+    begin
+      charge.purchases_requiring_stamping.each do |purchase|
+        StampPdfForPurchaseJob.perform_async(purchase.id)
+      end
+    rescue StandardError => e
+      stamp_error = e
     end
 
     # Deliveries run outside a shared transaction with the receipt_sent update: an
     # earlier delivery's committed CustomerEmailInfo must survive a later delivery's
     # failure, or a retry would resend an already-delivered receipt.
+    # receipt_sent stays false when the stamp enqueue failed, so the retry still
+    # tries the stamp. send_receipts skips a receipt this attempt already delivered.
     send_receipts(charge)
+    raise stamp_error if stamp_error
 
     charge.with_lock do
       SendAutoInvoiceEmailJob.perform_async(nil, charge.id) if AutoInvoiceEligibility.eligible?(charge)

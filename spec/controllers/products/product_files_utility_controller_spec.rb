@@ -68,8 +68,8 @@ describe ProductFilesUtilityController, :vcr do
       file1 = create(:readable_document, link: product, display_name: "file1")
       file2 = create(:streamable_video, link: product, display_name: "file2")
 
-      allow_any_instance_of(UrlRedirect).to receive(:signed_location_for_file).with(file1).and_return("https://example.com/file1.pdf")
-      allow_any_instance_of(UrlRedirect).to receive(:signed_location_for_file).with(file2).and_return("https://example.com/file2.pdf")
+      allow_any_instance_of(UrlRedirect).to receive(:signed_location_for_file).with(file1, allow_unstamped: true).and_return("https://example.com/file1.pdf")
+      allow_any_instance_of(UrlRedirect).to receive(:signed_location_for_file).with(file2, allow_unstamped: true).and_return("https://example.com/file2.pdf")
       get :download_product_files, format: :json, params: { product_file_ids: [file1.external_id, file2.external_id], product_id: product.external_id }
 
       expect(response).to have_http_status(:success)
@@ -78,7 +78,7 @@ describe ProductFilesUtilityController, :vcr do
 
     it "redirects to the first product file if the format is HTML" do
       file = create(:product_file, link: product)
-      expect_any_instance_of(UrlRedirect).to receive(:signed_location_for_file).with(file).and_return("https://example.com/file.srt")
+      expect_any_instance_of(UrlRedirect).to receive(:signed_location_for_file).with(file, allow_unstamped: true).and_return("https://example.com/file.srt")
       get :download_product_files, format: :html, params: { product_id: product.external_id, product_file_ids: [file.external_id] }
 
       expect(response).to redirect_to("https://example.com/file.srt")
@@ -86,7 +86,7 @@ describe ProductFilesUtilityController, :vcr do
 
     it "returns the download info for a library file attached to another of the seller's products" do
       library_file = create(:product_file, link: create(:product, user: seller), display_name: "library")
-      allow_any_instance_of(UrlRedirect).to receive(:signed_location_for_file).with(library_file).and_return("https://example.com/library.pdf")
+      allow_any_instance_of(UrlRedirect).to receive(:signed_location_for_file).with(library_file, allow_unstamped: true).and_return("https://example.com/library.pdf")
 
       get :download_product_files, format: :json, params: { product_id: product.external_id, product_file_ids: [library_file.external_id] }
 
@@ -105,7 +105,7 @@ describe ProductFilesUtilityController, :vcr do
 
       it "returns the file download info for the product's files" do
         file = create(:product_file, link: product, display_name: "file1")
-        allow_any_instance_of(UrlRedirect).to receive(:signed_location_for_file).with(file).and_return("https://example.com/file1.pdf")
+        allow_any_instance_of(UrlRedirect).to receive(:signed_location_for_file).with(file, allow_unstamped: true).and_return("https://example.com/file1.pdf")
 
         get :download_product_files, format: :json, params: { product_id: product.external_id, product_file_ids: [file.external_id] }
 

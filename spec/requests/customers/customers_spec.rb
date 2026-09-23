@@ -639,7 +639,7 @@ describe "Sales page", type: :system, js: true do
         end
         expect(page).to have_alert(text: "Receipt resent")
 
-        expect(SendPurchaseReceiptJob).to have_enqueued_sidekiq_job(membership_purchase.id).on("critical")
+        expect(SendPurchaseReceiptJob).to have_enqueued_sidekiq_job(membership_purchase.id, true).on("critical")
         within_section "Receipt", text: "Delivered #{membership_purchase.created_at.in_time_zone(seller.timezone).strftime("%b %-d")}" do
           expect(page).to have_button("Receipt resent", disabled: true)
         end
