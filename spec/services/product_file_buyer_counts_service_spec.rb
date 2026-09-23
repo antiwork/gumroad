@@ -75,6 +75,19 @@ describe ProductFileBuyerCountsService do
     expect(counts[product_file.external_id]).to eq(2)
   end
 
+  it "serves a repeat read from the cache until a newer sale lands" do
+    purchase = buy
+    expect(described_class.new(product:).counts_by_external_id[product_file.external_id]).to eq(1)
+
+    # A refund adds no sale row, so the cached reading stands until the minute expires or a newer
+    # sale makes a new key. The next read after that sale sees the refunded buyer is gone.
+    purchase.update_column(:stripe_refunded, true)
+    expect(described_class.new(product:).counts_by_external_id[product_file.external_id]).to eq(1)
+
+    buy
+    expect(described_class.new(product:).counts_by_external_id[product_file.external_id]).to eq(1)
+  end
+
   context "when the file is attached to a variant" do
     let(:category) { create(:variant_category, link: product) }
     let(:variant) { create(:variant, variant_category: category) }
