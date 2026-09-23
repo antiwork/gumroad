@@ -345,10 +345,8 @@ class OfferCode < ApplicationRecord
     end
   end
 
-  # Eligibility for a whole selection, not one entry: every option the buyer picked in a category the
-  # seller limited has to be in scope, or a tampered request carries a second option into a discounted
-  # line. Options from categories the code does not mention stay irrelevant, so limiting a code to one
-  # tier does not stop a buyer from picking any colour of it.
+  # Every picked option in a limited category must be in scope, so a tampered request cannot carry a
+  # second option into a discounted line. Options in categories the code does not limit are ignored.
   def applicable_to_variants?(link, variants)
     restricted = restricted_variants_for(link)
     return true if restricted.empty?
