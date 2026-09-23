@@ -923,7 +923,7 @@ describe("Checkout discounts page", type: :system, js: true) do
         find(:table_row, { "Discount" => "Launch" }).click
         within_modal("Launch") { click_on "Edit" }
 
-        select_combo_box_option "Icon library", from: "Products", option_exact_text: true
+        select_combo_box_option "Icon library", from: "Products"
         click_on "Save changes"
 
         within find(:table_row, { "Discount" => "Launch" }) do
