@@ -46,10 +46,6 @@ module ElasticsearchHelpers
 end
 
 class ElasticsearchSetup
-  def self.test_index_models
-    [Link, Balance, Purchase, Installment, ConfirmedFollowerEvent, ProductPageView, AudienceMember]
-  end
-
   def self.recreate_index(model)
     model.__elasticsearch__.delete_index!(force: true)
 
@@ -76,7 +72,7 @@ class ElasticsearchSetup
     end
 
     # Ensure indices are ready: same settings, same mapping, zero documents
-    models = test_index_models
+    models = [Link, Balance, Purchase, Installment, ConfirmedFollowerEvent, ProductPageView, AudienceMember]
     models.each do |model|
       model.index_name("#{model.name.parameterize}-test")
     end

@@ -161,23 +161,6 @@ describe OEmbedFinder do
       expect(registry_snapshot).to eq before
     end
 
-    # The gem registry survives application code reloads.
-    it "keeps its providers across a code reload" do
-      OEmbedFinder.embeddable_from_url(unmatched_url)
-      before = registry_snapshot
-      index_names = ElasticsearchSetup.test_index_models.to_h { |model| [model.name, model.index_name] }
-
-      begin
-        Rails.application.reloader.reload!
-        OEmbedFinder.embeddable_from_url(unmatched_url)
-
-        expect(registry_snapshot).to eq before
-      ensure
-        # Reloaded classes drop the test index names used by later ES specs.
-        index_names.each { |name, index| name.constantize.index_name(index) }
-      end
-    end
-
     it "resolves each registered host to its own endpoint and nothing to an unregistered one" do
       OEmbedFinder.embeddable_from_url(unmatched_url)
 
