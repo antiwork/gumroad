@@ -1,0 +1,163 @@
+---
+http_interactions:
+- request:
+    method: post
+    uri: https://api.twitter.com/oauth2/token
+    body:
+      encoding: ASCII-8BIT
+      string: grant_type=client_credentials
+    headers:
+      User-Agent:
+      - TwitterRubyGem/8.2.0
+      Accept:
+      - "*/*"
+      Authorization:
+      - Basic Og==
+      Connection:
+      - close
+      Content-Type:
+      - application/x-www-form-urlencoded
+      Host:
+      - api.twitter.com
+  response:
+    status:
+      code: 403
+      message: Forbidden
+    headers:
+      Date:
+      - Wed, 23 Sep 2026 19:48:19 GMT
+      Content-Type:
+      - application/json;charset=utf-8
+      Transfer-Encoding:
+      - chunked
+      Connection:
+      - close
+      Ml:
+      - A
+      Perf:
+      - '7402827104'
+      Pragma:
+      - no-cache
+      Server:
+      - cloudflare envoy
+      Status:
+      - 403 Forbidden
+      Expires:
+      - Tue, 31 Mar 1981 05:00:00 GMT
+      Cache-Control:
+      - no-cache, no-store, must-revalidate, pre-check=0, post-check=0
+      Last-Modified:
+      - Wed, 23 Sep 2026 19:48:19 GMT
+      X-Transaction:
+      - 8619a64878f43476
+      Set-Cookie:
+      - __cf_bm=HMLMRdiC9fvyityBg.yCF4GtGWZBgwmgeMurU2jior0-1790192899.078297-1.0.1.1-ES_lPOAwRxkSiucIzAmhjbAEGQ2ogJcqdW6TNU6w6ApZEsvMYPM6LBH2Sxj8x09i31GQhttVYmCIWVdtbpKp.CVQMxRraPamkACw_H5HRH4MC20jI8WMnZErSCIMlNHy;
+        HttpOnly; SameSite=None; Secure; Path=/; Domain=twitter.com; Expires=Wed,
+        23 Sep 2026 20:18:19 GMT
+      - guest_id=v1%3A179019289910322774; Max-Age=63072000; Expires=Fri, 22 Sep 2028
+        19:48:19 GMT; Path=/; Domain=.twitter.com; Secure; SameSite=None
+      - guest_id_ads=v1%3A179019289910322774; Max-Age=63072000; Expires=Fri, 22 Sep
+        2028 19:48:19 GMT; Path=/; Domain=.twitter.com; Secure; SameSite=None
+      - guest_id_marketing=v1%3A179019289910322774; Max-Age=63072000; Expires=Fri,
+        22 Sep 2028 19:48:19 GMT; Path=/; Domain=.twitter.com; Secure; SameSite=None
+      - personalization_id="v1_i8iKJq4jcCmlFGx21YjnTQ=="; Max-Age=63072000; Expires=Fri,
+        22 Sep 2028 19:48:19 GMT; Path=/; Domain=.twitter.com; Secure; SameSite=None
+      X-Frame-Options:
+      - DENY
+      X-Ua-Compatible:
+      - IE=edge,chrome=1
+      Cf-Cache-Status:
+      - DYNAMIC
+      X-Transaction-Id:
+      - 8619a64878f43476
+      X-Xss-Protection:
+      - '0'
+      Content-Disposition:
+      - attachment; filename=json.json
+      X-Content-Type-Options:
+      - nosniff
+      X-Twitter-Response-Tags:
+      - BouncerCompliant
+      X-Response-Time:
+      - '9'
+      Origin-Cf-Ray:
+      - a3fc10f33fb50f8d-ATL
+      Strict-Transport-Security:
+      - max-age=631138519; includeSubdomains
+      X-Served-By:
+      - t4_a
+      Vary:
+      - accept-encoding
+      Cf-Ray:
+      - a3fc10f33fb50f8d-EWR
+    body:
+      encoding: UTF-8
+      string: '{"errors":[{"code":99,"message":"Unable to verify your credentials","label":"authenticity_token_error"}]}'
+  recorded_at: Wed, 23 Sep 2026 19:48:19 GMT
+- request:
+    method: get
+    uri: https://api.twitter.com/1.1/users/show.json?user_id=279418691
+    body:
+      encoding: ASCII-8BIT
+      string: ''
+    headers:
+      User-Agent:
+      - TwitterRubyGem/8.2.0
+      Authorization:
+      - 'Bearer '
+      Connection:
+      - close
+      Host:
+      - api.twitter.com
+  response:
+    status:
+      code: 400
+      message: Bad Request
+    headers:
+      Date:
+      - Wed, 23 Sep 2026 19:48:19 GMT
+      Content-Type:
+      - application/json; charset=utf-8
+      Transfer-Encoding:
+      - chunked
+      Connection:
+      - close
+      Perf:
+      - '7402827104'
+      Server:
+      - cloudflare envoy
+      Cache-Control:
+      - no-cache, no-store, max-age=0
+      Set-Cookie:
+      - __cf_bm=fW4nMsd93MxawHgef52K8tpeAWSLLVyUVxeAQEy272A-1790192899.2379198-1.0.1.1-4w4O6hWS3..uB0ZZSL1j10b4VNdYR_GLl1Lolx.V65hz_yWOavPPHGB0llG5TzPsoQ93jkBrrJM1zmc1CP.8zAdZdMxR6IeV9hS9Y5j21P9DlDg4E2bYbdMY6DkcqJ85;
+        HttpOnly; SameSite=None; Secure; Path=/; Domain=twitter.com; Expires=Wed,
+        23 Sep 2026 20:18:19 GMT
+      - guest_id=v1%3A179019289926327117; Max-Age=63072000; Expires=Fri, 22 Sep 2028
+        19:48:19 GMT; Path=/; Domain=.twitter.com; Secure; SameSite=None
+      - guest_id_ads=v1%3A179019289926327117; Max-Age=63072000; Expires=Fri, 22 Sep
+        2028 19:48:19 GMT; Path=/; Domain=.twitter.com; Secure; SameSite=None
+      - guest_id_marketing=v1%3A179019289926327117; Max-Age=63072000; Expires=Fri,
+        22 Sep 2028 19:48:19 GMT; Path=/; Domain=.twitter.com; Secure; SameSite=None
+      - personalization_id="v1_AGhnYsjCmZoVEPYHJvaA5w=="; Max-Age=63072000; Expires=Fri,
+        22 Sep 2028 19:48:19 GMT; Path=/; Domain=.twitter.com; Secure; SameSite=None
+      Cf-Cache-Status:
+      - DYNAMIC
+      X-Transaction-Id:
+      - 01d81c13ce83796b
+      X-Response-Time:
+      - '9'
+      Origin-Cf-Ray:
+      - a3fc10f43dba9187-ATL
+      Strict-Transport-Security:
+      - max-age=631138519; includeSubdomains
+      X-Served-By:
+      - t4_a
+      Vary:
+      - accept-encoding
+      Cf-Ray:
+      - a3fc10f43dba9187-EWR
+    body:
+      encoding: UTF-8
+      string: '{"errors":[{"code":215,"message":"Bad Authentication data."}]}'
+  recorded_at: Wed, 23 Sep 2026 19:48:19 GMT
+recorded_with: VCR 6.2.0

@@ -416,6 +416,24 @@ describe User::OmniauthCallbacksController do
         expect(@user.twitter_handle).to_not be(nil)
       end
 
+      it "clears a recorded read-only X reason so the seller can post after reconnecting", :vcr do
+        user = create(:user)
+        action = create(:marketing_action, user:)
+        action.update!(error_code: Marketing::Action::X_WRITE_PERMISSION_MISSING)
+        other = create(:marketing_action)
+        other.update!(error_code: Marketing::Action::X_WRITE_PERMISSION_MISSING)
+        request.env["omniauth.params"] = { "state" => "link_twitter_account" }
+        OmniAuth.config.mock_auth[:twitter] = OmniAuth::AuthHash.new fetch_json("twitter")
+        request.env["omniauth.auth"] = OmniAuth.config.mock_auth[:twitter]
+        allow(controller).to receive(:current_user).and_return(user)
+
+        post :twitter
+
+        expect(action.reload.error_code).to be_nil
+        expect(action).not_to be_terminal
+        expect(other.reload.error_code).to eq(Marketing::Action::X_WRITE_PERMISSION_MISSING)
+      end
+
       it "updates the Twitter OAuth credentials on account creation", :vcr do
         user = create(:user)
         allow(User).to receive(:new).and_return(user)

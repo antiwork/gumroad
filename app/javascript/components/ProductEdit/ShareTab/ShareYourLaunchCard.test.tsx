@@ -157,7 +157,13 @@ describe("ShareYourLaunchCard", () => {
     expect(screen.getByText(/I trust this app/u)).toBeDefined();
     expect(screen.getByRole("link", { name: "Share on X" })).toBeDefined();
     expect(screen.getByRole("link", { name: "Reconnect X" })).toBeDefined();
-    expect(screen.getByRole("button", { name: "Post on X" })).toBeDefined();
+    expect(screen.getByRole("button", { name: "Post on X" })).toHaveProperty("disabled", true);
+  });
+
+  it("re-enables Post on X once the read-only reason is cleared", async () => {
+    await renderCard([xChannel({ action: action({ status: "approved" }) })]);
+
+    expect(screen.getByRole("button", { name: "Post on X" })).toHaveProperty("disabled", false);
   });
 
   it("tells the seller to check X when a post's result is unknown", async () => {
