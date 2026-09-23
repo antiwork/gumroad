@@ -201,14 +201,12 @@ export const PreviewSidebar = ({
   children: React.ReactNode;
 } & React.ComponentProps<"aside">) => {
   const isDesktop = useIsAboveBreakpoint("lg");
-  // `null` until the viewport has been measured, which `useWindowDimensions` does in a passive
-  // effect — so the first commit is already painted. During that commit `useIsAboveBreakpoint`
-  // guesses from the user agent (`!isMobile`), which reads as desktop for a desktop browser in a
-  // window narrower than lg. Rendering the copy here then put a preview inside this aside while
-  // it was still `display:none`, and the pane below mounted its own copy once the width was
-  // known: two navigations of a live page, one of them never visible. Waiting for the measurement
-  // costs the desktop sidebar one effect tick and is hydration-safe — SSR and the first client
-  // render both omit the preview, then it mounts once, where it is on screen.
+  // `useWindowDimensions` measures in a passive effect, so its first value is null — and on that
+  // first commit `useIsAboveBreakpoint` guesses from the user agent, which reads as desktop for a
+  // desktop window narrower than lg. Rendering the copy here then put a live page inside this
+  // `display:none` aside, and the pane below mounted its own copy once the width was known.
+  // Waiting for the measurement costs desktop one effect tick; SSR and the first client render
+  // both omit the preview, so it stays hydration-safe and mounts once, where it is on screen.
   const dimensions = useWindowDimensions();
   const modeContext = React.useContext(MobilePreviewModeContext);
   const mode = modeContext?.mode ?? "edit";
