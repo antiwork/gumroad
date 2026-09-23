@@ -50,7 +50,7 @@ type NewInvoicePageProps = {
   };
   invoice_file_url?: string | null;
   payment_id: string;
-  payments: { id: string; label: string }[];
+  payments: { id: string; label: string; url: string }[];
 };
 
 const PurchaseNewInvoicePage = () => {
@@ -121,9 +121,10 @@ const PurchaseNewInvoicePage = () => {
                   <Select
                     id="payment"
                     value={payment_id}
-                    onChange={(e) =>
-                      router.visit(Routes.new_purchase_invoice_path(e.target.value, { email: form_data.email }))
-                    }
+                    onChange={(e) => {
+                      const payment = payments.find(({ id }) => id === e.target.value);
+                      if (payment) router.visit(payment.url);
+                    }}
                   >
                     {payments.map((payment) => (
                       <option key={payment.id} value={payment.id}>

@@ -49,8 +49,8 @@ describe Purchases::InvoicesController, :vcr, type: :controller, inertia: true d
 
             expect(inertia.props[:payment_id]).to eq(june.external_id)
             expect(inertia.props[:payments]).to eq([
-                                                     { id: july.external_id, label: "Jul 25, 2026 · $20" },
-                                                     { id: june.external_id, label: "Jun 25, 2026 · $10" },
+                                                     { id: july.external_id, label: "Jul 25, 2026 · $20", url: new_purchase_invoice_path(july.external_id, email:) },
+                                                     { id: june.external_id, label: "Jun 25, 2026 · $10", url: new_purchase_invoice_path(june.external_id, email:) },
                                                    ])
           end
 
