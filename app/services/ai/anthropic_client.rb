@@ -324,11 +324,9 @@ class Ai::AnthropicClient
         parse_buffered_fallback(parsed)
       rescue ToolCallTokenCutoffError => e
         trace.error = e
-        # Opted-in callers treat a cutoff as truncation wherever it surfaces. This raise happens inside
-        # #stream_messages' UnreadableToolCallError rescue, so its ToolCallTokenCutoffError sibling never
-        # sees it: without this branch a replay that hits the cap itself fails the turn with the
-        # unreadable-tool-call error from the attempt before it, which is the bug this replay exists to
-        # recover from. The replayed attempt is also the longest one, so it is the likeliest to hit the cap.
+        # Raised from inside #stream_messages' UnreadableToolCallError rescue, so its
+        # ToolCallTokenCutoffError sibling never sees it — an opted-in caller would fail the turn with
+        # the error this replay exists to recover from.
         raise original_error unless recover_token_cutoff
 
         Result.new(text: "", tool_uses: [], stop_reason: "max_tokens")
