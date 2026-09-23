@@ -262,13 +262,19 @@ class CreatePublicMediaService
       return nil unless Feature.active?(:content_moderation)
       return nil if seller&.verified?
 
-      text = [name, blob.filename.to_s].compact_blank.uniq.join(" ")
+      names = [name, blob.filename.to_s].compact_blank.uniq.join(" ")
       image_urls = content_type.start_with?("image/") ? [blob.url] : []
 
+      # PromptStrategy's spam preset expects prose (a listing, post, or affiliate email) and is
+      # told to flag "random tokens" — which an asset-pipeline name like "tjn_<sha>.png" is by
+      # construction. The prose presets get the seller-authored display name only; the blocklist
+      # and the classifier still get the file name (one exact-matches it, the other judges the image).
       strategies = [
-        ContentModeration::Strategies::BlocklistStrategy.new(text:, image_urls:),
-        ContentModeration::Strategies::ClassifierStrategy.new(text:, image_urls:),
-        ContentModeration::Strategies::PromptStrategy.new(text:, image_urls:),
+        ContentModeration::Strategies::BlocklistStrategy.new(text: names, image_urls:),
+        ContentModeration::Strategies::ClassifierStrategy.new(text: names, image_urls:),
+        ContentModeration::Strategies::PromptStrategy.new(
+          text: name.to_s, image_urls:, corroborate_judgment_flags: true
+        ),
       ]
 
       strategies.each do |strategy|
