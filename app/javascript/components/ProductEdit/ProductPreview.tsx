@@ -175,31 +175,35 @@ export const ProductPreview = ({ showRefundPolicyModal }: { showRefundPolicyModa
         }}
         hideFollowForm
       >
-        <CoffeeProduct
-          product={{
-            ...serializedProduct,
-            is_published: true,
-            pwyw: {
-              suggested_price_cents: Math.max(
-                ...serializedProduct.options.map(({ price_difference_cents }) => price_difference_cents ?? 0),
+        {/* The gutter moved off CoffeeProduct's own root, so the preview supplies it here, on a
+            wrapper that still grows: the preview sits in the same flex-column layout. */}
+        <div className="flex grow flex-col px-4">
+          <CoffeeProduct
+            product={{
+              ...serializedProduct,
+              is_published: true,
+              pwyw: {
+                suggested_price_cents: Math.max(
+                  ...serializedProduct.options.map(({ price_difference_cents }) => price_difference_cents ?? 0),
+                ),
+              },
+              options: serializedProduct.options.sort(
+                (a, b) => (a.price_difference_cents ?? 0) - (b.price_difference_cents ?? 0),
               ),
-            },
-            options: serializedProduct.options.sort(
-              (a, b) => (a.price_difference_cents ?? 0) - (b.price_difference_cents ?? 0),
-            ),
-          }}
-          purchase={null}
-          selection={{
-            optionId: null,
-            price: {
-              value:
-                serializedProduct.options.length === 1
-                  ? (serializedProduct.options[0]?.price_difference_cents ?? null)
-                  : null,
-              error: false,
-            },
-          }}
-        />
+            }}
+            purchase={null}
+            selection={{
+              optionId: null,
+              price: {
+                value:
+                  serializedProduct.options.length === 1
+                    ? (serializedProduct.options[0]?.price_difference_cents ?? null)
+                    : null,
+                error: false,
+              },
+            }}
+          />
+        </div>
       </ProfileLayout>
     ) : (
       <>

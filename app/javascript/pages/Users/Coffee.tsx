@@ -34,7 +34,13 @@ export default function CoffeePage() {
       currencySelector
       shownCurrency={product.buyer_currency_display?.buyer_currency_shown}
     >
-      <CoffeeProduct product={product} purchase={purchase} className="mx-auto w-full max-w-6xl lg:px-0" />
+      {/* The gutter sits outside the cap, as SectionLayout has it, so the coffee page's content
+          tracks the profile's other sections instead of being flush at 1024-1152px. The wrapper
+          stays a growing flex box: CoffeeProduct's own `grow content-center` only fills and centers
+          the page while its parent is the layout column's flex child. */}
+      <div className="flex grow flex-col px-4">
+        <CoffeeProduct product={product} purchase={purchase} className="mx-auto w-full max-w-6xl" />
+      </div>
     </ProfileLayout>
   );
 }
