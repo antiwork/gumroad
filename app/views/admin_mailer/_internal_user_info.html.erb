@@ -17,6 +17,6 @@
   <br>
   Balance: <%= user.balance_formatted %>
   <br>
-  <% lost_chargebacks = user.lost_chargebacks %>
-  Lost Chargebacks: <%= lost_chargebacks[:volume] %> (<%= lost_chargebacks[:count] %>)
+  <% lost_chargebacks = user.lost_chargebacks_bounded %>
+  Lost Chargebacks: <%= lost_chargebacks ? "#{lost_chargebacks[:volume]} (#{lost_chargebacks[:count]})" : "unavailable" %>
 </p>

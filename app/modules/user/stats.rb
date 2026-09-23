@@ -245,6 +245,17 @@ module User::Stats
     chargeback_rates
   end
 
+  # Admin emails render inside a mail job, where the connection's five-minute session
+  # max_execution_time (config/database.yml) lets a lifetime aggregate over a million-purchase
+  # creator run until it takes the whole notification down with it. Bound it; nil = not computable.
+  LOST_CHARGEBACKS_BUDGET = 5.seconds
+
+  def lost_chargebacks_bounded
+    WithMaxExecutionTime.timeout_queries(seconds: LOST_CHARGEBACKS_BUDGET) { lost_chargebacks }
+  rescue WithMaxExecutionTime::QueryTimeoutError
+    nil
+  end
+
   # The payout gate's view of the same ratio, restricted to the trailing
   # PAYOUT_CHARGEBACK_RATE_WINDOW. Lifetime is the wrong measure for a hold a seller is supposed to
   # be able to work their way out of: on a long-lived account the denominator is so large that
