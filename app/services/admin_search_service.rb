@@ -2,6 +2,7 @@
 
 class AdminSearchService
   class InvalidDateError < StandardError; end
+  class InsufficientSearchCriteriaError < StandardError; end
 
   MAX_RESULTS = 500
 
@@ -78,6 +79,12 @@ class AdminSearchService
     # Raw-SQL columns here must stay table-qualified: the creator_email and
     # product_title_query filters join links, which shares created_at and price_cents.
     if [transaction_date, last_4, card_type, price, expiry_date].any?(&:present?)
+      # A card last-4 matches too few rows to reach LIMIT and both card_visual indexes lead with
+      # card_type, so on its own it walks index_purchases_on_created_at backwards over the whole
+      # table. Require a filter the query can seek on instead.
+      narrowing_values = [query, email, creator_email, license_key, transaction_date, card_type]
+      raise InsufficientSearchCriteriaError if last_4.present? && narrowing_values.none?(&:present?)
+
       purchases = purchases.where.not(stripe_fingerprint: nil)
 
       if transaction_date.present?

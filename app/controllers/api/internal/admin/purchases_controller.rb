@@ -44,6 +44,11 @@ class Api::Internal::Admin::PurchasesController < Api::Internal::Admin::BaseCont
     }
   rescue AdminSearchService::InvalidDateError
     render json: { success: false, message: "purchase_date must use YYYY-MM-DD format." }, status: :bad_request
+  rescue AdminSearchService::InsufficientSearchCriteriaError
+    render json: {
+      success: false,
+      message: "card_last4 needs a narrower search: also provide card_type, purchase_date, query, email, creator_email, or license_key."
+    }, status: :bad_request
   end
 
   def lookup
