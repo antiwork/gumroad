@@ -1406,6 +1406,40 @@ describe Purchase::CreateService, :vcr do
       end
     end
 
+    context "when an ineligible option leaves the cart below the minimum amount" do
+      let(:category) { create(:variant_category, link: product1) }
+      let(:eligible_option) { create(:variant, variant_category: category) }
+      let(:ineligible_option) { create(:variant, variant_category: category) }
+
+      before do
+        offer_code.update!(minimum_amount_cents: 200, variants: [eligible_option])
+        params[:purchase][:perceived_price_cents] = 0
+        params[:purchase][:discount_code] = offer_code.code
+        params[:cart_items] = [
+          {
+            permalink: product1.unique_permalink,
+            price_cents: 100,
+            variants: [eligible_option.external_id],
+          },
+          {
+            permalink: product1.unique_permalink,
+            price_cents: 100,
+            variants: [ineligible_option.external_id],
+          }
+        ]
+      end
+
+      it "refuses the code instead of counting the ineligible option's spend" do
+        _, error = Purchase::CreateService.new(
+          product: product1,
+          params:,
+          buyer:
+        ).perform
+
+        expect(error).to eq("Sorry, you have not met the offer code's minimum amount.")
+      end
+    end
+
     context "when the cart items don't meet the minimum amount" do
       before do
         params[:purchase][:perceived_price_cents] = 0

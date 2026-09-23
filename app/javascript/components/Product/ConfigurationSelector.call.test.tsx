@@ -29,6 +29,7 @@ const durationOption = {
 };
 
 const callProduct: Product = {
+  id: "product-id",
   permalink: "call-product",
   rental: null,
   options: [durationOption],

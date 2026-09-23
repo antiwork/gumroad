@@ -61,6 +61,8 @@ import { useSortingTableDriver, Sort } from "$app/components/useSortingTableDriv
 import blackFridayIllustration from "$assets/images/illustrations/black_friday.svg";
 import placeholder from "$assets/images/placeholders/discounts.png";
 
+type ProductScopeKind = "product" | "option" | "deleted";
+
 type Product = {
   id: string;
   name: string;
@@ -69,6 +71,7 @@ type Product = {
   is_tiered_membership: boolean;
   is_recurring_billing: boolean;
   archived: boolean;
+  options?: { id: string; name: string }[];
 };
 
 export type Duration = 1;
@@ -94,6 +97,7 @@ export type OfferCode = {
   existing_customers_only: boolean;
   ownership_products: Product[];
   ownership_duration_tiers: OwnershipDurationTier[] | null;
+  option_ids_by_product: Record<string, string[]>;
 };
 
 export type SortKey = "name" | "revenue" | "uses" | "term";
@@ -112,13 +116,31 @@ const formatProductNames = (products: Product[]) => {
     ? `${names}, and ${products.length - 2} ${products.length - 2 === 1 ? "other" : "others"}`
     : names;
 };
-const formatProducts = (offerCode: OfferCode) => {
+const formatOptionScope = (offerCode: OfferCode, product: Product) => {
+  const ids = offerCode.option_ids_by_product[product.id];
+  if (ids === undefined) return "All options";
+  return (
+    product.options
+      ?.filter(({ id }) => ids.includes(id))
+      .map(({ name }) => name)
+      .join(", ") || "No eligible options"
+  );
+};
+const formatProducts = (offerCode: OfferCode, products: Product[]) => {
   if (!offerCode.products) {
     return offerCode.excluded_products.length > 0
       ? `all products except ${formatProductNames(offerCode.excluded_products)}`
       : "all products";
   }
-  return formatProductNames(offerCode.products);
+  return formatProductNames(
+    offerCode.products.map((product) => ({
+      ...product,
+      name:
+        offerCode.option_ids_by_product[product.id] === undefined
+          ? product.name
+          : `${product.name} (${formatOptionScope(offerCode, products.find(({ id }) => id === product.id) ?? product)})`,
+    })),
+  );
 };
 const formatAmount = (offerCode: OfferCode) => {
   if (offerCode.ownership_duration_tiers?.length) {
@@ -419,7 +441,7 @@ const DiscountsPage = ({
                             <b>{offerCode.name}</b>
                           </div>
                           <FieldsetDescription>
-                            {formatAmount(offerCode)} off of {formatProducts(offerCode)}
+                            {formatAmount(offerCode)} off of {formatProducts(offerCode, products)}
                           </FieldsetDescription>
                         </div>
                       </TableCell>
@@ -629,6 +651,14 @@ const DiscountsPage = ({
                       <CardContent key={product.id} className="grid grid-cols-[1fr_auto] gap-2">
                         <div className="grow">
                           <h5 className="font-bold">{product.name}</h5>
+                          {Object.keys(selectedOfferCode.option_ids_by_product).length > 0 ? (
+                            <p>
+                              {formatOptionScope(
+                                selectedOfferCode,
+                                products.find(({ id }) => id === product.id) ?? product,
+                              )}
+                            </p>
+                          ) : null}
                           {uses != null ? `${uses} ${uses === 1 ? "use" : "uses"}` : null}
                         </div>
                         <CopyToClipboard
@@ -709,6 +739,7 @@ const DiscountsPage = ({
             maxQuantity: offerCode.limit,
             discount: offerCode.discount,
             selectedProductIds: offerCode.products?.map(({ id }) => id) ?? [],
+            selectedOptionIds: Object.values(offerCode.option_ids_by_product).flat(),
             excludedProductIds: offerCode.excluded_products.map(({ id }) => id),
             currencyCode: offerCode.discount.type === "cents" ? offerCode.currency_type : null,
             universal: !offerCode.products,
@@ -757,6 +788,7 @@ const DiscountsPage = ({
             maxQuantity: offerCode.limit,
             discount: offerCode.discount,
             selectedProductIds: offerCode.products?.map(({ id }) => id) ?? [],
+            selectedOptionIds: Object.values(offerCode.option_ids_by_product).flat(),
             excludedProductIds: offerCode.excluded_products.map(({ id }) => id),
             currencyCode: offerCode.discount.type === "cents" ? offerCode.currency_type : null,
             universal: !offerCode.products,
@@ -870,6 +902,9 @@ const Form = ({
     value: offerCode?.products?.map(({ id }) => id) ?? [],
   });
   const selectedProducts = products.filter(({ id }) => selectedProductIds.value.includes(id));
+  const [optionIdsByProduct, setOptionIdsByProduct] = React.useState<Record<string, string[]>>(
+    offerCode?.option_ids_by_product ?? {},
+  );
   const [excludedProductIds, setExcludedProductIds] = React.useState<string[]>(
     offerCode?.excluded_products.map(({ id }) => id) ?? [],
   );
@@ -906,6 +941,38 @@ const Form = ({
   const [currencyCode, setCurrencyCode] = React.useState(
     offerCode?.currency_type ?? selectedProducts[0]?.currency_type ?? products[0]?.currency_type ?? "usd",
   );
+  // One picker holds both scopes: a product row means all of its options, an option row limits the
+  // product to that option. A product limited only to deleted options keeps a "deleted" chip so the
+  // restriction survives until the seller removes it.
+  const productScopeTargets = new Map<string, { productId: string; optionId?: string; kind: ProductScopeKind }>();
+  const productScopeOption = (product: Product): Option => {
+    productScopeTargets.set(product.id, { productId: product.id, kind: "product" });
+    return { id: product.id, label: product.name };
+  };
+  const optionScopeOption = (product: Product, option: { id: string; name: string }): Option => {
+    const id = `${product.id}:${option.id}`;
+    productScopeTargets.set(id, { productId: product.id, optionId: option.id, kind: "option" });
+    return { id, label: `${product.name} (${option.name})`, isSubOption: true };
+  };
+  const productScopeOptions = products
+    .filter(
+      ({ currency_type }) =>
+        discount.type !== "cents" || selectedProductIds.value.length === 0 || currency_type === currencyCode,
+    )
+    .filter((product) => !product.archived || selectedProductIds.value.includes(product.id))
+    .flatMap((product) => [
+      productScopeOption(product),
+      ...(product.options ?? []).map((option) => optionScopeOption(product, option)),
+    ]);
+  const selectedProductScopes = selectedProducts.flatMap((product) => {
+    const optionIds = optionIdsByProduct[product.id];
+    if (optionIds === undefined) return [productScopeOption(product)];
+    const eligibleOptions = (product.options ?? []).filter(({ id }) => optionIds.includes(id));
+    if (eligibleOptions.length > 0) return eligibleOptions.map((option) => optionScopeOption(product, option));
+    const id = `${product.id}:deleted`;
+    productScopeTargets.set(id, { productId: product.id, kind: "deleted" });
+    return [{ id, label: `${product.name} (deleted options)` }];
+  });
 
   const canSetDuration = (universal ? products : selectedProducts).some(
     ({ is_recurring_billing }) => is_recurring_billing,
@@ -1057,6 +1124,7 @@ const Form = ({
       existing_customers_only: existingCustomersOnly,
       ownership_products: existingCustomersOnly ? ownershipProducts : [],
       ownership_duration_tiers: tieredPayload,
+      option_ids_by_product: universal ? {} : optionIdsByProduct,
     });
   };
 
@@ -1147,27 +1215,30 @@ const Form = ({
               ref={selectedProductsFieldRef}
               inputId={`${uid}products`}
               instanceId={`${uid}products`}
-              options={products
-                .filter(
-                  ({ currency_type }) =>
-                    discount.type !== "cents" ||
-                    selectedProductIds.value.length === 0 ||
-                    currency_type === currencyCode,
-                )
-                .filter((product) => !product.archived)
-                .map((product) => ({ id: product.id, label: product.name }))}
-              value={selectedProducts.map(({ id, name: label }) => ({
-                id,
-                label,
-              }))}
+              options={productScopeOptions}
+              value={selectedProductScopes}
               isMulti
               isClearable
               placeholder="Products to which this discount will apply"
-              onChange={(selectedIds) => {
-                setSelectedProductIds({ value: selectedIds.map(({ id }) => id) });
+              onChange={(selected, { action, option }) => {
+                const added = action === "select-option" && option ? productScopeTargets.get(option.id) : undefined;
+                const scopes = selected.flatMap(({ id }) => {
+                  const scope = productScopeTargets.get(id);
+                  if (!scope) return [];
+                  const replacedByAdded = added && scope.productId === added.productId && scope.kind !== added.kind;
+                  return replacedByAdded ? [] : [scope];
+                });
+                const productIds = [...new Set(scopes.map(({ productId }) => productId))];
+                const nextOptionIdsByProduct: Record<string, string[]> = {};
+                for (const { productId, optionId, kind } of scopes) {
+                  if (kind === "option" && optionId) (nextOptionIdsByProduct[productId] ??= []).push(optionId);
+                  if (kind === "deleted") nextOptionIdsByProduct[productId] = optionIdsByProduct[productId] ?? [];
+                }
+                setSelectedProductIds({ value: productIds });
+                setOptionIdsByProduct(nextOptionIdsByProduct);
                 setCurrencyCode(
                   (prevCurrencyCode) =>
-                    products.find(({ id }) => id === selectedIds[0]?.id)?.currency_type ?? prevCurrencyCode,
+                    products.find(({ id }) => id === productIds[0])?.currency_type ?? prevCurrencyCode,
                 );
               }}
               isDisabled={universal}
@@ -1179,6 +1250,7 @@ const Form = ({
                 onChange={(evt) => {
                   setUniversal(evt.target.checked);
                   setSelectedProductIds({ value: [] });
+                  setOptionIdsByProduct({});
                 }}
                 aria-invalid={selectedProductIds.error}
               />

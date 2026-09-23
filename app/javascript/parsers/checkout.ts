@@ -22,4 +22,5 @@ type DiscountConditions = {
   minimum_quantity: number | null;
   duration_in_billing_cycles: 1 | null;
   minimum_amount_cents: number | null;
+  option_ids_by_product?: Record<string, string[]>;
 };

@@ -13,6 +13,7 @@ import {
 afterEach(cleanup);
 
 const versionedProduct: Product = {
+  id: "product-id",
   permalink: "album",
   rental: null,
   options: [

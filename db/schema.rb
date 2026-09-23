@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.1].define(version: 2026_12_16_090003) do
+ActiveRecord::Schema[7.1].define(version: 2026_12_16_120000) do
   create_table "active_storage_attachments", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
     t.string "name", limit: 191, null: false
     t.string "record_type", limit: 191, null: false
@@ -1558,6 +1558,15 @@ ActiveRecord::Schema[7.1].define(version: 2026_12_16_090003) do
     t.datetime "updated_at", null: false
     t.index ["offer_code_id"], name: "index_offer_codes_products_on_offer_code_id"
     t.index ["product_id"], name: "index_offer_codes_products_on_product_id"
+  end
+
+  create_table "offer_codes_variants", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
+    t.bigint "offer_code_id", null: false
+    t.bigint "variant_id", null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["offer_code_id", "variant_id"], name: "index_offer_codes_variants_on_code_and_variant", unique: true
+    t.index ["variant_id"], name: "index_offer_codes_variants_on_variant_id"
   end
 
   create_table "order_purchases", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|

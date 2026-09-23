@@ -258,6 +258,7 @@ class CheckoutPresenter
       **checkout_common,
       product: {
         **product_common(product, recommended_by: nil),
+        id: product.external_id,
         native_type: product.native_type,
         require_shipping: product.require_shipping?,
         recurrences: subscription.is_installment_plan ? [] : prices
@@ -508,6 +509,12 @@ class CheckoutPresenter
       original_offer_code = original_purchase&.purchase_offer_code_discount&.offer_code || original_purchase&.offer_code
       return nil if original_offer_code&.tiered?
 
-      subscription.original_offer_code&.discount_for_display(buyer:, product: subscription.link, fallback_purchase: original_purchase)
+      displayed = subscription.original_offer_code&.discount_for_display(buyer:, product: subscription.link, fallback_purchase: original_purchase)
+      # The cached discount is a pricing stub with no scope of its own, so without this the Manage
+      # page offers the discount on every option while the charge keeps it to the scoped ones.
+      persisted_code = original_purchase&.purchase_offer_code_discount&.offer_code
+      return displayed unless displayed.present? && persisted_code&.variants&.any?
+
+      displayed.merge(option_ids_by_product: persisted_code.option_ids_by_product)
     end
 end

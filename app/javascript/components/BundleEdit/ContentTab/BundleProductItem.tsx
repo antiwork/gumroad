@@ -65,6 +65,7 @@ export const BundleProductItem = ({
                   selection={selection}
                   setSelection={setSelection}
                   product={{
+                    id: bundleProduct.id,
                     permalink: bundleProduct.permalink,
                     options:
                       bundleProduct.variants?.list.map((variant) => ({
