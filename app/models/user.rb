@@ -950,16 +950,43 @@ class User < ApplicationRecord
     end
   end
 
-  # Serializes profile-section writes on the seller_profile row. Several paths read-modify-write a
-  # section's shown_products/shown_posts (the profile editor, product create/edit, post save), so
-  # they take this lock and re-read the sections inside it to avoid clobbering each other. The
-  # profile editor holds the same row via #with_locked_seller_profile, so all writers serialize on it.
-  # Looked up directly (not via #seller_profile, which builds a record) so callers like product
-  # creation don't leave an unsaved seller_profile behind to be autosaved later. A seller without a
-  # saved profile has nothing to serialize against, so it just runs the block.
-  def with_profile_sections_lock(&block)
+  # Raised only when the bounded wait for the seller_profiles row itself runs out, so a caller can
+  # tell a dropped acquisition from a write behind the lock that timed out and still raises.
+  ProfileSectionsLockTimeout = Class.new(StandardError)
+
+  # Serializes profile-section writes on the seller_profile row: the profile editor, product
+  # create/edit and post save all read-modify-write a section's shown_products/shown_posts and
+  # re-read inside this lock, and the editor holds the same row via #with_locked_seller_profile.
+  # A seller with no saved profile has nothing to serialize against, so it just runs the block, and
+  # the row is looked up directly so product creation leaves no unsaved seller_profile behind.
+  # `lock_wait_timeout_seconds` bounds only the wait for that row, for callers inside someone else's
+  # transaction; writes behind the lock keep the session's timeout, like `LinksController`'s bound.
+  def with_profile_sections_lock(lock_wait_timeout_seconds: nil, &block)
     profile = SellerProfile.find_by(seller_id: id)
-    profile ? profile.with_lock(&block) : yield
+    return yield if profile.nil?
+    return profile.with_lock(&block) if lock_wait_timeout_seconds.nil?
+
+    SellerProfile.transaction do
+      acquire_profile_row_lock(profile, lock_wait_timeout_seconds)
+      block.call
+    end
+  end
+
+  private def acquire_profile_row_lock(profile, seconds)
+    with_bounded_lock_wait(seconds) { profile.lock! }
+  rescue ActiveRecord::LockWaitTimeout
+    raise ProfileSectionsLockTimeout
+  end
+
+  # `innodb_lock_wait_timeout` is a session setting on the connection the lock will run on,
+  # restored as soon as the lock resolves so no later write in the caller inherits the bound.
+  private def with_bounded_lock_wait(seconds)
+    connection = SellerProfile.connection
+    previous = connection.select_value("SELECT @@SESSION.innodb_lock_wait_timeout")
+    connection.execute("SET SESSION innodb_lock_wait_timeout = #{seconds.to_i}")
+    yield
+  ensure
+    connection.execute("SET SESSION innodb_lock_wait_timeout = #{previous.to_i}") if connection && previous.present?
   end
 
   def time_fields
