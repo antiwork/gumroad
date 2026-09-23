@@ -29,8 +29,8 @@ describe AdminMailer do
             .and_raise(WithMaxExecutionTime::QueryTimeoutError.new("maximum statement execution time exceeded"))
         end
 
-        it "still sends the notification, reporting the ratio as unavailable" do
-          expect(mail.body.encoded).to include "Lost Chargebacks: unavailable"
+        it "still sends the notification, reporting why the ratio is missing" do
+          expect(mail.body.encoded).to include "Lost Chargebacks: unavailable (too large to compute)"
         end
       end
     end
