@@ -131,8 +131,6 @@ class Rack::Attack
     throttle_by_ip path: "/signup.json",                    requests: 3,  period: 20.seconds # Initial: 9rpm,   Max: 45  requests/9 hours
     throttle_by_ip path: "/follow", method: :post,          requests: 3,  period: 20.seconds # Initial: 9rpm,   Max: 45  requests/9 hours
     throttle_by_ip path: "/follow_from_embed_form",         requests: 3,  period: 20.seconds # Initial: 9rpm,   Max: 45  requests/9 hours
-    throttle_by_ip path: "/forgot_password.json",           requests: 3,  period: 20.seconds # Initial: 9rpm,   Max: 45  requests/9 hours
-    throttle_by_ip path: "/forgot_password",                requests: 3,  period: 20.seconds # Initial: 9rpm,   Max: 45  requests/9 hours
     throttle_by_ip path: "/users/auth/facebook",            requests: 3,  period: 20.seconds # Initial: 9rpm,   Max: 45  requests/9 hours
 
     # Don't allow spammer to send confirmation emails to many random emails
@@ -354,19 +352,28 @@ class Rack::Attack
     req.remote_ip if req.path.match?(%r{\A/login/passkey(?:\.[^/]+)?\z}) && req.post?
   end
 
-  # Initial: 4rpm, Max: 24 requests/9 hours
-  throttle_by_params path: "/forgot_password.json",
-                     method: :post,
-                     requests: 4,
-                     period: 60.seconds,
-                     throttle_params: Proc.new { |req| req.json_params.is_a?(Hash) && req.json_params.dig("user", "email").presence }
+  # A reset request emails whatever address is submitted, unauthenticated, so an unthrottled
+  # endpoint is a mailbomb that burns our email reputation. Both the web form and the mobile
+  # API reach `user/passwords#create`; regex-matched and keyed on IP alone so a format suffix
+  # (`.json`, `.xml`) shares one budget instead of buying a second.
+  PASSWORD_RESET_PATH = %r{\A/(?:users|mobile)/forgot_password(?:\.[^/]+)?\z}
 
+  # Initial: 9rpm, Max: 45 requests/9 hours
+  throttle_with_exponential_backoff(name: "password_reset/ip", requests: 3, period: 20.seconds) do |req|
+    req.remote_ip if req.path.match?(PASSWORD_RESET_PATH) && req.post?
+  end
+
+  # One budget per target address so an abuser rotating IPs can't mailbomb one inbox. Falls back
+  # to the IP: a request with no address sends no mail, and a shared empty bucket would let one
+  # caller 429 every other caller.
   # Initial: 4rpm, Max: 24 requests/9 hours
-  throttle_by_params path: "/forgot_password",
-                     method: :post,
-                     requests: 4,
-                     period: 60.seconds,
-                     throttle_params: Proc.new { |req| req.json_params.is_a?(Hash) && req.json_params.dig("user", "email").presence }
+  throttle_with_exponential_backoff(name: "password_reset/email", requests: 4, period: 60.seconds, max_level: 6) do |req|
+    next unless req.path.match?(PASSWORD_RESET_PATH) && req.post?
+
+    json = req.json_params
+    email = json.dig("user", "email").presence if json.is_a?(Hash)
+    email || req.params.dig("user", "email").presence || req.remote_ip
+  end
 
   # Throttle requests to Sales API with slow pagination; a non-scalar `page`
   # (JSON:API `page[size]=`) is treated as page 0 so it cannot crash with a 500.
