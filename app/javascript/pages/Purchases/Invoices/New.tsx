@@ -1,4 +1,4 @@
-import { useForm, usePage } from "@inertiajs/react";
+import { router, useForm, usePage } from "@inertiajs/react";
 import * as React from "react";
 import typia from "typia";
 
@@ -49,10 +49,14 @@ type NewInvoicePageProps = {
     countries: Record<string, string>;
   };
   invoice_file_url?: string | null;
+  payment_id: string;
+  payments: { id: string; label: string; url: string }[];
 };
 
 const PurchaseNewInvoicePage = () => {
-  const { form_data, form_metadata, invoice_file_url } = typia.assert<NewInvoicePageProps>(usePage().props);
+  const { form_data, form_metadata, invoice_file_url, payment_id, payments } = typia.assert<NewInvoicePageProps>(
+    usePage().props,
+  );
   const { supplier_info, seller_info, order_info, countries } = form_metadata;
 
   const form = useForm(form_data);
@@ -111,6 +115,25 @@ const PurchaseNewInvoicePage = () => {
               </header>
             </CardContent>
             <CardContent>
+              {payments.length > 0 ? (
+                <Fieldset>
+                  <Label htmlFor="payment">Payment</Label>
+                  <Select
+                    id="payment"
+                    value={payment_id}
+                    onChange={(e) => {
+                      const payment = payments.find(({ id }) => id === e.target.value);
+                      if (payment) router.visit(payment.url);
+                    }}
+                  >
+                    {payments.map((payment) => (
+                      <option key={payment.id} value={payment.id}>
+                        {payment.label}
+                      </option>
+                    ))}
+                  </Select>
+                </Fieldset>
+              ) : null}
               <Fieldset state={form.errors["address_fields.full_name"] ? "danger" : undefined} className="grow basis-0">
                 <Label htmlFor="full_name">Full name</Label>
                 <Input

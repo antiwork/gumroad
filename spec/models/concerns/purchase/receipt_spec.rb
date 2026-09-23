@@ -149,4 +149,53 @@ describe Purchase::Receipt do
       end
     end
   end
+
+  describe "#invoiceable_charges" do
+    let(:product) { create(:membership_product) }
+    let(:subscription) { create(:subscription, link: product) }
+    let(:email) { "buyer@example.com" }
+    let!(:may) { create(:membership_purchase, link: product, subscription:, email:, is_original_subscription_purchase: true, succeeded_at: 3.months.ago) }
+    let!(:june) { create(:membership_purchase, link: product, subscription:, email:, is_original_subscription_purchase: false, succeeded_at: 2.months.ago) }
+    let!(:july) { create(:membership_purchase, link: product, subscription:, email:, is_original_subscription_purchase: false, succeeded_at: 1.month.ago) }
+
+    it "returns every charge of the subscription, newest first" do
+      expect(july.invoiceable_charges).to eq([july, june, may])
+    end
+
+    it "returns nothing for a purchase without a subscription" do
+      expect(create(:purchase).invoiceable_charges).to eq([])
+    end
+
+    it "leaves out a charge that carries somebody else's email" do
+      create(:membership_purchase, link: product, subscription:, email: "previous-holder@example.com", is_original_subscription_purchase: false, succeeded_at: 2.weeks.ago)
+
+      expect(july.invoiceable_charges).to eq([july, june, may])
+    end
+
+    # `purchases.email` collates utf8mb4_unicode_ci, so a SQL comparison would match these rows,
+    # and the invoice endpoint's byte comparison would then reject them.
+    it "leaves out a charge whose email differs only by case" do
+      june.update_column(:email, "Buyer@Example.com")
+
+      expect(july.invoiceable_charges).to eq([july, may])
+    end
+
+    it "leaves out a charge whose email differs only by accent" do
+      june.update!(email: "búyer@example.com")
+
+      expect(july.invoiceable_charges).to eq([july, may])
+    end
+
+    it "leaves out a fully refunded charge" do
+      june.update!(stripe_refunded: true)
+
+      expect(july.invoiceable_charges).to eq([july, may])
+    end
+
+    it "leaves out a free trial charge" do
+      may.update!(is_free_trial_purchase: true)
+
+      expect(july.invoiceable_charges).to eq([july, june])
+    end
+  end
 end

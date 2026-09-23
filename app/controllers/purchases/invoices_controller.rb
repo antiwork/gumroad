@@ -110,10 +110,28 @@ class Purchases::InvoicesController < ApplicationController
       form_data: -> { new_invoice_presenter.invoice_generation_form_data_props },
       form_metadata: -> { new_invoice_presenter.invoice_generation_form_metadata_props },
       invoice_file_url: InertiaRails.optional { session.delete(invoice_file_url_session_key) },
+      payment_id: @purchase.external_id,
+      payments: -> { payment_options },
     }
   end
 
   private
+    # Every payment shares the confirmed email byte-for-byte (see Purchase#invoiceable_charges),
+    # so switching between them never re-triggers require_email_confirmation.
+    def payment_options
+      payments = @purchase.invoiceable_charges
+      return [] unless payments.size > 1 && payments.include?(@purchase)
+
+      payments.map do |payment|
+        charge_info = ReceiptPresenter::ChargeInfo.new(Charge::Chargeable.find_by_purchase_or_charge!(purchase: payment), for_email: false, order_items_count: 1)
+        {
+          id: payment.external_id,
+          label: "#{charge_info.formatted_created_at} · #{charge_info.formatted_total_transaction_amount}",
+          url: new_purchase_invoice_path(payment.external_id, email: payment.email),
+        }
+      end
+    end
+
     def invoice_file_url_session_key
       "invoice_file_url_#{@purchase.external_id}"
     end

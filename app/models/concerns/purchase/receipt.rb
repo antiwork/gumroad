@@ -95,6 +95,24 @@ module Purchase::Receipt
     candidate
   end
 
+  # Every charge of this membership the current holder may invoice, newest first. Email is compared
+  # in Ruby, not SQL: the column collates utf8mb4_unicode_ci, so `where(email:)` also matches the
+  # case- and accent-variants the invoice endpoint's byte comparison rejects.
+  def invoiceable_charges
+    return [] unless subscription.present?
+
+    # Mirrors Subscription#successful_purchases (private): a test subscription's charges live in
+    # `test_successful` rather than `successful`.
+    charges = subscription.is_test_subscription? ? subscription.purchases.test_successful : subscription.purchases.successful
+
+    charges
+      .not_fully_refunded
+      .not_chargedback_or_chargedback_reversed
+      .order(succeeded_at: :desc, id: :desc)
+      .reject(&:is_gift_sender_purchase?)
+      .select { |charge| charge.email == email && charge.has_invoice? }
+  end
+
   def has_invoice?
     subscription.present? ? !is_free_trial_purchase? : !free_purchase?
   end

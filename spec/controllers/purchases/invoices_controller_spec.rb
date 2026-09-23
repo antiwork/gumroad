@@ -28,6 +28,42 @@ describe Purchases::InvoicesController, :vcr, type: :controller, inertia: true d
         end
       end
 
+      describe "payments" do
+        it "offers no payment picker for a one-off purchase" do
+          get :new, params: params
+
+          expect(inertia.props[:payment_id]).to eq(purchase.external_id)
+          expect(inertia.props[:payments]).to eq([])
+        end
+
+        context "for a membership with several charges" do
+          let(:membership_product) { create(:membership_product, user: seller) }
+          let(:subscription) { create(:subscription, link: membership_product) }
+          let(:email) { "buyer@example.com" }
+          let!(:june) { create(:membership_purchase, link: membership_product, subscription:, email:, price_cents: 1000, is_original_subscription_purchase: true, created_at: Time.utc(2026, 6, 25), succeeded_at: Time.utc(2026, 6, 25)) }
+          let!(:july) { create(:membership_purchase, link: membership_product, subscription:, email:, price_cents: 2000, is_original_subscription_purchase: false, created_at: Time.utc(2026, 7, 25), succeeded_at: Time.utc(2026, 7, 25)) }
+          let(:purchase) { june }
+
+          it "lists every payment newest first and selects the requested one" do
+            get :new, params: params
+
+            expect(inertia.props[:payment_id]).to eq(june.external_id)
+            expect(inertia.props[:payments]).to eq([
+                                                     { id: july.external_id, label: "Jul 25, 2026 · $20", url: new_purchase_invoice_path(july.external_id, email:) },
+                                                     { id: june.external_id, label: "Jun 25, 2026 · $10", url: new_purchase_invoice_path(june.external_id, email:) },
+                                                   ])
+          end
+
+          it "offers no payment picker when the requested charge is not invoiceable" do
+            june.update!(stripe_refunded: true)
+
+            get :new, params: params
+
+            expect(inertia.props[:payments]).to eq([])
+          end
+        end
+      end
+
       describe "for Charge" do
         let(:product_two) { create(:product, user: seller, name: "Product Two") }
         let(:purchase_two) { create(:purchase, created_at: date, link: product_two) }
