@@ -481,6 +481,29 @@ describe Charge::Disputable, :vcr do
           expect { Purchase.handle_charge_event(event) }.to raise_error("marking failed")
           expect(checks).to eq(1)
         end
+
+        it "pauses payouts when a later purchase fails and does not repeat the pause on replay" do
+          checks = 0
+          allow_any_instance_of(User).to receive(:lost_chargebacks_for_payout_gate) do
+            checks += 1
+            { volume: "2.0%", count: "2.0%" }
+          end
+          blocks = 0
+          allow_any_instance_of(Purchase).to receive(:block_buyer_based_on_chargeback_count!) do
+            blocks += 1
+            raise "buyer-block failure" if blocks == 2
+          end
+
+          expect { Purchase.handle_charge_event(event) }.to raise_error("buyer-block failure")
+          expect(checks).to eq(1)
+          expect(seller.reload.payouts_paused_internally).to be(true)
+          expect(seller.comments.where(author_name: User::SYSTEM_PAYOUT_PAUSE_COMMENT_AUTHORS[:high_chargeback_rate]).count).to eq(1)
+          expect(charge.reload.dispute.formalized_side_effects_finished_at).to be_nil
+
+          Purchase.handle_charge_event(event)
+          expect(charge.reload.dispute.formalized_side_effects_finished_at).to be_present
+          expect(seller.comments.where(author_name: User::SYSTEM_PAYOUT_PAUSE_COMMENT_AUTHORS[:high_chargeback_rate]).count).to eq(1)
+        end
       end
 
       it "enqueues EnforceRefundPolicyForSellerJob for each purchase" do
