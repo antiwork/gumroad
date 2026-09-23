@@ -85,10 +85,15 @@ class UrlRedirectPresenter
     # The invoiceable charges the download page renders its "Generate invoice" links from: a
     # membership's from the subscription, anything else the single purchase the receipt and
     # invoice links already point at, so a one-off purchase, a bundle and a gift are unchanged.
+    #
+    # A gifted membership's giftee row is `gift_receiver_purchase_successful`, not `successful`,
+    # so `invoiceable_charges` is empty until a renewal. Fall back to `receipt_purchase` or the
+    # link the page already showed disappears.
     def invoice_charges_for(receipt_purchase)
       return [] if purchase.blank? || receipt_purchase.blank?
 
       charges = purchase.subscription.present? ? purchase.invoiceable_charges : [receipt_purchase]
+      charges = [receipt_purchase] if charges.empty?
 
       charges.map do |charge|
         {

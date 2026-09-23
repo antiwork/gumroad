@@ -387,6 +387,24 @@ describe UrlRedirectPresenter do
           .to eq([august.external_id, sign_up.external_id])
       end
 
+      # The giftee row is not `successful`, and the gifter row is rejected, so the subscription
+      # list is empty. The page must still offer the purchase `receipt_purchase` already names.
+      it "offers the giftee's own purchase when a gifted membership has no renewal yet" do
+        product = create(:membership_product)
+        subscription = create(:subscription, link: product)
+        gifter = create(:membership_purchase, link: product, subscription:,
+                                              is_original_subscription_purchase: true, is_gift_sender_purchase: true,
+                                              email: "giftee@example.com", succeeded_at: 1.month.ago)
+        giftee = create(:purchase, :gift_receiver, link: product, subscription:, email: "giftee@example.com", price_cents: 0)
+        url_redirect = create(:url_redirect, purchase: giftee, link: product)
+
+        props = described_class.new(url_redirect:, logged_in_user: nil).download_page_with_content_props[:purchase]
+
+        expect(props[:invoice_charges].map { |charge| charge[:id] }).to eq([giftee.external_id])
+        expect(props[:invoice_charges].map { |charge| charge[:id] }).not_to include(gifter.external_id)
+        expect(props[:has_invoice]).to be(true)
+      end
+
       it "lists the single receipt/invoice purchase for a one-off purchase" do
         purchase = create(:purchase, link: @product, seller: @user)
         url_redirect = create(:url_redirect, purchase:, link: @product)
