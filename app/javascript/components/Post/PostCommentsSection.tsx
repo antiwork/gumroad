@@ -132,7 +132,7 @@ export const PostCommentsSection = ({ paginated_comments }: Props) => {
 
   return (
     <section className="border-b border-border">
-      <div className="mx-auto grid max-w-6xl gap-8 p-4 lg:px-0 lg:py-12">
+      <div className="mx-auto grid max-w-6xl gap-8 p-4 lg:py-12">
         <h2>
           {data.count} {data.count === 1 ? "comment" : "comments"}
         </h2>
