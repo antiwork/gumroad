@@ -296,6 +296,7 @@ class RetryStripeRejectedPayoutSetupForSellerJob
         if bank_note?(note)
           result = StripeMerchantAccountManager.update_bank_account(user, passphrase:, notify: false)
           return :account_blocked if result == :account_blocked_by_platform
+          # A refusal, not success: the row is still unlinked.
           [:synced, :noop_metadata_match].include?(result)
         else
           return false if user.alive_user_compliance_info.nil?

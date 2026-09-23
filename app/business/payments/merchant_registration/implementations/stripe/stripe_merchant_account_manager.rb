@@ -1309,11 +1309,17 @@ module StripeMerchantAccountManager
 
     stripe_account = Stripe::Account.retrieve(user.stripe_account.charge_processor_merchant_id)
     if stripe_account["metadata"]["bank_account_id"] == bank_account.external_id
-      return :noop_metadata_match unless account_holder_name_synced_to_stripe?(bank_account.user)
+      # A metadata match does not prove the local row is linked, so the no-op must not be reported
+      # before the link is checked. A holder-name mismatch in a sync country still owes an
+      # Account.update, so the restore only runs when no Stripe write is owed.
+      name_out_of_sync = false
+      if account_holder_name_synced_to_stripe?(bank_account.user)
+        stripe_external_account = stripe_account["external_accounts"]&.first
+        stripe_holder_name = stripe_external_account && stripe_external_account["account_holder_name"]
+        name_out_of_sync = stripe_holder_name != bank_account.account_holder_full_name
+      end
 
-      stripe_external_account = stripe_account["external_accounts"]&.first
-      stripe_holder_name = stripe_external_account && stripe_external_account["account_holder_name"]
-      return :noop_metadata_match if stripe_holder_name == bank_account.account_holder_full_name
+      return restore_local_bank_link!(bank_account, stripe_account) unless name_out_of_sync
     end
 
     attributes = bank_account_hash(bank_account, stripe_account:, passphrase:)
@@ -1841,15 +1847,91 @@ module StripeMerchantAccountManager
   end
 
   private_class_method
-  def self.save_stripe_bank_account_info(bank_account, stripe_account)
+  def self.save_stripe_bank_account_info(bank_account, stripe_account, stripe_external_account: nil)
     # We replace the bank account whenever adding a new one, so there will only be one in the list.
-    stripe_external_account = stripe_account.external_accounts.first
+    stripe_external_account ||= stripe_account.external_accounts.first
     bank_account.stripe_connect_account_id = stripe_account.id
     bank_account.stripe_external_account_id = stripe_external_account.id
     bank_account.stripe_fingerprint = stripe_external_account.fingerprint
     bank_account.save!(validate: false)
 
     CheckPaymentAddressWorker.perform_async(bank_account.user_id)
+  end
+
+  private_class_method
+  # Stripe can name this row in metadata while the local link is missing, and re-sending the details
+  # cannot repair that. Links the external account Stripe already holds, never guessing one: last4,
+  # routing number, currency and country must each match, or :bank_link_not_restored keeps the failure note.
+  def self.restore_local_bank_link!(bank_account, stripe_account)
+    return :noop_metadata_match if bank_account.stripe_bank_account_id.present?
+
+    stripe_external_account = matching_stripe_external_account(bank_account, stripe_account)
+    return :bank_link_not_restored if stripe_external_account.nil?
+
+    # Another bank sync may have linked or replaced the row while Stripe was being read.
+    linked = BankAccount.where(id: bank_account.id, stripe_bank_account_id: nil, deleted_at: nil,
+                               account_number_last_four: bank_account.account_number_last_four,
+                               bank_number: bank_account.bank_number, country: bank_account[:country])
+      .update_all(stripe_bank_account_id: stripe_external_account.id,
+                  stripe_connect_account_id: stripe_account.id,
+                  stripe_fingerprint: stripe_external_account.fingerprint,
+                  updated_at: Time.current)
+    return :bank_link_not_restored unless linked == 1
+
+    bank_account.reload
+    CheckPaymentAddressWorker.perform_async(bank_account.user_id)
+    clear_stale_bank_sync_failure_notes(bank_account.user)
+    :synced
+  end
+
+  # Account#retrieve embeds only the ten most recent external accounts. Matching on that page
+  # alone can miss a second candidate on a later page and still report a unique match.
+  EXTERNAL_ACCOUNTS_MATCH_LIMIT = 100
+
+  private_class_method
+  def self.matching_stripe_external_account(bank_account, stripe_account)
+    external_accounts = external_accounts_for_link_match(stripe_account)
+    return nil if external_accounts.nil?
+
+    local_last4 = bank_account.account_number_last_four.to_s
+    local_routing = bank_account.stripe_external_account_routing_number.to_s
+    local_currency = bank_account.stripe_external_account_currency.to_s
+    local_country = bank_account.stripe_external_account_country.to_s
+    return nil if local_last4.blank? || local_routing.blank? || local_currency.blank? || local_country.blank?
+
+    matches = external_accounts.select do |external_account|
+      last4 = external_account["last4"].to_s
+      routing = external_account["routing_number"].to_s
+      currency = external_account["currency"].to_s
+      country = external_account["country"].to_s
+      next false if last4.blank? || routing.blank? || currency.blank? || country.blank?
+
+      last4 == local_last4 && routing == local_routing &&
+        currency.casecmp?(local_currency) && country.casecmp?(local_country)
+    end
+    matches.one? ? matches.first : nil
+  end
+
+  private_class_method
+  def self.external_accounts_for_link_match(stripe_account)
+    raw_external_accounts = stripe_account["external_accounts"]
+    return Array(raw_external_accounts) unless raw_external_accounts.respond_to?(:data)
+
+    embedded = raw_external_accounts.data
+    return embedded unless raw_external_accounts.respond_to?(:has_more) && raw_external_accounts.has_more
+
+    listed = Stripe::Account.list_external_accounts(
+      stripe_account.id,
+      { limit: EXTERNAL_ACCOUNTS_MATCH_LIMIT, object: "bank_account" }
+    )
+    return nil if listed.respond_to?(:has_more) && listed.has_more
+
+    listed.respond_to?(:data) ? listed.data : Array(listed)
+  rescue Stripe::StripeError => e
+    Rails.logger.error(
+      "StripeMerchantAccountManager: external-account list failed for #{stripe_account&.id}: #{e.class}: #{e.message}"
+    )
+    nil
   end
 
   private_class_method

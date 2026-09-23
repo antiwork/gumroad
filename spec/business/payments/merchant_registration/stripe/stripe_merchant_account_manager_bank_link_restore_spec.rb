@@ -1,0 +1,258 @@
+# frozen_string_literal: true
+
+require "spec_helper"
+
+# A metadata match can name this row while the local external-account link is missing, which leaves
+# the seller unpayable and makes the retry job resolve its note on a false success.
+describe StripeMerchantAccountManager do
+  include_context "with Stripe API stubs"
+
+  let(:passphrase) { "1234" }
+  let(:user) { create(:user, payment_address: nil) }
+  let!(:user_compliance_info) { create(:user_compliance_info, user:) }
+  let!(:merchant_account) { create(:merchant_account, user:) }
+  let!(:bank_account) { create(:ach_account, user:) }
+
+  let(:merchant_id) { user.stripe_account.charge_processor_merchant_id }
+
+  def stripe_bank_account_payload(overrides = {})
+    Stripe::StripeObject.construct_from(
+      {
+        id: "ba_recovered_from_stripe",
+        object: "bank_account",
+        last4: bank_account.account_number_last_four,
+        routing_number: bank_account.stripe_external_account_routing_number,
+        currency: bank_account.stripe_external_account_currency,
+        country: bank_account.stripe_external_account_country,
+        account_holder_name: bank_account.account_holder_full_name,
+        fingerprint: "fp_recovered_from_stripe",
+      }.merge(overrides)
+    )
+  end
+
+  def stub_stripe_account_with(external_accounts, has_more: false)
+    allow(Stripe::Account).to receive(:retrieve).with(merchant_id).and_return(
+      Stripe::Account.construct_from(
+        id: merchant_id,
+        metadata: { "bank_account_id" => bank_account.external_id },
+        external_accounts: Stripe::ListObject.construct_from(
+          object: "list",
+          url: "/v1/accounts/#{merchant_id}/external_accounts",
+          has_more:,
+          data: external_accounts
+        )
+      )
+    )
+  end
+
+  def stub_full_external_account_list(external_accounts, has_more: false)
+    allow(Stripe::Account).to receive(:list_external_accounts).with(
+      merchant_id,
+      { limit: StripeMerchantAccountManager::EXTERNAL_ACCOUNTS_MATCH_LIMIT, object: "bank_account" }
+    ).and_return(
+      Stripe::ListObject.construct_from(
+        object: "list",
+        has_more:,
+        data: external_accounts
+      )
+    )
+  end
+
+  # The row Stripe holds but nothing local points at.
+  def unlink_bank_row!
+    bank_account.update_columns(stripe_bank_account_id: nil, stripe_connect_account_id: nil, stripe_fingerprint: nil, state: "unverified")
+    bank_account.reload
+  end
+
+  before do
+    allow(CheckPaymentAddressWorker).to receive(:perform_async)
+  end
+
+  describe "a bank row Stripe already holds but has never been linked locally" do
+    before { unlink_bank_row! }
+
+    it "links the external account Stripe already holds and reports the sync as done" do
+      stub_stripe_account_with([stripe_bank_account_payload])
+
+      expect(described_class.update_bank_account(user, passphrase:)).to eq(:synced)
+
+      bank_account.reload
+      expect(bank_account.stripe_bank_account_id).to eq("ba_recovered_from_stripe")
+      expect(bank_account.stripe_fingerprint).to eq("fp_recovered_from_stripe")
+      expect(bank_account.stripe_connect_account_id).to eq(merchant_id)
+    end
+
+    it "makes the seller payable again" do
+      stub_stripe_account_with([stripe_bank_account_payload])
+      expect(StripePayoutProcessor.has_valid_payout_info?(user)).to be(false)
+
+      described_class.update_bank_account(user, passphrase:)
+
+      expect(StripePayoutProcessor.has_valid_payout_info?(user.reload)).to be(true)
+    end
+
+    it "does not link an external account that cannot be shown to be this row" do
+      stub_stripe_account_with([stripe_bank_account_payload(last4: "9999")])
+
+      expect(described_class.update_bank_account(user, passphrase:)).to eq(:bank_link_not_restored)
+      expect(bank_account.reload.stripe_bank_account_id).to be_nil
+    end
+
+    it "does not link an external account whose routing number differs from the row's" do
+      stub_stripe_account_with([stripe_bank_account_payload(routing_number: "021000021")])
+
+      expect(described_class.update_bank_account(user, passphrase:)).to eq(:bank_link_not_restored)
+      expect(bank_account.reload.stripe_bank_account_id).to be_nil
+    end
+
+    it "does not link when the currency differs" do
+      stub_stripe_account_with([stripe_bank_account_payload(currency: "eur")])
+
+      expect(described_class.update_bank_account(user, passphrase:)).to eq(:bank_link_not_restored)
+      expect(bank_account.reload.stripe_bank_account_id).to be_nil
+    end
+
+    it "does not link an account in a different country with matching bank details" do
+      stub_stripe_account_with([stripe_bank_account_payload(country: "CA")])
+
+      expect(described_class.update_bank_account(user, passphrase:)).to eq(:bank_link_not_restored)
+      expect(bank_account.reload.stripe_bank_account_id).to be_nil
+    end
+
+    it "does not link when Stripe omits the external account's country" do
+      stub_stripe_account_with([stripe_bank_account_payload(country: nil)])
+
+      expect(described_class.update_bank_account(user, passphrase:)).to eq(:bank_link_not_restored)
+      expect(bank_account.reload.stripe_bank_account_id).to be_nil
+    end
+
+    it "does not overwrite a bank link written while Stripe accounts were being matched" do
+      stub_stripe_account_with([stripe_bank_account_payload])
+      allow(described_class).to receive(:matching_stripe_external_account).and_wrap_original do |method, *args|
+        match = method.call(*args)
+        bank_account.update_columns(stripe_bank_account_id: "ba_concurrent", stripe_connect_account_id: merchant_id, stripe_fingerprint: "fp_concurrent")
+        match
+      end
+      expect(CheckPaymentAddressWorker).not_to receive(:perform_async)
+
+      expect(described_class.update_bank_account(user, passphrase:)).to eq(:bank_link_not_restored)
+      bank_account.reload
+      expect(bank_account.stripe_bank_account_id).to eq("ba_concurrent")
+      expect(bank_account.stripe_fingerprint).to eq("fp_concurrent")
+    end
+
+    it "does not treat a missing routing number as evidence that this is the row" do
+      bank_account.update_columns(bank_number: nil)
+      stub_stripe_account_with([stripe_bank_account_payload(routing_number: nil)])
+
+      expect(described_class.update_bank_account(user, passphrase:)).to eq(:bank_link_not_restored)
+      expect(bank_account.reload.stripe_bank_account_id).to be_nil
+    end
+
+    it "refuses to guess when two external accounts look like this row" do
+      stub_stripe_account_with([
+                                 stripe_bank_account_payload,
+                                 stripe_bank_account_payload(id: "ba_second_match")
+                               ])
+
+      expect(described_class.update_bank_account(user, passphrase:)).to eq(:bank_link_not_restored)
+      expect(bank_account.reload.stripe_bank_account_id).to be_nil
+    end
+
+    it "stays unresolved when Stripe holds no external account at all" do
+      stub_stripe_account_with([])
+
+      expect(described_class.update_bank_account(user, passphrase:)).to eq(:bank_link_not_restored)
+      expect(bank_account.reload.stripe_bank_account_id).to be_nil
+    end
+
+    it "links the match from a later page when the embedded page is incomplete" do
+      stub_stripe_account_with(
+        [stripe_bank_account_payload(id: "ba_embedded_decoy", fingerprint: "fp_embedded_decoy", last4: "9999")],
+        has_more: true
+      )
+      stub_full_external_account_list([stripe_bank_account_payload])
+
+      expect(described_class.update_bank_account(user, passphrase:)).to eq(:synced)
+      bank_account.reload
+      expect(bank_account.stripe_bank_account_id).to eq("ba_recovered_from_stripe")
+      expect(bank_account.stripe_fingerprint).to eq("fp_recovered_from_stripe")
+    end
+
+    it "links the matching external account rather than the first one on the page" do
+      stub_stripe_account_with([
+                                 stripe_bank_account_payload(id: "ba_page_decoy", fingerprint: "fp_page_decoy", last4: "9999"),
+                                 stripe_bank_account_payload
+                               ])
+
+      expect(described_class.update_bank_account(user, passphrase:)).to eq(:synced)
+      bank_account.reload
+      expect(bank_account.stripe_bank_account_id).to eq("ba_recovered_from_stripe")
+      expect(bank_account.stripe_fingerprint).to eq("fp_recovered_from_stripe")
+    end
+
+    it "does not link from the embedded page when a later page could hold another match" do
+      stub_stripe_account_with([stripe_bank_account_payload], has_more: true)
+      stub_full_external_account_list(
+        [stripe_bank_account_payload, stripe_bank_account_payload(id: "ba_later_page")],
+        has_more: false
+      )
+
+      expect(described_class.update_bank_account(user, passphrase:)).to eq(:bank_link_not_restored)
+      expect(bank_account.reload.stripe_bank_account_id).to be_nil
+    end
+
+    it "does not link when the full external-account list is still incomplete" do
+      stub_stripe_account_with([stripe_bank_account_payload], has_more: true)
+      stub_full_external_account_list([stripe_bank_account_payload], has_more: true)
+      expect(Stripe::Account).not_to receive(:update)
+
+      expect(described_class.update_bank_account(user, passphrase:)).to eq(:bank_link_not_restored)
+      expect(bank_account.reload.stripe_bank_account_id).to be_nil
+    end
+
+    it "does not link when the full external-account list cannot be read" do
+      stub_stripe_account_with([stripe_bank_account_payload], has_more: true)
+      allow(Stripe::Account).to receive(:list_external_accounts).and_raise(Stripe::APIConnectionError.new("timeout"))
+      expect(Stripe::Account).not_to receive(:update)
+
+      expect(described_class.update_bank_account(user, passphrase:)).to eq(:bank_link_not_restored)
+      expect(bank_account.reload.stripe_bank_account_id).to be_nil
+    end
+  end
+
+  describe "a bank row that is already linked" do
+    before do
+      bank_account.update_columns(
+        stripe_bank_account_id: "ba_already_linked",
+        stripe_connect_account_id: merchant_id,
+        stripe_fingerprint: "fp_already_linked"
+      )
+      bank_account.reload
+    end
+
+    it "keeps reporting the metadata match without rewriting the link" do
+      stub_stripe_account_with([stripe_bank_account_payload])
+      expect(Stripe::Account).not_to receive(:update)
+
+      expect(described_class.update_bank_account(user, passphrase:)).to eq(:noop_metadata_match)
+
+      bank_account.reload
+      expect(bank_account.stripe_bank_account_id).to eq("ba_already_linked")
+      expect(bank_account.stripe_fingerprint).to eq("fp_already_linked")
+    end
+  end
+
+  # A holder-name mismatch in a sync country still has to reach Account.update.
+  it "sends a holder-name change for a name-sync country instead of stopping on the metadata match" do
+    user_compliance_info.update_columns(country: "Japan")
+    bank_account.update!(account_holder_full_name: "Updated Name")
+    stub_stripe_account_with([stripe_bank_account_payload(account_holder_name: "Previous Name")])
+    expect(Stripe::Account).to receive(:update).with(
+      merchant_id,
+      hash_including(bank_account: hash_including(account_holder_name: "Updated Name"))
+    ).and_raise(StandardError, "stop here")
+
+    expect { described_class.update_bank_account(user, passphrase:) }.to raise_error(StandardError, "stop here")
+  end
+end
