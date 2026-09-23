@@ -269,15 +269,22 @@ class CreatePublicMediaService
       # told to flag "random tokens" — which an asset-pipeline name like "tjn_<sha>.png" is by
       # construction. The prose presets get the seller-authored display name only; the blocklist
       # and the classifier still get the file name (one exact-matches it, the other judges the image).
+      prompt_strategy = ContentModeration::Strategies::PromptStrategy.new(text: name.to_s, image_urls:)
       strategies = [
         ContentModeration::Strategies::BlocklistStrategy.new(text: names, image_urls:),
         ContentModeration::Strategies::ClassifierStrategy.new(text: names, image_urls:),
-        ContentModeration::Strategies::PromptStrategy.new(text: name.to_s, image_urls:),
+        prompt_strategy,
       ]
 
       strategies.each do |strategy|
         result = strategy.perform
         if result.status == "flagged"
+          reasons = Array(result.reasoning)
+          if name.present? && strategy.equal?(prompt_strategy) &&
+             reasons.any? && reasons.all? { |reason| reason.to_s.start_with?("spam:") }
+            return "This file can’t be saved because its display name looks like spam. Change the display name and try again."
+          end
+
           return ContentModeration::ModerateRecordService.seller_message(result.reasoning, MODERATION_NOUN)
         end
       end
