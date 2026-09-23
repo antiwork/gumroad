@@ -22,6 +22,17 @@ describe AdminMailer do
         expect(mail.body.encoded).to include purchase.link.name
         expect(mail.body.encoded).to include purchase.formatted_disputed_amount
       end
+
+      context "when the lifetime chargeback aggregate exceeds its statement budget" do
+        before do
+          allow(WithMaxExecutionTime).to receive(:timeout_queries)
+            .and_raise(WithMaxExecutionTime::QueryTimeoutError.new("maximum statement execution time exceeded"))
+        end
+
+        it "still sends the notification, reporting the ratio as unavailable" do
+          expect(mail.body.encoded).to include "Lost Chargebacks: unavailable"
+        end
+      end
     end
 
     context "for a dispute on Charge", :vcr do
