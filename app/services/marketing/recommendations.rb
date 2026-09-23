@@ -36,11 +36,13 @@ class Marketing::Recommendations
     copy.truncate(Marketing::Action::MAX_COPY_LENGTH, separator: " ")
   end
 
-  # A word merely starting with the name ("Gum" in "Gumroad") is not the name being repeated.
+  # A word merely starting with the name ("Gum" in "Gumroad") is not the name being repeated, but a
+  # name-only sentence is — the end of the string is a boundary too.
   def self.opens_with?(sentence, name)
     return false if name.blank? || !sentence.downcase.start_with?(name.downcase)
 
-    sentence[name.length..].to_s.match?(/\A[^\p{Alnum}]/)
+    rest = sentence[name.length..].to_s
+    rest.empty? || rest.match?(/\A[^\p{Alnum}]/)
   end
 
   private

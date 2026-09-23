@@ -50,6 +50,11 @@ describe Marketing::Recommendations do
     expect(channels.first[:action].copy).to eq("Gum: Gumroad is where these started.")
   end
 
+  it "names the product once when the description is only the name" do
+    product.update!(name: "Gumstein Letters", description: "<p>Gumstein Letters</p>")
+    expect(channels.first[:action].copy).to eq("Gumstein Letters")
+  end
+
   it "truncates long names on a word boundary within the copy budget" do
     product.update!(name: "word " * 50, description: "tail " * 60)
     copy = channels.first[:action].copy
