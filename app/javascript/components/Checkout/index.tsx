@@ -273,9 +273,9 @@ export const Checkout = ({
     const discount = await computeOfferDiscount({
       code,
       products: Object.fromEntries(
-        cart.items.map((item) => [
-          item.product.permalink,
-          { permalink: item.product.permalink, quantity: item.quantity },
+        cart.items.map((item, index) => [
+          index,
+          { permalink: item.product.permalink, quantity: item.quantity, variant_external_id: item.option_id ?? "" },
         ]),
       ),
     });

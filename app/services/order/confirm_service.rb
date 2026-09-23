@@ -44,7 +44,8 @@ class Order::ConfirmService
           unless purchase.purchase_offer_code_discount&.once_per_cart?
             offer_codes[purchase.offer_code.code][purchase.link.unique_permalink] = { permalink: purchase.link.unique_permalink,
                                                                                       quantity: purchase.quantity,
-                                                                                      discount_code: purchase.offer_code.code }
+                                                                                      discount_code: purchase.offer_code.code,
+                                                                                      variant_external_id: purchase.variant_attributes.first&.external_id }
           end
         end
         purchase_responses[purchase.id] = error_response(error, purchase:)

@@ -15,6 +15,7 @@ const option = (id: string, extra: Partial<Option> = {}): Option => ({
 });
 
 const product = (extra: Partial<Product> = {}): Product => ({
+  id: "product-id",
   permalink: "hxjlir",
   rental: null,
   options: [],

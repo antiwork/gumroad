@@ -1691,7 +1691,7 @@ describe "PurchaseRefunds", :vcr do
 
       # The transfer this charge points at is CAD in the fixture below, so the CAD (holding) leg
       # is the one that must reach Stripe — not the 416 USD cents.
-      transfer = double("transfer", id: "tr_cad_presentment", currency: "cad",
+      transfer = double("transfer", id: "tr_cad_presentment", currency: "cad", amount: 700, amount_reversed: 0,
                                     reversals: double("reversals", data: []))
       allow(Stripe::Charge).to receive(:retrieve).and_return(double("charge", transfer: "tr_cad_presentment"))
       allow(Stripe::Transfer).to receive(:retrieve).and_return(transfer)
@@ -1705,6 +1705,35 @@ describe "PurchaseRefunds", :vcr do
       # The ledger stays canonical: the credit's USD leg is the full 416, not a conversion of 366.
       expect(Credit).to receive(:create_for_partial_refund_transfer_reversal!)
         .with(amount_cents_usd: -416, amount_cents_holding_currency: -366, merchant_account: @merchant_account)
+
+      purchase.send(:reverse_excess_amount_from_stripe_transfer, refund:)
+    end
+
+    it "caps a partial transfer reversal and its canonical credit at the remaining capacity" do
+      purchase = create(:purchase, link: @product, merchant_account: @merchant_account, stripe_transaction_id: "ch_2MlrJr9e1RjUNIyY0s8AWM5s")
+      allow_any_instance_of(Purchase).to receive(:gumroad_tax_cents).and_return 200
+      allow_any_instance_of(Purchase).to receive(:gumroad_tax_refunded_cents).and_return 200
+      refund = create(:refund, purchase:, processor_refund_id: "re_partial_capacity")
+      BalanceTransaction.create!(
+        user: purchase.seller,
+        merchant_account: purchase.merchant_account,
+        refund:,
+        dispute: nil,
+        issued_amount: BalanceTransaction::Amount.new(currency: "usd", gross_cents: -500, net_cents: -416),
+        holding_amount: BalanceTransaction::Amount.new(currency: "cad", gross_cents: -400, net_cents: -366),
+        update_user_balance: purchase.charged_using_gumroad_merchant_account?
+      )
+
+      transfer = double("transfer", id: "tr_partial_capacity", currency: "cad", amount: 700, amount_reversed: 600,
+                                    reversals: double("reversals", data: [double("reversal", source_refund: nil, amount: 600)]))
+      allow(Stripe::Charge).to receive(:retrieve).and_return(double("charge", transfer: transfer.id))
+      allow(Stripe::Transfer).to receive(:retrieve).and_return(transfer)
+      expect(Stripe::Transfer).to receive(:create_reversal).with(transfer.id, { amount: 100 })
+        .and_return(double("reversal", destination_payment_refund: "re_dest"))
+      allow(Stripe::Refund).to receive(:retrieve).and_return(double("refund", balance_transaction: "txn_dest"))
+      allow(Stripe::BalanceTransaction).to receive(:retrieve).and_return(double("balance_transaction", net: -100))
+      expect(Credit).to receive(:create_for_partial_refund_transfer_reversal!)
+        .with(amount_cents_usd: -114, amount_cents_holding_currency: -100, merchant_account: @merchant_account)
 
       purchase.send(:reverse_excess_amount_from_stripe_transfer, refund:)
     end
@@ -1728,7 +1757,7 @@ describe "PurchaseRefunds", :vcr do
         update_user_balance: purchase.charged_using_gumroad_merchant_account?
       )
 
-      transfer = double("transfer", id: "tr_gbp", currency: "gbp",
+      transfer = double("transfer", id: "tr_gbp", currency: "gbp", amount: 700, amount_reversed: 0,
                                     reversals: double("reversals", data: []))
       allow(Stripe::Charge).to receive(:retrieve).and_return(double("charge", transfer: "tr_gbp"))
       allow(Stripe::Transfer).to receive(:retrieve).and_return(transfer)
@@ -1737,6 +1766,67 @@ describe "PurchaseRefunds", :vcr do
       expect(Credit).not_to receive(:create_for_partial_refund_transfer_reversal!)
 
       purchase.send(:reverse_excess_amount_from_stripe_transfer, refund:)
+    end
+
+    it "does not reverse the excess when a reversal unrelated to this refund has already emptied the transfer" do
+      # A dispute withdrawal reverses the whole transfer and carries no `source_refund` of ours,
+      # so the guard below cannot see it.
+      purchase = create(:purchase, link: @product, merchant_account: @merchant_account, stripe_transaction_id: "ch_2MlrJr9e1RjUNIyY0s8AWM5s")
+      allow_any_instance_of(Purchase).to receive(:gumroad_tax_cents).and_return 200
+      allow_any_instance_of(Purchase).to receive(:gumroad_tax_refunded_cents).and_return 200
+
+      refund = create(:refund, purchase:, processor_refund_id: "re_after_dispute_withdrawal")
+
+      BalanceTransaction.create!(
+        user: purchase.seller,
+        merchant_account: purchase.merchant_account,
+        refund:,
+        dispute: nil,
+        issued_amount: BalanceTransaction::Amount.new(currency: "usd", gross_cents: -500, net_cents: -366),
+        holding_amount: BalanceTransaction::Amount.new(currency: "cad", gross_cents: -400, net_cents: -366),
+        update_user_balance: purchase.charged_using_gumroad_merchant_account?
+      )
+
+      transfer = double("transfer", id: "tr_dispute_reversed", currency: "cad", amount: 366, amount_reversed: 366,
+                                    reversals: double("reversals", data: [double("reversal", source_refund: nil, amount: 366)]))
+      allow(Stripe::Charge).to receive(:retrieve).and_return(double("charge", transfer: "tr_dispute_reversed"))
+      allow(Stripe::Transfer).to receive(:retrieve).and_return(transfer)
+
+      expect(Stripe::Transfer).not_to receive(:create_reversal)
+      expect(Credit).not_to receive(:create_for_partial_refund_transfer_reversal!)
+
+      purchase.send(:reverse_excess_amount_from_stripe_transfer, refund:)
+    end
+
+    it "keeps the refund when Stripe rejects the reversal as already fully reversed" do
+      # Stripe has already taken the refund by this point, so letting the rejection out rolls the
+      # refund bookkeeping back; nothing is owed once the transfer is fully reversed.
+      purchase = create(:purchase, link: @product, merchant_account: @merchant_account, stripe_transaction_id: "ch_2MlrJr9e1RjUNIyY0s8AWM5s")
+      allow_any_instance_of(Purchase).to receive(:gumroad_tax_cents).and_return 200
+      allow_any_instance_of(Purchase).to receive(:gumroad_tax_refunded_cents).and_return 200
+
+      refund = create(:refund, purchase:, processor_refund_id: "re_racing_reversal")
+
+      BalanceTransaction.create!(
+        user: purchase.seller,
+        merchant_account: purchase.merchant_account,
+        refund:,
+        dispute: nil,
+        issued_amount: BalanceTransaction::Amount.new(currency: "usd", gross_cents: -500, net_cents: -366),
+        holding_amount: BalanceTransaction::Amount.new(currency: "cad", gross_cents: -400, net_cents: -366),
+        update_user_balance: purchase.charged_using_gumroad_merchant_account?
+      )
+
+      transfer = double("transfer", id: "tr_race", currency: "cad", amount: 700, amount_reversed: 0,
+                                    reversals: double("reversals", data: []))
+      allow(Stripe::Charge).to receive(:retrieve).and_return(double("charge", transfer: "tr_race"))
+      allow(Stripe::Transfer).to receive(:retrieve).and_return(transfer)
+      allow(Stripe::Transfer).to receive(:create_reversal).and_raise(
+        Stripe::InvalidRequestError.new("The transfer tr_race is already fully reversed.", nil)
+      )
+      expect(ErrorNotifier).to receive(:notify)
+
+      expect { purchase.send(:reverse_excess_amount_from_stripe_transfer, refund:) }.not_to raise_error
     end
   end
 
@@ -1781,6 +1871,39 @@ describe "PurchaseRefunds", :vcr do
     before do
       @purchase = create(:purchase)
       @refunding_user = create(:user)
+    end
+
+    it "commits the partial refund when Stripe reports that the transfer became fully reversed" do
+      seller = create(:user)
+      merchant_account = create(:merchant_account, user: seller, country: "CA", currency: "cad")
+      product = create(:product, user: seller, price_cents: 1000)
+      purchase = create(:purchase, seller:, link: product, merchant_account:, gumroad_tax_cents: 200)
+      create(:refund, purchase:, total_transaction_cents: 200, amount_cents: 0, gumroad_tax_cents: 200,
+                      processor_refund_id: "re_tax_only")
+      flow_of_funds = FlowOfFunds.build_simple_flow_of_funds(Currency::USD, -500)
+      processor_refund = double("processor refund", id: "re_partial_after_tax", status: "succeeded")
+      transfer = double("transfer", id: "tr_race", currency: "usd", amount: 700, amount_reversed: 0,
+                                    reversals: double("reversals", data: []))
+      allow(Stripe::Charge).to receive(:retrieve).and_return(double("charge", transfer: transfer.id))
+      allow(Stripe::Transfer).to receive(:retrieve).and_return(transfer)
+      error = Stripe::InvalidRequestError.new("The transfer tr_race is already fully reversed.", nil)
+      expect(Stripe::Transfer).to receive(:create_reversal).and_raise(error)
+      expect(ErrorNotifier).to receive(:notify).with(
+        error, context: hash_including(purchase_id: purchase.id, transfer_id: transfer.id)
+      )
+      expect(CustomerMailer).to receive(:partial_refund).and_call_original
+      expect(Credit).not_to receive(:create_for_partial_refund_transfer_reversal!)
+      allow(purchase).to receive(:debit_processor_fee_from_merchant_account!)
+
+      expect do
+        expect(purchase.refund_purchase!(flow_of_funds, @refunding_user.id, processor_refund)).to be(true)
+      end.to change(Refund, :count).by(1)
+
+      purchase.reload
+      refund = purchase.refunds.find_by!(processor_refund_id: processor_refund.id)
+      expect(purchase.stripe_partially_refunded).to be(true)
+      expect(purchase.amount_refundable_cents).to be > 0
+      expect(refund.balance_transactions.where(user_id: seller.id)).to exist
     end
 
     describe "fee retention for Stripe-held funds" do

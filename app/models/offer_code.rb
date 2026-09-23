@@ -23,6 +23,9 @@ class OfferCode < ApplicationRecord
   has_and_belongs_to_many :products, class_name: "Link", join_table: "offer_codes_products", association_foreign_key: "product_id", after_add: [:note_applicability_change, :reindex_removed_product], after_remove: [:note_applicability_change, :note_removed_product, :reindex_removed_product]
   has_and_belongs_to_many :ownership_products, class_name: "Link", join_table: "offer_codes_ownership_products", association_foreign_key: "product_id"
   has_and_belongs_to_many :excluded_products, class_name: "Link", join_table: "offer_codes_excluded_products", association_foreign_key: "product_id", after_add: [:invalidate_excluded_product_cache, :note_applicability_change, :reindex_removed_product], after_remove: [:invalidate_excluded_product_cache, :note_applicability_change, :reindex_removed_product]
+  # Options (variants) the code is limited to. No rows means every option, which is how every code
+  # created before option scoping existed keeps working.
+  has_and_belongs_to_many :variants, class_name: "BaseVariant", join_table: "offer_codes_variants", association_foreign_key: "variant_id"
   belongs_to :user
   has_many :purchases
   has_many :purchases_that_count_towards_offer_code_uses, -> { counts_towards_offer_code_uses }, class_name: "Purchase"
@@ -47,6 +50,7 @@ class OfferCode < ApplicationRecord
   validate :validate_ownership_duration_tiers
   validate :validate_excluded_products
   validate :validate_default_discount_remains_applicable
+  validate :validate_option_scope
 
 
   after_save :invalidate_product_cache
@@ -316,6 +320,49 @@ class OfferCode < ApplicationRecord
     !!(valid_at&.future? || expires_at&.past?)
   end
 
+  # Deleted options must retain the product restriction until the seller changes it.
+  def restricted_variants_for(product)
+    variants.select { |variant| variant.owning_product_id == product.id }
+  end
+
+  def option_ids_by_product
+    variants.group_by(&:owning_product_id).to_h do |product_id, options|
+      [ObfuscateIds.encrypt(product_id), options.map(&:external_id)]
+    end
+  end
+
+  # Blank is ineligible here: purchase enforcement must fail closed if the chosen option is missing.
+  # Preview omits the id and lets the client filter the returned discount.
+  def applicable_to_variant?(link, variant)
+    restricted = restricted_variants_for(link)
+    return true if restricted.empty?
+    return false if variant.blank?
+
+    if variant.is_a?(BaseVariant)
+      restricted.any? { |restricted_variant| restricted_variant.id == variant.id }
+    else
+      restricted.any? { |restricted_variant| restricted_variant.external_id == variant.to_s }
+    end
+  end
+
+  # Every picked option in a limited category must be in scope, so a tampered request cannot carry a
+  # second option into a discounted line. Options in categories the code does not limit are ignored.
+  def applicable_to_variants?(link, variants)
+    restricted = restricted_variants_for(link)
+    return true if restricted.empty?
+
+    restricted_ids = restricted.map(&:id)
+    restricted_category_ids = restricted.map(&:variant_category_id).uniq
+    selected = Array(variants).filter_map do |variant|
+      next variant if variant.is_a?(BaseVariant)
+
+      link.base_variants.find { |base_variant| base_variant.external_id == variant.to_s }
+    end
+    scoped = selected.select { |variant| restricted_category_ids.include?(variant.variant_category_id) }
+
+    scoped.present? && scoped.all? { |variant| restricted_ids.include?(variant.id) }
+  end
+
   def discount
     json = (
       is_cents? ?
@@ -331,6 +378,7 @@ class OfferCode < ApplicationRecord
       }
     )
     json[:excluded_product_ids] = excluded_products.map(&:external_id) if universal? && excluded_products.present?
+    json[:option_ids_by_product] = option_ids_by_product if variants.any?
     if is_cents? && once_per_cart?
       json[:once_per_cart] = true
       json[:once_per_cart_id] = external_id
@@ -711,6 +759,16 @@ class OfferCode < ApplicationRecord
       # edit is recorded by after_remove but ends up attached, so it detaches
       # nothing.
       @removed_product_ids - products.map(&:id)
+    end
+
+    # Options are only meaningful for products the code already applies to: a variant list left
+    # behind by an edit that removed its product would discount nothing and read as a bug to the
+    # next editor, so reject it here instead.
+    def validate_option_scope
+      return if variants.empty?
+
+      scoped_to_other_products = variants.reject { |variant| applicable?(variant.link) }
+      errors.add(:base, "Options can only be limited for products the discount applies to.") if scoped_to_other_products.any?
     end
 
     def to_product_sentence(names, total)

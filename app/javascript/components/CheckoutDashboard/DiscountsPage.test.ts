@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 
-import { extractParams } from "$app/components/CheckoutDashboard/DiscountsPage";
+import { extractParams, findWholeProductScopeIds } from "$app/components/CheckoutDashboard/DiscountsPage";
 
 describe("extractParams", () => {
   it("restores a query containing a literal % without throwing (double-decode regression)", () => {
@@ -23,5 +23,15 @@ describe("extractParams", () => {
 
   it("ignores unknown sort columns", () => {
     expect(extractParams(new URLSearchParams("?column=bogus&sort=desc")).sort).toBeNull();
+  });
+});
+
+describe("findWholeProductScopeIds", () => {
+  it("marks a product scoped to the whole product, whose menu row react-select hides", () => {
+    expect(findWholeProductScopeIds([{ id: "1" }, { id: "2" }], { "2": ["opt-a"] })).toEqual(new Set(["1"]));
+  });
+
+  it("keeps a product visible when its scope lists options, including an empty list", () => {
+    expect(findWholeProductScopeIds([{ id: "1" }, { id: "2" }], { "1": ["opt-a"], "2": [] })).toEqual(new Set());
   });
 });

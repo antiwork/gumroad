@@ -1,9 +1,13 @@
 # frozen_string_literal: true
 
 class BosniaAndHerzegovinaBankAccount < BankAccount
+  include BicCountryValidation
+
   BANK_ACCOUNT_TYPE = "BA"
 
-  BANK_CODE_FORMAT_REGEX = /^[a-zA-Z0-9]{8}([a-zA-Z0-9]{3})?$/
+  # \A..\z, not ^..$: line anchors would let "UNCRBA22\nXXXX" pass here and then miss the
+  # BIC country check below, which anchors on the whole string.
+  BANK_CODE_FORMAT_REGEX = /\A[a-zA-Z0-9]{8}([a-zA-Z0-9]{3})?\z/
   private_constant :BANK_CODE_FORMAT_REGEX
 
   alias_attribute :bank_code, :bank_number
@@ -42,8 +46,9 @@ class BosniaAndHerzegovinaBankAccount < BankAccount
 
   private
     def validate_bank_code
-      return if BANK_CODE_FORMAT_REGEX.match?(bank_code)
-      errors.add :base, "The bank code is invalid."
+      return errors.add(:base, "The bank code is invalid.") unless BANK_CODE_FORMAT_REGEX.match?(bank_code)
+
+      validate_bank_code_country(BANK_ACCOUNT_TYPE)
     end
 
     def validate_account_number

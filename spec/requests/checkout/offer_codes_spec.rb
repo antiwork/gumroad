@@ -52,6 +52,7 @@ describe "Checkout offer codes", :js, type: :system do
       fill_in "Discount code", with: "everything"
       click_on "Apply"
       expect(page).to have_text("Discounts everything US$-5", normalize_ws: true)
+      wait_until_true { Cart.last&.discount_codes&.any? { _1["code"] == offer_code.code } }
 
       visit product2.long_url
       add_to_cart(product2)
@@ -87,6 +88,7 @@ describe "Checkout offer codes", :js, type: :system do
         fill_in "Discount code", with: "everything"
         click_on "Apply"
         expect(page).to have_text("Discounts everything US$-5", normalize_ws: true)
+        wait_until_true { Cart.last&.discount_codes&.any? { _1["code"] == offer_code.code } }
 
         visit product2.long_url
         add_to_cart(product2)
@@ -127,6 +129,7 @@ describe "Checkout offer codes", :js, type: :system do
         fill_in "Discount code", with: "product1_and_2_offer_code"
         click_on "Apply"
         expect(page).to have_text("Discounts product1_and_2_offer_code US$-5", normalize_ws: true)
+        wait_until_true { Cart.last&.discount_codes&.any? { _1["code"] == product1_and_2_offer_code.code } }
 
         visit product2.long_url
         add_to_cart(product2)
@@ -167,6 +170,7 @@ describe "Checkout offer codes", :js, type: :system do
         fill_in "Discount code", with: "product1_and_2_offer_code"
         click_on "Apply"
         expect(page).to have_text("Discounts product1_and_2_offer_code US$-5", normalize_ws: true)
+        wait_until_true { Cart.last&.discount_codes&.any? { _1["code"] == product1_and_2_offer_code.code } }
 
         visit product2.long_url
         add_to_cart(product2)

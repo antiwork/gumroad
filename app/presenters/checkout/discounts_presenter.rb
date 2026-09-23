@@ -18,17 +18,7 @@ class Checkout::DiscountsPresenter
       pages:,
       pagination:,
       offer_codes: offer_codes.map { offer_code_props(_1) },
-      products: pundit_user.seller.products.visible.map do |product|
-        {
-          id: product.external_id,
-          name: product.name,
-          archived: product.archived?,
-          currency_type: product.price_currency_type,
-          url: product.long_url,
-          is_tiered_membership: product.is_tiered_membership?,
-          is_recurring_billing: product.is_recurring_billing?,
-        }
-      end,
+      products: product_props_by_product,
       show_black_friday_banner: Feature.active?(:black_friday_seller_banner),
       black_friday_code: SearchProducts::BLACK_FRIDAY_CODE,
       black_friday_code_name: BLACK_FRIDAY_CODE_NAME
@@ -55,6 +45,7 @@ class Checkout::DiscountsPresenter
       existing_customers_only: offer_code.existing_customers_only?,
       ownership_products: offer_code.ownership_products.map { product_props_for(_1) },
       ownership_duration_tiers: offer_code.normalized_ownership_duration_tiers,
+      option_ids_by_product: offer_code.option_ids_by_product,
     }
   end
 
@@ -69,5 +60,22 @@ class Checkout::DiscountsPresenter
         is_tiered_membership: product.is_tiered_membership?,
         is_recurring_billing: product.is_recurring_billing?,
       }
+    end
+
+    def product_props_by_product
+      pundit_user.seller.products.visible.includes(:alive_variants, :variant_categories_alive, :skus_alive_not_default).map do |product|
+        props = product_props_for(product)
+        options = if product.skus_enabled?
+          product.skus_alive_not_default
+        else
+          product.alive_variants
+            .select { |variant| variant.variant_category_id == product.variant_categories_alive.first&.id }
+            .sort_by { |variant| [variant.position_in_category.nil? ? 0 : 1, variant.position_in_category.to_i, variant.created_at] }
+        end
+        props[:options] = options.map do |option|
+          { id: option.external_id, name: option.name == "Untitled" ? product.name : option.name.to_s }
+        end if options.any?
+        props
+      end
     end
 end

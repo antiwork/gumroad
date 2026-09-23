@@ -20,10 +20,9 @@ class ContentModeration::Strategies::PromptStrategy
   #
   # Corroboration is opt-in (`corroborate_judgment_flags: true`) so that only
   # callers designed for the downgrade path get it. ModerateRecordService opts
-  # in and records downgraded flags as non-blocking admin notes; the media
-  # upload path opts in too, having no record to annotate — a downgraded flag
-  # there just doesn't refuse the upload. Other callers keep the original
-  # single-sample blocking behavior and its latency profile.
+  # in and records downgraded flags as non-blocking admin notes; other
+  # callers (e.g. CreatePublicMediaService screening uploads) keep the
+  # original single-sample blocking behavior and its latency profile.
   CORROBORATION_RESAMPLES = 2
 
   # Which presets are judgment calls that need corroboration before they may

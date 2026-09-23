@@ -110,8 +110,10 @@ const PublicProfile = (props: Props) => {
   return (
     <>
       {props.bio || props.tabs.length > 1 ? (
-        <header className="border-b border-border">
-          <div className="mx-auto grid w-full max-w-6xl grid-cols-1 gap-4 px-4 py-8 lg:px-0">
+        <header className="border-b border-border px-4 py-8">
+          {/* The gutter sits outside the capped grid, as SectionLayout does below, so the bio and
+              the tabs track the sections' left edge at every width. */}
+          <div className="mx-auto grid w-full max-w-6xl grid-cols-1 gap-4">
             {props.bio ? (
               /*
                 The bio is regular prose, so it renders as a paragraph at normal body size. It used

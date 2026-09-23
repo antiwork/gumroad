@@ -13,6 +13,7 @@ type Uid = string;
 export type LineItemConfiguration = {
   permalink: string;
   quantity: number;
+  variant_external_id?: string | null;
 };
 type ComputeDiscountRequestData = {
   code: string;
@@ -42,7 +43,8 @@ export type OfferCodeResponseData =
         | "insufficient_times_of_use"
         | "inactive"
         | "unmet_minimum_purchase_quantity"
-        | "not_existing_customer";
+        | "not_existing_customer"
+        | "option_not_eligible";
       error_message: string;
     }
   | { valid: true; products_data: Record<string, Discount>; notice?: string };
@@ -75,6 +77,7 @@ type DiscountPayload = {
   code: string;
   discount: { type: "cents" | "percent"; value: number };
   selectedProductIds: string[];
+  selectedOptionIds: string[];
   excludedProductIds: string[];
   universal: boolean;
   currencyCode: CurrencyCode | null;
@@ -113,6 +116,7 @@ const buildDiscountPayload = (payload: DiscountPayload) => ({
   amount_percentage: payload.discount.type === "percent" ? payload.discount.value : null,
   amount_cents: payload.discount.type === "cents" ? payload.discount.value : null,
   selected_product_ids: payload.universal ? null : payload.selectedProductIds,
+  selected_option_ids: payload.universal ? [] : payload.selectedOptionIds,
   excluded_product_ids: payload.universal ? payload.excludedProductIds : [],
   universal: payload.universal,
   max_purchase_count: payload.maxQuantity,

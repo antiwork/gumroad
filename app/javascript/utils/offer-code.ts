@@ -9,3 +9,12 @@ export function applyOfferCodeToCents(offerCode: null | OfferCode, amountCents: 
   }
   return Math.round(Math.max(amountCents - offerCode.cents, 0));
 }
+
+export const discountAppliesToOption = (
+  discount: { option_ids_by_product?: Record<string, string[]> } | null,
+  product: { id: string },
+  optionId: string | null,
+) => {
+  const optionIds = discount?.option_ids_by_product?.[product.id];
+  return optionIds === undefined || (optionId !== null && optionIds.includes(optionId));
+};

@@ -429,8 +429,8 @@ module Payment::FailureReason
       solution: "Contact Gumroad Support to investigate reconciliation before retrying",
     },
     "destination_currency_mismatch" => {
-      reason: "the payout currency does not match any bank account configured to receive it on the connected Stripe account",
-      solution: "Confirm a bank account that accepts this currency is set up in payout settings. If the issue persists, contact Gumroad Support",
+      reason: "the selected payout bank account cannot receive the payout currency",
+      solution: "Confirm an active bank account that accepts this currency is set up in payout settings. If the issue persists, contact Gumroad Support",
     },
     "could_not_process" => {
       reason: "the bank could not process this payout",

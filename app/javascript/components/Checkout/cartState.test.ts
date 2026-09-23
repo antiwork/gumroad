@@ -76,6 +76,46 @@ const cartWith = (discount: Discount): CartState => ({
 });
 
 describe("getDiscountedPrice", () => {
+  it("keeps the price when every scoped option has been deleted", () => {
+    const cart = cartWith({
+      type: "percent",
+      percents: 100,
+      ...discountConditions,
+      option_ids_by_product: { [product.id]: ["deleted-option"] },
+    });
+    const selectedItem = { ...item, option_id: "remaining-option" };
+    cart.items = [selectedItem];
+    expect(getDiscountedPrice(cart, selectedItem).price).toBe(2_000);
+    expect(getDiscountedPrice(cart, selectedItem).discount).toBeNull();
+  });
+
+  it("does not count ineligible options toward the minimum quantity", () => {
+    const cart = cartWith({
+      type: "percent",
+      percents: 100,
+      ...discountConditions,
+      minimum_quantity: 2,
+      option_ids_by_product: { [product.id]: ["basic"] },
+    });
+    const eligible = { ...item, quantity: 1, option_id: "basic" };
+    cart.items = [eligible, { ...item, quantity: 1, option_id: "team" }];
+    expect(getDiscountedPrice(cart, eligible).price).toBe(1_000);
+  });
+
+  it("does not count ineligible options toward the minimum amount", () => {
+    const cart = cartWith({
+      type: "percent",
+      percents: 100,
+      ...discountConditions,
+      minimum_amount_cents: 2_000,
+      option_ids_by_product: { [product.id]: ["basic"] },
+    });
+    const eligible = { ...item, quantity: 1, option_id: "basic" };
+    cart.items = [eligible, { ...item, quantity: 1, option_id: "team" }];
+    expect(getDiscountedPrice(cart, eligible).price).toBe(1_000);
+    expect(getDiscountedPrice(cart, eligible).discount).toBeNull();
+  });
+
   it("allocates a cart discount in stable product order", () => {
     const firstItem = { ...item, price: 500, quantity: 1 };
     const secondProduct = { ...product, id: "second-product-id", permalink: "second-product" };

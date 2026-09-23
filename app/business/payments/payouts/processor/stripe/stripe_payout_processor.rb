@@ -817,7 +817,9 @@ class StripePayoutProcessor
       Payment::FailureReason::INSUFFICIENT_FUNDS
     when *BankAccount::STALE_EXTERNAL_ACCOUNT_MESSAGES
       Payment::FailureReason::BANK_ACCOUNT_NOT_FOUND_AT_STRIPE
-    when /\AAttempting to create a transfer of [a-z]{3} to a destination that supports [a-z]{3}\.\z/
+    when /\AAttempting to create a transfer of [a-z]{3} to a destination that supports [a-z]{3}/
+      # Stripe appends an alternative-account suggestion when the connected account already holds an
+      # external account in the payout currency, so the sentence must not be matched to its end.
       Payment::FailureReason::DESTINATION_CURRENCY_MISMATCH
     when /\AAmount must be no less than/
       # The released balance (for example the $1 floor applied to terminally

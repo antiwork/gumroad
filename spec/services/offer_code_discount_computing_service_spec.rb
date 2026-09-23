@@ -924,4 +924,146 @@ describe OfferCodeDiscountComputingService do
       expect(result[:products_data][product.unique_permalink][:discount]).to include(type: "percent", percents: 30)
     end
   end
+
+  describe "option scope" do
+    let(:category) { create(:variant_category, link: product) }
+    let(:tier) { create(:variant, variant_category: category, name: "Basic") }
+    let(:other_tier) { create(:variant, variant_category: category, name: "Pro") }
+    let(:scoped_code) do
+      create(
+        :offer_code,
+        user: seller,
+        products: [product],
+        code: "tieronly",
+        amount_percentage: 50,
+        amount_cents: nil,
+        currency_type: product.price_currency_type,
+        variants: [tier]
+      )
+    end
+
+    it "returns the discount with option scope when the preview does not name an option" do
+      expect(tier.link_id).to be_nil
+
+      result = described_class.new(
+        scoped_code.code,
+        { product.unique_permalink => { quantity: "1", permalink: product.unique_permalink } }
+      ).process
+
+      expect(result[:error_code]).to be_nil
+      expect(result[:products_data][product.unique_permalink][:discount][:option_ids_by_product]).to eq({ product.external_id => [tier.external_id] })
+    end
+
+    it "rejects a line that names an option outside the scope" do
+      result = described_class.new(
+        scoped_code.code,
+        { "0" => { quantity: "1", permalink: product.unique_permalink, variant_external_id: other_tier.external_id } },
+        key_by_input: true
+      ).process
+
+      expect(result[:products_data]).to eq({})
+      expect(result[:error_code]).to eq(:option_not_eligible)
+    end
+
+    it "applies the discount when the line names the scoped option" do
+      result = described_class.new(
+        scoped_code.code,
+        { "0" => { quantity: "1", permalink: product.unique_permalink, variant_external_id: tier.external_id } },
+        key_by_input: true
+      ).process
+
+      expect(result[:error_code]).to be_nil
+      expect(result[:products_data]).to have_key("0")
+    end
+
+    [false, true].each do |key_by_input|
+      it "reports skipped options with key_by_input=#{key_by_input}" do
+        result = described_class.new(
+          scoped_code.code,
+          {
+            "0" => { quantity: "1", permalink: product.unique_permalink, variant_external_id: other_tier.external_id },
+            "1" => { quantity: "1", permalink: product.unique_permalink, variant_external_id: tier.external_id },
+          },
+          key_by_input:
+        ).process
+        expect(result[:error_code]).to be_nil
+        expect(result[:products_data].keys).to eq([key_by_input ? "1" : product.unique_permalink])
+        expect(result[:partial_ineligibility_code]).to eq(:option_not_eligible)
+      end
+    end
+
+    it "rejects an explicitly empty option but preserves unconfigured previews" do
+      result = described_class.new(scoped_code.code, {
+                                     "0" => { quantity: "1", permalink: product.unique_permalink, variant_external_id: "" }
+                                   }).process
+      expect(result[:error_code]).to eq(:option_not_eligible)
+    end
+
+    it "still limits a sku when the line names one" do
+      sku = create(:sku, link: product)
+      other_sku = create(:sku, link: product, name: "Small")
+      code = create(
+        :offer_code,
+        user: seller,
+        products: [product],
+        code: "skuonly",
+        amount_percentage: 50,
+        amount_cents: nil,
+        currency_type: product.price_currency_type,
+        variants: [sku]
+      )
+
+      rejected = described_class.new(
+        code.code,
+        { "0" => { quantity: "1", permalink: product.unique_permalink, variant_external_id: other_sku.external_id } },
+        key_by_input: true
+      ).process
+      expect(rejected[:error_code]).to eq(:option_not_eligible)
+
+      applied = described_class.new(
+        code.code,
+        { "0" => { quantity: "1", permalink: product.unique_permalink, variant_external_id: sku.external_id } },
+        key_by_input: true
+      ).process
+      expect(applied[:error_code]).to be_nil
+    end
+
+    it "keeps the product restricted after every scoped option is deleted" do
+      scoped_code
+      tier.mark_deleted!
+
+      preview = described_class.new(
+        scoped_code.code,
+        { product.unique_permalink => { quantity: "1", permalink: product.unique_permalink } }
+      ).process
+      expect(preview[:error_code]).to be_nil
+      expect(preview[:products_data][product.unique_permalink][:discount][:option_ids_by_product]).to eq({ product.external_id => [tier.external_id] })
+
+      applied = described_class.new(
+        scoped_code.code,
+        { "0" => { quantity: "1", permalink: product.unique_permalink, variant_external_id: other_tier.external_id } },
+        key_by_input: true
+      ).process
+      expect(applied[:error_code]).to eq(:option_not_eligible)
+    end
+
+    it "keeps the remaining live option limited after another scoped option is deleted" do
+      scoped_code.variants << other_tier
+      tier.mark_deleted!
+      third = create(:variant, variant_category: category, name: "Team")
+
+      preview = described_class.new(
+        scoped_code.code,
+        { product.unique_permalink => { quantity: "1", permalink: product.unique_permalink } }
+      ).process
+      expect(preview[:products_data][product.unique_permalink][:discount][:option_ids_by_product]).to eq({ product.external_id => [tier.external_id, other_tier.external_id] })
+
+      rejected = described_class.new(
+        scoped_code.code,
+        { "0" => { quantity: "1", permalink: product.unique_permalink, variant_external_id: third.external_id } },
+        key_by_input: true
+      ).process
+      expect(rejected[:error_code]).to eq(:option_not_eligible)
+    end
+  end
 end

@@ -12,6 +12,7 @@ import {
 afterEach(cleanup);
 
 const pwywProduct: Product = {
+  id: "product-id",
   permalink: "pwyw-song",
   rental: null,
   options: [],

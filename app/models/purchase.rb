@@ -4533,7 +4533,19 @@ class Purchase < ApplicationRecord
     end
 
     def offer_amount_off(purchase_min_price)
+      return 0 unless offer_code_applies_to_selected_variant?
+
       offer_code_for_pricing&.amount_off(purchase_min_price) || 0
+    end
+
+    # The price floor stays at the undiscounted price when the buyer picked an option the seller
+    # limited the code away from, so a tampered checkout cannot buy an ineligible option for free.
+    # A cached discount is a pricing stub carrying no scope of its own, so read the persisted code.
+    def offer_code_applies_to_selected_variant?
+      offer_code = purchase_offer_code_discount&.offer_code || offer_code_for_pricing
+      return true if offer_code.nil?
+
+      offer_code.applicable_to_variants?(link, variant_attributes)
     end
 
     def currency_minimum_or_zero(price_cents)
@@ -5580,6 +5592,12 @@ class Purchase < ApplicationRecord
       unless (offer_code_cart_quantity || quantity) >= (offer_code.minimum_quantity || 0)
         self.error_code = PurchaseErrorCode::OFFER_CODE_INSUFFICIENT_QUANTITY
         errors.add :base, "Sorry, the discount code you wish to use has an unmet minimum quantity."
+        return
+      end
+
+      unless offer_code.applicable_to_variants?(link, variant_attributes)
+        self.error_code = PurchaseErrorCode::OFFER_CODE_INVALID
+        errors.add :base, "This code does not apply to the selected option."
         return
       end
 

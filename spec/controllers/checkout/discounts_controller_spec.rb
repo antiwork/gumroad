@@ -352,6 +352,52 @@ describe Checkout::DiscountsController do
       end
     end
 
+    context "when the offer code is limited to specific options" do
+      it "saves a version and a sku, and drops an option from a product the code does not cover" do
+        product = create(:product, user: seller)
+        other = create(:product, user: seller)
+        tier = create(:variant, variant_category: create(:variant_category, link: product))
+        sku = create(:sku, link: product)
+        foreign = create(:variant, variant_category: create(:variant_category, link: other))
+        expect(tier.link_id).to be_nil
+
+        expect do
+          post :create, params: {
+            name: "Tier only",
+            code: "tieronly",
+            amount_percentage: 100,
+            currency_type: nil,
+            universal: false,
+            selected_product_ids: [product.external_id],
+            selected_option_ids: [tier.external_id, sku.external_id, foreign.external_id],
+          }, as: :json
+        end.to change { seller.offer_codes.count }.by(1)
+
+        expect(response.parsed_body["success"]).to eq(true), response.body
+        expect(seller.offer_codes.find_by!(code: "tieronly").variants).to contain_exactly(tier, sku)
+      end
+
+      it "preserves the scope if an option is deleted before saving" do
+        product = create(:product, user: seller)
+        tier = create(:variant, variant_category: create(:variant_category, link: product))
+        removed = create(:variant, variant_category: tier.variant_category, name: "Early bird")
+        removed.mark_deleted!
+
+        post :create, params: {
+          name: "Live only",
+          code: "liveonly",
+          amount_percentage: 100,
+          currency_type: nil,
+          universal: false,
+          selected_product_ids: [product.external_id],
+          selected_option_ids: [tier.external_id, removed.external_id],
+        }, as: :json
+
+        expect(response.parsed_body["success"]).to eq(true), response.body
+        expect(seller.offer_codes.find_by!(code: "liveonly").variants).to contain_exactly(tier, removed)
+      end
+    end
+
     context "when the offer code has several products" do
       before do
         @product1 = create(:product, user: seller)
@@ -633,6 +679,31 @@ describe Checkout::DiscountsController do
       expect(offer_code.name).to eq("Renamed discount")
       expect(offer_code.universal).to eq(false)
       expect(offer_code.products).to eq([subject_product])
+    end
+
+    it "drops option restrictions for products removed by a partial update" do
+      subject_product = create(:product, user: seller)
+      option = create(:variant, variant_category: create(:variant_category, link: subject_product))
+      offer_code.update!(universal: false, products: [subject_product], variants: [option])
+      replacement = create(:product, user: seller)
+
+      put :update, params: { id: offer_code.external_id, selected_product_ids: [replacement.external_id] }, as: :json
+
+      expect(response.parsed_body["success"]).to eq(true)
+      expect(offer_code.reload.products).to eq([replacement])
+      expect(offer_code.variants).to be_empty
+    end
+
+    it "preserves a deleted option when editing the discount name" do
+      subject_product = create(:product, user: seller)
+      option = create(:variant, variant_category: create(:variant_category, link: subject_product))
+      offer_code.update!(universal: false, products: [subject_product], variants: [option])
+      option.mark_deleted!
+
+      put :update, params: { id: offer_code.external_id, name: "Renamed", selected_option_ids: [option.external_id] }, as: :json
+
+      expect(response.parsed_body["success"]).to eq(true)
+      expect(offer_code.reload.variants).to eq([option])
     end
 
     it "preserves a percentage offer code's amount on a partial update that omits both amount keys" do

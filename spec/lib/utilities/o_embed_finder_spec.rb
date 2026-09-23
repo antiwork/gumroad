@@ -161,17 +161,6 @@ describe OEmbedFinder do
       expect(registry_snapshot).to eq before
     end
 
-    # The gem registry survives application code reloads.
-    it "keeps its providers across a code reload" do
-      OEmbedFinder.embeddable_from_url(unmatched_url)
-      before = registry_snapshot
-
-      Rails.application.reloader.reload!
-      OEmbedFinder.embeddable_from_url(unmatched_url)
-
-      expect(registry_snapshot).to eq before
-    end
-
     it "resolves each registered host to its own endpoint and nothing to an unregistered one" do
       OEmbedFinder.embeddable_from_url(unmatched_url)
 

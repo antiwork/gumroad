@@ -908,6 +908,7 @@ describe CheckoutPresenter do
         result = described_class.new(logged_in_user: nil, ip: "127.0.0.1").subscription_manager_props(subscription: @subscription)
         expect(result).to eq({
                                product: {
+                                 id: @product.external_id,
                                  name: @product.name,
                                  native_type: @product.native_type,
                                  supports_paypal: nil,
@@ -1400,6 +1401,30 @@ describe CheckoutPresenter do
         duration_in_billing_cycles: nil,
         minimum_amount_cents: nil,
       )
+    end
+
+    it "adds the persisted code's option scope to the discount for the next charge" do
+      product = create(:product, price_cents: 2_000)
+      category = create(:variant_category, link: product)
+      tier = create(:variant, variant_category: category, name: "Basic")
+      persisted_code = create(:offer_code, user: product.user, products: [product], amount_cents: 100, variants: [tier])
+      # The cached discount is priced off a stub with no scope of its own, which is what the Manage
+      # page reads, so the scope has to come from the persisted code.
+      pricing_stub = OfferCode.new(amount_cents: 100, code: persisted_code.code, name: persisted_code.name, flags: persisted_code.flags)
+      cached_discount = instance_double(PurchaseOfferCodeDiscount, offer_code: persisted_code)
+      subscription = instance_double(
+        Subscription,
+        auto_renewal_offer_code: nil,
+        discount_applies_to_next_charge?: true,
+        original_offer_code: pricing_stub,
+        original_purchase: instance_double(Purchase, purchase_offer_code_discount: cached_discount),
+        link: product
+      )
+      presenter = described_class.new(logged_in_user: nil, ip: "127.0.0.1")
+
+      result = presenter.send(:subscription_discount_for_next_charge, subscription, buyer: create(:user))
+
+      expect(result[:option_ids_by_product]).to eq(ObfuscateIds.encrypt(product.id) => [tier.external_id])
     end
 
     context "non-tiered membership product" do

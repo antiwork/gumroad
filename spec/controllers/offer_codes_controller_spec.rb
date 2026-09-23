@@ -18,6 +18,26 @@ describe OfferCodesController do
       }
     end
 
+    it "explains why only one option of a product receives the discount" do
+      category = create(:variant_category, link: product)
+      eligible = create(:variant, variant_category: category)
+      ineligible = create(:variant, variant_category: category)
+      offer_code.variants = [eligible]
+      get :compute_discount, params: {
+        code: offer_code.code,
+        products: {
+          "0" => { permalink: product.unique_permalink, quantity: 1, variant_external_id: ineligible.external_id },
+          "1" => { permalink: product.unique_permalink, quantity: 1, variant_external_id: eligible.external_id },
+        }
+      }
+
+      expect(response.parsed_body).to include(
+        "valid" => true,
+        "notice" => "The code applies to some items. The selected options for the other items are not eligible."
+      )
+      expect(response.parsed_body["products_data"].keys).to eq([product.unique_permalink])
+    end
+
     it "returns an error in response when offer code is invalid" do
       offer_code_params[:code] = "invalid_offer"
       get :compute_discount, params: offer_code_params

@@ -781,6 +781,28 @@ describe Order::CreateService, :vcr do
         expect(order.purchases.order(:id).map(&:offer_code_id)).to eq([nil, offer_code.id])
       end
 
+      it "does not count ineligible options toward the code minimum" do
+        category = create(:variant_category, link: product_1)
+        eligible = create(:variant, variant_category: category)
+        ineligible = create(:variant, variant_category: category)
+        offer_code.update!(minimum_quantity: 2, variants: [eligible])
+        params[:line_items] = [eligible, ineligible].each_with_index.map do |variant, index|
+          {
+            uid: "option-#{index}",
+            permalink: product_1.unique_permalink,
+            perceived_price_cents: price_1 - 1_00,
+            quantity: 1,
+            variants: [variant.external_id],
+            discount_code: offer_code.code,
+          }
+        end
+
+        order, purchase_responses = described_class.new(params:).perform
+
+        expect(order.purchases.successful).to be_empty
+        expect(purchase_responses.fetch("option-0")[:error_code]).to eq(PurchaseErrorCode::OFFER_CODE_INSUFFICIENT_QUANTITY)
+      end
+
       it "combines variant quantities when checking the minimum" do
         offer_code.update!(minimum_quantity: 2)
         variant_category = create(:variant_category, link: product_1)

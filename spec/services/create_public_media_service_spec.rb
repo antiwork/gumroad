@@ -275,6 +275,44 @@ describe CreatePublicMediaService do
       expect(ActiveStorage::Blob.count).to eq(0)
     end
 
+    it "attributes a spam rejection to the seller's display name, not the image" do
+      url = "https://example.com/logo.png"
+      stub_remote_file(url, "smilie.png", "image/png")
+      flagged = ContentModeration::Strategies::PromptStrategy::Result.new(status: "flagged", reasoning: ["spam: repeated unrelated slogans"])
+      allow_any_instance_of(ContentModeration::Strategies::PromptStrategy).to receive(:perform).and_return(flagged)
+
+      result = described_class.new(seller:, url:, name: "BUY NOW BUY NOW BUY NOW").process
+
+      expect(result).not_to be_success
+      expect(result.error_message).to eq("This file can’t be saved because its display name looks like spam. Change the display name and try again.")
+      expect(PublicFile.count).to eq(0)
+      expect(ActiveStorage::Blob.count).to eq(0)
+    end
+
+    it "does not relabel a classifier finding as a display-name rejection" do
+      url = "https://example.com/logo.png"
+      stub_remote_file(url, "smilie.png", "image/png")
+      flagged = ContentModeration::Strategies::ClassifierStrategy::Result.new(status: "flagged", reasoning: ["OpenAI moderation flagged: violence (score: 0.95, threshold: 0.9)"])
+      allow_any_instance_of(ContentModeration::Strategies::ClassifierStrategy).to receive(:perform).and_return(flagged)
+
+      result = described_class.new(seller:, url:, name: "My logo").process
+
+      expect(result.error_message).to include("violent content")
+      expect(result.error_message).not_to include("display name")
+    end
+
+    it "does not hide a second prompt finding behind display-name copy" do
+      url = "https://example.com/logo.png"
+      stub_remote_file(url, "smilie.png", "image/png")
+      flagged = ContentModeration::Strategies::PromptStrategy::Result.new(status: "flagged", reasoning: ["spam: unrelated slogans", "adult_content: explicit image"])
+      allow_any_instance_of(ContentModeration::Strategies::PromptStrategy).to receive(:perform).and_return(flagged)
+
+      result = described_class.new(seller:, url:, name: "BUY NOW BUY NOW BUY NOW").process
+
+      expect(result.error_message).to include("adult content")
+      expect(result.error_message).not_to include("display name")
+    end
+
     it "skips moderation for verified sellers" do
       seller.update!(verified: true)
       url = "https://example.com/logo.png"
@@ -307,9 +345,8 @@ describe CreatePublicMediaService do
       stub_remote_file(url, "smilie.png", "image/png")
       compliant = ContentModeration::Strategies::ClassifierStrategy::Result.new(status: "compliant", reasoning: [])
       allow(ContentModeration::Strategies::ClassifierStrategy).to receive(:new).and_return(instance_double(ContentModeration::Strategies::ClassifierStrategy, perform: compliant))
-      expect(ContentModeration::Strategies::PromptStrategy).to receive(:new) do |text:, image_urls:, corroborate_judgment_flags:|
+      expect(ContentModeration::Strategies::PromptStrategy).to receive(:new) do |text:, image_urls:|
         expect(text).to be_blank
-        expect(corroborate_judgment_flags).to be(true)
         instance_double(ContentModeration::Strategies::PromptStrategy, perform: compliant)
       end
 
@@ -338,12 +375,29 @@ describe CreatePublicMediaService do
       expect(result).to be_success
     end
 
+    it "still blocks a flagged seller-authored display name on the first sample" do
+      url = "https://example.com/logo.png"
+      stub_remote_file(url, "smilie.png", "image/png")
+      compliant = ContentModeration::Strategies::ClassifierStrategy::Result.new(status: "compliant", reasoning: [])
+      flagged = ContentModeration::Strategies::PromptStrategy::Result.new(status: "flagged", reasoning: ["spam: repeated calls to action"], audit_reasoning: [])
+      allow(ContentModeration::Strategies::ClassifierStrategy).to receive(:new).and_return(instance_double(ContentModeration::Strategies::ClassifierStrategy, perform: compliant))
+      expect(ContentModeration::Strategies::PromptStrategy).to receive(:new).with(text: "buy now", image_urls: anything).and_return(
+        instance_double(ContentModeration::Strategies::PromptStrategy, perform: flagged)
+      )
+
+      result = described_class.new(seller:, url:, name: "buy now").process
+
+      expect(result).not_to be_success
+      expect(result.error_message).to eq("This file can’t be saved because its display name looks like spam. Change the display name and try again.")
+      expect(ActiveStorage::Blob.count).to eq(0)
+    end
+
     it "still moderates a seller-authored display name as prose" do
       url = "https://example.com/logo.png"
       stub_remote_file(url, "smilie.png", "image/png")
       compliant = ContentModeration::Strategies::ClassifierStrategy::Result.new(status: "compliant", reasoning: [])
       allow(ContentModeration::Strategies::ClassifierStrategy).to receive(:new).and_return(instance_double(ContentModeration::Strategies::ClassifierStrategy, perform: compliant))
-      expect(ContentModeration::Strategies::PromptStrategy).to receive(:new) do |text:, image_urls:, corroborate_judgment_flags:|
+      expect(ContentModeration::Strategies::PromptStrategy).to receive(:new) do |text:, image_urls:|
         expect(text).to eq("buy cheap crypto now")
         instance_double(ContentModeration::Strategies::PromptStrategy, perform: compliant)
       end
