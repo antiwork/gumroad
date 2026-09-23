@@ -187,4 +187,56 @@ describe Purchase, "offer-code capacity" do
     expect(purchase.errors.full_messages).to include("This code does not apply to the selected option.")
     expect(purchase.send(:offer_amount_off, product.price_cents)).to eq(0)
   end
+
+  it "rejects a line that carries an unscoped sibling next to the scoped option" do
+    product = create(:product, price_cents: 2_000)
+    category = create(:variant_category, link: product)
+    tier = create(:variant, variant_category: category, name: "Basic")
+    sibling = create(:variant, variant_category: category, name: "Pro")
+    offer_code = create(:offer_code, user: product.user, products: [product], amount_cents: 100, variants: [tier])
+
+    purchase = build(:purchase_in_progress, link: product, seller: product.user, offer_code:, discount_code: offer_code.code)
+    purchase.variant_attributes << tier
+    purchase.variant_attributes << sibling
+    purchase.send(:validate_offer_code)
+
+    expect(purchase.errors.full_messages).to include("This code does not apply to the selected option.")
+    expect(purchase.send(:offer_amount_off, product.price_cents)).to eq(0)
+  end
+
+  it "still discounts a scoped option when the product has another category the code ignores" do
+    product = create(:product, price_cents: 2_000)
+    license_category = create(:variant_category, link: product, title: "License")
+    tier = create(:variant, variant_category: license_category, name: "Basic")
+    format_category = create(:variant_category, link: product, title: "Format")
+    format = create(:variant, variant_category: format_category, name: "PDF")
+    offer_code = create(:offer_code, user: product.user, products: [product], amount_cents: 100, variants: [tier])
+
+    purchase = build(:purchase_in_progress, link: product, seller: product.user, offer_code:, discount_code: offer_code.code)
+    purchase.variant_attributes << tier
+    purchase.variant_attributes << format
+    purchase.send(:validate_offer_code)
+
+    expect(purchase.errors.full_messages).not_to include("This code does not apply to the selected option.")
+    expect(purchase.send(:offer_amount_off, product.price_cents)).to eq(100)
+  end
+
+  it "keeps a cached discount off an option the persisted code never covered" do
+    product = create(:product, price_cents: 2_000)
+    category = create(:variant_category, link: product)
+    tier = create(:variant, variant_category: category, name: "Basic")
+    sibling = create(:variant, variant_category: category, name: "Pro")
+    offer_code = create(:offer_code, user: product.user, products: [product], amount_cents: 100, variants: [tier])
+
+    purchase = build(:purchase_in_progress, link: product, seller: product.user, offer_code:)
+    purchase.variant_attributes << sibling
+    purchase.build_purchase_offer_code_discount(offer_code:, offer_code_amount: 100, offer_code_is_percent: false, pre_discount_minimum_price_cents: 2_000)
+
+    expect(purchase.send(:offer_amount_off, product.price_cents)).to eq(0)
+
+    purchase.variant_attributes.clear
+    purchase.variant_attributes << tier
+
+    expect(purchase.send(:offer_amount_off, product.price_cents)).to eq(100)
+  end
 end

@@ -192,9 +192,10 @@ const hasMetCartDiscountConditions = (cart: CartState, item: CartItem, discount:
   (!discount.minimum_amount_cents ||
     cart.items
       .filter(
-        ({ product }) =>
+        ({ product, option_id }) =>
           (!discount.product_ids || discount.product_ids.includes(product.id)) &&
-          !discount.excluded_product_ids?.includes(product.id),
+          !discount.excluded_product_ids?.includes(product.id) &&
+          discountAppliesToOption(discount, product, option_id),
       )
       .reduce((total, cartItem) => total + cartItem.price * cartItem.quantity, 0) >= discount.minimum_amount_cents);
 

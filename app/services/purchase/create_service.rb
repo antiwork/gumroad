@@ -101,7 +101,10 @@ class Purchase::CreateService < Purchase::BaseService
           excluded_permalinks = purchase.offer_code.excluded_products.pluck(:unique_permalink)
           valid_items.reject { excluded_permalinks.include?(_1[:permalink]) }
         else
-          valid_items.filter { purchase.offer_code.products.find_by(unique_permalink: _1[:permalink]).present? }
+          valid_items = valid_items.filter do |item|
+            link = purchase.offer_code.products.find_by(unique_permalink: item[:permalink])
+            link.present? && purchase.offer_code.applicable_to_variants?(link, item[:variants])
+          end
         end
         if valid_items.map { _1[:price_cents].to_i }.sum < purchase.offer_code.minimum_amount_cents
           raise Purchase::PurchaseInvalid, "Sorry, you have not met the offer code's minimum amount."

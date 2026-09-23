@@ -4540,11 +4540,12 @@ class Purchase < ApplicationRecord
 
     # The price floor stays at the undiscounted price when the buyer picked an option the seller
     # limited the code away from, so a tampered checkout cannot buy an ineligible option for free.
+    # A cached discount is a pricing stub carrying no scope of its own, so read the persisted code.
     def offer_code_applies_to_selected_variant?
-      offer_code = offer_code_for_pricing
+      offer_code = purchase_offer_code_discount&.offer_code || offer_code_for_pricing
       return true if offer_code.nil?
 
-      offer_code.applicable_to_variant?(link, variant_attributes.first)
+      offer_code.applicable_to_variants?(link, variant_attributes)
     end
 
     def currency_minimum_or_zero(price_cents)
@@ -5594,7 +5595,7 @@ class Purchase < ApplicationRecord
         return
       end
 
-      unless offer_code.applicable_to_variant?(link, variant_attributes.first)
+      unless offer_code.applicable_to_variants?(link, variant_attributes)
         self.error_code = PurchaseErrorCode::OFFER_CODE_INVALID
         errors.add :base, "This code does not apply to the selected option."
         return

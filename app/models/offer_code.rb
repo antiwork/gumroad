@@ -345,6 +345,26 @@ class OfferCode < ApplicationRecord
     end
   end
 
+  # Eligibility for a whole selection, not one entry: every option the buyer picked in a category the
+  # seller limited has to be in scope, or a tampered request carries a second option into a discounted
+  # line. Options from categories the code does not mention stay irrelevant, so limiting a code to one
+  # tier does not stop a buyer from picking any colour of it.
+  def applicable_to_variants?(link, variants)
+    restricted = restricted_variants_for(link)
+    return true if restricted.empty?
+
+    restricted_ids = restricted.map(&:id)
+    restricted_category_ids = restricted.map(&:variant_category_id).uniq
+    selected = Array(variants).filter_map do |variant|
+      next variant if variant.is_a?(BaseVariant)
+
+      link.base_variants.find { |base_variant| base_variant.external_id == variant.to_s }
+    end
+    scoped = selected.select { |variant| restricted_category_ids.include?(variant.variant_category_id) }
+
+    scoped.present? && scoped.all? { |variant| restricted_ids.include?(variant.id) }
+  end
+
   def discount
     json = (
       is_cents? ?

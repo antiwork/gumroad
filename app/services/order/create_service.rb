@@ -127,7 +127,7 @@ class Order::CreateService
               offer_code_cart_quantity: line_items
                 .select do |item|
                   item[:permalink] == product.unique_permalink &&
-                    (pricing_offer_code.nil? || pricing_offer_code.applicable_to_variant?(product, item[:variants]&.first))
+                    (pricing_offer_code.nil? || pricing_offer_code.applicable_to_variants?(product, item[:variants]))
                 end
                 .sum { _1[:quantity].to_i }
             )
