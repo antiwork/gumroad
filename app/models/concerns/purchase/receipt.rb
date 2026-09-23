@@ -95,6 +95,33 @@ module Purchase::Receipt
     candidate
   end
 
+  # Every charge of this membership the current holder may invoice, newest first.
+  #
+  # `receipt_purchase` can only ever name one charge — the latest — so on a long-running
+  # subscription every earlier period had no route from the UI at all: the download page's
+  # "Generate invoice" link always built the invoice for the newest charge and July's invoice
+  # was simply offered nowhere (gumroad-private#2907). This is the list that link is rendered
+  # from, so the buyer can pick the period they need.
+  #
+  # Same filters as `receipt_purchase`, including its byte-for-byte email guard: a membership
+  # reassigned by editing the sign-up's email leaves earlier charges on the previous holder's
+  # address, and those must stay unreachable.
+  def invoiceable_charges
+    return [] unless subscription.present?
+
+    # Mirrors Subscription#successful_purchases (private), which
+    # `last_successful_not_reversed_or_refunded_charge` uses: a test subscription's charges
+    # live in `test_successful` rather than `successful`.
+    charges = subscription.is_test_subscription? ? subscription.purchases.test_successful : subscription.purchases.successful
+
+    charges
+      .not_fully_refunded
+      .not_chargedback_or_chargedback_reversed
+      .where(email:)
+      .order(succeeded_at: :desc, id: :desc)
+      .reject(&:is_gift_sender_purchase?)
+  end
+
   def has_invoice?
     subscription.present? ? !is_free_trial_purchase? : !free_purchase?
   end

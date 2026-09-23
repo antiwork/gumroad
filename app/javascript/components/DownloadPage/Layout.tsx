@@ -1,5 +1,5 @@
 import { X } from "@boxicons/react";
-import { differenceInYears, parseISO } from "date-fns";
+import { differenceInYears, format, parseISO } from "date-fns";
 import * as React from "react";
 
 import { addPurchaseToLibrary } from "$app/data/account";
@@ -35,6 +35,9 @@ type ContentUnavailabilityReasonCode =
   | "email_confirmation_required"
   | null;
 type Call = { start_time: string; end_time: string; url: string | null };
+// One charge of a membership the buyer may invoice. `date` is the charge's succeeded_at (ISO),
+// used to label the period so a buyer with several months of charges can pick the right one.
+type InvoiceCharge = { id: string; date: string; has_invoice: boolean };
 
 export type LayoutProps = {
   content_unavailability_reason_code: ContentUnavailabilityReasonCode;
@@ -50,6 +53,13 @@ export type LayoutProps = {
     email_digest: string;
     is_archived: boolean;
     has_invoice: boolean;
+    /**
+     * Every charge of this membership the buyer may invoice, newest first. Ids only — the
+     * invoice URL embeds the buyer's email, which must not reach the page while email
+     * confirmation is still pending, so the frontend builds it from the id. One entry for a
+     * one-off purchase, the whole subscription's charges for a membership.
+     */
+    invoice_charges: InvoiceCharge[];
     product_id: string | null;
     product_permalink: string | null;
     product_name: string | null;
@@ -110,6 +120,10 @@ export const Layout = ({
   // `receipt_purchase_id` only ever names a purchase sharing this one's email (see
   // Purchase#receipt_purchase), so the library row's address is the right one for both links.
   const receiptPurchaseEmail = purchase?.email;
+  // Every charge of this membership the buyer may invoice, newest first — one entry for a
+  // one-off purchase. A membership's earlier periods have no other route from the UI: the
+  // receipt and invoice links can only ever name a single purchase (gumroad-private#2907).
+  const invoiceCharges = (purchase?.invoice_charges ?? []).filter((charge) => charge.has_invoice);
 
   const disabledStatus =
     purchase && !purchase.product_available
@@ -213,21 +227,28 @@ export const Layout = ({
                         that sellers were fielding the support requests. Surfacing it here
                         alongside the other receipt actions removes that indirection.
 
-                        Gated on has_invoice so it matches the receipt: a free purchase or a
-                        membership still in its free trial has no amount to invoice, and the
-                        invoice page would have nothing to render.
+                        The receipt and invoice links can only ever name one purchase, so a
+                        membership used to expose only its LATEST charge: a B2B buyer
+                        reconciling several months could find last month's invoice and nothing
+                        earlier (gumroad-private#2907). One link per invoiceable period, newest
+                        first, and the period is named only when there is more than one, so a
+                        one-off purchase and a one-charge membership read exactly as before.
+                        Gated per charge on has_invoice so it matches the receipt: a free
+                        purchase or a membership still in its free trial has no amount to
+                        invoice, and the invoice page would have nothing to render.
                       */}
-                      {purchase.has_invoice ? (
+                      {invoiceCharges.map((charge, index) => (
                         <NavigationButton
+                          key={charge.id}
                           href={
                             receiptPurchaseEmail
-                              ? Routes.new_purchase_invoice_url(receiptPurchaseId, { email: receiptPurchaseEmail })
-                              : Routes.new_purchase_invoice_url(receiptPurchaseId)
+                              ? Routes.new_purchase_invoice_url(charge.id, { email: receiptPurchaseEmail })
+                              : Routes.new_purchase_invoice_url(charge.id)
                           }
                         >
-                          Generate invoice
+                          {index === 0 ? "Generate invoice" : `Generate invoice — ${format(parseISO(charge.date), "MMMM yyyy")}`}
                         </NavigationButton>
-                      ) : null}
+                      ))}
                     </div>
                   </Details>
                 </CardContent>
