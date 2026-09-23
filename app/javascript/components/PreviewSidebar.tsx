@@ -202,6 +202,10 @@ export const PreviewSidebar = ({
   const isDesktop = useIsAboveBreakpoint("lg");
   const modeContext = React.useContext(MobilePreviewModeContext);
   const mode = modeContext?.mode ?? "edit";
+  // Below lg the aside is `display:none` and the pane below renders the same preview, so rendering
+  // it here as well mounts the preview twice — and in Edit mode mounts one the seller can never
+  // see. Previews are live pages, not thumbnails, so that is a whole page load.
+  const mobilePaneRendersPreview = !isDesktop && modeContext !== null;
 
   return (
     <>
@@ -215,7 +219,7 @@ export const PreviewSidebar = ({
         aria-label="Preview"
         {...props}
       >
-        {children}
+        {mobilePaneRendersPreview ? null : children}
       </aside>
       {/* The desktop sidebar above is display:none below lg, which used to mean mobile sellers
           had NO way to see the preview at all (real support tickets). Below lg the page instead
