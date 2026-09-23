@@ -285,7 +285,7 @@ class Ai::AnthropicClient
         yielded_any = false
       end
 
-      buffered_fallback(system:, messages:, tools:, max_tokens:, thinking:, original_error: e, &on_text)
+      buffered_fallback(system:, messages:, tools:, max_tokens:, thinking:, recover_token_cutoff:, original_error: e, &on_text)
     rescue ToolCallTokenCutoffError
       # Opt-in. The partial already streamed; the caller discards it and re-asks at a larger cap.
       raise unless recover_token_cutoff
@@ -300,7 +300,7 @@ class Ai::AnthropicClient
     # One non-streamed replay so the gateway cannot drop input_json_delta fragments. No extra retries.
     # Withhold truncated and tool-use preamble text (the caller would discard them after a flash).
     # If this fails too, re-raise original_error so the seller still sees the unreadable-tool-call message.
-    def buffered_fallback(system:, messages:, tools:, max_tokens:, thinking: nil, original_error:, &on_text)
+    def buffered_fallback(system:, messages:, tools:, max_tokens:, thinking: nil, recover_token_cutoff: false, original_error:, &on_text)
       Rails.logger.warn("Anthropic streamed tool call unreadable after retries; falling back to a non-streamed request. (#{original_error.message})")
 
       body = request_body(system:, messages:, tools:, max_tokens:, stream: false, thinking:)
@@ -322,6 +322,16 @@ class Ai::AnthropicClient
         trace.usage = usage_from_body(parsed)
         trace.provider_hint = provider_hint_from(parsed)
         parse_buffered_fallback(parsed)
+      rescue ToolCallTokenCutoffError => e
+        trace.error = e
+        # Opted-in callers treat a cutoff as truncation wherever it surfaces. This raise happens inside
+        # #stream_messages' UnreadableToolCallError rescue, so its ToolCallTokenCutoffError sibling never
+        # sees it: without this branch a replay that hits the cap itself fails the turn with the
+        # unreadable-tool-call error from the attempt before it, which is the bug this replay exists to
+        # recover from. The replayed attempt is also the longest one, so it is the likeliest to hit the cap.
+        raise original_error unless recover_token_cutoff
+
+        Result.new(text: "", tool_uses: [], stop_reason: "max_tokens")
       rescue Error, HTTP::Error, JSON::ParserError => e
         trace.error = e
         raise original_error
