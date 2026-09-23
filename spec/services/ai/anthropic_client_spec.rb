@@ -15,6 +15,8 @@ describe Ai::AnthropicClient do
     allow(GlobalConfig).to receive(:get).with("OPENROUTER_API_KEY").and_return(nil)
     allow(GlobalConfig).to receive(:get).with("GUMHEAD_UPSTREAM_API_KEY").and_return(nil)
     allow(GlobalConfig).to receive(:get).with("GUMHEAD_UPSTREAM_API_BASE").and_return(nil)
+    allow(GlobalConfig).to receive(:get).with("STORE_AGENT_OPENROUTER_API_KEY").and_return(nil)
+    allow(GlobalConfig).to receive(:get).with("STORE_AGENT_AI_GATEWAY_API_KEY").and_return(nil)
   end
 
   def sse_stream(text)
@@ -611,6 +613,17 @@ describe Ai::AnthropicClient do
       expect(client.served_models).to eq(["deepseek/deepseek-v4.1-flash"])
     end
 
+    it "prefers the store agent's own gateway key over the shared Gumhead key" do
+      allow(GlobalConfig).to receive(:get).with("STORE_AGENT_AI_GATEWAY_API_KEY").and_return("sk-vercel-store-agent")
+      stub = stub_request(:post, vercel_url)
+        .with(headers: { "x-api-key" => "sk-vercel-store-agent" })
+        .to_return(status: 200, body: { "content" => [], "stop_reason" => "end_turn" }.to_json, headers: { "Content-Type" => "application/json" })
+
+      client.messages(system: "s", messages: [{ role: "user", content: "x" }])
+
+      expect(stub).to have_been_requested
+    end
+
     it "joins a /v1 base onto /messages rather than doubling /v1" do
       allow(GlobalConfig).to receive(:get).with("GUMHEAD_UPSTREAM_API_BASE").and_return("https://ai-gateway.vercel.sh/v1")
       stub = stub_request(:post, vercel_url)
@@ -637,6 +650,19 @@ describe Ai::AnthropicClient do
       expect(client.gateway_name).to eq("openrouter")
       expect(captured["fallbacks"]).to eq([{ "model" => "anthropic/claude-opus-5" }])
       expect(captured).not_to have_key("providerOptions")
+    end
+
+    it "prefers the store agent's own OpenRouter key over the shared one" do
+      allow(GlobalConfig).to receive(:get).with("GUMHEAD_UPSTREAM_API_KEY").and_return(nil)
+      allow(GlobalConfig).to receive(:get).with("OPENROUTER_API_KEY").and_return("sk-or-test")
+      allow(GlobalConfig).to receive(:get).with("STORE_AGENT_OPENROUTER_API_KEY").and_return("sk-or-store-agent")
+      stub = stub_request(:post, openrouter_url)
+        .with(headers: { "x-api-key" => "sk-or-store-agent" })
+        .to_return(status: 200, body: { "content" => [], "stop_reason" => "end_turn" }.to_json, headers: { "Content-Type" => "application/json" })
+
+      client.messages(system: "s", messages: [{ role: "user", content: "x" }])
+
+      expect(stub).to have_been_requested
     end
 
     it "falls back to OpenRouter when the Gumhead base is not the Vercel host" do
