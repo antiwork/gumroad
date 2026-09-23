@@ -22,6 +22,7 @@ import { connectedFileRowClassName } from "$app/components/Download/RichContent"
 import { useEvaporateUploader } from "$app/components/EvaporateUploader";
 import { FileRowContent } from "$app/components/FileRowContent";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
+import { Modal } from "$app/components/Modal";
 import { PlayVideoIcon } from "$app/components/PlayVideoIcon";
 import { Popover, PopoverAnchor, PopoverClose, PopoverContent, PopoverTrigger } from "$app/components/Popover";
 import {
@@ -78,6 +79,7 @@ const FileEmbedNodeView = ({
   const uid = React.useId();
   const [expanded, setExpanded] = React.useState(false);
   const [isDropZone, setIsDropZone] = React.useState(false);
+  const [confirmingStreamOnly, setConfirmingStreamOnly] = React.useState(false);
   const [loadingVideo, setLoadingVideo] = React.useState(false);
   const [showingVideoPlayer, setShowingVideoPlayer] = React.useState(false);
   const [showingAudioDrawer, setShowingAudioDrawer] = React.useState(false);
@@ -92,6 +94,11 @@ const FileEmbedNodeView = ({
     ? (file.can_disable_downloads ??
       (file.is_streamable || FileUtils.isBrowserReadableDocument(file.extension, file.file_size)))
     : false;
+
+  // How many buyers lose download access if the switch is flipped: the server counts them with
+  // the rest of the editor's props (ProductFileBuyerCountsService). A file the editor just built
+  // has no count yet, and one with no buyers needs no confirmation.
+  const existingBuyersCount = file?.existing_buyers_count ?? 0;
 
   const playerRef = React.useRef<jwplayer.JWPlayer | null>(null);
   const subtitleUploadSettled = React.useRef(new Map<string, () => void>());
@@ -787,7 +794,15 @@ const FileEmbedNodeView = ({
               {canDisableDownloads ? (
                 <Switch
                   checked={file.stream_only}
-                  onChange={(e) => updateFile({ stream_only: e.target.checked })}
+                  onChange={(e) => {
+                    // Turning downloads off applies to everyone who already bought
+                    // (gumroad-private#2916), so name the buyers who lose access first.
+                    if (e.target.checked && existingBuyersCount > 0) {
+                      setConfirmingStreamOnly(true);
+                      return;
+                    }
+                    updateFile({ stream_only: e.target.checked });
+                  }}
                   label={
                     file.is_streamable ? (
                       <>
@@ -814,6 +829,30 @@ const FileEmbedNodeView = ({
             Create folder with 2 items
           </div>
         </div>
+      ) : null}
+      {confirmingStreamOnly ? (
+        <Modal
+          open
+          onClose={() => setConfirmingStreamOnly(false)}
+          title="Disable downloads for existing buyers?"
+          footer={
+            <>
+              <Button onClick={() => setConfirmingStreamOnly(false)}>No, cancel</Button>
+              <Button
+                color="danger"
+                onClick={() => {
+                  updateFile({ stream_only: true });
+                  setConfirmingStreamOnly(false);
+                }}
+              >
+                Yes, disable downloads
+              </Button>
+            </>
+          }
+        >
+          {existingBuyersCount.toLocaleString()} existing {existingBuyersCount === 1 ? "buyer" : "buyers"} will lose
+          download access to this file. This applies to everyone who already bought it, not only future buyers.
+        </Modal>
       ) : null}
     </NodeViewWrapper>
   );

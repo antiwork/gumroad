@@ -370,6 +370,10 @@ export type FileEntry = {
   // itself until it is saved. See ProductFile#can_disable_downloads?.
   can_disable_downloads?: boolean;
   stream_only: boolean;
+  // How many buyers can still reach this file today, counted by the server with the rest of the
+  // editor's props (ProductFileBuyerCountsService). Downloads-off applies retroactively to all of
+  // them, so the editor asks before flipping the switch. Absent on a file the editor just built.
+  existing_buyers_count?: number;
   is_transcoding_in_progress: boolean;
   // Pixel dimensions of the video, when we know them, so the editor's preview
   // frame can match the file's real shape instead of assuming 16:9. Null for

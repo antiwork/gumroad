@@ -294,7 +294,10 @@ class ProductPresenter
         subscription_duration: product.subscription_duration,
         collaborating_user: collaborator.present? ? UserPresenter.new(user: collaborator).author_byline_props : nil,
         rich_content: product.rich_content_json,
-        files: files_data(product),
+        # `existing_buyers_count` is how many buyers can still reach the file, so the editor can
+        # warn before a retroactive downloads-off change (gumroad-private#2918). Counted once,
+        # with the rest of the editor's props, rather than per keystroke.
+        files: files_data(product).map { _1.merge(existing_buyers_count: file_buyer_counts[_1[:id]] || 0) },
         # Served as false in the recoverable hidden-content state (flag on,
         # product level blank, variant pages real — the July 21, 2026 incident
         # shape) so the editor loads the real per-version pages instead of the
@@ -417,6 +420,10 @@ class ProductPresenter
   end
 
   private
+    def file_buyer_counts
+      @file_buyer_counts ||= ProductFileBuyerCountsService.new(product:).counts_by_external_id
+    end
+
     # An unset key means "no limit", which the picker relies on; only a stalled read gets the cap,
     # so a Redis blip cannot uncap the list.
     def existing_product_files_limit

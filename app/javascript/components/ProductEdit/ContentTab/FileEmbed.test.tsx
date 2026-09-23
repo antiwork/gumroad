@@ -342,3 +342,106 @@ it("holds the download switch back for an oversized EPUB picked but not yet save
 
   expect(screen.queryByText(/Disable file downloads/u)).toBeNull();
 });
+
+const downloadSwitch = () => screen.getByRole("switch", { name: /Disable file downloads/u });
+
+const expandRow = () => {
+  act(() => {
+    fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+  });
+};
+
+const trackProductFiles = (file: FileEntry) => {
+  const product: { files: FileEntry[] } = { files: [file] };
+  context.filesById = new Map<string, FileEntry>([[FILE_ID, file]]);
+  context.updateProduct = (update: unknown) => {
+    // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- fixture mapper matches updateProduct
+    if (typeof update === "function") (update as (p: typeof product) => void)(product);
+  };
+  return product;
+};
+
+it("names the buyers who lose access before disabling downloads (gumroad-private#2918)", async () => {
+  const file: FileEntry = { ...documentFile, status: { type: "saved" }, existing_buyers_count: 1788 };
+  const product = trackProductFiles(file);
+
+  render(<FileEmbedEditor config={{ filesById: context.filesById }} />);
+  await act(() => Promise.resolve());
+  expandRow();
+
+  act(() => {
+    fireEvent.click(downloadSwitch());
+  });
+
+  expect(screen.getByRole("dialog").textContent).toContain(
+    "1,788 existing buyers will lose download access to this file.",
+  );
+  // Nothing is disabled until the seller confirms.
+  expect(product.files[0]?.stream_only).toBe(false);
+
+  act(() => {
+    fireEvent.click(screen.getByRole("button", { name: "Yes, disable downloads" }));
+  });
+
+  expect(product.files[0]?.stream_only).toBe(true);
+  expect(screen.queryByRole("dialog")).toBeNull();
+});
+
+it("leaves downloads on when the seller cancels the confirmation", async () => {
+  const file: FileEntry = { ...documentFile, status: { type: "saved" }, existing_buyers_count: 1 };
+  const product = trackProductFiles(file);
+
+  render(<FileEmbedEditor config={{ filesById: context.filesById }} />);
+  await act(() => Promise.resolve());
+  expandRow();
+
+  act(() => {
+    fireEvent.click(downloadSwitch());
+  });
+  expect(screen.getByRole("dialog").textContent).toContain("1 existing buyer will lose download access");
+
+  act(() => {
+    fireEvent.click(screen.getByRole("button", { name: "No, cancel" }));
+  });
+
+  expect(product.files[0]?.stream_only).toBe(false);
+  expect(screen.queryByRole("dialog")).toBeNull();
+  expect(downloadSwitch().checked).toBe(false);
+});
+
+it("disables downloads without a dialog when no buyer can reach the file", async () => {
+  const file: FileEntry = { ...documentFile, status: { type: "saved" }, existing_buyers_count: 0 };
+  const product = trackProductFiles(file);
+
+  render(<FileEmbedEditor config={{ filesById: context.filesById }} />);
+  await act(() => Promise.resolve());
+  expandRow();
+
+  act(() => {
+    fireEvent.click(downloadSwitch());
+  });
+
+  expect(screen.queryByRole("dialog")).toBeNull();
+  expect(product.files[0]?.stream_only).toBe(true);
+});
+
+it("re-enables downloads without asking", async () => {
+  const file: FileEntry = {
+    ...documentFile,
+    status: { type: "saved" },
+    stream_only: true,
+    existing_buyers_count: 42,
+  };
+  const product = trackProductFiles(file);
+
+  render(<FileEmbedEditor config={{ filesById: context.filesById }} />);
+  await act(() => Promise.resolve());
+  expandRow();
+
+  act(() => {
+    fireEvent.click(downloadSwitch());
+  });
+
+  expect(screen.queryByRole("dialog")).toBeNull();
+  expect(product.files[0]?.stream_only).toBe(false);
+});
