@@ -15,6 +15,14 @@ class CustomerMailer < ApplicationMailer
   # another copy. Newest receipts are the ones a "resend my receipts" caller is after.
   GROUPED_RECEIPT_MAX_CHARGEABLES = 20
 
+  # A caller's match can be its whole history (one buyer email matches 31,964 purchases), and
+  # materialising an IN list that long dies at the session's 300s ceiling. Read it a window at a time.
+  GROUPED_RECEIPT_LOOKBACK = 10 * GROUPED_RECEIPT_MAX_CHARGEABLES
+
+  # A combined charge collapses its purchases into a single chargeable, so one window can resolve
+  # to one receipt; read on until the template's fill is reachable, but stop after ten windows.
+  GROUPED_RECEIPT_READ_WINDOWS = 10
+
   # One send per recipient + receipt set within this window. The claim is taken at render,
   # so a retry of a send that failed before SMTP handoff is also suppressed — acceptable,
   # because every caller of this mailer is a self-serve flow the buyer can re-trigger.
@@ -23,13 +31,7 @@ class CustomerMailer < ApplicationMailer
   def grouped_receipt(purchase_ids, recommendations: true)
     @recommendations = recommendations
     # Callers pass ids in any state; the email-reassignment flow includes failed purchases.
-    @chargeables = Purchase.where(id: purchase_ids)
-      .all_success_states_including_test
-      .order(id: :desc)
-      .includes(charge: [:order, :seller])
-      .map { Charge::Chargeable.find_by_purchase_or_charge!(purchase: _1) }
-      .uniq
-    @chargeables = renderable_chargeables(@chargeables).first(GROUPED_RECEIPT_MAX_CHARGEABLES).reverse
+    @chargeables = read_renderable_chargeables(purchase_ids).first(GROUPED_RECEIPT_MAX_CHARGEABLES).reverse
     return if @chargeables.empty?
 
     # Re-check before the claim so a set that cannot be sent does not consume the 24h window.
@@ -408,6 +410,24 @@ class CustomerMailer < ApplicationMailer
   end
 
   private
+    # Newest receipts are the ones a "resend my receipts" caller is after, so page newest-first;
+    # the state filter stays in the window query so failed ids cannot eat the read budget.
+    def read_renderable_chargeables(purchase_ids)
+      scope = Purchase.where(id: purchase_ids).all_success_states_including_test
+      chargeables = []
+
+      GROUPED_RECEIPT_READ_WINDOWS.times do
+        window = scope.order(id: :desc).limit(GROUPED_RECEIPT_LOOKBACK).includes(charge: [:order, :seller]).to_a
+        break if window.empty?
+
+        scope = scope.where("purchases.id < ?", window.last.id)
+        chargeables = renderable_chargeables((chargeables + window.map { Charge::Chargeable.find_by_purchase_or_charge!(purchase: _1) }).uniq)
+        break if chargeables.size >= GROUPED_RECEIPT_MAX_CHARGEABLES
+      end
+
+      chargeables
+    end
+
     # Batched: a per-chargeable exists? is an N+1 on up to GROUPED_RECEIPT_MAX_CHARGEABLES entries.
     def renderable_chargeables(chargeables)
       purchases, charges = chargeables.partition { _1.is_a?(Purchase) }

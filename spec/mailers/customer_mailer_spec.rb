@@ -1527,6 +1527,43 @@ describe CustomerMailer do
       expect(mail.subject).to eq("Receipts for Purchases")
     end
 
+    it "reads only bounded newest-first windows of a caller's match" do
+      stub_const("CustomerMailer::GROUPED_RECEIPT_LOOKBACK", 1)
+      stub_const("CustomerMailer::GROUPED_RECEIPT_READ_WINDOWS", 2)
+      older = create(:purchase, link: product, seller:)
+      allow(Charge::Chargeable).to receive(:find_by_purchase_or_charge!).and_call_original
+
+      mail = CustomerMailer.grouped_receipt([older.id] + purchases.map(&:id))
+
+      expect(mail.to).to eq([purchases.last.email])
+      expect(Charge::Chargeable).to have_received(:find_by_purchase_or_charge!).with(purchase: purchases.last).once
+      expect(Charge::Chargeable).to have_received(:find_by_purchase_or_charge!).with(purchase: purchases.first).once
+      expect(Charge::Chargeable).not_to have_received(:find_by_purchase_or_charge!).with(purchase: older)
+    end
+
+    it "keeps reading windows when the newest purchases collapse into a shared charge" do
+      stub_const("CustomerMailer::GROUPED_RECEIPT_LOOKBACK", 2)
+      older = create(:purchase, link: create(:product, user: seller, name: "Older item"), seller:)
+      create(:charge, purchases:, seller:)
+
+      items = Nokogiri::HTML(CustomerMailer.grouped_receipt([older.id] + purchases.map(&:id)).body.decoded)
+        .css(".item .product-checkout-cell h4").map(&:text).map(&:strip)
+
+      expect(items).to include("Older item")
+    end
+
+    it "does not let failed purchases consume the read budget" do
+      stub_const("CustomerMailer::GROUPED_RECEIPT_LOOKBACK", 1)
+      stub_const("CustomerMailer::GROUPED_RECEIPT_READ_WINDOWS", 1)
+      older = create(:purchase, link: create(:product, user: seller, name: "Older item"), seller:)
+      failed = create_list(:failed_purchase, 2, link: product, seller:)
+
+      mail = CustomerMailer.grouped_receipt([older.id] + failed.map(&:id))
+
+      expect(mail.message).not_to be_a(ActionMailer::Base::NullMail)
+      expect(Nokogiri::HTML(mail.body.decoded).css(".item .product-checkout-cell h4").map(&:text).map(&:strip)).to include("Older item")
+    end
+
     it "sets Reply-To to the product's support email" do
       product.update!(support_email: "product-support@example.com")
 
