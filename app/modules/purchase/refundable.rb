@@ -759,10 +759,9 @@ class Purchase
 
       return unless amount_already_reversed_cents < amount_to_reverse_cents
 
-      # A reversal that is not tied to this refund — a dispute withdrawal, or an earlier
-      # refund on the same charge — still consumes the transfer's reversibility, so the
-      # amount asked for here has to fit in what Stripe has left. Asking for more is
-      # rejected with "the transfer is already fully reversed".
+      # Reversals not tied to this refund — a dispute withdrawal, an earlier refund on the same
+      # charge — still consume the transfer's reversibility, so the request has to fit in what
+      # Stripe has left.
       transfer_cents_available_to_reverse = transfer.amount.to_i - transfer.amount_reversed.to_i
       reversal_amount_cents = [amount_to_reverse_cents - amount_already_reversed_cents,
                                transfer_cents_available_to_reverse].min
@@ -784,9 +783,8 @@ class Purchase
       transfer_reversal = begin
         Stripe::Transfer.create_reversal(transfer.id, { amount: reversal_amount_cents })
       rescue Stripe::InvalidRequestError => e
-        # Stripe has already taken this refund, so letting the error out would roll back the
-        # refund bookkeeping and leave the purchase looking refundable again. Nothing is owed
-        # when the transfer is already fully reversed, so report it and keep the refund.
+        # Stripe has already taken the refund, so letting this out rolls the refund bookkeeping
+        # back; nothing is owed once the transfer is fully reversed.
         raise unless e.message.match?(/already fully reversed/i)
 
         ErrorNotifier.notify(e, context: { purchase_id: id, refund_id: refund.id, transfer_id: transfer.id })

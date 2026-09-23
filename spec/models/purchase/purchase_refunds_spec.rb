@@ -1740,10 +1740,8 @@ describe "PurchaseRefunds", :vcr do
     end
 
     it "does not reverse the excess when a reversal unrelated to this refund has already emptied the transfer" do
-      # A dispute whose funds were withdrawn from the destination reverses the whole transfer,
-      # and that reversal carries no `source_refund` of ours, so the guard below cannot see it.
-      # Production: a 251.79 USD transfer reversed to the cent with the excess still computed as
-      # positive, so Stripe rejected the reversal and the raise rolled the refund back.
+      # A dispute withdrawal reverses the whole transfer and carries no `source_refund` of ours,
+      # so the guard below cannot see it.
       purchase = create(:purchase, link: @product, merchant_account: @merchant_account, stripe_transaction_id: "ch_2MlrJr9e1RjUNIyY0s8AWM5s")
       allow_any_instance_of(Purchase).to receive(:gumroad_tax_cents).and_return 200
       allow_any_instance_of(Purchase).to receive(:gumroad_tax_refunded_cents).and_return 200
@@ -1771,9 +1769,8 @@ describe "PurchaseRefunds", :vcr do
     end
 
     it "keeps the refund when Stripe rejects the reversal as already fully reversed" do
-      # Stripe has already taken the refund by this point, so letting the error out rolls the
-      # refund bookkeeping back and leaves the purchase looking refundable again. Nothing is
-      # owed once the transfer is fully reversed, so the refund has to survive the rejection.
+      # Stripe has already taken the refund by this point, so letting the rejection out rolls the
+      # refund bookkeeping back; nothing is owed once the transfer is fully reversed.
       purchase = create(:purchase, link: @product, merchant_account: @merchant_account, stripe_transaction_id: "ch_2MlrJr9e1RjUNIyY0s8AWM5s")
       allow_any_instance_of(Purchase).to receive(:gumroad_tax_cents).and_return 200
       allow_any_instance_of(Purchase).to receive(:gumroad_tax_refunded_cents).and_return 200
