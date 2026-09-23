@@ -371,55 +371,58 @@ module Charge::Disputable
     # before writing formalized_side_effects_finished_at, so each step is either guarded here
     # or idempotent on its own.
     def perform_dispute_formalized_side_effects!(event, dispute)
-      disputed_purchases.each do |purchase|
-        flow_of_funds = build_flow_of_funds(event.flow_of_funds, purchase)
-        # Replay-safe without a guard here: decrement_balance_for_refund_or_chargeback! checks
-        # seller_balance_update_eligible? internally and returns early once the purchase already
-        # has a purchase_chargeback_balance, so a replay never debits the seller twice.
-        purchase.decrement_balance_for_refund_or_chargeback!(flow_of_funds, dispute:)
+      begin
+        disputed_purchases.each do |purchase|
+          flow_of_funds = build_flow_of_funds(event.flow_of_funds, purchase)
+          # Replay-safe without a guard here: decrement_balance_for_refund_or_chargeback! checks
+          # seller_balance_update_eligible? internally and returns early once the purchase already
+          # has a purchase_chargeback_balance, so a replay never debits the seller twice.
+          purchase.decrement_balance_for_refund_or_chargeback!(flow_of_funds, dispute:)
 
-        # Read the purchase's own subscription: a seller converting a membership to a one-off flips
-        # link.is_recurring_billing for every past sale, live ones included.
-        #
-        # Installment plans must stay out: installment_plans_cannot_be_cancelled_by_buyer rejects
-        # the by_buyer cancel below, and raising here would strand every later side effect
-        # (payout pause, dispute evidence, FightDisputeJob) on every webhook redelivery.
-        subscription = Subscription.find_by(id: purchase.subscription_id)
-        subscription = nil if subscription&.is_installment_plan?
-        # Only cancel a live subscription: re-cancelling one that a previous attempt already
-        # deactivated would re-fire the cancellation webhooks and customer emails on replay.
-        # The review exclusion stays inside this guard because it is tied to the cancellation.
-        if subscription.present? && subscription.deactivated_at.nil?
-          subscription.cancel_effective_immediately!(by_buyer: true)
-          subscription.original_purchase.update!(should_exclude_product_review: true) if subscription.should_exclude_product_review_on_charge_reversal?
+          # Read the purchase's own subscription: a seller converting a membership to a one-off flips
+          # link.is_recurring_billing for every past sale, live ones included.
+          #
+          # Installment plans must stay out: installment_plans_cannot_be_cancelled_by_buyer rejects
+          # the by_buyer cancel below, and raising here would strand every later side effect
+          # (payout pause, dispute evidence, FightDisputeJob) on every webhook redelivery.
+          subscription = Subscription.find_by(id: purchase.subscription_id)
+          subscription = nil if subscription&.is_installment_plan?
+          # Only cancel a live subscription: re-cancelling one that a previous attempt already
+          # deactivated would re-fire the cancellation webhooks and customer emails on replay.
+          # The review exclusion stays inside this guard because it is tied to the cancellation.
+          if subscription.present? && subscription.deactivated_at.nil?
+            subscription.cancel_effective_immediately!(by_buyer: true)
+            subscription.original_purchase.update!(should_exclude_product_review: true) if subscription.should_exclude_product_review_on_charge_reversal?
+          end
+
+          purchase.enqueue_update_sales_related_products_infos_job(false)
+          purchase.mark_giftee_purchase_as_chargeback if purchase.is_gift_sender_purchase
+
+          # No replay guard needed for these writes: the same event always carries the same
+          # date and reason, so rewriting them is a no-op.
+          purchase.chargeback_date = event.created_at
+          purchase.chargeback_reason = event.extras.try(:[], :reason)
+          purchase.save!
+
+          purchase.mark_product_purchases_as_chargedback!
+
+          # Enforcement runs as a background job rather than inline: the dispute was already
+          # marked formalized above, so an inline failure here would otherwise be skipped on
+          # webhook retry. The job gets its own Sidekiq retries and the enforcement method is
+          # idempotent.
+          EnforceRefundPolicyForSellerJob.perform_async(purchase.id)
+          # Idempotent (it recomputes from current data and re-applies the same state), so a replay
+          # can safely call it again.
+          purchase.block_buyer_based_on_chargeback_count!
         end
-
-        purchase.enqueue_update_sales_related_products_infos_job(false)
-        purchase.mark_giftee_purchase_as_chargeback if purchase.is_gift_sender_purchase
-
-        # No replay guard needed for these writes: the same event always carries the same
-        # date and reason, so rewriting them is a no-op.
-        purchase.chargeback_date = event.created_at
-        purchase.chargeback_reason = event.extras.try(:[], :reason)
-        purchase.save!
-
-        purchase.mark_product_purchases_as_chargedback!
-
-        # Enforcement runs as a background job rather than inline: the dispute was already
-        # marked formalized above, so an inline failure here would otherwise be skipped on
-        # webhook retry. The job gets its own Sidekiq retries and the enforcement method is
-        # idempotent.
-        EnforceRefundPolicyForSellerJob.perform_async(purchase.id)
-        # Idempotent (it recomputes from current data and re-applies the same state), so a replay
-        # can safely call it again.
-        purchase.block_buyer_based_on_chargeback_count!
-      end
-
-      # The gate's ratio is seller-level and its trailing-window aggregate takes ~90s on a large
-      # catalog, so check each seller once — after every purchase in this charge is marked charged
-      # back — instead of once per purchase. Idempotent, so a replay can safely call it again.
-      disputed_purchases.uniq(&:seller_id).each do |purchase|
-        purchase.pause_payouts_for_seller_based_on_chargeback_rate!
+      ensure
+        # The gate reads a seller-level ratio whose trailing-window aggregate takes ~90s on a
+        # large catalog: run it once per seller, after every purchase above is marked charged
+        # back, rather than once per purchase. `ensure` so a purchase raising partway cannot
+        # defer the hold behind the rest of this method.
+        disputed_purchases.uniq(&:seller_id).each do |purchase|
+          purchase.pause_payouts_for_seller_based_on_chargeback_rate!
+        end
       end
 
       dispute_evidence = create_dispute_evidence_if_needed!

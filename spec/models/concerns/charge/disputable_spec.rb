@@ -430,7 +430,7 @@ describe Charge::Disputable, :vcr do
         expect(FightDisputeJob).to have_enqueued_sidekiq_job(purchase.dispute.id)
       end
 
-      it "calls pause_payouts_for_seller_based_on_chargeback_rate! for each purchase" do
+      it "checks the seller's payout gate" do
         expect_any_instance_of(Purchase).to receive(:pause_payouts_for_seller_based_on_chargeback_rate!)
         Purchase.handle_charge_event(event)
         expect(FightDisputeJob).to have_enqueued_sidekiq_job(purchase.dispute.id)
@@ -467,6 +467,19 @@ describe Charge::Disputable, :vcr do
           Purchase.handle_charge_event(event)
 
           expect(marked_when_checked).to eq([2])
+        end
+
+        it "checks the seller once when a purchase's side effects raise partway" do
+          checks = 0
+          allow_any_instance_of(Purchase).to receive(:pause_payouts_for_seller_based_on_chargeback_rate!).and_wrap_original do |original|
+            checks += 1
+            original.call
+          end
+          allow_any_instance_of(User).to receive(:lost_chargebacks_for_payout_gate).and_return({ volume: "0.5%", count: "0.5%" })
+          allow_any_instance_of(Purchase).to receive(:mark_product_purchases_as_chargedback!).and_raise("marking failed")
+
+          expect { Purchase.handle_charge_event(event) }.to raise_error("marking failed")
+          expect(checks).to eq(1)
         end
       end
 
