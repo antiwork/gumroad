@@ -430,10 +430,80 @@ describe Charge::Disputable, :vcr do
         expect(FightDisputeJob).to have_enqueued_sidekiq_job(purchase.dispute.id)
       end
 
-      it "calls pause_payouts_for_seller_based_on_chargeback_rate! for each purchase" do
+      it "checks the seller's payout gate" do
         expect_any_instance_of(Purchase).to receive(:pause_payouts_for_seller_based_on_chargeback_rate!)
         Purchase.handle_charge_event(event)
         expect(FightDisputeJob).to have_enqueued_sidekiq_job(purchase.dispute.id)
+      end
+
+      context "when the charge covers several purchases" do
+        let!(:charge) do
+          charge = create(:charge,
+                          seller:,
+                          processor: StripeChargeProcessor.charge_processor_id,
+                          processor_transaction_id: "ch_zitkxbhds3zqlt",
+                          amount_cents: 10_00)
+          charge.purchases << create(:purchase, link: create(:product, user: seller), total_transaction_cents: 2_50)
+          charge.purchases << create(:purchase, link: create(:product, user: seller), total_transaction_cents: 5_00)
+          charge
+        end
+
+        before do
+          # The evidence receipt renders for whichever purchase the charge selects, not the
+          # outer stub's single purchase.
+          allow(DisputeEvidence::GenerateReceiptImageService).to receive(:perform)
+            .and_return(File.read(Rails.root.join("spec", "support", "fixtures", "test-small.jpg")))
+        end
+
+        it "checks the seller once, after the whole charge is marked charged back" do
+          marked_when_checked = []
+          # Below the pause threshold: an above-threshold rate pauses the seller, and a later
+          # check would short-circuit on the pause source instead of reading the ratio.
+          allow_any_instance_of(User).to receive(:lost_chargebacks_for_payout_gate) do
+            marked_when_checked << charge.purchases.reload.count { _1.chargeback_date.present? }
+            { volume: "0.5%", count: "0.5%" }
+          end
+
+          Purchase.handle_charge_event(event)
+
+          expect(marked_when_checked).to eq([2])
+        end
+
+        it "checks the seller once when a purchase's side effects raise partway" do
+          checks = 0
+          allow_any_instance_of(Purchase).to receive(:pause_payouts_for_seller_based_on_chargeback_rate!).and_wrap_original do |original|
+            checks += 1
+            original.call
+          end
+          allow_any_instance_of(User).to receive(:lost_chargebacks_for_payout_gate).and_return({ volume: "0.5%", count: "0.5%" })
+          allow_any_instance_of(Purchase).to receive(:mark_product_purchases_as_chargedback!).and_raise("marking failed")
+
+          expect { Purchase.handle_charge_event(event) }.to raise_error("marking failed")
+          expect(checks).to eq(1)
+        end
+
+        it "pauses payouts when a later purchase fails and does not repeat the pause on replay" do
+          checks = 0
+          allow_any_instance_of(User).to receive(:lost_chargebacks_for_payout_gate) do
+            checks += 1
+            { volume: "2.0%", count: "2.0%" }
+          end
+          blocks = 0
+          allow_any_instance_of(Purchase).to receive(:block_buyer_based_on_chargeback_count!) do
+            blocks += 1
+            raise "buyer-block failure" if blocks == 2
+          end
+
+          expect { Purchase.handle_charge_event(event) }.to raise_error("buyer-block failure")
+          expect(checks).to eq(1)
+          expect(seller.reload.payouts_paused_internally).to be(true)
+          expect(seller.comments.where(author_name: User::SYSTEM_PAYOUT_PAUSE_COMMENT_AUTHORS[:high_chargeback_rate]).count).to eq(1)
+          expect(charge.reload.dispute.formalized_side_effects_finished_at).to be_nil
+
+          Purchase.handle_charge_event(event)
+          expect(charge.reload.dispute.formalized_side_effects_finished_at).to be_present
+          expect(seller.comments.where(author_name: User::SYSTEM_PAYOUT_PAUSE_COMMENT_AUTHORS[:high_chargeback_rate]).count).to eq(1)
+        end
       end
 
       it "enqueues EnforceRefundPolicyForSellerJob for each purchase" do
