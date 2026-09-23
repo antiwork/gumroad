@@ -6,27 +6,10 @@ class OEmbedFinder
   # limited oembed urls for mobile (we don't know if mobile can support other urls)
   MOBILE_URL_REGEXES = [%r{player.vimeo.com/video/\d+}, %r{https://w.soundcloud.com/player}, %r{https://www.youtube.com/embed}].freeze
 
+  # Providers are registered once at boot, in config/initializers/oembed.rb.
   def self.embeddable_from_url(new_url, maxwidth = AssetPreview::DEFAULT_DISPLAY_WIDTH)
-    OEmbed::Providers.register_all
-    wistia = OEmbed::Provider.new("http://fast.wistia.com/oembed")
-    wistia << "http://*.wistia.com/*"
-    wistia << "http://*.wistia.net/*"
-    wistia << "https://*.wistia.com/*"
-    wistia << "https://*.wistia.net/*"
-    OEmbed::Providers.register(wistia)
-
-    sketchfab = OEmbed::Provider.new("https://sketchfab.com/oembed")
-    sketchfab << "http://sketchfab.com/models/*"
-    sketchfab << "https://sketchfab.com/models/*"
-    OEmbed::Providers.register(sketchfab)
-
-    framerate = OEmbed::Provider.new("https://framerate.tv/api/oembed")
-    framerate << "http://*.framerate.tv/watch/*"
-    framerate << "https://*.framerate.tv/watch/*"
-    OEmbed::Providers.register(framerate)
-
-    begin
-      res = OEmbed::Providers.get(new_url, maxwidth:)
+    res = begin
+      OEmbed::Providers.get(new_url, maxwidth:)
     rescue StandardError
       return nil
     end

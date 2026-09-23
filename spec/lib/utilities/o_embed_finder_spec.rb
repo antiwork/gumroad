@@ -4,10 +4,6 @@ require "spec_helper"
 
 describe OEmbedFinder do
   describe "#embeddable_from_url" do
-    before :each do
-      expect(OEmbed::Providers).to receive(:register_all)
-    end
-
     it "returns nil if there is an exceptions when getting oembed" do
       allow(OEmbed::Providers).to receive(:get).and_raise(StandardError)
       expect(OEmbedFinder.embeddable_from_url("some url")).to be(nil)
@@ -107,6 +103,90 @@ describe OEmbedFinder do
           end
         end
       end
+    end
+  end
+
+  # Snapshot identities because the process-wide registry is shared across examples.
+  describe "provider registry" do
+    let(:unmatched_url) { "https://example.com/no-registered-provider-matches-this" }
+
+    def registry_snapshot
+      OEmbed::Providers.urls.transform_values { |providers| providers.map(&:object_id) }
+    end
+
+    def distinct_providers_for(endpoint)
+      OEmbed::Providers.urls.values.flatten.uniq.select { |provider| provider.endpoint == endpoint }
+    end
+
+    it "holds one provider per url pattern however many lookups have happened" do
+      3.times { OEmbedFinder.embeddable_from_url(unmatched_url) }
+
+      # Counts, not the providers themselves: a failure here otherwise prints all 93
+      # registered providers with their url lists.
+      duplicated = OEmbed::Providers.urls.transform_values(&:size).select { |_pattern, count| count > 1 }
+
+      expect(duplicated).to be_empty
+      expect(OEmbed::Providers.urls).to be_present
+    end
+
+    it "builds the Wistia, Sketchfab and FrameRate providers once rather than once per lookup" do
+      3.times { OEmbedFinder.embeddable_from_url(unmatched_url) }
+
+      expect(distinct_providers_for("http://fast.wistia.com/oembed").size).to eq 1
+      expect(distinct_providers_for("https://sketchfab.com/oembed").size).to eq 1
+      expect(distinct_providers_for("https://framerate.tv/api/oembed").size).to eq 1
+    end
+
+    it "leaves the registry untouched across a lookup that resolves" do
+      vcr_turned_on do
+        VCR.use_cassette("OEmbedFinder/framerate_watch_url", allow_playback_repeats: true) do
+          OEmbedFinder.embeddable_from_url("https://framerate.tv/watch/AB3peBMp")
+          before = registry_snapshot
+
+          OEmbedFinder.embeddable_from_url("https://framerate.tv/watch/AB3peBMp")
+
+          expect(registry_snapshot).to eq before
+        end
+      end
+    end
+
+    it "leaves the registry untouched when lookups run concurrently" do
+      OEmbedFinder.embeddable_from_url(unmatched_url)
+      before = registry_snapshot
+
+      8.times.map do
+        Thread.new { 3.times { OEmbedFinder.embeddable_from_url(unmatched_url) } }
+      end.each(&:join)
+
+      expect(registry_snapshot).to eq before
+    end
+
+    # The gem registry survives application code reloads.
+    it "keeps its providers across a code reload" do
+      OEmbedFinder.embeddable_from_url(unmatched_url)
+      before = registry_snapshot
+
+      Rails.application.reloader.reload!
+      OEmbedFinder.embeddable_from_url(unmatched_url)
+
+      expect(registry_snapshot).to eq before
+    end
+
+    it "resolves each registered host to its own endpoint and nothing to an unregistered one" do
+      OEmbedFinder.embeddable_from_url(unmatched_url)
+
+      expect(OEmbed::Providers.find("https://www.youtube.com/watch?v=jNQXAC9IVRw").endpoint).to eq "https://www.youtube.com/oembed/?scheme=https"
+      expect(OEmbed::Providers.find("https://vimeo.com/71588076").endpoint).to eq "https://vimeo.com/api/oembed.{format}"
+      expect(OEmbed::Providers.find("https://soundcloud.com/seller/track").endpoint).to eq "https://soundcloud.com/oembed"
+      expect(OEmbed::Providers.find("https://fast.wistia.com/embed/medias/abc").endpoint).to eq "http://fast.wistia.com/oembed"
+      expect(OEmbed::Providers.find("https://sketchfab.com/models/abc").endpoint).to eq "https://sketchfab.com/oembed"
+      expect(OEmbed::Providers.find("https://framerate.tv/watch/AB3peBMp").endpoint).to eq "https://framerate.tv/api/oembed"
+      expect(OEmbed::Providers.find(unmatched_url)).to be_nil
+    end
+
+    it "returns nil for an unmatched url without falling back to discovery or an aggregator" do
+      expect(OEmbedFinder.embeddable_from_url(unmatched_url)).to be_nil
+      expect(OEmbed::Providers.fallback).to be_empty
     end
   end
 end
