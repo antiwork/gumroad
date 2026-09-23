@@ -95,11 +95,9 @@ module Purchase::Receipt
     candidate
   end
 
-  # Every charge of this membership the current holder may invoice, newest first.
-  #
-  # Email is compared in Ruby, not SQL: `purchases.email` collates utf8mb4_unicode_ci, so
-  # `where(email:)` would also match a case- or accent-variant that the invoice endpoint's byte
-  # comparison rejects, i.e. a link that renders and then refuses.
+  # Every charge of this membership the current holder may invoice, newest first. Email is compared
+  # in Ruby, not SQL: the column collates utf8mb4_unicode_ci, so `where(email:)` also matches the
+  # case- and accent-variants the invoice endpoint's byte comparison rejects.
   def invoiceable_charges
     return [] unless subscription.present?
 

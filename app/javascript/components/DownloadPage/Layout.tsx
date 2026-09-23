@@ -220,14 +220,11 @@ export const Layout = ({
                         {isResendingReceipt ? "Resending receipt..." : "Resend receipt"}
                       </Button>
                       {/*
-                        The receipt and invoice links can only ever name one purchase, so a
-                        membership used to expose only its latest charge and earlier periods had
-                        no route from the UI at all. One link per invoiceable period; the period
-                        is named only when there is more than one, so a one-off purchase and a
-                        one-charge membership read as before. Gated per charge on has_invoice so
-                        a free purchase or a free-trial membership offers nothing to invoice.
+                        The receipt and invoice links can only ever name one purchase, so one link
+                        per invoiceable period; the period is named only when there is more than
+                        one, so a one-off purchase and a one-charge membership read as before.
                       */}
-                      {invoiceCharges.map((charge, index) => (
+                      {invoiceCharges.map((charge) => (
                         <NavigationButton
                           key={charge.id}
                           href={
@@ -236,9 +233,9 @@ export const Layout = ({
                               : Routes.new_purchase_invoice_url(charge.id)
                           }
                         >
-                          {index === 0
-                            ? "Generate invoice"
-                            : `Generate invoice — ${format(parseISO(charge.date), "MMMM yyyy")}`}
+                          {invoiceCharges.length > 1
+                            ? `Generate invoice — ${format(parseISO(charge.date), "MMMM yyyy")}`
+                            : "Generate invoice"}
                         </NavigationButton>
                       ))}
                     </div>
