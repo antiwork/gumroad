@@ -27,6 +27,16 @@ RSpec.describe ContentModeration::Strategies::PromptStrategy, :vcr do
     expect(OpenAI::Client).to have_received(:new).with(access_token: "test-key", request_timeout: 10)
   end
 
+  it "doesn't ask a preset that has no text and no images to grade" do
+    allow(client).to receive(:chat).and_return(json_chat_response(flagged: false, reasoning: ""))
+
+    result = described_class.new(text: "", image_urls: ["https://cdn.example.com/1.png"]).perform
+
+    expect(result.status).to eq("compliant")
+    # adult_content graded the image; the text-only spam preset had nothing to read.
+    expect(client).to have_received(:chat).once
+  end
+
   it "returns compliant when the API key is blank" do
     allow(GlobalConfig).to receive(:get).with("OPENAI_ACCESS_TOKEN").and_return(nil)
 

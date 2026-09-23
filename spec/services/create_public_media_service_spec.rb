@@ -300,5 +300,57 @@ describe CreatePublicMediaService do
 
       expect(result).to be_success
     end
+
+    it "keeps a pipeline-generated file name out of the prose presets" do
+      asset_name = "tjn_#{'a' * 64}.png"
+      url = "https://example.com/#{asset_name}"
+      stub_remote_file(url, "smilie.png", "image/png")
+      compliant = ContentModeration::Strategies::ClassifierStrategy::Result.new(status: "compliant", reasoning: [])
+      allow(ContentModeration::Strategies::ClassifierStrategy).to receive(:new).and_return(instance_double(ContentModeration::Strategies::ClassifierStrategy, perform: compliant))
+      expect(ContentModeration::Strategies::PromptStrategy).to receive(:new) do |text:, image_urls:, corroborate_judgment_flags:|
+        expect(text).to be_blank
+        expect(corroborate_judgment_flags).to be(true)
+        instance_double(ContentModeration::Strategies::PromptStrategy, perform: compliant)
+      end
+
+      result = described_class.new(seller:, url:).process
+
+      expect(result).to be_success
+    end
+
+    it "still gives the blocklist and the classifier the file name" do
+      asset_name = "tjn_#{'b' * 64}.png"
+      url = "https://example.com/#{asset_name}"
+      stub_remote_file(url, "smilie.png", "image/png")
+      compliant = ContentModeration::Strategies::ClassifierStrategy::Result.new(status: "compliant", reasoning: [])
+      expect(ContentModeration::Strategies::BlocklistStrategy).to receive(:new) do |text:, image_urls:|
+        expect(text).to eq(asset_name)
+        instance_double(ContentModeration::Strategies::BlocklistStrategy, perform: compliant)
+      end
+      expect(ContentModeration::Strategies::ClassifierStrategy).to receive(:new) do |text:, image_urls:|
+        expect(text).to eq(asset_name)
+        instance_double(ContentModeration::Strategies::ClassifierStrategy, perform: compliant)
+      end
+      allow(ContentModeration::Strategies::PromptStrategy).to receive(:new).and_return(instance_double(ContentModeration::Strategies::PromptStrategy, perform: compliant))
+
+      result = described_class.new(seller:, url:).process
+
+      expect(result).to be_success
+    end
+
+    it "still moderates a seller-authored display name as prose" do
+      url = "https://example.com/logo.png"
+      stub_remote_file(url, "smilie.png", "image/png")
+      compliant = ContentModeration::Strategies::ClassifierStrategy::Result.new(status: "compliant", reasoning: [])
+      allow(ContentModeration::Strategies::ClassifierStrategy).to receive(:new).and_return(instance_double(ContentModeration::Strategies::ClassifierStrategy, perform: compliant))
+      expect(ContentModeration::Strategies::PromptStrategy).to receive(:new) do |text:, image_urls:, corroborate_judgment_flags:|
+        expect(text).to eq("buy cheap crypto now")
+        instance_double(ContentModeration::Strategies::PromptStrategy, perform: compliant)
+      end
+
+      result = described_class.new(seller:, url:, name: "buy cheap crypto now").process
+
+      expect(result).to be_success
+    end
   end
 end

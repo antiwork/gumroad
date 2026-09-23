@@ -19,10 +19,11 @@ class ContentModeration::Strategies::PromptStrategy
   # an audit record instead of blocking the seller.
   #
   # Corroboration is opt-in (`corroborate_judgment_flags: true`) so that only
-  # callers designed for the downgrade path get it. ModerateRecordService
-  # opts in and records downgraded flags as non-blocking admin notes; other
-  # callers (e.g. CreatePublicMediaService screening uploads) keep the
-  # original single-sample blocking behavior and its latency profile.
+  # callers designed for the downgrade path get it. ModerateRecordService opts
+  # in and records downgraded flags as non-blocking admin notes; the media
+  # upload path opts in too, having no record to annotate — a downgraded flag
+  # there just doesn't refuse the upload. Other callers keep the original
+  # single-sample blocking behavior and its latency profile.
   CORROBORATION_RESAMPLES = 2
 
   # Which presets are judgment calls that need corroboration before they may
@@ -242,6 +243,8 @@ class ContentModeration::Strategies::PromptStrategy
     audit_reasoning = []
 
     presets.each do |preset|
+      next if empty_payload?(preset)
+
       result = evaluate_preset(preset)
       next if result[:status] == "compliant"
       next unless passes_uncertainty_check?(result[:reasoning])
@@ -291,6 +294,12 @@ class ContentModeration::Strategies::PromptStrategy
         list << { name: "off_platform_fulfillment", rules: OFF_PLATFORM_FULFILLMENT_RULES, skip_images: true }
       end
       list
+    end
+
+    # A preset with no text and no images has nothing to grade; asking anyway costs a model call
+    # and buys a verdict on the "[no text provided]" placeholder.
+    def empty_payload?(preset)
+      @text.blank? && (preset[:skip_images] || sampled_image_urls.empty?)
     end
 
     # An adult-content flag the model reached without seeing a picture is an
