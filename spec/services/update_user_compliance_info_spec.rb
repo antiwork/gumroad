@@ -612,6 +612,30 @@ describe UpdateUserComplianceInfo do
 
         expect(result[:success]).to be true
       end
+
+      it "accepts a representative's non-DNI personal tax ID for a Peru business whose representative lives outside Peru" do
+        user = create(:user).tap do |u|
+          create(
+            :user_compliance_info_business,
+            user: u,
+            country: "Vietnam",
+            business_country: "Peru",
+            business_type: UserComplianceInfo::BusinessTypes::CORPORATION,
+            individual_tax_id: "12345678-9",
+          )
+        end
+
+        params = ActionController::Parameters.new(
+          is_business: true,
+          individual_tax_id: "B1234567",
+        )
+
+        expect(StripeMerchantAccountManager).to receive(:handle_new_user_compliance_info)
+
+        result = described_class.new(compliance_params: params, user:).process
+
+        expect(result[:success]).to be true
+      end
     end
 
     context "with a Singapore individual" do
@@ -732,6 +756,52 @@ describe UpdateUserComplianceInfo do
 
         expect(result[:success]).to be true
         expect(user.reload.alive_user_compliance_info.city).to eq("Bukit Timah")
+      end
+    end
+
+    context "with a Singapore business" do
+      def create_singapore_business_user(country:, business_country:)
+        create(:user).tap do |u|
+          create(
+            :user_compliance_info_business,
+            user: u,
+            country:,
+            business_country:,
+            business_type: UserComplianceInfo::BusinessTypes::CORPORATION,
+            individual_tax_id: "S1234567A",
+          )
+        end
+      end
+
+      it "accepts a representative's non-NRIC personal tax ID when the representative lives outside Singapore" do
+        user = create_singapore_business_user(country: "Vietnam", business_country: "Singapore")
+
+        params = ActionController::Parameters.new(
+          is_business: true,
+          individual_tax_id: "B1234567",
+        )
+
+        expect(StripeMerchantAccountManager).to receive(:handle_new_user_compliance_info)
+
+        result = described_class.new(compliance_params: params, user:).process
+
+        expect(result[:success]).to be true
+      end
+
+      it "rejects a malformed NRIC when the representative lives in Singapore" do
+        user = create_singapore_business_user(country: "Singapore", business_country: "Singapore")
+
+        params = ActionController::Parameters.new(
+          is_business: true,
+          individual_tax_id: "123456789",
+        )
+
+        expect(StripeMerchantAccountManager).not_to receive(:handle_new_user_compliance_info)
+
+        result = described_class.new(compliance_params: params, user:).process
+
+        expect(result[:success]).to be false
+        expect(result[:error_message]).to eq("Your NRIC/FIN must start with S, T, F, G or M and end with a letter (for example, S1234567A). Please enter it exactly as it appears on your ID.")
       end
     end
 
@@ -915,6 +985,30 @@ describe UpdateUserComplianceInfo do
         # invariant part of the sentence is what catches a reworded message on one side only.
         expect(helper).to include("digits. Enter it exactly as it appears on your document")
         expect(helper).to include("do not add leading zeros")
+      end
+
+      it "accepts a representative's non-Cédula personal tax ID for a Colombian business whose representative lives outside Colombia" do
+        user = create(:user).tap do |u|
+          create(
+            :user_compliance_info_business,
+            user: u,
+            country: "Vietnam",
+            business_country: "Colombia",
+            business_type: UserComplianceInfo::BusinessTypes::CORPORATION,
+            individual_tax_id: "1234567",
+          )
+        end
+
+        params = ActionController::Parameters.new(
+          is_business: true,
+          individual_tax_id: "B12345",
+        )
+
+        expect(StripeMerchantAccountManager).to receive(:handle_new_user_compliance_info)
+
+        result = described_class.new(compliance_params: params, user:).process
+
+        expect(result[:success]).to be true
       end
     end
 

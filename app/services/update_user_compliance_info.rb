@@ -367,7 +367,7 @@ class UpdateUserComplianceInfo
     def peru_individual_dni_error(old_compliance_info)
       submitted = submitted_tax_id_for(:individual_tax_id)
       return if submitted.blank?
-      return unless effective_legal_entity_country_code(old_compliance_info) == Compliance::Countries::PER.alpha2
+      return unless individual_id_country_matches?(old_compliance_info, Compliance::Countries::PER.alpha2)
       return if submitted.gsub(/\D/, "").length == PERU_DNI_DIGIT_COUNT
       "Your Peru DNI must include the verification digit (for example, 12345678-9)."
     end
@@ -375,7 +375,7 @@ class UpdateUserComplianceInfo
     def singapore_individual_nric_error(old_compliance_info)
       submitted = submitted_tax_id_for(:individual_tax_id)
       return if submitted.blank?
-      return unless effective_legal_entity_country_code(old_compliance_info) == Compliance::Countries::SGP.alpha2
+      return unless individual_id_country_matches?(old_compliance_info, Compliance::Countries::SGP.alpha2)
       # Sellers sometimes paste the NRIC with spaces or dashes; those are harmless, so ignore
       # them when checking the shape (the submitted value is still stored as entered).
       # [[:space:]] instead of \s so Unicode spaces (like the non-breaking space that
@@ -388,9 +388,23 @@ class UpdateUserComplianceInfo
     def colombia_individual_id_error(old_compliance_info)
       submitted = submitted_tax_id_for(:individual_tax_id)
       return if submitted.blank?
-      return unless effective_legal_entity_country_code(old_compliance_info) == Compliance::Countries::COL.alpha2
+      return unless individual_id_country_matches?(old_compliance_info, Compliance::Countries::COL.alpha2)
       return if Compliance::ColombiaIdNumber.valid?(submitted)
       Compliance::ColombiaIdNumber::ERROR_MESSAGE
+    end
+
+    # A personal tax ID belongs to the representative, so its shape is only knowable from the
+    # representative's own country: an SG business whose representative lives elsewhere has no
+    # NRIC/FIN to enter, and Stripe takes their passport instead.
+    def individual_id_country_matches?(old_compliance_info, country_code)
+      effective_legal_entity_country_code(old_compliance_info) == country_code &&
+        representative_country_code(old_compliance_info) == country_code
+    end
+
+    # The submitted country wins over the stored one, mirroring the forms that echo every stored
+    # field back on save; individuals submit country changes as updated_country_code instead.
+    def representative_country_code(old_compliance_info)
+      country_code_for(compliance_params[:country].presence || old_compliance_info.country_code)
     end
 
     def effective_legal_entity_country_code(old_compliance_info)
