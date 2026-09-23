@@ -3,16 +3,13 @@
 # Compares the schema db/schema.rb declares with the schema the live database actually has.
 #
 # Rails records a migration's version as applied the moment `up` returns, so a DDL statement that
-# never took effect leaves nothing behind for a later deploy to notice: the version is in
-# schema_migrations, Rails skips it forever, and the code that reads through the missing index or
-# column keeps working until it meets a table big enough for the difference to matter
-# (gumroad-private#2885: an index on an 84M-row `charges` table was recorded as applied by a deploy
-# whose pt-osc run failed eleven hours later, and no subsequent deploy could create it).
+# never took effect leaves nothing for a later deploy to notice and the code that reads through the
+# missing index or column keeps working. Only "declared by db/schema.rb, missing live" is reported:
+# production legitimately carries schema objects schema.rb does not know about, and a rolling deploy
+# can be mid-migration.
 #
-# Both sides are parsed from the same format — Rails' own schema dump — so a quirk of the parser
-# cancels out instead of surfacing as drift. Only "declared by db/schema.rb, missing live" is
-# reported: production legitimately carries indexes and columns that schema.rb does not know about,
-# and a rolling deploy can be mid-migration.
+# Both sides are parsed in Rails' own schema dump format, so a parser quirk cancels out instead of
+# surfacing as drift.
 class DbSchemaParity
   class DriftError < StandardError; end
 

@@ -57,4 +57,10 @@ describe DbSchemaParity do
 
     expect(described_class.new(declared: schema, live:).missing.map(&:name)).to include("index_charges_on_stripe_payment_intent_id")
   end
+
+  # The task's real entry point: the file read and a dump of the live connection. The test database
+  # is loaded from db/schema.rb, so anything reported here is a boundary mismatch, not drift.
+  it "reads db/schema.rb and the live connection through from_live_connection" do
+    expect(described_class.from_live_connection.missing).to eq([])
+  end
 end

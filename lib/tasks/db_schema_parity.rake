@@ -15,9 +15,8 @@ namespace :db do
     missing.each { |row| puts "db:schema_parity: MISSING #{row}" }
     raise DbSchemaParity::DriftError, "#{missing.size} schema object(s) declared in db/schema.rb are missing from the live database: #{missing.join('; ')}"
   rescue StandardError => e
-    # Like taxonomy:seed, the deploy runs this non-fatally so it cannot hold the migration lock, so
-    # the shell discards the exit status — this report is the only thing that tells anyone the live
-    # schema is short of what schema.rb declares, which no later deploy will repair.
+    # The shell discards this exit status, so this report is the only signal that the live schema is
+    # short of what db/schema.rb declares.
     ErrorNotifier.notify(e, exclude_request_context: true, task: "db:schema_parity")
     abort "db:schema_parity failed: #{e.class}: #{e.message}"
   end
