@@ -868,9 +868,8 @@ const Form = ({
                       label="Offer the version the buyer selected"
                     />
                     <FieldsetDescription>
-                      {
-                        "Uses the offered product's version with the same name; falls back to the version above when the names differ."
-                      }
+                      Uses the offered product's version with the same name; falls back to the version above when the
+                      names differ.
                     </FieldsetDescription>
                   </Fieldset>
                 ) : null}
