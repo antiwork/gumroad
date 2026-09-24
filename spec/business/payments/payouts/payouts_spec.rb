@@ -956,11 +956,8 @@ describe Payouts do
       debt = create(:balance, user:, merchant_account:, date: payout_date - 2, amount_cents: -3_00,
                               holding_currency: Currency::EUR, holding_amount_cents: -2_60)
       alerts = []
-      expect(ActiveRecord).to receive(:after_all_transactions_commit).once { |&block| alerts << block }
-      expect(ErrorNotifier).to receive(:notify).once.with(
-        "Payout withheld for non-payable ledger",
-        user_id: user.id, payout_period_end_date: payout_date.to_s, processor_type: PayoutProcessorType::STRIPE
-      )
+      expect(ActiveRecord).to receive(:after_all_transactions_commit).twice { |&block| alerts << block }
+      expect(ErrorNotifier).to receive(:notify).twice
 
       expect(described_class.create_payments(payout_date.to_s, PayoutProcessorType::STRIPE, user)).to eq([])
       expect(described_class.create_payments(payout_date.to_s, PayoutProcessorType::STRIPE, user)).to eq([])
@@ -972,13 +969,15 @@ describe Payouts do
       create(:balance, user:, merchant_account:, date: payout_date - 2, amount_cents: -1_00,
                        holding_currency: Currency::GBP, holding_amount_cents: -80)
       expect(described_class.create_payments((payout_date + (26 * 7)).to_s, PayoutProcessorType::STRIPE, user)).to eq([])
-      expect(alerts.size).to eq(1)
+      expect(alerts.size).to eq(2)
+      alerts.last.call
 
-      notes = user.comments.with_type_payout_note.alive.where("content LIKE ?", "Payout STRIPE withheld for balance %")
-      expect(notes.count).to eq(1)
-      expect(notes.sole.json_data["ledger_hold_notification_state"]).to eq("notified")
-      expect(notes.sole.content).to include("the unpaid ledger is not payable", "Reconcile the unpaid balance ledger before retry")
-      expect(PayoutNoteVisibility.seller_visible?(notes.sole)).to eq(false)
+      notes = user.comments.with_type_payout_note.alive.where("content LIKE ?", "Payout STRIPE withheld for %")
+      expect(notes.count).to eq(2)
+      expect(notes.map(&:content).uniq.size).to eq(2)
+      expect(notes.map { |item| item.json_data["ledger_hold_notification_state"] }).to all(eq("notified"))
+      expect(notes.map(&:content)).to all(include("the unpaid ledger is not payable", "Reconcile the unpaid balance ledger before retry"))
+      expect(notes.map { |item| PayoutNoteVisibility.seller_visible?(item) }).to all(eq(false))
       expect(user.payments.count).to eq(0)
       expect(user.balances.reload.map(&:state).uniq).to eq(["unpaid"])
       expect(debt.reload).to be_unpaid

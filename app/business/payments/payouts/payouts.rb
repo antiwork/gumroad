@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require "digest"
+
 class Payouts
   extend ActionView::Helpers::NumberHelper
 
@@ -471,10 +473,12 @@ class Payouts
       negative_group = ledger_groups.any? { |_, _, group_balances| group_balances.sum(&:amount_cents).negative? }
       if ledger.sum(&:amount_cents) <= 0 || negative_group
         Rails.logger.info("Payouts: Negative balance for #{user.id}")
-        # Key the hold to the oldest unresolved debt, not the week, so recurring notes do not
-        # bury seller-facing guidance while a later debt can still start a new hold.
-        blocking_balance = ledger.select { |balance| balance.amount_cents.negative? }.min_by(&:id) || ledger.min_by(&:id)
-        note = "Payout #{processor_type} withheld for balance #{blocking_balance.id} because the unpaid ledger is not payable. Reconcile the unpaid balance ledger before retry."
+        # Key the hold to the unresolved debt set, not the week, so new debts are reported
+        # without burying seller-facing guidance under weekly notes for the same debt.
+        blocking_ids = ledger.filter_map { |balance| balance.id if balance.amount_cents.negative? }
+        blocking_ids = ledger.map(&:id) if blocking_ids.empty?
+        hold_key = Digest::SHA256.hexdigest(blocking_ids.sort.join(","))[0, 16]
+        note = "Payout #{processor_type} withheld for ledger #{hold_key} because the unpaid ledger is not payable. Reconcile the unpaid balance ledger before retry."
         hold_note = user.comments.with_type_payout_note.alive.find_by(author_id: GUMROAD_ADMIN_ID, content: note)
         notify = false
         if hold_note.nil?
