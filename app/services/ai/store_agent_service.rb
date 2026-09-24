@@ -16,15 +16,14 @@ class Ai::StoreAgentService
   class Error < StandardError; end
 
   MODEL = Ai::AnthropicClient::DEFAULT_MODEL
-  # Grok and DeepSeek are only reachable through OpenRouter, so the cutover keys off routing.
-  OPENROUTER_MODEL = "x-ai/grok-4.5"
-  # When Grok errors (provider down, rate limited), OpenRouter retries the turn on this model
+  # The Grok and DeepSeek ramps also need OpenRouter, which replays the Opus fallback when Vercel fails.
+  GROK_MODEL = "x-ai/grok-4.5"
+  # When Grok errors (provider down, rate limited), the gateway retries the turn on this model
   # rather than the client's default GPT fallback.
-  OPENROUTER_FALLBACK_MODEL = "anthropic/claude-opus-5"
+  GROK_FALLBACK_MODEL = "anthropic/claude-opus-5"
   # Below 100%, gates Grok vs Opus per seller in addition to OPENROUTER_API_KEY being configured.
   GROK_RAMP_FEATURE = :store_agent_grok
-  # DeepSeek V4.1 Flash: cheap, fast MoE model. Routed through Vercel AI Gateway
-  # (OpenRouter if that config is blank) with Opus as the model fallback.
+  # DeepSeek V4.1 Flash: cheap, fast MoE model, with Opus as the model fallback.
   DEEPSEEK_MODEL = "deepseek/deepseek-v4.1-flash"
   DEEPSEEK_FALLBACK_MODEL = "anthropic/claude-opus-5"
   # Below 100%, gates DeepSeek vs Opus per seller in addition to OPENROUTER_API_KEY being
@@ -1821,10 +1820,10 @@ class Ai::StoreAgentService
     def client
       @_client ||= if Ai::AnthropicClient.openrouter_configured? && Feature.active?(DEEPSEEK_RAMP_FEATURE, seller)
         @_client_model = DEEPSEEK_MODEL
-        Ai::AnthropicClient.new(timeout: REQUEST_TIMEOUT_IN_SECONDS, model: DEEPSEEK_MODEL, fallback_model: DEEPSEEK_FALLBACK_MODEL, gateway: :vercel)
+        Ai::AnthropicClient.new(timeout: REQUEST_TIMEOUT_IN_SECONDS, model: DEEPSEEK_MODEL, fallback_model: DEEPSEEK_FALLBACK_MODEL)
       elsif Ai::AnthropicClient.openrouter_configured? && Feature.active?(GROK_RAMP_FEATURE, seller)
-        @_client_model = OPENROUTER_MODEL
-        Ai::AnthropicClient.new(timeout: REQUEST_TIMEOUT_IN_SECONDS, model: OPENROUTER_MODEL, fallback_model: OPENROUTER_FALLBACK_MODEL)
+        @_client_model = GROK_MODEL
+        Ai::AnthropicClient.new(timeout: REQUEST_TIMEOUT_IN_SECONDS, model: GROK_MODEL, fallback_model: GROK_FALLBACK_MODEL)
       else
         @_client_model = MODEL
         Ai::AnthropicClient.new(timeout: REQUEST_TIMEOUT_IN_SECONDS, model: MODEL)
