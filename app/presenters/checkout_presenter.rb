@@ -184,7 +184,11 @@ class CheckoutPresenter
       affiliate_id: params[:affiliate_id],
       recommended_by: params[:recommended_by],
       recommender_model_name: params[:recommender_model_name],
-      accepted_offer: accepted_offer ? { id: accepted_offer.external_id, variant_id: accepted_offer&.variant&.external_id, discount: accepted_offer.offer_code&.discount_for_display(buyer: logged_in_user, product: accepted_offer.product) } : nil,
+      # The accepted offer's `variant_id` is the version this payload puts in the cart — `option_id`
+      # above. A cross-sell that follows the buyer's selection offers a matched version rather than
+      # its configured one, so reporting `accepted_offer.variant` here would name a version the
+      # buyer is not buying.
+      accepted_offer: accepted_offer ? { id: accepted_offer.external_id, variant_id: option_id, discount: accepted_offer.offer_code&.discount_for_display(buyer: logged_in_user, product: accepted_offer.product) } : nil,
     }
     if include_cross_sells
       selected_option_name = value[:product][:options].find { |option| option[:id] == option_id }&.[](:name)
