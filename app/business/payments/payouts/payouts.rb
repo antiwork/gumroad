@@ -476,14 +476,31 @@ class Payouts
         blocking_balance = ledger.select { |balance| balance.amount_cents.negative? }.min_by(&:id) || ledger.min_by(&:id)
         note = "Payout #{processor_type} withheld for balance #{blocking_balance.id} because the unpaid ledger is not payable. Reconcile the unpaid balance ledger before retry."
         hold_note = user.comments.with_type_payout_note.alive.find_by(author_id: GUMROAD_ADMIN_ID, content: note)
-        hold_note ||= user.add_payout_note(content: note, seller_visible: false, json_data: { "ledger_hold_notified" => false })
-        unless hold_note.json_data["ledger_hold_notified"]
+        notify = false
+        if hold_note.nil?
+          hold_note = user.add_payout_note(content: note, seller_visible: false,
+                                           json_data: { "ledger_hold_notification_state" => "claimed", "ledger_hold_claimed_at" => Time.current.iso8601 })
+          notify = true
+        else
+          state = hold_note.json_data["ledger_hold_notification_state"]
+          claimed_at = hold_note.json_data["ledger_hold_claimed_at"]
+          if state == "failed" || (state == "claimed" && claimed_at && Time.zone.parse(claimed_at) < 15.minutes.ago)
+            hold_note.update!(json_data: hold_note.json_data.merge("ledger_hold_notification_state" => "claimed", "ledger_hold_claimed_at" => Time.current.iso8601))
+            notify = true
+          end
+        end
+        if notify
           ActiveRecord.after_all_transactions_commit do
             ErrorNotifier.notify("Payout withheld for non-payable ledger",
                                  user_id: user.id, payout_period_end_date: date.to_s, processor_type:)
-            hold_note.update!(json_data: hold_note.json_data.merge("ledger_hold_notified" => true))
+            hold_note.update!(json_data: hold_note.json_data.merge("ledger_hold_notification_state" => "notified"))
           rescue => error
             Rails.logger.error("Payouts: ledger hold notification failed for #{user.id}: #{error.class}: #{error.message}")
+            begin
+              hold_note.update!(json_data: hold_note.json_data.merge("ledger_hold_notification_state" => "failed"))
+            rescue => state_error
+              Rails.logger.error("Payouts: ledger hold notification state failed for #{user.id}: #{state_error.class}: #{state_error.message}")
+            end
           end
         end
         balances.each(&:mark_unpaid!)

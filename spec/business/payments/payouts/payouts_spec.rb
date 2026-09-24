@@ -963,6 +963,8 @@ describe Payouts do
       )
 
       expect(described_class.create_payments(payout_date.to_s, PayoutProcessorType::STRIPE, user)).to eq([])
+      expect(described_class.create_payments(payout_date.to_s, PayoutProcessorType::STRIPE, user)).to eq([])
+      expect(user.comments.with_type_payout_note.alive.sole.json_data["ledger_hold_notification_state"]).to eq("claimed")
       alerts.each(&:call)
       25.times do |week|
         expect(described_class.create_payments((payout_date + ((week + 1) * 7)).to_s, PayoutProcessorType::STRIPE, user)).to eq([])
@@ -974,7 +976,7 @@ describe Payouts do
 
       notes = user.comments.with_type_payout_note.alive.where("content LIKE ?", "Payout STRIPE withheld for balance %")
       expect(notes.count).to eq(1)
-      expect(notes.sole.json_data["ledger_hold_notified"]).to eq(true)
+      expect(notes.sole.json_data["ledger_hold_notification_state"]).to eq("notified")
       expect(notes.sole.content).to include("the unpaid ledger is not payable", "Reconcile the unpaid balance ledger before retry")
       expect(PayoutNoteVisibility.seller_visible?(notes.sole)).to eq(false)
       expect(user.payments.count).to eq(0)
@@ -1013,14 +1015,15 @@ describe Payouts do
       expect(described_class.create_payments(payout_date.to_s, PayoutProcessorType::STRIPE, user)).to eq([])
       expect { callback.call }.not_to raise_error
       expect(user.comments.with_type_payout_note.alive.count).to eq(1)
-      expect(user.comments.with_type_payout_note.alive.sole.json_data["ledger_hold_notified"]).to eq(false)
+      expect(user.comments.with_type_payout_note.alive.sole.json_data["ledger_hold_notification_state"]).to eq("failed")
       expect(ErrorNotifier).to receive(:notify).with(
         "Payout withheld for non-payable ledger",
         user_id: user.id, payout_period_end_date: (payout_date + 7).to_s, processor_type: PayoutProcessorType::STRIPE
       ).and_return(nil)
       expect(described_class.create_payments((payout_date + 7).to_s, PayoutProcessorType::STRIPE, user)).to eq([])
+      expect(user.comments.with_type_payout_note.alive.sole.json_data["ledger_hold_notification_state"]).to eq("claimed")
       expect { callback.call }.not_to raise_error
-      expect(user.comments.with_type_payout_note.alive.sole.json_data["ledger_hold_notified"]).to eq(true)
+      expect(user.comments.with_type_payout_note.alive.sole.json_data["ledger_hold_notification_state"]).to eq("notified")
       expect(user.payments.count).to eq(0)
       expect(user.balances.reload.map(&:state).uniq).to eq(["unpaid"])
     end
