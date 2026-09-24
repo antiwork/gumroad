@@ -112,6 +112,41 @@ describe DiscoverController, type: :controller, inertia: true do
         expect(props).not_to have_key("search_results")
       end
 
+      it "serves the deferred fetch without repeating the search or recording it again" do
+        request.headers["X-Inertia-Partial-Data"] = "recommended_products,recommended_wishlists,recently_viewed"
+        allow(ProductPresenter).to receive(:card_for_web).and_call_original
+
+        expect do
+          get :index, params: { query: "stl files" }
+        end.to not_change(DiscoverSearch, :count)
+
+        expect(response).to be_successful
+        props = response.parsed_body.fetch("props")
+        expect(props).to include("recommended_products", "recommended_wishlists", "recently_viewed")
+        expect(props).not_to have_key("search_results")
+        expect(ProductPresenter).not_to have_received(:card_for_web)
+          .with(hash_including(recommended_by: RecommendationType::GUMROAD_SEARCH_RECOMMENDATION))
+      end
+
+      it "leaves the full load's meta tags in place on the deferred fetch" do
+        request.headers["X-Inertia-Partial-Data"] = "recommended_products,recommended_wishlists,recently_viewed"
+
+        get :index, params: { taxonomy: "3d/3d-modeling" }
+
+        expect(response).to be_successful
+        expect(response.parsed_body.fetch("props")).not_to have_key("_inertia_meta")
+      end
+
+      it "renders the full page when the partial reload names another component" do
+        request.headers["X-Inertia-Partial-Component"] = "Discover/Other"
+        request.headers["X-Inertia-Partial-Data"] = "recommended_products"
+
+        get :index
+
+        expect(response).to be_successful
+        expect(response.parsed_body.fetch("props")).to include("search_results", "taxonomies_for_nav")
+      end
+
       it "only fetches search_results when filtering without taxonomy change" do
         request.headers["X-Inertia-Partial-Data"] = "search_results"
 
