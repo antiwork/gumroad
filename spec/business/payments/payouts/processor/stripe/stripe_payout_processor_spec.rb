@@ -6,7 +6,7 @@ describe StripePayoutProcessor do
   describe ".is_balance_payable" do
     it "does not claim a debt held in a currency the account cannot pay out, so it cannot form its own payout group" do
       seller = create(:user)
-      merchant_account = create(:merchant_account, user: seller, currency: Currency::HUF)
+      merchant_account = create(:merchant_account, user: seller, currency: Currency::HUF, charge_processor_merchant_id: "acct_payable_huf")
       allow(described_class).to receive(:pay_out_currencies).and_return([Currency::EUR])
       debt = create(:balance, user: seller, merchant_account:, amount_cents: -20_00,
                               holding_currency: Currency::GBP, holding_amount_cents: -15_00)
@@ -23,7 +23,7 @@ describe StripePayoutProcessor do
 
   describe ".unpayable_currency_group?" do
     let(:seller) { create(:user) }
-    let(:merchant_account) { create(:merchant_account, user: seller, currency: Currency::PLN) }
+    let(:merchant_account) { create(:merchant_account, user: seller, currency: Currency::PLN, charge_processor_merchant_id: "acct_unpayable_pln") }
 
     before { allow(described_class).to receive(:pay_out_currencies).and_return([Currency::EUR]) }
 
