@@ -28,21 +28,27 @@ class UtmLinkSaleAttributionJob
               SQL
               .where(browser_guid:)
               .where("utm_link_visits.created_at >= ?", ATTRIBUTION_WINDOW.ago.beginning_of_day)
-              .order(created_at: :desc)
+              .order(created_at: :desc, id: :desc)
 
     purchase_attribution_map = {}
 
-    visits.find_each do |visit|
+    # #each, not find_each: find_each forces primary-key order and discards the ordering above.
+    visits.each do |visit|
       utm_link = visit.utm_link
       qualified_purchases = purchases_by_seller[utm_link.seller_id]
       next if qualified_purchases.blank?
 
+      # A copy: the seller's list is shared by every visit, so narrowing it in place would
+      # strip attribution from the purchases the next visit should have claimed.
       if utm_link.target_product_page?
-        qualified_purchases.select! { _1.link_id == utm_link.target_resource_id }
+        qualified_purchases = qualified_purchases.select { _1.link_id == utm_link.target_resource_id }
       end
 
-      # Attribute only one visit (the most recent among all applicable links) per purchase
-      qualified_purchases.each { purchase_attribution_map[_1.id] ||= { visit:, purchase: _1 } }
+      # Visits run newest-first, so a purchase keeps the latest visit that preceded it.
+      qualified_purchases.each do |purchase|
+        next if visit.created_at > purchase.created_at
+        purchase_attribution_map[purchase.id] ||= { visit:, purchase: }
+      end
     end
 
     purchase_attribution_map.each do |purchase_id, info|
