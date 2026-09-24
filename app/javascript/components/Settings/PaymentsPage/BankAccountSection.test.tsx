@@ -212,6 +212,27 @@ describe("BankAccountSection account-number hints", () => {
   );
 });
 
+describe("BankAccountSection IBAN-box placeholders", () => {
+  // spec/models/iban_account_number_placeholder_spec.rb checks every value in the table against its
+  // bank-account model; this checks the IBAN box actually renders it.
+  it.each([
+    ["JO", "JO67CBJO0010000000000131000303"],
+    ["DE", "DE62370400440532013001"],
+    ["MG", "MG1900005030010101914016057"],
+  ])("shows %s a full-length IBAN example in both boxes", (code, example) => {
+    renderForCountry(code, true);
+
+    expect(accountNumberField("IBAN").placeholder).toBe(example);
+    expect(accountNumberField("Confirm IBAN").placeholder).toBe(example);
+  });
+
+  it("never falls back to the country code followed by 1234567890", () => {
+    renderForCountry("XX", true);
+
+    expect(accountNumberField("IBAN").placeholder).toBe("");
+  });
+});
+
 describe("BankAccountSection Bolivia bank code", () => {
   // gp#1967: the placeholder used to read as a real value ("060"), and 0/128 submissions
   // ever linked a live Stripe account because sellers copied that literal placeholder
