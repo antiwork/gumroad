@@ -692,6 +692,34 @@ describe Ai::AnthropicClient do
         expect(client.gateway_name).to eq("vercel")
       end
 
+      it "sends the store agent's Grok route to Vercel on its own key and replays the Opus fallback on its own OpenRouter key" do
+        allow(GlobalConfig).to receive(:get).with("STORE_AGENT_AI_GATEWAY_API_KEY").and_return("sk-vercel-store-agent")
+        allow(GlobalConfig).to receive(:get).with("STORE_AGENT_OPENROUTER_API_KEY").and_return("sk-or-store-agent")
+        grok_client = described_class.new(
+          timeout: 5,
+          model: Ai::StoreAgentService::GROK_MODEL,
+          fallback_model: Ai::StoreAgentService::GROK_FALLBACK_MODEL,
+        )
+        primary = stub_request(:post, vercel_url)
+          .with(
+            headers: { "x-api-key" => "sk-vercel-store-agent" },
+            body: hash_including("model" => "x-ai/grok-4.5", "providerOptions" => { "gateway" => { "models" => ["anthropic/claude-opus-5"] } }),
+          )
+          .to_return(credit_error)
+        fallback = stub_request(:post, openrouter_url)
+          .with(headers: { "x-api-key" => "sk-or-store-agent" }, body: hash_including("model" => "anthropic/claude-opus-5"))
+          .to_return(status: 200, body: reply.to_json, headers: { "Content-Type" => "application/json" })
+
+        result = grok_client.messages(system: "s", messages: [{ role: "user", content: "x" }])
+
+        expect(result.text).to eq("ok")
+        expect(primary).to have_been_requested.once
+        expect(fallback).to have_been_requested.once
+        expect(grok_client.call_metrics.map { |call| call.slice(:gateway, :status) }).to eq(
+          [{ gateway: "vercel", status: 402 }, { gateway: "openrouter", status: 200 }]
+        )
+      end
+
       it "streams the OpenRouter fallback when Vercel rejects a request for insufficient credits" do
         primary = stub_request(:post, vercel_url).to_return(credit_error)
         fallback = stub_request(:post, openrouter_url)
