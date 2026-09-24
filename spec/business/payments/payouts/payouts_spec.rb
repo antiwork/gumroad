@@ -978,6 +978,10 @@ describe Payouts do
       expect(notes.map { |item| item.json_data["ledger_hold_notification_state"] }).to all(eq("notified"))
       expect(notes.map(&:content)).to all(include("the unpaid ledger is not payable", "Reconcile the unpaid balance ledger before retry"))
       expect(notes.map { |item| PayoutNoteVisibility.seller_visible?(item) }).to all(eq(false))
+      debt.update!(amount_cents: 0, holding_amount_cents: 0)
+      expect(described_class.create_payments((payout_date + (27 * 7)).to_s, PayoutProcessorType::STRIPE, user)).to eq([])
+      expect(alerts.size).to eq(2)
+      expect(user.comments.with_type_payout_note.alive.where("content LIKE ?", "Payout STRIPE withheld for %").count).to eq(2)
       expect(user.payments.count).to eq(0)
       expect(user.balances.reload.map(&:state).uniq).to eq(["unpaid"])
       expect(debt.reload).to be_unpaid

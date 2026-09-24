@@ -473,19 +473,27 @@ class Payouts
       negative_group = ledger_groups.any? { |_, _, group_balances| group_balances.sum(&:amount_cents).negative? }
       if ledger.sum(&:amount_cents) <= 0 || negative_group
         Rails.logger.info("Payouts: Negative balance for #{user.id}")
-        # Key the hold to the unresolved debt set, not the week, so new debts are reported
-        # without burying seller-facing guidance under weekly notes for the same debt.
+        # A continuing debt should not add weekly notes, but a new debt must be reported even
+        # when an older one still blocks payout. Resolving part of a hold is not a new incident.
         blocking_ids = ledger.filter_map { |balance| balance.id if balance.amount_cents.negative? }
         blocking_ids = ledger.map(&:id) if blocking_ids.empty?
-        hold_key = Digest::SHA256.hexdigest(blocking_ids.sort.join(","))[0, 16]
-        note = "Payout #{processor_type} withheld for ledger #{hold_key} because the unpaid ledger is not payable. Reconcile the unpaid balance ledger before retry."
-        hold_note = user.comments.with_type_payout_note.alive.find_by(author_id: GUMROAD_ADMIN_ID, content: note)
+        note_prefix = "Payout #{processor_type} withheld for ledger "
+        previous_note = user.comments.with_type_payout_note.alive
+                            .where(author_id: GUMROAD_ADMIN_ID)
+                            .where("content LIKE ?", "#{note_prefix}%")
+                            .order(created_at: :desc, id: :desc).first
+        known_ids = previous_note&.json_data&.fetch("ledger_hold_balance_ids", []) || []
+        new_ids = blocking_ids - known_ids
         notify = false
-        if hold_note.nil?
+        if previous_note.nil? || new_ids.any?
+          incident_ids = (known_ids | blocking_ids).sort
+          hold_key = Digest::SHA256.hexdigest(incident_ids.join(","))[0, 16]
+          note = "#{note_prefix}#{hold_key} because the unpaid ledger is not payable. Reconcile the unpaid balance ledger before retry."
           hold_note = user.add_payout_note(content: note, seller_visible: false,
-                                           json_data: { "ledger_hold_notification_state" => "claimed", "ledger_hold_claimed_at" => Time.current.iso8601 })
+                                           json_data: { "ledger_hold_balance_ids" => incident_ids, "ledger_hold_notification_state" => "claimed", "ledger_hold_claimed_at" => Time.current.iso8601 })
           notify = true
         else
+          hold_note = previous_note
           state = hold_note.json_data["ledger_hold_notification_state"]
           claimed_at = hold_note.json_data["ledger_hold_claimed_at"]
           if state == "failed" || (state == "claimed" && claimed_at && Time.zone.parse(claimed_at) < 15.minutes.ago)
