@@ -40,6 +40,21 @@ describe Onetime::RevokeOauthAccessOfDeletedUsers do
       expect(resource_subscription.reload).to be_deleted
     end
 
+    it "revokes a redeemable authorization code of a deleted user who holds no live token" do
+      user_with_code = create(:user, deleted_at: 1.minute.ago)
+      user_with_expired_code = create(:user, deleted_at: 1.year.ago)
+      access_grant = Doorkeeper::AccessGrant.create!(application_id: oauth_application.id, resource_owner_id: user_with_code.id, redirect_uri: oauth_application.redirect_uri,
+                                                     expires_in: Doorkeeper.config.authorization_code_expires_in.to_i, scopes: "view_sales")
+      expired_grant = Doorkeeper::AccessGrant.create!(application_id: oauth_application.id, resource_owner_id: user_with_expired_code.id, redirect_uri: oauth_application.redirect_uri,
+                                                      expires_in: Doorkeeper.config.authorization_code_expires_in.to_i, scopes: "view_sales", created_at: 1.year.ago)
+
+      result = described_class.process(dry_run: false)
+
+      expect(result[:user_ids]).to contain_exactly(deleted_user.id, user_with_code.id)
+      expect(access_grant.reload).to be_revoked
+      expect(expired_grant.reload).not_to be_revoked
+    end
+
     it "continues past a user whose revocation fails" do
       other_deleted_user = create(:user, deleted_at: 1.year.ago)
       other_token = create("doorkeeper/access_token", application: oauth_application, resource_owner_id: other_deleted_user.id, scopes: "view_sales")

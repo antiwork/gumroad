@@ -18,6 +18,9 @@ class Onetime::RevokeOauthAccessOfDeletedUsers
 
   def process
     revoke_for_owners_of(Doorkeeper::AccessToken.where(revoked_at: nil).where.not(resource_owner_id: nil), :resource_owner_id)
+    # Only codes still inside their expiry window can be redeemed; older unrevoked grants are spent
+    # or are the 60-year rows whose code is never handed out.
+    revoke_for_owners_of(Doorkeeper::AccessGrant.where(revoked_at: nil).where("created_at > ?", Doorkeeper.config.authorization_code_expires_in.ago), :resource_owner_id)
     revoke_for_owners_of(ResourceSubscription.alive, :user_id)
 
     Rails.logger.info("[RevokeOauthAccessOfDeletedUsers] dry_run=#{@dry_run} users=#{@user_ids.size} failed=#{@failed_user_ids.to_a}")
