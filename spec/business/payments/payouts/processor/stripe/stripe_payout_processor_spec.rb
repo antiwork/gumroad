@@ -4,17 +4,43 @@ require "spec_helper"
 
 describe StripePayoutProcessor do
   describe ".is_balance_payable" do
-    it "admits a debt held in a currency the account cannot pay out right now" do
+    it "does not claim a debt held in a currency the account cannot pay out, so it cannot form its own payout group" do
       seller = create(:user)
-      merchant_account = create(:merchant_account, user: seller, currency: Currency::HUF)
+      merchant_account = create(:merchant_account, user: seller, currency: Currency::HUF, charge_processor_merchant_id: "acct_payable_huf")
       allow(described_class).to receive(:pay_out_currencies).and_return([Currency::EUR])
       debt = create(:balance, user: seller, merchant_account:, amount_cents: -20_00,
                               holding_currency: Currency::GBP, holding_amount_cents: -15_00)
       credit = create(:balance, user: seller, merchant_account:, amount_cents: 33_12,
                                 holding_currency: Currency::EUR, holding_amount_cents: 4_303)
+      home_debt = create(:balance, user: seller, merchant_account:, amount_cents: -5_00,
+                                   holding_currency: Currency::HUF, holding_amount_cents: -1_750_00)
 
-      expect(described_class.is_balance_payable(debt)).to be(true)
+      expect(described_class.is_balance_payable(debt)).to be(false)
       expect(described_class.is_balance_payable(credit)).to be(true)
+      expect(described_class.is_balance_payable(home_debt)).to be(true)
+    end
+  end
+
+  describe ".unpayable_currency_group?" do
+    let(:seller) { create(:user) }
+    let(:merchant_account) { create(:merchant_account, user: seller, currency: Currency::PLN, charge_processor_merchant_id: "acct_unpayable_pln") }
+
+    before { allow(described_class).to receive(:pay_out_currencies).and_return([Currency::EUR]) }
+
+    it "is true only for a Stripe-held group in a currency the account neither defaults to nor pays out" do
+      usd_debt = create(:balance, user: seller, merchant_account:, amount_cents: -61_22,
+                                  holding_currency: Currency::USD, holding_amount_cents: -61_22)
+      pln_debt = create(:balance, user: seller, merchant_account:, amount_cents: -10_00,
+                                  holding_currency: Currency::PLN, holding_amount_cents: -40_00)
+      eur_debt = create(:balance, user: seller, merchant_account:, amount_cents: -10_00,
+                                  holding_currency: Currency::EUR, holding_amount_cents: -9_00)
+      gumroad_debt = create(:balance, user: seller, amount_cents: -10_00)
+
+      expect(described_class.unpayable_currency_group?([usd_debt])).to be(true)
+      expect(described_class.unpayable_currency_group?([pln_debt])).to be(false)
+      expect(described_class.unpayable_currency_group?([eur_debt])).to be(false)
+      expect(described_class.unpayable_currency_group?([usd_debt, gumroad_debt])).to be(false)
+      expect(described_class.unpayable_currency_group?([])).to be(false)
     end
   end
 

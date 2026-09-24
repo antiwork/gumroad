@@ -112,18 +112,21 @@ class StripePayoutProcessor
   def self.is_balance_payable(balance)
     case balance.merchant_account.holder_of_funds
     when HolderOfFunds::STRIPE
-      # A debt has to reach the seller-level check in `Payouts.create_payments` even in a currency
-      # this account cannot pay out right now: `pay_out_currencies` lists only currencies Stripe
-      # reports a POSITIVE balance in, so without this a negative foreign-currency row is filtered
-      # out of the claim and a credit group in another currency is released against an invisible
-      # debt. Measured on the USD ledger (`amount_cents`), which is what that check sums; a negative
-      # holding with a whole USD ledger is the drift guard's business, not this one's.
-      balance.amount_cents.negative? || pay_out_currency?(balance.merchant_account, balance.holding_currency)
+      # A debt in a currency this account cannot pay out is not claimed: it would form a group of its
+      # own and hold every payable one. `Payouts.create_payments` still counts it against the seller
+      # through `unpayable_currency_group?`, reading the whole unpaid ledger.
+      pay_out_currency?(balance.merchant_account, balance.holding_currency)
     when HolderOfFunds::GUMROAD
       true
     else
       false
     end
+  end
+
+  # Public: True for a `payout_groups` group none of whose balances this processor would claim, so
+  # it can never form a payout of its own.
+  def self.unpayable_currency_group?(group_balances)
+    group_balances.present? && group_balances.none? { |balance| is_balance_payable(balance) }
   end
 
   # Unsupported currencies stay unpaid rather than creating a payout Stripe will reject.

@@ -1224,6 +1224,140 @@ describe Payouts do
       expect(user.payments.count).to eq(0)
       expect(user.balances.reload.map(&:state).uniq).to eq(["unpaid"])
     end
+
+    context "with a legacy debt held in a currency the account never holds" do
+      let(:seller) { create(:user) }
+      let(:pln_account) { create(:merchant_account, user: seller, currency: Currency::PLN, charge_processor_merchant_id: "acct_legacy_debt_pln") }
+      let!(:pln_credits) do
+        [
+          create(:balance, user: seller, merchant_account: pln_account, date: payout_date - 3, amount_cents: 150_00,
+                           holding_currency: Currency::PLN, holding_amount_cents: 555_00),
+          create(:balance, user: seller, merchant_account: pln_account, date: payout_date - 2, amount_cents: 146_62,
+                           holding_currency: Currency::PLN, holding_amount_cents: 546_89),
+        ]
+      end
+      let!(:usd_debt) do
+        create(:balance, user: seller, merchant_account: pln_account, date: payout_date - 700, amount_cents: -61_22,
+                         holding_currency: Currency::USD, holding_amount_cents: -61_22)
+      end
+
+      before do
+        allow(StripePayoutProcessor).to receive(:pay_out_currencies).and_return([Currency::PLN])
+        allow(StripePayoutProcessor).to receive(:prepare_payment_and_set_amount).and_return([])
+        allow(ErrorNotifier).to receive(:notify)
+        allow(ActiveRecord).to receive(:after_all_transactions_commit) { |&block| block.call }
+      end
+
+      def hold_notes
+        seller.comments.with_type_payout_note.alive.where("content LIKE ?", "Payout STRIPE withheld for ledger %")
+      end
+
+      it "pays the account-currency group and leaves the debt unpaid on the ledger" do
+        pairs = described_class.create_payments(payout_date.to_s, PayoutProcessorType::STRIPE, seller)
+
+        payment, errors = pairs.sole
+        expect(errors).to eq([])
+        expect(payment.currency).to eq(Currency::PLN)
+        expect(payment.balances.ids).to match_array(pln_credits.map(&:id))
+        expect(pln_credits.map { |balance| balance.reload.state }.uniq).to eq(["processing"])
+        expect(usd_debt.reload).to be_unpaid
+        expect(usd_debt.payments).to be_empty
+        expect(ErrorNotifier).not_to have_received(:notify)
+        expect(hold_notes).to be_empty
+      end
+
+      it "pays nothing when the debt is larger than a payable group, even with a positive ledger" do
+        eur_credit = create(:balance, user: seller, merchant_account: pln_account, date: payout_date - 1, amount_cents: 400_00,
+                                      holding_currency: Currency::EUR, holding_amount_cents: 360_00)
+        usd_debt.update!(amount_cents: -300_00, holding_amount_cents: -300_00)
+        allow(StripePayoutProcessor).to receive(:pay_out_currencies).and_return([Currency::PLN, Currency::EUR])
+        expect(seller.balances.sum(:amount_cents)).to be_positive
+
+        expect do
+          expect(described_class.create_payments(payout_date.to_s, PayoutProcessorType::STRIPE, seller)).to eq([])
+        end.not_to change(Payment, :count)
+
+        expect(StripePayoutProcessor).not_to have_received(:prepare_payment_and_set_amount)
+        expect((pln_credits + [eur_credit, usd_debt]).map { |balance| balance.reload.state }.uniq).to eq(["unpaid"])
+        expect(ErrorNotifier).to have_received(:notify).with(
+          "Payout withheld for non-payable ledger",
+          user_id: seller.id, payout_period_end_date: payout_date.to_s, processor_type: PayoutProcessorType::STRIPE
+        ).once
+        note = hold_notes.sole
+        expect(PayoutNoteVisibility.seller_visible?(note)).to eq(false)
+        expect(note.json_data["ledger_hold_debt_keys"]).to include("b#{usd_debt.id}")
+      end
+
+      it "judges a payable group on its full ledger, so an unclaimed refund in that currency cannot cover the debt" do
+        pln_refund = create(:balance, user: seller, merchant_account: pln_account, date: payout_date - 1, amount_cents: -250_00,
+                                      holding_currency: Currency::PLN, holding_amount_cents: -925_00)
+        eur_credit = create(:balance, user: seller, merchant_account: pln_account, date: payout_date - 1, amount_cents: 400_00,
+                                      holding_currency: Currency::EUR, holding_amount_cents: 360_00)
+        allow(StripePayoutProcessor).to receive(:pay_out_currencies).and_return([Currency::PLN, Currency::EUR])
+        allow(described_class).to receive(:payable_balances_for_processor).and_wrap_original do |original, *args|
+          original.call(*args).reject { |balance| balance.id == pln_refund.id }
+        end
+
+        expect(described_class.create_payments(payout_date.to_s, PayoutProcessorType::STRIPE, seller)).to eq([])
+
+        expect(seller.payments.count).to eq(0)
+        expect((pln_credits + [pln_refund, eur_credit, usd_debt]).map { |balance| balance.reload.state }.uniq).to eq(["unpaid"])
+        expect(hold_notes.count).to eq(1)
+      end
+
+      it "holds the payout when a positive claim's full ledger group nets to zero and cannot cover the debt" do
+        gumroad_debt = create(:balance, user: seller, date: payout_date - 1, amount_cents: -296_62)
+        eur_credit = create(:balance, user: seller, merchant_account: pln_account, date: payout_date - 1, amount_cents: 400_00,
+                                      holding_currency: Currency::EUR, holding_amount_cents: 360_00)
+        allow(StripePayoutProcessor).to receive(:pay_out_currencies).and_return([Currency::PLN, Currency::EUR])
+
+        expect(described_class.create_payments(payout_date.to_s, PayoutProcessorType::STRIPE, seller)).to eq([])
+
+        expect(seller.payments.count).to eq(0)
+        expect((pln_credits + [gumroad_debt, eur_credit, usd_debt]).map { |balance| balance.reload.state }.uniq).to eq(["unpaid"])
+        expect(hold_notes.count).to eq(1)
+      end
+
+      it "holds the payout when the debt outweighs the whole ledger even though no payable group is positive" do
+        pln_refund = create(:balance, user: seller, merchant_account: pln_account, date: payout_date - 1, amount_cents: -296_62,
+                                      holding_currency: Currency::PLN, holding_amount_cents: -1_101_89)
+
+        expect(described_class.create_payments(payout_date.to_s, PayoutProcessorType::STRIPE, seller)).to eq([])
+
+        expect((pln_credits + [pln_refund, usd_debt]).map { |balance| balance.reload.state }.uniq).to eq(["unpaid"])
+        expect(ErrorNotifier).to have_received(:notify).once
+        expect(hold_notes.count).to eq(1)
+      end
+
+      it "pays nothing when the debt outweighs the whole ledger, and does not repeat the note or alert" do
+        usd_debt.update!(amount_cents: -500_00, holding_amount_cents: -500_00)
+
+        2.times do
+          expect(described_class.create_payments(payout_date.to_s, PayoutProcessorType::STRIPE, seller)).to eq([])
+        end
+
+        expect(seller.payments.count).to eq(0)
+        expect(seller.balances.reload.map(&:state).uniq).to eq(["unpaid"])
+        expect(ErrorNotifier).to have_received(:notify).once
+        expect(hold_notes.count).to eq(1)
+      end
+
+      it "still holds every group on a debt in a currency the account does hold" do
+        eur_credit = create(:balance, user: seller, merchant_account: pln_account, date: payout_date - 1, amount_cents: 400_00,
+                                      holding_currency: Currency::EUR, holding_amount_cents: 360_00)
+        pln_refund = create(:balance, user: seller, merchant_account: pln_account, date: payout_date - 1, amount_cents: -300_00,
+                                      holding_currency: Currency::PLN, holding_amount_cents: -1_110_00)
+        usd_debt.destroy!
+        allow(StripePayoutProcessor).to receive(:pay_out_currencies).and_return([Currency::PLN, Currency::EUR])
+
+        expect(described_class.create_payments(payout_date.to_s, PayoutProcessorType::STRIPE, seller)).to eq([])
+
+        expect(seller.payments.count).to eq(0)
+        expect((pln_credits + [eur_credit, pln_refund]).map { |balance| balance.reload.state }.uniq).to eq(["unpaid"])
+        expect(ErrorNotifier).to have_received(:notify).once
+        expect(hold_notes.count).to eq(1)
+      end
+    end
   end
 
   # Retired-account debts must remain in the claim even when they block the payout.

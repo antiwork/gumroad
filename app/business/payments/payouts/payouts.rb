@@ -470,8 +470,7 @@ class Payouts
       else
         [[nil, nil, ledger]]
       end
-      negative_group = ledger_groups.any? { |_, _, group_balances| group_balances.sum(&:amount_cents).negative? }
-      if ledger.sum(&:amount_cents) <= 0 || negative_group
+      if negative_ledger?(payout_processor, ledger, ledger_groups, payout_groups)
         Rails.logger.info("Payouts: Negative balance for #{user.id}")
         # Track the latest debit for each unresolved negative balance. Credits can reduce an
         # existing debt without a new alert, while a later debit on the same row must report.
@@ -592,6 +591,38 @@ class Payouts
       [payment, [error.message]]
     end
   end
+
+  # A negative ledger group holds every group, except a debt in a currency its account cannot pay
+  # out: that debt only holds when a payable group could not cover it. There is no FX netting, so
+  # the debt row stays unpaid for reconciliation.
+  def self.negative_ledger?(payout_processor, ledger, ledger_groups, payout_groups)
+    return true if ledger.sum(&:amount_cents) <= 0
+
+    orphan_debt_cents = 0
+    ledger_groups.each do |_, _, group_balances|
+      group_cents = group_balances.sum(&:amount_cents)
+      next unless group_cents.negative?
+      return true unless payout_processor.respond_to?(:unpayable_currency_group?) &&
+                         payout_processor.unpayable_currency_group?(group_balances)
+
+      orphan_debt_cents += group_cents
+    end
+    return false if orphan_debt_cents.zero?
+
+    # Judge each group that will pay on the lesser of its claim and its full ledger group, so
+    # unclaimed debts in that group cannot make it look able to cover the orphan debt.
+    ledger_cents_by_balance_id = ledger_groups.each_with_object({}) do |(_, _, group_balances), cents|
+      group_cents = group_balances.sum(&:amount_cents)
+      group_balances.each { |balance| cents[balance.id] = group_cents }
+    end
+    payout_groups.any? do |_, _, group_balances|
+      claim_cents = group_balances.sum(&:amount_cents)
+      next false unless claim_cents.positive?
+
+      [claim_cents, ledger_cents_by_balance_id.fetch(group_balances.first.id)].min + orphan_debt_cents <= 0
+    end
+  end
+  private_class_method :negative_ledger?
 
   def self.under_chargeback_rate_reserve?(user, payout_type:)
     payout_type != Payouts::PAYOUT_TYPE_INSTANT && user.chargeback_rate_payout_reserve_active?
