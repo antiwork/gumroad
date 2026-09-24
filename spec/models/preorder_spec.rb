@@ -33,19 +33,20 @@ describe Preorder, :vcr do
     end
 
     it "returns proper json for a charged preorder whose charge purchase has no url redirect" do
+      buyer = create(:user)
       link = create(:product, price_cents: 600)
       preorder_link = create(:preorder_link, link:, release_at: 2.days.from_now)
-      authorization_purchase = create(:preorder_authorization_purchase, link:, seller: link.user)
-      preorder = create(:preorder, preorder_link:, seller: link.user, purchaser: authorization_purchase.purchaser, state: "charge_successful")
+      authorization_purchase = create(:preorder_authorization_purchase, link:, seller: link.user, purchaser: buyer)
+      preorder = create(:preorder, preorder_link:, seller: link.user, purchaser: buyer, state: "charge_successful")
       authorization_purchase.update!(preorder:)
-      charge_purchase = create(:purchase, link:, preorder:, seller: link.user, purchaser: authorization_purchase.purchaser)
+      charge_purchase = create(:purchase, link:, preorder:, seller: link.user, purchaser: buyer)
 
       json_hash = preorder.mobile_json_data
 
       expect(json_hash["name"]).to eq link.name
       expect(json_hash[:purchase_id]).to eq charge_purchase.external_id
       expect(json_hash[:purchased_at]).to eq charge_purchase.created_at
-      expect(json_hash[:user_id]).to eq authorization_purchase.purchaser.external_id
+      expect(json_hash[:user_id]).to eq buyer.external_id
       expect(json_hash[:is_archived]).to eq false
       expect(json_hash[:preorder_data]).to eq nil
     end
