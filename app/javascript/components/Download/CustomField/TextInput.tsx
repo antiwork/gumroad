@@ -49,6 +49,7 @@ export const TextInput = ({
           purchase_id: purchaseInfo.purchaseId,
           custom_field_id: customFieldId,
           value: newValue,
+          token: purchaseInfo.token,
         },
       });
       setIsLoading(false);

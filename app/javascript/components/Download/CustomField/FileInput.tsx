@@ -61,6 +61,7 @@ export const FileInput = ({ customFieldId }: { customFieldId: string }) => {
           purchase_id: purchaseInfo.purchaseId,
           custom_field_id: customFieldId,
           file_signed_ids: signedIds,
+          token: purchaseInfo.token,
         },
       });
 
