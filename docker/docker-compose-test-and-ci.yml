@@ -48,7 +48,9 @@ services:
       - "11211"
 
   minio:
-    image: quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z
+    image: cgr.dev/chainguard/minio@sha256:bd014394a80898e68c149f2311fdf8d5a2c2f3bb2c33b9327ae6d02b4b065ae1
+    # Root because volumes the old root-run image wrote are root-owned.
+    user: root
     ports:
       - "9000"
       - "9001"
@@ -66,7 +68,7 @@ services:
       start_period: 30s
 
   createbuckets:
-    image: quay.io/minio/mc:RELEASE.2025-08-13T08-35-41Z
+    image: cgr.dev/chainguard/minio@sha256:bd014394a80898e68c149f2311fdf8d5a2c2f3bb2c33b9327ae6d02b4b065ae1
     depends_on:
       minio:
         condition: service_healthy
@@ -86,7 +88,7 @@ services:
       done; exit 0; "
 
   copyfixturefiles:
-    image: quay.io/minio/mc:RELEASE.2025-08-13T08-35-41Z
+    image: cgr.dev/chainguard/minio@sha256:bd014394a80898e68c149f2311fdf8d5a2c2f3bb2c33b9327ae6d02b4b065ae1
     depends_on:
       createbuckets:
         condition: service_completed_successfully

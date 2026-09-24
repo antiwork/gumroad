@@ -50,7 +50,9 @@ services:
       - elasticsearch7data:/data
 
   minio:
-    image: quay.io/minio/minio
+    image: cgr.dev/chainguard/minio@sha256:bd014394a80898e68c149f2311fdf8d5a2c2f3bb2c33b9327ae6d02b4b065ae1
+    # Root because volumes the old root-run image wrote are root-owned.
+    user: root
     ports:
       - "9000:9000" # API port
       - "9001:9001" # Console port
@@ -68,7 +70,7 @@ services:
       start_period: 30s
 
   createbuckets:
-    image: quay.io/minio/mc
+    image: cgr.dev/chainguard/minio@sha256:bd014394a80898e68c149f2311fdf8d5a2c2f3bb2c33b9327ae6d02b4b065ae1
     depends_on:
       minio:
         condition: service_healthy
@@ -88,7 +90,7 @@ services:
       done; exit 0; "
 
   copyfixturefiles:
-    image: quay.io/minio/mc
+    image: cgr.dev/chainguard/minio@sha256:bd014394a80898e68c149f2311fdf8d5a2c2f3bb2c33b9327ae6d02b4b065ae1
     depends_on:
       createbuckets:
         condition: service_completed_successfully
