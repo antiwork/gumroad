@@ -50,6 +50,13 @@ RUN cd $APP_DIR \
 # context: copy_secrets.sh puts the credentials repo's copy there.
 COPY --chown=app:app --chmod=755 . $APP_DIR/
 
+# Only a build that ran copy_secrets.sh has this file. Missing: GEOIP is nil and
+# every GeoIp.lookup returns nothing. Empty: the initializer still opens it and
+# boot fails. Warn, not fail: builds with no credentials repo must still succeed.
+RUN f="$APP_DIR/lib/GeoIP2-City.mmdb"; \
+  if [ ! -e "$f" ]; then echo "WARNING: lib/GeoIP2-City.mmdb missing from the build context; GEOIP will be nil in this image"; \
+  elif [ ! -s "$f" ]; then echo "WARNING: lib/GeoIP2-City.mmdb is empty; the geoip initializer will fail to open it at boot"; fi
+
 ENV DATABASE_HOST="db" \
   DATABASE_NAME="gumroad_development" \
   DATABASE_PORT=3306 \
