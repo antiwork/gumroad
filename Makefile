@@ -65,10 +65,12 @@ build_base_test:
 
 build:
 	: $${BUNDLE_GEMS__CONTRIBSYS__COM?"Need to set BUNDLE_GEMS__CONTRIBSYS__COM for sidekiq-pro"}
+	: $${MAXMIND_LICENSE_KEY?"Need to set MAXMIND_LICENSE_KEY to download the GeoIP database"}
 	echo $(NEW_WEB_TAG) > revision
 	WEB_DOCKERFILE_FROM=$(NEW_BASE_REPO):$(shell ./docker/base/generate_tag_for_web_base.sh) \
 	$(DOCKER_BUILD) $(WEB_OUTPUT_OPTS) \
 		--build-arg BUNDLE_GEMS__CONTRIBSYS__COM \
+		--secret id=maxmind_license_key,env=MAXMIND_LICENSE_KEY \
 		$(WEB_CACHE_OPTS) \
 		--build-arg WEB_DOCKERFILE_FROM \
 		--file docker/web/Dockerfile \
