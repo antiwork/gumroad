@@ -509,7 +509,7 @@ jobs:
         ports:
           - 9200:9200
       # MinIO (S3-compatible object storage) is started as a step below rather than
-      # a service: the official quay.io/minio/minio image needs a `server /data` command
+      # a service: the MinIO image needs a `server /data` command
       # that GitHub Actions service containers can't supply.
 
     env:
@@ -530,31 +530,18 @@ jobs:
       - name: Prepare test database
         run: bundle exec rake db:prepare
 
-      # The MinIO steps below `docker run` two Hub images; log in first so the
-      # pulls count against the paid org instead of the runner IP.
-      - name: Login to Docker Hub
-        uses: nick-fields/retry@v3
-        with:
-          timeout_seconds: 120
-          max_attempts: 3
-          retry_wait_seconds: 10
-          command: echo "$DOCKERHUB_PASSWORD" | docker login -u "$DOCKERHUB_USERNAME" --password-stdin
-        env:
-          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
-          DOCKERHUB_PASSWORD: ${{ secrets.DOCKERHUB_PASSWORD }}
-
       - name: Start MinIO (S3-compatible object storage)
         run: |
           docker run -d --name minio -p 9000:9000 -p 9001:9001 \
             -e MINIO_ROOT_USER=minioadmin -e MINIO_ROOT_PASSWORD=minioadmin \
-            quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z server /data --console-address ":9001"
+            cgr.dev/chainguard/minio@sha256:bd014394a80898e68c149f2311fdf8d5a2c2f3bb2c33b9327ae6d02b4b065ae1 server /data --console-address ":9001"
           for i in $(seq 1 30); do curl -fsS http://localhost:9000/minio/health/ready >/dev/null 2>&1 && break; sleep 2; done
           curl -fsS http://localhost:9000/minio/health/ready || { echo "MinIO did not become ready"; exit 1; }
           # Provision the buckets the app's :test storage service expects (see
           # config/storage.yml). This mirrors the `createbuckets` service in
           # docker/docker-compose-test-and-ci.yml so the two CI lanes behave the same:
-          # the mc release is pinned to the same version (an unpinned :latest can change
-          # CLI behavior and break this job with no code change), and both buckets get the
+          # mc runs from the same digest-pinned image, which bundles it (an unpinned :latest
+          # can change CLI behavior and break this job with no code change), and both buckets get the
           # public read policy and versioning the compose stack sets. The :test service is
           # declared `public: true`, so without `anonymous set public` any future test that
           # fetches blob.url over plain HTTP would 403 here while passing locally.
@@ -562,7 +549,7 @@ jobs:
           # `mc anonymous set` and `mc version enable` each take exactly ONE bucket — passing
           # two makes mc print its usage text and exit 1 — so they run per bucket in a loop.
           # (`mc mb` does accept several.)
-          docker run --rm --network host --entrypoint /bin/sh quay.io/minio/mc:RELEASE.2025-08-13T08-35-41Z -c "
+          docker run --rm --network host --entrypoint /bin/sh cgr.dev/chainguard/minio@sha256:bd014394a80898e68c149f2311fdf8d5a2c2f3bb2c33b9327ae6d02b4b065ae1 -c "
             set -e
             mc alias set local http://localhost:9000 minioadmin minioadmin
             mc mb --ignore-existing local/gumroad-specs local/gumroad-invoices
