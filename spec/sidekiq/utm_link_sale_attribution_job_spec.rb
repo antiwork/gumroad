@@ -45,6 +45,40 @@ describe UtmLinkSaleAttributionJob do
     expect(driven_sale.utm_link_id).to eq(utm_link.id)
   end
 
+  it "keeps the pre-sale visit when the buyer revisits the same link after the purchase" do
+    purchase = create(:purchase, link: product, seller:, created_at: 2.hours.ago)
+    order.purchases << purchase
+    pre_sale_visit = create(:utm_link_visit, utm_link:, browser_guid:, created_at: 1.day.ago)
+    create(:utm_link_visit, utm_link:, browser_guid:, created_at: 1.hour.ago)
+
+    described_class.new.perform(order.id, browser_guid)
+
+    expect(utm_link.utm_link_driven_sales.sole.utm_link_visit_id).to eq(pre_sale_visit.id)
+  end
+
+  it "keeps an earlier purchase's visit when the buyer revisits the link before a later purchase in the order" do
+    earlier_purchase = create(:purchase, link: product, seller:, created_at: 3.hours.ago)
+    later_purchase = create(:purchase, link: product, seller:, created_at: 1.hour.ago)
+    order.purchases << earlier_purchase << later_purchase
+    pre_sale_visit = create(:utm_link_visit, utm_link:, browser_guid:, created_at: 1.day.ago)
+    revisit = create(:utm_link_visit, utm_link:, browser_guid:, created_at: 2.hours.ago)
+
+    described_class.new.perform(order.id, browser_guid)
+
+    visit_ids_by_purchase = utm_link.utm_link_driven_sales.pluck(:purchase_id, :utm_link_visit_id).to_h
+    expect(visit_ids_by_purchase).to eq(earlier_purchase.id => pre_sale_visit.id, later_purchase.id => revisit.id)
+  end
+
+  it "attributes a visit that falls in the same second as the purchase" do
+    purchase = create(:purchase, link: product, seller:)
+    order.purchases << purchase
+    visit = create(:utm_link_visit, utm_link:, browser_guid:, created_at: purchase.created_at + 0.5.seconds)
+
+    described_class.new.perform(order.id, browser_guid)
+
+    expect(utm_link.utm_link_driven_sales.sole.utm_link_visit_id).to eq(visit.id)
+  end
+
   it "only attributes purchases to the latest visit per utm link" do
     purchase = create(:purchase, link: product, seller:)
     order.purchases << purchase

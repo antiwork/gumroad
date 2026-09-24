@@ -225,22 +225,3 @@ export const reorderRowsPreservingMembership = <T extends { id: string }>(report
   }
   return [...reordered, ...remaining];
 };
-
-// True when this save asks the server to remove anything at all. Used to decide
-// whether the revision token is required: a save that deletes nothing does not
-// need to prove which snapshot it came from, so a stale tab can still fix a
-// typo without being told to reload.
-//
-// The Array.isArray check is not just a type narrowing: `deleted_ids` is a
-// Partial record, so a caller can legitimately hand us a key whose value is
-// undefined, and reading `.length` off that would throw during a save.
-export const hasDeletions = (operations: DeletionOperations): boolean =>
-  operations.cleared_collections.length > 0 ||
-  Object.values(operations.deleted_ids).some((ids: unknown) => Array.isArray(ids) && ids.length > 0) ||
-  // Version-scoped removals are deletions too. Omitting them here would let a
-  // save whose ONLY deletion is "disconnect Discord from this tier" travel
-  // without a revision token, which is precisely the stale-tab case the token
-  // exists to catch.
-  Object.values(operations.variant_deleted_ids ?? {}).some((collections) =>
-    Object.values(collections).some((ids: unknown) => Array.isArray(ids) && ids.length > 0),
-  );

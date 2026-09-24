@@ -4,7 +4,6 @@ import {
   DeletionSources,
   buildDeletionOperations,
   confirmRemovedVariantPageDeletions,
-  hasDeletions,
   reorderPreservingMembership,
   reorderRowsPreservingMembership,
 } from "$app/data/product_save_contract";
@@ -24,9 +23,7 @@ describe("buildDeletionOperations", () => {
   it("asks for no deletions when the seller removed nothing", () => {
     const operations = buildDeletionOperations(productWith({}));
 
-    expect(operations.deleted_ids).toEqual({});
-    expect(operations.cleared_collections).toEqual([]);
-    expect(hasDeletions(operations)).toBe(false);
+    expect(operations).toEqual({ deleted_ids: {}, cleared_collections: [] });
   });
 
   // The important one. An editor session that loaded no variants looks
@@ -39,9 +36,7 @@ describe("buildDeletionOperations", () => {
       productWith({ confirmed_removed_variant_ids: [], confirmed_removed_rich_content_ids: [] }),
     );
 
-    expect(operations.deleted_ids).toEqual({});
-    expect(operations.cleared_collections).toEqual([]);
-    expect(hasDeletions(operations)).toBe(false);
+    expect(operations).toEqual({ deleted_ids: {}, cleared_collections: [] });
   });
 
   it("names exactly the variants the seller confirmed removing", () => {
@@ -51,7 +46,6 @@ describe("buildDeletionOperations", () => {
 
     expect(operations.deleted_ids.variants).toEqual(["variant-a", "variant-b"]);
     expect(operations.deleted_ids.rich_content).toBeUndefined();
-    expect(hasDeletions(operations)).toBe(true);
   });
 
   it("names exactly the content pages the seller confirmed removing", () => {
@@ -132,7 +126,6 @@ describe("buildDeletionOperations", () => {
 
     const withClear = buildDeletionOperations(productWith({}), ["variants"]);
     expect(withClear.cleared_collections).toEqual(["variants"]);
-    expect(hasDeletions(withClear)).toBe(true);
   });
 
   it("does not repeat a collection named twice for clearing", () => {
@@ -166,7 +159,7 @@ describe("buildDeletionOperations", () => {
       );
 
       expect(operations.deleted_ids.files).toBeUndefined();
-      expect(hasDeletions(operations)).toBe(false);
+      expect(operations).toEqual({ deleted_ids: {}, cleared_collections: [] });
     });
 
     it("asks for nothing when the seller removed no files", () => {
@@ -219,7 +212,7 @@ describe("buildDeletionOperations", () => {
       );
 
       expect(operations.deleted_ids.integrations).toBeUndefined();
-      expect(hasDeletions(operations)).toBe(false);
+      expect(operations).toEqual({ deleted_ids: {}, cleared_collections: [] });
     });
 
     it("does not name an integration the seller just turned on", () => {
@@ -239,7 +232,7 @@ describe("buildDeletionOperations", () => {
       const operations = buildDeletionOperations(productWith({ loaded_integrations: { circle: true, discord: true } }));
 
       expect(operations.deleted_ids.integrations).toBeUndefined();
-      expect(hasDeletions(operations)).toBe(false);
+      expect(operations).toEqual({ deleted_ids: {}, cleared_collections: [] });
     });
 
     it("asks for no disconnections for a provider key absent from the live map", () => {
@@ -253,7 +246,7 @@ describe("buildDeletionOperations", () => {
       );
 
       expect(operations.deleted_ids.integrations).toBeUndefined();
-      expect(hasDeletions(operations)).toBe(false);
+      expect(operations).toEqual({ deleted_ids: {}, cleared_collections: [] });
     });
 
     // Only an explicit `null` — the shape the server uses for "not connected" —
@@ -275,7 +268,7 @@ describe("buildDeletionOperations", () => {
       const operations = buildDeletionOperations(productWith({ integrations: { circle: null } }));
 
       expect(operations.deleted_ids.integrations).toBeUndefined();
-      expect(hasDeletions(operations)).toBe(false);
+      expect(operations).toEqual({ deleted_ids: {}, cleared_collections: [] });
     });
 
     // gumroad-private#1379: connect -> save -> disconnect -> save, no reload.
@@ -313,45 +306,6 @@ describe("buildDeletionOperations", () => {
 
       expect(buildDeletionOperations(stale).deleted_ids.integrations).toBeUndefined();
     });
-  });
-});
-
-describe("hasDeletions", () => {
-  it("is false for empty operations", () => {
-    expect(hasDeletions({ deleted_ids: {}, cleared_collections: [] })).toBe(false);
-  });
-
-  // A collection key present but empty is not a deletion request. Treating it
-  // as one would resurrect the "[] means delete everything" behaviour on the
-  // client side.
-  it("is false when a collection key is present but empty", () => {
-    expect(hasDeletions({ deleted_ids: { variants: [] }, cleared_collections: [] })).toBe(false);
-  });
-
-  it("is true when any id is named", () => {
-    expect(hasDeletions({ deleted_ids: { files: ["f1"] }, cleared_collections: [] })).toBe(true);
-  });
-
-  it("is true when any collection is cleared", () => {
-    expect(hasDeletions({ deleted_ids: {}, cleared_collections: ["integrations"] })).toBe(true);
-  });
-
-  // A save whose only deletion is version-scoped still has to carry the
-  // revision token, or the stale-tab guard never runs for it.
-  it("is true when only a version-scoped deletion is named", () => {
-    expect(
-      hasDeletions({
-        deleted_ids: {},
-        cleared_collections: [],
-        variant_deleted_ids: { v1: { integrations: ["discord"] } },
-      }),
-    ).toBe(true);
-  });
-
-  it("is false when a version-scoped entry is present but empty", () => {
-    expect(
-      hasDeletions({ deleted_ids: {}, cleared_collections: [], variant_deleted_ids: { v1: { integrations: [] } } }),
-    ).toBe(false);
   });
 });
 
@@ -424,7 +378,7 @@ describe("buildDeletionOperations, version-scoped integrations", () => {
     );
 
     expect(operations.variant_deleted_ids).toBeUndefined();
-    expect(hasDeletions(operations)).toBe(false);
+    expect(operations).toEqual({ deleted_ids: {}, cleared_collections: [] });
   });
 
   it("asks for nothing for a provider key absent from the version's live map", () => {
@@ -442,7 +396,7 @@ describe("buildDeletionOperations, version-scoped integrations", () => {
     );
 
     expect(operations.variant_deleted_ids).toBeUndefined();
-    expect(hasDeletions(operations)).toBe(false);
+    expect(operations).toEqual({ deleted_ids: {}, cleared_collections: [] });
   });
 
   // Version-level values are booleans, so `false` is the disconnect signal and

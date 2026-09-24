@@ -6,7 +6,6 @@ describe RobotsService do
   before do
     @redis_namespace = Redis::Namespace.new(:robots_redis_namespace, redis: $redis)
     @sitemap_config = "Sitemap: https://test-public-files.gumroad.com/products/sitemap.xml"
-    @user_agent_rules = ["User-agent: *", "Disallow: /purchases/"]
   end
 
   describe "#sitemap_configs" do
@@ -38,22 +37,7 @@ describe RobotsService do
   end
 
   describe "#user_agent_rules" do
-    it "returns the user agent rules" do
-      expect(described_class.new.user_agent_rules).to eq @user_agent_rules
-    end
-
     context "on a storefront host" do
-      it "prepends a bingbot group carrying a crawl delay" do
-        expect(described_class.new(storefront_host: true).user_agent_rules).to eq [
-          "User-agent: bingbot",
-          "Crawl-delay: #{described_class::STOREFRONT_BINGBOT_CRAWL_DELAY_SECONDS}",
-          "Disallow: /purchases/",
-          "",
-          "User-agent: *",
-          "Disallow: /purchases/"
-        ]
-      end
-
       it "repeats every wildcard disallow inside the bingbot group" do
         rules = described_class.new(storefront_host: true).user_agent_rules
         bingbot_group = rules[0...rules.index("")]

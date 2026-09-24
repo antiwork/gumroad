@@ -240,12 +240,6 @@ module ChargeProcessor
     transaction_url(charge_processor_id, charge_id)
   end
 
-  def self.transaction_url_for_admin(charge_processor_id, charge_id, charged_using_gumroad_account)
-    return if charge_processor_id.blank? || charge_id.blank? || !charged_using_gumroad_account
-
-    transaction_url(charge_processor_id, charge_id)
-  end
-
   def self.charge_processor_success_statuses(charge_processor_id)
     charge_processor_class = CHARGE_PROCESSOR_CLASS_MAP[charge_processor_id]
     return charge_processor_class::VALID_TRANSACTION_STATUSES if charge_processor_class

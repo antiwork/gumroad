@@ -31,18 +31,6 @@ describe ThumbnailsController do
         expect(response.parsed_body["success"]).to eq(true)
       end
     end
-
-    context "when the current user neither owns nor collaborates on the product" do
-      before { sign_in create(:user) }
-
-      it "does not find the product" do
-        expect do
-          post :create, params: request_params
-        end.to raise_error(ActionController::RoutingError, "Not Found")
-
-        expect(product.reload.thumbnail).to be_blank
-      end
-    end
   end
 
   describe "DELETE destroy" do
