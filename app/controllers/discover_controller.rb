@@ -23,6 +23,14 @@ class DiscoverController < ApplicationController
 
     format_search_params!
 
+    # The deferred fetch after every page load re-enters this action. Skip the search, the cards
+    # and the DiscoverSearch write, and send no meta: Inertia merges partial props into the page,
+    # so the before_action defaults would overwrite the full load's canonical and JSON-LD tags.
+    if deferred_props_only_request?
+      inertia_meta.clear
+      return render inertia: "Discover/Index", props: deferred_props
+    end
+
     if params[:sort].blank? && curated_products.present?
       params[:sort] = ProductSortKey::CURATED
       params[:curated_product_ids] = (curated_products[RECOMMENDED_PRODUCTS_COUNT..] || []).map { _1.product.id }
@@ -69,13 +77,28 @@ class DiscoverController < ApplicationController
       is_black_friday_page: params[:offer_code] == SearchProducts::BLACK_FRIDAY_CODE,
       black_friday_offer_code: SearchProducts::BLACK_FRIDAY_CODE,
       black_friday_stats: -> { black_friday_feature_active? ? BlackFridayStatsService.fetch_stats : nil },
-      recommended_products: InertiaRails.defer { recommendations },
-      recommended_wishlists: InertiaRails.defer { recommended_wishlists_data },
-      recently_viewed: InertiaRails.defer { recently_viewed_data },
+      **deferred_props,
     }
   end
 
   private
+    def deferred_props
+      {
+        recommended_products: InertiaRails.defer { recommendations },
+        recommended_wishlists: InertiaRails.defer { recommended_wishlists_data },
+        recently_viewed: InertiaRails.defer { recently_viewed_data },
+      }
+    end
+
+    # A partial reload for another component is served as a full visit, so it must not
+    # take the short path.
+    def deferred_props_only_request?
+      return false unless request.headers["X-Inertia-Partial-Component"] == "Discover/Index"
+
+      requested = request.headers["X-Inertia-Partial-Data"].to_s.split(",")
+      requested.any? && (requested - deferred_props.keys.map(&:to_s)).empty?
+    end
+
     def recently_viewed_data
       return nil if params[:offer_code].present?
       return nil if logged_in_user.blank? && cookies[:_gumroad_guid].blank?
