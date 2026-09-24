@@ -45,6 +45,22 @@ describe SaveUpsellService do
       expect(upsell.cross_sell).to be(false)
     end
 
+    it "persists whether the offer follows the version the buyer selected" do
+      upsell = described_class.new(
+        seller:,
+        params: params(
+          name: "Cross-sell",
+          cross_sell: true,
+          product_id: product.external_id,
+          product_ids: [other_product.external_id],
+          offer_matching_version: true,
+        )
+      ).perform
+
+      expect(upsell).to be_persisted
+      expect(upsell.offer_matching_version).to be(true)
+    end
+
     it "creates a cross-sell with a discounted offer code and selected products" do
       upsell = described_class.new(
         seller:,
@@ -109,6 +125,14 @@ describe SaveUpsellService do
       described_class.new(seller:, params: params(product_id: product.external_id, name: "Renamed"), upsell:).perform
       expect(upsell.reload.name).to eq("Renamed")
       expect(upsell.text).to eq("Take advantage of this excellent offer!")
+    end
+
+    it "turns following the buyer's selected version on and off" do
+      described_class.new(seller:, params: params(product_id: product.external_id, offer_matching_version: true), upsell:).perform
+      expect(upsell.reload.offer_matching_version).to be(true)
+
+      described_class.new(seller:, params: params(product_id: product.external_id, offer_matching_version: false), upsell:).perform
+      expect(upsell.reload.offer_matching_version).to be(false)
     end
 
     it "re-activates a variant mapping that was previously removed" do
