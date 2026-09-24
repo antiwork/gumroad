@@ -5,10 +5,9 @@ class HelpCenter::BaseController < ApplicationController
 
   rescue_from ActiveHash::RecordNotFound, with: :redirect_to_help_center_root
 
-  # The old help center served every article and category at a `.html` URL, and Google still
-  # indexes those duplicates next to the extension-less URL (22 of them carried ~210k
-  # impressions in the last 28 days). The canonical tag on both copies is only a hint, so
-  # redirect permanently to consolidate the ranking signal onto the canonical URL.
+  # Legacy `.html` help center URLs are still served and indexed next to the extension-less
+  # canonical path, and the canonical tag on both copies is only a hint, so redirect permanently
+  # to consolidate the ranking signal.
   before_action :redirect_html_suffixed_path, if: -> { request.get? }
 
   before_action do
