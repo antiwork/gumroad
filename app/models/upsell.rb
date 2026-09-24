@@ -93,10 +93,23 @@ class Upsell < ApplicationRecord
   def offered_variant_for(selected_option_name)
     return variant unless offer_matching_version? && selected_option_name.present?
 
-    product.variants_or_skus.detect { |offered| offered.name == selected_option_name } || variant
+    offerable_versions.detect { |offered| displayed_version_name(offered) == selected_option_name } || variant
   end
 
   private
+    # Mirrors `Link#options`: checkout only offers versions from the first variant category,
+    # under their displayed name.
+    def offerable_versions
+      return product.variants_or_skus if product.skus_enabled?
+
+      first_category = product.variant_categories_alive.to_a.first
+      product.variants_or_skus.select { |offered| offered.variant_category_id == first_category&.id }
+    end
+
+    def displayed_version_name(offered)
+      !product.skus_enabled? && offered.name == "Untitled" ? product.name : offered.name
+    end
+
     def selected_products_belong_to_seller
       if selected_products.any? { _1.user != seller }
         errors.add(:base, "All offered products must belong to the current seller.")
