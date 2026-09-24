@@ -48,16 +48,16 @@ describe PakistanBankAccount do
       expect(ba.stripe_external_account_routing_number).to eq("HABBPKKAXXX")
     end
 
-    it "keeps a lowercase head-office BIC unchanged" do
+    it "upcases a lowercase head-office BIC" do
       ba = create(:pakistan_bank_account, bank_code: "habbpkkaxxx")
 
-      expect(ba.stripe_external_account_routing_number).to eq("habbpkkaxxx")
+      expect(ba.stripe_external_account_routing_number).to eq("HABBPKKAXXX")
     end
 
     it "uses the 8-character bank identifier for a lowercase branch-specific BIC" do
       ba = create(:pakistan_bank_account, bank_code: "habbpkka007")
 
-      expect(ba.stripe_external_account_routing_number).to eq("habbpkka")
+      expect(ba.stripe_external_account_routing_number).to eq("HABBPKKA")
     end
   end
 

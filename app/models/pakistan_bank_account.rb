@@ -16,8 +16,11 @@ class PakistanBankAccount < BankAccount
   end
 
   def stripe_external_account_routing_number
+    # Stripe resolves only an uppercase PK BIC — it rejects a lowercase one on format, before any
+    # directory lookup — so the seller's own casing must not reach it.
     # Stripe links PK head-office BICs, but rejects branch-specific suffixes.
-    routing_number.upcase.end_with?("XXX") ? routing_number : routing_number.first(8)
+    code = routing_number.upcase
+    code.end_with?("XXX") ? code : code.first(8)
   end
 
   def bank_account_type
