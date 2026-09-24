@@ -1,19 +1,6 @@
 # BASE
 ARG WEB_DOCKERFILE_FROM
 
-# Fetched in its own stage so the database is written once, straight to its
-# final path, and stays cached across source changes.
-# The license key comes in as a BuildKit secret (see the Makefile's build target)
-# so it never lands in a layer or the image history the way a build arg would.
-FROM ${WEB_DOCKERFILE_FROM} AS geoip
-RUN --mount=type=secret,id=maxmind_license_key,required=true \
-  { test -s /run/secrets/maxmind_license_key || { echo "MAXMIND_LICENSE_KEY is not set" >&2; exit 1; }; } \
-  && cd /tmp \
-  && curl -fsSL -o GeoIP2-City.tar.gz "https://download.maxmind.com/app/geoip_download?edition_id=GeoIP2-City&license_key=$(cat /run/secrets/maxmind_license_key)&suffix=tar.gz" \
-  && tar xzf GeoIP2-City.tar.gz \
-  && mv GeoIP2-City_*/GeoIP2-City.mmdb /GeoIP2-City.mmdb \
-  && rm -rf /tmp/*
-
 FROM ${WEB_DOCKERFILE_FROM}
 
 
@@ -59,9 +46,9 @@ RUN cd $APP_DIR \
 # --chown/--chmod set ownership and modes in this layer; a chmod -R/chown -R
 # afterwards would store every file (and the gems) a second time. Some
 # entrypoints Nomad runs directly, like docker/web/sidekiq_worker.sh, are not
-# executable in git, so the 755 matters.
+# executable in git, so the 755 matters. lib/GeoIP2-City.mmdb arrives with the
+# context: copy_secrets.sh puts the credentials repo's copy there.
 COPY --chown=app:app --chmod=755 . $APP_DIR/
-COPY --from=geoip --chown=app:app --chmod=755 /GeoIP2-City.mmdb $APP_DIR/lib/GeoIP2-City.mmdb
 
 ENV DATABASE_HOST="db" \
   DATABASE_NAME="gumroad_development" \

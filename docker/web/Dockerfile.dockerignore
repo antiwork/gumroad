@@ -2,8 +2,6 @@
 # docker/web/Dockerfile, so it repeats that file's entries. spec/ is only
 # excluded here: the test image (Dockerfile.test) needs it, and deployed images
 # already delete it (Makefile remove_spec_folder), just in a layer that saves nothing.
-# The GeoIP database copy_secrets.sh drops into lib/ is replaced by the geoip stage's
-# download, so sending it would only add a dead 126MB copy to the source layer.
 .bundle
 .DS_Store
 .git
@@ -18,4 +16,3 @@ docker/tmp/
 .env.*.local
 node_modules/
 spec/
-lib/GeoIP2-City.mmdb
