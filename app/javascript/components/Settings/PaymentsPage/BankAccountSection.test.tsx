@@ -216,9 +216,9 @@ describe("BankAccountSection IBAN-box placeholders", () => {
   // spec/models/iban_account_number_placeholder_spec.rb checks every value in the table against its
   // bank-account model; this checks the IBAN box actually renders it.
   it.each([
-    ["JO", "JO67CBJO0010000000000131000303"],
-    ["DE", "DE62370400440532013001"],
-    ["MG", "MG1900005030010101914016057"],
+    ["JO", "JO00CBJO0010000000000131000303"],
+    ["DE", "DE00370400440532013001"],
+    ["MG", "MG0000005030010101914016057"],
   ])("shows %s a full-length IBAN example in both boxes", (code, example) => {
     renderForCountry(code, true);
 
