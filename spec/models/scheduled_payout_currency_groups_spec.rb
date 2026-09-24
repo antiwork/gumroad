@@ -123,17 +123,18 @@ RSpec.describe ScheduledPayout do
     expect(payments).to eq([huf_balance.reload.payments.sole])
   end
 
-  it "pays the healthy currency when a currency the account cannot pay out nets to a debt it covers" do
+  it "pays the healthy currency net of a debt in a currency the account cannot pay out" do
     allow(StripePayoutProcessor).to receive(:pay_out_currencies).and_return([])
     eur_refund = create(:balance, user:, merchant_account:, date: 2.days.ago.to_date,
                                   amount_cents: -150_00, holding_currency: Currency::EUR, holding_amount_cents: -135_00)
+    huf_newest = create(:balance, user:, merchant_account:, date: 2.days.ago.to_date,
+                                  amount_cents: 60_00, holding_currency: Currency::HUF, holding_amount_cents: 21_000_00)
     expect(Stripe::Payout).to receive(:create).with(hash_including(currency: Currency::HUF), anything).once
 
     payments = PayoutUsersService.new(date_string: Date.yesterday.to_s, processor_type: PayoutProcessorType::STRIPE, user_ids: user.id).process
 
     expect(payments).to eq([huf_balance.reload.payments.sole])
-    expect(eur_balance.reload).to be_unpaid
-    expect(eur_refund.reload).to be_unpaid
+    expect([huf_newest, eur_balance, eur_refund].map { |balance| balance.reload.state }.uniq).to eq(["unpaid"])
   end
 
   it "blocks every group when the seller really owes money in one of the currencies" do
