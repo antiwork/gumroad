@@ -44,9 +44,9 @@ class UtmLinkSaleAttributionJob
         qualified_purchases = qualified_purchases.select { _1.link_id == utm_link.target_resource_id }
       end
 
-      # Visits run newest-first, so a purchase keeps the latest visit that preceded it.
+      # purchases.created_at is second-precision, so a visit in the same second still counts.
       qualified_purchases.each do |purchase|
-        next if visit.created_at > purchase.created_at
+        next if visit.created_at.change(usec: 0) > purchase.created_at
         purchase_attribution_map[purchase.id] ||= { visit:, purchase: }
       end
     end
