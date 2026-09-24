@@ -35,12 +35,3 @@ export const needsOptionChoice = (
   product.options.length > 1 &&
   !selection.optionId &&
   product.options.some((option: Option) => isSelectable(product, selection, option));
-
-export const isSelectionComplete = (product: Product, selection: PriceSelection): boolean => {
-  if (needsOptionChoice(product, selection)) return false;
-  const selectedOption = product.options.find((option: Option) => option.id === selection.optionId);
-  const isPWYW = product.is_tiered_membership ? (selectedOption?.is_pwyw ?? false) : !!product.pwyw;
-  if (isPWYW && selection.price.value === null) return false;
-  if (product.native_type === "call" && !selection.callStartTime) return false;
-  return true;
-};

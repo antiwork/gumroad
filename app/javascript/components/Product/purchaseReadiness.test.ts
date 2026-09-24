@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { Option, PriceSelection, Product } from "$app/components/Product/ConfigurationSelector";
-import { initialOptionId, isSelectionComplete, needsOptionChoice } from "$app/components/Product/purchaseReadiness";
+import { initialOptionId, needsOptionChoice } from "$app/components/Product/purchaseReadiness";
 
 const option = (id: string, extra: Partial<Option> = {}): Option => ({
   id,
@@ -97,49 +97,11 @@ describe("needsOptionChoice", () => {
       options: [option("first", { quantity_left: 0 }), option("second", { quantity_left: 0 })],
     });
     expect(needsOptionChoice(soldOut, selection())).toBe(false);
-    expect(isSelectionComplete(soldOut, selection())).toBe(true);
   });
 
   it("does not ask for a choice when no option can be priced for the chosen recurrence", () => {
     const membership = product({ is_tiered_membership: true, options: [option("first"), option("second")] });
     expect(needsOptionChoice(membership, selection())).toBe(true);
     expect(needsOptionChoice(membership, selection({ recurrence: "monthly" }))).toBe(false);
-  });
-});
-
-describe("isSelectionComplete", () => {
-  const two = product({ options: [option("first"), option("second")] });
-
-  it("is incomplete until the buyer picks one of several options", () => {
-    expect(isSelectionComplete(two, selection())).toBe(false);
-  });
-
-  it("is complete once an option is chosen", () => {
-    expect(isSelectionComplete(two, selection({ optionId: "second" }))).toBe(true);
-  });
-
-  it("treats a single-option product with that option selected as complete", () => {
-    const one = product({ options: [option("only")] });
-    expect(isSelectionComplete(one, selection({ optionId: "only" }))).toBe(true);
-  });
-
-  it("is incomplete for PWYW until an amount is entered", () => {
-    const pwyw = product({ pwyw: { suggested_price_cents: 500 } });
-    expect(isSelectionComplete(pwyw, selection())).toBe(false);
-    expect(isSelectionComplete(pwyw, selection({ price: { error: false, value: 800 } }))).toBe(true);
-  });
-
-  it("does not treat quantity or a default recurrence as an incomplete choice", () => {
-    const qty = product({
-      options: [option("only")],
-      is_quantity_enabled: true,
-      recurrences: { default: "monthly", enabled: [{ recurrence: "monthly", price_cents: 500, id: "m" }] },
-    });
-    expect(isSelectionComplete(qty, selection({ optionId: "only", quantity: 1, recurrence: "monthly" }))).toBe(true);
-  });
-
-  it("lets a coffee buyer through on the Other amount", () => {
-    const coffee = product({ native_type: "coffee", options: [option("one"), option("five")] });
-    expect(isSelectionComplete(coffee, selection({ price: { error: false, value: 10000 } }))).toBe(true);
   });
 });
