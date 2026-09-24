@@ -45,6 +45,17 @@ describe UtmLinkSaleAttributionJob do
     expect(driven_sale.utm_link_id).to eq(utm_link.id)
   end
 
+  it "keeps the pre-sale visit when the buyer revisits the same link after the purchase" do
+    purchase = create(:purchase, link: product, seller:, created_at: 2.hours.ago)
+    order.purchases << purchase
+    pre_sale_visit = create(:utm_link_visit, utm_link:, browser_guid:, created_at: 1.day.ago)
+    create(:utm_link_visit, utm_link:, browser_guid:, created_at: 1.hour.ago)
+
+    described_class.new.perform(order.id, browser_guid)
+
+    expect(utm_link.utm_link_driven_sales.sole.utm_link_visit_id).to eq(pre_sale_visit.id)
+  end
+
   it "attributes a visit that falls in the same second as the purchase" do
     purchase = create(:purchase, link: product, seller:)
     order.purchases << purchase

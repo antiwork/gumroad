@@ -8,7 +8,12 @@ class UtmLinkSaleAttributionJob
   sidekiq_options queue: :low, lock: :until_executed, retry: 3
 
   def perform(order_id, browser_guid)
-    purchases_by_seller = Order.find(order_id).purchases.successful.group_by(&:seller_id)
+    purchases = Order.find(order_id).purchases.successful.to_a
+    return if purchases.empty?
+    purchases_by_seller = purchases.group_by(&:seller_id)
+    # Exclusive upper bound, so a revisit after the sale can't displace the pre-sale visit
+    # to the same link in the MAX below. purchases.created_at is second-precision.
+    visits_before = purchases.map(&:created_at).max + 1.second
 
     # Fetch only the latest visit per UtmLink
     latest_visits_query = <<~SQL.squish
@@ -16,6 +21,7 @@ class UtmLinkSaleAttributionJob
       FROM utm_link_visits
       WHERE browser_guid = '#{ActiveRecord::Base.connection.quote_string(browser_guid)}'
       AND created_at >= '#{ATTRIBUTION_WINDOW.ago.beginning_of_day.strftime("%Y-%m-%d %H:%M:%S")}'
+      AND created_at < '#{visits_before.utc.strftime("%Y-%m-%d %H:%M:%S")}'
       GROUP BY utm_link_id
     SQL
 
@@ -28,6 +34,7 @@ class UtmLinkSaleAttributionJob
               SQL
               .where(browser_guid:)
               .where("utm_link_visits.created_at >= ?", ATTRIBUTION_WINDOW.ago.beginning_of_day)
+              .where("utm_link_visits.created_at < ?", visits_before)
               .order(created_at: :desc, id: :desc)
 
     purchase_attribution_map = {}
