@@ -34,9 +34,20 @@ SecureHeaders::Configuration.default do |config|
     default_src: ["https:", "'self'"],
 
     frame_src: ["*", "data:", "blob:"],
-    worker_src: ["*", "data:", "blob:"],
-    object_src: ["*", "data:", "blob:"],
-    child_src: ["*", "data:", "blob:"],
+    # pdfjs loads its worker from the CDN asset host (see the asset_host append
+    # below) or, in development, from the Vite lane — so "self" alone would block
+    # it. Nothing else in the app spawns a worker, and blob: covers the ones
+    # libraries create from inlined source.
+    worker_src: ["'self'", "blob:"],
+    # No <object>/<embed> in shipped markup; plugin documents are the classic CSP
+    # bypass, so there is no allowlist to maintain here.
+    object_src: ["'none'"],
+    # Superseded by frame_src/worker_src wherever they apply, but scanners read
+    # the header as sent, so it stays tight rather than advertising a wildcard.
+    child_src: ["'self'", "blob:"],
+    # Without this an injected <base href> re-points every relative URL on the
+    # page at an attacker's origin.
+    base_uri: ["'self'"],
     img_src: ["*", "data:", "blob:"],
     font_src: ["*", "data:", "blob:"],
     media_src: ["*", "data:", "blob:"],
@@ -205,6 +216,7 @@ SecureHeaders::Configuration.default do |config|
     config.csp[:connect_src] << Rails.application.config.asset_host
     config.csp[:script_src] << Rails.application.config.asset_host
     config.csp[:style_src] << Rails.application.config.asset_host
+    config.csp[:worker_src] << Rails.application.config.asset_host
   end
 
   if Rails.env.test?
@@ -225,6 +237,7 @@ SecureHeaders::Configuration.default do |config|
       config.csp[:script_src] << "#{host}:#{vite_port}" # Vite dev server
       config.csp[:connect_src] << "#{host}:#{vite_port}" # Vite dev server
       config.csp[:connect_src] << "ws://#{host}:#{vite_port}" # Vite HMR websocket
+      config.csp[:worker_src] << "#{host}:#{vite_port}" # Vite dev server workers
     end
     cable_scheme = PROTOCOL == "https" ? "wss" : "ws"
     cable_port = ENV["ANYCABLE_PORT"].presence || (PROTOCOL == "https" ? 8081 : 8080)
