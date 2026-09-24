@@ -560,8 +560,14 @@ class Payouts
     end
     return false if orphan_debt_cents.zero?
 
-    payout_groups.any? do |_, _, group_balances|
+    # Judge each payout group on the lesser of its claim and its full ledger group, so unclaimed
+    # refunds in that currency cannot make it look able to cover the debt.
+    ledger_cents_by_balance_id = ledger_groups.each_with_object({}) do |(_, _, group_balances), cents|
       group_cents = group_balances.sum(&:amount_cents)
+      group_balances.each { |balance| cents[balance.id] = group_cents }
+    end
+    payout_groups.any? do |_, _, group_balances|
+      group_cents = [group_balances.sum(&:amount_cents), ledger_cents_by_balance_id.fetch(group_balances.first.id)].min
       group_cents.positive? && group_cents + orphan_debt_cents <= 0
     end
   end

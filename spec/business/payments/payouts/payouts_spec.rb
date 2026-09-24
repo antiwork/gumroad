@@ -1145,6 +1145,34 @@ describe Payouts do
         expect(note.content).to include("usd@#{pln_account.id} $-300.00")
       end
 
+      it "judges a payable group on its full ledger, so an unclaimed refund in that currency cannot cover the debt" do
+        pln_refund = create(:balance, user: seller, merchant_account: pln_account, date: payout_date - 1, amount_cents: -250_00,
+                                      holding_currency: Currency::PLN, holding_amount_cents: -925_00)
+        eur_credit = create(:balance, user: seller, merchant_account: pln_account, date: payout_date - 1, amount_cents: 400_00,
+                                      holding_currency: Currency::EUR, holding_amount_cents: 360_00)
+        allow(StripePayoutProcessor).to receive(:pay_out_currencies).and_return([Currency::PLN, Currency::EUR])
+        allow(described_class).to receive(:payable_balances_for_processor).and_wrap_original do |original, *args|
+          original.call(*args).reject { |balance| balance.id == pln_refund.id }
+        end
+
+        expect(described_class.create_payments(payout_date.to_s, PayoutProcessorType::STRIPE, seller)).to eq([])
+
+        expect(seller.payments.count).to eq(0)
+        expect((pln_credits + [pln_refund, eur_credit, usd_debt]).map { |balance| balance.reload.state }.uniq).to eq(["unpaid"])
+        expect(held_notes.size).to eq(1)
+      end
+
+      it "reports the hold when the debt outweighs the whole ledger even though no payable group is positive" do
+        pln_refund = create(:balance, user: seller, merchant_account: pln_account, date: payout_date - 1, amount_cents: -296_62,
+                                      holding_currency: Currency::PLN, holding_amount_cents: -1_101_89)
+
+        expect(described_class.create_payments(payout_date.to_s, PayoutProcessorType::STRIPE, seller)).to eq([])
+
+        expect((pln_credits + [pln_refund, usd_debt]).map { |balance| balance.reload.state }.uniq).to eq(["unpaid"])
+        expect(ErrorNotifier).to have_received(:notify).once
+        expect(held_notes.size).to eq(1)
+      end
+
       it "pays nothing when the debt outweighs the whole ledger, and does not stack a repeat note" do
         usd_debt.update!(amount_cents: -500_00, holding_amount_cents: -500_00)
 

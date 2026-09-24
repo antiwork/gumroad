@@ -123,14 +123,11 @@ class StripePayoutProcessor
     end
   end
 
-  # Public: True for a `payout_groups` group of Stripe-held balances none of which this processor
-  # would claim (a currency their account can neither default to nor pay out). Such a group can
-  # never form a payout, so its net debt is judged against the payable groups instead of blocking
-  # them outright.
+  # Public: True for a `payout_groups` group none of whose balances this processor would claim: a
+  # Stripe-held currency the account can neither default to nor pay out. Such a group can never form
+  # a payout, so its net debt is judged against the payable groups instead of blocking them outright.
   def self.unpayable_currency_group?(group_balances)
-    group_balances.present? && group_balances.none? do |balance|
-      balance.merchant_account.holder_of_funds != HolderOfFunds::STRIPE || is_balance_payable(balance)
-    end
+    group_balances.present? && group_balances.none? { |balance| is_balance_payable(balance) }
   end
 
   # Unsupported currencies stay unpaid rather than creating a payout Stripe will reject.
