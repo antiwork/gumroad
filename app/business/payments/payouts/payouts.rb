@@ -31,6 +31,7 @@ class Payouts
   # so it has to get past the dedupe. A combined pattern would let the stale note suppress it.
   GUARDIAN_REQUIRED_NOTE_REGEX = /\AYour payout on .+ was skipped because sellers under 18 need a legal guardian/
   GUARDIAN_UNSUPPORTED_NOTE_REGEX = /\AYour payout on .+ was skipped because our payment partner cannot verify a seller under 18/
+  NEGATIVE_LEDGER_NOTE_REGEX = /\APayout on .+ was held because the unpaid balance has a debt no payable currency group covers/
 
   def self.is_user_payable(user, date, processor_type: nil, add_comment: false, from_admin: false, bypass_minimum_payout: false, payout_type: Payouts::PAYOUT_TYPE_STANDARD)
     payout_date = Time.current.to_fs(:formatted_date_full_month)
@@ -450,6 +451,7 @@ class Payouts
     # Unrestricted claims are dated before the claim so a hold landing mid-run cannot post-date
     # hold_started_at; claims made under the hold are dated now so they count in the reserve base.
     claimed_at = Time.current
+    held_ledger = nil
     groups = ActiveRecord::Base.transaction(requires_new: true) do
       balances, under_reserve = mark_balances_processing(date, processor_type, user, payout_type:)
       next [] if balances.empty?
@@ -468,10 +470,9 @@ class Payouts
       else
         [[nil, nil, ledger]]
       end
-      if ledger.sum(&:amount_cents) <= 0 ||
-          ledger_groups.any? { |_, _, group_balances| group_balances.sum(&:amount_cents).negative? }
-        Rails.logger.info("Payouts: Negative balance for #{user.id}")
+      if negative_ledger?(payout_processor, ledger, ledger_groups, payout_groups)
         balances.each(&:mark_unpaid!)
+        held_ledger = [ledger, ledger_groups]
         next []
       end
 
@@ -519,6 +520,7 @@ class Payouts
         [payment, merchant_account, payout_currency, group_balances]
       end
     end
+    report_negative_ledger(user, *held_ledger) if held_ledger
 
     groups.map do |payment, merchant_account, payout_currency, group_balances|
       payment_errors = if payout_processor.respond_to?(:payout_groups)
@@ -541,6 +543,57 @@ class Payouts
       [payment, [error.message]]
     end
   end
+
+  # A negative ledger group normally blocks every group. A debt in a currency its account cannot pay
+  # out is never claimed, so it cannot form a payout of its own; it only blocks when a payable group
+  # would not cover it. No FX netting: the debt row stays unpaid for reconciliation.
+  def self.negative_ledger?(payout_processor, ledger, ledger_groups, payout_groups)
+    return true if ledger.sum(&:amount_cents) <= 0
+
+    orphan_debt_cents = 0
+    ledger_groups.each do |_, _, group_balances|
+      group_cents = group_balances.sum(&:amount_cents)
+      next unless group_cents.negative?
+      return true unless unpayable_currency_group?(payout_processor, group_balances)
+
+      orphan_debt_cents += group_cents
+    end
+    return false if orphan_debt_cents.zero?
+
+    payout_groups.any? do |_, _, group_balances|
+      group_cents = group_balances.sum(&:amount_cents)
+      group_cents.positive? && group_cents + orphan_debt_cents <= 0
+    end
+  end
+  private_class_method :negative_ledger?
+
+  def self.unpayable_currency_group?(payout_processor, group_balances)
+    payout_processor.respond_to?(:unpayable_currency_group?) &&
+      payout_processor.unpayable_currency_group?(group_balances)
+  end
+  private_class_method :unpayable_currency_group?
+
+  # Internal only: the seller cannot act on a negative ledger, and a hidden repeat is not stacked so
+  # it cannot push a seller-visible explanation out of PayoutNoteVisibility::MAX_NOTES_SCANNED.
+  def self.report_negative_ledger(user, ledger, ledger_groups)
+    groups = ledger_groups.map do |merchant_account, currency, group_balances|
+      "#{currency || 'none'}@#{merchant_account&.id || 'none'} #{user.formatted_dollar_amount(group_balances.sum(&:amount_cents), no_cents_if_whole: false)}"
+    end
+    net = user.formatted_dollar_amount(ledger.sum(&:amount_cents), no_cents_if_whole: false)
+    ErrorNotifier.notify("Payouts: payout held for a negative ledger group", user_id: user.id, net:, groups:)
+
+    return if newest_note_is_hidden_repeat?(user, NEGATIVE_LEDGER_NOTE_REGEX)
+
+    payout_date = Time.current.to_fs(:formatted_date_full_month)
+    user.add_payout_note(
+      content: "Payout on #{payout_date} was held because the unpaid balance has a debt no payable currency group covers (net #{net}; groups: #{groups.join(', ')}).",
+      seller_visible: false
+    )
+  rescue => e
+    # Reporting must not undo the release it describes.
+    Rails.logger.error("Payouts: negative ledger report failed for #{user.id}: #{e.class}: #{e.message}")
+  end
+  private_class_method :report_negative_ledger
 
   def self.under_chargeback_rate_reserve?(user, payout_type:)
     payout_type != Payouts::PAYOUT_TYPE_INSTANT && user.chargeback_rate_payout_reserve_active?
