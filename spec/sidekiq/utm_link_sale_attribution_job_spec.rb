@@ -162,5 +162,20 @@ describe UtmLinkSaleAttributionJob do
       expect(driven_sale.utm_link_visit_id).to eq(utm_link1_visit.id)
       expect(driven_sale.utm_link_id).to eq(utm_link.id)
     end
+
+    it "attributes the purchase to the newest visit even when the older visit was recorded first" do
+      create(:utm_link_visit, utm_link:, browser_guid:, created_at: 2.days.ago)
+      newer_link = create(:utm_link, seller:)
+      newer_visit = create(:utm_link_visit, utm_link: newer_link, browser_guid:, created_at: 1.day.ago)
+      purchase = create(:purchase, link: product, seller:)
+      order.purchases << purchase
+
+      described_class.new.perform(order.id, browser_guid)
+
+      driven_sale = UtmLinkDrivenSale.sole
+      expect(driven_sale.purchase_id).to eq(purchase.id)
+      expect(driven_sale.utm_link_visit_id).to eq(newer_visit.id)
+      expect(driven_sale.utm_link_id).to eq(newer_link.id)
+    end
   end
 end

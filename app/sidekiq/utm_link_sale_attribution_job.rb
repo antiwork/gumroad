@@ -28,11 +28,12 @@ class UtmLinkSaleAttributionJob
               SQL
               .where(browser_guid:)
               .where("utm_link_visits.created_at >= ?", ATTRIBUTION_WINDOW.ago.beginning_of_day)
-              .order(created_at: :desc)
+              .order(created_at: :desc, id: :desc)
 
     purchase_attribution_map = {}
 
-    visits.find_each do |visit|
+    # #each, not find_each: find_each forces primary-key order and discards the ordering above.
+    visits.each do |visit|
       utm_link = visit.utm_link
       qualified_purchases = purchases_by_seller[utm_link.seller_id]
       next if qualified_purchases.blank?
