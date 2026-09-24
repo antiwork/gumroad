@@ -471,7 +471,8 @@ class Payouts
       else
         [[nil, nil, ledger]]
       end
-      debt_reserve = orphan_debt_reserve(payout_processor, balances, ledger, ledger_groups, payout_groups)
+      debt_reserve = orphan_debt_reserve(payout_processor, balances, ledger, ledger_groups, payout_groups,
+                                         minimum_cents: payout_minimum_cents(user, payout_type))
       if negative_ledger?(payout_processor, ledger, ledger_groups) || debt_reserve.nil?
         Rails.logger.info("Payouts: Negative balance for #{user.id}")
         # Track the latest debit for each unresolved negative balance. Credits can reduce an
@@ -615,8 +616,8 @@ class Payouts
   # The claim skips a debt in a currency the account cannot pay out, so the claimed rows can exceed
   # what the seller is owed. Keep claimed rows unpaid until the unpaid ledger is back to zero or
   # more. There is no FX netting: the debt row stays unpaid for reconciliation. Returns the rows to
-  # keep unpaid, or nil when the groups left to pay would still exceed the ledger.
-  def self.orphan_debt_reserve(payout_processor, balances, ledger, ledger_groups, payout_groups)
+  # keep unpaid, or nil when the groups left to pay would exceed the ledger or fall below the minimum.
+  def self.orphan_debt_reserve(payout_processor, balances, ledger, ledger_groups, payout_groups, minimum_cents:)
     orphan_debt = ledger_groups.any? do |_, _, group_balances|
       group_balances.sum(&:amount_cents).negative? && unpayable_currency_group?(payout_processor, group_balances)
     end
@@ -643,8 +644,10 @@ class Payouts
     reserve = [fit, single && [single]].compact.min_by { |candidate| candidate.sum(&:amount_cents) }
 
     # Groups left non-positive are released later, which can pay out more than the reserve assumed.
+    # Eligibility checked the minimum on the ledger, so the reserve's overshoot can take the payout
+    # under it, and the minimum includes Stripe's cross-border floor.
     paid_cents = payout_groups.sum { |_, _, group_balances| [(group_balances - reserve).sum(&:amount_cents), 0].max }
-    paid_cents <= ledger_cents ? reserve : nil
+    reserve if paid_cents <= ledger_cents && paid_cents >= minimum_cents
   end
   private_class_method :orphan_debt_reserve
 
@@ -695,7 +698,7 @@ class Payouts
   def self.select_and_claim_payable_balances(date, processor_type, user, payout_type:, under_reserve:)
     unpaid_balances = user.unpaid_balances_up_to_date(date)
     payable_balances = payable_balances_for_processor(user, unpaid_balances, processor_type)
-    minimum_cents = payout_type == Payouts::PAYOUT_TYPE_INSTANT ? StripePayoutProcessor::MINIMUM_INSTANT_PAYOUT_AMOUNT_CENTS : user.minimum_payout_amount_cents
+    minimum_cents = payout_minimum_cents(user, payout_type)
     if under_reserve
       # The reserve chooses a global oldest-row prefix before each processor intersects it
       # with its own rail. Otherwise a newer PayPal/Stripe row can leapfrog an older row on
@@ -729,6 +732,11 @@ class Payouts
     end
   end
   private_class_method :select_and_claim_payable_balances
+
+  def self.payout_minimum_cents(user, payout_type)
+    payout_type == Payouts::PAYOUT_TYPE_INSTANT ? StripePayoutProcessor::MINIMUM_INSTANT_PAYOUT_AMOUNT_CENTS : user.minimum_payout_amount_cents
+  end
+  private_class_method :payout_minimum_cents
 
   def self.payable_balances_for_processor(user, balances, processor_type)
     payout_processor = ::PayoutProcessorType.get(processor_type)

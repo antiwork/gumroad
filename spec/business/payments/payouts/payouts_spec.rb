@@ -1212,6 +1212,8 @@ describe Payouts do
     it "keeps rows that cover a debt in a currency the account cannot pay out right now unpaid" do
       allow(StripePayoutProcessor).to receive(:pay_out_currencies).and_return([Currency::EUR])
       allow(StripePayoutProcessor).to receive(:prepare_payment_and_set_amount).and_return([])
+      create(:balance, user:, merchant_account:, date: payout_date - 3, amount_cents: 150_00,
+                       holding_currency: Currency::HUF, holding_amount_cents: 228_138_735)
       eur_credit = create(:balance, user:, merchant_account:, date: payout_date - 2, amount_cents: 33_12,
                                     holding_currency: Currency::EUR, holding_amount_cents: 4_303)
       gbp_debt = create(:balance, user:, merchant_account:, date: payout_date - 3, amount_cents: -20_00,
@@ -1219,7 +1221,7 @@ describe Payouts do
 
       payment, _ = described_class.create_payments(payout_date.to_s, PayoutProcessorType::STRIPE, user).sole
 
-      expect(payment.balances.map(&:holding_currency)).to eq([Currency::HUF])
+      expect(payment.balances.map(&:holding_currency)).to eq([Currency::HUF, Currency::HUF])
       expect([eur_credit, gbp_debt].map { |balance| balance.reload.state }.uniq).to eq(["unpaid"])
       expect(user.balances.unpaid.sum(:amount_cents)).to eq(33_12 - 20_00)
     end
@@ -1322,6 +1324,18 @@ describe Payouts do
         expect(payment.balances.ids).to eq([pln_credits.first.id])
         expect([pln_credits.last, pln_small, usd_debt].map { |balance| balance.reload.state }.uniq).to eq(["unpaid"])
         expect(seller.balances.unpaid.sum(:amount_cents)).to eq(100_00 + 50_00 - 120_00)
+      end
+
+      it "holds the payout when the rows left to pay fall below the seller's minimum" do
+        usd_debt.update!(amount_cents: -160_00, holding_amount_cents: -160_00)
+        expect(seller.minimum_payout_amount_cents).to be > 0
+
+        expect(described_class.create_payments(payout_date.to_s, PayoutProcessorType::STRIPE, seller)).to eq([])
+
+        expect(seller.payments.count).to eq(0)
+        expect((pln_credits + [usd_debt]).map { |balance| balance.reload.state }.uniq).to eq(["unpaid"])
+        expect(hold_notes.count).to eq(1)
+        expect(debt_reserve_notes).to be_empty
       end
 
       it "counts an unclaimed refund in the shortfall, so the rows left unpaid still cover every debt" do
