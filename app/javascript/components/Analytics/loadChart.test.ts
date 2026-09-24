@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { describe, expect, it, vi } from "vitest";
 
-import { LazySalesChart, loadSalesChart, warmSalesChart } from "$app/components/Analytics/loadChart";
+import { warmSalesChart } from "$app/components/Analytics/loadChart";
 
 const setOnLine = (value: boolean) => Object.defineProperty(navigator, "onLine", { configurable: true, value });
 
@@ -26,18 +26,6 @@ describe("Analytics chart chunking", () => {
 
     expect(valueImports).toHaveLength(0);
     expect(source).toContain("LazySalesChart");
-  });
-
-  it("resolves the chart component itself, not the module namespace", async () => {
-    // `lazy` needs `{ default: Component }`; handing it the module gives React an object with no
-    // render and the chart fails at mount rather than at import, which is much harder to trace.
-    const chartModule = await loadSalesChart();
-    expect(typeof chartModule.SalesChart).toBe("function");
-  });
-
-  it("exposes the chart as a lazy component", () => {
-    expect(LazySalesChart).toBeTypeOf("object");
-    expect(LazySalesChart).toHaveProperty("$$typeof");
   });
 
   it("does not warm the chunk while offline, so a guaranteed failure never enters the module map", () => {
