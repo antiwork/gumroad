@@ -126,7 +126,8 @@ class StripePayoutProcessor
   # Public: True for a `payout_groups` group none of whose balances this processor would claim, so
   # it can never form a payout of its own.
   def self.unpayable_currency_group?(group_balances)
-    group_balances.present? && group_balances.none? { |balance| is_balance_payable(balance) }
+    group_balances.present? &&
+      group_balances.none? { |balance| is_balance_payable(balance) || pay_out_currencies_unknown?(balance.merchant_account) }
   end
 
   # Unsupported currencies stay unpaid rather than creating a payout Stripe will reject.
@@ -148,6 +149,7 @@ class StripePayoutProcessor
     cached = pay_out_currencies_cache[stripe_account_id]
     return cached[:currencies] if cached.present? && cached[:fetched_at] > PAY_OUT_CURRENCIES_CACHE_TTL.ago
 
+    probe_failed = false
     currencies = begin
       receivable = Stripe::Account.list_external_accounts(stripe_account_id, { limit: 100 })
         .map { |external_account| external_account.currency.to_s }
@@ -157,17 +159,26 @@ class StripePayoutProcessor
     rescue Stripe::StripeError
       # A currency we cannot prove is payable stays unpaid and rolls into the next run, rather than
       # producing a payout Stripe will reject and a failure email for the seller.
+      probe_failed = true
       []
     rescue StandardError => e
       # Anything else reaching the client (bad credentials, an unmocked HTTP layer in specs, a bug in
       # the probe itself) must not fail the whole payout run for the seller: same safe direction as
       # above, but logged loudly because this class of error is not expected.
       Rails.logger.warn("StripePayoutProcessor: payable-currency probe failed for #{stripe_account_id}: #{e.class}: #{e.message}")
+      probe_failed = true
       []
     end
 
-    pay_out_currencies_cache[stripe_account_id] = { currencies:, fetched_at: Time.current }
+    pay_out_currencies_cache[stripe_account_id] = { currencies:, fetched_at: Time.current, probe_failed: }
     currencies
+  end
+
+  # Public: True when the last probe for this account failed, so an empty `pay_out_currencies` does
+  # not prove the account holds none of a currency.
+  def self.pay_out_currencies_unknown?(merchant_account)
+    pay_out_currencies(merchant_account)
+    pay_out_currencies_cache.dig(merchant_account.charge_processor_merchant_id, :probe_failed) == true
   end
 
   def self.pay_out_currencies_cache

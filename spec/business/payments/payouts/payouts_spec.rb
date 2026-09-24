@@ -1266,6 +1266,20 @@ describe Payouts do
         expect(hold_notes).to be_empty
       end
 
+      it "holds the payout when the currency probe fails, since it cannot prove the debt's currency is unpayable" do
+        allow(StripePayoutProcessor).to receive(:pay_out_currencies).and_call_original
+        allow(Stripe::Account).to receive(:list_external_accounts).and_raise(Stripe::APIConnectionError, "probe unavailable")
+        StripePayoutProcessor.pay_out_currencies_cache.delete(pln_account.charge_processor_merchant_id)
+
+        expect(described_class.create_payments(payout_date.to_s, PayoutProcessorType::STRIPE, seller)).to eq([])
+
+        expect(seller.payments.count).to eq(0)
+        expect((pln_credits + [usd_debt]).map { |balance| balance.reload.state }.uniq).to eq(["unpaid"])
+        expect(hold_notes.count).to eq(1)
+      ensure
+        StripePayoutProcessor.pay_out_currencies_cache.delete(pln_account.charge_processor_merchant_id)
+      end
+
       it "pays nothing when the debt is larger than a payable group, even with a positive ledger" do
         eur_credit = create(:balance, user: seller, merchant_account: pln_account, date: payout_date - 1, amount_cents: 400_00,
                                       holding_currency: Currency::EUR, holding_amount_cents: 360_00)

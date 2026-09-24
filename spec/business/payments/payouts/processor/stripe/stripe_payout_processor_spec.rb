@@ -42,6 +42,18 @@ describe StripePayoutProcessor do
       expect(described_class.unpayable_currency_group?([usd_debt, gumroad_debt])).to be(false)
       expect(described_class.unpayable_currency_group?([])).to be(false)
     end
+
+    it "is false when the currency probe fails, since an empty currency list proves nothing" do
+      allow(described_class).to receive(:pay_out_currencies).and_call_original
+      allow(Stripe::Account).to receive(:list_external_accounts).and_raise(Stripe::APIConnectionError, "probe unavailable")
+      described_class.pay_out_currencies_cache.delete(merchant_account.charge_processor_merchant_id)
+      usd_debt = create(:balance, user: seller, merchant_account:, amount_cents: -61_22,
+                                  holding_currency: Currency::USD, holding_amount_cents: -61_22)
+
+      expect(described_class.unpayable_currency_group?([usd_debt])).to be(false)
+    ensure
+      described_class.pay_out_currencies_cache.delete(merchant_account.charge_processor_merchant_id)
+    end
   end
 
   describe "foreign payout destination identity" do
