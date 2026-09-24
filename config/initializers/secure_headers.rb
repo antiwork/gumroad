@@ -34,10 +34,8 @@ SecureHeaders::Configuration.default do |config|
     default_src: ["https:", "'self'"],
 
     frame_src: ["*", "data:", "blob:"],
-    # pdfjs loads its worker from the CDN asset host (see the asset_host append
-    # below) or, in development, from the Vite lane — so "self" alone would block
-    # it. Nothing else in the app spawns a worker, and blob: covers the ones
-    # libraries create from inlined source.
+    # pdfjs is the only worker the app starts, and Vite resolves its URL through
+    # the asset host (or the dev lane's Vite server), so 'self' alone blocks it.
     worker_src: ["'self'", "blob:"],
     # No <object>/<embed> in shipped markup; plugin documents are the classic CSP
     # bypass, so there is no allowlist to maintain here.
