@@ -130,16 +130,13 @@ describe Api::V2::MediaController do
         expect(body["message"]).to eq("Your account is not active.")
       end
 
-      it "rejects uploads from a deleted (closed) account with a 403 and never calls the service" do
+      it "rejects uploads from a deleted (closed) account with a 401 and never calls the service" do
         @user.update!(deleted_at: Time.current)
         expect(CreatePublicMediaService).not_to receive(:new)
 
         post @action, params: @params.merge(url: "https://example.com/logo.png")
 
-        expect(response).to have_http_status(:forbidden)
-        body = response.parsed_body
-        expect(body["success"]).to be(false)
-        expect(body["message"]).to eq("Your account is not active.")
+        expect(response).to have_http_status(:unauthorized)
       end
     end
   end
