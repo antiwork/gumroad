@@ -1,0 +1,18 @@
+# BuildKit uses this instead of the root .dockerignore when building
+# docker/web/Dockerfile, so it repeats that file's entries. spec/ is only
+# excluded here: the test image (Dockerfile.test) needs it, and deployed images
+# already delete it (Makefile remove_spec_folder), just in a layer that saves nothing.
+.bundle
+.DS_Store
+.git
+vendor/cache/
+vendor/bundle/
+tmp/
+log/
+ci_scripts/
+.githooks/
+docker/tmp/
+.env
+.env.*.local
+node_modules/
+spec/
