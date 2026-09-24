@@ -301,5 +301,23 @@ describe Upsell do
 
       expect(cross_sell.offered_variant_for(nil)).to eq(offered_versions.first)
     end
+
+    it "resolves from the offered product's loaded versions rather than querying per match" do
+      cross_sell.update!(offer_matching_version: true)
+      offered_product.variants_or_skus.load
+
+      queries = []
+      subscriber = lambda { |_name, _start, _finish, _id, payload|
+        queries << payload[:sql] if payload[:sql] && !payload[:name]&.match?(/SCHEMA|TRANSACTION|CACHE/)
+      }
+
+      matched = nil
+      ActiveSupport::Notifications.subscribed(subscriber, "sql.active_record") do
+        matched = cross_sell.offered_variant_for("Studio License")
+      end
+
+      expect(matched).to eq(offered_versions.second)
+      expect(queries).to be_empty
+    end
   end
 end

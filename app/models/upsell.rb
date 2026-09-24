@@ -88,15 +88,12 @@ class Upsell < ApplicationRecord
   end
 
   # With `offer_matching_version`, a cross-sell follows the version the buyer selected on the
-  # product it appears on: the offered product's option of the same name. Falls back to the
+  # product it appears on: the offered product's version of the same name. Falls back to the
   # fixed `variant` when the two products share no version name.
   def offered_variant_for(selected_option_name)
     return variant unless offer_matching_version? && selected_option_name.present?
 
-    matching_option = product.options.find { |option| option[:name] == selected_option_name }
-    return variant if matching_option.nil?
-
-    product.variants_or_skus.find_by_external_id(matching_option[:id]) || variant
+    product.variants_or_skus.detect { |offered| offered.name == selected_option_name } || variant
   end
 
   private

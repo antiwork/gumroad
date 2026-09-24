@@ -660,7 +660,7 @@ const Form = ({
           : null,
       productIds: isCrossSell ? selectedProductIds.value : [],
       upsellVariants: !isCrossSell ? variants : [],
-      offerMatchingVersion: isCrossSell && offerMatchingVersion,
+      offerMatchingVersion: isCrossSell && offerMatchingVersion && (offeredProduct?.options.length ?? 0) > 0,
       paused,
     });
   };
@@ -835,7 +835,10 @@ const Form = ({
                     options={offerableProducts.map(({ id, name: label }) => ({ id, label }))}
                     value={offeredOption ? { id: offeredOption.id, label: offeredOption.name } : null}
                     onChange={(selectedOption) => {
-                      if (selectedOption?.id !== offeredProductId.value) setOfferedVariantId({ value: null });
+                      if (selectedOption?.id !== offeredProductId.value) {
+                        setOfferedVariantId({ value: null });
+                        setOfferMatchingVersion(false);
+                      }
                       setOfferedProductId({ value: selectedOption?.id ?? null });
                     }}
                     isMulti={false}
