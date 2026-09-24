@@ -82,6 +82,19 @@ describe OauthDeviceAuthorization do
       )
     end
 
+    it "denies an approved authorization whose owner closed their account" do
+      resource_owner = create(:user)
+      device_authorization = create(:oauth_device_authorization, oauth_application:, resource_owner:, status: described_class::STATUS_APPROVED)
+      resource_owner.update!(deleted_at: Time.current)
+
+      expect do
+        expect(device_authorization.poll!(oauth_application:, ip_address: "203.0.113.10", user_agent: "RSpec"))
+          .to eq([described_class::POLL_ACCESS_DENIED, nil])
+      end.not_to change { Doorkeeper::AccessToken.count }
+
+      expect(device_authorization.reload.status).to eq(described_class::STATUS_DENIED)
+    end
+
     it "returns expired_token if cleanup deletes the authorization before the row lock" do
       device_authorization = create(:oauth_device_authorization, oauth_application:, expires_at: 1.second.ago)
       allow(device_authorization).to receive(:with_lock).and_raise(ActiveRecord::RecordNotFound)

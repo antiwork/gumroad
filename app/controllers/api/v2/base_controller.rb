@@ -8,6 +8,21 @@ class Api::V2::BaseController < ApplicationController
       super(*scopes, :account)
     end
 
+    # Closure revokes the owner's tokens, but accounts closed before it did still hold theirs.
+    # Both overrides are needed: the second makes Doorkeeper answer 401, not 403.
+    def valid_doorkeeper_token?
+      super && !resource_owner_deleted?
+    end
+
+    def doorkeeper_invalid_token_response?
+      super || resource_owner_deleted?
+    end
+
+    # Client-credentials tokens have no resource owner, so they are left to the scope check.
+    def resource_owner_deleted?
+      doorkeeper_token&.resource_owner_id.present? && !current_resource_owner&.alive?
+    end
+
     # Most legacy v2 endpoints intentionally accept the broad `account` scope as a fallback. New
     # endpoints with a narrower security boundary can call this immediately after
     # `doorkeeper_authorize!` to preserve the normal OAuth 401/expired-token handling while refusing
@@ -30,7 +45,9 @@ class Api::V2::BaseController < ApplicationController
     end
 
     def current_resource_owner
-      User.find(doorkeeper_token.resource_owner_id) if doorkeeper_token.present?
+      return unless doorkeeper_token.present?
+
+      @current_resource_owner ||= User.find(doorkeeper_token.resource_owner_id)
     end
 
     def success_with_object(object_type, object, additional_info = {})

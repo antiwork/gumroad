@@ -1220,6 +1220,24 @@ describe User, :vcr do
         end
       end
 
+      it "revokes the OAuth access of every application, not only the mobile one" do
+        oauth_application = create(:oauth_application)
+        access_token = create("doorkeeper/access_token", application: oauth_application, resource_owner_id: @user.id, scopes: "view_sales", use_refresh_token: true)
+        access_grant = Doorkeeper::AccessGrant.create!(application_id: oauth_application.id, resource_owner_id: @user.id, redirect_uri: oauth_application.redirect_uri,
+                                                       expires_in: 1.day.to_i, scopes: "view_sales")
+        device_authorization = create(:oauth_device_authorization, oauth_application:, resource_owner: @user, status: OauthDeviceAuthorization::STATUS_APPROVED)
+        resource_subscription = create(:resource_subscription, oauth_application:, user: @user)
+        other_user_access_token = create("doorkeeper/access_token", application: oauth_application, resource_owner_id: create(:user).id, scopes: "view_sales")
+
+        expect(@user.deactivate!).to eq(true)
+
+        expect(access_token.reload).to be_revoked
+        expect(access_grant.reload).to be_revoked
+        expect(device_authorization.reload.status).to eq(OauthDeviceAuthorization::STATUS_DENIED)
+        expect(resource_subscription.reload).to be_deleted
+        expect(other_user_access_token.reload).not_to be_revoked
+      end
+
       it "deletes the account's public media files and purges their blobs from public storage" do
         public_file = PublicFile.new(seller: @user, resource: @user, display_name: "Logo")
         public_file.file.attach(

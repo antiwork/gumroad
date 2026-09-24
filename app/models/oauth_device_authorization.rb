@@ -168,7 +168,8 @@ class OauthDeviceAuthorization < ApplicationRecord
           update_poll_metadata!(ip_address:, user_agent:, poll_interval_seconds: next_poll_interval_seconds)
           too_recent ? [POLL_SLOW_DOWN, next_poll_interval_seconds] : [POLL_AUTHORIZATION_PENDING, nil]
         else
-          if access_revoked_after_creation_for?(resource_owner)
+          # An approve! racing account closure commits after closure denied the approved codes.
+          if resource_owner&.deleted? || access_revoked_after_creation_for?(resource_owner)
             mark_denied!(resource_owner:, ip_address:, user_agent:)
             [POLL_ACCESS_DENIED, nil]
           else
