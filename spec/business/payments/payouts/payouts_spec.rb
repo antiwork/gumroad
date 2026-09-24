@@ -1142,7 +1142,7 @@ describe Payouts do
           .with("Payouts: payout held for a negative ledger group", hash_including(user_id: seller.id)).once
         note = held_notes.sole
         expect(PayoutNoteVisibility.seller_visible?(note)).to eq(false)
-        expect(note.content).to include("usd@#{pln_account.id} -$300.00")
+        expect(note.content).to include("usd@#{pln_account.id} $-300.00")
       end
 
       it "pays nothing when the debt outweighs the whole ledger, and does not stack a repeat note" do
