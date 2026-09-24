@@ -1,16 +1,17 @@
 # frozen_string_literal: true
 
 module Order::Orderable
+  # Order defines its own receipt_for_gift_*? and test?, so those bodies here only run on a Purchase.
   def require_shipping?
-    is_a?(Order) ? super : link.require_shipping?
+    link.require_shipping?
   end
 
   def receipt_for_gift_receiver?
-    is_a?(Order) ? super : is_gift_receiver_purchase?
+    is_gift_receiver_purchase?
   end
 
   def receipt_for_gift_sender?
-    is_a?(Order) ? super : is_gift_sender_purchase?
+    is_gift_sender_purchase?
   end
 
   def seller_receipt_enabled?
@@ -18,7 +19,7 @@ module Order::Orderable
   end
 
   def test?
-    is_a?(Order) ? super : is_test_purchase?
+    is_test_purchase?
   end
 
   def uses_charge_receipt?

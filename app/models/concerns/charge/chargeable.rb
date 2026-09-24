@@ -54,12 +54,14 @@ module Charge::Chargeable
     is_a?(Charge) ? purchases.non_free.to_a.reject { _1.is_free_trial_purchase? || _1.is_preorder_authorization? } : [self]
   end
 
+  # Charge defines its own successful_purchases, update_processor_fee_cents!, taxable?,
+  # multi_item_charge?, taxed_by_gumroad? and *_for_invoice, so those bodies here only run on a Purchase.
   def successful_purchases
-    is_a?(Charge) ? super : Purchase.where(id:)
+    Purchase.where(id:)
   end
 
   def update_processor_fee_cents!(processor_fee_cents:)
-    is_a?(Charge) ? super : update!(processor_fee_cents:)
+    update!(processor_fee_cents:)
   end
 
   def charged_amount_cents
@@ -155,23 +157,23 @@ module Charge::Chargeable
   end
 
   def taxable?
-    is_a?(Charge) ? super : was_purchase_taxable?
+    was_purchase_taxable?
   end
 
   def multi_item_charge?
-    is_a?(Charge) ? super : false
+    false
   end
 
   def taxed_by_gumroad?
-    is_a?(Charge) ? super : gumroad_tax_cents > 0
+    gumroad_tax_cents > 0
   end
 
   def external_id_for_invoice
-    is_a?(Charge) ? super : external_id
+    external_id
   end
 
   def external_id_numeric_for_invoice
-    is_a?(Charge) ? super : external_id_numeric.to_s
+    external_id_numeric.to_s
   end
 
   def subscription
