@@ -5,7 +5,7 @@ import { fetchWithOneRetry } from "$app/utils/lazy_chunk";
 // Keep recharts/d3 out of Inertia's blocking route import; the page shell can paint while the chart loads.
 const importSalesChart = () => import("$app/components/Analytics/SalesChart");
 
-export const loadSalesChart = () => fetchWithOneRetry(importSalesChart);
+const loadSalesChart = () => fetchWithOneRetry(importSalesChart);
 
 export const LazySalesChart = lazy(async () => ({
   default: (await loadSalesChart()).SalesChart,
