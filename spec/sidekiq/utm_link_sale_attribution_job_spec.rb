@@ -45,6 +45,16 @@ describe UtmLinkSaleAttributionJob do
     expect(driven_sale.utm_link_id).to eq(utm_link.id)
   end
 
+  it "attributes a visit that falls in the same second as the purchase" do
+    purchase = create(:purchase, link: product, seller:)
+    order.purchases << purchase
+    visit = create(:utm_link_visit, utm_link:, browser_guid:, created_at: purchase.created_at + 0.5.seconds)
+
+    described_class.new.perform(order.id, browser_guid)
+
+    expect(utm_link.utm_link_driven_sales.sole.utm_link_visit_id).to eq(visit.id)
+  end
+
   it "only attributes purchases to the latest visit per utm link" do
     purchase = create(:purchase, link: product, seller:)
     order.purchases << purchase
