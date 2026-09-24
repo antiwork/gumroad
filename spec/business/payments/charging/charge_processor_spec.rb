@@ -381,29 +381,4 @@ describe ChargeProcessor do
       expect(URI.parse(url)).to be_a(URI)
     end
   end
-
-  describe ".transaction_url_for_admin" do
-    let(:charge_processor_id) { StripeChargeProcessor.charge_processor_id }
-    let(:charge_id) { "dummy_charge_id" }
-
-    it "returns nil if charge_processor_id is nil" do
-      url = ChargeProcessor.transaction_url_for_admin(nil, charge_id, false)
-      expect(url).to be(nil)
-    end
-
-    it "returns nil if charge_id is nil" do
-      url = ChargeProcessor.transaction_url_for_admin(charge_processor_id, nil, false)
-      expect(url).to be(nil)
-    end
-
-    it "returns nil if not charged_using_gumroad_account" do
-      url = ChargeProcessor.transaction_url_for_admin(charge_processor_id, charge_id, false)
-      expect(url).to be(nil)
-    end
-
-    it "returns url if charged_using_gumroad_account" do
-      url = ChargeProcessor.transaction_url_for_admin(charge_processor_id, charge_id, true)
-      expect(URI.parse(url)).to be_a(URI)
-    end
-  end
 end

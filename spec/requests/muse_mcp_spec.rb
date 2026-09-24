@@ -207,6 +207,30 @@ describe "Muse MCP" do
     expect(response.headers["WWW-Authenticate"]).to include("resource_metadata=\"#{PROTOCOL}://#{DOMAIN}/.well-known/oauth-protected-resource/muse/v1/mcp\"")
   end
 
+  context "when the token owner closes their account" do
+    before do
+      @token = create("doorkeeper/access_token", application: @app, resource_owner_id: @seller.id, scopes: "view_sales")
+    end
+
+    it "returns 401 after the closure revokes the token" do
+      expect(@seller.deactivate!).to eq(true)
+
+      post_mcp({ jsonrpc: "2.0", id: 1, method: "tools/list" })
+
+      expect(response).to have_http_status(:unauthorized)
+      expect(response.headers["WWW-Authenticate"]).to include("resource_metadata=\"#{PROTOCOL}://#{DOMAIN}/.well-known/oauth-protected-resource/muse/v1/mcp\"")
+    end
+
+    it "returns 401 for a token that is still unrevoked" do
+      @seller.update!(deleted_at: Time.current)
+
+      post_mcp({ jsonrpc: "2.0", id: 1, method: "tools/list" })
+
+      expect(response).to have_http_status(:unauthorized)
+      expect(@token.reload).not_to be_revoked
+    end
+  end
+
   it "points Claude and ChatGPT 401 challenges at their own resource metadata" do
     %w[muse claude chatgpt].each do |client|
       post "/#{client}/v1/mcp",

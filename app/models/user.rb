@@ -840,6 +840,7 @@ class User < ApplicationRecord
         end
         cancel_active_subscriptions!
         invalidate_active_sessions!
+        revoke_all_oauth_access!
         clear_team_member_flags!
 
         true
@@ -863,9 +864,9 @@ class User < ApplicationRecord
     end
   end
 
-  # Closure revokes only the mobile app's tokens, so a surviving one keeps reaching the staff
-  # surfaces is_team_member? gates. Mirrors Settings::Team::MembersController#destroy, including
-  # clearing it for the members when the Gumroad account itself closes.
+  # The flag survives `reactivate!`, so closure must clear it or a reopened account regains staff
+  # access. Mirrors Settings::Team::MembersController#destroy, including clearing it for the
+  # members when the Gumroad account itself closes.
   def clear_team_member_flags!
     staff_users = gumroad_account? ? seller_memberships.not_deleted.includes(:user).map(&:user) : []
     staff_users << self
@@ -1143,6 +1144,20 @@ class User < ApplicationRecord
     if application.present?
       application.revoke_access_tokens_for(self)
     end
+  end
+
+  # `invalidate_active_sessions!` revokes only the mobile app's tokens. Closure must also revoke
+  # third-party apps (MCP connectors, API clients), whose tokens never expire. Subscriptions go with
+  # the tokens, as in `OauthApplication#revoke_access_for`: an alive, token-less one emails the seller.
+  def revoke_all_oauth_access!
+    revoked_at = Time.current
+
+    OauthDeviceAuthorization
+      .where(resource_owner_id: id, status: OauthDeviceAuthorization::STATUS_APPROVED)
+      .update_all(status: OauthDeviceAuthorization::STATUS_DENIED, denied_at: revoked_at, updated_at: revoked_at)
+    Doorkeeper::AccessGrant.where(resource_owner_id: id, revoked_at: nil).update_all(revoked_at:)
+    Doorkeeper::AccessToken.where(resource_owner_id: id, revoked_at: nil).update_all(revoked_at:)
+    resource_subscriptions.alive.update_all(deleted_at: revoked_at)
   end
 
   def invalidate_browser_sessions!

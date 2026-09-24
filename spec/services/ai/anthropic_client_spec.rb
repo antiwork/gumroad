@@ -12,7 +12,6 @@ describe Ai::AnthropicClient do
     # Pin routing so these specs do not depend on the host machine's environment.
     allow(GlobalConfig).to receive(:get).with("OPENROUTER_API_KEY").and_return("sk-or-test")
     allow(GlobalConfig).to receive(:get).with("OPENROUTER_FALLBACK_MODEL").and_return(nil)
-    allow(GlobalConfig).to receive(:get).with("GUMHEAD_UPSTREAM_API_KEY").and_return(nil)
     allow(GlobalConfig).to receive(:get).with("GUMHEAD_UPSTREAM_API_BASE").and_return(nil)
     allow(GlobalConfig).to receive(:get).with("STORE_AGENT_OPENROUTER_API_KEY").and_return(nil)
     allow(GlobalConfig).to receive(:get).with("STORE_AGENT_AI_GATEWAY_API_KEY").and_return(nil)
@@ -317,11 +316,11 @@ describe Ai::AnthropicClient do
   describe "first-byte deadline failover" do
     let(:vercel_url) { "https://ai-gateway.vercel.sh/v1/messages" }
     let(:vercel_client) do
-      described_class.new(timeout: 120, model: "deepseek/deepseek-v4.1-flash", fallback_model: "anthropic/claude-opus-5", gateway: :vercel)
+      described_class.new(timeout: 120, model: "deepseek/deepseek-v4.1-flash", fallback_model: "anthropic/claude-opus-5")
     end
 
     before do
-      allow(GlobalConfig).to receive(:get).with("GUMHEAD_UPSTREAM_API_KEY").and_return("gw-test")
+      allow(GlobalConfig).to receive(:get).with("STORE_AGENT_AI_GATEWAY_API_KEY").and_return("gw-test")
       allow(GlobalConfig).to receive(:get).with("GUMHEAD_UPSTREAM_API_BASE").and_return("https://ai-gateway.vercel.sh")
       allow(GlobalConfig).to receive(:get).with("OPENROUTER_API_KEY").and_return(nil)
     end
@@ -391,6 +390,7 @@ describe Ai::AnthropicClient do
     end
 
     it "keeps re-issuing the same model when no deadline was given" do
+      allow(GlobalConfig).to receive(:get).with("STORE_AGENT_AI_GATEWAY_API_KEY").and_return(nil)
       allow(GlobalConfig).to receive(:get).with("OPENROUTER_API_KEY").and_return("sk-or-test")
       allow(client).to receive(:sleep)
       stub_request(:post, url).to_timeout
@@ -562,14 +562,13 @@ describe Ai::AnthropicClient do
     subject(:client) do
       described_class.new(
         timeout: 5,
-        gateway: :vercel,
         model: "deepseek/deepseek-v4.1-flash",
         fallback_model: "anthropic/claude-opus-5",
       )
     end
 
     before do
-      allow(GlobalConfig).to receive(:get).with("GUMHEAD_UPSTREAM_API_KEY").and_return("sk-vercel-test")
+      allow(GlobalConfig).to receive(:get).with("STORE_AGENT_AI_GATEWAY_API_KEY").and_return("sk-vercel-test")
       allow(GlobalConfig).to receive(:get).with("GUMHEAD_UPSTREAM_API_BASE").and_return("https://ai-gateway.vercel.sh")
       allow(GlobalConfig).to receive(:get).with("OPENROUTER_API_KEY").and_return(nil)
     end
@@ -591,15 +590,19 @@ describe Ai::AnthropicClient do
       expect(client.served_models).to eq(["deepseek/deepseek-v4.1-flash"])
     end
 
-    it "prefers the store agent's own gateway key over the shared Gumhead key" do
-      allow(GlobalConfig).to receive(:get).with("STORE_AGENT_AI_GATEWAY_API_KEY").and_return("sk-vercel-store-agent")
-      stub = stub_request(:post, vercel_url)
-        .with(headers: { "x-api-key" => "sk-vercel-store-agent" })
+    it "uses OpenRouter rather than the Gumhead key when the store agent has no gateway key" do
+      allow(GlobalConfig).to receive(:get).with("STORE_AGENT_AI_GATEWAY_API_KEY").and_return(nil)
+      allow(GlobalConfig).to receive(:get).with("GUMHEAD_UPSTREAM_API_KEY").and_return("sk-vercel-gumhead")
+      allow(GlobalConfig).to receive(:get).with("OPENROUTER_API_KEY").and_return("sk-or-test")
+      vercel = stub_request(:post, vercel_url)
+      openrouter = stub_request(:post, openrouter_url)
+        .with(headers: { "x-api-key" => "sk-or-test" })
         .to_return(status: 200, body: { "content" => [], "stop_reason" => "end_turn" }.to_json, headers: { "Content-Type" => "application/json" })
 
       client.messages(system: "s", messages: [{ role: "user", content: "x" }])
 
-      expect(stub).to have_been_requested
+      expect(openrouter).to have_been_requested
+      expect(vercel).not_to have_been_requested
     end
 
     it "joins a /v1 base onto /messages rather than doubling /v1" do
@@ -613,7 +616,7 @@ describe Ai::AnthropicClient do
     end
 
     it "falls back to OpenRouter when Vercel config is blank" do
-      allow(GlobalConfig).to receive(:get).with("GUMHEAD_UPSTREAM_API_KEY").and_return(nil)
+      allow(GlobalConfig).to receive(:get).with("STORE_AGENT_AI_GATEWAY_API_KEY").and_return(nil)
       allow(GlobalConfig).to receive(:get).with("GUMHEAD_UPSTREAM_API_BASE").and_return(nil)
       allow(GlobalConfig).to receive(:get).with("OPENROUTER_API_KEY").and_return("sk-or-test")
       captured = nil
@@ -631,7 +634,7 @@ describe Ai::AnthropicClient do
     end
 
     it "prefers the store agent's own OpenRouter key over the shared one" do
-      allow(GlobalConfig).to receive(:get).with("GUMHEAD_UPSTREAM_API_KEY").and_return(nil)
+      allow(GlobalConfig).to receive(:get).with("STORE_AGENT_AI_GATEWAY_API_KEY").and_return(nil)
       allow(GlobalConfig).to receive(:get).with("OPENROUTER_API_KEY").and_return("sk-or-test")
       allow(GlobalConfig).to receive(:get).with("STORE_AGENT_OPENROUTER_API_KEY").and_return("sk-or-store-agent")
       stub = stub_request(:post, openrouter_url)
@@ -687,6 +690,34 @@ describe Ai::AnthropicClient do
         expect(primary).to have_been_requested.twice
         expect(fallback).to have_been_requested.once
         expect(client.gateway_name).to eq("vercel")
+      end
+
+      it "sends the store agent's Grok route to Vercel on its own key and replays the Opus fallback on its own OpenRouter key" do
+        allow(GlobalConfig).to receive(:get).with("STORE_AGENT_AI_GATEWAY_API_KEY").and_return("sk-vercel-store-agent")
+        allow(GlobalConfig).to receive(:get).with("STORE_AGENT_OPENROUTER_API_KEY").and_return("sk-or-store-agent")
+        grok_client = described_class.new(
+          timeout: 5,
+          model: Ai::StoreAgentService::GROK_MODEL,
+          fallback_model: Ai::StoreAgentService::GROK_FALLBACK_MODEL,
+        )
+        primary = stub_request(:post, vercel_url)
+          .with(
+            headers: { "x-api-key" => "sk-vercel-store-agent" },
+            body: hash_including("model" => "x-ai/grok-4.5", "providerOptions" => { "gateway" => { "models" => ["anthropic/claude-opus-5"] } }),
+          )
+          .to_return(credit_error)
+        fallback = stub_request(:post, openrouter_url)
+          .with(headers: { "x-api-key" => "sk-or-store-agent" }, body: hash_including("model" => "anthropic/claude-opus-5"))
+          .to_return(status: 200, body: reply.to_json, headers: { "Content-Type" => "application/json" })
+
+        result = grok_client.messages(system: "s", messages: [{ role: "user", content: "x" }])
+
+        expect(result.text).to eq("ok")
+        expect(primary).to have_been_requested.once
+        expect(fallback).to have_been_requested.once
+        expect(grok_client.call_metrics.map { |call| call.slice(:gateway, :status) }).to eq(
+          [{ gateway: "vercel", status: 402 }, { gateway: "openrouter", status: 200 }]
+        )
       end
 
       it "streams the OpenRouter fallback when Vercel rejects a request for insufficient credits" do
@@ -900,19 +931,20 @@ describe Ai::AnthropicClient do
       expect(Rails.logger).to have_received(:info).with(/served by deepseek\/deepseek-v4.1-flash via vercel/)
     end
 
-    it "sends OpenRouter fallbacks and no Vercel options on a default client" do
+    it "routes a default Opus client through Vercel ahead of a configured OpenRouter key" do
       allow(GlobalConfig).to receive(:get).with("OPENROUTER_API_KEY").and_return("sk-or-test")
       default_client = described_class.new(timeout: 5)
       captured = nil
-      stub_request(:post, url)
+      stub = stub_request(:post, vercel_url)
         .with { |request| captured = JSON.parse(request.body); true }
         .to_return(status: 200, body: { "content" => [], "stop_reason" => "end_turn" }.to_json, headers: { "Content-Type" => "application/json" })
 
       default_client.messages(system: "s", messages: [{ role: "user", content: "x" }])
 
-      expect(default_client.gateway_name).to eq("openrouter")
-      expect(captured["fallbacks"]).to eq([{ "model" => described_class::DEFAULT_FALLBACK_MODEL }])
-      expect(captured).not_to have_key("providerOptions")
+      expect(stub).to have_been_requested
+      expect(default_client.gateway_name).to eq("vercel")
+      expect(captured["model"]).to eq(described_class::DEFAULT_MODEL)
+      expect(captured).not_to have_key("fallbacks")
     end
   end
 
@@ -1572,14 +1604,13 @@ describe Ai::AnthropicClient do
       subject(:client) do
         described_class.new(
           timeout: 5,
-          gateway: :vercel,
           model: "deepseek/deepseek-v4.1-flash",
           fallback_model: "anthropic/claude-opus-5",
         )
       end
 
       before do
-        allow(GlobalConfig).to receive(:get).with("GUMHEAD_UPSTREAM_API_KEY").and_return("sk-vercel-test")
+        allow(GlobalConfig).to receive(:get).with("STORE_AGENT_AI_GATEWAY_API_KEY").and_return("sk-vercel-test")
         allow(GlobalConfig).to receive(:get).with("GUMHEAD_UPSTREAM_API_BASE").and_return("https://ai-gateway.vercel.sh")
       end
 

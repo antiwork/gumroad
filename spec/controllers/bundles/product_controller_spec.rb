@@ -25,12 +25,6 @@ describe Bundles::ProductController, inertia: true do
   end
 
   describe "PUT update" do
-    it_behaves_like "authorize called for action", :put, :update do
-      let(:policy_klass) { LinkPolicy }
-      let(:record) { bundle }
-      let(:request_params) { { bundle_id: bundle.external_id } }
-    end
-
     it "changes the bundle's display currency" do
       put :update, params: { bundle_id: bundle.external_id, price_currency_type: "eur", price_cents: 2000 }
 

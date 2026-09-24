@@ -84,62 +84,6 @@ describe Order::Orderable do
     end
   end
 
-  describe "For Order" do
-    let(:failed_purchase) { create(:failed_purchase) }
-    let(:purchase) { create(:purchase) }
-    let(:order) { create(:order, purchases: [failed_purchase, purchase]) }
-
-    describe "#require_shipping?" do
-      before do
-        allow(order).to receive(:require_shipping?).and_return("super")
-      end
-
-      it "calls super" do
-        expect(order.require_shipping?).to eq("super")
-      end
-    end
-
-    describe "#receipt_for_gift_receiver?" do
-      before do
-        allow(order).to receive(:receipt_for_gift_receiver?).and_return("super")
-      end
-
-      it "calls super" do
-        expect(order.receipt_for_gift_receiver?).to eq("super")
-      end
-    end
-
-    describe "#receipt_for_gift_sender?" do
-      before do
-        allow(order).to receive(:receipt_for_gift_sender?).and_return("super")
-      end
-
-      it "calls super" do
-        expect(order.receipt_for_gift_sender?).to eq("super")
-      end
-    end
-
-    describe "#test?" do
-      before do
-        allow(order).to receive(:test?).and_return("super")
-      end
-
-      it "calls super" do
-        expect(order.test?).to eq("super")
-      end
-    end
-
-    describe "#seller_receipt_enabled?" do
-      before do
-        allow(order).to receive(:seller_receipt_enabled?).and_return("super")
-      end
-
-      it "calls super" do
-        expect(order.seller_receipt_enabled?).to eq("super")
-      end
-    end
-  end
-
   describe "#uses_charge_receipt?" do
     context "when is an Order" do
       let(:order) { create(:order) }

@@ -31,8 +31,10 @@ class GdprDataErasureService
 
     ActiveRecord::Base.transaction do
       @products_deleted = deactivate_account!
-      # Outside deactivate_account!, which returns early for an already-closed account, and before
+      # Outside deactivate_account!, which returns early for an already-closed account: one closed
+      # before closure revoked third-party access still holds those tokens. Flags are cleared before
       # the anonymize that overwrites the email gumroad_account? reads.
+      @user.revoke_all_oauth_access!
       @user.clear_team_member_flags!
       anonymized_email = anonymize_user_pii!
       anonymize_compliance_info!

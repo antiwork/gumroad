@@ -54,6 +54,17 @@ describe GdprDataErasureService do
       expect(user.deleted_at).to be_present
     end
 
+    [false, true].each do |already_deleted|
+      it "revokes the OAuth access tokens of every application with already_deleted=#{already_deleted}" do
+        access_token = create("doorkeeper/access_token", application: create(:oauth_application), resource_owner_id: user.id, scopes: "view_sales")
+        user.update_column(:deleted_at, 1.day.ago) if already_deleted
+
+        described_class.new(user, performed_by: admin).perform!
+
+        expect(access_token.reload).to be_revoked
+      end
+    end
+
     context "when the erased account is on the Gumroad team" do
       it "clears the staff flag of the account and of the members it grants the flag to" do
         gumroad_account = create(:admin_user, email: ApplicationMailer::ADMIN_EMAIL)

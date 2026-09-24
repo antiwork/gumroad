@@ -31,6 +31,54 @@ describe UtmLinkSaleAttributionJob do
     end.not_to change { utm_link.utm_link_driven_sales.count }
   end
 
+  it "does not attribute a purchase to a visit made after it" do
+    purchase = create(:purchase, link: product, seller:, created_at: 2.hours.ago)
+    order.purchases << purchase
+    pre_sale_visit = create(:utm_link_visit, utm_link:, browser_guid:, created_at: 1.day.ago)
+    post_sale_link = create(:utm_link, seller:)
+    create(:utm_link_visit, utm_link: post_sale_link, browser_guid:, created_at: 1.hour.ago)
+
+    described_class.new.perform(order.id, browser_guid)
+
+    driven_sale = UtmLinkDrivenSale.sole
+    expect(driven_sale.utm_link_visit_id).to eq(pre_sale_visit.id)
+    expect(driven_sale.utm_link_id).to eq(utm_link.id)
+  end
+
+  it "keeps the pre-sale visit when the buyer revisits the same link after the purchase" do
+    purchase = create(:purchase, link: product, seller:, created_at: 2.hours.ago)
+    order.purchases << purchase
+    pre_sale_visit = create(:utm_link_visit, utm_link:, browser_guid:, created_at: 1.day.ago)
+    create(:utm_link_visit, utm_link:, browser_guid:, created_at: 1.hour.ago)
+
+    described_class.new.perform(order.id, browser_guid)
+
+    expect(utm_link.utm_link_driven_sales.sole.utm_link_visit_id).to eq(pre_sale_visit.id)
+  end
+
+  it "keeps an earlier purchase's visit when the buyer revisits the link before a later purchase in the order" do
+    earlier_purchase = create(:purchase, link: product, seller:, created_at: 3.hours.ago)
+    later_purchase = create(:purchase, link: product, seller:, created_at: 1.hour.ago)
+    order.purchases << earlier_purchase << later_purchase
+    pre_sale_visit = create(:utm_link_visit, utm_link:, browser_guid:, created_at: 1.day.ago)
+    revisit = create(:utm_link_visit, utm_link:, browser_guid:, created_at: 2.hours.ago)
+
+    described_class.new.perform(order.id, browser_guid)
+
+    visit_ids_by_purchase = utm_link.utm_link_driven_sales.pluck(:purchase_id, :utm_link_visit_id).to_h
+    expect(visit_ids_by_purchase).to eq(earlier_purchase.id => pre_sale_visit.id, later_purchase.id => revisit.id)
+  end
+
+  it "attributes a visit that falls in the same second as the purchase" do
+    purchase = create(:purchase, link: product, seller:)
+    order.purchases << purchase
+    visit = create(:utm_link_visit, utm_link:, browser_guid:, created_at: purchase.created_at + 0.5.seconds)
+
+    described_class.new.perform(order.id, browser_guid)
+
+    expect(utm_link.utm_link_driven_sales.sole.utm_link_visit_id).to eq(visit.id)
+  end
+
   it "only attributes purchases to the latest visit per utm link" do
     purchase = create(:purchase, link: product, seller:)
     order.purchases << purchase
@@ -84,6 +132,25 @@ describe UtmLinkSaleAttributionJob do
       driven_sale = utm_link.utm_link_driven_sales.sole
       expect(driven_sale.purchase_id).to eq(target_purchase.id)
       expect(driven_sale.utm_link_visit_id).to eq(visit.id)
+    end
+  end
+
+  context "when an order has purchases of two products from the same seller" do
+    let(:product_a) { create(:product, user: seller) }
+    let(:product_b) { create(:product, user: seller) }
+    let(:product_link) { create(:utm_link, seller:, target_resource_id: product_a.id, target_resource_type: "product_page") }
+
+    it "attributes each purchase to its own link" do
+      purchase_a = create(:purchase, link: product_a, seller:)
+      purchase_b = create(:purchase, link: product_b, seller:)
+      order.purchases << [purchase_a, purchase_b]
+      profile_visit = create(:utm_link_visit, utm_link:, browser_guid:, created_at: 2.days.ago)
+      product_visit = create(:utm_link_visit, utm_link: product_link, browser_guid:, created_at: 1.day.ago)
+
+      described_class.new.perform(order.id, browser_guid)
+
+      expect(UtmLinkDrivenSale.find_by(purchase: purchase_a).utm_link_visit_id).to eq(product_visit.id)
+      expect(UtmLinkDrivenSale.find_by(purchase: purchase_b).utm_link_visit_id).to eq(profile_visit.id)
     end
   end
 
@@ -161,6 +228,36 @@ describe UtmLinkSaleAttributionJob do
       expect(driven_sale.purchase_id).to eq(purchase.id)
       expect(driven_sale.utm_link_visit_id).to eq(utm_link1_visit.id)
       expect(driven_sale.utm_link_id).to eq(utm_link.id)
+    end
+
+    it "attributes the purchase to the newest visit even when the older visit was recorded first" do
+      create(:utm_link_visit, utm_link:, browser_guid:, created_at: 2.days.ago)
+      newer_link = create(:utm_link, seller:)
+      newer_visit = create(:utm_link_visit, utm_link: newer_link, browser_guid:, created_at: 1.day.ago)
+      purchase = create(:purchase, link: product, seller:)
+      order.purchases << purchase
+
+      described_class.new.perform(order.id, browser_guid)
+
+      driven_sale = UtmLinkDrivenSale.sole
+      expect(driven_sale.purchase_id).to eq(purchase.id)
+      expect(driven_sale.utm_link_visit_id).to eq(newer_visit.id)
+      expect(driven_sale.utm_link_id).to eq(newer_link.id)
+    end
+
+    it "breaks a same-second tie in favour of the visit recorded last" do
+      same_second = 1.day.ago.change(usec: 0)
+      create(:utm_link_visit, utm_link:, browser_guid:, created_at: same_second)
+      newer_link = create(:utm_link, seller:)
+      newer_visit = create(:utm_link_visit, utm_link: newer_link, browser_guid:, created_at: same_second)
+      purchase = create(:purchase, link: product, seller:)
+      order.purchases << purchase
+
+      described_class.new.perform(order.id, browser_guid)
+
+      driven_sale = UtmLinkDrivenSale.sole
+      expect(driven_sale.utm_link_visit_id).to eq(newer_visit.id)
+      expect(driven_sale.utm_link_id).to eq(newer_link.id)
     end
   end
 end
