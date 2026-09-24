@@ -79,6 +79,10 @@ def check(name, base_files:, head_files:, head_deletes: [], expect_specs: nil, e
       if missing.any?
         $failures << "#{name}: missing expected specs #{missing.inspect}\ngot: #{got.inspect}"
       end
+      # A non-empty list is a floor; an empty one means the selector prints nothing.
+      if expect_specs == [] && got.any?
+        $failures << "#{name}: expected no specs\ngot: #{got.inspect}"
+      end
     end
   end
 end
