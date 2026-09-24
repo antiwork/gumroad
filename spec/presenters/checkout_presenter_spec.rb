@@ -844,6 +844,44 @@ describe CheckoutPresenter do
       expect(instance.checkout_product(product, cart_item, {})[:product][:cross_sells]).to be_empty
     end
 
+    context "when a cross-sell follows the version the buyer selected" do
+      let(:seller) { create(:named_user) }
+      let(:product) { create(:product, user: seller) }
+      let(:offered_product) { create(:product, user: seller) }
+      let(:source_versions) do
+        category = create(:variant_category, title: "License", link: product)
+        ["Single License", "Team License"].map { |name| create(:variant, variant_category: category, name:) }
+      end
+      let(:offered_versions) do
+        category = create(:variant_category, title: "License", link: offered_product)
+        ["Single License", "Team License"].map { |name| create(:variant, variant_category: category, name:) }
+      end
+      let(:cart_item) { product.cart_item({ option: source_versions.second.external_id }) }
+
+      def offered_option_id
+        create(:upsell, selected_products: [product], seller:, product: offered_product, cross_sell: true,
+                        variant: offered_versions.first, offer_matching_version: @matching)
+        instance = described_class.new(logged_in_user: nil, ip: "127.0.0.1")
+        instance.checkout_product(product, cart_item, {})[:product][:cross_sells].first[:offered_product][:option_id]
+      end
+
+      it "offers the offered product's version with the same name" do
+        @matching = true
+        expect(offered_option_id).to eq(offered_versions.second.external_id)
+      end
+
+      it "offers the configured version when the offer doesn't follow the buyer's selection" do
+        @matching = false
+        expect(offered_option_id).to eq(offered_versions.first.external_id)
+      end
+
+      it "offers the configured version when the products share no version name" do
+        @matching = true
+        source_versions.second.update!(name: "Studio License")
+        expect(offered_option_id).to eq(offered_versions.first.external_id)
+      end
+    end
+
     it "only queries purchases of the cross-sell candidate products, not the buyer's whole history" do
       seller = create(:named_user)
       product = create(:product, user: seller)

@@ -7,6 +7,7 @@ class Upsell < ApplicationRecord
 
   has_flags 1 => :replace_selected_products,
             2 => :is_content_upsell,
+            4 => :offer_matching_version,
             :column => "flags",
             :flag_query_mode => :bit_operator,
             check_for_column: false
@@ -49,6 +50,7 @@ class Upsell < ApplicationRecord
       name:,
       cross_sell:,
       replace_selected_products:,
+      offer_matching_version:,
       universal:,
       text:,
       description:,
@@ -83,6 +85,15 @@ class Upsell < ApplicationRecord
         }
       end,
     }
+  end
+
+  # With `offer_matching_version`, a cross-sell follows the version the buyer selected on the
+  # product it appears on: the offered product's version of the same name. Falls back to the
+  # fixed `variant` when the two products share no version name.
+  def offered_variant_for(selected_option_name)
+    return variant unless offer_matching_version? && selected_option_name.present?
+
+    product.variants_or_skus.detect { |offered| offered.name == selected_option_name } || variant
   end
 
   private

@@ -187,19 +187,21 @@ class CheckoutPresenter
       accepted_offer: accepted_offer ? { id: accepted_offer.external_id, variant_id: accepted_offer&.variant&.external_id, discount: accepted_offer.offer_code&.discount_for_display(buyer: logged_in_user, product: accepted_offer.product) } : nil,
     }
     if include_cross_sells
+      selected_option_name = value[:product][:options].find { |option| option[:id] == option_id }&.[](:name)
       value[:product][:cross_sells] = product.available_cross_sells.filter_map do |cross_sell|
+        offered_variant = cross_sell.offered_variant_for(selected_option_name)
         next unless cross_sell.product.alive? &&
           (cross_sell.product.remaining_for_sale_count.nil? || cross_sell.product.remaining_for_sale_count > 0) &&
-          (cross_sell.variant.blank? || cross_sell.variant.available?) &&
+          (offered_variant.blank? || offered_variant.available?) &&
           (
             cross_sell.seller == logged_in_user ||
-            !already_purchased?(cross_sell.product, cross_sell.variant)
+            !already_purchased?(cross_sell.product, offered_variant)
           )
 
         offered_product = cross_sell.product
         offered_product_cart_item = offered_product.cart_item(
           {
-            option: cross_sell.variant&.external_id,
+            option: offered_variant&.external_id,
             recurrence: offered_product.default_price_recurrence&.recurrence
           }
         )

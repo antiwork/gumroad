@@ -20,6 +20,7 @@ describe Checkout::UpsellsController do
     "name",
     "cross_sell",
     "replace_selected_products",
+    "offer_matching_version",
     "universal",
     "paused",
     "text",

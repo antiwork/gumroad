@@ -198,6 +198,7 @@ describe Upsell do
           text: "Take advantage of this excellent offer!",
           cross_sell: true,
           replace_selected_products: true,
+          offer_matching_version: false,
           universal: false,
           paused: false,
           discount: nil,
@@ -228,6 +229,7 @@ describe Upsell do
           text: "Take advantage of this excellent offer!",
           cross_sell: false,
           replace_selected_products: false,
+          offer_matching_version: false,
           universal: false,
           paused: false,
           discount: {
@@ -266,6 +268,56 @@ describe Upsell do
       upsell2.update!(offer_code:)
 
       expect(upsell2.as_json[:discount]).to include(type: "percent", percents: 15)
+    end
+  end
+
+  describe "#offered_variant_for" do
+    let(:seller) { create(:named_user) }
+    let(:offered_product) { create(:product, user: seller) }
+    let(:offered_versions) do
+      category = create(:variant_category, title: "License", link: offered_product)
+      ["Single License", "Studio License"].map { |name| create(:variant, variant_category: category, name:) }
+    end
+    let(:cross_sell) { create(:upsell, seller:, product: offered_product, cross_sell: true, variant: offered_versions.first) }
+
+    it "returns the configured version when the offer doesn't follow the buyer's selection" do
+      expect(cross_sell.offered_variant_for("Studio License")).to eq(offered_versions.first)
+    end
+
+    it "returns the offered product's version with the same name when it follows the buyer's selection" do
+      cross_sell.update!(offer_matching_version: true)
+
+      expect(cross_sell.offered_variant_for("Studio License")).to eq(offered_versions.second)
+    end
+
+    it "returns the configured version when the products share no version name" do
+      cross_sell.update!(offer_matching_version: true)
+
+      expect(cross_sell.offered_variant_for("Team License")).to eq(offered_versions.first)
+    end
+
+    it "returns the configured version when the buyer selected no version" do
+      cross_sell.update!(offer_matching_version: true)
+
+      expect(cross_sell.offered_variant_for(nil)).to eq(offered_versions.first)
+    end
+
+    it "resolves from the offered product's loaded versions rather than querying per match" do
+      cross_sell.update!(offer_matching_version: true)
+      offered_product.variants_or_skus.load
+
+      queries = []
+      subscriber = lambda { |_name, _start, _finish, _id, payload|
+        queries << payload[:sql] if payload[:sql] && !payload[:name]&.match?(/SCHEMA|TRANSACTION|CACHE/)
+      }
+
+      matched = nil
+      ActiveSupport::Notifications.subscribed(subscriber, "sql.active_record") do
+        matched = cross_sell.offered_variant_for("Studio License")
+      end
+
+      expect(matched).to eq(offered_versions.second)
+      expect(queries).to be_empty
     end
   end
 end

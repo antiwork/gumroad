@@ -70,6 +70,7 @@ export type Upsell = {
   universal: boolean;
   cross_sell: boolean;
   replace_selected_products: boolean;
+  offer_matching_version: boolean;
   paused: boolean;
   product: {
     id: string;
@@ -479,6 +480,9 @@ const UpsellDrawer = ({
               <h5 className="grow font-bold">
                 {formatOfferedProductName(selectedUpsell.product.name, selectedUpsell.product.variant?.name)}
               </h5>
+              {selectedUpsell.offer_matching_version ? (
+                <p>Offers the version the buyer selected, matched by name.</p>
+              ) : null}
             </CardContent>
           </section>
         </Card>
@@ -535,6 +539,7 @@ const Form = ({
   const [name, setName] = React.useState<{ value: string; error?: boolean }>({ value: upsell?.name ?? "" });
   const [offerText, setOfferText] = React.useState<{ value: string; error?: boolean }>({ value: upsell?.text ?? "" });
   const [offerDescription, setOfferDescription] = React.useState(upsell?.description ?? "");
+  const [offerMatchingVersion, setOfferMatchingVersion] = React.useState(upsell?.offer_matching_version ?? false);
   const [paused, setPaused] = React.useState(upsell?.paused ?? false);
 
   const [cartItems, setCartItems] = React.useState<Record<string, ProductToAdd>>({});
@@ -655,6 +660,7 @@ const Form = ({
           : null,
       productIds: isCrossSell ? selectedProductIds.value : [],
       upsellVariants: !isCrossSell ? variants : [],
+      offerMatchingVersion: isCrossSell && offerMatchingVersion && (offeredProduct?.options.length ?? 0) > 0,
       paused,
     });
   };
@@ -829,7 +835,10 @@ const Form = ({
                     options={offerableProducts.map(({ id, name: label }) => ({ id, label }))}
                     value={offeredOption ? { id: offeredOption.id, label: offeredOption.name } : null}
                     onChange={(selectedOption) => {
-                      if (selectedOption?.id !== offeredProductId.value) setOfferedVariantId({ value: null });
+                      if (selectedOption?.id !== offeredProductId.value) {
+                        setOfferedVariantId({ value: null });
+                        setOfferMatchingVersion(false);
+                      }
                       setOfferedProductId({ value: selectedOption?.id ?? null });
                     }}
                     isMulti={false}
@@ -852,6 +861,19 @@ const Form = ({
                       isClearable
                       aria-invalid={offeredVariantId.error}
                     />
+                  </Fieldset>
+                ) : null}
+                {offeredProduct && offeredProduct.options.length > 0 ? (
+                  <Fieldset>
+                    <Switch
+                      checked={offerMatchingVersion}
+                      onChange={(evt) => setOfferMatchingVersion(evt.target.checked)}
+                      label="Offer the version the buyer selected"
+                    />
+                    <FieldsetDescription>
+                      Uses the offered product's version with the same name; falls back to the version above when the
+                      names differ.
+                    </FieldsetDescription>
                   </Fieldset>
                 ) : null}
                 <Fieldset>

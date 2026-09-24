@@ -2,7 +2,7 @@
 
 class SaveUpsellService
   PERMITTED_PARAMS = [
-    :name, :text, :description, :cross_sell, :product_id, :variant_id, :universal, :replace_selected_products, :paused,
+    :name, :text, :description, :cross_sell, :product_id, :variant_id, :universal, :replace_selected_products, :offer_matching_version, :paused,
     { offer_code: [:amount_cents, :amount_percentage], product_ids: [], upsell_variants: [:selected_variant_id, :offered_variant_id] }
   ].freeze
 
