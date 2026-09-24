@@ -3,6 +3,12 @@
 class PurchaseCustomFieldsController < ApplicationController
   def create
     purchase = Purchase.find_by_external_id!(permitted_params.require(:purchase_id))
+
+    # The download page is the only surface that renders these fields, and it always loads one
+    # purchase through that purchase's own URL redirect — a purchase external id alone must not be
+    # enough to write. Token binding only; the page already gates entitlement.
+    return head :not_found unless buyer_can_write?(purchase)
+
     custom_field = purchase.link.custom_fields.is_post_purchase.where(type: CustomField::FIELD_TYPE_TO_NODE_TYPE_MAPPING.keys).find_by_external_id!(permitted_params.require(:custom_field_id))
 
     purchase_custom_field = purchase.purchase_custom_fields.find_by(custom_field_id: custom_field.id)
@@ -23,7 +29,12 @@ class PurchaseCustomFieldsController < ApplicationController
   end
 
   private
+    def buyer_can_write?(purchase)
+      token = permitted_params[:token]
+      token.is_a?(String) && token.present? && UrlRedirect.exists?(token:, purchase_id: purchase.id)
+    end
+
     def permitted_params
-      params.permit(:purchase_id, :custom_field_id, :value, file_signed_ids: [])
+      params.permit(:purchase_id, :custom_field_id, :value, :token, file_signed_ids: [])
     end
 end
