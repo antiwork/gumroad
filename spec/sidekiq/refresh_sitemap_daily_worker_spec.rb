@@ -4,6 +4,9 @@ require "spec_helper"
 
 describe RefreshSitemapDailyWorker do
   describe "#perform" do
+    # The file path comes from the product's month and the worker reads Date.current; both must see one month.
+    around { |example| freeze_time { example.run } }
+
     before do
       @product = create(:product, created_at: Time.current)
     end
