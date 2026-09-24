@@ -471,14 +471,14 @@ class Payouts
       negative_group = ledger_groups.any? { |_, _, group_balances| group_balances.sum(&:amount_cents).negative? }
       if ledger.sum(&:amount_cents) <= 0 || negative_group
         Rails.logger.info("Payouts: Negative balance for #{user.id}")
-        if negative_group
-          note = "Payout #{processor_type} for period ending #{date} withheld because a ledger group carries debt. Reconcile the unpaid balance ledger before retry."
-          unless user.comments.with_type_payout_note.alive.where(author_id: GUMROAD_ADMIN_ID, content: note).exists?
-            user.add_payout_note(content: note, seller_visible: false)
-            ActiveRecord.after_all_transactions_commit do
-              ErrorNotifier.notify("Payout withheld for negative ledger group",
-                                   user_id: user.id, payout_period_end_date: date.to_s, processor_type:)
-            end
+        note = "Payout #{processor_type} for period ending #{date} withheld because the unpaid ledger is not payable. Reconcile the unpaid balance ledger before retry."
+        unless user.comments.with_type_payout_note.alive.where(author_id: GUMROAD_ADMIN_ID, content: note).exists?
+          user.add_payout_note(content: note, seller_visible: false)
+          ActiveRecord.after_all_transactions_commit do
+            ErrorNotifier.notify("Payout withheld for non-payable ledger",
+                                 user_id: user.id, payout_period_end_date: date.to_s, processor_type:)
+          rescue => error
+            Rails.logger.error("Payouts: ledger hold notification failed for #{user.id}: #{error.class}: #{error.message}")
           end
         end
         balances.each(&:mark_unpaid!)
