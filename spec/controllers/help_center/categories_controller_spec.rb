@@ -35,5 +35,13 @@ describe HelpCenter::CategoriesController, inertia: true do
       get :show, params: { slug: "non-existent-category" }
       expect(response).to redirect_to(help_center_root_path)
     end
+
+    context "with a legacy .html suffixed URL" do
+      it "redirects permanently to the canonical category URL" do
+        get :show, params: { slug: category.slug, format: "html" }
+        expect(response).to have_http_status(:moved_permanently)
+        expect(response).to redirect_to("/help/category/#{category.slug}")
+      end
+    end
   end
 end

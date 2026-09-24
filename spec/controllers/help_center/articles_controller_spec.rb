@@ -70,6 +70,19 @@ describe HelpCenter::ArticlesController, inertia: true do
       expect(response).to redirect_to(help_center_root_path)
     end
 
+    context "with a legacy .html suffixed URL" do
+      it "redirects permanently to the canonical article URL" do
+        get :show, params: { slug: article.slug, format: "html" }
+        expect(response).to have_http_status(:moved_permanently)
+        expect(response).to redirect_to("/help/article/#{article.slug}")
+      end
+
+      it "preserves the query string" do
+        get :show, params: { slug: article.slug, format: "html", utm_source: "newsletter" }
+        expect(response).to redirect_to("/help/article/#{article.slug}?utm_source=newsletter")
+      end
+    end
+
     context "with legacy article redirect" do
       it "redirects to the correct URL" do
         get :show, params: { slug: "284-jobs-at-gumroad" }
