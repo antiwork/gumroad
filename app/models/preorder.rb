@@ -177,22 +177,32 @@ class Preorder < ApplicationRecord
   def mobile_json_data(include_product_updates: true)
     if charge_purchase_successful?
       preorder_charge_purchase = purchases.last
-      return preorder_charge_purchase.url_redirect.product_json_data(include_product_updates:)
+      # A successful charge purchase can have no url_redirect: create_url_redirect! skips gift
+      # senders and commission completions, and preorders charged before it existed have none.
+      if preorder_charge_purchase.url_redirect.present?
+        return preorder_charge_purchase.url_redirect.product_json_data(include_product_updates:)
+      end
+
+      return mobile_json_data_for_purchase(preorder_charge_purchase, include_product_updates:)
     end
-    result = link.as_json(mobile: true)
-    preorder_data = { external_id:, release_at: preorder_link.release_at }
-    result[:preorder_data] = preorder_data
-    if authorization_purchase
-      result[:purchase_id] = authorization_purchase.external_id
-      result[:purchased_at] = authorization_purchase.created_at
-      result[:user_id] = authorization_purchase.purchaser.external_id if authorization_purchase.purchaser
-      result[:product_updates_data] = authorization_purchase.update_json_data_for_mobile if include_product_updates
-      result[:is_archived] = authorization_purchase.is_archived
-    end
+    result = mobile_json_data_for_purchase(authorization_purchase, include_product_updates:)
+    result[:preorder_data] = { external_id:, release_at: preorder_link.release_at }
     result
   end
 
   private
+    def mobile_json_data_for_purchase(purchase, include_product_updates:)
+      result = link.as_json(mobile: true)
+      return result if purchase.blank?
+
+      result[:purchase_id] = purchase.external_id
+      result[:purchased_at] = purchase.created_at
+      result[:user_id] = purchase.purchaser.external_id if purchase.purchaser
+      result[:product_updates_data] = purchase.update_json_data_for_mobile if include_product_updates
+      result[:is_archived] = purchase.is_archived
+      result
+    end
+
     def mark_authorization_purchase_as_concluded_successfully
       authorization_purchase.mark_preorder_concluded_successfully
     end

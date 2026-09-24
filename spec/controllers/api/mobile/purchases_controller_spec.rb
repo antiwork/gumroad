@@ -962,6 +962,23 @@ describe Api::Mobile::PurchasesController do
         expect(preorder_item).not_to have_key(:product_updates_data)
       end
 
+      it "is omitted for a preorder whose charge purchase has no url_redirect" do
+        preorder_product = create(:product, user: @user, is_in_preorder_state: true)
+        preorder_link = create(:preorder_link, link: preorder_product, release_at: 2.days.from_now)
+        authorization_purchase = create(:preorder_authorization_purchase, link: preorder_product, purchaser: @purchaser, seller: @user, email: @purchaser.email)
+        preorder = create(:preorder, preorder_link:, seller: @user, purchaser: @purchaser, state: "charge_successful")
+        authorization_purchase.update!(preorder:)
+        charge_purchase = create(:purchase, link: preorder_product, preorder:, purchaser: @purchaser, seller: @user)
+
+        get :search, params: @params
+
+        expect(response).to have_http_status(:ok)
+        expect(response).to match_json_schema("api/mobile/purchases_search")
+        preorder_item = response.parsed_body[:purchases].find { _1[:purchase_id] == charge_purchase.external_id }
+        expect(preorder_item).to be_present
+        expect(preorder_item).not_to have_key(:product_updates_data)
+      end
+
       it "does not run the queries that decide which posts the buyer can see" do
         expect(Purchase).not_to receive(:preload_product_updates_data!)
         expect(Installment).not_to receive(:profile_only_for_sellers)
