@@ -950,6 +950,146 @@ describe Payouts do
       expect(user.balances.reload.map(&:state).uniq).to eq(["unpaid"])
     end
 
+    it "records one support-only note for a continuing hold without paying the positive group" do
+      allow(StripePayoutProcessor).to receive(:is_balance_payable).and_return(true)
+      expect(StripePayoutProcessor).not_to receive(:prepare_payment_and_set_amount)
+      debt = create(:balance, user:, merchant_account:, date: payout_date - 2, amount_cents: -3_00,
+                              holding_currency: Currency::EUR, holding_amount_cents: -2_60)
+      alerts = []
+      expect(ActiveRecord).to receive(:after_all_transactions_commit).twice { |&block| alerts << block }
+      expect(ErrorNotifier).to receive(:notify).twice
+
+      expect(described_class.create_payments(payout_date.to_s, PayoutProcessorType::STRIPE, user)).to eq([])
+      expect(described_class.create_payments(payout_date.to_s, PayoutProcessorType::STRIPE, user)).to eq([])
+      expect(user.comments.with_type_payout_note.alive.sole.json_data["ledger_hold_notification_state"]).to eq("claimed")
+      alerts.each(&:call)
+      25.times do |week|
+        expect(described_class.create_payments((payout_date + ((week + 1) * 7)).to_s, PayoutProcessorType::STRIPE, user)).to eq([])
+      end
+      create(:balance, user:, merchant_account:, date: payout_date - 2, amount_cents: -1_00,
+                       holding_currency: Currency::GBP, holding_amount_cents: -80)
+      expect(described_class.create_payments((payout_date + (26 * 7)).to_s, PayoutProcessorType::STRIPE, user)).to eq([])
+      expect(alerts.size).to eq(2)
+      alerts.last.call
+
+      notes = user.comments.with_type_payout_note.alive.where("content LIKE ?", "Payout STRIPE withheld for %")
+      expect(notes.count).to eq(2)
+      expect(notes.map(&:content).uniq.size).to eq(2)
+      expect(notes.map { |item| item.json_data["ledger_hold_notification_state"] }).to all(eq("notified"))
+      expect(notes.map(&:content)).to all(include("the unpaid ledger is not payable", "Reconcile the unpaid balance ledger before retry"))
+      expect(notes.map { |item| PayoutNoteVisibility.seller_visible?(item) }).to all(eq(false))
+      debt.update!(amount_cents: 0, holding_amount_cents: 0)
+      expect(described_class.create_payments((payout_date + (27 * 7)).to_s, PayoutProcessorType::STRIPE, user)).to eq([])
+      expect(alerts.size).to eq(2)
+      expect(user.comments.with_type_payout_note.alive.where("content LIKE ?", "Payout STRIPE withheld for %").count).to eq(2)
+      expect(user.payments.count).to eq(0)
+      expect(user.balances.reload.map(&:state).uniq).to eq(["unpaid"])
+      expect(debt.reload).to be_unpaid
+    end
+
+    it "records a zero-net ledger hold even without a negative currency group" do
+      allow(StripePayoutProcessor).to receive(:is_balance_payable).and_return(true)
+      expect(StripePayoutProcessor).not_to receive(:prepare_payment_and_set_amount)
+      create(:balance, user:, merchant_account:, date: payout_date - 2, amount_cents: -10_00,
+                       holding_currency: Currency::HUF, holding_amount_cents: -15_209_249)
+      expect(ErrorNotifier).to receive(:notify).once.with(
+        "Payout withheld for non-payable ledger",
+        user_id: user.id, payout_period_end_date: payout_date.to_s, processor_type: PayoutProcessorType::STRIPE
+      )
+      allow(ActiveRecord).to receive(:after_all_transactions_commit) { |&block| block.call }
+
+      expect(described_class.create_payments(payout_date.to_s, PayoutProcessorType::STRIPE, user)).to eq([])
+      note = user.comments.with_type_payout_note.alive.sole
+      expect(note.content).to include("the unpaid ledger is not payable")
+      expect(PayoutNoteVisibility.seller_visible?(note)).to eq(false)
+      expect(user.payments.count).to eq(0)
+      expect(user.balances.reload.map(&:state).uniq).to eq(["unpaid"])
+    end
+
+    it "keeps a committed hold when its operator notification fails" do
+      allow(StripePayoutProcessor).to receive(:is_balance_payable).and_return(true)
+      create(:balance, user:, merchant_account:, date: payout_date - 2, amount_cents: -3_00,
+                       holding_currency: Currency::EUR, holding_amount_cents: -2_60)
+      callback = nil
+      allow(ActiveRecord).to receive(:after_all_transactions_commit) { |&block| callback = block }
+      allow(ErrorNotifier).to receive(:notify).and_raise(StandardError, "notification unavailable")
+      expect(Rails.logger).to receive(:error).with(/ledger hold notification failed.*notification unavailable/)
+
+      expect(described_class.create_payments(payout_date.to_s, PayoutProcessorType::STRIPE, user)).to eq([])
+      expect { callback.call }.not_to raise_error
+      expect(user.comments.with_type_payout_note.alive.count).to eq(1)
+      expect(user.comments.with_type_payout_note.alive.sole.json_data["ledger_hold_notification_state"]).to eq("failed")
+      expect(ErrorNotifier).to receive(:notify).with(
+        "Payout withheld for non-payable ledger",
+        user_id: user.id, payout_period_end_date: (payout_date + 7).to_s, processor_type: PayoutProcessorType::STRIPE
+      ).and_return(nil)
+      expect(described_class.create_payments((payout_date + 7).to_s, PayoutProcessorType::STRIPE, user)).to eq([])
+      expect(user.comments.with_type_payout_note.alive.sole.json_data["ledger_hold_notification_state"]).to eq("claimed")
+      expect { callback.call }.not_to raise_error
+      expect(user.comments.with_type_payout_note.alive.sole.json_data["ledger_hold_notification_state"]).to eq("notified")
+      expect(user.payments.count).to eq(0)
+      expect(user.balances.reload.map(&:state).uniq).to eq(["unpaid"])
+    end
+
+    it "records a new hold after the previous debt is resolved" do
+      allow(StripePayoutProcessor).to receive(:is_balance_payable).and_return(true)
+      debt = create(:balance, user:, merchant_account:, date: payout_date - 2, amount_cents: -3_00,
+                              holding_currency: Currency::EUR, holding_amount_cents: -2_60)
+      allow(ActiveRecord).to receive(:after_all_transactions_commit) { |&block| block.call }
+      expect(ErrorNotifier).to receive(:notify).twice
+      expect(described_class.create_payments(payout_date.to_s, PayoutProcessorType::STRIPE, user)).to eq([])
+
+      debt.update!(amount_cents: 0, holding_amount_cents: 0)
+      create(:balance, user:, merchant_account:, date: payout_date + 1, amount_cents: -4_00,
+                       holding_currency: Currency::EUR, holding_amount_cents: -3_60)
+      expect(described_class.create_payments((payout_date + 7).to_s, PayoutProcessorType::STRIPE, user)).to eq([])
+      expect(user.comments.with_type_payout_note.alive.count).to eq(2)
+      expect(user.payments.count).to eq(0)
+    end
+
+    it "reports a new negative transaction on a reused balance after debt is cleared" do
+      allow(StripePayoutProcessor).to receive(:is_balance_payable).and_return(true)
+      debt = create(:balance, user:, merchant_account:, date: payout_date - 2, amount_cents: -3_00,
+                              holding_currency: Currency::EUR, holding_amount_cents: -2_60)
+      record_transaction = lambda do |amount|
+        BalanceTransaction.new(
+          user:, merchant_account:, balance: debt,
+          credit: create(:credit, user:, merchant_account:, balance: debt),
+          issued_amount_currency: Currency::USD, issued_amount_gross_cents: amount,
+          issued_amount_net_cents: amount, holding_amount_currency: Currency::EUR,
+          holding_amount_gross_cents: amount, holding_amount_net_cents: amount
+        ).save!
+      end
+      record_transaction.call(-3_00)
+      allow(ActiveRecord).to receive(:after_all_transactions_commit) { |&block| block.call }
+      expect(ErrorNotifier).to receive(:notify).twice
+      expect(described_class.create_payments(payout_date.to_s, PayoutProcessorType::STRIPE, user)).to eq([])
+
+      debt.update!(amount_cents: -1_00, holding_amount_cents: -1_00)
+      record_transaction.call(2_00)
+      expect(described_class.create_payments((payout_date + 7).to_s, PayoutProcessorType::STRIPE, user)).to eq([])
+      expect(user.comments.with_type_payout_note.alive.count).to eq(1)
+      debt.update!(amount_cents: 0, holding_amount_cents: 0)
+      debt.update!(amount_cents: -2_00, holding_amount_cents: -2_00)
+      record_transaction.call(-2_00)
+      expect(described_class.create_payments((payout_date + 14).to_s, PayoutProcessorType::STRIPE, user)).to eq([])
+      expect(user.comments.with_type_payout_note.alive.count).to eq(2)
+      expect(user.payments.count).to eq(0)
+    end
+
+    it "keeps the negative-group note out of a later period after the debt is resolved" do
+      allow(StripePayoutProcessor).to receive(:is_balance_payable).and_return(true)
+      debt = create(:balance, user:, merchant_account:, date: payout_date - 2, amount_cents: -3_00,
+                              holding_currency: Currency::EUR, holding_amount_cents: -2_60)
+      allow(ErrorNotifier).to receive(:notify)
+      expect(described_class.create_payments(payout_date.to_s, PayoutProcessorType::STRIPE, user)).to eq([])
+      debt.update!(amount_cents: 0, holding_amount_cents: 0)
+      allow(StripePayoutProcessor).to receive(:prepare_payment_and_set_amount).and_return([])
+
+      expect(described_class.create_payments(payout_date.to_s, PayoutProcessorType::STRIPE, user)).not_to be_empty
+      expect(user.comments.with_type_payout_note.alive.count).to eq(1)
+    end
+
     context "with mixed source accounts in the group ledger" do
       before do
         allow(StripePayoutProcessor).to receive(:pay_out_currencies).and_return([Currency::EUR])
@@ -1131,6 +1271,20 @@ describe Payouts do
       expect(groups.sole.last.sum(&:amount_cents)).to be_positive
       expect(stripe_debts.sum(&:holding_amount_cents)).to be_negative
       expect(stripe_debts.sum(&:amount_cents)).to be_negative
+    end
+
+    it "keeps the debt hold visible without claiming which account holds the debt" do
+      current_account = create(:merchant_account, user:, currency: Currency::AUD)
+      allow(user).to receive(:stripe_account).and_return(current_account)
+      allow(ErrorNotifier).to receive(:notify)
+
+      expect(described_class.create_payments(payout_date.to_s, PayoutProcessorType::STRIPE, user)).to eq([])
+
+      note = user.comments.with_type_payout_note.alive.order(id: :desc).first
+      expect(note.content).to include("the unpaid ledger is not payable")
+      expect(PayoutNoteVisibility.seller_visible?(note)).to eq(false)
+      expect(user.payments.count).to eq(0)
+      expect(user.balances.reload.map(&:state).uniq).to eq(["unpaid"])
     end
 
     it "fails the payout closed before the internal transfer and returns every claimed balance to unpaid" do

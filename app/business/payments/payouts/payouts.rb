@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require "digest"
+
 class Payouts
   extend ActionView::Helpers::NumberHelper
 
@@ -468,9 +470,58 @@ class Payouts
       else
         [[nil, nil, ledger]]
       end
-      if ledger.sum(&:amount_cents) <= 0 ||
-          ledger_groups.any? { |_, _, group_balances| group_balances.sum(&:amount_cents).negative? }
+      negative_group = ledger_groups.any? { |_, _, group_balances| group_balances.sum(&:amount_cents).negative? }
+      if ledger.sum(&:amount_cents) <= 0 || negative_group
         Rails.logger.info("Payouts: Negative balance for #{user.id}")
+        # Track the latest debit for each unresolved negative balance. Credits can reduce an
+        # existing debt without a new alert, while a later debit on the same row must report.
+        negative_ids = ledger.filter_map { |balance| balance.id if balance.amount_cents.negative? }
+        blocking_keys = if negative_ids.any?
+          latest_debits = ApplicationRecord.connected_to(role: :writing) do
+            BalanceTransaction.where(balance_id: negative_ids).where("issued_amount_net_cents < 0").group(:balance_id).maximum(:id)
+          end
+          negative_ids.map { |id| latest_debits[id] ? "t#{latest_debits[id]}" : "b#{id}" }
+        else
+          ledger.map { |balance| "b#{balance.id}" }
+        end
+        note_prefix = "Payout #{processor_type} withheld for ledger "
+        previous_note = user.comments.with_type_payout_note.alive
+                            .where(author_id: GUMROAD_ADMIN_ID)
+                            .where("content LIKE ?", "#{note_prefix}%")
+                            .order(created_at: :desc, id: :desc).first
+        known_keys = previous_note&.json_data&.fetch("ledger_hold_debt_keys", []) || []
+        new_keys = blocking_keys - known_keys
+        notify = false
+        if previous_note.nil? || new_keys.any?
+          incident_keys = (known_keys | blocking_keys).sort
+          hold_key = Digest::SHA256.hexdigest(incident_keys.join(","))[0, 16]
+          note = "#{note_prefix}#{hold_key} because the unpaid ledger is not payable. Reconcile the unpaid balance ledger before retry."
+          hold_note = user.add_payout_note(content: note, seller_visible: false,
+                                           json_data: { "ledger_hold_debt_keys" => incident_keys, "ledger_hold_notification_state" => "claimed", "ledger_hold_claimed_at" => Time.current.iso8601 })
+          notify = true
+        else
+          hold_note = previous_note
+          state = hold_note.json_data["ledger_hold_notification_state"]
+          claimed_at = hold_note.json_data["ledger_hold_claimed_at"]
+          if state == "failed" || (state == "claimed" && claimed_at && Time.zone.parse(claimed_at) < 15.minutes.ago)
+            hold_note.update!(json_data: hold_note.json_data.merge("ledger_hold_notification_state" => "claimed", "ledger_hold_claimed_at" => Time.current.iso8601))
+            notify = true
+          end
+        end
+        if notify
+          ActiveRecord.after_all_transactions_commit do
+            ErrorNotifier.notify("Payout withheld for non-payable ledger",
+                                 user_id: user.id, payout_period_end_date: date.to_s, processor_type:)
+            hold_note.update!(json_data: hold_note.json_data.merge("ledger_hold_notification_state" => "notified"))
+          rescue => error
+            Rails.logger.error("Payouts: ledger hold notification failed for #{user.id}: #{error.class}: #{error.message}")
+            begin
+              hold_note.update!(json_data: hold_note.json_data.merge("ledger_hold_notification_state" => "failed"))
+            rescue => state_error
+              Rails.logger.error("Payouts: ledger hold notification state failed for #{user.id}: #{state_error.class}: #{state_error.message}")
+            end
+          end
+        end
         balances.each(&:mark_unpaid!)
         next []
       end
