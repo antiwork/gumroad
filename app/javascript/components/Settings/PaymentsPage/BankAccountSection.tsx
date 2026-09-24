@@ -2,7 +2,7 @@ import * as React from "react";
 
 import { SavedCreditCard } from "$app/parsers/card";
 import type { FormFieldName, User } from "$app/types/payments";
-import { COUNTRY_ACCOUNT_NUMBER_HINTS } from "$app/utils/payoutAccountNumbers";
+import { COUNTRY_ACCOUNT_NUMBER_HINTS, COUNTRY_IBAN_PLACEHOLDERS } from "$app/utils/payoutAccountNumbers";
 
 import { Button } from "$app/components/Button";
 import { Alert } from "$app/components/ui/Alert";
@@ -816,6 +816,8 @@ const BankAccountSection = ({
   const nonIbanAccountNumberInputProps: AccountNumberInputProps = (user.country_code
     ? COUNTRY_ACCOUNT_NUMBER_HINTS[user.country_code]
     : undefined) ?? { placeholder: "1234567890" };
+
+  const ibanPlaceholder = (user.country_code ? COUNTRY_IBAN_PLACEHOLDERS[user.country_code] : undefined) ?? "";
 
   const getRoutingNumberLabel = (countryCode: string) => {
     switch (true) {
@@ -2466,11 +2468,7 @@ const BankAccountSection = ({
                     <Input
                       type="text"
                       id={`${uid}-account-number`}
-                      placeholder={
-                        user.country_code === "MG"
-                          ? "MG4800005000011234567890123"
-                          : `${user.country_code || ""}1234567890`
-                      }
+                      placeholder={ibanPlaceholder}
                       required
                       disabled={isFormDisabled}
                       aria-invalid={errorFieldNames.has("account_number")}
@@ -2484,11 +2482,7 @@ const BankAccountSection = ({
                     <Input
                       type="text"
                       id={`${uid}-confirm-account-number`}
-                      placeholder={
-                        user.country_code === "MG"
-                          ? "MG4800005000011234567890123"
-                          : `${user.country_code || ""}1234567890`
-                      }
+                      placeholder={ibanPlaceholder}
                       required
                       disabled={isFormDisabled}
                       aria-invalid={errorFieldNames.has("account_number_confirmation")}

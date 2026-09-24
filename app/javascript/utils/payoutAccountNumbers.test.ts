@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   COUNTRY_ACCOUNT_NUMBER_HINTS,
+  COUNTRY_IBAN_PLACEHOLDERS,
   accountNumberFormatError,
   normalizeAccountNumber,
 } from "$app/utils/payoutAccountNumbers";
@@ -64,6 +65,16 @@ describe("accountNumberFormatError", () => {
     expect(accountNumberFormatError("MZ", "00123456789012345678")).toBe(COUNTRY_ACCOUNT_NUMBER_HINTS.MZ?.title);
     // Qatar's IBAN with its last character dropped, the shape a truncating length cap would produce.
     expect(accountNumberFormatError("QA", "QA87CITI12345678901234567890")).toBe(COUNTRY_ACCOUNT_NUMBER_HINTS.QA?.title);
+  });
+
+  it("refuses every IBAN-box example submitted as the seller's own IBAN", () => {
+    for (const [countryCode, example] of Object.entries(COUNTRY_IBAN_PLACEHOLDERS)) {
+      expect(accountNumberFormatError(countryCode, example)).toMatch(/only an example/u);
+      expect(accountNumberFormatError(countryCode, example.toLowerCase().replace(/(.{4})/gu, "$1 "))).toMatch(
+        /only an example/u,
+      );
+    }
+    expect(accountNumberFormatError("DE", "DE62370400440532013001")).toBeNull();
   });
 
   it("defers to the server for countries with no format on record", () => {
