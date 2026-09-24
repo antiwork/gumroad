@@ -471,13 +471,17 @@ class Payouts
       negative_group = ledger_groups.any? { |_, _, group_balances| group_balances.sum(&:amount_cents).negative? }
       if ledger.sum(&:amount_cents) <= 0 || negative_group
         Rails.logger.info("Payouts: Negative balance for #{user.id}")
-        # A continuing hold must not bury seller-facing guidance behind weekly internal notes.
-        note = "Payout #{processor_type} withheld because the unpaid ledger is not payable. Reconcile the unpaid balance ledger before retry."
-        unless user.comments.with_type_payout_note.alive.where(author_id: GUMROAD_ADMIN_ID, content: note).exists?
-          user.add_payout_note(content: note, seller_visible: false)
+        # Key the hold to the oldest unresolved debt, not the week, so recurring notes do not
+        # bury seller-facing guidance while a later debt can still start a new hold.
+        blocking_balance = ledger.select { |balance| balance.amount_cents.negative? }.min_by(&:id) || ledger.min_by(&:id)
+        note = "Payout #{processor_type} withheld for balance #{blocking_balance.id} because the unpaid ledger is not payable. Reconcile the unpaid balance ledger before retry."
+        hold_note = user.comments.with_type_payout_note.alive.find_by(author_id: GUMROAD_ADMIN_ID, content: note)
+        hold_note ||= user.add_payout_note(content: note, seller_visible: false, json_data: { "ledger_hold_notified" => false })
+        unless hold_note.json_data["ledger_hold_notified"]
           ActiveRecord.after_all_transactions_commit do
             ErrorNotifier.notify("Payout withheld for non-payable ledger",
                                  user_id: user.id, payout_period_end_date: date.to_s, processor_type:)
+            hold_note.update!(json_data: hold_note.json_data.merge("ledger_hold_notified" => true))
           rescue => error
             Rails.logger.error("Payouts: ledger hold notification failed for #{user.id}: #{error.class}: #{error.message}")
           end
