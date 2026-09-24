@@ -519,6 +519,11 @@ changed.each do |path|
     # vendored client are exercised by useConfigureEvaporate vitest.
     # None of these need rspec.
     next
+  elsif path.match?(%r{\Aspec/.*_spec\.rb\z}) && !File.exist?(path)
+    # A deleted spec has nothing left to run. What it covered is still mapped
+    # through the other paths in the diff; deleted support files and deleted
+    # app code keep escalating.
+    next
   elsif path == "bin/branch-specs" || path == "spec/bin/branch_specs_test.rb"
     # Standalone ruby test (ruby spec/bin/branch_specs_test.rb), not rspec.
     next
