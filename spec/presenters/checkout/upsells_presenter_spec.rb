@@ -36,6 +36,7 @@ describe Checkout::UpsellsPresenter do
                      text: "Take advantage of this excellent offer!",
                      cross_sell: false,
                      replace_selected_products: false,
+                     offer_matching_version: false,
                      universal: false,
                      paused: false,
                      discount: {
@@ -73,6 +74,7 @@ describe Checkout::UpsellsPresenter do
                      text: "Take advantage of this excellent offer!",
                      cross_sell: true,
                      replace_selected_products: true,
+                     offer_matching_version: false,
                      universal: false,
                      paused: false,
                      discount: nil,
