@@ -50,6 +50,11 @@ RUN cd $APP_DIR \
 # context: copy_secrets.sh puts the credentials repo's copy there.
 COPY --chown=app:app --chmod=755 . $APP_DIR/
 
+# Only a build that ran copy_secrets.sh has this file. Without it GEOIP is nil
+# and every GeoIp.lookup returns nothing, so say so in the build log rather than
+# shipping it silently; a hard failure would block builds with no credentials repo.
+RUN test -s "$APP_DIR/lib/GeoIP2-City.mmdb" || echo "WARNING: lib/GeoIP2-City.mmdb missing from the build context; GEOIP will be nil in this image"
+
 ENV DATABASE_HOST="db" \
   DATABASE_NAME="gumroad_development" \
   DATABASE_PORT=3306 \
