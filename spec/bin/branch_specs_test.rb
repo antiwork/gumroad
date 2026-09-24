@@ -23,7 +23,7 @@ SELECTOR = File.expand_path("../../bin/branch-specs", __dir__)
 $failures = []
 $count = 0
 
-def build_repo(dir, base_files:, head_files:, quote_path: nil)
+def build_repo(dir, base_files:, head_files:, head_deletes: [], quote_path: nil)
   Dir.chdir(dir) do
     system("git init -q -b main .", exception: true)
     system("git config user.email t@t.t", exception: true)
@@ -42,6 +42,7 @@ def build_repo(dir, base_files:, head_files:, quote_path: nil)
 
     write.call(base_files)
     system("git branch -f base HEAD", exception: true)
+    FileUtils.rm(head_deletes)
     write.call(head_files)
   end
 end
@@ -56,10 +57,10 @@ ASCII_LOCALE = { "LC_ALL" => "C", "LANG" => "C", "LC_CTYPE" => nil, "LANGUAGE" =
 # non-ASCII expectations below compare as text rather than raising.
 def utf8(str) = str.dup.force_encoding(Encoding::UTF_8)
 
-def check(name, base_files:, head_files:, expect_specs: nil, expect_escalate: false, env: {}, quote_path: nil)
+def check(name, base_files:, head_files:, head_deletes: [], expect_specs: nil, expect_escalate: false, env: {}, quote_path: nil)
   $count += 1
   Dir.mktmpdir do |dir|
-    build_repo(dir, base_files:, head_files:, quote_path:)
+    build_repo(dir, base_files:, head_files:, head_deletes:, quote_path:)
     stdout, stderr, status = Open3.capture3(env, "ruby", SELECTOR, "--base", "base", chdir: dir)
     stdout = utf8(stdout)
     stderr = utf8(stderr)
@@ -77,6 +78,10 @@ def check(name, base_files:, head_files:, expect_specs: nil, expect_escalate: fa
       missing = (expect_specs || []) - got
       if missing.any?
         $failures << "#{name}: missing expected specs #{missing.inspect}\ngot: #{got.inspect}"
+      end
+      # A non-empty list is a floor; an empty one means the selector prints nothing.
+      if expect_specs == [] && got.any?
+        $failures << "#{name}: expected no specs\ngot: #{got.inspect}"
       end
     end
   end
@@ -1269,6 +1274,48 @@ check(
     "config/initializers/devise_pwned_password_safe_params.rb" => "old",
   },
   head_files: { "config/initializers/devise_pwned_password_safe_params.rb" => "new" },
+  expect_escalate: true,
+)
+
+# Deleted spec files have nothing left to run. The rest of the diff still maps.
+check(
+  "deleted spec files do not escalate alongside a mapped spec edit",
+  base_files: {
+    "spec/models/discover_search_spec.rb" => SPEC_STUB,
+    "spec/sidekiq/refresh_sitemap_daily_worker_spec.rb" => SPEC_STUB,
+  },
+  head_files: { "spec/sidekiq/refresh_sitemap_daily_worker_spec.rb" => "# edited\n" },
+  head_deletes: %w[spec/models/discover_search_spec.rb],
+  expect_specs: %w[spec/sidekiq/refresh_sitemap_daily_worker_spec.rb],
+)
+
+check(
+  "a diff that only deletes spec files selects nothing",
+  base_files: {
+    "spec/models/discover_search_spec.rb" => SPEC_STUB,
+    "spec/models/sales_export_chunk_spec.rb" => SPEC_STUB,
+  },
+  head_files: {},
+  head_deletes: %w[spec/models/discover_search_spec.rb spec/models/sales_export_chunk_spec.rb],
+  expect_specs: [],
+)
+
+check(
+  "deleted app code still escalates when its spec is deleted with it",
+  base_files: {
+    "lib/utilities/xml_helpers.rb" => "module XmlHelpers; end\n",
+    "spec/lib/utilities/xml_helpers_spec.rb" => SPEC_STUB,
+  },
+  head_files: {},
+  head_deletes: %w[lib/utilities/xml_helpers.rb spec/lib/utilities/xml_helpers_spec.rb],
+  expect_escalate: true,
+)
+
+check(
+  "a deleted spec support file still escalates",
+  base_files: { "spec/support/some_helper.rb" => "# helper\n" },
+  head_files: {},
+  head_deletes: %w[spec/support/some_helper.rb],
   expect_escalate: true,
 )
 
