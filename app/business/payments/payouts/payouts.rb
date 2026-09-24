@@ -33,7 +33,6 @@ class Payouts
   # so it has to get past the dedupe. A combined pattern would let the stale note suppress it.
   GUARDIAN_REQUIRED_NOTE_REGEX = /\AYour payout on .+ was skipped because sellers under 18 need a legal guardian/
   GUARDIAN_UNSUPPORTED_NOTE_REGEX = /\AYour payout on .+ was skipped because our payment partner cannot verify a seller under 18/
-  DEBT_RESERVE_NOTE_REGEX = /\APayout \w+ left .+ unpaid to cover a debt in a currency the Stripe account cannot pay out/
 
   def self.is_user_payable(user, date, processor_type: nil, add_comment: false, from_admin: false, bypass_minimum_payout: false, payout_type: Payouts::PAYOUT_TYPE_STANDARD)
     payout_date = Time.current.to_fs(:formatted_date_full_month)
@@ -533,7 +532,7 @@ class Payouts
         payout_groups = payout_groups.map do |merchant_account, payout_currency, group_balances|
           [merchant_account, payout_currency, group_balances - debt_reserve]
         end
-        add_debt_reserve_note(user, processor_type, debt_reserve)
+        add_debt_reserve_note(user, processor_type, debt_reserve, -orphan_debt_cents(payout_processor, ledger_groups))
       end
 
       # A group the claim left non-positive has nothing to send; releasing it keeps a zero- (or
@@ -614,22 +613,19 @@ class Payouts
   private_class_method :negative_ledger?
 
   # The claim skips a debt in a currency the account cannot pay out, so the claimed rows can exceed
-  # what the seller is owed. Keep claimed rows unpaid until the unpaid ledger is back to zero or
-  # more. There is no FX netting: the debt row stays unpaid for reconciliation. Returns the rows to
-  # keep unpaid, or nil when the groups left to pay would exceed the ledger or fall below the minimum.
+  # what the seller is owed. Keep claimed rows unpaid so the unpaid ledger stays at zero or more.
+  # There is no FX netting: the debt row stays unpaid for reconciliation. Returns the rows to keep
+  # unpaid, or nil when no choice keeps the payout within the ledger and at or above the minimum.
   def self.orphan_debt_reserve(payout_processor, balances, ledger, ledger_groups, payout_groups, minimum_cents:)
-    orphan_debt = ledger_groups.any? do |_, _, group_balances|
-      group_balances.sum(&:amount_cents).negative? && unpayable_currency_group?(payout_processor, group_balances)
-    end
-    return [] unless orphan_debt
+    return [] if orphan_debt_cents(payout_processor, ledger_groups).zero?
 
     ledger_cents = ledger.sum(&:amount_cents)
     return unless ledger_cents.positive?
 
+    # Rows cannot be split, and a group left non-positive is released whole, so compare candidates
+    # on what they actually pay: nothing kept, a largest-first fit topped up with the smallest row
+    # left, the smallest covering row, or one whole group. Pay the most the ledger allows.
     shortfall_cents = balances.sum(&:amount_cents) - ledger_cents
-    # Rows cannot be split, so the reserve overshoots the shortfall. Take whichever of the smallest
-    # covering row or a largest-first fit (topped up with the smallest row left) overshoots less:
-    # the overshoot is the seller's money held until the debt is reconciled.
     rows = balances.select { |balance| balance.amount_cents.positive? }.sort_by { |balance| [-balance.amount_cents, balance.id] }
     fit = []
     remaining_cents = shortfall_cents
@@ -639,31 +635,42 @@ class Payouts
       fit << balance
       remaining_cents -= balance.amount_cents
     end
-    fit << (rows - fit).last if remaining_cents.positive?
+    top_up = (rows - fit).last
+    fit << top_up if remaining_cents.positive? && top_up
     single = rows.reverse.find { |balance| balance.amount_cents >= shortfall_cents }
-    reserve = [fit, single && [single]].compact.min_by { |candidate| candidate.sum(&:amount_cents) }
+    candidates = [[], fit, single && [single], *payout_groups.map { |_, _, group_balances| group_balances }].compact
 
-    # Groups left non-positive are released later, which can pay out more than the reserve assumed.
-    # Eligibility checked the minimum on the ledger, so the reserve's overshoot can take the payout
-    # under it, and the minimum includes Stripe's cross-border floor.
-    paid_cents = payout_groups.sum { |_, _, group_balances| [(group_balances - reserve).sum(&:amount_cents), 0].max }
-    reserve if paid_cents <= ledger_cents && paid_cents >= minimum_cents
+    paid_cents = ->(reserve) { payout_groups.sum { |_, _, group_balances| [(group_balances - reserve).sum(&:amount_cents), 0].max } }
+    reserve = candidates.select { |candidate| paid_cents.(candidate) <= ledger_cents }.max_by { |candidate| paid_cents.(candidate) }
+    # Eligibility checked the minimum on the ledger, and the minimum includes Stripe's cross-border
+    # floor, so a payout the reserve shrinks under it must not go out.
+    reserve if reserve && paid_cents.(reserve) >= minimum_cents
   end
   private_class_method :orphan_debt_reserve
+
+  def self.orphan_debt_cents(payout_processor, ledger_groups)
+    ledger_groups.sum do |_, _, group_balances|
+      group_cents = group_balances.sum(&:amount_cents)
+      group_cents.negative? && unpayable_currency_group?(payout_processor, group_balances) ? group_cents : 0
+    end
+  end
+  private_class_method :orphan_debt_cents
 
   def self.unpayable_currency_group?(payout_processor, group_balances)
     payout_processor.respond_to?(:unpayable_currency_group?) && payout_processor.unpayable_currency_group?(group_balances)
   end
   private_class_method :unpayable_currency_group?
 
-  # Support-only: explains why a payout is smaller than the unpaid balances. The newest note is not
-  # repeated while the same debt keeps reserving rows each run.
-  def self.add_debt_reserve_note(user, processor_type, reserve)
-    return if newest_note_is_hidden_repeat?(user, DEBT_RESERVE_NOTE_REGEX)
+  # Support-only: explains why a payout is smaller than the unpaid balances. Not repeated while the
+  # newest note names the same debt, since the rows kept unpaid can change every run.
+  def self.add_debt_reserve_note(user, processor_type, reserve, debt_cents)
+    debt = user.formatted_dollar_amount(debt_cents, no_cents_if_whole: false)
+    debt_clause = "to cover a #{debt} debt in a currency the Stripe account cannot pay out"
+    return if newest_note_is_hidden_repeat?(user, /#{Regexp.escape(debt_clause)}\./)
 
     amount = user.formatted_dollar_amount(reserve.sum(&:amount_cents), no_cents_if_whole: false)
     user.add_payout_note(
-      content: "Payout #{processor_type} left #{amount} unpaid to cover a debt in a currency the Stripe account cannot pay out. Reconcile the debt to release it.",
+      content: "Payout #{processor_type} left #{amount} unpaid #{debt_clause}. Reconcile the debt to release it.",
       seller_visible: false
     )
   end

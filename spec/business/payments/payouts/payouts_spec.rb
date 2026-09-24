@@ -1254,7 +1254,7 @@ describe Payouts do
       end
 
       def debt_reserve_notes
-        seller.comments.with_type_payout_note.alive.select { |note| note.content.match?(Payouts::DEBT_RESERVE_NOTE_REGEX) }
+        seller.comments.with_type_payout_note.alive.where("content LIKE ?", "Payout STRIPE left % unpaid to cover a %")
       end
 
       it "pays net of the debt by keeping the row that covers it unpaid" do
@@ -1272,7 +1272,7 @@ describe Payouts do
         expect(hold_notes).to be_empty
         note = debt_reserve_notes.sole
         expect(PayoutNoteVisibility.seller_visible?(note)).to eq(false)
-        expect(note.content).to include("left $146.62 unpaid")
+        expect(note.content).to include("left $146.62 unpaid to cover a $61.22 debt")
       end
 
       it "does not repeat the reserve note while the same debt keeps reserving rows" do
@@ -1281,7 +1281,48 @@ describe Payouts do
           seller.balances.processing.each(&:mark_unpaid!)
         end
 
-        expect(debt_reserve_notes.size).to eq(1)
+        expect(debt_reserve_notes.count).to eq(1)
+      end
+
+      it "writes a new reserve note when the debt changes" do
+        described_class.create_payments(payout_date.to_s, PayoutProcessorType::STRIPE, seller)
+        seller.balances.processing.each(&:mark_unpaid!)
+        usd_debt.update!(amount_cents: -70_00, holding_amount_cents: -70_00)
+
+        described_class.create_payments((payout_date + 7).to_s, PayoutProcessorType::STRIPE, seller)
+
+        expect(debt_reserve_notes.map(&:content)).to contain_exactly(
+          a_string_including("to cover a $61.22 debt"), a_string_including("to cover a $70.00 debt")
+        )
+      end
+
+      it "pays in full when unclaimed credits already cover the debt" do
+        eur_credit = create(:balance, user: seller, merchant_account: pln_account, date: payout_date - 1, amount_cents: 100_00,
+                                      holding_currency: Currency::EUR, holding_amount_cents: 90_00)
+        allow(StripePayoutProcessor).to receive(:pay_out_currencies).and_return([Currency::PLN, Currency::EUR])
+        allow(described_class).to receive(:payable_balances_for_processor).and_wrap_original do |original, *args|
+          original.call(*args).reject { |balance| balance.id == eur_credit.id }
+        end
+
+        payment, _ = described_class.create_payments(payout_date.to_s, PayoutProcessorType::STRIPE, seller).sole
+
+        expect(payment.balances.ids).to match_array(pln_credits.map(&:id))
+        expect(debt_reserve_notes).to be_empty
+      end
+
+      it "keeps a whole group unpaid when keeping single rows would release a negative group" do
+        pln_credits.first.update!(amount_cents: 300_00, holding_amount_cents: 1_110_00)
+        pln_credits.last.update!(amount_cents: -180_00, holding_amount_cents: -666_00)
+        eur_credit = create(:balance, user: seller, merchant_account: pln_account, date: payout_date - 1, amount_cents: 400_00,
+                                      holding_currency: Currency::EUR, holding_amount_cents: 360_00)
+        usd_debt.update!(amount_cents: -150_00, holding_amount_cents: -150_00)
+        allow(StripePayoutProcessor).to receive(:pay_out_currencies).and_return([Currency::PLN, Currency::EUR])
+
+        payment, _ = described_class.create_payments(payout_date.to_s, PayoutProcessorType::STRIPE, seller).sole
+
+        expect(payment.balances.ids).to match_array(pln_credits.map(&:id))
+        expect([eur_credit, usd_debt].map { |balance| balance.reload.state }.uniq).to eq(["unpaid"])
+        expect(seller.balances.unpaid.sum(:amount_cents)).to eq(400_00 - 150_00)
       end
 
       it "holds the payout when the currency probe fails, since it cannot prove the debt's currency is unpayable" do
@@ -1368,7 +1409,7 @@ describe Payouts do
         expect(seller.balances.unpaid.sum(:amount_cents)).to eq(400_00 - 296_62 - 61_22)
       end
 
-      it "holds the payout when keeping rows unpaid would release a negative group and pay out more than the ledger" do
+      it "holds the payout when no rows kept unpaid leave a payout within the ledger and above the minimum" do
         pln_credits.first.destroy!
         pln_credits.last.update!(amount_cents: -50_00, holding_amount_cents: -185_00, date: payout_date - 4)
         pln_newest = create(:balance, user: seller, merchant_account: pln_account, date: payout_date - 1, amount_cents: 100_00,
