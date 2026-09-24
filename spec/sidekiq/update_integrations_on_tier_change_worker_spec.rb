@@ -23,9 +23,5 @@ describe UpdateIntegrationsOnTierChangeWorker do
 
   it "errors out if subscription is not found" do
     expect { described_class.new.perform(1) }.to raise_error(ActiveRecord::RecordNotFound).with_message("Couldn't find Subscription with 'id'=1")
-
-    [Integrations::CircleIntegrationService, Integrations::DiscordIntegrationService].each do |integration_service|
-      expect_any_instance_of(integration_service).to_not receive(:update_on_tier_change)
-    end
   end
 end

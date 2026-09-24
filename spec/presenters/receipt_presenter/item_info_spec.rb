@@ -484,9 +484,6 @@ describe ReceiptPresenter::ItemInfo do
           )
         end
 
-        it "returns general attributes with variant" do
-        end
-
         context "when the purchase has quantity" do
           before do
             purchase.update!(quantity: 2)

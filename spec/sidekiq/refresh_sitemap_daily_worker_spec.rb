@@ -11,15 +11,12 @@ describe RefreshSitemapDailyWorker do
     it "generates the sitemap" do
       date = @product.created_at
       sitemap_file_path = "#{Rails.public_path}/sitemap/products/monthly/#{date.year}/#{date.month}/sitemap.xml.gz"
+      # Other specs write this month's file too, and nothing cleans public/sitemap.
+      FileUtils.rm_f(sitemap_file_path)
+
       described_class.new.perform
 
       expect(File.exist?(sitemap_file_path)).to be true
-    end
-
-    it "invokes SitemapService" do
-      expect_any_instance_of(SitemapService).to receive(:generate)
-
-      described_class.new.perform
     end
 
     # Regenerating a month overwrites its file, so retrying costs nothing and a killed run

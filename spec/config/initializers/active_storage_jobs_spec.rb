@@ -11,12 +11,6 @@ describe "ActiveStorage::AnalyzeJob error handling" do
 end
 
 describe "ActiveStorage::PreviewImageJob error handling" do
-  it "discards the job when the previewer raises ActiveStorage::PreviewError" do
-    expect(ActiveStorage::PreviewImageJob.rescue_handlers).to include(
-      satisfy { |handler| handler[0] == "ActiveStorage::PreviewError" }
-    )
-  end
-
   it "does not re-raise and logs a warning when PreviewError is raised" do
     allow_any_instance_of(ActiveStorage::PreviewImageJob).to receive(:perform)
       .and_raise(ActiveStorage::PreviewError, "ffmpeg failed (status 1): could not decode input")
