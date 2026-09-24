@@ -1,9 +1,7 @@
 # frozen_string_literal: true
 
 class EmailSuppressionManager
-  SUPPRESSION_LISTS = [:bounces, :spam_reports]
   ALL_SUPPRESSION_LISTS = [:bounces, :blocks, :spam_reports, :invalid_emails].freeze
-  private_constant :SUPPRESSION_LISTS
 
   # All SendGrid subusers we send through. Suppression lists are per-subuser, so anything
   # scanning or clearing suppressions must check every one of these.
@@ -19,15 +17,6 @@ class EmailSuppressionManager
 
   def initialize(email)
     @email = email
-  end
-
-  def reasons_for_suppression
-    # Scan all subusers for the email and note the reasons for suppressions
-    sendgrid_subusers.inject({}) do |reasons, (subuser, api_key)|
-      supression_reasons = email_suppression_reasons(api_key)
-      reasons[subuser] = supression_reasons if supression_reasons.present?
-      reasons
-    end
   end
 
   def detailed_status(lists: ALL_SUPPRESSION_LISTS)
@@ -64,46 +53,11 @@ class EmailSuppressionManager
     end
   end
 
-  def unblock_email
-    # Scan all subusers for the email and delete it from each suppression list
-    # Return true if the email is unblocked from any of the lists
-    sendgrid_subusers.inject(false) do |unblocked, (_, api_key)|
-      unblocked | unblock_suppressed_email(api_key)
-    end
-  end
-
     private
       attr_reader :email
 
       def sendgrid(api_key)
         SendGrid::API.new(api_key:)
-      end
-
-      def email_suppression_reasons(api_key)
-        suppression = sendgrid(api_key).client.suppression
-
-        SUPPRESSION_LISTS.inject([]) do |reasons, list|
-          parsed_body = suppression.public_send(list)._(email).get.parsed_body
-
-          begin
-            reasons << { list:, reason:  parsed_body.first[:reason] } if parsed_body.present?
-          rescue => e
-            ErrorNotifier.notify(e)
-            Rails.logger.info "[EmailSuppressionManager] Error parsing SendGrid response: #{parsed_body}"
-          end
-
-          reasons
-        end
-      end
-
-      def unblock_suppressed_email(api_key)
-        suppression = sendgrid(api_key).client.suppression
-
-        # Scan all lists for the email and delete it from each list
-        # Return true if the email is found in any of the lists
-        SUPPRESSION_LISTS.inject(false) do |unblocked, list|
-          unblocked | successful_response?(suppression.public_send(list)._(email).delete.status_code)
-        end
       end
 
       def successful_response?(status_code)

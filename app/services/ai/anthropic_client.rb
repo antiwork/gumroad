@@ -1,8 +1,8 @@
 # frozen_string_literal: true
 
-# Anthropic Messages API client for StoreAgentService. Requests go through OpenRouter's
-# Anthropic-compatible endpoint (provider failover + `fallbacks` to GPT), or through the Vercel AI
-# Gateway when the caller asks for it.
+# Anthropic Messages API client for StoreAgentService. Requests go through the Vercel AI Gateway
+# when the store agent's gateway key is configured, and through OpenRouter's Anthropic-compatible
+# endpoint otherwise. OpenRouter also replays the fallback model when a Vercel request fails.
 class Ai::AnthropicClient
   class Error < StandardError; end
 
@@ -80,7 +80,6 @@ class Ai::AnthropicClient
 
   OPENROUTER_API_URL = "https://openrouter.ai/api/v1/messages"
   VERCEL_HOST = "ai-gateway.vercel.sh"
-  GATEWAYS = %i[openrouter vercel].freeze
   API_VERSION = "2023-06-01"
   DEFAULT_MODEL = "claude-opus-4-7"
   DEFAULT_MAX_TOKENS = 1024
@@ -93,14 +92,16 @@ class Ai::AnthropicClient
     openrouter_api_key.present?
   end
 
-  # The store agent's own keys come first so its spend is metered and capped apart from
-  # Gumhead's (which shares GUMHEAD_UPSTREAM_*) and the refund-policy OpenRouter calls.
+  # The store agent's own key comes first so its spend is metered and capped apart from the
+  # refund-policy OpenRouter calls.
   def self.openrouter_api_key
     GlobalConfig.get("STORE_AGENT_OPENROUTER_API_KEY").presence || GlobalConfig.get("OPENROUTER_API_KEY").presence
   end
 
+  # No fallback to GUMHEAD_UPSTREAM_API_KEY: store-agent traffic on Gumhead's key cannot be capped
+  # apart from Gumhead. Without its own key the store agent uses OpenRouter.
   def self.vercel_api_key
-    GlobalConfig.get("STORE_AGENT_AI_GATEWAY_API_KEY").presence || GlobalConfig.get("GUMHEAD_UPSTREAM_API_KEY").presence
+    GlobalConfig.get("STORE_AGENT_AI_GATEWAY_API_KEY").presence
   end
 
   # Short on purpose: fail fast and retry rather than sit on a dead socket.
@@ -164,14 +165,10 @@ class Ai::AnthropicClient
 
   # `timeout` is per-read silence, not total stream duration. Buffered calls wait this long for
   # the whole body (nothing is sent until generation finishes).
-  def initialize(timeout: 60, model: DEFAULT_MODEL, fallback_model: nil, gateway: nil)
+  def initialize(timeout: 60, model: DEFAULT_MODEL, fallback_model: nil)
     @timeout = timeout
     @model = model
     @fallback_model_override = fallback_model
-    @preferred_gateway = gateway&.to_sym
-    if @preferred_gateway && GATEWAYS.exclude?(@preferred_gateway)
-      raise ArgumentError, "Unknown gateway #{gateway.inspect} (expected #{GATEWAYS.join(", ")})"
-    end
     @retry_sleep_spent = 0.0
     @served_models = []
     @call_metrics = []
@@ -654,7 +651,6 @@ class Ai::AnthropicClient
     end
 
     def resolved_gateway
-      return :openrouter unless @preferred_gateway == :vercel
       return :openrouter if @using_fallback_model && self.class.openrouter_configured?
 
       vercel_configured? ? :vercel : :openrouter
@@ -673,7 +669,7 @@ class Ai::AnthropicClient
       return if base.blank?
 
       uri = URI.parse(base)
-      # Reject http:// — the Gumhead key would otherwise go over plaintext.
+      # Reject http:// — the gateway key would otherwise go over plaintext.
       return unless uri.scheme == "https" && uri.host == VERCEL_HOST
 
       base.end_with?("/v1") ? "#{base}/messages" : "#{base}/v1/messages"

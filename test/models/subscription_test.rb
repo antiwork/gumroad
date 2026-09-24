@@ -4520,6 +4520,17 @@ class SubscriptionTest < ActiveSupport::TestCase
     }
   end
 
+  test "#send_restart_notifications! does not notify the creator when they have turned off payment emails" do
+    @subscription.seller.update!(enable_payment_email: false)
+    mail = mock
+    mail.stubs(:deliver_later)
+    CustomerMailer.expects(:subscription_restarted).with(@subscription.id, nil).returns(mail)
+    ContactingCreatorMailer.expects(:subscription_restarted).never
+    @subscription.expects(:send_restarted_notification_webhook)
+
+    @subscription.send_restart_notifications!
+  end
+
   # --- #last_resubscribed_at / #last_deactivated_at --------------------------
 
   test "#last_resubscribed_at returns the last restart time if the subscription has been restarted" do
