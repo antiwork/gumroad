@@ -445,6 +445,10 @@ describe Order::CreateService, :vcr do
         expect(cross_sell_code.quantity_left).to eq(1)
       end
 
+      # A cross-sell whose offer follows the buyer's selection offers a version that need not be the
+      # cross-sell's own `variant`. The plausible wrong fix is a guard that applies the discount only
+      # when the purchased version is that configured variant; this example is the only one that
+      # reddens on that guard, so it is not a duplicate of the allocation example below.
       it "buys the version a matched cross-sell offered, not the cross-sell's configured version" do
         source_product = create(:product, user: seller_1, price_cents: 10_00)
         offered_product = create(:product, user: seller_1, price_cents: 10_00)
