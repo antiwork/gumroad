@@ -28,6 +28,14 @@ class Rack::Attack
         body.rewind
       end
     end
+
+    # `throttle_with_exponential_backoff` re-runs a rule's block once per tier.
+    def memoize(key)
+      @memoized ||= {}
+      return @memoized[key] if @memoized.key?(key)
+
+      @memoized[key] = yield
+    end
   end
 
   def self.matches_path?(path:, request:)
@@ -363,16 +371,30 @@ class Rack::Attack
     req.remote_ip if req.path.match?(PASSWORD_RESET_PATH) && req.post?
   end
 
-  # One budget per target address so an abuser rotating IPs can't mailbomb one inbox. Downcased
-  # by hand as well as by `throttle_discriminator_normalizer`, so the key folds case either way;
-  # falls back to the IP, since a shared empty bucket would let one caller 429 everyone else.
+  # One budget per account the controller would email, so rotating IPs can't mailbomb an inbox. Keyed
+  # on the account because the column collation matches spellings a Ruby fold can't (accents, ß/ss,
+  # zero-width characters), and `user[email]` is read the way Rails does: body per its content type,
+  # query string wins. Prefixed so a submitted string can't land in an account's or an IP's bucket.
   # Initial: 4rpm, Max: 24 requests/9 hours
   throttle_with_exponential_backoff(name: "password_reset/email", requests: 4, period: 60.seconds, max_level: 6) do |req|
     next unless req.path.match?(PASSWORD_RESET_PATH) && req.post?
 
-    json = req.json_params
-    email = json.dig("user", "email").to_s.downcase.presence if json.is_a?(Hash)
-    email || req.params.dig("user", "email").to_s.downcase.presence || req.remote_ip
+    req.memoize(:password_reset_recipient) do
+      body_params = req.media_type&.include?("json") ? req.json_params : req.POST
+      request_params = body_params.is_a?(Hash) ? body_params.merge(req.GET) : req.GET
+      user_params = request_params["user"]
+      email = user_params["email"] if user_params.is_a?(Hash) && user_params["email"].is_a?(String)
+      user_id = User.alive.by_email(email).first&.id if EmailFormatValidator.valid?(email)
+      address = email.to_s.strip.downcase.presence
+
+      if user_id
+        "user:#{user_id}"
+      elsif address
+        "email:#{address}"
+      else
+        req.remote_ip
+      end
+    end
   end
 
   # Throttle requests to Sales API with slow pagination; a non-scalar `page`

@@ -57,9 +57,115 @@ describe "Rack::Attack throttle", type: :request do
       end
     end
 
-    it "does not throttle a GET on the same path" do
+    it "does not throttle GET, PUT or PATCH on the same path" do
       travel_to(Time.current) do
-        5.times { expect(reset_throttled?(Rack::Attack::Request.new(Rack::MockRequest.env_for("/users/forgot_password/new", "HTTP_CF_CONNECTING_IP" => "203.0.113.201")))).to be(false) }
+        %w[GET PUT PATCH].each do |method|
+          5.times do |i|
+            request = Rack::Attack::Request.new(
+              Rack::MockRequest.env_for(
+                "/users/forgot_password",
+                method:,
+                input: { user: { email: "target@example.com" } }.to_json,
+                "CONTENT_TYPE" => "application/json",
+                "HTTP_CF_CONNECTING_IP" => "203.0.113.201"
+              )
+            )
+            expect(reset_throttled?(request)).to be(false), "#{method} request #{i + 1} unexpectedly throttled"
+          end
+        end
+      end
+    end
+
+    describe "when the query string and the body name different recipients" do
+      let!(:target) { create(:user, email: "reset-target@example.com") }
+      let!(:bystander) { create(:user, email: "reset-bystander@example.com") }
+
+      def reset_with_body_decoy(recipient, ip:, body:, content_type:)
+        post "/users/forgot_password?#{{ user: { email: recipient } }.to_query}",
+             params: body,
+             headers: { "CONTENT_TYPE" => content_type, "CF-Connecting-IP" => ip }
+      end
+
+      {
+        "a JSON body" => ["application/json", ->(decoy) { { user: { email: decoy } }.to_json }],
+        "a form body" => ["application/x-www-form-urlencoded", ->(decoy) { { user: { email: decoy } }.to_query }],
+        "a text/plain body holding JSON" => ["text/plain", ->(decoy) { { user: { email: decoy } }.to_json }],
+        "a JSON body whose user is not a hash" => ["application/json", ->(_decoy) { { user: "decoy" }.to_json }]
+      }.each do |description, (content_type, build_body)|
+        it "keys the address budget on the query recipient Rails emails, given #{description}" do
+          travel_to(Time.current) do
+            4.times do |i|
+              reset_with_body_decoy(target.email, ip: "198.51.100.#{10 + i}", body: build_body.call("decoy-#{i}@example.com"), content_type:)
+              expect(response).to have_http_status(:see_other), "request #{i + 1} did not reach the query recipient"
+            end
+
+            reset_with_body_decoy(target.email, ip: "198.51.100.20", body: build_body.call("decoy-4@example.com"), content_type:)
+            expect(response).to have_http_status(:too_many_requests)
+            expect(request.env["rack.attack.matched"]).to eq("password_reset/email")
+            expect(request.env["rack.attack.match_discriminator"]).to eq("user:#{target.id}")
+
+            reset_with_body_decoy(bystander.email, ip: "198.51.100.21", body: build_body.call(target.email), content_type:)
+            expect(response).to have_http_status(:see_other)
+          end
+        end
+      end
+    end
+
+    describe "when spellings the users collation matches name one account" do
+      let!(:target) { create(:user, email: "strasse-target@example.com") }
+      let!(:bystander) { create(:user, email: "strasse-bystander@example.com") }
+
+      { "/users/forgot_password" => VALID_REQUEST_HOSTS.first, "/mobile/forgot_password" => VALID_API_REQUEST_HOSTS.first }.each do |path, host|
+        it "shares one budget across accented, sharp-s and zero-width spellings on #{path}" do
+          allow_any_instance_of(ActionDispatch::Request).to receive(:host).and_return(host)
+
+          travel_to(Time.current) do
+            ["stràsse-target@example.com", "straße-target@example.com", "stras\u200Bse-target@example.com", "STRASSE-Target@example.com"].each_with_index do |email, i|
+              post path, params: { user: { email: } }, headers: { "CF-Connecting-IP" => "198.51.100.#{30 + i}" }, as: :json
+              expect(response).to have_http_status(:see_other), "#{email.inspect} did not reach the persisted recipient"
+            end
+
+            post path, params: { user: { email: target.email } }, headers: { "CF-Connecting-IP" => "198.51.100.40" }, as: :json
+            expect(response).to have_http_status(:too_many_requests)
+            expect(request.env["rack.attack.matched"]).to eq("password_reset/email")
+            expect(request.env["rack.attack.match_discriminator"]).to eq("user:#{target.id}")
+
+            post path, params: { user: { email: bystander.email } }, headers: { "CF-Connecting-IP" => "198.51.100.41" }, as: :json
+            expect(response).to have_http_status(:see_other)
+          end
+        end
+      end
+    end
+
+    it "looks the account up once per request although every backoff tier evaluates the rule" do
+      create(:user, email: "tiers-target@example.com")
+      request = password_reset_request("/users/forgot_password", body: { user: { email: "tiers-target@example.com" } })
+      user_queries = []
+      count_user_queries = ->(*, payload) { user_queries << payload[:sql] if payload[:sql].include?("FROM `users`") }
+
+      ActiveSupport::Notifications.subscribed(count_user_queries, "sql.active_record") do
+        expect(reset_throttled?(request)).to be(false)
+      end
+
+      expect(Rack::Attack.configuration.throttles.keys.grep(%r{\Apassword_reset/email(/|\z)}).size).to eq(6)
+      expect(user_queries.size).to eq(1)
+    end
+
+    it "falls back to the IP when user[email] is nested in a shape the controller cannot mail" do
+      create(:user, email: "target@example.com")
+      rule = Rack::Attack.configuration.throttles["password_reset/email"]
+
+      [
+        [{ user: { email: ["target@example.com"] } }, "application/json"],
+        [{ user: { email: { address: "target@example.com" } } }, "application/json"],
+        [{ user: ["target@example.com"] }, "application/json"],
+        [[{ user: { email: "target@example.com" } }], "application/json"],
+        [{ "user[email][]" => "target@example.com" }, "application/x-www-form-urlencoded"],
+        [{ "user[email][address]" => "target@example.com" }, "application/x-www-form-urlencoded"],
+        [{ "user[][email]" => "target@example.com" }, "application/x-www-form-urlencoded"]
+      ].each do |body, content_type|
+        request = password_reset_request("/users/forgot_password", body:, content_type:)
+        expect(rule.block.call(request)).to eq("203.0.113.200"), "#{body.inspect} (#{content_type}) did not fall back to the IP"
       end
     end
 
