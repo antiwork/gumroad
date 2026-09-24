@@ -471,7 +471,8 @@ class Payouts
       negative_group = ledger_groups.any? { |_, _, group_balances| group_balances.sum(&:amount_cents).negative? }
       if ledger.sum(&:amount_cents) <= 0 || negative_group
         Rails.logger.info("Payouts: Negative balance for #{user.id}")
-        note = "Payout #{processor_type} for period ending #{date} withheld because the unpaid ledger is not payable. Reconcile the unpaid balance ledger before retry."
+        # A continuing hold must not bury seller-facing guidance behind weekly internal notes.
+        note = "Payout #{processor_type} withheld because the unpaid ledger is not payable. Reconcile the unpaid balance ledger before retry."
         unless user.comments.with_type_payout_note.alive.where(author_id: GUMROAD_ADMIN_ID, content: note).exists?
           user.add_payout_note(content: note, seller_visible: false)
           ActiveRecord.after_all_transactions_commit do

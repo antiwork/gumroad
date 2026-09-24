@@ -950,7 +950,7 @@ describe Payouts do
       expect(user.balances.reload.map(&:state).uniq).to eq(["unpaid"])
     end
 
-    it "records one support-only debt hold per period without paying the positive group" do
+    it "records one support-only note for a continuing hold without paying the positive group" do
       allow(StripePayoutProcessor).to receive(:is_balance_payable).and_return(true)
       expect(StripePayoutProcessor).not_to receive(:prepare_payment_and_set_amount)
       debt = create(:balance, user:, merchant_account:, date: payout_date - 2, amount_cents: -3_00,
@@ -962,16 +962,16 @@ describe Payouts do
         user_id: user.id, payout_period_end_date: payout_date.to_s, processor_type: PayoutProcessorType::STRIPE
       )
 
-      2.times do
-        expect(described_class.create_payments(payout_date.to_s, PayoutProcessorType::STRIPE, user)).to eq([])
+      26.times do |week|
+        expect(described_class.create_payments((payout_date + (week * 7)).to_s, PayoutProcessorType::STRIPE, user)).to eq([])
       end
       create(:balance, user:, merchant_account:, date: payout_date - 2, amount_cents: -1_00,
                        holding_currency: Currency::GBP, holding_amount_cents: -80)
-      expect(described_class.create_payments(payout_date.to_s, PayoutProcessorType::STRIPE, user)).to eq([])
+      expect(described_class.create_payments((payout_date + (26 * 7)).to_s, PayoutProcessorType::STRIPE, user)).to eq([])
       expect(alerts.size).to eq(1)
       alerts.each(&:call)
 
-      notes = user.comments.with_type_payout_note.alive.where("content LIKE ?", "Payout STRIPE for period ending #{payout_date}%")
+      notes = user.comments.with_type_payout_note.alive.where(content: "Payout STRIPE withheld because the unpaid ledger is not payable. Reconcile the unpaid balance ledger before retry.")
       expect(notes.count).to eq(1)
       expect(notes.sole.content).to include("the unpaid ledger is not payable", "Reconcile the unpaid balance ledger before retry")
       expect(PayoutNoteVisibility.seller_visible?(notes.sole)).to eq(false)
