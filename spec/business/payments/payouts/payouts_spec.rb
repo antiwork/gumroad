@@ -1047,6 +1047,36 @@ describe Payouts do
       expect(user.payments.count).to eq(0)
     end
 
+    it "reports a new negative transaction on a reused balance after debt is cleared" do
+      allow(StripePayoutProcessor).to receive(:is_balance_payable).and_return(true)
+      debt = create(:balance, user:, merchant_account:, date: payout_date - 2, amount_cents: -3_00,
+                              holding_currency: Currency::EUR, holding_amount_cents: -2_60)
+      record_transaction = lambda do |amount|
+        BalanceTransaction.new(
+          user:, merchant_account:, balance: debt,
+          credit: create(:credit, user:, merchant_account:, balance: debt),
+          issued_amount_currency: Currency::USD, issued_amount_gross_cents: amount,
+          issued_amount_net_cents: amount, holding_amount_currency: Currency::EUR,
+          holding_amount_gross_cents: amount, holding_amount_net_cents: amount
+        ).save!
+      end
+      record_transaction.call(-3_00)
+      allow(ActiveRecord).to receive(:after_all_transactions_commit) { |&block| block.call }
+      expect(ErrorNotifier).to receive(:notify).twice
+      expect(described_class.create_payments(payout_date.to_s, PayoutProcessorType::STRIPE, user)).to eq([])
+
+      debt.update!(amount_cents: -1_00, holding_amount_cents: -1_00)
+      record_transaction.call(2_00)
+      expect(described_class.create_payments((payout_date + 7).to_s, PayoutProcessorType::STRIPE, user)).to eq([])
+      expect(user.comments.with_type_payout_note.alive.count).to eq(1)
+      debt.update!(amount_cents: 0, holding_amount_cents: 0)
+      debt.update!(amount_cents: -2_00, holding_amount_cents: -2_00)
+      record_transaction.call(-2_00)
+      expect(described_class.create_payments((payout_date + 14).to_s, PayoutProcessorType::STRIPE, user)).to eq([])
+      expect(user.comments.with_type_payout_note.alive.count).to eq(2)
+      expect(user.payments.count).to eq(0)
+    end
+
     it "keeps the negative-group note out of a later period after the debt is resolved" do
       allow(StripePayoutProcessor).to receive(:is_balance_payable).and_return(true)
       debt = create(:balance, user:, merchant_account:, date: payout_date - 2, amount_cents: -3_00,

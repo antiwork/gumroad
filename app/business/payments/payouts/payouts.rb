@@ -473,24 +473,31 @@ class Payouts
       negative_group = ledger_groups.any? { |_, _, group_balances| group_balances.sum(&:amount_cents).negative? }
       if ledger.sum(&:amount_cents) <= 0 || negative_group
         Rails.logger.info("Payouts: Negative balance for #{user.id}")
-        # A continuing debt should not add weekly notes, but a new debt must be reported even
-        # when an older one still blocks payout. Resolving part of a hold is not a new incident.
-        blocking_ids = ledger.filter_map { |balance| balance.id if balance.amount_cents.negative? }
-        blocking_ids = ledger.map(&:id) if blocking_ids.empty?
+        # Track the latest debit for each unresolved negative balance. Credits can reduce an
+        # existing debt without a new alert, while a later debit on the same row must report.
+        negative_ids = ledger.filter_map { |balance| balance.id if balance.amount_cents.negative? }
+        blocking_keys = if negative_ids.any?
+          latest_debits = ApplicationRecord.connected_to(role: :writing) do
+            BalanceTransaction.where(balance_id: negative_ids).where("issued_amount_net_cents < 0").group(:balance_id).maximum(:id)
+          end
+          negative_ids.map { |id| latest_debits[id] ? "t#{latest_debits[id]}" : "b#{id}" }
+        else
+          ledger.map { |balance| "b#{balance.id}" }
+        end
         note_prefix = "Payout #{processor_type} withheld for ledger "
         previous_note = user.comments.with_type_payout_note.alive
                             .where(author_id: GUMROAD_ADMIN_ID)
                             .where("content LIKE ?", "#{note_prefix}%")
                             .order(created_at: :desc, id: :desc).first
-        known_ids = previous_note&.json_data&.fetch("ledger_hold_balance_ids", []) || []
-        new_ids = blocking_ids - known_ids
+        known_keys = previous_note&.json_data&.fetch("ledger_hold_debt_keys", []) || []
+        new_keys = blocking_keys - known_keys
         notify = false
-        if previous_note.nil? || new_ids.any?
-          incident_ids = (known_ids | blocking_ids).sort
-          hold_key = Digest::SHA256.hexdigest(incident_ids.join(","))[0, 16]
+        if previous_note.nil? || new_keys.any?
+          incident_keys = (known_keys | blocking_keys).sort
+          hold_key = Digest::SHA256.hexdigest(incident_keys.join(","))[0, 16]
           note = "#{note_prefix}#{hold_key} because the unpaid ledger is not payable. Reconcile the unpaid balance ledger before retry."
           hold_note = user.add_payout_note(content: note, seller_visible: false,
-                                           json_data: { "ledger_hold_balance_ids" => incident_ids, "ledger_hold_notification_state" => "claimed", "ledger_hold_claimed_at" => Time.current.iso8601 })
+                                           json_data: { "ledger_hold_debt_keys" => incident_keys, "ledger_hold_notification_state" => "claimed", "ledger_hold_claimed_at" => Time.current.iso8601 })
           notify = true
         else
           hold_note = previous_note
