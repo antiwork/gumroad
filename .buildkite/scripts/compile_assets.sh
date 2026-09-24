@@ -19,6 +19,8 @@ quietly() {
 
 source .buildkite/scripts/preview_asset_cache.sh
 
+# Test branch: build and push the images, never sync compiled assets to S3.
+
 # Skip the whole production pipeline when this commit changes nothing that ships
 # (specs, workflows, docs, the pipeline itself). See deploy_relevance.sh.
 source .buildkite/scripts/deploy_relevance.sh
@@ -178,7 +180,7 @@ if [[ ${BUILDKITE_PARALLEL_JOB:-0} = 0 && $BUILDKITE_BRANCH != "main" ]]; then
       GUM_AWS_ACCESS_KEY_ID=${GUM_AWS_ACCESS_KEY_ID} \
       GUM_AWS_SECRET_ACCESS_KEY=${GUM_AWS_SECRET_ACCESS_KEY} \
       RAILS_STAGING_MASTER_KEY="$RAILS_STAGING_MASTER_KEY" \
-      PUSH_ASSETS=true \
+      PUSH_ASSETS=false \
       make build_staging
 
     # Populate the cache for the next push on this branch. Best-effort: a
@@ -201,7 +203,7 @@ if [[ $BUILDKITE_PARALLEL_JOB = 1 && ( $BUILDKITE_BRANCH == "main" || $BUILDKITE
     GUM_AWS_ACCESS_KEY_ID=${GUM_AWS_ACCESS_KEY_ID} \
     GUM_AWS_SECRET_ACCESS_KEY=${GUM_AWS_SECRET_ACCESS_KEY} \
     RAILS_PRODUCTION_MASTER_KEY="$RAILS_PRODUCTION_MASTER_KEY" \
-    PUSH_ASSETS=true \
+    PUSH_ASSETS=false \
     make build_production
 
   push_image production || exit 1
