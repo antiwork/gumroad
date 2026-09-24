@@ -42,9 +42,10 @@ class ThumbnailsControllerTest < ActionController::TestCase
     sign_in create_user
 
     assert_no_difference -> { Thumbnail.count } do
-      assert_raises(ActionController::RoutingError, "Not Found") do
+      error = assert_raises(ActionController::RoutingError) do
         post :create, params: { link_id: @product.unique_permalink, thumbnail: { signed_blob_id: image_blob.signed_id } }
       end
+      assert_equal "Not Found", error.message
     end
   end
 

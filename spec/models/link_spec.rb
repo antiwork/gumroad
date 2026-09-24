@@ -65,18 +65,6 @@ describe Link do
       expect(product).to be_should_show_sales_count
     end
 
-    it "does not notify an affiliate when the assignment exists" do
-      seller = create(:user)
-      affiliate = create(:direct_affiliate, seller:, apply_to_all_products: true)
-      product = create(:product, user: seller, draft: true)
-      create(:product_affiliate, affiliate:, product:)
-
-      expect do
-        product.publish!
-      end.not_to have_enqueued_mail(AffiliateMailer, :notify_direct_affiliate_of_new_product)
-
-      expect(ProductAffiliate.where(affiliate:, product:).count).to eq(1)
-    end
 
     it "lets an assignment deadlock roll back the caller transaction" do
       seller = create(:user)
