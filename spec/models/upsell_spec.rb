@@ -302,9 +302,26 @@ describe Upsell do
       expect(cross_sell.offered_variant_for(nil)).to eq(offered_versions.first)
     end
 
+    it "ignores same-named versions in categories checkout doesn't offer" do
+      cross_sell.update!(offer_matching_version: true)
+      hidden_category = create(:variant_category, title: "Seats", link: offered_product)
+      create(:variant, variant_category: hidden_category, name: "Team License")
+
+      expect(cross_sell.offered_variant_for("Team License")).to eq(offered_versions.first)
+    end
+
+    it "matches an untitled version by the name checkout displays for it" do
+      untitled_product = create(:product, user: seller, name: "Brush Pack")
+      untitled = create(:variant, variant_category: create(:variant_category, link: untitled_product), name: "Untitled")
+      cross_sell = create(:upsell, seller:, product: untitled_product, cross_sell: true, offer_matching_version: true)
+
+      expect(cross_sell.offered_variant_for("Brush Pack")).to eq(untitled)
+    end
+
     it "resolves from the offered product's loaded versions rather than querying per match" do
       cross_sell.update!(offer_matching_version: true)
       offered_product.variants_or_skus.load
+      offered_product.variant_categories_alive.load
 
       queries = []
       subscriber = lambda { |_name, _start, _finish, _id, payload|
