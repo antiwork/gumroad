@@ -347,7 +347,11 @@ export const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: st
     fileInputHeldRef.current = held;
     setFileInputHeld(held);
   };
+  // A retry pick over the snapshot budget keeps its original handle, so its input is held here
+  // until the upload settles, after the row has already swapped in a fresh input.
+  const heldRetryInputsRef = React.useRef(new Map<string, HTMLInputElement>());
   const settleFileInputUpload = (fileId: string) => {
+    heldRetryInputsRef.current.delete(fileId);
     const pending = pendingFileInputResetRef.current;
     if (!pending?.uploadIds.delete(fileId) || pending.uploadIds.size > 0) return;
     pendingFileInputResetRef.current = null;
@@ -355,27 +359,72 @@ export const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: st
     const input = fileInputRef.current;
     if (input && fileListMatchesPickedFiles(input.files, pending.picked)) input.value = "";
   };
+  const pickedFileFields = (file: File) => {
+    const extension = FileUtils.getFileExtension(file.name).toUpperCase();
+    return {
+      display_name: FileUtils.getFileNameWithoutExtension(file.name),
+      extension,
+      file_size: file.size,
+      is_pdf: extension === "PDF",
+      is_streamable: FileUtils.isFileExtensionStreamable(extension),
+    };
+  };
+  // Returns the new status and whether Evaporate accepted the file. A rejected file is marked
+  // failed right away so its row offers "Upload again" instead of sitting at 0%.
+  const startUpload = (id: string, file: File) => {
+    const { s3key, fileUrl } = s3UploadConfig.generateS3KeyForUpload(id, file.name);
+    const fileStatus: FileEntry["status"] = {
+      type: "unsaved",
+      uploadStatus: { type: "uploading", progress: { percent: 0, bitrate: 0 } },
+      url: URL.createObjectURL(file),
+    };
+    const status = uploader.scheduleUpload({
+      cancellationKey: `file_${id}`,
+      name: s3key,
+      file,
+      mimeType: getMimeType(file.name),
+      onComplete: () => {
+        fileStatus.uploadStatus = { type: "uploaded" };
+        updateProduct((product) => {
+          product.files = [...product.files];
+        });
+        settleFileInputUpload(id);
+      },
+      onError: () => {
+        uploader.cancelUpload(`file_${id}`);
+        fileStatus.uploadStatus = { type: "failed" };
+        updateProduct((product) => {
+          product.files = [...product.files];
+        });
+        showAlert(`Could not upload ${file.name}. Select "Upload again" on the file to retry.`, "error");
+        settleFileInputUpload(id);
+      },
+      onProgress: (progress) => {
+        fileStatus.uploadStatus = { type: "uploading", progress };
+        updateProduct((product) => {
+          product.files = [...product.files];
+        });
+      },
+    });
+    const scheduled = typeof status !== "string";
+    if (!scheduled) {
+      // status contains error string if any, otherwise index of file in array
+      showAlert(status, "error");
+      fileStatus.uploadStatus = { type: "failed" };
+    }
+    return { fileUrl, fileStatus, scheduled };
+  };
   const uploadFiles = (files: File[]) => {
     const scheduledIds: string[] = [];
-    const fileEntries = files.map((file) => {
+    const fileEntries = files.map((file): FileEntry => {
       const id = FileUtils.generateGuid();
-      const { s3key, fileUrl } = s3UploadConfig.generateS3KeyForUpload(id, file.name);
-      const mimeType = getMimeType(file.name);
-      const extension = FileUtils.getFileExtension(file.name).toUpperCase();
-      const fileStatus: FileEntry["status"] = {
-        type: "unsaved",
-        uploadStatus: { type: "uploading", progress: { percent: 0, bitrate: 0 } },
-        url: URL.createObjectURL(file),
-      };
-      const fileEntry: FileEntry = {
-        display_name: FileUtils.getFileNameWithoutExtension(file.name),
-        extension,
+      const { fileUrl, fileStatus, scheduled } = startUpload(id, file);
+      if (scheduled) scheduledIds.push(id);
+      return {
+        ...pickedFileFields(file),
         description: null,
-        file_size: file.size,
-        is_pdf: extension === "PDF",
         pdf_stamp_enabled: false,
         hide_kindle_and_read_buttons: false,
-        is_streamable: FileUtils.isFileExtensionStreamable(extension),
         stream_only: false,
         is_transcoding_in_progress: false,
         id,
@@ -384,45 +433,35 @@ export const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: st
         status: fileStatus,
         thumbnail: null,
       };
-      const status = uploader.scheduleUpload({
-        cancellationKey: `file_${id}`,
-        name: s3key,
-        file,
-        mimeType,
-        onComplete: () => {
-          fileStatus.uploadStatus = { type: "uploaded" };
-          updateProduct((product) => {
-            product.files = [...product.files];
-          });
-          settleFileInputUpload(id);
-        },
-        onError: () => {
-          uploader.cancelUpload(`file_${id}`);
-          fileStatus.uploadStatus = { type: "failed" };
-          updateProduct((product) => {
-            product.files = [...product.files];
-          });
-          showAlert(`Upload failed for ${file.name}. Please try adding it again.`, "error");
-          settleFileInputUpload(id);
-        },
-        onProgress: (progress) => {
-          fileStatus.uploadStatus = { type: "uploading", progress };
-          updateProduct((product) => {
-            product.files = [...product.files];
-          });
-        },
-      });
-      if (typeof status === "string") {
-        // status contains error string if any, otherwise index of file in array
-        showAlert(status, "error");
-      } else {
-        scheduledIds.push(id);
-      }
-      return fileEntry;
     });
     updateProduct({ files: [...product.files, ...fileEntries] });
     onSelectFiles(fileEntries.map((file) => file.id));
     return scheduledIds;
+  };
+  const productRef = useRefToLatest(product);
+  // Keeps the file id, so every embed of the failed file stays where the seller put it.
+  const retryUpload = (fileId: string, input: HTMLInputElement) => {
+    const picked = input.files?.[0];
+    if (!picked) return;
+    void snapshotPickedFiles([picked])
+      .then(([file = picked]) => {
+        const failed = productRef.current.files.find((existing) => existing.id === fileId);
+        // Removed while the pick was being copied.
+        if (failed?.status.type !== "unsaved" || failed.status.uploadStatus.type !== "failed") return;
+        URL.revokeObjectURL(failed.status.url);
+        const { fileUrl, fileStatus, scheduled } = startUpload(fileId, file);
+        if (scheduled && file === picked) heldRetryInputsRef.current.set(fileId, input);
+        updateProduct((product) => {
+          product.files = product.files.map((existing) =>
+            existing.id === fileId
+              ? { ...existing, ...pickedFileFields(file), url: fileUrl, status: fileStatus, thumbnail: null }
+              : existing,
+          );
+        });
+      })
+      .catch((error: unknown) => {
+        showAlert(error instanceof Error ? error.message : "Could not read the selected file.", "error");
+      });
   };
   const fileInputRef = React.useRef<HTMLInputElement>(null);
   const openToolbarFileInput = () => {
@@ -461,7 +500,11 @@ export const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: st
     prepareDownload: save,
     filesById,
   });
-  const fileEmbedConfig = useRefToLatest<FileEmbedConfig>({ filesById, onUploadCancelled: settleFileInputUpload });
+  const fileEmbedConfig = useRefToLatest<FileEmbedConfig>({
+    filesById,
+    onUploadCancelled: settleFileInputUpload,
+    onRetryUpload: retryUpload,
+  });
   const uploadFilesRef = useRefToLatest(uploadFiles);
   const contentEditorExtensions = extensions(id, [
     FileEmbedGroup.configure({ getConfig: () => fileEmbedGroupConfig.current }),

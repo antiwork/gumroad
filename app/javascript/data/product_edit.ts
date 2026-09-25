@@ -380,6 +380,26 @@ const removeFileEmbeds = (value: unknown, fileIds: Set<string>): unknown => {
   return { ...value, content };
 };
 
+const collectFileEmbedIds = (value: unknown, ids: Set<string>) => {
+  if (Array.isArray(value)) value.forEach((child) => collectFileEmbedIds(child, ids));
+  else if (isRecord(value)) {
+    if (value.type === "fileEmbed" && isRecord(value.attrs) && typeof value.attrs.id === "string")
+      ids.add(value.attrs.id);
+    collectFileEmbedIds(value.content, ids);
+  }
+};
+
+// Only these are left out of a save. A failed entry whose embed the seller deleted is already
+// gone from their content, so it is not worth a warning.
+export const embeddedFailedUploadIds = (
+  files: { id: string; status?: { type?: string; uploadStatus?: { type?: string } } | null }[],
+  pages: { description: object }[],
+) => {
+  const embedded = new Set<string>();
+  pages.forEach((page) => collectFileEmbedIds(page.description, embedded));
+  return new Set([...failedUploadFileIds(files)].filter((id) => embedded.has(id)));
+};
+
 export const removeFileEmbedsFromRichContent = (description: object, fileIds: Set<string>): object => {
   const cleaned = removeFileEmbeds(description, fileIds);
   return isRecord(cleaned) ? cleaned : description;

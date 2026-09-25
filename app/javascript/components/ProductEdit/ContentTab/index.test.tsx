@@ -61,6 +61,8 @@ const scheduledUploads = vi.hoisted(
   (): { file: File; cancellationKey: string; onComplete: () => void; onError: () => void }[] => [],
 );
 const cancelUpload = vi.hoisted(() => vi.fn());
+// Evaporate returns an error string instead of an index when it rejects a file up front.
+const scheduleResult = vi.hoisted((): { value: string | number } => ({ value: 0 }));
 vi.mock("$app/components/EvaporateUploader", async (importOriginal) => {
   const mod = await importOriginal<typeof import("$app/components/EvaporateUploader")>();
   return {
@@ -78,7 +80,7 @@ vi.mock("$app/components/EvaporateUploader", async (importOriginal) => {
         onError: () => void;
       }) => {
         scheduledUploads.push({ file, cancellationKey, onComplete, onError });
-        return 0;
+        return scheduleResult.value;
       },
       cancelUpload,
     }),
@@ -130,6 +132,7 @@ afterEach(() => {
   alerts.length = 0;
   scheduledUploads.length = 0;
   cancelUpload.mockReset();
+  scheduleResult.value = 0;
   sortable.echoList = false;
   viewport.isDesktop = true;
 });
@@ -640,6 +643,7 @@ const attachToolbarFiles = (input: HTMLInputElement, picked: File[]) => {
     configurable: true,
     // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- minimal FileList for the handler
     value: {
+      ...picked,
       length: picked.length,
       item: (index: number) => picked[index] ?? null,
       [Symbol.iterator]: () => picked[Symbol.iterator](),
@@ -731,8 +735,65 @@ it("marks the row failed and tells the seller when an upload errors out", async 
   // A failed upload has to stop counting as in-flight, or Save changes stays
   // disabled for the rest of the session.
   expect(scheduled.status.type === "unsaved" && scheduled.status.uploadStatus.type).toBe("failed");
-  expect(alerts).toEqual([{ message: "Upload failed for huge.zip. Please try adding it again.", level: "error" }]);
+  expect(alerts).toEqual([
+    { message: 'Could not upload huge.zip. Select "Upload again" on the file to retry.', level: "error" },
+  ]);
   expect(cancelUpload).toHaveBeenCalledWith(`file_${scheduled.id}`);
+});
+
+it("restarts a failed upload in place with the file the seller picks again", async () => {
+  const { product, input } = await renderToolbarPicker();
+  attachToolbarFile(input, new File(["x"], "huge.zip", { type: "application/zip" }));
+  await act(async () => {
+    fireEvent.change(input);
+  });
+  const failed = product.files.at(-1);
+  if (!failed) throw new Error("Picked file was not added");
+  await act(async () => {
+    scheduledUploads[0]?.onError();
+  });
+
+  const fileEmbed = getMountedEditor().extensionManager.extensions.find((ext) => ext.name === FileEmbed.name);
+  const onRetryUpload = fileEmbed?.options.getConfig?.()?.onRetryUpload;
+  if (!onRetryUpload) throw new Error("FileEmbed retry hook was not wired");
+  const repicked = new File(["xy"], "huge-v2.zip", { type: "application/zip" });
+  const retryInput = document.createElement("input");
+  retryInput.type = "file";
+  attachToolbarFile(retryInput, repicked);
+  await act(async () => {
+    onRetryUpload(failed.id, retryInput);
+  });
+
+  // Same id, so every embed of the file keeps its place in the content.
+  const retried = product.files.find((file) => file.id === failed.id);
+  expect(product.files).toHaveLength(1);
+  expect(scheduledUploads[1]?.cancellationKey).toBe(`file_${failed.id}`);
+  // A small pick is copied first, like the toolbar's, so the handle can be released.
+  expect(scheduledUploads[1]?.file).not.toBe(repicked);
+  expect(scheduledUploads[1]?.file.name).toBe("huge-v2.zip");
+  expect(retried).toMatchObject({ display_name: "huge-v2", file_size: 2 });
+  expect(retried?.status.type === "unsaved" && retried.status.uploadStatus.type).toBe("uploading");
+
+  await act(async () => {
+    scheduledUploads[1]?.onComplete();
+  });
+  const completed = product.files.find((file) => file.id === failed.id);
+  expect(completed?.status.type === "unsaved" && completed.status.uploadStatus.type).toBe("uploaded");
+});
+
+it("marks the row failed when Evaporate rejects the file up front", async () => {
+  const { product, input } = await renderToolbarPicker();
+  scheduleResult.value = "The file is too large.";
+  attachToolbarFile(input, new File(["x"], "huge.zip", { type: "application/zip" }));
+
+  await act(async () => {
+    fireEvent.change(input);
+  });
+
+  // Nothing will ever report progress for it, so leaving it "uploading" would block Save for good.
+  const rejected = product.files.at(-1);
+  expect(rejected?.status.type === "unsaved" && rejected.status.uploadStatus.type).toBe("failed");
+  expect(alerts).toEqual([{ message: "The file is too large.", level: "error" }]);
 });
 
 it("resets an over-budget pick when the seller cancels the upload", async () => {

@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
-import { EditorContent, useEditor } from "@tiptap/react";
+import { type Editor, EditorContent, useEditor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import * as React from "react";
 import { afterEach, expect, it, vi } from "vitest";
@@ -142,12 +142,15 @@ const streamableFile = {
   thumbnail: null,
 } as FileEntry;
 
-const FileEmbedEditor = ({ config }: { config: FileEmbedConfig }) => {
+const FileEmbedEditor = ({ config, onEditor }: { config: FileEmbedConfig; onEditor?: (editor: Editor) => void }) => {
   const editor = useEditor({
     extensions: [StarterKit, FileEmbed.configure({ getConfig: () => config })],
     content: { type: "doc", content: [{ type: "fileEmbed", attrs: { id: FILE_ID, uid: "uid-1" } }] },
     immediatelyRender: false,
   });
+  React.useEffect(() => {
+    if (editor) onEditor?.(editor);
+  }, [editor]);
   return <EditorContent editor={editor} />;
 };
 
@@ -156,6 +159,7 @@ const attachPickedFiles = (input: HTMLInputElement, picked: File[]) => {
     configurable: true,
     // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- minimal FileList for the handler
     value: {
+      ...picked,
       length: picked.length,
       item: (index: number) => picked[index] ?? null,
       [Symbol.iterator]: () => picked[Symbol.iterator](),
@@ -203,6 +207,71 @@ it("shows a failed upload on the row, with no download, and removes it on Remove
 
   expect(cancelUpload).toHaveBeenCalledWith(`file_${FILE_ID}`);
   expect(onUploadCancelled).toHaveBeenCalledWith(FILE_ID);
+});
+
+it("offers no closed-captions editor on a failed video row", async () => {
+  const failedVideo: FileEntry = { ...failedFile, extension: "MP4", is_streamable: true };
+  const filesById = new Map<string, FileEntry>([[FILE_ID, failedVideo]]);
+  context.filesById = filesById;
+
+  render(<FileEmbedEditor config={{ filesById }} />);
+  await act(() => Promise.resolve());
+
+  expect(screen.getByText("Upload failed")).toBeTruthy();
+  expect(screen.queryByText(/closed caption/u)).toBeNull();
+});
+
+it("closes an open drawer when the upload fails, since its edits would not be saved", async () => {
+  let editor: Editor | null = null;
+  context.filesById = new Map<string, FileEntry>([[FILE_ID, uploadingFile]]);
+
+  render(<FileEmbedEditor config={{ filesById: context.filesById }} onEditor={(value) => (editor = value)} />);
+  await act(() => Promise.resolve());
+  act(() => {
+    fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+  });
+  expect(screen.getByLabelText("Name")).toBeTruthy();
+
+  context.filesById = new Map<string, FileEntry>([[FILE_ID, failedFile]]);
+  // An attribute change re-renders the node view against the new files map.
+  act(() => {
+    editor?.commands.updateAttributes(FileEmbed.name, { uid: "uid-2" });
+  });
+
+  expect(screen.getByText("Upload failed")).toBeTruthy();
+  expect(screen.queryByLabelText("Name")).toBeNull();
+
+  // It stays closed once "Upload again" restarts the upload.
+  context.filesById = new Map<string, FileEntry>([[FILE_ID, uploadingFile]]);
+  act(() => {
+    editor?.commands.updateAttributes(FileEmbed.name, { uid: "uid-3" });
+  });
+  expect(screen.queryByText("Upload failed")).toBeNull();
+  expect(screen.queryByLabelText("Name")).toBeNull();
+});
+
+it("hands the Upload again pick to the config", async () => {
+  const onRetryUpload = vi.fn();
+  const filesById = new Map<string, FileEntry>([[FILE_ID, failedFile]]);
+  context.filesById = filesById;
+  const picked = new File(["x"], "huge.zip", { type: "application/zip" });
+  render(<FileEmbedEditor config={{ filesById, onRetryUpload }} />);
+  await act(() => Promise.resolve());
+  const input = document.querySelector<HTMLInputElement>('input[type="file"]');
+  if (!input) throw new Error("Upload again has no file input");
+  const openPicker = vi.spyOn(input, "click").mockImplementation(() => {});
+
+  act(() => {
+    fireEvent.click(screen.getByRole("button", { name: "Upload again" }));
+  });
+  expect(openPicker).toHaveBeenCalled();
+
+  attachPickedFiles(input, [picked]);
+  act(() => {
+    fireEvent.change(input);
+  });
+
+  expect(onRetryUpload).toHaveBeenCalledWith(FILE_ID, input);
 });
 
 it("still offers the download for a file that finished uploading", async () => {

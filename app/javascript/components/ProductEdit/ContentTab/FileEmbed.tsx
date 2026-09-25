@@ -81,6 +81,7 @@ const FileEmbedNodeView = ({
   const [loadingVideo, setLoadingVideo] = React.useState(false);
   const [showingVideoPlayer, setShowingVideoPlayer] = React.useState(false);
   const [showingAudioDrawer, setShowingAudioDrawer] = React.useState(false);
+  const retryInputRef = React.useRef<HTMLInputElement>(null);
   const uploader = assertDefined(useEvaporateUploader());
   const s3UploadConfig = useS3UploadConfig();
 
@@ -175,10 +176,17 @@ const FileEmbedNodeView = ({
     });
   };
   const fileExists = file && file.status.type !== "removed";
+  const uploadFailed = file?.status.type === "unsaved" && file.status.uploadStatus.type === "failed";
+  // Its edits would be discarded, and it must not reopen by itself after "Upload again".
+  React.useEffect(() => {
+    if (uploadFailed) setExpanded(false);
+  }, [uploadFailed]);
+  // "Upload again" keeps the status type but brings a new local file to thumbnail.
+  const localFileUrl = file?.status.type === "unsaved" ? file.status.url : null;
   React.useEffect(() => {
     if (file?.is_streamable && file.status.type === "unsaved" && file.status.uploadStatus.type === "uploading")
       generateThumbnail();
-  }, [file?.status.type]);
+  }, [file?.status.type, localFileUrl]);
 
   const pos = getPos();
   // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Tiptap types are wrong
@@ -452,7 +460,7 @@ const FileEmbedNodeView = ({
           className={cx("embed", { [connectedFileRowClassName(isLastInGroup)]: isConnectedRow })}
           role={isInGroup ? "treeitem" : undefined}
         >
-          {file.is_streamable && !node.attrs.collapsed ? (
+          {file.is_streamable && !node.attrs.collapsed && !isFailedUpload ? (
             <RowDetails asChild>
               {loadingVideo ? (
                 <figure className="preview" style={frameStyle}>
@@ -556,13 +564,13 @@ const FileEmbedNodeView = ({
               name={file.display_name}
               externalLinkUrl={file.url}
               isUploading={!isComplete}
-              hideIcon={file.is_streamable}
+              hideIcon={file.is_streamable ? !isFailedUpload : false}
               details={
                 <>
                   {file.extension ? <li>{file.extension}</li> : null}
 
                   {isFailedUpload ? (
-                    <li>Upload failed</li>
+                    <li className="text-danger">Upload failed</li>
                   ) : file.extension === "URL" ? (
                     <li>{file.url}</li>
                   ) : uploadProgress != null ? (
@@ -573,7 +581,7 @@ const FileEmbedNodeView = ({
                     <li>{FileUtils.getFullFileSizeString(file.file_size)}</li>
                   ) : null}
 
-                  {file.is_streamable && isComplete ? (
+                  {file.is_streamable && isComplete && !isFailedUpload ? (
                     <li>
                       <LinkButton onClick={() => setExpanded(!expanded)}>
                         {file.subtitle_files.length}{" "}
@@ -670,9 +678,26 @@ const FileEmbedNodeView = ({
             ) : null}
 
             {isFailedUpload ? (
-              <Button color="danger" outline onClick={onCancel} aria-label="Remove">
-                Remove
-              </Button>
+              <>
+                {/* Keyed per attempt so a re-pick of the same file still fires change; resetting
+                    the value instead can revoke a handle Evaporate is still reading. */}
+                <input
+                  ref={retryInputRef}
+                  key={localFileUrl}
+                  type="file"
+                  hidden
+                  onChange={(event) => {
+                    const picked = event.target.files?.[0];
+                    if (picked) config?.onRetryUpload?.(file.id, event.target);
+                  }}
+                />
+                <Button color="primary" onClick={() => retryInputRef.current?.click()}>
+                  Upload again
+                </Button>
+                <Button color="danger" outline onClick={onCancel} aria-label="Remove">
+                  Remove
+                </Button>
+              </>
             ) : null}
 
             {!isFailedUpload && FileUtils.isAudioExtension(file.extension) ? (
@@ -703,7 +728,7 @@ const FileEmbedNodeView = ({
             </RowDetails>
           ) : null}
 
-          {expanded ? (
+          {expanded && !isFailedUpload ? (
             <RowDetails className="drawer flex flex-col gap-4">
               <Fieldset>
                 <FieldsetTitle>
@@ -833,6 +858,8 @@ export type FileEmbedConfig = {
   // Cancelling releases Evaporate's hold on the picked File; the content tab uses this
   // to know when the toolbar file input can be reset.
   onUploadCancelled?: (fileId: string) => void;
+  // Takes the input, not the File: an over-budget pick must keep its input alive (see snapshotPickedFiles).
+  onRetryUpload?: (fileId: string, input: HTMLInputElement) => void;
 };
 
 export const FileEmbed = TiptapNode.create<{ getConfig?: () => FileEmbedConfig }>({
