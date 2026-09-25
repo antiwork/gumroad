@@ -22,8 +22,9 @@ export const TextInputNodeView = ({ editor, node, updateAttributes, getPos }: No
     <NodeViewWrapper data-drag-handle data-input-embed>
       {editor.isEditable ? (
         <NodeActionsWrapper asChild>
-          <Fieldset>
-            <NodeActionsMenu editor={editor} getPos={getPos} />
+          {/* Below lg the actions button sits beside the field instead of over it. */}
+          <Fieldset className="max-lg:flex-row max-lg:items-end">
+            <NodeActionsMenu editor={editor} getPos={getPos} className="max-lg:static" />
 
             <fieldset className="m-0 min-w-0 flex-1 border-0 p-0">
               <Input

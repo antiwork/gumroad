@@ -49,10 +49,12 @@ export const NodeActionsMenu = ({
   editor,
   getPos,
   actions,
+  className,
 }: {
   editor: Editor;
   getPos: () => number | undefined;
   actions?: { item: () => React.ReactNode; menu: (close: () => void) => React.ReactNode }[];
+  className?: string;
 }) => {
   const [open, setOpen] = React.useState(false);
   const [selectedActionIndex, setSelectedActionIndex] = React.useState<number | null>(null);
@@ -76,6 +78,7 @@ export const NodeActionsMenu = ({
         className={classNames(
           "absolute bottom-4 left-4 z-1 text-base lg:top-6 lg:bottom-auto lg:-left-2 lg:-translate-x-full",
           !selected && !open && "lg:hidden",
+          className,
         )}
       >
         <PopoverAnchor>
