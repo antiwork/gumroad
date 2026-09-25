@@ -29,6 +29,13 @@ const GUMROAD_PARAMS = [
   "force_new_subscription",
 ];
 
+// A buyer holds at most one tier/billing period of a recurring product, so arriving with a
+// different option replaces that line instead of adding a second subscription to the order.
+const findLineToReplace = (cart: CartState, product: ProductToAdd) =>
+  product.product.recurrences
+    ? cart.items.find((item) => item.product.permalink === product.product.permalink)
+    : findCartItem(cart, product.product.permalink, product.option_id);
+
 const addProduct = ({
   cart,
   product,
@@ -40,7 +47,7 @@ const addProduct = ({
   url: URL;
   referrer: string | null;
 }) => {
-  const existing = findCartItem(cart, product.product.permalink, product.option_id);
+  const existing = findLineToReplace(cart, product);
 
   const urlParameters: Record<string, string> = {};
   for (const [key, value] of url.searchParams.entries()) if (!GUMROAD_PARAMS.includes(key)) urlParameters[key] = value;
@@ -104,9 +111,7 @@ export const computeInitialCheckout = ({
   const returnUrl = referrer || documentReferrer;
   if (returnUrl) initialCart.returnUrl = returnUrl;
 
-  const newAddProducts = addProducts.filter(
-    (product) => !findCartItem(initialCart, product.product.permalink, product.option_id),
-  );
+  const newAddProducts = addProducts.filter((product) => !findLineToReplace(initialCart, product));
   if (initialCart.items.length + newAddProducts.length > maxAllowedCartProducts) {
     initialCart.items = initialCart.items.slice(0, maxAllowedCartProducts);
     return { cart: initialCart, overLimit: true, sellersToTrack: [], beginCheckoutEvents: [] };

@@ -153,4 +153,52 @@ describe("computeInitialCheckout", () => {
     expect(result.cart.items.map((i) => i.product.permalink).sort()).toEqual(["a", "b"]);
     expect(result.cart.rejectPppDiscount).toBe(false);
   });
+
+  describe("an arrival for a product already in the cart", () => {
+    const recurrences = {
+      default: "monthly" as const,
+      enabled: [
+        { recurrence: "monthly" as const, price_cents: 100, id: "m" },
+        { recurrence: "yearly" as const, price_cents: 1000, id: "y" },
+      ],
+    };
+    const membership = (optionId: string, recurrence: "monthly" | "yearly") => {
+      const product = makeProductToAdd({ permalink: "space", creatorId: "seller-1", optionId });
+      return { ...product, product: { ...product.product, recurrences }, recurrence };
+    };
+    const cartHolding = (product: ProductToAdd) =>
+      computeInitialCheckout(makeArgs([product], { url: new URL("https://gumroad.com/checkout") })).cart;
+
+    it("replaces the line when a recurring product arrives with a different tier and period", () => {
+      const cart = cartHolding(membership("rocket", "monthly"));
+
+      const result = computeInitialCheckout(makeArgs([membership("moon", "yearly")], { cart }));
+
+      expect(result.overLimit).toBe(false);
+      expect(result.cart.items.map((i) => [i.product.permalink, i.option_id, i.recurrence])).toEqual([
+        ["space", "moon", "yearly"],
+      ]);
+    });
+
+    it("keeps separate lines for different options of a non-recurring product", () => {
+      const cart = cartHolding(makeProductToAdd({ permalink: "pack", creatorId: "seller-1", optionId: "small" }));
+
+      const result = computeInitialCheckout(
+        makeArgs([makeProductToAdd({ permalink: "pack", creatorId: "seller-1", optionId: "large" })], { cart }),
+      );
+
+      expect(result.cart.items.map((i) => i.option_id)).toEqual(["large", "small"]);
+    });
+
+    it("does not count a replaced recurring line against the cart limit", () => {
+      const cart = cartHolding(membership("rocket", "monthly"));
+
+      const result = computeInitialCheckout(
+        makeArgs([membership("moon", "yearly")], { cart, maxAllowedCartProducts: 1 }),
+      );
+
+      expect(result.overLimit).toBe(false);
+      expect(result.cart.items).toHaveLength(1);
+    });
+  });
 });
