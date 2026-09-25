@@ -192,6 +192,32 @@ describe User::DashboardNavItems do
     end
   end
 
+  describe "#seed_promoted_nav_items!" do
+    it "re-runs an insert that deadlocked, so the seed still lands" do
+      # Two requests for one user deadlock on the unique index and InnoDB aborts one of them; the
+      # seed must not be what loses.
+      attempts = 0
+      allow(DashboardNavPromotion).to receive(:insert_all).and_wrap_original do |original, *args|
+        attempts += 1
+        raise ActiveRecord::Deadlocked, "Deadlock found when trying to get lock" if attempts == 1
+
+        original.call(*args)
+      end
+
+      user.seed_promoted_nav_items!(seller: user)
+
+      expect(attempts).to eq 2
+      expect(user.reload.dashboard_nav_items_seeded?).to be true
+    end
+
+    it "re-raises once the retries are spent, so a persistent deadlock still reports" do
+      allow(DashboardNavPromotion).to receive(:insert_all)
+        .and_raise(ActiveRecord::Deadlocked.new("Deadlock found when trying to get lock"))
+
+      expect { user.seed_promoted_nav_items!(seller: user) }.to raise_error(ActiveRecord::Deadlocked)
+    end
+  end
+
   describe "user deletion" do
     it "takes its promotions with it rather than orphaning rows" do
       user.promote_nav_item!("workflows")
