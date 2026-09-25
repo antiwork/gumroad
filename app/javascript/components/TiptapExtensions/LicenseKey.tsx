@@ -90,7 +90,8 @@ const LicenseKeyNodeView = ({ editor, selected, getPos }: NodeViewProps) => {
                         Use your product ID to verify licenses through the API.
                       </Label>
                     </FieldsetTitle>
-                    <div className="flex gap-2">
+                    {/* Below lg the actions button sits at the bottom left of the row, on this line. */}
+                    <div className="flex gap-2 max-lg:pl-12">
                       <Input id={`product_id-${uid}`} type="text" value={productId} className="flex-1" readOnly />
                       <CopyToClipboard text={productId} tooltipPosition="bottom">
                         <Button>Copy</Button>
