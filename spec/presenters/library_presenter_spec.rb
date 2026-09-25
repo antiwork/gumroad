@@ -692,6 +692,20 @@ describe LibraryPresenter do
         expect(purchase1.link.product_files_archives.alive.entity_archives.map(&:product_files_archive_state)).to eq(["too_large"])
       end
 
+      it "names the latest attempt's reason when a failure follows an older too-large archive" do
+        library_props(bundle_ids: [purchase1.link.external_id])
+        archive = purchase1.link.product_files_archives.alive.entity_archives.sole
+        archive.mark_too_large!
+        archive.update_columns(updated_at: 8.days.ago)
+        bundle_files = purchase1.url_redirect.bundle_archive_product_files
+        2.times { purchase1.url_redirect.product_files_archives.create!(product_files: bundle_files).mark_failed! }
+
+        props = library_props(bundle_ids: [purchase1.link.external_id])
+
+        expected_download = { id: purchase1.link.external_id, label: "Bundle", download_url: nil, zip_unavailable_reason: "failed" }
+        expect(props[:bundle_downloads]).to eq([expected_download])
+      end
+
       it "allows another retry when the previous bundle ZIP failures are stale" do
         library_props(bundle_ids: [purchase1.link.external_id])
         archive = purchase1.link.product_files_archives.alive.entity_archives.sole

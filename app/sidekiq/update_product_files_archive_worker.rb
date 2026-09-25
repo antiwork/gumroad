@@ -81,8 +81,6 @@ class UpdateProductFilesArchiveWorker
     Rails.logger.info("Beginning UpdateProductFilesArchive Job for #{product_files_archive.id}")
     product_files_archive.mark_in_progress!
 
-    # Check the estimated size of the archive. If it is larger than our limit,
-    # mark the product_files_archive as too large and exit the job.
     estimated_size = calculate_estimated_size(product_files_archive)
     if estimated_size > PRODUCT_FILES_ARCHIVE_FILE_SIZE_LIMIT
       product_files_archive.mark_too_large!
