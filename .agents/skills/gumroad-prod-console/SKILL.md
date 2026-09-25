@@ -87,7 +87,7 @@ EC2 recycles private IPs, so the **bastion's** `known_hosts` accumulates stale k
 - **A pool rejected entirely for stale keys says so**, with that same command, instead of the generic health-probe error.
 
 - **`LC_PAPER=127.0.0.1` means the bastion itself.** The forced command jumps to whatever `LC_PAPER` names, and omitting the variable — or the `-o SendEnv=LC_PAPER` that ships it — fails with `ssh: Could not resolve hostname`; instance IPs run the command on that instance. Anything aimed at the bastion's own files goes through `127.0.0.1`.
-- **The warning text is often noise.** A run can print the whole man-in-the-middle banner for a *previous* hop and still succeed. Judge by exit code and `MARK` output, not the banner. A nonzero exit with the banner as its only output means the query failed, not the hop.
+- **The warning text is often noise.** A run can print the whole man-in-the-middle banner for a *previous* hop and still succeed. Judge by exit code and `MARK` output, not the banner. `rc 255` is the transport dropping mid-flight, so the outcome is unknown — do not read it as a failed query. Any *other* nonzero rc whose only output is the banner means the query failed: look for `Query process killed by SIGKILL` or the query's own output.
 
 ### "No instance passed the health probe" usually means slow, not down
 
@@ -118,11 +118,11 @@ timeout 560 prod_query.sh /tmp/q.rb > /tmp/q.out 2>/tmp/q.err; echo "exit=$?"
 grep -a "^MARK" /tmp/q.out
 ```
 
-Exit `124` = outer timeout (query too heavy); `255` = SSH failed before Rails started.
+Exit `124` = outer timeout (query too heavy). `255` = SSH itself failed: either the hop dropped before Rails started, or the transport dropped mid-flight with the spool state unknown — treat the query's outcome as unknown rather than failed.
 
 ### `association.unscoped` reads the whole table
 
-`user.links.unscoped` drops the `user_id` condition along with the default scope, so it is `SELECT * FROM links` (millions of rows). Iterating that gets the query process OOM-killed: the run exits nonzero, prints `Query process killed by SIGKILL`, and the stale host-key banner above it is **not** the cause. To include deleted rows, keep the owner condition: `Link.unscoped.where(user_id: user.id)`.
+`Link` has no `default_scope`, so `user.links` already includes deleted rows — there is nothing to reach for `.unscoped` for. On an association it drops the `user_id` condition instead, leaving `SELECT * FROM links` (millions of rows). Iterating that gets the query process OOM-killed: the run exits nonzero, prints `Query process killed by SIGKILL`, and the stale host-key banner above it is **not** the cause. Use `user.links` (or `Link.where(user_id: user.id)`).
 
 ### Keep Stripe API calls out of loops
 
