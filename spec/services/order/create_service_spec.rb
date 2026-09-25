@@ -445,6 +445,61 @@ describe Order::CreateService, :vcr do
         expect(cross_sell_code.quantity_left).to eq(1)
       end
 
+      # A cross-sell that offers the buyer's selection offers a version that need not be the
+      # cross-sell's own `variant`; a guard applying the discount only for that configured variant
+      # fails only this example.
+      it "buys the version a matched cross-sell offered, not the cross-sell's configured version" do
+        source_product = create(:product, user: seller_1, price_cents: 10_00)
+        offered_product = create(:product, user: seller_1, price_cents: 10_00)
+        source_category = create(:variant_category, title: "License", link: source_product)
+        offered_category = create(:variant_category, title: "License", link: offered_product)
+        source_versions = ["Single License", "Studio License"].map do |name|
+          create(:variant, variant_category: source_category, name:)
+        end
+        offered_versions = ["Single License", "Studio License"].map do |name|
+          create(:variant, variant_category: offered_category, name:)
+        end
+        cross_sell_code = create(:offer_code, user: seller_1, products: [offered_product], code: "MATCHED", amount_cents: 1_00)
+        cross_sell = create(:upsell, seller: seller_1, product: offered_product, selected_products: [source_product],
+                                     variant: offered_versions.first, offer_matching_version: true, cross_sell: true,
+                                     offer_code: cross_sell_code)
+
+        offered_cart_item = CheckoutPresenter.new(logged_in_user: nil, ip: "127.0.0.1").checkout_product(
+          source_product,
+          source_product.cart_item({ option: source_versions.second.external_id }),
+          {}
+        )[:product][:cross_sells].first[:offered_product]
+        # The checkout client copies this payload into the cart when the buyer accepts the offer.
+        expect(offered_cart_item[:option_id]).to eq(offered_versions.second.external_id)
+
+        params[:line_items] = [
+          {
+            uid: "unique-id-0",
+            permalink: source_product.unique_permalink,
+            price_cents: 10_00,
+            perceived_price_cents: 10_00,
+            quantity: 1,
+            variants: [source_versions.second.external_id],
+          },
+          {
+            uid: "unique-id-1",
+            permalink: offered_product.unique_permalink,
+            price_cents: 10_00,
+            perceived_price_cents: 9_00,
+            quantity: 1,
+            variants: [offered_cart_item[:option_id]],
+            accepted_offer: { id: cross_sell.external_id, original_product_id: source_product.external_id },
+          },
+        ]
+
+        order, purchase_responses = Order::CreateService.new(params:).perform
+
+        expect(purchase_responses).to be_empty
+        purchase = order.purchases.find_by(link: offered_product)
+        expect(purchase.variant_attributes).to eq([offered_versions.second])
+        expect(purchase.offer_code).to eq(cross_sell_code)
+      end
+
       it "allocates the cart discount away from a smaller accepted-offer discount" do
         product_1.update!(price_cents: 10_00)
         offer_code.update!(amount_cents: 5_00)
