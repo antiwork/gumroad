@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
-import { EditorContent, useEditor } from "@tiptap/react";
+import { type Editor, EditorContent, useEditor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import * as React from "react";
 import { afterEach, expect, it, vi } from "vitest";
@@ -9,6 +9,14 @@ import { PICKED_FILE_SNAPSHOT_LIMIT_BYTES } from "$app/utils/snapshotPickedFile"
 
 import { FileEmbed, FileEmbedConfig } from "$app/components/ProductEdit/ContentTab/FileEmbed";
 import { FileEntry } from "$app/components/ProductEdit/state";
+
+vi.mock("@rails/activestorage", () => ({
+  DirectUpload: class {
+    create(callback: (error: Error | null, blob: { key: string; signed_id: string }) => void) {
+      callback(null, { key: "thumb-key", signed_id: "thumb-signed-id" });
+    }
+  },
+}));
 
 const alerts = vi.hoisted((): { message: string; level: string }[] => []);
 vi.mock("$app/components/server-components/Alert", () => ({
@@ -105,6 +113,25 @@ const uploadingFile = {
 } as FileEntry;
 
 // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- fixture only needs the fields the node view reads
+const failedFile = {
+  id: FILE_ID,
+  display_name: "huge",
+  description: null,
+  extension: "ZIP",
+  file_size: 1024,
+  is_pdf: false,
+  pdf_stamp_enabled: false,
+  hide_kindle_and_read_buttons: false,
+  is_streamable: false,
+  stream_only: false,
+  is_transcoding_in_progress: false,
+  url: null,
+  subtitle_files: [],
+  status: { type: "unsaved", uploadStatus: { type: "failed" }, url: "blob:huge" },
+  thumbnail: null,
+} as FileEntry;
+
+// eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- fixture only needs the fields the node view reads
 const streamableFile = {
   id: FILE_ID,
   display_name: "video",
@@ -123,12 +150,15 @@ const streamableFile = {
   thumbnail: null,
 } as FileEntry;
 
-const FileEmbedEditor = ({ config }: { config: FileEmbedConfig }) => {
+const FileEmbedEditor = ({ config, onEditor }: { config: FileEmbedConfig; onEditor?: (editor: Editor) => void }) => {
   const editor = useEditor({
     extensions: [StarterKit, FileEmbed.configure({ getConfig: () => config })],
     content: { type: "doc", content: [{ type: "fileEmbed", attrs: { id: FILE_ID, uid: "uid-1" } }] },
     immediatelyRender: false,
   });
+  React.useEffect(() => {
+    if (editor) onEditor?.(editor);
+  }, [editor]);
   return <EditorContent editor={editor} />;
 };
 
@@ -137,6 +167,7 @@ const attachPickedFiles = (input: HTMLInputElement, picked: File[]) => {
     configurable: true,
     // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- minimal FileList for the handler
     value: {
+      ...picked,
       length: picked.length,
       item: (index: number) => picked[index] ?? null,
       [Symbol.iterator]: () => picked[Symbol.iterator](),
@@ -158,6 +189,150 @@ it("tells the config which file was cancelled when the seller cancels an in-prog
 
   expect(cancelUpload).toHaveBeenCalledWith(`file_${FILE_ID}`);
   expect(onUploadCancelled).toHaveBeenCalledWith(FILE_ID);
+});
+
+it("shows a failed upload on the row, with no download, and removes it on Remove", async () => {
+  const onUploadCancelled = vi.fn();
+  const filesById = new Map<string, FileEntry>([[FILE_ID, failedFile]]);
+  context.filesById = filesById;
+
+  render(<FileEmbedEditor config={{ filesById, onUploadCancelled }} />);
+  await act(() => Promise.resolve());
+
+  expect(screen.getByText("Upload failed")).toBeTruthy();
+  // Nothing landed in S3, so there is nothing to download and nothing to cancel.
+  expect(screen.queryByText("Download")).toBeNull();
+  expect(screen.queryByRole("button", { name: "Cancel" })).toBeNull();
+
+  // Everything but Remove would edit a file the save discards, so the row offers nothing else.
+  expect(screen.queryByRole("button", { name: "Edit" })).toBeNull();
+  expect(screen.queryByRole("button", { name: "Thumbnail view" })).toBeNull();
+  expect(screen.queryByRole("button", { name: "Play" })).toBeNull();
+
+  act(() => {
+    fireEvent.click(screen.getByRole("button", { name: "Remove" }));
+  });
+
+  expect(cancelUpload).toHaveBeenCalledWith(`file_${FILE_ID}`);
+  expect(onUploadCancelled).toHaveBeenCalledWith(FILE_ID);
+});
+
+it("offers no closed-captions editor on a failed video row", async () => {
+  const failedVideo: FileEntry = { ...failedFile, extension: "MP4", is_streamable: true };
+  const filesById = new Map<string, FileEntry>([[FILE_ID, failedVideo]]);
+  context.filesById = filesById;
+
+  render(<FileEmbedEditor config={{ filesById }} />);
+  await act(() => Promise.resolve());
+
+  expect(screen.getByText("Upload failed")).toBeTruthy();
+  expect(screen.queryByText(/closed caption/u)).toBeNull();
+});
+
+it("closes an open drawer when the upload fails, since its edits would not be saved", async () => {
+  let editor: Editor | null = null;
+  context.filesById = new Map<string, FileEntry>([[FILE_ID, uploadingFile]]);
+
+  render(<FileEmbedEditor config={{ filesById: context.filesById }} onEditor={(value) => (editor = value)} />);
+  await act(() => Promise.resolve());
+  act(() => {
+    fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+  });
+  expect(screen.getByLabelText("Name")).toBeTruthy();
+
+  context.filesById = new Map<string, FileEntry>([[FILE_ID, failedFile]]);
+  // An attribute change re-renders the node view against the new files map.
+  act(() => {
+    editor?.commands.updateAttributes(FileEmbed.name, { uid: "uid-2" });
+  });
+
+  expect(screen.getByText("Upload failed")).toBeTruthy();
+  expect(screen.queryByLabelText("Name")).toBeNull();
+
+  // It stays closed once "Upload again" restarts the upload.
+  context.filesById = new Map<string, FileEntry>([[FILE_ID, uploadingFile]]);
+  act(() => {
+    editor?.commands.updateAttributes(FileEmbed.name, { uid: "uid-3" });
+  });
+  expect(screen.queryByText("Upload failed")).toBeNull();
+  expect(screen.queryByLabelText("Name")).toBeNull();
+});
+
+it("hands the Upload again pick to the config", async () => {
+  const onRetryUpload = vi.fn();
+  const filesById = new Map<string, FileEntry>([[FILE_ID, failedFile]]);
+  context.filesById = filesById;
+  const picked = new File(["x"], "huge.zip", { type: "application/zip" });
+  render(<FileEmbedEditor config={{ filesById, onRetryUpload }} />);
+  await act(() => Promise.resolve());
+  const input = document.querySelector<HTMLInputElement>('input[type="file"]');
+  if (!input) throw new Error("Upload again has no file input");
+  const openPicker = vi.spyOn(input, "click").mockImplementation(() => {});
+
+  act(() => {
+    fireEvent.click(screen.getByRole("button", { name: "Upload again" }));
+  });
+  expect(openPicker).toHaveBeenCalled();
+
+  attachPickedFiles(input, [picked]);
+  act(() => {
+    fireEvent.change(input);
+  });
+
+  expect(onRetryUpload).toHaveBeenCalledWith(FILE_ID, input);
+});
+
+it("attaches a generated thumbnail to a saved video", async () => {
+  const file: FileEntry = { ...streamableFile, status: { type: "saved" }, thumbnail: null };
+  const product: { files: FileEntry[] } = { files: [file] };
+  context.filesById = new Map<string, FileEntry>([[FILE_ID, file]]);
+  context.updateProduct = (update: unknown) => {
+    // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- fixture mapper matches updateProduct
+    if (typeof update === "function") (update as (p: typeof product) => void)(product);
+  };
+  Object.assign(Routes, {
+    rails_direct_uploads_path: () => "/rails/active_storage/direct_uploads",
+    s3_utility_cdn_url_for_blob_path: ({ key }: { key: string }) => `/cdn/${key}`,
+  });
+  // happy-dom cannot decode video or draw to a canvas, so stand in for both.
+  let video: HTMLVideoElement | null = null;
+  const createElement = document.createElement.bind(document);
+  const createElementSpy = vi.spyOn(document, "createElement").mockImplementation((tagName: string) => {
+    if (tagName === "canvas")
+      // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- only the calls generateThumbnail makes
+      return {
+        getContext: () => ({ drawImage: () => {} }),
+        toBlob: (callback: (blob: Blob) => void) => callback(new Blob(["frame"])),
+        remove: () => {},
+      } as unknown as HTMLCanvasElement;
+    const element = createElement(tagName);
+    // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- narrowed by the tag name
+    if (tagName === "video") video = element as HTMLVideoElement;
+    return element;
+  });
+
+  render(<FileEmbedEditor config={{ filesById: context.filesById }} />);
+  await act(() => Promise.resolve());
+  act(() => {
+    fireEvent.click(screen.getByRole("button", { name: "Generate a thumbnail" }));
+  });
+  act(() => {
+    video?.onseeked?.(new Event("seeked"));
+  });
+  createElementSpy.mockRestore();
+
+  expect(product.files[0]?.thumbnail).toMatchObject({ url: "/cdn/thumb-key", signed_id: "thumb-signed-id" });
+});
+
+it("still offers the download for a file that finished uploading", async () => {
+  const filesById = new Map<string, FileEntry>([[FILE_ID, streamableFile]]);
+  context.filesById = filesById;
+
+  render(<FileEmbedEditor config={{ filesById }} />);
+  await act(() => Promise.resolve());
+
+  expect(screen.getByText("Download")).toBeTruthy();
+  expect(screen.queryByText("Upload failed")).toBeNull();
 });
 
 it("keeps every subtitle from a multi-file pick instead of last-write-wins", async () => {

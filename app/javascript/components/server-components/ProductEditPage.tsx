@@ -7,6 +7,8 @@ import typia from "typia";
 import {
   applyRichContentPageSaveResponse,
   canonicalRichContentScope,
+  embeddedFailedUploadIds,
+  failedUploadFileIds,
   hasMoveSourceScope,
   HiddenVariantContentConflictError,
   reconcileConfirmedRemovalIds,
@@ -17,6 +19,7 @@ import {
   UnmarkedInstallmentPlanClearConflictError,
   saveProduct,
   scopedRichContentPageKey,
+  withoutFailedFileEmbeds,
 } from "$app/data/product_edit";
 import { OtherRefundPolicy } from "$app/data/products/other_refund_policies";
 import { Thumbnail } from "$app/data/thumbnails";
@@ -487,14 +490,25 @@ const scopedConfirmedPageIdMappings = (
 };
 
 const findUpdatedContent = (product: Product, lastSavedProduct: Product) => {
+  // Same pruning the save applies to the request: an embed the save strips was
+  // never published, so it cannot count as changed content. Each snapshot uses
+  // its own failed files, because "Upload again" reuses the file id.
+  const failedFileIds = failedUploadFileIds(product.files);
+  const lastSavedFailedFileIds = failedUploadFileIds(lastSavedProduct.files);
+  const sameContent = (pages: Page[], lastSavedPages: Page[]) =>
+    pagesHaveSameContent(
+      withoutFailedFileEmbeds(pages, failedFileIds),
+      withoutFailedFileEmbeds(lastSavedPages, lastSavedFailedFileIds),
+    );
+
   const contentUpdatedVariantIds = product.variants
     .filter((variant) => {
       const lastSavedVariant = lastSavedProduct.variants.find((v) => v.id === variant.id);
-      return !pagesHaveSameContent(variant.rich_content, lastSavedVariant?.rich_content ?? []);
+      return !sameContent(variant.rich_content, lastSavedVariant?.rich_content ?? []);
     })
     .map((variant) => variant.id);
 
-  const sharedContentUpdated = !pagesHaveSameContent(product.rich_content, lastSavedProduct.rich_content);
+  const sharedContentUpdated = !sameContent(product.rich_content, lastSavedProduct.rich_content);
 
   return {
     sharedContentUpdated,
@@ -724,11 +738,24 @@ const ProductEditPage = (props: Props) => {
         if (current.description === productSent.description) current.description_changed = false;
       });
 
-      if (response.warning_message) showAlert(response.warning_message, "warning");
+      const failedUploadCount = embeddedFailedUploadIds(
+        productSent.files,
+        allScopedRichContentPages(productSent).map(({ page }) => page),
+      ).size;
+      const failedUploadNote =
+        failedUploadCount > 0
+          ? `Changes saved, except ${failedUploadCount === 1 ? "1 file" : `${failedUploadCount} files`} that did not upload.`
+          : null;
+      if (response.warning_message)
+        showAlert(
+          failedUploadNote ? `${failedUploadNote} ${response.warning_message}` : response.warning_message,
+          "warning",
+        );
       else {
         const contentUpdated = sharedContentUpdated || contentUpdatedVariantIds.length > 0;
+        const offerContentUpdateEmail = props.successful_sales_count > 0 && contentUpdated;
 
-        if (props.successful_sales_count > 0 && contentUpdated) {
+        if (offerContentUpdateEmail) {
           const uniquePermalinkOrVariantIds = productSent.has_same_rich_content_for_all_variants
             ? [props.unique_permalink]
             : // Report canonical ids for variants created by this very save.
@@ -737,7 +764,10 @@ const ProductEditPage = (props: Props) => {
           setContentUpdates({
             uniquePermalinkOrVariantIds,
           });
-        } else {
+        }
+        if (failedUploadNote) {
+          showAlert(failedUploadNote, "warning");
+        } else if (!offerContentUpdateEmail) {
           showAlert("Changes saved!", "success");
         }
       }

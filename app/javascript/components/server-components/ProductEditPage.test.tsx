@@ -2,12 +2,12 @@
 
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import * as React from "react";
-import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { type SaveProductResponse, saveProductError } from "$app/data/product_edit";
 import { confirmRemovedVariantPageDeletions } from "$app/data/product_save_contract";
 
-import { ProductEditContext, type Product, type Version } from "$app/components/ProductEdit/state";
+import { type FileEntry, ProductEditContext, type Product, type Version } from "$app/components/ProductEdit/state";
 import { showAlert } from "$app/components/server-components/Alert";
 import { ProductEditPage, type ProductEditPageProps } from "$app/components/server-components/ProductEditPage";
 
@@ -1140,6 +1140,125 @@ it("does not report a content update when only the send-time stamp differs", asy
   });
 
   expect(showAlert).toHaveBeenCalledWith("Changes saved!", "success");
+});
+
+// A failed upload's embed is stripped from the save, so it must not read as
+// changed content either — otherwise a seller with sales gets the
+// customer-notification prompt for content that was never published.
+describe("a failed upload's embed", () => {
+  const failedFile: FileEntry = {
+    id: "failed-file",
+    display_name: "huge",
+    description: null,
+    extension: "ZIP",
+    file_size: 1024,
+    is_pdf: false,
+    pdf_stamp_enabled: false,
+    hide_kindle_and_read_buttons: false,
+    is_streamable: false,
+    stream_only: false,
+    is_transcoding_in_progress: false,
+    url: null,
+    subtitle_files: [],
+    status: { type: "unsaved", uploadStatus: { type: "failed" }, url: "blob:huge" },
+    thumbnail: null,
+  };
+  const body = { type: "paragraph", content: [{ type: "text", text: "Body" }] };
+  const embed = { type: "fileEmbed", attrs: { id: failedFile.id, uid: "uid-1" } };
+
+  const renderWithSales = async () => {
+    const product = buildTieredProduct([
+      buildTier("tier-a", "Tier A", [
+        {
+          id: "existing-page",
+          title: "Unchanged",
+          description: { type: "doc", content: [body] },
+          updated_at: "2026-01-01T00:00:00Z",
+        },
+      ]),
+    ]);
+    saveProductMock.mockResolvedValue({} satisfies SaveProductResponse);
+    vi.mocked(showAlert).mockClear();
+    render(<ProductEditPage {...buildTieredProps(product)} successful_sales_count={5} />);
+    await waitFor(() => expect(contextCapture.current).not.toBeNull());
+  };
+  const setTierA = (files: FileEntry[], content: object[]) =>
+    act(() =>
+      contextCapture.current?.updateProduct((current) => {
+        current.files = files;
+        current.variants
+          .find((variant) => variant.id === "tier-a")
+          ?.rich_content.forEach((page) => {
+            page.description = { type: "doc", content };
+          });
+      }),
+    );
+  const save = async () => {
+    vi.mocked(showAlert).mockClear();
+    await act(async () => {
+      await contextCapture.current?.save();
+    });
+  };
+
+  it("does not report a content update, and says the file was not saved", async () => {
+    await renderWithSales();
+    setTierA([failedFile], [body, embed]);
+
+    await save();
+
+    expect(contextCapture.current?.contentUpdates).toBeNull();
+    expect(showAlert).toHaveBeenCalledWith("Changes saved, except 1 file that did not upload.", "warning");
+  });
+
+  it("keeps the failed-file note when the save also returns a warning", async () => {
+    await renderWithSales();
+    setTierA([failedFile], [body, embed]);
+    saveProductMock.mockResolvedValue({ warning_message: "The following offer code is invalid: SAVE10." });
+
+    await save();
+
+    expect(showAlert).toHaveBeenCalledWith(
+      "Changes saved, except 1 file that did not upload. The following offer code is invalid: SAVE10.",
+      "warning",
+    );
+  });
+
+  it("does not warn about a failed file whose embed the seller deleted", async () => {
+    await renderWithSales();
+    // Backspace on the embed removes the node but leaves the failed entry in files.
+    setTierA([failedFile], [body]);
+
+    await save();
+
+    expect(showAlert).toHaveBeenCalledWith("Changes saved!", "success");
+  });
+
+  it("does not report a content update when the failed row is removed after a save", async () => {
+    await renderWithSales();
+    setTierA([failedFile], [body, embed]);
+    await save();
+
+    setTierA([], [body]);
+    await save();
+
+    expect(contextCapture.current?.contentUpdates).toBeNull();
+    expect(showAlert).toHaveBeenCalledWith("Changes saved!", "success");
+  });
+
+  it("reports a content update when Upload again succeeds after a save", async () => {
+    await renderWithSales();
+    setTierA([failedFile], [body, embed]);
+    await save();
+
+    // "Upload again" keeps the file id, so only the status tells the two saves apart.
+    setTierA(
+      [{ ...failedFile, status: { type: "unsaved", uploadStatus: { type: "uploaded" }, url: "blob:huge" } }],
+      [body, embed],
+    );
+    await save();
+
+    expect(contextCapture.current?.contentUpdates).toEqual({ uniquePermalinkOrVariantIds: ["tier-a"] });
+  });
 });
 
 // Pins the missing-content reload guard (gp#2023 follow-up): every UI

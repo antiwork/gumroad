@@ -123,11 +123,34 @@ export const saveProductError = (error: SaveProductErrorPayload): Error => {
   }
 };
 
-export const filesForSave = <T extends { id: string }>(
+// A failed upload has no object in S3, so a saved row would point at nothing. The editor keeps the
+// row on screen to be removed, but no save may carry it — the keep-all retry included.
+const isFailedUpload = (file: { status?: { type?: string; uploadStatus?: { type?: string } } | null }) =>
+  file.status?.type === "unsaved" && file.status.uploadStatus?.type === "failed";
+
+export const failedUploadFileIds = (
+  files: { id: string; status?: { type?: string; uploadStatus?: { type?: string } } | null }[],
+) => new Set(files.filter(isFailedUpload).map((file) => file.id));
+
+// Its embed goes with it: the node would save as content that renders nothing.
+export const withoutFailedFileEmbeds = <T extends { description: object }>(
+  pages: T[],
+  failedFileIds: Set<string>,
+): T[] =>
+  failedFileIds.size === 0
+    ? pages
+    : pages.map((page) => ({ ...page, description: removeFileEmbedsFromRichContent(page.description, failedFileIds) }));
+
+export const filesForSave = <
+  T extends { id: string; status?: { type?: string; uploadStatus?: { type?: string } } | null },
+>(
   files: T[],
   embeddedFileIds: Set<unknown>,
   keepAllFiles: boolean,
-) => (keepAllFiles ? files : files.filter((file) => embeddedFileIds.has(file.id)));
+) => {
+  const savable = files.filter((file) => !isFailedUpload(file));
+  return keepAllFiles ? savable : savable.filter((file) => embeddedFileIds.has(file.id));
+};
 
 const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null;
 
@@ -362,6 +385,26 @@ const removeFileEmbeds = (value: unknown, fileIds: Set<string>): unknown => {
   return { ...value, content };
 };
 
+const collectFileEmbedIds = (value: unknown, ids: Set<string>) => {
+  if (Array.isArray(value)) value.forEach((child) => collectFileEmbedIds(child, ids));
+  else if (isRecord(value)) {
+    if (value.type === "fileEmbed" && isRecord(value.attrs) && typeof value.attrs.id === "string")
+      ids.add(value.attrs.id);
+    collectFileEmbedIds(value.content, ids);
+  }
+};
+
+// Only these are left out of a save. A failed entry whose embed the seller deleted is already
+// gone from their content, so it is not worth a warning.
+export const embeddedFailedUploadIds = (
+  files: { id: string; status?: { type?: string; uploadStatus?: { type?: string } } | null }[],
+  pages: { description: object }[],
+) => {
+  const embedded = new Set<string>();
+  pages.forEach((page) => collectFileEmbedIds(page.description, embedded));
+  return new Set([...failedUploadFileIds(files)].filter((id) => embedded.has(id)));
+};
+
 export const removeFileEmbedsFromRichContent = (description: object, fileIds: Set<string>): object => {
   const cleaned = removeFileEmbeds(description, fileIds);
   return isRecord(cleaned) ? cleaned : description;
@@ -546,10 +589,13 @@ export const saveProduct = async (
 ): Promise<SaveProductResponse> => {
   // TODO remove this once we have a better content uploader
   const editor = new Editor(baseEditorOptions(extensions(id)));
-  const richContents =
+  const failedFileIds = failedUploadFileIds(product.files);
+  const richContents = withoutFailedFileEmbeds(
     product.has_same_rich_content_for_all_variants || !product.variants.length
       ? product.rich_content
-      : product.variants.flatMap((variant) => variant.rich_content);
+      : product.variants.flatMap((variant) => variant.rich_content),
+    failedFileIds,
+  );
   const fileIds = new Set(
     richContents.flatMap((content) =>
       findChildren(
@@ -581,6 +627,7 @@ export const saveProduct = async (
     url: Routes.link_path(permalink),
     data: {
       ...productParams,
+      rich_content: withoutFailedFileEmbeds(product.rich_content, failedFileIds),
       ...scalarSettingsForSave(
         {
           custom_permalink,
@@ -607,9 +654,10 @@ export const saveProduct = async (
       // Variants created in this session are sent with id: null (the server
       // assigns the canonical id) plus the client's own id as client_id so
       // the response can map one to the other.
-      variants: product.variants.map(({ newlyAdded, ...variant }) =>
-        newlyAdded ? { ...variant, id: null, client_id: variant.id } : variant,
-      ),
+      variants: product.variants.map(({ newlyAdded, ...variant }) => {
+        const pruned = { ...variant, rich_content: withoutFailedFileEmbeds(variant.rich_content, failedFileIds) };
+        return newlyAdded ? { ...pruned, id: null, client_id: variant.id } : pruned;
+      }),
       confirmed_removed_variant_ids: product.confirmed_removed_variant_ids ?? [],
       confirmed_removed_rich_content_ids: product.confirmed_removed_rich_content_ids ?? [],
       preserved_rich_content_ids: product.preserved_rich_content_ids ?? [],

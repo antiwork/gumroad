@@ -18,6 +18,7 @@ import {
   removedFileEmbedIdsForPage,
   resolveServerIdMapping,
   richContentMoveSourceIds,
+  saveProduct,
   saveProductError,
   scalarSettingsForSave,
   StaleContentConflictError,
@@ -45,6 +46,79 @@ describe("filesForSave", () => {
     expect(filesForSave(editorFiles, new Set(), false)).toEqual([]);
     expect(editorFiles).toEqual([file]);
     expect(filesForSave(editorFiles, new Set(), true)).toEqual([file]);
+  });
+
+  it("drops a file whose upload failed, on both the embedded-only and keep-all paths", () => {
+    const uploaded = { id: "uploaded-id" };
+    const failed = { id: "failed-id", status: { type: "unsaved", uploadStatus: { type: "failed" } } };
+    const editorFiles = [uploaded, failed];
+
+    expect(filesForSave(editorFiles, new Set(["uploaded-id", "failed-id"]), false)).toEqual([uploaded]);
+    expect(filesForSave(editorFiles, new Set(), true)).toEqual([uploaded]);
+  });
+});
+
+const requestMock = vi.hoisted(() => vi.fn());
+vi.mock("$app/utils/request", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("$app/utils/request")>()),
+  request: requestMock,
+}));
+
+describe("saveProduct with a failed upload", () => {
+  const failedId = "failed-file";
+  const productWithFailedEmbed = () => ({
+    files: [
+      { id: "saved-file", status: { type: "saved" } },
+      { id: failedId, status: { type: "unsaved", uploadStatus: { type: "failed" } } },
+    ],
+    public_files: [],
+    rich_content: [
+      {
+        id: "page-1",
+        title: "Page",
+        description: {
+          type: "doc",
+          content: [
+            { type: "fileEmbed", attrs: { id: failedId, uid: "uid-1" } },
+            { type: "fileEmbed", attrs: { id: "saved-file", uid: "uid-2" } },
+          ],
+        },
+      },
+    ],
+    variants: [],
+    has_same_rich_content_for_all_variants: true,
+    covers: [],
+    availabilities: [],
+    confirmed_removed_variant_ids: [],
+    confirmed_removed_rich_content_ids: [],
+    preserved_rich_content_ids: [],
+    editor_revision: null,
+    allow_installment_plan: false,
+  });
+
+  it("saves neither the failed file nor the embed it left in the content", async () => {
+    // Rails injects this global; the save URL goes through it.
+    Object.assign(globalThis, { Routes: { link_path: () => "/p/demo" } });
+    requestMock.mockReset().mockResolvedValue({ ok: true, status: 204 });
+    // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- fixture only carries the fields the save reads
+    const product = productWithFailedEmbed() as unknown as Parameters<typeof saveProduct>[2];
+
+    await saveProduct("demo", "product-id", product, "usd", { keepAllFiles: true });
+
+    expect(requestMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          files: [{ id: "saved-file", status: { type: "saved" } }],
+          rich_content: [
+            {
+              id: "page-1",
+              title: "Page",
+              description: { type: "doc", content: [{ type: "fileEmbed", attrs: { id: "saved-file", uid: "uid-2" } }] },
+            },
+          ],
+        }),
+      }),
+    );
   });
 });
 
