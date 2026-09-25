@@ -190,6 +190,30 @@ describe("computeInitialCheckout", () => {
       expect(result.cart.items.map((i) => i.option_id)).toEqual(["large", "small"]);
     });
 
+    it("collapses tiers of the same membership a saved cart already holds into the arriving one", () => {
+      const cart = cartHolding(membership("rocket", "monthly"));
+      const galaxy = cartHolding(membership("galaxy", "monthly")).items[0];
+      if (galaxy) cart.items.push(galaxy);
+
+      const result = computeInitialCheckout(makeArgs([membership("moon", "yearly")], { cart }));
+
+      expect(result.cart.items.map((i) => i.option_id)).toEqual(["moon"]);
+    });
+
+    it("counts two tiers of one membership arriving together as one line against the cart limit", () => {
+      const cart = cartHolding(makeProductToAdd({ permalink: "other", creatorId: "seller-1" }));
+
+      const result = computeInitialCheckout(
+        makeArgs([membership("rocket", "monthly"), membership("moon", "yearly")], { cart, maxAllowedCartProducts: 2 }),
+      );
+
+      expect(result.overLimit).toBe(false);
+      expect(result.cart.items.map((i) => [i.product.permalink, i.option_id])).toEqual([
+        ["space", "rocket"],
+        ["other", null],
+      ]);
+    });
+
     it("does not count a replaced recurring line against the cart limit", () => {
       const cart = cartHolding(membership("rocket", "monthly"));
 
