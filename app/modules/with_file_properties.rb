@@ -251,6 +251,10 @@ module WithFileProperties
           IO.copy_stream(source, repaired)
         end
         repaired.flush
+        # Archive freshness is keyed on file ids and names, not bytes, so ZIPs built
+        # from the tagged object are rebuilt in place. The ids are read before the
+        # rewrite: a retried analyze sees clean bytes and never reaches this again.
+        stale_archive_ids = respond_to?(:product_files_archives) ? product_files_archives.alive.ids : []
 
         object = s3_object
         object.upload_file(repaired.path,
@@ -264,6 +268,7 @@ module WithFileProperties
       ensure
         repaired.close!
       end
+      stale_archive_ids.each { UpdateProductFilesArchiveWorker.perform_async(_1) }
     rescue Aws::Errors::ServiceError, Seahorse::Client::NetworkingError => e
       logger.warn("Analyze -- could not strip the ID3v2 tag from #{self.class.name} #{id} (#{e.class} => #{e.message})")
     end

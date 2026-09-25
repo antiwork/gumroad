@@ -30,6 +30,12 @@ export const AudioPlayer = (props: Props) => {
   const [hasError, setHasError] = React.useState(false);
   const [progress, setProgress] = React.useState(0);
   const [duration, setDuration] = React.useState(0);
+  React.useEffect(() => {
+    setHasError(false);
+    setIsLoaded(false);
+    setProgress(0);
+    setDuration(0);
+  }, [props.src]);
   const ref = React.useRef<HTMLAudioElement>(null);
 
   const formattedTime = (num: number) => {

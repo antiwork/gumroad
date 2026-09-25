@@ -102,22 +102,17 @@ describe WithFileProperties do
   end
 
   describe "an M4A whose bytes start with an ID3v2 tag" do
-    # Some recorders write the MP3 tag in front of the M4A boxes. Every decoder
-    # reads the tag as a corrupt box and refuses the file, so analyze has to strip
-    # it: the download page otherwise hands buyers a file no player can open
-    # (gumroad-private#2969).
     def tag_size
       1126
     end
 
-    def tagged_m4a_bytes(size = tag_size, boxes = "ftypM4A ")
+    def tagged_m4a_bytes(size = tag_size, boxes = [16].pack("N") + "ftypM4A \x00\x00\x02\x00")
       "ID3\x04\x00\x00" +
         [(size >> 21) & 0x7F, (size >> 14) & 0x7F, (size >> 7) & 0x7F, size & 0x7F].pack("C4") +
         ("\x00" * size) + boxes + ("a" * 20)
     end
 
-    def analyze(file_bytes)
-      product_file = create(:product_file, url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/specs/tagged.m4a")
+    def analyze(file_bytes, product_file: create(:product_file, url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/specs/tagged.m4a"))
       allow(product_file).to receive(:confirm_s3_key!)
 
       uploads = []
@@ -171,6 +166,42 @@ describe WithFileProperties do
 
       expect(uploads).to be_empty
       expect(probed).to eq(clean)
+    end
+
+    it "rebuilds archives zipped from the tagged bytes in place" do
+      product_file = create(:product_file, url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/specs/tagged.m4a")
+      archive = create(:product_files_archive, link: product_file.link, product_files: [product_file])
+      deleted_archive = create(:product_files_archive, link: product_file.link, product_files: [product_file])
+      deleted_archive.mark_deleted!
+      UpdateProductFilesArchiveWorker.jobs.clear
+
+      analyze(tagged_m4a_bytes, product_file:)
+
+      expect(archive.reload).not_to be_deleted
+      expect(UpdateProductFilesArchiveWorker).to have_enqueued_sidekiq_job(archive.id)
+      expect(UpdateProductFilesArchiveWorker).not_to have_enqueued_sidekiq_job(deleted_archive.id)
+    end
+
+    it "rebuilds an installment's archive the same way" do
+      installment = create(:installment)
+      product_file = create(:product_file, link: nil, installment:, url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/specs/tagged.m4a")
+      archive = create(:product_files_archive, link: nil, installment:, product_files: [product_file])
+      UpdateProductFilesArchiveWorker.jobs.clear
+
+      analyze(tagged_m4a_bytes, product_file:)
+
+      expect(archive.reload).not_to be_deleted
+      expect(UpdateProductFilesArchiveWorker).to have_enqueued_sidekiq_job(archive.id)
+    end
+
+    it "keeps archives when there is no tag to strip" do
+      product_file = create(:product_file, url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/specs/tagged.m4a")
+      archive = create(:product_files_archive, link: product_file.link, product_files: [product_file])
+      UpdateProductFilesArchiveWorker.jobs.clear
+
+      analyze("ftypM4A #{"a" * 20}", product_file:)
+
+      expect(UpdateProductFilesArchiveWorker).not_to have_enqueued_sidekiq_job(archive.id)
     end
 
     it "keeps the original object when the rewrite fails" do

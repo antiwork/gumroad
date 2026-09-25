@@ -6,6 +6,8 @@
 # box and refuses the file, which reaches buyers as a player that never loads.
 class Mp4Id3Tag
   HEADER_SIZE = 10
+  FOOTER_SIZE = 10
+  FOOTER_FLAG = 0x10
 
   def self.leading_tag_size(path)
     new(path).leading_tag_size
@@ -20,21 +22,25 @@ class Mp4Id3Tag
   # rather than a guess: the bytes left behind have to be a playable MP4.
   def leading_tag_size
     header = File.binread(@path, HEADER_SIZE)
-    return nil unless header&.start_with?("ID3")
+    return nil unless header&.bytesize == HEADER_SIZE && header.start_with?("ID3")
 
     size = syncsafe_size(header)
     return nil if size.nil?
-    return nil unless File.binread(@path, 4, HEADER_SIZE + size) == "ftyp"
 
-    HEADER_SIZE + size
+    tag_size = HEADER_SIZE + size
+    tag_size += FOOTER_SIZE if header.getbyte(5) & FOOTER_FLAG != 0
+    # A box starts with its 4-byte length; the type follows it.
+    return nil unless File.binread(@path, 4, tag_size + 4) == "ftyp"
+
+    tag_size
   end
 
   private
     # ID3v2 sizes are "syncsafe": seven bits per byte, so a byte with its high bit
     # set means these were never tag-size bytes.
     def syncsafe_size(header)
-      bytes = header.byteslice(6, 4)&.bytes
-      return nil if bytes.nil? || bytes.any? { _1 >= 0x80 }
+      bytes = header.byteslice(6, 4).bytes
+      return nil if bytes.any? { _1 >= 0x80 }
 
       bytes.reduce(0) { |size, byte| (size << 7) | byte }
     end
