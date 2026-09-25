@@ -442,7 +442,7 @@ describe Charge::Refundable do
         charge_refund.instance_variable_set(:@charge, stripe_charge)
         charge_refund.charge_processor_id = StripeChargeProcessor.charge_processor_id
         charge_refund.id = refund_id
-        charge_refund.refund = refund
+        charge_refund.instance_variable_set(:@refund, refund)
         usd = ->(cents) { FlowOfFunds::Amount.new(currency: Currency::USD, cents:) }
         charge_refund.flow_of_funds = FlowOfFunds.new(
           issued_amount: usd.(-10_00), settled_amount: usd.(-10_00),
