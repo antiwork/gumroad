@@ -446,6 +446,47 @@ describe Risk::StrandedBuyerRecoveryService do
     end
   end
 
+  describe "candidate purchase lookup" do
+    let(:user) { create(:user, email: buyer_email) }
+
+    def candidate_purchases_for(user)
+      described_class.new(user_external_id: user.external_id).send(:candidate_purchases)
+    end
+
+    def purchase_queries(&block)
+      queries = []
+      callback = ->(*, payload) { queries << payload[:sql] if payload[:sql].include?("FROM `purchases`") }
+      ActiveSupport::Notifications.subscribed(callback, "sql.active_record", &block)
+      queries
+    end
+
+    it "queries the account rows and the guest rows separately instead of with an OR" do
+      queries = purchase_queries { candidate_purchases_for(user) }
+
+      expect(queries).to be_present
+      expect(queries).to all(satisfy { |sql| !sql.match?(/purchaser_id`? = '?\d+'? OR\b/i) })
+    end
+
+    it "keeps the newest rows across both halves, up to the limit" do
+      stub_const("Purchase::Blockable::MAX_SIBLING_PURCHASES_FOR_UNBLOCK", 3)
+      account_older = create(:purchase, purchaser: user, email: "checkout@example.com")
+      guest_newer = create(:purchase, email: buyer_email)
+      account_newest = create(:purchase, purchaser: user, email: "checkout@example.com")
+      create(:purchase, email: buyer_email, purchaser: create(:user))
+
+      newest_three = (history + [failed_purchase, account_older, guest_newer, account_newest]).max_by(3, &:id)
+      expect(candidate_purchases_for(user)).to eq(newest_three)
+    end
+
+    it "does not treat a missing account email as a match for email-less guest rows" do
+      user.update_column(:email, nil)
+      emailless_guest = create(:purchase)
+      emailless_guest.update_columns(email: nil, purchaser_id: nil)
+
+      expect(candidate_purchases_for(user)).not_to include(emailless_guest)
+    end
+  end
+
   describe "no-ops" do
     it "reports a buyer with no active blocks" do
       PlatformBlock.active.each(&:unblock!)
