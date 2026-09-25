@@ -30,3 +30,15 @@ it("keeps a mid-file resume when backend duration is longer than the loaded file
   fireEvent.loadedMetadata(audio);
   expect(audio.currentTime).toBe(45);
 });
+
+it("reports an unplayable file instead of spinning forever", () => {
+  const { container } = render(<AudioPlayer src="https://example.com/unplayable.m4a" />);
+  const audio = container.querySelector("audio");
+  if (!audio) throw new Error("Audio element missing");
+  expect(container.querySelector('[role="progressbar"]')).not.toBeNull();
+
+  fireEvent.error(audio);
+
+  expect(container.querySelector('[role="progressbar"]')).toBeNull();
+  expect(container.textContent).toContain("This file can't be played in your browser");
+});

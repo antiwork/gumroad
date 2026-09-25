@@ -59,6 +59,7 @@ module WithFileProperties
           temp_file.rewind
           path = temp_file.path
           if path.present?
+            strip_leading_id3_tag(path) if mp4_container?(filetype)
             action = :"assign_#{file_type}_attributes"
             respond_to?(action) && send(action, path)
           end
@@ -225,5 +226,45 @@ module WithFileProperties
     end
 
     def video_file_analysis_completed
+    end
+
+    # Boxes are read from byte 0 in these containers, so an ID3v2 tag in front of
+    # one is invalid rather than merely unusual.
+    MP4_CONTAINER_FILETYPES = %w[m4a m4b mov mp4 m4v].freeze
+
+    def mp4_container?(extension)
+      MP4_CONTAINER_FILETYPES.include?(extension.to_s.downcase)
+    end
+
+    # Rewrites the stored object without a leading ID3v2 tag and leaves the
+    # repaired bytes in `path`, so the probe that follows measures the file buyers
+    # will actually get. `upload_file` is a PUT, so a failure leaves the original
+    # object untouched.
+    def strip_leading_id3_tag(path)
+      tag_size = Mp4Id3Tag.leading_tag_size(path)
+      return if tag_size.nil?
+
+      repaired = Tempfile.new(["repaired", File.extname(path)], encoding: "ascii-8bit")
+      begin
+        File.open(path, "rb") do |source|
+          source.seek(tag_size)
+          IO.copy_stream(source, repaired)
+        end
+        repaired.flush
+
+        object = s3_object
+        object.upload_file(repaired.path,
+                           content_type: object.content_type,
+                           content_disposition: object.content_disposition,
+                           metadata: object.metadata)
+
+        self.size = File.size(repaired.path)
+        IO.copy_stream(repaired.path, path)
+        logger.info("Analyze -- stripped a #{tag_size} byte ID3v2 tag from #{self.class.name} #{id}")
+      ensure
+        repaired.close!
+      end
+    rescue Aws::Errors::ServiceError, Seahorse::Client::NetworkingError => e
+      logger.warn("Analyze -- could not strip the ID3v2 tag from #{self.class.name} #{id} (#{e.class} => #{e.message})")
     end
 end
