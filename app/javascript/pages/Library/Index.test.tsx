@@ -327,7 +327,9 @@ describe("LibraryPage", () => {
 
   it("explains a ZIP that is too large instead of dropping the block or promising a ZIP", () => {
     const props = defaultProps();
-    props.bundle_downloads = [{ id: "b1", label: "Bundle One", download_url: null, zip_unavailable_reason: "too_large" }];
+    props.bundle_downloads = [
+      { id: "b1", label: "Bundle One", download_url: null, zip_unavailable_reason: "too_large" },
+    ];
     renderPage(props);
 
     expect(screen.getByText(/too large to download as one ZIP file/u)).toBeTruthy();
