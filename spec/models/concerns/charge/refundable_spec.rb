@@ -436,8 +436,9 @@ describe Charge::Refundable do
         event
       end
 
-      def charge_refund_with(merchant_cents: nil)
-        refund = Stripe::StripeObject.construct_from(id: refund_id, amount: 10_00, charge: stripe_charge.id, status: "succeeded", currency: "usd")
+      def charge_refund_with(merchant_cents: nil, transfer_reversal: nil)
+        refund = Stripe::StripeObject.construct_from(id: refund_id, amount: 10_00, charge: stripe_charge.id, status: "succeeded",
+                                                     currency: "usd", transfer_reversal:)
         charge_refund = StripeChargeRefund.allocate
         charge_refund.instance_variable_set(:@charge, stripe_charge)
         charge_refund.charge_processor_id = StripeChargeProcessor.charge_processor_id
@@ -483,6 +484,18 @@ describe Charge::Refundable do
         expect(ErrorNotifier).to have_received(:notify).with(Charge::Refundable::EXTERNAL_REFUND_ALERT,
                                                              hash_including(stripe_refund_id: refund_id, transfer_outcome: :reversed_by_gumroad, recorded: true))
         expect(ErrorNotifier).not_to have_received(:notify).with(/Gumroad-funded/, anything)
+      end
+
+      it "uses the flow of funds as read when the refund itself reversed the transfer" do
+        allow_any_instance_of(StripeChargeProcessor).to receive(:get_refund).and_return(charge_refund_with(merchant_cents: 8_50, transfer_reversal: "trr_1"))
+        expect(Stripe::Transfer).not_to receive(:retrieve)
+        expect(Stripe::Transfer).not_to receive(:create_reversal)
+
+        purchase.handle_event_refund_updated!(build_external_event)
+
+        expect(seller_refund_debits.sole.holding_amount_gross_cents).to eq(-8_50)
+        expect(ErrorNotifier).to have_received(:notify).with(Charge::Refundable::EXTERNAL_REFUND_ALERT,
+                                                             hash_including(transfer_outcome: :reversed_by_stripe))
       end
 
       it "reads the flow of funds from Stripe's reversal when the refund already reversed the transfer" do

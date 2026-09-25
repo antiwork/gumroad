@@ -701,6 +701,8 @@ class StripeChargeProcessor
   def reverse_transfer_for_external_refund(charge_refund, merchant_account:)
     charge = charge_refund.charge
     return [charge_refund, :no_transfer] if charge[:destination].blank? || charge[:transfer].blank?
+    # Stripe reversed the transfer with this refund; get_refund already read that reversal.
+    return [charge_refund, :reversed_by_stripe] if charge_refund.refund[:transfer_reversal].present?
 
     refund_id = charge_refund.id
     transfer = Stripe::Transfer.retrieve(charge[:transfer])
