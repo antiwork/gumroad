@@ -27,9 +27,40 @@ class UpdateProductFilesArchiveWorker
     @used_file_paths = []
   end
 
+  # Outlasts a worst-case 500MB build so a live run is never overlapped; a crashed run only
+  # delays the next rebuild by this much.
+  LOCK_TTL = 1.hour
+  LOCKED_RETRY_DELAY = 1.minute
+  RELEASE_LOCK_SCRIPT = <<~LUA
+    if redis.call("get", KEYS[1]) == ARGV[1] then return redis.call("del", KEYS[1]) end
+    return 0
+  LUA
+  private_constant :RELEASE_LOCK_SCRIPT
+
+  def self.lock_key(product_files_archive_id)
+    "update_product_files_archive_worker:lock:#{product_files_archive_id}"
+  end
+
   def perform(product_files_archive_id)
     return if Rails.env.test?
 
+    # Concurrent runs for one archive race on its state and S3 object, so a second run defers
+    # instead of being dropped: it may carry bytes the running build has not seen.
+    lock_key = self.class.lock_key(product_files_archive_id)
+    lock_token = SecureRandom.uuid
+    unless $redis.set(lock_key, lock_token, nx: true, ex: LOCK_TTL.to_i)
+      self.class.perform_in(LOCKED_RETRY_DELAY, product_files_archive_id)
+      return
+    end
+
+    begin
+      build_archive(product_files_archive_id)
+    ensure
+      $redis.eval(RELEASE_LOCK_SCRIPT, keys: [lock_key], argv: [lock_token])
+    end
+  end
+
+  def build_archive(product_files_archive_id)
     product_files_archive = ProductFilesArchive.find(product_files_archive_id)
     # Check for nil immediately, product_files_archive has mysteriously been
     # nil which locks up workers by not failing properly

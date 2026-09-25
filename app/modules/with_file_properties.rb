@@ -268,7 +268,11 @@ module WithFileProperties
       ensure
         repaired.close!
       end
-      stale_archive_ids.each { UpdateProductFilesArchiveWorker.perform_async(_1) }
+      ProductFilesArchive.where(id: stale_archive_ids).find_each do |archive|
+        # Take the ZIP out of download-all until the rebuild lands; it still holds the tagged bytes.
+        archive.update!(product_files_archive_state: "queueing") if archive.ready?
+        UpdateProductFilesArchiveWorker.perform_async(archive.id)
+      end
     rescue Aws::Errors::ServiceError, Seahorse::Client::NetworkingError => e
       logger.warn("Analyze -- could not strip the ID3v2 tag from #{self.class.name} #{id} (#{e.class} => #{e.message})")
     end

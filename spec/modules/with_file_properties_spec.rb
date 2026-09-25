@@ -182,6 +182,20 @@ describe WithFileProperties do
       expect(UpdateProductFilesArchiveWorker).not_to have_enqueued_sidekiq_job(deleted_archive.id)
     end
 
+    it "stops serving a ready archive's stale ZIP until the rebuild lands" do
+      product_file = create(:product_file, url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/specs/tagged.m4a")
+      archive = create(:product_files_archive, link: product_file.link, product_files: [product_file])
+      archive.mark_in_progress!
+      archive.mark_ready!
+      UpdateProductFilesArchiveWorker.jobs.clear
+
+      analyze(tagged_m4a_bytes, product_file:)
+
+      expect(archive.reload).to be_queueing
+      expect(product_file.link.product_files_archives.latest_ready_entity_archive).to be_nil
+      expect(UpdateProductFilesArchiveWorker).to have_enqueued_sidekiq_job(archive.id)
+    end
+
     it "rebuilds an installment's archive the same way" do
       installment = create(:installment)
       product_file = create(:product_file, link: nil, installment:, url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/specs/tagged.m4a")

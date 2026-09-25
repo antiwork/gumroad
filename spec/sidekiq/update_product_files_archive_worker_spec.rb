@@ -67,6 +67,25 @@ describe UpdateProductFilesArchiveWorker, :vcr do
         expect(@product_files_archive.s3_object.content_type).to eq("application/zip")
       end
 
+      it "defers instead of overlapping a run already building the same archive" do
+        $redis.set(described_class.lock_key(@product_files_archive.id), "other-run")
+        described_class.jobs.clear
+
+        described_class.new.perform(@product_files_archive.id)
+
+        expect(@product_files_archive.reload.queueing?).to be(true)
+        expect(described_class).to have_enqueued_sidekiq_job(@product_files_archive.id).in(described_class::LOCKED_RETRY_DELAY)
+        expect($redis.get(described_class.lock_key(@product_files_archive.id))).to eq("other-run")
+      end
+
+      it "releases the archive lock when the run finishes" do
+        @product_files_archive.mark_deleted!
+
+        described_class.new.perform(@product_files_archive.id)
+
+        expect($redis.get(described_class.lock_key(@product_files_archive.id))).to be_nil
+      end
+
       context "when product files archive is marked as deleted" do
         before do
           @product_files_archive.mark_deleted!
