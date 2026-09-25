@@ -713,7 +713,7 @@ describe "PurchaseRefunds", :vcr do
         expect(ChargeProcessor).to receive(:refund!).with(purchase.charge_processor_id, purchase.stripe_transaction_id,
                                                           amount_cents: nil, merchant_account: purchase.merchant_account,
                                                           reverse_transfer: false, paypal_order_purchase_unit_refund: nil,
-                                                          is_for_fraud: false, purchase:).and_call_original
+                                                          is_for_fraud: false, purchase:, cap_to_unrefunded_amount: false).and_call_original
         expect(purchase).to receive(:debit_processor_fee_from_merchant_account!)
 
         purchase.refund_and_save!(create(:admin_user).id, reason: "Refund requested by the buyer")

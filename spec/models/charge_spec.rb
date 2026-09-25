@@ -206,7 +206,7 @@ describe Charge, :vcr do
     before do
       create(:balance, user: seller, amount_cents: 1_000_00)
       allow(Stripe::Charge).to receive(:retrieve).with(charge_id) do
-        Stripe::Charge.construct_from(id: charge_id, livemode: false, destination: nil, **stripe_state)
+        Stripe::Charge.construct_from(id: charge_id, livemode: false, destination: nil, currency: "usd", **stripe_state)
       end
       allow(Stripe::Refund).to receive(:create) do |params|
         unrefunded = stripe_state[:amount] - stripe_state[:amount_refunded]
@@ -229,6 +229,8 @@ describe Charge, :vcr do
     end
 
     it "refunds the last sibling for what is left on the charge instead of failing" do
+      allow(ErrorNotifier).to receive(:notify)
+
       expect(charge.refund_and_save!(seller.id)).to be(true)
 
       expect(Stripe::Refund).to have_received(:create).with(hash_including(amount: 60_00)).ordered
@@ -238,6 +240,8 @@ describe Charge, :vcr do
       expect(first.refunds.sole.total_transaction_cents).to eq(60_00)
       expect(last.refunds.sole.total_transaction_cents).to eq(54_12)
       expect(last.stripe_partially_refunded).to be(true)
+      expect(ErrorNotifier).to have_received(:notify)
+        .with("Combined-charge refund capped to the charge's unrefunded amount", context: hash_including(requested_cents: 67_65, unrefunded_cents: 54_12))
     end
   end
 

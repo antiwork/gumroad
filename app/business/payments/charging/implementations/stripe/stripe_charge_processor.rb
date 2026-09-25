@@ -645,12 +645,17 @@ class StripeChargeProcessor
     params = {
       charge: charge_id
     }
-    if amount_cents.present? && cap_to_unrefunded_amount
+    # amount_cents is canonical USD, so only a USD charge's remaining amount is comparable.
+    if amount_cents.present? && cap_to_unrefunded_amount && stripe_charge.currency.to_s.casecmp?(Currency::USD)
       # A sibling on the same combined charge may already have taken more than its local share
       # (split rounding, or a refund booked elsewhere); refund what is left rather than fail.
       unrefunded_cents = stripe_charge.amount.to_i - stripe_charge.amount_refunded.to_i
       raise ChargeProcessorAlreadyRefundedError.new("Stripe charge #{charge_id} has nothing left to refund") if unrefunded_cents <= 0
-      amount_cents = [amount_cents, unrefunded_cents].min
+      if amount_cents > unrefunded_cents
+        ErrorNotifier.notify("Combined-charge refund capped to the charge's unrefunded amount",
+                             context: { charge_id:, requested_cents: amount_cents, unrefunded_cents: })
+        amount_cents = unrefunded_cents
+      end
     end
     params[:amount] = amount_cents if amount_cents.present?
     # Stripe adds fraudulent refunds to Radar's blocklists, including shared test cards.
