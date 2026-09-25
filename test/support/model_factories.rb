@@ -902,7 +902,10 @@ module ModelFactories
     public_file = PublicFile.new({
       original_file_name: "test-#{unique_suffix}.mp3",
       display_name: "Test audio",
-      public_id: PublicFile.generate_public_id,
+      # Digits only: tests embed this id in a product description, and a random
+      # alphanumeric id can spell an adult keyword (e.g. "3joi7") that fails
+      # Link's content_has_no_adult_keywords validation.
+      public_id: SecureRandom.random_number(10**16).to_s.rjust(16, "0"),
       resource:,
     }.merge(attrs))
     if with_audio
