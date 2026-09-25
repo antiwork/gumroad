@@ -77,6 +77,25 @@ describe "Checkout cart", :js, type: :system do
       check_out(@membership_product)
     end
 
+    it "replaces a membership line when a direct link brings a different tier and recurrence" do
+      first_tier, second_tier = @membership_product.variant_categories.first.variants.alive.to_a
+
+      visit "#{@membership_product.long_url}?option=#{first_tier.external_id}&recurrence=yearly&wanted=true"
+      within_cart_item(@membership_product.name) { expect(page).to have_text("US$4 Yearly", normalize_ws: true) }
+      poll_until { Cart.alive.sole.alive_cart_products.sole.option == first_tier }
+
+      visit "#{@membership_product.long_url}?option=#{second_tier.external_id}&recurrence=monthly&wanted=true"
+      within_cart_item(@membership_product.name) do
+        expect(page).to have_text("US$5 Monthly", normalize_ws: true)
+        expect(page).to have_text("Tier: #{second_tier.name}")
+      end
+      expect(page).to have_selector("[role=listitem] h4", text: @membership_product.name, count: 1)
+      poll_until { Cart.alive.sole.alive_cart_products.sole.option == second_tier }
+      expect(Cart.alive.sole.alive_cart_products.sole.recurrence).to eq("monthly")
+
+      check_out(@membership_product)
+    end
+
     it "updates the quantity" do
       visit @product.long_url
       add_to_cart(@product)
