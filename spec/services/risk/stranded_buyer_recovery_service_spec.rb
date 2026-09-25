@@ -460,11 +460,12 @@ describe Risk::StrandedBuyerRecoveryService do
       queries
     end
 
-    it "queries the account rows and the guest rows separately instead of with an OR" do
+    it "reads the account and guest halves in one statement instead of with an OR" do
       queries = purchase_queries { candidate_purchases_for(user) }
 
-      expect(queries).to be_present
-      expect(queries).to all(satisfy { |sql| !sql.match?(/purchaser_id`? = '?\d+'? OR\b/i) })
+      expect(queries.size).to eq(1)
+      expect(queries.first).to include("UNION ALL")
+      expect(queries.first).not_to match(/purchaser_id`? = '?\d+'? OR\b/i)
     end
 
     it "keeps the newest rows across both halves, up to the limit" do

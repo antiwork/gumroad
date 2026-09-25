@@ -132,17 +132,18 @@ class Risk::StrandedBuyerRecoveryService
     # Blockable#same_email_guest_purchases): only the buyer's own rows and true guest
     # checkouts may anchor innocence or corroborate identifiers.
     #
-    # Fetched as two halves and merged: MySQL can't index the OR, so ORDER BY id DESC LIMIT walks the
-    # primary key across all of purchases for a buyer with fewer rows than the limit. The halves are
-    # disjoint on purchaser_id, so merging each half's newest rows gives the same set.
+    # A UNION ALL of two indexed halves: MySQL can't index the OR, so ORDER BY id DESC LIMIT walks the
+    # primary key across all of purchases for a buyer with fewer rows than the limit. One statement
+    # keeps one snapshot, so a guest row attached to the account mid-read can't fall between halves.
     def candidate_purchases
       @_candidate_purchases ||= begin
         limit = Purchase::Blockable::MAX_SIBLING_PURCHASES_FOR_UNBLOCK
         if user.present?
-          account_rows = Purchase.where(purchaser_id: user.id).order(id: :desc).limit(limit).to_a
+          halves = [Purchase.where(purchaser_id: user.id)]
           # A nil email must not become `email IS NULL`, which would pull in every email-less guest row.
-          guest_rows = user.email.nil? ? [] : Purchase.where(email: user.email, purchaser_id: nil).order(id: :desc).limit(limit).to_a
-          (account_rows + guest_rows).sort_by { -_1.id }.first(limit)
+          halves << Purchase.where(email: user.email, purchaser_id: nil) unless user.email.nil?
+          union = halves.map { "(#{_1.order(id: :desc).limit(limit).to_sql})" }.join(" UNION ALL ")
+          Purchase.from("(#{union}) AS purchases").order(id: :desc).limit(limit).to_a
         else
           Purchase.where(email: @email, purchaser_id: nil).order(id: :desc).limit(limit).to_a
         end
