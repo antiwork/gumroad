@@ -306,6 +306,23 @@ describe WithFiltering do
             expect(post.purchase_passes_filters(@purchase)).to eq true
           end
         end
+
+        context "when the probe falls back to SQL" do
+          let(:not_bought_products) { [] }
+          let(:not_bought_variants) { [@variant.external_id] }
+
+          it "filters each half of the variant subquery by the buyer's email" do
+            probe_sql = nil
+            callback = ->(*, payload) { probe_sql = payload[:sql] if payload[:sql].include?(" UNION ") }
+            ActiveSupport::Notifications.subscribed(callback, "sql.active_record") do
+              post.purchase_passes_filters(@purchase)
+            end
+
+            branches = probe_sql[/SELECT id FROM \((.*)\) AS t_purchases/, 1].split(" UNION ")
+            expect(branches.size).to eq(2)
+            expect(branches).to all(include("`purchases`.`email` = #{Purchase.connection.quote(@purchase.email)}"))
+          end
+        end
       end
 
       describe "not bought products and variants" do
