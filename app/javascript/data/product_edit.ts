@@ -118,15 +118,20 @@ export const saveProductError = (error: SaveProductErrorPayload): Error => {
   }
 };
 
-// A file whose upload failed has no object in S3, so a saved row would point at nothing. The editor
-// keeps it on screen to be removed, but no save may carry it — the keep-all retry included, which
-// is about hidden content rather than half-uploaded files.
+// A failed upload has no object in S3, so a saved row would point at nothing. The editor keeps the
+// row on screen to be removed, but no save may carry it — the keep-all retry included.
 const isFailedUpload = (file: { status?: { type?: string; uploadStatus?: { type?: string } } | null }) =>
   file.status?.type === "unsaved" && file.status.uploadStatus?.type === "failed";
 
-// Its embed in the content goes with it: the node would save as content that renders nothing, with
-// no way to click it and remove it.
-const withoutFailedFileEmbeds = <T extends { description: object }>(pages: T[], failedFileIds: Set<string>): T[] =>
+export const failedUploadFileIds = (
+  files: { id: string; status?: { type?: string; uploadStatus?: { type?: string } } | null }[],
+) => new Set(files.filter(isFailedUpload).map((file) => file.id));
+
+// Its embed goes with it: the node would save as content that renders nothing.
+export const withoutFailedFileEmbeds = <T extends { description: object }>(
+  pages: T[],
+  failedFileIds: Set<string>,
+): T[] =>
   failedFileIds.size === 0
     ? pages
     : pages.map((page) => ({ ...page, description: removeFileEmbedsFromRichContent(page.description, failedFileIds) }));
@@ -538,7 +543,7 @@ export const saveProduct = async (
 ): Promise<SaveProductResponse> => {
   // TODO remove this once we have a better content uploader
   const editor = new Editor(baseEditorOptions(extensions(id)));
-  const failedFileIds = new Set(product.files.filter((file) => isFailedUpload(file)).map((file) => file.id));
+  const failedFileIds = failedUploadFileIds(product.files);
   const richContents = withoutFailedFileEmbeds(
     product.has_same_rich_content_for_all_variants || !product.variants.length
       ? product.rich_content

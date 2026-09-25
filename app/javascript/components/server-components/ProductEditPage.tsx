@@ -7,6 +7,7 @@ import typia from "typia";
 import {
   applyRichContentPageSaveResponse,
   canonicalRichContentScope,
+  failedUploadFileIds,
   hasMoveSourceScope,
   HiddenVariantContentConflictError,
   reconcileConfirmedRemovalIds,
@@ -16,6 +17,7 @@ import {
   StaleDeletionConflictError,
   saveProduct,
   scopedRichContentPageKey,
+  withoutFailedFileEmbeds,
 } from "$app/data/product_edit";
 import { OtherRefundPolicy } from "$app/data/products/other_refund_policies";
 import { Thumbnail } from "$app/data/thumbnails";
@@ -484,15 +486,22 @@ const scopedConfirmedPageIdMappings = (
   return unambiguousMappings;
 };
 
-const findUpdatedContent = (product: Product, lastSavedProduct: Product) => {
+const findUpdatedContent = (product: Product, lastSavedProduct: Product, failedFileIds: Set<string>) => {
+  // Same pruning the save applies to the request: an embed the save strips was
+  // never published, so it cannot count as changed content.
+  const comparable = (pages: Page[]) => withoutFailedFileEmbeds(pages, failedFileIds);
+
   const contentUpdatedVariantIds = product.variants
     .filter((variant) => {
       const lastSavedVariant = lastSavedProduct.variants.find((v) => v.id === variant.id);
-      return !pagesHaveSameContent(variant.rich_content, lastSavedVariant?.rich_content ?? []);
+      return !pagesHaveSameContent(comparable(variant.rich_content), comparable(lastSavedVariant?.rich_content ?? []));
     })
     .map((variant) => variant.id);
 
-  const sharedContentUpdated = !pagesHaveSameContent(product.rich_content, lastSavedProduct.rich_content);
+  const sharedContentUpdated = !pagesHaveSameContent(
+    comparable(product.rich_content),
+    comparable(lastSavedProduct.rich_content),
+  );
 
   return {
     sharedContentUpdated,
@@ -653,6 +662,7 @@ const ProductEditPage = (props: Props) => {
       const { contentUpdatedVariantIds, sharedContentUpdated } = findUpdatedContent(
         productSent,
         lastSavedProductRef.current,
+        failedUploadFileIds(productSent.files),
       );
 
       // Adopt the canonical ids the server assigned to records this save

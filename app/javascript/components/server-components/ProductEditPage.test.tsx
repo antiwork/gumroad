@@ -7,7 +7,7 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { type SaveProductResponse } from "$app/data/product_edit";
 import { confirmRemovedVariantPageDeletions } from "$app/data/product_save_contract";
 
-import { ProductEditContext, type Product, type Version } from "$app/components/ProductEdit/state";
+import { type FileEntry, ProductEditContext, type Product, type Version } from "$app/components/ProductEdit/state";
 import { showAlert } from "$app/components/server-components/Alert";
 import { ProductEditPage, type ProductEditPageProps } from "$app/components/server-components/ProductEditPage";
 
@@ -1134,6 +1134,70 @@ it("does not report a content update when only the send-time stamp differs", asy
 
   render(<ProductEditPage {...props} />);
   await waitFor(() => expect(contextCapture.current).not.toBeNull());
+
+  await act(async () => {
+    await contextCapture.current?.save();
+  });
+
+  expect(showAlert).toHaveBeenCalledWith("Changes saved!", "success");
+});
+
+// A failed upload's embed is stripped from the save, so it must not read as
+// changed content either — otherwise a seller with sales gets the
+// customer-notification prompt for content that was never published.
+it("does not report a content update for a failed upload's embed", async () => {
+  const product = buildTieredProduct([
+    buildTier("tier-a", "Tier A", [
+      {
+        id: "existing-page",
+        title: "Unchanged",
+        description: { type: "doc", content: [{ type: "paragraph", content: [{ type: "text", text: "Body" }] }] },
+        updated_at: "2026-01-01T00:00:00Z",
+      },
+    ]),
+  ]);
+  const props = { ...buildTieredProps(product), successful_sales_count: 5 };
+
+  saveProductMock.mockResolvedValue({} satisfies SaveProductResponse);
+  vi.mocked(showAlert).mockClear();
+
+  render(<ProductEditPage {...props} />);
+  await waitFor(() => expect(contextCapture.current).not.toBeNull());
+
+  // The seller picks a file and its upload fails: the row and its embed stay in
+  // the editor, and only the save strips them from the request.
+  const failedFile: FileEntry = {
+    id: "failed-file",
+    display_name: "huge",
+    description: null,
+    extension: "ZIP",
+    file_size: 1024,
+    is_pdf: false,
+    pdf_stamp_enabled: false,
+    hide_kindle_and_read_buttons: false,
+    is_streamable: false,
+    stream_only: false,
+    is_transcoding_in_progress: false,
+    url: null,
+    subtitle_files: [],
+    status: { type: "unsaved", uploadStatus: { type: "failed" }, url: "blob:huge" },
+    thumbnail: null,
+  };
+  act(() =>
+    contextCapture.current?.updateProduct((current) => {
+      current.files = [failedFile];
+      const tierA = current.variants.find((variant) => variant.id === "tier-a");
+      tierA?.rich_content.forEach((page) => {
+        page.description = {
+          type: "doc",
+          content: [
+            { type: "paragraph", content: [{ type: "text", text: "Body" }] },
+            { type: "fileEmbed", attrs: { id: failedFile.id, uid: "uid-1" } },
+          ],
+        };
+      });
+    }),
+  );
 
   await act(async () => {
     await contextCapture.current?.save();
