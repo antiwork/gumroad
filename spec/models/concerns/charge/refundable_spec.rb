@@ -457,6 +457,9 @@ describe Charge::Refundable do
       before do
         purchase
         allow(Stripe::Transfer).to receive(:retrieve).with(transfer.id).and_return(transfer)
+        allow(Stripe::Transfer).to receive(:retrieve_reversal).and_return(
+          Stripe::StripeObject.construct_from(id: "trr_1", destination_payment_refund: "pyr_1")
+        )
         allow_any_instance_of(StripeChargeProcessor).to receive(:get_refund) do |_processor, _id, destination_payment_refund_id: nil, **|
           destination_payment_refund_id ? charge_refund_with(merchant_cents: 8_50) : charge_refund_with
         end
@@ -486,16 +489,41 @@ describe Charge::Refundable do
         expect(ErrorNotifier).not_to have_received(:notify).with(/Gumroad-funded/, anything)
       end
 
-      it "uses the flow of funds as read when the refund itself reversed the transfer" do
-        allow_any_instance_of(StripeChargeProcessor).to receive(:get_refund).and_return(charge_refund_with(merchant_cents: 8_50, transfer_reversal: "trr_1"))
+      it "pairs the reversal's own destination refund when the refund itself reversed the transfer" do
+        allow(Stripe::Transfer).to receive(:retrieve_reversal).with(transfer.id, "trr_1").and_return(
+          Stripe::StripeObject.construct_from(id: "trr_1", destination_payment_refund: "pyr_this")
+        )
+        paired_refund_ids = []
+        # Only this refund's paired destination refund carries its share; the newest destination refund on
+        # the charge belongs to the other refund, so reading that one would debit the seller wrongly.
+        allow_any_instance_of(StripeChargeProcessor).to receive(:get_refund) do |_processor, _id, destination_payment_refund_id: nil, **|
+          paired_refund_ids << destination_payment_refund_id
+          charge_refund_with(merchant_cents: destination_payment_refund_id == "pyr_this" ? 8_50 : nil, transfer_reversal: "trr_1")
+        end
         expect(Stripe::Transfer).not_to receive(:retrieve)
         expect(Stripe::Transfer).not_to receive(:create_reversal)
 
         purchase.handle_event_refund_updated!(build_external_event)
 
+        expect(paired_refund_ids).to include("pyr_this")
         expect(seller_refund_debits.sole.holding_amount_gross_cents).to eq(-8_50)
         expect(ErrorNotifier).to have_received(:notify).with(Charge::Refundable::EXTERNAL_REFUND_ALERT,
-                                                             hash_including(transfer_outcome: :reversed_by_stripe))
+                                                             hash_including(transfer_outcome: :reversed_by_stripe, recorded: true))
+      end
+
+      it "books nothing when the refund's own reversal does not name its destination refund" do
+        allow(Stripe::Transfer).to receive(:retrieve_reversal).with(transfer.id, "trr_1").and_return(
+          Stripe::StripeObject.construct_from(id: "trr_1")
+        )
+        allow_any_instance_of(StripeChargeProcessor).to receive(:get_refund).and_return(charge_refund_with(transfer_reversal: "trr_1"))
+        expect(Stripe::Transfer).not_to receive(:create_reversal)
+
+        purchase.handle_event_refund_updated!(build_external_event)
+
+        expect(purchase.reload.refunds).to be_empty
+        expect(seller_refund_debits).to be_empty
+        expect(ErrorNotifier).to have_received(:notify).with(Charge::Refundable::EXTERNAL_REFUND_ALERT,
+                                                             hash_including(transfer_outcome: :reversal_unpaired, recorded: false))
       end
 
       it "reads the flow of funds from Stripe's reversal when the refund already reversed the transfer" do

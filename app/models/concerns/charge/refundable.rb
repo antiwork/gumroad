@@ -125,7 +125,9 @@ module Charge::Refundable
 
           charge_refund, transfer_outcome = processor.reverse_transfer_for_external_refund(charge_refund, merchant_account:)
         end
-        next [] if transfer_outcome == :fee_refund_unpaired
+        # Nothing was moved or paired for this refund, so do not book it: an unpaired reversal or fee
+        # refund would debit the seller by an amount that belongs to a different refund on the charge.
+        next [] if %i[fee_refund_unpaired reversal_unpaired].include?(transfer_outcome)
         gumroad_funded = transfer_outcome == :not_reversible
 
         unrecorded.select do |purchase|
