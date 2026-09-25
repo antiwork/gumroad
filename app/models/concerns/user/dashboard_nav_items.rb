@@ -13,6 +13,13 @@ module User::DashboardNavItems
   # surface it.
   SEEDED_MARKER = "seeded"
 
+  # A concurrent seed or promote of the same user can deadlock on the unique index's
+  # insert-intention lock, and InnoDB aborts one of the two statements arbitrarily. Re-running it is
+  # safe — the statement rolls back whole and the upsert skips whatever the winner landed — and the
+  # lock wait is not retried: InnoDB already spent its timeout on the page render by then.
+  CONTENTION_RETRIES = 2
+  CONTENTION_BASE_BACKOFF = 0.05
+
   included do
     has_many :dashboard_nav_promotions, dependent: :delete_all
   end
@@ -61,7 +68,17 @@ module User::DashboardNavItems
     def record_nav_items(items)
       return promoted_nav_item_keys if items.empty?
 
-      DashboardNavPromotion.insert_all(items.map { |item| { user_id: id, nav_item: item } })
+      attempts = 0
+      begin
+        DashboardNavPromotion.insert_all(items.map { |item| { user_id: id, nav_item: item } })
+      rescue ActiveRecord::Deadlocked
+        attempts += 1
+        raise if attempts > CONTENTION_RETRIES
+
+        # Jittered so two losers retrying against each other don't line up again.
+        sleep(CONTENTION_BASE_BACKOFF * (2**(attempts - 1)) * (0.5 + Kernel.rand))
+        retry
+      end
       @loaded_nav_items = nil
       promoted_nav_item_keys
     end

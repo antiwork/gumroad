@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1120" height="560" viewBox="0 0 1120 560" font-family="SFMono-Regular, Menlo, Consolas, monospace">
+  <rect width="1120" height="560" fill="#12141a"/>
+  <rect x="0" y="0" width="1120" height="34" fill="#1c1f27"/>
+  <text x="16" y="23" fill="#e6e6e6" font-size="15">qa-media/pr-dashboard-nav-deadlock-retry-spec-results.svg</text>
+
+  <text x="20" y="66" fill="#7dd3fc" font-size="15">Fix: re-run a deadlocked dashboard nav upsert instead of losing the rows</text>
+  <text x="20" y="90" fill="#9aa3b2" font-size="13">Sentry GUMROAD-1R4, production, 2026-09-25: INSERT ... ON DUPLICATE KEY UPDATE into dashboard_nav_promotions</text>
+  <text x="20" y="108" fill="#9aa3b2" font-size="13">deadlocked in the DashboardController#index before_action (seed_dashboard_nav_items), caught and reported.</text>
+  <text x="20" y="126" fill="#9aa3b2" font-size="13">File: app/models/concerns/user/dashboard_nav_items.rb # record_nav_items</text>
+
+  <text x="20" y="166" fill="#fbbf24" font-size="14">1) RED — spec against origin/main code (no retry), fix reverted in place</text>
+  <text x="36" y="190" fill="#e6e6e6" font-size="13">$ git show origin/main:app/models/concerns/user/dashboard_nav_items.rb &gt; app/models/concerns/user/dashboard_nav_items.rb</text>
+  <text x="36" y="210" fill="#e6e6e6" font-size="13">$ grep -c CONTENTION_RETRIES app/models/concerns/user/dashboard_nav_items.rb   # 0, revert landed</text>
+  <text x="36" y="230" fill="#e6e6e6" font-size="13">$ DISABLE_SPRING=1 bundle exec rspec spec/models/concerns/user/dashboard_nav_items_spec.rb</text>
+  <text x="36" y="252" fill="#f87171" font-size="13">22 examples, 1 failure</text>
+  <text x="36" y="272" fill="#f87171" font-size="13">rspec ./spec/models/concerns/user/dashboard_nav_items_spec.rb:196 # re-runs an insert that deadlocked, so the seed still lands</text>
+
+  <text x="20" y="314" fill="#4ade80" font-size="14">2) GREEN — same spec against the branch head</text>
+  <text x="36" y="338" fill="#e6e6e6" font-size="13">$ git checkout HEAD -- app/models/concerns/user/dashboard_nav_items.rb &amp;&amp; grep -n CONTENTION_RETRIES &lt;file&gt;</text>
+  <text x="36" y="358" fill="#e6e6e6" font-size="13">20:  CONTENTION_RETRIES = 2      76:  raise if attempts &gt; CONTENTION_RETRIES</text>
+  <text x="36" y="378" fill="#e6e6e6" font-size="13">$ DISABLE_SPRING=1 bundle exec rspec spec/models/concerns/user/dashboard_nav_items_spec.rb</text>
+  <text x="36" y="400" fill="#4ade80" font-size="13">22 examples, 0 failures   (Finished in 4.37 seconds)</text>
+
+  <text x="20" y="442" fill="#7dd3fc" font-size="14">3) What the two new examples pin</text>
+  <text x="36" y="466" fill="#e6e6e6" font-size="13">- retry fires and the rows still land: attempts == 2, dashboard_nav_items_seeded? == true</text>
+  <text x="36" y="486" fill="#e6e6e6" font-size="13">- the ceiling is pinned by count: the insert is attempted exactly CONTENTION_RETRIES + 1 times, then re-raises</text>
+  <text x="36" y="506" fill="#e6e6e6" font-size="13">- no wrapping transaction on this path (Sellers::BaseController / DashboardController have none), so the</text>
+  <text x="36" y="524" fill="#e6e6e6" font-size="13">  deadlocked statement has already rolled back whole when it is re-run</text>
+  <text x="36" y="544" fill="#9aa3b2" font-size="13">CI on push: see the PR checks. This artifact is text (SVG), so the review panel can read it.</text>
+</svg>
