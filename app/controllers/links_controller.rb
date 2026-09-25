@@ -464,6 +464,17 @@ class LinksController < ApplicationController
         # timestamps both pass and the last writer silently wins.
         with_editor_save_lock_wait_bound { @product.lock! }
 
+        # An old editor also sends null when the seller switches installments off.
+        # It has no intent marker, so refuse the whole save rather than silently
+        # keeping an existing plan or clearing one added by another tab.
+        if params.key?(:installment_plan) && params[:installment_plan].nil? && !installment_plan_clear_requested? && @product.installment_plan.present?
+          log_editor_save_conflict("unmarked_installment_plan_clear_conflict")
+          return render json: {
+            error_message: "This page is out of date. None of your changes were saved. Please refresh the page and try again.",
+            error_code: "unmarked_installment_plan_clear_conflict",
+          }, status: :conflict
+        end
+
         # Capture the deletion-guard diagnostics (alive counts, persisted
         # shared-content flag) NOW, after the lock/reload but before
         # assign_attributes and the save steps below mutate the product — they
