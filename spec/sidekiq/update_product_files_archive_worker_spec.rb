@@ -67,6 +67,40 @@ describe UpdateProductFilesArchiveWorker, :vcr do
         expect(@product_files_archive.s3_object.content_type).to eq("application/zip")
       end
 
+      it "defers instead of overlapping a run already building the same archive" do
+        $redis.set(described_class.lock_key(@product_files_archive.id), "other-run")
+        described_class.jobs.clear
+
+        described_class.new.perform(@product_files_archive.id)
+
+        expect(@product_files_archive.reload.queueing?).to be(true)
+        expect(described_class).to have_enqueued_sidekiq_job(@product_files_archive.id).in(described_class::LOCKED_RETRY_DELAY)
+        expect($redis.get(described_class.lock_key(@product_files_archive.id))).to eq("other-run")
+      end
+
+      it "releases the archive lock when the run finishes" do
+        @product_files_archive.mark_deleted!
+
+        described_class.new.perform(@product_files_archive.id)
+
+        expect($redis.get(described_class.lock_key(@product_files_archive.id))).to be_nil
+      end
+
+      it "leaves the archive hidden when it was reset for a rebuild mid-build" do
+        worker = described_class.new
+        allow(worker).to receive(:calculate_estimated_size) do
+          ProductFilesArchive.where(id: @product_files_archive.id).update_all(product_files_archive_state: "queueing")
+          0
+        end
+        s3_object = double(upload_file: true)
+        allow_any_instance_of(ProductFilesArchive).to receive(:s3_object).and_return(s3_object)
+        allow(Zip::File).to receive(:open) { |path, *| File.write(path, "zip") }
+
+        worker.perform(@product_files_archive.id)
+
+        expect(@product_files_archive.reload.product_files_archive_state).to eq("queueing")
+      end
+
       context "when product files archive is marked as deleted" do
         before do
           @product_files_archive.mark_deleted!
