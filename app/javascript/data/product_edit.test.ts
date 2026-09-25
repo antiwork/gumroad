@@ -22,6 +22,7 @@ import {
   scalarSettingsForSave,
   StaleContentConflictError,
   StaleDeletionConflictError,
+  UnmarkedInstallmentPlanClearConflictError,
 } from "$app/data/product_edit";
 import { ResponseError } from "$app/utils/request";
 
@@ -748,5 +749,17 @@ describe("save contract conflict responses", () => {
     const unknown = saveProductError({ error_message: "Nope.", error_code: "some_future_code" });
     expect(unknown).toBeInstanceOf(ResponseError);
     expect(unknown).not.toBeInstanceOf(StaleDeletionConflictError);
+  });
+
+  it("maps unmarked_installment_plan_clear_conflict to its own typed error", () => {
+    const error = saveProductError({
+      error_message: "This page is out of date.",
+      error_code: "unmarked_installment_plan_clear_conflict",
+    });
+
+    expect(error).toBeInstanceOf(UnmarkedInstallmentPlanClearConflictError);
+    expect(error).not.toBeInstanceOf(ResponseError);
+    expect(error).not.toBeInstanceOf(StaleDeletionConflictError);
+    expect(error.message).toBe("This page is out of date.");
   });
 });

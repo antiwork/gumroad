@@ -4,7 +4,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-libra
 import * as React from "react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
-import { type SaveProductResponse } from "$app/data/product_edit";
+import { type SaveProductResponse, saveProductError } from "$app/data/product_edit";
 import { confirmRemovedVariantPageDeletions } from "$app/data/product_save_contract";
 
 import { ProductEditContext, type Product, type Version } from "$app/components/ProductEdit/state";
@@ -1646,4 +1646,42 @@ it("spends a description marker the completed save carried", async () => {
   });
 
   expect(contextCapture.current?.product.description_changed).toBe(false);
+});
+
+it("shows an unmarked installment-plan clear refusal inline, keeps the seller's edits, and clears it once a save succeeds", async () => {
+  const product = buildTieredProduct([buildTier("tier-a", "Tier A", [])]);
+  const props = buildTieredProps(product);
+  const message = "This page is out of date, so none of your changes were saved.";
+
+  saveProductMock.mockRejectedValueOnce(
+    saveProductError({ error_message: message, error_code: "unmarked_installment_plan_clear_conflict" }),
+  );
+  saveProductMock.mockResolvedValueOnce({} satisfies SaveProductResponse);
+  vi.mocked(showAlert).mockClear();
+
+  render(<ProductEditPage {...props} />);
+  await waitFor(() => expect(contextCapture.current).not.toBeNull());
+
+  act(() => contextCapture.current?.updateProduct({ name: "Unsaved name" }));
+
+  let saved: boolean | undefined;
+  await act(async () => {
+    saved = await contextCapture.current?.save();
+  });
+
+  expect(saved).toBe(false);
+  const alert = screen.getByRole("alert");
+  expect(alert.textContent).toBe(message);
+  expect(document.activeElement).toBe(alert);
+  expect(screen.queryByRole("dialog")).toBeNull();
+  expect(showAlert).not.toHaveBeenCalled();
+  expect(contextCapture.current?.product.name).toBe("Unsaved name");
+
+  await act(async () => {
+    saved = await contextCapture.current?.save();
+  });
+
+  expect(saved).toBe(true);
+  expect(saveProductMock.mock.calls[1]?.[2]).toMatchObject({ name: "Unsaved name" });
+  expect(screen.queryByRole("alert")).toBeNull();
 });

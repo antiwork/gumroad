@@ -14,6 +14,7 @@ import {
   SaveProductResponse,
   StaleContentConflictError,
   StaleDeletionConflictError,
+  UnmarkedInstallmentPlanClearConflictError,
   saveProduct,
   scopedRichContentPageKey,
 } from "$app/data/product_edit";
@@ -50,6 +51,7 @@ import {
 } from "$app/components/ProductEdit/state";
 import { ImageUploadSettingsContext } from "$app/components/RichTextEditor";
 import { showAlert } from "$app/components/server-components/Alert";
+import { Alert } from "$app/components/ui/Alert";
 
 const routes: RouteObject[] = [
   {
@@ -557,6 +559,16 @@ const ProductEditPage = (props: Props) => {
   // because this session cannot tell which of its own field values are also
   // stale.
   const [staleDeletionConflict, setStaleDeletionConflict] = React.useState<string | null>(null);
+  // Shown inline rather than as a toast so it cannot cover the header or tabs
+  // while the seller copies their unsaved edits. An object so a repeated
+  // refusal re-focuses it.
+  const [installmentPlanClearConflict, setInstallmentPlanClearConflict] = React.useState<{ message: string } | null>(
+    null,
+  );
+  const installmentPlanClearConflictRef = React.useRef<HTMLDivElement>(null);
+  React.useEffect(() => {
+    if (installmentPlanClearConflict) installmentPlanClearConflictRef.current?.focus();
+  }, [installmentPlanClearConflict]);
   // Client-generated id → canonical server id, accumulated separately because
   // variant and page external ids are not distinct namespaces.
   const [variantIdMappings, setVariantIdMappings] = React.useState<Record<string, string>>({});
@@ -644,6 +656,7 @@ const ProductEditPage = (props: Props) => {
         lastSavedAllowInstallmentPlan: lastSavedProductRef.current.allow_installment_plan,
       });
       saved = true;
+      setInstallmentPlanClearConflict(null);
       // The version pages the seller chose to keep were never loaded into this
       // editor session (the shared-content flag hid them), so the in-memory
       // state can't render the outcome. Reload to pick up the kept content.
@@ -741,6 +754,8 @@ const ProductEditPage = (props: Props) => {
         // whole product and the write path is not gated on the token. So say
         // plainly that the deletion did not happen and send them to a reload.
         setStaleDeletionConflict(e.message);
+      } else if (e instanceof UnmarkedInstallmentPlanClearConflictError) {
+        setInstallmentPlanClearConflict({ message: e.message });
       } else {
         assertResponseError(e);
         showAlert(e.message, "error");
@@ -1051,6 +1066,16 @@ const ProductEditPage = (props: Props) => {
               </p>
             </div>
           </Modal>
+        ) : null}
+        {installmentPlanClearConflict ? (
+          <Alert
+            ref={installmentPlanClearConflictRef}
+            tabIndex={-1}
+            variant="danger"
+            className="mx-4 mt-4 md:mx-8 md:mt-8"
+          >
+            {installmentPlanClearConflict.message}
+          </Alert>
         ) : null}
         <RouterProvider router={router} />
       </ImageUploadSettingsContext.Provider>

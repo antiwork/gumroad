@@ -720,7 +720,8 @@ describe("Product Edit Memberships", type: :system, js: true) do
 
           within tier_rows[0] do
             check "Apply price changes to existing customers"
-            fill_in "Effective date for existing customers", with: "01-01-2020\t"
+            fill_in "Effective date for existing customers", with: "01-01-2020"
+            find("[aria-label='Custom message']").click
           end
           expect(page).to have_text "The effective date must be at least 7 days from today"
 
@@ -731,7 +732,8 @@ describe("Product Edit Memberships", type: :system, js: true) do
           expect(page).to have_alert(text: "Validation failed: The effective date must be at least 7 days from today")
 
           within tier_rows[0] do
-            fill_in "Effective date for existing customers", with: "01-01-#{Date.today.year + 2}\t"
+            fill_in "Effective date for existing customers", with: "01-01-#{Date.today.year + 2}"
+            find("[aria-label='Custom message']").click
           end
           expect(page).not_to have_text "The effective date must be at least 7 days from today"
         end

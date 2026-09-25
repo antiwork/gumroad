@@ -49,7 +49,7 @@ describe LinksController, type: :controller do
     )
     expect(response.parsed_body).to include(
       "error_code" => "unmarked_installment_plan_clear_conflict",
-      "error_message" => "This page is out of date, so none of your changes were saved. Reloading will discard the edits on this page — copy anything you want to keep first, then try again.",
+      "error_message" => "This page is out of date. Your changes weren't saved. Copy your edits before refreshing. Refreshing will erase them.",
     )
     expect(product.reload.installment_plan&.number_of_installments).to eq(2)
   end

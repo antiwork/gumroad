@@ -465,12 +465,12 @@ class LinksController < ApplicationController
         with_editor_save_lock_wait_bound { @product.lock! }
 
         # An old editor also sends null when the seller switches installments off.
-        # It has no intent marker, so refuse the whole save rather than silently
+        # Without an intent marker, refuse the whole save rather than silently
         # keeping an existing plan or clearing one added by another tab.
         if params.key?(:installment_plan) && params[:installment_plan].nil? && !installment_plan_clear_requested? && @product.installment_plan.present?
           log_editor_save_conflict("unmarked_installment_plan_clear_conflict")
           return render json: {
-            error_message: "This page is out of date, so none of your changes were saved. Reloading will discard the edits on this page — copy anything you want to keep first, then try again.",
+            error_message: "This page is out of date. Your changes weren't saved. Copy your edits before refreshing. Refreshing will erase them.",
             error_code: "unmarked_installment_plan_clear_conflict",
           }, status: :conflict
         end

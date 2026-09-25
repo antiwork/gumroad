@@ -90,6 +90,9 @@ export class StaleContentConflictError extends Error {
 // current token of its own.
 export class StaleDeletionConflictError extends Error {}
 
+// The server refused an ambiguous unmarked clear before writing any edits.
+export class UnmarkedInstallmentPlanClearConflictError extends Error {}
+
 // The server's error payload for a rejected save. Every conflict the editor can
 // act on is discriminated by `error_code`, never by HTTP status: stale-content
 // and stale-deletion both answer 409 but demand opposite handling (reload vs.
@@ -113,6 +116,8 @@ export const saveProductError = (error: SaveProductErrorPayload): Error => {
       return new StaleContentConflictError(error.error_message, error.stale_records ?? []);
     case "stale_deletion_conflict":
       return new StaleDeletionConflictError(error.error_message);
+    case "unmarked_installment_plan_clear_conflict":
+      return new UnmarkedInstallmentPlanClearConflictError(error.error_message);
     default:
       return new ResponseError(error.error_message);
   }
