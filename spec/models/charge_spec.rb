@@ -277,7 +277,7 @@ describe Charge, :vcr do
       [[first, "re_first"], [second, "re_second"]].each do |purchase, refund_id|
         flow_of_funds = FlowOfFunds.build_simple_flow_of_funds(Currency::USD, -purchase.total_transaction_cents)
         allow(ChargeProcessor).to receive(:refund!).with(anything, "ch_combined_raise", hash_including(purchase:))
-          .and_return(double(id: refund_id, refund: double(id: refund_id, status: "succeeded", amount: 5_00), flow_of_funds:))
+          .and_return(double(id: refund_id, refund: double(id: refund_id, status: "succeeded", amount: 5_00, currency: "usd"), flow_of_funds:))
       end
       allow_any_instance_of(Purchase).to receive(:refund_purchase!).and_wrap_original do |original, *args, **kwargs|
         raise ActiveRecord::StatementInvalid, "lock wait timeout" if original.receiver.id == second.id
@@ -291,7 +291,39 @@ describe Charge, :vcr do
       expect(first.reload.refunds.sole.processor_refund_id).to eq("re_first")
       expect(ErrorNotifier).to have_received(:notify).with(
         an_instance_of(ActiveRecord::StatementInvalid),
-        context: { purchase_id: second.id, charge_id: "ch_combined_raise", processor_refund_id: "re_second", processor_refund_amount_cents: 5_00 }
+        context: { purchase_id: second.id, charge_id: "ch_combined_raise", processor_refund_id: "re_second", processor_refund_amount_cents: 5_00, processor_refund_currency: "usd" }
+      )
+    end
+  end
+
+  describe "#refund_and_save! when the accepted refund's amount comes back as a PayPal money object" do
+    let(:seller) { create(:user) }
+    let(:purchases) do
+      Array.new(2) { create(:purchase, seller:, link: create(:product, user: seller), stripe_transaction_id: "ch_combined_paypal", is_part_of_combined_charge: true) }
+    end
+    let(:charge) { create(:charge, seller:, purchases:, merchant_account: purchases.first.merchant_account) }
+
+    it "reports the amount in minor units with its currency" do
+      create(:balance, user: seller, amount_cents: 10_000)
+      first, second = purchases.sort_by(&:id)
+      [[first, "re_first"], [second, "re_second"]].each do |purchase, refund_id|
+        # PayPal's order-refund response carries the amount as a money object, not minor units.
+        response = OpenStruct.new(id: refund_id, status: "COMPLETED", amount: OpenStruct.new(value: "5.00", currency_code: "USD"))
+        refund = PaypalOrderRefund.new(response, "ch_combined_paypal")
+        refund.flow_of_funds = FlowOfFunds.build_simple_flow_of_funds(Currency::USD, -purchase.total_transaction_cents)
+        allow(ChargeProcessor).to receive(:refund!).with(anything, "ch_combined_paypal", hash_including(purchase:)).and_return(refund)
+      end
+      allow_any_instance_of(Purchase).to receive(:refund_purchase!).and_wrap_original do |original, *args, **kwargs|
+        raise ActiveRecord::StatementInvalid, "lock wait timeout" if original.receiver.id == second.id
+        original.call(*args, **kwargs)
+      end
+      allow(ErrorNotifier).to receive(:notify)
+
+      expect(charge.refund_and_save!(seller.id)).to be(false)
+
+      expect(ErrorNotifier).to have_received(:notify).with(
+        an_instance_of(ActiveRecord::StatementInvalid),
+        context: { purchase_id: second.id, charge_id: "ch_combined_paypal", processor_refund_id: "re_second", processor_refund_amount_cents: 5_00, processor_refund_currency: "usd" }
       )
     end
   end

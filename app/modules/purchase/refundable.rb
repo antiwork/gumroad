@@ -204,7 +204,7 @@ class Purchase
         # stands, so this report is the only record tying the money back to the purchase.
         if charge_refund
           ErrorNotifier.notify(e, context: { purchase_id: id, charge_id: stripe_transaction_id, processor_refund_id: charge_refund.id,
-                                             processor_refund_amount_cents: charge_refund.refund.try(:amount) || processor_refund_amount_cents })
+                                             **reported_processor_refund_amount(charge_refund) })
         end
         raise
       end
@@ -667,6 +667,20 @@ class Purchase
   end
 
   private
+    # Stripe reports the refunded amount in minor units; a PayPal order refund returns a money
+    # object instead (`value` is a decimal string), so scale it and report the currency it was
+    # refunded in rather than passing the object off as cents.
+    def reported_processor_refund_amount(charge_refund)
+      reported_amount = charge_refund.refund.try(:amount)
+      if reported_amount.respond_to?(:value) && reported_amount.value.present?
+        { processor_refund_amount_cents: (BigDecimal(reported_amount.value.to_s) * unit_scaling_factor(reported_amount.currency_code)).to_i,
+          processor_refund_currency: reported_amount.currency_code.to_s.downcase }
+      else
+        { processor_refund_amount_cents: reported_amount || processor_refund_amount_cents,
+          processor_refund_currency: charge_refund.refund.try(:currency)&.to_s&.downcase }
+      end
+    end
+
     def refundable_amounts
       amounts_query = "COALESCE(SUM(total_transaction_cents), 0) AS tt_cents, COALESCE(SUM(amount_cents), 0) AS p_cents, " \
                         "COALESCE(SUM(creator_tax_cents), 0) AS ct_cents, COALESCE(SUM(gumroad_tax_cents), 0) as gt_cents," \
