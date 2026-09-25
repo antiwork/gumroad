@@ -723,14 +723,22 @@ const ProductEditPage = (props: Props) => {
         if (current.description === productSent.description) current.description_changed = false;
       });
 
-      if (response.warning_message) showAlert(response.warning_message, "warning");
+      const failedUploadCount = embeddedFailedUploadIds(
+        productSent.files,
+        allScopedRichContentPages(productSent).map(({ page }) => page),
+      ).size;
+      const failedUploadNote =
+        failedUploadCount > 0
+          ? `Changes saved, except ${failedUploadCount === 1 ? "1 file" : `${failedUploadCount} files`} that did not upload.`
+          : null;
+      if (response.warning_message)
+        showAlert(
+          failedUploadNote ? `${failedUploadNote} ${response.warning_message}` : response.warning_message,
+          "warning",
+        );
       else {
         const contentUpdated = sharedContentUpdated || contentUpdatedVariantIds.length > 0;
         const offerContentUpdateEmail = props.successful_sales_count > 0 && contentUpdated;
-        const failedUploadCount = embeddedFailedUploadIds(
-          productSent.files,
-          allScopedRichContentPages(productSent).map(({ page }) => page),
-        ).size;
 
         if (offerContentUpdateEmail) {
           const uniquePermalinkOrVariantIds = productSent.has_same_rich_content_for_all_variants
@@ -742,11 +750,8 @@ const ProductEditPage = (props: Props) => {
             uniquePermalinkOrVariantIds,
           });
         }
-        if (failedUploadCount > 0) {
-          showAlert(
-            `Changes saved, except ${failedUploadCount === 1 ? "1 file" : `${failedUploadCount} files`} that did not upload.`,
-            "warning",
-          );
+        if (failedUploadNote) {
+          showAlert(failedUploadNote, "warning");
         } else if (!offerContentUpdateEmail) {
           showAlert("Changes saved!", "success");
         }

@@ -1210,6 +1210,19 @@ describe("a failed upload's embed", () => {
     expect(showAlert).toHaveBeenCalledWith("Changes saved, except 1 file that did not upload.", "warning");
   });
 
+  it("keeps the failed-file note when the save also returns a warning", async () => {
+    await renderWithSales();
+    setTierA([failedFile], [body, embed]);
+    saveProductMock.mockResolvedValue({ warning_message: "The following offer code is invalid: SAVE10." });
+
+    await save();
+
+    expect(showAlert).toHaveBeenCalledWith(
+      "Changes saved, except 1 file that did not upload. The following offer code is invalid: SAVE10.",
+      "warning",
+    );
+  });
+
   it("does not warn about a failed file whose embed the seller deleted", async () => {
     await renderWithSales();
     // Backspace on the embed removes the node but leaves the failed entry in files.

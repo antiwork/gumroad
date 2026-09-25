@@ -753,6 +753,9 @@ it("restarts a failed upload in place with the file the seller picks again", asy
     scheduledUploads[0]?.onError();
   });
 
+  // Set while it was uploading: the retry keeps the description but drops what fit the old file type.
+  Object.assign(failed, { description: "Field notes", isbn: "978-3-16-148410-0", pdf_stamp_enabled: true });
+
   const fileEmbed = getMountedEditor().extensionManager.extensions.find((ext) => ext.name === FileEmbed.name);
   const onRetryUpload = fileEmbed?.options.getConfig?.()?.onRetryUpload;
   if (!onRetryUpload) throw new Error("FileEmbed retry hook was not wired");
@@ -771,7 +774,9 @@ it("restarts a failed upload in place with the file the seller picks again", asy
   // A small pick is copied first, like the toolbar's, so the handle can be released.
   expect(scheduledUploads[1]?.file).not.toBe(repicked);
   expect(scheduledUploads[1]?.file.name).toBe("huge-v2.zip");
-  expect(retried).toMatchObject({ display_name: "huge-v2", file_size: 2 });
+  expect(retried).toMatchObject({ display_name: "huge-v2", file_size: 2, description: "Field notes" });
+  expect(retried?.isbn).toBeUndefined();
+  expect(retried?.pdf_stamp_enabled).toBe(false);
   expect(retried?.status.type === "unsaved" && retried.status.uploadStatus.type).toBe("uploading");
 
   await act(async () => {

@@ -414,25 +414,26 @@ export const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: st
     }
     return { fileUrl, fileStatus, scheduled };
   };
+  const newFileEntry = (id: string, file: File, upload: ReturnType<typeof startUpload>): FileEntry => ({
+    ...pickedFileFields(file),
+    description: null,
+    pdf_stamp_enabled: false,
+    hide_kindle_and_read_buttons: false,
+    stream_only: false,
+    is_transcoding_in_progress: false,
+    id,
+    subtitle_files: [],
+    url: upload.fileUrl,
+    status: upload.fileStatus,
+    thumbnail: null,
+  });
   const uploadFiles = (files: File[]) => {
     const scheduledIds: string[] = [];
-    const fileEntries = files.map((file): FileEntry => {
+    const fileEntries = files.map((file) => {
       const id = FileUtils.generateGuid();
-      const { fileUrl, fileStatus, scheduled } = startUpload(id, file);
-      if (scheduled) scheduledIds.push(id);
-      return {
-        ...pickedFileFields(file),
-        description: null,
-        pdf_stamp_enabled: false,
-        hide_kindle_and_read_buttons: false,
-        stream_only: false,
-        is_transcoding_in_progress: false,
-        id,
-        subtitle_files: [],
-        url: fileUrl,
-        status: fileStatus,
-        thumbnail: null,
-      };
+      const upload = startUpload(id, file);
+      if (upload.scheduled) scheduledIds.push(id);
+      return newFileEntry(id, file, upload);
     });
     updateProduct({ files: [...product.files, ...fileEntries] });
     onSelectFiles(fileEntries.map((file) => file.id));
@@ -449,12 +450,13 @@ export const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: st
         // Removed while the pick was being copied.
         if (failed?.status.type !== "unsaved" || failed.status.uploadStatus.type !== "failed") return;
         URL.revokeObjectURL(failed.status.url);
-        const { fileUrl, fileStatus, scheduled } = startUpload(fileId, file);
-        if (scheduled && file === picked) heldRetryInputsRef.current.set(fileId, input);
+        const upload = startUpload(fileId, file);
+        if (upload.scheduled && file === picked) heldRetryInputsRef.current.set(fileId, input);
+        // A fresh entry: settings made for the old file, such as an ISBN, may not fit the new file type.
         updateProduct((product) => {
           product.files = product.files.map((existing) =>
             existing.id === fileId
-              ? { ...existing, ...pickedFileFields(file), url: fileUrl, status: fileStatus, thumbnail: null }
+              ? { ...newFileEntry(fileId, file, upload), description: existing.description }
               : existing,
           );
         });

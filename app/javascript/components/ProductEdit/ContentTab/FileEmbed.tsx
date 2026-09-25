@@ -154,7 +154,7 @@ const FileEmbedNodeView = ({
       canvas.toBlob(
         (blob) => {
           setLoadingVideo(false);
-          if (blob) uploadThumbnail(new File([blob], "thumbnail.jpg"));
+          if (blob) uploadThumbnail(new File([blob], "thumbnail.jpg"), downloadUrl);
           video.remove();
           canvas.remove();
         },
@@ -216,7 +216,7 @@ const FileEmbedNodeView = ({
       product.files = product.files.map((existing) => (existing.id === file.id ? { ...existing, ...data } : existing));
     });
 
-  const uploadThumbnail = (thumbnail: File) => {
+  const uploadThumbnail = (thumbnail: File, generatedFrom?: string) => {
     if (thumbnail.size > 5 * 1024 * 1024)
       return showAlert(
         "Could not process your thumbnail, please upload an image with size smaller than 5 MB.",
@@ -227,13 +227,21 @@ const FileEmbedNodeView = ({
     const upload = new DirectUpload(thumbnail, Routes.rails_direct_uploads_path());
     upload.create((error, blob) => {
       if (error) return showAlert(error.message, "error");
-      updateFile({
-        thumbnail: {
-          url: Routes.s3_utility_cdn_url_for_blob_path({ key: blob.key }),
-          signed_id: blob.signed_id,
-          status: { type: "unsaved" },
-        },
-      });
+      const uploaded: FileEntry["thumbnail"] = {
+        url: Routes.s3_utility_cdn_url_for_blob_path({ key: blob.key }),
+        signed_id: blob.signed_id,
+        status: { type: "unsaved" },
+      };
+      if (generatedFrom == null) updateFile({ thumbnail: uploaded });
+      // A frame from a failed attempt must not land on the file that "Upload again" brought in.
+      else
+        updateProduct((product) => {
+          product.files = product.files.map((existing) =>
+            existing.id === file.id && existing.status.type === "unsaved" && existing.status.url === generatedFrom
+              ? { ...existing, thumbnail: uploaded }
+              : existing,
+          );
+        });
       setLoadingVideo(false);
     });
   };
