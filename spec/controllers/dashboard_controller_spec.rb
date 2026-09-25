@@ -196,22 +196,6 @@ describe DashboardController, type: :controller, inertia: true do
       end
     end
 
-    it "does not feature Gumhead when the rollout flag is off" do
-      get :index
-
-      expect(inertia.props[:creator_home]).not_to have_key(:gumhead)
-    end
-
-    it "features Gumhead when the rollout flag is on for the seller" do
-      Feature.activate_user(:gumhead, seller)
-
-      get :index
-
-      expect(inertia.props[:creator_home][:gumhead]).to eq(
-        { download_url: CreatorHomePresenter::GUMHEAD_DOWNLOAD_URL }
-      )
-    end
-
     context "when seller is suspended for TOS" do
       let(:admin_user) { create(:user) }
       let!(:product) { create(:product, user: seller) }
@@ -318,30 +302,6 @@ describe DashboardController, type: :controller, inertia: true do
 
       expect(response).to have_http_status(:ok)
       expect(seller.reload.has_dismissed_getting_started_checklist?).to be(true)
-    end
-  end
-
-  describe "POST dismiss_gumhead_promo" do
-    it_behaves_like "authorize called for action", :post, :dismiss_gumhead_promo do
-      let(:record) { :dashboard }
-    end
-
-    it "dismisses the Gumhead promo" do
-      expect(seller.has_dismissed_gumhead_promo?).to be(false)
-
-      post :dismiss_gumhead_promo
-
-      expect(response).to have_http_status(:ok)
-      expect(seller.reload.has_dismissed_gumhead_promo?).to be(true)
-    end
-
-    it "succeeds when the promo is already dismissed" do
-      seller.update!(has_dismissed_gumhead_promo: true)
-
-      post :dismiss_gumhead_promo
-
-      expect(response).to have_http_status(:ok)
-      expect(seller.reload.has_dismissed_gumhead_promo?).to be(true)
     end
   end
 

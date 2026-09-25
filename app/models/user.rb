@@ -430,9 +430,9 @@ class User < ApplicationRecord
             56 => :gifting_disabled, # Seller opt-out (checkout settings page): removes the "Give as a gift" option at checkout for all of this seller's products (gumroad-private#1191).
             57 => :content_moderation_disabled, # Admin-only: exempts every product this seller creates from automated content moderation, including ones that don't exist yet. Link#content_moderation_disabled only covers products that already exist when support grants it (gumroad-private#1742).
             58 => :product_page_storefront_enabled, # Product pages render inside the creator's storefront (profile header above, catalog below). Defaulted on for new accounts only, so lift can be measured against existing creators before enabling for all (gumroad-private#2196). Sellers can turn it off in profile settings.
-            59 => :has_dismissed_gumhead_promo,
+            59 => :DEPRECATED_has_dismissed_gumhead_promo,
             60 => :hide_follow_form, # Seller setting: hides the subscribe box in the public profile header. Custom HTML pages omit it by not including the form.
-            61 => :gumhead_enabled, # Gumhead beta membership; gates :gumhead via the :gumhead_beta group so the cohort can exceed Flipper's 100-actor cap.
+            61 => :DEPRECATED_gumhead_enabled,
             62 => :link_disabled, # Seller opt-out (checkout settings page): checkout stops offering Stripe Link, which also removes the "save my information" block it renders under the card fields.
             63 => :paypal_card_funding_disabled, # Seller opt-out (checkout settings page): hides PayPal's own debit-or-credit-card funding button, leaving only the PayPal sign-in button.
             :column => "flags",

@@ -193,18 +193,6 @@ Rails.application.routes.draw do
       get "/tax_forms", to: "tax_forms#index"
       get "/tax_forms/:year/:tax_form_type/download", to: "tax_forms#download"
       get "/earnings", to: "earnings#show"
-
-      # Gumhead points its Anthropic base URL at /v2/gumhead, so its
-      # runtime's /v1/messages calls land on these routes; the model key
-      # stays server-side and every call is metered per seller (see
-      # Api::V2::Gumhead::MessagesController).
-      namespace :gumhead do
-        scope "v1" do
-          post "messages", to: "messages#create"
-          post "messages/count_tokens", to: "messages#count_tokens"
-        end
-        get "client_version", to: "messages#client_version"
-      end
     end
   end
 
@@ -1066,7 +1054,6 @@ Rails.application.routes.draw do
     get "/dashboard/monthly_recurring_revenue" => "dashboard#monthly_recurring_revenue", as: :dashboard_monthly_recurring_revenue
     get "/dashboard/download_tax_form" => "dashboard#download_tax_form", as: :dashboard_download_tax_form
     post "/dashboard/dismiss_getting_started_checklist" => "dashboard#dismiss_getting_started_checklist", as: :dashboard_dismiss_getting_started_checklist
-    post "/dashboard/dismiss_gumhead_promo" => "dashboard#dismiss_gumhead_promo", as: :dashboard_dismiss_gumhead_promo
 
     get "/products", to: "links#index", as: :products
 

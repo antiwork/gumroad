@@ -25,7 +25,6 @@ vi.hoisted(() => {
   Object.assign(globalThis, {
     Routes: {
       dashboard_dismiss_getting_started_checklist_path: url("/dashboard/dismiss_getting_started_checklist"),
-      dashboard_dismiss_gumhead_promo_path: url("/dashboard/dismiss_gumhead_promo"),
       dashboard_download_tax_form_path: url("/dashboard/download_tax_form"),
       dashboard_path: url("/dashboard"),
       edit_link_url: url("/links/:id/edit"),
@@ -110,7 +109,6 @@ const props: DashboardPageProps = {
   tax_forms: {},
   show_1099_download_notice: false,
   tax_center_enabled: false,
-  gumhead: null,
 };
 
 const renderDashboard = (currentSeller: CurrentSeller) =>

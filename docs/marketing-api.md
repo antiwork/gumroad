@@ -17,14 +17,14 @@ Execute also returns `intent_url` and `connect_path` for the existing reconnect/
 
 Validation failures return HTTP 422 with `{success: false, message: "..."}`. Missing authentication returns 401, insufficient scope 403, and missing/foreign resources 404.
 
-## CLI and Gumhead post-publish flow
+## CLI post-publish flow
 
 1. `GET /v2/products/:id/marketing/recommendations` after publishing. Select a live channel and display its `handle`, `action.post_text`, and `action.link_url`. Do not approve automatically.
 2. After the seller explicitly confirms, `POST /v2/marketing_actions/:action_id/approve` with `idempotency_key` and `confirmation_token` from that preview (and optional seller-edited `copy`).
 3. `POST /v2/marketing_actions/:action_id/execute` with the keys from the approve response. Resolve retries with the same action ID; `GET /v2/marketing_actions/:action_id` shows the outcome.
 4. Offer cancellation before execution via `POST /v2/marketing_actions/:action_id/cancel`, with `idempotency_key`.
 
-The companion CLI exposes `marketing recommend`, `approve`, `schedule`, `cancel`, and `status`. `schedule` invokes the immediate execute endpoint; it does not accept a future date. Merge and deploy this Rails API before merging/releasing the CLI. Gumhead consumes these calls; this change does not modify Gumhead.
+The companion CLI exposes `marketing recommend`, `approve`, `schedule`, `cancel`, and `status`. `schedule` invokes the immediate execute endpoint; it does not accept a future date. Merge and deploy this Rails API before merging/releasing the CLI.
 
 ## Launch email drafts
 

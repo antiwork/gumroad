@@ -1172,8 +1172,8 @@ class LinksController < ApplicationController
     def report_editor_save_lock_contention(exception)
       key = "editor_save_lock_contention:#{@product.id}"
       occurrences = $redis.incr(key)
-      # Same ttl == -1 repair as the Gumhead gateway throttle: a counter that
-      # outlives its window would suppress this product's reports forever.
+      # Repair ttl == -1 too: a counter that outlives its window would
+      # suppress this product's reports forever.
       $redis.expire(key, EDITOR_SAVE_LOCK_REPORT_WINDOW.to_i) if occurrences == 1 || $redis.ttl(key) == -1
 
       Rails.logger.info(
