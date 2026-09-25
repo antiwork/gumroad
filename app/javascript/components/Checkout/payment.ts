@@ -417,6 +417,10 @@ export type State = {
   // on the status type alone never see it — PaymentForm keys its scroll-to-first-error effect
   // on this counter instead (gumroad-private#1703).
   validationFailedCount: number;
+  // True while a confirmation the submit itself raised is what the buyer owes — the large-tip and
+  // duplicate-purchase modals. Those hold the status at `finished` so their retry can resubmit, and
+  // nothing is in flight meanwhile, so Pay must not keep reading as a charge in progress.
+  awaitingBuyerConfirmation: boolean;
   status:
     | { type: "input"; errors: Set<string> }
     | { type: "offering" }
@@ -516,6 +520,7 @@ type PublicAction =
   // checkout page's props.
   | { type: "update-checkout-payment"; checkoutPayment: CheckoutPaymentConfig }
   | { type: "refresh-expired-buyer-currency-quote"; beforeSubmit?: boolean }
+  | { type: "set-awaiting-buyer-confirmation"; awaiting: boolean }
   | { type: "cancel" };
 
 type Action =
@@ -527,9 +532,16 @@ type Action =
   | { type: "surcharges-fetch-succeeded"; requestId: number; result: SurchargesResponse }
   | { type: "surcharges-fetch-failed"; requestId: number };
 
+export function getPayLabel(state: State) {
+  // A confirmation the buyer owes keeps the submit in `finished` so its retry can resubmit, but no
+  // charge is in flight while they decide — "Processing..." there reads as a hung payment.
+  if (isProcessing(state) && !state.awaitingBuyerConfirmation) return "Processing...";
+  return state.payLabel ?? (requiresPayment(state) ? "Pay" : "Get");
+}
+
 export function usePayLabel() {
   const [state] = useState();
-  return isProcessing(state) ? "Processing..." : (state.payLabel ?? (requiresPayment(state) ? "Pay" : "Get"));
+  return getPayLabel(state);
 }
 
 export function requiresPayment(state: State) {
@@ -1652,10 +1664,14 @@ export const reduceCheckoutState = produce((state: State, action: Action) => {
       state.acknowledgedEmails.add(action.email);
       state.emailTypoSuggestion = null;
       break;
+    case "set-awaiting-buyer-confirmation":
+      state.awaitingBuyerConfirmation = action.awaiting;
+      break;
     case "cancel":
       // Cancelling clears a pending resume too: the buyer (or an error path) has backed out of the
       // submit, so a configuration refresh landing later must not restart it behind their back.
       state.resumeSubmitAfterCheckoutPayment = false;
+      state.awaitingBuyerConfirmation = false;
       if (state.status.type === "input") return;
       state.status = { type: "input", errors: new Set() };
       break;
@@ -1907,6 +1923,7 @@ export function createReducer(initial: {
       paymentMethod: "card",
       paymentElementType: "card",
       checkoutPaymentStale: false,
+      awaitingBuyerConfirmation: false,
       resumeSubmitAfterCheckoutPayment: false,
       validationFailedCount: 0,
       willSaveCard: false,

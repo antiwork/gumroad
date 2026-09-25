@@ -175,6 +175,7 @@ const buildState = (overrides: Partial<State> = {}): State => ({
   checkoutPaymentStale: false,
   resumeSubmitAfterCheckoutPayment: false,
   validationFailedCount: 0,
+  awaitingBuyerConfirmation: false,
   ...overrides,
 });
 
