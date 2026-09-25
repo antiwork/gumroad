@@ -90,6 +90,9 @@ export class StaleContentConflictError extends Error {
 // current token of its own.
 export class StaleDeletionConflictError extends Error {}
 
+// The server refused an ambiguous unmarked clear before writing any edits.
+export class UnmarkedInstallmentPlanClearConflictError extends Error {}
+
 // The server's error payload for a rejected save. Every conflict the editor can
 // act on is discriminated by `error_code`, never by HTTP status: stale-content
 // and stale-deletion both answer 409 but demand opposite handling (reload vs.
@@ -113,6 +116,8 @@ export const saveProductError = (error: SaveProductErrorPayload): Error => {
       return new StaleContentConflictError(error.error_message, error.stale_records ?? []);
     case "stale_deletion_conflict":
       return new StaleDeletionConflictError(error.error_message);
+    case "unmarked_installment_plan_clear_conflict":
+      return new UnmarkedInstallmentPlanClearConflictError(error.error_message);
     default:
       return new ResponseError(error.error_message);
   }
@@ -467,12 +472,16 @@ export const scalarSettingsForSave = (
     customizable_price: boolean;
     price_cents: number;
     hasPaidVariantPricing: boolean;
+    installment_plan: { number_of_installments: number } | null;
+    allow_installment_plan: boolean;
   },
   lastSaved: {
     custom_permalink: string | null;
     customizable_price: boolean | null;
     price_cents: number;
     hasPaidVariantPricing: boolean;
+    installment_plan: { number_of_installments: number } | null;
+    allow_installment_plan: boolean | null;
   },
 ) => {
   const settings: Record<string, unknown> = {};
@@ -498,6 +507,21 @@ export const scalarSettingsForSave = (
   if (!flagIsDerivedFromUnchangedInputs || product.customizable_price !== lastSaved.customizable_price) {
     settings.customizable_price = product.customizable_price;
   }
+  // A null plan hard-deletes the seller's plan server-side, so a stale snapshot
+  // must omit it; a deliberate clear is marked `installment_plan_changed`.
+  const installmentBaselineKnown = lastSaved.allow_installment_plan !== null;
+  const installmentToggled = product.allow_installment_plan !== lastSaved.allow_installment_plan;
+  const installmentCountChanged =
+    (product.installment_plan?.number_of_installments ?? null) !==
+    (lastSaved.installment_plan?.number_of_installments ?? null);
+  if (product.allow_installment_plan) {
+    if (!installmentBaselineKnown || installmentToggled || installmentCountChanged) {
+      settings.installment_plan = product.installment_plan;
+    }
+  } else if (!installmentBaselineKnown || installmentToggled) {
+    settings.installment_plan = null;
+    settings.installment_plan_changed = true;
+  }
   return settings;
 };
 
@@ -516,6 +540,8 @@ export const saveProduct = async (
     lastSavedCustomizablePrice?: boolean | null;
     lastSavedPriceCents?: number | null;
     lastSavedHasPaidVariantPricing?: boolean | null;
+    lastSavedInstallmentPlan?: { number_of_installments: number } | null;
+    lastSavedAllowInstallmentPlan?: boolean | null;
   } = {},
 ): Promise<SaveProductResponse> => {
   // TODO remove this once we have a better content uploader
@@ -545,6 +571,8 @@ export const saveProduct = async (
     customizable_price,
     description,
     description_changed,
+    installment_plan,
+    allow_installment_plan,
     ...productParams
   } = product;
   const response = await request({
@@ -561,12 +589,16 @@ export const saveProduct = async (
           customizable_price,
           price_cents: product.price_cents,
           hasPaidVariantPricing: hasPaidVariantPricing(product),
+          installment_plan,
+          allow_installment_plan,
         },
         {
           custom_permalink: options.lastSavedCustomPermalink ?? null,
           customizable_price: options.lastSavedCustomizablePrice ?? null,
           price_cents: options.lastSavedPriceCents ?? product.price_cents,
           hasPaidVariantPricing: options.lastSavedHasPaidVariantPricing ?? hasPaidVariantPricing(product),
+          installment_plan: options.lastSavedInstallmentPlan ?? null,
+          allow_installment_plan: options.lastSavedAllowInstallmentPlan ?? null,
         },
       ),
       files,
@@ -602,7 +634,6 @@ export const saveProduct = async (
       availabilities: product.availabilities.map(({ newlyAdded, ...availability }) =>
         newlyAdded ? { ...availability, id: null } : availability,
       ),
-      installment_plan: product.allow_installment_plan ? product.installment_plan : null,
     },
   });
   if (!response.ok) throw saveProductError(typia.assert<SaveProductErrorPayload>(await response.json()));

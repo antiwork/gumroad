@@ -5066,7 +5066,7 @@ class LinksControllerUpdateTest < ActionController::TestCase
     create_installment_plan_purchase(link: product)
 
     assert_changes -> { existing_plan.reload.deleted_at }, from: nil do
-      post :update, params: { id: product.unique_permalink, price_cents: 0, installment_plan: nil }, as: :json
+      post :update, params: { id: product.unique_permalink, price_cents: 0, installment_plan: nil, installment_plan_changed: true }, as: :json
     end
 
     assert_nil product.reload.installment_plan
@@ -5077,7 +5077,7 @@ class LinksControllerUpdateTest < ActionController::TestCase
     existing_plan = create_product_installment_plan(link: product, number_of_installments: 2, recurrence: "monthly")
 
     assert_difference -> { ProductInstallmentPlan.count }, -1 do
-      post :update, params: { id: product.unique_permalink, installment_plan: nil }, as: :json
+      post :update, params: { id: product.unique_permalink, installment_plan: nil, installment_plan_changed: true }, as: :json
     end
 
     assert_raises(ActiveRecord::RecordNotFound) { existing_plan.reload }

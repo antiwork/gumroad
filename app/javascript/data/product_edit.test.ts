@@ -22,6 +22,7 @@ import {
   scalarSettingsForSave,
   StaleContentConflictError,
   StaleDeletionConflictError,
+  UnmarkedInstallmentPlanClearConflictError,
 } from "$app/data/product_edit";
 import { ResponseError } from "$app/utils/request";
 
@@ -53,6 +54,8 @@ describe("scalarSettingsForSave", () => {
     customizable_price: false,
     price_cents: 100,
     hasPaidVariantPricing: false,
+    installment_plan: null,
+    allow_installment_plan: false,
     ...overrides,
   });
   const lastSaved = (overrides = {}) => ({
@@ -60,6 +63,8 @@ describe("scalarSettingsForSave", () => {
     customizable_price: false,
     price_cents: 100,
     hasPaidVariantPricing: false,
+    installment_plan: null,
+    allow_installment_plan: false,
     ...overrides,
   });
 
@@ -171,6 +176,52 @@ describe("scalarSettingsForSave", () => {
     expect(
       scalarSettingsForSave(product({ customizable_price: false }), { ...lastSaved(), customizable_price: null }),
     ).toEqual({ customizable_price: false });
+  });
+
+  it("omits an unchanged installment plan so a stale tab cannot delete the seller's plan", () => {
+    expect(scalarSettingsForSave(product(), lastSaved())).toEqual({});
+  });
+
+  it("sends the plan when this session turned the toggle on", () => {
+    expect(
+      scalarSettingsForSave(
+        product({ allow_installment_plan: true, installment_plan: { number_of_installments: 2 } }),
+        lastSaved(),
+      ),
+    ).toEqual({ installment_plan: { number_of_installments: 2 } });
+  });
+
+  it("sends the plan when this session changed the installment count", () => {
+    expect(
+      scalarSettingsForSave(
+        product({ allow_installment_plan: true, installment_plan: { number_of_installments: 4 } }),
+        lastSaved({ allow_installment_plan: true, installment_plan: { number_of_installments: 2 } }),
+      ),
+    ).toEqual({ installment_plan: { number_of_installments: 4 } });
+  });
+
+  it("marks a deliberate toggle-off as a clear so the server can tell it from a stale tab", () => {
+    expect(
+      scalarSettingsForSave(
+        product({ allow_installment_plan: false, installment_plan: null }),
+        lastSaved({ allow_installment_plan: true, installment_plan: { number_of_installments: 2 } }),
+      ),
+    ).toEqual({ installment_plan: null, installment_plan_changed: true });
+  });
+
+  it("always sends installment_plan when the caller has no baseline", () => {
+    expect(
+      scalarSettingsForSave(
+        product({ allow_installment_plan: true, installment_plan: { number_of_installments: 2 } }),
+        { ...lastSaved(), allow_installment_plan: null },
+      ),
+    ).toEqual({ installment_plan: { number_of_installments: 2 } });
+    expect(
+      scalarSettingsForSave(product({ allow_installment_plan: false }), {
+        ...lastSaved(),
+        allow_installment_plan: null,
+      }),
+    ).toEqual({ installment_plan: null, installment_plan_changed: true });
   });
 });
 
@@ -698,5 +749,17 @@ describe("save contract conflict responses", () => {
     const unknown = saveProductError({ error_message: "Nope.", error_code: "some_future_code" });
     expect(unknown).toBeInstanceOf(ResponseError);
     expect(unknown).not.toBeInstanceOf(StaleDeletionConflictError);
+  });
+
+  it("maps unmarked_installment_plan_clear_conflict to its own typed error", () => {
+    const error = saveProductError({
+      error_message: "This page is out of date.",
+      error_code: "unmarked_installment_plan_clear_conflict",
+    });
+
+    expect(error).toBeInstanceOf(UnmarkedInstallmentPlanClearConflictError);
+    expect(error).not.toBeInstanceOf(ResponseError);
+    expect(error).not.toBeInstanceOf(StaleDeletionConflictError);
+    expect(error.message).toBe("This page is out of date.");
   });
 });

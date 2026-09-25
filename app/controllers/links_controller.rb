@@ -464,6 +464,17 @@ class LinksController < ApplicationController
         # timestamps both pass and the last writer silently wins.
         with_editor_save_lock_wait_bound { @product.lock! }
 
+        # An old editor also sends null when the seller switches installments off.
+        # Without an intent marker, refuse the whole save rather than silently
+        # keeping an existing plan or clearing one added by another tab.
+        if params.key?(:installment_plan) && params[:installment_plan].nil? && !installment_plan_clear_requested? && @product.installment_plan.present?
+          log_editor_save_conflict("unmarked_installment_plan_clear_conflict")
+          return render json: {
+            error_message: "This page is out of date. Your changes weren't saved. Copy your edits before refreshing. Refreshing will erase them.",
+            error_code: "unmarked_installment_plan_clear_conflict",
+          }, status: :conflict
+        end
+
         # Capture the deletion-guard diagnostics (alive counts, persisted
         # shared-content flag) NOW, after the lock/reload but before
         # assign_attributes and the save steps below mutate the product — they
@@ -958,6 +969,7 @@ class LinksController < ApplicationController
       permitted.delete(:custom_permalink) if permitted[:custom_permalink].blank? && !custom_permalink_clear_requested?
       permitted.delete(:description) if permitted[:description].blank? && !description_clear_requested?
       permitted.delete(:customizable_price) if permitted[:customizable_price].nil?
+      permitted.delete(:installment_plan) if permitted[:installment_plan].blank? && !installment_plan_clear_requested?
     end
 
     def custom_permalink_clear_requested?
@@ -966,6 +978,10 @@ class LinksController < ApplicationController
 
     def description_clear_requested?
       ActiveModel::Type::Boolean.new.cast(params[:description_changed])
+    end
+
+    def installment_plan_clear_requested?
+      ActiveModel::Type::Boolean.new.cast(params[:installment_plan_changed])
     end
 
     # Built from PERMITTED params so submitted? sees collections as strong
@@ -2071,6 +2087,8 @@ class LinksController < ApplicationController
 
     def update_installment_plan
       return unless @product.eligible_for_installment_plans?
+      # Absent means unspecified, not "remove": only a marked clear may delete the plan.
+      return unless product_permitted_params[:installment_plan].present? || installment_plan_clear_requested?
 
       if @product.installment_plan && product_permitted_params[:installment_plan].present?
         @product.installment_plan.assign_attributes(product_permitted_params[:installment_plan])
