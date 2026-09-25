@@ -44,6 +44,17 @@ describe Mp4Id3Tag do
     expect(leading_tag_size_for(tagged_file(tag_size: 16, declared_size: 4096))).to be_nil
   end
 
+  it "returns nil for a file whose bytes at the tag offsets happen to line up" do
+    file = Tempfile.new(["coincidence", ".m4a"], encoding: "ascii-8bit")
+    file.write("ftypM4")                 # bytes 0-5
+    file.write([0, 0, 0, 8].pack("C4"))  # bytes 6-9 read as a syncsafe size of 8
+    file.write("\x00" * 8)               # the 8 bytes that size covers
+    file.write("ftyp")                   # a box at the offset the size points to
+    file.flush
+
+    expect(leading_tag_size_for(file)).to be_nil
+  end
+
   it "returns nil when the size bytes are not syncsafe" do
     file = Tempfile.new(["notsyncsafe", ".m4a"], encoding: "ascii-8bit")
     file.write("ID3\x04\x00\x00\xFF\xFF\xFF\xFF")

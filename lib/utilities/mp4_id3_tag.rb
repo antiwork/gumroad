@@ -6,9 +6,6 @@
 # box and refuses the file, which reaches buyers as a player that never loads.
 class Mp4Id3Tag
   HEADER_SIZE = 10
-  # Real tags are a few KB. A syncsafe size this large means we are looking at
-  # bytes that merely start with `ID3`, not at a tag worth stripping.
-  MAX_TAG_SIZE = 1_048_576
 
   def self.leading_tag_size(path)
     new(path).leading_tag_size
@@ -26,7 +23,7 @@ class Mp4Id3Tag
     return nil unless header&.start_with?("ID3")
 
     size = syncsafe_size(header)
-    return nil if size.nil? || size > MAX_TAG_SIZE
+    return nil if size.nil?
     return nil unless File.binread(@path, 4, HEADER_SIZE + size) == "ftyp"
 
     HEADER_SIZE + size
