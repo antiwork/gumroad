@@ -3,6 +3,8 @@
 module Charge::Refundable
   extend ActiveSupport::Concern
 
+  EXTERNAL_REFUND_ALERT = "Stripe refund created outside the app"
+
   # A refund reached a terminal unsuccessful status after Stripe had accepted it.
   # "failed" means the buyer's bank returned an asynchronous bank-transfer refund
   # (iDEAL, Bancontact, ACH) days after creation, or that an asynchronous wallet refund
@@ -68,7 +70,11 @@ module Charge::Refundable
       # buyer-presentment charges is the buyer's currency, not canonical USD.
       expected_refunded_amount_cents = refundable.presentment_refundable_amount_cents || refundable.refundable_amount_cents
       refunded_amount_cents = event.extras[:refunded_amount_cents].to_i
-      return unless refunded_amount_cents > 0 && refunded_amount_cents <= expected_refunded_amount_cents
+      unless refunded_amount_cents > 0 && refunded_amount_cents <= expected_refunded_amount_cents
+        ErrorNotifier.notify(EXTERNAL_REFUND_ALERT, stripe_refund_id:, stripe_charge_id:, refunded_amount_cents:,
+                                                    expected_refunded_amount_cents:, recorded: false)
+        return
+      end
 
       # A partial charge-level refund on a combined charge with multiple purchases
       # cannot be reliably attributed: a proportional split across all purchases may
@@ -89,41 +95,49 @@ module Charge::Refundable
         return
       end
 
-      charge_refund = StripeChargeProcessor.new.get_refund(stripe_refund_id, merchant_account: refundable.merchant_account)
-      refundable.charged_purchases.each do |purchase|
-        next if !purchase.successful? || purchase.stripe_refunded?
-        flow_of_funds = if purchase.is_part_of_combined_charge?
-          purchase.send(:build_flow_of_funds_from_combined_charge, charge_refund.flow_of_funds)
-        else
-          charge_refund.flow_of_funds
+      processor = StripeChargeProcessor.new
+      merchant_account = refundable.merchant_account
+      charge_refund = processor.get_refund(stripe_refund_id, merchant_account:)
+      transfer_outcome = nil
+      purchases = refundable.charged_purchases.select { _1.successful? && !_1.stripe_refunded? }.sort_by(&:id)
+      unrecorded = []
+      refunded_purchases = ApplicationRecord.transaction do
+        # Lock every purchase (id order, as Charge#refund_and_save! does) before re-checking for
+        # an app-side Refund row: an app refund's uncommitted transaction holds these locks, so
+        # the re-check sees its row. It also serializes redeliveries of this webhook.
+        purchases.each { _1.reload.lock! }
+        unrecorded = purchases.reject do |purchase|
+          Refund.where(processor_refund_id: stripe_refund_id, purchase_id: purchase.id).exists? || purchase.stripe_refunded?
         end
-        # reload before locking: reading a json_data-backed attribute on a row whose
-        # json_data column is NULL dirties the record in memory, and lock! (inside
-        # with_lock) raises on dirty records. Reloading discards that phantom change.
-        purchase.reload
-        refunded = purchase.with_lock do
-          # Re-check for an already-recorded refund UNDER the purchase row lock. A
-          # seller-initiated refund creates the Stripe refund and the local Refund row
-          # inside one long transaction (emails, search indexing and analytics updates
-          # all happen before it commits), so this webhook can arrive and run the
-          # db_refunds lookup above before that transaction is committed — the lookup
-          # misses the seller's row and this branch would record the same Stripe refund
-          # a second time (a duplicate Refund row, a duplicate seller balance debit and
-          # a duplicate "sale refunded" creator email). The seller's transaction holds
-          # this purchase's row lock (refund_purchase! locks it), so waiting on the lock
-          # and re-querying afterwards is guaranteed to see the committed row. The same
-          # serialization protects against two deliveries of this webhook racing each
-          # other. Scoped to this purchase because one charge-level Stripe refund on a
-          # combined charge legitimately produces one Refund row per charged purchase.
-          # Re-check stripe_refunded? too (with_lock reloaded the row): it covers
-          # a racing full refund whose row predates processor refund ids being stored.
-          if Refund.where(processor_refund_id: stripe_refund_id, purchase_id: purchase.id).exists? || purchase.stripe_refunded?
-            false
+        next [] if unrecorded.empty?
+
+        if charge_refund.is_a?(StripeChargeRefund) && charge_refund.charge[:destination].present? &&
+            merchant_account&.holder_of_funds == HolderOfFunds::STRIPE
+          charge_refund, transfer_outcome = processor.reverse_transfer_for_external_refund(charge_refund, merchant_account:)
+        end
+        gumroad_funded = transfer_outcome == :not_reversible
+
+        unrecorded.select do |purchase|
+          flow_of_funds = if purchase.is_part_of_combined_charge?
+            purchase.send(:build_flow_of_funds_from_combined_charge, charge_refund.flow_of_funds)
           else
-            purchase.refund_purchase!(flow_of_funds, GUMROAD_ADMIN_ID, charge_refund.refund, event.extras[:refund_reason] == "fraudulent")
+            charge_refund.flow_of_funds
           end
+          purchase.refund_purchase!(flow_of_funds, GUMROAD_ADMIN_ID, charge_refund.refund,
+                                    event.extras[:refund_reason] == "fraudulent", gumroad_funded:)
         end
-        next unless refunded
+      end
+      return if unrecorded.empty?
+
+      alert_context = { stripe_refund_id:, stripe_charge_id:, refunded_amount_cents:, transfer_outcome:,
+                        refunded_purchase_ids: refunded_purchases.map(&:id),
+                        unrecorded_purchase_ids: (unrecorded - refunded_purchases).map(&:id) }
+      ErrorNotifier.notify(EXTERNAL_REFUND_ALERT, **alert_context, recorded: refunded_purchases.size == unrecorded.size)
+      if transfer_outcome == :not_reversible
+        ErrorNotifier.notify("Refund created outside the app booked as Gumroad-funded: seller transfer not reversible", **alert_context)
+      end
+
+      refunded_purchases.each do |purchase|
         if event.extras[:refund_reason] == "fraudulent"
           ContactingCreatorMailer.purchase_refunded_for_fraud(purchase.id).deliver_later
         else
