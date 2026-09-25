@@ -2334,9 +2334,14 @@ class Purchase < ApplicationRecord
     gift = gift_given
     return if gift.nil?
 
-    gift.mark_failed! if gift.in_progress?
+    # A gift leg that no longer validates must not roll back the gifter's own failure.
+    if gift.in_progress? && !gift.mark_failed
+      ErrorNotifier.notify("Could not mark gift as failed", gift_id: gift.id, errors: gift.errors.full_messages)
+    end
     giftee_purchase = gift.giftee_purchase
-    giftee_purchase.mark_gift_receiver_purchase_failed! if giftee_purchase&.in_progress?
+    if giftee_purchase&.in_progress? && !giftee_purchase.mark_gift_receiver_purchase_failed
+      ErrorNotifier.notify("Could not mark giftee purchase as failed", purchase_id: giftee_purchase.id, errors: giftee_purchase.errors.full_messages)
+    end
   end
 
   def mark_giftee_purchase_as_chargeback_reversed
