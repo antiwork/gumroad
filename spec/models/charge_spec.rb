@@ -188,6 +188,86 @@ describe Charge, :vcr do
     end
   end
 
+  describe "#refund_and_save! on a combined Stripe charge with less left than the purchases' shares" do
+    let(:seller) { create(:user) }
+    let(:charge_id) { "ch_combined_shrinking" }
+    let(:purchases) do
+      [60_00, 67_65].map do |price_cents|
+        create(:purchase, seller:, link: create(:product, user: seller, price_cents:), price_cents:,
+                          stripe_transaction_id: charge_id, is_part_of_combined_charge: true)
+      end
+    end
+    let(:charge) { create(:charge, seller:, purchases:, merchant_account: purchases.first.merchant_account, processor_transaction_id: charge_id) }
+    # An earlier refund on the charge (e.g. a separately refunded fee) that no purchase's
+    # local share accounts for, so the last sibling's share exceeds what Stripe has left.
+    let(:stripe_state) { { amount: 127_65, amount_refunded: 13_53 } }
+    let(:refunded_amounts) { {} }
+
+    before do
+      create(:balance, user: seller, amount_cents: 1_000_00)
+      allow(Stripe::Charge).to receive(:retrieve).with(charge_id) do
+        Stripe::Charge.construct_from(id: charge_id, livemode: false, destination: nil, **stripe_state)
+      end
+      allow(Stripe::Refund).to receive(:create) do |params|
+        unrefunded = stripe_state[:amount] - stripe_state[:amount_refunded]
+        if params[:amount] > unrefunded
+          raise Stripe::InvalidRequestError.new("Refund amount is greater than unrefunded amount on charge", "amount")
+        end
+        stripe_state[:amount_refunded] += params[:amount]
+        refund_id = "re_#{SecureRandom.hex(4)}"
+        refunded_amounts[refund_id] = params[:amount]
+        Stripe::Refund.construct_from(id: refund_id, amount: params[:amount], status: "succeeded")
+      end
+      allow_any_instance_of(StripeChargeProcessor).to receive(:get_refund) do |_processor, refund_id, **|
+        charge_refund = ChargeRefund.new
+        charge_refund.charge_processor_id = StripeChargeProcessor.charge_processor_id
+        charge_refund.id = refund_id
+        charge_refund.flow_of_funds = FlowOfFunds.build_simple_flow_of_funds(Currency::USD, -refunded_amounts.fetch(refund_id))
+        charge_refund.instance_variable_set(:@refund, double(id: refund_id, status: "succeeded"))
+        charge_refund
+      end
+    end
+
+    it "refunds the last sibling for what is left on the charge instead of failing" do
+      expect(charge.refund_and_save!(seller.id)).to be(true)
+
+      expect(Stripe::Refund).to have_received(:create).with(hash_including(amount: 60_00)).ordered
+      expect(Stripe::Refund).to have_received(:create).with(hash_including(amount: 54_12)).ordered
+      expect(stripe_state[:amount_refunded]).to eq(stripe_state[:amount])
+      first, last = purchases.map(&:reload)
+      expect(first.refunds.sole.total_transaction_cents).to eq(60_00)
+      expect(last.refunds.sole.total_transaction_cents).to eq(54_12)
+      expect(last.stripe_partially_refunded).to be(true)
+    end
+  end
+
+  describe "#refund_and_save! when a later sibling raises after an earlier Stripe refund succeeded" do
+    let(:seller) { create(:user) }
+    let(:purchases) do
+      Array.new(2) { create(:purchase, seller:, link: create(:product, user: seller), stripe_transaction_id: "ch_combined_raise", is_part_of_combined_charge: true) }
+    end
+    let(:charge) { create(:charge, seller:, purchases:, merchant_account: purchases.first.merchant_account) }
+
+    it "keeps the earlier sibling's local refund and reports the failure" do
+      create(:balance, user: seller, amount_cents: 10_000)
+      first, second = purchases.sort_by(&:id)
+      flow_of_funds = FlowOfFunds.build_simple_flow_of_funds(Currency::USD, -first.total_transaction_cents)
+      allow(ChargeProcessor).to receive(:refund!).with(anything, "ch_combined_raise", hash_including(purchase: first))
+        .and_return(double(id: "re_first", refund: double(id: "re_first", status: "succeeded"), flow_of_funds:))
+      allow(ChargeProcessor).to receive(:refund!).with(anything, "ch_combined_raise", hash_including(purchase: second))
+        .and_raise(RuntimeError, "unexpected processor failure")
+      allow(ErrorNotifier).to receive(:notify)
+
+      expect(charge.refund_and_save!(seller.id)).to be(false)
+
+      expect(first.reload.refunds.sole.processor_refund_id).to eq("re_first")
+      expect(first.stripe_refunded).to be(true)
+      expect(second.reload.refunds).to be_empty
+      expect(charge.errors.full_messages.join).to include("unexpected processor failure")
+      expect(ErrorNotifier).to have_received(:notify).with(an_instance_of(RuntimeError), context: { charge_id: charge.id, purchase_id: second.id })
+    end
+  end
+
   describe "#refund_gumroad_taxes!" do
     it "attempts every taxable purchase refund even when one purchase fails" do
       charge = create(:charge)

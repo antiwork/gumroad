@@ -145,7 +145,9 @@ class Purchase
                                                 reverse_transfer: !chargedback? || !chargeback_reversed,
                                                 paypal_order_purchase_unit_refund:,
                                                 is_for_fraud:,
-                                                purchase: self)
+                                                purchase: self,
+                                                # Presentment refunds book a pinned canonical amount, so only USD ones may be resized.
+                                                cap_to_unrefunded_amount: is_part_of_combined_charge? && presentment_refund.nil?)
         logger.info("Refunding purchase: #{id} completed with ID: #{charge_refund.id}, Flow of Funds: #{charge_refund.flow_of_funds.to_h}")
         purchase_event = Event.where(purchase_id: id, event_name: "purchase").last
         unless purchase_event.nil?
@@ -164,6 +166,10 @@ class Purchase
                                     canonical_gross_refund_cents: (presentment_refund ? (gross_amount_cents.presence || gross_amount_refundable_cents) : nil),
                                     presentment_refund:,
                                     note: reason)
+        unless refunded
+          ErrorNotifier.notify("Processor refund succeeded but no local refund was recorded",
+                               context: { purchase_id: id, processor_refund_id: charge_refund.id })
+        end
         # When a Gumroad team member (support/admin) refunds a sale on the creator's
         # behalf, tell the creator by email — otherwise they only discover the refund by
         # stumbling on the refunded row in their dashboard. Creator-initiated refunds stay

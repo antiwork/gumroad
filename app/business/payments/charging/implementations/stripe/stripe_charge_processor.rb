@@ -630,7 +630,7 @@ class StripeChargeProcessor
     end
   end
 
-  def refund!(charge_id, amount_cents: nil, merchant_account: nil, reverse_transfer: true, is_for_fraud: nil, **_args)
+  def refund!(charge_id, amount_cents: nil, merchant_account: nil, reverse_transfer: true, is_for_fraud: nil, cap_to_unrefunded_amount: false, **_args)
     if merchant_migrated? merchant_account
       begin
         stripe_charge = Stripe::Charge.retrieve({ id: charge_id }, { stripe_account: merchant_account.charge_processor_merchant_id })
@@ -645,6 +645,13 @@ class StripeChargeProcessor
     params = {
       charge: charge_id
     }
+    if amount_cents.present? && cap_to_unrefunded_amount
+      # A sibling on the same combined charge may already have taken more than its local share
+      # (split rounding, or a refund booked elsewhere); refund what is left rather than fail.
+      unrefunded_cents = stripe_charge.amount.to_i - stripe_charge.amount_refunded.to_i
+      raise ChargeProcessorAlreadyRefundedError.new("Stripe charge #{charge_id} has nothing left to refund") if unrefunded_cents <= 0
+      amount_cents = [amount_cents, unrefunded_cents].min
+    end
     params[:amount] = amount_cents if amount_cents.present?
     # Stripe adds fraudulent refunds to Radar's blocklists, including shared test cards.
     params[:reason] = REFUND_REASON_FRAUDULENT if is_for_fraud.present? && stripe_charge.livemode

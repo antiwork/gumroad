@@ -191,7 +191,7 @@ class Charge < ApplicationRecord
     transaction do
       refunded_all_purchases = true
       lock_successful_purchases_in_id_order!.each do |purchase|
-        refunded = purchase.refund_and_save!(refunding_user_id, reason:)
+        refunded = refund_sibling(purchase) { purchase.refund_and_save!(refunding_user_id, reason:) }
         unless refunded
           copy_refund_errors_from(purchase)
           refunded_all_purchases = false
@@ -205,7 +205,7 @@ class Charge < ApplicationRecord
     transaction do
       refunded_all_taxes = true
       lock_successful_purchases_in_id_order!.select { _1.gumroad_tax_cents > 0 }.each do |purchase|
-        refunded = purchase.refund_gumroad_taxes!(refunding_user_id:, note:, business_vat_id:)
+        refunded = refund_sibling(purchase) { purchase.refund_gumroad_taxes!(refunding_user_id:, note:, business_vat_id:) }
         unless refunded
           copy_refund_errors_from(purchase)
           refunded_all_taxes = false
@@ -217,7 +217,13 @@ class Charge < ApplicationRecord
 
   def refund_for_fraud_and_block_buyer!(refunding_user_id)
     with_lock do
-      return false unless lock_successful_purchases_in_id_order!.all? { _1.refund_for_fraud!(refunding_user_id) }
+      failed_purchase = lock_successful_purchases_in_id_order!.find do |purchase|
+        !refund_sibling(purchase) { purchase.refund_for_fraud!(refunding_user_id) }
+      end
+      if failed_purchase
+        copy_refund_errors_from(failed_purchase)
+        return false
+      end
 
       block_buyer!(blocking_user_id: refunding_user_id)
     end
@@ -349,6 +355,17 @@ class Charge < ApplicationRecord
     # under FOR UPDATE.
     def lock_successful_purchases_in_id_order!
       successful_purchases.sort_by(&:id).each { _1.reload.lock! }
+    end
+
+    # Each sibling gets its own savepoint: an exception in one must not roll back the local
+    # rows of siblings whose Stripe refunds already succeeded, which the refund webhook would
+    # then book a second time.
+    def refund_sibling(purchase)
+      transaction(requires_new: true) { yield }
+    rescue StandardError => e
+      ErrorNotifier.notify(e, context: { charge_id: id, purchase_id: purchase.id })
+      purchase.errors.add(:base, "Refund failed for purchase #{purchase.external_id_numeric}: #{e.message}")
+      false
     end
 
     def copy_refund_errors_from(purchase)
