@@ -192,7 +192,7 @@ describe Charge, :vcr do
     let(:seller) { create(:user) }
     let(:charge_id) { "ch_combined_shrinking" }
     let(:purchases) do
-      [60_00, 67_65].map do |price_cents|
+      [40_00, 50_00].map do |price_cents|
         create(:purchase, seller:, link: create(:product, user: seller, price_cents:), price_cents:,
                           stripe_transaction_id: charge_id, is_part_of_combined_charge: true)
       end
@@ -200,7 +200,7 @@ describe Charge, :vcr do
     let(:charge) { create(:charge, seller:, purchases:, merchant_account: purchases.first.merchant_account, processor_transaction_id: charge_id) }
     # An earlier refund on the charge (e.g. a separately refunded fee) that no purchase's
     # local share accounts for, so the last sibling's share exceeds what Stripe has left.
-    let(:stripe_state) { { amount: 127_65, amount_refunded: 13_53 } }
+    let(:stripe_state) { { amount: 90_00, amount_refunded: 12_00 } }
     let(:refunded_amounts) { {} }
 
     before do
@@ -233,15 +233,15 @@ describe Charge, :vcr do
 
       expect(charge.refund_and_save!(seller.id)).to be(true)
 
-      expect(Stripe::Refund).to have_received(:create).with(hash_including(amount: 60_00)).ordered
-      expect(Stripe::Refund).to have_received(:create).with(hash_including(amount: 54_12)).ordered
+      expect(Stripe::Refund).to have_received(:create).with(hash_including(amount: 40_00)).ordered
+      expect(Stripe::Refund).to have_received(:create).with(hash_including(amount: 38_00)).ordered
       expect(stripe_state[:amount_refunded]).to eq(stripe_state[:amount])
       first, last = purchases.map(&:reload)
-      expect(first.refunds.sole.total_transaction_cents).to eq(60_00)
-      expect(last.refunds.sole.total_transaction_cents).to eq(54_12)
+      expect(first.refunds.sole.total_transaction_cents).to eq(40_00)
+      expect(last.refunds.sole.total_transaction_cents).to eq(38_00)
       expect(last.stripe_partially_refunded).to be(true)
       expect(ErrorNotifier).to have_received(:notify)
-        .with("Combined-charge refund capped to the charge's unrefunded amount", context: hash_including(requested_cents: 67_65, unrefunded_cents: 54_12))
+        .with("Combined-charge refund capped to the charge's unrefunded amount", context: hash_including(requested_cents: 50_00, unrefunded_cents: 38_00))
     end
   end
 
