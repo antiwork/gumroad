@@ -42,3 +42,16 @@ it("reports an unplayable file instead of spinning forever", () => {
   expect(container.querySelector('[role="progressbar"]')).toBeNull();
   expect(container.textContent).toContain("This file can't be played in your browser");
 });
+
+it("clears the error when the player is given a new file", () => {
+  const { container, rerender } = render(<AudioPlayer src="https://example.com/unplayable.m4a" />);
+  const audio = container.querySelector("audio");
+  if (!audio) throw new Error("Audio element missing");
+  fireEvent.error(audio);
+  expect(container.textContent).toContain("This file can't be played in your browser");
+
+  rerender(<AudioPlayer src="https://example.com/playable.mp3" />);
+
+  expect(container.textContent).not.toContain("This file can't be played in your browser");
+  expect(container.querySelector('[role="progressbar"]')).not.toBeNull();
+});

@@ -264,7 +264,21 @@ module WithFileProperties
       ensure
         repaired.close!
       end
+      rebuild_archives_holding_old_bytes
     rescue Aws::Errors::ServiceError, Seahorse::Client::NetworkingError => e
       logger.warn("Analyze -- could not strip the ID3v2 tag from #{self.class.name} #{id} (#{e.class} => #{e.message})")
+    end
+
+    # Archive freshness is keyed on file ids and names, not bytes, so a ZIP built
+    # before the rewrite would keep serving the tagged file.
+    def rebuild_archives_holding_old_bytes
+      return unless respond_to?(:product_files_archives)
+
+      product_files_archives.alive.each(&:mark_deleted!)
+      if link_id.present?
+        GenerateProductFilesArchivesJob.perform_async(link_id)
+      elsif installment&.needs_updated_entity_archive?
+        installment.generate_entity_archive!
+      end
     end
 end
