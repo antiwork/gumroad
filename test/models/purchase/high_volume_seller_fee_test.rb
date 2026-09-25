@@ -75,13 +75,13 @@ class Purchase::HighVolumeSellerFeeTest < ActiveSupport::TestCase
     assert RefreshHighVolumeSellerFeeEligibilityJob.jobs.any? { |job| job["args"] == [@seller.id] }
   end
 
-  test "a successful sale keeps the async pre-warm when the flag is off" do
+  test "a successful sale does not refresh eligibility when the flag is off, leaving the pre-warm to the nightly job" do
     Feature.deactivate(:high_volume_seller_fee)
     RefreshHighVolumeSellerFeeEligibilityJob.clear
     create_purchase(link: @product, seller: @seller, price_cents: 2_000_000)
 
     assert_not @seller.reload.high_volume_fee_eligible?
-    assert RefreshHighVolumeSellerFeeEligibilityJob.jobs.any? { |job| job["args"] == [@seller.id] }
+    assert_empty RefreshHighVolumeSellerFeeEligibilityJob.jobs
   end
 
   test "a full refund clears eligibility synchronously so the next sale cannot use the stale 5% rate" do

@@ -3725,13 +3725,17 @@ class Purchase < ApplicationRecord
 
   def enqueue_high_volume_fee_eligibility_refresh
     return if seller_id.blank?
+    # Flag-off sellers skip the per-sale refresh: it locks the seller's users row and sums
+    # the month's sales, one job per sale. The nightly job still pre-warms them; when ramping,
+    # run RefreshHighVolumeSellerFeeEligibilityJob for the ramped sellers to cover same-day crossers.
+    return unless seller && Feature.active?(:high_volume_seller_fee, seller)
 
     # A sale that crosses $20k must lower the very next sale's fee, so refresh
     # synchronously while the seller is below the cached threshold. Already-eligible
-    # sellers can't change state on a sale; flag-off keeps the async pre-warm.
+    # sellers can't lose eligibility on a sale, so they take the cheaper async path.
     # Reload before branching: a concurrent refund can clear the cached eligibility
     # this in-memory seller still shows, which would wrongly skip the sync refresh.
-    if seller && Feature.active?(:high_volume_seller_fee, seller) && !seller.reload.high_volume_fee_eligible?
+    if !seller.reload.high_volume_fee_eligible?
       refresh_high_volume_fee_eligibility
     else
       RefreshHighVolumeSellerFeeEligibilityJob.perform_async(seller_id)
