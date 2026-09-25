@@ -14,8 +14,8 @@ describe "Sentry configuration" do
   describe "before_send" do
     subject(:before_send) { Sentry.configuration.before_send }
 
-    def build_event(tags:)
-      instance_double(Sentry::ErrorEvent, tags:)
+    def build_event(tags:, request: nil)
+      instance_double(Sentry::ErrorEvent, tags:, request:)
     end
 
     def build_exception(backtrace)
@@ -75,6 +75,52 @@ describe "Sentry configuration" do
       event = build_event(tags: { source: "runner" })
 
       expect(before_send.call(event, exception: StandardError.new("boom"))).to eq(event)
+    end
+  end
+
+  describe "retired Gumhead gateway requests" do
+    # Real events built through the SDK's scope, so the request context is the one a
+    # sampled production request would carry.
+    def event_for(url, type)
+      env = Rack::MockRequest.env_for(
+        url,
+        method: "POST",
+        input: { messages: "seller prompt" }.to_json,
+        "CONTENT_TYPE" => "application/json",
+        "HTTP_AUTHORIZATION" => "Bearer secret",
+      )
+      event = if type == :transaction
+        Sentry::TransactionEvent.new(configuration: Sentry.configuration, transaction: Sentry::Transaction.new(name: "POST", op: "http.server"))
+      else
+        Sentry::ErrorEvent.new(configuration: Sentry.configuration)
+      end
+      scope = Sentry::Scope.new
+      scope.set_rack_env(env)
+      scope.apply_to_event(event)
+      event
+    end
+
+    it "drops error events for the retired gateway URLs" do
+      event = event_for("https://example.com/v2/gumhead/v1/messages", :error)
+      expect(event.request.headers).to include("Authorization" => "Bearer secret")
+
+      expect(Sentry.configuration.before_send.call(event, nil)).to be_nil
+    end
+
+    it "drops transactions for the retired gateway URLs" do
+      event = event_for("https://example.com/api/v2/gumhead/v1/messages", :transaction)
+      expect(event.request.headers).to include("Authorization" => "Bearer secret")
+      expect(event.request.data).to include("seller prompt")
+
+      expect(Sentry.configuration.before_send_transaction.call(event, nil)).to be_nil
+    end
+
+    it "keeps events for other URLs" do
+      error = event_for("https://example.com/purchases", :error)
+      transaction = event_for("https://example.com/purchases", :transaction)
+
+      expect(Sentry.configuration.before_send.call(error, nil)).to eq(error)
+      expect(Sentry.configuration.before_send_transaction.call(transaction, nil)).to eq(transaction)
     end
   end
 end

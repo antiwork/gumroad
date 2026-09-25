@@ -17,6 +17,11 @@ Sentry.init do |config|
     "ActionController::ParameterMissing",
   ]
 
+  # Installed Gumhead apps still post prompts and the seller's bearer token to
+  # the retired /v2/gumhead routes. With send_default_pii on, Sentry would keep
+  # both, so drop every event for those URLs.
+  retired_gumhead_request = ->(event) { event.request&.url.to_s.include?("/v2/gumhead/") }
+
   # Drop errors raised by ad-hoc `bin/rails runner` scripts piped in over STDIN
   # (their backtraces contain "stdin:<line>" frames). These are one-off console
   # commands typed by an operator — the person running the script sees the error
@@ -31,6 +36,10 @@ Sentry.init do |config|
       exception.respond_to?(:backtrace) &&
       exception.backtrace&.any? { |frame| frame.start_with?("stdin:") }
 
-    stdin_runner_error ? nil : event
+    stdin_runner_error || retired_gumhead_request.call(event) ? nil : event
+  end
+
+  config.before_send_transaction = lambda do |event, _hint|
+    retired_gumhead_request.call(event) ? nil : event
   end
 end
