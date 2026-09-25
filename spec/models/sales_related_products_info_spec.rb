@@ -107,6 +107,38 @@ describe SalesRelatedProductsInfo do
       expect(related.all? { described_class.find_by(smaller_product_id: [product.id, _1.id].min, larger_product_id: [product.id, _1.id].max).sales_count == 1 }).to be(true)
     end
 
+    it "applies the counts inside a caller's transaction" do
+      product1 = create(:product)
+      product2 = create(:product)
+
+      ApplicationRecord.transaction do
+        described_class.update_sales_counts(product_id: product1.id, related_product_ids: [product2.id], increment: true)
+      end
+
+      info = described_class.find_by(smaller_product_id: [product1.id, product2.id].min, larger_product_id: [product1.id, product2.id].max)
+      expect(info.sales_count).to eq(1)
+    end
+
+    it "lets a deadlock inside a caller's transaction propagate instead of retrying the slice on its own" do
+      product1 = create(:product)
+      product2 = create(:product)
+      insert_attempts = 0
+      allow(ApplicationRecord.connection).to receive(:execute).and_wrap_original do |original, sql, *args|
+        if sql.include?("INSERT INTO #{described_class.table_name}")
+          insert_attempts += 1
+          raise ActiveRecord::Deadlocked, "Deadlock found when trying to get lock"
+        end
+        original.call(sql, *args)
+      end
+
+      expect do
+        ApplicationRecord.transaction do
+          described_class.update_sales_counts(product_id: product1.id, related_product_ids: [product2.id], increment: true)
+        end
+      end.to raise_error(ActiveRecord::Deadlocked)
+      expect(insert_attempts).to eq(1)
+    end
+
     it "accumulates repeated increments on the same pair" do
       # Note this passes on the old read-then-write code too: sequential calls are not a
       # real race. It is here as a regression guard on the upsert's arithmetic, since
