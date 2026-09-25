@@ -27,8 +27,8 @@ class UpdateProductFilesArchiveWorker
     @used_file_paths = []
   end
 
-  # Renewed per file, so it only has to outlast one file's download; a crashed run delays the
-  # next rebuild by at most this much.
+  # Renewed before each download and the upload, so it only has to outlast one transfer; a
+  # crashed run delays the next rebuild by at most this much.
   LOCK_TTL = 30.minutes
   LOCKED_RETRY_DELAY = 1.minute
   RELEASE_LOCK_SCRIPT = <<~LUA
@@ -136,6 +136,7 @@ class UpdateProductFilesArchiveWorker
     # variable to hold the zip file, so had to do it this way.
     file = File.open(zip_archive_filename, "rb")
     archive_s3_object = product_files_archive.s3_object
+    $redis.eval(RENEW_LOCK_SCRIPT, keys: [@lock_key], argv: [@lock_token, LOCK_TTL.to_i])
     archive_s3_object.upload_file(file, content_type: "application/zip")
     # A file rewritten mid-build resets the archive to queueing and enqueues a rebuild; this ZIP
     # may hold its old bytes, so leave it hidden for that rebuild.
