@@ -48,6 +48,10 @@ var Evaporate = function(config){
     partSize: 100 * 1024 * 1024,
     retryBackoffPower: 2,
     maxRetryBackoffSecs: 300,
+    // A part that keeps failing or stalling is re-queued forever (the backoff just caps at
+    // maxRetryBackoffSecs), so the file stays "uploading" upstream with no end. After this many
+    // attempts on one part the whole file is failed instead. 0 disables the cap.
+    maxRetryAttempts: 10,
     progressIntervalMS: 1000,
     maxFileSize: null,
     s3Endpoint: 'https://s3.amazonaws.com'
@@ -236,6 +240,17 @@ var Evaporate = function(config){
     }
 
 
+    function failUpload(msg){
+
+      l.w(msg);
+      me.warn(msg);
+      me.info(msg);
+      me.error(msg);
+      setStatus(ERROR);
+      cancelAllRequests();
+    }
+
+
     function initiateUpload(){ // see: http://docs.amazonwebservices.com/AmazonS3/latest/API/mpUploadInitiate.html
 
       var initiate = {
@@ -275,6 +290,14 @@ var Evaporate = function(config){
       var backOff, hasErrored, upload, part;
 
       part = parts[partNumber];
+
+      if (con.maxRetryAttempts && part.attempts >= con.maxRetryAttempts){
+        // The part has used up its retry budget. Re-queueing it again would just grow the
+        // backoff to maxRetryBackoffSecs and leave the file uploading forever, so fail the
+        // whole file: the caller's error callback runs and the upload can be retried by hand.
+        failUpload('part #' + partNumber + ' failed ' + part.attempts + ' times. Giving up.');
+        return;
+      }
 
       part.status = EVAPORATING;
       countUploadAttempts++;

@@ -21,6 +21,7 @@ declare module "$vendor/evaporate.cjs" {
       fetchCurrentServerTimeUrl: string;
       maxFileSize?: number;
       s3Endpoint?: string;
+      maxRetryAttempts?: number;
     });
 
     add(params: UploadParams): string | number;

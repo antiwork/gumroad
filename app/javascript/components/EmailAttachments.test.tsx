@@ -3,7 +3,12 @@ import { renderHook } from "@testing-library/react";
 import * as React from "react";
 import { afterEach, expect, it, vi } from "vitest";
 
-import { FileAction, FilesDispatchProvider, useUploadSubtitles } from "$app/components/EmailAttachments";
+import {
+  FileAction,
+  FilesDispatchProvider,
+  useUploadFiles,
+  useUploadSubtitles,
+} from "$app/components/EmailAttachments";
 
 const alerts = vi.hoisted((): { message: string; level: string }[] => []);
 vi.mock("$app/components/server-components/Alert", () => ({
@@ -67,4 +72,22 @@ it("settles the subtitle upload promise when Evaporate errors", async () => {
   if (removed?.type === "remove-subtitle") {
     expect(typeof removed.subtitleUrl).toBe("string");
   }
+});
+
+it("drops an attachment row and alerts when its upload fails", () => {
+  const dispatched: FileAction[] = [];
+  const { result } = renderHook(() => useUploadFiles(), {
+    wrapper: ({ children }: { children: React.ReactNode }) => (
+      <FilesDispatchProvider value={(action) => dispatched.push(action)}>{children}</FilesDispatchProvider>
+    ),
+  });
+  if (!result.current) throw new Error("uploader hook returned null");
+
+  result.current("email-1", [new File(["x"], "huge.zip", { type: "application/zip" })]);
+  const started = dispatched.find((action) => action.type === "start-file-upload");
+  if (started?.type !== "start-file-upload") throw new Error("upload did not start");
+
+  scheduledUploads[0]?.onError?.();
+  expect(alerts).toEqual([{ message: "Could not upload huge.zip. Please try again.", level: "error" }]);
+  expect(dispatched).toContainEqual({ type: "remove-file", fileId: started.file.id });
 });

@@ -297,6 +297,10 @@ export const useUploadFiles = (): null | ((emailId: string, files: File[]) => vo
         file,
         mimeType,
         onComplete: () => filesDispatch({ type: "finish-file-upload", fileId: id }),
+        onError: () => {
+          showAlert(`Could not upload ${originalName}. Please try again.`, "error");
+          filesDispatch({ type: "remove-file", fileId: id });
+        },
         onProgress: (progress) => filesDispatch({ type: "set-file-upload-progress", fileId: id, progress }),
       });
 

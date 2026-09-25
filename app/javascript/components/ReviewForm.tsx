@@ -4,7 +4,7 @@ import * as React from "react";
 import { setProductRating } from "$app/data/product_reviews";
 import { assertDefined } from "$app/utils/assert";
 import FileUtils from "$app/utils/file";
-import { assertResponseError } from "$app/utils/request";
+import { assertResponseError, ResponseError } from "$app/utils/request";
 import { summarizeUploadProgress } from "$app/utils/summarizeUploadProgress";
 
 import { Button } from "$app/components/Button";
@@ -211,6 +211,11 @@ export const ReviewForm = React.forwardRef<
             setUploadProgress(null);
             setUploadCancellationKey(null);
             resolve(fileUrl);
+          },
+          onError: () => {
+            setUploadProgress(null);
+            setUploadCancellationKey(null);
+            reject(new ResponseError("Your video couldn't be uploaded. Please try again."));
           },
           onProgress: setUploadProgress,
         });
