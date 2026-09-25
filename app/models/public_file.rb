@@ -60,17 +60,15 @@ class PublicFile < ApplicationRecord
   end
 
   def self.generate_public_id(max_retries: 10)
-    retries = 0
-    candidate = SecureRandom.alphanumeric.downcase
-
-    while self.exists?(public_id: candidate)
-      retries += 1
-      raise "Failed to generate unique public_id after #{max_retries} attempts" if retries >= max_retries
-
+    max_retries.times do
       candidate = SecureRandom.alphanumeric.downcase
+      # The id is embedded in the product description, and the adult keyword check reads
+      # each letter run in it as a word, so "3kink1" would block the seller's save.
+      next if AdultKeywordDetector.adult?(candidate)
+      return candidate unless exists?(public_id: candidate)
     end
 
-    candidate
+    raise "Failed to generate unique public_id after #{max_retries} attempts"
   end
 
   private
