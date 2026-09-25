@@ -9,6 +9,7 @@ type Responder = (xhr: FakeXhr) => void;
 class FakeXhr {
   static partResponders: Responder[] = [];
   static partRequests = 0;
+  static hungRequests: FakeXhr[] = [];
 
   method = "";
   url = "";
@@ -32,8 +33,10 @@ class FakeXhr {
     return name === "ETag" ? '"part-etag"' : null;
   }
 
+  // Like a browser: aborting an unfinished request fires readystatechange with status 0.
   abort() {
     this.aborted = true;
+    if (this.readyState !== 4) this.respond(0, "");
   }
 
   send() {
@@ -64,10 +67,12 @@ class FakeXhr {
   }
 }
 
-const flush = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+const hang: Responder = (xhr) => FakeXhr.hungRequests.push(xhr);
 
-const buildEvaporate = (maxRetryAttempts: number) =>
+const buildEvaporate = (maxRetryAttempts: number, partSize?: number) =>
+  // partSize is read at runtime but not part of the typed config.
   new Evaporate({
+    ...(partSize ? { partSize } : {}),
     signerUrl: "http://s3.test/sign",
     aws_key: "key",
     bucket: "bucket",
@@ -96,10 +101,12 @@ const addFile = (
 beforeEach(() => {
   FakeXhr.partResponders = [];
   FakeXhr.partRequests = 0;
+  FakeXhr.hungRequests = [];
   vi.stubGlobal("XMLHttpRequest", FakeXhr);
 });
 
 afterEach(() => {
+  vi.useRealTimers();
   vi.unstubAllGlobals();
 });
 
@@ -116,7 +123,8 @@ it("fails the file once a part exhausts its retry budget instead of retrying for
   const evaporate = buildEvaporate(2);
   addFile(evaporate, { complete, error });
 
-  await flush(1500);
+  await vi.waitFor(() => expect(error).toHaveBeenCalledTimes(1), { timeout: 5000 });
+  await new Promise((resolve) => setTimeout(resolve, 50));
 
   expect(error).toHaveBeenCalledTimes(1);
   expect(complete).not.toHaveBeenCalled();
@@ -133,9 +141,47 @@ it("completes the file when a part recovers inside the retry budget", async () =
   const evaporate = buildEvaporate(3);
   addFile(evaporate, { complete, error });
 
-  await flush(1500);
+  await vi.waitFor(() => expect(complete).toHaveBeenCalledTimes(1), { timeout: 5000 });
 
   expect(error).not.toHaveBeenCalled();
   expect(complete).toHaveBeenCalledTimes(1);
   expect(FakeXhr.partRequests).toBe(2);
+});
+
+it("aborts the other in-flight parts when one part exhausts its budget", async () => {
+  // Two 5-byte parts: part 1 always fails, part 2 never answers.
+  FakeXhr.partResponders = [(xhr) => (xhr.url.includes("partNumber=1") ? xhr.respond(500, "") : hang(xhr))];
+  const complete = vi.fn();
+  const error = vi.fn();
+
+  const evaporate = buildEvaporate(2, 5);
+  addFile(evaporate, { complete, error });
+
+  await vi.waitFor(() => expect(error).toHaveBeenCalledTimes(1), { timeout: 5000 });
+  const requestsAtFailure = FakeXhr.partRequests;
+  await new Promise((resolve) => setTimeout(resolve, 1500));
+
+  expect(FakeXhr.hungRequests.length).toBeGreaterThan(0);
+  expect(FakeXhr.hungRequests.every((xhr) => xhr.aborted)).toBe(true);
+  expect(FakeXhr.partRequests).toBe(requestsAtFailure);
+  expect(error).toHaveBeenCalledTimes(1);
+  expect(complete).not.toHaveBeenCalled();
+});
+
+it("fails the file once a permanently stalled part is aborted past its budget", async () => {
+  vi.useFakeTimers();
+  FakeXhr.partResponders = [hang];
+  const complete = vi.fn();
+  const error = vi.fn();
+
+  const evaporate = buildEvaporate(2);
+  addFile(evaporate, { complete, error });
+
+  // Each attempt costs two 2-minute stall-monitor ticks before it is aborted.
+  await vi.advanceTimersByTimeAsync(9 * 60 * 1000);
+
+  expect(error).toHaveBeenCalledTimes(1);
+  expect(complete).not.toHaveBeenCalled();
+  expect(FakeXhr.partRequests).toBe(2);
+  expect(FakeXhr.hungRequests.every((xhr) => xhr.aborted)).toBe(true);
 });
