@@ -142,13 +142,26 @@ describe WithFileProperties do
       [product_file.reload, uploads, probed]
     end
 
-    it "rewrites the stored object without the tag and probes the repaired bytes" do
-      product_file, uploads, probed = analyze(tagged_m4a_bytes)
+    def repaired_m4a_bytes
+      tagged_m4a_bytes.byteslice(tag_size + 10..)
+    end
 
-      expected = tagged_m4a_bytes.byteslice(tag_size + 10..)
-      expect(uploads).to eq([expected])
-      expect(probed).to eq(expected)
-      expect(product_file.size).to eq(expected.bytesize)
+    it "rewrites the stored object without the tag" do
+      _product_file, uploads, = analyze(tagged_m4a_bytes)
+
+      expect(uploads).to eq([repaired_m4a_bytes])
+    end
+
+    it "probes the repaired bytes, so the duration describes what buyers get" do
+      _product_file, _uploads, probed = analyze(tagged_m4a_bytes)
+
+      expect(probed).to eq(repaired_m4a_bytes)
+    end
+
+    it "records the size of the repaired file" do
+      product_file, = analyze(tagged_m4a_bytes)
+
+      expect(product_file.size).to eq(repaired_m4a_bytes.bytesize)
       expect(product_file.duration).to eq(46)
     end
 

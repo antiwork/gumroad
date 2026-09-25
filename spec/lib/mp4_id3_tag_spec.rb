@@ -56,9 +56,12 @@ describe Mp4Id3Tag do
   end
 
   it "returns nil when the size bytes are not syncsafe" do
+    # These bytes read as 136 if the high bit is ignored, and that offset lands on
+    # something that looks like the ftyp box — the syncsafe rule is what refuses it.
     file = Tempfile.new(["notsyncsafe", ".m4a"], encoding: "ascii-8bit")
-    file.write("ID3\x04\x00\x00\xFF\xFF\xFF\xFF")
-    file.write("\x00" * 64)
+    file.write("ID3\x04\x00\x00")
+    file.write([0, 0, 0, 0x88].pack("C4"))
+    file.write("\x00" * 136)
     file.write("ftypM4A ")
     file.flush
 
