@@ -168,24 +168,40 @@ describe WithFileProperties do
       expect(probed).to eq(clean)
     end
 
-    it "retires archives zipped from the tagged bytes and queues a rebuild" do
+    it "rebuilds archives zipped from the tagged bytes in place" do
       product_file = create(:product_file, url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/specs/tagged.m4a")
       archive = create(:product_files_archive, link: product_file.link, product_files: [product_file])
+      deleted_archive = create(:product_files_archive, link: product_file.link, product_files: [product_file])
+      deleted_archive.mark_deleted!
+      UpdateProductFilesArchiveWorker.jobs.clear
 
       analyze(tagged_m4a_bytes, product_file:)
 
-      expect(archive.reload).to be_deleted
-      expect(GenerateProductFilesArchivesJob).to have_enqueued_sidekiq_job(product_file.link_id)
+      expect(archive.reload).not_to be_deleted
+      expect(UpdateProductFilesArchiveWorker).to have_enqueued_sidekiq_job(archive.id)
+      expect(UpdateProductFilesArchiveWorker).not_to have_enqueued_sidekiq_job(deleted_archive.id)
+    end
+
+    it "rebuilds an installment's archive the same way" do
+      installment = create(:installment)
+      product_file = create(:product_file, link: nil, installment:, url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/specs/tagged.m4a")
+      archive = create(:product_files_archive, link: nil, installment:, product_files: [product_file])
+      UpdateProductFilesArchiveWorker.jobs.clear
+
+      analyze(tagged_m4a_bytes, product_file:)
+
+      expect(archive.reload).not_to be_deleted
+      expect(UpdateProductFilesArchiveWorker).to have_enqueued_sidekiq_job(archive.id)
     end
 
     it "keeps archives when there is no tag to strip" do
       product_file = create(:product_file, url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/specs/tagged.m4a")
       archive = create(:product_files_archive, link: product_file.link, product_files: [product_file])
+      UpdateProductFilesArchiveWorker.jobs.clear
 
       analyze("ftypM4A #{"a" * 20}", product_file:)
 
-      expect(archive.reload).not_to be_deleted
-      expect(GenerateProductFilesArchivesJob).not_to have_enqueued_sidekiq_job(product_file.link_id)
+      expect(UpdateProductFilesArchiveWorker).not_to have_enqueued_sidekiq_job(archive.id)
     end
 
     it "keeps the original object when the rewrite fails" do

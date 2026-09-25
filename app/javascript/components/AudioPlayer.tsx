@@ -28,9 +28,14 @@ export const AudioPlayer = (props: Props) => {
   // An undecodable file (a corrupt upload, or a container the browser can't read)
   // never fires loadedmetadata, so without this the row spins forever.
   const [hasError, setHasError] = React.useState(false);
-  React.useEffect(() => setHasError(false), [props.src]);
   const [progress, setProgress] = React.useState(0);
   const [duration, setDuration] = React.useState(0);
+  React.useEffect(() => {
+    setHasError(false);
+    setIsLoaded(false);
+    setProgress(0);
+    setDuration(0);
+  }, [props.src]);
   const ref = React.useRef<HTMLAudioElement>(null);
 
   const formattedTime = (num: number) => {
