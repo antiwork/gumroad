@@ -979,6 +979,38 @@ check(
 )
 
 check(
+  "a content-only editor block selects the product editor and download page specs",
+  base_files: {
+    "spec/requests/products/edit/rich_text_editor_spec.rb" => SPEC_STUB,
+    "spec/requests/download_page/download_page_spec.rb" => SPEC_STUB,
+    "spec/requests/reading_spec.rb" => SPEC_STUB,
+    "spec/requests/video_streaming_spec.rb" => SPEC_STUB,
+    "app/javascript/components/TiptapExtensions/LicenseKey.tsx" => "old",
+    "app/javascript/components/TiptapExtensions/TextInputNodeView.tsx" => "old",
+  },
+  head_files: {
+    "app/javascript/components/TiptapExtensions/LicenseKey.tsx" => "new",
+    "app/javascript/components/TiptapExtensions/TextInputNodeView.tsx" => "new",
+  },
+  expect_specs: %w[
+    spec/requests/download_page/download_page_spec.rb
+    spec/requests/products/edit/rich_text_editor_spec.rb
+    spec/requests/reading_spec.rb
+    spec/requests/video_streaming_spec.rb
+  ],
+)
+
+check(
+  "a TiptapExtension that also renders outside product content still escalates",
+  base_files: {
+    "spec/requests/products/edit/rich_text_editor_spec.rb" => SPEC_STUB,
+    "app/javascript/components/TiptapExtensions/Link.tsx" => "old",
+  },
+  head_files: { "app/javascript/components/TiptapExtensions/Link.tsx" => "new" },
+  expect_escalate: true,
+)
+
+check(
   "pages/UrlRedirects/Read escalates even with its co-located vitest",
   base_files: {
     "app/javascript/pages/UrlRedirects/Read.tsx" => "old",
