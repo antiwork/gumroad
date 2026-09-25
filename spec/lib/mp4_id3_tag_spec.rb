@@ -41,10 +41,10 @@ describe Mp4Id3Tag do
     expect(leading_tag_size_for(tagged_file(tag_size: 1126, footer: true))).to eq(1146)
   end
 
-  it "detects the tag in front of an M4A written by ffmpeg" do
-    m4a = File.binread(file_fixture("sine.m4a"))
+  it "detects the tag in front of a real MP4-family file" do
+    movie = File.binread(file_fixture("sample.mov"))
 
-    expect(leading_tag_size_for(tagged_file(tag_size: 64, boxes: m4a))).to eq(74)
+    expect(leading_tag_size_for(tagged_file(tag_size: 64, boxes: movie))).to eq(74)
   end
 
   it "returns nil for a file with no leading tag" do
