@@ -192,6 +192,11 @@ it("shows a failed upload on the row, with no download, and removes it on Remove
   expect(screen.queryByText("Download")).toBeNull();
   expect(screen.queryByRole("button", { name: "Cancel" })).toBeNull();
 
+  // Everything but Remove would edit a file the save discards, so the row offers nothing else.
+  expect(screen.queryByRole("button", { name: "Edit" })).toBeNull();
+  expect(screen.queryByRole("button", { name: "Thumbnail view" })).toBeNull();
+  expect(screen.queryByRole("button", { name: "Play" })).toBeNull();
+
   act(() => {
     fireEvent.click(screen.getByRole("button", { name: "Remove" }));
   });

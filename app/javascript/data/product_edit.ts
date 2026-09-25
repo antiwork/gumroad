@@ -118,13 +118,18 @@ export const saveProductError = (error: SaveProductErrorPayload): Error => {
   }
 };
 
-// A file whose upload failed has no object in S3, so a row built from it is a
-// product_files row pointing at nothing. The editor keeps the failed row on
-// screen (it can be removed, or the file picked again), but a save must never
-// carry it — not even the keep-all retry, which is about hidden content, not
-// about half-uploaded files.
+// A file whose upload failed has no object in S3, so a saved row would point at nothing. The editor
+// keeps it on screen to be removed, but no save may carry it — the keep-all retry included, which
+// is about hidden content rather than half-uploaded files.
 const isFailedUpload = (file: { status?: { type?: string; uploadStatus?: { type?: string } } | null }) =>
   file.status?.type === "unsaved" && file.status.uploadStatus?.type === "failed";
+
+// Its embed in the content goes with it: the node would save as content that renders nothing, with
+// no way to click it and remove it.
+const withoutFailedFileEmbeds = <T extends { description: object }>(pages: T[], failedFileIds: Set<string>): T[] =>
+  failedFileIds.size === 0
+    ? pages
+    : pages.map((page) => ({ ...page, description: removeFileEmbedsFromRichContent(page.description, failedFileIds) }));
 
 export const filesForSave = <
   T extends { id: string; status?: { type?: string; uploadStatus?: { type?: string } } | null },
@@ -533,10 +538,13 @@ export const saveProduct = async (
 ): Promise<SaveProductResponse> => {
   // TODO remove this once we have a better content uploader
   const editor = new Editor(baseEditorOptions(extensions(id)));
-  const richContents =
+  const failedFileIds = new Set(product.files.filter((file) => isFailedUpload(file)).map((file) => file.id));
+  const richContents = withoutFailedFileEmbeds(
     product.has_same_rich_content_for_all_variants || !product.variants.length
       ? product.rich_content
-      : product.variants.flatMap((variant) => variant.rich_content);
+      : product.variants.flatMap((variant) => variant.rich_content),
+    failedFileIds,
+  );
   const fileIds = new Set(
     richContents.flatMap((content) =>
       findChildren(
@@ -566,6 +574,7 @@ export const saveProduct = async (
     url: Routes.link_path(permalink),
     data: {
       ...productParams,
+      rich_content: withoutFailedFileEmbeds(product.rich_content, failedFileIds),
       ...scalarSettingsForSave(
         {
           custom_permalink,
@@ -588,9 +597,10 @@ export const saveProduct = async (
       // Variants created in this session are sent with id: null (the server
       // assigns the canonical id) plus the client's own id as client_id so
       // the response can map one to the other.
-      variants: product.variants.map(({ newlyAdded, ...variant }) =>
-        newlyAdded ? { ...variant, id: null, client_id: variant.id } : variant,
-      ),
+      variants: product.variants.map(({ newlyAdded, ...variant }) => {
+        const pruned = { ...variant, rich_content: withoutFailedFileEmbeds(variant.rich_content, failedFileIds) };
+        return newlyAdded ? { ...pruned, id: null, client_id: variant.id } : pruned;
+      }),
       confirmed_removed_variant_ids: product.confirmed_removed_variant_ids ?? [],
       confirmed_removed_rich_content_ids: product.confirmed_removed_rich_content_ids ?? [],
       preserved_rich_content_ids: product.preserved_rich_content_ids ?? [],

@@ -534,7 +534,7 @@ const FileEmbedNodeView = ({
             actions={!isInGroup || fileEmbedGroups.length > 0 || parentNode.childCount > 1 ? [folderAction] : []}
           />
           <RowContent className="content">
-            {file.is_streamable && node.attrs.collapsed ? (
+            {!isFailedUpload && file.is_streamable && node.attrs.collapsed ? (
               <label className="thumbnail" aria-label="Upload a thumbnail">
                 {loadingVideo ? (
                   <div style={{ placeSelf: "center" }}>
@@ -598,7 +598,7 @@ const FileEmbedNodeView = ({
               </NavigationButton>
             ) : null}
 
-            {file.is_streamable ? (
+            {!isFailedUpload && file.is_streamable ? (
               <Popover>
                 <PopoverAnchor>
                   <PopoverTrigger aria-label="Thumbnail view" asChild>
@@ -653,7 +653,7 @@ const FileEmbedNodeView = ({
               </Popover>
             ) : null}
 
-            {!file.is_streamable || isComplete ? (
+            {!isFailedUpload && (!file.is_streamable || isComplete) ? (
               <Button
                 size="icon"
                 onClick={() => setExpanded(!expanded)}
@@ -675,13 +675,13 @@ const FileEmbedNodeView = ({
               </Button>
             ) : null}
 
-            {FileUtils.isAudioExtension(file.extension) ? (
+            {!isFailedUpload && FileUtils.isAudioExtension(file.extension) ? (
               <Button color="primary" onClick={() => setShowingAudioDrawer(!showingAudioDrawer)}>
                 {showingAudioDrawer ? "Close" : "Play"}
               </Button>
             ) : null}
 
-            {file.is_streamable && node.attrs.collapsed ? (
+            {!isFailedUpload && file.is_streamable && node.attrs.collapsed ? (
               <Button
                 color={showingVideoPlayer ? undefined : "primary"}
                 onClick={() => setShowingVideoPlayer(!showingVideoPlayer)}
