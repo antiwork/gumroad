@@ -8,10 +8,6 @@ Flipper.configure do |config|
   config.adapter { Flipper::Adapters::RedisFailOpen.new(Flipper::Adapters::Redis.new($redis), state: redis_flag_state) }
 end
 
-# Gumhead beta membership is a User flag bit, not per-actor enablement:
-# flipper 1.3 caps actors at 100 per feature and the beta must grow past that.
-Flipper.register(:gumhead_beta) { |actor| actor.respond_to?(:gumhead_enabled?) && actor.gumhead_enabled? }
-
 Rails.application.config.flipper.preload = false
 
 Flipper::UI.configuration.application_breadcrumb_href = "/"

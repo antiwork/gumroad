@@ -79,7 +79,7 @@ class Ai::AnthropicClient
   private_constant :FirstByteTimeout
 
   OPENROUTER_API_URL = "https://openrouter.ai/api/v1/messages"
-  VERCEL_HOST = "ai-gateway.vercel.sh"
+  VERCEL_API_URL = "https://ai-gateway.vercel.sh/v1/messages"
   API_VERSION = "2023-06-01"
   DEFAULT_MODEL = "claude-opus-4-7"
   DEFAULT_MAX_TOKENS = 1024
@@ -98,8 +98,7 @@ class Ai::AnthropicClient
     GlobalConfig.get("STORE_AGENT_OPENROUTER_API_KEY").presence || GlobalConfig.get("OPENROUTER_API_KEY").presence
   end
 
-  # No fallback to GUMHEAD_UPSTREAM_API_KEY: store-agent traffic on Gumhead's key cannot be capped
-  # apart from Gumhead. Without its own key the store agent uses OpenRouter.
+  # Without its own gateway key the store agent uses OpenRouter.
   def self.vercel_api_key
     GlobalConfig.get("STORE_AGENT_AI_GATEWAY_API_KEY").presence
   end
@@ -657,24 +656,11 @@ class Ai::AnthropicClient
     end
 
     def vercel_configured?
-      vercel_api_key.present? && vercel_messages_url.present?
+      vercel_api_key.present?
     end
 
     def vercel_api_key
       self.class.vercel_api_key
-    end
-
-    def vercel_messages_url
-      base = GlobalConfig.get("GUMHEAD_UPSTREAM_API_BASE").to_s.strip.chomp("/")
-      return if base.blank?
-
-      uri = URI.parse(base)
-      # Reject http:// — the gateway key would otherwise go over plaintext.
-      return unless uri.scheme == "https" && uri.host == VERCEL_HOST
-
-      base.end_with?("/v1") ? "#{base}/messages" : "#{base}/v1/messages"
-    rescue URI::InvalidURIError
-      nil
     end
 
     def openrouter_api_key
@@ -682,7 +668,7 @@ class Ai::AnthropicClient
     end
 
     def api_url
-      vercel? ? vercel_messages_url : OPENROUTER_API_URL
+      vercel? ? VERCEL_API_URL : OPENROUTER_API_URL
     end
 
     def request_model

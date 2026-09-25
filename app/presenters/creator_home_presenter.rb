@@ -5,9 +5,6 @@ class CreatorHomePresenter
 
   ACTIVITY_ITEMS_LIMIT = 10
   BALANCE_ITEMS_LIMIT = 3
-  GUMHEAD_FEATURE = :gumhead
-  # A fixed tag, because releases/latest here is a deploy release.
-  GUMHEAD_DOWNLOAD_URL = "https://github.com/antiwork/gumroad/releases/download/gumhead-latest/Gumhead.dmg"
 
   attr_reader :pundit_user, :seller
 
@@ -121,7 +118,6 @@ class CreatorHomePresenter
       tax_forms:,
       show_1099_download_notice:,
       tax_center_enabled:,
-      **gumhead_props,
       **social_connection_props,
     }
   end
@@ -142,13 +138,6 @@ class CreatorHomePresenter
         connections << { name: "TikTok", connected: seller.tiktok_identity.present? }
       end
       { social_connections: connections }
-    end
-
-    def gumhead_props
-      return {} unless Feature.active?(GUMHEAD_FEATURE, seller)
-      return {} if seller.has_dismissed_gumhead_promo?
-
-      { gumhead: { download_url: GUMHEAD_DOWNLOAD_URL } }
     end
 
     def activity_items

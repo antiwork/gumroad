@@ -12,7 +12,6 @@ describe Ai::AnthropicClient do
     # Pin routing so these specs do not depend on the host machine's environment.
     allow(GlobalConfig).to receive(:get).with("OPENROUTER_API_KEY").and_return("sk-or-test")
     allow(GlobalConfig).to receive(:get).with("OPENROUTER_FALLBACK_MODEL").and_return(nil)
-    allow(GlobalConfig).to receive(:get).with("GUMHEAD_UPSTREAM_API_BASE").and_return(nil)
     allow(GlobalConfig).to receive(:get).with("STORE_AGENT_OPENROUTER_API_KEY").and_return(nil)
     allow(GlobalConfig).to receive(:get).with("STORE_AGENT_AI_GATEWAY_API_KEY").and_return(nil)
   end
@@ -321,7 +320,6 @@ describe Ai::AnthropicClient do
 
     before do
       allow(GlobalConfig).to receive(:get).with("STORE_AGENT_AI_GATEWAY_API_KEY").and_return("gw-test")
-      allow(GlobalConfig).to receive(:get).with("GUMHEAD_UPSTREAM_API_BASE").and_return("https://ai-gateway.vercel.sh")
       allow(GlobalConfig).to receive(:get).with("OPENROUTER_API_KEY").and_return(nil)
     end
 
@@ -569,11 +567,10 @@ describe Ai::AnthropicClient do
 
     before do
       allow(GlobalConfig).to receive(:get).with("STORE_AGENT_AI_GATEWAY_API_KEY").and_return("sk-vercel-test")
-      allow(GlobalConfig).to receive(:get).with("GUMHEAD_UPSTREAM_API_BASE").and_return("https://ai-gateway.vercel.sh")
       allow(GlobalConfig).to receive(:get).with("OPENROUTER_API_KEY").and_return(nil)
     end
 
-    it "routes to Vercel with the Gumhead key, no OpenRouter fallbacks, and Vercel model failover" do
+    it "routes to Vercel with the store agent's gateway key, no OpenRouter fallbacks, and Vercel model failover" do
       captured = nil
       stub = stub_request(:post, vercel_url)
         .with(headers: { "x-api-key" => "sk-vercel-test", "anthropic-version" => "2023-06-01" }) { |request| captured = JSON.parse(request.body); true }
@@ -590,34 +587,8 @@ describe Ai::AnthropicClient do
       expect(client.served_models).to eq(["deepseek/deepseek-v4.1-flash"])
     end
 
-    it "uses OpenRouter rather than the Gumhead key when the store agent has no gateway key" do
+    it "falls back to OpenRouter when the store agent has no gateway key" do
       allow(GlobalConfig).to receive(:get).with("STORE_AGENT_AI_GATEWAY_API_KEY").and_return(nil)
-      allow(GlobalConfig).to receive(:get).with("GUMHEAD_UPSTREAM_API_KEY").and_return("sk-vercel-gumhead")
-      allow(GlobalConfig).to receive(:get).with("OPENROUTER_API_KEY").and_return("sk-or-test")
-      vercel = stub_request(:post, vercel_url)
-      openrouter = stub_request(:post, openrouter_url)
-        .with(headers: { "x-api-key" => "sk-or-test" })
-        .to_return(status: 200, body: { "content" => [], "stop_reason" => "end_turn" }.to_json, headers: { "Content-Type" => "application/json" })
-
-      client.messages(system: "s", messages: [{ role: "user", content: "x" }])
-
-      expect(openrouter).to have_been_requested
-      expect(vercel).not_to have_been_requested
-    end
-
-    it "joins a /v1 base onto /messages rather than doubling /v1" do
-      allow(GlobalConfig).to receive(:get).with("GUMHEAD_UPSTREAM_API_BASE").and_return("https://ai-gateway.vercel.sh/v1")
-      stub = stub_request(:post, vercel_url)
-        .to_return(status: 200, body: { "content" => [], "stop_reason" => "end_turn" }.to_json, headers: { "Content-Type" => "application/json" })
-
-      client.messages(system: "s", messages: [{ role: "user", content: "x" }])
-
-      expect(stub).to have_been_requested
-    end
-
-    it "falls back to OpenRouter when Vercel config is blank" do
-      allow(GlobalConfig).to receive(:get).with("STORE_AGENT_AI_GATEWAY_API_KEY").and_return(nil)
-      allow(GlobalConfig).to receive(:get).with("GUMHEAD_UPSTREAM_API_BASE").and_return(nil)
       allow(GlobalConfig).to receive(:get).with("OPENROUTER_API_KEY").and_return("sk-or-test")
       captured = nil
       stub = stub_request(:post, openrouter_url)
@@ -644,18 +615,6 @@ describe Ai::AnthropicClient do
       client.messages(system: "s", messages: [{ role: "user", content: "x" }])
 
       expect(stub).to have_been_requested
-    end
-
-    it "falls back to OpenRouter when the Gumhead base is not the Vercel host" do
-      allow(GlobalConfig).to receive(:get).with("GUMHEAD_UPSTREAM_API_BASE").and_return("https://openrouter.ai/api/v1")
-      allow(GlobalConfig).to receive(:get).with("OPENROUTER_API_KEY").and_return("sk-or-test")
-      stub = stub_request(:post, openrouter_url)
-        .to_return(status: 200, body: { "content" => [], "stop_reason" => "end_turn" }.to_json, headers: { "Content-Type" => "application/json" })
-
-      client.messages(system: "s", messages: [{ role: "user", content: "x" }])
-
-      expect(stub).to have_been_requested
-      expect(client.gateway_name).to eq("openrouter")
     end
 
     context "when OpenRouter is configured" do
@@ -905,20 +864,6 @@ describe Ai::AnthropicClient do
         ["deepseek/deepseek-v4.1-flash", "anthropic/claude-opus-5", "deepseek/deepseek-v4.1-flash"]
       )
       expect(captured.last["providerOptions"]).to eq("gateway" => { "models" => ["anthropic/claude-opus-5"] })
-    end
-
-    it "falls back to OpenRouter when the Vercel base is http" do
-      allow(GlobalConfig).to receive(:get).with("GUMHEAD_UPSTREAM_API_BASE").and_return("http://ai-gateway.vercel.sh")
-      allow(GlobalConfig).to receive(:get).with("OPENROUTER_API_KEY").and_return("sk-or-test")
-      stub = stub_request(:post, openrouter_url)
-        .to_return(status: 200, body: { "content" => [], "stop_reason" => "end_turn" }.to_json, headers: { "Content-Type" => "application/json" })
-      plaintext = stub_request(:post, "http://ai-gateway.vercel.sh/v1/messages")
-
-      client.messages(system: "s", messages: [{ role: "user", content: "x" }])
-
-      expect(stub).to have_been_requested
-      expect(plaintext).not_to have_been_requested
-      expect(client.gateway_name).to eq("openrouter")
     end
 
     it "logs the gateway name with the served model" do
@@ -1611,7 +1556,6 @@ describe Ai::AnthropicClient do
 
       before do
         allow(GlobalConfig).to receive(:get).with("STORE_AGENT_AI_GATEWAY_API_KEY").and_return("sk-vercel-test")
-        allow(GlobalConfig).to receive(:get).with("GUMHEAD_UPSTREAM_API_BASE").and_return("https://ai-gateway.vercel.sh")
       end
 
       it "reads the served provider from the gateway's response header" do
