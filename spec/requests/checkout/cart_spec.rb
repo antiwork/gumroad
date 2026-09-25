@@ -3,6 +3,12 @@
 require "spec_helper"
 
 describe "Checkout cart", :js, type: :system do
+  def poll_until(timeout: 60)
+    Timeout.timeout(timeout) do
+      sleep 0.1 until yield
+    end
+  end
+
   before do
     @product = create(:product, price_cents: 1000, quantity_enabled: true)
     @pwyw_product = create(:product, price_cents: 1000, customizable_price: true, thumbnail: create(:thumbnail))
@@ -77,6 +83,25 @@ describe "Checkout cart", :js, type: :system do
       check_out(@membership_product)
     end
 
+    it "replaces a membership line when a direct link brings a different tier and recurrence" do
+      first_tier, second_tier = @membership_product.variant_categories.first.variants.alive.to_a
+
+      visit "#{@membership_product.long_url}?option=#{first_tier.external_id}&recurrence=yearly&wanted=true"
+      within_cart_item(@membership_product.name) { expect(page).to have_text("US$4 Yearly", normalize_ws: true) }
+      poll_until { Cart.alive.sole.alive_cart_products.sole.option == first_tier }
+
+      visit "#{@membership_product.long_url}?option=#{second_tier.external_id}&recurrence=monthly&wanted=true"
+      within_cart_item(@membership_product.name) do
+        expect(page).to have_text("US$5 Monthly", normalize_ws: true)
+        expect(page).to have_text("Tier: #{second_tier.name}")
+      end
+      expect(page).to have_selector("[role=listitem] h4", text: @membership_product.name, count: 1)
+      poll_until { Cart.alive.sole.alive_cart_products.sole.option == second_tier }
+      expect(Cart.alive.sole.alive_cart_products.sole.recurrence).to eq("monthly")
+
+      check_out(@membership_product)
+    end
+
     it "updates the quantity" do
       visit @product.long_url
       add_to_cart(@product)
@@ -140,14 +165,6 @@ describe "Checkout cart", :js, type: :system do
     end
 
     describe "cart persistence" do
-      let(:wait_timeout) { 60 }
-
-      def poll_until(timeout: wait_timeout)
-        Timeout.timeout(timeout) do
-          sleep 0.1 until yield
-        end
-      end
-
       context "when adding a product with a discount code" do
         let(:offer_code) { create(:percentage_offer_code, code: "get-it-for-free", amount_percentage: 100, products: [@product], user: @product.user) }
 

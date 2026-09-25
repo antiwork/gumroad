@@ -29,6 +29,16 @@ const GUMROAD_PARAMS = [
   "force_new_subscription",
 ];
 
+// A buyer holds at most one tier/billing period of a recurring product, so arriving with a
+// different option replaces that line instead of adding a second subscription to the order.
+const findLineToReplace = (cart: CartState, product: ProductToAdd) =>
+  product.product.recurrences
+    ? cart.items.find((item) => item.product.permalink === product.product.permalink)
+    : findCartItem(cart, product.product.permalink, product.option_id);
+
+const lineKey = (product: ProductToAdd) =>
+  product.product.recurrences ? product.product.permalink : `${product.product.permalink} ${product.option_id ?? ""}`;
+
 const addProduct = ({
   cart,
   product,
@@ -40,7 +50,7 @@ const addProduct = ({
   url: URL;
   referrer: string | null;
 }) => {
-  const existing = findCartItem(cart, product.product.permalink, product.option_id);
+  const existing = findLineToReplace(cart, product);
 
   const urlParameters: Record<string, string> = {};
   for (const [key, value] of url.searchParams.entries()) if (!GUMROAD_PARAMS.includes(key)) urlParameters[key] = value;
@@ -58,6 +68,11 @@ const addProduct = ({
   };
   if (existing) Object.assign(existing, newItem);
   else cart.items.unshift(newItem);
+  // A saved or merged cart can already hold several tiers of one membership; keep only this one.
+  if (product.product.recurrences)
+    cart.items = cart.items.filter(
+      (item) => item.product.permalink !== product.product.permalink || item === (existing ?? newItem),
+    );
 };
 
 export type InitialCheckout = {
@@ -104,10 +119,13 @@ export const computeInitialCheckout = ({
   const returnUrl = referrer || documentReferrer;
   if (returnUrl) initialCart.returnUrl = returnUrl;
 
-  const newAddProducts = addProducts.filter(
-    (product) => !findCartItem(initialCart, product.product.permalink, product.option_id),
+  const newLineKeys = new Set(addProducts.filter((product) => !findLineToReplace(initialCart, product)).map(lineKey));
+  const collapsedLines = [...new Set(addProducts.filter((product) => product.product.recurrences).map(lineKey))].reduce(
+    (count, permalink) =>
+      count + Math.max(0, initialCart.items.filter((item) => item.product.permalink === permalink).length - 1),
+    0,
   );
-  if (initialCart.items.length + newAddProducts.length > maxAllowedCartProducts) {
+  if (initialCart.items.length - collapsedLines + newLineKeys.size > maxAllowedCartProducts) {
     initialCart.items = initialCart.items.slice(0, maxAllowedCartProducts);
     return { cart: initialCart, overLimit: true, sellersToTrack: [], beginCheckoutEvents: [] };
   }
