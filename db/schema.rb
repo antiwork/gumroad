@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.1].define(version: 2026_12_16_120000) do
+ActiveRecord::Schema[7.1].define(version: 2026_12_16_120001) do
   create_table "active_storage_attachments", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
     t.string "name", limit: 191, null: false
     t.string "record_type", limit: 191, null: false
@@ -120,7 +120,7 @@ ActiveRecord::Schema[7.1].define(version: 2026_12_16_120000) do
     t.index ["affiliate_id"], name: "index_affiliate_credits_on_affiliate_id"
     t.index ["affiliate_user_id", "affiliate_credit_refund_balance_id", "affiliate_credit_chargeback_balance_id", "affiliate_credit_success_balance_id", "amount_cents"], name: "idx_affiliate_credits_on_user_and_balances_and_amount"
     t.index ["affiliate_user_id"], name: "index_affiliate_credits_on_affiliate_user_id"
-    t.index ["link_id"], name: "index_affiliate_credits_on_link_id"
+    t.index ["link_id", "affiliate_id", "affiliate_credit_chargeback_balance_id", "affiliate_credit_refund_balance_id", "amount_cents"], name: "idx_affiliate_credits_on_link_affiliate_balances_amount"
     t.index ["oauth_application_id"], name: "index_affiliate_credits_on_oauth_application_id"
     t.index ["purchase_id"], name: "index_affiliate_credits_on_purchase_id"
     t.index ["seller_id"], name: "index_affiliate_credits_on_seller_id"
