@@ -131,14 +131,22 @@ class Risk::StrandedBuyerRecoveryService
     # Same-email rows owned by a DIFFERENT account are excluded outright (matching
     # Blockable#same_email_guest_purchases): only the buyer's own rows and true guest
     # checkouts may anchor innocence or corroborate identifiers.
+    #
+    # A UNION ALL of two indexed halves: MySQL can't index the OR, so ORDER BY id DESC LIMIT walks the
+    # primary key across all of purchases for a buyer with fewer rows than the limit. One statement
+    # keeps one snapshot, so a guest row attached to the account mid-read can't fall between halves.
     def candidate_purchases
       @_candidate_purchases ||= begin
-        scope = if user.present?
-          Purchase.where("purchaser_id = ? OR (email = ? AND purchaser_id IS NULL)", user.id, user.email)
+        limit = Purchase::Blockable::MAX_SIBLING_PURCHASES_FOR_UNBLOCK
+        if user.present?
+          halves = [Purchase.where(purchaser_id: user.id)]
+          # A nil email must not become `email IS NULL`, which would pull in every email-less guest row.
+          halves << Purchase.where(email: user.email, purchaser_id: nil) unless user.email.nil?
+          union = halves.map { "(#{_1.order(id: :desc).limit(limit).to_sql})" }.join(" UNION ALL ")
+          Purchase.from("(#{union}) AS purchases").order(id: :desc).limit(limit).to_a
         else
-          Purchase.where(email: @email, purchaser_id: nil)
+          Purchase.where(email: @email, purchaser_id: nil).order(id: :desc).limit(limit).to_a
         end
-        scope.order(id: :desc).limit(Purchase::Blockable::MAX_SIBLING_PURCHASES_FOR_UNBLOCK).to_a
       end
     end
 
