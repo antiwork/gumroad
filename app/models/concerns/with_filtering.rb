@@ -209,11 +209,15 @@ module WithFiltering
             exclude_product_ids:
           )
         else
+          # The email goes before by_external_variant_ids_or_products, which copies the relation
+          # into a UNION subquery. Applied after it, MySQL materializes every buyer of the variant
+          # before it checks the email.
           (seller_sales || seller.sales)
+            .where(email:)
             .not_is_archived_original_subscription_purchase
             .not_subscription_or_original_purchase
             .by_external_variant_ids_or_products(not_bought_variants, exclude_product_ids)
-            .exists?(email:)
+            .exists?
         end
         cache[cache_key] = matched if cache
         return false if matched
