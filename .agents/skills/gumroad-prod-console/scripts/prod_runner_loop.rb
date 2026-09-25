@@ -86,6 +86,9 @@ loop do
   child = fork do
     $stdout.reopen(File.open("#{out_path}.tmp", "w"))
     $stderr.reopen(File.open("#{err_path}.tmp", "w"))
+    # A SIGKILLed child (the kernel OOM killer) loses buffered output, which would leave the
+    # caller with a bare nonzero rc and nothing else.
+    $stdout.sync = true
     # AR is cleared pre-fork, but the boot-time $redis client still holds the
     # parent's socket; concurrent use across forks corrupts its protocol the
     # same way it does MySQL's. Closing forces a clean reconnect on next use.
@@ -110,6 +113,12 @@ loop do
     exit!(status)
   end
   _, wait_status = Process.wait2(child)
+  if wait_status.signaled?
+    signal = Signal.signame(wait_status.termsig)
+    File.open("#{err_path}.tmp", "a") do |f|
+      f.puts "Query process killed by SIG#{signal}#{" (usually out of memory: look for an unbounded scan)" if signal == "KILL"}"
+    end
+  end
   File.write("#{rc_path}.tmp", (wait_status.exitstatus || 1).to_s) unless File.exist?("#{rc_path}.tmp")
   FileUtils.mv("#{out_path}.tmp", out_path) if File.exist?("#{out_path}.tmp")
   FileUtils.mv("#{err_path}.tmp", err_path) if File.exist?("#{err_path}.tmp")
