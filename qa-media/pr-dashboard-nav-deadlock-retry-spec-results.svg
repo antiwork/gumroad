@@ -23,7 +23,7 @@
 
   <text x="20" y="442" fill="#7dd3fc" font-size="14">3) What the two new examples pin</text>
   <text x="36" y="466" fill="#e6e6e6" font-size="13">- retry fires and the rows still land: attempts == 2, dashboard_nav_items_seeded? == true</text>
-  <text x="36" y="486" fill="#e6e6e6" font-size="13">- the ceiling is real: once CONTENTION_RETRIES is spent the deadlock re-raises to the caller's rescue</text>
+  <text x="36" y="486" fill="#e6e6e6" font-size="13">- the ceiling is pinned by count: the insert is attempted exactly CONTENTION_RETRIES + 1 times, then re-raises</text>
   <text x="36" y="506" fill="#e6e6e6" font-size="13">- no wrapping transaction on this path (Sellers::BaseController / DashboardController have none), so the</text>
   <text x="36" y="524" fill="#e6e6e6" font-size="13">  deadlocked statement has already rolled back whole when it is re-run</text>
   <text x="36" y="544" fill="#9aa3b2" font-size="13">CI on push: see the PR checks. This artifact is text (SVG), so the review panel can read it.</text>

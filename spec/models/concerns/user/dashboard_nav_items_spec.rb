@@ -211,10 +211,14 @@ describe User::DashboardNavItems do
     end
 
     it "re-raises once the retries are spent, so a persistent deadlock still reports" do
-      allow(DashboardNavPromotion).to receive(:insert_all)
-        .and_raise(ActiveRecord::Deadlocked.new("Deadlock found when trying to get lock"))
+      calls = 0
+      allow(DashboardNavPromotion).to receive(:insert_all) do
+        calls += 1
+        raise ActiveRecord::Deadlocked.new("Deadlock found when trying to get lock")
+      end
 
       expect { user.seed_promoted_nav_items!(seller: user) }.to raise_error(ActiveRecord::Deadlocked)
+      expect(calls).to eq User::DashboardNavItems::CONTENTION_RETRIES + 1
     end
   end
 
