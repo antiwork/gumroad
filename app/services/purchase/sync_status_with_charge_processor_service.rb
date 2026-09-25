@@ -184,9 +184,17 @@ class Purchase::SyncStatusWithChargeProcessorService
       purchase.with_lock do
         next false unless purchase.in_progress?
 
-        gifter_purchase = purchase.gift_received&.gifter_purchase
+        gift = purchase.gift_received
+        gifter_purchase = gift&.gifter_purchase
         if gifter_purchase&.purchase_state.in?(GIFTER_SUCCESS_STATES)
+          # A recurring gift's renewals ride the gifter's subscription; without one there is
+          # nothing for the recipient to renew on, so wait rather than grant open-ended access.
+          subscription = gifter_purchase.subscription
+          next false if subscription.nil? && (purchase.link.is_recurring_billing || gifter_purchase.is_installment_payment)
+
+          subscription.purchases << purchase if subscription && purchase.subscription_id.nil?
           purchase.mark_gift_receiver_purchase_successful!
+          gift.mark_successful if gift.in_progress?
           true
         else
           purchase.mark_gift_receiver_purchase_failed! if gifter_purchase&.failed?

@@ -515,10 +515,33 @@ describe Purchase::SyncStatusWithChargeProcessorService, :vcr do
     context "when the gifter purchase succeeded" do
       let(:gifter_state) { "successful" }
 
-      it "marks the giftee purchase successful" do
+      it "marks the giftee purchase and the gift successful" do
         expect(Purchase::SyncStatusWithChargeProcessorService.new(giftee_purchase, mark_as_failed: true).perform).to be(true)
 
         expect(giftee_purchase.reload).to be_gift_receiver_purchase_successful
+        expect(gift.reload).to be_successful
+      end
+
+      context "when the product is recurring" do
+        let(:product) { create(:product, :is_subscription) }
+        let(:gift) { create(:gift, link: product) }
+
+        it "attaches the giftee purchase to the gifter's subscription" do
+          subscription = create(:subscription, link: product)
+          subscription.purchases << gifter_purchase
+
+          expect(Purchase::SyncStatusWithChargeProcessorService.new(giftee_purchase, mark_as_failed: true).perform).to be(true)
+
+          expect(giftee_purchase.reload).to be_gift_receiver_purchase_successful
+          expect(giftee_purchase.subscription).to eq(subscription)
+        end
+
+        it "leaves the giftee purchase in progress when the gifter has no subscription" do
+          expect(Purchase::SyncStatusWithChargeProcessorService.new(giftee_purchase, mark_as_failed: true).perform).to be(false)
+
+          expect(giftee_purchase.reload).to be_in_progress
+          expect(gift.reload).to be_in_progress
+        end
       end
     end
   end
