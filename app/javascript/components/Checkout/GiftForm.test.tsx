@@ -71,6 +71,7 @@ const state = (overrides: Partial<State> = {}): State => ({
   checkoutPaymentStale: false,
   resumeSubmitAfterCheckoutPayment: false,
   validationFailedCount: 0,
+  awaitingBuyerConfirmation: false,
   status: { type: "input", errors: new Set() },
   recaptchaKey: null,
   recaptchaScoreBased: false,

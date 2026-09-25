@@ -15,6 +15,7 @@ import {
   getConfiguredDirectListedCurrency,
   getFutureInstallmentsTotal,
   getLoadedDirectListedAmountToken,
+  getPayLabel,
   getSelectableDirectListedCurrency,
   getStripePaymentElementAmount,
   getStripePaymentElementMountCurrency,
@@ -238,6 +239,7 @@ const state = (overrides: Partial<State> = {}): State => ({
   checkoutPaymentStale: false,
   resumeSubmitAfterCheckoutPayment: false,
   validationFailedCount: 0,
+  awaitingBuyerConfirmation: false,
   status: { type: "input", errors: new Set() },
   recaptchaKey: null,
   recaptchaScoreBased: false,
@@ -248,6 +250,29 @@ const state = (overrides: Partial<State> = {}): State => ({
   acknowledgedEmails: new Set(),
   requireEmailTypoAcknowledgment: false,
   ...overrides,
+});
+
+describe("pay label while a confirmation holds the submit open", () => {
+  const charging = state({ status: { type: "finished", paymentMethod: { type: "saved" } } as const });
+
+  it("reads as a charge in progress while the request is in flight", () => {
+    expect(getPayLabel(charging)).toBe("Processing...");
+  });
+
+  it("reads as Pay again while the checkout waits on the buyer's own confirmation", () => {
+    expect(
+      getPayLabel(reduceCheckoutState(charging, { type: "set-awaiting-buyer-confirmation", awaiting: true })),
+    ).toBe("Pay");
+  });
+
+  it("keeps the caller's label override", () => {
+    expect(getPayLabel(state({ payLabel: "Pre-order" }))).toBe("Pre-order");
+  });
+
+  it("is cleared by cancel, so a later charge cannot inherit the label", () => {
+    const waiting = reduceCheckoutState(charging, { type: "set-awaiting-buyer-confirmation", awaiting: true });
+    expect(reduceCheckoutState(waiting, { type: "cancel" }).awaitingBuyerConfirmation).toBe(false);
+  });
 });
 
 describe("expired buyer-currency quote submission", () => {

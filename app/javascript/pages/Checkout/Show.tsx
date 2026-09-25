@@ -520,6 +520,7 @@ const CheckoutIndexPage = () => {
     if (state.status.type !== "finished") return;
     if (isTipSuspiciouslyLarge(state) && !largeTipConfirmedRef.current) {
       setShowLargeTipConfirmation(true);
+      dispatch({ type: "set-awaiting-buyer-confirmation", awaiting: true });
       return;
     }
     try {
@@ -747,6 +748,7 @@ const CheckoutIndexPage = () => {
           uids: duplicatePurchaseResults.map(({ item }) => getCartItemUid(item)),
           productNames: duplicatePurchaseResults.map(({ item }) => item.product.name),
         });
+        dispatch({ type: "set-awaiting-buyer-confirmation", awaiting: true });
         return;
       }
 
@@ -1189,6 +1191,8 @@ const CheckoutIndexPage = () => {
               onClick={() => {
                 largeTipConfirmedRef.current = true;
                 setShowLargeTipConfirmation(false);
+                // The retry below resubmits on `finished`; until it does, Pay is charging again.
+                dispatch({ type: "set-awaiting-buyer-confirmation", awaiting: false });
               }}
             >
               Yes, leave tip
@@ -1238,6 +1242,7 @@ const CheckoutIndexPage = () => {
                   for (const uid of duplicatePurchaseConfirmation.uids)
                     confirmedDuplicatePurchaseUidsRef.current.add(uid);
                 setDuplicatePurchaseConfirmation(null);
+                dispatch({ type: "set-awaiting-buyer-confirmation", awaiting: false });
               }}
             >
               Buy again
@@ -1245,10 +1250,8 @@ const CheckoutIndexPage = () => {
           </>
         }
       >
-        <p>
-          You already paid for {duplicatePurchaseConfirmation?.productNames.join(", ") ?? ""}. Do you want to buy{" "}
-          {(duplicatePurchaseConfirmation?.productNames.length ?? 0) > 1 ? "them" : "it"} again?
-        </p>
+        {/* The heading already carries ownership — saying it again here read as the same point twice. */}
+        <p>Do you want to buy {duplicatePurchaseConfirmation?.productNames.join(", ") ?? ""} again?</p>
       </Modal>
     </StateContext.Provider>
   );

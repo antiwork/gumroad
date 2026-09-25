@@ -96,6 +96,7 @@ export const CheckoutPreview = ({
         checkoutPaymentStale: false,
         resumeSubmitAfterCheckoutPayment: false,
         validationFailedCount: 0,
+        awaitingBuyerConfirmation: false,
       },
       () => undefined,
     ],
