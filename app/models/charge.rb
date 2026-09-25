@@ -360,8 +360,8 @@ class Charge < ApplicationRecord
     # Each sibling gets its own savepoint: an exception in one must not roll back the local
     # rows of siblings whose Stripe refunds already succeeded, which the refund webhook would
     # then book a second time.
-    def refund_sibling(purchase)
-      transaction(requires_new: true) { yield }
+    def refund_sibling(purchase, &block)
+      transaction(requires_new: true, &block)
     rescue StandardError => e
       ErrorNotifier.notify(e, context: { charge_id: id, purchase_id: purchase.id })
       purchase.errors.add(:base, "Refund failed for purchase #{purchase.external_id_numeric}: #{e.message}")
