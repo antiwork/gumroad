@@ -953,9 +953,6 @@ class LinksController < ApplicationController
 
     # Blank custom_permalink / description is unspecified unless marked a
     # deliberate clear, so a content-tab snapshot cannot wipe another tab's copy.
-    # An absent/null installment_plan is the same shape: the seller's plan is
-    # hard-deleted by update_installment_plan, so only a session that says it
-    # cleared the toggle may remove it (gumroad-private#2958).
     def omit_unspecified_product_scalars!
       permitted = product_permitted_params
       permitted.delete(:custom_permalink) if permitted[:custom_permalink].blank? && !custom_permalink_clear_requested?
@@ -2079,10 +2076,7 @@ class LinksController < ApplicationController
 
     def update_installment_plan
       return unless @product.eligible_for_installment_plans?
-      # Only a session that actually submitted a plan — or said it cleared the
-      # toggle — may change the seller's plan. An absent (or stale, omitted)
-      # value is "unspecified"; reading it as "remove" is what hard-deletes a
-      # plan a second tab never touched (gumroad-private#2958).
+      # Absent means unspecified, not "remove": only a marked clear may delete the plan.
       return unless product_permitted_params[:installment_plan].present? || installment_plan_clear_requested?
 
       if @product.installment_plan && product_permitted_params[:installment_plan].present?

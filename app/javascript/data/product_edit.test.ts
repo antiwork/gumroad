@@ -178,8 +178,6 @@ describe("scalarSettingsForSave", () => {
   });
 
   it("omits an unchanged installment plan so a stale tab cannot delete the seller's plan", () => {
-    // A snapshot taken before the plan existed must not send `null`, which the
-    // server reads as an explicit clear and hard-deletes (gumroad-private#2958).
     expect(scalarSettingsForSave(product(), lastSaved())).toEqual({});
   });
 

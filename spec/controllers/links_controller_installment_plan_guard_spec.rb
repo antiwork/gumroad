@@ -2,13 +2,6 @@
 
 require "spec_helper"
 
-# Regression coverage for gumroad-private#2958. `installment_plan` was the one
-# scalar in the product-editor save payload with no "unspecified" guard, and
-# LinksController#update_installment_plan read an absent or null plan as an
-# explicit "remove the plan" — hard-deleting it (ProductInstallmentPlan uses
-# Deletable, and a plan with no payment options is destroyed with no audit
-# trail). Any save from a snapshot taken before the seller's plan existed (a
-# second tab, a stale editor) therefore wiped it silently.
 describe LinksController, type: :controller do
   let(:seller) { create(:user) }
   let!(:product) { create(:product, user: seller, price_cents: 10_000) }
