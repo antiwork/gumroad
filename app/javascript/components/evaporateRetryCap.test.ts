@@ -159,7 +159,8 @@ it("aborts the other in-flight parts when one part exhausts its budget", async (
 
   await vi.waitFor(() => expect(error).toHaveBeenCalledTimes(1), { timeout: 5000 });
   const requestsAtFailure = FakeXhr.partRequests;
-  await new Promise((resolve) => setTimeout(resolve, 1500));
+  // failUpload cancels every in-flight request, so wait for the abort rather than a fixed delay.
+  await vi.waitFor(() => expect(FakeXhr.hungRequests.every((xhr) => xhr.aborted)).toBe(true), { timeout: 5000 });
 
   expect(FakeXhr.hungRequests.length).toBeGreaterThan(0);
   expect(FakeXhr.hungRequests.every((xhr) => xhr.aborted)).toBe(true);
