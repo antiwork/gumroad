@@ -2675,10 +2675,8 @@ describe StripeChargeProcessor, :vcr do
         end
 
         it "refunds the purchases corresponding to the Stripe charge in case of combined charge", vcr: { allow_playback_repeats: true } do
-          # The handler re-reads the refund once it has reversed the transfer, so these recorded
-          # interactions have to be replayable. The reversal this cassette's refund names cannot be
-          # fetched: its test account no longer holds the transfer, so supply what the recorded
-          # reversal list carries (trr_0Q7bZN9e1RjUNIyYH7vxI14k -> pyr_1Q7bZNS88hpHw07jJoJqr11q).
+          # The handler re-reads the refund after reversing, so this cassette has to replay; the
+          # stub below supplies the reversal its test account no longer holds.
           allow(Stripe::Transfer).to receive(:retrieve_reversal)
             .with("tr_2Q7bRK9e1RjUNIyY1Ec54YVV", "trr_0Q7bZN9e1RjUNIyYH7vxI14k")
             .and_return(Stripe::StripeObject.construct_from(id: "trr_0Q7bZN9e1RjUNIyYH7vxI14k",
