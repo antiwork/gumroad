@@ -3,6 +3,12 @@
 require "spec_helper"
 
 describe "Checkout cart", :js, type: :system do
+  def poll_until(timeout: 60)
+    Timeout.timeout(timeout) do
+      sleep 0.1 until yield
+    end
+  end
+
   before do
     @product = create(:product, price_cents: 1000, quantity_enabled: true)
     @pwyw_product = create(:product, price_cents: 1000, customizable_price: true, thumbnail: create(:thumbnail))
@@ -159,13 +165,6 @@ describe "Checkout cart", :js, type: :system do
     end
 
     describe "cart persistence" do
-      let(:wait_timeout) { 60 }
-
-      def poll_until(timeout: wait_timeout)
-        Timeout.timeout(timeout) do
-          sleep 0.1 until yield
-        end
-      end
 
       context "when adding a product with a discount code" do
         let(:offer_code) { create(:percentage_offer_code, code: "get-it-for-free", amount_percentage: 100, products: [@product], user: @product.user) }
