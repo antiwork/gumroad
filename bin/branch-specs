@@ -176,6 +176,12 @@ FANOUT = {
   # Layout.tsx and WithContent.tsx escalate: the former renders the
   # UrlRedirects pages, the latter reaches ProductEdit/ContentTab through
   # components/Download/{RichContent,FileList}.
+  %r{\Aapp/javascript/components/TiptapExtensions/(LicenseKey|ShortAnswer|LongAnswer|TextInputNodeView|FileUpload|Posts|MoreLikeThis)\.tsx\z} =>
+    PRODUCT_FLOW_SPECS + DOWNLOAD_PAGE_SPECS,
+  # Content-only blocks. Importers: ProductEdit/ContentTab/index.tsx and
+  # Download/RichContent.tsx (LicenseKey and Posts also DownloadPage/WithContent.tsx);
+  # TextInputNodeView via Short/LongAnswer. The other TiptapExtensions also render in
+  # product descriptions, emails, and profiles — escalate.
   %r{\Aapp/javascript/data/discord_integration} => DOWNLOAD_PAGE_SPECS + CHECKOUT_FLOW_SPECS + %w[spec/requests/products/edit/integrations/discord_integrations_spec.rb],
   # Importers: DiscordButton.tsx:4 join/leave;
   # ProductEdit/ProductTab/DiscordIntegrationEditor.tsx:4 fetchServerInfo.

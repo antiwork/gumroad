@@ -744,8 +744,11 @@ check(
 
 check(
   "Tiptap extension still escalates (shared editor, multi-flow consumers)",
-  base_files: { "app/javascript/components/TiptapExtensions/FileUpload.tsx" => "old" },
-  head_files: { "app/javascript/components/TiptapExtensions/FileUpload.tsx" => "new" },
+  base_files: {
+    "spec/requests/products/edit/rich_text_editor_spec.rb" => SPEC_STUB,
+    "app/javascript/components/TiptapExtensions/Link.tsx" => "old",
+  },
+  head_files: { "app/javascript/components/TiptapExtensions/Link.tsx" => "new" },
   expect_escalate: true,
 )
 
@@ -977,6 +980,23 @@ check(
   head_files: { "app/javascript/components/DownloadPage/WithContent.tsx" => "new" },
   expect_escalate: true,
 )
+
+# One check per block, so a name that stops matching the mapping fails on its own.
+%w[LicenseKey ShortAnswer LongAnswer TextInputNodeView FileUpload Posts MoreLikeThis].each do |block|
+  check(
+    "content-only editor block #{block} selects the product editor and download page specs",
+    base_files: {
+      "spec/requests/products/edit/rich_text_editor_spec.rb" => SPEC_STUB,
+      "spec/requests/download_page/download_page_spec.rb" => SPEC_STUB,
+      "app/javascript/components/TiptapExtensions/#{block}.tsx" => "old",
+    },
+    head_files: { "app/javascript/components/TiptapExtensions/#{block}.tsx" => "new" },
+    expect_specs: %w[
+      spec/requests/download_page/download_page_spec.rb
+      spec/requests/products/edit/rich_text_editor_spec.rb
+    ],
+  )
+end
 
 check(
   "pages/UrlRedirects/Read escalates even with its co-located vitest",
