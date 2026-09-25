@@ -27,15 +27,19 @@ class UpdateProductFilesArchiveWorker
     @used_file_paths = []
   end
 
-  # Outlasts a worst-case 500MB build so a live run is never overlapped; a crashed run only
-  # delays the next rebuild by this much.
-  LOCK_TTL = 1.hour
+  # Renewed per file, so it only has to outlast one file's download; a crashed run delays the
+  # next rebuild by at most this much.
+  LOCK_TTL = 30.minutes
   LOCKED_RETRY_DELAY = 1.minute
   RELEASE_LOCK_SCRIPT = <<~LUA
     if redis.call("get", KEYS[1]) == ARGV[1] then return redis.call("del", KEYS[1]) end
     return 0
   LUA
-  private_constant :RELEASE_LOCK_SCRIPT
+  RENEW_LOCK_SCRIPT = <<~LUA
+    if redis.call("get", KEYS[1]) == ARGV[1] then return redis.call("expire", KEYS[1], ARGV[2]) end
+    return 0
+  LUA
+  private_constant :RELEASE_LOCK_SCRIPT, :RENEW_LOCK_SCRIPT
 
   def self.lock_key(product_files_archive_id)
     "update_product_files_archive_worker:lock:#{product_files_archive_id}"
@@ -46,9 +50,9 @@ class UpdateProductFilesArchiveWorker
 
     # Concurrent runs for one archive race on its state and S3 object, so a second run defers
     # instead of being dropped: it may carry bytes the running build has not seen.
-    lock_key = self.class.lock_key(product_files_archive_id)
-    lock_token = SecureRandom.uuid
-    unless $redis.set(lock_key, lock_token, nx: true, ex: LOCK_TTL.to_i)
+    @lock_key = self.class.lock_key(product_files_archive_id)
+    @lock_token = SecureRandom.uuid
+    unless $redis.set(@lock_key, @lock_token, nx: true, ex: LOCK_TTL.to_i)
       self.class.perform_in(LOCKED_RETRY_DELAY, product_files_archive_id)
       return
     end
@@ -56,7 +60,7 @@ class UpdateProductFilesArchiveWorker
     begin
       build_archive(product_files_archive_id)
     ensure
-      $redis.eval(RELEASE_LOCK_SCRIPT, keys: [lock_key], argv: [lock_token])
+      $redis.eval(RELEASE_LOCK_SCRIPT, keys: [@lock_key], argv: [@lock_token])
     end
   end
 
@@ -92,6 +96,8 @@ class UpdateProductFilesArchiveWorker
     Zip::File.open(zip_archive_filename, Zip::File::CREATE) do |zip_file|
       product_files.each do |product_file|
         next if product_file.stream_only?
+
+        $redis.eval(RENEW_LOCK_SCRIPT, keys: [@lock_key], argv: [@lock_token, LOCK_TTL.to_i])
 
         if product_files_archive.bundle_purchase_archive?
           file_path_parts = [product_file.link.name, product_file.folder&.name, product_file.name_displayable]
@@ -131,7 +137,11 @@ class UpdateProductFilesArchiveWorker
     file = File.open(zip_archive_filename, "rb")
     archive_s3_object = product_files_archive.s3_object
     archive_s3_object.upload_file(file, content_type: "application/zip")
-    product_files_archive.mark_ready!
+    # A file rewritten mid-build resets the archive to queueing and enqueues a rebuild; this ZIP
+    # may hold its old bytes, so leave it hidden for that rebuild.
+    product_files_archive.with_lock do
+      product_files_archive.mark_ready! if product_files_archive.in_progress?
+    end
     Rails.logger.info("UpdateProductFilesArchive job completed for id #{product_files_archive.id}.")
   rescue NoMemoryError, Aws::S3::Errors::NoSuchKey, Errno::ENOENT, Seahorse::Client::NetworkingError, Aws::S3::Errors::ServiceError => e
     file&.close

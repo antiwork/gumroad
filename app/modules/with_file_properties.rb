@@ -269,8 +269,11 @@ module WithFileProperties
         repaired.close!
       end
       ProductFilesArchive.where(id: stale_archive_ids).find_each do |archive|
-        # Take the ZIP out of download-all until the rebuild lands; it still holds the tagged bytes.
-        archive.update!(product_files_archive_state: "queueing") if archive.ready?
+        # Hide the stale ZIP until the rebuild lands. A build already in progress may have read the
+        # tagged bytes, so it is reset too; the worker then declines to mark it ready.
+        archive.with_lock do
+          archive.update!(product_files_archive_state: "queueing") if archive.ready? || archive.in_progress?
+        end
         UpdateProductFilesArchiveWorker.perform_async(archive.id)
       end
     rescue Aws::Errors::ServiceError, Seahorse::Client::NetworkingError => e

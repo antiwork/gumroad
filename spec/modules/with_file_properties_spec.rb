@@ -196,6 +196,18 @@ describe WithFileProperties do
       expect(UpdateProductFilesArchiveWorker).to have_enqueued_sidekiq_job(archive.id)
     end
 
+    it "resets an archive whose build is already in progress" do
+      product_file = create(:product_file, url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/specs/tagged.m4a")
+      archive = create(:product_files_archive, link: product_file.link, product_files: [product_file])
+      archive.mark_in_progress!
+      UpdateProductFilesArchiveWorker.jobs.clear
+
+      analyze(tagged_m4a_bytes, product_file:)
+
+      expect(archive.reload).to be_queueing
+      expect(UpdateProductFilesArchiveWorker).to have_enqueued_sidekiq_job(archive.id)
+    end
+
     it "rebuilds an installment's archive the same way" do
       installment = create(:installment)
       product_file = create(:product_file, link: nil, installment:, url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/specs/tagged.m4a")
