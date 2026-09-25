@@ -40,6 +40,7 @@ class UrlRedirect < ApplicationRecord
   FAKE_VIDEO_URL_GUID_FOR_OBFUSCATION = "ef64f2fef0d6c776a337050020423fc0"
   GUID_GETTER_FROM_S3_URL_REGEX = %r{attachments/(.*)/original}
   BUNDLE_ARCHIVE_FAILED_RETRY_COOLDOWN = 24.hours
+  BUNDLE_ARCHIVE_MAX_TOO_LARGE_RETRY_COOLDOWN = 1.week
   BUNDLE_ARCHIVE_MAX_FAILED_ATTEMPTS = 3
   # Bounds buyer-poll enqueues per product once the job's until_executing lock is released at start.
   # Kept below the job's LOCK_TTL so a stranded lock, not this window, is the recovery bound.
@@ -213,13 +214,24 @@ class UrlRedirect < ApplicationRecord
     owner = rich_content_provider.presence || with_product_files
     owner.with_lock do
       matching_archives = matching_bundle_archives(bundle_files)
-      return if matching_archives.any? { |archive| !archive.failed? }
+      return if matching_archives.any? { |archive| !archive.failed? && !archive.too_large? }
 
       failed_archives = matching_archives.select(&:failed?)
       return if failed_archives.size >= BUNDLE_ARCHIVE_MAX_FAILED_ATTEMPTS
 
-      latest_failure_at = failed_archives.map(&:updated_at).compact.max
-      return if failed_archives.size >= 2 && latest_failure_at > BUNDLE_ARCHIVE_FAILED_RETRY_COOLDOWN.ago
+      # Too-large archives stay off the failure budget so a raised cap can heal the bundle, but their
+      # retry window doubles per attempt up to a week: the same file set gives the same rejection, so a
+      # page visit must not re-enqueue a doomed build.
+      too_large_archives = matching_archives.select(&:too_large?)
+      latest_attempt_at = (failed_archives + too_large_archives).map(&:updated_at).compact.max
+      if latest_attempt_at.present?
+        retry_cooldown_seconds = if too_large_archives.any?
+          [BUNDLE_ARCHIVE_FAILED_RETRY_COOLDOWN.to_i * 2**(too_large_archives.size - 1), BUNDLE_ARCHIVE_MAX_TOO_LARGE_RETRY_COOLDOWN.to_i].min
+        elsif failed_archives.size >= 2
+          BUNDLE_ARCHIVE_FAILED_RETRY_COOLDOWN.to_i
+        end
+        return if retry_cooldown_seconds && latest_attempt_at > retry_cooldown_seconds.seconds.ago
+      end
 
       product_files_archive = product_files_archives.new
       product_files_archive.product_files = bundle_files

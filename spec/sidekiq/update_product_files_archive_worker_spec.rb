@@ -114,6 +114,25 @@ describe UpdateProductFilesArchiveWorker, :vcr do
       end
     end
 
+    context "when the estimated archive size is over the limit" do
+      before do
+        installment = create(:installment)
+        installment.product_files << create(:product_file, link: nil, installment:)
+        @product_files_archive = installment.product_files_archives.create!
+        @product_files_archive.product_files = installment.product_files
+        @product_files_archive.save!
+        installment.product_files.each do |product_file|
+          product_file.update_columns(size: described_class::PRODUCT_FILES_ARCHIVE_FILE_SIZE_LIMIT + 1)
+        end
+      end
+
+      it "marks the archive too large rather than failed" do
+        described_class.new.perform(@product_files_archive.id)
+
+        expect(@product_files_archive.reload.product_files_archive_state).to eq("too_large")
+      end
+    end
+
     context "when rich content provider is present" do
       before do
         @product = create(:product)

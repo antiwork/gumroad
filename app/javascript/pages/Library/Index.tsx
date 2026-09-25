@@ -188,7 +188,12 @@ type Props = {
   pagination: { page: number; pages: number; from: number; to: number; count: number };
   creators: { id: string; name: string; count: number }[];
   bundles: { id: string; label: string }[];
-  bundle_downloads: { id: string; label: string; download_url: string | null }[];
+  bundle_downloads: {
+    id: string;
+    label: string;
+    download_url: string | null;
+    zip_unavailable_reason: "too_large" | "failed" | null;
+  }[];
   archived_count: number;
   unarchived_count: number;
   search: SearchParams;
@@ -379,7 +384,21 @@ export default function LibraryPage() {
         {bundleDownloads.map((bundleDownload) => (
           <Alert key={bundleDownload.id} role="status" variant="info" className="mb-5 flex items-center gap-4">
             <div className="grow">
-              Download everything included in <strong>{bundleDownload.label}</strong> as one ZIP file.
+              {bundleDownload.zip_unavailable_reason === "too_large" ? (
+                <>
+                  <strong>{bundleDownload.label}</strong> is too large to download as one ZIP file. Download the
+                  products below individually.
+                </>
+              ) : bundleDownload.zip_unavailable_reason === "failed" ? (
+                <>
+                  We could not prepare a ZIP file for <strong>{bundleDownload.label}</strong>. Download the products
+                  below individually.
+                </>
+              ) : (
+                <>
+                  Download everything included in <strong>{bundleDownload.label}</strong> as one ZIP file.
+                </>
+              )}
             </div>
             {bundleDownload.download_url ? (
               <Button asChild color="accent">
@@ -388,7 +407,7 @@ export default function LibraryPage() {
                   Download all
                 </a>
               </Button>
-            ) : (
+            ) : bundleDownload.zip_unavailable_reason ? null : (
               <Button disabled>
                 <FileCode pack="filled" className="size-5" />
                 Preparing ZIP
