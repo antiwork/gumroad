@@ -101,6 +101,12 @@ module Charge::Refundable
       transfer_outcome = nil
       purchases = refundable.charged_purchases.select { _1.successful? && !_1.stripe_refunded? }.sort_by(&:id)
       unrecorded = []
+      blocked_purchase_ids = []
+      flow_of_funds_for = lambda do |purchase, refund|
+        next refund.flow_of_funds unless purchase.is_part_of_combined_charge?
+
+        purchase.send(:build_flow_of_funds_from_combined_charge, refund.flow_of_funds)
+      end
       refunded_purchases = ApplicationRecord.transaction do
         # Lock every purchase (id order, as Charge#refund_and_save! does) before re-checking for
         # an app-side Refund row: an app refund's uncommitted transaction holds these locks, so
@@ -113,17 +119,17 @@ module Charge::Refundable
 
         if charge_refund.is_a?(StripeChargeRefund) && charge_refund.charge[:destination].present? &&
             merchant_account&.holder_of_funds == HolderOfFunds::STRIPE
+          # The reversal takes the seller's money for the whole charge, so make it only when every purchase can be booked.
+          blocked_purchase_ids = unrecorded.reject { _1.refund_recordable_from?(flow_of_funds_for.(_1, charge_refund)) }.map(&:id)
+          next [] if blocked_purchase_ids.any?
+
           charge_refund, transfer_outcome = processor.reverse_transfer_for_external_refund(charge_refund, merchant_account:)
         end
+        next [] if transfer_outcome == :fee_refund_unpaired
         gumroad_funded = transfer_outcome == :not_reversible
 
         unrecorded.select do |purchase|
-          flow_of_funds = if purchase.is_part_of_combined_charge?
-            purchase.send(:build_flow_of_funds_from_combined_charge, charge_refund.flow_of_funds)
-          else
-            charge_refund.flow_of_funds
-          end
-          purchase.refund_purchase!(flow_of_funds, GUMROAD_ADMIN_ID, charge_refund.refund,
+          purchase.refund_purchase!(flow_of_funds_for.(purchase, charge_refund), GUMROAD_ADMIN_ID, charge_refund.refund,
                                     event.extras[:refund_reason] == "fraudulent", gumroad_funded:)
         end
       end
@@ -131,7 +137,7 @@ module Charge::Refundable
 
       alert_context = { stripe_refund_id:, stripe_charge_id:, refunded_amount_cents:, transfer_outcome:,
                         refunded_purchase_ids: refunded_purchases.map(&:id),
-                        unrecorded_purchase_ids: (unrecorded - refunded_purchases).map(&:id) }
+                        unrecorded_purchase_ids: (unrecorded - refunded_purchases).map(&:id), blocked_purchase_ids: }
       ErrorNotifier.notify(EXTERNAL_REFUND_ALERT, **alert_context, recorded: refunded_purchases.size == unrecorded.size)
       if transfer_outcome == :not_reversible
         ErrorNotifier.notify("Refund created outside the app booked as Gumroad-funded: seller transfer not reversible", **alert_context)

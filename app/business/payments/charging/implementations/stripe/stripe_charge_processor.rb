@@ -699,6 +699,21 @@ class StripeChargeProcessor
   # may not have passed reverse_transfer. Returns [charge_refund, outcome]; the returned
   # charge_refund's flow of funds reads the matching destination refund, so the seller debit equals the reversal.
   def reverse_transfer_for_external_refund(charge_refund, merchant_account:)
+    charge_refund, outcome = find_or_create_external_refund_reversal(charge_refund, merchant_account:)
+    # get_refund pairs the destination refund by id but reads the newest application-fee refund,
+    # so with more than one the seller debit could come from an unrelated fee refund.
+    if %i[reversed_by_stripe reversed_by_gumroad].include?(outcome) && self.class.application_fee_refund_count(charge_refund.charge) > 1
+      outcome = :fee_refund_unpaired
+    end
+    [charge_refund, outcome]
+  end
+
+  def self.application_fee_refund_count(charge)
+    fee = charge[:application_fee]
+    fee.is_a?(Stripe::StripeObject) ? Array(fee[:refunds]&.data).size : 0
+  end
+
+  def find_or_create_external_refund_reversal(charge_refund, merchant_account:)
     charge = charge_refund.charge
     return [charge_refund, :no_transfer] if charge[:destination].blank? || charge[:transfer].blank?
     # Stripe reversed the transfer with this refund; get_refund already read that reversal.
@@ -723,6 +738,8 @@ class StripeChargeProcessor
       amount = (charge_refund.refund[:amount] * transfer.amount / charge.amount.to_r).round
       amount = remaining if amount - remaining == 1
       return [charge_refund, :not_reversible] unless amount.positive? && amount <= remaining
+      # A second fee refund could not be paired with this reversal, so do not move money.
+      return [charge_refund, :fee_refund_unpaired] if self.class.application_fee_refund_count(charge) > 0
 
       begin
         reversal = Stripe::Transfer.create_reversal(

@@ -558,6 +558,53 @@ describe Charge::Refundable do
         expect(ErrorNotifier).to have_received(:notify).with(Charge::Refundable::EXTERNAL_REFUND_ALERT, anything).once
       end
 
+      context "when the charge already has an application-fee refund" do
+        let(:stripe_charge) do
+          Stripe::StripeObject.construct_from(id: purchase.stripe_transaction_id, amount: 10_00, amount_refunded: 10_00,
+                                              destination: merchant_account.charge_processor_merchant_id, transfer: transfer.id,
+                                              application_fee: { id: "fee_1", refunds: { data: [{ id: "fr_earlier", amount: 50 }] } })
+        end
+
+        it "does not reverse or book the refund, and alerts, because the new fee refund cannot be paired" do
+          allow(Stripe::Transfer).to receive(:list_reversals).and_return([])
+          expect(Stripe::Transfer).not_to receive(:create_reversal)
+
+          purchase.handle_event_refund_updated!(build_external_event)
+
+          expect(purchase.reload.refunds).to be_empty
+          expect(seller_refund_debits).to be_empty
+          expect(ErrorNotifier).to have_received(:notify).with(Charge::Refundable::EXTERNAL_REFUND_ALERT,
+                                                               hash_including(transfer_outcome: :fee_refund_unpaired, recorded: false))
+        end
+
+        it "does not book Stripe's own reversal when more than one fee refund exists" do
+          stripe_charge.application_fee.refunds.data << Stripe::StripeObject.construct_from(id: "fr_this", amount: 1_50)
+          allow_any_instance_of(StripeChargeProcessor).to receive(:get_refund).and_return(charge_refund_with(merchant_cents: 8_50, transfer_reversal: "trr_1"))
+
+          purchase.handle_event_refund_updated!(build_external_event)
+
+          expect(purchase.reload.refunds).to be_empty
+          expect(seller_refund_debits).to be_empty
+          expect(ErrorNotifier).to have_received(:notify).with(Charge::Refundable::EXTERNAL_REFUND_ALERT,
+                                                               hash_including(transfer_outcome: :fee_refund_unpaired, recorded: false))
+        end
+      end
+
+      it "does not reverse the transfer when a purchase on the charge cannot be booked" do
+        create(:purchase_presentment, purchase:, presentment_currency: Currency::USD, presentment_price_cents: 10_00,
+                                      presentment_gumroad_tax_cents: 0, presentment_total_cents: 10_00)
+        purchase.association(:purchase_presentment).reset
+        # A prior refund without a presentment snapshot leaves the remaining buyer-currency amount unknowable.
+        create(:refund, purchase:, total_transaction_cents: 1_00, amount_cents: 1_00)
+        expect(Stripe::Transfer).not_to receive(:create_reversal)
+
+        purchase.handle_event_refund_updated!(build_external_event)
+
+        expect(purchase.reload.refunds.count).to eq(1)
+        expect(ErrorNotifier).to have_received(:notify).with(Charge::Refundable::EXTERNAL_REFUND_ALERT,
+                                                             hash_including(blocked_purchase_ids: [purchase.id], transfer_outcome: nil, recorded: false))
+      end
+
       it "leaves refunds the app created unchanged" do
         create(:refund, purchase:, processor_refund_id: refund_id, status: "pending")
         expect(Stripe::Transfer).not_to receive(:create_reversal)

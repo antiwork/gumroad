@@ -607,6 +607,22 @@ class Purchase
     true
   end
 
+  # refund_purchase!'s fail-closed amount checks, without writing or alerting.
+  def refund_recordable_from?(flow_of_funds)
+    issued_amount = flow_of_funds&.issued_amount
+    return false if issued_amount.nil?
+
+    gross_cents = if buyer_presentment?
+      return false unless issued_amount.currency.to_s.downcase == purchase_presentment.presentment_currency.to_s.downcase
+
+      Purchase::PresentmentRefund.from_presentment_amount(purchase: self, presentment_amount_cents: issued_amount.cents.abs)
+        &.canonical_gross_refund_cents
+    else
+      issued_amount.cents.abs
+    end
+    gross_cents.to_i.positive? && gross_cents <= gross_amount_refundable_cents
+  end
+
   # Derives the canonical refund amount + presentment snapshot for a refund that arrived with
   # only a buyer-currency flow of funds (refund webhooks, settlement declines). Returns nil —
   # and notifies — when the flow of funds is not in the presentment currency or no consistent
