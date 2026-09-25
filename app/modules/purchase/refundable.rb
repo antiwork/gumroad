@@ -199,6 +199,14 @@ class Purchase
         logger.error "Charge processor unavailable in purchase: #{external_id}. Response: #{e.message}"
         errors.add :base, "There is a temporary problem. Try to refund later."
         false
+      rescue StandardError => e
+        # The caller's rollback will discard this purchase's Refund row while the processor refund
+        # stands, so this report is the only record tying the money back to the purchase.
+        if charge_refund
+          ErrorNotifier.notify(e, context: { purchase_id: id, charge_id: stripe_transaction_id, processor_refund_id: charge_refund.id,
+                                             processor_refund_amount_cents: charge_refund.refund.try(:amount) || processor_refund_amount_cents })
+        end
+        raise
       end
     end
 

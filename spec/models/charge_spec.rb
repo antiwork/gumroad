@@ -270,6 +270,30 @@ describe Charge, :vcr do
       expect(charge.errors.full_messages.join).to include("unexpected processor failure")
       expect(ErrorNotifier).to have_received(:notify).with(an_instance_of(RuntimeError), context: { charge_id: charge.id, purchase_id: second.id })
     end
+
+    it "reports the processor refund id when recording a sibling's accepted Stripe refund raises" do
+      create(:balance, user: seller, amount_cents: 10_000)
+      first, second = purchases.sort_by(&:id)
+      [[first, "re_first"], [second, "re_second"]].each do |purchase, refund_id|
+        flow_of_funds = FlowOfFunds.build_simple_flow_of_funds(Currency::USD, -purchase.total_transaction_cents)
+        allow(ChargeProcessor).to receive(:refund!).with(anything, "ch_combined_raise", hash_including(purchase:))
+          .and_return(double(id: refund_id, refund: double(id: refund_id, status: "succeeded", amount: 5_00), flow_of_funds:))
+      end
+      allow_any_instance_of(Purchase).to receive(:refund_purchase!).and_wrap_original do |original, *args, **kwargs|
+        raise ActiveRecord::StatementInvalid, "lock wait timeout" if original.receiver.id == second.id
+        original.call(*args, **kwargs)
+      end
+      allow(ErrorNotifier).to receive(:notify)
+
+      expect(charge.refund_and_save!(seller.id)).to be(false)
+
+      expect(second.reload.refunds).to be_empty
+      expect(first.reload.refunds.sole.processor_refund_id).to eq("re_first")
+      expect(ErrorNotifier).to have_received(:notify).with(
+        an_instance_of(ActiveRecord::StatementInvalid),
+        context: { purchase_id: second.id, charge_id: "ch_combined_raise", processor_refund_id: "re_second", processor_refund_amount_cents: 5_00 }
+      )
+    end
   end
 
   describe "#refund_gumroad_taxes!" do
