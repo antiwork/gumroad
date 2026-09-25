@@ -22,7 +22,7 @@ export const TextInputNodeView = ({ editor, node, updateAttributes, getPos }: No
     <NodeViewWrapper data-drag-handle data-input-embed>
       {editor.isEditable ? (
         <NodeActionsWrapper asChild>
-          {/* Below lg the actions button sits beside the field instead of over it. */}
+          {/* Keep NodeActionsMenu a direct child: the desktop hover rule selects `>[data-actions-menu]`. */}
           <Fieldset className="max-lg:flex-row max-lg:items-end">
             <NodeActionsMenu editor={editor} getPos={getPos} className="max-lg:static" />
 
