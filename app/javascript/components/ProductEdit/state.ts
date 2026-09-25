@@ -353,7 +353,12 @@ type FileStatus =
   | { type: "dropbox"; externalId: string; uploadState: string }
   | {
       type: "unsaved";
-      uploadStatus: { type: "uploaded" } | { type: "uploading"; progress: UploadProgress };
+      uploadStatus:
+        | { type: "uploaded" }
+        | { type: "uploading"; progress: UploadProgress }
+        // The uploader gave up (part retries exhausted). A failure variant rather
+        // than a removal so the row can say what failed and stay out of the save.
+        | { type: "failed" };
       url: string;
     };
 

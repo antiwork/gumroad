@@ -57,17 +57,30 @@ vi.mock("$app/components/ProductEdit/Layout", async (importOriginal) => {
   const mod = await importOriginal<typeof import("$app/components/ProductEdit/Layout")>();
   return { ...mod, useProductUrl: () => "#" };
 });
-const scheduledUploads = vi.hoisted((): { file: File; onComplete: () => void }[] => []);
+const scheduledUploads = vi.hoisted(
+  (): { file: File; cancellationKey: string; onComplete: () => void; onError: () => void }[] => [],
+);
+const cancelUpload = vi.hoisted(() => vi.fn());
 vi.mock("$app/components/EvaporateUploader", async (importOriginal) => {
   const mod = await importOriginal<typeof import("$app/components/EvaporateUploader")>();
   return {
     ...mod,
     useEvaporateUploader: () => ({
-      scheduleUpload: ({ file, onComplete }: { file: File; onComplete: () => void }) => {
-        scheduledUploads.push({ file, onComplete });
+      scheduleUpload: ({
+        file,
+        cancellationKey,
+        onComplete,
+        onError,
+      }: {
+        file: File;
+        cancellationKey: string;
+        onComplete: () => void;
+        onError: () => void;
+      }) => {
+        scheduledUploads.push({ file, cancellationKey, onComplete, onError });
         return 0;
       },
-      cancelUpload: () => {},
+      cancelUpload,
     }),
   };
 });
@@ -116,6 +129,7 @@ afterEach(() => {
   mountedEditor = null;
   alerts.length = 0;
   scheduledUploads.length = 0;
+  cancelUpload.mockReset();
   sortable.echoList = false;
   viewport.isDesktop = true;
 });
@@ -694,6 +708,31 @@ it("does not reset an over-budget pick until Evaporate completes", async () => {
     uploaded.onComplete();
   });
   expect(valueWrites).toEqual([""]);
+});
+
+it("marks the row failed and tells the seller when an upload errors out", async () => {
+  const { product, input } = await renderToolbarPicker();
+  attachToolbarFile(input, new File(["x"], "huge.zip", { type: "application/zip" }));
+
+  await act(async () => {
+    fireEvent.change(input);
+  });
+
+  const upload = scheduledUploads[0];
+  const scheduled = product.files.at(-1);
+  if (!upload) throw new Error("No upload was scheduled");
+  if (!scheduled) throw new Error("Picked file was not added");
+  expect(upload.cancellationKey).toBe(`file_${scheduled.id}`);
+
+  await act(async () => {
+    upload.onError();
+  });
+
+  // A failed upload has to stop counting as in-flight, or Save changes stays
+  // disabled for the rest of the session.
+  expect(scheduled.status.type === "unsaved" && scheduled.status.uploadStatus.type).toBe("failed");
+  expect(alerts).toEqual([{ message: "Upload failed for huge.zip. Please try adding it again.", level: "error" }]);
+  expect(cancelUpload).toHaveBeenCalledWith(`file_${scheduled.id}`);
 });
 
 it("resets an over-budget pick when the seller cancels the upload", async () => {

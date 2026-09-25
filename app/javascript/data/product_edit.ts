@@ -118,11 +118,24 @@ export const saveProductError = (error: SaveProductErrorPayload): Error => {
   }
 };
 
-export const filesForSave = <T extends { id: string }>(
+// A file whose upload failed has no object in S3, so a row built from it is a
+// product_files row pointing at nothing. The editor keeps the failed row on
+// screen (it can be removed, or the file picked again), but a save must never
+// carry it — not even the keep-all retry, which is about hidden content, not
+// about half-uploaded files.
+const isFailedUpload = (file: { status?: { type?: string; uploadStatus?: { type?: string } } | null }) =>
+  file.status?.type === "unsaved" && file.status.uploadStatus?.type === "failed";
+
+export const filesForSave = <
+  T extends { id: string; status?: { type?: string; uploadStatus?: { type?: string } } | null },
+>(
   files: T[],
   embeddedFileIds: Set<unknown>,
   keepAllFiles: boolean,
-) => (keepAllFiles ? files : files.filter((file) => embeddedFileIds.has(file.id)));
+) => {
+  const savable = files.filter((file) => !isFailedUpload(file));
+  return keepAllFiles ? savable : savable.filter((file) => embeddedFileIds.has(file.id));
+};
 
 const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null;
 

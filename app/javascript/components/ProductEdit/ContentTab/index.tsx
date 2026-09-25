@@ -396,6 +396,15 @@ export const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: st
           });
           settleFileInputUpload(id);
         },
+        onError: () => {
+          uploader.cancelUpload(`file_${id}`);
+          fileStatus.uploadStatus = { type: "failed" };
+          updateProduct((product) => {
+            product.files = [...product.files];
+          });
+          showAlert(`Upload failed for ${file.name}. Please try adding it again.`, "error");
+          settleFileInputUpload(id);
+        },
         onProgress: (progress) => {
           fileStatus.uploadStatus = { type: "uploading", progress };
           updateProduct((product) => {

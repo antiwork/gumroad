@@ -6,7 +6,7 @@ import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { CurrentSellerProvider, type CurrentSeller } from "$app/components/CurrentSeller";
 import { DomainSettingsProvider } from "$app/components/DomainSettings";
 import { Layout } from "$app/components/ProductEdit/Layout";
-import { ProductEditContext, type Product } from "$app/components/ProductEdit/state";
+import { type FileEntry, ProductEditContext, type Product } from "$app/components/ProductEdit/state";
 
 vi.mock("react-router-dom", () => ({
   Link: ({ to, children }: { to: string; children?: React.ReactNode }) => <a href={to}>{children}</a>,
@@ -41,7 +41,10 @@ beforeAll(() => {
   });
 });
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  product.files = [];
+});
 
 const minor: CurrentSeller = {
   id: "1",
@@ -202,6 +205,47 @@ const renderLayout = (currentSeller: CurrentSeller) =>
       </CurrentSellerProvider>
     </DomainSettingsProvider>,
   );
+
+describe("ProductEdit Layout save gating", () => {
+  const unsavedFile = (uploadStatus: "uploading" | "failed"): FileEntry => ({
+    id: "unsaved-file",
+    display_name: "huge",
+    description: null,
+    extension: "ZIP",
+    file_size: 1024,
+    is_pdf: false,
+    pdf_stamp_enabled: false,
+    hide_kindle_and_read_buttons: false,
+    is_streamable: false,
+    stream_only: false,
+    is_transcoding_in_progress: false,
+    url: null,
+    subtitle_files: [],
+    thumbnail: null,
+    status:
+      uploadStatus === "uploading"
+        ? {
+            type: "unsaved",
+            uploadStatus: { type: "uploading", progress: { percent: 0.1, bitrate: 0 } },
+            url: "blob:huge",
+          }
+        : { type: "unsaved", uploadStatus: { type: "failed" }, url: "blob:huge" },
+  });
+
+  it("keeps Save disabled while a file is still uploading", () => {
+    product.files = [unsavedFile("uploading")];
+    renderLayout(minor);
+
+    expect(screen.getByRole<HTMLButtonElement>("button", { name: "Save and continue" }).disabled).toBe(true);
+  });
+
+  it("re-enables Save when the only unsaved file failed to upload", () => {
+    product.files = [unsavedFile("failed")];
+    renderLayout(minor);
+
+    expect(screen.getByRole<HTMLButtonElement>("button", { name: "Save and continue" }).disabled).toBe(false);
+  });
+});
 
 describe("ProductEdit Layout under-18 banner", () => {
   it("points a minor outside the guardian countries at payouts starting at 18", () => {

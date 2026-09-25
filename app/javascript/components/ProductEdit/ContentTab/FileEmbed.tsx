@@ -237,6 +237,7 @@ const FileEmbedNodeView = ({
       </NodeViewWrapper>
     );
 
+  const isFailedUpload = file.status.type === "unsaved" && file.status.uploadStatus.type === "failed";
   const isComplete = !(
     (file.status.type === "unsaved" && file.status.uploadStatus.type === "uploading") ||
     (file.status.type === "dropbox" && file.status.uploadState === "in_progress")
@@ -560,7 +561,9 @@ const FileEmbedNodeView = ({
                 <>
                   {file.extension ? <li>{file.extension}</li> : null}
 
-                  {file.extension === "URL" ? (
+                  {isFailedUpload ? (
+                    <li>Upload failed</li>
+                  ) : file.extension === "URL" ? (
                     <li>{file.url}</li>
                   ) : uploadProgress != null ? (
                     <li>
@@ -586,7 +589,7 @@ const FileEmbedNodeView = ({
           </RowContent>
 
           <RowActions>
-            {downloadUrl && !file.stream_only ? (
+            {downloadUrl && !file.stream_only && !isFailedUpload ? (
               <NavigationButton
                 href={downloadUrl}
                 download={`${file.display_name}.${file.extension?.toLocaleLowerCase()}`}
@@ -663,6 +666,12 @@ const FileEmbedNodeView = ({
             {!isComplete ? (
               <Button color="danger" outline onClick={onCancel} aria-label="Cancel">
                 Cancel
+              </Button>
+            ) : null}
+
+            {isFailedUpload ? (
+              <Button color="danger" outline onClick={onCancel} aria-label="Remove">
+                Remove
               </Button>
             ) : null}
 

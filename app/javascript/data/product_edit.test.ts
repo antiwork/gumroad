@@ -45,6 +45,15 @@ describe("filesForSave", () => {
     expect(editorFiles).toEqual([file]);
     expect(filesForSave(editorFiles, new Set(), true)).toEqual([file]);
   });
+
+  it("drops a file whose upload failed, on both the embedded-only and keep-all paths", () => {
+    const uploaded = { id: "uploaded-id" };
+    const failed = { id: "failed-id", status: { type: "unsaved", uploadStatus: { type: "failed" } } };
+    const editorFiles = [uploaded, failed];
+
+    expect(filesForSave(editorFiles, new Set(["uploaded-id", "failed-id"]), false)).toEqual([uploaded]);
+    expect(filesForSave(editorFiles, new Set(), true)).toEqual([uploaded]);
+  });
 });
 
 describe("scalarSettingsForSave", () => {

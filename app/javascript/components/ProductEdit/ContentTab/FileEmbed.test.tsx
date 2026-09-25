@@ -105,6 +105,25 @@ const uploadingFile = {
 } as FileEntry;
 
 // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- fixture only needs the fields the node view reads
+const failedFile = {
+  id: FILE_ID,
+  display_name: "huge",
+  description: null,
+  extension: "ZIP",
+  file_size: 1024,
+  is_pdf: false,
+  pdf_stamp_enabled: false,
+  hide_kindle_and_read_buttons: false,
+  is_streamable: false,
+  stream_only: false,
+  is_transcoding_in_progress: false,
+  url: null,
+  subtitle_files: [],
+  status: { type: "unsaved", uploadStatus: { type: "failed" }, url: "blob:huge" },
+  thumbnail: null,
+} as FileEntry;
+
+// eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- fixture only needs the fields the node view reads
 const streamableFile = {
   id: FILE_ID,
   display_name: "video",
@@ -158,6 +177,38 @@ it("tells the config which file was cancelled when the seller cancels an in-prog
 
   expect(cancelUpload).toHaveBeenCalledWith(`file_${FILE_ID}`);
   expect(onUploadCancelled).toHaveBeenCalledWith(FILE_ID);
+});
+
+it("shows a failed upload on the row, with no download, and removes it on Remove", async () => {
+  const onUploadCancelled = vi.fn();
+  const filesById = new Map<string, FileEntry>([[FILE_ID, failedFile]]);
+  context.filesById = filesById;
+
+  render(<FileEmbedEditor config={{ filesById, onUploadCancelled }} />);
+  await act(() => Promise.resolve());
+
+  expect(screen.getByText("Upload failed")).toBeTruthy();
+  // Nothing landed in S3, so there is nothing to download and nothing to cancel.
+  expect(screen.queryByText("Download")).toBeNull();
+  expect(screen.queryByRole("button", { name: "Cancel" })).toBeNull();
+
+  act(() => {
+    fireEvent.click(screen.getByRole("button", { name: "Remove" }));
+  });
+
+  expect(cancelUpload).toHaveBeenCalledWith(`file_${FILE_ID}`);
+  expect(onUploadCancelled).toHaveBeenCalledWith(FILE_ID);
+});
+
+it("still offers the download for a file that finished uploading", async () => {
+  const filesById = new Map<string, FileEntry>([[FILE_ID, streamableFile]]);
+  context.filesById = filesById;
+
+  render(<FileEmbedEditor config={{ filesById }} />);
+  await act(() => Promise.resolve());
+
+  expect(screen.getByText("Download")).toBeTruthy();
+  expect(screen.queryByText("Upload failed")).toBeNull();
 });
 
 it("keeps every subtitle from a multi-file pick instead of last-write-wins", async () => {
