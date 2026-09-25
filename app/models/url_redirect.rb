@@ -213,13 +213,18 @@ class UrlRedirect < ApplicationRecord
     owner = rich_content_provider.presence || with_product_files
     owner.with_lock do
       matching_archives = matching_bundle_archives(bundle_files)
-      return if matching_archives.any? { |archive| !archive.failed? }
+      return if matching_archives.any? { |archive| !archive.failed? && !archive.too_large? }
 
       failed_archives = matching_archives.select(&:failed?)
       return if failed_archives.size >= BUNDLE_ARCHIVE_MAX_FAILED_ATTEMPTS
 
-      latest_failure_at = failed_archives.map(&:updated_at).compact.max
-      return if failed_archives.size >= 2 && latest_failure_at > BUNDLE_ARCHIVE_FAILED_RETRY_COOLDOWN.ago
+      # Too-large archives stay off the failure budget: the cap is a config and the member file set can
+      # shrink, so they retry on the cooldown instead of needing a manual archive row delete.
+      too_large_archives = matching_archives.select(&:too_large?)
+      latest_attempt_at = (failed_archives + too_large_archives).map(&:updated_at).compact.max
+      if latest_attempt_at.present? && latest_attempt_at > BUNDLE_ARCHIVE_FAILED_RETRY_COOLDOWN.ago
+        return if too_large_archives.any? || failed_archives.size >= 2
+      end
 
       product_files_archive = product_files_archives.new
       product_files_archive.product_files = bundle_files

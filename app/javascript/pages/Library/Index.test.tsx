@@ -62,7 +62,12 @@ const defaultProps = (): {
   pagination: { page: number; pages: number; from: number; to: number; count: number };
   creators: { id: string; name: string; count: number }[];
   bundles: { id: string; label: string }[];
-  bundle_downloads: { id: string; label: string; download_url: string | null }[];
+  bundle_downloads: {
+    id: string;
+    label: string;
+    download_url: string | null;
+    zip_unavailable_reason: "too_large" | "failed" | null;
+  }[];
   archived_count: number;
   unarchived_count: number;
   search: SearchParams;
@@ -298,7 +303,9 @@ describe("LibraryPage", () => {
 
   it("renders a bundle Download all link when the selected bundle archive is ready", () => {
     const props = defaultProps();
-    props.bundle_downloads = [{ id: "b1", label: "Bundle One", download_url: "/d/bundle-token/download_archive" }];
+    props.bundle_downloads = [
+      { id: "b1", label: "Bundle One", download_url: "/d/bundle-token/download_archive", zip_unavailable_reason: null },
+    ];
     renderPage(props);
 
     expect(screen.getByText(/Download everything included in/u).textContent).toContain(
@@ -310,12 +317,31 @@ describe("LibraryPage", () => {
 
   it("shows the bundle ZIP preparation state while the archive is being generated", () => {
     const props = defaultProps();
-    props.bundle_downloads = [{ id: "b1", label: "Bundle One", download_url: null }];
+    props.bundle_downloads = [{ id: "b1", label: "Bundle One", download_url: null, zip_unavailable_reason: null }];
     renderPage(props);
 
     const button = screen.getByRole("button", { name: /Preparing ZIP/u });
     if (!(button instanceof HTMLButtonElement)) throw new Error("expected a button");
     expect(button.disabled).toBe(true);
+  });
+
+  it("explains a ZIP that is too large instead of dropping the block or promising a ZIP", () => {
+    const props = defaultProps();
+    props.bundle_downloads = [{ id: "b1", label: "Bundle One", download_url: null, zip_unavailable_reason: "too_large" }];
+    renderPage(props);
+
+    expect(screen.getByText(/too large to download as one ZIP file/u)).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /Preparing ZIP/u })).toBeNull();
+    expect(screen.queryByRole("link", { name: /Download all/u })).toBeNull();
+  });
+
+  it("explains a ZIP that could not be prepared", () => {
+    const props = defaultProps();
+    props.bundle_downloads = [{ id: "b1", label: "Bundle One", download_url: null, zip_unavailable_reason: "failed" }];
+    renderPage(props);
+
+    expect(screen.getByText(/We could not prepare a ZIP file for/u)).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /Preparing ZIP/u })).toBeNull();
   });
 });
 

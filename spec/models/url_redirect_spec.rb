@@ -300,6 +300,34 @@ describe UrlRedirect do
       expect(files_for_original_token.map(&:link_id)).to match_array(original_product_ids)
       expect(files_for_original_token.map(&:link_id)).not_to include(new_bundle_product.product_id)
     end
+
+    def entity_archive_count
+      ProductFilesArchive.alive.where(link_id: bundle.id, folder_id: nil).count
+    end
+
+    it "does not queue a replacement ZIP while a too-large archive is inside the retry cooldown" do
+      add_member_files
+      bundle_purchase.create_artifacts_and_send_receipt!
+      redirect = bundle_purchase.url_redirect
+      redirect.bundle_archive
+      redirect.matching_bundle_archives(redirect.bundle_archive_product_files).each(&:mark_too_large!)
+
+      expect { redirect.bundle_archive }.not_to change { entity_archive_count }
+    end
+
+    it "retries a too-large archive once the cooldown expires instead of spending the failure budget" do
+      add_member_files
+      bundle_purchase.create_artifacts_and_send_receipt!
+      redirect = bundle_purchase.url_redirect
+      bundle_files = redirect.bundle_archive_product_files
+      3.times { redirect.product_files_archives.create!(product_files: bundle_files).mark_too_large! }
+      expect(entity_archive_count).to eq(3)
+
+      redirect.product_files_archives.alive.each { _1.update_columns(updated_at: 25.hours.ago) }
+
+      expect { redirect.bundle_archive }.to change { entity_archive_count }.by(1)
+      expect(bundle.product_files_archives.alive.order(:id).last).to be_queueing
+    end
   end
 
   describe "streaming" do

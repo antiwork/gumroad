@@ -19,6 +19,12 @@ class ProductFilesArchive < ApplicationRecord
       transition all => :failed
     end
 
+    # Distinct from :failed so a deterministic "too large" is not charged against the bundle's
+    # retry budget in UrlRedirect#ensure_bundle_archive_for, and support can see the reason on the row.
+    event :mark_too_large do
+      transition all => :too_large
+    end
+
     event :mark_in_progress do
       transition all => :in_progress
     end

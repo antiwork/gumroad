@@ -227,15 +227,21 @@ class LibraryPresenter
         next if files.empty?
 
         archive = redirect.bundle_archive
+        zip_unavailable_reason = nil
         if archive.blank?
           matching = redirect.matching_bundle_archives(files)
-          next if matching.any? && matching.none? { |existing| existing.queueing? || existing.in_progress? }
+          if matching.any? && matching.none? { |existing| existing.queueing? || existing.in_progress? }
+            # Retrying is over, so name the reason instead of dropping the row: a vanished ZIP block
+            # reads to the buyer as a missing file.
+            zip_unavailable_reason = matching.any?(&:too_large?) ? "too_large" : "failed"
+          end
         end
 
         {
           id: link.external_id,
           label: link.name,
           download_url: archive.present? ? url_redirect_download_archive_path(redirect.token) : nil,
+          zip_unavailable_reason:,
         }
       end
     end
