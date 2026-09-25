@@ -640,6 +640,8 @@ const ProductEditPage = (props: Props) => {
         lastSavedCustomizablePrice: lastSavedProductRef.current.customizable_price,
         lastSavedPriceCents: lastSavedProductRef.current.price_cents,
         lastSavedHasPaidVariantPricing: hasPaidVariantPricing(lastSavedProductRef.current),
+        lastSavedInstallmentPlan: lastSavedProductRef.current.installment_plan,
+        lastSavedAllowInstallmentPlan: lastSavedProductRef.current.allow_installment_plan,
       });
       saved = true;
       // The version pages the seller chose to keep were never loaded into this

@@ -467,12 +467,16 @@ export const scalarSettingsForSave = (
     customizable_price: boolean;
     price_cents: number;
     hasPaidVariantPricing: boolean;
+    installment_plan: { number_of_installments: number } | null;
+    allow_installment_plan: boolean;
   },
   lastSaved: {
     custom_permalink: string | null;
     customizable_price: boolean | null;
     price_cents: number;
     hasPaidVariantPricing: boolean;
+    installment_plan: { number_of_installments: number } | null;
+    allow_installment_plan: boolean | null;
   },
 ) => {
   const settings: Record<string, unknown> = {};
@@ -498,6 +502,29 @@ export const scalarSettingsForSave = (
   if (!flagIsDerivedFromUnchangedInputs || product.customizable_price !== lastSaved.customizable_price) {
     settings.customizable_price = product.customizable_price;
   }
+  // `installment_plan` is the same defect class as the scalars above
+  // (gumroad-private#2348): `LinksController#update_installment_plan` reads an
+  // absent or null plan as an explicit "remove the plan" and hard-deletes it
+  // (`ProductInstallmentPlan` uses `Deletable`, so there is no audit trail), so
+  // a save from any snapshot taken before the seller's plan existed would wipe
+  // it. Send the plan only when THIS session changed the toggle or the
+  // installment count; a deliberate toggle-off still sends the clear, marked
+  // `installment_plan_changed` so the server can tell it from a stale snapshot
+  // (gumroad-private#2958). A null `allow_installment_plan` baseline means the
+  // caller does not track the last-saved value, so send it through unchanged.
+  const installmentBaselineKnown = lastSaved.allow_installment_plan !== null;
+  const installmentToggled = product.allow_installment_plan !== lastSaved.allow_installment_plan;
+  const installmentCountChanged =
+    (product.installment_plan?.number_of_installments ?? null) !==
+    (lastSaved.installment_plan?.number_of_installments ?? null);
+  if (product.allow_installment_plan) {
+    if (!installmentBaselineKnown || installmentToggled || installmentCountChanged) {
+      settings.installment_plan = product.installment_plan;
+    }
+  } else if (!installmentBaselineKnown || installmentToggled) {
+    settings.installment_plan = null;
+    settings.installment_plan_changed = true;
+  }
   return settings;
 };
 
@@ -516,6 +543,8 @@ export const saveProduct = async (
     lastSavedCustomizablePrice?: boolean | null;
     lastSavedPriceCents?: number | null;
     lastSavedHasPaidVariantPricing?: boolean | null;
+    lastSavedInstallmentPlan?: { number_of_installments: number } | null;
+    lastSavedAllowInstallmentPlan?: boolean | null;
   } = {},
 ): Promise<SaveProductResponse> => {
   // TODO remove this once we have a better content uploader
@@ -545,6 +574,8 @@ export const saveProduct = async (
     customizable_price,
     description,
     description_changed,
+    installment_plan,
+    allow_installment_plan,
     ...productParams
   } = product;
   const response = await request({
@@ -561,12 +592,16 @@ export const saveProduct = async (
           customizable_price,
           price_cents: product.price_cents,
           hasPaidVariantPricing: hasPaidVariantPricing(product),
+          installment_plan,
+          allow_installment_plan,
         },
         {
           custom_permalink: options.lastSavedCustomPermalink ?? null,
           customizable_price: options.lastSavedCustomizablePrice ?? null,
           price_cents: options.lastSavedPriceCents ?? product.price_cents,
           hasPaidVariantPricing: options.lastSavedHasPaidVariantPricing ?? hasPaidVariantPricing(product),
+          installment_plan: options.lastSavedInstallmentPlan ?? null,
+          allow_installment_plan: options.lastSavedAllowInstallmentPlan ?? null,
         },
       ),
       files,
@@ -602,7 +637,6 @@ export const saveProduct = async (
       availabilities: product.availabilities.map(({ newlyAdded, ...availability }) =>
         newlyAdded ? { ...availability, id: null } : availability,
       ),
-      installment_plan: product.allow_installment_plan ? product.installment_plan : null,
     },
   });
   if (!response.ok) throw saveProductError(typia.assert<SaveProductErrorPayload>(await response.json()));

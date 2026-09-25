@@ -953,11 +953,15 @@ class LinksController < ApplicationController
 
     # Blank custom_permalink / description is unspecified unless marked a
     # deliberate clear, so a content-tab snapshot cannot wipe another tab's copy.
+    # An absent/null installment_plan is the same shape: the seller's plan is
+    # hard-deleted by update_installment_plan, so only a session that says it
+    # cleared the toggle may remove it (gumroad-private#2958).
     def omit_unspecified_product_scalars!
       permitted = product_permitted_params
       permitted.delete(:custom_permalink) if permitted[:custom_permalink].blank? && !custom_permalink_clear_requested?
       permitted.delete(:description) if permitted[:description].blank? && !description_clear_requested?
       permitted.delete(:customizable_price) if permitted[:customizable_price].nil?
+      permitted.delete(:installment_plan) if permitted[:installment_plan].blank? && !installment_plan_clear_requested?
     end
 
     def custom_permalink_clear_requested?
@@ -966,6 +970,10 @@ class LinksController < ApplicationController
 
     def description_clear_requested?
       ActiveModel::Type::Boolean.new.cast(params[:description_changed])
+    end
+
+    def installment_plan_clear_requested?
+      ActiveModel::Type::Boolean.new.cast(params[:installment_plan_changed])
     end
 
     # Built from PERMITTED params so submitted? sees collections as strong
@@ -2071,6 +2079,11 @@ class LinksController < ApplicationController
 
     def update_installment_plan
       return unless @product.eligible_for_installment_plans?
+      # Only a session that actually submitted a plan — or said it cleared the
+      # toggle — may change the seller's plan. An absent (or stale, omitted)
+      # value is "unspecified"; reading it as "remove" is what hard-deletes a
+      # plan a second tab never touched (gumroad-private#2958).
+      return unless product_permitted_params[:installment_plan].present? || installment_plan_clear_requested?
 
       if @product.installment_plan && product_permitted_params[:installment_plan].present?
         @product.installment_plan.assign_attributes(product_permitted_params[:installment_plan])

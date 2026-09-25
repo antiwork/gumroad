@@ -53,6 +53,8 @@ describe("scalarSettingsForSave", () => {
     customizable_price: false,
     price_cents: 100,
     hasPaidVariantPricing: false,
+    installment_plan: null,
+    allow_installment_plan: false,
     ...overrides,
   });
   const lastSaved = (overrides = {}) => ({
@@ -60,6 +62,8 @@ describe("scalarSettingsForSave", () => {
     customizable_price: false,
     price_cents: 100,
     hasPaidVariantPricing: false,
+    installment_plan: null,
+    allow_installment_plan: false,
     ...overrides,
   });
 
@@ -171,6 +175,54 @@ describe("scalarSettingsForSave", () => {
     expect(
       scalarSettingsForSave(product({ customizable_price: false }), { ...lastSaved(), customizable_price: null }),
     ).toEqual({ customizable_price: false });
+  });
+
+  it("omits an unchanged installment plan so a stale tab cannot delete the seller's plan", () => {
+    // A snapshot taken before the plan existed must not send `null`, which the
+    // server reads as an explicit clear and hard-deletes (gumroad-private#2958).
+    expect(scalarSettingsForSave(product(), lastSaved())).toEqual({});
+  });
+
+  it("sends the plan when this session turned the toggle on", () => {
+    expect(
+      scalarSettingsForSave(
+        product({ allow_installment_plan: true, installment_plan: { number_of_installments: 2 } }),
+        lastSaved(),
+      ),
+    ).toEqual({ installment_plan: { number_of_installments: 2 } });
+  });
+
+  it("sends the plan when this session changed the installment count", () => {
+    expect(
+      scalarSettingsForSave(
+        product({ allow_installment_plan: true, installment_plan: { number_of_installments: 4 } }),
+        lastSaved({ allow_installment_plan: true, installment_plan: { number_of_installments: 2 } }),
+      ),
+    ).toEqual({ installment_plan: { number_of_installments: 4 } });
+  });
+
+  it("marks a deliberate toggle-off as a clear so the server can tell it from a stale tab", () => {
+    expect(
+      scalarSettingsForSave(
+        product({ allow_installment_plan: false, installment_plan: null }),
+        lastSaved({ allow_installment_plan: true, installment_plan: { number_of_installments: 2 } }),
+      ),
+    ).toEqual({ installment_plan: null, installment_plan_changed: true });
+  });
+
+  it("always sends installment_plan when the caller has no baseline", () => {
+    expect(
+      scalarSettingsForSave(
+        product({ allow_installment_plan: true, installment_plan: { number_of_installments: 2 } }),
+        { ...lastSaved(), allow_installment_plan: null },
+      ),
+    ).toEqual({ installment_plan: { number_of_installments: 2 } });
+    expect(
+      scalarSettingsForSave(product({ allow_installment_plan: false }), {
+        ...lastSaved(),
+        allow_installment_plan: null,
+      }),
+    ).toEqual({ installment_plan: null, installment_plan_changed: true });
   });
 });
 
