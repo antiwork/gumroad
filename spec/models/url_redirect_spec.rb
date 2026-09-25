@@ -305,17 +305,30 @@ describe UrlRedirect do
       ProductFilesArchive.alive.where(link_id: bundle.id, folder_id: nil).count
     end
 
-    it "does not queue a replacement ZIP while a too-large archive is inside the retry cooldown" do
+    it "does not queue a replacement ZIP while a too-large archive is inside its retry window" do
       add_member_files
       bundle_purchase.create_artifacts_and_send_receipt!
       redirect = bundle_purchase.url_redirect
       redirect.bundle_archive
       redirect.matching_bundle_archives(redirect.bundle_archive_product_files).each(&:mark_too_large!)
+      redirect.product_files_archives.alive.each { _1.update_columns(updated_at: 1.hour.ago) }
 
       expect { redirect.bundle_archive }.not_to change { entity_archive_count }
     end
 
-    it "retries a too-large archive once the cooldown expires instead of spending the failure budget" do
+    it "retries a too-large archive once its retry window has passed instead of spending the failure budget" do
+      add_member_files
+      bundle_purchase.create_artifacts_and_send_receipt!
+      redirect = bundle_purchase.url_redirect
+      redirect.bundle_archive
+      redirect.matching_bundle_archives(redirect.bundle_archive_product_files).each(&:mark_too_large!)
+      redirect.product_files_archives.alive.each { _1.update_columns(updated_at: 25.hours.ago) }
+
+      expect { redirect.bundle_archive }.to change { entity_archive_count }.by(1)
+      expect(bundle.product_files_archives.alive.order(:id).last).to be_queueing
+    end
+
+    it "widens the too-large retry window as attempts accumulate" do
       add_member_files
       bundle_purchase.create_artifacts_and_send_receipt!
       redirect = bundle_purchase.url_redirect
@@ -324,9 +337,24 @@ describe UrlRedirect do
       expect(entity_archive_count).to eq(3)
 
       redirect.product_files_archives.alive.each { _1.update_columns(updated_at: 25.hours.ago) }
+      expect { redirect.bundle_archive }.not_to change { entity_archive_count }
 
+      redirect.product_files_archives.alive.each { _1.update_columns(updated_at: 4.days.ago - 1.hour) }
       expect { redirect.bundle_archive }.to change { entity_archive_count }.by(1)
-      expect(bundle.product_files_archives.alive.order(:id).last).to be_queueing
+    end
+
+    it "caps the too-large retry window at a week" do
+      add_member_files
+      bundle_purchase.create_artifacts_and_send_receipt!
+      redirect = bundle_purchase.url_redirect
+      bundle_files = redirect.bundle_archive_product_files
+      8.times { redirect.product_files_archives.create!(product_files: bundle_files).mark_too_large! }
+
+      redirect.product_files_archives.alive.each { _1.update_columns(updated_at: 6.days.ago) }
+      expect { redirect.bundle_archive }.not_to change { entity_archive_count }
+
+      redirect.product_files_archives.alive.each { _1.update_columns(updated_at: 8.days.ago) }
+      expect { redirect.bundle_archive }.to change { entity_archive_count }.by(1)
     end
   end
 
