@@ -14,8 +14,8 @@ describe "Sentry configuration" do
   describe "before_send" do
     subject(:before_send) { Sentry.configuration.before_send }
 
-    def build_event(tags:)
-      instance_double(Sentry::ErrorEvent, tags:)
+    def build_event(tags:, request: nil)
+      instance_double(Sentry::ErrorEvent, tags:, request:)
     end
 
     def build_exception(backtrace)
@@ -75,6 +75,32 @@ describe "Sentry configuration" do
       event = build_event(tags: { source: "runner" })
 
       expect(before_send.call(event, exception: StandardError.new("boom"))).to eq(event)
+    end
+  end
+
+  describe "retired Gumhead gateway requests" do
+    def build_request(url)
+      Sentry::RequestInterface.allocate.tap { |request| request.url = url }
+    end
+
+    it "drops error events for the retired gateway URLs" do
+      event = instance_double(Sentry::ErrorEvent, tags: {}, request: build_request("https://api.gumroad.com/v2/gumhead/v1/messages"))
+
+      expect(Sentry.configuration.before_send.call(event, nil)).to be_nil
+    end
+
+    it "drops transactions for the retired gateway URLs" do
+      event = instance_double(Sentry::TransactionEvent, request: build_request("https://gumroad.com/api/v2/gumhead/v1/messages"))
+
+      expect(Sentry.configuration.before_send_transaction.call(event, nil)).to be_nil
+    end
+
+    it "keeps events for other URLs" do
+      error = instance_double(Sentry::ErrorEvent, tags: {}, request: build_request("https://gumroad.com/purchases"))
+      transaction = instance_double(Sentry::TransactionEvent, request: build_request("https://gumroad.com/purchases"))
+
+      expect(Sentry.configuration.before_send.call(error, nil)).to eq(error)
+      expect(Sentry.configuration.before_send_transaction.call(transaction, nil)).to eq(transaction)
     end
   end
 end
