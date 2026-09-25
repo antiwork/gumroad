@@ -260,9 +260,9 @@ describe("pay label while a confirmation holds the submit open", () => {
   });
 
   it("reads as Pay again while the checkout waits on the buyer's own confirmation", () => {
-    expect(getPayLabel(reduceCheckoutState(charging, { type: "set-awaiting-buyer-confirmation", awaiting: true }))).toBe(
-      "Pay",
-    );
+    expect(
+      getPayLabel(reduceCheckoutState(charging, { type: "set-awaiting-buyer-confirmation", awaiting: true })),
+    ).toBe("Pay");
   });
 
   it("keeps the caller's label override", () => {
