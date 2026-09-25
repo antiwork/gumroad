@@ -254,6 +254,22 @@ describe Purchase::ChargeEventsHandler, :vcr do
     end
   end
 
+  describe "payment failed event for a client-confirmed gift charge" do
+    it "fails the gift and the giftee purchase along with the gifter purchase" do
+      gift = create(:gift)
+      charge = create(:charge, order: create(:order), client_confirmed: true, stripe_payment_intent_id: "pi_gift_declined")
+      gifter_purchase = create(:purchase_in_progress, link: gift.link, gift_given: gift, is_gift_sender_purchase: true)
+      giftee_purchase = create(:free_purchase, link: gift.link, gift_received: gift, is_gift_receiver_purchase: true, purchase_state: "in_progress")
+      charge.purchases << gifter_purchase
+
+      charge.handle_event_failed!(build(:charge_event_payment_failed, extras: { "stripe_error_code" => "card_declined_generic_decline" }))
+
+      expect(gifter_purchase.reload).to be_failed
+      expect(gift.reload).to be_failed
+      expect(giftee_purchase.reload).to be_gift_receiver_purchase_failed
+    end
+  end
+
   describe "payment failed event for purchase" do
     before do
       @initial_balance = 200

@@ -5,6 +5,7 @@ class Purchase::SyncStatusWithChargeProcessorService
   # Charge statuses that count as success but are not final: the money may still settle or still
   # fail, so a purchase sitting behind one of these is waiting, not stuck.
   PENDING_CHARGE_STATUSES = %w[pending created approved].freeze
+  GIFTER_SUCCESS_STATES = (Purchase::NON_GIFT_SUCCESS_STATES + %w[test_successful]).freeze
 
   attr_accessor :purchase, :mark_as_failed
   # Why the last #perform did not succeed, for callers that report on rows they could not heal:
@@ -47,6 +48,8 @@ class Purchase::SyncStatusWithChargeProcessorService
       end
       return purchase.reload.successful?
     end
+
+    return sync_giftee_purchase_with_gifter if purchase.is_gift_receiver_purchase?
 
     # The generic path has no unique balance-transaction guard, so hold the row through fulfillment.
     purchase.with_lock do
@@ -172,6 +175,23 @@ class Purchase::SyncStatusWithChargeProcessorService
         :pending
       else
         :unsuccessful
+      end
+    end
+
+    # A giftee purchase is $0 and never charged, so the processor cannot vouch for it: it only
+    # ever mirrors its gifter purchase, and stays put while the gifter is undecided.
+    def sync_giftee_purchase_with_gifter
+      purchase.with_lock do
+        next false unless purchase.in_progress?
+
+        gifter_purchase = purchase.gift_received&.gifter_purchase
+        if gifter_purchase&.purchase_state.in?(GIFTER_SUCCESS_STATES)
+          purchase.mark_gift_receiver_purchase_successful!
+          true
+        else
+          purchase.mark_gift_receiver_purchase_failed! if gifter_purchase&.failed?
+          false
+        end
       end
     end
 

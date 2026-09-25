@@ -485,6 +485,57 @@ describe Purchase::SyncStatusWithChargeProcessorService, :vcr do
     expect(purchase_given.gift.successful?).to be(true)
   end
 
+  describe "giftee purchases" do
+    let(:gift) { create(:gift) }
+    let!(:gifter_purchase) { create(:purchase, link: gift.link, gift_given: gift, is_gift_sender_purchase: true, purchase_state: gifter_state) }
+    let!(:giftee_purchase) { create(:free_purchase, link: gift.link, gift_received: gift, is_gift_receiver_purchase: true, purchase_state: "in_progress") }
+
+    context "when the gifter purchase failed" do
+      let(:gifter_state) { "failed" }
+
+      it "fails the giftee purchase instead of granting access" do
+        expect(ChargeProcessor).not_to receive(:get_or_search_charge)
+
+        expect(Purchase::SyncStatusWithChargeProcessorService.new(giftee_purchase, mark_as_failed: true).perform).to be(false)
+
+        expect(giftee_purchase.reload).to be_gift_receiver_purchase_failed
+      end
+    end
+
+    context "when the gifter purchase is still in progress" do
+      let(:gifter_state) { "in_progress" }
+
+      it "leaves the giftee purchase in progress" do
+        expect(Purchase::SyncStatusWithChargeProcessorService.new(giftee_purchase, mark_as_failed: true).perform).to be(false)
+
+        expect(giftee_purchase.reload).to be_in_progress
+      end
+    end
+
+    context "when the gifter purchase succeeded" do
+      let(:gifter_state) { "successful" }
+
+      it "marks the giftee purchase successful" do
+        expect(Purchase::SyncStatusWithChargeProcessorService.new(giftee_purchase, mark_as_failed: true).perform).to be(true)
+
+        expect(giftee_purchase.reload).to be_gift_receiver_purchase_successful
+      end
+    end
+  end
+
+  it "fails the gift and giftee purchase when a gifter purchase is marked failed" do
+    gift = create(:gift)
+    purchase_given = create(:purchase, link: gift.link, gift_given: gift, is_gift_sender_purchase: true, purchase_state: "in_progress")
+    purchase_received = create(:free_purchase, link: gift.link, gift_received: gift, is_gift_receiver_purchase: true, purchase_state: "in_progress")
+    allow(ChargeProcessor).to receive(:get_or_search_charge).and_return(nil)
+
+    expect(Purchase::SyncStatusWithChargeProcessorService.new(purchase_given, mark_as_failed: true).perform).to be(false)
+
+    expect(purchase_given.reload).to be_failed
+    expect(gift.reload).to be_failed
+    expect(purchase_received.reload).to be_gift_receiver_purchase_failed
+  end
+
   it "creates a subscription in case of a successful subscription purchase" do
     product = create(:product, :is_subscription, user: @seller)
     purchase = create(:purchase, link: product, purchase_state: "in_progress", chargeable: create(:chargeable), price: product.default_price)
