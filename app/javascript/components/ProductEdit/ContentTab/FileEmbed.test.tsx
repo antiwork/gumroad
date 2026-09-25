@@ -10,6 +10,14 @@ import { PICKED_FILE_SNAPSHOT_LIMIT_BYTES } from "$app/utils/snapshotPickedFile"
 import { FileEmbed, FileEmbedConfig } from "$app/components/ProductEdit/ContentTab/FileEmbed";
 import { FileEntry } from "$app/components/ProductEdit/state";
 
+vi.mock("@rails/activestorage", () => ({
+  DirectUpload: class {
+    create(callback: (error: Error | null, blob: { key: string; signed_id: string }) => void) {
+      callback(null, { key: "thumb-key", signed_id: "thumb-signed-id" });
+    }
+  },
+}));
+
 const alerts = vi.hoisted((): { message: string; level: string }[] => []);
 vi.mock("$app/components/server-components/Alert", () => ({
   showAlert: (message: string, level: string) => alerts.push({ message, level }),
@@ -272,6 +280,48 @@ it("hands the Upload again pick to the config", async () => {
   });
 
   expect(onRetryUpload).toHaveBeenCalledWith(FILE_ID, input);
+});
+
+it("attaches a generated thumbnail to a saved video", async () => {
+  const file: FileEntry = { ...streamableFile, status: { type: "saved" }, thumbnail: null };
+  const product: { files: FileEntry[] } = { files: [file] };
+  context.filesById = new Map<string, FileEntry>([[FILE_ID, file]]);
+  context.updateProduct = (update: unknown) => {
+    // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- fixture mapper matches updateProduct
+    if (typeof update === "function") (update as (p: typeof product) => void)(product);
+  };
+  Object.assign(Routes, {
+    rails_direct_uploads_path: () => "/rails/active_storage/direct_uploads",
+    s3_utility_cdn_url_for_blob_path: ({ key }: { key: string }) => `/cdn/${key}`,
+  });
+  // happy-dom cannot decode video or draw to a canvas, so stand in for both.
+  let video: HTMLVideoElement | null = null;
+  const createElement = document.createElement.bind(document);
+  const createElementSpy = vi.spyOn(document, "createElement").mockImplementation((tagName: string) => {
+    if (tagName === "canvas")
+      // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- only the calls generateThumbnail makes
+      return {
+        getContext: () => ({ drawImage: () => {} }),
+        toBlob: (callback: (blob: Blob) => void) => callback(new Blob(["frame"])),
+        remove: () => {},
+      } as unknown as HTMLCanvasElement;
+    const element = createElement(tagName);
+    // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- narrowed by the tag name
+    if (tagName === "video") video = element as HTMLVideoElement;
+    return element;
+  });
+
+  render(<FileEmbedEditor config={{ filesById: context.filesById }} />);
+  await act(() => Promise.resolve());
+  act(() => {
+    fireEvent.click(screen.getByRole("button", { name: "Generate a thumbnail" }));
+  });
+  act(() => {
+    video?.onseeked?.(new Event("seeked"));
+  });
+  createElementSpy.mockRestore();
+
+  expect(product.files[0]?.thumbnail).toMatchObject({ url: "/cdn/thumb-key", signed_id: "thumb-signed-id" });
 });
 
 it("still offers the download for a file that finished uploading", async () => {

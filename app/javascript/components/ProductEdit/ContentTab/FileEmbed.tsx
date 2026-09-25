@@ -154,7 +154,11 @@ const FileEmbedNodeView = ({
       canvas.toBlob(
         (blob) => {
           setLoadingVideo(false);
-          if (blob) uploadThumbnail(new File([blob], "thumbnail.jpg"), downloadUrl);
+          if (blob)
+            uploadThumbnail(
+              new File([blob], "thumbnail.jpg"),
+              file.status.type === "unsaved" ? file.status.url : undefined,
+            );
           video.remove();
           canvas.remove();
         },
