@@ -99,10 +99,7 @@ class Purchase::BaseService
         purchase.mark_failed
       end
 
-      if purchase.is_gift_sender_purchase
-        purchase.gift_given.mark_failed!
-        purchase.gift_given.giftee_purchase&.mark_gift_receiver_purchase_failed!
-      end
+      purchase.fail_gift_legs! if purchase.is_gift_sender_purchase
 
       subscription = purchase.subscription
       if subscription&.is_resubscription_pending_confirmation?

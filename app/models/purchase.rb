@@ -273,6 +273,9 @@ class Purchase < ApplicationRecord
     after_transition any => :failed, :do => :ban_buyer_on_fraud_related_error_code!
     after_transition any => :failed, :do => :suspend_buyer_on_fraudulent_card_decline!
     after_transition any => :failed, :do => :send_failure_email
+    # Several failure paths (client-confirm webhooks, the stuck-purchase sync) call mark_failed!
+    # directly instead of going through Purchase::MarkFailedService.
+    after_transition any => :failed, :do => :fail_gift_legs!, if: :is_gift_sender_purchase?
 
     after_transition any => %i[preorder_authorization_successful successful not_charged preorder_concluded_unsuccessfully], :do => :queue_product_cache_invalidation
     after_transition any => %i[successful preorder_authorization_successful], :do => :touch_variants_if_limited_quantity, unless: lambda { |purchase|
@@ -2333,6 +2336,15 @@ class Purchase < ApplicationRecord
 
     giftee_purchase.chargeback_date = DateTime.current
     giftee_purchase.save!
+  end
+
+  def fail_gift_legs!
+    gift = gift_given
+    return if gift.nil?
+
+    gift.mark_failed! if gift.in_progress?
+    giftee_purchase = gift.giftee_purchase
+    giftee_purchase.mark_gift_receiver_purchase_failed! if giftee_purchase&.in_progress?
   end
 
   def mark_giftee_purchase_as_chargeback_reversed
