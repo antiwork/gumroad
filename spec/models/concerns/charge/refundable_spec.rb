@@ -411,6 +411,257 @@ describe Charge::Refundable do
       end
     end
 
+    describe "refunds created outside the app on a Gumroad-managed destination charge" do
+      let(:seller) { create(:user) }
+      let(:merchant_account) { create(:merchant_account, user: seller) }
+      let(:product) { create(:product, user: seller, price_cents: 10_00) }
+      let(:purchase) do
+        create(:purchase_with_balance, link: product, seller:, price_cents: 10_00, total_transaction_cents: 10_00,
+                                       merchant_account:, stripe_transaction_id: "ch_external_#{SecureRandom.hex(6)}")
+      end
+      let(:refund_id) { "re_external_#{SecureRandom.hex(6)}" }
+      let(:transfer) { Stripe::StripeObject.construct_from(id: "tr_external", amount: 8_50, amount_reversed: 0) }
+      let(:stripe_charge) do
+        Stripe::StripeObject.construct_from(id: purchase.stripe_transaction_id, amount: 10_00, amount_refunded: 10_00,
+                                            destination: merchant_account.charge_processor_merchant_id, transfer: transfer.id)
+      end
+
+      def build_external_event
+        event = ChargeEvent.new
+        event.charge_processor_id = StripeChargeProcessor.charge_processor_id
+        event.charge_id = purchase.stripe_transaction_id
+        event.refund_id = refund_id
+        event.type = ChargeEvent::TYPE_CHARGE_REFUND_UPDATED
+        event.extras = { refund_status: "succeeded", refunded_amount_cents: 10_00, refund_reason: nil }
+        event
+      end
+
+      def charge_refund_with(merchant_cents: nil, transfer_reversal: nil)
+        refund = Stripe::StripeObject.construct_from(id: refund_id, amount: 10_00, charge: stripe_charge.id, status: "succeeded",
+                                                     currency: "usd", transfer_reversal:)
+        charge_refund = StripeChargeRefund.allocate
+        charge_refund.instance_variable_set(:@charge, stripe_charge)
+        charge_refund.charge_processor_id = StripeChargeProcessor.charge_processor_id
+        charge_refund.id = refund_id
+        charge_refund.instance_variable_set(:@refund, refund)
+        usd = ->(cents) { FlowOfFunds::Amount.new(currency: Currency::USD, cents:) }
+        charge_refund.flow_of_funds = FlowOfFunds.new(
+          issued_amount: usd.(-10_00), settled_amount: usd.(-10_00),
+          gumroad_amount: usd.(merchant_cents ? -(10_00 - merchant_cents) : -10_00),
+          merchant_account_gross_amount: merchant_cents && usd.(-merchant_cents),
+          merchant_account_net_amount: merchant_cents && usd.(-merchant_cents)
+        )
+        charge_refund
+      end
+
+      before do
+        purchase
+        allow(Stripe::Transfer).to receive(:retrieve).with(transfer.id).and_return(transfer)
+        allow(Stripe::Transfer).to receive(:retrieve_reversal).and_return(
+          Stripe::StripeObject.construct_from(id: "trr_1", destination_payment_refund: "pyr_1")
+        )
+        allow_any_instance_of(StripeChargeProcessor).to receive(:get_refund) do |_processor, _id, destination_payment_refund_id: nil, **|
+          destination_payment_refund_id ? charge_refund_with(merchant_cents: 8_50) : charge_refund_with
+        end
+        allow(ErrorNotifier).to receive(:notify)
+      end
+
+      def seller_refund_debits
+        BalanceTransaction.where(user_id: seller.id).where.not(refund_id: nil)
+      end
+
+      it "reverses the transfer for the refunded share and debits the seller exactly that amount once" do
+        allow(Stripe::Transfer).to receive(:list_reversals).and_return([])
+        expect(Stripe::Transfer).to receive(:create_reversal).with(
+          transfer.id,
+          { amount: 8_50, refund_application_fee: true, metadata: { "external_refund_id" => refund_id } },
+          { idempotency_key: "external_refund_reversal_#{refund_id}" }
+        ).once.and_return(Stripe::StripeObject.construct_from(id: "trr_1", destination_payment_refund: "pyr_1"))
+
+        purchase.handle_event_refund_updated!(build_external_event)
+
+        refund = purchase.reload.refunds.sole
+        expect(purchase.stripe_refunded?).to be(true)
+        expect(refund.gumroad_funded).to be_nil
+        expect(seller_refund_debits.sole.holding_amount_gross_cents).to eq(-8_50)
+        expect(ErrorNotifier).to have_received(:notify).with(Charge::Refundable::EXTERNAL_REFUND_ALERT,
+                                                             hash_including(stripe_refund_id: refund_id, transfer_outcome: :reversed_by_gumroad, recorded: true))
+        expect(ErrorNotifier).not_to have_received(:notify).with(/Gumroad-funded/, anything)
+      end
+
+      it "pairs the reversal's own destination refund when the refund itself reversed the transfer" do
+        allow(Stripe::Transfer).to receive(:retrieve_reversal).with(transfer.id, "trr_1").and_return(
+          Stripe::StripeObject.construct_from(id: "trr_1", destination_payment_refund: "pyr_this")
+        )
+        paired_refund_ids = []
+        # Only this refund's paired destination refund carries its share; the newest destination refund on
+        # the charge belongs to the other refund, so reading that one would debit the seller wrongly.
+        allow_any_instance_of(StripeChargeProcessor).to receive(:get_refund) do |_processor, _id, destination_payment_refund_id: nil, **|
+          paired_refund_ids << destination_payment_refund_id
+          charge_refund_with(merchant_cents: destination_payment_refund_id == "pyr_this" ? 8_50 : nil, transfer_reversal: "trr_1")
+        end
+        expect(Stripe::Transfer).not_to receive(:retrieve)
+        expect(Stripe::Transfer).not_to receive(:create_reversal)
+
+        purchase.handle_event_refund_updated!(build_external_event)
+
+        expect(paired_refund_ids).to include("pyr_this")
+        expect(seller_refund_debits.sole.holding_amount_gross_cents).to eq(-8_50)
+        expect(ErrorNotifier).to have_received(:notify).with(Charge::Refundable::EXTERNAL_REFUND_ALERT,
+                                                             hash_including(transfer_outcome: :reversed_by_stripe, recorded: true))
+      end
+
+      it "books nothing when the refund's own reversal does not name its destination refund" do
+        allow(Stripe::Transfer).to receive(:retrieve_reversal).with(transfer.id, "trr_1").and_return(
+          Stripe::StripeObject.construct_from(id: "trr_1")
+        )
+        allow_any_instance_of(StripeChargeProcessor).to receive(:get_refund).and_return(charge_refund_with(transfer_reversal: "trr_1"))
+        expect(Stripe::Transfer).not_to receive(:create_reversal)
+
+        purchase.handle_event_refund_updated!(build_external_event)
+
+        expect(purchase.reload.refunds).to be_empty
+        expect(seller_refund_debits).to be_empty
+        expect(ErrorNotifier).to have_received(:notify).with(Charge::Refundable::EXTERNAL_REFUND_ALERT,
+                                                             hash_including(transfer_outcome: :reversal_unpaired, recorded: false))
+      end
+
+      it "reads the flow of funds from Stripe's reversal when the refund already reversed the transfer" do
+        allow(Stripe::Transfer).to receive(:list_reversals).and_return(
+          [Stripe::StripeObject.construct_from(id: "trr_stripe", source_refund: refund_id, destination_payment_refund: "pyr_2")]
+        )
+        expect(Stripe::Transfer).not_to receive(:create_reversal)
+
+        purchase.handle_event_refund_updated!(build_external_event)
+
+        expect(seller_refund_debits.sole.holding_amount_gross_cents).to eq(-8_50)
+        expect(ErrorNotifier).to have_received(:notify).with(Charge::Refundable::EXTERNAL_REFUND_ALERT,
+                                                             hash_including(transfer_outcome: :reversed_by_stripe))
+      end
+
+      it "books the refund as Gumroad-funded with no seller debit and alerts when no reversible transfer exists" do
+        transfer.amount_reversed = 8_50
+        allow(Stripe::Transfer).to receive(:list_reversals).and_return([])
+        expect(Stripe::Transfer).not_to receive(:create_reversal)
+        balance_before = seller.reload.unpaid_balance_cents
+
+        purchase.handle_event_refund_updated!(build_external_event)
+
+        refund = purchase.reload.refunds.sole
+        expect(purchase.stripe_refunded?).to be(true)
+        expect(refund.gumroad_funded).to be(true)
+        expect(seller_refund_debits).to be_empty
+        expect(seller.reload.unpaid_balance_cents).to eq(balance_before)
+        expect(ErrorNotifier).to have_received(:notify).with(
+          "Refund created outside the app booked as Gumroad-funded: seller transfer not reversible",
+          hash_including(stripe_refund_id: refund_id, stripe_charge_id: purchase.stripe_transaction_id, refunded_amount_cents: 10_00)
+        )
+      end
+
+      it "books the refund as Gumroad-funded when Stripe refuses the reversal" do
+        allow(Stripe::Transfer).to receive(:list_reversals).and_return([])
+        allow(Stripe::Transfer).to receive(:create_reversal).and_raise(Stripe::InvalidRequestError.new("Transfer already paid out", nil))
+
+        purchase.handle_event_refund_updated!(build_external_event)
+
+        expect(purchase.reload.refunds.sole.gumroad_funded).to be(true)
+        expect(seller_refund_debits).to be_empty
+        expect(ErrorNotifier).to have_received(:notify).with(/Gumroad-funded/, hash_including(transfer_outcome: :not_reversible))
+      end
+
+      it "does nothing twice when the webhook is redelivered" do
+        allow(Stripe::Transfer).to receive(:list_reversals).and_return([])
+        expect(Stripe::Transfer).to receive(:create_reversal).once
+          .and_return(Stripe::StripeObject.construct_from(id: "trr_1", destination_payment_refund: "pyr_1"))
+        # Both deliveries miss the entry lookup, as if the first had not committed yet.
+        allow(Refund).to receive(:where).and_wrap_original do |m, *args, **kwargs|
+          next Refund.none if kwargs == { processor_refund_id: refund_id } || args == [{ processor_refund_id: refund_id }]
+          m.call(*args, **kwargs)
+        end
+
+        2.times { purchase.handle_event_refund_updated!(build_external_event) }
+
+        expect(Refund.unscoped.where(purchase_id: purchase.id).count).to eq(1)
+        expect(seller_refund_debits.count).to eq(1)
+        expect(ErrorNotifier).to have_received(:notify).with(Charge::Refundable::EXTERNAL_REFUND_ALERT, anything).once
+      end
+
+      context "when the charge already has an application-fee refund" do
+        let(:stripe_charge) do
+          Stripe::StripeObject.construct_from(id: purchase.stripe_transaction_id, amount: 10_00, amount_refunded: 10_00,
+                                              destination: merchant_account.charge_processor_merchant_id, transfer: transfer.id,
+                                              application_fee: { id: "fee_1", refunds: { data: [{ id: "fr_earlier", amount: 50 }] } })
+        end
+
+        it "does not reverse or book the refund, and alerts, because the new fee refund cannot be paired" do
+          allow(Stripe::Transfer).to receive(:list_reversals).and_return([])
+          expect(Stripe::Transfer).not_to receive(:create_reversal)
+
+          purchase.handle_event_refund_updated!(build_external_event)
+
+          expect(purchase.reload.refunds).to be_empty
+          expect(seller_refund_debits).to be_empty
+          expect(ErrorNotifier).to have_received(:notify).with(Charge::Refundable::EXTERNAL_REFUND_ALERT,
+                                                               hash_including(transfer_outcome: :fee_refund_unpaired, recorded: false))
+        end
+
+        it "does not book Stripe's own reversal when more than one fee refund exists" do
+          stripe_charge.application_fee.refunds.data << Stripe::StripeObject.construct_from(id: "fr_this", amount: 1_50)
+          allow_any_instance_of(StripeChargeProcessor).to receive(:get_refund).and_return(charge_refund_with(merchant_cents: 8_50, transfer_reversal: "trr_1"))
+
+          purchase.handle_event_refund_updated!(build_external_event)
+
+          expect(purchase.reload.refunds).to be_empty
+          expect(seller_refund_debits).to be_empty
+          expect(ErrorNotifier).to have_received(:notify).with(Charge::Refundable::EXTERNAL_REFUND_ALERT,
+                                                               hash_including(transfer_outcome: :fee_refund_unpaired, recorded: false))
+        end
+      end
+
+      it "does not reverse the transfer when a purchase on the charge cannot be booked" do
+        create(:purchase_presentment, purchase:, presentment_currency: Currency::USD, presentment_price_cents: 10_00,
+                                      presentment_gumroad_tax_cents: 0, presentment_total_cents: 10_00)
+        purchase.association(:purchase_presentment).reset
+        # A prior refund without a presentment snapshot leaves the remaining buyer-currency amount unknowable.
+        create(:refund, purchase:, total_transaction_cents: 1_00, amount_cents: 1_00)
+        expect(Stripe::Transfer).not_to receive(:create_reversal)
+
+        purchase.handle_event_refund_updated!(build_external_event)
+
+        expect(purchase.reload.refunds.count).to eq(1)
+        expect(ErrorNotifier).to have_received(:notify).with(Charge::Refundable::EXTERNAL_REFUND_ALERT,
+                                                             hash_including(blocked_purchase_ids: [purchase.id], transfer_outcome: nil, recorded: false))
+      end
+
+      it "leaves refunds the app created unchanged" do
+        create(:refund, purchase:, processor_refund_id: refund_id, status: "pending")
+        expect(Stripe::Transfer).not_to receive(:create_reversal)
+        expect_any_instance_of(StripeChargeProcessor).not_to receive(:get_refund)
+
+        purchase.handle_event_refund_updated!(build_external_event)
+
+        expect(purchase.reload.refunds.sole.status).to eq("succeeded")
+        expect(ErrorNotifier).not_to have_received(:notify)
+      end
+    end
+
+    describe "refund created outside the app detector" do
+      it "alerts when the refunded amount cannot be recorded" do
+        expect(ErrorNotifier).to receive(:notify).with(Charge::Refundable::EXTERNAL_REFUND_ALERT,
+                                                       hash_including(refunded_amount_cents: 11_00, recorded: false))
+
+        purchase.handle_event_refund_updated!(build_event(refunded_amount_cents: 11_00))
+      end
+
+      it "alerts when a refund created outside the app is recorded on a platform charge" do
+        stub_stripe_refund(presentment_cents: 10_00, currency: Currency::USD)
+        expect(ErrorNotifier).to receive(:notify).with(Charge::Refundable::EXTERNAL_REFUND_ALERT,
+                                                       hash_including(transfer_outcome: nil, refunded_purchase_ids: [purchase.id], recorded: true))
+
+        purchase.handle_event_refund_updated!(build_event(refunded_amount_cents: 10_00))
+      end
+    end
+
     describe "combined charges with multiple purchases" do
       let(:purchase_one) { create(:purchase, price_cents: 10_00, total_transaction_cents: 10_00, is_part_of_combined_charge: true) }
       let(:purchase_two) { create(:purchase, price_cents: 5_00, total_transaction_cents: 5_00, is_part_of_combined_charge: true) }

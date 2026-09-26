@@ -2674,7 +2674,13 @@ describe StripeChargeProcessor, :vcr do
           expect(purchase.refunds.last.total_transaction_cents).to eq 1700
         end
 
-        it "refunds the purchases corresponding to the Stripe charge in case of combined charge" do
+        it "refunds the purchases corresponding to the Stripe charge in case of combined charge", vcr: { allow_playback_repeats: true } do
+          # The handler re-reads the refund after reversing, so this cassette has to replay; the
+          # stub below supplies the reversal its test account no longer holds.
+          allow(Stripe::Transfer).to receive(:retrieve_reversal)
+            .with("tr_2Q7bRK9e1RjUNIyY1Ec54YVV", "trr_0Q7bZN9e1RjUNIyYH7vxI14k")
+            .and_return(Stripe::StripeObject.construct_from(id: "trr_0Q7bZN9e1RjUNIyYH7vxI14k",
+                                                            destination_payment_refund: "pyr_1Q7bZNS88hpHw07jJoJqr11q"))
           expect(ChargeProcessor).to(receive(:handle_event)).with(an_instance_of(ChargeEvent)).and_call_original
 
           purchase = create(:purchase,
