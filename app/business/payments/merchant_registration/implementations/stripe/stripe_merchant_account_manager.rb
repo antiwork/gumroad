@@ -1320,7 +1320,8 @@ module StripeMerchantAccountManager
     if ecuador_company?(user) && bank_account.is_a?(EcuadorBankAccount)
       if bank_account.stripe_external_account_id.blank?
         metadata_names_this_bank = stripe_account["metadata"]["bank_account_id"] == bank_account.external_id
-        if metadata_names_this_bank || matching_stripe_external_account(bank_account, stripe_account)
+        detail_match = holder_name_only && matching_stripe_external_account(bank_account, stripe_account)
+        if metadata_names_this_bank || detail_match
           repair_result = restore_local_bank_link!(bank_account, stripe_account)
           return repair_result unless repair_result == :synced
         end

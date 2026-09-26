@@ -10941,11 +10941,22 @@ describe StripeMerchantAccountManager, :vcr do
         end
 
         it "restores the local link and updates the holder name without replacing bank details" do
-          expect(subject.update_bank_account(user, passphrase: "1234")).to eq(:synced)
+          expect(subject.update_bank_account(user, passphrase: "1234", holder_name_only: true)).to eq(:synced)
           expect(bank_account.reload.stripe_external_account_id).to eq("ba_ec")
           expect(bank_account.stripe_connect_account_id).to eq("acct_ec")
           expect(Stripe::Account).to have_received(:update_external_account).with("acct_ec", "ba_ec", { account_holder_name: "Personal Name" })
           expect(Stripe::Account).not_to have_received(:update)
+        end
+
+        it "does not treat a new bank with the same last four as the existing payout account" do
+          allow(stripe_account).to receive(:refresh).and_return(stripe_account)
+          allow(subject).to receive(:save_stripe_bank_account_info)
+          allow(subject).to receive(:clear_stale_bank_sync_failure_notes)
+
+          expect(subject.update_bank_account(user, passphrase: "1234")).to eq(:synced)
+          expect(bank_account.reload.stripe_external_account_id).to be_nil
+          expect(Stripe::Account).to have_received(:update)
+          expect(Stripe::Account).not_to have_received(:update_external_account)
         end
       end
     end
@@ -13952,7 +13963,7 @@ describe StripeMerchantAccountManager, :vcr do
         before { merchant_account }
 
         it "calls update account for the user" do
-          expect(subject).to receive(:update_bank_account).with(user, passphrase: "1234")
+          expect(subject).to receive(:update_bank_account).with(user, passphrase: "1234", holder_name_only: false)
           subject.handle_new_bank_account(user_compliance_info)
         end
       end
