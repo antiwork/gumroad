@@ -10962,6 +10962,27 @@ describe StripeMerchantAccountManager, :vcr do
       end
     end
 
+    context "when a name-only edit cannot identify an external account" do
+      let(:stripe_metadata_bank_account_id) { "older-bank-record" }
+      let(:stripe_account) do
+        Stripe::Account.construct_from(
+          id: "acct_ec",
+          business_type: "company",
+          metadata: { bank_account_id: stripe_metadata_bank_account_id },
+          external_accounts: { object: "list", data: [] }
+        )
+      end
+
+      before { bank_account.update_columns(stripe_bank_account_id: nil, stripe_connect_account_id: nil) }
+
+      it "does not resubmit bank details" do
+        allow(ErrorNotifier).to receive(:notify)
+
+        expect(subject.update_bank_account(user, passphrase: "1234", holder_name_only: true)).to eq(:external_account_mismatch)
+        expect(Stripe::Account).not_to have_received(:update)
+        expect(Stripe::Account).not_to have_received(:update_external_account)
+      end
+    end
     context "when a name-only job is stale" do
       it "does not sync after the seller submits a newer bank" do
         create(:ecuador_bank_account, user:)
@@ -10973,6 +10994,7 @@ describe StripeMerchantAccountManager, :vcr do
         subject.handle_new_bank_account(bank_account, holder_name_only: true)
       end
     end
+
     context "when the Ecuador seller is an individual" do
       before { user_compliance_info.update_columns(is_business: false) }
 

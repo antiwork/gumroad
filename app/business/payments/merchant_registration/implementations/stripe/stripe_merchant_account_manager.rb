@@ -1339,8 +1339,7 @@ module StripeMerchantAccountManager
         return update_external_account_holder_name(bank_account, stripe_account, stripe_external_account)
       end
 
-      # Name-only edits must not replace an unidentified payout account. An empty
-      # Stripe list can still be attached; a new bank row keeps the replacement update.
+      # A name-only edit never sends full bank details. A new bank row still uses the replacement update.
       if bank_account.stripe_external_account_id.blank? && ecuador_name_sync_must_not_replace_bank?(bank_account, stripe_account, holder_name_only:)
         return report_external_account_mismatch(bank_account, stripe_account)
       end
@@ -1414,11 +1413,12 @@ module StripeMerchantAccountManager
 
   private_class_method
   def self.ecuador_name_sync_must_not_replace_bank?(bank_account, stripe_account, holder_name_only:)
-    external_accounts = external_accounts_for_link_match(stripe_account)
-    stripe_holds_unidentified_bank = external_accounts.nil? || external_accounts.any?
-    return false unless stripe_holds_unidentified_bank
+    return true if holder_name_only
 
-    holder_name_only || bank_account.stripe_connect_account_id.present?
+    external_accounts = external_accounts_for_link_match(stripe_account)
+    return false if external_accounts&.empty?
+
+    bank_account.stripe_connect_account_id.present?
   end
 
   private_class_method
@@ -1427,10 +1427,7 @@ module StripeMerchantAccountManager
     :external_account_mismatch
   end
 
-  # Only account_holder_name is sent: Stripe accepts it on an existing Custom-account external
-  # account, but not the other bank details. The identity guard keeps the rename from landing on
-  # an external account our local record doesn't point at. Stripe errors propagate to
-  # update_bank_account's rescues.
+  # Stripe errors propagate to update_bank_account's rescues.
   private_class_method
   def self.update_external_account_holder_name(bank_account, stripe_account, stripe_external_account)
     external_account_id = bank_account.stripe_external_account_id
