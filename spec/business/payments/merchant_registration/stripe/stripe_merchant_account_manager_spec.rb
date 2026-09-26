@@ -10912,6 +10912,34 @@ describe StripeMerchantAccountManager, :vcr do
       end
     end
 
+    context "when both local Stripe links are missing and metadata is stale" do
+      let(:stripe_metadata_bank_account_id) { "older-bank-record" }
+
+      before { bank_account.update_columns(stripe_bank_account_id: nil, stripe_connect_account_id: nil) }
+
+      it "does not replace the payout account" do
+        allow(ErrorNotifier).to receive(:notify)
+
+        expect(subject.update_bank_account(user, passphrase: "1234")).to eq(:external_account_mismatch)
+        expect(Stripe::Account).not_to have_received(:update)
+        expect(Stripe::Account).not_to have_received(:update_external_account)
+      end
+
+      context "when Stripe's existing bank details match uniquely" do
+        let(:stripe_match_details) do
+          { last4: "6789", routing_number: "AAAAECE1XXX", currency: "usd", country: "EC", fingerprint: "synthetic_ec_fingerprint" }
+        end
+
+        it "restores the local link and updates the holder name without replacing bank details" do
+          expect(subject.update_bank_account(user, passphrase: "1234")).to eq(:synced)
+          expect(bank_account.reload.stripe_external_account_id).to eq("ba_ec")
+          expect(bank_account.stripe_connect_account_id).to eq("acct_ec")
+          expect(Stripe::Account).to have_received(:update_external_account).with("acct_ec", "ba_ec", { account_holder_name: "Personal Name" })
+          expect(Stripe::Account).not_to have_received(:update)
+        end
+      end
+    end
+
     context "when the Ecuador seller is an individual" do
       before { user_compliance_info.update_columns(is_business: false) }
 

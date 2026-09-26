@@ -1318,9 +1318,12 @@ module StripeMerchantAccountManager
 
     stripe_account = Stripe::Account.retrieve(user.stripe_account.charge_processor_merchant_id)
     if ecuador_company?(user) && bank_account.is_a?(EcuadorBankAccount)
-      if bank_account.stripe_external_account_id.blank? && stripe_account["metadata"]["bank_account_id"] == bank_account.external_id
-        repair_result = restore_local_bank_link!(bank_account, stripe_account)
-        return repair_result unless repair_result == :synced
+      if bank_account.stripe_external_account_id.blank?
+        metadata_names_this_bank = stripe_account["metadata"]["bank_account_id"] == bank_account.external_id
+        if metadata_names_this_bank || matching_stripe_external_account(bank_account, stripe_account)
+          repair_result = restore_local_bank_link!(bank_account, stripe_account)
+          return repair_result unless repair_result == :synced
+        end
       end
 
       if bank_account.stripe_external_account_id.present?
@@ -1333,7 +1336,8 @@ module StripeMerchantAccountManager
         return update_external_account_holder_name(bank_account, stripe_account, stripe_external_account)
       end
 
-      return report_external_account_mismatch(bank_account, stripe_account) if bank_account.stripe_connect_account_id.present?
+      # Full bank details would replace a payout account we could not identify.
+      return report_external_account_mismatch(bank_account, stripe_account) if ecuador_bank_replacement_unsafe?(bank_account, stripe_account)
     end
 
     if stripe_account["metadata"]["bank_account_id"] == bank_account.external_id
@@ -1398,6 +1402,14 @@ module StripeMerchantAccountManager
     Rails.logger.error "Stripe error (#{e.class.name}) request ID #{e.request_id} when updating bank account #{bank_account&.id} for stripe account #{stripe_account&.inspect}"
     ErrorNotifier.notify(e)
     :stripe_unknown_error
+  end
+
+  private_class_method
+  def self.ecuador_bank_replacement_unsafe?(bank_account, stripe_account)
+    return true if bank_account.stripe_connect_account_id.present?
+
+    external_accounts = external_accounts_for_link_match(stripe_account)
+    external_accounts.nil? || external_accounts.any?
   end
 
   private_class_method
