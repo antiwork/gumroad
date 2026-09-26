@@ -10800,6 +10800,7 @@ describe StripeMerchantAccountManager, :vcr do
     let(:stripe_holder_name) { nil }
     let(:stripe_external_account_id) { "ba_ec" }
     let(:stripe_metadata_bank_account_id) { bank_account.external_id }
+    let(:stripe_match_details) { {} }
     let(:stripe_account) do
       Stripe::Account.construct_from(
         id: "acct_ec",
@@ -10807,7 +10808,7 @@ describe StripeMerchantAccountManager, :vcr do
         metadata: { bank_account_id: stripe_metadata_bank_account_id },
         external_accounts: { object: "list", data: [
           { id: "ba_other", object: "bank_account", account_holder_name: "Someone Else" },
-          { id: "ba_ec", object: "bank_account", account_holder_name: stripe_holder_name }
+          { id: "ba_ec", object: "bank_account", account_holder_name: stripe_holder_name }.merge(stripe_match_details)
         ] }
       )
     end
@@ -10890,13 +10891,24 @@ describe StripeMerchantAccountManager, :vcr do
     context "when the local record has no Stripe external account id" do
       before { bank_account.update_columns(stripe_bank_account_id: nil) }
 
-      it "leaves Stripe untouched" do
-        allow(ErrorNotifier).to receive(:notify)
-
-        expect(subject.update_bank_account(user, passphrase: "1234")).to eq(:external_account_mismatch)
+      it "does not replace the bank if Stripe's external account cannot be verified" do
+        expect(subject.update_bank_account(user, passphrase: "1234")).to eq(:bank_link_not_restored)
 
         expect(Stripe::Account).not_to have_received(:update_external_account)
         expect(Stripe::Account).not_to have_received(:update)
+      end
+
+      context "when Stripe's existing bank details match uniquely" do
+        let(:stripe_match_details) do
+          { last4: "6789", routing_number: "AAAAECE1XXX", currency: "usd", country: "EC", fingerprint: "synthetic_ec_fingerprint" }
+        end
+
+        it "restores the local link and updates the holder name without replacing bank details" do
+          expect(subject.update_bank_account(user, passphrase: "1234")).to eq(:synced)
+          expect(bank_account.reload.stripe_external_account_id).to eq("ba_ec")
+          expect(Stripe::Account).to have_received(:update_external_account).with("acct_ec", "ba_ec", { account_holder_name: "Personal Name" })
+          expect(Stripe::Account).not_to have_received(:update)
+        end
       end
     end
 

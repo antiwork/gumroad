@@ -1317,18 +1317,23 @@ module StripeMerchantAccountManager
     raise MerchantRegistrationUserNotReadyError.new(user.id, "does not have a bank account") if bank_account.nil?
 
     stripe_account = Stripe::Account.retrieve(user.stripe_account.charge_processor_merchant_id)
-    if ecuador_company?(user) && bank_account.is_a?(EcuadorBankAccount) && bank_account.stripe_external_account_id.present?
-      return report_external_account_mismatch(bank_account, stripe_account) unless stripe_account["business_type"] == "company" && bank_account.stripe_connect_account_id == stripe_account.id
-
-      stripe_external_account = Stripe::Account.retrieve_external_account(stripe_account.id, bank_account.stripe_external_account_id)
-      return report_external_account_mismatch(bank_account, stripe_account) unless stripe_external_account["id"] == bank_account.stripe_external_account_id && stripe_external_account["object"] == "bank_account"
-      return :noop_metadata_match if stripe_external_account["account_holder_name"] == bank_account.account_holder_full_name
-
-      return update_external_account_holder_name(bank_account, stripe_account, stripe_external_account)
-    end
-
     if ecuador_company?(user) && bank_account.is_a?(EcuadorBankAccount)
-      return report_external_account_mismatch(bank_account, stripe_account) if bank_account.stripe_connect_account_id.present? || stripe_account["metadata"]["bank_account_id"] == bank_account.external_id
+      if bank_account.stripe_external_account_id.blank? && stripe_account["metadata"]["bank_account_id"] == bank_account.external_id
+        repair_result = restore_local_bank_link!(bank_account, stripe_account)
+        return repair_result unless repair_result == :synced
+      end
+
+      if bank_account.stripe_external_account_id.present?
+        return report_external_account_mismatch(bank_account, stripe_account) unless stripe_account["business_type"] == "company" && bank_account.stripe_connect_account_id == stripe_account.id
+
+        stripe_external_account = Stripe::Account.retrieve_external_account(stripe_account.id, bank_account.stripe_external_account_id)
+        return report_external_account_mismatch(bank_account, stripe_account) unless stripe_external_account["id"] == bank_account.stripe_external_account_id && stripe_external_account["object"] == "bank_account"
+        return :noop_metadata_match if stripe_external_account["account_holder_name"] == bank_account.account_holder_full_name
+
+        return update_external_account_holder_name(bank_account, stripe_account, stripe_external_account)
+      end
+
+      return report_external_account_mismatch(bank_account, stripe_account) if bank_account.stripe_connect_account_id.present?
     end
 
     if stripe_account["metadata"]["bank_account_id"] == bank_account.external_id
