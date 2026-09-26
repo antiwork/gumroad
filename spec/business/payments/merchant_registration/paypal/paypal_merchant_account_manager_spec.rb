@@ -254,6 +254,68 @@ describe PaypalMerchantAccountManager, :vcr do
       end
     end
 
+    context "when PayPal reports the account cannot receive payments" do
+      let(:creator) { create(:user) }
+      let(:paypal_merchant_id) { "GSQ5PDPXZCWGW" }
+
+      before do
+        creator.mark_compliant!(author_name: "ContentModeration")
+        allow_any_instance_of(User).to receive(:sales_cents_total).and_return(100_00)
+        create(:payment_completed, user: creator)
+        allow_any_instance_of(MerchantAccount).to receive(:paypal_account_details).and_return(
+          "country" => "US",
+          "primary_currency" => "USD",
+          "primary_email_confirmed" => true,
+          "payments_receivable" => false,
+          "primary_email" => "seller@example.com",
+          "oauth_integrations" => [{
+            "integration_type" => "OAUTH_THIRD_PARTY",
+            "integration_method" => "PAYPAL",
+            "oauth_third_party" => [{ "partner_client_id" => PAYPAL_PARTNER_CLIENT_ID }]
+          }]
+        )
+      end
+
+      it "reports the PayPal-side restriction instead of blaming missing permissions" do
+        result = subject.update_merchant_account(user: creator, paypal_merchant_id:)
+
+        expect(result).to eq("PayPal reports that your account cannot receive payments right now. Please resolve the restriction or outstanding requirement on your PayPal account, then try connecting again.")
+        expect(creator.merchant_accounts.charge_processor_verified.paypal).to be_empty
+      end
+
+      it "reports the PayPal-side restriction even when our own grant is missing" do
+        allow_any_instance_of(MerchantAccount).to receive(:paypal_account_details).and_return(
+          "country" => "US",
+          "primary_currency" => "USD",
+          "primary_email_confirmed" => true,
+          "payments_receivable" => false,
+          "primary_email" => "seller@example.com"
+        )
+
+        result = subject.update_merchant_account(user: creator, paypal_merchant_id:)
+
+        expect(result).to eq("PayPal reports that your account cannot receive payments right now. Please resolve the restriction or outstanding requirement on your PayPal account, then try connecting again.")
+      end
+
+      it "keeps the permissions notice when PayPal omits the capability entirely" do
+        allow_any_instance_of(MerchantAccount).to receive(:paypal_account_details).and_return(
+          "country" => "US",
+          "primary_currency" => "USD",
+          "primary_email_confirmed" => true,
+          "primary_email" => "seller@example.com",
+          "oauth_integrations" => [{
+            "integration_type" => "OAUTH_THIRD_PARTY",
+            "integration_method" => "PAYPAL",
+            "oauth_third_party" => [{ "partner_client_id" => PAYPAL_PARTNER_CLIENT_ID }]
+          }]
+        )
+
+        result = subject.update_merchant_account(user: creator, paypal_merchant_id:)
+
+        expect(result).to eq("Your PayPal account connect with Gumroad is incomplete because of missing permissions. Please try connecting again and grant the requested permissions.")
+      end
+    end
+
     context "when the PayPal OAuth grant belongs to another partner" do
       let(:creator) { create(:user) }
       let(:paypal_merchant_id) { "GSQ5PDPXZCWGW" }
