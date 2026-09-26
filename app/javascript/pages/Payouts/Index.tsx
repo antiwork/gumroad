@@ -270,7 +270,7 @@ const Period = ({ payoutPeriodData }: { payoutPeriodData: PayoutPeriodData }) =>
         ) : null}
         <CardContent>
           {(() => {
-            const isCurrentPeriod = payoutPeriodData.status === "payable";
+            const isCurrentPeriod = payoutPeriodData.is_current_period;
             switch (payoutPeriodData.payout_method_type) {
               case "stripe_connect":
                 if ("stripe_connect_account_id" in payoutPeriodData) {

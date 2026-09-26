@@ -99,7 +99,10 @@ class UserBalanceStatsService
     end
 
     def cache_key
-      "balance_stats_for_user_#{user.id}"
+      # v2: the Payouts page reads is_current_period off this payload to pick the destination line's
+      # tense, and a blob written before the field existed would leave it undefined — rendering a
+      # fresh current period in the past tense.
+      "balance_stats_for_user_#{user.id}_v2"
     end
 
     def next_payout_period_data

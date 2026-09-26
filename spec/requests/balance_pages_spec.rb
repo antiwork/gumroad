@@ -435,6 +435,26 @@ describe "Balance Pages Scenario", js: true, type: :system do
           end
         end
 
+        context "when payouts are paused and the destination is a PayPal account" do
+          before do
+            seller.update!(
+              payouts_paused_internally: true,
+              payouts_paused_by: User::PAYOUT_PAUSE_SOURCE_SYSTEM,
+              payment_address: "seller-paypal@example.com"
+            )
+          end
+
+          it "reads the current period's destination in the future tense" do
+            travel_to(Date.parse("2013-08-14")) do
+              visit balance_path
+
+              expect(page).to have_section("Next payout: paused")
+              expect(page).to have_css("h4", text: "Will be sent to PayPal account: seller-paypal@example.com")
+              expect(page).to have_no_css("h4", text: /\ASent to PayPal account:/)
+            end
+          end
+        end
+
         context "when the chargeback-rate reserve is active" do
           before do
             seller.update!(payouts_paused_internally: true, payouts_paused_by: User::PAYOUT_PAUSE_SOURCE_SYSTEM)

@@ -155,6 +155,7 @@ export type PaypalAccount = { payout_method_type: "paypal"; paypal_address: stri
 
 type CurrentPayoutsDataWithUserNotPayable = {
   status: "not_payable";
+  is_current_period: boolean;
   should_be_shown_currencies_always: boolean;
   minimum_payout_amount_cents: number;
   balance_cents?: number | null;
@@ -171,6 +172,7 @@ type CurrentPeriodPayoutData = (
   | { status: Exclude<CurrentPayoutStatus, "processing" | "completed"> }
 ) & {
   has_stripe_connect: boolean;
+  is_current_period: boolean;
   should_be_shown_currencies_always: boolean;
   displayable_payout_period_range: string;
   payout_currency: string;
@@ -199,6 +201,7 @@ type CurrentPeriodPayoutData = (
 
 type PastPeriodPayoutsData = {
   status: "completed";
+  is_current_period: boolean;
   should_be_shown_currencies_always: boolean;
   displayable_payout_period_range: string;
   payout_currency: string;
