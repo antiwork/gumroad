@@ -843,7 +843,8 @@ const FileEmbedNodeView = ({
                   onChange={(e) => updateFile({ stream_only: e.target.checked })}
                   label={
                     downloadsUnavailableForDocument ? (
-                      "This file is too large for the in-browser reader, so downloads can't be turned off"
+                      // Name the setting too: the switch is disabled, not a different setting.
+                      "Disable file downloads (too large for the in-browser reader)"
                     ) : file.is_streamable ? (
                       <>
                         Disable file downloads (stream only){" "}
