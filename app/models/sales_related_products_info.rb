@@ -23,15 +23,16 @@ class SalesRelatedProductsInfo < ApplicationRecord
   # many products the buyer owns.
   SALES_COUNT_UPSERT_BATCH_SIZE = 100
 
-  # Concurrent upserts deadlock against each other often enough to matter (a multi-item
-  # cart fires one job per purchase, all landing here at once). Retrying is the remedy
-  # rather than avoidance: under REPEATABLE READ the losing statement is InnoDB's chosen
-  # victim, not a symptom of bad SQL. Keep the ceiling low — this sleeps a Sidekiq thread.
+  # READ COMMITTED (see execute_upsert_with_contention_retry) removes the primary-key tail
+  # deadlock. The duplicate-key check still next-key locks the pair's unique-index record, so
+  # keep the retry. Keep the ceiling low — this sleeps a Sidekiq thread.
   UPSERT_CONTENTION_RETRIES = 3
   UPSERT_CONTENTION_BASE_BACKOFF = 0.05
 
   # Applies +1 (or -1) to the pairwise sales counter between `product_id` and each of
-  # `related_product_ids`, creating the pair row if it does not exist yet.
+  # `related_product_ids`, creating the pair row if it does not exist yet. Outside a transaction
+  # each statement runs in its own READ COMMITTED transaction with retries; inside a caller's
+  # it runs once at the caller's isolation (see execute_upsert_with_contention_retry).
   #
   # This runs once per successful purchase for every product the buyer already owns, so a
   # single sale can touch a lot of pairs. Two properties matter more than they look:
@@ -51,9 +52,10 @@ class SalesRelatedProductsInfo < ApplicationRecord
   #    (smaller_product_id, larger_product_id) lets MySQL resolve that per row, so a
   #    concurrent racer's increment is applied rather than discarded.
   #
-  # Production MySQL runs `binlog_format = MIXED`, so a deterministic statement is binlogged
-  # as a statement and every replica re-executes it on a single applier thread. That is why
-  # statement size here shows up as replica lag (#1353) rather than just primary CPU.
+  # Each statement is one replicated event that the replica applies on a single applier thread,
+  # which is why statement size here shows up as replica lag (#1353) rather than just primary
+  # CPU. MIXED binlogging logs it as row events: an upsert on a table with two unique keys is
+  # unsafe for statement logging.
   def self.update_sales_counts(product_id:, related_product_ids:, increment:)
     raise ArgumentError, "product_id must be an integer" unless product_id.is_a?(Integer)
     raise ArgumentError, "related_product_ids must be an array of integers" unless related_product_ids.all? { _1.is_a?(Integer) }
@@ -71,10 +73,8 @@ class SalesRelatedProductsInfo < ApplicationRecord
     # than going negative.
     new_sales_count = increment ? 1 : 0
 
-    # Sorted so that two overlapping statements — the norm for a multi-item cart, whose jobs
-    # derive near-identical pair sets — take their row locks in the same order. This does not
-    # address the insert-intention conflict at the tail of the clustered index, which is what
-    # the retry below is for; it removes the separate lock-ordering deadlock on top of it.
+    # Sorted so that two overlapping statements — a multi-item cart's jobs derive near-identical
+    # pair sets — take their row locks in the same order.
     pairs = pair_product_ids.map { [product_id, _1].minmax }.sort
 
     pairs.each_slice(SALES_COUNT_UPSERT_BATCH_SIZE) do |slice|
@@ -95,12 +95,20 @@ class SalesRelatedProductsInfo < ApplicationRecord
   end
 
   # Retries are per statement, so slices that already committed are never replayed. Safe
-  # because a deadlocked (or lock-wait-timed-out) statement rolls back whole and this runs
-  # outside any wrapping transaction: nothing was counted, so nothing can double-count.
+  # because a deadlocked (or lock-wait-timed-out) statement rolls back its own one-statement
+  # transaction whole: nothing was counted, so nothing can double-count.
   def self.execute_upsert_with_contention_retry(query)
+    # A deadlock rolls back the caller's whole transaction, even if it is non-joinable.
+    # Retrying here could commit a slice independently after that rollback.
+    return ApplicationRecord.connection.execute(query) if ApplicationRecord.connection.transaction_open?
+
     attempts = 0
     begin
-      ApplicationRecord.connection.execute(query)
+      # For a pair that already exists, InnoDB still attempts the insert at the tail of the
+      # auto-increment primary key before the unique index turns it into an update. Under
+      # REPEATABLE READ that leaves a next-key lock on the primary key's supremum, so concurrent
+      # upserts of unrelated pairs deadlock on it. READ COMMITTED does not take that lock.
+      ApplicationRecord.transaction(isolation: :read_committed) { ApplicationRecord.connection.execute(query) }
     rescue ActiveRecord::Deadlocked, ActiveRecord::LockWaitTimeout
       attempts += 1
       raise if attempts > UPSERT_CONTENTION_RETRIES
