@@ -8,8 +8,8 @@
 #   * `match?` is the strict one, used by the payout settings form to REJECT an address up front
 #     for countries where our payment partner requires a physical street address. Because it
 #     blocks a seller from saving, it only fires on the unmistakable spellings ("PO Box 65",
-#     "P.O. Box 65", "P O Box 65"). It has to stay in step with the same check the
-#     settings form runs in the browser (`isStreetAddressPOBox` in
+#     "P.O. Box 65", "P O Box 65", "Post Office Box 65"). It has to stay in step with the same
+#     check the settings form runs in the browser (`isStreetAddressPOBox` in
 #     app/javascript/pages/Settings/Payments/Show.tsx), and widening what we refuse to store is
 #     a product decision, not a detail of this module.
 #
@@ -26,8 +26,11 @@
 # rather than "PO Box 65". See UserComplianceInfoRequest for the full description.
 module PoBoxAddress
   # Looked for in the address once every character that isn't a letter, digit, or underscore has
-  # been removed, so it covers "PO Box 65", "P.O. Box 65" and "P O BOX 65".
-  EXPLICIT = "pobox"
+  # been removed, so it covers "PO Box 65", "P.O. Box 65", "P O BOX 65" and "Post Office Box 65".
+  # The spelled-out form belongs here: it says "post office box" as plainly as "PO Box 65" does,
+  # and our payment partner rejects an address written that way whenever it reaches them, so the
+  # only thing missing it changes is which message the seller reads.
+  EXPLICIT = ["pobox", "postofficebox"].freeze
 
   # Matched against the address as written, so the word boundary is still meaningful. Catches
   # "Box 65", "Box #65", "Box65" and "Post Office Box 65" without catching "Boxwood Lane 4" (the
@@ -37,9 +40,9 @@ module PoBoxAddress
   # A deliberately loose SQL `LIKE` pattern for callers that need to narrow a table down before
   # asking `possible_match?` about individual addresses. It matches any address containing the
   # letters b, o and x in that order, which is a guaranteed superset of everything either method
-  # above can match: the strict one only fires on spellings that reduce to "pobox" once
-  # punctuation is dropped (so the three letters are present and in order even in "P.O.B.O.X"),
-  # and the lenient one needs the literal word "box".
+  # above can match: the strict one only fires on spellings that reduce to "pobox" or
+  # "postofficebox" once punctuation is dropped (so the three letters are present and in order even
+  # in "P.O.B.O.X"), and the lenient one needs the literal word "box".
   #
   # It also matches plenty of addresses that are no kind of post office box ("Boxwood Lane") —
   # that is fine and intended. The point is to hand Ruby a couple of candidate rows instead of a
@@ -52,7 +55,8 @@ module PoBoxAddress
   def self.match?(address)
     return false if address.blank?
 
-    normalize(address).include?(EXPLICIT)
+    normalized = normalize(address)
+    EXPLICIT.any? { |spelling| normalized.include?(spelling) }
   end
 
   # The spellings above, plus the bare box-and-number form. Use for messaging, never for blocking.

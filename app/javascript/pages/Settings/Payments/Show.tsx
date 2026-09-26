@@ -445,11 +445,13 @@ export default function PaymentsPage() {
     // errorFieldNames is deliberately NOT a dependency — see the comment above.
   }, [errors, clientErrorMessage, failedSaveAttempts]);
 
-  const isStreetAddressPOBox = (input: string) =>
-    input
-      .replace(/[^\w]*/gu, "")
-      .toLocaleLowerCase()
-      .includes("pobox");
+  // Mirrors PoBoxAddress::EXPLICIT in app/services/po_box_address.rb — the two have to stay in step.
+  const PO_BOX_SPELLINGS = ["pobox", "postofficebox"];
+
+  const isStreetAddressPOBox = (input: string) => {
+    const normalized = input.replace(/[^\w]*/gu, "").toLocaleLowerCase();
+    return PO_BOX_SPELLINGS.some((spelling) => normalized.includes(spelling));
+  };
 
   const poBoxAddressErrorMessage = (countryCode: CountryCode) => {
     if (countryCode === "US") {

@@ -699,6 +699,11 @@ describe("Payments Settings Scenario", type: :system, js: true) do
           click_on "Update settings"
           expect(page).to have_status(text: "We require a valid physical US address. We cannot accept a P.O. Box as a valid address.")
         end.to_not change { @user.alive_user_compliance_info.reload.street_address }
+        find(:css, "input[id$='creator-street-address']").set("123 North street, Post Office Box 95")
+        expect do
+          click_on "Update settings"
+          expect(page).to have_status(text: "We require a valid physical US address. We cannot accept a P.O. Box as a valid address.")
+        end.to_not change { @user.alive_user_compliance_info.reload.street_address }
       end
     end
 
