@@ -836,16 +836,30 @@ const FileEmbedNodeView = ({
                 </Fieldset>
               ) : null}
 
-              {canDisableDownloads || downloadsUnavailableForDocument ? (
+              {downloadsUnavailableForDocument ? (
+                // The explanation is the point of showing this switch, so dim the control only:
+                // Switch fades its whole label wrapper, which would hide the reason at 0.3 opacity.
+                <div className="flex flex-col">
+                  <div className="flex items-center gap-2">
+                    <Switch
+                      checked={file.stream_only}
+                      disabled
+                      onChange={(e) => updateFile({ stream_only: e.target.checked })}
+                      aria-label="Disable file downloads"
+                      aria-describedby={`${uid}downloads-disabled`}
+                    />
+                    <span>Disable file downloads</span>
+                  </div>
+                  <small id={`${uid}downloads-disabled`} className="block text-muted">
+                    This file is too large for the in-browser reader
+                  </small>
+                </div>
+              ) : canDisableDownloads ? (
                 <Switch
                   checked={file.stream_only}
-                  disabled={downloadsUnavailableForDocument}
                   onChange={(e) => updateFile({ stream_only: e.target.checked })}
                   label={
-                    downloadsUnavailableForDocument ? (
-                      // Name the setting too: the switch is disabled, not a different setting.
-                      "Disable file downloads (too large for the in-browser reader)"
-                    ) : file.is_streamable ? (
+                    file.is_streamable ? (
                       <>
                         Disable file downloads (stream only){" "}
                         <a href="/help/article/43-streaming-videos" target="_blank" rel="noreferrer">
