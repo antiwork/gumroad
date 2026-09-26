@@ -10832,6 +10832,16 @@ describe StripeMerchantAccountManager, :vcr do
       expect(Stripe::Account).not_to have_received(:update)
     end
 
+    it "does not record a bank-sync failure when the name update is rejected" do
+      allow(Stripe::Account).to receive(:update_external_account).and_raise(
+        Stripe::InvalidRequestError.new("The name is not accepted", "account_holder_name", code: "account_number_invalid")
+      )
+      expect(subject).not_to receive(:record_bank_sync_failure_note)
+      allow(ErrorNotifier).to receive(:notify)
+
+      expect(subject.update_bank_account(user, passphrase: "1234", holder_name_only: true)).to eq(:stripe_invalid_request)
+    end
+
     context "when the name changed from a different one already on Stripe" do
       let(:stripe_holder_name) { "Buy More, LLC" }
 

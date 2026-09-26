@@ -1317,16 +1317,30 @@ module StripeMerchantAccountManager
 
     stripe_account = Stripe::Account.retrieve(user.stripe_account.charge_processor_merchant_id)
     if holder_name_only
-      if ecuador_company?(user) && bank_account.is_a?(EcuadorBankAccount) && bank_account.stripe_external_account_id.present? && stripe_account["business_type"] == "company" && bank_account.stripe_connect_account_id == stripe_account.id
-        stripe_external_account = retrieve_linked_external_account(stripe_account, bank_account)
-        if stripe_external_account && stripe_external_account["id"] == bank_account.stripe_external_account_id && stripe_external_account["object"] == "bank_account"
-          return :noop_metadata_match if stripe_external_account["account_holder_name"] == bank_account.account_holder_full_name
+      begin
+        if ecuador_company?(user) && bank_account.is_a?(EcuadorBankAccount) && bank_account.stripe_external_account_id.present? && stripe_account["business_type"] == "company" && bank_account.stripe_connect_account_id == stripe_account.id
+          stripe_external_account = retrieve_linked_external_account(stripe_account, bank_account)
+          if stripe_external_account && stripe_external_account["id"] == bank_account.stripe_external_account_id && stripe_external_account["object"] == "bank_account"
+            return :noop_metadata_match if stripe_external_account["account_holder_name"] == bank_account.account_holder_full_name
 
-          return update_external_account_holder_name(bank_account, stripe_account, stripe_external_account)
+            return update_external_account_holder_name(bank_account, stripe_account, stripe_external_account)
+          end
         end
-      end
 
-      return report_external_account_mismatch(bank_account, stripe_account)
+        return report_external_account_mismatch(bank_account, stripe_account)
+      rescue Stripe::InvalidRequestError => e
+        if e.code == "incorrect_account_holder_name"
+          ContactingCreatorMailer.invalid_account_holder_name(user.id).deliver_later(queue: "critical") if notify
+          return :invalid_account_holder_name
+        end
+
+        ErrorNotifier.notify(e)
+        return :stripe_invalid_request
+      rescue Stripe::StripeError => e
+        Rails.logger.error "Stripe error (#{e.class.name}) request ID #{e.request_id} when updating holder name for bank account #{bank_account&.id}"
+        ErrorNotifier.notify(e)
+        return :stripe_unknown_error
+      end
     end
 
     if ecuador_company?(user) && bank_account.is_a?(EcuadorBankAccount) && bank_account.stripe_external_account_id.blank?
