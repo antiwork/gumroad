@@ -32,6 +32,7 @@ describe BalanceController, type: :controller, inertia: true do
                                                               should_be_shown_currencies_always: false,
                                                               minimum_payout_amount_cents: 10_000,
                                                               is_user_payable: false,
+                                                              is_current_period: true,
                                                               status: "not_payable",
                                                               balance_cents: 0,
                                                               payout_note: nil,
