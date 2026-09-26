@@ -6084,10 +6084,10 @@ class Purchase < ApplicationRecord
       end
     end
 
-    def send_refunded_notification_webhook
+    def send_refunded_notification_webhook(webhook_url_parameters = url_parameters)
       return if is_gift_sender_purchase
 
-      PostToPingEndpointsWorker.perform_in(5.seconds, id, url_parameters, ResourceSubscription::REFUNDED_RESOURCE_NAME)
+      PostToPingEndpointsWorker.perform_in(5.seconds, id, webhook_url_parameters, ResourceSubscription::REFUNDED_RESOURCE_NAME)
     end
 
     def log_transition

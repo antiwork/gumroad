@@ -97,7 +97,7 @@ module Charge::Refundable
 
       processor = StripeChargeProcessor.new
       merchant_account = refundable.merchant_account
-      charge_refund = processor.get_refund(stripe_refund_id, merchant_account:)
+      charge_refund = processor.get_refund(stripe_refund_id, merchant_account:, for_external_refund: true)
       transfer_outcome = nil
       purchases = refundable.charged_purchases.select { _1.successful? && !_1.stripe_refunded? }.sort_by(&:id)
       unrecorded = []
@@ -132,7 +132,8 @@ module Charge::Refundable
 
         unrecorded.select do |purchase|
           purchase.refund_purchase!(flow_of_funds_for.(purchase, charge_refund), GUMROAD_ADMIN_ID, charge_refund.refund,
-                                    event.extras[:refund_reason] == "fraudulent", gumroad_funded:)
+                                    event.extras[:refund_reason] == "fraudulent",
+                                    gumroad_funded:, defer_notifications_until_commit: true)
         end
       end
       return if unrecorded.empty?
@@ -153,5 +154,15 @@ module Charge::Refundable
         end
       end
     end
+  rescue StripeChargeProcessor::UnmatchedApplicationFeeRefundError
+    ErrorNotifier.notify(EXTERNAL_REFUND_ALERT, stripe_refund_id:, stripe_charge_id:, refunded_amount_cents:,
+                                                transfer_outcome: :fee_refund_unpaired, recorded: false)
+  rescue StandardError => error
+    if stripe_charge_id.present?
+      ErrorNotifier.notify(EXTERNAL_REFUND_ALERT, stripe_refund_id:, stripe_charge_id:, refunded_amount_cents:,
+                                                  transfer_outcome: transfer_outcome || :unknown,
+                                                  recording_outcome: :unknown, error_class: error.class.name)
+    end
+    raise
   end
 end

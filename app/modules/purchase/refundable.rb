@@ -273,7 +273,8 @@ class Purchase
   # consistent derivation is possible the refund fails closed rather than booking buyer-currency
   # cents as canonical USD.
   def refund_purchase!(flow_of_funds, refunding_user_id, stripe_refund = nil, is_for_fraud = false,
-                       canonical_gross_refund_cents: nil, presentment_refund: nil, note: nil, gumroad_funded: false)
+                       canonical_gross_refund_cents: nil, presentment_refund: nil, note: nil, gumroad_funded: false,
+                       defer_notifications_until_commit: false)
     if buyer_presentment? && canonical_gross_refund_cents.nil?
       derived = derive_presentment_refund_from_flow_of_funds(flow_of_funds)
       return false if derived.blank?
@@ -345,15 +346,22 @@ class Purchase
       debit_processor_fee_from_merchant_account!(refund) unless is_refund_chargeback_fee_waived || chargedback_not_reversed? || gumroad_funded
       Credit.create_for_vat_exclusive_refund!(refund:) if (paypal_order_id.present? || merchant_account&.is_a_stripe_connect_account?) && !chargedback_not_reversed? && !gumroad_funded
       subscription.original_purchase.update!(should_exclude_product_review: true) if subscription&.should_exclude_product_review_on_charge_reversal?
-      send_refunded_notification_webhook
-      if partially_refunded_previously || self.stripe_partially_refunded
-        # Pass the refund's buyer-currency amount as plain values (not the Refund id):
-        # this enqueue happens inside the transaction, so the mailer job could run
-        # before the Refund row is committed/visible and would miss it.
-        CustomerMailer.partial_refund(email, link.id, id, funds_refunded, formatted_refund_state, refund.presentment_amount_cents, refund.presentment_currency).deliver_later(queue: "critical")
+      # Pass the refund's buyer-currency amount as plain values (not the Refund id):
+      # without deferral this enqueue happens inside the transaction, so the mailer job
+      # could run before the Refund row is committed/visible and would miss it.
+      buyer_mail = if partially_refunded_previously || self.stripe_partially_refunded
+        CustomerMailer.partial_refund(email, link.id, id, funds_refunded, formatted_refund_state, refund.presentment_amount_cents, refund.presentment_currency)
       else
-        CustomerMailer.refund(email, link.id, id).deliver_later(queue: "critical")
+        CustomerMailer.refund(email, link.id, id)
       end
+      webhook_url_parameters = url_parameters
+      notify = lambda do
+        send_refunded_notification_webhook(webhook_url_parameters)
+        buyer_mail.deliver_later(queue: "critical")
+      end
+      # A caller refunding several purchases in one transaction defers, so a later purchase's
+      # rollback cannot leave this one's notifications queued for a refund that never committed.
+      defer_notifications_until_commit ? AfterCommitEverywhere.after_commit(&notify) : notify.call
       # Those callbacks are manually invoked because of a rails issue: https://github.com/rails/rails/issues/39972
       update_creator_analytics_cache(force: true)
       # Refunding impacts many of the ES document fields,

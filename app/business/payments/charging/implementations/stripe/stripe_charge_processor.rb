@@ -7,6 +7,7 @@ class StripeChargeProcessor
   DISPLAY_NAME = "Stripe"
 
   class NoRefundFeeTransferError < StandardError; end
+  class UnmatchedApplicationFeeRefundError < StandardError; end
 
   # https://stripe.com/docs/api/charges/object#charge_object-status
   VALID_TRANSACTION_STATUSES = %w(succeeded pending).freeze
@@ -577,7 +578,7 @@ class StripeChargeProcessor
     end
   end
 
-  def get_refund(refund_id, merchant_account: nil, destination_payment_refund_id: nil)
+  def get_refund(refund_id, merchant_account: nil, destination_payment_refund_id: nil, for_external_refund: false)
     with_stripe_error_handler do
       if merchant_migrated? merchant_account
         begin
@@ -596,11 +597,20 @@ class StripeChargeProcessor
 
       destination = charge.destination
       if destination
+        check_external_refund_fee!(charge) if for_external_refund
         application_fee_refund = charge.application_fee.refunds.first if charge.application_fee
         destination_transfer = Stripe::Transfer.retrieve(id: charge.transfer)
+        if destination_payment_refund_id.nil? && refund[:transfer_reversal].present?
+          reversal_id = self.class.transfer_reversal_id(refund)
+          reversal = destination_transfer[:reversals]&.find { _1.id == reversal_id } ||
+            Stripe::Transfer.retrieve_reversal(destination_transfer.id, reversal_id)
+          destination_payment_refund_id = reversal[:destination_payment_refund]
+        end
+        destination_payment_refund_id = destination_payment_refund_id.id if destination_payment_refund_id.respond_to?(:id)
         stripe_destination_payment = Stripe::Charge.retrieve({ id: destination_transfer.destination_payment,
                                                                expand: %w[refunds.data.balance_transaction application_fee.refunds] },
                                                              { stripe_account: destination_transfer.destination })
+        check_external_refund_fee!(stripe_destination_payment) if for_external_refund
         # A reversal made after the refund is not necessarily the newest destination refund.
         destination_payment_refund = if destination_payment_refund_id
           stripe_destination_payment.refunds.find { _1.id == destination_payment_refund_id } ||
@@ -725,7 +735,7 @@ class StripeChargeProcessor
       reversal = Stripe::Transfer.retrieve_reversal(charge[:transfer], self.class.transfer_reversal_id(charge_refund.refund))
       return [charge_refund, :reversal_unpaired] if reversal[:destination_payment_refund].blank?
 
-      return [get_refund(charge_refund.id, merchant_account:, destination_payment_refund_id: reversal[:destination_payment_refund]), :reversed_by_stripe]
+      return [get_refund(charge_refund.id, merchant_account:, destination_payment_refund_id: reversal[:destination_payment_refund], for_external_refund: true), :reversed_by_stripe]
     end
 
     refund_id = charge_refund.id
@@ -766,12 +776,19 @@ class StripeChargeProcessor
     # destination refund would resolve to the newest one on the charge, so book nothing and alert.
     return [charge_refund, :reversal_unpaired] if reversal[:destination_payment_refund].blank?
 
-    [get_refund(refund_id, merchant_account:, destination_payment_refund_id: reversal[:destination_payment_refund]), outcome]
+    [get_refund(refund_id, merchant_account:, destination_payment_refund_id: reversal[:destination_payment_refund], for_external_refund: true), outcome]
   end
 
   def self.transfer_reversal_id(refund)
     transfer_reversal = refund[:transfer_reversal]
     transfer_reversal.respond_to?(:id) ? transfer_reversal.id : transfer_reversal.to_s
+  end
+
+  private def check_external_refund_fee!(charge)
+    # Stripe exposes no refund-to-fee-refund identity, even for a singleton fee-refund list.
+    return if charge[:application_fee].blank? && charge[:application_fee_amount].to_i.zero?
+
+    raise UnmatchedApplicationFeeRefundError, "Application fee refund requires manual reconciliation"
   end
 
   def self.external_refund_reversal_for?(reversal, refund_id)
