@@ -559,6 +559,12 @@ describe DiscoverController, type: :controller, inertia: true do
         expect(meta_tags["meta-name-description"][:content]).to eq(description)
       end
 
+      it "uses the filtered result count, not a fixed marketplace-wide number, in curated tag copy" do
+        get :index, params: { tags: "photos", taxonomy: "3d" }
+
+        expect(meta_tags["meta-name-description"][:content]).to start_with("Browse over 0 photos")
+      end
+
       it "falls back to the generic tag template when a taxonomy page carries a tag with no curated description" do
         get :index, params: { tags: "some-tag", taxonomy: "3d" }
 

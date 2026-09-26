@@ -231,12 +231,7 @@ class DiscoverController < ApplicationController
       set_meta_tag(property: "og:site_name", content: "Gumroad")
       set_meta_tag(tag_name: "link", rel: "canonical", href: Discover::CanonicalUrlPresenter.canonical_url(params), head_key: "canonical")
 
-      # Tag pages carry a curated per-tag description (config/discover_meta_tags.yml) with a
-      # generic tag template as the fallback. A taxonomy + tags landing page — /3d/vrchat?tags=furry,
-      # /drawing-and-painting?tags=procreate — is the indexed, ranking variant of that pair (its
-      # canonical self-references with the tag params), and its title is already tag-flavored below,
-      # but it used to fall through to the site-wide boilerplate description. Prefer the tag copy
-      # there too so the snippet names what the searcher typed.
+      # Taxonomy + tags pages self-canonicalize with their tags, so they get the tag copy too.
       if !params[:query].present? && params[:tags].present?
         presenter = Discover::TagPageMetaPresenter.new(params[:tags], search_results[:total])
         set_meta_tag(name: "description", content: presenter.meta_description)
