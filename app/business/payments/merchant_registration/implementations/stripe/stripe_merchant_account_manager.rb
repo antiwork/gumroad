@@ -756,6 +756,16 @@ module StripeMerchantAccountManager
   IDENTITY_SUBHASH_KEYS = %i[id_number ssn_last_4 tax_id].freeze
   private_constant :IDENTITY_SUBHASH_KEYS
 
+  # Person-payload keys a refill must never seed: the identifiers are gated on the account country
+  # further down `update_person`, and `relationship` carries ownership/title, which the caller sets.
+  PERSON_REFILL_EXCLUDED_KEYS = (IDENTITY_SUBHASH_KEYS + [:relationship]).freeze
+  private_constant :PERSON_REFILL_EXCLUDED_KEYS
+
+  # `dob` is one value to Stripe, so a missing part refills the whole date instead of a partial one
+  # Stripe rejects.
+  PERSON_REFILL_WHOLE_VALUE_KEYS = %i[dob].freeze
+  private_constant :PERSON_REFILL_WHOLE_VALUE_KEYS
+
   # Prefix distinct from the service-agreement note: support needs to tell "we withheld your
   # address" from "Stripe has not taken your tax ID", because only the second is the seller's to
   # fix. Worded around acceptance rather than rejection because the same note also marks an
@@ -965,6 +975,12 @@ module StripeMerchantAccountManager
 
     current_attributes = person_hash(user_compliance_info, passphrase)
     current_attributes.deep_merge!(relationship: { representative: true })
+    # `relationship.title` is otherwise unsent on an update (only creation sets it), so a person whose
+    # title Stripe lost can never satisfy `person.<id>.relationship.title`. Fill it only when Stripe
+    # has none — a title set through the beneficial-owners UI stays.
+    if stripe_relationship_title(stripe_person).blank?
+      current_attributes[:relationship][:title] = user_compliance_info.job_title.presence || DEFAULT_RELATIONSHIP_TITLE
+    end
     seed_representative_ownership = last_user_compliance_info&.is_individual? && user_compliance_info.is_business? if seed_representative_ownership.nil?
     if seed_representative_ownership
       # Switching a seller from individual to business normally means one person who owns the whole
@@ -991,6 +1007,12 @@ module StripeMerchantAccountManager
       last_attributes[:phone] = nil
       diff_attributes = get_diff_attributes(current_attributes, last_attributes)
     end
+
+    address_submitted_before_refill = ADDRESS_SUBHASH_KEYS.any? { |address_key| diff_attributes[address_key].present? }
+    # Stripe can replace the person outright (its KYC pass, or our ownership editor) with a blank
+    # record while the metadata still names the last version we synced, so the diff above stays
+    # unchanged and the requirements are never met. Refill what the live person is missing.
+    seed_attributes_missing_from_stripe_person!(diff_attributes, current_attributes, stripe_person, user)
 
     if diff_attributes[:dob].present?
       # Re-add the full DOB field if any part of it is being kept. Stripe handles this field inconsistently and the full DOB
@@ -1051,7 +1073,9 @@ module StripeMerchantAccountManager
     end
     clear_identity_rejection_notes(user, note_ids: resolved_note_ids)
     submit_person_identity_fields_in_isolation(user, stripe_account, stripe_person, person_identity_attributes, account_country)
-    ADDRESS_SUBHASH_KEYS.any? { |address_key| diff_attributes[address_key].present? }
+    # A refill must not clear a postal-code note. Only a postal code the seller changed, or a forced resync, did.
+    ADDRESS_SUBHASH_KEYS.any? { |address_key| diff_attributes.dig(address_key, :postal_code).present? } &&
+      (address_submitted_before_refill || force_address_resync)
   end
 
   # The `update_person` counterpart of `submit_identity_fields_in_isolation`. Same contract: the
@@ -1071,6 +1095,77 @@ module StripeMerchantAccountManager
                       "#{account_country.inspect} account: #{e.class}: #{e.message}"
     raise unless e.is_a?(Stripe::InvalidRequestError) && marker_recorded
     false
+  end
+
+  private_class_method
+  # Refills a person record Stripe replaced with a blank one, from our compliance record. Only blanks
+  # are filled: a value Stripe already holds is never overwritten.
+  def self.seed_attributes_missing_from_stripe_person!(diff_attributes, current_attributes, stripe_person, user)
+    live_person = stripe_person.to_h
+    # A postal code Stripe rejected is retried by `force_address_resync` alone; refilling it here would
+    # fail the whole person update on the same code and take the rest of the refill down with it.
+    withhold_postal_code = postal_code_failure_note_outstanding?(user)
+    (current_attributes.keys - PERSON_REFILL_EXCLUDED_KEYS).each do |key|
+      current = current_attributes[key]
+      current = current.except(:postal_code) if withhold_postal_code && ADDRESS_SUBHASH_KEYS.include?(key)
+      next if current.blank?
+
+      existing = diff_attributes[key]
+      # A changed address leaf is already a non-empty hash. Skipping the key would leave the other
+      # blank leaves unsent. A scalar already in the diff is the whole value.
+      next if existing.present? && (!existing.is_a?(Hash) || PERSON_REFILL_WHOLE_VALUE_KEYS.include?(key))
+
+      refill = refill_values_for(key, stripe_value_at(live_person, key), current)
+      next if refill.blank?
+
+      diff_attributes[key] = existing.is_a?(Hash) ? refill.merge(existing) : refill
+    end
+  end
+
+  private_class_method
+  # What Stripe's person is missing, for one payload key, or `{}` when it holds it all. Addresses are
+  # filled per subfield, so a value Stripe already holds is never resent.
+  def self.refill_values_for(key, live_value, current_value)
+    return stripe_value_blank?(live_value) ? current_value : {} unless current_value.is_a?(Hash)
+
+    if PERSON_REFILL_WHOLE_VALUE_KEYS.include?(key)
+      missing = current_value.any? do |nested_key, nested|
+        nested.present? && stripe_value_blank?(stripe_value_at(live_value, nested_key))
+      end
+      return missing ? current_value : {}
+    end
+
+    current_value.each_with_object({}) do |(nested_key, nested), refill|
+      next if nested.blank?
+
+      missing = refill_values_for(nested_key, stripe_value_at(live_value, nested_key), nested)
+      refill[nested_key] = missing if missing.present?
+    end
+  end
+
+  private_class_method
+  # Nested payloads arrive as plain hashes or StripeObject instances alike; both answer `[]` for a
+  # missing key with nil, and StripeObject has no `dig`.
+  def self.stripe_value_at(container, key)
+    return nil if container.nil?
+    return nil unless container.respond_to?(:[])
+
+    container[key] || container[key.to_s]
+  end
+
+  private_class_method
+  def self.stripe_value_blank?(value)
+    return true if value.nil?
+    return value.empty? if value.respond_to?(:empty?)
+
+    value.to_s.strip.empty?
+  end
+
+  private_class_method
+  # The representative's title as Stripe currently has it, or nil when the person carries no
+  # relationship object at all (which `person.to_h` can return — see `owner_relationships_on`).
+  def self.stripe_relationship_title(stripe_person)
+    stripe_value_at(stripe_value_at(stripe_person.to_h, :relationship), :title)
   end
 
   private_class_method
@@ -1780,6 +1875,16 @@ module StripeMerchantAccountManager
     # rejection: the seller's error message matters more than our diagnostics.
     Rails.logger.error "Failed to record Stripe account-rejection payout-note breadcrumb for user #{user&.id}: #{e.class}: #{e.message}"
     ErrorNotifier.notify(e)
+  end
+
+  private_class_method
+  def self.postal_code_failure_note_outstanding?(user)
+    user.comments
+        .with_type_payout_note
+        .alive
+        .where(author_id: GUMROAD_ADMIN_ID)
+        .where("content LIKE ?", "#{POSTAL_CODE_FAILURE_NOTE_PREFIX}%")
+        .exists?
   end
 
   private_class_method
