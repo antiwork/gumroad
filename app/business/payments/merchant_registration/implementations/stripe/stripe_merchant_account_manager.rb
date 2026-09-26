@@ -1073,8 +1073,8 @@ module StripeMerchantAccountManager
     end
     clear_identity_rejection_notes(user, note_ids: resolved_note_ids)
     submit_person_identity_fields_in_isolation(user, stripe_account, stripe_person, person_identity_attributes, account_country)
-    # A refill must not clear a postal-code note. Only an address the seller changed, or a forced resync, did.
-    ADDRESS_SUBHASH_KEYS.any? { |address_key| diff_attributes[address_key].present? } &&
+    # A refill must not clear a postal-code note. Only a postal code the seller changed, or a forced resync, did.
+    ADDRESS_SUBHASH_KEYS.any? { |address_key| diff_attributes.dig(address_key, :postal_code).present? } &&
       (address_submitted_before_refill || force_address_resync)
   end
 
@@ -1102,12 +1102,12 @@ module StripeMerchantAccountManager
   # are filled: a value Stripe already holds is never overwritten.
   def self.seed_attributes_missing_from_stripe_person!(diff_attributes, current_attributes, stripe_person, user)
     live_person = stripe_person.to_h
-    excluded = PERSON_REFILL_EXCLUDED_KEYS
     # A postal code Stripe rejected is retried by `force_address_resync` alone; refilling it here would
-    # fail the whole person update on the same code and take the name/DOB refill down with it.
-    excluded += ADDRESS_SUBHASH_KEYS if postal_code_failure_note_outstanding?(user)
-    (current_attributes.keys - excluded).each do |key|
+    # fail the whole person update on the same code and take the rest of the refill down with it.
+    withhold_postal_code = postal_code_failure_note_outstanding?(user)
+    (current_attributes.keys - PERSON_REFILL_EXCLUDED_KEYS).each do |key|
       current = current_attributes[key]
+      current = current.except(:postal_code) if withhold_postal_code && ADDRESS_SUBHASH_KEYS.include?(key)
       next if current.blank?
 
       existing = diff_attributes[key]

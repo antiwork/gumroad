@@ -13991,15 +13991,34 @@ describe StripeMerchantAccountManager, :vcr do
         ).to be false
       end
 
-      it "leaves a previously rejected postal code to force_address_resync" do
-        user.add_payout_note(
-          content: "#{StripeMerchantAccountManager::POSTAL_CODE_FAILURE_NOTE_PREFIX}: postal_code_invalid — The postal code you entered is not valid."
-        )
+      context "with a postal-code rejection outstanding" do
+        before do
+          user.add_payout_note(
+            content: "#{StripeMerchantAccountManager::POSTAL_CODE_FAILURE_NOTE_PREFIX}: postal_code_invalid — The postal code you entered is not valid."
+          )
+        end
 
-        captured_attributes = captured_refill(last_synced_user_compliance_info)
+        it "refills the rest of the address but leaves the postal code to force_address_resync" do
+          captured_attributes = captured_refill(last_synced_user_compliance_info)
 
-        expect(captured_attributes).not_to have_key(:address)
-        expect(captured_attributes[:first_name]).to eq(user_compliance_info.first_name)
+          expect(captured_attributes[:address]).to include(line1: user_compliance_info.street_address, city: user_compliance_info.city)
+          expect(captured_attributes[:address]).not_to have_key(:postal_code)
+          expect(captured_attributes[:first_name]).to eq(user_compliance_info.first_name)
+        end
+
+        it "does not report a postal re-validation when the seller changed only another address field" do
+          user_compliance_info.mark_deleted!
+          changed = create(:user_compliance_info_business, user:, city: "Portland")
+          marker = create(:user_compliance_info_business, user:, city: "Oakland",
+                                                          street_address: changed.street_address,
+                                                          state: changed.state,
+                                                          zip_code: changed.zip_code,
+                                                          country: changed.country)
+          marker.mark_deleted!
+          allow(Stripe::Account).to receive(:update_person).and_return(true)
+
+          expect(described_class.update_person(user, stripe_account, marker.external_id, "1234")).to be false
+        end
       end
     end
 
