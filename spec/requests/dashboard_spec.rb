@@ -94,8 +94,9 @@ describe "Dashboard", js: true, type: :system do
       visit dashboard_path
       expect(page).to have_text("Connected: X")
       click_on "Manage connections"
-      click_on "Open X connection menu"
-      find("[role=menuitem]", text: "Disconnect").click
+      click_on "Disconnect X"
+      within("[role=dialog]") { click_on "Disconnect" }
+      wait_for_ajax
       expect(page).to have_button("Connect to X")
       expect(seller.reload.twitter_user_id).to be_nil
       visit dashboard_path

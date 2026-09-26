@@ -138,6 +138,23 @@ describe("SocialConnectionsPage", () => {
     expect(screen.queryByRole("dialog")).toBeNull();
   });
 
+  // The menu route is the only way to reach Disconnect below the row-wrap breakpoint, so its
+  // Cancel path needs the same coverage the desktop button gets in the system spec.
+  it("confirms before disconnecting from the connection menu", async () => {
+    renderPage({ twitter_connected: true, twitter_handle: "gumroad" });
+
+    fireEvent.click(screen.getByRole("button", { name: "Open X connection menu" }));
+    fireEvent.click(await screen.findByRole("menuitem", { name: "Disconnect @gumroad from X" }));
+
+    const dialog = await screen.findByRole("dialog");
+    expect(dialog.textContent).toContain("Gumroad will forget @gumroad and the access it stored.");
+
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(screen.getByRole("button", { name: "Reconnect @gumroad from X" })).toBeTruthy();
+  });
+
   it("points the Reconnect button at the same write-enabled connect flow", () => {
     renderPage({ twitter_connected: true, twitter_handle: "gumroad" });
 
