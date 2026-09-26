@@ -101,10 +101,9 @@ class SalesRelatedProductsInfo < ApplicationRecord
     # Inside a caller's transaction (refunds and disputes enqueue the job inside theirs, which
     # runs it there under Sidekiq::Testing.inline!), run once and let a deadlock propagate:
     # InnoDB rolls back the caller's whole transaction, so a retry would commit this slice alone.
-    # Non-joinable outer transactions (transactional fixtures, console sandbox) take the retry
-    # path below, where Rails turns the isolation into a plain savepoint; a real deadlock there
-    # still aborts the outer transaction.
-    return ApplicationRecord.connection.execute(query) if ApplicationRecord.connection.current_transaction.joinable?
+    # Non-joinable callers (transactional fixtures, console sandbox, joinable: false) count too:
+    # nested below another transaction they reject the isolation, and a retry autocommits.
+    return ApplicationRecord.connection.execute(query) if ApplicationRecord.connection.transaction_open?
 
     attempts = 0
     begin

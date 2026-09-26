@@ -3,8 +3,8 @@
 require "spec_helper"
 
 describe SalesRelatedProductsInfo, "concurrent sales count upserts" do
-  # Transactional fixtures would swallow the isolation level (Rails turns it into a savepoint)
-  # and share one connection across threads, so this needs real, separate transactions.
+  # Under transactional fixtures the upsert would run inside the fixture's transaction, without
+  # READ COMMITTED or retries, and threads would share one connection.
   self.use_transactional_tests = false
 
   # Product ids far above anything factories create; no foreign keys, so no product rows needed.
@@ -14,12 +14,29 @@ describe SalesRelatedProductsInfo, "concurrent sales count upserts" do
     described_class.where(smaller_product_id: base_id..(base_id + 999_999)).delete_all
   end
 
-  def seed_pairs(pairs)
-    values = pairs.map { |smaller, larger| "(#{smaller}, #{larger}, 0, NOW(), NOW())" }.join(", ")
+  def seed_pairs(pairs, sales_count: 0)
+    values = pairs.map { |smaller, larger| "(#{smaller}, #{larger}, #{sales_count}, NOW(), NOW())" }.join(", ")
     described_class.connection.execute(<<~SQL)
       INSERT INTO sales_related_products_infos (smaller_product_id, larger_product_id, sales_count, created_at, updated_at)
       VALUES #{values}
     SQL
+  end
+
+  def sales_count(smaller, larger)
+    described_class.find_by(smaller_product_id: smaller, larger_product_id: larger)&.sales_count
+  end
+
+  # Fails the first `times` upsert attempts, then lets them through. Tracks the attempt
+  # count in @upsert_attempts.
+  def fail_upserts(times:, with:)
+    @upsert_attempts = 0
+    allow(ApplicationRecord.connection).to receive(:execute).and_wrap_original do |original, sql, *args|
+      if sql.include?("INSERT INTO #{described_class.table_name}")
+        @upsert_attempts += 1
+        raise with, "Deadlock found when trying to get lock" if @upsert_attempts <= times
+      end
+      original.call(sql, *args)
+    end
   end
 
   it "counts every increment without deadlocking when unrelated buyers upsert existing and new pairs at once" do
@@ -105,5 +122,164 @@ describe SalesRelatedProductsInfo, "concurrent sales count upserts" do
     expect(raised_once).to be(true)
     expect(isolation_statements).to eq(2)
     expect(described_class.find_by(smaller_product_id: product_id, larger_product_id: partner_id).sales_count).to eq(1)
+  end
+
+  context "when a standalone upsert hits contention" do
+    before { allow(described_class).to receive(:sleep) }
+
+    let(:product_id) { base_id + 1 }
+    let(:partner_id) { base_id + 2 }
+
+    it "retries a deadlocked statement and applies the increment" do
+      fail_upserts(times: 1, with: ActiveRecord::Deadlocked)
+
+      described_class.update_sales_counts(product_id:, related_product_ids: [partner_id], increment: true)
+
+      expect(@upsert_attempts).to eq(2)
+      expect(sales_count(product_id, partner_id)).to eq(1)
+    end
+
+    it "retries a lock wait timeout as well" do
+      fail_upserts(times: 1, with: ActiveRecord::LockWaitTimeout)
+
+      described_class.update_sales_counts(product_id:, related_product_ids: [partner_id], increment: true)
+
+      expect(@upsert_attempts).to eq(2)
+      expect(sales_count(product_id, partner_id)).to eq(1)
+    end
+
+    it "counts a retried pair exactly once" do
+      seed_pairs([[product_id, partner_id]], sales_count: 4)
+      fail_upserts(times: 2, with: ActiveRecord::Deadlocked)
+
+      described_class.update_sales_counts(product_id:, related_product_ids: [partner_id], increment: true)
+
+      expect(sales_count(product_id, partner_id)).to eq(5)
+    end
+
+    it "raises once the retry ceiling is exhausted so persistent contention still surfaces" do
+      fail_upserts(times: described_class::UPSERT_CONTENTION_RETRIES + 1, with: ActiveRecord::Deadlocked)
+
+      expect do
+        described_class.update_sales_counts(product_id:, related_product_ids: [partner_id], increment: true)
+      end.to raise_error(ActiveRecord::Deadlocked)
+
+      expect(@upsert_attempts).to eq(described_class::UPSERT_CONTENTION_RETRIES + 1)
+    end
+
+    it "does not replay a slice that already committed" do
+      partner_ids = Array.new(4) { base_id + 10 + _1 }
+      stub_const("#{described_class}::SALES_COUNT_UPSERT_BATCH_SIZE", 1)
+      # Fail only the third statement, after two slices have already committed.
+      @upsert_attempts = 0
+      allow(ApplicationRecord.connection).to receive(:execute).and_wrap_original do |original, sql, *args|
+        if sql.include?("INSERT INTO #{described_class.table_name}")
+          @upsert_attempts += 1
+          raise ActiveRecord::Deadlocked, "Deadlock found when trying to get lock" if @upsert_attempts == 3
+        end
+        original.call(sql, *args)
+      end
+
+      described_class.update_sales_counts(product_id:, related_product_ids: partner_ids, increment: true)
+
+      # 4 slices, one of them attempted twice.
+      expect(@upsert_attempts).to eq(5)
+      expect(partner_ids.map { sales_count(product_id, _1) }).to all(eq(1))
+    end
+  end
+
+  context "when InnoDB picks the upsert as a deadlock victim" do
+    let(:product_id) { base_id + 1 }
+    let(:first_pair) { [product_id, base_id + 2] }
+    let(:second_pair) { [product_id, base_id + 3] }
+    let(:caller_pair) { [base_id + 4, base_id + 5] }
+
+    before { seed_pairs([first_pair, second_pair], sales_count: 10) }
+
+    def where_pair(pair)
+      "smaller_product_id = #{pair[0]} AND larger_product_id = #{pair[1]}"
+    end
+
+    # Another session holds second_pair and, once the upsert has locked first_pair and is waiting
+    # on second_pair, updates first_pair. Its 40 inserted rows make it the heavier transaction, so
+    # InnoDB rolls back the upsert's. Returns what the block raised, if anything.
+    def deadlock_upsert
+      process_id = ApplicationRecord.connection.select_value("SELECT CONNECTION_ID()").to_i
+      holding = Queue.new
+      other = Thread.new do
+        Thread.current.report_on_exception = false
+        ApplicationRecord.connection_pool.with_connection do |connection|
+          connection.transaction do
+            seed_pairs(Array.new(40) { [base_id + 100 + _1, base_id + 200] })
+            connection.execute("SELECT id FROM #{described_class.table_name} WHERE #{where_pair(second_pair)} FOR UPDATE")
+            holding << true
+            blocked = 200.times.any? do
+              waiting = connection.uncached do
+                connection.select_value(<<~SQL)
+                  SELECT COUNT(*) FROM performance_schema.data_lock_waits AS lock_waits
+                  INNER JOIN performance_schema.data_locks AS requested_lock
+                    ON requested_lock.ENGINE_LOCK_ID = lock_waits.REQUESTING_ENGINE_LOCK_ID
+                  INNER JOIN performance_schema.threads AS requesting_thread
+                    ON requesting_thread.THREAD_ID = lock_waits.REQUESTING_THREAD_ID
+                  WHERE requesting_thread.PROCESSLIST_ID = #{process_id}
+                    AND requested_lock.OBJECT_SCHEMA = DATABASE()
+                    AND requested_lock.OBJECT_NAME = #{connection.quote(described_class.table_name)}
+                SQL
+              end
+              break true if waiting.to_i.positive?
+              sleep(0.025)
+              false
+            end
+            raise "the upsert never blocked on second_pair" unless blocked
+            connection.execute("UPDATE #{described_class.table_name} SET sales_count = sales_count + 100 WHERE #{where_pair(first_pair)}")
+          end
+        end
+      end
+      expect(holding.pop(timeout: 10)).to be(true)
+      deadlocks = 0
+      callback = ->(*, payload) { deadlocks += 1 if payload[:exception_object].is_a?(ActiveRecord::Deadlocked) }
+      error = ActiveSupport::Notifications.subscribed(callback, "sql.active_record") do
+        yield
+        nil
+      rescue StandardError => e
+        e
+      end
+      expect(other.join(30)).to be_truthy
+      other.value
+      expect(deadlocks).to eq(1)
+      error
+    ensure
+      other&.kill&.join
+    end
+
+    def upsert_both_pairs
+      described_class.update_sales_counts(product_id:, related_product_ids: [first_pair[1], second_pair[1]], increment: true)
+    end
+
+    it "retries a standalone upsert in a fresh transaction and counts it once" do
+      error = deadlock_upsert { upsert_both_pairs }
+
+      expect(error).to be_nil
+      expect(sales_count(*first_pair)).to eq(10 + 100 + 1)
+      expect(sales_count(*second_pair)).to eq(10 + 1)
+    end
+
+    [{}, { joinable: false }].each do |transaction_options|
+      it "rolls back a caller's transaction(#{transaction_options}) whole instead of retrying the slice on its own" do
+        error = deadlock_upsert do
+          ApplicationRecord.transaction(**transaction_options) do
+            seed_pairs([caller_pair])
+            upsert_both_pairs
+          end
+        end
+
+        aggregate_failures do
+          expect(sales_count(*first_pair)).to eq(10 + 100)
+          expect(sales_count(*second_pair)).to eq(10)
+          expect(sales_count(*caller_pair)).to be_nil
+          expect(error).to be_a(ActiveRecord::Deadlocked)
+        end
+      end
+    end
   end
 end
