@@ -1352,9 +1352,6 @@ module StripeMerchantAccountManager
         if repair_result == :synced && stripe_account["business_type"] == "company" && bank_account.stripe_connect_account_id == stripe_account.id
           stripe_external_account = retrieve_linked_external_account(stripe_account, bank_account)
           if retrieved_linked_bank?(bank_account, stripe_external_account)
-            clear_stale_bank_sync_failure_notes(bank_account.user)
-            return :noop_metadata_match if stripe_external_account["account_holder_name"] == bank_account.account_holder_full_name
-
             return update_identified_ecuador_holder_name(bank_account, stripe_account, stripe_external_account, notify:)
           end
 
@@ -1366,20 +1363,22 @@ module StripeMerchantAccountManager
     end
 
     if stripe_account["metadata"]["bank_account_id"] == bank_account.external_id
-      details_replaced = false
+      skip_metadata_noop = false
       if identified_ecuador_company_bank?(user, bank_account, stripe_account)
         stripe_external_account = retrieve_linked_external_account(stripe_account, bank_account)
         if retrieved_linked_bank?(bank_account, stripe_external_account)
           if linked_bank_details_replaced?(bank_account, stripe_external_account)
-            details_replaced = true
+            skip_metadata_noop = true
           else
             return update_identified_ecuador_holder_name(bank_account, stripe_account, stripe_external_account, notify:)
           end
+        else
+          skip_metadata_noop = true
         end
       end
 
       # A metadata match does not prove the local row is linked.
-      unless details_replaced
+      unless skip_metadata_noop
         name_out_of_sync = false
         if account_holder_name_synced_to_stripe?(bank_account.user)
           stripe_external_account = stripe_account["external_accounts"]&.first
@@ -1517,16 +1516,18 @@ module StripeMerchantAccountManager
 
   private_class_method
   def self.linked_bank_details_replaced?(bank_account, stripe_external_account)
-    remote_last4 = stripe_external_account["last4"].to_s
-    remote_routing = stripe_external_account["routing_number"].to_s
-    remote_currency = stripe_external_account["currency"].to_s
-    remote_country = stripe_external_account["country"].to_s
-    return false if remote_last4.blank? || remote_routing.blank? || remote_currency.blank? || remote_country.blank?
+    [
+      [stripe_external_account["last4"], bank_account.account_number_last_four, false],
+      [stripe_external_account["routing_number"], bank_account.stripe_external_account_routing_number, false],
+      [stripe_external_account["currency"], bank_account.stripe_external_account_currency, true],
+      [stripe_external_account["country"], bank_account.stripe_external_account_country, true]
+    ].any? do |remote, local, case_insensitive|
+      remote = remote.to_s
+      next false if remote.blank?
 
-    remote_last4 != bank_account.account_number_last_four.to_s ||
-      remote_routing != bank_account.stripe_external_account_routing_number.to_s ||
-      !remote_currency.casecmp?(bank_account.stripe_external_account_currency.to_s) ||
-      !remote_country.casecmp?(bank_account.stripe_external_account_country.to_s)
+      local = local.to_s
+      case_insensitive ? !remote.casecmp?(local) : remote != local
+    end
   end
 
   private_class_method

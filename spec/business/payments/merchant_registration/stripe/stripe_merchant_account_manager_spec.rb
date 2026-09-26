@@ -10879,6 +10879,18 @@ describe StripeMerchantAccountManager, :vcr do
         expect(Stripe::Account).to have_received(:update)
         expect(Stripe::Account).not_to have_received(:update_external_account)
       end
+
+      it "replaces the linked bank when only the retrieved last four differs" do
+        stripe_account["external_accounts"]["data"].first["account_holder_name"] = "Personal Name"
+        retrieved_external_account["last4"] = "0000"
+        allow(stripe_account).to receive(:refresh).and_return(stripe_account)
+        allow(subject).to receive(:save_stripe_bank_account_info)
+        allow(subject).to receive(:clear_stale_bank_sync_failure_notes)
+
+        expect(subject.update_bank_account(user, passphrase: "1234")).to eq(:synced)
+        expect(Stripe::Account).to have_received(:update)
+        expect(Stripe::Account).not_to have_received(:update_external_account)
+      end
     end
 
     context "when Stripe already has the local holder name" do
@@ -10978,6 +10990,16 @@ describe StripeMerchantAccountManager, :vcr do
           expect(Stripe::Account).not_to have_received(:update)
           expect(Stripe::Account).not_to have_received(:update_external_account)
         end
+
+        it "keeps the bank failure note when the restored name update is rejected" do
+          allow(Stripe::Account).to receive(:update_external_account).and_raise(
+            Stripe::InvalidRequestError.new("The name is not accepted", "account_holder_name", code: "account_number_invalid")
+          )
+          allow(ErrorNotifier).to receive(:notify)
+          expect(subject).not_to receive(:clear_stale_bank_sync_failure_notes)
+
+          expect(subject.update_bank_account(user, passphrase: "1234")).to eq(:stripe_invalid_request)
+        end
       end
     end
 
@@ -11068,6 +11090,17 @@ describe StripeMerchantAccountManager, :vcr do
       end
 
       it "sends the saved bank details on a full sync" do
+        allow(stripe_account).to receive(:refresh).and_return(stripe_account)
+        allow(subject).to receive(:save_stripe_bank_account_info)
+        allow(subject).to receive(:clear_stale_bank_sync_failure_notes)
+
+        expect(subject.update_bank_account(user, passphrase: "1234")).to eq(:synced)
+        expect(Stripe::Account).to have_received(:update)
+        expect(Stripe::Account).not_to have_received(:update_external_account)
+      end
+
+      it "does not report success when the linked account is missing and another account has the local name" do
+        stripe_account["external_accounts"]["data"].first["account_holder_name"] = "Personal Name"
         allow(stripe_account).to receive(:refresh).and_return(stripe_account)
         allow(subject).to receive(:save_stripe_bank_account_info)
         allow(subject).to receive(:clear_stale_bank_sync_failure_notes)
