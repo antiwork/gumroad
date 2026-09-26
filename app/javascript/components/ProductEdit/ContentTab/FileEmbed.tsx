@@ -93,6 +93,12 @@ const FileEmbedNodeView = ({
     ? (file.can_disable_downloads ??
       (file.is_streamable || FileUtils.isBrowserReadableDocument(file.extension, file.file_size)))
     : false;
+  // A document the reader can't serve — an EPUB over the size limit — is the one case where the
+  // switch has nothing to offer, so it stays visible and disabled with the reason: hiding it for
+  // one document and not the next on the same product reads as a missing control.
+  const downloadsUnavailableForDocument = Boolean(
+    file && !canDisableDownloads && (file.is_pdf || file.extension === "EPUB"),
+  );
 
   const playerRef = React.useRef<jwplayer.JWPlayer | null>(null);
   const subtitleUploadSettled = React.useRef(new Map<string, () => void>());
@@ -830,12 +836,15 @@ const FileEmbedNodeView = ({
                 </Fieldset>
               ) : null}
 
-              {canDisableDownloads ? (
+              {canDisableDownloads || downloadsUnavailableForDocument ? (
                 <Switch
                   checked={file.stream_only}
+                  disabled={downloadsUnavailableForDocument}
                   onChange={(e) => updateFile({ stream_only: e.target.checked })}
                   label={
-                    file.is_streamable ? (
+                    downloadsUnavailableForDocument ? (
+                      "This file is too large for the in-browser reader, so downloads can't be turned off"
+                    ) : file.is_streamable ? (
                       <>
                         Disable file downloads (stream only){" "}
                         <a href="/help/article/43-streaming-videos" target="_blank" rel="noreferrer">
